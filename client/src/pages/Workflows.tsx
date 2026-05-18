@@ -60,13 +60,13 @@ const TRIGGER_GROUPS = [
     triggers: [
       { value: "tag_added",       label: "Tag Added",               icon: Tag,        description: "A tag is applied to a contact",      hasChannel: false },
       { value: "tag_removed",     label: "Tag Removed",             icon: Tag,        description: "A tag is removed from a contact",    hasChannel: false },
-      { value: "pipeline_change", label: "Pipeline Stage Changed",  icon: ArrowRight, description: "Runs when a contact's pipeline stage changes (inbox/API). Requires DB migration 0020 + flow worker.", hasChannel: false },
+      { value: "pipeline_change", label: "Pipeline Stage Changed",  icon: ArrowRight, description: "Runs when a contact moves to a different pipeline stage.", hasChannel: false },
     ],
   },
   {
     label: "Timing",
     triggers: [
-      { value: "no_reply", label: "No Reply For", icon: BellOff, description: "Runs if the contact stays silent after a team outbound (per workflow delay). Requires DB migration 0020 + flow worker.", hasChannel: true },
+      { value: "no_reply", label: "No Reply For", icon: BellOff, description: "Runs when a contact has not replied after your selected delay.", hasChannel: true },
     ],
   },
   {
@@ -78,7 +78,7 @@ const TRIGGER_GROUPS = [
   {
     label: "Integrations",
     triggers: [
-      { value: "webhook",        label: "Webhook Received", icon: Webhook,  description: "An external system sends a webhook", hasChannel: false },
+      { value: "webhook",        label: "App Event Received", icon: Webhook,  description: "Another connected tool sends an event", hasChannel: false },
       { value: "form_submitted", label: "Form Submitted",   icon: FileText, description: "A lead form or widget is submitted",  hasChannel: false },
     ],
   },
@@ -247,7 +247,7 @@ function StarterPlanAutomationsBanner({ onUpgradePro }: { onUpgradePro: () => vo
   return (
     <div className="px-4 sm:px-6 py-3 bg-amber-50/90 border-b border-amber-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm text-amber-950">
       <p>
-        You're on Starter — Basic Automations enabled. Upgrade to Pro for Advanced Automations.
+        You're on Starter — Basic Automations enabled. Pro unlocks more advanced workflows, Growth Engine automations, and AI-assisted triggers where enabled.
       </p>
       <Button
         type="button"

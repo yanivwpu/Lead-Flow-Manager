@@ -122,13 +122,13 @@ const CHANNEL_CONFIG: Record<Channel, {
   instagram: {
     color: '#FF0069',
     label: 'Instagram',
-    description: 'Direct messages via Meta Graph API',
+    description: 'Route Instagram DMs into the unified inbox',
     isMessaging: true,
   },
   facebook: {
     color: '#0866FF',
     label: 'Facebook Messenger',
-    description: 'Messages via Meta Graph API',
+    description: 'Route Page messages into the unified inbox',
     isMessaging: true,
   },
   sms: {
@@ -249,7 +249,7 @@ export function ChannelSettings() {
     } else if (oauthStatus === "error") {
       const reason = params.get("reason") || "unknown error";
       toast({
-        title: "Connection failed",
+        title: "Connection couldn't be completed",
         description: `Something went wrong during the Facebook login (${reason}). Please try again.`,
         variant: "destructive",
       });
@@ -573,7 +573,7 @@ export function ChannelSettings() {
         body: JSON.stringify({ botToken: token }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Connection failed");
+      if (!res.ok) throw new Error(data.error ?? "Connection could not be completed");
       return data as { username: string; firstName: string; botLink: string };
     },
     onSuccess: (data) => {
@@ -693,9 +693,9 @@ export function ChannelSettings() {
       if (wa.metaPersistedButTwilioSelected) {
         return {
           pill: "needs_attention",
-          subline: "Meta credentials saved — Twilio is still your active WhatsApp sender.",
+          subline: "Meta connection saved. Review WhatsApp routing before going live.",
           warning:
-            "Open Manage and switch the provider to Meta Cloud API for production Cloud API routing.",
+            "Open Manage to finish selecting the WhatsApp connection you want to use.",
           action: "manage",
           actionLabel: "Manage",
           onAction: () => setConfigChannel("whatsapp"),
@@ -721,9 +721,9 @@ export function ChannelSettings() {
       if (metaRoute) {
         if (meta?.integrationStatus === "failed") {
           return {
-            pill: "error",
-            subline: "Connected via Meta Cloud API",
-            warning: meta?.lastErrorMessage ?? "WhatsApp connection failed. Try Manage to fix or reconnect.",
+            pill: "needs_attention",
+            subline: "Connected through Meta",
+            warning: "WhatsApp needs attention. Open Manage to review or reconnect.",
             action: "manage",
             actionLabel: "Manage",
             onAction: () => setConfigChannel("whatsapp"),
@@ -738,9 +738,9 @@ export function ChannelSettings() {
         if (needsAttention) {
           return {
             pill: "needs_attention",
-            subline: "Connected via Meta Cloud API",
+            subline: "Connected through Meta",
             footerHint:
-              "Open Manage to check webhook endpoint health and WABA app subscription.",
+              "Open Manage to review the connection and finish any remaining Meta setup.",
             action: "manage",
             actionLabel: "Manage",
             onAction: () => setConfigChannel("whatsapp"),
@@ -750,7 +750,7 @@ export function ChannelSettings() {
         }
         return {
           pill: "connected",
-          subline: "Connected via Meta Cloud API",
+          subline: "Connected through Meta",
           action: "manage",
           actionLabel: "Manage",
           onAction: () => setConfigChannel("whatsapp"),
@@ -805,8 +805,8 @@ export function ChannelSettings() {
           pill: "needs_attention",
           subline:
             channel === "instagram"
-              ? "Credentials or permissions incomplete — finish Instagram setup in Meta."
-              : "Webhook or page access needs attention — complete setup to receive messages.",
+              ? "Instagram needs a quick Meta permission or account linkage check."
+              : "Facebook needs a quick Page access or permission check.",
           action: "reconnect",
           actionLabel: "Reconnect",
           onAction: () => handleFbIgConnectClick(channel),
@@ -1063,7 +1063,7 @@ export function ChannelSettings() {
               >
                 {resubscribeMutation.isPending
                   ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Checking…</>
-                  : "Refresh Webhook Subscription"
+                  : "Refresh Meta Connection"
                 }
               </Button>
               {resubscribeResult && (

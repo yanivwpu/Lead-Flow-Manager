@@ -53,7 +53,7 @@ export function ZokoAlternative() {
             The Shopify-First WhatsApp CRM Without the "Success Tax"
           </h1>
           <p className="text-lg md:text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Zoko charges you more as you grow. WhachatCRM gives you unlimited flows, zero per-message fees, and advanced AI for a fraction of the cost.
+            Zoko charges more as you grow. WhachatCRM gives you a unified inbox, transparent Meta conversation pricing, and optional AI assistance for a simpler monthly cost.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-3 justify-center mb-4">
@@ -83,10 +83,10 @@ export function ZokoAlternative() {
             </div>
             
             {[
-              { feature: "Per-Message Fees", us: "Zero", them: "Variable Markup" },
-              { feature: "Automation Flows", us: "Unlimited (Free)", them: "$6/mo per flow" },
-              { feature: "Instagram Integration", us: "Native (Free)", them: "$10/mo extra" },
-              { feature: "AI Assistant (Add-on)", us: "$29/mo (Unlimited)", them: "$79/mo (Limited)" },
+              { feature: "Meta Fee Markup", us: "0%", them: "Variable markup" },
+              { feature: "Automation Flows", us: "Starter+", them: "Usage-based add-ons" },
+              { feature: "Instagram Integration", us: "Meta-connected", them: "May cost extra" },
+              { feature: "AI Brain Add-on", us: "$29/mo", them: "Higher paid tier" },
               { feature: "Monthly Subscription", us: "From $19/mo", them: "From $35/mo" },
               { feature: "Shopify Native App", us: true, them: true },
               { feature: "Multi-Channel Inbox", us: true, them: "Primarily WhatsApp" },
@@ -123,10 +123,10 @@ export function ZokoAlternative() {
                 <Brain className="h-6 w-6 text-purple-600" />
               </div>
               <h2 className="text-3xl font-display font-bold text-gray-900 mb-6">
-                Meet the AI Brain: Smarter than Zoko's AI, at 60% less cost.
+                Meet AI Brain: an optional intelligence layer for deeper context.
               </h2>
               <p className="text-lg text-gray-600 mb-6">
-                Zoko's AI starts at a staggering $79/month. Our AI Brain is a powerful $29 add-on that doesn't just reply — it thinks.
+                AI Brain adds smart suggestions, business context assistance, lead insights where enabled, and workflow enhancements on top of Starter or Pro.
               </p>
               <ul className="space-y-4">
                 {[
@@ -134,7 +134,7 @@ export function ZokoAlternative() {
                   "Automated lead scoring & qualification",
                   "Human-like conversation (not a rigid bot)",
                   "Multi-language support (English, Spanish, Hebrew, Arabic)",
-                  "Unlimited AI messages (No 'success tax')"
+                  "Advanced AI workflow enhancements where enabled"
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3">
                     <Sparkles className="h-5 w-5 text-purple-500 shrink-0 mt-0.5" />
@@ -156,7 +156,7 @@ export function ZokoAlternative() {
               <div className="mt-6 p-4 bg-white/80 backdrop-blur rounded-xl border border-purple-100 flex items-center justify-between">
                 <span className="text-sm font-bold text-purple-900">Monthly Cost</span>
                 <div className="text-right">
-                  <div className="text-xs text-gray-500 line-through">Zoko: $79+</div>
+                  <div className="text-xs text-gray-500 line-through">Zoko: higher paid tier</div>
                   <div className="text-xl font-bold text-brand-green">WhachatCRM: $29</div>
                 </div>
               </div>

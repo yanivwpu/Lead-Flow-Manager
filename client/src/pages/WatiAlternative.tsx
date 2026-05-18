@@ -94,16 +94,16 @@ export function WatiAlternative() {
               { feature: "Free plan", us: true, them: false },
               { feature: "Zero message markup", us: true, them: false },
               { feature: "Cancel anytime (self-service)", us: true, them: false },
-              { feature: "Multiple WhatsApp numbers", us: "Up to 5", them: "1 only" },
-              { feature: "Unlimited users", us: "$49/mo", them: "$200+/mo" },
+              { feature: "Multi-channel scaling", us: "Pro", them: "Limited" },
+              { feature: "Unlimited users", us: "$49/mo", them: "Higher tiers" },
               { feature: "Visual chatbot builder", us: "$19/mo", them: "$100+/mo" },
               { feature: "Simple setup", us: true, them: false },
               { feature: "No training required", us: true, them: false },
               { feature: "WhatsApp messaging", us: true, them: true },
               { feature: "Notes & tags", us: true, them: true },
               { feature: "Follow-up reminders", us: true, them: true },
-              { feature: "Workflow automation", us: "$49/mo", them: "$200+/mo" },
-              { feature: "Template messaging", us: "$49/mo", them: "$200+/mo" },
+              { feature: "Workflow automation", us: "$49/mo", them: "Higher tiers" },
+              { feature: "Template messaging", us: "$19/mo", them: "Paid tiers" },
               { feature: "Starting price", us: "$0/free", them: "$30/month + fees" },
             ].map((row, i) => (
               <div key={i} className="grid grid-cols-3 p-4 border-t border-gray-100 items-center">
@@ -146,18 +146,18 @@ export function WatiAlternative() {
             </div>
             <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
               <h3 className="font-bold text-red-900 mb-2">Single Number Lock</h3>
-              <p className="text-red-700 text-sm">WATI limits you to 1 WhatsApp number. Our Pro plan includes up to 3 numbers.</p>
+              <p className="text-red-700 text-sm">WATI can make multi-number scaling feel rigid. Pro is built for broader multi-channel growth.</p>
             </div>
             <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
               <h3 className="font-bold text-red-900 mb-2">Enterprise Pricing</h3>
-              <p className="text-red-700 text-sm">WATI charges $200+/mo for features we include in our $49 Pro plan.</p>
+              <p className="text-red-700 text-sm">WATI often pushes core growth features into higher tiers. Pro keeps scaling simple at $49/month.</p>
             </div>
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
             <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-xl">
               <h3 className="font-bold text-emerald-900 mb-2">Zero Message Markup</h3>
-              <p className="text-emerald-700 text-sm">You connect your own Twilio account. Pay Twilio directly - we never touch your message fees.</p>
+              <p className="text-emerald-700 text-sm">You pay Meta/WhatsApp conversation fees directly. WhachatCRM adds no per-message markup.</p>
             </div>
             <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-xl">
               <h3 className="font-bold text-emerald-900 mb-2">Cancel Anytime</h3>
@@ -165,7 +165,7 @@ export function WatiAlternative() {
             </div>
             <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-xl">
               <h3 className="font-bold text-emerald-900 mb-2">$49 Gets You Everything</h3>
-              <p className="text-emerald-700 text-sm">Workflows, templates, unlimited users, up to 5 WhatsApp numbers — features WATI charges $200+/month for.</p>
+              <p className="text-emerald-700 text-sm">Advanced workflows, templates, unlimited users, and multi-channel scaling features in one clear Pro plan.</p>
             </div>
           </div>
         </div>

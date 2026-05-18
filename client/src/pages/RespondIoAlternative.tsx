@@ -89,18 +89,18 @@ export function RespondIoAlternative() {
             
             {[
               { feature: "Free plan", us: true, them: false },
-              { feature: "Starting price", us: "$19/mo", them: "$79/mo" },
+              { feature: "Starting price", us: "$19/mo", them: "Higher paid tier" },
               { feature: "Zero message markup", us: true, them: false },
               { feature: "Visual chatbot builder", us: true, them: true },
-              { feature: "Unlimited users", us: "$49/mo", them: "$279+/mo" },
-              { feature: "Multiple WhatsApp numbers", us: "Up to 5", them: "Extra cost" },
+              { feature: "Unlimited users", us: "$49/mo", them: "Higher team tiers" },
+              { feature: "Multi-channel scaling", us: "Pro", them: "Extra cost" },
               { feature: "Simple pricing", us: true, them: false },
               { feature: "No training required", us: true, them: false },
               { feature: "Built for SMBs", us: true, them: false },
               { feature: "Drip campaigns", us: true, them: true },
               { feature: "Workflow automation", us: true, them: true },
               { feature: "Team inbox", us: true, them: true },
-              { feature: "Multi-channel support", us: "WhatsApp focused", them: "Omnichannel" },
+              { feature: "Multi-channel support", us: "Unified inbox", them: "Omnichannel" },
             ].map((row, i) => (
               <div key={i} className="grid grid-cols-3 p-4 border-t border-gray-100 items-center">
                 <div className="text-gray-700">{row.feature}</div>
@@ -133,7 +133,7 @@ export function RespondIoAlternative() {
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
               <h3 className="font-bold text-red-900 mb-2">Enterprise Pricing</h3>
-              <p className="text-red-700 text-sm">Respond.io starts at $79/mo and scales to $279+ for teams. We start at $19/mo.</p>
+              <p className="text-red-700 text-sm">Respond.io pushes teams toward higher paid tiers. WhachatCRM starts at $19/month and keeps Pro clear at $49/month.</p>
             </div>
             <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
               <h3 className="font-bold text-red-900 mb-2">Complex Features</h3>

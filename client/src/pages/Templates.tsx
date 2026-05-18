@@ -1219,8 +1219,8 @@ export function Templates() {
       const msg = error?.message || "";
       const clean = msg.replace(/^\d+:\s*/, "").replace(/^\{"error":"/, "").replace(/"\}$/, "");
       toast({
-        title: "Sync failed",
-        description: clean || "Failed to sync templates. Check your WhatsApp connection in Settings.",
+        title: "Sync couldn't finish",
+        description: clean || "Templates could not sync. Please review your WhatsApp connection in Settings and try again.",
         variant: "destructive",
       });
     },

@@ -134,12 +134,12 @@ const SHAREABLE_CONTENT = [
   {
     id: "7",
     type: "blog",
-    title: "How to Set Up Twilio for WhatsApp: Step-by-Step Guide",
-    description: "Complete walkthrough for connecting your WhatsApp Business to Twilio, including webhooks and your first message.",
+    title: "How to Connect WhatsApp with Meta Embedded Signup",
+    description: "Simple walkthrough for connecting WhatsApp through Meta and verifying the inbox connection.",
     url: "/blog/twilio-whatsapp-setup-guide",
     category: "Tutorial",
     readTime: "15 min",
-    shareMessage: "Setting up Twilio for WhatsApp? This step-by-step guide makes it easy:",
+    shareMessage: "Connecting WhatsApp through Meta? This step-by-step guide makes it easy:",
   },
   {
     id: "8",

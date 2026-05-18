@@ -111,7 +111,7 @@ function CalendlyTokenInstructions() {
         <div>
           <p className="font-medium">How to create your Calendly token</p>
           <p className="mt-1 text-xs leading-relaxed text-blue-900/90">
-            Open Calendly, create a Personal Access Token, select the required scopes, then paste the token below.
+            Open Calendly, create a Personal Access Token, select the required access, then paste the token below.
           </p>
         </div>
         <Button asChild variant="outline" size="sm" className="h-8 shrink-0 border-blue-200 bg-white text-blue-700">
@@ -122,22 +122,22 @@ function CalendlyTokenInstructions() {
         </Button>
       </div>
       <ol className="mt-3 list-decimal space-y-1.5 pl-4 text-xs leading-relaxed text-blue-900">
-        <li>Go to Calendly → Integrations & Apps → API and webhooks.</li>
+        <li>Go to Calendly → Integrations & Apps → API access.</li>
         <li>Create a Personal Access Token.</li>
         <li>Select required scopes before copying the token.</li>
       </ol>
       <div className="mt-3 rounded-md bg-white/80 p-3">
-        <p className="text-xs font-medium text-blue-950">Required scopes</p>
+        <p className="text-xs font-medium text-blue-950">Required access</p>
         <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-blue-900">
-          <li>Scheduling scopes</li>
-          <li>Webhook scopes</li>
+          <li>Scheduling access</li>
+          <li>Booking sync access</li>
           <li>
             <code className="rounded bg-blue-100 px-1 py-0.5">organizations:read</code>
           </li>
         </ul>
       </div>
       <p className="mt-3 text-xs leading-relaxed text-blue-900/90">
-        WhachatCRM will validate the token, read your organization and event types, then register the booking webhook automatically.
+        WhachatCRM will validate the token, read your organization and event types, then set up booking sync automatically.
       </p>
     </div>
   );
@@ -305,7 +305,7 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     tagline: "Payments, customers & subscriptions",
     fields: [
       { key: "secretKey", label: "Secret Key", placeholder: "sk_live_xxxxx", type: "password", helpText: "Found in Stripe Dashboard > Developers > API keys" },
-      { key: "webhookSecret", label: "Webhook Signing Secret", placeholder: "whsec_xxxxx", type: "password", helpText: "From webhook endpoint settings" },
+      { key: "webhookSecret", label: "Event Signing Secret", placeholder: "whsec_xxxxx", type: "password", helpText: "From Stripe event settings" },
     ],
     syncOptions: [
       { id: "new_customers", label: "New Customers", description: "Create a chat when someone pays" },
@@ -345,7 +345,7 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
         label: "Personal Access Token",
         placeholder: "eyJraWQiOiIxY...",
         type: "password",
-        helpText: "Create this in Calendly from Integrations & Apps > API and webhooks. Select scheduling, webhook, and organizations:read scopes.",
+        helpText: "Create this in Calendly from Integrations & Apps > API access. Select scheduling, booking sync, and organizations:read access.",
       },
     ],
     syncOptions: [
@@ -418,32 +418,32 @@ function WebhookUrlDisplay({ integrationType }: { integrationType: string }) {
     switch (integrationType) {
       case 'shopify':
         return [
-          "Webhooks are registered automatically when you install the app",
+          "Event connections are registered automatically when you install the app",
           "New orders and customers will sync to WhachatCRM automatically",
-          "Use the webhook URL above for custom Zapier/Make.com workflows"
+          "Use the connection URL above for custom Zapier/Make.com workflows"
         ];
       case 'calendly':
         return [
           "Click Connect and paste your Personal Access Token",
-          "WhachatCRM registers the webhook with Calendly for you",
+          "WhachatCRM sets up booking sync with Calendly for you",
           "Bookings, cancellations, and reschedules sync to the inbox automatically",
         ];
       case 'stripe':
         return [
-          "Go to Stripe Dashboard → Developers → Webhooks",
+          "Go to Stripe Dashboard → Developers → Events",
           "Click 'Add endpoint'",
-          "Paste the webhook URL above",
+          "Paste the connection URL above",
           "Select events: checkout.session.completed, payment_intent.succeeded",
           "Click 'Add endpoint'"
         ];
       case 'hubspot':
         return [
-          "Inbound HubSpot webhooks are not used in this version.",
+          "Inbound HubSpot event sync is not used in this version.",
           "Use Connect with a Private App token; we validate it against HubSpot before saving.",
           "Open Manage → Sync now to push contacts to HubSpot.",
         ];
       default:
-        return ["Configure the webhook URL in your service"];
+        return ["Configure the connection URL in your service"];
     }
   };
   
@@ -452,7 +452,7 @@ function WebhookUrlDisplay({ integrationType }: { integrationType: string }) {
   return (
     <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-gray-600">Webhook URL</span>
+        <span className="text-xs font-medium text-gray-600">Connection URL</span>
         <Button
           variant="ghost"
           size="sm"
@@ -603,8 +603,8 @@ export function Integrations() {
           title: "Calendly connected",
           description:
             typeof data?.calendlyWebhookError === "string"
-              ? `Booking link is connected, but webhook registration failed: ${data.calendlyWebhookError}`
-              : "Booking link is connected, but webhook registration failed. Use Manage > Sync now to retry.",
+              ? `Booking link is connected, but booking sync needs another try: ${data.calendlyWebhookError}`
+              : "Booking link is connected, but booking sync needs another try. Use Manage > Sync now to retry.",
           variant: "destructive",
         });
       } else if (Array.isArray(types) && types.length > 0) {
@@ -629,7 +629,7 @@ export function Integrations() {
           if (typeof parsed.error === "string") description = parsed.error;
           if (parsed.errorCode === "missing_scopes") {
             description =
-              "Your Calendly token is missing required scopes. Create a new token with scheduling scopes, webhook scopes, and organizations:read.";
+              "Your Calendly token is missing required access. Create a new token with scheduling, booking sync, and organizations:read access.";
           } else if (parsed.errorCode === "invalid_token") {
             description = "Calendly could not validate this token. Copy a fresh Personal Access Token from Calendly.";
           } else if (parsed.errorCode === "organization_not_found") {
@@ -640,7 +640,7 @@ export function Integrations() {
         }
       }
       toast({
-        title: "Connection failed",
+        title: "Connection couldn't be completed",
         description,
         variant: "destructive",
       });
@@ -665,7 +665,7 @@ export function Integrations() {
         title: pendingDisconnectType === "calendly" ? "Calendly disconnected" : "Integration disconnected",
         description:
           pendingDisconnectType === "calendly"
-            ? "Calendly token, booking link state, and webhook connection were removed."
+            ? "Calendly token, booking link state, and booking sync connection were removed."
             : "The integration has been removed.",
       });
       setManageIntegrationId(null);
@@ -673,8 +673,8 @@ export function Integrations() {
     },
     onError: (err: Error) => {
       toast({
-        title: "Disconnect failed",
-        description: err.message || "Could not disconnect integration.",
+        title: "Disconnect couldn't finish",
+        description: err.message || "Could not disconnect integration. Please try again.",
         variant: "destructive",
       });
       setPendingDisconnectType(null);
@@ -696,7 +696,7 @@ export function Integrations() {
         lastHubSpotSync?: Record<string, unknown>;
       };
       if (!res.ok) {
-        throw new Error(data.error || data.message || `Sync failed (${res.status})`);
+        throw new Error(data.error || data.message || `Sync could not finish (${res.status})`);
       }
       return data;
     },
@@ -723,8 +723,8 @@ export function Integrations() {
     onError: (err: Error) => {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
       toast({
-        title: "Sync failed",
-        description: err.message || "Could not sync integration",
+        title: "Sync couldn't finish",
+        description: err.message || "Could not sync integration. Please try again.",
         variant: "destructive",
       });
     },
@@ -743,7 +743,7 @@ export function Integrations() {
         sampleOrders?: { id: number }[];
       };
       if (!res.ok) {
-        throw new Error(data.error || "Connection failed");
+        throw new Error(data.error || "Connection could not be completed");
       }
       return data;
     },
@@ -875,7 +875,7 @@ export function Integrations() {
   const handleDisconnectIntegration = (integrationId: string, integrationName: string, integrationType: string) => {
     const confirmed = window.confirm(
       integrationType === "calendly"
-        ? "Disconnect Calendly? This removes the saved token, clears the booking link connection, and attempts to remove the Calendly webhook subscription."
+        ? "Disconnect Calendly? This removes the saved token, clears the booking link connection, and attempts to remove booking sync."
         : `Disconnect ${integrationName}? This removes the saved integration credentials.`
     );
     if (!confirmed) return;
@@ -944,7 +944,7 @@ export function Integrations() {
             </TabsTrigger>
             <TabsTrigger value="webhooks" data-testid="tab-webhooks">
               <Webhook className="h-4 w-4 mr-2" />
-              Webhooks
+              Connections
             </TabsTrigger>
           </TabsList>
 
@@ -1094,7 +1094,7 @@ export function Integrations() {
 
             <div className="rounded-xl border border-gray-200 bg-gray-50/50 px-6 py-8 text-center">
               <p className="text-sm text-gray-500">
-                Need a specific integration? Use webhooks with Zapier or Make.com, or{" "}
+                Need a specific integration? Connect with Zapier, Make.com, or{" "}
                 <a href="/contact" className="text-gray-900 underline underline-offset-2 hover:text-gray-700">
                   contact us
                 </a>{" "}
@@ -1108,9 +1108,9 @@ export function Integrations() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-lg">Webhook Endpoints</CardTitle>
+                    <CardTitle className="text-lg">Workflow Connections</CardTitle>
                     <CardDescription>
-                      Send real-time events to your apps via Zapier, Make.com, or custom endpoints
+                      Share selected WhachatCRM events with tools like Zapier, Make.com, or your own apps
                     </CardDescription>
                   </div>
                   <Button 
@@ -1121,7 +1121,7 @@ export function Integrations() {
                     data-testid="button-add-webhook"
                   >
                     <Plus className="h-4 w-4 mr-1" />
-                    Add Webhook
+                    Add Connection
                   </Button>
                 </div>
               </CardHeader>
@@ -1133,8 +1133,8 @@ export function Integrations() {
                 ) : webhooks.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <Webhook className="h-10 w-10 mx-auto mb-3 text-gray-300" />
-                    <p className="font-medium">No webhooks configured</p>
-                    <p className="text-sm">Create a webhook to start receiving events</p>
+                    <p className="font-medium">No workflow connections yet</p>
+                    <p className="text-sm">Create a connection to share selected events with another tool</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1150,7 +1150,7 @@ export function Integrations() {
                             <span className="font-medium">{webhook.name}</span>
                             {webhook.failureCount > 0 && (
                               <Badge variant="destructive" className="text-xs">
-                                {webhook.failureCount} failures
+                                Needs retry
                               </Badge>
                             )}
                           </div>
@@ -1217,7 +1217,7 @@ export function Integrations() {
                       </div>
                     ))}
                     <p className="text-xs text-gray-400 text-center pt-2">
-                      {webhooks.length} of {maxWebhooks} webhooks used
+                      {webhooks.length} of {maxWebhooks} workflow connections used
                     </p>
                   </div>
                 )}
@@ -1226,36 +1226,36 @@ export function Integrations() {
 
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-lg">How Webhooks Work</CardTitle>
+                <CardTitle className="text-lg">How Workflow Connections Work</CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-gray-600 space-y-3">
                 <p>
-                  Webhooks allow WhachatCRM to send real-time data to your other applications when events occur.
+                  Workflow connections let WhachatCRM share selected events with your other applications when something important happens.
                 </p>
                 <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                  <p className="font-medium text-gray-900">Quick Setup with Zapier:</p>
+                  <p className="font-medium text-gray-900">Quick setup with Zapier:</p>
                   <ol className="list-decimal list-inside space-y-1 text-gray-600">
                     <li>Create a new Zap in Zapier</li>
-                    <li>Choose "Webhooks by Zapier" as your trigger</li>
-                    <li>Select "Catch Hook" and copy the webhook URL</li>
+                    <li>Choose the Zapier trigger that receives app events</li>
+                    <li>Copy the connection URL from Zapier</li>
                     <li>Paste the URL here and select your events</li>
                   </ol>
                 </div>
                 <p className="text-xs text-gray-500">
-                  All webhooks include an HMAC signature in the <code>X-Webhook-Signature</code> header for verification.
+                  Advanced users can verify each event with the included signature header.
                 </p>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
 
-        {/* Webhook Dialog */}
+        {/* Workflow connection dialog */}
         <Dialog open={isWebhookDialogOpen} onOpenChange={setIsWebhookDialogOpen}>
           <DialogContent className="max-w-md h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col p-0 overflow-hidden">
             <DialogHeader className="flex-shrink-0 p-6 pb-2">
-              <DialogTitle>Create Webhook</DialogTitle>
+              <DialogTitle>Create Workflow Connection</DialogTitle>
               <DialogDescription>
-                Configure a webhook endpoint to receive events
+                Choose which events to send to another tool.
               </DialogDescription>
             </DialogHeader>
             <div className="flex-1 overflow-y-auto space-y-4 p-6 pt-2">
@@ -1270,7 +1270,7 @@ export function Integrations() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="webhook-url">Endpoint URL</Label>
+                <Label htmlFor="webhook-url">Connection URL</Label>
                 <Input
                   id="webhook-url"
                   placeholder="https://hooks.zapier.com/..."
@@ -1309,7 +1309,7 @@ export function Integrations() {
                 className="bg-brand-green hover:bg-brand-green/90"
                 data-testid="button-save-webhook"
               >
-                {createWebhookMutation.isPending ? "Creating..." : "Create Webhook"}
+                {createWebhookMutation.isPending ? "Creating..." : "Create Connection"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1337,7 +1337,7 @@ export function Integrations() {
             <div className="space-y-4 py-2">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800 space-y-1">
                 <p className="font-medium">Transparent Pricing:</p>
-                <p className="text-xs">Unlike other CRMs, WhachatCRM has <strong>zero per-message fees</strong> and <strong>unlimited automation flows</strong>. Your plan includes everything you need to scale without hidden costs.</p>
+                <p className="text-xs">WhachatCRM keeps billing transparent with no markup on Meta conversation pricing. Your subscription and Meta messaging charges are separate.</p>
               </div>
               {shopifyListingState === "live" ? (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800 space-y-1">

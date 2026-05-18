@@ -63,7 +63,7 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess, onStartTour
         setStep("webhook");
       }
     } catch (err: any) {
-      setError(err.message || "Connection failed");
+      setError(err.message || "Connection could not be completed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -128,8 +128,8 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess, onStartTour
             )}
           </div>
           <DialogDescription>
-            {step === "credentials" && "Enter your Twilio credentials to enable WhatsApp messaging."}
-            {step === "webhook" && "Configure your Twilio webhook to receive incoming messages."}
+            {step === "credentials" && "Legacy Twilio setup for existing WhatsApp senders."}
+            {step === "webhook" && "Add the connection URLs in Twilio so incoming messages can reach WhachatCRM."}
             {step === "success" && "Your WhatsApp Business is now connected and ready to use."}
           </DialogDescription>
         </DialogHeader>
@@ -213,7 +213,7 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess, onStartTour
             <Alert className="bg-amber-50 border-amber-200">
               <AlertCircle className="h-4 w-4 text-amber-600" />
               <AlertDescription className="text-amber-800">
-                Almost done! Copy these URLs to your Twilio Sandbox settings.
+                Almost done. Copy these connection URLs into your Twilio WhatsApp sender settings.
               </AlertDescription>
             </Alert>
 
@@ -280,7 +280,7 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess, onStartTour
               >
                 <Button variant="outline" className="w-full">
                   <ExternalLink className="h-4 w-4 mr-2" />
-                  Open Twilio Sandbox Settings
+                  Open Twilio WhatsApp Settings
                 </Button>
               </a>
             </div>
@@ -290,7 +290,7 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess, onStartTour
                 Back
               </Button>
               <Button onClick={handleComplete} data-testid="button-done">
-                I've configured the webhooks
+                I've added the connection URLs
               </Button>
             </div>
           </div>

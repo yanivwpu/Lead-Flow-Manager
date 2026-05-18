@@ -330,19 +330,21 @@ export function UserGuide() {
             Billing &amp; plan limits
           </h2>
           <p className="text-gray-600">
-            Plans limit how many <strong>active conversations</strong> you can open in a billing period, how many{" "}
-            <strong>users</strong> can join the workspace, and how many <strong>WhatsApp numbers</strong> you can
-            register — message charges from Meta or Twilio are billed by those providers separately.
+            Plans define your conversation capacity, team access, automation level, and AI features. Meta/WhatsApp
+            conversation charges are billed separately by Meta with no WhachatCRM markup.
           </p>
           <ul className="list-disc space-y-2 pl-5 text-gray-600">
             <li>
-              <strong>Free:</strong> 50 active conversations, 1 user, 1 WhatsApp number.
+              <strong>Free:</strong> Best for testing WhachatCRM with basic inbox access, limited active conversations,
+              1 user, and supported channel testing.
             </li>
             <li>
-              <strong>Starter:</strong> 500 active conversations, up to 3 users, 1 WhatsApp number.
+              <strong>Starter:</strong> $19/month with up to 3 users, AI Assist Basic, unified inbox, templates,
+              follow-ups, basic automations, and core integrations.
             </li>
             <li>
-              <strong>Pro:</strong> 2,000 active conversations, unlimited users, up to 5 WhatsApp numbers.
+              <strong>Pro:</strong> $49/month with unlimited users, larger conversation capacity, advanced workflows,
+              multi-channel scaling, and Growth Engines access where eligible.
             </li>
             <li>
               <strong>AI Brain:</strong> Add-on; requires an active <strong>Starter</strong> or <strong>Pro</strong> plan.

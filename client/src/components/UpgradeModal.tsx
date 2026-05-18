@@ -55,7 +55,7 @@ const UPGRADE_CONTENT: Record<
       "You've reached your monthly conversation limit for this plan.\nUpgrade your plan to continue creating new conversations, or wait until your next billing cycle for access to reset.",
     targetPlan: "starter",
     ctaText: "Upgrade Plan",
-    benefits: ["500 conversations/month", "Send messages to customers", "Follow-ups enabled"],
+    benefits: ["Better conversation capacity", "Send messages to customers", "Follow-ups enabled"],
   },
   free_reply: {
     icon: <Zap className="h-8 w-8 text-brand-green" />,
@@ -63,7 +63,7 @@ const UPGRADE_CONTENT: Record<
     description: "Free plan users can receive messages, but sending requires a paid plan.",
     targetPlan: "starter",
     ctaText: "Upgrade to Starter",
-    benefits: ["Reply to all your customers", "500 conversations/month", "Notes, tags & pipeline"],
+    benefits: ["Reply to all your customers", "Better conversation capacity", "Notes, tags & pipeline"],
   },
   add_user: {
     icon: <Users className="h-8 w-8 text-blue-500" />,
@@ -71,7 +71,7 @@ const UPGRADE_CONTENT: Record<
     description: "Add your team to collaborate on customer conversations.",
     targetPlan: "pro",
     ctaText: "Upgrade to Pro",
-    benefits: ["Unlimited users", "2,000 conversations/month", "Team inbox & collaboration"],
+    benefits: ["Unlimited users", "Larger conversation capacity", "Team inbox & collaboration"],
   },
   add_whatsapp_number: {
     icon: <Phone className="h-8 w-8 text-emerald-600" />,
@@ -79,7 +79,7 @@ const UPGRADE_CONTENT: Record<
     description: "Manage multiple WhatsApp Business numbers for different brands.",
     targetPlan: "pro",
     ctaText: "Upgrade to Pro",
-    benefits: ["Up to 5 WhatsApp numbers", "2,000 conversations/month", "Unlimited users"],
+    benefits: ["Multi-channel scaling features", "Larger conversation capacity", "Unlimited users"],
   },
   add_team_member: {
     icon: <Users className="h-8 w-8 text-blue-500" />,
@@ -99,17 +99,17 @@ const UPGRADE_CONTENT: Record<
     description: "Conversation assignment is available on the Pro plan.",
     targetPlan: "pro",
     ctaText: "Upgrade to Pro",
-    benefits: ["Assign chats to team members", "Pipeline and collaboration", "2,000 conversations/month"],
+    benefits: ["Assign chats to team members", "Pipeline and collaboration", "Larger conversation capacity"],
   },
   automations_upgrade_pro: {
     icon: <Sparkles className="h-8 w-8 text-purple-500" />,
-    title: "Unlock Advanced Automations",
-    description: "Upgrade to Pro for Advanced Automations, including integration-based triggers.",
+    title: "Unlock advanced workflows",
+    description: "Upgrade to Pro for advanced workflows, Growth Engine automations, and AI-assisted triggers where enabled.",
     targetPlan: "pro",
     ctaText: "Upgrade to Pro",
     benefits: [
-      "Webhook & form submission triggers",
-      "2,000 conversations/month",
+      "Connected app and form triggers",
+      "Larger conversation capacity",
       "Full team and channel features",
     ],
   },
@@ -122,7 +122,7 @@ const UPGRADE_CONTENT: Record<
     ctaText: "Upgrade to Starter",
     benefits: [
       "Up to 3 users",
-      "500 conversations/month",
+      "Better conversation capacity",
       "Shared team inbox",
     ],
   },
@@ -135,7 +135,7 @@ const UPGRADE_CONTENT: Record<
     ctaText: "Upgrade to Pro",
     benefits: [
       "Unlimited users",
-      "2,000 conversations/month",
+      "Larger conversation capacity",
       "Assignment & advanced CRM",
     ],
   },
@@ -152,12 +152,12 @@ const AUTOMATIONS_PAID_PLAN_COPY = {
   description: "Automations are available on Starter and Pro plans.",
   starterBenefits: [
     "Basic Automations — workflows & sequences",
-    "500 conversations/month",
+    "Better conversation capacity",
     "Templates & integrations",
   ],
   proBenefits: [
-    "Advanced Automations — integration triggers",
-    "2,000 conversations/month",
+    "Advanced workflows and AI-assisted triggers where enabled",
+    "Larger conversation capacity",
     "Unlimited users",
   ],
 };

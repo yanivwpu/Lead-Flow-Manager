@@ -237,7 +237,7 @@ export function ConnectMetaFbIgWizard({
       });
       result = (await resp.json()) as ConnectPageResult;
       if (!resp.ok || !result.success) {
-        throw new Error(result.error || "Connection failed");
+        throw new Error(result.error || "Connection could not be completed");
       }
     } catch (e: any) {
       setProgress({
@@ -247,7 +247,7 @@ export function ConnectMetaFbIgWizard({
         instagram: "error",
         saving: "error",
       });
-      setConnectError(e.message || "Connection failed — please try again");
+      setConnectError(e.message || "Connection could not be completed. Please try again.");
       return;
     }
 
@@ -568,7 +568,7 @@ export function ConnectMetaFbIgWizard({
                 <div className="min-w-0">
                   <p className="font-medium text-sm text-gray-900 truncate">{selectedPage.name}</p>
                   <p className="text-xs text-gray-500">
-                    {connectError ? "Connection failed" : "Setting up…"}
+                    {connectError ? "Connection needs attention" : "Setting up…"}
                   </p>
                 </div>
               </div>
@@ -593,7 +593,7 @@ export function ConnectMetaFbIgWizard({
               <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-100 rounded-lg">
                 <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-red-700">Connection failed</p>
+                  <p className="text-xs font-medium text-red-700">Connection needs attention</p>
                   <p className="text-xs text-red-600">{connectError}</p>
                   <button
                     className="text-xs text-blue-600 hover:underline mt-0.5"

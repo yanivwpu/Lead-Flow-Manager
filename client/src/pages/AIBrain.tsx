@@ -258,7 +258,7 @@ const AI_BRAIN_HIGHLIGHTS = [
 ] as const;
 
 function assistTierLabel(plan: string, trialProAi: boolean): string {
-  if (trialProAi || plan === "pro" || plan === "enterprise") return "AI Assist Enhanced";
+  if (trialProAi || plan === "pro" || plan === "enterprise") return "AI Assist Basic + Pro workflows";
   if (plan === "starter") return "AI Assist Basic";
   return "AI Assist";
 }
@@ -799,8 +799,7 @@ function AIBrainContent() {
               <p>
                 <span className="font-medium text-slate-900">Starter</span> is{" "}
                 <span className="text-violet-900/90">AI Assist Basic</span>.{" "}
-                <span className="font-medium text-slate-900">Pro</span> is{" "}
-                <span className="text-violet-900/90">AI Assist Enhanced</span>.
+                <span className="font-medium text-slate-900">Pro</span> adds unlimited users and enhanced AI-assisted workflows where enabled.
               </p>
               <p>
                 <span className="font-medium text-violet-900">AI Brain</span> — the serious upgrade for business memory,
@@ -848,7 +847,7 @@ function AIBrainContent() {
                         disabled={isCheckingOut}
                       >
                         <span className="font-semibold text-violet-950">Pro + AI Brain</span>
-                        <span className="text-xs font-normal text-violet-800/80">AI Assist Enhanced + intelligence layer</span>
+                        <span className="text-xs font-normal text-violet-800/80">AI Assist Basic, Pro workflows + intelligence layer</span>
                       </Button>
                     </div>
                     {isCheckingOut && (
@@ -927,7 +926,7 @@ function AIBrainContent() {
               </div>
               {showTrialFullSuite && (
                 <p className="text-sm text-violet-700/90">
-                  Trial includes AI Assist Enhanced and AI Brain. Subscribe before it ends to keep both.
+                  Trial includes AI Assist Basic, Pro workflow access, and AI Brain. Subscribe before it ends to keep them.
                 </p>
               )}
               {effectiveHasAIBrain && !showTrialFullSuite && (
@@ -1046,7 +1045,7 @@ function AIBrainContent() {
                         aria-checked={selected}
                         title={
                           autoLocked
-                            ? "Auto mode requires AI Assist Enhanced (Pro). Upgrade or complete your trial on Pro."
+                            ? "Auto mode requires Pro workflow access. Upgrade or complete your trial on Pro."
                             : mode.tooltip
                         }
                         onClick={() => {
@@ -1067,7 +1066,7 @@ function AIBrainContent() {
                 </div>
                 {starterOnly && (
                   <p className="text-xs text-slate-500">
-                    <span className="font-medium text-slate-700">Auto</span> is part of AI Assist Enhanced. On AI Assist
+                    <span className="font-medium text-slate-700">Auto</span> is part of Pro workflow access. On AI Assist
                     Basic, use <span className="font-medium text-slate-700">Suggest</span> to review every send.
                   </p>
                 )}

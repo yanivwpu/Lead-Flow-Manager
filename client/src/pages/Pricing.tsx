@@ -291,9 +291,9 @@ export function Pricing() {
     starter: boolean | string;
     pro: boolean | string;
   }[] = [
-    { feature: t(`${p}.compare.activeConversations`), free: "50", starter: "500", pro: "2,000" },
+    { feature: t(`${p}.compare.activeConversations`), free: t(`${p}.compare.limited`), starter: t(`${p}.compare.smallBusinessCapacity`), pro: t(`${p}.compare.largerCapacity`) },
     { feature: t(`${p}.compare.users`), free: "1", starter: t(`${p}.compare.upTo3`), pro: t(`${p}.compare.multiple`) },
-    { feature: t(`${p}.compare.whatsappNumbers`), free: "1", starter: "1", pro: t(`${p}.compare.upTo5`) },
+    { feature: t(`${p}.compare.whatsappNumbers`), free: t(`${p}.compare.testSupportedChannels`), starter: t(`${p}.compare.coreChannels`), pro: t(`${p}.compare.multiChannelScaling`) },
     { feature: t(`${p}.compare.unifiedInbox`), free: true, starter: true, pro: true },
     { feature: t(`${p}.compare.crm`), free: t(`${p}.compare.basic`), starter: t(`${p}.compare.full`), pro: t(`${p}.compare.full`) },
     { feature: t(`${p}.compare.pipelineTasks`), free: true, starter: true, pro: true },
@@ -384,6 +384,19 @@ export function Pricing() {
               <Sparkles className="h-4 w-4 shrink-0" />
               {t(`${p}.hero.badge3`)}
             </span>
+          </div>
+        </div>
+
+        {/* ─────────────── SECTION 1b: META FEE TRANSPARENCY ─────────────── */}
+        <div className="mb-14 rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-sm" data-testid="section-meta-fees">
+          <div className={`flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between ${isRTL ? "sm:flex-row-reverse" : ""}`}>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{t(`${p}.metaFees.title`)}</p>
+              <p className="mt-1 text-sm text-gray-600">{t(`${p}.metaFees.body`)}</p>
+            </div>
+            <p className="text-xs font-medium text-gray-500 sm:max-w-xs">
+              {t(`${p}.metaFees.note`)}
+            </p>
           </div>
         </div>
 

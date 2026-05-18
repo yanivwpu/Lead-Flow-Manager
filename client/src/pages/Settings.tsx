@@ -1097,7 +1097,7 @@ export function Settings() {
               </div>
               <div className="min-w-0">
                 <h2 className="text-base sm:text-lg font-bold text-gray-900">Subscription</h2>
-                <p className="text-xs sm:text-sm text-gray-500">Manage your plan and billing.</p>
+                <p className="text-xs sm:text-sm text-gray-500">Manage your plan and billing with transparent messaging costs.</p>
               </div>
             </div>
 
@@ -1106,6 +1106,7 @@ export function Settings() {
                 <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
               </div>
             ) : (
+              <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-5 bg-white rounded-xl border border-gray-200 flex flex-col h-full shadow-sm">
                   <div className="flex items-center gap-2 mb-3">
@@ -1186,6 +1187,17 @@ export function Settings() {
                     )}
                   </div>
                 </div>
+              </div>
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4 text-sm text-emerald-950">
+                <p className="font-semibold">No WhachatCRM markup on Meta conversation pricing.</p>
+                <p className="mt-1 text-emerald-900/90">
+                  You pay Meta/WhatsApp conversation fees directly based on Meta's pricing model. WhachatCRM does not add
+                  additional per-message markups.
+                </p>
+                <p className="mt-1 text-xs text-emerald-800/80">
+                  Your WhachatCRM subscription and Meta messaging charges are separate.
+                </p>
+              </div>
               </div>
             )}
           </div>

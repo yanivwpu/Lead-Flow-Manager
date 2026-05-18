@@ -57,7 +57,7 @@ export function ConnectMetaWizard({ open, onOpenChange, onSuccess, onStartTour }
       setVerifyToken(data.webhookVerifyToken || data.verifyToken);
       setStep("webhook");
     } catch (err: any) {
-      setError(err.message || "Connection failed");
+      setError(err.message || "Connection could not be completed. Please try again.");
     } finally {
       setLoading(false);
     }

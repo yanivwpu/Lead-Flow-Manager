@@ -55,14 +55,14 @@ Businesses using WhatsApp for sales report up to 40% higher conversion rates com
 ### Step 1: Choose the Right Platform
 
 Look for a WhatsApp CRM that offers:
-- Easy Twilio or WhatsApp Business API integration
+- Guided Meta Embedded Signup for WhatsApp
 - Mobile-friendly interface
 - Affordable pricing for small teams
 - Automation features
 
 ### Step 2: Connect Your WhatsApp Number
 
-Most WhatsApp CRM tools use Twilio or the official WhatsApp Business API. The setup typically takes 15-30 minutes.
+WhachatCRM guides WhatsApp setup through Meta Embedded Signup. Choose your business, WhatsApp account, and phone number, then return to WhachatCRM for automatic verification.
 
 ### Step 3: Import Your Contacts
 
@@ -141,7 +141,7 @@ The WhatsApp Business API is designed for medium to large businesses that need m
 - Multi-user access
 - Full automation capabilities
 - CRM integration
-- Webhook support
+- Real-time message sync
 - Message templates for outbound
 - High volume messaging
 - Analytics and reporting
@@ -153,9 +153,9 @@ The WhatsApp Business API is designed for medium to large businesses that need m
 - Companies requiring CRM integration
 
 ### Requirements
-- Must use a Business Solution Provider (BSP) like Twilio
-- Requires technical setup
-- Monthly costs for messages
+- Uses Meta business assets and approvals
+- Guided setup through Meta Embedded Signup in WhachatCRM
+- Meta conversation pricing billed separately by Meta
 
 ## Head-to-Head Comparison
 
@@ -195,31 +195,31 @@ Many businesses start with the Business App and migrate to the API as they grow.
 
 When you're ready to upgrade from the Business App to the API:
 
-1. Choose a BSP (Twilio is popular and reliable)
-2. Get your number verified for the API
-3. Set up your CRM integration
-4. Migrate your customer conversations
+1. Log into the correct Meta admin account
+2. Start Meta Embedded Signup in WhachatCRM
+3. Select your business, WhatsApp account, and phone number
+4. Let WhachatCRM verify the connection
 5. Train your team on the new system
 
 ## Cost Considerations
 
 **Business App**: Free, but your time has value
 
-**Business API via Twilio**:
-- No monthly fees
-- Pay per conversation (~$0.05-0.15 depending on region)
-- First 1,000 conversations free per month
+**WhatsApp Business Platform through Meta**:
+- Meta conversation pricing varies by country and conversation type
+- Meta messaging charges are separate from your CRM subscription
+- WhachatCRM does not add per-message markups
 
 **WhatsApp CRM (like WhachatCRM)**:
 - $0-49/month for the platform
-- Plus Twilio message costs
+- Plus Meta conversation fees billed directly by Meta
 - Zero markup on messages
 
 ## Conclusion
 
 For most growing businesses, the WhatsApp Business API provides the features and flexibility needed to scale. While the Business App is great for starting out, you'll likely outgrow it quickly if your business is growing.
 
-WhachatCRM makes it easy to use the WhatsApp Business API without the technical complexity. Connect your Twilio account in minutes and start managing conversations like a pro.
+WhachatCRM makes it easy to connect WhatsApp without developer setup. Use Meta Embedded Signup and start managing conversations in the unified inbox.
   `,
   "automate-whatsapp-messages-small-business": `
 Time is your most valuable resource as a small business owner. Automating WhatsApp messages can save you hours every week while improving customer experience.
@@ -361,7 +361,7 @@ Based on typical small business usage:
 ## Getting Started
 
 1. Sign up for a WhatsApp CRM like WhachatCRM
-2. Connect your Twilio account
+2. Connect WhatsApp through Meta Embedded Signup
 3. Enable auto-reply with your first message
 4. Set up business hours and away message
 5. Create 3-5 quick response templates
@@ -515,7 +515,7 @@ WATI (WhatsApp Team Inbox) is a popular WhatsApp Business solution, but it's not
 
 | Feature | WATI | WhachatCRM | Respond.io | Trengo |
 |---------|------|------------|------------|--------|
-| Starting Price | $49/mo | $0/mo | $79/mo | $15/user/mo |
+| Starting Price | Paid plan | $0/mo | Paid plan | Per-user pricing |
 | Message Markup | Yes | No | Yes | Yes |
 | Free Plan | No | Yes | No | No |
 | Drip Campaigns | Yes | Yes | Yes | Limited |
@@ -526,15 +526,15 @@ WATI (WhatsApp Team Inbox) is a popular WhatsApp Business solution, but it's not
 **Best For:** Small teams wanting zero message markup
 
 ### Pricing
-- Free: $0/month (50 conversations, 1 user)
-- Starter: $19/month (500 conversations, 3 users)
-- Pro: $49/month (2,000 conversations, unlimited users)
+- Free: $0/month (basic inbox access, 1 user)
+- Starter: $19/month (up to 3 users, AI Assist Basic included)
+- Pro: $49/month (unlimited users, advanced workflows)
 
 ### Key Differences from WATI
-- **No message markup** - Pay Twilio directly
+- **No Meta message markup** - Pay Meta/WhatsApp conversation fees directly
 - **Free plan available** - Try before you buy
 - **Simpler interface** - Less learning curve
-- **Your Twilio account** - Full control over messaging
+- **Meta-first onboarding** - Guided WhatsApp setup through Meta Embedded Signup
 
 ### Pros
 ✅ Most affordable option
@@ -543,7 +543,7 @@ WATI (WhatsApp Team Inbox) is a popular WhatsApp Business solution, but it's not
 ✅ Quick setup (15 minutes)
 
 ### Cons
-❌ Requires own Twilio account
+❌ Some Meta messaging features may require approval before live use
 ❌ Fewer advanced features than WATI
 
 ## 2. Respond.io
@@ -551,8 +551,8 @@ WATI (WhatsApp Team Inbox) is a popular WhatsApp Business solution, but it's not
 **Best For:** Multi-channel customer communication
 
 ### Pricing
-- Team: $79/month
-- Business: $249/month
+- Team: Higher paid tier
+- Business: Higher paid tier
 - Enterprise: Custom
 
 ### Key Features
@@ -892,184 +892,39 @@ Great WhatsApp customer service combines the right tools, processes, and people.
 WhachatCRM provides the team inbox, templates, and automation you need for professional customer service. Try it free today.
   `,
   "twilio-whatsapp-setup-guide": `
-This step-by-step guide will walk you through setting up Twilio for WhatsApp messaging. By the end, you'll have a working WhatsApp Business integration.
+WhatsApp onboarding in WhachatCRM is now guided through Meta Embedded Signup. This keeps setup simple: choose your business, WhatsApp account, and phone number in Meta, then return to WhachatCRM for automatic verification.
 
-## Prerequisites
+## Before You Start
 
-Before you start, you'll need:
-- A Twilio account (sign up at twilio.com)
-- A verified phone number
-- A business to register with WhatsApp
+Make sure you are logged into the correct Facebook or Meta admin account. You need admin access to the Meta Business account and WhatsApp Business Account you want to connect.
 
-## Step 1: Create a Twilio Account
+Your WhatsApp number should be ready for production messaging. Some Meta features may require approval before live customer messaging works.
 
-1. Go to twilio.com and click "Sign Up"
-2. Enter your email and create a password
-3. Verify your email address
-4. Add your phone number for verification
-5. Answer a few questions about your use case
+## Connect WhatsApp
 
-**Tip:** Choose "WhatsApp" when asked what you want to build.
+1. Open Settings ? Integrations / Channels
+2. Click Connect WhatsApp
+3. Continue with Meta Embedded Signup
+4. Select or create your business account
+5. Select your WhatsApp Business Account
+6. Select the phone number you want to use
+7. Return to WhachatCRM
+8. WhachatCRM verifies the connection automatically
+9. If multiple numbers exist, choose the number you want connected
 
-## Step 2: Access the Twilio Console
+## What Happens Next
 
-Once logged in:
-1. You'll see your dashboard with Account SID and Auth Token
-2. **Copy these credentials** - you'll need them later
-3. Note your trial credit amount
+Once connected, new WhatsApp conversations can route into the unified inbox. Your team can reply, add notes, use templates and follow-ups, and build basic or advanced workflows depending on your plan.
 
-## Step 3: Set Up WhatsApp Sandbox (For Testing)
+## Billing Transparency
 
-For testing before going live:
+WhachatCRM does not add a markup to Meta conversation pricing. You pay Meta/WhatsApp conversation fees directly based on Meta's pricing model, separate from your WhachatCRM subscription.
 
-1. In the console, navigate to **Messaging** > **Try it out** > **Send a WhatsApp message**
-2. You'll see a sandbox number and join code
-3. Send the join code to the sandbox number from your phone
-4. Now you can send and receive test messages
+## Troubleshooting
 
-**Example:**
-Send "join example-word" to +1 415 523 8886
+If messages do not arrive, check that you used the correct Meta admin account, selected the right WhatsApp Business Account and phone number, and completed any required Meta approval steps. Reconnect the channel if permissions changed.
 
-## Step 4: Get a WhatsApp-Enabled Number
-
-For production use:
-
-1. Go to **Phone Numbers** > **Buy a Number**
-2. Select a number that supports WhatsApp (check the capabilities)
-3. Purchase the number
-
-**Note:** WhatsApp numbers require approval. This can take 1-3 business days.
-
-## Step 5: Register for WhatsApp Business API
-
-1. Navigate to **Messaging** > **Senders** > **WhatsApp Senders**
-2. Click "Register a WhatsApp Business Profile"
-3. Fill in your business information:
-   - Business name
-   - Category
-   - Description
-   - Address
-   - Logo
-4. Submit for approval
-
-**Approval Timeline:** Usually 24-72 hours
-
-## Step 6: Configure Webhooks
-
-Webhooks let you receive incoming messages:
-
-1. Go to **Messaging** > **Settings** > **WhatsApp Sandbox Settings** (or your approved sender)
-2. In "When a message comes in", enter your webhook URL
-3. Example: https://yourapp.com/api/twilio/webhook
-4. Save changes
-
-**Testing Webhooks:**
-Use tools like ngrok to test locally before deploying.
-
-## Step 7: Send Your First Message
-
-Using Node.js:
-
-\`\`\`javascript
-const twilio = require('twilio');
-
-const client = twilio(
-  'YOUR_ACCOUNT_SID',
-  'YOUR_AUTH_TOKEN'
-);
-
-client.messages.create({
-  from: 'whatsapp:+14155238886', // Your Twilio WhatsApp number
-  to: 'whatsapp:+1234567890',    // Customer's number
-  body: 'Hello from Twilio!'
-}).then(message => console.log(message.sid));
-\`\`\`
-
-## Step 8: Handle Incoming Messages
-
-Set up a webhook handler:
-
-\`\`\`javascript
-app.post('/api/twilio/webhook', (req, res) => {
-  const { From, Body } = req.body;
-  
-  console.log(\`Message from \${From}: \${Body}\`);
-  
-  // Respond with TwiML
-  res.type('text/xml').send(\`
-    <Response>
-      <Message>Thanks for your message!</Message>
-    </Response>
-  \`);
-});
-\`\`\`
-
-## Step 9: Message Templates (Required for 24h+ Messages)
-
-WhatsApp requires pre-approved templates for messages sent more than 24 hours after the last customer message.
-
-1. Go to **Messaging** > **Content Template Builder**
-2. Click "Create a Template"
-3. Choose a template type
-4. Write your template content
-5. Submit for approval
-
-**Template Example:**
-"Hi {{1}}, your order {{2}} has shipped. Track it here: {{3}}"
-
-## Common Issues and Solutions
-
-### "Number not WhatsApp enabled"
-- Ensure you've completed WhatsApp Business API registration
-- Check that your number shows WhatsApp capability in the console
-
-### "Message failed to send"
-- Verify the recipient has WhatsApp
-- Check your account balance
-- Ensure you're using the correct number format (+country code)
-
-### "Webhook not receiving messages"
-- Verify your webhook URL is publicly accessible
-- Check Twilio debugger for errors
-- Ensure HTTPS is configured correctly
-
-## Cost Breakdown
-
-**Twilio Pricing (2025):**
-- Phone number: ~$1-2/month
-- Conversations: ~$0.05-0.15 per conversation
-- First 1,000 conversations: Free each month
-
-**Conversation Pricing:**
-- User-initiated: Lower cost
-- Business-initiated: Higher cost
-- 24-hour conversation window
-
-## Security Best Practices
-
-1. **Never expose credentials** - Use environment variables
-2. **Validate webhooks** - Check Twilio signature
-3. **Use HTTPS** - Encrypt all communication
-4. **Rotate tokens** - Regularly update credentials
-
-## Connecting to WhachatCRM
-
-Once Twilio is set up:
-
-1. Log into WhachatCRM
-2. Go to Settings > WhatsApp Connection
-3. Enter your Account SID
-4. Enter your Auth Token
-5. Add your WhatsApp phone number
-6. Click "Save & Test Connection"
-
-WhachatCRM will automatically configure webhooks to receive your messages.
-
-## Conclusion
-
-Setting up Twilio for WhatsApp takes about 15-30 minutes for the sandbox, and a few days for full production access. The investment is worth it for the power and flexibility you get.
-
-Need help? WhachatCRM support is available to assist with your Twilio setup.
+Need help? Contact support and we can help review the connection status.
   `,
   "whatsapp-drip-campaigns-examples": `
 Drip campaigns are automated message sequences sent over time to nurture leads and customers. Here are proven examples you can adapt for your business.

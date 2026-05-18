@@ -71,8 +71,8 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     slug: "twilio-whatsapp-setup-guide",
-    title: "How to Set Up Twilio for WhatsApp: Step-by-Step Guide",
-    excerpt: "Complete walkthrough for connecting your WhatsApp Business to Twilio. Includes getting approved, configuring webhooks, and sending your first message via the API.",
+    title: "How to Connect WhatsApp with Meta Embedded Signup",
+    excerpt: "A simple walkthrough for connecting WhatsApp through Meta, choosing your business account and phone number, and verifying the inbox connection.",
     category: "Tutorials",
     readTime: "15 min read",
     date: "2025-11-10",

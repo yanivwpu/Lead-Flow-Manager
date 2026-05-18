@@ -119,14 +119,12 @@ Welcome to WhachatCRM! This guide will help you get up and running quickly with 
 
 ## Step 1: Connect Your Channels
 
-WhachatCRM supports 7 messaging channels in one unified inbox:
-- **WhatsApp**: Via Twilio or Meta Business API (your choice)
-- **SMS**: Via Twilio
-- **Telegram**: Connect your bot
-- **Instagram DM**: Via Meta integration
-- **Facebook Messenger**: Via Meta integration
-- **Web Chat**: Embeddable widget for your website
-- **TikTok**: Lead intake only
+WhachatCRM brings supported channels into one unified inbox so your team can reply faster and keep lead history in one place.
+- **WhatsApp**: Connected through Meta Embedded Signup
+- **Instagram DMs**: Connected through Meta and linked Facebook Pages
+- **Facebook Messenger**: Connected through your Facebook Page
+- **Web Chat**: Website widget for inbound conversations
+- **SMS, Telegram, and TikTok lead intake**: Available where enabled
 
 To connect:
 1. Go to **Settings** > **Communication Channels**
@@ -151,12 +149,10 @@ Once connected, you can:
 
 ## Step 4: Set Up Automation
 
-Save time with automated features:
-- **Away Messages**: Auto-reply outside business hours
-- **Auto-Responders**: Reply instantly to new messages
-- **Smart Fallback**: Auto-route to backup channel if primary fails
-- **Drip Sequences**: Send scheduled message series (Pro plan)
-- **Workflows**: Automate tagging and assignments (Pro plan)
+Create follow-ups, reminders, lead nurturing steps, and campaign flows across supported channels.
+- **Starter**: Basic automations, templates, and follow-ups
+- **Pro**: More advanced workflows, Growth Engine automations, and AI-assisted triggers where enabled
+- **AI Brain add-on**: Optional intelligence layer for smarter suggestions, context, and workflow enhancements
     `
   },
   {
@@ -178,7 +174,7 @@ Think of AI Brain as a smart assistant that:
 - **Captures leads** - automatically extracts customer information from conversations
 - **Adapts to your style** - choose from Neutral, Friendly, Professional, or Sales-focused tones
 
-Available for **Starter and Pro plan** users at **$29/month** under Fair Use.
+AI Assist Basic is included in **Starter and above**. AI Brain is an optional add-on for teams that want deeper context, smart suggestions, lead scoring or insights where enabled, and advanced AI workflow enhancements.
 
 ## What can AI Brain do?
 
@@ -199,7 +195,7 @@ Upload your company's unique information—products, pricing, policies, and FAQs
 1. **Upgrade to Starter or Pro** - AI Brain requires a paid subscription
 2. **Enable AI Brain** - Go to Settings > AI Brain and subscribe
 3. **Add Business Knowledge** - Teach AI about your business
-4. **Set AI Mode** - Choose Suggest Only, Auto Draft, or Hybrid
+4. **Choose your AI behavior** - Start with suggestions and enable advanced modes only where your plan supports them
 5. **Start Using** - Click the brain icon in any chat
     `
   },
@@ -267,29 +263,45 @@ Manage your WhachatCRM subscription and billing information.
 
 ## Available Plans
 
-### Free Plan
-- 50 conversations/month
-- Basic inbox features
-- 1 channel connection
+### Free
+- Best for testing WhachatCRM
+- Basic inbox access
+- Limited active conversations
+- 1 user
+- Test supported channels
 
-### Starter Plan - $29/month
-- Unlimited conversations
-- All 7 channels
-- Team collaboration
-- Basic automation
+### Starter - $19/month
+- Up to 3 users
+- AI Assist Basic included
+- Unified inbox
+- Templates and follow-ups
+- Basic automations
+- Core integrations
+- Better conversation capacity for small businesses
 
-### Pro Plan - $79/month
-- Everything in Starter
-- Advanced automation
-- Drip sequences
-- Priority support
-- API access
+### Pro - $49/month
+- Unlimited users
+- Advanced automations
+- Growth Engines access where eligible
+- Enhanced AI-assisted workflows
+- Larger conversation capacity
+- Multi-channel scaling features
+- Advanced workflow capabilities
 
-### AI Brain Add-on - $29/month
-- Unlimited AI features
-- Smart reply suggestions
-- Lead scoring
-- Business knowledge base
+### AI Brain Add-on
+- Optional intelligence layer
+- Smart suggestions
+- AI context assistance
+- Lead scoring and insights where enabled
+- Advanced AI workflow enhancements
+
+## Meta Conversation Fees
+
+No WhachatCRM markup on Meta conversation pricing.
+
+You pay Meta/WhatsApp conversation fees directly based on Meta's pricing model. WhachatCRM does not add additional per-message markups.
+
+Your WhachatCRM subscription and Meta messaging charges are separate.
 
 ## How to Upgrade
 
@@ -318,49 +330,80 @@ Contact support within 14 days of purchase for refund requests.
     content: `
 # Connecting Communication Channels
 
-WhachatCRM supports 7 messaging channels in one unified inbox.
+# Connecting Communication Channels
 
-## WhatsApp
+Use this guide to connect WhatsApp, Facebook Messenger, and Instagram DMs to the unified inbox.
 
-### Via Twilio
-1. Create a Twilio account
-2. Get WhatsApp Business approval
-3. Enter your Twilio credentials in Settings
+## Before You Start
 
-### Via Meta Business API
-1. Create a Meta Business account
-2. Set up WhatsApp Business API
-3. Connect using the Meta wizard in Settings
+- Log into the correct Facebook/Meta account before you begin
+- Make sure you have admin access to the business, Page, and messaging assets
+- Instagram must be a Professional account
+- Instagram must be linked to a Facebook Page
+- WhatsApp connects through Meta Embedded Signup
+- Some Meta features may require approval before live customer messaging works
 
-## SMS (Twilio)
+## Connect WhatsApp
 
-1. Get a Twilio phone number
-2. Enter Account SID and Auth Token
-3. Configure webhook URL
+FLOW: WhachatCRM → Meta Embedded Signup → Choose Business → Choose WhatsApp Account → Choose Phone Number → Return to WhachatCRM → Connection Verification → Ready
 
-## Telegram
+1. Open **Settings** → **Integrations / Channels**
+2. Click **Connect WhatsApp**
+3. Continue with Meta Embedded Signup
+4. Select or create your business account
+5. Select your WhatsApp Business Account
+6. Select your phone number
+7. Return to WhachatCRM
+8. WhachatCRM verifies the connection automatically
+9. If multiple numbers exist, choose the number you want connected
 
-1. Create a bot using @BotFather
-2. Get your bot token
-3. Enter token in Settings
+WhachatCRM does not add a markup to Meta conversation pricing. Your WhachatCRM subscription and Meta messaging charges are separate.
 
-## Instagram & Facebook
+## Connect Facebook Messenger
 
-1. Connect your Meta Business account
-2. Link your Instagram/Facebook page
-3. Grant messaging permissions
+FLOW: WhachatCRM → Meta Login → Choose Page/Account → Approve Permissions → Return to WhachatCRM → Inbox Ready
 
-## Web Chat Widget
+1. Open **Integrations**
+2. Click **Connect Facebook**
+3. Choose the Facebook Page
+4. Approve requested permissions
+5. Return to WhachatCRM
+6. Test the inbox connection
 
-1. Go to Settings > Web Widget
-2. Customize appearance
-3. Copy embed code to your website
+## Connect Instagram
 
-## TikTok
+FLOW: WhachatCRM → Meta Login → Choose Page/Account → Approve Permissions → Return to WhachatCRM → Inbox Ready
 
-1. Connect your TikTok Business account
-2. Enable lead form integration
-3. Leads appear automatically in inbox
+1. Ensure Instagram is Professional
+2. Ensure it is linked to a Facebook Page
+3. Click **Connect Instagram**
+4. Approve Meta permissions
+5. Return to WhachatCRM
+6. Verify inbox connection
+
+If messages do not arrive, Meta permissions, account linkage, or app review may still need approval or configuration.
+
+## Status Definitions
+
+### Connected
+Your channel is ready.
+
+### Needs Attention
+The connection exists but requires review or reconnection.
+
+### Pending Review
+Meta approval or setup may still be in progress.
+
+### Not Connected
+This channel has not been connected yet.
+
+## Troubleshooting
+
+- Make sure you used the correct Facebook/Meta admin account
+- Confirm Instagram is linked to the correct Facebook Page
+- Confirm the WhatsApp number is a production number
+- Reconnect the channel if permissions changed
+- Contact support if the connection still needs attention
     `
   },
 ];
@@ -380,8 +423,8 @@ export const HELP_ARTICLES_HE: HelpArticle[] = [
 ## שלב 1: חיבור הערוצים שלך
 
 WhachatCRM תומך ב-7 ערוצי הודעות בתיבת דואר מאוחדת אחת:
-- **וואטסאפ**: דרך Twilio או Meta Business API (לבחירתך)
-- **SMS**: דרך Twilio
+- **וואטסאפ**: דרך Meta Embedded Signup
+- **SMS**: זמין כשמופעל
 - **טלגרם**: חבר את הבוט שלך
 - **הודעות אינסטגרם**: דרך אינטגרציית Meta
 - **פייסבוק מסנג'ר**: דרך אינטגרציית Meta
@@ -438,7 +481,7 @@ AI Brain הוא תוסף עוצמתי שהופך את WhachatCRM לעוזר עס
 - **לוכד לידים** - מחלץ אוטומטית מידע לקוחות משיחות
 - **מתאים לסגנון שלך** - בחר בין נייטרלי, ידידותי, מקצועי או ממוקד מכירות
 
-זמין למשתמשי **תוכנית Starter ו-Pro** ב-**$29/חודש** תחת שימוש הוגן.
+AI Assist Basic כלול ב-**Starter ומעלה**. AI Brain הוא תוסף אופציונלי לשכבת אינטליגנציה עמוקה יותר, הצעות חכמות, סיוע בהקשר, תובנות לידים כשמופעלות ושיפורי זרימת עבודה מבוססי AI.
 
 ## מה AI Brain יכול לעשות?
 
@@ -528,29 +571,45 @@ WhachatCRM מספקת תבניות אוטומציה מוכנות מראש כדי
 
 ## תוכניות זמינות
 
-### תוכנית חינמית
-- 50 שיחות/חודש
-- תכונות תיבת דואר בסיסיות
-- חיבור ערוץ אחד
+### Free
+- הטוב ביותר לבדיקת WhachatCRM
+- גישה בסיסית לתיבת הדואר
+- שיחות פעילות מוגבלות
+- משתמש אחד
+- בדיקת ערוצים נתמכים
 
-### תוכנית Starter - $29/חודש
-- שיחות ללא הגבלה
-- כל 7 הערוצים
-- שיתוף פעולה צוותי
-- אוטומציה בסיסית
+### Starter - $19/חודש
+- עד 3 משתמשים
+- AI Assist Basic כלול
+- תיבת דואר מאוחדת
+- תבניות ומעקבים
+- אוטומציות בסיסיות
+- אינטגרציות ליבה
+- קיבולת שיחות טובה יותר לעסקים קטנים
 
-### תוכנית Pro - $79/חודש
-- הכל ב-Starter
-- אוטומציה מתקדמת
-- רצפי טפטוף
-- תמיכה בעדיפות
-- גישת API
+### Pro - $49/חודש
+- משתמשים ללא הגבלה
+- אוטומציות מתקדמות
+- גישה ל-Growth Engines כשזכאים
+- זרימות עבודה משופרות בסיוע AI
+- קיבולת שיחות גדולה יותר
+- יכולות סקיילינג רב-ערוציות
+- יכולות זרימת עבודה מתקדמות
 
-### תוסף AI Brain - $29/חודש
-- תכונות AI ללא הגבלה
-- הצעות תשובה חכמות
-- דירוג לידים
-- בסיס ידע עסקי
+### תוסף AI Brain
+- שכבת אינטליגנציה אופציונלית
+- הצעות חכמות
+- סיוע AI בהקשר
+- דירוג לידים ותובנות כשמופעלים
+- שיפורי זרימת עבודה מתקדמים בסיוע AI
+
+## עמלות שיחה של Meta
+
+אין תוספת מחיר של WhachatCRM על תמחור השיחות של Meta.
+
+אתה משלם עמלות שיחה של Meta/WhatsApp ישירות לפי מודל התמחור של Meta. WhachatCRM לא מוסיפה תוספות לכל הודעה.
+
+המנוי שלך ל-WhachatCRM וחיובי ההודעות של Meta נפרדים.
 
 ## איך לשדרג
 
@@ -579,49 +638,78 @@ WhachatCRM מספקת תבניות אוטומציה מוכנות מראש כדי
     content: `
 # חיבור ערוצי תקשורת
 
-WhachatCRM תומך ב-7 ערוצי הודעות בתיבת דואר מאוחדת אחת.
+השתמש במדריך זה כדי לחבר WhatsApp, Facebook Messenger והודעות Instagram לתיבת הדואר המאוחדת.
 
-## וואטסאפ
+## לפני שמתחילים
 
-### דרך Twilio
-1. צור חשבון Twilio
-2. קבל אישור WhatsApp Business
-3. הזן את פרטי ה-Twilio שלך בהגדרות
+- התחבר לחשבון Facebook/Meta הנכון
+- ודא שיש לך הרשאות אדמין לעסק, לעמוד ולנכסי ההודעות
+- חשבון Instagram חייב להיות Professional
+- Instagram חייב להיות מקושר לעמוד Facebook
+- WhatsApp מתחבר דרך Meta Embedded Signup
+- חלק מתכונות Meta עשויות לדרוש אישור לפני הודעות ללקוחות חיים
 
-### דרך Meta Business API
-1. צור חשבון Meta Business
-2. הגדר WhatsApp Business API
-3. התחבר באמצעות אשף Meta בהגדרות
+## חיבור WhatsApp
 
-## SMS (Twilio)
+FLOW: WhachatCRM → Meta Embedded Signup → בחירת עסק → בחירת חשבון WhatsApp → בחירת מספר טלפון → חזרה ל-WhachatCRM → אימות חיבור → מוכן
 
-1. קבל מספר טלפון Twilio
-2. הזן Account SID ו-Auth Token
-3. הגדר כתובת webhook
+1. פתח **הגדרות** → **אינטגרציות / ערוצים**
+2. לחץ **Connect WhatsApp**
+3. המשך עם Meta Embedded Signup
+4. בחר או צור את חשבון העסק
+5. בחר את חשבון WhatsApp Business
+6. בחר את מספר הטלפון
+7. חזור ל-WhachatCRM
+8. WhachatCRM מאמת את החיבור אוטומטית
+9. אם קיימים מספר מספרים, בחר את המספר שברצונך לחבר
 
-## טלגרם
+אין תוספת מחיר של WhachatCRM על תמחור השיחות של Meta. המנוי שלך וחיובי ההודעות של Meta נפרדים.
 
-1. צור בוט באמצעות @BotFather
-2. קבל את טוקן הבוט שלך
-3. הזן את הטוקן בהגדרות
+## חיבור Facebook Messenger
 
-## אינסטגרם ופייסבוק
+FLOW: WhachatCRM → Meta Login → בחירת עמוד/חשבון → אישור הרשאות → חזרה ל-WhachatCRM → תיבת דואר מוכנה
 
-1. חבר את חשבון ה-Meta Business שלך
-2. קשר את דף האינסטגרם/פייסבוק שלך
-3. הענק הרשאות הודעות
+1. פתח **אינטגרציות**
+2. לחץ **Connect Facebook**
+3. בחר את עמוד Facebook
+4. אשר את ההרשאות המבוקשות
+5. חזור ל-WhachatCRM
+6. בדוק את החיבור בתיבת הדואר
 
-## ווידג'ט צ'אט אתר
+## חיבור Instagram
 
-1. עבור להגדרות > ווידג'ט אתר
-2. התאם אישית את המראה
-3. העתק קוד הטמעה לאתר שלך
+FLOW: WhachatCRM → Meta Login → בחירת עמוד/חשבון → אישור הרשאות → חזרה ל-WhachatCRM → תיבת דואר מוכנה
 
-## טיקטוק
+1. ודא ש-Instagram הוא חשבון Professional
+2. ודא שהוא מקושר לעמוד Facebook
+3. לחץ **Connect Instagram**
+4. אשר הרשאות Meta
+5. חזור ל-WhachatCRM
+6. אמת את החיבור לתיבת הדואר
 
-1. חבר את חשבון TikTok Business שלך
-2. הפעל אינטגרציית טופס לידים
-3. לידים מופיעים אוטומטית בתיבת הדואר
+אם הודעות לא מגיעות, ייתכן שהרשאות Meta, קישור החשבון או סקירת האפליקציה עדיין דורשים אישור או הגדרה.
+
+## הגדרות סטטוס
+
+### מחובר
+הערוץ מוכן.
+
+### דורש תשומת לב
+החיבור קיים אבל דורש בדיקה או חיבור מחדש.
+
+### ממתין לאישור
+ייתכן שאישור Meta או ההגדרה עדיין בתהליך.
+
+### לא מחובר
+הערוץ עדיין לא חובר.
+
+## פתרון בעיות
+
+- ודא שהשתמשת בחשבון Facebook/Meta אדמין הנכון
+- ודא ש-Instagram מקושר לעמוד Facebook הנכון
+- ודא שמספר WhatsApp הוא מספר production
+- חבר מחדש את הערוץ אם ההרשאות השתנו
+- פנה לתמיכה אם החיבור עדיין דורש תשומת לב
     `
   },
 ];
@@ -641,8 +729,8 @@ export const HELP_ARTICLES_ES: HelpArticle[] = [
 ## Paso 1: Conecta tus Canales
 
 WhachatCRM soporta 7 canales de mensajería en una bandeja unificada:
-- **WhatsApp**: Vía Twilio o Meta Business API (a tu elección)
-- **SMS**: Vía Twilio
+- **WhatsApp**: Mediante Meta Embedded Signup
+- **SMS**: Disponible donde esté habilitado
 - **Telegram**: Conecta tu bot
 - **Instagram DM**: Vía integración Meta
 - **Facebook Messenger**: Vía integración Meta
@@ -699,7 +787,7 @@ Piensa en AI Brain como un asistente inteligente que:
 - **Captura leads** - extrae automáticamente información del cliente de las conversaciones
 - **Se adapta a tu estilo** - elige entre Neutral, Amigable, Profesional o enfocado en Ventas
 
-Disponible para usuarios del **plan Starter y Pro** a **$29/mes** bajo Uso Justo.
+AI Assist Basic está incluido en **Starter y planes superiores**. AI Brain es un complemento opcional para equipos que necesitan más contexto, sugerencias inteligentes, asistencia de IA, puntuación o insights de leads donde estén habilitados, y mejoras avanzadas de flujos con IA.
 
 ## ¿Qué puede hacer AI Brain?
 
@@ -789,29 +877,45 @@ Administra tu suscripción e información de facturación de WhachatCRM.
 
 ## Planes Disponibles
 
-### Plan Gratuito
-- 50 conversaciones/mes
-- Funciones básicas de bandeja
-- 1 conexión de canal
+### Free
+- Ideal para probar WhachatCRM
+- Acceso básico a la bandeja
+- Conversaciones activas limitadas
+- 1 usuario
+- Prueba de canales compatibles
 
-### Plan Starter - $29/mes
-- Conversaciones ilimitadas
-- Los 7 canales
-- Colaboración en equipo
-- Automatización básica
+### Starter - $19/mes
+- Hasta 3 usuarios
+- AI Assist Basic incluido
+- Bandeja unificada
+- Plantillas y seguimientos
+- Automatizaciones básicas
+- Integraciones principales
+- Más capacidad de conversaciones para pequeños negocios
 
-### Plan Pro - $79/mes
-- Todo en Starter
-- Automatización avanzada
-- Secuencias de goteo
-- Soporte prioritario
-- Acceso API
+### Pro - $49/mes
+- Usuarios ilimitados
+- Automatizaciones avanzadas
+- Acceso a Growth Engines donde corresponda
+- Flujos mejorados asistidos por IA
+- Mayor capacidad de conversaciones
+- Funciones para escalar múltiples canales
+- Capacidades avanzadas de workflow
 
-### Complemento AI Brain - $29/mes
-- Funciones de IA ilimitadas
-- Sugerencias de respuesta inteligentes
-- Puntuación de leads
-- Base de conocimiento del negocio
+### Complemento AI Brain
+- Capa de inteligencia opcional
+- Sugerencias inteligentes
+- Asistencia contextual con IA
+- Puntuación e insights de leads donde estén habilitados
+- Mejoras avanzadas de workflow con IA
+
+## Tarifas de conversación de Meta
+
+WhachatCRM no agrega margen al precio de conversaciones de Meta.
+
+Pagas las tarifas de conversación de Meta/WhatsApp directamente según el modelo de precios de Meta. WhachatCRM no agrega recargos por mensaje.
+
+Tu suscripción de WhachatCRM y los cargos de mensajería de Meta son separados.
 
 ## Cómo Actualizar
 
@@ -840,49 +944,78 @@ Contacta a soporte dentro de los 14 días de la compra para solicitudes de reemb
     content: `
 # Conectar Canales de Comunicación
 
-WhachatCRM soporta 7 canales de mensajería en una bandeja de entrada unificada.
+Usa esta guía para conectar WhatsApp, Facebook Messenger e Instagram DMs a la bandeja unificada.
 
-## WhatsApp
+## Antes de empezar
 
-### Vía Twilio
-1. Crea una cuenta de Twilio
-2. Obtén la aprobación de WhatsApp Business
-3. Ingresa tus credenciales de Twilio en Configuración
+- Inicia sesión con la cuenta correcta de Facebook/Meta
+- Necesitas acceso de administrador al negocio, Página y activos de mensajería
+- Instagram debe ser una cuenta Professional
+- Instagram debe estar vinculado a una Página de Facebook
+- WhatsApp se conecta mediante Meta Embedded Signup
+- Algunas funciones de Meta pueden requerir aprobación antes de enviar mensajes a clientes reales
 
-### Vía Meta Business API
-1. Crea una cuenta de Meta Business
-2. Configura WhatsApp Business API
-3. Conéctate usando el asistente de Meta en Configuración
+## Conectar WhatsApp
 
-## SMS (Twilio)
+FLOW: WhachatCRM → Meta Embedded Signup → Elegir negocio → Elegir cuenta WhatsApp → Elegir número → Volver a WhachatCRM → Verificación → Listo
 
-1. Obtén un número de teléfono de Twilio
-2. Ingresa Account SID y Auth Token
-3. Configura la URL del webhook
+1. Abre **Configuración** → **Integraciones / Canales**
+2. Haz clic en **Connect WhatsApp**
+3. Continúa con Meta Embedded Signup
+4. Selecciona o crea tu cuenta de negocio
+5. Selecciona tu WhatsApp Business Account
+6. Selecciona tu número de teléfono
+7. Vuelve a WhachatCRM
+8. WhachatCRM verifica la conexión automáticamente
+9. Si existen varios números, elige el número que quieres conectar
 
-## Telegram
+WhachatCRM no agrega margen al precio de conversaciones de Meta. Tu suscripción y los cargos de mensajería de Meta son separados.
 
-1. Crea un bot usando @BotFather
-2. Obtén tu token del bot
-3. Ingresa el token en Configuración
+## Conectar Facebook Messenger
 
-## Instagram y Facebook
+FLOW: WhachatCRM → Meta Login → Elegir Página/Cuenta → Aprobar permisos → Volver a WhachatCRM → Bandeja lista
 
-1. Conecta tu cuenta de Meta Business
-2. Vincula tu página de Instagram/Facebook
-3. Otorga permisos de mensajería
+1. Abre **Integraciones**
+2. Haz clic en **Connect Facebook**
+3. Elige la Página de Facebook
+4. Aprueba los permisos solicitados
+5. Vuelve a WhachatCRM
+6. Prueba la conexión en la bandeja
 
-## Widget de Chat Web
+## Conectar Instagram
 
-1. Ve a Configuración > Widget Web
-2. Personaliza la apariencia
-3. Copia el código de inserción a tu sitio web
+FLOW: WhachatCRM → Meta Login → Elegir Página/Cuenta → Aprobar permisos → Volver a WhachatCRM → Bandeja lista
 
-## TikTok
+1. Asegúrate de que Instagram sea Professional
+2. Asegúrate de que esté vinculado a una Página de Facebook
+3. Haz clic en **Connect Instagram**
+4. Aprueba los permisos de Meta
+5. Vuelve a WhachatCRM
+6. Verifica la conexión de la bandeja
 
-1. Conecta tu cuenta de TikTok Business
-2. Habilita la integración de formularios de leads
-3. Los leads aparecen automáticamente en la bandeja
+Si los mensajes no llegan, permisos de Meta, vinculación de cuentas o revisión de la app pueden necesitar aprobación o configuración.
+
+## Estados
+
+### Conectado
+Tu canal está listo.
+
+### Requiere atención
+La conexión existe pero requiere revisión o reconexión.
+
+### Pendiente de revisión
+La aprobación o configuración de Meta puede seguir en progreso.
+
+### No conectado
+Este canal todavía no se ha conectado.
+
+## Solución de problemas
+
+- Asegúrate de usar la cuenta correcta de Facebook/Meta con permisos de administrador
+- Confirma que Instagram esté vinculado a la Página de Facebook correcta
+- Confirma que el número de WhatsApp sea de producción
+- Reconecta el canal si cambiaron los permisos
+- Contacta a soporte si la conexión sigue requiriendo atención
     `
   },
 ];

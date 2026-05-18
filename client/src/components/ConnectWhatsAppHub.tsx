@@ -205,7 +205,7 @@ export function ConnectWhatsAppHub({
         credentials: "include",
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Repair failed");
+      if (!res.ok) throw new Error(data.error || "We couldn't refresh the connection. Please try again.");
       if (!data.verified && data.error) throw new Error(data.error);
       return data;
     },
@@ -227,7 +227,7 @@ export function ConnectWhatsAppHub({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Disconnect failed");
+        throw new Error(data.error || "We couldn't disconnect WhatsApp. Please try again.");
       }
       return res.json();
     },
@@ -451,7 +451,7 @@ export function ConnectWhatsAppHub({
 
       {!cfg?.metaConfigured && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-          Meta WhatsApp signup isn&apos;t configured on this server yet. Ask your admin to set Meta app environment variables, or use Twilio below.
+          Meta WhatsApp signup isn&apos;t available in this workspace yet. Please contact support to finish setup.
         </div>
       )}
 
@@ -484,7 +484,7 @@ export function ConnectWhatsAppHub({
               {supportMode && (
                 <div className="mt-3 pt-3 border-t border-emerald-200/80 space-y-1.5 text-xs">
                   <div className="flex justify-between gap-2">
-                    <dt className="text-gray-600">Webhook endpoint</dt>
+                  <dt className="text-gray-600">Connection health</dt>
                     <dd
                       className={cn(
                         "font-medium",
@@ -498,12 +498,12 @@ export function ConnectWhatsAppHub({
                       {(meta?.webhookSignatureHealth ?? meta?.webhookHealth) === "ok"
                         ? "Healthy"
                         : (meta?.webhookSignatureHealth ?? meta?.webhookHealth) === "needs_app_secret"
-                          ? "Error"
+                          ? "Needs setup"
                           : "—"}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-2">
-                    <dt className="text-gray-600">WABA app subscription</dt>
+                    <dt className="text-gray-600">Meta app access</dt>
                     <dd
                       className={cn(
                         "font-medium",
@@ -512,7 +512,7 @@ export function ConnectWhatsAppHub({
                           : "text-amber-800"
                       )}
                     >
-                      {graphSubscriptionConfirmed ? "Confirmed (Graph)" : "Needs attention (Graph)"}
+                      {graphSubscriptionConfirmed ? "Confirmed" : "Needs attention"}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-2">
@@ -545,7 +545,7 @@ export function ConnectWhatsAppHub({
                 meta?.lastErrorMessage &&
                 !String(meta.lastErrorMessage).toLowerCase().includes("webhook subscription could not be confirmed") && (
                   <p className="text-xs text-amber-800 mt-2 border border-amber-100 rounded-md px-2 py-1 bg-white/80">
-                    {meta.lastErrorMessage}
+                    WhatsApp needs attention. Open Manage to review the setup.
                   </p>
                 )}
 
@@ -614,7 +614,7 @@ export function ConnectWhatsAppHub({
                   ) : (
                     <RefreshCw className="h-4 w-4 mr-1" />
                   )}
-                  Refresh Graph diagnostics
+                  Refresh connection check
                 </Button>
 
                 <Button
@@ -627,14 +627,14 @@ export function ConnectWhatsAppHub({
                     queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
                     await refetchDiag();
                   }}
-                  title="POST /{waba-id}/subscribed_apps — re-subscribe this Meta app to your WABA"
+                  title="Refresh the Meta app connection for this WhatsApp account"
                 >
                   {subscribeMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin mr-1" />
                   ) : (
                     <RefreshCw className="h-4 w-4 mr-1" />
                   )}
-                  Repair WABA subscription
+                  Refresh Meta connection
                 </Button>
               </>
             )}
@@ -652,7 +652,7 @@ export function ConnectWhatsAppHub({
             <div className="px-3 py-2 border-b bg-gray-50/80">
               <h3 className="text-sm font-semibold text-gray-900">Connect WhatsApp</h3>
               <p className="text-[11px] text-gray-500 mt-0.5">
-                Choose how you want to connect. Twilio stays available as an alternate provider.
+                Connect WhatsApp through Meta Embedded Signup. WhachatCRM will verify the connection automatically.
               </p>
             </div>
             <div className="p-3 space-y-3">
@@ -670,9 +670,9 @@ export function ConnectWhatsAppHub({
                 <div className="flex items-center gap-2">
                   <MessageCircle className="h-5 w-5 text-emerald-600" />
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">A) Continue with Meta</p>
+                    <p className="text-sm font-semibold text-gray-900">Continue with Meta Embedded Signup</p>
                     <p className="text-[11px] text-gray-600 mt-0.5">
-                      Recommended — set up WhatsApp in Meta and connect it to WhachatCRM.
+                      Choose your business account, WhatsApp account, and phone number in Meta.
                     </p>
                   </div>
                 </div>
@@ -694,13 +694,13 @@ export function ConnectWhatsAppHub({
                 <div className="flex items-center gap-2">
                   <Smartphone className="h-5 w-5 text-blue-600" />
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">B) Use existing WhatsApp Business App number</p>
+                    <p className="text-sm font-semibold text-gray-900">Use an existing WhatsApp Business App number</p>
                     <p className="text-[11px] text-gray-600 mt-0.5">
                       Coming soon
                     </p>
                   </div>
                 </div>
-                <p className="text-[10px] text-gray-500 mt-2">Use the same WhatsApp Business App number on both your phone and WhachatCRM.</p>
+                <p className="text-[10px] text-gray-500 mt-2">Planned support for businesses that want shared app and inbox access.</p>
               </button>
 
               <button
@@ -714,9 +714,9 @@ export function ConnectWhatsAppHub({
                 <div className="flex items-center gap-2">
                   <Smartphone className="h-5 w-5 text-red-600" />
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">C) Connect with Twilio instead</p>
+                    <p className="text-sm font-semibold text-gray-900">Legacy Twilio connection</p>
                     <p className="text-[11px] text-gray-600 mt-0.5">
-                      Use your existing Twilio WhatsApp sender — SMS optional via same account.
+                      Available for existing Twilio-based setups.
                     </p>
                   </div>
                 </div>
@@ -726,7 +726,7 @@ export function ConnectWhatsAppHub({
 
           <div className="rounded-lg border border-dashed border-gray-200 px-3 py-2">
             <p className="text-[11px] text-gray-600">
-              Advanced: already have a permanent token and IDs?{" "}
+              Advanced setup for existing Meta credentials{" "}
               <button
                 type="button"
                 className="text-emerald-700 font-medium hover:underline inline-flex items-center gap-0.5"
@@ -735,7 +735,7 @@ export function ConnectWhatsAppHub({
                   onOpenManualMeta();
                 }}
               >
-                Paste credentials manually <ExternalLink className="h-3 w-3" />
+                Open manual setup <ExternalLink className="h-3 w-3" />
               </button>
             </p>
           </div>
