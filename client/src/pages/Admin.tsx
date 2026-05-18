@@ -2203,19 +2203,16 @@ export function Admin() {
             </div>
             <div>
               <Label htmlFor="new-cal" className="text-xs font-medium text-muted-foreground">
-                Concierge calendar link <span className="font-normal">(optional)</span>
+                Scheduling link <span className="font-normal">(optional)</span>
               </Label>
               <Input
                 id="new-cal"
                 type="url"
                 value={newPerson.calendarLink}
                 onChange={(e) => setNewPerson({ ...newPerson, calendarLink: e.target.value })}
-                placeholder="https://calendly.com/…"
+                placeholder="https://your-booking-link.com"
                 className="mt-1 h-9"
               />
-              <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                Used for Growth Engine launch sessions when this person is assigned.
-              </p>
             </div>
             <div>
               <Label htmlFor="new-role" className="text-xs font-medium text-muted-foreground">
@@ -2328,7 +2325,7 @@ export function Admin() {
               </div>
               <div>
                 <Label htmlFor="edit-cal" className="text-xs font-medium text-muted-foreground">
-                  Concierge calendar link
+                  Scheduling link
                 </Label>
                 <Input
                   id="edit-cal"
@@ -2336,7 +2333,7 @@ export function Admin() {
                   type="url"
                   value={editingPerson.calendarLink || ""}
                   onChange={(e) => setEditingPerson({ ...editingPerson, calendarLink: e.target.value })}
-                  placeholder="https://calendly.com/…"
+                  placeholder="https://your-booking-link.com"
                 />
               </div>
               <div>
