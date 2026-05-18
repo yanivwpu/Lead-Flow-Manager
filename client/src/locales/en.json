@@ -959,9 +959,9 @@
       "badge3": "AI Assist on paid plans"
     },
     "metaFees": {
-      "title": "No WhachatCRM markup on Meta conversation pricing.",
-      "body": "You pay Meta/WhatsApp conversation fees directly based on Meta's pricing model. WhachatCRM does not add additional per-message markups.",
-      "note": "Your WhachatCRM subscription and Meta messaging charges are separate."
+      "title": "No markup on Meta messaging fees",
+      "body": "WhachatCRM does not add per-message surcharges. Your subscription covers the platform, while Meta/WhatsApp conversation charges are billed separately according to Meta's pricing.",
+      "note": "Simple software pricing. No hidden messaging markup."
     },
     "copilot": {
       "title": "Copilot grows with your plan",
@@ -1021,7 +1021,7 @@
         "f7": "AI Assist Basic included",
         "f8": "AI Brain add-on available",
         "f9": "Pipeline & tasks included",
-        "f10": "Integrations + Growth Engines access where eligible",
+        "f10": "Integrations",
         "upsell": "Upgrade to Pro when you need unlimited users, 2,000 conversations, and advanced automations.",
         "cta": "Upgrade to Starter"
       },

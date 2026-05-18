@@ -302,7 +302,7 @@ export function Pricing() {
     { feature: t(`${p}.compare.leadScoring`), free: false, starter: false, pro: true },
     { feature: t(`${p}.compare.smartRetargeting`), free: false, starter: true, pro: true },
     { feature: t(`${p}.compare.integrations`), free: false, starter: true, pro: true },
-    { feature: t(`${p}.compare.growthEngines`), free: false, starter: t(`${p}.compare.eligible`), pro: t(`${p}.compare.eligible`) },
+    { feature: t(`${p}.compare.growthEngines`), free: false, starter: false, pro: t(`${p}.compare.eligible`) },
     { feature: t(`${p}.compare.aiBrainAddon`), free: false, starter: true, pro: true },
   ];
 
@@ -389,15 +389,16 @@ export function Pricing() {
         </div>
 
         {/* ─────────────── SECTION 1b: META FEE TRANSPARENCY ─────────────── */}
-        <div className="mb-14 rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-sm" data-testid="section-meta-fees">
-          <div className={`flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between ${isRTL ? "sm:flex-row-reverse" : ""}`}>
-            <div>
-              <p className="text-sm font-semibold text-gray-900">{t(`${p}.metaFees.title`)}</p>
-              <p className="mt-1 text-sm text-gray-600">{t(`${p}.metaFees.body`)}</p>
+        <div className="mb-14 mx-auto max-w-4xl rounded-2xl border border-gray-200 bg-white px-5 py-5 shadow-sm" data-testid="section-meta-fees">
+          <div className={`flex items-start gap-4 ${isRTL ? "flex-row-reverse text-right" : ""}`}>
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+              <Shield className="h-5 w-5" />
             </div>
-            <p className="text-xs font-medium text-gray-500 sm:max-w-xs">
-              {t(`${p}.metaFees.note`)}
-            </p>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-900">{t(`${p}.metaFees.title`)}</p>
+              <p className="mt-1 text-sm leading-relaxed text-gray-600">{t(`${p}.metaFees.body`)}</p>
+              <p className="mt-2 text-xs font-medium text-emerald-700">{t(`${p}.metaFees.note`)}</p>
+            </div>
           </div>
         </div>
 
@@ -664,6 +665,7 @@ export function Pricing() {
                     features={[
                       t(`${p}.plans.starter.f1`),
                       t(`${p}.plans.starter.f2`),
+                      t(`${p}.plans.starter.f3`),
                     ]}
                     iconClass="text-blue-500"
                     isRTL={isRTL}
@@ -671,7 +673,6 @@ export function Pricing() {
                   <FeatureGroup
                     label={t(`${p}.sections.crmInbox`)}
                     features={[
-                      t(`${p}.plans.starter.f3`),
                       t(`${p}.plans.starter.f4`),
                       t(`${p}.plans.starter.f9`),
                     ]}
