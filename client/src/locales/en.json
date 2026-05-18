@@ -477,7 +477,8 @@
     "startFree": "Start Free",
     "dashboard": "Dashboard",
     "heroTitle": "One Inbox. Every Channel. Zero Complexity.",
-    "heroSubtitle": "WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat — all in one unified inbox. Stop juggling apps. Respond faster, never lose a lead.",
+    "heroEyebrow": "Official Meta API inbox with 0% Meta fee markup",
+    "heroSubtitle": "Bring WhatsApp, Instagram, Facebook Messenger, SMS, Telegram, and web chat into one clean workspace for faster follow-ups, better visibility, and team collaboration.",
     "startTrial": "Start Your 14-Day Pro Trial",
     "bookDemo": "Book a Demo",
     "noCreditCard": "No credit card required",
@@ -497,19 +498,27 @@
     "integrationsDesc": "Connect with your favorite tools",
     "badge1": "Built on the official WhatsApp Business API",
     "badge2": "Secure & compliant — no scraping",
-    "badge3": "Designed for founders, sales teams & support teams"
+    "badge3": "Designed for founders, sales teams & support teams",
+    "trust": {
+      "officialMeta": "Official Meta API",
+      "unifiedInbox": "Unified inbox",
+      "automations": "Automations",
+      "teamCollab": "Team collaboration",
+      "noMetaMarkup": "No Meta markup fees",
+      "aiWorkflows": "AI-assisted workflows"
+    }
   },
   "home": {
     "hero": {
       "title": "One Inbox. Every Channel. Zero Complexity.",
-      "subtitle": "WhatsApp, SMS, Telegram, Instagram, Facebook, Messenger, Web Chat — all in one unified inbox. Stop juggling apps. Respond faster, never lose a lead.",
+      "subtitle": "WhatsApp, Instagram, Facebook Messenger, SMS, Telegram, and web chat in one unified inbox. Respond faster, collaborate as a team, and automate the follow-up work that usually slips.",
       "cta": {
         "primary": "Start Your 14-Day Free Trial",
         "secondary": "See Pricing",
         "demo": "Book a Demo"
       },
       "note": "No credit card required",
-      "badge1": "Built on the official WhatsApp Business API",
+      "badge1": "Built on the official Meta APIs",
       "badge2": "Secure & compliant — no scraping",
       "badge3": "Designed for founders, sales teams & support teams"
     },
@@ -517,7 +526,7 @@
       "alt": "WhachatCRM Dashboard - WhatsApp CRM Interface"
     },
     "problem": {
-      "title": "WhatsApp Wasn't Built for Managing Customers — Until Now",
+      "title": "Customer conversations move fast. Your CRM should keep up.",
       "heading": "The Problem",
       "item1": "Important chats get buried",
       "item2": "No context about customers",
@@ -525,57 +534,58 @@
       "item4": "Teams lose visibility"
     },
     "solution": {
-      "heading": "WhachatCRM Solution",
+      "heading": "What WhachatCRM gives you",
       "item1": "One conversation per customer",
       "item2": "Notes, tags & tasks inside each chat",
       "item3": "Clear follow-ups so nothing slips through",
-      "item4": "Multi-channel integrations with your favorite tools"
+      "item4": "A unified view across supported messaging channels"
     },
     "features": {
-      "title": "Everything You Need to Manage WhatsApp Like a CRM",
+      "title": "Turn conversations into organized revenue work",
+      "subtitle": "A calmer workspace for lead visibility, follow-ups, collaboration, and automation across your supported channels.",
       "item1": {
-        "title": "Organized Conversations",
-        "desc": "Every WhatsApp chat becomes a customer record — no more searching or guessing."
+        "title": "Fewer missed conversations",
+        "desc": "Bring inbound messages into one shared inbox so leads do not disappear across phones, tabs, and platforms."
       },
       "item2": {
-        "title": "Notes & Tags",
-        "desc": "Add internal notes and tags so your team always knows the full context."
+        "title": "Better lead visibility",
+        "desc": "Use notes, tags, stages, and contact history to understand who needs attention next."
       },
       "item3": {
-        "title": "Follow-Ups & Tasks",
-        "desc": "Set reminders and tasks to make sure every lead is followed up on time."
+        "title": "Faster follow-ups",
+        "desc": "Schedule reminders, tasks, and follow-up steps so hot conversations keep moving."
       },
       "item4": {
-        "title": "AI Brain",
-        "desc": "Smart reply suggestions, lead capture & tone control. Your AI-powered business assistant."
+        "title": "AI-assisted workflows",
+        "desc": "Use AI assistance for smarter suggestions, context, and workflow support where enabled."
       },
       "item5": {
-        "title": "Visual Chatbot Builder",
-        "desc": "Build automated flows with our drag-and-drop chatbot builder. No coding required."
+        "title": "Multi-agent collaboration",
+        "desc": "Assign, share notes, and coordinate replies without losing customer context."
       },
       "item6": {
-        "title": "Multi-Channel Integrations",
-        "desc": "Connect with Shopify, HubSpot, Salesforce, Stripe & more to sync leads across all your tools."
+        "title": "WhatsApp automation",
+        "desc": "Create templates, follow-ups, and workflows for supported WhatsApp and messaging scenarios."
       }
     },
     "integrations": {
-      "title": "Connect Your Favorite Tools",
-      "subtitle": "WhachatCRM integrates seamlessly with the apps you already use — sync leads, automate workflows, and keep everything in one place."
+      "title": "Real integrations for real workflows",
+      "subtitle": "Connect supported messaging channels, commerce, CRM, scheduling, and lead sources without turning your inbox into a developer project."
     },
     "howItWorks": {
       "title": "Up and running in minutes",
-      "subtitle": "No complex setup. No training required.",
+      "subtitle": "Connect your channels, invite your team, and start managing conversations without heavy implementation work.",
       "step1": {
-        "title": "Connect your number",
-        "desc": "Link your WhatsApp Business number in just a few clicks."
+        "title": "Connect your channels",
+        "desc": "Use guided Meta onboarding for WhatsApp, Facebook, and Instagram, plus supported native integrations."
       },
       "step2": {
-        "title": "Organize your chats",
-        "desc": "Add notes, tags, and set follow-up reminders for each conversation."
+        "title": "Centralize your leads",
+        "desc": "Give every conversation a clear owner, status, notes, tags, and next step."
       },
       "step3": {
-        "title": "Close more deals",
-        "desc": "Get reminders, follow up on time, and convert more leads into customers."
+        "title": "Follow up faster",
+        "desc": "Use reminders, templates, and automations to move conversations forward with less manual chasing."
       }
     },
     "pricingTeaser": {
@@ -587,17 +597,37 @@
       "seePlans": "See Plans"
     },
     "builtFor": {
-      "title": "Built for Businesses That Live on WhatsApp",
-      "salesTeams": "Sales teams managing inbound leads",
-      "supportTeams": "Customer support teams",
-      "agencies": "Agencies & consultants",
-      "smallBiz": "Small businesses & founders",
-      "tagline": "If WhatsApp is how you talk to customers — this is your CRM."
+      "title": "Built for teams that win through conversations",
+      "realEstate": "Real estate teams",
+      "realEstateDesc": "Route listing inquiries, qualify buyers, and keep every viewing follow-up visible.",
+      "salesTeams": "Sales teams",
+      "salesTeamsDesc": "Respond to inbound leads faster, assign owners, and keep pipeline movement clear.",
+      "supportTeams": "Support teams",
+      "supportTeamsDesc": "Give customers one responsive channel while your team shares context behind the scenes.",
+      "agencies": "Agencies",
+      "agenciesDesc": "Manage multiple client conversations and lead sources without jumping between tools.",
+      "smallBiz": "Local businesses",
+      "smallBizDesc": "Capture WhatsApp and social messages, follow up on time, and look organized from day one.",
+      "tagline": "From first reply to next step, WhachatCRM helps teams move faster without losing context."
     },
     "trust": {
-      "title": "Official. Secure. Reliable.",
-      "line1": "WhachatCRM uses the official WhatsApp Business API and does not scrape personal accounts.",
-      "line2": "Your data stays secure and compliant with Meta's policies."
+      "eyebrow": "Social proof",
+      "title": "Used by growing sales and service teams",
+      "line1": "A clean home for WhatsApp, social messages, follow-ups, and team collaboration.",
+      "line2": "Customer logos, testimonials, and case studies will appear here as teams go live.",
+      "placeholder": "Placeholder for customer proof",
+      "card1": {
+        "quote": "Designed for teams that need every inbound conversation visible, owned, and followed up.",
+        "role": "Sales operations"
+      },
+      "card2": {
+        "quote": "Built around real messaging workflows: quick replies, shared context, and fewer missed leads.",
+        "role": "Service teams"
+      },
+      "card3": {
+        "quote": "A polished place for future customer stories, logo rows, and measurable business outcomes.",
+        "role": "Case studies"
+      }
     },
     "cta": {
       "title": "Stop Losing Leads in Your WhatsApp Inbox",

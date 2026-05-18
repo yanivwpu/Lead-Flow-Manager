@@ -4,15 +4,17 @@ import { MessageSquare, Bell, Tag, Phone, Zap, Brain } from "lucide-react";
 export default function WelcomeBenefitsSection() {
   const { t } = useTranslation();
   return (
-    <section className="px-4 md:px-6 py-16 md:py-20 bg-gray-50">
+    <section className="px-4 md:px-6 py-20 md:py-24 bg-gray-50">
       <div className="max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
-        <div className="text-center mb-10 md:mb-14">
-          <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-3 md:mb-4">
+        <div className="mx-auto mb-12 max-w-3xl text-center md:mb-16">
+          <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-brand-green">Business outcomes</p>
+          <h2 className="text-3xl md:text-5xl font-display font-bold tracking-tight text-gray-950 mb-4">
             {t("home.features.title")}
           </h2>
+          <p className="text-base md:text-lg text-gray-600">{t("home.features.subtitle")}</p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 md:gap-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
           {[
             {
               icon: MessageSquare,
@@ -61,14 +63,14 @@ export default function WelcomeBenefitsSection() {
             return (
               <div
                 key={benefit.title}
-                className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 animate-fade-in-up"
+                className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 animate-fade-in-up"
                 style={{ animationDelay: `${i * 100}ms` }}
               >
-                <div className={`h-12 w-12 ${benefit.color} rounded-xl flex items-center justify-center mb-4`}>
+                <div className={`h-11 w-11 ${benefit.color} rounded-xl flex items-center justify-center mb-5`}>
                   <Icon className={`h-6 w-6 ${benefit.iconColor}`} />
                 </div>
-                <h3 className="text-lg xl:text-xl font-bold text-gray-900 mb-2">{benefit.title}</h3>
-                <p className="text-gray-600 xl:text-base">{benefit.desc}</p>
+                <h3 className="text-lg xl:text-xl font-bold text-gray-950 mb-2">{benefit.title}</h3>
+                <p className="text-gray-600 xl:text-base leading-relaxed">{benefit.desc}</p>
               </div>
             );
           })}

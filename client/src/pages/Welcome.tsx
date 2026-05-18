@@ -2,7 +2,7 @@ import { useState, lazy, Suspense, useLayoutEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, CheckCircle2, ChevronRight, Calendar } from "lucide-react";
+import { ArrowRight, CheckCircle2, ChevronRight, Calendar, Shield, Inbox, Zap, Users } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 const SiteFooter = lazy(() =>
   import("@/components/SiteFooter").then((m) => ({ default: m.SiteFooter })),
@@ -103,7 +103,7 @@ export function Welcome() {
       {!deferHeroToStaticHtml ? (
       <>
       {/* Navigation */}
-      <nav className="min-h-[56px] py-3 px-4 md:py-6 md:px-6 flex justify-between items-center max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto box-border">
+      <nav className="min-h-[56px] py-3 px-4 md:py-5 md:px-6 flex justify-between items-center max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto box-border">
         <div className="flex items-center gap-2">
           <div className="h-8 w-8 bg-brand-green rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-lg">W</span>
@@ -140,15 +140,16 @@ export function Welcome() {
       </nav>
 
       {/* Hero Section */}
-      <section className="px-4 md:px-6 pt-4 md:pt-8 pb-12 md:pb-20 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
+      <section className="px-4 md:px-6 pt-6 md:pt-10 pb-16 md:pb-24 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
         {/* Picture first in DOM (earlier fetch); mobile image above fold; md+: headline left via order */}
-        <div className="flex flex-col gap-8 md:grid md:grid-cols-2 md:gap-12 xl:gap-16 2xl:gap-20 items-start">
+        <div className="flex flex-col gap-10 md:grid md:grid-cols-[0.92fr_1.08fr] md:gap-12 xl:gap-20 items-center">
           <div className="relative order-1 w-full md:order-2 animate-hero-image">
             {/*
               Reserve aspect ratio before decode (CLS): intrinsic 704×384.
               Absolute img avoids reflow; object-contain matches prior uncropped look.
             */}
-            <div className="relative aspect-[704/384] w-full overflow-hidden rounded-xl border border-gray-200 bg-gray-100 shadow-lg md:rounded-2xl md:shadow-2xl">
+            <div className="absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-emerald-100 via-sky-50 to-white blur-2xl" aria-hidden />
+            <div className="relative aspect-[704/384] w-full overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl shadow-gray-900/10 ring-1 ring-gray-100 md:rounded-[1.75rem]">
               <picture className="absolute inset-0 block">
                 <source type="image/avif" srcSet={HERO_AVIF_SRCSET} sizes={HERO_SIZES} />
                 <source type="image/webp" srcSet={HERO_WEBP_SRCSET} sizes={HERO_SIZES} />
@@ -165,13 +166,32 @@ export function Welcome() {
                 />
               </picture>
             </div>
+            <div className="relative mt-4 grid grid-cols-2 gap-3 text-xs text-gray-600 sm:grid-cols-4">
+              {[
+                { icon: Shield, label: t("landing.trust.officialMeta") },
+                { icon: Inbox, label: t("landing.trust.unifiedInbox") },
+                { icon: Zap, label: t("landing.trust.automations") },
+                { icon: Users, label: t("landing.trust.teamCollab") },
+              ].map(({ icon: TrustIcon, label }) => {
+                return (
+                  <div key={label} className="rounded-xl border border-gray-200 bg-white/90 px-3 py-2 shadow-sm">
+                    <TrustIcon className="mb-1 h-4 w-4 text-brand-green" />
+                    <span className="font-medium text-gray-700">{label}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="animate-hero-text order-2 md:order-1">
-            <h1 className="text-3xl md:text-5xl lg:text-6xl xl:text-7xl font-display font-bold text-gray-900 leading-[1.1] mb-4 md:mb-6">{t("landing.heroTitle")}</h1>
-            <p className="text-lg md:text-xl xl:text-2xl text-gray-600 mb-6 md:mb-8 leading-relaxed">{t("landing.heroSubtitle")}</p>
+          <div className="animate-hero-text order-2 md:order-1 max-w-2xl">
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-800">
+              <Shield className="h-4 w-4" />
+              {t("landing.heroEyebrow")}
+            </div>
+            <h1 className="text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-display font-bold text-gray-950 tracking-tight leading-[1.05] mb-5 md:mb-6">{t("landing.heroTitle")}</h1>
+            <p className="text-lg md:text-xl xl:text-2xl text-gray-600 mb-7 md:mb-8 leading-relaxed max-w-xl">{t("landing.heroSubtitle")}</p>
 
-            <div className="flex flex-col gap-3 mb-4">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 mb-5">
               <div className="w-full sm:w-auto">
                 <Link href={user ? "/app/inbox" : "/auth"}>
                   <button
@@ -186,7 +206,7 @@ export function Welcome() {
               <div className="w-full sm:w-auto">
                 <Link href="/pricing">
                   <button
-                    className="w-full sm:w-auto h-12 px-6 bg-white border border-gray-200 text-gray-700 font-medium rounded-full flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
+                    className="w-full sm:w-auto h-14 px-7 bg-white border border-gray-200 text-gray-800 font-semibold rounded-full flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors shadow-sm"
                     data-testid="button-hero-pricing"
                   >
                     {t("landing.pricing")}
@@ -198,7 +218,7 @@ export function Welcome() {
                 <button
                   type="button"
                   onClick={() => setShowDemoModal(true)}
-                  className="w-full sm:w-auto h-12 px-6 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium rounded-full flex items-center justify-center gap-2 hover:from-amber-600 hover:to-orange-600 transition-colors shadow-md"
+                  className="w-full sm:w-auto h-14 px-7 bg-gray-950 text-white font-semibold rounded-full flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors shadow-md"
                   data-testid="button-book-demo"
                 >
                   <Calendar className="h-4 w-4" />
@@ -211,19 +231,18 @@ export function Welcome() {
               <span className="text-sm text-gray-500">{t("landing.noCreditCard")}</span>
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-brand-green" />
-                <span>{t("home.hero.badge1")}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-brand-green" />
-                <span>{t("home.hero.badge2")}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-brand-green" />
-                <span>{t("home.hero.badge3")}</span>
-              </div>
+            <div className="grid gap-2 text-sm text-gray-600 sm:grid-cols-2">
+              {[
+                t("home.hero.badge1"),
+                t("landing.trust.noMetaMarkup"),
+                t("landing.trust.aiWorkflows"),
+                t("home.hero.badge3"),
+              ].map((item) => (
+                <div key={item} className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-brand-green" />
+                  <span>{item}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
