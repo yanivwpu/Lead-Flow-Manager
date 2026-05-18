@@ -291,17 +291,18 @@ export function Pricing() {
     starter: boolean | string;
     pro: boolean | string;
   }[] = [
-    { feature: t(`${p}.compare.activeConversations`), free: t(`${p}.compare.limited`), starter: t(`${p}.compare.smallBusinessCapacity`), pro: t(`${p}.compare.largerCapacity`) },
+    { feature: t(`${p}.compare.activeConversations`), free: "50", starter: "500", pro: "2,000" },
     { feature: t(`${p}.compare.users`), free: "1", starter: t(`${p}.compare.upTo3`), pro: t(`${p}.compare.multiple`) },
-    { feature: t(`${p}.compare.whatsappNumbers`), free: t(`${p}.compare.testSupportedChannels`), starter: t(`${p}.compare.coreChannels`), pro: t(`${p}.compare.multiChannelScaling`) },
+    { feature: t(`${p}.compare.whatsappNumbers`), free: "1", starter: "1", pro: t(`${p}.compare.upTo5`) },
     { feature: t(`${p}.compare.unifiedInbox`), free: true, starter: true, pro: true },
     { feature: t(`${p}.compare.crm`), free: t(`${p}.compare.basic`), starter: t(`${p}.compare.full`), pro: t(`${p}.compare.full`) },
     { feature: t(`${p}.compare.pipelineTasks`), free: true, starter: true, pro: true },
-    { feature: t(`${p}.compare.aiAssist`), free: false, starter: t(`${p}.compare.aiAssistBasicIncluded`), pro: t(`${p}.compare.aiAssistEnhancedIncluded`) },
+    { feature: t(`${p}.compare.aiAssist`), free: false, starter: t(`${p}.compare.aiAssistBasic`), pro: t(`${p}.compare.aiAssistEnhanced`) },
     { feature: t(`${p}.compare.automations`), free: false, starter: t(`${p}.compare.basic`), pro: t(`${p}.compare.advancedAutomations`) },
     { feature: t(`${p}.compare.leadScoring`), free: false, starter: false, pro: true },
     { feature: t(`${p}.compare.smartRetargeting`), free: false, starter: true, pro: true },
-    { feature: t(`${p}.compare.integrationsWebhooks`), free: false, starter: true, pro: true },
+    { feature: t(`${p}.compare.integrations`), free: false, starter: true, pro: true },
+    { feature: t(`${p}.compare.growthEngines`), free: false, starter: t(`${p}.compare.eligible`), pro: t(`${p}.compare.eligible`) },
     { feature: t(`${p}.compare.aiBrainAddon`), free: false, starter: true, pro: true },
   ];
 
@@ -672,6 +673,7 @@ export function Pricing() {
                     features={[
                       t(`${p}.plans.starter.f3`),
                       t(`${p}.plans.starter.f4`),
+                      t(`${p}.plans.starter.f9`),
                     ]}
                     iconClass="text-blue-500"
                     isRTL={isRTL}
@@ -681,6 +683,7 @@ export function Pricing() {
                     features={[
                       t(`${p}.plans.starter.f5`),
                       t(`${p}.plans.starter.f6`),
+                      t(`${p}.plans.starter.f10`),
                     ]}
                     iconClass="text-blue-500"
                     isRTL={isRTL}
@@ -688,7 +691,6 @@ export function Pricing() {
                   <FeatureGroup
                     label={t(`${p}.sections.aiFeatures`)}
                     features={[
-                      t(`${p}.plans.starter.f9`),
                       t(`${p}.plans.starter.f7`),
                       t(`${p}.plans.starter.f8`),
                     ]}
@@ -777,7 +779,11 @@ export function Pricing() {
                   />
                   <FeatureGroup
                     label={t(`${p}.sections.automation`)}
-                    features={[t(`${p}.plans.pro.f4`), t(`${p}.plans.pro.f4b`)]}
+                    features={[
+                      t(`${p}.plans.pro.f4`),
+                      t(`${p}.plans.pro.f4b`),
+                      t(`${p}.plans.pro.f8`),
+                    ]}
                     iconClass="text-brand-green"
                     isRTL={isRTL}
                   />
@@ -787,7 +793,7 @@ export function Pricing() {
                       t(`${p}.plans.pro.f5`),
                       t(`${p}.plans.pro.f6`),
                       t(`${p}.plans.pro.f7`),
-                      t(`${p}.plans.pro.f8`),
+                      t(`${p}.plans.pro.f9`),
                     ]}
                     iconClass="text-brand-green"
                     isRTL={isRTL}
