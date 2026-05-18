@@ -2,7 +2,7 @@ import { useState, lazy, Suspense, useLayoutEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, Calendar, CheckCircle2, ChevronRight, Clock3, Shield, Sparkles, TrendingUp } from "lucide-react";
+import { ArrowRight, Calendar, Shield } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 const SiteFooter = lazy(() =>
   import("@/components/SiteFooter").then((m) => ({ default: m.SiteFooter })),
@@ -28,83 +28,15 @@ function BelowFoldFallback({ className }: { className?: string }) {
 
 function HeroConversationMockup() {
   return (
-    <div className="relative mx-auto w-full max-w-[560px]">
-      <div className="relative overflow-hidden rounded-[1.75rem] border border-gray-200 bg-white shadow-2xl shadow-gray-900/10">
-        <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 text-sm font-bold text-white">
-              W
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-950">Miami buyer lead</p>
-              <p className="text-xs text-gray-500">WhatsApp conversation synced to CRM</p>
-            </div>
-          </div>
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700 ring-1 ring-violet-100">
-            <Sparkles className="h-3.5 w-3.5" />
-            AI Copilot active
-          </div>
-        </div>
-
-        <div className="grid gap-0 md:grid-cols-[1.05fr_0.95fr]">
-          <div className="space-y-3 bg-gray-50/70 px-5 py-5">
-            <div className="max-w-[86%] rounded-2xl rounded-tl-sm bg-white px-4 py-3 text-sm text-gray-800 shadow-sm ring-1 ring-gray-100">
-              Hi, I’m interested in a 3-bedroom home in Miami.
-            </div>
-            <div className="ml-auto max-w-[86%] rounded-2xl rounded-tr-sm bg-emerald-600 px-4 py-3 text-sm text-white shadow-sm">
-              Great. What’s your budget range?
-            </div>
-            <div className="max-w-[78%] rounded-2xl rounded-tl-sm bg-white px-4 py-3 text-sm text-gray-800 shadow-sm ring-1 ring-gray-100">
-              Around $600k–$800k.
-            </div>
-            <div className="ml-auto flex max-w-[90%] items-center gap-2 rounded-2xl rounded-tr-sm bg-emerald-50 px-4 py-3 text-sm text-emerald-900 ring-1 ring-emerald-100">
-              <Sparkles className="h-4 w-4 shrink-0 text-emerald-700" />
-              Budget qualified. I can send available times for a showing.
-            </div>
-          </div>
-
-          <div className="border-t border-gray-100 bg-white px-5 py-5 md:border-l md:border-t-0">
-            <div className="rounded-2xl bg-gray-950 p-4 text-white">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-xs font-medium text-gray-300">Lead score</span>
-                <TrendingUp className="h-4 w-4 text-emerald-300" />
-              </div>
-              <div className="flex items-end gap-2">
-                <span className="text-4xl font-bold tracking-tight">87</span>
-                <span className="pb-1 text-sm text-gray-400">/100</span>
-              </div>
-              <div className="mt-3 h-2 rounded-full bg-white/10">
-                <div className="h-2 w-[87%] rounded-full bg-emerald-400" />
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-3 text-sm">
-              {["Budget qualified", "Follow-up scheduled", "Booking link ready"].map((item) => (
-                <div key={item} className="flex items-center gap-2 text-gray-700">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  <span>{item}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-5 rounded-2xl bg-gray-50 p-4 ring-1 ring-gray-100">
-              <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                <Clock3 className="h-3.5 w-3.5" />
-                Pipeline updated
-              </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
-                <span className="rounded-full bg-white px-3 py-1.5 text-gray-600 ring-1 ring-gray-200">New lead</span>
-                <ChevronRight className="h-3.5 w-3.5 text-gray-300" />
-                <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-emerald-800 ring-1 ring-emerald-200">Qualified</span>
-              </div>
-              <p className="mt-3 text-xs leading-relaxed text-gray-500">
-                Every conversation becomes organized, scored, and followed up.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <img
+      src="/hero/whachat-hero-mockup.png"
+      alt="WhachatCRM WhatsApp conversation mockup with AI copilot and lead score"
+      className="mx-auto w-full max-w-[474px]"
+      width={474}
+      height={828}
+      loading="eager"
+      decoding="async"
+    />
   );
 }
 
