@@ -54,16 +54,20 @@
       */
       #whachat-static-shell { background: #fff; overflow-x: hidden; }
       #whachat-static-shell a { color: inherit; }
-      #whachat-static-shell .wcs-nav { min-height: 56px; padding: 8px 16px; display: flex; justify-content: space-between; align-items: center; max-width: 1280px; margin: 0 auto; box-sizing: border-box; }
+      #whachat-static-shell .wcs-nav { min-height: 56px; padding: 8px 16px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; max-width: 1280px; margin: 0 auto; box-sizing: border-box; }
       #whachat-static-shell .wcs-brand { display: flex; align-items: center; gap: 8px; text-decoration: none; }
       #whachat-static-shell .wcs-logo { height: 32px; width: 32px; background: #059669; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 1.125rem; }
       #whachat-static-shell .wcs-wordmark { font-family: 'Plus Jakarta Sans', Inter, sans-serif; font-weight: 700; font-size: 1.25rem; color: #111827; }
-      #whachat-static-shell .wcs-nav-links { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      #whachat-static-shell .wcs-nav-links { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-self: end; }
+      #whachat-static-shell .wcs-trust-pill { display: none; justify-self: center; align-items: center; height: 32px; border-radius: 9999px; background: #ecfdf5; color: #065f46; border: 1px solid #d1fae5; padding: 0 12px; font-size: .75rem; font-weight: 500; white-space: nowrap; }
       #whachat-static-shell .wcs-link { font-size: 0.875rem; font-weight: 500; color: #4b5563; text-decoration: none; padding: 8px 0; }
       #whachat-static-shell .wcs-link:hover { color: #111827; }
       #whachat-static-shell .wcs-hide-sm { display: none; }
       @media (min-width: 640px) {
         #whachat-static-shell .wcs-hide-sm { display: inline-block; }
+      }
+      @media (min-width: 1024px) {
+        #whachat-static-shell .wcs-trust-pill { display: inline-flex; }
       }
       #whachat-static-shell .wcs-btn-header { font-size: 0.875rem; font-weight: 500; padding: 8px 16px; border-radius: 9999px; text-decoration: none; border: none; cursor: pointer; font-family: inherit; }
       #whachat-static-shell .wcs-btn-ghost { color: #4b5563; background: transparent; }
@@ -74,9 +78,9 @@
       #whachat-static-shell .wcs-order-txt { order: 2; width: 100%; }
       @media (min-width: 768px) {
         #whachat-static-shell .wcs-nav { padding: 12px 24px; }
-        #whachat-static-shell .wcs-hero { padding: 20px 24px 64px; }
-        #whachat-static-shell .wcs-hero-grid { display: grid; grid-template-columns: .95fr 1.05fr; gap: 40px; align-items: center; }
-        #whachat-static-shell .wcs-order-img { order: 2; }
+        #whachat-static-shell .wcs-hero { padding: 8px 24px 56px; }
+        #whachat-static-shell .wcs-hero-grid { display: grid; grid-template-columns: 1fr 1.04fr; gap: 40px; align-items: start; }
+        #whachat-static-shell .wcs-order-img { order: 2; margin-top: 28px; }
         #whachat-static-shell .wcs-order-txt { order: 1; }
       }
       #whachat-static-shell .wcs-mockup { position: relative; max-width: 560px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 28px; background: #fff; overflow: hidden; box-shadow: 0 24px 50px -24px rgb(17 24 39 / .32); }
@@ -98,24 +102,22 @@
       #whachat-static-shell .wcs-pipeline { border-radius: 18px; background: #f9fafb; border: 1px solid #f3f4f6; padding: 14px; font-size: .75rem; color: #6b7280; }
       #whachat-static-shell h1 { font-family: 'Plus Jakarta Sans', Inter, sans-serif; font-size: clamp(2.25rem, 6vw, 3rem); font-weight: 700; line-height: 1.05; letter-spacing: -0.035em; margin: 0 0 20px; color: #030712; }
       @media (min-width: 768px) {
-        #whachat-static-shell h1 { font-size: clamp(3rem, 4.7vw, 4.5rem); margin-bottom: 24px; }
+        #whachat-static-shell h1 { font-size: clamp(3rem, 4.35vw, 4.5rem); margin-bottom: 16px; max-width: 700px; }
       }
+      #whachat-static-shell .wcs-nowrap { white-space: nowrap; }
       #whachat-static-shell .wcs-sub { font-size: 1.125rem; color: #4b5563; margin: 0 0 24px; line-height: 1.625; max-width: 36rem; }
       @media (min-width: 768px) {
-        #whachat-static-shell .wcs-sub { font-size: 1.25rem; margin-bottom: 32px; }
+        #whachat-static-shell .wcs-sub { font-size: 1.25rem; margin-bottom: 24px; }
       }
-      #whachat-static-shell .wcs-stack { display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; max-width: 100%; }
+      #whachat-static-shell .wcs-stack { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-width: 100%; }
       #whachat-static-shell .wcs-btn-row { width: 100%; }
       @media (min-width: 640px) {
         #whachat-static-shell .wcs-btn-row { width: auto; }
       }
       #whachat-static-shell .wcs-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 56px; padding: 0 32px; background: #059669; color: #fff; font-weight: 600; border-radius: 9999px; text-decoration: none; width: 100%; box-sizing: border-box; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08); }
       #whachat-static-shell .wcs-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 24px; background: #fff; color: #374151; font-weight: 500; border-radius: 9999px; text-decoration: none; border: 1px solid #e5e7eb; width: 100%; box-sizing: border-box; }
-      #whachat-static-shell .wcs-btn-demo { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 24px; background: #fff; color: #065f46; font-weight: 600; border-radius: 9999px; text-decoration: none; border: 1px solid #a7f3d0; width: 100%; box-sizing: border-box; }
+      #whachat-static-shell .wcs-btn-demo { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 24px; background: linear-gradient(to right, #f59e0b, #f97316); color: #fff; font-weight: 600; border-radius: 9999px; text-decoration: none; width: 100%; box-sizing: border-box; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08); }
       #whachat-static-shell .wcs-note { font-size: 0.875rem; color: #6b7280; margin: 0 0 24px; }
-      #whachat-static-shell .wcs-badges { font-size: 0.875rem; color: #4b5563; display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-start; }
-      #whachat-static-shell .wcs-badge { display: flex; align-items: flex-start; gap: 8px; max-width: 100%; }
-      #whachat-static-shell .wcs-check { color: #059669; flex-shrink: 0; margin-top: 2px; }
       html.wcs-hide-static-marketing #whachat-static-shell { display: none !important; }
     </style>
 
@@ -195,6 +197,7 @@
           <span class="wcs-logo" aria-hidden="true">W</span>
           <span class="wcs-wordmark">WhachatCRM</span>
         </a>
+        <div class="wcs-trust-pill">Official Meta API inbox with 0% Meta fee markup</div>
         <nav class="wcs-nav-links" aria-label="Primary">
           <a class="wcs-link wcs-hide-sm" href="/pricing">Pricing</a>
           <a class="wcs-link wcs-hide-sm" href="/blog">Blog</a>
@@ -239,7 +242,7 @@
             </div>
           </div>
           <div class="wcs-order-txt">
-            <h1 id="whachat-static-hero-title">One Inbox. Every Channel. Zero Complexity.</h1>
+            <h1 id="whachat-static-hero-title">One Inbox. Every Channel. <span class="wcs-nowrap">Zero Complexity.</span></h1>
             <p class="wcs-sub">Bring WhatsApp, Instagram, Facebook Messenger, SMS, Telegram, and web chat into one clean workspace for faster follow-ups, better visibility, and team collaboration.</p>
             <div class="wcs-stack">
               <div class="wcs-btn-row">
@@ -253,13 +256,6 @@
               </div>
             </div>
             <p class="wcs-note">No credit card required</p>
-            <div class="wcs-badges">
-              <span class="wcs-badge" style="border-radius:9999px;background:#ecfdf5;color:#065f46;padding:6px 12px;border:1px solid #a7f3d0;"><span>Official Meta API • 0% Meta fee markup</span></span>
-              <span class="wcs-badge"><span class="wcs-check" aria-hidden="true">✓</span><span>Built on the official Meta APIs</span></span>
-              <span class="wcs-badge"><span class="wcs-check" aria-hidden="true">✓</span><span>Secure &amp; compliant — no scraping</span></span>
-              <span class="wcs-badge"><span class="wcs-check" aria-hidden="true">✓</span><span>No Meta markup fees</span></span>
-              <span class="wcs-badge"><span class="wcs-check" aria-hidden="true">✓</span><span>AI-assisted workflows</span></span>
-            </div>
           </div>
         </div>
       </section>

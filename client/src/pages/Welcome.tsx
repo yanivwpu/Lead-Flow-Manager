@@ -17,7 +17,6 @@ const WelcomeProblemSolution = lazy(() => import("@/pages/welcome/WelcomeProblem
 const WelcomeBenefitsSection = lazy(() => import("@/pages/welcome/WelcomeBenefitsSection"));
 const WelcomeIntegrationsSection = lazy(() => import("@/pages/welcome/WelcomeIntegrationsSection"));
 const WelcomeHowPricingBuilt = lazy(() => import("@/pages/welcome/WelcomeHowPricingBuilt"));
-const WelcomeTestimonials = lazy(() => import("@/pages/welcome/WelcomeTestimonials"));
 const WelcomeFinalCta = lazy(() => import("@/pages/welcome/WelcomeFinalCta"));
 import { getDirection } from "@/lib/i18n";
 import { MARKETING_URL } from "@/lib/marketingUrl";
@@ -116,6 +115,9 @@ export function Welcome() {
   const { t } = useTranslation();
   const [showDemoModal, setShowDemoModal] = useState(false);
   const isRTL = getDirection() === "rtl";
+  const heroTitle = t("landing.heroTitle");
+  const zeroPhrase = "Zero Complexity.";
+  const zeroIndex = heroTitle.indexOf(zeroPhrase);
 
   const hasStaticShell =
     typeof document !== "undefined" && !!document.getElementById("whachat-static-shell");
@@ -178,14 +180,20 @@ export function Welcome() {
       {!deferHeroToStaticHtml ? (
       <>
       {/* Navigation */}
-      <nav className="min-h-[56px] py-2 px-4 md:py-3 md:px-6 flex justify-between items-center max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto box-border">
+      <nav className="min-h-[56px] py-2 px-4 md:py-3 md:px-6 grid grid-cols-[auto_1fr_auto] items-center gap-3 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto box-border">
         <div className="flex items-center gap-2">
           <div className="h-8 w-8 bg-brand-green rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-lg">W</span>
           </div>
           <span className="font-display font-bold text-xl text-gray-900">WhachatCRM</span>
         </div>
-        <div className="flex items-center gap-2 md:gap-3">
+        <div className="hidden lg:flex justify-self-center">
+          <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-50 px-3 text-xs font-medium text-emerald-800 ring-1 ring-emerald-100">
+            <Shield className="h-3.5 w-3.5" />
+            {t("landing.heroEyebrow")}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 md:gap-3 justify-self-end">
           <Link href="/pricing">
             <button className="h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">{t("landing.pricing")}</button>
           </Link>
@@ -215,17 +223,26 @@ export function Welcome() {
       </nav>
 
       {/* Hero Section */}
-      <section className="px-4 md:px-6 pt-2 md:pt-5 pb-14 md:pb-16 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
-        <div className="flex flex-col gap-8 md:grid md:grid-cols-[0.95fr_1.05fr] md:gap-10 xl:gap-16 items-center">
-          <div className="relative order-1 w-full md:order-2 animate-hero-image">
+      <section className="px-4 md:px-6 pt-0 md:pt-2 pb-12 md:pb-14 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
+        <div className="flex flex-col gap-8 md:grid md:grid-cols-[1fr_1.04fr] md:gap-10 xl:gap-14 items-start">
+          <div className="relative order-1 w-full md:order-2 md:mt-8 lg:mt-7 animate-hero-image">
             <HeroConversationMockup />
           </div>
 
-          <div className="animate-hero-text order-2 md:order-1 max-w-2xl">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-display font-bold text-gray-950 tracking-tight leading-[1.05] mb-4 md:mb-5">{t("landing.heroTitle")}</h1>
-            <p className="text-lg md:text-xl xl:text-2xl text-gray-600 mb-6 leading-relaxed max-w-xl">{t("landing.heroSubtitle")}</p>
+          <div className="animate-hero-text order-2 md:order-1 max-w-[700px]">
+            <h1 className="text-4xl md:text-5xl lg:text-[4rem] xl:text-7xl font-display font-bold text-gray-950 tracking-tight leading-[1.04] mb-4">
+              {zeroIndex >= 0 ? (
+                <>
+                  {heroTitle.slice(0, zeroIndex)}
+                  <span className="whitespace-nowrap">{zeroPhrase}</span>
+                </>
+              ) : (
+                heroTitle
+              )}
+            </h1>
+            <p className="text-lg md:text-xl xl:text-2xl text-gray-600 mb-5 leading-relaxed max-w-xl">{t("landing.heroSubtitle")}</p>
 
-            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 mb-5">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 mb-4">
               <div className="w-full sm:w-auto">
                 <Link href={user ? "/app/inbox" : "/auth"}>
                   <button
@@ -252,7 +269,7 @@ export function Welcome() {
                 <button
                   type="button"
                   onClick={() => setShowDemoModal(true)}
-                  className="w-full sm:w-auto h-14 px-7 bg-white border border-emerald-200 text-emerald-800 font-semibold rounded-full flex items-center justify-center gap-2 hover:bg-emerald-50 transition-colors"
+                  className="w-full sm:w-auto h-14 px-7 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-full flex items-center justify-center gap-2 hover:from-amber-600 hover:to-orange-600 transition-colors shadow-md"
                   data-testid="button-book-demo"
                 >
                   <Calendar className="h-4 w-4" />
@@ -261,29 +278,8 @@ export function Welcome() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 mb-6">
+            <div className="flex items-center gap-2">
               <span className="text-sm text-gray-500">{t("landing.noCreditCard")}</span>
-            </div>
-
-            <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
-              <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 font-medium text-emerald-800 ring-1 ring-emerald-100">
-                <Shield className="h-4 w-4" />
-                {t("landing.heroEyebrow")}
-              </span>
-            </div>
-
-            <div className="grid gap-2 text-sm text-gray-600 sm:grid-cols-2">
-              {[
-                t("home.hero.badge1"),
-                t("landing.trust.noMetaMarkup"),
-                t("landing.trust.aiWorkflows"),
-                t("home.hero.badge3"),
-              ].map((item) => (
-                <div key={item} className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-brand-green" />
-                  <span>{item}</span>
-                </div>
-              ))}
             </div>
           </div>
         </div>
@@ -305,10 +301,6 @@ export function Welcome() {
 
       <Suspense fallback={<BelowFoldFallback className="min-h-[560px] bg-gray-50 [contain-intrinsic-size:auto_560px]" />}>
         <WelcomeHowPricingBuilt />
-      </Suspense>
-
-      <Suspense fallback={<BelowFoldFallback className="min-h-[260px] bg-white [contain-intrinsic-size:auto_260px]" />}>
-        <WelcomeTestimonials />
       </Suspense>
 
       <Suspense fallback={<BelowFoldFallback className="min-h-[320px] bg-gradient-to-br from-brand-green/5 to-brand-teal/5 [contain-intrinsic-size:auto_320px]" />}>
