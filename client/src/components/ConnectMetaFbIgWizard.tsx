@@ -305,6 +305,9 @@ export function ConnectMetaFbIgWizard({
 
   const channelNoun = isFacebook ? "Facebook Page" : "Instagram account";
   const channelTitle = isFacebook ? "Facebook Messenger" : "Instagram DMs";
+  const idleDescription = isFacebook
+    ? `Sign in with Facebook to grant access to your ${channelNoun}.`
+    : "Instagram business messaging is managed through Meta Business and connected Facebook Pages. Continue with Facebook to securely connect your Instagram DMs.";
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
@@ -325,7 +328,7 @@ export function ConnectMetaFbIgWizard({
           </div>
           {stage === "idle" && (
             <DialogDescription className="text-sm text-gray-500">
-              Sign in with Facebook to grant access to your {channelNoun}.
+              {idleDescription}
             </DialogDescription>
           )}
           {stage === "page_select" && !pagesLoading && pages.length > 0 && (
@@ -355,9 +358,10 @@ export function ConnectMetaFbIgWizard({
                       "Subscribe to new message notifications",
                     ]
                   : [
-                      "List and access your Facebook Pages",
-                      "Subscribe to Instagram DM notifications via your Page",
-                      "Send and receive messages through your Page",
+                      "Access connected Instagram business accounts",
+                      "Receive Instagram DM conversations in the unified inbox",
+                      "Send and reply to Instagram messages",
+                      "Enable real-time message sync and notifications",
                     ]
                 ).map((item) => (
                   <li key={item} className="flex items-center gap-2 text-xs text-gray-600">
