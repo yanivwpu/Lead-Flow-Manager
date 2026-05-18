@@ -29,7 +29,6 @@ function BelowFoldFallback({ className }: { className?: string }) {
 function HeroConversationMockup() {
   return (
     <div className="relative mx-auto w-full max-w-[560px]">
-      <div className="absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-emerald-100 via-white to-violet-100 blur-2xl" aria-hidden />
       <div className="relative overflow-hidden rounded-[1.75rem] border border-gray-200 bg-white shadow-2xl shadow-gray-900/10">
         <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-5 py-4">
           <div className="flex items-center gap-3">
@@ -188,7 +187,7 @@ export function Welcome() {
           <span className="font-display font-bold text-xl text-gray-900">WhachatCRM</span>
         </div>
         <div className="hidden lg:flex justify-self-center">
-          <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-50 px-3 text-xs font-medium text-emerald-800 ring-1 ring-emerald-100">
+          <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 text-[11px] font-medium text-emerald-800 ring-1 ring-emerald-100">
             <Shield className="h-3.5 w-3.5" />
             {t("landing.heroEyebrow")}
           </span>
@@ -223,14 +222,14 @@ export function Welcome() {
       </nav>
 
       {/* Hero Section */}
-      <section className="px-4 md:px-6 pt-0 md:pt-2 pb-12 md:pb-14 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
+      <section className="px-4 md:px-6 pt-3 md:pt-6 pb-12 md:pb-14 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
         <div className="flex flex-col gap-8 md:grid md:grid-cols-[1fr_1.04fr] md:gap-10 xl:gap-14 items-start">
-          <div className="relative order-1 w-full md:order-2 md:mt-8 lg:mt-7 animate-hero-image">
+          <div className="relative order-1 w-full md:order-2 md:mt-12 lg:mt-12 animate-hero-image">
             <HeroConversationMockup />
           </div>
 
-          <div className="animate-hero-text order-2 md:order-1 max-w-[700px]">
-            <h1 className="text-4xl md:text-5xl lg:text-[4rem] xl:text-7xl font-display font-bold text-gray-950 tracking-tight leading-[1.04] mb-4">
+          <div className="animate-hero-text order-2 md:order-1 max-w-[640px]">
+            <h1 className="text-4xl md:text-5xl lg:text-[3.45rem] xl:text-6xl font-display font-bold text-gray-950 tracking-tight leading-[1.09] mb-4">
               {zeroIndex >= 0 ? (
                 <>
                   {heroTitle.slice(0, zeroIndex)}
@@ -240,7 +239,7 @@ export function Welcome() {
                 heroTitle
               )}
             </h1>
-            <p className="text-lg md:text-xl xl:text-2xl text-gray-600 mb-5 leading-relaxed max-w-xl">{t("landing.heroSubtitle")}</p>
+            <p className="text-base md:text-lg xl:text-xl text-gray-600 mb-5 leading-7 max-w-xl">{t("landing.heroSubtitle")}</p>
 
             <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 mb-4">
               <div className="w-full sm:w-auto">
