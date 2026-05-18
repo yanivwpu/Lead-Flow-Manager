@@ -1,19 +1,15 @@
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, CheckCircle2, Zap } from "lucide-react";
+import { ArrowRight, CheckCircle2 } from "lucide-react";
 
 type Props = { isLoggedIn: boolean };
 
 export default function WelcomeFinalCta({ isLoggedIn }: Props) {
   const { t } = useTranslation();
   return (
-    <section className="px-4 md:px-6 py-16 md:py-20 bg-gradient-to-br from-brand-green/5 to-brand-teal/5">
+    <section className="px-4 md:px-6 py-16 md:py-20 bg-gradient-to-br from-emerald-50 to-white">
       <div className="max-w-3xl xl:max-w-4xl mx-auto text-center">
-        <div className="inline-flex items-center gap-2 px-4 py-2 bg-brand-green/10 text-brand-green rounded-full text-sm xl:text-base font-medium mb-6">
-          <Zap className="h-4 w-4" />
-          {t("home.cta.setupTime")}
-        </div>
-        <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-3 md:mb-4">{t("home.cta.title")}</h2>
+        <h2 className="text-3xl md:text-5xl font-display font-bold tracking-tight text-gray-950 mb-4">{t("home.cta.title")}</h2>
         <p className="text-base md:text-lg xl:text-xl text-gray-600 mb-8">{t("home.cta.subtitle")}</p>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
@@ -28,7 +24,7 @@ export default function WelcomeFinalCta({ isLoggedIn }: Props) {
           </Link>
           <Link href="/pricing">
             <button
-              className="h-14 px-8 bg-white border border-gray-200 text-gray-700 font-medium rounded-full inline-flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
+              className="h-14 px-8 bg-white border border-gray-200 text-gray-800 font-semibold rounded-full inline-flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
               data-testid="button-final-pricing"
             >
               {t("home.cta.secondary")}

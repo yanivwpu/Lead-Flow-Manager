@@ -526,12 +526,39 @@
       "alt": "WhachatCRM Dashboard - WhatsApp CRM Interface"
     },
     "problem": {
-      "title": "Customer conversations move fast. Your CRM should keep up.",
-      "heading": "The Problem",
-      "item1": "Important chats get buried",
-      "item2": "No context about customers",
-      "item3": "Follow-ups are forgotten",
-      "item4": "Teams lose visibility"
+      "eyebrow": "Conversation flows",
+      "title": "Built for conversations that turn into revenue",
+      "subtitle": "WhachatCRM connects the message, AI context, follow-up, and pipeline step so every important chat has a next action.",
+      "scenarios": {
+        "lead": {
+          "title": "New lead comes in",
+          "source": "WhatsApp",
+          "step1": "Conversation",
+          "step2": "AI captures budget and timeline",
+          "step3": "CRM lead created"
+        },
+        "instagram": {
+          "title": "Customer asks a question",
+          "source": "Instagram DM",
+          "step1": "Inbox context",
+          "step2": "Team replies with history",
+          "step3": "Customer stays visible"
+        },
+        "quiet": {
+          "title": "Prospect goes quiet",
+          "source": "Follow-up",
+          "step1": "No reply detected",
+          "step2": "Reminder or template",
+          "step3": "Conversation keeps moving"
+        },
+        "appointment": {
+          "title": "Appointment intent detected",
+          "source": "Booking",
+          "step1": "Intent found",
+          "step2": "Right link sent",
+          "step3": "Pipeline updated"
+        }
+      }
     },
     "solution": {
       "heading": "What WhachatCRM gives you",
@@ -570,7 +597,7 @@
     },
     "integrations": {
       "title": "Real integrations for real workflows",
-      "subtitle": "Connect supported messaging channels, commerce, CRM, scheduling, and lead sources without turning your inbox into a developer project."
+      "subtitle": "Connect the tools you already use — and add more as your workflow grows."
     },
     "howItWorks": {
       "title": "Up and running in minutes",
@@ -599,39 +626,26 @@
     "builtFor": {
       "title": "Built for teams that win through conversations",
       "realEstate": "Real estate teams",
-      "realEstateDesc": "Route listing inquiries, qualify buyers, and keep every viewing follow-up visible.",
+      "realEstateDesc": "Qualify buyer leads, send booking links, and follow up automatically when prospects go quiet.",
+      "medSpas": "Med spas and clinics",
+      "medSpasDesc": "Answer treatment questions, capture appointment intent, and keep consult requests moving.",
       "salesTeams": "Sales teams",
-      "salesTeamsDesc": "Respond to inbound leads faster, assign owners, and keep pipeline movement clear.",
-      "supportTeams": "Support teams",
-      "supportTeamsDesc": "Give customers one responsive channel while your team shares context behind the scenes.",
+      "salesTeamsDesc": "Route inbound conversations, score high-intent leads, and keep every rep aligned.",
       "agencies": "Agencies",
-      "agenciesDesc": "Manage multiple client conversations and lead sources without jumping between tools.",
-      "smallBiz": "Local businesses",
-      "smallBizDesc": "Capture WhatsApp and social messages, follow up on time, and look organized from day one.",
+      "agenciesDesc": "Manage client lead sources, WhatsApp replies, and campaign follow-ups from one place.",
+      "localServices": "Local service businesses",
+      "localServicesDesc": "Turn missed calls and WhatsApp questions into booked jobs and clear next steps.",
       "tagline": "From first reply to next step, WhachatCRM helps teams move faster without losing context."
     },
     "trust": {
       "eyebrow": "Social proof",
-      "title": "Used by growing sales and service teams",
+      "title": "Built for growing sales and service teams",
       "line1": "A clean home for WhatsApp, social messages, follow-ups, and team collaboration.",
-      "line2": "Customer logos, testimonials, and case studies will appear here as teams go live.",
-      "placeholder": "Placeholder for customer proof",
-      "card1": {
-        "quote": "Designed for teams that need every inbound conversation visible, owned, and followed up.",
-        "role": "Sales operations"
-      },
-      "card2": {
-        "quote": "Built around real messaging workflows: quick replies, shared context, and fewer missed leads.",
-        "role": "Service teams"
-      },
-      "card3": {
-        "quote": "A polished place for future customer stories, logo rows, and measurable business outcomes.",
-        "role": "Case studies"
-      }
+      "line2": "Customer logos and case studies will appear here as teams go live."
     },
     "cta": {
-      "title": "Stop Losing Leads in Your WhatsApp Inbox",
-      "subtitle": "Join growing businesses using WhachatCRM to close more deals via WhatsApp.",
+      "title": "Stop losing leads in your WhatsApp inbox",
+      "subtitle": "Start with one inbox, then add AI assistance, automations, and Growth Engines as you scale.",
       "primary": "Start Your 14-Day Pro Trial",
       "secondary": "See Pricing",
       "note": "No credit card required • Free plan forever • Cancel anytime",
