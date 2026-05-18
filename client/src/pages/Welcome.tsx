@@ -224,12 +224,12 @@ export function Welcome() {
       {/* Hero Section */}
       <section className="px-4 md:px-6 pt-5 md:pt-8 pb-12 md:pb-14 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
         <div className="flex flex-col gap-8 md:grid md:grid-cols-[1fr_1.04fr] md:gap-10 xl:gap-14 items-start">
-          <div className="relative order-1 w-full md:order-2 md:mt-16 lg:mt-16 animate-hero-image">
+          <div className="relative order-2 w-full md:order-2 md:mt-16 lg:mt-16 animate-hero-image">
             <HeroConversationMockup />
           </div>
 
-          <div className="animate-hero-text order-2 md:order-1 max-w-[720px] md:mt-8 lg:mt-10">
-            <h1 className="text-4xl md:text-6xl lg:text-[5rem] xl:text-[5.4rem] font-display font-bold text-gray-950 tracking-tight leading-[0.98] mb-5">
+          <div className="animate-hero-text order-1 md:order-1 max-w-[780px] md:mt-8 lg:mt-10">
+            <h1 className="text-[3rem] md:text-[4.5rem] lg:text-[6.4rem] xl:text-[6.9rem] font-display font-bold text-gray-950 tracking-tight leading-[0.95] mb-7">
               {zeroIndex >= 0 ? (
                 <>
                   <span className="block">{heroTitle.slice(0, zeroIndex).trim()}</span>
@@ -239,7 +239,7 @@ export function Welcome() {
                 heroTitle
               )}
             </h1>
-            <p className="text-base md:text-[1.05rem] text-gray-600 mb-5 leading-7 max-w-xl">{t("landing.heroSubtitle")}</p>
+            <p className="text-base md:text-[1.05rem] text-gray-600 mb-8 leading-7 max-w-xl">{t("landing.heroSubtitle")}</p>
 
             <div className="flex flex-col sm:flex-row gap-2.5 mb-4">
               <div className="w-full sm:w-auto">
