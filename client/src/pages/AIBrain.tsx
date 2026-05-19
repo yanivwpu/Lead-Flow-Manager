@@ -33,6 +33,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
+import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
@@ -391,7 +392,7 @@ function AIBrainContent() {
     [wkUrls],
   );
 
-  const isShopify = !!(subscription?.subscription?.isShopify) || !!shopHint;
+  const isShopify = mustUseShopifyBilling(subscription?.subscription, shopHint);
 
   // AI Brain add-on checkout
   const handleAddonCheckout = async () => {

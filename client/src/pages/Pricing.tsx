@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supportedLanguages } from "@/lib/i18n";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, getShopifyShopHint, useShopifyShopHint } from "@/lib/shopifyBillingHint";
+import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
 
 // ─── Shared structural components ───────────────────────────────────────────
 function FeatureItem({
@@ -132,8 +133,7 @@ export function Pricing() {
       : "free";
   const hasAIBrainAddon = limits?.hasAIBrainAddon ?? false;
   const aiBrainBasePlanEligible = limits?.aiBrainBasePlanEligible ?? false;
-  const isShopify =
-    !!(subscriptionData?.subscription?.isShopify) || !!getShopifyShopHint();
+  const isShopify = mustUseShopifyBilling(subscriptionData?.subscription, shopHint);
   const planButtonsDisabled = !!user && subscriptionLoading;
 
   // Shopify plan name mapping
@@ -200,7 +200,7 @@ export function Pricing() {
     },
     onSuccess: (data) => {
       if (data.url) {
-        window.open(data.url, "_blank");
+        window.location.href = data.url;
         setLoadingPlan(null);
       }
     },

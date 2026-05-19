@@ -68,6 +68,7 @@ import {
 } from "@shared/rgePaths";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
+import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -804,7 +805,7 @@ export function RealtorGrowthEngine() {
     },
     staleTime: 60_000,
   });
-  const isShopify = !!(billingAccount?.subscription?.isShopify) || !!shopHint;
+  const isShopify = mustUseShopifyBilling(billingAccount?.subscription, shopHint);
 
   const isOnboardingPath = location.includes("/realtor-growth-engine/onboarding");
 
@@ -847,7 +848,7 @@ export function RealtorGrowthEngine() {
     const params = new URLSearchParams(window.location.search);
     const paid = params.get("paid");
     const sessionId = params.get("session_id");
-    if (paid === "true" && sessionId) {
+    if (paid === "true" && sessionId && !isShopify) {
       verifyPaymentMutation.mutate(sessionId);
     }
     if (params.get("shopify_rge") === "success") {
@@ -1989,7 +1990,7 @@ export function RealtorGrowthEngine() {
                 if (!res.ok) throw new Error("Failed to create checkout");
                 const data = await res.json();
                 if (data.url) {
-                  window.open(data.url, '_blank');
+                  window.location.href = data.url;
                 }
               } catch (err) {
                 console.error("Checkout error:", err);

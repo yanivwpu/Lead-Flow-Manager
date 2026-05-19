@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
+import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Zap, MessageSquare, Users, Phone, Sparkles, Loader2, Check, Info } from "lucide-react";
@@ -224,7 +225,7 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
     },
   });
 
-  const isShopify = !!(subscription?.subscription?.isShopify) || !!shopHint;
+  const isShopify = mustUseShopifyBilling(subscription?.subscription, shopHint);
 
   const runCheckout = async (plan: TargetPlan) => {
     setLoadingPlan(plan);
@@ -263,7 +264,7 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
 
       const data = await response.json();
       if (data.url) {
-        window.open(data.url, "_blank");
+        window.location.href = data.url;
         setLoadingPlan(null);
         onOpenChange(false);
       }

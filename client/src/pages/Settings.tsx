@@ -15,6 +15,7 @@ import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { ChannelSettings } from "@/components/ChannelSettings";
 import { cn } from "@/lib/utils";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
+import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
 
 interface TeamMember {
   id: string;
@@ -646,13 +647,13 @@ export function Settings() {
     typeof usersCountVal === "number" &&
     usersCountVal >= usersLimitVal;
 
+  const billingUsesShopify = mustUseShopifyBilling(subscriptionData?.subscription, shopHint);
+
   const isInShopify =
-    !!subscriptionData?.subscription?.isShopify ||
-    !!shopHint ||
+    billingUsesShopify ||
     (typeof window !== "undefined" &&
-      (window.location.search.includes("shop=") ||
-        (window.top != null && window.top !== window.self) ||
-        document.referrer.includes("shopify")));
+      (window.top != null && window.top !== window.self) ||
+      document.referrer.includes("shopify"));
 
   const shopifyBillingMutation = useMutation({
     mutationFn: async () => {
@@ -1157,13 +1158,13 @@ export function Settings() {
                   <p className="text-xs text-gray-500 mb-4">Update payment method or download invoices.</p>
                   
                   <div className="mt-auto pt-6">
-                    {subscriptionData?.subscription?.isShopify ? (
+                    {billingUsesShopify ? (
                       <p className="text-xs text-gray-500 leading-relaxed">
                         Subscriptions are billed through Shopify. Open your Shopify admin → Apps → WhachatCRM to manage the
                         app subscription, or use <span className="font-medium text-gray-700">Pricing</span> in this app to
                         change plans.
                       </p>
-                    ) : !subscriptionData?.subscription?.isShopify &&
+                    ) : !billingUsesShopify &&
                       subscriptionData?.subscription?.isPaidSubscriber ? (
                       <Button 
                         variant="outline" 

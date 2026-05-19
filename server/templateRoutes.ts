@@ -23,6 +23,11 @@ import {
   onGrowthEngineInstallSuccess,
   resolveConciergeBookingUrlForUser,
 } from "./growthEngineSetupService";
+import {
+  isShopifyBillingAccount,
+  rejectStripeIfShopifyUser,
+  shopDomainFromRequest,
+} from "./shopifyBillingGuard";
 
 const TEMPLATE_ID = "realtor-growth-engine";
 const TEMPLATE_PRICE_CENTS = 19900;
@@ -159,10 +164,13 @@ export function registerTemplateRoutes(app: Express) {
         return res.json({ success: true, demo: true });
       }
 
-      if (user.shopifyShop) {
-        if (!user.shopifyAccessToken) {
+      if (isShopifyBillingAccount(user, req)) {
+        if (!user.shopifyShop || !user.shopifyAccessToken) {
+          const shop = shopDomainFromRequest(req) || user.shopifyShop;
           return res.status(400).json({
-            error: "Shopify connection is incomplete. Re-open the app from your Shopify admin, then try again.",
+            error: shop
+              ? "Install or re-open the app from your Shopify admin to complete billing, then try again."
+              : "Shopify connection is incomplete. Re-open the app from your Shopify admin, then try again.",
             code: "SHOPIFY_TOKEN_MISSING",
           });
         }
@@ -178,6 +186,10 @@ export function registerTemplateRoutes(app: Express) {
           return res.status(500).json({ error: "Failed to start Shopify billing for this purchase" });
         }
         return res.json({ shopifyConfirmationUrl: billing.confirmationUrl });
+      }
+
+      if (await rejectStripeIfShopifyUser(req, res, "templates/rge/purchase", (id) => storage.getUser(id))) {
+        return;
       }
 
       const stripe = await getUncachableStripeClient();
@@ -225,6 +237,10 @@ export function registerTemplateRoutes(app: Express) {
 
   app.post("/api/templates/realtor-growth-engine/verify-payment", requireAuth, async (req, res) => {
     try {
+      if (await rejectStripeIfShopifyUser(req, res, "templates/rge/verify-payment", (id) => storage.getUser(id))) {
+        return;
+      }
+
       const userId = (req.user as any).id;
       const { sessionId } = req.body;
 

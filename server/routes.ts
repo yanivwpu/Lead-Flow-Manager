@@ -118,6 +118,8 @@ import { getUncachableStripeClient } from "./stripeClient";
 import { sanitizeStripeReturnPath } from "./checkoutReturnPath";
 import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBase";
 import { getAppOrigin } from "./urlOrigins";
+import { isShopifyShopDomain } from "@shared/shopifyBilling";
+import { rejectStripeIfShopifyUser } from "./shopifyBillingGuard";
 import { getMarketingOrigin } from "./urlOrigins";
 import { sendWelcomeEmail, sendContactFormEmail, sendDemoBookingNotification, sendDemoConfirmationEmail, sendSalespersonWelcomeEmail } from "./email";
 import bcrypt from "bcryptjs";
@@ -3517,19 +3519,8 @@ export async function registerRoutes(
 
   // ============= Subscription Endpoints =============
 
-  /** Shopify-linked accounts must use Shopify Billing API — never Stripe checkout or portal. */
-  async function rejectStripeIfShopifyUser(req: Request, res: Response): Promise<boolean> {
-    const u = await storage.getUser(req.user!.id);
-    if (u?.shopifyShop) {
-      res.status(400).json({
-        error:
-          "This account is billed through Shopify. Use Pricing or Settings to subscribe or change plans.",
-        code: "SHOPIFY_BILLING_REQUIRED",
-      });
-      return true;
-    }
-    return false;
-  }
+  const blockStripeForShopify = (req: Request, res: Response, context: string) =>
+    rejectStripeIfShopifyUser(req, res, context, (id) => storage.getUser(id));
 
   // Get available subscription plans
   app.get("/api/subscription/plans", (_req, res) => {
@@ -3709,7 +3700,7 @@ export async function registerRoutes(
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      if (await rejectStripeIfShopifyUser(req, res)) return;
+      if (await blockStripeForShopify(req, res, "subscription/checkout")) return;
 
       const { planId, billingInterval, redirectTo, cancelTo } = req.body as {
         planId?: string;
@@ -3748,7 +3739,7 @@ export async function registerRoutes(
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      if (await rejectStripeIfShopifyUser(req, res)) return;
+      if (await blockStripeForShopify(req, res, "subscription/checkout/pro-ai")) return;
 
       const { redirectTo, cancelTo } = (req.body || {}) as { redirectTo?: string; cancelTo?: string };
       const baseUrl = getAppOrigin() || `${req.protocol}://${req.get('host')}`;
@@ -3774,7 +3765,7 @@ export async function registerRoutes(
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      if (await rejectStripeIfShopifyUser(req, res)) return;
+      if (await blockStripeForShopify(req, res, "subscription/checkout/plan-ai-bundle")) return;
 
       const { plan, redirectTo, cancelTo } = (req.body || {}) as {
         plan?: string;
@@ -3810,7 +3801,7 @@ export async function registerRoutes(
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      if (await rejectStripeIfShopifyUser(req, res)) return;
+      if (await blockStripeForShopify(req, res, "subscription/addon/ai-brain")) return;
 
       const baseUrl = getAppOrigin() || `${req.protocol}://${req.get('host')}`;
       const { redirectTo, cancelTo } = (req.body || {}) as { redirectTo?: string; cancelTo?: string };
@@ -3851,7 +3842,7 @@ export async function registerRoutes(
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      if (await rejectStripeIfShopifyUser(req, res)) return;
+      if (await blockStripeForShopify(req, res, "subscription/portal")) return;
 
       const returnUrl = `${resolveStripeCheckoutRedirectOrigin(getAppOrigin())}/app/settings`;
       const result = await subscriptionService.createPortalSession(req.user.id, returnUrl);
@@ -3868,7 +3859,7 @@ export async function registerRoutes(
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      if (await rejectStripeIfShopifyUser(req, res)) return;
+      if (await blockStripeForShopify(req, res, "subscription/cancel")) return;
 
       const { immediate } = req.body;
       

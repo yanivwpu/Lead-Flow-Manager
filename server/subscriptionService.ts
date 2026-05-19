@@ -15,6 +15,7 @@ import {
   buildStripeCancelUrl,
   sanitizeStripeReturnPath,
 } from "./checkoutReturnPath";
+import { assertStripeNotAllowedForShopifyUser } from "./shopifyBillingGuard";
 
 export type StripeCheckoutRedirectOpts = {
   successReturnPath?: string;
@@ -339,6 +340,7 @@ class SubscriptionService {
   ): Promise<{ url: string }> {
     const user = await storage.getUserForSession(userId);
     if (!user) throw new Error("User not found");
+    assertStripeNotAllowedForShopifyUser(user, "createCheckoutSession");
 
     const stripe = await getUncachableStripeClient();
     const resolvedBaseUrl = resolveStripeCheckoutRedirectOrigin(getAppOrigin() || baseUrl);
@@ -407,6 +409,7 @@ class SubscriptionService {
   ): Promise<{ url: string }> {
     const user = await storage.getUserForSession(userId);
     if (!user) throw new Error("User not found");
+    assertStripeNotAllowedForShopifyUser(user, "createProPlusAICheckoutSession");
 
     const stripe = await getUncachableStripeClient();
     const resolvedBaseUrl = resolveStripeCheckoutRedirectOrigin(getAppOrigin() || baseUrl);
@@ -468,6 +471,7 @@ class SubscriptionService {
   ): Promise<{ url: string }> {
     const user = await storage.getUserForSession(userId);
     if (!user) throw new Error("User not found");
+    assertStripeNotAllowedForShopifyUser(user, "createPlanAIBundleCheckoutSession");
 
     if (getEffectivePlanForUser(user) !== "free") {
       throw Object.assign(
@@ -537,6 +541,7 @@ class SubscriptionService {
   ): Promise<{ url: string }> {
     const user = await storage.getUserForSession(userId);
     if (!user) throw new Error("User not found");
+    assertStripeNotAllowedForShopifyUser(user, "createAddonCheckoutSession");
 
     if (isProAiTrialActive(user)) {
       throw Object.assign(
@@ -605,6 +610,7 @@ class SubscriptionService {
   async createPortalSession(userId: string, returnUrl: string): Promise<{ url: string }> {
     const user = await storage.getUserForSession(userId);
     if (!user) throw new Error("User not found");
+    assertStripeNotAllowedForShopifyUser(user, "createPortalSession");
 
     const stripe = await getUncachableStripeClient();
 

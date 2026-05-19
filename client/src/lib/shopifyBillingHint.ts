@@ -1,14 +1,13 @@
 import { useMemo } from "react";
 import { useLocation } from "wouter";
-
-const SHOP_RE = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i;
+import { isShopifyShopDomain } from "@shared/shopifyBilling";
 
 /** Persist Shopify shop domain from URL for SPA navigations (matches Settings localStorage key). */
 export function getShopifyShopHint(): string | undefined {
   if (typeof window === "undefined") return undefined;
   try {
     const fromUrl = new URLSearchParams(window.location.search).get("shop");
-    if (fromUrl && SHOP_RE.test(fromUrl)) {
+    if (fromUrl && isShopifyShopDomain(fromUrl)) {
       localStorage.setItem("shopify_shop", fromUrl);
       return fromUrl;
     }
@@ -17,7 +16,7 @@ export function getShopifyShopHint(): string | undefined {
   }
   try {
     const stored = localStorage.getItem("shopify_shop");
-    if (stored && SHOP_RE.test(stored)) return stored;
+    if (stored && isShopifyShopDomain(stored)) return stored;
   } catch {
     /* ignore */
   }

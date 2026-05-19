@@ -1,5 +1,6 @@
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
-import { getSubscriptionApiUrl } from "@/lib/shopifyBillingHint";
+import { getShopifyShopHint, getSubscriptionApiUrl } from "@/lib/shopifyBillingHint";
+import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
 
 export type UpgradeProvider = "shopify" | "stripe";
 
@@ -16,15 +17,9 @@ export async function upgradeToProAI(returnPath = "/app/inbox"): Promise<void> {
   const subRes = await fetch(getSubscriptionApiUrl(), { credentials: "include" });
   if (!subRes.ok) throw new Error("Could not load subscription");
   const data = await subRes.json();
-  const provider = getUpgradeProvider(data.subscription);
-
-  if (provider === "shopify") {
-    const hint =
-      typeof window !== "undefined"
-        ? new URLSearchParams(window.location.search).get("shop") ||
-          (typeof localStorage !== "undefined" ? localStorage.getItem("shopify_shop") : null)
-        : null;
-    const qs = hint ? `?shop=${encodeURIComponent(hint)}` : "";
+  const shopHint = getShopifyShopHint();
+  if (mustUseShopifyBilling(data.subscription, shopHint)) {
+    const qs = shopHint ? `?shop=${encodeURIComponent(shopHint)}` : "";
     window.location.href = `/pricing${qs}`;
     return;
   }
