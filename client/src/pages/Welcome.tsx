@@ -13,7 +13,6 @@ const BookDemoModal = lazy(() =>
 const LanguageSelector = lazy(() =>
   import("@/components/LanguageSelector").then((m) => ({ default: m.LanguageSelector })),
 );
-const WelcomeProblemSolution = lazy(() => import("@/pages/welcome/WelcomeProblemSolution"));
 const WelcomeBenefitsSection = lazy(() => import("@/pages/welcome/WelcomeBenefitsSection"));
 const WelcomeIntegrationsSection = lazy(() => import("@/pages/welcome/WelcomeIntegrationsSection"));
 const WelcomeHowPricingBuilt = lazy(() => import("@/pages/welcome/WelcomeHowPricingBuilt"));
@@ -171,7 +170,7 @@ export function Welcome() {
                 heroTitle
               )}
             </h1>
-            <p className="text-base md:text-[1.05rem] text-gray-600 mb-8 leading-7 max-w-xl">{t("landing.heroSubtitle")}</p>
+            <p className="text-base md:text-[1.05rem] text-gray-600 mb-10 leading-7 max-w-xl">{t("landing.heroSubtitle")}</p>
 
             <div className="flex flex-col sm:flex-row gap-2.5 mb-4">
               <div className="w-full sm:w-auto">
@@ -216,10 +215,6 @@ export function Welcome() {
       </section>
       </>
       ) : null}
-
-      <Suspense fallback={<BelowFoldFallback className="min-h-[360px] bg-white [contain-intrinsic-size:auto_360px]" />}>
-        <WelcomeProblemSolution />
-      </Suspense>
 
       <Suspense fallback={<BelowFoldFallback className="min-h-[520px] bg-gray-50 [contain-intrinsic-size:auto_520px]" />}>
         <WelcomeBenefitsSection />
