@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,12 +10,20 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { 
   Calendar, DollarSign, CheckCircle, Clock, LogOut, Loader2, 
   User, Phone, Mail, ExternalLink, FileText, AlertCircle,
-  Eye, EyeOff, ClipboardList
+  Eye, EyeOff, ClipboardList, CircleHelp
 } from "lucide-react";
 import { isSalespersonSubscriptionCommissionActiveAt } from "@shared/salespersonSubscriptionCommissionWindow";
+import { SALESPERSON_SUBSCRIPTION_COMMISSION_SHORT } from "@shared/salespersonCommissionCopy";
 import {
   SALESPERSON_AGREEMENT_TEXT,
   SALESPERSON_AGREEMENT_VERSION,
@@ -87,6 +95,116 @@ interface SalespersonInfo {
   id: string;
   name: string;
   email: string;
+  role?: string;
+}
+
+function salespersonHasSetupPayouts(role?: string): boolean {
+  const r = role === "demo" ? "sales" : role || "sales";
+  return r === "setup" || r === "both";
+}
+
+function EarningsInfoSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="border-b border-slate-100 py-4 last:border-0 last:pb-0 first:pt-0">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function SalesPortalEarningsDialogs({
+  earningsOpen,
+  onEarningsOpenChange,
+  policyOpen,
+  onPolicyOpenChange,
+  stats,
+  role,
+}: {
+  earningsOpen: boolean;
+  onEarningsOpenChange: (open: boolean) => void;
+  policyOpen: boolean;
+  onPolicyOpenChange: (open: boolean) => void;
+  stats?: Stats;
+  role?: string;
+}) {
+  const taskPayout = stats?.effectiveTaskPayoutDollars ?? stats?.defaultTaskPayoutDollars ?? 50;
+  const showSetup = salespersonHasSetupPayouts(role);
+
+  return (
+    <>
+      <Dialog open={earningsOpen} onOpenChange={onEarningsOpenChange}>
+        <DialogContent className="max-w-md gap-0 p-0 overflow-hidden sm:max-w-md">
+          <DialogHeader className="px-5 pt-5 pb-0 text-start space-y-1">
+            <DialogTitle className="text-base font-semibold text-slate-900">How earnings work</DialogTitle>
+            <DialogDescription className="text-sm text-slate-500">
+              Quick summary of commission and payout rules.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="px-5 pb-5 pt-3 max-h-[min(70vh,520px)] overflow-y-auto">
+            <EarningsInfoSection title="Subscription commission">
+              <ul className="list-disc pl-4 space-y-1.5 text-sm text-slate-600 leading-relaxed">
+                <li>{SALESPERSON_SUBSCRIPTION_COMMISSION_SHORT}</li>
+                <li>Applies while the customer remains active and paying on a qualifying base plan.</li>
+                <li>Demo conversions may also include one-time conversion credits.</li>
+              </ul>
+            </EarningsInfoSection>
+            {showSetup && (
+              <EarningsInfoSection title="Setup task payouts">
+                <ul className="list-disc pl-4 space-y-1.5 text-sm text-slate-600 leading-relaxed">
+                  <li>
+                    <span className="font-medium text-slate-800">${taskPayout.toFixed(2)}</span> per completed Growth
+                    Engine / concierge setup task
+                    {stats?.hasCustomTaskPayout ? " (custom rate)" : " (default rate)"}.
+                  </li>
+                  <li>Fixed payout — separate from subscription commission.</li>
+                </ul>
+              </EarningsInfoSection>
+            )}
+            <EarningsInfoSection title="Exclusions">
+              <ul className="list-disc pl-4 space-y-1.5 text-sm text-slate-600 leading-relaxed">
+                <li>AI Brain add-ons</li>
+                <li>Growth Engines</li>
+                <li>One-time purchases and other add-ons outside the base plan</li>
+                <li>Messaging fees and third-party platform costs</li>
+              </ul>
+            </EarningsInfoSection>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4 w-full rounded-lg border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              onClick={() => {
+                onEarningsOpenChange(false);
+                onPolicyOpenChange(true);
+              }}
+            >
+              <FileText className="h-4 w-4 mr-2 shrink-0" />
+              View full commission policy
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={policyOpen} onOpenChange={onPolicyOpenChange}>
+        <DialogContent className="max-w-2xl gap-0 p-0 overflow-hidden sm:max-w-2xl">
+          <DialogHeader className="px-5 pt-5 pb-3 text-start border-b border-slate-100">
+            <DialogTitle className="text-base font-semibold text-slate-900">Commission policy</DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">Version {SALESPERSON_AGREEMENT_VERSION}</DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="h-[min(60vh,480px)] px-5 py-4">
+            <pre className="whitespace-pre-wrap text-sm text-slate-600 font-sans leading-relaxed">
+              {SALESPERSON_AGREEMENT_TEXT}
+            </pre>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 function subscriptionCommissionWindowBadge(createdAt: string): { label: string; active: boolean } {
@@ -108,7 +226,9 @@ export function SalesPortal() {
   const [isAccepting, setIsAccepting] = useState(false);
   const [acceptError, setAcceptError] = useState("");
   const [showCode, setShowCode] = useState(false);
-  
+  const [earningsInfoOpen, setEarningsInfoOpen] = useState(false);
+  const [policyModalOpen, setPolicyModalOpen] = useState(false);
+
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -435,7 +555,18 @@ export function SalesPortal() {
             </div>
             <div>
               <h1 className="text-lg font-display font-bold text-gray-900">Sales Portal</h1>
-              <p className="text-sm text-gray-500">Welcome, {salesperson?.name}</p>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
+                <p className="text-sm text-gray-500">Welcome, {salesperson?.name}</p>
+                <button
+                  type="button"
+                  onClick={() => setEarningsInfoOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] font-medium text-slate-600 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                  data-testid="button-how-earnings-work"
+                >
+                  <CircleHelp className="h-3 w-3 text-slate-400" />
+                  How earnings work
+                </button>
+              </div>
             </div>
           </div>
           <Button variant="ghost" onClick={handleLogout} className="text-gray-600">
@@ -493,22 +624,6 @@ export function SalesPortal() {
             <p className="text-3xl font-bold text-gray-900">{stats?.setupTasksCompleted ?? 0}</p>
           </div>
         </div>
-
-        <p className="text-sm text-gray-600 mb-6 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <span className="font-medium text-gray-900">How you earn</span> Earnings include demo conversion commissions and
-          completed setup task payouts. Each completed Growth Engine setup task pays a fixed amount:{" "}
-          <span className="font-semibold text-gray-900">
-            ${(stats?.effectiveTaskPayoutDollars ?? stats?.defaultTaskPayoutDollars ?? 50).toFixed(2)}
-          </span>
-          {stats?.hasCustomTaskPayout ? (
-            <span className="text-gray-600"> (custom override)</span>
-          ) : (
-            <span className="text-gray-600"> (default ${(stats?.defaultTaskPayoutDollars ?? 50).toFixed(2)})</span>
-          )}
-          . Demo conversions can also earn one-time credits plus recurring subscription commission (30% on base
-          subscription revenue while the customer remains active; excludes AI Brain, Growth Engines, messaging fees, and
-          other add-ons) when Stripe records a qualifying payment.
-        </p>
 
         <Tabs defaultValue="pending" className="space-y-6">
           <TabsList className="flex flex-wrap h-auto gap-1">
@@ -871,6 +986,15 @@ export function SalesPortal() {
           </TabsContent>
         </Tabs>
       </main>
+
+      <SalesPortalEarningsDialogs
+        earningsOpen={earningsInfoOpen}
+        onEarningsOpenChange={setEarningsInfoOpen}
+        policyOpen={policyModalOpen}
+        onPolicyOpenChange={setPolicyModalOpen}
+        stats={stats}
+        role={salesperson?.role}
+      />
     </div>
   );
 }
