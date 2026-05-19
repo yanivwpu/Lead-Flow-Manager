@@ -31,9 +31,9 @@ function HeroConversationMockup() {
     <img
       src="/hero/whachat-hero-mockup.png"
       alt="WhachatCRM WhatsApp conversation mockup with AI copilot and lead score"
-      className="mx-auto w-full max-w-[474px]"
-      width={474}
-      height={828}
+      className="mx-auto w-full max-w-[390px] lg:max-w-[420px]"
+      width={560}
+      height={871}
       loading="eager"
       decoding="async"
     />
