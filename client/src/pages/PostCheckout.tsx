@@ -163,7 +163,7 @@ export function PostCheckout() {
           onClick={() => setLocation(manualContinuePath)}
           data-testid="button-post-checkout-continue"
         >
-          {pollTemplate ? "Continue to Realtor Growth Engine Onboarding" : "Continue to your account"}
+          {pollTemplate ? "Continue to Realtor Growth Engine onboarding" : "Continue to your account"}
         </Button>
       )}
     </div>

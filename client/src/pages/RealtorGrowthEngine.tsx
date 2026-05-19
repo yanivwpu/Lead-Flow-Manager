@@ -62,7 +62,10 @@ import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 import type { ActivationStatusPayload } from "@/lib/activationStatus";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
-import { getRgeCheckoutReturnPaths } from "@shared/rgePaths";
+import {
+  getRgeCheckoutReturnPaths,
+  RGE_TEMPLATE_ONBOARDING_PATH,
+} from "@shared/rgePaths";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { useToast } from "@/hooks/use-toast";
@@ -181,7 +184,7 @@ const onboardingSchema = z.object({
   leadSources: z.string().min(3, "Add a short note about where leads come from"),
   primaryGoal: z.string().min(3, "Tell us what you want this system to do for you"),
   timezone: z.string().min(2, "Select your timezone"),
-  conciergeLaunchAvailability: z.string().min(5, "Share a few times that work for your launch session"),
+  conciergeLaunchAvailability: z.string().optional(),
   additionalNotes: z.string().optional(),
 });
 
@@ -265,9 +268,11 @@ function RGEOnboardingWizard({
       const res = await apiRequest("GET", "/api/templates/realtor-growth-engine/concierge-calendar");
       return res.json();
     },
-    enabled: status === "submitted",
+    enabled: status === "purchased" || status === "submitted",
     staleTime: 60_000,
   });
+
+  const conciergeCalendarUrl = conciergeBooking?.calendarUrl?.trim() || null;
 
   const webchatConnected = !!channelSettings?.some((s) => s.channel === "webchat" && !!s.isConnected);
   const calendlyConnected = !!(engineStatusData as { calendlyConnected?: boolean } | undefined)?.calendlyConnected;
@@ -279,21 +284,31 @@ function RGEOnboardingWizard({
     void refetchEngineStatus();
   };
 
-  const getFieldsForStep = (stepNum: number): string[] => {
-    const stepFields: Record<number, string[]> = {
+  const getFieldsForStep = (stepNum: number): (keyof OnboardingValues)[] => {
+    const stepFields: Record<number, (keyof OnboardingValues)[]> = {
       1: [],
       2: [],
       3: ["legalName", "country", "website", "teamType", "estimatedSeats", "notificationsEnabled", "leadSources", "primaryGoal"],
-      4: ["timezone", "conciergeLaunchAvailability"],
+      4: conciergeCalendarUrl ? [] : ["timezone", "conciergeLaunchAvailability"],
       5: [],
     };
     return stepFields[stepNum] || [];
   };
 
   const nextStep = async () => {
+    if (step === 4 && !conciergeCalendarUrl) {
+      const availability = form.getValues("conciergeLaunchAvailability")?.trim() ?? "";
+      if (availability.length < 5) {
+        form.setError("conciergeLaunchAvailability", {
+          type: "manual",
+          message: "Share a few times that work for your launch session",
+        });
+        return;
+      }
+    }
     const fields = getFieldsForStep(step);
     if (fields.length > 0) {
-      const result = await form.trigger(fields as any);
+      const result = await form.trigger(fields);
       if (!result) return;
     }
     setStep((s) => Math.min(s + 1, totalSteps));
@@ -302,7 +317,11 @@ function RGEOnboardingWizard({
   const prevStep = () => setStep((s) => Math.max(s - 1, 1));
 
   const onSubmit = (values: OnboardingValues) => {
-    submitOnboardingMutation.mutate(values);
+    const payload = { ...values };
+    if (conciergeCalendarUrl && !payload.conciergeLaunchAvailability?.trim()) {
+      payload.conciergeLaunchAvailability = "Booked via specialist calendar";
+    }
+    submitOnboardingMutation.mutate(payload);
   };
 
   return (
@@ -408,7 +427,7 @@ function RGEOnboardingWizard({
                 <Card className="border-gray-200/80 shadow-sm">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-lg">Business profile</CardTitle>
-                    <CardDescription>Helps us tailor defaults and your concierge session.</CardDescription>
+                    <CardDescription>Helps us tailor your setup and concierge launch session.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <FormField
@@ -559,75 +578,109 @@ function RGEOnboardingWizard({
               {step === 4 && (
                 <Card className="border-gray-200/80 shadow-sm">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">Concierge launch session</CardTitle>
+                    <CardTitle className="text-lg">Book your concierge launch session</CardTitle>
                     <CardDescription className="text-base leading-relaxed">
-                      A focused working session (not generic tech support) to validate channels, confirm automation behavior,
-                      review qualification priorities, tighten booking flows, and make sure everything is live the way you work.
+                      Choose a time with your assigned launch specialist so we can review your setup, confirm channels, and
+                      prepare your Growth Engine for activation.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <FormField
-                      control={form.control}
-                      name="timezone"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Timezone</FormLabel>
-                          <FormControl>
-                            <Select value={field.value} onValueChange={field.onChange}>
-                              <SelectTrigger data-testid="select-timezone">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="America/New_York">Eastern</SelectItem>
-                                <SelectItem value="America/Chicago">Central</SelectItem>
-                                <SelectItem value="America/Denver">Mountain</SelectItem>
-                                <SelectItem value="America/Los_Angeles">Pacific</SelectItem>
-                                <SelectItem value="America/Anchorage">Alaska</SelectItem>
-                                <SelectItem value="Pacific/Honolulu">Hawaii</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="conciergeLaunchAvailability"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Availability for your session</FormLabel>
-                          <FormControl>
-                            <Textarea
-                              placeholder="e.g. Tue-Thu 2-5pm ET; avoid Friday mornings"
-                              className="min-h-[100px]"
-                              {...field}
-                              data-testid="textarea-concierge-availability"
-                            />
-                          </FormControl>
-                          <FormDescription>We&apos;ll reach out to schedule.</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="additionalNotes"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Notes for your concierge (optional)</FormLabel>
-                          <FormControl>
-                            <Textarea
-                              placeholder="Markets, specialties, or anything you want emphasized in the session"
-                              className="min-h-[88px]"
-                              {...field}
-                              data-testid="textarea-additional-notes"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    {conciergeCalendarUrl ? (
+                      <>
+                        <Button className="bg-brand-green hover:bg-brand-green/90" asChild data-testid="button-book-launch-session">
+                          <a href={conciergeCalendarUrl} target="_blank" rel="noopener noreferrer">
+                            Book launch session
+                            <ExternalLink className="ml-2 h-4 w-4" />
+                          </a>
+                        </Button>
+                        <FormField
+                          control={form.control}
+                          name="additionalNotes"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Notes for your specialist (optional)</FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  placeholder="Markets, specialties, or anything you want emphasized in the session"
+                                  className="min-h-[88px]"
+                                  {...field}
+                                  data-testid="textarea-additional-notes"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <p className="rounded-lg border border-gray-100 bg-gray-50/80 px-4 py-3 text-sm leading-relaxed text-gray-600">
+                          Your launch specialist calendar is not connected yet. We&apos;ll contact you to schedule your session.
+                        </p>
+                        <FormField
+                          control={form.control}
+                          name="timezone"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Timezone</FormLabel>
+                              <FormControl>
+                                <Select value={field.value} onValueChange={field.onChange}>
+                                  <SelectTrigger data-testid="select-timezone">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="America/New_York">Eastern</SelectItem>
+                                    <SelectItem value="America/Chicago">Central</SelectItem>
+                                    <SelectItem value="America/Denver">Mountain</SelectItem>
+                                    <SelectItem value="America/Los_Angeles">Pacific</SelectItem>
+                                    <SelectItem value="America/Anchorage">Alaska</SelectItem>
+                                    <SelectItem value="Pacific/Honolulu">Hawaii</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="conciergeLaunchAvailability"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>When are you usually available?</FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  placeholder="e.g. Tue-Thu 2-5pm ET; avoid Friday mornings"
+                                  className="min-h-[100px]"
+                                  {...field}
+                                  data-testid="textarea-concierge-availability"
+                                />
+                              </FormControl>
+                              <FormDescription>Share a few windows that work for your launch session.</FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="additionalNotes"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Notes for your concierge (optional)</FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  placeholder="Markets, specialties, or anything you want emphasized in the session"
+                                  className="min-h-[88px]"
+                                  {...field}
+                                  data-testid="textarea-additional-notes-fallback"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -708,7 +761,7 @@ function RGEOnboardingWizard({
               <Button className="bg-brand-green hover:bg-brand-green/90 mt-2" asChild>
                 <a href={conciergeBooking.calendarUrl} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="w-4 h-4 mr-2 inline" />
-                  Book your concierge launch session
+                  Book launch session
                 </a>
               </Button>
             ) : (
@@ -932,10 +985,10 @@ export function RealtorGrowthEngine() {
       };
     }
     if (status === "purchased") {
-      return { label: "Start Realtor Growth Engine Onboarding", disabled: purchaseMutation.isPending };
+      return { label: "Start onboarding", disabled: purchaseMutation.isPending };
     }
     if (status === "submitted") {
-      return { label: "Launch in progress", disabled: true as const };
+      return { label: "Continue setup", disabled: false };
     }
     return { label: "Activate Engine", disabled: true as const };
   }, [isPaused, status, purchaseMutation.isPending, checkingSubscription]);
@@ -1005,8 +1058,8 @@ export function RealtorGrowthEngine() {
       void handlePurchaseContinue();
     } else if (isPaused) {
       return;
-    } else if (status === "purchased") {
-      setLocation("/app/templates/realtor-growth-engine/onboarding");
+    } else if (status === "purchased" || status === "submitted") {
+      setLocation(RGE_TEMPLATE_ONBOARDING_PATH);
     }
   };
 
@@ -1131,6 +1184,31 @@ export function RealtorGrowthEngine() {
           </section>
 
           <div className="mb-6 flex justify-center">{renderStepper()}</div>
+
+          {(status === "purchased" || status === "submitted") && (
+            <section
+              className="mb-8 rounded-2xl border border-emerald-100/90 bg-gradient-to-br from-emerald-50/40 via-white to-white px-6 py-8 shadow-sm md:px-8"
+              data-testid="section-launch-onboarding-cta"
+            >
+              <div className="mx-auto max-w-xl text-center">
+                <h2 className="mb-2 text-xl font-semibold tracking-tight text-gray-900 md:text-2xl">
+                  Ready to launch your <RealtorMark /> Growth Engine?
+                </h2>
+                <p className="mb-6 text-sm leading-relaxed text-gray-600">
+                  Start the guided onboarding to connect channels, review your launch profile, and activate your automation.
+                </p>
+                <Button
+                  size="lg"
+                  className="rounded-xl bg-gray-900 px-8 text-white shadow-sm hover:bg-gray-800"
+                  onClick={() => setLocation(RGE_TEMPLATE_ONBOARDING_PATH)}
+                  data-testid="button-start-onboarding-top"
+                >
+                  Start onboarding
+                  <ChevronRight className="ml-1.5 h-5 w-5" />
+                </Button>
+              </div>
+            </section>
+          )}
 
         {isPaused && (
           <Card className="mb-10 border-amber-300 bg-amber-50" data-testid="banner-subscription-paused">
@@ -1722,6 +1800,7 @@ export function RealtorGrowthEngine() {
           </div>
         </section>
 
+        {status === "locked" && (
         <div className="mb-6 grid gap-4 md:grid-cols-2">
           <section
             className="rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm"
@@ -1771,34 +1850,34 @@ export function RealtorGrowthEngine() {
             </div>
           </section>
         </div>
+        )}
 
-        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#0a1f17] via-[#0f2920] to-[#143d2e] px-6 py-10 text-center md:px-10 md:py-12">
-          <div className="absolute left-1/2 top-0 h-48 w-96 -translate-x-1/2 rounded-full bg-emerald-500/20 blur-3xl" aria-hidden />
-          <div className="relative">
-            <h2 className="mb-2 text-2xl font-bold text-white md:text-3xl">Ready to run this in your workspace?</h2>
-            <p className="mx-auto mb-6 max-w-md text-sm text-emerald-100/80">
-              {isPaused && "Your plan must be active for this engine to run. Reactivate Pro and AI above, then continue."}
-              {!isPaused && status === "locked" && "Activate the Realtor Growth Engine to unlock checkout and guided concierge onboarding."}
-              {!isPaused && status === "purchased" && "Finish channel alignment and your launch profile so we can install and validate everything."}
-              {!isPaused && status === "submitted" && "Your concierge team is aligning on install and session scheduling — watch your inbox for next steps."}
-              {!isPaused && status === "installed" && "Your Growth Engine is installed — keep Pro and AI active for full automation."}
+        {status === "locked" ? (
+          <section className="rounded-2xl border border-gray-200/80 bg-white px-6 py-10 text-center shadow-sm md:px-10 md:py-12">
+            <h2 className="mb-2 text-2xl font-semibold tracking-tight text-gray-900 md:text-3xl">
+              Ready to run this in your workspace?
+            </h2>
+            <p className="mx-auto mb-6 max-w-md text-sm leading-relaxed text-gray-600">
+              {isPaused
+                ? "Your plan must be active for this engine to run. Reactivate Pro and AI above, then continue."
+                : "Activate the Realtor Growth Engine to unlock checkout and guided concierge onboarding."}
             </p>
             <Button
               size="lg"
               className={cn(
-                "mt-2 min-w-[200px] rounded-xl bg-emerald-500 px-8 py-5 text-base font-semibold text-white shadow-lg shadow-emerald-900/30 transition-all hover:bg-emerald-400 hover:shadow-emerald-500/20",
+                "min-w-[200px] rounded-xl bg-gray-900 px-8 text-white shadow-sm hover:bg-gray-800",
                 (primaryMarketingCta.disabled || purchaseMutation.isPending) && "pointer-events-none opacity-50",
               )}
               onClick={handlePrimaryCta}
               disabled={purchaseMutation.isPending || primaryMarketingCta.disabled}
               data-testid="button-bottom-cta"
             >
-              {checkingSubscription && status === "locked" ? (
+              {checkingSubscription ? (
                 <>
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   Checking…
                 </>
-              ) : purchaseMutation.isPending && status === "locked" ? (
+              ) : purchaseMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   Redirecting…
@@ -1810,22 +1889,30 @@ export function RealtorGrowthEngine() {
                 </>
               )}
             </Button>
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-xs text-emerald-200/70">
-              <span className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden />
-                One-time template license
-              </span>
-              <span className="hidden text-emerald-200/30 sm:inline" aria-hidden>
-                •
-              </span>
-              <span>Requires Pro + AI Brain</span>
-              <span className="hidden text-emerald-200/30 sm:inline" aria-hidden>
-                •
-              </span>
-              <span>WhatsApp connects before activation</span>
-            </div>
-          </div>
-        </section>
+            <p className="mt-4 text-xs text-gray-500">One-time template license · Pro + AI Brain required</p>
+          </section>
+        ) : status === "purchased" || status === "submitted" ? (
+          <section
+            className="rounded-2xl border border-gray-200/80 bg-gradient-to-br from-emerald-50/30 via-white to-white px-6 py-10 text-center shadow-sm md:px-10 md:py-12"
+            data-testid="section-bottom-onboarding-cta"
+          >
+            <h2 className="mb-2 text-2xl font-semibold tracking-tight text-gray-900 md:text-3xl">
+              Ready to launch your <RealtorMark /> Growth Engine?
+            </h2>
+            <p className="mx-auto mb-6 max-w-md text-sm leading-relaxed text-gray-600">
+              Start the guided onboarding to connect channels, review your launch profile, and activate your automation.
+            </p>
+            <Button
+              size="lg"
+              className="min-w-[200px] rounded-xl bg-gray-900 px-8 text-white shadow-sm hover:bg-gray-800"
+              onClick={() => setLocation(RGE_TEMPLATE_ONBOARDING_PATH)}
+              data-testid="button-bottom-cta"
+            >
+              Start onboarding
+              <ChevronRight className="ml-1.5 h-5 w-5" />
+            </Button>
+          </section>
+        ) : null}
       </main>
       </div>
     );
@@ -2613,9 +2700,6 @@ export function RealtorGrowthEngine() {
                     </div>
                   ))}
                 </div>
-                <Button variant="outline" size="sm" className="w-full mt-4 text-xs" onClick={() => setLocation("/app/inbox")}>
-                  Open CRM
-                </Button>
               </CardContent>
             </Card>
           </div>

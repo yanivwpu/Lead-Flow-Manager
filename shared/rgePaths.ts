@@ -2,6 +2,32 @@
 export const RGE_TEMPLATE_DETAIL_PATH = "/app/templates/realtor-growth-engine";
 export const RGE_TEMPLATE_ONBOARDING_PATH = "/app/templates/realtor-growth-engine/onboarding";
 
+export type RgeEntitlementStatus = "locked" | "purchased" | "submitted" | "installed";
+
+/** Where the Growth Engines card / hub should route for the current entitlement. */
+export function getRgeHubPath(status: RgeEntitlementStatus | null | undefined): string {
+  if (status === "installed") return RGE_TEMPLATE_DETAIL_PATH;
+  if (status === "purchased" || status === "submitted") return RGE_TEMPLATE_ONBOARDING_PATH;
+  return RGE_TEMPLATE_DETAIL_PATH;
+}
+
+export function getRgeGalleryCtaLabel(status: RgeEntitlementStatus | null | undefined, fallback: string): string {
+  if (status === "installed") return "Manage Growth Engine";
+  if (status === "purchased" || status === "submitted") return "Open Growth Engine";
+  return fallback;
+}
+
+export function getRgeGalleryStatusLabel(status: RgeEntitlementStatus | null | undefined): string | null {
+  if (status === "installed") return "Activated";
+  if (status === "submitted") return "In setup";
+  if (status === "purchased") return "Ready";
+  return null;
+}
+
+export function isRgeOwnedStatus(status: RgeEntitlementStatus | null | undefined): boolean {
+  return status === "purchased" || status === "submitted" || status === "installed";
+}
+
 /** Stripe success / post-checkout should land on onboarding, not the sales detail page. */
 export function normalizeRgePostPurchaseRedirect(path: string): string {
   if (!path.includes("realtor-growth-engine")) return path;

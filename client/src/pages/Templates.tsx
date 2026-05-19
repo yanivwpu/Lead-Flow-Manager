@@ -69,6 +69,13 @@ import {
 import { getPresetCampaignStepCount } from "@shared/campaignPlaceholders";
 import { getSavedCampaignSourceLabel } from "@shared/localizedTemplates";
 import { apiRequest } from "@/lib/queryClient";
+import {
+  getRgeGalleryCtaLabel,
+  getRgeGalleryStatusLabel,
+  getRgeHubPath,
+  isRgeOwnedStatus,
+  type RgeEntitlementStatus,
+} from "@shared/rgePaths";
 import { cn } from "@/lib/utils";
 import { GROWTH_ENGINE_CARDS, sortGrowthEnginesCatalog, type GrowthEngineCardModel } from "@/lib/growthEnginesCatalog";
 import { useToast } from "@/hooks/use-toast";
@@ -559,12 +566,21 @@ const GROWTH_ENGINE_PLACEHOLDER: Record<
 function GrowthEngineGalleryCard({
   engine,
   setLocation,
+  rgeEntitlementStatus,
 }: {
   engine: GrowthEngineCardModel;
   setLocation: (path: string, opts?: { replace?: boolean }) => void;
+  rgeEntitlementStatus?: RgeEntitlementStatus | null;
 }) {
   const isComingSoon = engine.status === "coming_soon";
   const showRealtorMark = engine.slug === "realtor-growth-engine";
+  const isRge = engine.slug === "realtor-growth-engine";
+  const rgeOwned = isRge && isRgeOwnedStatus(rgeEntitlementStatus);
+  const hubHref = isRge && rgeEntitlementStatus ? getRgeHubPath(rgeEntitlementStatus) : engine.detailHref;
+  const ctaLabel = isRge
+    ? getRgeGalleryCtaLabel(rgeEntitlementStatus, engine.ctaLabel)
+    : engine.ctaLabel;
+  const statusLabel = isRge ? getRgeGalleryStatusLabel(rgeEntitlementStatus) : null;
   const phKey = engine.placeholderKey ?? "wellness";
   const ph = GROWTH_ENGINE_PLACEHOLDER[phKey];
   const PhIcon = ph.icon;
@@ -607,10 +623,13 @@ function GrowthEngineGalleryCard({
             </div>
           </div>
         )}
-        {!isComingSoon && engine.image ? (
+        {!isComingSoon && engine.image && statusLabel ? (
           <div className="pointer-events-none absolute left-4 top-4 z-[1]">
-            <Badge className="border border-emerald-400/30 bg-emerald-600/95 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm backdrop-blur-[2px]">
-              Live
+            <Badge
+              variant="outline"
+              className="border-gray-200/90 bg-white/90 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-600 shadow-sm backdrop-blur-[2px]"
+            >
+              {statusLabel}
             </Badge>
           </div>
         ) : null}
@@ -640,6 +659,7 @@ function GrowthEngineGalleryCard({
         </div>
         <p className="text-sm leading-relaxed text-gray-600 text-pretty [overflow-wrap:anywhere]">{engine.summary}</p>
         {(() => {
+          if (rgeOwned) return null;
           const mode =
             engine.galleryPricingMode ??
             (engine.oneTimePrice ? "show" : engine.status === "coming_soon" ? "coming_soon" : "hidden");
@@ -694,10 +714,10 @@ function GrowthEngineGalleryCard({
           ) : (
             <Button
               className="w-full bg-brand-green text-white shadow-md shadow-emerald-900/10 ring-1 ring-emerald-600/20 hover:bg-brand-green/90"
-              onClick={() => engine.detailHref && setLocation(engine.detailHref)}
+              onClick={() => hubHref && setLocation(hubHref)}
               data-testid={engine.slug === "realtor-growth-engine" ? "button-view-activate-engine" : undefined}
             >
-              {engine.ctaLabel}
+              {ctaLabel}
               <ArrowRight className="ml-2 h-4 w-4 shrink-0" />
             </Button>
           )}
@@ -709,6 +729,16 @@ function GrowthEngineGalleryCard({
 
 function GrowthEnginesTab() {
   const [, setLocation] = useLocation();
+  const { data: rgeTemplate } = useQuery<{ entitlement?: { status?: RgeEntitlementStatus } } | null>({
+    queryKey: ["/api/templates/realtor-growth-engine"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/templates/realtor-growth-engine");
+      if (!res.ok) return null;
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+  const rgeEntitlementStatus = rgeTemplate?.entitlement?.status ?? null;
 
   return (
     <div className="space-y-8 md:space-y-10">
@@ -726,7 +756,12 @@ function GrowthEnginesTab() {
       <div className="rounded-2xl border border-gray-200/70 bg-gray-50/40 p-4 shadow-sm sm:p-5 md:p-6">
         <div className="grid auto-rows-fr gap-5 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
           {sortGrowthEnginesCatalog(GROWTH_ENGINE_CARDS).map((engine) => (
-            <GrowthEngineGalleryCard key={engine.slug} engine={engine} setLocation={setLocation} />
+            <GrowthEngineGalleryCard
+              key={engine.slug}
+              engine={engine}
+              setLocation={setLocation}
+              rgeEntitlementStatus={engine.slug === "realtor-growth-engine" ? rgeEntitlementStatus : undefined}
+            />
           ))}
         </div>
       </div>
