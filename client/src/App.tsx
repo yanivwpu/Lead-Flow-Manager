@@ -4,7 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect } from "react";
 import { useTranslation } from "react-i18next";
 
 const AuthPage = lazy(() => import("@/pages/Auth").then(m => ({ default: m.AuthPage })));
@@ -66,6 +66,13 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
 
 function Router() {
   const [location] = useLocation();
+
+  useLayoutEffect(() => {
+    if (typeof document === "undefined") return;
+    if (location !== "/") {
+      document.documentElement.classList.add("wcs-hide-static-marketing");
+    }
+  }, [location]);
 
   if (location === "/") {
     return <Welcome />;
