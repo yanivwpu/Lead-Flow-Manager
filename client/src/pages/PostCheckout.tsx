@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { queryClient } from "@/lib/queryClient";
+
+const RGE_POST_CHECKOUT_PATH = "/app/templates/realtor-growth-engine";
 
 function sanitizeClientRedirect(raw: string | null, fallback: string): string {
   if (!raw || typeof raw !== "string") return fallback;
@@ -75,6 +78,14 @@ export function PostCheckout() {
   }, [search]);
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [showManualContinue, setShowManualContinue] = useState(false);
+
+  const manualContinuePath = pollTemplate ? RGE_POST_CHECKOUT_PATH : targetPath;
+
+  useEffect(() => {
+    const slowTimer = window.setTimeout(() => setShowManualContinue(true), 10000);
+    return () => window.clearTimeout(slowTimer);
+  }, []);
 
   useEffect(() => {
     abortRef.current?.abort();
@@ -138,6 +149,17 @@ export function PostCheckout() {
         Finishing checkout… updating your subscription.
       </p>
       {errorMsg ? <p className="text-xs text-amber-700 mt-3 text-center max-w-md">{errorMsg}</p> : null}
+      {(errorMsg || showManualContinue) && (
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-6"
+          onClick={() => setLocation(manualContinuePath)}
+          data-testid="button-post-checkout-continue"
+        >
+          {pollTemplate ? "Continue to Realtor Growth Engine" : "Continue to your account"}
+        </Button>
+      )}
     </div>
   );
 }
