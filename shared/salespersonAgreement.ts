@@ -3,9 +3,6 @@ export const SALESPERSON_AGREEMENT_VERSION = "2026-05-18";
 
 export const SALESPERSON_AGREEMENT_TEXT = `Internal Sales Commission Policy
 
-WhachatCRM Internal Sales Team
-Last updated: January 3, 2026
-
 This document defines commission eligibility, attribution rules, and payout policies for WhachatCRM internal sales representatives and onboarding specialists.
 
 1. Purpose
