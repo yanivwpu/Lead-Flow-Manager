@@ -62,6 +62,7 @@ import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 import type { ActivationStatusPayload } from "@/lib/activationStatus";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
+import { getRgeCheckoutReturnPaths } from "@shared/rgePaths";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { useToast } from "@/hooks/use-toast";
@@ -814,7 +815,7 @@ export function RealtorGrowthEngine() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(getCheckoutReturnPaths()),
+        body: JSON.stringify(getRgeCheckoutReturnPaths()),
       });
       if (res.status === 401) {
         window.location.href = `/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
@@ -931,7 +932,7 @@ export function RealtorGrowthEngine() {
       };
     }
     if (status === "purchased") {
-      return { label: "Continue setup", disabled: purchaseMutation.isPending };
+      return { label: "Start Realtor Growth Engine Onboarding", disabled: purchaseMutation.isPending };
     }
     if (status === "submitted") {
       return { label: "Launch in progress", disabled: true as const };

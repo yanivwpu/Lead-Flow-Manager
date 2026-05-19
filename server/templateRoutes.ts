@@ -9,6 +9,11 @@ import { createShopifyRgeOneTimePurchase } from "./shopify";
 import { z } from "zod";
 import { getAppOrigin } from "./urlOrigins";
 import { buildPostCheckoutSuccessUrl, buildStripeCancelUrl, sanitizeStripeReturnPath } from "./checkoutReturnPath";
+import {
+  RGE_TEMPLATE_DETAIL_PATH,
+  RGE_TEMPLATE_ONBOARDING_PATH,
+  normalizeRgePostPurchaseRedirect,
+} from "@shared/rgePaths";
 import { isUserCalendlyBookingConnected } from "./calendlyBookingConnected";
 import { evaluateGrowthEngineAccess } from "./growthEngineEntitlements";
 import { isUserWhatsAppConnectedForActivation } from "./whatsappService";
@@ -188,9 +193,10 @@ export function registerTemplateRoutes(app: Express) {
       }
 
       const baseUrl = resolveStripeCheckoutRedirectOrigin(getAppOrigin());
-      const defaultRge = "/app/templates/realtor-growth-engine";
-      const successPath = sanitizeStripeReturnPath(redirectTo, `${defaultRge}/onboarding?paid=true`);
-      const cancelPath = sanitizeStripeReturnPath(cancelTo ?? redirectTo, defaultRge);
+      const successPath = normalizeRgePostPurchaseRedirect(
+        sanitizeStripeReturnPath(redirectTo, `${RGE_TEMPLATE_ONBOARDING_PATH}?paid=true`)
+      );
+      const cancelPath = sanitizeStripeReturnPath(cancelTo ?? redirectTo, RGE_TEMPLATE_DETAIL_PATH);
       const priceId = process.env.STRIPE_RGE_ONE_TIME_PRICE_ID;
       if (!priceId) {
         throw new Error("Missing STRIPE_RGE_ONE_TIME_PRICE_ID");

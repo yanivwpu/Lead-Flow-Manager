@@ -3,8 +3,10 @@ import { useLocation, useSearch } from "wouter";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { queryClient } from "@/lib/queryClient";
-
-const RGE_POST_CHECKOUT_PATH = "/app/templates/realtor-growth-engine";
+import {
+  RGE_TEMPLATE_ONBOARDING_PATH,
+  normalizeRgePostPurchaseRedirect,
+} from "@shared/rgePaths";
 
 function sanitizeClientRedirect(raw: string | null, fallback: string): string {
   if (!raw || typeof raw !== "string") return fallback;
@@ -74,13 +76,17 @@ export function PostCheckout() {
     const pollTemplate =
       target.includes("/templates/realtor-growth-engine") || target.includes("realtor-growth-engine");
 
+    if (pollTemplate) {
+      target = normalizeRgePostPurchaseRedirect(target);
+    }
+
     return { targetPath: target, pollTemplate };
   }, [search]);
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showManualContinue, setShowManualContinue] = useState(false);
 
-  const manualContinuePath = pollTemplate ? RGE_POST_CHECKOUT_PATH : targetPath;
+  const manualContinuePath = pollTemplate ? RGE_TEMPLATE_ONBOARDING_PATH : targetPath;
 
   useEffect(() => {
     const slowTimer = window.setTimeout(() => setShowManualContinue(true), 10000);
@@ -157,7 +163,7 @@ export function PostCheckout() {
           onClick={() => setLocation(manualContinuePath)}
           data-testid="button-post-checkout-continue"
         >
-          {pollTemplate ? "Continue to Realtor Growth Engine" : "Continue to your account"}
+          {pollTemplate ? "Continue to Realtor Growth Engine Onboarding" : "Continue to your account"}
         </Button>
       )}
     </div>
