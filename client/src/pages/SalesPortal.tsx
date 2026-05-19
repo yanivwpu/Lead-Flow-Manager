@@ -16,6 +16,10 @@ import {
   Eye, EyeOff, ClipboardList
 } from "lucide-react";
 import { isSalespersonSubscriptionCommissionActiveAt } from "@shared/salespersonSubscriptionCommissionWindow";
+import {
+  SALESPERSON_AGREEMENT_TEXT,
+  SALESPERSON_AGREEMENT_VERSION,
+} from "@shared/salespersonAgreement";
 
 interface Demo {
   id: string;
@@ -91,66 +95,6 @@ function subscriptionCommissionWindowBadge(createdAt: string): { label: string; 
   const active = isSalespersonSubscriptionCommissionActiveAt(d, new Date());
   return { label: active ? "Commission active" : "Commission expired", active };
 }
-
-const SALESPERSON_AGREEMENT_TEXT = `Internal Sales Commission Policy
-
-WhachatCRM Internal Sales Team
-Last updated: January 3, 2026
-
-This document defines commission rules for WhachatCRM internal sales representatives.
-
-1. Purpose
-This policy governs commission eligibility, calculation, and payment for internal sales personnel who close customer subscriptions following demos or direct sales efforts.
-
-2. Eligibility
-A salesperson is eligible for commission if:
-They conduct or materially contribute to a demo or sales process
-The prospect becomes a paying customer
-Payment is successfully collected
-
-3. Lead Ownership
-Leads are assigned via WhachatCRM's internal systems
-Commission credit is based on recorded assignment at time of demo
-Management decisions on disputes are final
-
-4. Commission Structure & Payout Schedule
-A) Demo-attributed subscriptions: internal sales earn 30% recurring commission for the lifetime of successfully converted subscription customers on the base subscription plan only, while the customer remains active and paying. This excludes AI Brain, Growth Engines, one-time purchases, and other add-ons or upgrades outside the base subscription plan. Commissions are calculated from Stripe invoice payments on qualifying base-plan amounts and may be paid monthly on the first business day of the month.
-B) Growth Engine setup tasks: separately from subscription commission, eligible specialists may earn a fixed payout per completed internal setup task (default amount set by the company; admins may set a per-person override). Setup payouts are not subscription percentages.
-
-Upgrades on the base subscription plan increase commission proportionally; downgrades reduce commission. Commissions related to refunded, disputed, or failed payments are not payable and may be reversed.
-
-5. Policy Changes
-WhachatCRM may modify, suspend, or terminate commission plans, rates, payout schedules, or eligibility criteria at any time. Changes apply prospectively and do not retroactively reduce commissions already earned under a prior approved schedule.
-
-6. Exclusions
-No subscription commission is paid for:
-Organic signups with no demo involvement
-Partner-referred customers (unless explicitly approved)
-Non-paying or refunded accounts
-AI Brain add-ons, Growth Engines, one-time purchases, or other add-ons outside the base subscription plan
-
-Fixed setup task payouts (4.B) only apply when an internal setup task is completed and credited under company policy.
-
-7. Payment Timing
-Commissions are calculated monthly
-Paid after customer payment clears
-Refunds or chargebacks may result in commission reversal
-
-8. Employment Status
-Commission eligibility does not alter employment status.
-WhachatCRM may modify or discontinue commissions at any time.
-
-9. Misconduct
-Manipulating attribution, self-dealing, or falsifying activity may result in:
-Loss of commissions
-Termination
-Legal action if applicable
-
-10. Changes to Policy
-WhachatCRM reserves the right to modify this policy at any time.
-
-11. Governing Law
-This policy is governed by the laws of the State of Florida, USA.`;
 
 export function SalesPortal() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -405,6 +349,7 @@ export function SalesPortal() {
             </div>
             <h1 className="text-2xl font-display font-bold text-gray-900">Internal Sales Commission Policy</h1>
             <p className="text-gray-600 mt-2">Please review and accept the policy to continue</p>
+            <p className="text-xs text-gray-500 mt-1">Version {SALESPERSON_AGREEMENT_VERSION}</p>
           </div>
 
           <div className="mb-6">
@@ -440,8 +385,9 @@ export function SalesPortal() {
                 htmlFor="agreement-check" 
                 className="text-sm text-gray-700 cursor-pointer leading-relaxed"
               >
-                I have read and agree to the Internal Sales Commission Policy. I understand that my acceptance 
-                is legally binding and my IP address and timestamp will be recorded.
+                I have read and agree to the Internal Sales Commission Policy (version{" "}
+                {SALESPERSON_AGREEMENT_VERSION}). I understand that my acceptance is legally binding and my
+                salesperson account ID, IP address, user agent, and timestamp will be recorded.
               </label>
             </div>
 
@@ -559,9 +505,9 @@ export function SalesPortal() {
           ) : (
             <span className="text-gray-600"> (default ${(stats?.defaultTaskPayoutDollars ?? 50).toFixed(2)})</span>
           )}
-          . Demo conversions can also earn one-time credits plus recurring subscription commission (30% on the base
-          subscription plan for life; excludes AI Brain, Growth Engines, and other add-ons) when Stripe records a qualifying
-          payment.
+          . Demo conversions can also earn one-time credits plus recurring subscription commission (30% on base
+          subscription revenue while the customer remains active; excludes AI Brain, Growth Engines, messaging fees, and
+          other add-ons) when Stripe records a qualifying payment.
         </p>
 
         <Tabs defaultValue="pending" className="space-y-6">
@@ -877,9 +823,8 @@ export function SalesPortal() {
                 <div className="p-4">
                   <h3 className="text-sm font-semibold text-gray-900">Subscription commissions</h3>
                   <p className="text-xs text-gray-500 mt-0.5 mb-3">
-                    Ongoing commission from paid base-plan subscription invoices (30% while the customer remains active).
-                    Commission applies to the base subscription plan only and excludes AI Brain, Growth Engines, and other
-                    add-ons.
+                    Ongoing commission from paid base-plan subscription invoices (30% recurring while the customer
+                    remains active). Excludes AI Brain, Growth Engines, one-time purchases, and other add-ons.
                   </p>
                   {commissions.length === 0 ? (
                     <div className="rounded-md border border-dashed border-gray-200 py-8 text-center text-sm text-gray-500">

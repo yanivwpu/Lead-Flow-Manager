@@ -926,7 +926,6 @@ export const agreementAcceptances = pgTable("agreement_acceptances", {
 
 export const insertAgreementAcceptanceSchema = createInsertSchema(agreementAcceptances).omit({
   id: true,
-  acceptedAt: true,
 });
 
 export type InsertAgreementAcceptance = z.infer<typeof insertAgreementAcceptanceSchema>;

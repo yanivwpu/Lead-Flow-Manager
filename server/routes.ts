@@ -151,6 +151,7 @@ import {
 import { isUserCalendlyBookingConnected, applyCalendlyBookingLinkForAi } from "./calendlyBookingConnected";
 import { hubspotValidatePrivateAppToken } from "./hubspotApi";
 import { pushLeadsToHubSpot } from "./hubspotSync";
+import { SALESPERSON_AGREEMENT_VERSION } from "@shared/salespersonAgreement";
 
 import { registerTemplateRoutes } from "./templateRoutes";
 import { registerMediaRoutes } from "./routes/media";
@@ -222,7 +223,7 @@ function calculateNextDueDate(
 // Partners/salespeople must re-accept if their stored version differs
 export const AGREEMENT_VERSIONS = {
   partner_referral: "2026-02-14",
-  salesperson_commission: "2026-01-26",
+  salesperson_commission: SALESPERSON_AGREEMENT_VERSION,
 } as const;
 
 /** Safe webhook payload summary for Railway logs — no secrets. */
@@ -8849,26 +8850,38 @@ export async function registerRoutes(
       }
       
       const currentVersion = AGREEMENT_VERSIONS.salesperson_commission;
-      const ipAddress = req.headers['x-forwarded-for']?.toString().split(',')[0] || req.socket.remoteAddress || 'unknown';
-      const userAgent = req.headers['user-agent'] || 'unknown';
-      
-      // Record acceptance in audit table
-      await storage.recordAgreementAcceptance({
-        agreementType: 'salesperson_commission',
+      const ipAddress =
+        req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() ||
+        req.socket.remoteAddress ||
+        "unknown";
+      const userAgent = req.headers["user-agent"] || "unknown";
+      const acceptedAt = new Date();
+
+      const acceptance = await storage.recordAgreementAcceptance({
+        agreementType: "salesperson_commission",
         agreementVersion: currentVersion,
         partnerId: null,
         salespersonId: salesperson.id,
         ipAddress,
         userAgent,
+        acceptedAt,
       });
-      
-      // Update salesperson record
+
       await storage.updateSalesperson(salesperson.id, {
-        agreementAcceptedAt: new Date(),
+        agreementAcceptedAt: acceptedAt,
         agreementVersion: currentVersion,
       });
-      
-      res.json({ success: true });
+
+      res.json({
+        success: true,
+        acceptance: {
+          salespersonId: acceptance.salespersonId,
+          acceptedAt: acceptance.acceptedAt,
+          ipAddress: acceptance.ipAddress,
+          userAgent: acceptance.userAgent,
+          agreementVersion: acceptance.agreementVersion,
+        },
+      });
     } catch (error) {
       console.error("Accept agreement error:", error);
       res.status(500).json({ error: "Failed to accept agreement" });
