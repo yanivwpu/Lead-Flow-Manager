@@ -153,7 +153,7 @@ export function Welcome() {
       </nav>
 
       {/* Hero Section */}
-      <section className="px-4 md:px-6 pt-5 md:pt-8 pb-8 md:pb-10 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
+      <section className="px-4 md:px-6 pt-5 md:pt-8 pb-6 md:pb-8 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
         <div className="flex flex-col gap-8 md:grid md:grid-cols-[1fr_1.04fr] md:gap-10 xl:gap-14 items-start">
           <div className="relative order-2 w-full md:order-2 md:mt-16 lg:mt-16 animate-hero-image">
             <HeroConversationMockup />
