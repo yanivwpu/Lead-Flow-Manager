@@ -123,7 +123,7 @@ export function Welcome() {
             {t("landing.heroEyebrow")}
           </span>
         </div>
-        <div className="flex items-center gap-2 md:gap-3 justify-self-end">
+        <div className="flex items-center gap-2 md:gap-5 lg:gap-6 justify-self-end">
           <Link href="/pricing">
             <button className="h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">{t("landing.pricing")}</button>
           </Link>
