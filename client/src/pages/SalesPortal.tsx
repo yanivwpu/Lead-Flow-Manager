@@ -114,43 +114,42 @@ Commission credit is based on recorded assignment at time of demo
 Management decisions on disputes are final
 
 4. Commission Structure & Payout Schedule
-A) Demo-attributed subscriptions: internal sales earn 30% of subscription revenue collected (excluding AI add-ons, messaging fees, and third-party costs), for up to twelve (12) months from the sales conversion record date, while the customer remains active and paying. Commissions are calculated from Stripe invoice payments and may be paid monthly on the first business day of the month.
+A) Demo-attributed subscriptions: internal sales earn 30% recurring commission for the lifetime of successfully converted subscription customers on the base subscription plan only, while the customer remains active and paying. This excludes AI Brain, Growth Engines, one-time purchases, and other add-ons or upgrades outside the base subscription plan. Commissions are calculated from Stripe invoice payments on qualifying base-plan amounts and may be paid monthly on the first business day of the month.
 B) Growth Engine setup tasks: separately from subscription commission, eligible specialists may earn a fixed payout per completed internal setup task (default amount set by the company; admins may set a per-person override). Setup payouts are not subscription percentages.
 
-Commission duration and rates for (A) follow management-approved schedules. Upgrades increase commission proportionally; downgrades reduce commission. Commissions related to refunded, disputed, or failed payments are not payable and may be reversed.
+Upgrades on the base subscription plan increase commission proportionally; downgrades reduce commission. Commissions related to refunded, disputed, or failed payments are not payable and may be reversed.
 
-5. No Lifetime Commission Guarantee
-Sales commissions are not guaranteed for the lifetime of any customer.
-Commission eligibility is limited to the duration defined by WhachatCRM (currently up to twelve (12) months from the sales conversion record date).
-WhachatCRM may modify, suspend, or terminate commission plans, rates, payout schedules, or eligibility criteria at any time. Commission plans do not create a vested or guaranteed right to future commissions.
+5. Policy Changes
+WhachatCRM may modify, suspend, or terminate commission plans, rates, payout schedules, or eligibility criteria at any time. Changes apply prospectively and do not retroactively reduce commissions already earned under a prior approved schedule.
 
 6. Exclusions
 No subscription commission is paid for:
 Organic signups with no demo involvement
 Partner-referred customers (unless explicitly approved)
 Non-paying or refunded accounts
+AI Brain add-ons, Growth Engines, one-time purchases, or other add-ons outside the base subscription plan
 
 Fixed setup task payouts (4.B) only apply when an internal setup task is completed and credited under company policy.
 
-6. Payment Timing
+7. Payment Timing
 Commissions are calculated monthly
 Paid after customer payment clears
 Refunds or chargebacks may result in commission reversal
 
-7. Employment Status
+8. Employment Status
 Commission eligibility does not alter employment status.
 WhachatCRM may modify or discontinue commissions at any time.
 
-8. Misconduct
+9. Misconduct
 Manipulating attribution, self-dealing, or falsifying activity may result in:
 Loss of commissions
 Termination
 Legal action if applicable
 
-9. Changes to Policy
+10. Changes to Policy
 WhachatCRM reserves the right to modify this policy at any time.
 
-10. Governing Law
+11. Governing Law
 This policy is governed by the laws of the State of Florida, USA.`;
 
 export function SalesPortal() {
@@ -560,8 +559,9 @@ export function SalesPortal() {
           ) : (
             <span className="text-gray-600"> (default ${(stats?.defaultTaskPayoutDollars ?? 50).toFixed(2)})</span>
           )}
-          . Demo conversions can also earn one-time credits plus subscription-based commission (for example 30% for up to 12
-          months) when Stripe records a qualifying payment.
+          . Demo conversions can also earn one-time credits plus recurring subscription commission (30% on the base
+          subscription plan for life; excludes AI Brain, Growth Engines, and other add-ons) when Stripe records a qualifying
+          payment.
         </p>
 
         <Tabs defaultValue="pending" className="space-y-6">
@@ -877,8 +877,9 @@ export function SalesPortal() {
                 <div className="p-4">
                   <h3 className="text-sm font-semibold text-gray-900">Subscription commissions</h3>
                   <p className="text-xs text-gray-500 mt-0.5 mb-3">
-                    Ongoing commission from paid subscription invoices (30% while active). New commission rows are created only
-                    within 12 months of the conversion record date; older rows below are unchanged.
+                    Ongoing commission from paid base-plan subscription invoices (30% while the customer remains active).
+                    Commission applies to the base subscription plan only and excludes AI Brain, Growth Engines, and other
+                    add-ons.
                   </p>
                   {commissions.length === 0 ? (
                     <div className="rounded-md border border-dashed border-gray-200 py-8 text-center text-sm text-gray-500">

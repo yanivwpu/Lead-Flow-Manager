@@ -7964,7 +7964,13 @@ export async function registerRoutes(
       const person = await storage.createSalesperson({ ...data, loginCode });
       
       // Send welcome email with login credentials
-      sendSalespersonWelcomeEmail(person.name, person.email, person.loginCode)
+      sendSalespersonWelcomeEmail(
+        person.name,
+        person.email,
+        person.loginCode,
+        person.role ?? "sales",
+        getEffectiveTaskPayoutDollars(person)
+      )
         .then(sent => {
           if (sent) {
             console.log(`[Admin] Welcome email sent to salesperson: ${person.email}`);

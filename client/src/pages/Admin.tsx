@@ -208,10 +208,10 @@ function SalespersonRolePayoutHint({ role }: { role: string }) {
   const r = role === "demo" ? "sales" : role || "sales";
   const text =
     r === "sales"
-      ? "Demo conversion commission: 30% for 12 months."
+      ? "Demo conversion commission: 30% recurring on base subscription for life (excludes AI Brain, Growth Engines, and add-ons)."
       : r === "setup"
         ? `Setup task payout: $${ADMIN_DEFAULT_TASK_PAYOUT} default. Override below if needed.`
-        : `Demo commission: 30% for 12 months + setup task payout: $${ADMIN_DEFAULT_TASK_PAYOUT}. Override setup payout below if needed.`;
+        : `Demo commission: 30% recurring on base subscription for life (excludes add-ons) + setup task payout: $${ADMIN_DEFAULT_TASK_PAYOUT}. Override setup payout below if needed.`;
   return (
     <p className="mt-1.5 rounded-md border border-muted bg-muted/40 px-2.5 py-1.5 text-[11px] leading-snug text-muted-foreground">
       {text}
