@@ -1,4 +1,4 @@
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -65,9 +65,14 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
 }
 
 function Router() {
+  const [location] = useLocation();
+
+  if (location === "/") {
+    return <Welcome />;
+  }
+
   return (
     <Switch>
-      <Route path="/" component={Welcome} />
       <Route path="/auth" component={AuthPage} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/privacy">
