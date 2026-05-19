@@ -30,7 +30,7 @@ function HeroConversationMockup() {
     <img
       src="/hero/whachat-hero-mockup.png"
       alt="WhachatCRM WhatsApp conversation mockup with AI copilot and lead score"
-      className="mx-auto block w-full max-w-[390px] lg:max-w-[420px]"
+      className="mx-auto block w-full max-w-[350px] lg:max-w-[380px]"
       width={560}
       height={871}
       loading="eager"
@@ -155,11 +155,11 @@ export function Welcome() {
       {/* Hero Section */}
       <section className="px-4 md:px-6 pt-5 md:pt-8 pb-6 md:pb-8 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
         <div className="flex flex-col gap-8 md:grid md:grid-cols-[1fr_1.04fr] md:gap-10 xl:gap-14 items-start">
-          <div className="relative order-2 w-full md:order-2 md:mt-16 lg:mt-16 animate-hero-image">
+          <div className="relative order-2 w-full md:order-2 md:mt-10 lg:mt-10 animate-hero-image">
             <HeroConversationMockup />
           </div>
 
-          <div className="animate-hero-text order-1 md:order-1 max-w-[780px] md:mt-8 lg:mt-10">
+          <div className="animate-hero-text order-1 md:order-1 max-w-[780px] md:mt-12 lg:mt-14">
             <h1 className="text-[3rem] md:text-[4.5rem] lg:text-[6.4rem] xl:text-[6.9rem] font-display font-bold text-gray-950 tracking-tight leading-[0.95] mb-7">
               {zeroIndex >= 0 ? (
                 <>
