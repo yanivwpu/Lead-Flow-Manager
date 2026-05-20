@@ -15,6 +15,7 @@ import { supportedLanguages } from "@/lib/i18n";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, getShopifyShopHint, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
+import { postShopifyCheckoutWeb } from "@/lib/shopifyCheckout";
 
 // ─── Shared structural components ───────────────────────────────────────────
 function FeatureItem({
@@ -146,21 +147,14 @@ export function Pricing() {
     mutationFn: async (planId: string) => {
       const shopifyPlan = SHOPIFY_PLAN_MAP[planId];
       if (!shopifyPlan) throw new Error("Invalid plan");
-      const res = await fetch("/api/shopify/billing/checkout-web", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: shopifyPlan }),
-        credentials: "include",
-      });
-      if (res.status === 401) {
-        setLocation(`/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`);
-        throw new Error("session_expired");
+      try {
+        return await postShopifyCheckoutWeb(shopifyPlan, shopHint);
+      } catch (e: any) {
+        if (e?.message === "session_expired") {
+          setLocation(`/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`);
+        }
+        throw e;
       }
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to start billing");
-      }
-      return res.json();
     },
     onSuccess: (data) => {
       if (data.confirmationUrl) {
@@ -242,14 +236,7 @@ export function Pricing() {
     setAiBrainAddonLoading(true);
     try {
       if (isShopify) {
-        const response = await fetch("/api/shopify/billing/checkout-web", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ plan: "AI Brain Add-on" }),
-        });
-        if (!response.ok) throw new Error("Failed to start billing");
-        const data = await response.json();
+        const data = await postShopifyCheckoutWeb("AI Brain Add-on", shopHint);
         if (data.confirmationUrl) window.location.href = data.confirmationUrl;
         return;
       }

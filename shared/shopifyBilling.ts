@@ -12,3 +12,8 @@ export function isShopifyShopDomain(shop: string | null | undefined): boolean {
 }
 
 export const SHOPIFY_BILLING_REQUIRED_CODE = "SHOPIFY_BILLING_REQUIRED";
+
+export const SHOPIFY_RECONNECT_REQUIRED_CODE = "SHOPIFY_RECONNECT_REQUIRED";
+
+export const SHOPIFY_RECONNECT_REQUIRED_MESSAGE =
+  "Open WhachatCRM from Shopify admin to reconnect billing.";

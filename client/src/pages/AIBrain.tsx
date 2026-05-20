@@ -34,6 +34,7 @@ import { toast } from "@/hooks/use-toast";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
+import { postShopifyCheckoutWeb } from "@/lib/shopifyCheckout";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
@@ -399,14 +400,7 @@ function AIBrainContent() {
     setIsCheckingOut(true);
     try {
       if (isShopify) {
-        const response = await fetch("/api/shopify/billing/checkout-web", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ plan: 'AI Brain Add-on' }),
-        });
-        if (!response.ok) throw new Error("Failed to start billing");
-        const data = await response.json();
+        const data = await postShopifyCheckoutWeb("AI Brain Add-on", shopHint);
         if (data.confirmationUrl) window.location.href = data.confirmationUrl;
         return;
       }

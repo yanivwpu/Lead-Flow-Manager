@@ -69,6 +69,7 @@ import {
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
+import { postShopifyCheckoutWeb } from "@/lib/shopifyCheckout";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -869,7 +870,10 @@ export function RealtorGrowthEngine() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(getRgeCheckoutReturnPaths()),
+        body: JSON.stringify({
+          ...getRgeCheckoutReturnPaths(),
+          ...(shopHint ? { shop: shopHint } : {}),
+        }),
       });
       if (res.status === 401) {
         window.location.href = `/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
@@ -1953,21 +1957,7 @@ export function RealtorGrowthEngine() {
                 if (isShopify) {
                   setShopifyGateLoading(true);
                   const plan = !subscriptionGate.hasPro ? "Pro" : "AI Brain Add-on";
-                  const res = await fetch("/api/shopify/billing/checkout-web", {
-                    method: "POST",
-                    credentials: "include",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ plan }),
-                  });
-                  if (res.status === 401) {
-                    window.location.href = `/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
-                    return;
-                  }
-                  if (!res.ok) {
-                    const err = await res.json().catch(() => ({}));
-                    throw new Error(err.error || "Failed to start Shopify billing");
-                  }
-                  const data = await res.json();
+                  const data = await postShopifyCheckoutWeb(plan, shopHint);
                   if (data.confirmationUrl) {
                     window.location.href = data.confirmationUrl;
                   }

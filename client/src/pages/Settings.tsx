@@ -16,6 +16,8 @@ import { ChannelSettings } from "@/components/ChannelSettings";
 import { cn } from "@/lib/utils";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
+import { postShopifyCheckoutWeb } from "@/lib/shopifyCheckout";
+import { SHOPIFY_RECONNECT_REQUIRED_CODE } from "@shared/shopifyBilling";
 
 interface TeamMember {
   id: string;
@@ -661,26 +663,28 @@ export function Settings() {
       const shop = urlParams.get("shop") || localStorage.getItem("shopify_shop");
       if (!shop) throw new Error("No Shopify shop found");
       localStorage.setItem("shopify_shop", shop);
-      const res = await fetch(`/api/shopify/billing/checkout-web`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ plan: "Pro" }),
-      });
-      if (!res.ok) {
-        const redirectUrl = `/api/shopify/install?shop=${encodeURIComponent(shop)}`;
-        window.location.href = redirectUrl;
-        return;
-      }
-      return res.json();
+      return postShopifyCheckoutWeb("Pro", shop);
     },
     onSuccess: (data) => {
       if (data?.confirmationUrl) {
         window.location.href = data.confirmationUrl;
       }
     },
-    onError: () => {
-      toast({ title: "Starting Pro Trial", description: "Redirecting to Shopify billing..." });
+    onError: (error: Error & { code?: string }) => {
+      if (error.code === SHOPIFY_RECONNECT_REQUIRED_CODE) {
+        toast({
+          title: "Reconnect billing",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+      const shop = new URLSearchParams(window.location.search).get("shop") || localStorage.getItem("shopify_shop");
+      if (shop) {
+        window.location.href = `/api/shopify/install?shop=${encodeURIComponent(shop)}`;
+        return;
+      }
+      toast({ title: "Billing error", description: error.message, variant: "destructive" });
     },
   });
 

@@ -26,8 +26,8 @@ import {
 import {
   isShopifyBillingAccount,
   rejectStripeIfShopifyUser,
-  shopDomainFromRequest,
 } from "./shopifyBillingGuard";
+import { resolveShopifyMerchantForBilling } from "./shopifyMerchantResolver";
 
 const TEMPLATE_ID = "realtor-growth-engine";
 const TEMPLATE_PRICE_CENTS = 19900;
@@ -165,20 +165,16 @@ export function registerTemplateRoutes(app: Express) {
       }
 
       if (isShopifyBillingAccount(user, req)) {
-        if (!user.shopifyShop || !user.shopifyAccessToken) {
-          const shop = shopDomainFromRequest(req) || user.shopifyShop;
-          return res.status(400).json({
-            error: shop
-              ? "Install or re-open the app from your Shopify admin to complete billing, then try again."
-              : "Shopify connection is incomplete. Re-open the app from your Shopify admin, then try again.",
-            code: "SHOPIFY_TOKEN_MISSING",
-          });
+        const resolved = await resolveShopifyMerchantForBilling(req, userId, "templates/rge/purchase");
+        if (!resolved.ok) {
+          return res.status(resolved.status).json({ error: resolved.error, code: resolved.code });
         }
+        const { shop, accessToken } = resolved.merchant;
         const base = resolveStripeCheckoutRedirectOrigin(getAppOrigin());
-        const returnUrl = `${base}/api/shopify/billing/rge-onetime-callback?shop=${encodeURIComponent(user.shopifyShop)}`;
+        const returnUrl = `${base}/api/shopify/billing/rge-onetime-callback?shop=${encodeURIComponent(shop)}`;
         const billing = await createShopifyRgeOneTimePurchase(
-          user.shopifyShop,
-          user.shopifyAccessToken,
+          shop,
+          accessToken,
           returnUrl,
           process.env.NODE_ENV !== "production",
         );

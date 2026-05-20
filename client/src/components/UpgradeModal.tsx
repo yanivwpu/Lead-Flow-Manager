@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
+import { postShopifyCheckoutWeb } from "@/lib/shopifyCheckout";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Zap, MessageSquare, Users, Phone, Sparkles, Loader2, Check, Info } from "lucide-react";
@@ -233,14 +234,7 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
       if (isShopify) {
         const shopifyPlan = SHOPIFY_PLAN_MAP[plan];
         if (!shopifyPlan) throw new Error("Invalid plan");
-        const response = await fetch("/api/shopify/billing/checkout-web", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ plan: shopifyPlan }),
-        });
-        if (!response.ok) throw new Error("Failed to start billing");
-        const data = await response.json();
+        const data = await postShopifyCheckoutWeb(shopifyPlan, shopHint);
         if (data.confirmationUrl) window.location.href = data.confirmationUrl;
         return;
       }
