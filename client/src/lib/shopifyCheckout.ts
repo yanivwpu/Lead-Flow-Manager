@@ -55,9 +55,11 @@ export async function postShopifyCheckoutWeb(
   }
 
   if (!res.ok) {
-    const err = new Error(shopifyBillingErrorMessage(data, "Failed to start billing")) as Error & {
-      code?: string;
-    };
+    const detail =
+      typeof data.error === "string" && data.error
+        ? data.error
+        : shopifyBillingErrorMessage(data, "Failed to start billing");
+    const err = new Error(detail) as Error & { code?: string };
     err.code = data.code;
     throw err;
   }

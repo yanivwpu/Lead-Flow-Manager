@@ -5,7 +5,8 @@ import * as jose from 'jose';
 import crypto from 'crypto';
 import { storage } from './storage';
 
-const API_VERSION = ApiVersion.October24; // Maps to 2025-10 in Shopify dashboard
+/** Align with shopify.app.whachatcrm.toml webhooks `api_version` (2026-01). */
+const API_VERSION = ApiVersion.January26;
 
 const SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY || '';
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
@@ -147,31 +148,117 @@ export function shopifySessionMiddleware(required: boolean = true) {
   };
 }
 
+export type ShopifyBillingChargeSuccess = {
+  ok: true;
+  confirmationUrl: string;
+  chargeId: string;
+};
+
+export type ShopifyBillingChargeFailure = {
+  ok: false;
+  code: string;
+  message: string;
+  shopifyUserErrors?: Array<{ field?: string[] | string; message: string }>;
+  graphQLErrors?: unknown;
+  rawResponse?: unknown;
+};
+
+export type ShopifyBillingChargeResult = ShopifyBillingChargeSuccess | ShopifyBillingChargeFailure;
+
+function resolveShopifyBillingTestMode(explicitTest?: boolean): boolean {
+  if (typeof explicitTest === "boolean") return explicitTest;
+  const envFlag = process.env.SHOPIFY_BILLING_TEST?.trim().toLowerCase();
+  if (envFlag === "1" || envFlag === "true" || envFlag === "yes") return true;
+  if (envFlag === "0" || envFlag === "false" || envFlag === "no") return false;
+  return process.env.NODE_ENV !== "production";
+}
+
+function formatShopifyRequestError(error: unknown): {
+  message: string;
+  graphQLErrors?: unknown;
+  raw?: unknown;
+} {
+  if (!error || typeof error !== "object") {
+    return { message: String(error ?? "Unknown Shopify API error") };
+  }
+  const err = error as Record<string, unknown>;
+  const graphQLErrors =
+    err.graphQLErrors ??
+    (err.body as Record<string, unknown> | undefined)?.errors ??
+    (err.response as Record<string, unknown> | undefined)?.errors;
+  const message =
+    (typeof err.message === "string" && err.message) ||
+    (Array.isArray(graphQLErrors) &&
+      graphQLErrors
+        .map((e: any) => e?.message)
+        .filter(Boolean)
+        .join("; ")) ||
+    "Shopify GraphQL request failed";
+  return { message, graphQLErrors, raw: err };
+}
+
 export async function createShopifyBillingCharge(
   shop: string,
   accessToken: string,
   plan: keyof typeof SHOPIFY_BILLING_PLANS,
   returnUrl: string,
-  isTest: boolean = true
-): Promise<{ confirmationUrl: string; chargeId: string } | null> {
+  isTest?: boolean,
+): Promise<ShopifyBillingChargeResult> {
   const shopify = getShopifyApi();
-  if (!shopify) return null;
+  if (!shopify) {
+    return {
+      ok: false,
+      code: "SHOPIFY_NOT_CONFIGURED",
+      message: "Shopify API credentials are not configured on the server.",
+    };
+  }
 
   const planConfig = SHOPIFY_BILLING_PLANS[plan];
-  
+  const testMode = resolveShopifyBillingTestMode(isTest);
+  const trialDays = "trialDays" in planConfig ? (planConfig as { trialDays?: number }).trialDays ?? 0 : 0;
+  const subscriptionName =
+    plan === "AI Brain Add-on" ? "WhachatCRM AI Brain add-on" : `WhachatCRM ${plan}`;
+
+  const mutationVariables: Record<string, unknown> = {
+    name: subscriptionName,
+    returnUrl,
+    test: testMode,
+    lineItems: [
+      {
+        plan: {
+          appRecurringPricingDetails: {
+            price: { amount: planConfig.amount, currencyCode: planConfig.currencyCode },
+            interval:
+              planConfig.interval === BillingInterval.Every30Days ? "EVERY_30_DAYS" : "ANNUAL",
+          },
+        },
+      },
+    ],
+  };
+  if (trialDays > 0) mutationVariables.trialDays = trialDays;
+
+  const logContext = {
+    shop,
+    plan,
+    subscriptionName,
+    returnUrl,
+    test: testMode,
+    trialDays: trialDays > 0 ? trialDays : 0,
+    apiVersion: API_VERSION,
+    scopes: SHOPIFY_SCOPES,
+    hostName: HOST.replace(/^https?:\/\//, ""),
+    isEmbeddedApp: false,
+    lineItems: mutationVariables.lineItems,
+  };
+  console.log("[ShopifyBilling] appSubscriptionCreate request", logContext);
+
   try {
     const client = new shopify.clients.Graphql({
       session: { shop, accessToken } as Session,
     });
 
-    const trialDays = 'trialDays' in planConfig ? (planConfig as any).trialDays : 0;
-
-    const subscriptionName =
-      plan === 'AI Brain Add-on'
-        ? 'WhachatCRM AI Brain add-on'
-        : `WhachatCRM ${plan}`;
-
-    const response = await client.request(`
+    const response = await client.request(
+      `
       mutation appSubscriptionCreate($name: String!, $returnUrl: URL!, $lineItems: [AppSubscriptionLineItemInput!]!, $test: Boolean, $trialDays: Int) {
         appSubscriptionCreate(
           name: $name
@@ -190,36 +277,88 @@ export async function createShopifyBillingCharge(
           }
         }
       }
-    `, {
-      variables: {
-        name: subscriptionName,
-        returnUrl,
-        test: isTest,
-        trialDays: trialDays > 0 ? trialDays : null,
-        lineItems: [{
-          plan: {
-            appRecurringPricingDetails: {
-              price: { amount: planConfig.amount, currencyCode: planConfig.currencyCode },
-              interval: planConfig.interval === BillingInterval.Every30Days ? 'EVERY_30_DAYS' : 'ANNUAL',
-            },
-          },
-        }],
-      },
+    `,
+      { variables: mutationVariables },
+    );
+
+    const data = (response as { data?: unknown }).data as Record<string, unknown> | undefined;
+    const extensions = (response as { extensions?: unknown }).extensions;
+    const topLevelErrors = (response as { errors?: unknown }).errors;
+
+    const payload = data?.appSubscriptionCreate as
+      | {
+          appSubscription?: { id?: string };
+          confirmationUrl?: string;
+          userErrors?: Array<{ field?: string[] | string; message: string }>;
+        }
+      | undefined;
+
+    console.log("[ShopifyBilling] appSubscriptionCreate response", {
+      ...logContext,
+      graphQLErrors: topLevelErrors ?? null,
+      extensions: extensions ?? null,
+      userErrors: payload?.userErrors ?? null,
+      confirmationUrl: payload?.confirmationUrl ?? null,
+      appSubscriptionId: payload?.appSubscription?.id ?? null,
+      rawData: data ?? null,
     });
 
-    const data = response.data as any;
-    if (data?.appSubscriptionCreate?.userErrors?.length > 0) {
-      console.error('Shopify billing errors:', data.appSubscriptionCreate.userErrors);
-      return null;
+    if (topLevelErrors) {
+      return {
+        ok: false,
+        code: "SHOPIFY_GRAPHQL_ERROR",
+        message:
+          Array.isArray(topLevelErrors) && topLevelErrors.length
+            ? (topLevelErrors as Array<{ message?: string }>).map((e) => e.message).filter(Boolean).join("; ")
+            : "Shopify returned a GraphQL error while creating the subscription.",
+        graphQLErrors: topLevelErrors,
+        rawResponse: data,
+      };
+    }
+
+    const userErrors = payload?.userErrors ?? [];
+    if (userErrors.length > 0) {
+      const message = userErrors.map((e) => e.message).filter(Boolean).join("; ");
+      return {
+        ok: false,
+        code: "SHOPIFY_USER_ERRORS",
+        message: message || "Shopify rejected the billing charge.",
+        shopifyUserErrors: userErrors,
+        rawResponse: data,
+      };
+    }
+
+    const confirmationUrl = payload?.confirmationUrl;
+    const chargeId = payload?.appSubscription?.id;
+    if (!confirmationUrl) {
+      return {
+        ok: false,
+        code: "SHOPIFY_MISSING_CONFIRMATION_URL",
+        message: "Shopify did not return a confirmation URL for this charge.",
+        rawResponse: data,
+      };
     }
 
     return {
-      confirmationUrl: data.appSubscriptionCreate.confirmationUrl,
-      chargeId: data.appSubscriptionCreate.appSubscription.id,
+      ok: true,
+      confirmationUrl,
+      chargeId: chargeId || confirmationUrl,
     };
   } catch (error) {
-    console.error('Failed to create Shopify billing charge:', error);
-    return null;
+    const formatted = formatShopifyRequestError(error);
+    console.error("[ShopifyBilling] appSubscriptionCreate failed", {
+      ...logContext,
+      errorMessage: formatted.message,
+      graphQLErrors: formatted.graphQLErrors ?? null,
+      raw: formatted.raw ?? null,
+    });
+    return {
+      ok: false,
+      code: "SHOPIFY_REQUEST_FAILED",
+      message: formatted.message,
+      graphQLErrors: formatted.graphQLErrors,
+      rawResponse: formatted.raw,
+    };
   }
 }
 

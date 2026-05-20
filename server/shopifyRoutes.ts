@@ -382,22 +382,26 @@ router.post('/billing/change-plan', shopifySessionMiddleware(), async (req: Requ
 
     const HOST = getAppOrigin();
 
+    const returnUrl = `${HOST}/api/shopify/billing/callback?shop=${encodeURIComponent(shop)}`;
     const billingResult = await createShopifyBillingCharge(
       shop,
       user.shopifyAccessToken,
       plan as keyof typeof SHOPIFY_BILLING_PLANS,
-      `${HOST}/api/shopify/billing/callback?shop=${shop}`,
-      process.env.NODE_ENV !== 'production'
+      returnUrl,
     );
 
-    if (billingResult?.confirmationUrl) {
+    if (billingResult.ok) {
       await storage.updateUser(user.id, {
         shopifyChargeId: billingResult.chargeId,
       });
       return res.json({ confirmationUrl: billingResult.confirmationUrl });
     }
 
-    res.status(500).json({ error: 'Failed to create billing charge' });
+    return res.status(502).json({
+      error: billingResult.message,
+      code: billingResult.code,
+      shopifyUserErrors: billingResult.shopifyUserErrors,
+    });
   } catch (error) {
     console.error('Plan change error:', error);
     res.status(500).json({ error: 'Plan change failed' });
@@ -696,21 +700,34 @@ router.post('/billing/checkout-web', async (req: Request, res: Response) => {
     }
 
     const HOST = getAppOrigin();
+    const returnUrl = `${HOST}/api/shopify/billing/callback?shop=${encodeURIComponent(shop)}`;
     const billingResult = await createShopifyBillingCharge(
       shop,
       accessToken,
       plan as keyof typeof SHOPIFY_BILLING_PLANS,
-      `${HOST}/api/shopify/billing/callback?shop=${encodeURIComponent(shop)}`,
-      process.env.NODE_ENV !== 'production',
+      returnUrl,
     );
 
-    if (billingResult?.confirmationUrl) {
+    if (billingResult.ok) {
       await storage.updateUser(billingUserId, { shopifyChargeId: billingResult.chargeId });
       return res.json({ confirmationUrl: billingResult.confirmationUrl });
     }
 
-    console.error("[ShopifyBilling] checkout-web charge creation failed", { plan, shop, billingUserId });
-    res.status(500).json({ error: 'Failed to create billing charge' });
+    console.error("[ShopifyBilling] checkout-web charge creation failed", {
+      plan,
+      shop,
+      billingUserId,
+      returnUrl,
+      code: billingResult.code,
+      message: billingResult.message,
+      shopifyUserErrors: billingResult.shopifyUserErrors ?? null,
+      graphQLErrors: billingResult.graphQLErrors ?? null,
+    });
+    return res.status(502).json({
+      error: billingResult.message,
+      code: billingResult.code,
+      shopifyUserErrors: billingResult.shopifyUserErrors,
+    });
   } catch (error: any) {
     console.error('[ShopifyBilling] checkout-web error:', error);
     res.status(500).json({ error: error?.message || 'Billing failed' });
