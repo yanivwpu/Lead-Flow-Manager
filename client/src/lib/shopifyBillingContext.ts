@@ -6,7 +6,7 @@ export type BillingSubscriptionFlags = {
 };
 
 /**
- * When true, all paid plan / add-on / upgrade actions must use Shopify Billing API — never Stripe.
+ * When true, all paid plan / add-on / upgrade actions must use Shopify App Pricing — never Stripe.
  * Includes API flags and persisted ?shop= hint (Shopify App Store / embedded review).
  */
 export function mustUseShopifyBilling(

@@ -20,7 +20,10 @@ import {
   useShopifyShopHint,
 } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
-import { postShopifyCheckoutWeb } from "@/lib/shopifyCheckout";
+import {
+  openShopifyManagedPricing,
+  shopifyManagedPricingInstructions,
+} from "@/lib/shopifyCheckout";
 
 // ─── Shared structural components ───────────────────────────────────────────
 function FeatureItem({
@@ -153,39 +156,43 @@ export function Pricing() {
     });
   }, [shopHint]);
 
-  // Shopify plan name mapping
-  const SHOPIFY_PLAN_MAP: Record<string, string> = {
-    starter: 'Starter',
-    pro: 'Pro',
+  const shopifyPaidPlan =
+    effectivePlan === "starter" || effectivePlan === "pro";
+
+  const shopifyPlanCta = shopifyPaidPlan
+    ? t(`${p}.shopifyManagePlan`)
+    : t(`${p}.shopifyChoosePlan`);
+
+  const openShopifyPlans = async () => {
+    try {
+      const opened = await openShopifyManagedPricing(shopHint);
+      if (!opened) {
+        toast({
+          title: t(`${p}.shopifyChoosePlan`),
+          description: t(`${p}.shopifyManagedPricingInstructions`),
+        });
+      }
+    } catch (e: any) {
+      if (e?.message === "session_expired") {
+        setLocation(`/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`);
+        return;
+      }
+      toast({
+        title: t(`${p}.shopifyChoosePlan`),
+        description: shopifyManagedPricingInstructions(
+          { error: e?.message },
+          t(`${p}.shopifyManagedPricingInstructions`),
+        ),
+        variant: "destructive",
+      });
+    }
   };
 
   const shopifyCheckoutMutation = useMutation({
-    mutationFn: async (planId: string) => {
-      const shopifyPlan = SHOPIFY_PLAN_MAP[planId];
-      if (!shopifyPlan) throw new Error("Invalid plan");
-      try {
-        return await postShopifyCheckoutWeb(shopifyPlan, shopHint);
-      } catch (e: any) {
-        if (e?.message === "session_expired") {
-          setLocation(`/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`);
-        }
-        throw e;
-      }
+    mutationFn: async (_planId: string) => {
+      await openShopifyPlans();
     },
-    onSuccess: (data) => {
-      if (data.confirmationUrl) {
-        window.location.href = data.confirmationUrl;
-      }
-      setLoadingPlan(null);
-    },
-    onError: (error: any) => {
-      if (error.message !== "session_expired") {
-        toast({
-          title: "Error",
-          description: error.message || "Failed to start billing",
-          variant: "destructive",
-        });
-      }
+    onSettled: () => {
       setLoadingPlan(null);
     },
   });
@@ -252,9 +259,7 @@ export function Pricing() {
     setAiBrainAddonLoading(true);
     try {
       if (isShopify) {
-        const shopForCheckout = resolveShopifyShopForCheckout(shopHint);
-        const data = await postShopifyCheckoutWeb("AI Brain Add-on", shopForCheckout);
-        if (data.confirmationUrl) window.location.href = data.confirmationUrl;
+        await openShopifyPlans();
         return;
       }
 
@@ -276,10 +281,16 @@ export function Pricing() {
         window.location.href = data.url;
       }
     } catch (error: any) {
+      if (error?.message === "session_expired") return;
       toast({
-        title: "Error",
-        description: error.message || "Failed to start checkout",
-        variant: "destructive",
+        title: isShopify ? t(`${p}.shopifyChoosePlan`) : "Error",
+        description: isShopify
+          ? shopifyManagedPricingInstructions(
+              { error: error?.message },
+              t(`${p}.shopifyManagedPricingInstructions`),
+            )
+          : error.message || "Failed to start checkout",
+        variant: isShopify ? "default" : "destructive",
       });
     } finally {
       setAiBrainAddonLoading(false);
@@ -723,6 +734,8 @@ export function Pricing() {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : isCurrentPlan ? (
                     t(`${p}.plans.currentPlan`)
+                  ) : isShopify ? (
+                    shopifyPlanCta
                   ) : (
                     t(`${p}.plans.starter.cta`)
                   )}
@@ -824,6 +837,8 @@ export function Pricing() {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : isCurrentPlan ? (
                     t(`${p}.plans.currentPlan`)
+                  ) : isShopify ? (
+                    shopifyPlanCta
                   ) : (
                     t(`${p}.plans.pro.cta`)
                   )}
@@ -904,7 +919,7 @@ export function Pricing() {
                 {aiBrainAddonLoading ? (
                   <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} />
                 ) : null}
-                {isShopify ? t(`${p}.shopifyApproveAiBrain`) : t(`${p}.plans.aiBrain.ctaUnlock`)}
+                {isShopify ? shopifyPlanCta : t(`${p}.plans.aiBrain.ctaUnlock`)}
               </Button>
             ) : (
               <Button

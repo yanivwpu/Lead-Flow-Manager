@@ -69,7 +69,10 @@ import {
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
-import { postShopifyCheckoutWeb } from "@/lib/shopifyCheckout";
+import {
+  openShopifyManagedPricing,
+  shopifyManagedPricingInstructions,
+} from "@/lib/shopifyCheckout";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1956,10 +1959,15 @@ export function RealtorGrowthEngine() {
               try {
                 if (isShopify) {
                   setShopifyGateLoading(true);
-                  const plan = !subscriptionGate.hasPro ? "Pro" : "AI Brain Add-on";
-                  const data = await postShopifyCheckoutWeb(plan, shopHint);
-                  if (data.confirmationUrl) {
-                    window.location.href = data.confirmationUrl;
+                  const opened = await openShopifyManagedPricing(shopHint);
+                  if (!opened) {
+                    toast({
+                      title: "Choose plan in Shopify",
+                      description: shopifyManagedPricingInstructions(
+                        undefined,
+                        "Plan selection is managed by Shopify. Open WhachatCRM in Shopify Admin → Billing / App subscription to choose a plan.",
+                      ),
+                    });
                   }
                   return;
                 }
@@ -1999,8 +2007,8 @@ export function RealtorGrowthEngine() {
               ? "Opening Shopify…"
               : isShopify
                 ? !subscriptionGate.hasPro
-                  ? "Approve Pro in Shopify"
-                  : "Approve AI Brain in Shopify"
+                  ? "Choose plan in Shopify"
+                  : "Manage plan in Shopify"
                 : !subscriptionGate.hasPro
                   ? "Upgrade to Pro + AI"
                   : "Enable AI Add-on"}

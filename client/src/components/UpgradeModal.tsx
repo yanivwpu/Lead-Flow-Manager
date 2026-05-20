@@ -3,7 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
-import { postShopifyCheckoutWeb } from "@/lib/shopifyCheckout";
+import {
+  openShopifyManagedPricing,
+  shopifyManagedPricingInstructions,
+} from "@/lib/shopifyCheckout";
+import { useToast } from "@/hooks/use-toast";
+import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Zap, MessageSquare, Users, Phone, Sparkles, Loader2, Check, Info } from "lucide-react";
@@ -204,11 +209,12 @@ function buildConversationLimitDescription(limitInfo?: ConversationLimitInfo): R
   );
 }
 
-const SHOPIFY_PLAN_MAP: Record<string, string> = { starter: "Starter", pro: "Pro" };
-
 export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInfo }: UpgradeModalProps) {
   const [loadingPlan, setLoadingPlan] = useState<TargetPlan | null>(null);
   const shopHint = useShopifyShopHint();
+  const { toast } = useToast();
+  const { t } = useTranslation();
+  const p = "pricingPage";
 
   const isConversationLimit = reason === "conversation_limit";
   const isAutomationsPaidPlan = reason === "automations_paid_plan";
@@ -232,10 +238,14 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
     setLoadingPlan(plan);
     try {
       if (isShopify) {
-        const shopifyPlan = SHOPIFY_PLAN_MAP[plan];
-        if (!shopifyPlan) throw new Error("Invalid plan");
-        const data = await postShopifyCheckoutWeb(shopifyPlan, shopHint);
-        if (data.confirmationUrl) window.location.href = data.confirmationUrl;
+        const opened = await openShopifyManagedPricing(shopHint);
+        if (!opened) {
+          toast({
+            title: t(`${p}.shopifyChoosePlan`),
+            description: t(`${p}.shopifyManagedPricingInstructions`),
+          });
+        }
+        setLoadingPlan(null);
         return;
       }
 
@@ -262,8 +272,19 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
         setLoadingPlan(null);
         onOpenChange(false);
       }
-    } catch (error) {
-      console.error("Checkout error:", error);
+    } catch (error: any) {
+      if (error?.message !== "session_expired") {
+        toast({
+          title: isShopify ? t(`${p}.shopifyChoosePlan`) : "Error",
+          description: isShopify
+            ? shopifyManagedPricingInstructions(
+                { error: error?.message },
+                t(`${p}.shopifyManagedPricingInstructions`),
+              )
+            : error?.message || "Failed to start checkout",
+          variant: isShopify ? "default" : "destructive",
+        });
+      }
       setLoadingPlan(null);
     }
   };
@@ -314,7 +335,13 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
                   disabled={loadingPlan !== null}
                   data-testid="button-upgrade-modal-starter"
                 >
-                  {loadingPlan === "starter" ? <Loader2 className="h-5 w-5 animate-spin" /> : "Upgrade to Starter"}
+                  {loadingPlan === "starter" ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : isShopify ? (
+                    t(`${p}.shopifyChoosePlan`)
+                  ) : (
+                    "Upgrade to Starter"
+                  )}
                 </Button>
               </div>
               <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
@@ -338,7 +365,13 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
                   disabled={loadingPlan !== null}
                   data-testid="button-upgrade-modal-pro"
                 >
-                  {loadingPlan === "pro" ? <Loader2 className="h-5 w-5 animate-spin" /> : "Upgrade to Pro"}
+                  {loadingPlan === "pro" ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : isShopify ? (
+                    t(`${p}.shopifyChoosePlan`)
+                  ) : (
+                    "Upgrade to Pro"
+                  )}
                 </Button>
               </div>
             </div>

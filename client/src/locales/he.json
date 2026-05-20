@@ -956,7 +956,10 @@
     "backHome": "חזרה לדף הבית",
     "backSettings": "חזרה להגדרות",
     "trialBanner": "כל התוכניות בתשלום כוללות 14 ימי ניסיון Pro חינמיים שמאפשרים לך לחוות את המערכת המלאה. אין חיוב במהלך הניסיון.",
-    "shopifyApproveAiBrain": "אשר את AI Brain ב-Shopify",
+    "shopifyChoosePlan": "בחר תוכנית ב-Shopify",
+    "shopifyManagePlan": "נהל תוכנית ב-Shopify",
+    "shopifyManagedPricingInstructions": "בחירת התוכנית מנוהלת על ידי Shopify. פתח את WhachatCRM ב-Shopify Admin → Billing / App subscription כדי לבחור תוכנית.",
+    "shopifyApproveAiBrain": "בחר תוכנית ב-Shopify",
     "trialNote": "כולל 14 ימי ניסיון Pro חינמיים",
     "hero": {
       "title": "תמחור פשוט ושקוף לעסקים שגדלים",

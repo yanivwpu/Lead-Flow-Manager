@@ -16,7 +16,10 @@ import { ChannelSettings } from "@/components/ChannelSettings";
 import { cn } from "@/lib/utils";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
-import { postShopifyCheckoutWeb } from "@/lib/shopifyCheckout";
+import {
+  openShopifyManagedPricing,
+  shopifyManagedPricingInstructions,
+} from "@/lib/shopifyCheckout";
 import { SHOPIFY_RECONNECT_REQUIRED_CODE } from "@shared/shopifyBilling";
 
 interface TeamMember {
@@ -661,13 +664,15 @@ export function Settings() {
     mutationFn: async () => {
       const urlParams = new URLSearchParams(window.location.search);
       const shop = urlParams.get("shop") || localStorage.getItem("shopify_shop");
-      if (!shop) throw new Error("No Shopify shop found");
-      localStorage.setItem("shopify_shop", shop);
-      return postShopifyCheckoutWeb("Pro", shop);
-    },
-    onSuccess: (data) => {
-      if (data?.confirmationUrl) {
-        window.location.href = data.confirmationUrl;
+      if (shop) localStorage.setItem("shopify_shop", shop);
+      const opened = await openShopifyManagedPricing(shop);
+      if (!opened) {
+        throw new Error(
+          shopifyManagedPricingInstructions(
+            undefined,
+            "Plan selection is managed by Shopify. Open WhachatCRM in Shopify Admin → Billing / App subscription to choose a plan.",
+          ),
+        );
       }
     },
     onError: (error: Error & { code?: string }) => {
@@ -680,11 +685,14 @@ export function Settings() {
         return;
       }
       const shop = new URLSearchParams(window.location.search).get("shop") || localStorage.getItem("shopify_shop");
-      if (shop) {
+      if (shop && error.message?.includes("reconnect")) {
         window.location.href = `/api/shopify/install?shop=${encodeURIComponent(shop)}`;
         return;
       }
-      toast({ title: "Billing error", description: error.message, variant: "destructive" });
+      toast({
+        title: "Choose plan in Shopify",
+        description: error.message,
+      });
     },
   });
 
@@ -1163,11 +1171,20 @@ export function Settings() {
                   
                   <div className="mt-auto pt-6">
                     {billingUsesShopify ? (
-                      <p className="text-xs text-gray-500 leading-relaxed">
-                        Subscriptions are billed through Shopify. Open your Shopify admin → Apps → WhachatCRM to manage the
-                        app subscription, or use <span className="font-medium text-gray-700">Pricing</span> in this app to
-                        change plans.
-                      </p>
+                      <Button
+                        variant="outline"
+                        className="w-full border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold"
+                        onClick={() => shopifyBillingMutation.mutate()}
+                        disabled={shopifyBillingMutation.isPending}
+                        data-testid="button-shopify-manage-plan"
+                      >
+                        {shopifyBillingMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                        )}
+                        Manage plan in Shopify
+                      </Button>
                     ) : !billingUsesShopify &&
                       subscriptionData?.subscription?.isPaidSubscriber ? (
                       <Button 

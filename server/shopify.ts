@@ -197,6 +197,9 @@ function formatShopifyRequestError(error: unknown): {
   return { message, graphQLErrors, raw: err };
 }
 
+/**
+ * Manual Billing API (appSubscriptionCreate). Not used when the app uses Shopify App Pricing (Managed Pricing).
+ */
 export async function createShopifyBillingCharge(
   shop: string,
   accessToken: string,

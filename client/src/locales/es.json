@@ -869,7 +869,10 @@
     "backHome": "Volver al Inicio",
     "backSettings": "Volver a Configuración",
     "trialBanner": "Todos los planes de pago incluyen una prueba gratuita de 14 días del plan Pro para que experimentes el sistema completo. Sin cargos durante la prueba.",
-    "shopifyApproveAiBrain": "Aprobar AI Brain en Shopify",
+    "shopifyChoosePlan": "Elegir plan en Shopify",
+    "shopifyManagePlan": "Gestionar plan en Shopify",
+    "shopifyManagedPricingInstructions": "La selección de planes la gestiona Shopify. Abre WhachatCRM en Shopify Admin → Billing / App subscription para elegir un plan.",
+    "shopifyApproveAiBrain": "Elegir plan en Shopify",
     "trialNote": "Prueba gratuita de 14 días del plan Pro incluida",
     "hero": {
       "title": "Precios simples y transparentes para conversaciones en crecimiento",

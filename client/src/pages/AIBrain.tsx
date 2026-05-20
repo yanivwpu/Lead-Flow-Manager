@@ -34,7 +34,10 @@ import { toast } from "@/hooks/use-toast";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
-import { postShopifyCheckoutWeb } from "@/lib/shopifyCheckout";
+import {
+  openShopifyManagedPricing,
+  shopifyManagedPricingInstructions,
+} from "@/lib/shopifyCheckout";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
@@ -400,8 +403,14 @@ function AIBrainContent() {
     setIsCheckingOut(true);
     try {
       if (isShopify) {
-        const data = await postShopifyCheckoutWeb("AI Brain Add-on", shopHint);
-        if (data.confirmationUrl) window.location.href = data.confirmationUrl;
+        const opened = await openShopifyManagedPricing(shopHint);
+        if (!opened) {
+          toast({
+            title: "Choose plan in Shopify",
+            description:
+              "Plan selection is managed by Shopify. Open WhachatCRM in Shopify Admin → Billing / App subscription to choose a plan.",
+          });
+        }
         return;
       }
 
@@ -425,9 +434,14 @@ function AIBrainContent() {
     } catch (error: any) {
       if (error.message === "session_expired") return;
       toast({
-        title: "Checkout Error",
-        description: error.message || "Failed to start checkout. Please try again.",
-        variant: "destructive",
+        title: isShopify ? "Choose plan in Shopify" : "Checkout Error",
+        description: isShopify
+          ? shopifyManagedPricingInstructions(
+              { error: error?.message },
+              "Plan selection is managed by Shopify. Open WhachatCRM in Shopify Admin → Billing / App subscription to choose a plan.",
+            )
+          : error.message || "Failed to start checkout. Please try again.",
+        variant: isShopify ? "default" : "destructive",
       });
     } finally {
       setIsCheckingOut(false);
@@ -436,10 +450,16 @@ function AIBrainContent() {
 
   const handlePlanAIBundleCheckout = async (bundlePlan: "starter" | "pro") => {
     if (isShopify) {
-      toast({
-        title: "Use Shopify to subscribe",
-        description: "Open Pricing in this app and approve Starter or Pro in Shopify, then add AI Brain there.",
-      });
+      const opened = await openShopifyManagedPricing(shopHint);
+      if (!opened) {
+        toast({
+          title: "Choose plan in Shopify",
+          description: shopifyManagedPricingInstructions(
+            undefined,
+            "Plan selection is managed by Shopify. Open WhachatCRM in Shopify Admin → Billing / App subscription to choose a plan.",
+          ),
+        });
+      }
       return;
     }
     setIsCheckingOut(true);
@@ -1003,7 +1023,7 @@ function AIBrainContent() {
                       disabled={isCheckingOut}
                       data-testid="button-ai-brain-primary-cta"
                     >
-                      {isCheckingOut ? "Processing…" : isShopify ? "Approve in Shopify" : "Unlock AI Brain"}
+                      {isCheckingOut ? "Processing…" : isShopify ? "Choose plan in Shopify" : "Unlock AI Brain"}
                     </Button>
                     <p className="text-xs text-slate-500">
                       {isShopify

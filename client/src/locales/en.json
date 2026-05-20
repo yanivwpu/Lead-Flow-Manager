@@ -991,8 +991,11 @@
     "backHome": "Back to Home",
     "backSettings": "Back to Settings",
     "trialBanner": "All paid plans include a 14-day free Pro trial that lets you experience the complete system. No charge during trial.",
-    "shopifyInstallBanner": "You're connected through Shopify. Choose Starter ($19/mo) or Pro ($49/mo) below — checkout and subscription management run in Shopify. Each paid plan includes a 14-day free trial before the first charge. AI Brain is a separate add-on at $29/mo on top of your base plan.",
-    "shopifyApproveAiBrain": "Approve AI Brain in Shopify",
+    "shopifyInstallBanner": "You're connected through Shopify. Plan selection and billing are managed in Shopify Admin — use the buttons below to open Shopify and choose Starter ($19/mo) or Pro ($49/mo). Each paid plan includes a 14-day free trial before the first charge. AI Brain is a separate add-on at $29/mo on top of your base plan.",
+    "shopifyChoosePlan": "Choose plan in Shopify",
+    "shopifyManagePlan": "Manage plan in Shopify",
+    "shopifyManagedPricingInstructions": "Plan selection is managed by Shopify. Open WhachatCRM in Shopify Admin → Billing / App subscription to choose a plan.",
+    "shopifyApproveAiBrain": "Choose plan in Shopify",
     "trialNote": "14-day free Pro trial included",
     "hero": {
       "title": "Simple, transparent pricing for growing conversations",

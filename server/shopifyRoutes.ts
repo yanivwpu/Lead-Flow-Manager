@@ -6,11 +6,9 @@ import {
   generateShopifyInstallUrl,
   validateOAuthState,
   exchangeShopifyCode,
-  createShopifyBillingCharge,
   createShopifyRgeOneTimePurchase,
   getActiveShopifySubscription,
   getAppPurchaseOneTimeStatus,
-  cancelShopifySubscription,
   shopifySessionMiddleware,
   registerMandatoryWebhooks,
   SHOPIFY_BILLING_PLANS,
@@ -19,6 +17,12 @@ import { getAppOrigin } from './urlOrigins';
 import { ensureGrowthEnginePurchasedTask } from './growthEngineSetupService';
 import { resolveShopifyMerchantForBilling } from './shopifyMerchantResolver';
 import { rawShopFromRequest, shopDomainFromRequest } from './shopifyBillingGuard';
+import {
+  getShopifyAppHandle,
+  managedPricingPayloadForShop,
+  respondSessionManagedPricing,
+} from './shopifyManagedPricing';
+import { SHOPIFY_MANAGED_PRICING_INSTRUCTIONS } from '@shared/shopifyManagedPricing';
 
 const router = Router();
 
@@ -362,49 +366,27 @@ router.get('/billing/callback', async (req: Request, res: Response) => {
 });
 
 router.post('/billing/change-plan', shopifySessionMiddleware(), async (req: Request, res: Response) => {
-  const { plan } = req.body;
   const { shop } = (req as any).shopifySession;
-
-  if (!plan || !SHOPIFY_BILLING_PLANS[plan as keyof typeof SHOPIFY_BILLING_PLANS]) {
-    return res.status(400).json({ error: 'Invalid plan' });
-  }
 
   try {
     const user = await storage.getUserByShopifyShop(shop);
-    
+
     if (!user || !user.shopifyAccessToken) {
       return res.status(404).json({ error: 'Shop not found' });
     }
 
-    if (user.shopifyChargeId) {
-      await cancelShopifySubscription(shop, user.shopifyAccessToken, user.shopifyChargeId);
-    }
-
-    const HOST = getAppOrigin();
-
-    const returnUrl = `${HOST}/api/shopify/billing/callback?shop=${encodeURIComponent(shop)}`;
-    const billingResult = await createShopifyBillingCharge(
-      shop,
-      user.shopifyAccessToken,
-      plan as keyof typeof SHOPIFY_BILLING_PLANS,
-      returnUrl,
-    );
-
-    if (billingResult.ok) {
-      await storage.updateUser(user.id, {
-        shopifyChargeId: billingResult.chargeId,
+    const payload = managedPricingPayloadForShop(shop);
+    if (!payload.planSelectionUrl) {
+      return res.status(200).json({
+        ...payload,
+        error: payload.instructions,
       });
-      return res.json({ confirmationUrl: billingResult.confirmationUrl });
     }
 
-    return res.status(502).json({
-      error: billingResult.message,
-      code: billingResult.code,
-      shopifyUserErrors: billingResult.shopifyUserErrors,
-    });
+    return res.json(payload);
   } catch (error) {
     console.error('Plan change error:', error);
-    res.status(500).json({ error: 'Plan change failed' });
+    res.status(500).json({ error: 'Could not open Shopify plan selection' });
   }
 });
 
@@ -658,79 +640,53 @@ router.post('/webhooks/shop/redact', async (req: Request, res: Response) => {
   }
 });
 
-// Session-auth Shopify billing – called from the web app (no Shopify JWT required)
+/** Shopify App Pricing — plan selection URL for session-authenticated web app users. */
+router.get('/billing/managed-pricing-url', async (req: Request, res: Response) => {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { bodyShop, queryShop } = rawShopFromRequest(req);
+  console.log('[ShopifyBilling] managed-pricing-url', {
+    bodyShop,
+    queryShop,
+    resolvedShop: shopDomainFromRequest(req),
+    appHandle: getShopifyAppHandle(),
+  });
+
+  try {
+    await respondSessionManagedPricing(req, res, (req.user as any).id, 'managed-pricing-url');
+  } catch (error: any) {
+    console.error('[ShopifyBilling] managed-pricing-url error:', error);
+    res.status(500).json({
+      error: SHOPIFY_MANAGED_PRICING_INSTRUCTIONS,
+      instructions: SHOPIFY_MANAGED_PRICING_INSTRUCTIONS,
+    });
+  }
+});
+
+/**
+ * Legacy route — returns Managed Pricing URL only (appSubscriptionCreate disabled).
+ * @deprecated Prefer GET /billing/managed-pricing-url
+ */
 router.post('/billing/checkout-web', async (req: Request, res: Response) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
   const { plan } = (req.body || {}) as { plan?: string };
-  if (!plan || !SHOPIFY_BILLING_PLANS[plan as keyof typeof SHOPIFY_BILLING_PLANS]) {
-    return res.status(400).json({ error: 'Invalid plan' });
-  }
-
-  const { bodyShop, queryShop } = rawShopFromRequest(req);
-  const resolvedShopFromRequest = shopDomainFromRequest(req);
-  console.log('[ShopifyBilling] checkout-web request body', {
-    plan,
-    bodyShop,
-    queryShop,
-    resolvedShop: resolvedShopFromRequest,
-    bodyType: typeof req.body,
-    bodyKeys: req.body && typeof req.body === 'object' ? Object.keys(req.body as object) : [],
+  console.log('[ShopifyBilling] checkout-web (managed pricing redirect)', {
+    plan: plan ?? null,
+    bodyShop: rawShopFromRequest(req).bodyShop,
+    queryShop: rawShopFromRequest(req).queryShop,
+    resolvedShop: shopDomainFromRequest(req),
+    appHandle: getShopifyAppHandle(),
   });
 
   try {
-    const resolved = await resolveShopifyMerchantForBilling(
-      req,
-      (req.user as any).id,
-      "checkout-web",
-      plan,
-    );
-    if (!resolved.ok) {
-      return res.status(resolved.status).json({ error: resolved.error, code: resolved.code });
-    }
-
-    const { shop, accessToken, billingUserId } = resolved.merchant;
-    const billingUser = await storage.getUser(billingUserId);
-    if (!billingUser) {
-      return res.status(404).json({ error: 'Billing account not found' });
-    }
-
-    if (billingUser.shopifyChargeId) {
-      await cancelShopifySubscription(shop, accessToken, billingUser.shopifyChargeId);
-    }
-
-    const HOST = getAppOrigin();
-    const returnUrl = `${HOST}/api/shopify/billing/callback?shop=${encodeURIComponent(shop)}`;
-    const billingResult = await createShopifyBillingCharge(
-      shop,
-      accessToken,
-      plan as keyof typeof SHOPIFY_BILLING_PLANS,
-      returnUrl,
-    );
-
-    if (billingResult.ok) {
-      await storage.updateUser(billingUserId, { shopifyChargeId: billingResult.chargeId });
-      return res.json({ confirmationUrl: billingResult.confirmationUrl });
-    }
-
-    console.error("[ShopifyBilling] checkout-web charge creation failed", {
-      plan,
-      shop,
-      billingUserId,
-      returnUrl,
-      code: billingResult.code,
-      message: billingResult.message,
-      shopifyUserErrors: billingResult.shopifyUserErrors ?? null,
-      graphQLErrors: billingResult.graphQLErrors ?? null,
-    });
-    return res.status(502).json({
-      error: billingResult.message,
-      code: billingResult.code,
-      shopifyUserErrors: billingResult.shopifyUserErrors,
-    });
+    await respondSessionManagedPricing(req, res, (req.user as any).id, 'checkout-web');
   } catch (error: any) {
     console.error('[ShopifyBilling] checkout-web error:', error);
-    res.status(500).json({ error: error?.message || 'Billing failed' });
+    res.status(500).json({
+      error: SHOPIFY_MANAGED_PRICING_INSTRUCTIONS,
+      instructions: SHOPIFY_MANAGED_PRICING_INSTRUCTIONS,
+    });
   }
 });
 
