@@ -1,4 +1,7 @@
-import { getShopifyShopHint } from "@/lib/shopifyBillingHint";
+import {
+  getShopifyShopHint,
+  resolveShopifyShopForCheckout,
+} from "@/lib/shopifyBillingHint";
 import { SHOPIFY_RECONNECT_REQUIRED_MESSAGE } from "@shared/shopifyBilling";
 
 export type ShopifyCheckoutWebResponse = {
@@ -16,21 +19,32 @@ export function shopifyBillingErrorMessage(data: ShopifyCheckoutWebResponse, fal
 }
 
 /**
- * Session-auth Shopify billing — passes shop from URL/localStorage so backend can resolve install token.
+ * Session-auth Shopify billing — passes shop in JSON body and query string when resolved.
  */
 export async function postShopifyCheckoutWeb(
   plan: string,
   shopHint?: string | null,
 ): Promise<ShopifyCheckoutWebResponse> {
-  const shop = shopHint ?? getShopifyShopHint();
-  const res = await fetch("/api/shopify/billing/checkout-web", {
+  const shop = resolveShopifyShopForCheckout(shopHint);
+
+  if (import.meta.env.DEV) {
+    console.log("[ShopifyBilling] postShopifyCheckoutWeb", {
+      plan,
+      shopHint: shopHint ?? null,
+      resolvedShop: shop ?? null,
+      locationSearch: typeof window !== "undefined" ? window.location.search : null,
+      getShopifyShopHint: getShopifyShopHint() ?? null,
+    });
+  }
+
+  const payload: { plan: string; shop?: string } = { plan };
+  if (shop) payload.shop = shop;
+  const query = shop ? `?shop=${encodeURIComponent(shop)}` : "";
+  const res = await fetch(`/api/shopify/billing/checkout-web${query}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({
-      plan,
-      ...(shop ? { shop } : {}),
-    }),
+    body: JSON.stringify(payload),
   });
 
   const data = (await res.json().catch(() => ({}))) as ShopifyCheckoutWebResponse;

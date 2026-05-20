@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import express, { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { storage } from './storage';
 import {
@@ -18,8 +18,12 @@ import {
 import { getAppOrigin } from './urlOrigins';
 import { ensureGrowthEnginePurchasedTask } from './growthEngineSetupService';
 import { resolveShopifyMerchantForBilling } from './shopifyMerchantResolver';
+import { rawShopFromRequest, shopDomainFromRequest } from './shopifyBillingGuard';
 
 const router = Router();
+
+// Ensure JSON body is parsed for session-auth billing routes (checkout-web).
+router.use(express.json());
 
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
 
@@ -654,10 +658,21 @@ router.post('/webhooks/shop/redact', async (req: Request, res: Response) => {
 router.post('/billing/checkout-web', async (req: Request, res: Response) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { plan } = req.body as { plan?: string };
+  const { plan } = (req.body || {}) as { plan?: string };
   if (!plan || !SHOPIFY_BILLING_PLANS[plan as keyof typeof SHOPIFY_BILLING_PLANS]) {
     return res.status(400).json({ error: 'Invalid plan' });
   }
+
+  const { bodyShop, queryShop } = rawShopFromRequest(req);
+  const resolvedShopFromRequest = shopDomainFromRequest(req);
+  console.log('[ShopifyBilling] checkout-web request body', {
+    plan,
+    bodyShop,
+    queryShop,
+    resolvedShop: resolvedShopFromRequest,
+    bodyType: typeof req.body,
+    bodyKeys: req.body && typeof req.body === 'object' ? Object.keys(req.body as object) : [],
+  });
 
   try {
     const resolved = await resolveShopifyMerchantForBilling(

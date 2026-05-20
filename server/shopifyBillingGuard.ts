@@ -7,11 +7,36 @@ import {
 
 type ShopifyBillingUser = { id?: string; shopifyShop?: string | null };
 
+function shopFromQueryValue(value: unknown): string | null {
+  if (typeof value === "string") return normalizeShopifyShopDomain(value);
+  if (Array.isArray(value) && typeof value[0] === "string") {
+    return normalizeShopifyShopDomain(value[0]);
+  }
+  return null;
+}
+
 export function shopDomainFromRequest(req: Request): string | null {
-  const fromQuery = typeof req.query.shop === "string" ? req.query.shop : null;
-  const body = req.body as { shop?: string } | undefined;
-  const fromBody = typeof body?.shop === "string" ? body.shop : null;
-  return normalizeShopifyShopDomain(fromQuery) ?? normalizeShopifyShopDomain(fromBody);
+  const fromQuery = shopFromQueryValue(req.query.shop);
+  const body = req.body as { shop?: unknown } | undefined;
+  const fromBody =
+    typeof body?.shop === "string"
+      ? normalizeShopifyShopDomain(body.shop)
+      : body?.shop != null
+        ? shopFromQueryValue(body.shop)
+        : null;
+  return fromQuery ?? fromBody;
+}
+
+/** Raw shop values before normalization (for structured logs). */
+export function rawShopFromRequest(req: Request): {
+  bodyShop: unknown;
+  queryShop: unknown;
+} {
+  const body = req.body as { shop?: unknown } | undefined;
+  return {
+    bodyShop: body?.shop ?? null,
+    queryShop: req.query.shop ?? null,
+  };
 }
 
 /** True when account is linked to Shopify or request carries a valid ?shop= domain. */

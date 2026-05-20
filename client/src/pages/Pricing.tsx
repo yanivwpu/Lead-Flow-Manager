@@ -13,7 +13,12 @@ import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { supportedLanguages } from "@/lib/i18n";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
-import { getSubscriptionApiUrl, getShopifyShopHint, useShopifyShopHint } from "@/lib/shopifyBillingHint";
+import {
+  getSubscriptionApiUrl,
+  getShopifyShopHint,
+  resolveShopifyShopForCheckout,
+  useShopifyShopHint,
+} from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
 import { postShopifyCheckoutWeb } from "@/lib/shopifyCheckout";
 
@@ -137,6 +142,17 @@ export function Pricing() {
   const isShopify = mustUseShopifyBilling(subscriptionData?.subscription, shopHint);
   const planButtonsDisabled = !!user && subscriptionLoading;
 
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const resolved = resolveShopifyShopForCheckout(shopHint);
+    console.log("[ShopifyBilling] Pricing shop context", {
+      shopHint: shopHint ?? null,
+      getShopifyShopHint: getShopifyShopHint() ?? null,
+      resolveShopifyShopForCheckout: resolved ?? null,
+      locationSearch: window.location.search,
+    });
+  }, [shopHint]);
+
   // Shopify plan name mapping
   const SHOPIFY_PLAN_MAP: Record<string, string> = {
     starter: 'Starter',
@@ -236,7 +252,8 @@ export function Pricing() {
     setAiBrainAddonLoading(true);
     try {
       if (isShopify) {
-        const data = await postShopifyCheckoutWeb("AI Brain Add-on", shopHint);
+        const shopForCheckout = resolveShopifyShopForCheckout(shopHint);
+        const data = await postShopifyCheckoutWeb("AI Brain Add-on", shopForCheckout);
         if (data.confirmationUrl) window.location.href = data.confirmationUrl;
         return;
       }
