@@ -1183,7 +1183,10 @@
     },
     "pill": {
       "badge": "Pro + AI Trial",
-      "daysLeftCompact": "{{days}}d left"
+      "daysLeftCompact": "{{days}}d left",
+      "tooltipActive": "Pro + AI Trial active",
+      "daysLeftTooltip_one": "{{count}} day remaining",
+      "daysLeftTooltip_other": "{{count}} days remaining"
     }
   },
   "activation": {

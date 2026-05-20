@@ -117,7 +117,7 @@ export function Sidebar() {
     <TooltipProvider delayDuration={200}>
       <div
         className={cn(
-          "hidden md:flex h-full flex-col bg-gray-50 z-20 transition-all duration-200 ease-in-out flex-shrink-0",
+          "hidden md:flex h-full flex-col bg-gray-50 z-20 transition-all duration-200 ease-in-out flex-shrink-0 overflow-x-hidden",
           isRTL ? "border-is" : "border-ie",
           collapsed ? "w-16 items-center" : "w-[200px] items-stretch"
         )}
@@ -172,8 +172,13 @@ export function Sidebar() {
         </div>
 
         {/* Trial pill — desktop sidebar only; mobile uses absolute cluster in AppLayout main */}
-        <div className="hidden md:flex flex-shrink-0 flex-col px-2 pb-2">
-          <TrialSetupCluster />
+        <div
+          className={cn(
+            "hidden md:flex flex-shrink-0 overflow-hidden transition-all duration-200 ease-in-out",
+            collapsed ? "w-full justify-center px-0 pb-2" : "min-w-0 px-2 pb-2",
+          )}
+        >
+          <TrialSetupCluster sidebarCollapsed={collapsed} />
         </div>
 
         {/* ── Navigation ── */}

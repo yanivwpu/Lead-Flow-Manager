@@ -1138,7 +1138,10 @@
     },
     "pill": {
       "badge": "Pro + AI Trial",
-      "daysLeftCompact": "נותרו {{days}} ימים"
+      "daysLeftCompact": "נותרו {{days}} ימים",
+      "tooltipActive": "Pro + AI Trial פעיל",
+      "daysLeftTooltip_one": "נותר יום {{count}}",
+      "daysLeftTooltip_other": "נותרו {{count}} ימים"
     }
   },
   "activation": {
