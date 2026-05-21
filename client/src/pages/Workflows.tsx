@@ -32,6 +32,16 @@ import { cn } from "@/lib/utils";
 import { MODAL_OVERLAY_BACKDROP } from "@/lib/modalOverlay";
 import { useSubscription } from "@/lib/subscription-context";
 import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
+import {
+  CRM_WORKFLOW_ACTIONS,
+  GROWTH_ENGINE_WORKFLOW_ACTIONS,
+  getWorkflowActionDefinition,
+  getWorkflowActionSummary,
+  isGrowthEngineWorkflowRecord,
+  isPersistableWorkflowAction,
+  normalizeActionsForEditor,
+  type WorkflowActionRecord,
+} from "@/lib/workflowActionCatalog";
 
 // ─── Channel Config ───────────────────────────────────────────────────────────
 
@@ -116,6 +126,22 @@ const ACTION_CATEGORIES = [
 ];
 
 const ALL_ACTIONS = ACTION_CATEGORIES.flatMap(c => c.actions);
+
+function buildActionPickerCategories(growthEngine: boolean) {
+  if (!growthEngine) return ACTION_CATEGORIES;
+  return [
+    {
+      label: "Growth Engine",
+      actions: GROWTH_ENGINE_WORKFLOW_ACTIONS.map((a) => ({
+        value: a.value,
+        label: a.label,
+        icon: a.icon,
+        description: a.description,
+      })),
+    },
+    ...ACTION_CATEGORIES,
+  ];
+}
 
 const TAGS           = ["New", "Hot", "Quoted", "Paid", "Waiting", "Lost"];
 const STATUSES       = ["open", "pending", "resolved", "closed"];
@@ -202,7 +228,7 @@ interface Workflow {
   isActive: boolean; triggerType: string; triggerConditions: any;
   actions: any[]; executionCount: number; lastExecutedAt: string | null; createdAt: string;
 }
-interface WorkflowAction { type: string; value: string; }
+type WorkflowAction = WorkflowActionRecord;
 interface DripCampaign {
   id: string; userId: string; name: string; description: string | null;
   isActive: boolean; triggerType: string; triggerConfig: any;
@@ -357,8 +383,15 @@ function TriggerPicker({
 
 // ─── Action Popover (anchored to "Add action" button) ────────────────────────
 
-function ActionPickerPopover({ onSelect }: { onSelect: (type: string) => void }) {
+function ActionPickerPopover({
+  onSelect,
+  growthEngine,
+}: {
+  onSelect: (type: string) => void;
+  growthEngine?: boolean;
+}) {
   const [open, setOpen] = useState(false);
+  const categories = buildActionPickerCategories(!!growthEngine);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -376,7 +409,7 @@ function ActionPickerPopover({ onSelect }: { onSelect: (type: string) => void })
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Choose an action</p>
         </div>
         <div className="p-2 space-y-3">
-          {ACTION_CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <div key={cat.label}>
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 py-1">{cat.label}</p>
               {cat.actions.map((action) => {
@@ -408,14 +441,31 @@ function ActionPickerPopover({ onSelect }: { onSelect: (type: string) => void })
 // ─── Action Block Card ────────────────────────────────────────────────────────
 
 function ActionBlock({
-  action, index, total, teamMembers, onUpdate, onRemove, onMoveUp, onMoveDown,
+  action,
+  index,
+  total,
+  teamMembers,
+  messageTemplateKeys,
+  onUpdate,
+  onPatch,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
 }: {
-  action: WorkflowAction; index: number; total: number; teamMembers: any[];
+  action: WorkflowAction;
+  index: number;
+  total: number;
+  teamMembers: any[];
+  messageTemplateKeys?: string[];
   onUpdate: (field: "type" | "value", value: string) => void;
-  onRemove: () => void; onMoveUp: () => void; onMoveDown: () => void;
+  onPatch: (patch: Partial<WorkflowAction>) => void;
+  onRemove: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
 }) {
-  const def = ALL_ACTIONS.find(a => a.value === action.type);
+  const def = getWorkflowActionDefinition(action.type);
   const Icon = def?.icon || FileText;
+  const summary = getWorkflowActionSummary(action);
 
   // For "assign": value === "round_robin" means round robin, any other value is a userId (specific user)
   const assignMethod = action.type === "assign"
@@ -424,6 +474,90 @@ function ActionBlock({
 
   const renderValue = () => {
     switch (action.type) {
+      case "apply_tag":
+        return (
+          <Input
+            value={action.tag || action.value || ""}
+            onChange={(e) => onPatch({ tag: e.target.value, type: "apply_tag" })}
+            placeholder="Tag name..."
+            className="h-8 text-sm flex-1 bg-gray-50 border-gray-200"
+            data-testid={`input-action-apply-tag-${index}`}
+          />
+        );
+      case "set_pipeline_stage":
+        return (
+          <Input
+            value={action.stage || action.value || ""}
+            onChange={(e) => onPatch({ stage: e.target.value, type: "set_pipeline_stage" })}
+            placeholder="Pipeline stage..."
+            className="h-8 text-sm flex-1 bg-gray-50 border-gray-200"
+            data-testid={`input-action-pipeline-stage-${index}`}
+          />
+        );
+      case "send_message_template":
+        return messageTemplateKeys && messageTemplateKeys.length > 0 ? (
+          <Select
+            value={action.templateKey || undefined}
+            onValueChange={(v) => onPatch({ templateKey: v, type: "send_message_template" })}
+          >
+            <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200" data-testid={`select-action-template-${index}`}>
+              <SelectValue placeholder="Select template..." />
+            </SelectTrigger>
+            <SelectContent>
+              {messageTemplateKeys.map((k) => (
+                <SelectItem key={k} value={k}>{k}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Input
+            value={action.templateKey || ""}
+            onChange={(e) => onPatch({ templateKey: e.target.value, type: "send_message_template" })}
+            placeholder="Template key (e.g. intro_fast_reply)"
+            className="h-8 text-sm flex-1 bg-gray-50 border-gray-200"
+            data-testid={`input-action-template-key-${index}`}
+          />
+        );
+      case "create_task":
+        return (
+          <div className="flex-1 space-y-2">
+            <Input
+              value={action.title || ""}
+              onChange={(e) => onPatch({ title: e.target.value })}
+              placeholder="Task title..."
+              className="h-8 text-sm bg-gray-50 border-gray-200"
+              data-testid={`input-action-task-title-${index}`}
+            />
+            <Input
+              type="number"
+              min={0}
+              value={action.dueDays != null ? String(action.dueDays) : "1"}
+              onChange={(e) => onPatch({ dueDays: parseInt(e.target.value, 10) || 1 })}
+              placeholder="Due in (days)"
+              className="h-8 text-sm bg-gray-50 border-gray-200"
+              data-testid={`input-action-task-due-${index}`}
+            />
+          </div>
+        );
+      case "detect_language":
+      case "create_or_update_lead":
+        return <p className="text-sm text-gray-600 flex-1">{summary}</p>;
+      case "update_lead_fields":
+        return (
+          <Input
+            value={Array.isArray(action.fields) ? action.fields.join(", ") : ""}
+            onChange={(e) =>
+              onPatch({
+                fields: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+              })
+            }
+            placeholder="field keys, comma-separated"
+            className="h-8 text-sm flex-1 bg-gray-50 border-gray-200"
+            data-testid={`input-action-lead-fields-${index}`}
+          />
+        );
+      case "run_lead_scoring":
+        return <p className="text-sm text-gray-600 flex-1">Runs on inbound messages when AI Brain is enabled</p>;
       case "assign":
         return (
           <div className="flex-1 space-y-2">
@@ -561,12 +695,18 @@ function ActionBlock({
               <Label className="text-xs text-gray-500">Assignment method</Label>
               {renderValue()}
             </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <Label className="text-xs text-gray-500 w-12 shrink-0">Value</Label>
-              {renderValue()}
-            </div>
-          )}
+          ) : (() => {
+            const valueUi = renderValue();
+            if (!valueUi) return <p className="text-sm text-gray-500">{summary}</p>;
+            return (
+              <div className="flex items-center gap-3">
+                <Label className="text-xs text-gray-500 w-12 shrink-0">
+                  {action.type === "send_message_template" ? "Template" : "Value"}
+                </Label>
+                {valueUi}
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>
@@ -803,19 +943,13 @@ function WorkflowSummary({
 }) {
   const normalized = normalizeTriggerType(triggerType);
   const def = ALL_TRIGGERS.find(t => t.value === normalized);
-  const validActions = actions.filter(a => a.value);
+  const validActions = actions.filter(isPersistableWorkflowAction);
   if (!def || validActions.length === 0) return null;
 
-  const phrases = validActions.map(a => {
-    switch (a.type) {
-      case "assign": return a.value === "round_robin" ? "assign via round robin" : `assign to team member`;
-      case "tag": return `add tag "${a.value}"`;
-      case "set_status": return `set status to "${a.value}"`;
-      case "set_pipeline": return `move to "${a.value}" stage`;
-      case "add_note": return "add a note";
-      case "set_followup": return `schedule ${a.value}-day follow-up`;
-      default: return "";
-    }
+  const phrases = validActions.map((a) => {
+    const label = getWorkflowActionDefinition(a.type)?.label || a.type;
+    const detail = getWorkflowActionSummary(a);
+    return `${label.toLowerCase()} (${detail})`;
   }).filter(Boolean);
 
   let triggerPhrase = def.label.toLowerCase();
@@ -967,6 +1101,16 @@ export function Workflows() {
   });
   const { data: chats = [] } = useQuery<any[]>({ queryKey: ["/api/chats"], retry: false });
   const { data: teamMembers = [] } = useQuery<any[]>({ queryKey: ["/api/team/members"], retry: false });
+  const editingGrowthEngine = editingWorkflow ? isGrowthEngineWorkflowRecord(editingWorkflow) : false;
+  const { data: rgeTemplatePayload } = useQuery<{ assets?: Array<{ assetType: string; definition?: { templates?: Array<{ key: string }> } }> }>({
+    queryKey: ["/api/templates/realtor-growth-engine"],
+    enabled: editingGrowthEngine && view === "wf-builder",
+    retry: false,
+  });
+  const rgeMessageTemplateKeys =
+    rgeTemplatePayload?.assets
+      ?.find((a) => a.assetType === "message_templates")
+      ?.definition?.templates?.map((t) => t.key) ?? [];
 
   // ─── Mutations ────────────────────────────────────────────────────────────
 
@@ -1053,14 +1197,22 @@ export function Workflows() {
     setTriggerKeywords(tc.keywords?.join(", ") || "");
     setTriggerTag(tc.tag || "any");
     setTriggerToStage(tc.stage || "any");
-    setTriggerDuration(tc.durationHours ? String(tc.durationHours) : tc.durationMinutes ? String(Math.round(tc.durationMinutes / 60)) : "24");
+    setTriggerDuration(
+      tc.delayHours != null
+        ? String(tc.delayHours)
+        : tc.durationHours
+          ? String(tc.durationHours)
+          : tc.durationMinutes
+            ? String(Math.round(tc.durationMinutes / 60))
+            : "24",
+    );
     // Restore saved conditions (new format) + backward-compat: lift channel from triggerConditions
     const savedConds: WorkflowCondition[] = tc.conditions || [];
     if (savedConds.length === 0 && tc.channel && tc.channel !== "any") {
       savedConds.push({ id: crypto.randomUUID(), type: "channel", value: tc.channel });
     }
     setConditions(savedConds);
-    setActions(wf.actions as WorkflowAction[] || [{ type: "assign", value: "round_robin" }]);
+    setActions(normalizeActionsForEditor(wf.actions));
     setActiveTab("workflows");
     setView("wf-builder");
   };
@@ -1086,13 +1238,25 @@ export function Workflows() {
   const buildTriggerConditions = () => {
     const cond: any = {};
     const normalized = normalizeTriggerType(triggerType);
-    if (normalized === "keyword" && triggerKeywords.trim()) cond.keywords = triggerKeywords.split(",").map(k => k.trim()).filter(Boolean);
+    if (normalized === "keyword" && triggerKeywords.trim()) {
+      cond.keywords = triggerKeywords.split(",").map((k) => k.trim()).filter(Boolean);
+    }
     if ((normalized === "tag_added" || normalized === "tag_removed") && triggerTag !== "any") cond.tag = triggerTag;
     if (normalized === "pipeline_change" && triggerToStage !== "any") cond.stage = triggerToStage;
-    if (normalized === "no_reply" && triggerDuration) { cond.durationHours = parseInt(triggerDuration); cond.durationMinutes = parseInt(triggerDuration) * 60; }
-    // Persist the conditions array (channel, tag, keyword, stage filters)
-    const validConditions = conditions.filter(c => c.value.trim());
+    if (normalized === "no_reply" && triggerDuration) {
+      const hours = parseInt(triggerDuration, 10);
+      cond.durationHours = hours;
+      cond.durationMinutes = hours * 60;
+      cond.delayHours = hours;
+    }
+    const validConditions = conditions.filter((c) => c.value.trim());
     if (validConditions.length > 0) cond.conditions = validConditions;
+    if (editingWorkflow && isGrowthEngineWorkflowRecord(editingWorkflow)) {
+      const tc = (editingWorkflow.triggerConditions || {}) as Record<string, unknown>;
+      if (tc.templateId) cond.templateId = tc.templateId;
+      if (tc.templateKey) cond.templateKey = tc.templateKey;
+      if (Array.isArray(tc.rgeConditions)) cond.rgeConditions = tc.rgeConditions;
+    }
     return cond;
   };
 
@@ -1103,7 +1267,13 @@ export function Workflows() {
 
   const handleWfSubmit = () => {
     if (!name.trim()) { toast({ title: "Please enter a workflow name", variant: "destructive" }); return; }
-    const data = { name, description: description || null, triggerType: serializeTriggerType(), triggerConditions: buildTriggerConditions(), actions: actions.filter(a => a.value) };
+    const data = {
+      name,
+      description: description || null,
+      triggerType: serializeTriggerType(),
+      triggerConditions: buildTriggerConditions(),
+      actions: actions.filter(isPersistableWorkflowAction),
+    };
     if (editingWorkflow) updateWorkflowMutation.mutate({ id: editingWorkflow.id, ...data });
     else createWorkflowMutation.mutate(data);
   };
@@ -1126,9 +1296,42 @@ export function Workflows() {
 
   // ─── Action helpers ───────────────────────────────────────────────────────
 
-  const addAction = (type: string) => setActions([...actions, { type, value: type === "assign" ? "round_robin" : "" }]);
+  const defaultActionForType = (type: string): WorkflowAction => {
+    switch (type) {
+      case "assign":
+        return { type: "assign", value: "round_robin" };
+      case "apply_tag":
+        return { type: "apply_tag", tag: "New" };
+      case "set_pipeline_stage":
+        return { type: "set_pipeline_stage", stage: "New Lead" };
+      case "send_message_template":
+        return { type: "send_message_template", templateKey: "intro_fast_reply" };
+      case "create_task":
+        return { type: "create_task", title: "Follow up", dueDays: 1 };
+      case "detect_language":
+        return { type: "detect_language" };
+      case "create_or_update_lead":
+        return { type: "create_or_update_lead" };
+      case "update_lead_fields":
+        return { type: "update_lead_fields", fields: ["languageDetected"] };
+      case "run_lead_scoring":
+        return { type: "run_lead_scoring" };
+      default:
+        return { type, value: "" };
+    }
+  };
+
+  const addAction = (type: string) => setActions([...actions, defaultActionForType(type)]);
+  const patchAction = (i: number, patch: Partial<WorkflowAction>) => {
+    const a = [...actions];
+    a[i] = { ...a[i], ...patch };
+    setActions(a);
+  };
   const updateAction = (i: number, field: "type" | "value", value: string) => {
-    const a = [...actions]; a[i] = { ...a[i], [field]: value }; if (field === "type") a[i].value = ""; setActions(a);
+    const a = [...actions];
+    a[i] = { ...a[i], [field]: value };
+    if (field === "type") Object.assign(a[i], defaultActionForType(value));
+    setActions(a);
   };
   const removeAction = (i: number) => setActions(actions.filter((_, j) => j !== i));
   const moveAction = (from: number, to: number) => {
@@ -1409,6 +1612,12 @@ export function Workflows() {
               </div>
 
               <div>
+                {editingGrowthEngine && (
+                  <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 mb-3">
+                    Growth Engine workflow — actions use template keys, tags, and pipeline stages from your RGE install.
+                    W2 qualification runs in the message engine (not listed here).
+                  </p>
+                )}
                 {actions.map((action, i) => (
                   <ActionBlock
                     key={i}
@@ -1416,7 +1625,9 @@ export function Workflows() {
                     index={i}
                     total={actions.length}
                     teamMembers={teamMembers}
+                    messageTemplateKeys={editingGrowthEngine ? rgeMessageTemplateKeys : undefined}
                     onUpdate={(field, value) => updateAction(i, field, value)}
+                    onPatch={(patch) => patchAction(i, patch)}
                     onRemove={() => removeAction(i)}
                     onMoveUp={() => moveAction(i, i - 1)}
                     onMoveDown={() => moveAction(i, i + 1)}
@@ -1424,7 +1635,7 @@ export function Workflows() {
                 ))}
 
                 {/* Add action — Popover anchored here */}
-                <ActionPickerPopover onSelect={addAction} />
+                <ActionPickerPopover onSelect={addAction} growthEngine={editingGrowthEngine} />
               </div>
             </div>
 
@@ -1709,14 +1920,14 @@ export function Workflows() {
                         <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-1.5">
                           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Actions</p>
                           {(wf.actions as WorkflowAction[])?.map((action, i) => {
-                            const def = ALL_ACTIONS.find(a => a.value === action.type);
+                            const def = getWorkflowActionDefinition(action.type);
                             const Icon = def?.icon || FileText;
                             return (
                               <div key={i} className="flex items-center gap-2 text-sm">
                                 <Icon className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                                <span className="text-gray-700">{def?.label}</span>
+                                <span className="text-gray-700">{def?.label || action.type}</span>
                                 <ArrowRight className="h-3 w-3 text-gray-300" />
-                                <span className="text-gray-500 capitalize">{action.value}</span>
+                                <span className="text-gray-500">{getWorkflowActionSummary(action)}</span>
                               </div>
                             );
                           })}

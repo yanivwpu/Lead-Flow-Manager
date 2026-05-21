@@ -10,6 +10,7 @@ import {
   finalizeEmbeddedSignupWabaSelection,
   getWhatsappMetaRedirectUri,
   logWhatsappEmbeddedSignupStartupWarnings,
+  logWhatsappEmbeddedSignupClientDiagnostics,
   applyMetaTokenExpiryAttention,
   getWhatsappConnectionDebug,
   verifyWhatsappEmbeddedSignupMigration,
@@ -44,6 +45,23 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       res.json(cfg);
     } catch (e: any) {
       res.status(500).json({ error: "Failed to load Meta configuration" });
+    }
+  });
+
+  const signupDiagnosticsBody = z.record(z.unknown());
+
+  app.post("/api/integrations/whatsapp/meta/signup-diagnostics", async (req: Request, res: Response) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const parsed = signupDiagnosticsBody.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid body" });
+      }
+      const user = await storage.getUserForSession(req.user.id);
+      logWhatsappEmbeddedSignupClientDiagnostics(req.user.id, user?.email, parsed.data);
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: "Failed to record diagnostics" });
     }
   });
 

@@ -112,6 +112,10 @@ export function getWhatsappMetaRedirectUri(): string {
 }
 
 export interface WhatsappMetaPublicConfig {
+  /** Always META_APP_ID — never INSTAGRAM_APP_ID. */
+  appIdSource: "META_APP_ID";
+  /** True when META_APP_ID equals INSTAGRAM_APP_ID (misconfiguration). */
+  appIdMatchesInstagramAppId: boolean;
   embeddedSignupEnabled: boolean;
   /**
    * True when coexistence onboarding can start: Embedded Signup is enabled and
@@ -140,11 +144,24 @@ export function logWhatsappEmbeddedSignupStartupWarnings(): void {
     process.env.WHATSAPP_COEXISTENCE_ENABLED === "1" ||
     process.env.WHATSAPP_COOEXISTENCE_ENABLED === "true" ||
     process.env.WHATSAPP_COOEXISTENCE_ENABLED === "1";
+  const metaAppId = process.env.META_APP_ID?.trim() || "";
+  const igAppId = process.env.INSTAGRAM_APP_ID?.trim() || "";
+  if (metaAppId && igAppId && metaAppId === igAppId) {
+    console.error(
+      "[WhatsApp Embedded Signup] META_APP_ID equals INSTAGRAM_APP_ID — Embedded Signup must use the WhatsApp/Meta app id, not the Instagram API app. Real users will see “Feature unavailable” until fixed."
+    );
+  }
+  if (process.env.META_CONFIG_ID?.trim() && !process.env.META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID?.trim()) {
+    console.warn(
+      "[WhatsApp Embedded Signup] META_CONFIG_ID is set but META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID is unset — Embedded Signup uses META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID only."
+    );
+  }
   if (embedded) {
     const missing: string[] = [];
     if (!process.env.META_APP_ID) missing.push("META_APP_ID");
     if (!process.env.META_APP_SECRET) missing.push("META_APP_SECRET");
     if (!process.env.META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID) missing.push("META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID");
+    if (!process.env.META_WHATSAPP_REDIRECT_URI?.trim()) missing.push("META_WHATSAPP_REDIRECT_URI");
     if (missing.length) {
       console.warn(
         `[WhatsApp Embedded Signup] WHATSAPP_EMBEDDED_SIGNUP_ENABLED is on but missing: ${missing.join(", ")} — Meta onboarding buttons will stay disabled until configured.`
@@ -187,8 +204,12 @@ export function getWhatsappMetaPublicConfig(): WhatsappMetaPublicConfig {
   const coexistenceEnabled = embeddedSignupEnabled && !!coexistenceConfigOnly;
 
   const graphRaw = process.env.META_GRAPH_API_VERSION || "v21.0";
+  const metaAppId = process.env.META_APP_ID?.trim() || null;
+  const igAppId = process.env.INSTAGRAM_APP_ID?.trim() || null;
 
   return {
+    appIdSource: "META_APP_ID",
+    appIdMatchesInstagramAppId: !!(metaAppId && igAppId && metaAppId === igAppId),
     embeddedSignupEnabled,
     coexistenceEnabled,
     coexistenceFeatureFlagSet: coexistenceFlag,
@@ -311,6 +332,25 @@ export async function startEmbeddedSignupSession(
   const appId = process.env.META_APP_ID!;
   const graphRaw = process.env.META_GRAPH_API_VERSION || "v21.0";
   const graphApiVersion = graphRaw.startsWith("v") ? graphRaw : `v${graphRaw}`;
+  const igAppId = process.env.INSTAGRAM_APP_ID?.trim() || "";
+
+  console.log("[WhatsApp Embedded Signup] session_start", {
+    userId,
+    flow,
+    appIdSource: "META_APP_ID",
+    appIdTail: appId.slice(-6),
+    configIdTail: configId.slice(-8),
+    graphApiVersion,
+    redirectUriHost: (() => {
+      try {
+        return new URL(redirectUri).host;
+      } catch {
+        return "(invalid_redirect_uri)";
+      }
+    })(),
+    appIdMatchesInstagramAppId: !!(igAppId && igAppId === appId),
+    embeddedSignupEnabled: cfg.embeddedSignupEnabled,
+  });
 
   const authUrl = buildEmbeddedSignupAuthUrl(stateToken, flow);
   return {
@@ -2164,4 +2204,22 @@ export async function finalizeEmbeddedSignupWabaSelection(params: {
 
   await db.delete(whatsappOauthStates).where(eq(whatsappOauthStates.stateToken, state));
   return { success: true };
+}
+
+/** Client-reported diagnostics (no secrets) — for production Meta login failures. */
+export function logWhatsappEmbeddedSignupClientDiagnostics(
+  userId: string,
+  userEmail: string | null | undefined,
+  payload: Record<string, unknown>,
+): void {
+  const safe: Record<string, unknown> = { ...payload };
+  delete safe.code;
+  delete safe.access_token;
+  delete safe.authResponse;
+  console.log("[WhatsApp Embedded Signup] client_diagnostics", {
+    userId,
+    userEmail: userEmail || null,
+    at: new Date().toISOString(),
+    ...safe,
+  });
 }

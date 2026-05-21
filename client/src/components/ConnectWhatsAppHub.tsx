@@ -25,10 +25,20 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import {
+  META_EMBEDDED_SIGNUP_BLOCKED_MESSAGE,
+  buildEmbeddedSignupPreLoginDiagnostics,
+  inferMetaLoginFailureMessage,
+  isMetaEmbeddedSignupBlockedError,
+  postWhatsappEmbeddedSignupDiagnostics,
+  redactFbLoginResponse,
+} from "@/lib/whatsappEmbeddedSignupDiagnostics";
 
 const META_TEST_NUMBER_HELP = "Connected to Meta test number. Ready for testing.";
 
 interface MetaConfigResponse {
+  appIdSource?: "META_APP_ID";
+  appIdMatchesInstagramAppId?: boolean;
   embeddedSignupEnabled: boolean;
   coexistenceEnabled: boolean;
   coexistenceFeatureFlagSet?: boolean;
@@ -40,6 +50,14 @@ interface MetaConfigResponse {
   coexistenceConfigId: string | null;
   missingEnvHints: string[];
 }
+
+const WCS_WHATSAPP_FB_SDK = "__wcsWhatsappFbSdkState";
+
+type WhatsappFbSdkState = {
+  promise?: Promise<void>;
+  appId?: string;
+  version?: string;
+};
 
 type WabaChoice = {
   wabaId: string;
@@ -246,41 +264,89 @@ export function ConnectWhatsAppHub({
   const metaActive = status?.activeProvider === "meta" && meta?.connected;
   const supportMode = authedUser?.role === "owner" || authedUser?.role === "admin";
 
+  function getWhatsappFbSdkState(w: Window & typeof globalThis & Record<string, unknown>): WhatsappFbSdkState {
+    if (!w[WCS_WHATSAPP_FB_SDK]) w[WCS_WHATSAPP_FB_SDK] = {};
+    return w[WCS_WHATSAPP_FB_SDK] as WhatsappFbSdkState;
+  }
+
   async function loadFacebookSdk(appId: string, version: string): Promise<void> {
-    const w = window as any;
-    if (w.FB && typeof w.FB.init === "function") {
+    const w = window as Window & typeof globalThis & Record<string, unknown>;
+    const state = getWhatsappFbSdkState(w);
+
+    const initSdk = () => {
+      const FB = w.FB as { init: (opts: Record<string, unknown>) => void } | undefined;
+      if (!FB?.init) throw new Error("Facebook SDK loaded but FB.init is missing");
+      FB.init({ appId, cookie: true, autoLogAppEvents: true, xfbml: true, version });
+      state.appId = appId;
+      state.version = version;
+    };
+
+    if (w.FB && state.appId && state.appId !== appId) {
+      console.warn("[WhatsApp Embedded Signup] Re-initializing Facebook SDK (appId changed)", {
+        priorAppIdTail: state.appId.slice(-6),
+        nextAppIdTail: appId.slice(-6),
+      });
+      delete w.FB;
+      delete w.fbAsyncInit;
+      const stale = document.getElementById("facebook-jssdk");
+      if (stale) stale.remove();
+      state.promise = undefined;
+    }
+
+    if (w.FB && state.appId === appId && state.version === version) {
       try {
-        w.FB.init({ appId, autoLogAppEvents: true, xfbml: true, version });
+        initSdk();
       } catch {
-        // ignore re-init errors
+        /* ignore re-init */
       }
       return;
     }
-    if (w.__fbSdkPromise) return w.__fbSdkPromise as Promise<void>;
-    w.__fbSdkPromise = new Promise<void>((resolve, reject) => {
-      w.fbAsyncInit = function () {
-        try {
-          w.FB.init({ appId, autoLogAppEvents: true, xfbml: true, version });
-          resolve();
-        } catch (e) {
-          reject(e);
+
+    if (!state.promise) {
+      state.promise = new Promise<void>((resolve, reject) => {
+        w.fbAsyncInit = function () {
+          try {
+            initSdk();
+            resolve();
+          } catch (e) {
+            reject(e);
+          }
+        };
+        const existing = document.getElementById("facebook-jssdk");
+        if (!existing) {
+          const s = document.createElement("script");
+          s.id = "facebook-jssdk";
+          s.async = true;
+          s.defer = true;
+          s.crossOrigin = "anonymous";
+          s.src = "https://connect.facebook.net/en_US/sdk.js";
+          s.onerror = () => reject(new Error("Failed to load Facebook SDK"));
+          document.body.appendChild(s);
+        } else if (w.FB) {
+          try {
+            w.fbAsyncInit?.();
+          } catch (e) {
+            reject(e);
+          }
         }
-      };
-      const existing = document.getElementById("facebook-jssdk");
-      if (existing) return;
-      const s = document.createElement("script");
-      s.id = "facebook-jssdk";
-      s.async = true;
-      s.defer = true;
-      s.crossOrigin = "anonymous";
-      s.src = "https://connect.facebook.net/en_US/sdk.js";
-      s.onerror = () => reject(new Error("Failed to load Facebook SDK"));
-      document.body.appendChild(s);
-    });
-    return w.__fbSdkPromise as Promise<void>;
+      });
+    }
+
+    await state.promise;
+    if (!w.FB) throw new Error("Facebook SDK did not initialize");
   }
 
   async function startEmbeddedSignupViaSdk(): Promise<void> {
+    const priorSdkAppId =
+      (window as Window & typeof globalThis & Record<string, unknown>)[WCS_WHATSAPP_FB_SDK] as
+        | WhatsappFbSdkState
+        | undefined;
+    let session: {
+      state: string;
+      redirectUri: string;
+      sdk: { appId: string; graphApiVersion: string; configId: string };
+    } | null = null;
+
     try {
       setHubBanner(null);
       const start = await fetch("/api/integrations/whatsapp/meta/start", {
@@ -292,28 +358,75 @@ export function ConnectWhatsAppHub({
       const startJson = await start.json().catch(() => ({}));
       if (!start.ok) throw new Error(startJson?.error || "Could not start Meta signup");
 
-      const session = startJson as {
-        state: string;
-        redirectUri: string;
-        sdk: { appId: string; graphApiVersion: string; configId: string };
-      };
+      session = startJson as typeof session;
+      const { appId, graphApiVersion, configId } = session!.sdk;
+      const appIdMissing = !appId?.trim();
+      const configIdMissing = !configId?.trim();
 
-      await loadFacebookSdk(session.sdk.appId, session.sdk.graphApiVersion);
-      const w = window as any;
+      await loadFacebookSdk(appId, graphApiVersion);
+      const w = window as Window & typeof globalThis & Record<string, unknown>;
+      const sdkLoaded = !!(w.FB && typeof (w.FB as { login?: unknown }).login === "function");
+
+      const preLoginDiag = buildEmbeddedSignupPreLoginDiagnostics({
+        phase: "pre_fb_login",
+        loginMethod: "embedded_signup",
+        appId,
+        configId,
+        graphVersion: graphApiVersion,
+        userId: authedUser?.id ?? null,
+        userEmail: authedUser?.email ?? null,
+        sdkLoaded,
+        sdkPriorAppId: priorSdkAppId?.appId ?? null,
+        cfgAppId: cfg?.appId ?? null,
+        cfgEmbeddedConfigId: cfg?.embeddedSignupConfigId ?? null,
+        appIdMissing,
+        configIdMissing,
+        appIdMatchesInstagramAppId: cfg?.appIdMatchesInstagramAppId,
+        embeddedSignupEnabled: cfg?.embeddedSignupEnabled,
+      });
+      console.log("[WhatsApp Embedded Signup] pre_fb_login", preLoginDiag);
+      void postWhatsappEmbeddedSignupDiagnostics(preLoginDiag);
+
+      if (appIdMissing || configIdMissing) {
+        throw new Error(
+          "WhatsApp signup is not configured on the server (missing Meta app id or Embedded Signup config). Please contact support.",
+        );
+      }
+
+      if (cfg?.appIdMatchesInstagramAppId) {
+        console.error(
+          "[WhatsApp Embedded Signup] Server reports META_APP_ID matches INSTAGRAM_APP_ID — misconfiguration",
+        );
+      }
 
       await new Promise<void>((resolve, reject) => {
-        const loginCb = async (response: any) => {
+        const loginCb = async (response: unknown) => {
           try {
-            const code = response?.authResponse?.code as string | undefined;
+            const code = (response as { authResponse?: { code?: string } })?.authResponse?.code;
             if (!code) {
+              const metaMsg = inferMetaLoginFailureMessage(response);
+              const loginDiag = {
+                ...preLoginDiag,
+                phase: "fb_login_callback_no_code",
+                fbResponse: redactFbLoginResponse(response),
+                metaMessage: metaMsg,
+              };
+              console.warn("[WhatsApp Embedded Signup] fb_login_no_code", loginDiag);
+              void postWhatsappEmbeddedSignupDiagnostics(loginDiag);
+
+              if (metaMsg && isMetaEmbeddedSignupBlockedError(metaMsg)) {
+                reject(new Error(META_EMBEDDED_SIGNUP_BLOCKED_MESSAGE));
+                return;
+              }
               reject(new Error(META_CANCELLED_MESSAGE));
               return;
             }
+
             const r = await fetch("/api/integrations/whatsapp/meta/complete-sdk", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               credentials: "include",
-              body: JSON.stringify({ code, state: session.state }),
+              body: JSON.stringify({ code, state: session!.state }),
             });
             const j = await r.json().catch(() => ({}));
             if (!r.ok) throw new Error(j?.error || "Could not complete Meta signup");
@@ -324,31 +437,57 @@ export function ConnectWhatsAppHub({
             await queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
             await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
             resolve();
-          } catch (e: any) {
+          } catch (e: unknown) {
             reject(e);
           }
         };
 
         try {
-          w.FB.login(loginCb, {
-            config_id: session.sdk.configId,
-            response_type: "code",
-            override_default_response_type: true,
-            // Scopes are required for Graph access to WABA + phone assets.
-            scope: "whatsapp_business_management,whatsapp_business_messaging,business_management",
-            extras: {
-              setup: {},
-              feature: "whatsapp_embedded_signup",
-              sessionInfoVersion: "2",
+          (w.FB as { login: (cb: (r: unknown) => void, opts: Record<string, unknown>) => void }).login(
+            loginCb,
+            {
+              config_id: configId,
+              response_type: "code",
+              override_default_response_type: true,
+              scope: "whatsapp_business_management,whatsapp_business_messaging,business_management",
+              extras: {
+                setup: {},
+                feature: "whatsapp_embedded_signup",
+                sessionInfoVersion: "2",
+              },
             },
-          });
+          );
         } catch (e) {
           reject(e);
         }
       });
-    } catch (e: any) {
-      // Fallback: redirect-based flow (kept for environments where SDK is blocked).
-      console.warn("[WhatsApp Embedded Signup] SDK flow failed; falling back to redirect.", e?.message || e);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const blocked = isMetaEmbeddedSignupBlockedError(msg) || msg === META_EMBEDDED_SIGNUP_BLOCKED_MESSAGE;
+      void postWhatsappEmbeddedSignupDiagnostics({
+        phase: "embedded_signup_failed",
+        loginMethod: "embedded_signup",
+        error: msg,
+        blocked,
+        userId: authedUser?.id ?? null,
+        userEmail: authedUser?.email ?? null,
+        url: typeof window !== "undefined" ? window.location.href : null,
+        sdkAppId: session?.sdk?.appId ?? null,
+        sdkConfigId: session?.sdk?.configId ?? null,
+      });
+
+      if (blocked) {
+        setHubBanner({ variant: "error", message: META_EMBEDDED_SIGNUP_BLOCKED_MESSAGE });
+        return;
+      }
+
+      if (msg === META_CANCELLED_MESSAGE) {
+        setHubBanner({ variant: "neutral", message: META_CANCELLED_MESSAGE });
+        return;
+      }
+
+      setHubBanner({ variant: "error", message: msg || "Could not start Meta signup" });
+      console.warn("[WhatsApp Embedded Signup] SDK flow failed; falling back to redirect.", msg);
       window.location.href = "/api/integrations/whatsapp/meta/start-redirect?flow=embedded";
     }
   }
