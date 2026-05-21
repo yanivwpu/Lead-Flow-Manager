@@ -7,12 +7,13 @@ import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ShopifyBootstrapScreen } from "@/components/ShopifyBootstrapScreen";
-import { ShopifyBootstrapFade } from "@/components/ShopifyBootstrapFade";
+import { ShopifyBootstrapRoutes } from "@/components/ShopifyBootstrapRoutes";
 import {
   applyShopifyBootstrapDocumentFlags,
-  getShopifyBootstrapContext,
-  pathMatches,
+  isShopifyBootstrapDestinationReached,
+  readShopifyBootstrapFromWindow,
   resolveShopifyBootstrapDestination,
+  shouldSuppressAppRoutes,
 } from "@/lib/shopifyBootstrap";
 
 const AuthPage = lazy(() => import("@/pages/Auth").then(m => ({ default: m.AuthPage })));
@@ -56,6 +57,12 @@ import { Welcome } from "@/pages/Welcome";
 // Wrapper for protected routes
 function ProtectedRoute({ component: Component, ...rest }: any) {
   const { user, isLoading } = useAuth();
+  const bootstrap = readShopifyBootstrapFromWindow();
+
+  if (shouldSuppressAppRoutes(bootstrap)) {
+    console.log("[ShopifyBootstrap] suppressing_app_routes");
+    return <ShopifyBootstrapScreen />;
+  }
 
   if (isLoading) {
     return (
@@ -70,15 +77,6 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
   }
 
   return <Component {...rest} />;
-}
-
-function useShopifyBootstrap() {
-  const [location] = useLocation();
-  const search = typeof window !== "undefined" ? window.location.search : "";
-  return useMemo(
-    () => getShopifyBootstrapContext(location, search),
-    [location, search],
-  );
 }
 
 function MarketingRoutes() {
@@ -143,8 +141,13 @@ function MarketingRoutes() {
 function Router() {
   const [location, setLocation] = useLocation();
   const { user, isLoading: authLoading } = useAuth();
-  const bootstrap = useShopifyBootstrap();
-  const [bootstrapReady, setBootstrapReady] = useState(false);
+  const [urlTick, setUrlTick] = useState(0);
+
+  const bootstrap = useMemo(() => readShopifyBootstrapFromWindow(), [location, urlTick]);
+
+  useLayoutEffect(() => {
+    setUrlTick((n) => n + 1);
+  }, [location]);
 
   useLayoutEffect(() => {
     if (typeof document === "undefined") return;
@@ -165,46 +168,58 @@ function Router() {
     );
   }, [bootstrap.active, bootstrap.needsInstallRedirect, bootstrap.shop]);
 
-  useEffect(() => {
-    if (!bootstrap.active || authLoading) {
-      setBootstrapReady(false);
-      return;
+  const destination = useMemo(
+    () => resolveShopifyBootstrapDestination(bootstrap, !!user),
+    [bootstrap, user],
+  );
+
+  const destinationReached = useMemo(
+    () => isShopifyBootstrapDestinationReached(bootstrap, !!user),
+    [bootstrap, urlTick, location, user],
+  );
+
+  useLayoutEffect(() => {
+    if (!bootstrap.active || authLoading || bootstrap.needsInstallRedirect) return;
+
+    if (shouldSuppressAppRoutes(bootstrap)) {
+      console.log("[ShopifyBootstrap] suppressing_app_routes");
     }
 
-    const destination = resolveShopifyBootstrapDestination(bootstrap, !!user);
-    if (!pathMatches(location, destination)) {
-      setBootstrapReady(false);
+    if (!destinationReached) {
+      console.log("[ShopifyBootstrap] redirecting_to_pricing", {
+        from: `${window.location.pathname}${window.location.search}`,
+        to: destination,
+      });
       setLocation(destination);
-      return;
     }
-
-    setBootstrapReady(true);
   }, [
     authLoading,
     bootstrap,
-    location,
+    bootstrap.needsInstallRedirect,
+    destination,
+    destinationReached,
     setLocation,
-    user,
   ]);
 
   useLayoutEffect(() => {
     if (!bootstrap.active) return;
-    if (!authLoading && bootstrapReady && !bootstrap.needsInstallRedirect) {
+    if (!authLoading && destinationReached && !bootstrap.needsInstallRedirect) {
       document.documentElement.classList.remove("wcs-shopify-bootstrap");
     } else {
       document.documentElement.classList.add("wcs-shopify-bootstrap");
     }
-  }, [authLoading, bootstrap.active, bootstrap.needsInstallRedirect, bootstrapReady]);
+  }, [authLoading, bootstrap.active, bootstrap.needsInstallRedirect, destinationReached]);
 
   if (bootstrap.active) {
-    if (authLoading || bootstrap.needsInstallRedirect || !bootstrapReady) {
+    if (authLoading || bootstrap.needsInstallRedirect || !destinationReached) {
       return <ShopifyBootstrapScreen />;
     }
 
     return (
-      <ShopifyBootstrapFade>
-        <MarketingRoutes />
-      </ShopifyBootstrapFade>
+      <ShopifyBootstrapRoutes
+        destination={destination}
+        postInstallFlow={bootstrap.postInstallFlow}
+      />
     );
   }
 

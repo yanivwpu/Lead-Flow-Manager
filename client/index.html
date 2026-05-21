@@ -236,6 +236,17 @@
             (p === "/" && shopOk);
           if (shopifyBootstrap) {
             document.documentElement.classList.add("wcs-hide-static-marketing", "wcs-shopify-bootstrap");
+            if (shopifyInstalled && shopOk) {
+              try {
+                var pricingQs = new URLSearchParams();
+                pricingQs.set("shop", shop);
+                pricingQs.set("shopify_installed", "1");
+                var td = params.get("trial_days");
+                if (td) pricingQs.set("trial_days", td);
+                if (embedded) pricingQs.set("embedded", "1");
+                sessionStorage.setItem("whachatcrm_shopify_post_install_pricing", "/pricing?" + pricingQs.toString());
+              } catch (e) {}
+            }
           } else if (p !== "/") {
             document.documentElement.classList.add("wcs-hide-static-marketing");
           }
