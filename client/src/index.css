@@ -245,27 +245,71 @@ html {
   opacity: 0;
 }
 
-/* Landing hero image — fixed aspect ratio prevents CLS on nav/auth transition */
+/*
+ * Hero mock image — shared by index.html static shell + React Welcome.
+ * Keep rules in sync with client/index.html critical CSS.
+ */
+.wcs-hero-image-column,
+#whachat-static-shell .wcs-order-img {
+  order: 2;
+  width: 100%;
+  flex-shrink: 0;
+  position: relative;
+}
+
+@media (min-width: 768px) {
+  .wcs-hero-image-column,
+  #whachat-static-shell .wcs-order-img {
+    margin-top: 40px;
+  }
+}
+
 .wcs-hero-image-slot {
+  box-sizing: border-box;
+  display: block;
   width: 100%;
   max-width: 350px;
+  min-width: 0;
+  min-height: calc(350px * 871 / 560);
   margin-left: auto;
   margin-right: auto;
   aspect-ratio: 560 / 871;
-  contain: layout style;
+  contain: layout style size;
+  overflow: hidden;
 }
 
 @media (min-width: 1024px) {
   .wcs-hero-image-slot {
     max-width: 380px;
+    min-height: calc(380px * 871 / 560);
   }
 }
 
-.wcs-hero-image-slot img {
+.wcs-hero-image-slot img,
+img.wcs-hero-image {
   display: block;
   width: 100%;
   height: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
   object-fit: contain;
+  object-position: center;
+  transform: none;
+  transition: none;
+  animation: none;
+}
+
+.wcs-hero-image-frozen,
+.wcs-hero-image-frozen img,
+html.wcs-marketing-navigating .wcs-hero-image-slot,
+html.wcs-marketing-navigating .wcs-hero-image-slot img,
+html.wcs-marketing-navigating .wcs-hero-image-column,
+html.wcs-marketing-navigating #whachat-static-shell .wcs-order-img {
+  transition: none !important;
+  transform: none !important;
+  animation: none !important;
 }
 
 /* Homepage → any route: keep static hero frozen; load destination in #root underneath */
@@ -284,9 +328,25 @@ html.wcs-marketing-navigating.wcs-hide-static-marketing #whachat-static-shell {
   pointer-events: none;
 }
 
+html.wcs-marketing-navigating #whachat-static-shell .wcs-hero-grid,
+html.wcs-marketing-navigating #whachat-static-shell .wcs-hero,
+html.wcs-marketing-navigating #whachat-static-shell .wcs-order-img,
+html.wcs-marketing-navigating #whachat-static-shell .wcs-order-txt {
+  transition: none !important;
+  transform: none !important;
+}
+
 html.wcs-marketing-navigating #root {
   opacity: 0;
   pointer-events: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 0;
+  min-height: 0;
+  overflow: hidden;
+  visibility: hidden;
 }
 
 html.wcs-marketing-navigating .animate-hero-text,

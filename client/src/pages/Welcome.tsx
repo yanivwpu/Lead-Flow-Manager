@@ -28,27 +28,21 @@ function BelowFoldFallback({ className }: { className?: string }) {
 
 function HeroConversationMockup() {
   return (
-    <div className="wcs-hero-image-slot">
-      <img
-        src="/hero/whachat-hero-mockup.png"
-        alt="WhachatCRM WhatsApp conversation mockup with AI copilot and lead score"
-        width={560}
-        height={871}
-        loading="eager"
-        decoding="async"
-        fetchPriority="high"
-      />
+    <div className="wcs-hero-image-column w-full md:order-2">
+      <div className="wcs-hero-image-slot">
+        <img
+          className="wcs-hero-image"
+          src="/hero/whachat-hero-mockup.png"
+          alt="WhachatCRM WhatsApp conversation mockup with AI copilot and lead score"
+          width={560}
+          height={871}
+          loading="eager"
+          decoding="async"
+          fetchPriority="high"
+        />
+      </div>
     </div>
   );
-}
-
-function navigateFromMarketing(href: string, setLocation: (to: string) => void) {
-  return (e: MouseEvent) => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-    e.preventDefault();
-    beginMarketingNavTransition();
-    requestAnimationFrame(() => setLocation(href));
-  };
 }
 
 export function Welcome() {
@@ -132,11 +126,11 @@ export function Welcome() {
           </span>
         </div>
         <div className="flex items-center gap-2 md:gap-5 lg:gap-6 justify-self-end">
-          <Link href="/pricing">
-            <button className="h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">{t("landing.pricing")}</button>
+          <Link href="/pricing" onClick={goPricing}>
+            <button className="wcs-nav-text-btn h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">{t("landing.pricing")}</button>
           </Link>
-          <Link href="/blog">
-            <button className="h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">{t("landing.blog")}</button>
+          <Link href="/blog" onClick={goBlog}>
+            <button className="wcs-nav-text-btn h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">{t("landing.blog")}</button>
           </Link>
           <Suspense
             fallback={<div className="h-9 w-9 shrink-0 rounded-md bg-gray-100/90 border border-transparent" aria-hidden />}
@@ -171,9 +165,7 @@ export function Welcome() {
       {/* Hero Section */}
       <section className="px-4 md:px-6 pt-5 md:pt-8 pb-6 md:pb-8 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
         <div className="flex flex-col gap-8 md:grid md:grid-cols-[1fr_1.04fr] md:gap-10 xl:gap-14 items-start">
-          <div className="relative order-2 w-full md:order-2 md:mt-10 lg:mt-10 animate-hero-image">
-            <HeroConversationMockup />
-          </div>
+          <HeroConversationMockup />
 
           <div className="order-1 md:order-1 max-w-[780px] md:mt-12 lg:mt-14">
             <h1 className="text-[3rem] md:text-[4.5rem] lg:text-[6.4rem] xl:text-[6.9rem] font-display font-bold text-gray-950 tracking-tight leading-[0.95] mb-7">
@@ -201,7 +193,7 @@ export function Welcome() {
                 </Link>
               </div>
               <div className="w-full sm:w-auto">
-                <Link href="/pricing">
+                <Link href="/pricing" onClick={goPricing}>
                   <button
                     className="w-full sm:w-auto h-11 px-5 bg-white border border-gray-200 text-gray-800 text-sm font-semibold rounded-full flex items-center justify-center gap-1.5 hover:bg-gray-50 transition-colors"
                     data-testid="button-hero-pricing"

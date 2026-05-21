@@ -78,13 +78,15 @@
       #whachat-static-shell .wcs-btn-green { background: #059669; color: #fff; font-weight: 500; }
       #whachat-static-shell .wcs-hero { padding: 20px 16px 32px; max-width: 1280px; margin: 0 auto; box-sizing: border-box; }
       #whachat-static-shell .wcs-hero-grid { display: flex; flex-direction: column; gap: 32px; align-items: stretch; }
-      #whachat-static-shell .wcs-order-img { order: 2; width: 100%; }
+      #whachat-static-shell .wcs-order-img,
+      .wcs-hero-image-column { order: 2; width: 100%; flex-shrink: 0; position: relative; }
       #whachat-static-shell .wcs-order-txt { order: 1; width: 100%; }
       @media (min-width: 768px) {
         #whachat-static-shell .wcs-nav { padding: 12px 24px; }
         #whachat-static-shell .wcs-hero { padding: 32px 24px 32px; }
         #whachat-static-shell .wcs-hero-grid { display: grid; grid-template-columns: 1fr 1.04fr; gap: 40px; align-items: start; }
-        #whachat-static-shell .wcs-order-img { order: 2; margin-top: 40px; }
+        #whachat-static-shell .wcs-order-img,
+        .wcs-hero-image-column { order: 2; margin-top: 40px; }
         #whachat-static-shell .wcs-order-txt { order: 1; margin-top: 56px; }
       }
       #whachat-static-shell .wcs-mockup { position: relative; max-width: 560px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 28px; background: #fff; overflow: hidden; box-shadow: 0 24px 50px -24px rgb(17 24 39 / .32); }
@@ -127,21 +129,46 @@
       #whachat-static-shell .wcs-note { font-size: 0.875rem; color: #6b7280; margin: 0 0 24px; }
       html.wcs-hide-static-marketing #whachat-static-shell { display: none !important; }
       .wcs-hero-image-slot {
+        box-sizing: border-box;
+        display: block;
         width: 100%;
         max-width: 350px;
+        min-width: 0;
+        min-height: calc(350px * 871 / 560);
         margin-left: auto;
         margin-right: auto;
         aspect-ratio: 560 / 871;
-        contain: layout style;
+        contain: layout style size;
+        overflow: hidden;
       }
       @media (min-width: 1024px) {
-        .wcs-hero-image-slot { max-width: 380px; }
+        .wcs-hero-image-slot {
+          max-width: 380px;
+          min-height: calc(380px * 871 / 560);
+        }
       }
-      .wcs-hero-image-slot img {
+      .wcs-hero-image-slot img,
+      img.wcs-hero-image {
         display: block;
         width: 100%;
         height: 100%;
+        max-width: 100%;
+        margin: 0;
+        padding: 0;
+        border: 0;
         object-fit: contain;
+        object-position: center;
+        transform: none;
+        transition: none;
+        animation: none;
+      }
+      .wcs-hero-image-frozen,
+      html.wcs-marketing-navigating .wcs-hero-image-slot,
+      html.wcs-marketing-navigating .wcs-hero-image-slot img,
+      html.wcs-marketing-navigating #whachat-static-shell .wcs-order-img {
+        transition: none !important;
+        transform: none !important;
+        animation: none !important;
       }
       html { scrollbar-gutter: stable; }
       html.wcs-marketing-navigating { overflow: hidden; scrollbar-gutter: stable; }
@@ -154,9 +181,23 @@
         transition: none !important;
         pointer-events: none;
       }
+      html.wcs-marketing-navigating #whachat-static-shell .wcs-hero-grid,
+      html.wcs-marketing-navigating #whachat-static-shell .wcs-hero,
+      html.wcs-marketing-navigating #whachat-static-shell .wcs-order-txt {
+        transition: none !important;
+        transform: none !important;
+      }
       html.wcs-marketing-navigating #root {
         opacity: 0;
         pointer-events: none;
+        position: fixed;
+        left: 0;
+        right: 0;
+        width: 100%;
+        height: 0;
+        min-height: 0;
+        overflow: hidden;
+        visibility: hidden;
       }
       #wcs-shopify-bootstrap-shell {
         display: none;
@@ -252,9 +293,51 @@
   </head>
   <body>
     <script>
+      window.wcsFreezeHeroMock = function () {
+        try {
+          document.querySelectorAll("#whachat-static-shell .wcs-hero-image-slot, #root .wcs-hero-image-slot").forEach(function (slot) {
+            if (slot.getAttribute("data-wcs-hero-frozen")) return;
+            var rect = slot.getBoundingClientRect();
+            if (rect.width < 1 || rect.height < 1) return;
+            var column = slot.closest(".wcs-hero-image-column, .wcs-order-img");
+            var colRect = column ? column.getBoundingClientRect() : rect;
+            var w = rect.width + "px";
+            var h = rect.height + "px";
+            slot.setAttribute("data-wcs-hero-frozen", "1");
+            slot.classList.add("wcs-hero-image-frozen");
+            slot.style.boxSizing = "border-box";
+            slot.style.width = w;
+            slot.style.height = h;
+            slot.style.minWidth = w;
+            slot.style.minHeight = h;
+            slot.style.maxWidth = w;
+            slot.style.maxHeight = h;
+            slot.style.aspectRatio = "auto";
+            slot.style.flexShrink = "0";
+            var img = slot.querySelector("img");
+            if (img) {
+              img.style.display = "block";
+              img.style.width = "100%";
+              img.style.height = "100%";
+              img.style.objectFit = "contain";
+              img.style.transform = "none";
+              img.style.transition = "none";
+              img.style.animation = "none";
+            }
+            if (column) {
+              column.classList.add("wcs-hero-image-frozen");
+              column.style.width = colRect.width + "px";
+              column.style.minWidth = colRect.width + "px";
+              column.style.minHeight = colRect.height + "px";
+              column.style.flexShrink = "0";
+            }
+          });
+        } catch (e) {}
+      };
       window.wcsBeginMarketingNav = function () {
         try {
           if (document.documentElement.classList.contains("wcs-marketing-navigating")) return;
+          window.wcsFreezeHeroMock();
           document.documentElement.classList.add("wcs-marketing-navigating");
           var shell = document.getElementById("whachat-static-shell");
           var lockHeight = shell
@@ -264,6 +347,7 @@
           var scrollbarWidth = Math.max(0, (window.innerWidth || 0) - document.documentElement.clientWidth);
           if (scrollbarWidth > 0) document.body.style.paddingRight = scrollbarWidth + "px";
           document.documentElement.style.overflow = "hidden";
+          window.wcsFreezeHeroMock();
         } catch (e) {}
       };
       (function () {
@@ -343,9 +427,9 @@
       </header>
       <section class="wcs-hero" aria-labelledby="whachat-static-hero-title">
         <div class="wcs-hero-grid">
-          <div class="wcs-order-img">
+          <div class="wcs-order-img wcs-hero-image-column">
             <div class="wcs-hero-image-slot">
-              <img src="/hero/whachat-hero-mockup.png" alt="WhachatCRM WhatsApp conversation mockup with AI copilot and lead score" width="560" height="871" loading="eager" decoding="async" fetchpriority="high" />
+              <img class="wcs-hero-image" src="/hero/whachat-hero-mockup.png" alt="WhachatCRM WhatsApp conversation mockup with AI copilot and lead score" width="560" height="871" loading="eager" decoding="async" fetchpriority="high" />
             </div>
           </div>
           <div class="wcs-order-txt">
