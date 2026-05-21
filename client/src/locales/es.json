@@ -886,6 +886,11 @@
       "badge2": "Cancela cuando quieras",
       "badge3": "AI Assist en planes de pago"
     },
+    "metaFees": {
+      "title": "Sin recargo sobre las tarifas de mensajería de Meta",
+      "body": "WhachatCRM no añade recargos por mensaje. Tu suscripción cubre la plataforma, mientras que los cargos de conversación de Meta/WhatsApp se facturan por separado según la tarificación de Meta.",
+      "note": "Precios de software simples. Sin recargos ocultos por mensajería."
+    },
     "copilot": {
       "title": "Copilot crece con tu plan",
       "subtitle": "Starter y Pro incluyen AI Assist Basic para que tu equipo responda más rápido. El complemento opcional AI Brain agrega más contexto del negocio, insights y mejoras de flujos donde estén habilitadas.",
