@@ -157,20 +157,23 @@ export function Pricing() {
     });
   }, [shopHint]);
 
-  const shopifyPaidPlan =
-    effectivePlan === "starter" || effectivePlan === "pro";
-
-  const shopifyPlanCta = shopifyPaidPlan
-    ? t(`${p}.shopifyManagePlan`)
-    : t(`${p}.shopifyChoosePlan`);
+  const shopifyPlanButtonLabel = (
+    plan: "starter" | "pro" | "aiBrain",
+    isActive: boolean,
+  ): string => {
+    if (isActive) return t(`${p}.shopifyManageInShopify`);
+    if (plan === "starter") return t(`${p}.shopifyChooseStarter`);
+    if (plan === "pro") return t(`${p}.shopifyChoosePro`);
+    return t(`${p}.shopifyChooseAiBrain`);
+  };
 
   const openShopifyPlans = async () => {
     try {
       const opened = await openShopifyManagedPricing(shopHint);
       if (!opened) {
         toast({
-          title: t(`${p}.shopifyChoosePlan`),
-          description: t(`${p}.shopifyManagedPricingInstructions`),
+          title: t(`${p}.shopifyToastTitle`),
+          description: t(`${p}.shopifyToastHint`),
         });
       }
     } catch (e: any) {
@@ -179,7 +182,7 @@ export function Pricing() {
         return;
       }
       toast({
-        title: t(`${p}.shopifyChoosePlan`),
+        title: t(`${p}.shopifyToastTitle`),
         description: shopifyManagedPricingInstructions(
           { error: e?.message },
           t(`${p}.shopifyManagedPricingInstructions`),
@@ -284,7 +287,7 @@ export function Pricing() {
     } catch (error: any) {
       if (error?.message === "session_expired") return;
       toast({
-        title: isShopify ? t(`${p}.shopifyChoosePlan`) : "Error",
+        title: isShopify ? t(`${p}.shopifyToastTitle`) : "Error",
         description: isShopify
           ? shopifyManagedPricingInstructions(
               { error: error?.message },
@@ -721,20 +724,24 @@ export function Pricing() {
                 </p>
                 <Button
                   className={`w-full ${
-                    isCurrentPlan
+                    isCurrentPlan && !isShopify
                       ? "bg-gray-100 text-gray-500"
-                      : "bg-blue-600 hover:bg-blue-700 text-white"
+                      : isCurrentPlan && isShopify
+                        ? "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                        : "bg-blue-600 hover:bg-blue-700 text-white"
                   }`}
-                  disabled={planButtonsDisabled || isCurrentPlan || isLoading}
+                  disabled={planButtonsDisabled || (isCurrentPlan && !isShopify) || isLoading}
                   onClick={() => handleUpgrade("starter")}
                   data-testid="button-upgrade-starter"
                 >
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : isCurrentPlan ? (
-                    t(`${p}.plans.currentPlan`)
+                    isShopify
+                      ? shopifyPlanButtonLabel("starter", true)
+                      : t(`${p}.plans.currentPlan`)
                   ) : isShopify ? (
-                    shopifyPlanCta
+                    shopifyPlanButtonLabel("starter", false)
                   ) : (
                     t(`${p}.plans.starter.cta`)
                   )}
@@ -824,20 +831,24 @@ export function Pricing() {
                 </p>
                 <Button
                   className={`w-full ${
-                    isCurrentPlan
+                    isCurrentPlan && !isShopify
                       ? "bg-gray-100 text-gray-500"
-                      : "bg-brand-green hover:bg-emerald-700 text-white"
+                      : isCurrentPlan && isShopify
+                        ? "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                        : "bg-brand-green hover:bg-emerald-700 text-white"
                   }`}
-                  disabled={planButtonsDisabled || isCurrentPlan || isLoading}
+                  disabled={planButtonsDisabled || (isCurrentPlan && !isShopify) || isLoading}
                   onClick={() => handleUpgrade("pro")}
                   data-testid="button-upgrade-pro"
                 >
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : isCurrentPlan ? (
-                    t(`${p}.plans.currentPlan`)
+                    isShopify
+                      ? shopifyPlanButtonLabel("pro", true)
+                      : t(`${p}.plans.currentPlan`)
                   ) : isShopify ? (
-                    shopifyPlanCta
+                    shopifyPlanButtonLabel("pro", false)
                   ) : (
                     t(`${p}.plans.pro.cta`)
                   )}
@@ -918,7 +929,7 @@ export function Pricing() {
                 {aiBrainAddonLoading ? (
                   <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} />
                 ) : null}
-                {isShopify ? shopifyPlanCta : t(`${p}.plans.aiBrain.ctaUnlock`)}
+                {isShopify ? shopifyPlanButtonLabel("aiBrain", false) : t(`${p}.plans.aiBrain.ctaUnlock`)}
               </Button>
             ) : (
               <Button

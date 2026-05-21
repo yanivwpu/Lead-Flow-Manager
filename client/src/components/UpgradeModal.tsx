@@ -241,8 +241,8 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
         const opened = await openShopifyManagedPricing(shopHint);
         if (!opened) {
           toast({
-            title: t(`${p}.shopifyChoosePlan`),
-            description: t(`${p}.shopifyManagedPricingInstructions`),
+            title: t(`${p}.shopifyToastTitle`),
+            description: t(`${p}.shopifyToastHint`),
           });
         }
         setLoadingPlan(null);
@@ -275,7 +275,7 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
     } catch (error: any) {
       if (error?.message !== "session_expired") {
         toast({
-          title: isShopify ? t(`${p}.shopifyChoosePlan`) : "Error",
+          title: isShopify ? t(`${p}.shopifyToastTitle`) : "Error",
           description: isShopify
             ? shopifyManagedPricingInstructions(
                 { error: error?.message },
@@ -368,7 +368,7 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
                   {loadingPlan === "pro" ? (
                     <Loader2 className="h-5 w-5 animate-spin" />
                   ) : isShopify ? (
-                    t(`${p}.shopifyChoosePlan`)
+                    t(`${p}.shopifyChoosePro`)
                   ) : (
                     "Upgrade to Pro"
                   )}

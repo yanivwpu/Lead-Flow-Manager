@@ -6,7 +6,7 @@ export const SHOPIFY_MANAGED_PRICING_CODE = "SHOPIFY_MANAGED_PRICING";
 export const DEFAULT_SHOPIFY_APP_HANDLE = "whachatcrm";
 
 export const SHOPIFY_MANAGED_PRICING_INSTRUCTIONS =
-  "Plan selection is managed by Shopify. Open WhachatCRM in Shopify Admin → Billing / App subscription to choose a plan.";
+  "Open WhachatCRM in your Shopify admin to choose or update your plan.";
 
 export function shopifyStoreHandleFromDomain(shop: string | null | undefined): string | null {
   const normalized = normalizeShopifyShopDomain(shop);
