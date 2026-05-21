@@ -53,6 +53,11 @@ const NotFound = lazy(() => import("@/pages/not-found"));
 import { ReferralCapture } from "@/components/ReferralCapture";
 import { CookieConsentRoot } from "@/components/CookieConsentRoot";
 import { Welcome } from "@/pages/Welcome";
+import {
+  installMarketingHomeNavCapture,
+  shouldDeferHidingStaticMarketing,
+  watchMarketingHomeNavRelease,
+} from "@/lib/marketingNavTransition";
 
 // Wrapper for protected routes
 function ProtectedRoute({ component: Component, ...rest }: any) {
@@ -144,6 +149,12 @@ function Router() {
   const [urlTick, setUrlTick] = useState(0);
 
   const bootstrap = useMemo(() => readShopifyBootstrapFromWindow(), [location, urlTick]);
+
+  useEffect(() => installMarketingHomeNavCapture(), []);
+
+  useLayoutEffect(() => {
+    return watchMarketingHomeNavRelease(location, authLoading);
+  }, [location, authLoading]);
 
   useLayoutEffect(() => {
     setUrlTick((n) => n + 1);

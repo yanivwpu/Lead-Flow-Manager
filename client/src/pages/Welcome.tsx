@@ -1,6 +1,6 @@
-import { useState, lazy, Suspense, useLayoutEffect, type MouseEvent } from "react";
+import { useState, lazy, Suspense, useLayoutEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { beginMarketingNavTransition } from "@/lib/marketingNavTransition";
+import { createMarketingHomeNavHandler, shouldDeferHidingStaticMarketing } from "@/lib/marketingNavTransition";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Calendar, Shield } from "lucide-react";
@@ -61,8 +61,11 @@ export function Welcome() {
   const zeroPhrase = "Zero Complexity";
   const zeroIndex = heroTitle.indexOf(zeroPhrase);
 
-  const goAuth = navigateFromMarketing("/auth?mode=login", setLocation);
-  const goSignup = navigateFromMarketing("/auth", setLocation);
+  const goAuth = createMarketingHomeNavHandler("/auth?mode=login", setLocation);
+  const goSignup = createMarketingHomeNavHandler("/auth", setLocation);
+  const goPricing = createMarketingHomeNavHandler("/pricing", setLocation);
+  const goBlog = createMarketingHomeNavHandler("/blog", setLocation);
+  const goDashboard = createMarketingHomeNavHandler("/app/inbox", setLocation);
 
   const hasStaticShell =
     typeof document !== "undefined" && !!document.getElementById("whachat-static-shell");
@@ -72,6 +75,7 @@ export function Welcome() {
   useLayoutEffect(() => {
     const shell = document.getElementById("whachat-static-shell");
     if (!shell) return;
+    if (shouldDeferHidingStaticMarketing()) return;
     if (location !== "/" || user) {
       document.documentElement.classList.add("wcs-hide-static-marketing");
     } else {
@@ -140,8 +144,8 @@ export function Welcome() {
             <LanguageSelector variant="compact" className="text-gray-600 hover:text-gray-900 hover:bg-gray-100" />
           </Suspense>
           {user ? (
-            <Link href="/app/inbox">
-              <button className="text-sm font-medium px-4 py-2 bg-brand-green text-white rounded-full hover:bg-emerald-700">{t("landing.dashboard")}</button>
+            <Link href="/app/inbox" onClick={goDashboard}>
+              <button className="h-9 shrink-0 px-4 text-sm font-medium bg-brand-green text-white rounded-full hover:bg-emerald-700 border border-transparent">{t("landing.dashboard")}</button>
             </Link>
           ) : (
             <>
@@ -171,7 +175,7 @@ export function Welcome() {
             <HeroConversationMockup />
           </div>
 
-          <div className="animate-hero-text order-1 md:order-1 max-w-[780px] md:mt-12 lg:mt-14">
+          <div className="order-1 md:order-1 max-w-[780px] md:mt-12 lg:mt-14">
             <h1 className="text-[3rem] md:text-[4.5rem] lg:text-[6.4rem] xl:text-[6.9rem] font-display font-bold text-gray-950 tracking-tight leading-[0.95] mb-7">
               {zeroIndex >= 0 ? (
                 <>
@@ -186,7 +190,7 @@ export function Welcome() {
 
             <div className="flex flex-col sm:flex-row gap-2.5 mb-4">
               <div className="w-full sm:w-auto">
-                <Link href={user ? "/app/inbox" : "/auth"} onClick={user ? undefined : goSignup}>
+                <Link href={user ? "/app/inbox" : "/auth"} onClick={user ? goDashboard : goSignup}>
                   <button
                     className="w-full sm:w-auto h-11 px-5 bg-brand-green hover:bg-emerald-700 text-white text-sm font-semibold rounded-full flex items-center justify-center gap-2 transition-colors shadow-md hover:shadow-lg border border-transparent"
                     data-testid="button-hero-cta"

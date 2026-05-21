@@ -143,15 +143,19 @@
         height: 100%;
         object-fit: contain;
       }
-      html.wcs-marketing-navigating { overflow: hidden; }
-      html.wcs-marketing-navigating #whachat-static-shell {
-        opacity: 0;
-        transition: opacity 160ms ease-out;
+      html { scrollbar-gutter: stable; }
+      html.wcs-marketing-navigating { overflow: hidden; scrollbar-gutter: stable; }
+      html.wcs-marketing-navigating #whachat-static-shell,
+      html.wcs-marketing-navigating.wcs-hide-static-marketing #whachat-static-shell {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        transform: none !important;
+        transition: none !important;
         pointer-events: none;
       }
       html.wcs-marketing-navigating #root {
         opacity: 0;
-        transition: opacity 160ms ease-out;
         pointer-events: none;
       }
       #wcs-shopify-bootstrap-shell {
@@ -250,15 +254,36 @@
     <script>
       window.wcsBeginMarketingNav = function () {
         try {
-          document.documentElement.classList.add("wcs-marketing-navigating", "wcs-hide-static-marketing");
+          if (document.documentElement.classList.contains("wcs-marketing-navigating")) return;
+          document.documentElement.classList.add("wcs-marketing-navigating");
           var shell = document.getElementById("whachat-static-shell");
           var lockHeight = shell
             ? Math.max(shell.offsetHeight, window.innerHeight || 0)
             : (window.innerHeight || 0);
           document.body.style.minHeight = lockHeight + "px";
+          var scrollbarWidth = Math.max(0, (window.innerWidth || 0) - document.documentElement.clientWidth);
+          if (scrollbarWidth > 0) document.body.style.paddingRight = scrollbarWidth + "px";
           document.documentElement.style.overflow = "hidden";
         } catch (e) {}
       };
+      (function () {
+        function isOutbound(href) {
+          if (!href || href.charAt(0) !== "/") return false;
+          var path = (window.location.pathname || "/").replace(/\/$/, "") || "/";
+          var target = (href.split("?")[0] || "/").replace(/\/$/, "") || "/";
+          return path === "/" && target !== "/";
+        }
+        document.addEventListener("click", function (e) {
+          var path = (window.location.pathname || "/").replace(/\/$/, "") || "/";
+          if (path !== "/") return;
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+          var a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+          if (!a) return;
+          var href = a.getAttribute("href");
+          if (!isOutbound(href)) return;
+          window.wcsBeginMarketingNav();
+        }, true);
+      })();
     </script>
     <script>
       (function () {
@@ -328,7 +353,7 @@
             <p class="wcs-sub">One unified inbox for WhatsApp, Instagram, Facebook Messenger, SMS, Telegram, and web chat — with AI Copilot, CRM context, and automated follow-ups built in.</p>
             <div class="wcs-stack">
               <div class="wcs-btn-row">
-                <a class="wcs-btn-primary" href="/auth" data-testid="button-hero-cta" onclick="window.wcsBeginMarketingNav&amp;&amp;true">Start Free Trial →</a>
+                <a class="wcs-btn-primary" href="/auth" data-testid="button-hero-cta">Start Free Trial →</a>
               </div>
               <div class="wcs-btn-row">
                 <a class="wcs-btn-outline" href="/pricing" data-testid="button-hero-pricing">Pricing</a>

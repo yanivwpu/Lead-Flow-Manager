@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+html {
+  scrollbar-gutter: stable;
+}
+
 @theme inline {
   /* Slate & Emerald Color Palette */
   --color-brand-green: #059669;
@@ -264,21 +268,32 @@
   object-fit: contain;
 }
 
-/* Smooth leave from marketing homepage → /auth (no static/React hero swap) */
+/* Homepage → any route: keep static hero frozen; load destination in #root underneath */
 html.wcs-marketing-navigating {
   overflow: hidden;
+  scrollbar-gutter: stable;
 }
 
-html.wcs-marketing-navigating #whachat-static-shell {
-  opacity: 0;
-  transition: opacity 160ms ease-out;
+html.wcs-marketing-navigating #whachat-static-shell,
+html.wcs-marketing-navigating.wcs-hide-static-marketing #whachat-static-shell {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  transform: none !important;
+  transition: none !important;
   pointer-events: none;
 }
 
 html.wcs-marketing-navigating #root {
   opacity: 0;
-  transition: opacity 160ms ease-out;
   pointer-events: none;
+}
+
+html.wcs-marketing-navigating .animate-hero-text,
+html.wcs-marketing-navigating .animate-hero-image {
+  animation: none !important;
+  opacity: 1 !important;
+  transform: none !important;
 }
 
 /* Nav controls: no dimension shift on hover/active/focus */
