@@ -5,6 +5,109 @@
 
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <!-- Shopify install: block marketing paint before static shell (sync, no React) -->
+    <style id="wcs-shopify-preboot-critical">
+      html.wcs-shopify-preboot #whachat-static-shell,
+      html.wcs-shopify-bootstrap #whachat-static-shell,
+      html.wcs-hide-static-marketing #whachat-static-shell {
+        display: none !important;
+        visibility: hidden !important;
+      }
+      html.wcs-shopify-preboot #wcs-shopify-bootstrap-shell,
+      html.wcs-shopify-bootstrap #wcs-shopify-bootstrap-shell {
+        display: flex !important;
+        min-height: 100dvh;
+      }
+      html.wcs-shopify-preboot #root {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        pointer-events: none !important;
+      }
+      html.wcs-shopify-bootstrap #root {
+        display: block !important;
+        visibility: visible !important;
+        height: auto !important;
+        overflow: visible !important;
+        pointer-events: auto !important;
+      }
+      html.wcs-shopify-preboot body {
+        margin: 0;
+        overflow: hidden;
+        background: #fff;
+      }
+    </style>
+    <script>
+      (function () {
+        try {
+          var rawPath = window.location.pathname || "/";
+          var p = rawPath.replace(/\/$/, "") || "/";
+          var search = window.location.search || "";
+          var params = new URLSearchParams(search);
+          var shop = params.get("shop");
+          var shopOk = shop && /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop);
+          var shopifyInstalled = params.get("shopify_installed") === "1";
+          var embedded = params.get("embedded") === "1";
+          var hmac = params.get("hmac");
+          var redirect = params.get("redirect") || "";
+          var redirectShopify = /shopify_installed=1|(?:\?|&)shop=|\/pricing/.test(redirect);
+          var onPricing = p === "/pricing" || p.indexOf("/pricing/") === 0;
+          var persisted = null;
+          try {
+            persisted = sessionStorage.getItem("whachatcrm_shopify_post_install_pricing");
+          } catch (e) {}
+          var persistedShopify = persisted && persisted.indexOf("/pricing") === 0;
+
+          var shopifyIntent =
+            shopifyInstalled ||
+            embedded ||
+            persistedShopify ||
+            (shopOk && hmac) ||
+            (p === "/auth" && (shopOk || redirectShopify)) ||
+            (onPricing && (shopOk || shopifyInstalled)) ||
+            (p === "/" && (shopOk || shopifyInstalled));
+
+          if (shopifyIntent) {
+            document.documentElement.classList.add(
+              "wcs-shopify-preboot",
+              "wcs-shopify-bootstrap",
+              "wcs-hide-static-marketing"
+            );
+            console.log("[ShopifyPreBoot] detected", {
+              path: p,
+              shop: shop || null,
+              shopifyInstalled: shopifyInstalled,
+              embedded: embedded,
+              persisted: persistedShopify,
+            });
+            console.log("[ShopifyPreBoot] hiding_marketing_before_paint");
+            if (shopifyInstalled && shopOk) {
+              var pricingQs = new URLSearchParams();
+              pricingQs.set("shop", shop);
+              pricingQs.set("shopify_installed", "1");
+              var td = params.get("trial_days");
+              if (td) pricingQs.set("trial_days", td);
+              if (embedded) pricingQs.set("embedded", "1");
+              try {
+                sessionStorage.setItem(
+                  "whachatcrm_shopify_post_install_pricing",
+                  "/pricing?" + pricingQs.toString()
+                );
+              } catch (e) {}
+            }
+          } else if (p !== "/") {
+            document.documentElement.classList.add("wcs-hide-static-marketing");
+          }
+
+          if (p === "/" && shopOk && !shopifyInstalled && !persistedShopify) {
+            window.location.replace(
+              "/api/shopify/install?shop=" + encodeURIComponent(shop)
+            );
+          }
+        } catch (e) {}
+      })();
+    </script>
     <meta name="msvalidate.01" content="D34136A426046C3430F8378418B1F090" />
 
     <title>WhachatCRM – WhatsApp CRM & Automation Platform</title>
@@ -171,8 +274,6 @@
         background: #fff;
         font-family: 'Inter', sans-serif;
       }
-      html.wcs-shopify-bootstrap #whachat-static-shell { display: none !important; }
-      html.wcs-shopify-bootstrap #wcs-shopify-bootstrap-shell { display: flex; }
       #wcs-shopify-bootstrap-shell .wcs-bootstrap-logo {
         height: 48px;
         width: 48px;
@@ -255,43 +356,6 @@
     <script type="module" src="/src/main.tsx"></script>
   </head>
   <body>
-    <script>
-      (function () {
-        try {
-          var raw = window.location.pathname || "/";
-          var p = raw.replace(/\/$/, "") || "/";
-          var params = new URLSearchParams(window.location.search || "");
-          var shop = params.get("shop");
-          var shopOk = shop && /^[a-z0-9][a-z0-9-]*\\.myshopify\\.com$/i.test(shop);
-          var shopifyInstalled = params.get("shopify_installed") === "1";
-          var embedded = params.get("embedded") === "1";
-          var redirect = params.get("redirect") || "";
-          var redirectShopify = /shopify_installed=1|(?:\\?|&)shop=|\\/pricing/.test(redirect);
-          var shopifyBootstrap = shopifyInstalled || embedded || shopOk ||
-            (p === "/auth" && (shopOk || redirectShopify)) ||
-            (p === "/" && shopOk);
-          if (shopifyBootstrap) {
-            document.documentElement.classList.add("wcs-hide-static-marketing", "wcs-shopify-bootstrap");
-            if (shopifyInstalled && shopOk) {
-              try {
-                var pricingQs = new URLSearchParams();
-                pricingQs.set("shop", shop);
-                pricingQs.set("shopify_installed", "1");
-                var td = params.get("trial_days");
-                if (td) pricingQs.set("trial_days", td);
-                if (embedded) pricingQs.set("embedded", "1");
-                sessionStorage.setItem("whachatcrm_shopify_post_install_pricing", "/pricing?" + pricingQs.toString());
-              } catch (e) {}
-            }
-          } else if (p !== "/") {
-            document.documentElement.classList.add("wcs-hide-static-marketing");
-          }
-          if (p === "/" && shopOk && !shopifyInstalled) {
-            window.location.replace("/api/shopify/install?shop=" + encodeURIComponent(shop));
-          }
-        } catch (e) {}
-      })();
-    </script>
     <div id="wcs-shopify-bootstrap-shell" aria-live="polite" aria-busy="true" role="status">
       <div class="wcs-bootstrap-logo" aria-hidden="true">W</div>
       <p class="wcs-bootstrap-text">Loading workspace…</p>

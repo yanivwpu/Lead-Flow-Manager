@@ -68,7 +68,9 @@ function buildPricingPath(
   embedded: boolean,
 ): string {
   if (pathname === "/pricing" || pathname.startsWith("/pricing/")) {
-    return `${pathname}${search}`;
+    const destination = `${pathname}${search}`;
+    logBootstrap("preserving_query", { destination });
+    return destination;
   }
 
   const params = new URLSearchParams();
@@ -81,7 +83,9 @@ function buildPricingPath(
   if (embedded) params.set("embedded", "1");
 
   const qs = params.toString();
-  return qs ? `/pricing?${qs}` : "/pricing";
+  const destination = qs ? `/pricing?${qs}` : "/pricing";
+  logBootstrap("preserving_query", { destination });
+  return destination;
 }
 
 /**
@@ -116,9 +120,11 @@ export function getShopifyBootstrapContext(
   const active = Boolean(
     postInstallFlow ||
       embedded ||
-      shop ||
+      shopifyInstalled ||
+      (shop && hmac) ||
       (onAuth && (shop || redirectParamIsShopify(redirect))) ||
-      (onHome && shop) ||
+      (onPricing && (shop || shopifyInstalled)) ||
+      (onHome && (shop || shopifyInstalled)) ||
       (onApp && (postInstallFlow || persisted)),
   );
 
@@ -192,9 +198,13 @@ export function shouldSuppressAppRoutes(ctx: ShopifyBootstrapContext): boolean {
 export function applyShopifyBootstrapDocumentFlags(active: boolean): void {
   if (typeof document === "undefined") return;
   if (active) {
-    document.documentElement.classList.add("wcs-hide-static-marketing", "wcs-shopify-bootstrap");
+    document.documentElement.classList.add(
+      "wcs-shopify-preboot",
+      "wcs-hide-static-marketing",
+      "wcs-shopify-bootstrap",
+    );
   } else {
-    document.documentElement.classList.remove("wcs-shopify-bootstrap");
+    document.documentElement.classList.remove("wcs-shopify-preboot", "wcs-shopify-bootstrap");
   }
 }
 

@@ -204,7 +204,7 @@ function Router() {
   useLayoutEffect(() => {
     if (!bootstrap.active) return;
     if (!authLoading && destinationReached && !bootstrap.needsInstallRedirect) {
-      document.documentElement.classList.remove("wcs-shopify-bootstrap");
+      document.documentElement.classList.remove("wcs-shopify-bootstrap", "wcs-shopify-preboot");
     } else {
       document.documentElement.classList.add("wcs-shopify-bootstrap");
     }
