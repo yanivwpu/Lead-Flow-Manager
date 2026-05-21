@@ -99,10 +99,12 @@ export function getShopifyBootstrapContext(
   const shop = normalizeShopifyShopDomain(params.get("shop")) ?? undefined;
   const shopifyInstalled = params.get("shopify_installed") === "1";
   const embedded = params.get("embedded") === "1";
+  const hmac = params.get("hmac");
   const redirect = params.get("redirect") ?? "";
 
   const path = pathname.replace(/\/$/, "") || "/";
   const onAuth = path === "/auth";
+  const onPricing = path === "/pricing" || path.startsWith("/pricing/");
   const onHome = path === "/";
   const onApp = path === "/app" || path.startsWith("/app/");
 
