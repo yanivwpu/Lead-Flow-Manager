@@ -93,6 +93,7 @@ export function Pricing() {
   const { toast } = useToast();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const { t, i18n } = useTranslation();
+  const p = "pricingPage";
 
   const isRTL =
     (supportedLanguages[i18n.language as keyof typeof supportedLanguages]?.dir ??
@@ -296,8 +297,6 @@ export function Pricing() {
       setAiBrainAddonLoading(false);
     }
   };
-
-  const p = "pricingPage";
 
   // Comparison table rows – feature labels are already translated strings
   const compareRows: {
