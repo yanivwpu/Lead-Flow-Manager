@@ -4,8 +4,16 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
-import { lazy, Suspense, useEffect, useLayoutEffect } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ShopifyBootstrapScreen } from "@/components/ShopifyBootstrapScreen";
+import { ShopifyBootstrapFade } from "@/components/ShopifyBootstrapFade";
+import {
+  applyShopifyBootstrapDocumentFlags,
+  getShopifyBootstrapContext,
+  pathMatches,
+  resolveShopifyBootstrapDestination,
+} from "@/lib/shopifyBootstrap";
 
 const AuthPage = lazy(() => import("@/pages/Auth").then(m => ({ default: m.AuthPage })));
 
@@ -64,15 +72,17 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
   return <Component {...rest} />;
 }
 
-function Router() {
+function useShopifyBootstrap() {
   const [location] = useLocation();
+  const search = typeof window !== "undefined" ? window.location.search : "";
+  return useMemo(
+    () => getShopifyBootstrapContext(location, search),
+    [location, search],
+  );
+}
 
-  useLayoutEffect(() => {
-    if (typeof document === "undefined") return;
-    if (location !== "/") {
-      document.documentElement.classList.add("wcs-hide-static-marketing");
-    }
-  }, [location]);
+function MarketingRoutes() {
+  const [location] = useLocation();
 
   if (location === "/") {
     return <Welcome />;
@@ -128,6 +138,77 @@ function Router() {
       <Route component={NotFound} />
     </Switch>
   );
+}
+
+function Router() {
+  const [location, setLocation] = useLocation();
+  const { user, isLoading: authLoading } = useAuth();
+  const bootstrap = useShopifyBootstrap();
+  const [bootstrapReady, setBootstrapReady] = useState(false);
+
+  useLayoutEffect(() => {
+    if (typeof document === "undefined") return;
+    if (bootstrap.active) {
+      applyShopifyBootstrapDocumentFlags(true);
+      return;
+    }
+    applyShopifyBootstrapDocumentFlags(false);
+    if (location !== "/") {
+      document.documentElement.classList.add("wcs-hide-static-marketing");
+    }
+  }, [bootstrap.active, location]);
+
+  useLayoutEffect(() => {
+    if (!bootstrap.active || !bootstrap.needsInstallRedirect || !bootstrap.shop) return;
+    window.location.replace(
+      `/api/shopify/install?shop=${encodeURIComponent(bootstrap.shop)}`,
+    );
+  }, [bootstrap.active, bootstrap.needsInstallRedirect, bootstrap.shop]);
+
+  useEffect(() => {
+    if (!bootstrap.active || authLoading) {
+      setBootstrapReady(false);
+      return;
+    }
+
+    const destination = resolveShopifyBootstrapDestination(bootstrap, !!user);
+    if (!pathMatches(location, destination)) {
+      setBootstrapReady(false);
+      setLocation(destination);
+      return;
+    }
+
+    setBootstrapReady(true);
+  }, [
+    authLoading,
+    bootstrap,
+    location,
+    setLocation,
+    user,
+  ]);
+
+  useLayoutEffect(() => {
+    if (!bootstrap.active) return;
+    if (!authLoading && bootstrapReady && !bootstrap.needsInstallRedirect) {
+      document.documentElement.classList.remove("wcs-shopify-bootstrap");
+    } else {
+      document.documentElement.classList.add("wcs-shopify-bootstrap");
+    }
+  }, [authLoading, bootstrap.active, bootstrap.needsInstallRedirect, bootstrapReady]);
+
+  if (bootstrap.active) {
+    if (authLoading || bootstrap.needsInstallRedirect || !bootstrapReady) {
+      return <ShopifyBootstrapScreen />;
+    }
+
+    return (
+      <ShopifyBootstrapFade>
+        <MarketingRoutes />
+      </ShopifyBootstrapFade>
+    );
+  }
+
+  return <MarketingRoutes />;
 }
 
 const PageLoader = () => (

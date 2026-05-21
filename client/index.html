@@ -126,6 +126,37 @@
       #whachat-static-shell .wcs-btn-demo { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 20px; background: linear-gradient(to right, #f59e0b, #f97316); color: #fff; font-size: .875rem; font-weight: 600; border-radius: 9999px; text-decoration: none; width: 100%; box-sizing: border-box; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08); }
       #whachat-static-shell .wcs-note { font-size: 0.875rem; color: #6b7280; margin: 0 0 24px; }
       html.wcs-hide-static-marketing #whachat-static-shell { display: none !important; }
+      #wcs-shopify-bootstrap-shell {
+        display: none;
+        min-height: 100dvh;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #fff;
+        font-family: 'Inter', sans-serif;
+      }
+      html.wcs-shopify-bootstrap #whachat-static-shell { display: none !important; }
+      html.wcs-shopify-bootstrap #wcs-shopify-bootstrap-shell { display: flex; }
+      #wcs-shopify-bootstrap-shell .wcs-bootstrap-logo {
+        height: 48px;
+        width: 48px;
+        background: #059669;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-weight: 700;
+        font-size: 1.25rem;
+        font-family: 'Plus Jakarta Sans', Inter, sans-serif;
+      }
+      #wcs-shopify-bootstrap-shell .wcs-bootstrap-text {
+        margin-top: 20px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #6b7280;
+        letter-spacing: -0.01em;
+      }
     </style>
 
     <!-- PWA -->
@@ -193,10 +224,31 @@
         try {
           var raw = window.location.pathname || "/";
           var p = raw.replace(/\/$/, "") || "/";
-          if (p !== "/") document.documentElement.classList.add("wcs-hide-static-marketing");
+          var params = new URLSearchParams(window.location.search || "");
+          var shop = params.get("shop");
+          var shopOk = shop && /^[a-z0-9][a-z0-9-]*\\.myshopify\\.com$/i.test(shop);
+          var shopifyInstalled = params.get("shopify_installed") === "1";
+          var embedded = params.get("embedded") === "1";
+          var redirect = params.get("redirect") || "";
+          var redirectShopify = /shopify_installed=1|(?:\\?|&)shop=|\\/pricing/.test(redirect);
+          var shopifyBootstrap = shopifyInstalled || embedded || shopOk ||
+            (p === "/auth" && (shopOk || redirectShopify)) ||
+            (p === "/" && shopOk);
+          if (shopifyBootstrap) {
+            document.documentElement.classList.add("wcs-hide-static-marketing", "wcs-shopify-bootstrap");
+          } else if (p !== "/") {
+            document.documentElement.classList.add("wcs-hide-static-marketing");
+          }
+          if (p === "/" && shopOk && !shopifyInstalled) {
+            window.location.replace("/api/shopify/install?shop=" + encodeURIComponent(shop));
+          }
         } catch (e) {}
       })();
     </script>
+    <div id="wcs-shopify-bootstrap-shell" aria-live="polite" aria-busy="true" role="status">
+      <div class="wcs-bootstrap-logo" aria-hidden="true">W</div>
+      <p class="wcs-bootstrap-text">Loading workspace…</p>
+    </div>
     <!-- Instant above-the-fold (no React): visible on "/" without JS; hidden on other paths via wcs-hide-static-marketing. -->
     <div id="whachat-static-shell">
       <header class="wcs-nav" role="banner">
