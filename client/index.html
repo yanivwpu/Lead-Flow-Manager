@@ -126,6 +126,34 @@
       #whachat-static-shell .wcs-btn-demo { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 20px; background: linear-gradient(to right, #f59e0b, #f97316); color: #fff; font-size: .875rem; font-weight: 600; border-radius: 9999px; text-decoration: none; width: 100%; box-sizing: border-box; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08); }
       #whachat-static-shell .wcs-note { font-size: 0.875rem; color: #6b7280; margin: 0 0 24px; }
       html.wcs-hide-static-marketing #whachat-static-shell { display: none !important; }
+      .wcs-hero-image-slot {
+        width: 100%;
+        max-width: 350px;
+        margin-left: auto;
+        margin-right: auto;
+        aspect-ratio: 560 / 871;
+        contain: layout style;
+      }
+      @media (min-width: 1024px) {
+        .wcs-hero-image-slot { max-width: 380px; }
+      }
+      .wcs-hero-image-slot img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+      html.wcs-marketing-navigating { overflow: hidden; }
+      html.wcs-marketing-navigating #whachat-static-shell {
+        opacity: 0;
+        transition: opacity 160ms ease-out;
+        pointer-events: none;
+      }
+      html.wcs-marketing-navigating #root {
+        opacity: 0;
+        transition: opacity 160ms ease-out;
+        pointer-events: none;
+      }
       #wcs-shopify-bootstrap-shell {
         display: none;
         min-height: 100dvh;
@@ -220,6 +248,19 @@
   </head>
   <body>
     <script>
+      window.wcsBeginMarketingNav = function () {
+        try {
+          document.documentElement.classList.add("wcs-marketing-navigating", "wcs-hide-static-marketing");
+          var shell = document.getElementById("whachat-static-shell");
+          var lockHeight = shell
+            ? Math.max(shell.offsetHeight, window.innerHeight || 0)
+            : (window.innerHeight || 0);
+          document.body.style.minHeight = lockHeight + "px";
+          document.documentElement.style.overflow = "hidden";
+        } catch (e) {}
+      };
+    </script>
+    <script>
       (function () {
         try {
           var raw = window.location.pathname || "/";
@@ -278,14 +319,16 @@
       <section class="wcs-hero" aria-labelledby="whachat-static-hero-title">
         <div class="wcs-hero-grid">
           <div class="wcs-order-img">
-            <img src="/hero/whachat-hero-mockup.png" alt="WhachatCRM WhatsApp conversation mockup with AI copilot and lead score" width="560" height="871" loading="eager" decoding="async" style="display:block;width:100%;max-width:380px;margin:0 auto;" />
+            <div class="wcs-hero-image-slot">
+              <img src="/hero/whachat-hero-mockup.png" alt="WhachatCRM WhatsApp conversation mockup with AI copilot and lead score" width="560" height="871" loading="eager" decoding="async" fetchpriority="high" />
+            </div>
           </div>
           <div class="wcs-order-txt">
             <h1 id="whachat-static-hero-title"><span class="wcs-head-line">Unified Inbox</span><span class="wcs-nowrap">Zero Complexity</span></h1>
             <p class="wcs-sub">One unified inbox for WhatsApp, Instagram, Facebook Messenger, SMS, Telegram, and web chat — with AI Copilot, CRM context, and automated follow-ups built in.</p>
             <div class="wcs-stack">
               <div class="wcs-btn-row">
-                <a class="wcs-btn-primary" href="/auth" data-testid="button-hero-cta">Start Free Trial →</a>
+                <a class="wcs-btn-primary" href="/auth" data-testid="button-hero-cta" onclick="window.wcsBeginMarketingNav&amp;&amp;true">Start Free Trial →</a>
               </div>
               <div class="wcs-btn-row">
                 <a class="wcs-btn-outline" href="/pricing" data-testid="button-hero-pricing">Pricing</a>

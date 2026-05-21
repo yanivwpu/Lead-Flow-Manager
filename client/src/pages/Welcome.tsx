@@ -1,5 +1,6 @@
-import { useState, lazy, Suspense, useLayoutEffect } from "react";
+import { useState, lazy, Suspense, useLayoutEffect, type MouseEvent } from "react";
 import { Link, useLocation } from "wouter";
+import { beginMarketingNavTransition } from "@/lib/marketingNavTransition";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Calendar, Shield } from "lucide-react";
@@ -27,21 +28,32 @@ function BelowFoldFallback({ className }: { className?: string }) {
 
 function HeroConversationMockup() {
   return (
-    <img
-      src="/hero/whachat-hero-mockup.png"
-      alt="WhachatCRM WhatsApp conversation mockup with AI copilot and lead score"
-      className="mx-auto block w-full max-w-[350px] lg:max-w-[380px]"
-      width={560}
-      height={871}
-      loading="eager"
-      decoding="async"
-    />
+    <div className="wcs-hero-image-slot">
+      <img
+        src="/hero/whachat-hero-mockup.png"
+        alt="WhachatCRM WhatsApp conversation mockup with AI copilot and lead score"
+        width={560}
+        height={871}
+        loading="eager"
+        decoding="async"
+        fetchPriority="high"
+      />
+    </div>
   );
 }
 
+function navigateFromMarketing(href: string, setLocation: (to: string) => void) {
+  return (e: MouseEvent) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    beginMarketingNavTransition();
+    requestAnimationFrame(() => setLocation(href));
+  };
+}
+
 export function Welcome() {
-  const { user, isLoading: authLoading } = useAuth();
-  const [location] = useLocation();
+  const { user } = useAuth();
+  const [location, setLocation] = useLocation();
   const { t } = useTranslation();
   const [showDemoModal, setShowDemoModal] = useState(false);
   const isRTL = getDirection() === "rtl";
@@ -49,11 +61,13 @@ export function Welcome() {
   const zeroPhrase = "Zero Complexity";
   const zeroIndex = heroTitle.indexOf(zeroPhrase);
 
+  const goAuth = navigateFromMarketing("/auth?mode=login", setLocation);
+  const goSignup = navigateFromMarketing("/auth", setLocation);
+
   const hasStaticShell =
     typeof document !== "undefined" && !!document.getElementById("whachat-static-shell");
-  /** index.html paints nav+hero for "/" guests — skip React duplicate until login or non-home route */
-  const deferHeroToStaticHtml =
-    hasStaticShell && location === "/" && (authLoading || !user);
+  /** Keep static HTML hero until logged-in or leaving "/" — avoids duplicate hero flash on Login */
+  const deferHeroToStaticHtml = hasStaticShell && location === "/" && !user;
 
   useLayoutEffect(() => {
     const shell = document.getElementById("whachat-static-shell");
@@ -131,12 +145,20 @@ export function Welcome() {
             </Link>
           ) : (
             <>
-              <Link href="/auth?mode=login">
-                <button className="h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">{t("landing.login")}</button>
-              </Link>
-              <Link href="/auth">
-                <button className="h-9 px-4 text-sm font-medium bg-brand-green text-white rounded-full hover:bg-emerald-700">{t("landing.startFree")}</button>
-              </Link>
+              <button
+                type="button"
+                onClick={goAuth}
+                className="wcs-nav-text-btn text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:inline-flex"
+              >
+                {t("landing.login")}
+              </button>
+              <button
+                type="button"
+                onClick={goSignup}
+                className="h-9 shrink-0 px-4 text-sm font-medium bg-brand-green text-white rounded-full hover:bg-emerald-700 border border-transparent"
+              >
+                {t("landing.startFree")}
+              </button>
             </>
           )}
         </div>
@@ -164,9 +186,9 @@ export function Welcome() {
 
             <div className="flex flex-col sm:flex-row gap-2.5 mb-4">
               <div className="w-full sm:w-auto">
-                <Link href={user ? "/app/inbox" : "/auth"}>
+                <Link href={user ? "/app/inbox" : "/auth"} onClick={user ? undefined : goSignup}>
                   <button
-                    className="w-full sm:w-auto h-11 px-5 bg-brand-green hover:bg-emerald-700 text-white text-sm font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg"
+                    className="w-full sm:w-auto h-11 px-5 bg-brand-green hover:bg-emerald-700 text-white text-sm font-semibold rounded-full flex items-center justify-center gap-2 transition-colors shadow-md hover:shadow-lg border border-transparent"
                     data-testid="button-hero-cta"
                   >
                     {t("landing.startTrial")}

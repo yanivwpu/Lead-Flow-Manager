@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useLayoutEffect } from "react";
+import { endMarketingNavTransition } from "@/lib/marketingNavTransition";
 import { useLocation, Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
@@ -37,6 +38,10 @@ export function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const { login, signup } = useAuth();
   const [, setLocation] = useLocation();
+
+  useLayoutEffect(() => {
+    endMarketingNavTransition();
+  }, []);
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();

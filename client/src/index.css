@@ -241,6 +241,67 @@
   opacity: 0;
 }
 
+/* Landing hero image — fixed aspect ratio prevents CLS on nav/auth transition */
+.wcs-hero-image-slot {
+  width: 100%;
+  max-width: 350px;
+  margin-left: auto;
+  margin-right: auto;
+  aspect-ratio: 560 / 871;
+  contain: layout style;
+}
+
+@media (min-width: 1024px) {
+  .wcs-hero-image-slot {
+    max-width: 380px;
+  }
+}
+
+.wcs-hero-image-slot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Smooth leave from marketing homepage → /auth (no static/React hero swap) */
+html.wcs-marketing-navigating {
+  overflow: hidden;
+}
+
+html.wcs-marketing-navigating #whachat-static-shell {
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+  pointer-events: none;
+}
+
+html.wcs-marketing-navigating #root {
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+  pointer-events: none;
+}
+
+/* Nav controls: no dimension shift on hover/active/focus */
+.wcs-nav-text-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  padding: 0 8px;
+  line-height: 1.25;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.wcs-nav-text-btn:active,
+.wcs-nav-text-btn:focus-visible {
+  border-color: transparent;
+  outline: none;
+  box-shadow: none;
+}
+
 /* Mobile / reduced-motion: skip entrance animations — opacity 0 delays LCP and increases main-thread work */
 @media (max-width: 767px) {
   .animate-hero-text,
