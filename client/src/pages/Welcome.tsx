@@ -1,6 +1,5 @@
 import { useState, lazy, Suspense, useLayoutEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { createMarketingHomeNavHandler, shouldDeferHidingStaticMarketing } from "@/lib/marketingNavTransition";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Calendar, Shield } from "lucide-react";
@@ -47,7 +46,7 @@ function HeroConversationMockup() {
 
 export function Welcome() {
   const { user } = useAuth();
-  const [location, setLocation] = useLocation();
+  const [location] = useLocation();
   const { t } = useTranslation();
   const [showDemoModal, setShowDemoModal] = useState(false);
   const isRTL = getDirection() === "rtl";
@@ -55,26 +54,14 @@ export function Welcome() {
   const zeroPhrase = "Zero Complexity";
   const zeroIndex = heroTitle.indexOf(zeroPhrase);
 
-  const goAuth = createMarketingHomeNavHandler("/auth?mode=login", setLocation);
-  const goSignup = createMarketingHomeNavHandler("/auth", setLocation);
-  const goPricing = createMarketingHomeNavHandler("/pricing", setLocation);
-  const goBlog = createMarketingHomeNavHandler("/blog", setLocation);
-  const goDashboard = createMarketingHomeNavHandler("/app/inbox", setLocation);
-
-  const hasStaticShell =
-    typeof document !== "undefined" && !!document.getElementById("whachat-static-shell");
-  /** Keep static HTML hero until logged-in or leaving "/" — avoids duplicate hero flash on Login */
-  const deferHeroToStaticHtml = hasStaticShell && location === "/" && !user;
-
   useLayoutEffect(() => {
-    const shell = document.getElementById("whachat-static-shell");
-    if (!shell) return;
-    if (shouldDeferHidingStaticMarketing()) return;
-    if (location !== "/" || user) {
-      document.documentElement.classList.add("wcs-hide-static-marketing");
-    } else {
-      document.documentElement.classList.remove("wcs-hide-static-marketing");
-    }
+    document.documentElement.classList.remove("wcs-marketing-navigating");
+    document.body.style.minHeight = "";
+    document.body.style.paddingRight = "";
+    document.documentElement.style.overflow = "";
+
+    if (!document.getElementById("whachat-static-shell")) return;
+    document.documentElement.classList.add("wcs-hide-static-marketing");
   }, [location, user]);
 
   return (
@@ -109,9 +96,7 @@ export function Welcome() {
           <BookDemoModal isOpen={showDemoModal} onClose={() => setShowDemoModal(false)} />
         </Suspense>
       ) : null}
-      {!deferHeroToStaticHtml ? (
-      <>
-      {/* Navigation */}
+
       <nav className="min-h-[56px] py-2 px-4 md:py-3 md:px-6 grid grid-cols-[auto_1fr_auto] items-center gap-3 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto box-border">
         <div className="flex items-center gap-2">
           <div className="h-8 w-8 bg-brand-green rounded-lg flex items-center justify-center">
@@ -126,11 +111,11 @@ export function Welcome() {
           </span>
         </div>
         <div className="flex items-center gap-2 md:gap-5 lg:gap-6 justify-self-end">
-          <Link href="/pricing" onClick={goPricing}>
-            <button className="wcs-nav-text-btn h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">{t("landing.pricing")}</button>
+          <Link href="/pricing" className="h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:inline-flex items-center">
+            {t("landing.pricing")}
           </Link>
-          <Link href="/blog" onClick={goBlog}>
-            <button className="wcs-nav-text-btn h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">{t("landing.blog")}</button>
+          <Link href="/blog" className="h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:inline-flex items-center">
+            {t("landing.blog")}
           </Link>
           <Suspense
             fallback={<div className="h-9 w-9 shrink-0 rounded-md bg-gray-100/90 border border-transparent" aria-hidden />}
@@ -138,37 +123,37 @@ export function Welcome() {
             <LanguageSelector variant="compact" className="text-gray-600 hover:text-gray-900 hover:bg-gray-100" />
           </Suspense>
           {user ? (
-            <Link href="/app/inbox" onClick={goDashboard}>
-              <button className="h-9 shrink-0 px-4 text-sm font-medium bg-brand-green text-white rounded-full hover:bg-emerald-700 border border-transparent">{t("landing.dashboard")}</button>
+            <Link
+              href="/app/inbox"
+              className="h-9 shrink-0 px-4 text-sm font-medium bg-brand-green text-white rounded-full hover:bg-emerald-700 inline-flex items-center"
+            >
+              {t("landing.dashboard")}
             </Link>
           ) : (
             <>
-              <button
-                type="button"
-                onClick={goAuth}
-                className="wcs-nav-text-btn text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:inline-flex"
+              <Link
+                href="/auth?mode=login"
+                className="h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:inline-flex items-center"
               >
                 {t("landing.login")}
-              </button>
-              <button
-                type="button"
-                onClick={goSignup}
-                className="h-9 shrink-0 px-4 text-sm font-medium bg-brand-green text-white rounded-full hover:bg-emerald-700 border border-transparent"
+              </Link>
+              <Link
+                href="/auth"
+                className="h-9 shrink-0 px-4 text-sm font-medium bg-brand-green text-white rounded-full hover:bg-emerald-700 inline-flex items-center"
               >
                 {t("landing.startFree")}
-              </button>
+              </Link>
             </>
           )}
         </div>
       </nav>
 
-      {/* Hero Section */}
       <section className="px-4 md:px-6 pt-5 md:pt-8 pb-6 md:pb-8 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
         <div className="flex flex-col gap-8 md:grid md:grid-cols-[1fr_1.04fr] md:gap-10 xl:gap-14 items-start">
           <HeroConversationMockup />
 
           <div className="order-1 md:order-1 max-w-[780px] md:mt-12 lg:mt-14">
-            <h1 className="text-[3rem] md:text-[4.5rem] lg:text-[6.4rem] xl:text-[6.9rem] font-display font-bold text-gray-950 tracking-tight leading-[0.95] mb-7">
+            <h1 className="text-[3rem] md:text-[4rem] lg:text-[5.5rem] xl:text-[6rem] font-display font-bold text-gray-950 tracking-tight leading-[0.95] mb-7">
               {zeroIndex >= 0 ? (
                 <>
                   <span className="block">{heroTitle.slice(0, zeroIndex).trim()}</span>
@@ -182,24 +167,22 @@ export function Welcome() {
 
             <div className="flex flex-col sm:flex-row gap-2.5 mb-4">
               <div className="w-full sm:w-auto">
-                <Link href={user ? "/app/inbox" : "/auth"} onClick={user ? goDashboard : goSignup}>
-                  <button
-                    className="w-full sm:w-auto h-11 px-5 bg-brand-green hover:bg-emerald-700 text-white text-sm font-semibold rounded-full flex items-center justify-center gap-2 transition-colors shadow-md hover:shadow-lg border border-transparent"
-                    data-testid="button-hero-cta"
-                  >
-                    {t("landing.startTrial")}
-                    <ArrowRight className="h-5 w-5" />
-                  </button>
+                <Link
+                  href={user ? "/app/inbox" : "/auth"}
+                  className="w-full sm:w-auto h-11 px-5 bg-brand-green hover:bg-emerald-700 text-white text-sm font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-colors shadow-md hover:shadow-lg"
+                  data-testid="button-hero-cta"
+                >
+                  {t("landing.startTrial")}
+                  <ArrowRight className="h-5 w-5" />
                 </Link>
               </div>
               <div className="w-full sm:w-auto">
-                <Link href="/pricing" onClick={goPricing}>
-                  <button
-                    className="w-full sm:w-auto h-11 px-5 bg-white border border-gray-200 text-gray-800 text-sm font-semibold rounded-full flex items-center justify-center gap-1.5 hover:bg-gray-50 transition-colors"
-                    data-testid="button-hero-pricing"
-                  >
-                    {t("landing.pricing")}
-                  </button>
+                <Link
+                  href="/pricing"
+                  className="w-full sm:w-auto h-11 px-5 bg-white border border-gray-200 text-gray-800 text-sm font-semibold rounded-full inline-flex items-center justify-center gap-1.5 hover:bg-gray-50 transition-colors"
+                  data-testid="button-hero-pricing"
+                >
+                  {t("landing.pricing")}
                 </Link>
               </div>
               <div className="flex flex-col items-center sm:items-start">
@@ -221,8 +204,6 @@ export function Welcome() {
           </div>
         </div>
       </section>
-      </>
-      ) : null}
 
       <Suspense fallback={<BelowFoldFallback className="min-h-[520px] bg-gray-50 [contain-intrinsic-size:auto_520px]" />}>
         <WelcomeBenefitsSection />

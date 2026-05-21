@@ -53,11 +53,6 @@ const NotFound = lazy(() => import("@/pages/not-found"));
 import { ReferralCapture } from "@/components/ReferralCapture";
 import { CookieConsentRoot } from "@/components/CookieConsentRoot";
 import { Welcome } from "@/pages/Welcome";
-import {
-  installMarketingHomeNavCapture,
-  shouldDeferHidingStaticMarketing,
-  watchMarketingHomeNavRelease,
-} from "@/lib/marketingNavTransition";
 
 // Wrapper for protected routes
 function ProtectedRoute({ component: Component, ...rest }: any) {
@@ -150,12 +145,6 @@ function Router() {
 
   const bootstrap = useMemo(() => readShopifyBootstrapFromWindow(), [location, urlTick]);
 
-  useEffect(() => installMarketingHomeNavCapture(), []);
-
-  useLayoutEffect(() => {
-    return watchMarketingHomeNavRelease(location, authLoading);
-  }, [location, authLoading]);
-
   useLayoutEffect(() => {
     setUrlTick((n) => n + 1);
   }, [location]);
@@ -245,6 +234,13 @@ const PageLoader = () => (
 
 function App() {
   const { i18n } = useTranslation();
+
+  useEffect(() => {
+    document.documentElement.classList.remove("wcs-marketing-navigating");
+    document.body.style.minHeight = "";
+    document.body.style.paddingRight = "";
+    document.documentElement.style.overflow = "";
+  }, []);
 
   useEffect(() => {
     const rtlLanguages = ['he', 'ar', 'fa', 'ur'];

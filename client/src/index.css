@@ -1,10 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-html {
-  scrollbar-gutter: stable;
-}
-
 @theme inline {
   /* Slate & Emerald Color Palette */
   --color-brand-green: #059669;
@@ -301,80 +297,12 @@ img.wcs-hero-image {
   animation: none;
 }
 
-.wcs-hero-image-frozen,
-.wcs-hero-image-frozen img,
-html.wcs-marketing-navigating .wcs-hero-image-slot,
-html.wcs-marketing-navigating .wcs-hero-image-slot img,
-html.wcs-marketing-navigating .wcs-hero-image-column,
-html.wcs-marketing-navigating #whachat-static-shell .wcs-order-img {
-  transition: none !important;
+.wcs-hero-image-column,
+.wcs-hero-image-slot,
+.wcs-hero-image-slot img,
+img.wcs-hero-image {
   transform: none !important;
   animation: none !important;
-}
-
-/* Homepage → any route: keep static hero frozen; load destination in #root underneath */
-html.wcs-marketing-navigating {
-  overflow: hidden;
-  scrollbar-gutter: stable;
-}
-
-html.wcs-marketing-navigating #whachat-static-shell,
-html.wcs-marketing-navigating.wcs-hide-static-marketing #whachat-static-shell {
-  display: block !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  transform: none !important;
-  transition: none !important;
-  pointer-events: none;
-}
-
-html.wcs-marketing-navigating #whachat-static-shell .wcs-hero-grid,
-html.wcs-marketing-navigating #whachat-static-shell .wcs-hero,
-html.wcs-marketing-navigating #whachat-static-shell .wcs-order-img,
-html.wcs-marketing-navigating #whachat-static-shell .wcs-order-txt {
-  transition: none !important;
-  transform: none !important;
-}
-
-html.wcs-marketing-navigating #root {
-  opacity: 0;
-  pointer-events: none;
-  position: fixed;
-  left: 0;
-  right: 0;
-  width: 100%;
-  height: 0;
-  min-height: 0;
-  overflow: hidden;
-  visibility: hidden;
-}
-
-html.wcs-marketing-navigating .animate-hero-text,
-html.wcs-marketing-navigating .animate-hero-image {
-  animation: none !important;
-  opacity: 1 !important;
-  transform: none !important;
-}
-
-/* Nav controls: no dimension shift on hover/active/focus */
-.wcs-nav-text-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 36px;
-  box-sizing: border-box;
-  border: 1px solid transparent;
-  border-radius: 9999px;
-  padding: 0 8px;
-  line-height: 1.25;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.wcs-nav-text-btn:active,
-.wcs-nav-text-btn:focus-visible {
-  border-color: transparent;
-  outline: none;
-  box-shadow: none;
 }
 
 /* Mobile / reduced-motion: skip entrance animations — opacity 0 delays LCP and increases main-thread work */

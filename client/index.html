@@ -109,7 +109,7 @@
       #whachat-static-shell .wcs-pipeline { border-radius: 18px; background: #f9fafb; border: 1px solid #f3f4f6; padding: 14px; font-size: .75rem; color: #6b7280; }
       #whachat-static-shell h1 { font-family: 'Plus Jakarta Sans', Inter, sans-serif; font-size: clamp(2.25rem, 6vw, 3rem); font-weight: 700; line-height: 1.03; letter-spacing: -0.035em; margin: 0 0 16px; color: #030712; }
       @media (min-width: 768px) {
-        #whachat-static-shell h1 { font-size: clamp(4.5rem, 6.65vw, 6.9rem); line-height: .95; margin-bottom: 28px; max-width: 780px; }
+        #whachat-static-shell h1 { font-size: clamp(4rem, 6.2vw, 6rem); line-height: .95; margin-bottom: 28px; max-width: 780px; }
       }
       #whachat-static-shell .wcs-head-line { display: block; }
       #whachat-static-shell .wcs-nowrap { display: block; white-space: nowrap; }
@@ -161,43 +161,6 @@
         transform: none;
         transition: none;
         animation: none;
-      }
-      .wcs-hero-image-frozen,
-      html.wcs-marketing-navigating .wcs-hero-image-slot,
-      html.wcs-marketing-navigating .wcs-hero-image-slot img,
-      html.wcs-marketing-navigating #whachat-static-shell .wcs-order-img {
-        transition: none !important;
-        transform: none !important;
-        animation: none !important;
-      }
-      html { scrollbar-gutter: stable; }
-      html.wcs-marketing-navigating { overflow: hidden; scrollbar-gutter: stable; }
-      html.wcs-marketing-navigating #whachat-static-shell,
-      html.wcs-marketing-navigating.wcs-hide-static-marketing #whachat-static-shell {
-        display: block !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        transform: none !important;
-        transition: none !important;
-        pointer-events: none;
-      }
-      html.wcs-marketing-navigating #whachat-static-shell .wcs-hero-grid,
-      html.wcs-marketing-navigating #whachat-static-shell .wcs-hero,
-      html.wcs-marketing-navigating #whachat-static-shell .wcs-order-txt {
-        transition: none !important;
-        transform: none !important;
-      }
-      html.wcs-marketing-navigating #root {
-        opacity: 0;
-        pointer-events: none;
-        position: fixed;
-        left: 0;
-        right: 0;
-        width: 100%;
-        height: 0;
-        min-height: 0;
-        overflow: hidden;
-        visibility: hidden;
       }
       #wcs-shopify-bootstrap-shell {
         display: none;
@@ -292,83 +255,6 @@
     <script type="module" src="/src/main.tsx"></script>
   </head>
   <body>
-    <script>
-      window.wcsFreezeHeroMock = function () {
-        try {
-          document.querySelectorAll("#whachat-static-shell .wcs-hero-image-slot, #root .wcs-hero-image-slot").forEach(function (slot) {
-            if (slot.getAttribute("data-wcs-hero-frozen")) return;
-            var rect = slot.getBoundingClientRect();
-            if (rect.width < 1 || rect.height < 1) return;
-            var column = slot.closest(".wcs-hero-image-column, .wcs-order-img");
-            var colRect = column ? column.getBoundingClientRect() : rect;
-            var w = rect.width + "px";
-            var h = rect.height + "px";
-            slot.setAttribute("data-wcs-hero-frozen", "1");
-            slot.classList.add("wcs-hero-image-frozen");
-            slot.style.boxSizing = "border-box";
-            slot.style.width = w;
-            slot.style.height = h;
-            slot.style.minWidth = w;
-            slot.style.minHeight = h;
-            slot.style.maxWidth = w;
-            slot.style.maxHeight = h;
-            slot.style.aspectRatio = "auto";
-            slot.style.flexShrink = "0";
-            var img = slot.querySelector("img");
-            if (img) {
-              img.style.display = "block";
-              img.style.width = "100%";
-              img.style.height = "100%";
-              img.style.objectFit = "contain";
-              img.style.transform = "none";
-              img.style.transition = "none";
-              img.style.animation = "none";
-            }
-            if (column) {
-              column.classList.add("wcs-hero-image-frozen");
-              column.style.width = colRect.width + "px";
-              column.style.minWidth = colRect.width + "px";
-              column.style.minHeight = colRect.height + "px";
-              column.style.flexShrink = "0";
-            }
-          });
-        } catch (e) {}
-      };
-      window.wcsBeginMarketingNav = function () {
-        try {
-          if (document.documentElement.classList.contains("wcs-marketing-navigating")) return;
-          window.wcsFreezeHeroMock();
-          document.documentElement.classList.add("wcs-marketing-navigating");
-          var shell = document.getElementById("whachat-static-shell");
-          var lockHeight = shell
-            ? Math.max(shell.offsetHeight, window.innerHeight || 0)
-            : (window.innerHeight || 0);
-          document.body.style.minHeight = lockHeight + "px";
-          var scrollbarWidth = Math.max(0, (window.innerWidth || 0) - document.documentElement.clientWidth);
-          if (scrollbarWidth > 0) document.body.style.paddingRight = scrollbarWidth + "px";
-          document.documentElement.style.overflow = "hidden";
-          window.wcsFreezeHeroMock();
-        } catch (e) {}
-      };
-      (function () {
-        function isOutbound(href) {
-          if (!href || href.charAt(0) !== "/") return false;
-          var path = (window.location.pathname || "/").replace(/\/$/, "") || "/";
-          var target = (href.split("?")[0] || "/").replace(/\/$/, "") || "/";
-          return path === "/" && target !== "/";
-        }
-        document.addEventListener("click", function (e) {
-          var path = (window.location.pathname || "/").replace(/\/$/, "") || "/";
-          if (path !== "/") return;
-          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-          var a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
-          if (!a) return;
-          var href = a.getAttribute("href");
-          if (!isOutbound(href)) return;
-          window.wcsBeginMarketingNav();
-        }, true);
-      })();
-    </script>
     <script>
       (function () {
         try {
