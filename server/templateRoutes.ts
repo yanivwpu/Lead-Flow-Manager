@@ -470,7 +470,7 @@ export function registerTemplateRoutes(app: Express) {
         normalized,
       });
 
-      await onGrowthEngineSubmissionRecorded(userId, submission.id).catch((e) =>
+      await onGrowthEngineSubmissionRecorded(userId, submission.id, fullPayload).catch((e) =>
         console.error("[Template] GE setup task (submission):", e)
       );
 

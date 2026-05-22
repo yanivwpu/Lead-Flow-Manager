@@ -89,6 +89,8 @@ interface SetupTaskRow {
   updatedAt: string | null;
   userEmail: string | null;
   userName: string | null;
+  onboardingSummary?: Record<string, unknown> | null;
+  sessionBooking?: { startTime?: string; eventTypeName?: string; inviteeName?: string } | null;
 }
 
 interface SalespersonInfo {
@@ -793,6 +795,23 @@ export function SalesPortal() {
                             </span>
                           </div>
                           <p className="text-xs text-gray-400 font-mono truncate">User ID: {task.userId}</p>
+                          {task.onboardingSummary && typeof task.onboardingSummary === "object" ? (
+                            <p className="text-xs text-gray-600 line-clamp-2">
+                              {String(
+                                (task.onboardingSummary as { legalName?: string }).legalName ||
+                                  (task.onboardingSummary as { legalBusinessName?: string }).legalBusinessName ||
+                                  "",
+                              )}
+                              {(task.onboardingSummary as { country?: string }).country
+                                ? ` · ${(task.onboardingSummary as { country?: string }).country}`
+                                : ""}
+                            </p>
+                          ) : null}
+                          {task.sessionBooking?.startTime ? (
+                            <p className="text-xs text-emerald-700">
+                              Session: {new Date(task.sessionBooking.startTime).toLocaleString()}
+                            </p>
+                          ) : null}
                         </div>
                         <Button
                           onClick={() => markSetupComplete.mutate(task.id)}

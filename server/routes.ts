@@ -8941,14 +8941,22 @@ export async function registerRoutes(
       if (role !== "setup" && role !== "both") {
         return res.json([]);
       }
+      const { readRgeSetupTaskMeta, parseGrowthEngineSessionBookingMeta } = await import(
+        "./growthEngineSetupService"
+      );
       const tasks = await storage.listGrowthEngineSetupTasksForSalesperson(req.salesperson.id);
       const enriched = await Promise.all(
         tasks.map(async (t) => {
           const u = await storage.getUser(t.userId);
+          const meta = readRgeSetupTaskMeta(t.internalNotes);
+          const sessionBooking = parseGrowthEngineSessionBookingMeta(t.internalNotes);
+          const submission = await storage.getRealtorOnboardingSubmission(t.userId).catch(() => undefined);
           return {
             ...t,
             userEmail: u?.email ?? null,
             userName: u?.name ?? null,
+            onboardingSummary: meta?.onboarding ?? submission?.payload ?? null,
+            sessionBooking,
           };
         }),
       );

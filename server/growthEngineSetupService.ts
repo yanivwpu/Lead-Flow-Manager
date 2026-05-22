@@ -1,10 +1,17 @@
-import { RGE_TEMPLATE_ID } from "@shared/rgePaths";
+import { RGE_TEMPLATE_ID, RGE_TEMPLATE_ONBOARDING_PATH } from "@shared/rgePaths";
 import { storage } from "./storage";
 import type { GrowthEngineSetupTask, User } from "@shared/schema";
 import { sendGrowthEngineSessionBookedEmail } from "./email";
 import { isUserWhatsAppConnectedForActivation } from "./whatsappService";
+import { getAppOrigin } from "./urlOrigins";
 
 export { RGE_TEMPLATE_ID };
+
+export const RGE_SETUP_TASK_LOG = "[RGE Setup Task]";
+
+export function logRgeSetupTask(event: string, payload: Record<string, unknown>): void {
+  console.warn(RGE_SETUP_TASK_LOG, event, payload);
+}
 
 export const GE_SETUP_STATUS = {
   purchased: "purchased",
@@ -37,7 +44,16 @@ export type GrowthEngineSessionBookingMeta = GrowthEngineSessionBookingDetails &
   recordedAt: string;
 };
 
-export function appendGrowthEngineSetupTrackingParams(schedulingUrl: string, userId: string): string {
+export function buildRgeSetupBookingReturnUrl(): string {
+  const base = getAppOrigin().replace(/\/+$/, "");
+  return `${base}${RGE_TEMPLATE_ONBOARDING_PATH}?step=4&booking=success`;
+}
+
+export function appendGrowthEngineSetupTrackingParams(
+  schedulingUrl: string,
+  userId: string,
+  options?: { redirectAfterBooking?: string },
+): string {
   const raw = (schedulingUrl || "").trim();
   if (!raw || !userId) return raw;
   try {
@@ -46,33 +62,81 @@ export function appendGrowthEngineSetupTrackingParams(schedulingUrl: string, use
     url.searchParams.set("utm_source", "whachatcrm");
     url.searchParams.set("utm_medium", "rge_setup");
     url.searchParams.set("utm_content", userId);
+    const redirect = options?.redirectAfterBooking?.trim();
+    if (redirect) {
+      url.searchParams.set("redirect_url", redirect);
+    }
     return url.toString();
   } catch {
     const join = raw.includes("?") ? "&" : "?";
-    return `${raw}${join}utm_source=whachatcrm&utm_medium=rge_setup&utm_content=${encodeURIComponent(userId)}`;
+    let out = `${raw}${join}utm_source=whachatcrm&utm_medium=rge_setup&utm_content=${encodeURIComponent(userId)}`;
+    const redirect = options?.redirectAfterBooking?.trim();
+    if (redirect) {
+      out += `&redirect_url=${encodeURIComponent(redirect)}`;
+    }
+    return out;
   }
+}
+
+export type RgeSetupTaskMeta = {
+  kind: "rge_setup_meta";
+  onboarding?: Record<string, unknown>;
+  booking?: GrowthEngineSessionBookingMeta;
+  updatedAt: string;
+};
+
+export function readRgeSetupTaskMeta(internalNotes: string | null | undefined): RgeSetupTaskMeta | null {
+  if (!internalNotes?.trim()) return null;
+  try {
+    const parsed = JSON.parse(internalNotes) as Record<string, unknown>;
+    if (parsed?.kind === "rge_setup_meta") {
+      return parsed as RgeSetupTaskMeta;
+    }
+    if (parsed?.kind === "session_booking") {
+      const booking = parsed.booking as GrowthEngineSessionBookingMeta | undefined;
+      return {
+        kind: "rge_setup_meta",
+        booking: booking && typeof booking === "object" ? booking : undefined,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function writeRgeSetupTaskMeta(parts: {
+  onboarding?: Record<string, unknown>;
+  booking?: GrowthEngineSessionBookingMeta | null;
+  existingNotes?: string | null;
+}): string {
+  const prior = readRgeSetupTaskMeta(parts.existingNotes ?? null);
+  const meta: RgeSetupTaskMeta = {
+    kind: "rge_setup_meta",
+    onboarding: parts.onboarding ?? prior?.onboarding,
+    booking: parts.booking ?? prior?.booking ?? undefined,
+    updatedAt: new Date().toISOString(),
+  };
+  return JSON.stringify(meta);
 }
 
 export function parseGrowthEngineSessionBookingMeta(
   internalNotes: string | null | undefined,
 ): GrowthEngineSessionBookingMeta | null {
-  if (!internalNotes?.trim()) return null;
-  try {
-    const parsed = JSON.parse(internalNotes) as Record<string, unknown>;
-    if (parsed?.kind !== "session_booking") return null;
-    const booking = parsed.booking as GrowthEngineSessionBookingMeta | undefined;
-    return booking && typeof booking === "object" ? booking : null;
-  } catch {
-    return null;
-  }
+  const meta = readRgeSetupTaskMeta(internalNotes);
+  return meta?.booking ?? null;
 }
 
-function buildSessionBookingNotes(details: GrowthEngineSessionBookingDetails): string {
-  const meta: GrowthEngineSessionBookingMeta = {
+function buildSessionBookingNotes(
+  details: GrowthEngineSessionBookingDetails,
+  existingNotes?: string | null,
+): string {
+  const booking: GrowthEngineSessionBookingMeta = {
     ...details,
     recordedAt: new Date().toISOString(),
   };
-  return JSON.stringify({ kind: "session_booking", booking: meta });
+  return writeRgeSetupTaskMeta({ booking, existingNotes });
 }
 
 export async function recordGrowthEngineSessionBooked(params: {
@@ -92,7 +156,10 @@ export async function recordGrowthEngineSessionBooked(params: {
     return { recorded: false, reason: "user_not_found" };
   }
 
-  const task = await storage.getGrowthEngineSetupTask(user.id, RGE_TEMPLATE_ID);
+  let task = await storage.getGrowthEngineSetupTask(user.id, RGE_TEMPLATE_ID);
+  if (!task) {
+    task = await ensureGrowthEnginePurchasedTask(user.id);
+  }
   if (!task) {
     return { recorded: false, reason: "no_setup_task", userId: user.id };
   }
@@ -119,7 +186,15 @@ export async function recordGrowthEngineSessionBooked(params: {
   await storage.updateGrowthEngineSetupTask(task.id, {
     status: GE_SETUP_STATUS.sessionBooked,
     sessionBookedAt,
-    internalNotes: buildSessionBookingNotes(params.details),
+    internalNotes: buildSessionBookingNotes(params.details, task.internalNotes),
+  });
+
+  logRgeSetupTask("bookingDetected", {
+    userId: user.id,
+    taskId: task.id,
+    salespersonId: task.salespersonId,
+    eventTypeName: params.details.eventTypeName,
+    startTime: params.details.startTime,
   });
 
   let salespersonEmail: string | null = null;
@@ -168,21 +243,78 @@ export async function pickNextSetupSpecialistId(): Promise<string | null> {
   return openCounts[0]?.id ?? null;
 }
 
+async function assignGrowthEngineSetupSpecialist(
+  task: GrowthEngineSetupTask,
+): Promise<GrowthEngineSetupTask> {
+  if (task.salespersonId) return task;
+  const specialistId = await pickNextSetupSpecialistId();
+  if (!specialistId) {
+    logRgeSetupTask("assign_skipped_no_specialist", {
+      userId: task.userId,
+      taskId: task.id,
+    });
+    return task;
+  }
+  const updated = await storage.updateGrowthEngineSetupTask(task.id, {
+    salespersonId: specialistId,
+  });
+  logRgeSetupTask("assigned", {
+    userId: task.userId,
+    taskId: task.id,
+    salespersonId: specialistId,
+  });
+  return updated ?? task;
+}
+
+async function logSetupTaskPortalVisibility(task: GrowthEngineSetupTask): Promise<void> {
+  if (!task.salespersonId) {
+    logRgeSetupTask("taskVisibleInPortal", {
+      userId: task.userId,
+      taskId: task.id,
+      visible: false,
+      reason: "no_salesperson_assigned",
+    });
+    return;
+  }
+  const sp = await storage.getSalesperson(task.salespersonId);
+  const role = sp?.role || "sales";
+  const visible = !!sp?.isActive && (role === "setup" || role === "both");
+  logRgeSetupTask("taskVisibleInPortal", {
+    userId: task.userId,
+    taskId: task.id,
+    salespersonId: task.salespersonId,
+    salespersonRole: role,
+    visible,
+  });
+}
+
 export async function ensureGrowthEnginePurchasedTask(userId: string): Promise<GrowthEngineSetupTask | undefined> {
   const existing = await storage.getGrowthEngineSetupTask(userId, RGE_TEMPLATE_ID);
-  if (existing) return existing;
+  if (existing) {
+    const assigned = await assignGrowthEngineSetupSpecialist(existing);
+    return assigned;
+  }
   const specialistId = await pickNextSetupSpecialistId();
   try {
-    return await storage.insertGrowthEngineSetupTask({
+    const created = await storage.insertGrowthEngineSetupTask({
       userId,
       templateId: RGE_TEMPLATE_ID,
       salespersonId: specialistId,
       status: GE_SETUP_STATUS.purchased,
     });
+    logRgeSetupTask("created", {
+      userId,
+      taskId: created.id,
+      salespersonId: specialistId,
+    });
+    const assigned = await assignGrowthEngineSetupSpecialist(created);
+    await logSetupTaskPortalVisibility(assigned);
+    return assigned;
   } catch (e: any) {
     // Unique race: fetch again
     if (String(e?.message || "").includes("unique") || e?.code === "23505") {
-      return storage.getGrowthEngineSetupTask(userId, RGE_TEMPLATE_ID);
+      const raced = await storage.getGrowthEngineSetupTask(userId, RGE_TEMPLATE_ID);
+      return raced ? assignGrowthEngineSetupSpecialist(raced) : undefined;
     }
     throw e;
   }
@@ -191,19 +323,52 @@ export async function ensureGrowthEnginePurchasedTask(userId: string): Promise<G
 export async function onGrowthEngineSubmissionRecorded(
   userId: string,
   submissionId: string,
+  onboardingPayload?: Record<string, unknown>,
 ): Promise<void> {
-  await ensureGrowthEnginePurchasedTask(userId);
-  await storage.updateGrowthEngineSetupTaskByUserTemplate(userId, RGE_TEMPLATE_ID, {
-    status: GE_SETUP_STATUS.onboardingSubmitted,
+  let task = await ensureGrowthEnginePurchasedTask(userId);
+  if (!task) {
+    logRgeSetupTask("submit_skipped_no_task", { userId, submissionId });
+    return;
+  }
+  task = await assignGrowthEngineSetupSpecialist(task);
+
+  const keepSessionBooked = task.status === GE_SETUP_STATUS.sessionBooked;
+  const nextStatus = keepSessionBooked
+    ? GE_SETUP_STATUS.sessionBooked
+    : GE_SETUP_STATUS.onboardingSubmitted;
+
+  const internalNotes = writeRgeSetupTaskMeta({
+    onboarding: onboardingPayload,
+    booking: parseGrowthEngineSessionBookingMeta(task.internalNotes),
+    existingNotes: task.internalNotes,
+  });
+
+  const updated = await storage.updateGrowthEngineSetupTaskByUserTemplate(userId, RGE_TEMPLATE_ID, {
+    status: nextStatus,
     submissionId,
     onboardingSubmittedAt: new Date(),
+    internalNotes,
   });
+
+  if (updated) {
+    logRgeSetupTask("onboarding_submitted", {
+      userId,
+      taskId: updated.id,
+      submissionId,
+      status: updated.status,
+      salespersonId: updated.salespersonId,
+      bookingDetected: keepSessionBooked || !!parseGrowthEngineSessionBookingMeta(updated.internalNotes),
+    });
+    await logSetupTaskPortalVisibility(updated);
+  }
 }
 
 export async function onGrowthEngineInstallSuccess(userId: string): Promise<void> {
   const t = await storage.getGrowthEngineSetupTask(userId, RGE_TEMPLATE_ID);
   if (!t) return;
   if (t.status === GE_SETUP_STATUS.setupCompleted) return;
+  if (t.status === GE_SETUP_STATUS.sessionBooked) return;
+  if (t.status !== GE_SETUP_STATUS.onboardingSubmitted) return;
   await storage.updateGrowthEngineSetupTaskByUserTemplate(userId, RGE_TEMPLATE_ID, {
     status: GE_SETUP_STATUS.sessionPending,
   });
@@ -213,13 +378,16 @@ export async function resolveConciergeBookingUrlForUser(userId: string): Promise
   calendarUrl: string | null;
   source: "specialist" | "default" | "none";
 }> {
+  const returnAfterBooking = buildRgeSetupBookingReturnUrl();
   const task = await storage.getGrowthEngineSetupTask(userId, RGE_TEMPLATE_ID);
   if (task?.salespersonId) {
     const sp = await storage.getSalesperson(task.salespersonId);
     const link = sp?.calendarLink?.trim();
     if (link) {
       return {
-        calendarUrl: appendGrowthEngineSetupTrackingParams(link, userId),
+        calendarUrl: appendGrowthEngineSetupTrackingParams(link, userId, {
+          redirectAfterBooking: returnAfterBooking,
+        }),
         source: "specialist",
       };
     }
@@ -227,7 +395,9 @@ export async function resolveConciergeBookingUrlForUser(userId: string): Promise
   const def = getDefaultRgeSetupCalendarUrl();
   if (def) {
     return {
-      calendarUrl: appendGrowthEngineSetupTrackingParams(def, userId),
+      calendarUrl: appendGrowthEngineSetupTrackingParams(def, userId, {
+        redirectAfterBooking: returnAfterBooking,
+      }),
       source: "default",
     };
   }

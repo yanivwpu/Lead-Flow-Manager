@@ -289,6 +289,9 @@ function RGEOnboardingWizard({
   submitOnboardingMutation: UseMutationResult<any, Error, OnboardingValues, unknown>;
   setLocation: (path: string) => void;
 }) {
+  const { toast } = useToast();
+  const bookingReturnHandledRef = React.useRef(false);
+
   const { data: activationStatus } = useQuery<ActivationStatusPayload>({
     queryKey: ["/api/activation-status"],
     staleTime: 15_000,
@@ -301,10 +304,10 @@ function RGEOnboardingWizard({
     refetchInterval: 20_000,
   });
 
-  const { data: engineStatusData } = useQuery<RgeEngineStatusPayload>({
+  const { data: engineStatusData, refetch: refetchEngineStatus } = useQuery<RgeEngineStatusPayload>({
     queryKey: ["/api/templates/realtor-growth-engine/status"],
-    staleTime: 15_000,
-    refetchInterval: 30_000,
+    staleTime: 5_000,
+    refetchInterval: step === 4 && !onboardingComplete ? 4_000 : 30_000,
   });
 
   const { data: savedProgressData } = useQuery<{
@@ -352,9 +355,39 @@ function RGEOnboardingWizard({
   const conciergeCalendarUrl = conciergeBooking?.calendarUrl?.trim() || null;
   const showCompletion = onboardingComplete;
   const sessionBooking = engineStatusData?.setupTask?.sessionBooking;
+  const launchSessionBooked =
+    engineStatusData?.setupTask?.status === "session_booked" ||
+    !!engineStatusData?.setupTask?.sessionBookedAt ||
+    !!sessionBooking?.startTime;
   const sessionWhen =
     formatLaunchSessionWhen(sessionBooking?.startTime) ||
     formatLaunchSessionWhen(engineStatusData?.setupTask?.sessionBookedAt);
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const stepParam = params.get("step");
+    if (stepParam) {
+      const n = parseInt(stepParam, 10);
+      if (!Number.isNaN(n) && n >= 1 && n <= totalSteps) {
+        setStep(n);
+      }
+    }
+    if (params.get("booking") === "success" && !bookingReturnHandledRef.current) {
+      bookingReturnHandledRef.current = true;
+      setStep(4);
+      persistProgress(4);
+      void refetchEngineStatus();
+      void queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/status"] });
+      toast({
+        title: "Launch session booked successfully",
+        description: "Your time is confirmed. Continue to finish onboarding.",
+      });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("booking");
+      url.searchParams.delete("step");
+      window.history.replaceState({}, "", url.pathname + url.search);
+    }
+  }, [setStep, totalSteps, refetchEngineStatus, toast]);
 
   const webchatConnected = !!channelSettings?.some((s) => s.channel === "webchat" && !!s.isConnected);
   const calendlyConnected = !!engineStatusData?.calendlyConnected;
@@ -371,7 +404,21 @@ function RGEOnboardingWizard({
     return stepFields[stepNum] || [];
   };
 
+  const openLaunchSessionBooking = () => {
+    if (!conciergeCalendarUrl) return;
+    persistProgress(4);
+    window.location.href = conciergeCalendarUrl;
+  };
+
   const nextStep = async () => {
+    if (step === 4 && conciergeCalendarUrl && !launchSessionBooked) {
+      toast({
+        title: "Book your launch session first",
+        description: "Choose a time with your specialist, then continue here after confirmation.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (step === 4 && !conciergeCalendarUrl) {
       const availability = form.getValues("conciergeLaunchAvailability")?.trim() ?? "";
       if (availability.length < 5) {
@@ -435,12 +482,7 @@ function RGEOnboardingWizard({
                   </p>
                 ) : null}
               </div>
-            ) : (
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                If you booked via Calendly, your session details will appear here shortly. You can also use the calendar
-                link in your confirmation email.
-              </p>
-            )}
+            ) : null}
             <p className="text-xs text-muted-foreground leading-relaxed">
               If your availability changes, update your booking using the calendar link sent to your email.
             </p>
@@ -456,11 +498,8 @@ function RGEOnboardingWizard({
             <p className="text-sm text-gray-700 pt-1">
               Thank you for your purchase and we wish you lots of business.
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-              <Button className="bg-brand-green hover:bg-brand-green/90" asChild data-testid="button-go-growth-engine">
-                <Link href={RGE_TEMPLATE_DETAIL_PATH}>Go to Growth Engine</Link>
-              </Button>
-              <Button variant="outline" asChild data-testid="button-open-automations">
+            <div className="flex justify-center pt-2">
+              <Button className="bg-brand-green hover:bg-brand-green/90" asChild data-testid="button-open-automations">
                 <Link href="/app/workflows">Open Automations</Link>
               </Button>
             </div>
@@ -716,12 +755,31 @@ function RGEOnboardingWizard({
                   <CardContent className="space-y-4">
                     {conciergeCalendarUrl ? (
                       <>
-                        <Button className="bg-brand-green hover:bg-brand-green/90" asChild data-testid="button-book-launch-session">
-                          <a href={conciergeCalendarUrl} target="_blank" rel="noopener noreferrer">
+                        {launchSessionBooked ? (
+                          <div
+                            className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-900"
+                            data-testid="banner-launch-session-booked"
+                          >
+                            <p className="font-medium">Launch session booked successfully</p>
+                            {sessionWhen ? (
+                              <p className="mt-1 text-emerald-800/90">{sessionWhen}</p>
+                            ) : (
+                              <p className="mt-1 text-emerald-800/90">
+                                Your booking is confirmed. Continue to the next step when you are ready.
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <Button
+                            type="button"
+                            className="bg-brand-green hover:bg-brand-green/90"
+                            onClick={openLaunchSessionBooking}
+                            data-testid="button-book-launch-session"
+                          >
                             Book launch session
                             <ExternalLink className="ml-2 h-4 w-4" />
-                          </a>
-                        </Button>
+                          </Button>
+                        )}
                         <FormField
                           control={form.control}
                           name="additionalNotes"
@@ -850,8 +908,17 @@ function RGEOnboardingWizard({
                   <ChevronLeft className="mr-1 w-4 h-4" /> Previous
                 </Button>
                 {step < totalSteps ? (
-                  <Button type="button" className="bg-brand-green hover:bg-brand-green/90" onClick={nextStep} data-testid="button-next-step">
-                    Next <ChevronRight className="ml-1 w-4 h-4" />
+                  <Button
+                    type="button"
+                    className="bg-brand-green hover:bg-brand-green/90"
+                    onClick={nextStep}
+                    disabled={step === 4 && !!conciergeCalendarUrl && !launchSessionBooked}
+                    data-testid="button-next-step"
+                  >
+                    {step === 4 && conciergeCalendarUrl && !launchSessionBooked
+                      ? "Book session to continue"
+                      : "Next"}{" "}
+                    <ChevronRight className="ml-1 w-4 h-4" />
                   </Button>
                 ) : (
                   <Button

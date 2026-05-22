@@ -1,6 +1,10 @@
 import type { Request, Response } from "express";
 import { extractCalendlyBookingPayload, verifyCalendlyWebhookSignature } from "./calendlyWebhook";
-import { recordGrowthEngineSessionBooked, type GrowthEngineSessionBookingDetails } from "./growthEngineSetupService";
+import {
+  logRgeSetupTask,
+  recordGrowthEngineSessionBooked,
+  type GrowthEngineSessionBookingDetails,
+} from "./growthEngineSetupService";
 
 function readTrackingUserId(tracking: unknown): string | undefined {
   if (!tracking || typeof tracking !== "object") return undefined;
@@ -81,13 +85,16 @@ async function processGrowthEngineSetupCalendlyPayload(body: Record<string, unkn
   });
 
   if (result.recorded) {
-    console.log("[GE Setup Calendly] Session booked", {
+    logRgeSetupTask("bookingDetected", {
+      source: "calendly_webhook",
       userId: result.userId,
       taskId: result.taskId,
       email: parsed.email,
+      utmUserId: utmUserId || null,
     });
   } else {
-    console.warn("[GE Setup Calendly] No matching open setup task", {
+    logRgeSetupTask("booking_skipped", {
+      source: "calendly_webhook",
       email: parsed.email,
       utmUserId: utmUserId || null,
       reason: result.reason,
