@@ -222,7 +222,7 @@ function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function extractCalendlyBookingPayload(body: Record<string, unknown>): {
+export function extractCalendlyBookingPayload(body: Record<string, unknown>): {
   email: string;
   name: string;
   eventTypeName: string;

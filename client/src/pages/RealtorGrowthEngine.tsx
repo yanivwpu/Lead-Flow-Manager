@@ -64,6 +64,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
 import {
   getRgeCheckoutReturnPaths,
+  RGE_TEMPLATE_DETAIL_PATH,
   RGE_TEMPLATE_ONBOARDING_PATH,
 } from "@shared/rgePaths";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
@@ -195,7 +196,35 @@ const onboardingSchema = z.object({
 
 type OnboardingValues = z.infer<typeof onboardingSchema>;
 
+type RgeEngineStatusPayload = {
+  onboardingComplete?: boolean;
+  setupTask?: {
+    status: string;
+    sessionBookedAt: string | null;
+    sessionBooking: { startTime?: string; eventTypeName?: string; inviteeName?: string } | null;
+    specialist: { name: string; email: string } | null;
+  } | null;
+  calendlyConnected?: boolean;
+};
+
 type ChannelSettingRow = { channel: string; isConnected?: boolean | null };
+
+function formatLaunchSessionWhen(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
+  } catch {
+    return iso;
+  }
+}
 
 function ChannelStatusRow({
   label,
@@ -249,22 +278,22 @@ function RGEOnboardingWizard({
   submitOnboardingMutation: UseMutationResult<any, Error, OnboardingValues, unknown>;
   setLocation: (path: string) => void;
 }) {
-  const { data: activationStatus, refetch: refetchActivation } = useQuery<ActivationStatusPayload>({
+  const { data: activationStatus } = useQuery<ActivationStatusPayload>({
     queryKey: ["/api/activation-status"],
-    enabled: status === "purchased" || status === "submitted",
     staleTime: 15_000,
+    refetchInterval: 20_000,
   });
 
-  const { data: channelSettings, refetch: refetchChannels } = useQuery<ChannelSettingRow[]>({
+  const { data: channelSettings } = useQuery<ChannelSettingRow[]>({
     queryKey: ["/api/channels"],
-    enabled: status === "purchased" || status === "submitted",
     staleTime: 15_000,
+    refetchInterval: 20_000,
   });
 
-  const { data: engineStatusData, refetch: refetchEngineStatus } = useQuery({
+  const { data: engineStatusData } = useQuery<RgeEngineStatusPayload>({
     queryKey: ["/api/templates/realtor-growth-engine/status"],
-    enabled: status === "purchased" || status === "submitted",
     staleTime: 15_000,
+    refetchInterval: 30_000,
   });
 
   const { data: conciergeBooking } = useQuery<{ calendarUrl: string | null; source: string }>({
@@ -273,21 +302,19 @@ function RGEOnboardingWizard({
       const res = await apiRequest("GET", "/api/templates/realtor-growth-engine/concierge-calendar");
       return res.json();
     },
-    enabled: status === "purchased" || status === "submitted",
     staleTime: 60_000,
   });
 
   const conciergeCalendarUrl = conciergeBooking?.calendarUrl?.trim() || null;
+  const showCompletion = status === "installed" || !!engineStatusData?.onboardingComplete;
+  const sessionBooking = engineStatusData?.setupTask?.sessionBooking;
+  const sessionWhen =
+    formatLaunchSessionWhen(sessionBooking?.startTime) ||
+    formatLaunchSessionWhen(engineStatusData?.setupTask?.sessionBookedAt);
 
   const webchatConnected = !!channelSettings?.some((s) => s.channel === "webchat" && !!s.isConnected);
-  const calendlyConnected = !!(engineStatusData as { calendlyConnected?: boolean } | undefined)?.calendlyConnected;
+  const calendlyConnected = !!engineStatusData?.calendlyConnected;
   const whatsappReady = !!activationStatus?.whatsappConnected;
-
-  const refreshReadiness = () => {
-    void refetchActivation();
-    void refetchChannels();
-    void refetchEngineStatus();
-  };
 
   const getFieldsForStep = (stepNum: number): (keyof OnboardingValues)[] => {
     const stepFields: Record<number, (keyof OnboardingValues)[]> = {
@@ -337,7 +364,59 @@ function RGEOnboardingWizard({
         </Button>
       </div>
 
-      {status === "purchased" && (
+      {showCompletion ? (
+        <Card className="border-emerald-100 bg-emerald-50/30 shadow-sm" data-testid="card-onboarding-complete">
+          <CardContent className="py-10 px-6 space-y-5 text-center max-w-lg mx-auto">
+            <CheckCircle2 className="w-12 h-12 text-brand-green mx-auto" />
+            <h3 className="text-2xl font-bold text-gray-900 tracking-tight">Your onboarding is complete</h3>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Your Growth Engine onboarding has been submitted and your launch session has been scheduled.
+            </p>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Our team will review your setup and contact you if anything else is needed.
+            </p>
+            {sessionWhen ? (
+              <div className="rounded-lg border border-emerald-100 bg-white px-4 py-3 text-sm text-gray-700">
+                <p className="font-medium text-gray-900">Launch session confirmed</p>
+                <p className="mt-1">{sessionWhen}</p>
+                {engineStatusData?.setupTask?.specialist ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Specialist: {engineStatusData.setupTask.specialist.name}
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                If you booked via Calendly, your session details will appear here shortly. You can also use the calendar
+                link in your confirmation email.
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              If your availability changes, update your booking using the calendar link sent to your email.
+            </p>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              Manage automation layers anytime from Growth Engine or Automations.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Need help?{" "}
+              <a href="mailto:support@whachatcrm.com" className="text-brand-green font-medium hover:underline">
+                support@whachatcrm.com
+              </a>
+            </p>
+            <p className="text-sm text-gray-700 pt-1">
+              Thank you for your purchase and we wish you lots of business.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+              <Button className="bg-brand-green hover:bg-brand-green/90" asChild data-testid="button-go-growth-engine">
+                <Link href={RGE_TEMPLATE_DETAIL_PATH}>Go to Growth Engine</Link>
+              </Button>
+              <Button variant="outline" asChild data-testid="button-open-automations">
+                <Link href="/app/workflows">Open Automations</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : status === "purchased" ? (
         <div className="mb-8">
           <div className="text-center mb-6">
             <Badge className="mb-4 bg-brand-green/10 text-brand-green border-brand-green/20">
@@ -383,11 +462,6 @@ function RGEOnboardingWizard({
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="flex justify-end">
-                      <Button type="button" variant="outline" size="sm" className="text-xs" onClick={refreshReadiness}>
-                        Refresh status
-                      </Button>
-                    </div>
                     <div className="space-y-2">
                       <ChannelStatusRow
                         label="WhatsApp"
@@ -710,13 +784,10 @@ function RGEOnboardingWizard({
                             <Link href={settingsChannelsHref({ provider: "whatsapp" })}>
                               <a className="text-brand-green font-medium underline-offset-2 hover:underline">Connect WhatsApp</a>
                             </Link>{" "}
-                            in Settings, then refresh status here.
+                            in Settings — status updates automatically.
                           </span>
                         )}
                       </p>
-                      <Button type="button" variant="outline" size="sm" className="text-xs" onClick={refreshReadiness}>
-                        Refresh connection status
-                      </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -750,37 +821,7 @@ function RGEOnboardingWizard({
             </form>
           </Form>
         </div>
-      )}
-
-      {status === "submitted" && (
-        <Card className="border-emerald-100 bg-emerald-50/40 shadow-sm">
-          <CardContent className="py-10 text-center space-y-3">
-            <CheckCircle2 className="w-12 h-12 text-brand-green mx-auto" />
-            <h3 className="text-xl font-bold text-gray-900">You&apos;re scheduled for optimization</h3>
-            <p className="text-gray-600 max-w-md mx-auto text-sm leading-relaxed">
-              Your concierge team has your launch profile. Expect outreach to align on your session, validate automations, and
-              fine-tune booking so everything is live with confidence.
-            </p>
-            <p className="text-xs text-muted-foreground">Watch your inbox for scheduling details.</p>
-            {conciergeBooking?.calendarUrl ? (
-              <Button className="bg-brand-green hover:bg-brand-green/90 mt-2" asChild>
-                <a href={conciergeBooking.calendarUrl} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="w-4 h-4 mr-2 inline" />
-                  Book launch session
-                </a>
-              </Button>
-            ) : (
-              <p className="text-xs text-muted-foreground max-w-md mx-auto mt-2">
-                A self-serve scheduling link will appear here when your specialist or company default calendar is configured. Your team may
-                still reach out by email to coordinate.
-              </p>
-            )}
-            <Button variant="outline" className="mt-2" onClick={() => setLocation("/app/templates/realtor-growth-engine")}>
-              Return to overview
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -914,11 +955,8 @@ export function RealtorGrowthEngine() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activation-status"] });
-      toast({
-        title: "Growth Engine activated",
-        description: "Your concierge team will reach out to schedule your launch and optimization session.",
-      });
     },
     onError: (err: Error) => {
       toast({
@@ -948,7 +986,7 @@ export function RealtorGrowthEngine() {
 
   React.useEffect(() => {
     if (!isOnboardingPath) return;
-    if (status === "locked" || status === "installed") {
+    if (status === "locked") {
       setLocation("/app/templates/realtor-growth-engine");
     }
   }, [isOnboardingPath, status, setLocation]);
@@ -2826,7 +2864,7 @@ export function RealtorGrowthEngine() {
   return (
     <RealtorEngineErrorBoundary>
       <>
-        {status === "installed" ? (
+        {status === "installed" && !isOnboardingPath ? (
           <DashboardView />
         ) : isOnboardingPath ? (
           <RGEOnboardingWizard

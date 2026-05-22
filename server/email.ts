@@ -503,88 +503,162 @@ export async function sendRealtorPaymentConfirmationEmail(
   });
 }
 
+export type GrowthEngineOnboardingEmailContext = {
+  whatsappConnected: boolean;
+  whatsappLine: string;
+  connectedChannels: string[];
+  assignedSpecialistName: string | null;
+  assignedSpecialistEmail: string | null;
+  sessionBooking: {
+    eventTypeName?: string;
+    startTime?: string;
+    inviteeName?: string;
+  } | null;
+  onboardingCompletedAt: string | null;
+};
+
+function formatRgeSessionTime(iso: string | undefined): string {
+  if (!iso) return "Pending — customer has not booked yet";
+  try {
+    return new Date(iso).toLocaleString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+export async function sendGrowthEngineSessionBookedEmail(
+  salespersonEmail: string,
+  salespersonName: string,
+  booking: {
+    customerName: string;
+    customerEmail: string;
+    eventTypeName: string;
+    startTime?: string;
+    meetingLink?: string;
+  },
+): Promise<boolean> {
+  const when = formatRgeSessionTime(booking.startTime);
+  const body = [
+    emailParagraph(`Hi ${escapeHtml(salespersonName)},`),
+    emailParagraph("A customer booked their Growth Engine concierge launch session."),
+    emailHighlightBox(
+      [
+        `<strong>Customer:</strong> ${escapeHtml(booking.customerName)}`,
+        `<strong>Email:</strong> ${escapeHtml(booking.customerEmail)}`,
+        `<strong>Session:</strong> ${escapeHtml(booking.eventTypeName)}`,
+        `<strong>When:</strong> ${escapeHtml(when)}`,
+        booking.meetingLink
+          ? `<strong>Meeting link:</strong> <a href="${escapeHtml(booking.meetingLink)}">${escapeHtml(booking.meetingLink)}</a>`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("<br/>"),
+    ),
+    emailParagraph("Review their setup in Sales Portal → GE Setup and prepare for the session."),
+    emailButton(`${APP_URL}/sales-portal`, "Open Sales Portal"),
+  ].join("");
+
+  return sendEmail({
+    to: salespersonEmail,
+    subject: `GE launch session booked — ${booking.customerName}`,
+    html: renderBrandedEmail({ title: "Launch session booked", bodyHtml: body }),
+  });
+}
+
 export async function sendRealtorOnboardingEmail(
   payload: Record<string, unknown>,
   normalized: Record<string, unknown>,
-  submissionId: string
+  submissionId: string,
+  context?: GrowthEngineOnboardingEmailContext,
 ): Promise<boolean> {
   const n = normalized || {};
   const p = payload || {};
   const field = (key: string) => escapeHtml(String((n as Record<string, unknown>)[key] ?? (p as Record<string, unknown>)[key] ?? "N/A"));
-  const fieldList = (key: string) => {
-    const val = (n as Record<string, unknown>)[key] ?? (p as Record<string, unknown>)[key];
-    return Array.isArray(val) ? val.map(String).join(", ") : field(key);
-  };
-
-  const section = (title: string, rows: string) =>
-    `${emailSectionHeading(title)}${rows}`;
+  const payloadStr = (key: string) => escapeHtml(String((p as Record<string, unknown>)[key] ?? ""));
 
   const row = (label: string, value: string) =>
     emailParagraph(`<strong>${escapeHtml(label)}:</strong> ${value}`);
 
+  const sessionWhen = context?.sessionBooking?.startTime
+    ? formatRgeSessionTime(context.sessionBooking.startTime)
+    : field("preferredCallWindows");
+
+  const specialistLine =
+    context?.assignedSpecialistName && context?.assignedSpecialistEmail
+      ? `${escapeHtml(context.assignedSpecialistName)} (${escapeHtml(context.assignedSpecialistEmail)})`
+      : context?.assignedSpecialistName
+        ? escapeHtml(context.assignedSpecialistName)
+        : "Assigned at purchase — see Sales Portal";
+
+  const whatsappState = context
+    ? context.whatsappConnected
+      ? `Connected — ${escapeHtml(context.whatsappLine)}`
+      : "Not connected"
+    : field("numberActiveOnWhatsapp");
+
+  const channelsLine =
+    context && context.connectedChannels.length > 0
+      ? escapeHtml(context.connectedChannels.join(", "))
+      : "None connected yet";
+
+  const completedAt = context?.onboardingCompletedAt
+    ? formatRgeSessionTime(context.onboardingCompletedAt)
+    : "Just now";
+
+  const summaryCard = emailHighlightBox(
+    [
+      `<strong>Business:</strong> ${field("legalBusinessName")}`,
+      `<strong>Customer:</strong> ${field("fullName")} · ${field("email")}`,
+      `<strong>Launch session:</strong> ${escapeHtml(sessionWhen)}`,
+      `<strong>Setup specialist:</strong> ${specialistLine}`,
+      `<strong>Onboarding completed:</strong> ${escapeHtml(completedAt)}`,
+    ].join("<br/>"),
+  );
+
   const body = [
-    section(
-      "Contact information",
-      [
-        row("Full name", field("fullName")),
-        row("Email", field("email")),
-        row("Mobile", field("mobile")),
-      ].join("")
+    emailParagraph(
+      "New <strong>Realtor Growth Engine</strong> guided launch submission. The customer completed embedded WhatsApp signup and the Guided Launch wizard.",
     ),
-    section(
-      "Business eligibility",
-      [
-        row("Registered entity", field("hasRegisteredEntity")),
-        row("Country", field("country")),
-        row("Legal business name", field("legalBusinessName")),
-        row("Documents available", field("docsAvailable")),
-        row("Website", field("website")),
-      ].join("")
+    summaryCard,
+    emailSectionHeading("WhatsApp & channels"),
+    row("WhatsApp (embedded signup)", whatsappState),
+    row("Connected channels", channelsLine),
+    emailSectionHeading("Business & CRM"),
+    row("Country", field("country")),
+    row("Website", field("website")),
+    row("Team", field("teamSize")),
+    row("Seats", field("seats")),
+    row("Notifications", field("notifications")),
+    emailSectionHeading("Goals & concierge notes"),
+    row("Lead sources", field("leadSources")),
+    row("Primary outcome", field("goals")),
+    row("Timezone", field("timezone")),
+    row("Additional notes", field("notes") === "N/A" ? "—" : field("notes")),
+    emailSectionHeading("Plan validation"),
+    emailParagraph(
+      "Pro + AI Brain were verified at activation. Automations install with the template; concierge validates AI Brain tuning and channel coverage in the launch session.",
     ),
-    section(
-      "WhatsApp setup",
-      [
-        row("Desired number", field("desiredWhatsappNumber")),
-        row("Active on WhatsApp", field("numberActiveOnWhatsapp")),
-        row("Migrate / new", field("migrateOrNew")),
-        row("SMS access", field("smsAccess")),
-        row("Ownership", field("numberOwnership")),
-      ].join("")
-    ),
-    section(
-      "Meta Business Manager",
-      [row("Has BM", field("hasBM")), row("BM email", field("bmEmail")), row("BM ID", field("bmId"))].join("")
-    ),
-    section(
-      "CRM & team",
-      [
-        row("Team size", field("teamSize")),
-        row("Seats", field("seats")),
-        row("Notifications", field("notifications")),
-      ].join("")
-    ),
-    section(
-      "Lead sources & goals",
-      [row("Sources", fieldList("leadSources")), row("Goals", fieldList("goals"))].join("")
-    ),
-    section(
-      "Scheduling",
-      [row("Timezone", field("timezone")), row("Preferred windows", fieldList("preferredCallWindows"))].join("")
-    ),
-    section("Notes", row("", field("notes"))),
     emailHighlightBox(
       `<strong>Submission ID:</strong> ${escapeHtml(submissionId)}<br/>
-       <strong>Status:</strong> Submitted — awaiting review`
+       <strong>Flow:</strong> Guided Launch v2 · Embedded Meta signup`,
     ),
   ].join("");
 
-  const legalName = String((n as Record<string, unknown>).legalBusinessName ?? (p as Record<string, unknown>).legalBusinessName ?? "N/A");
+  const legalName = String((n as Record<string, unknown>).legalBusinessName ?? (p as Record<string, unknown>).legalName ?? "N/A");
   const fullName = String((n as Record<string, unknown>).fullName ?? (p as Record<string, unknown>).fullName ?? "N/A");
 
   return sendEmail({
     to: "support@whachatcrm.com",
-    subject: `New Realtor Growth Engine Onboarding — ${legalName} — ${fullName}`,
-    html: renderBrandedEmail({ title: "New Growth Engine onboarding", bodyHtml: body }),
+    subject: `RGE Guided Launch — ${legalName} — ${fullName}`,
+    html: renderBrandedEmail({ title: "Growth Engine onboarding", bodyHtml: body }),
   });
 }
 

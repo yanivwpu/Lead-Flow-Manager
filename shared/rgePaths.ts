@@ -19,8 +19,8 @@ export function getRgeGalleryCtaLabel(status: RgeEntitlementStatus | null | unde
 
 export function getRgeGalleryStatusLabel(status: RgeEntitlementStatus | null | undefined): string | null {
   if (status === "installed") return "Activated";
-  if (status === "submitted") return "In setup";
-  if (status === "purchased") return "Ready";
+  if (status === "submitted") return "Launch in progress";
+  if (status === "purchased") return "Ready to launch";
   return null;
 }
 

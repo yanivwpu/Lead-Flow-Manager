@@ -22,6 +22,9 @@ import {
   onGrowthEngineSubmissionRecorded,
   onGrowthEngineInstallSuccess,
   resolveConciergeBookingUrlForUser,
+  buildGrowthEngineOnboardingEmailContext,
+  parseGrowthEngineSessionBookingMeta,
+  RGE_TEMPLATE_ID as GE_RGE_TEMPLATE_ID,
 } from "./growthEngineSetupService";
 import {
   isShopifyBillingAccount,
@@ -331,8 +334,8 @@ export function registerTemplateRoutes(app: Express) {
         notificationsEnabled: z.boolean().optional(),
         leadSources: z.string().min(3),
         primaryGoal: z.string().min(3),
-        timezone: z.string().min(2),
-        conciergeLaunchAvailability: z.string().min(5),
+        timezone: z.string().min(2).optional(),
+        conciergeLaunchAvailability: z.string().optional(),
         additionalNotes: z.string().optional(),
       });
 
@@ -342,6 +345,18 @@ export function registerTemplateRoutes(app: Express) {
       }
 
       const p = validation.data;
+      const calendarResolved = await resolveConciergeBookingUrlForUser(userId);
+      const availabilityNote =
+        p.conciergeLaunchAvailability?.trim() ||
+        (calendarResolved.calendarUrl
+          ? "Launch session — customer books via specialist Calendly link"
+          : "");
+      if (!calendarResolved.calendarUrl && availabilityNote.length < 5) {
+        return res.status(400).json({
+          error: "Share a few times that work for your launch session, or book via the scheduling link.",
+        });
+      }
+
       const waLine =
         user?.metaDisplayPhoneNumber ||
         user?.twilioWhatsappNumber ||
@@ -368,7 +383,10 @@ export function registerTemplateRoutes(app: Express) {
         desiredWhatsappNumber: waLine,
         bmEmail: null,
         timezone: p.timezone || null,
-        preferredCallWindows: p.conciergeLaunchAvailability || null,
+        preferredCallWindows: availabilityNote || null,
+        leadSources: p.leadSources,
+        goals: p.primaryGoal,
+        notes: p.additionalNotes || null,
       };
 
       const fullPayload = {
@@ -392,7 +410,8 @@ export function registerTemplateRoutes(app: Express) {
         leadSources: p.leadSources,
         goals: p.primaryGoal,
         notes: p.additionalNotes,
-        preferredCallWindows: p.conciergeLaunchAvailability,
+        preferredCallWindows: availabilityNote,
+        conciergeCalendarUsed: Boolean(calendarResolved.calendarUrl),
       };
 
       const submission = await storage.createRealtorOnboardingSubmission({
@@ -411,9 +430,9 @@ export function registerTemplateRoutes(app: Express) {
         onboardingSubmittedAt: new Date(),
       });
 
-      sendRealtorOnboardingEmail(fullPayload, normalized, submission.id).catch((err) =>
-        console.error("[Template] Failed to send onboarding email:", err)
-      );
+      buildGrowthEngineOnboardingEmailContext(userId)
+        .then((ctx) => sendRealtorOnboardingEmail(fullPayload, normalized, submission.id, ctx))
+        .catch((err) => console.error("[Template] Failed to send onboarding email:", err));
 
       try {
         await installTemplateForUser(userId);
@@ -493,6 +512,13 @@ export function registerTemplateRoutes(app: Express) {
       const submission = await storage.getRealtorOnboardingSubmission(userId);
 
       const calendlyConnected = await isUserCalendlyBookingConnected(userId);
+      const setupTask = await storage.getGrowthEngineSetupTask(userId, GE_RGE_TEMPLATE_ID);
+      const sessionBooking = parseGrowthEngineSessionBookingMeta(setupTask?.internalNotes);
+      let setupSpecialist: { name: string; email: string } | null = null;
+      if (setupTask?.salespersonId) {
+        const sp = await storage.getSalesperson(setupTask.salespersonId);
+        if (sp?.name && sp?.email) setupSpecialist = { name: sp.name, email: sp.email };
+      }
 
       res.json({
         entitlement: entitlement
@@ -514,6 +540,16 @@ export function registerTemplateRoutes(app: Express) {
             }
           : null,
         calendlyConnected,
+        onboardingComplete: Boolean(entitlement?.onboardingSubmittedAt && install),
+        setupTask: setupTask
+          ? {
+              status: setupTask.status,
+              sessionBookedAt: setupTask.sessionBookedAt,
+              onboardingSubmittedAt: setupTask.onboardingSubmittedAt,
+              sessionBooking,
+              specialist: setupSpecialist,
+            }
+          : null,
       });
     } catch (error: any) {
       console.error("[Template] Status error:", error);
