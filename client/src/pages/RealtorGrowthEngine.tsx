@@ -71,7 +71,11 @@ import {
   RGE_TEMPLATE_ONBOARDING_PATH,
 } from "@shared/rgePaths";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
-import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
+import {
+  getRgePurchaseBillingPayload,
+  getSubscriptionApiUrl,
+  useShopifyShopHint,
+} from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
 import {
   openShopifyManagedPricing,
@@ -965,7 +969,7 @@ export function RealtorGrowthEngine() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...getRgeCheckoutReturnPaths(),
-          ...(shopHint ? { shop: shopHint } : {}),
+          ...getRgePurchaseBillingPayload(),
         }),
       });
       if (res.status === 401) {
@@ -1021,12 +1025,7 @@ export function RealtorGrowthEngine() {
           hasAI: templateData?.subscription?.hasAI !== false,
         });
       }
-      const title =
-        err.code === "rge_stripe_price_missing"
-          ? "Checkout unavailable"
-          : err.code === "rge_shopify_shop_required" || err.code === "rge_shopify_reconnect_required"
-            ? "Open from Shopify"
-            : "Could not start purchase";
+      const title = err.code === "rge_stripe_price_missing" ? "Checkout unavailable" : "Could not start purchase";
       toast({
         title,
         description: err.message,

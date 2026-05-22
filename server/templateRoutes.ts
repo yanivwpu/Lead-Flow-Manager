@@ -199,19 +199,6 @@ export function registerTemplateRoutes(app: Express) {
       }
 
       const billingChannel = await resolveRgePurchaseBillingChannel(userId, req);
-      if (billingChannel.channel === "error") {
-        logRgePurchaseEvent("billing_channel_error", {
-          userId,
-          code: billingChannel.code,
-          reason: billingChannel.reason,
-          status: billingChannel.status,
-        });
-        return res.status(billingChannel.status).json({
-          error: billingChannel.error,
-          code: billingChannel.code,
-          reason: billingChannel.reason,
-        });
-      }
 
       if (billingChannel.channel === "shopify") {
         const { shop, accessToken } = billingChannel.merchant;

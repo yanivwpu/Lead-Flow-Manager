@@ -1,10 +1,10 @@
 import type { Request } from "express";
 import type { TemplateEntitlement } from "@shared/schema";
-import { SHOPIFY_RECONNECT_REQUIRED_CODE } from "@shared/shopifyBilling";
-import { isShopifyBillingAccount } from "./shopifyBillingGuard";
+import { isShopifyShopDomain } from "@shared/shopifyBilling";
+import { shopDomainFromRequest } from "./shopifyBillingGuard";
 import {
   resolveShopifyMerchantForBilling,
-  type ResolveShopifyMerchantResult,
+  type ResolvedShopifyMerchant,
 } from "./shopifyMerchantResolver";
 import { storage } from "./storage";
 import { getRgeOnboardingProgress } from "./rgeOnboardingProgress";
@@ -15,9 +15,6 @@ export const RGE_PURCHASE_LOG = "[RGE Purchase]";
 export type RgePurchaseDenialCode =
   | "rge_already_purchased"
   | "rge_ge_access_denied"
-  | "rge_shopify_shop_required"
-  | "rge_shopify_reconnect_required"
-  | "rge_shopify_billing_unavailable"
   | "rge_stripe_price_missing"
   | "rge_stripe_checkout_failed";
 
@@ -34,7 +31,7 @@ export async function reconcileRgeEntitlementForPurchase(userId: string): Promis
   reconciled: boolean;
   priorStatus: string | null;
 }> {
-  const existing = await storage.getTemplateEntitlement(userId, RGE_TEMPLATE_ID);
+  const existing = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
   if (existing && existing.status !== "locked") {
     return { entitlement: existing, reconciled: false, priorStatus: existing.status };
   }
@@ -58,7 +55,7 @@ export async function reconcileRgeEntitlementForPurchase(userId: string): Promis
     status = existing.status as "submitted" | "installed";
   }
 
-  const ent = await storage.upsertTemplateEntitlement(userId, RGE_TEMPLATE_ID, {
+  const ent = await storage.upsertTemplateEntitlement(userId, TEMPLATE_ID, {
     status,
     purchasedAt: existing?.purchasedAt ?? install?.createdAt ?? new Date(),
     onboardingSubmittedAt: submission?.submittedAt ?? existing?.onboardingSubmittedAt ?? undefined,
@@ -77,50 +74,91 @@ export async function reconcileRgeEntitlementForPurchase(userId: string): Promis
   return { entitlement: ent, reconciled: true, priorStatus: existing?.status ?? null };
 }
 
-/** Stripe when Shopify context is missing/invalid; Shopify one-time only when merchant resolves. */
+/**
+ * Shopify billing for RGE only when the client explicitly opts in (billingChannel=shopify)
+ * with a shop on the request — not from stale users.shopifyShop alone.
+ */
+export function requestSignalsShopifyBilling(req: Request): boolean {
+  const body = (req.body || {}) as Record<string, unknown>;
+  if (body.billingChannel !== "shopify") return false;
+  const shop = shopDomainFromRequest(req);
+  if (!shop) return false;
+  return true;
+}
+
+function userHasShopifyShopField(user: { shopifyShop?: string | null } | null | undefined): boolean {
+  return !!(user?.shopifyShop && isShopifyShopDomain(user.shopifyShop));
+}
+
+/**
+ * RGE one-time purchase: default Stripe on app.whachatcrm.com.
+ * Shopify only when request explicitly signals Shopify session + merchant resolves.
+ * Any Shopify resolution failure falls back to Stripe (never block web checkout for stale metadata).
+ */
 export async function resolveRgePurchaseBillingChannel(
   userId: string,
   req: Request,
 ): Promise<
-  | { channel: "shopify"; merchant: NonNullable<Extract<ResolveShopifyMerchantResult, { ok: true }>["merchant"]> }
-  | { channel: "stripe" }
-  | { channel: "error"; status: number; code: string; error: string; reason: string }
+  | { channel: "shopify"; merchant: ResolvedShopifyMerchant }
+  | { channel: "stripe"; stripeFallbackReason?: string }
 > {
   const user = await storage.getUser(userId);
-  if (!isShopifyBillingAccount(user, req)) {
-    return { channel: "stripe" };
-  }
+  const hasShopifyShop = userHasShopifyShopField(user);
+  const requestShop = shopDomainFromRequest(req);
+  const hasValidShopifyContext = requestSignalsShopifyBilling(req);
 
-  const resolved = await resolveShopifyMerchantForBilling(req, userId, "templates/rge/purchase");
-  if (resolved.ok) {
-    return { channel: "shopify", merchant: resolved.merchant };
-  }
+  let selectedChannel: "stripe" | "shopify" = "stripe";
 
-  const allowStripeFallback =
-    resolved.reason === "no_shop_context" || resolved.reason === "missing_token";
+  if (hasValidShopifyContext) {
+    const resolved = await resolveShopifyMerchantForBilling(req, userId, "templates/rge/purchase");
+    if (resolved.ok) {
+      selectedChannel = "shopify";
+      logRgePurchaseEvent("billing_channel_decision", {
+        userId,
+        hasShopifyShop,
+        hasValidShopifyContext,
+        requestShop,
+        selectedChannel,
+        shopSource: resolved.merchant.shopSource,
+      });
+      return { channel: "shopify", merchant: resolved.merchant };
+    }
 
-  if (allowStripeFallback) {
-    logRgePurchaseEvent("stripe_fallback", {
+    logRgePurchaseEvent("billing_channel_decision", {
       userId,
-      shopifyShop: user?.shopifyShop ?? null,
-      code: resolved.code,
-      reason: resolved.reason,
+      hasShopifyShop,
+      hasValidShopifyContext,
+      requestShop,
+      selectedChannel: "stripe",
+      stripeFallbackReason: resolved.reason,
+      resolveCode: resolved.code,
+      staleMetadataHint: hasShopifyShop
+        ? "users.shopify_shop present but Shopify session invalid — using Stripe. To clear: UPDATE users SET shopify_shop = NULL, shopify_access_token = NULL WHERE id = '<userId>';"
+        : undefined,
     });
-    return { channel: "stripe" };
+    return { channel: "stripe", stripeFallbackReason: resolved.reason };
   }
 
-  const code =
-    resolved.code === SHOPIFY_RECONNECT_REQUIRED_CODE
-      ? "rge_shopify_reconnect_required"
-      : resolved.code === "SHOPIFY_SHOP_REQUIRED"
-        ? "rge_shopify_shop_required"
-        : "rge_shopify_billing_unavailable";
+  if (hasShopifyShop && !hasValidShopifyContext) {
+    logRgePurchaseEvent("billing_channel_decision", {
+      userId,
+      hasShopifyShop,
+      hasValidShopifyContext: false,
+      requestShop,
+      selectedChannel: "stripe",
+      note: "Stale shopifyShop ignored for RGE web purchase — Stripe checkout",
+      devCleanupSql:
+        "UPDATE users SET shopify_shop = NULL, shopify_access_token = NULL, shopify_subscription_status = NULL WHERE id = '<userId>';",
+    });
+  } else {
+    logRgePurchaseEvent("billing_channel_decision", {
+      userId,
+      hasShopifyShop,
+      hasValidShopifyContext: false,
+      requestShop,
+      selectedChannel: "stripe",
+    });
+  }
 
-  return {
-    channel: "error",
-    status: resolved.status,
-    code,
-    error: resolved.error,
-    reason: resolved.reason,
-  };
+  return { channel: "stripe" };
 }

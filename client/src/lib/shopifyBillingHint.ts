@@ -53,3 +53,30 @@ export function useShopifyShopHint(): string | undefined {
   const search = typeof window !== "undefined" ? window.location.search : "";
   return useMemo(() => getShopifyShopHint(), [loc, search]);
 }
+
+/**
+ * RGE one-time purchase: only attach Shopify billing when the current URL is a Shopify session
+ * (?shop= on page + shopify_installed or embedded). Ignores localStorage shop so normal web app uses Stripe.
+ */
+export function getRgePurchaseBillingPayload(): {
+  billingChannel: "stripe" | "shopify";
+  shop?: string;
+} {
+  if (typeof window === "undefined") return { billingChannel: "stripe" };
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const shopInUrl = params.get("shop");
+    const normalized = shopInUrl ? normalizeShopifyShopDomain(shopInUrl) : null;
+    const shopifySession =
+      !!normalized &&
+      (params.get("shopify_installed") === "1" ||
+        params.get("embedded") === "1" ||
+        (window.location.pathname.includes("/pricing") && !!shopInUrl));
+    if (shopifySession && normalized) {
+      return { billingChannel: "shopify", shop: normalized };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { billingChannel: "stripe" };
+}

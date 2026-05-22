@@ -6,6 +6,13 @@
 -- Does NOT touch: contacts, conversations, messages, chats, subscriptions, Stripe customer,
 -- general message_templates, or non-RGE workflows.
 --
+-- Optional (dev only): if RGE purchase wrongly routes to Shopify on web app, clear stale Shopify
+-- billing metadata on the user (normal web checkout uses Stripe):
+--   UPDATE users SET shopify_shop = NULL, shopify_access_token = NULL,
+--     shopify_subscription_status = NULL, shopify_installed_at = NULL
+--   WHERE lower(trim(email)) = lower(trim('yahabegood@gmail.com'));
+-- Also clear localStorage key `shopify_shop` in the browser for that test account.
+--
 -- HOW TO RUN SAFELY:
 --   1) Run only the PREVIEW section first (through the first ROLLBACK).
 --   2) Confirm user_match_count = 1 and previews look correct.
