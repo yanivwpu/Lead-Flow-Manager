@@ -287,6 +287,11 @@ router.get('/billing/rge-onetime-callback', async (req: Request, res: Response) 
       await ensureGrowthEnginePurchasedTask(user.id).catch((e) =>
         console.error('[Shopify RGE callback] GE setup task:', e),
       );
+      const { getRgeOnboardingProgress, saveRgeOnboardingProgress } = await import('./rgeOnboardingProgress');
+      const existingProgress = await getRgeOnboardingProgress(user.id);
+      if (!existingProgress) {
+        await saveRgeOnboardingProgress(user.id, { step: 1 }).catch(() => undefined);
+      }
       return res.redirect(`/app/templates/realtor-growth-engine/onboarding?shopify_rge=success`);
     }
 

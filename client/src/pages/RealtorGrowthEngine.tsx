@@ -64,6 +64,9 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
 import {
   getRgeCheckoutReturnPaths,
+  getRgeDetailCtaLabel,
+  isRgeOnboardingComplete,
+  isRgePurchased,
   RGE_TEMPLATE_DETAIL_PATH,
   RGE_TEMPLATE_ONBOARDING_PATH,
 } from "@shared/rgePaths";
@@ -162,6 +165,8 @@ interface TemplateData {
     purchasedAt: string | null;
     onboardingSubmittedAt: string | null;
   } | null;
+  onboardingProgress?: { step: number; formValues?: Record<string, unknown>; updatedAt?: string } | null;
+  onboardingComplete?: boolean;
   install: {
     installStatus: string;
     installedAt: string | null;
@@ -266,7 +271,8 @@ function RGEOnboardingWizard({
   setStep,
   totalSteps,
   form,
-  status,
+  onboardingComplete,
+  hasPurchased,
   submitOnboardingMutation,
   setLocation,
 }: {
@@ -274,7 +280,8 @@ function RGEOnboardingWizard({
   setStep: React.Dispatch<React.SetStateAction<number>>;
   totalSteps: number;
   form: UseFormReturn<OnboardingValues>;
-  status: EntitlementStatus;
+  onboardingComplete: boolean;
+  hasPurchased: boolean;
   submitOnboardingMutation: UseMutationResult<any, Error, OnboardingValues, unknown>;
   setLocation: (path: string) => void;
 }) {
@@ -296,6 +303,39 @@ function RGEOnboardingWizard({
     refetchInterval: 30_000,
   });
 
+  const { data: savedProgressData } = useQuery<{
+    progress: { step: number; formValues?: Record<string, unknown> } | null;
+  }>({
+    queryKey: ["/api/templates/realtor-growth-engine/onboarding/progress"],
+    enabled: hasPurchased && !onboardingComplete,
+    staleTime: 10_000,
+  });
+
+  const saveProgressMutation = useMutation({
+    mutationFn: async (payload: { step: number; formValues?: OnboardingValues }) => {
+      const res = await apiRequest("PUT", "/api/templates/realtor-growth-engine/onboarding/progress", payload);
+      if (!res.ok) throw new Error("Failed to save progress");
+      return res.json();
+    },
+  });
+
+  const progressHydratedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (progressHydratedRef.current || onboardingComplete) return;
+    const p = savedProgressData?.progress;
+    if (!p?.step) return;
+    progressHydratedRef.current = true;
+    setStep(Math.min(totalSteps, Math.max(1, p.step)));
+    if (p.formValues && typeof p.formValues === "object") {
+      form.reset({ ...form.getValues(), ...(p.formValues as Partial<OnboardingValues>) });
+    }
+  }, [savedProgressData, onboardingComplete, form, setStep, totalSteps]);
+
+  const persistProgress = (nextStep: number) => {
+    if (onboardingComplete) return;
+    saveProgressMutation.mutate({ step: nextStep, formValues: form.getValues() });
+  };
+
   const { data: conciergeBooking } = useQuery<{ calendarUrl: string | null; source: string }>({
     queryKey: ["/api/templates/realtor-growth-engine/concierge-calendar"],
     queryFn: async () => {
@@ -306,7 +346,7 @@ function RGEOnboardingWizard({
   });
 
   const conciergeCalendarUrl = conciergeBooking?.calendarUrl?.trim() || null;
-  const showCompletion = status === "installed" || !!engineStatusData?.onboardingComplete;
+  const showCompletion = onboardingComplete;
   const sessionBooking = engineStatusData?.setupTask?.sessionBooking;
   const sessionWhen =
     formatLaunchSessionWhen(sessionBooking?.startTime) ||
@@ -343,10 +383,16 @@ function RGEOnboardingWizard({
       const result = await form.trigger(fields);
       if (!result) return;
     }
-    setStep((s) => Math.min(s + 1, totalSteps));
+    const next = Math.min(step + 1, totalSteps);
+    setStep(next);
+    persistProgress(next);
   };
 
-  const prevStep = () => setStep((s) => Math.max(s - 1, 1));
+  const prevStep = () => {
+    const prev = Math.max(step - 1, 1);
+    setStep(prev);
+    persistProgress(prev);
+  };
 
   const onSubmit = (values: OnboardingValues) => {
     const payload = { ...values };
@@ -416,7 +462,7 @@ function RGEOnboardingWizard({
             </div>
           </CardContent>
         </Card>
-      ) : status === "purchased" ? (
+      ) : hasPurchased && !showCompletion ? (
         <div className="mb-8">
           <div className="text-center mb-6">
             <Badge className="mb-4 bg-brand-green/10 text-brand-green border-brand-green/20">
@@ -442,7 +488,7 @@ function RGEOnboardingWizard({
                   </CardHeader>
                   <CardContent className="space-y-4 text-sm text-gray-600">
                     <ul className="list-disc pl-5 space-y-2">
-                      <li>Channels wired for inbound leads (WhatsApp is required before activation)</li>
+                      <li>Channels wired for inbound leads (WhatsApp recommended; connect anytime in Settings)</li>
                       <li>AI qualification and routing tuned for real estate conversations</li>
                       <li>Automation sequences for speed-to-lead and nurture</li>
                       <li>Optional calendar connection so prospects can self-book showings</li>
@@ -495,8 +541,8 @@ function RGEOnboardingWizard({
                       />
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      WhatsApp uses Meta&apos;s embedded signup from Settings (no manual API keys). Connect your booking calendar so
-                      leads can automatically schedule appointments and showings.
+                      WhatsApp uses Meta&apos;s embedded signup from Settings (no manual API keys). You can finish onboarding and book
+                      your launch session before WhatsApp is connected — connect when you are ready for live automations.
                     </p>
                   </CardContent>
                 </Card>
@@ -776,15 +822,17 @@ function RGEOnboardingWizard({
                     <div className="rounded-lg border border-gray-100 bg-gray-50/60 p-4 space-y-2 text-sm text-gray-700">
                       <p className="font-medium text-gray-900">Before you finish</p>
                       <p>
-                        WhatsApp must be connected so automations have a live channel.{" "}
                         {whatsappReady ? (
-                          <span className="text-emerald-700 font-medium">You&apos;re connected. You can activate.</span>
+                          <span className="text-emerald-700 font-medium">
+                            WhatsApp is connected — your automations can go live as soon as setup is complete.
+                          </span>
                         ) : (
                           <span>
+                            WhatsApp is not connected yet. You can still complete onboarding and book your concierge launch session.{" "}
                             <Link href={settingsChannelsHref({ provider: "whatsapp" })}>
                               <a className="text-brand-green font-medium underline-offset-2 hover:underline">Connect WhatsApp</a>
                             </Link>{" "}
-                            in Settings — status updates automatically.
+                            in Settings when you are ready for live messaging.
                           </span>
                         )}
                       </p>
@@ -805,7 +853,7 @@ function RGEOnboardingWizard({
                   <Button
                     type="submit"
                     className="bg-brand-green hover:bg-brand-green/90"
-                    disabled={submitOnboardingMutation.isPending || !whatsappReady}
+                    disabled={submitOnboardingMutation.isPending}
                     data-testid="button-submit-onboarding"
                   >
                     {submitOnboardingMutation.isPending ? (
@@ -878,6 +926,7 @@ export function RealtorGrowthEngine() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/onboarding/progress"] });
       toast({
         title: "Payment confirmed",
         description: "Continue guided setup: align channels and book your concierge launch session.",
@@ -929,17 +978,21 @@ export function RealtorGrowthEngine() {
       }
       return res.json();
     },
-    onSuccess: (data: { url?: string; shopifyConfirmationUrl?: string }) => {
+    onSuccess: (data: { url?: string; shopifyConfirmationUrl?: string; alreadyPurchased?: boolean }) => {
       if (data.shopifyConfirmationUrl) {
         window.location.href = data.shopifyConfirmationUrl;
         return;
       }
       if (data.url) {
         window.location.href = data.url;
-      } else {
-        queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
-        toast({ title: "Template Unlocked", description: "Continue with your guided launch setup." });
+        return;
       }
+      queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
+      if (data.alreadyPurchased) {
+        setLocation(RGE_TEMPLATE_ONBOARDING_PATH);
+        return;
+      }
+      toast({ title: "Template Unlocked", description: "Continue with your guided launch setup." });
     }
   });
 
@@ -983,13 +1036,18 @@ export function RealtorGrowthEngine() {
   });
 
   const status = templateData?.entitlement?.status || "locked";
+  const entitlement = templateData?.entitlement;
+  const onboardingComplete =
+    isRgeOnboardingComplete(entitlement) || templateData?.onboardingComplete === true;
+  const hasPurchased = isRgePurchased(status, entitlement);
+  const onboardingStep = templateData?.onboardingProgress?.step ?? null;
 
   React.useEffect(() => {
     if (!isOnboardingPath) return;
-    if (status === "locked") {
-      setLocation("/app/templates/realtor-growth-engine");
+    if (!hasPurchased) {
+      setLocation(RGE_TEMPLATE_DETAIL_PATH);
     }
-  }, [isOnboardingPath, status, setLocation]);
+  }, [isOnboardingPath, hasPurchased, setLocation]);
 
   const { data: assetsData } = useQuery({
     queryKey: ["/api/templates/realtor-growth-engine/assets"],
@@ -1024,20 +1082,29 @@ export function RealtorGrowthEngine() {
     if (isPaused) {
       return { label: "Resume when your plan is active", disabled: true as const };
     }
-    if (status === "locked") {
+    if (!hasPurchased) {
       return {
         label: "Activate Engine",
         disabled: purchaseMutation.isPending || checkingSubscription,
       };
     }
-    if (status === "purchased") {
-      return { label: "Start onboarding", disabled: purchaseMutation.isPending };
+    if (!onboardingComplete) {
+      return {
+        label: getRgeDetailCtaLabel(status, entitlement, onboardingStep),
+        disabled: false as const,
+      };
     }
-    if (status === "submitted") {
-      return { label: "Continue setup", disabled: false };
-    }
-    return { label: "Activate Engine", disabled: true as const };
-  }, [isPaused, status, purchaseMutation.isPending, checkingSubscription]);
+    return { label: "Open Growth Engine", disabled: false as const };
+  }, [
+    isPaused,
+    hasPurchased,
+    onboardingComplete,
+    status,
+    entitlement,
+    onboardingStep,
+    purchaseMutation.isPending,
+    checkingSubscription,
+  ]);
 
   React.useEffect(() => {
     if (subscriptionActive && sessionStorage.getItem("rge_reactivating")) {
@@ -1100,20 +1167,25 @@ export function RealtorGrowthEngine() {
   };
 
   const handlePrimaryCta = () => {
-    if (status === "locked") {
+    if (!hasPurchased) {
       void handlePurchaseContinue();
-    } else if (isPaused) {
       return;
-    } else if (status === "purchased" || status === "submitted") {
+    }
+    if (isPaused) return;
+    if (!onboardingComplete) {
       setLocation(RGE_TEMPLATE_ONBOARDING_PATH);
+      return;
+    }
+    if (!isOnboardingPath) {
+      setLocation(RGE_TEMPLATE_DETAIL_PATH);
     }
   };
 
   const renderStepper = () => {
-    const s1 = status !== "locked";
-    const s2 = status === "submitted" || status === "installed";
-    const s3 = status === "installed";
-    const s2Active = status === "purchased";
+    const s1 = hasPurchased;
+    const s2 = hasPurchased;
+    const s3 = onboardingComplete;
+    const s2Active = hasPurchased && !onboardingComplete;
 
     const circle = (done: boolean, activeRing: boolean) =>
       cn(
@@ -1231,25 +1303,32 @@ export function RealtorGrowthEngine() {
 
           <div className="mb-6 flex justify-center">{renderStepper()}</div>
 
-          {(status === "purchased" || status === "submitted") && (
+          {hasPurchased && !onboardingComplete && (
             <section
-              className="mb-8 rounded-2xl border border-emerald-100/90 bg-gradient-to-br from-emerald-50/40 via-white to-white px-6 py-8 shadow-sm md:px-8"
-              data-testid="section-launch-onboarding-cta"
+              className="mb-8 rounded-2xl border border-amber-200/90 bg-gradient-to-br from-amber-50/50 via-white to-white px-6 py-8 shadow-sm md:px-8"
+              data-testid="banner-incomplete-onboarding"
             >
-              <div className="mx-auto max-w-xl text-center">
-                <h2 className="mb-2 text-xl font-semibold tracking-tight text-gray-900 md:text-2xl">
-                  Ready to launch your <RealtorMark /> Growth Engine?
-                </h2>
-                <p className="mb-6 text-sm leading-relaxed text-gray-600">
-                  Start the guided onboarding to connect channels, review your launch profile, and activate your automation.
-                </p>
+              <div className="mx-auto flex max-w-2xl flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
+                <div className="flex-1 space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Setup in progress</p>
+                  <h2 className="text-xl font-semibold tracking-tight text-gray-900 md:text-2xl">
+                    Continue your <RealtorMark /> Growth Engine launch
+                  </h2>
+                  <p className="text-sm leading-relaxed text-gray-600">
+                    Your purchase is saved. Resume guided onboarding to book your concierge session and finish activation.
+                    WhatsApp can be connected anytime — it is not required to continue setup.
+                  </p>
+                  {onboardingStep && onboardingStep > 1 ? (
+                    <p className="text-xs text-muted-foreground">Last saved: step {onboardingStep} of 5</p>
+                  ) : null}
+                </div>
                 <Button
                   size="lg"
-                  className="rounded-xl bg-gray-900 px-8 text-white shadow-sm hover:bg-gray-800"
+                  className="shrink-0 rounded-xl bg-gray-900 px-8 text-white shadow-sm hover:bg-gray-800"
                   onClick={() => setLocation(RGE_TEMPLATE_ONBOARDING_PATH)}
-                  data-testid="button-start-onboarding-top"
+                  data-testid="button-continue-setup-banner"
                 >
-                  Start onboarding
+                  {getRgeDetailCtaLabel(status, entitlement, onboardingStep)}
                   <ChevronRight className="ml-1.5 h-5 w-5" />
                 </Button>
               </div>
@@ -1937,16 +2016,17 @@ export function RealtorGrowthEngine() {
             </Button>
             <p className="mt-4 text-xs text-gray-500">One-time template license · Pro + AI Brain required</p>
           </section>
-        ) : status === "purchased" || status === "submitted" ? (
+        ) : hasPurchased && !onboardingComplete ? (
           <section
             className="rounded-2xl border border-gray-200/80 bg-gradient-to-br from-emerald-50/30 via-white to-white px-6 py-10 text-center shadow-sm md:px-10 md:py-12"
             data-testid="section-bottom-onboarding-cta"
           >
             <h2 className="mb-2 text-2xl font-semibold tracking-tight text-gray-900 md:text-3xl">
-              Ready to launch your <RealtorMark /> Growth Engine?
+              Finish your <RealtorMark /> launch setup
             </h2>
             <p className="mx-auto mb-6 max-w-md text-sm leading-relaxed text-gray-600">
-              Start the guided onboarding to connect channels, review your launch profile, and activate your automation.
+              Resume onboarding to book your concierge session and complete activation. Connect WhatsApp when you are ready
+              for live automations.
             </p>
             <Button
               size="lg"
@@ -1954,7 +2034,7 @@ export function RealtorGrowthEngine() {
               onClick={() => setLocation(RGE_TEMPLATE_ONBOARDING_PATH)}
               data-testid="button-bottom-cta"
             >
-              Start onboarding
+              {getRgeDetailCtaLabel(status, entitlement, onboardingStep)}
               <ChevronRight className="ml-1.5 h-5 w-5" />
             </Button>
           </section>
@@ -2864,7 +2944,7 @@ export function RealtorGrowthEngine() {
   return (
     <RealtorEngineErrorBoundary>
       <>
-        {status === "installed" && !isOnboardingPath ? (
+        {onboardingComplete && status === "installed" && !isOnboardingPath ? (
           <DashboardView />
         ) : isOnboardingPath ? (
           <RGEOnboardingWizard
@@ -2872,7 +2952,8 @@ export function RealtorGrowthEngine() {
             setStep={setStep}
             totalSteps={totalSteps}
             form={form}
-            status={status}
+            onboardingComplete={onboardingComplete}
+            hasPurchased={hasPurchased}
             submitOnboardingMutation={submitOnboardingMutation}
             setLocation={setLocation}
           />

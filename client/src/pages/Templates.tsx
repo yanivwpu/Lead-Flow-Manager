@@ -566,21 +566,26 @@ const GROWTH_ENGINE_PLACEHOLDER: Record<
 function GrowthEngineGalleryCard({
   engine,
   setLocation,
-  rgeEntitlementStatus,
+  rgeEntitlement,
 }: {
   engine: GrowthEngineCardModel;
   setLocation: (path: string, opts?: { replace?: boolean }) => void;
-  rgeEntitlementStatus?: RgeEntitlementStatus | null;
+  rgeEntitlement?: {
+    status?: RgeEntitlementStatus;
+    purchasedAt?: string | null;
+    onboardingSubmittedAt?: string | null;
+  } | null;
 }) {
   const isComingSoon = engine.status === "coming_soon";
   const showRealtorMark = engine.slug === "realtor-growth-engine";
   const isRge = engine.slug === "realtor-growth-engine";
+  const rgeEntitlementStatus = rgeEntitlement?.status ?? null;
   const rgeOwned = isRge && isRgeOwnedStatus(rgeEntitlementStatus);
-  const hubHref = isRge && rgeEntitlementStatus ? getRgeHubPath(rgeEntitlementStatus) : engine.detailHref;
+  const hubHref = isRge ? getRgeHubPath(rgeEntitlementStatus, rgeEntitlement) : engine.detailHref;
   const ctaLabel = isRge
     ? getRgeGalleryCtaLabel(rgeEntitlementStatus, engine.ctaLabel)
     : engine.ctaLabel;
-  const statusLabel = isRge ? getRgeGalleryStatusLabel(rgeEntitlementStatus) : null;
+  const statusLabel = isRge ? getRgeGalleryStatusLabel(rgeEntitlementStatus, rgeEntitlement) : null;
   const phKey = engine.placeholderKey ?? "wellness";
   const ph = GROWTH_ENGINE_PLACEHOLDER[phKey];
   const PhIcon = ph.icon;
@@ -729,7 +734,9 @@ function GrowthEngineGalleryCard({
 
 function GrowthEnginesTab() {
   const [, setLocation] = useLocation();
-  const { data: rgeTemplate } = useQuery<{ entitlement?: { status?: RgeEntitlementStatus } } | null>({
+  const { data: rgeTemplate } = useQuery<{
+    entitlement?: { status?: RgeEntitlementStatus; purchasedAt?: string | null; onboardingSubmittedAt?: string | null };
+  } | null>({
     queryKey: ["/api/templates/realtor-growth-engine"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/templates/realtor-growth-engine");
@@ -738,7 +745,8 @@ function GrowthEnginesTab() {
     },
     staleTime: 30_000,
   });
-  const rgeEntitlementStatus = rgeTemplate?.entitlement?.status ?? null;
+  const rgeEntitlement = rgeTemplate?.entitlement ?? null;
+  const rgeEntitlementStatus = rgeEntitlement?.status ?? null;
 
   return (
     <div className="space-y-8 md:space-y-10">
@@ -760,7 +768,7 @@ function GrowthEnginesTab() {
               key={engine.slug}
               engine={engine}
               setLocation={setLocation}
-              rgeEntitlementStatus={engine.slug === "realtor-growth-engine" ? rgeEntitlementStatus : undefined}
+              rgeEntitlement={engine.slug === "realtor-growth-engine" ? rgeEntitlement : undefined}
             />
           ))}
         </div>

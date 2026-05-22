@@ -4,20 +4,64 @@ export const RGE_TEMPLATE_ONBOARDING_PATH = "/app/templates/realtor-growth-engin
 
 export type RgeEntitlementStatus = "locked" | "purchased" | "submitted" | "installed";
 
+export type RgeEntitlementSnapshot = {
+  status?: RgeEntitlementStatus | null;
+  purchasedAt?: string | Date | null;
+  onboardingSubmittedAt?: string | Date | null;
+};
+
+/** Guided launch finished (submission recorded). */
+export function isRgeOnboardingComplete(
+  entitlement: RgeEntitlementSnapshot | null | undefined,
+): boolean {
+  return !!entitlement?.onboardingSubmittedAt;
+}
+
+/** Template one-time purchase unlocked (may still be mid onboarding). */
+export function isRgePurchased(
+  status: RgeEntitlementStatus | null | undefined,
+  entitlement?: RgeEntitlementSnapshot | null,
+): boolean {
+  if (entitlement?.purchasedAt) return true;
+  return status === "purchased" || status === "submitted" || status === "installed";
+}
+
 /** Where the Growth Engines card / hub should route for the current entitlement. */
-export function getRgeHubPath(status: RgeEntitlementStatus | null | undefined): string {
-  if (status === "installed") return RGE_TEMPLATE_DETAIL_PATH;
-  if (status === "purchased" || status === "submitted") return RGE_TEMPLATE_ONBOARDING_PATH;
+export function getRgeHubPath(
+  status: RgeEntitlementStatus | null | undefined,
+  entitlement?: RgeEntitlementSnapshot | null,
+): string {
+  if (!isRgePurchased(status, entitlement)) return RGE_TEMPLATE_DETAIL_PATH;
+  if (!isRgeOnboardingComplete(entitlement)) return RGE_TEMPLATE_ONBOARDING_PATH;
   return RGE_TEMPLATE_DETAIL_PATH;
+}
+
+export function getRgeDetailCtaLabel(
+  status: RgeEntitlementStatus | null | undefined,
+  entitlement: RgeEntitlementSnapshot | null | undefined,
+  onboardingStep?: number | null,
+): string {
+  if (!isRgePurchased(status, entitlement)) return "Activate Engine";
+  if (!isRgeOnboardingComplete(entitlement)) {
+    return onboardingStep && onboardingStep > 1 ? "Resume onboarding" : "Continue setup";
+  }
+  if (status === "installed") return "Open Growth Engine";
+  return "Continue setup";
 }
 
 export function getRgeGalleryCtaLabel(status: RgeEntitlementStatus | null | undefined, fallback: string): string {
   if (status === "installed") return "Manage Growth Engine";
-  if (status === "purchased" || status === "submitted") return "Open Growth Engine";
+  if (status === "purchased" || status === "submitted") return "Continue setup";
   return fallback;
 }
 
-export function getRgeGalleryStatusLabel(status: RgeEntitlementStatus | null | undefined): string | null {
+export function getRgeGalleryStatusLabel(
+  status: RgeEntitlementStatus | null | undefined,
+  entitlement?: RgeEntitlementSnapshot | null,
+): string | null {
+  if (isRgePurchased(status, entitlement) && !isRgeOnboardingComplete(entitlement)) {
+    return "Setup in progress";
+  }
   if (status === "installed") return "Activated";
   if (status === "submitted") return "Launch in progress";
   if (status === "purchased") return "Ready to launch";

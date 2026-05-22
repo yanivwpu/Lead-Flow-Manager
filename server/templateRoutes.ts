@@ -26,6 +26,7 @@ import {
   parseGrowthEngineSessionBookingMeta,
   RGE_TEMPLATE_ID as GE_RGE_TEMPLATE_ID,
 } from "./growthEngineSetupService";
+import { getRgeOnboardingProgress, saveRgeOnboardingProgress } from "./rgeOnboardingProgress";
 import {
   isShopifyBillingAccount,
   rejectStripeIfShopifyUser,
@@ -120,6 +121,8 @@ export function registerTemplateRoutes(app: Express) {
           ? { installStatus: install.installStatus, installedAt: install.installedAt }
           : { installStatus: null, installedAt: null },
         subscription: { hasPro, hasAI, active: subscriptionActive },
+        onboardingProgress: await getRgeOnboardingProgress(userId),
+        onboardingComplete: Boolean(entitlement?.onboardingSubmittedAt),
       });
     } catch (error: any) {
       console.error("[Template] Error fetching template:", error);
@@ -164,6 +167,10 @@ export function registerTemplateRoutes(app: Express) {
         await ensureGrowthEnginePurchasedTask(userId).catch((e) =>
           console.error("[Template] GE setup task (demo purchase):", e)
         );
+        const existingProgress = await getRgeOnboardingProgress(userId);
+        if (!existingProgress) {
+          await saveRgeOnboardingProgress(userId, { step: 1 }).catch(() => undefined);
+        }
         return res.json({ success: true, demo: true });
       }
 
@@ -279,6 +286,13 @@ export function registerTemplateRoutes(app: Express) {
         console.error("[Template] GE setup task (verify payment):", e)
       );
 
+      const existingProgress = await getRgeOnboardingProgress(userId);
+      if (!existingProgress) {
+        await saveRgeOnboardingProgress(userId, { step: 1 }).catch((e) =>
+          console.error("[Template] GE onboarding progress init:", e),
+        );
+      }
+
       res.json({ success: true, entitlement });
     } catch (error: any) {
       console.error("[Template] Verify payment error:", error);
@@ -362,16 +376,7 @@ export function registerTemplateRoutes(app: Express) {
         user?.twilioWhatsappNumber ||
         (user?.email !== "demo@whachat.com" ? "Not on file" : "demo");
 
-      if (user?.email !== "demo@whachat.com") {
-        const whatsappOk = await isUserWhatsAppConnectedForActivation(userId);
-        if (!whatsappOk) {
-          return res.status(400).json({
-            error:
-              "Connect WhatsApp in Settings → Channels (guided setup) before completing activation. Optional channels can be added anytime.",
-            code: "whatsapp_required",
-          });
-        }
-      }
+      const whatsappConnected = await isUserWhatsAppConnectedForActivation(userId);
 
       const normalized = {
         fullName: user?.name || "N/A",
@@ -397,7 +402,7 @@ export function registerTemplateRoutes(app: Express) {
         hasRegisteredEntity: "yes",
         legalBusinessName: p.legalName,
         desiredWhatsappNumber: waLine,
-        numberActiveOnWhatsapp: "connected_in_app",
+        numberActiveOnWhatsapp: whatsappConnected ? "connected_in_app" : "not_connected_yet",
         migrateOrNew: "embedded_guided",
         smsAccess: "not_collected",
         numberOwnership: "owner",
@@ -443,6 +448,8 @@ export function registerTemplateRoutes(app: Express) {
       } catch (installErr) {
         console.error("[Template] Install failed (non-blocking):", installErr);
       }
+
+      await saveRgeOnboardingProgress(userId, { step: 5 }).catch(() => undefined);
 
       res.json({ success: true, submissionId: submission.id });
     } catch (error: any) {
@@ -540,7 +547,8 @@ export function registerTemplateRoutes(app: Express) {
             }
           : null,
         calendlyConnected,
-        onboardingComplete: Boolean(entitlement?.onboardingSubmittedAt && install),
+        onboardingComplete: Boolean(entitlement?.onboardingSubmittedAt),
+        onboardingProgress: await getRgeOnboardingProgress(userId),
         setupTask: setupTask
           ? {
               status: setupTask.status,
@@ -556,6 +564,50 @@ export function registerTemplateRoutes(app: Express) {
       res.status(500).json({ error: "Failed to fetch status" });
     }
   });
+  app.get("/api/templates/realtor-growth-engine/onboarding/progress", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const entitlement = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
+      if (!entitlement || entitlement.status === "locked") {
+        return res.status(403).json({ error: "Template not purchased" });
+      }
+      const progress = await getRgeOnboardingProgress(userId);
+      res.json({
+        progress,
+        onboardingComplete: Boolean(entitlement.onboardingSubmittedAt),
+      });
+    } catch (error: any) {
+      console.error("[Template] Onboarding progress fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch onboarding progress" });
+    }
+  });
+
+  app.put("/api/templates/realtor-growth-engine/onboarding/progress", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const entitlement = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
+      if (!entitlement || entitlement.status === "locked") {
+        return res.status(403).json({ error: "Template not purchased" });
+      }
+      if (entitlement.onboardingSubmittedAt) {
+        return res.status(400).json({ error: "Onboarding already completed" });
+      }
+
+      const { step, formValues } = req.body || {};
+      if (typeof step !== "number" || step < 1 || step > 5) {
+        return res.status(400).json({ error: "Invalid step (1–5)" });
+      }
+      const progress = await saveRgeOnboardingProgress(userId, {
+        step,
+        formValues: formValues && typeof formValues === "object" ? formValues : undefined,
+      });
+      res.json({ success: true, progress });
+    } catch (error: any) {
+      console.error("[Template] Onboarding progress save error:", error);
+      res.status(500).json({ error: "Failed to save onboarding progress" });
+    }
+  });
+
   app.get("/api/templates/realtor-growth-engine/preferences", requireAuth, async (req, res) => {
     try {
       const userId = (req.user as any).id;
