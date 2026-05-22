@@ -98,12 +98,40 @@ export function PostCheckout() {
     const ac = new AbortController();
     abortRef.current = ac;
 
+    async function verifyRgeStripeSession(sessionId: string): Promise<boolean> {
+      try {
+        const res = await fetch("/api/templates/realtor-growth-engine/verify-payment", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    }
+
     async function waitAndRedirect() {
       try {
+        const params = new URLSearchParams(search);
+        const stripeSession =
+          params.get("session_id") ??
+          params.get("stripe_session") ??
+          params.get("checkout_session_id");
+
         const first = await fetchSubscriptionJson();
         if (first?.unauthorized) {
           setLocation(`/auth?redirect=${encodeURIComponent(`/post-checkout${search}`)}`);
           return;
+        }
+
+        if (pollTemplate && stripeSession) {
+          await verifyRgeStripeSession(stripeSession);
+          await queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
+          await queryClient.invalidateQueries({
+            queryKey: ["/api/templates/realtor-growth-engine/onboarding/progress"],
+          });
         }
 
         let sub0 = serializeSubscriptionSnapshot(first);
@@ -134,12 +162,17 @@ export function PostCheckout() {
 
         await queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
         await queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
+        await queryClient.invalidateQueries({
+          queryKey: ["/api/templates/realtor-growth-engine/onboarding/progress"],
+        });
 
-        if (!ac.signal.aborted) setLocation(targetPath);
+        const redirectTarget = pollTemplate ? RGE_TEMPLATE_ONBOARDING_PATH : targetPath;
+
+        if (!ac.signal.aborted) setLocation(redirectTarget);
       } catch {
         setErrorMsg("Something went wrong confirming your checkout. Redirecting…");
         setTimeout(() => {
-          if (!ac.signal.aborted) setLocation(targetPath);
+          if (!ac.signal.aborted) setLocation(pollTemplate ? RGE_TEMPLATE_ONBOARDING_PATH : targetPath);
         }, 1600);
       }
     }

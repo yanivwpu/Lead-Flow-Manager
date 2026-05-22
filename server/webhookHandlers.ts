@@ -1,5 +1,7 @@
 import { isSalespersonSubscriptionCommissionActiveAt } from '@shared/salespersonSubscriptionCommissionWindow';
+import { RGE_TEMPLATE_ID } from '@shared/rgePaths';
 import { getUncachableStripeClient } from './stripeClient';
+import { fulfillRgePurchaseAfterPayment, logRgeStripeWebhook } from './rgePurchase';
 import { storage } from './storage';
 
 export class WebhookHandlers {
@@ -110,6 +112,32 @@ export class WebhookHandlers {
         metadataKeys: metadata ? Object.keys(metadata) : [],
         resolvedUserId: userId,
       });
+
+      const templateId = metadata?.templateId as string | undefined;
+      const isRgeOneTime =
+        templateId === RGE_TEMPLATE_ID &&
+        session?.mode === "payment" &&
+        session?.payment_status === "paid";
+
+      if (userId && isRgeOneTime) {
+        try {
+          await fulfillRgePurchaseAfterPayment(userId, {
+            sessionId: session?.id,
+            source: "webhook",
+          });
+          logRgeStripeWebhook("rge_purchase_completed", {
+            userId,
+            sessionId: session?.id,
+            templateId,
+          });
+        } catch (rgeErr: any) {
+          logRgeStripeWebhook("rge_purchase_fulfill_failed", {
+            userId,
+            sessionId: session?.id,
+            message: rgeErr?.message || String(rgeErr),
+          });
+        }
+      }
 
       if (userId && customerId) {
         const updated = await storage.updateUser(userId, {

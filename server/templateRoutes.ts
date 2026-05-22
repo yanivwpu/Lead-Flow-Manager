@@ -28,14 +28,12 @@ import {
 } from "./growthEngineSetupService";
 import { getRgeOnboardingProgress, saveRgeOnboardingProgress } from "./rgeOnboardingProgress";
 import {
+  fulfillRgePurchaseAfterPayment,
+  logRgeCheckoutSuccess,
   logRgePurchaseEvent,
   reconcileRgeEntitlementForPurchase,
   resolveRgePurchaseBillingChannel,
 } from "./rgePurchase";
-import {
-  isShopifyBillingAccount,
-  rejectStripeIfShopifyUser,
-} from "./shopifyBillingGuard";
 
 const TEMPLATE_ID = "realtor-growth-engine";
 const TEMPLATE_PRICE_CENTS = 19900;
@@ -273,6 +271,13 @@ export function registerTemplateRoutes(app: Express) {
           code: "rge_stripe_checkout_failed",
         });
       }
+
+      logRgePurchaseEvent("stripe_checkout_created", {
+        userId,
+        templateId: TEMPLATE_ID,
+        sessionId: session.id,
+        successPath,
+      });
       res.json({ success: true, url: session.url });
     } catch (error: any) {
       console.error("[Template] Purchase error:", error);
@@ -286,16 +291,14 @@ export function registerTemplateRoutes(app: Express) {
 
   app.post("/api/templates/realtor-growth-engine/verify-payment", requireAuth, async (req, res) => {
     try {
-      if (await rejectStripeIfShopifyUser(req, res, "templates/rge/verify-payment", (id) => storage.getUser(id))) {
-        return;
-      }
-
       const userId = (req.user as any).id;
       const { sessionId } = req.body;
 
       if (!sessionId) {
         return res.status(400).json({ error: "Session ID required" });
       }
+
+      logRgeCheckoutSuccess("verify_started", { userId, sessionId });
 
       const stripe = await getUncachableStripeClient();
       const session = await stripe.checkout.sessions.retrieve(sessionId);
@@ -308,15 +311,14 @@ export function registerTemplateRoutes(app: Express) {
         return res.status(403).json({ error: "Session does not belong to this user" });
       }
 
-      const entitlement = await storage.upsertTemplateEntitlement(userId, TEMPLATE_ID, {
-        status: "purchased",
-        purchasedAt: new Date(),
-      });
-
-      const existingInstall = await storage.getTemplateInstall(userId, TEMPLATE_ID);
-      if (!existingInstall) {
-        await storage.createTemplateInstall({ userId, templateId: TEMPLATE_ID, installStatus: "pending" });
+      if (session.metadata?.templateId && session.metadata.templateId !== TEMPLATE_ID) {
+        return res.status(400).json({ error: "Not a Growth Engine checkout session" });
       }
+
+      const { entitlement } = await fulfillRgePurchaseAfterPayment(userId, {
+        sessionId,
+        source: "verify",
+      });
 
       const user = await storage.getUser(userId);
       if (user?.email) {
@@ -325,20 +327,19 @@ export function registerTemplateRoutes(app: Express) {
         );
       }
 
-      await ensureGrowthEnginePurchasedTask(userId).catch((e) =>
-        console.error("[Template] GE setup task (verify payment):", e)
-      );
+      logRgeCheckoutSuccess("redirect_to_onboarding", { userId, sessionId });
 
-      const existingProgress = await getRgeOnboardingProgress(userId);
-      if (!existingProgress) {
-        await saveRgeOnboardingProgress(userId, { step: 1 }).catch((e) =>
-          console.error("[Template] GE onboarding progress init:", e),
-        );
-      }
-
-      res.json({ success: true, entitlement });
+      res.json({
+        success: true,
+        entitlement,
+        redirectTo: RGE_TEMPLATE_ONBOARDING_PATH,
+      });
     } catch (error: any) {
       console.error("[Template] Verify payment error:", error);
+      logRgeCheckoutSuccess("verify_failed", {
+        userId: (req.user as any)?.id,
+        message: error?.message,
+      });
       res.status(500).json({ error: "Failed to verify payment" });
     }
   });

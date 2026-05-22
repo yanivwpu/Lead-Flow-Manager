@@ -7,10 +7,13 @@ import {
   type ResolvedShopifyMerchant,
 } from "./shopifyMerchantResolver";
 import { storage } from "./storage";
-import { getRgeOnboardingProgress } from "./rgeOnboardingProgress";
+import { getRgeOnboardingProgress, saveRgeOnboardingProgress } from "./rgeOnboardingProgress";
 import { RGE_TEMPLATE_ID } from "@shared/rgePaths";
+import { ensureGrowthEnginePurchasedTask } from "./growthEngineSetupService";
 
 export const RGE_PURCHASE_LOG = "[RGE Purchase]";
+export const RGE_CHECKOUT_SUCCESS_LOG = "[RGE Checkout Success]";
+export const RGE_STRIPE_WEBHOOK_LOG = "[RGE Stripe Webhook]";
 
 export type RgePurchaseDenialCode =
   | "rge_already_purchased"
@@ -23,6 +26,84 @@ export function logRgePurchaseEvent(
   payload: Record<string, unknown>,
 ): void {
   console.warn(RGE_PURCHASE_LOG, event, payload);
+}
+
+export function logRgeCheckoutSuccess(
+  event: string,
+  payload: Record<string, unknown>,
+): void {
+  console.warn(RGE_CHECKOUT_SUCCESS_LOG, event, payload);
+}
+
+export function logRgeStripeWebhook(
+  event: string,
+  payload: Record<string, unknown>,
+): void {
+  console.warn(RGE_STRIPE_WEBHOOK_LOG, event, payload);
+}
+
+export type FulfillRgePurchaseResult = {
+  entitlement: TemplateEntitlement;
+  installCreated: boolean;
+  progressInitialized: boolean;
+  entitlementCreated: boolean;
+};
+
+/** Idempotent: entitlement purchased + pending install + onboarding step 1 + GE setup task. */
+export async function fulfillRgePurchaseAfterPayment(
+  userId: string,
+  opts?: { sessionId?: string; source?: "verify" | "webhook" },
+): Promise<FulfillRgePurchaseResult> {
+  const prior = await storage.getTemplateEntitlement(userId, RGE_TEMPLATE_ID);
+  const entitlementCreated = !prior || prior.status === "locked";
+
+  const entitlement = await storage.upsertTemplateEntitlement(userId, RGE_TEMPLATE_ID, {
+    status: "purchased",
+    purchasedAt: prior?.purchasedAt ?? new Date(),
+  });
+
+  logRgeCheckoutSuccess("entitlement_created", {
+    userId,
+    templateId: RGE_TEMPLATE_ID,
+    sessionId: opts?.sessionId,
+    source: opts?.source ?? "verify",
+    entitlementCreated,
+    status: entitlement.status,
+  });
+
+  let installCreated = false;
+  const existingInstall = await storage.getTemplateInstall(userId, RGE_TEMPLATE_ID);
+  if (!existingInstall) {
+    await storage.createTemplateInstall({
+      userId,
+      templateId: RGE_TEMPLATE_ID,
+      installStatus: "pending",
+    });
+    installCreated = true;
+  }
+
+  await ensureGrowthEnginePurchasedTask(userId).catch((e) =>
+    console.error("[RGE] GE setup task after purchase fulfill:", e),
+  );
+
+  const existingProgress = await getRgeOnboardingProgress(userId);
+  let progressInitialized = false;
+  if (!existingProgress) {
+    await saveRgeOnboardingProgress(userId, { step: 1 }).catch((e) =>
+      console.error("[RGE] onboarding progress init after fulfill:", e),
+    );
+    progressInitialized = true;
+  }
+
+  if (progressInitialized) {
+    logRgeCheckoutSuccess("onboarding_progress_initialized", {
+      userId,
+      sessionId: opts?.sessionId,
+      source: opts?.source ?? "verify",
+    });
+  }
+
+  return { entitlement, installCreated, progressInitialized, entitlementCreated };
 }
 
 /** After Neon partial reset: restore purchased/submitted from install, progress, or ops task. */

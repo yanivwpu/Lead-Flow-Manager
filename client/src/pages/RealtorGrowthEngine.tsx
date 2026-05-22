@@ -923,6 +923,11 @@ export function RealtorGrowthEngine() {
     retry: 1,
   });
 
+  const pendingStripeVerify = React.useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("paid") === "true" && !!params.get("session_id");
+  }, [location]);
+
   const verifyPaymentMutation = useMutation({
     mutationFn: async (sessionId: string) => {
       const res = await apiRequest("POST", "/api/templates/realtor-growth-engine/verify-payment", { sessionId });
@@ -935,19 +940,22 @@ export function RealtorGrowthEngine() {
         title: "Payment confirmed",
         description: "Continue guided setup: align channels and book your concierge launch session.",
       });
-      const url = new URL(window.location.href);
-      url.searchParams.delete("paid");
-      url.searchParams.delete("session_id");
-      window.history.replaceState({}, "", url.pathname);
-    }
+      setLocation(RGE_TEMPLATE_ONBOARDING_PATH);
+      window.history.replaceState({}, "", RGE_TEMPLATE_ONBOARDING_PATH);
+    },
   });
+
+  const stripeVerifySessionRef = React.useRef<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const paid = params.get("paid");
     const sessionId = params.get("session_id");
     if (paid === "true" && sessionId && !isShopify) {
-      verifyPaymentMutation.mutate(sessionId);
+      if (stripeVerifySessionRef.current !== sessionId) {
+        stripeVerifySessionRef.current = sessionId;
+        verifyPaymentMutation.mutate(sessionId);
+      }
     }
     if (params.get("shopify_rge") === "success") {
       queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
@@ -958,8 +966,11 @@ export function RealtorGrowthEngine() {
       const url = new URL(window.location.href);
       url.searchParams.delete("shopify_rge");
       window.history.replaceState({}, "", url.pathname + url.search);
+      if (!isOnboardingPath) {
+        setLocation(RGE_TEMPLATE_ONBOARDING_PATH);
+      }
     }
-  }, []);
+  }, [isShopify, isOnboardingPath, setLocation]);
 
   const purchaseMutation = useMutation({
     mutationFn: async () => {
@@ -1082,10 +1093,17 @@ export function RealtorGrowthEngine() {
 
   React.useEffect(() => {
     if (!isOnboardingPath) return;
+    if (pendingStripeVerify || verifyPaymentMutation.isPending) return;
     if (!hasPurchased) {
       setLocation(RGE_TEMPLATE_DETAIL_PATH);
     }
-  }, [isOnboardingPath, hasPurchased, setLocation]);
+  }, [
+    isOnboardingPath,
+    hasPurchased,
+    setLocation,
+    pendingStripeVerify,
+    verifyPaymentMutation.isPending,
+  ]);
 
   const { data: assetsData } = useQuery({
     queryKey: ["/api/templates/realtor-growth-engine/assets"],
