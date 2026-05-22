@@ -1,3 +1,6 @@
+/** Canonical Growth Engine template id (DB, entitlements, installs). */
+export const RGE_TEMPLATE_ID = "realtor-growth-engine";
+
 /** In-app Realtor Growth Engine routes (shared by client + server). */
 export const RGE_TEMPLATE_DETAIL_PATH = "/app/templates/realtor-growth-engine";
 export const RGE_TEMPLATE_ONBOARDING_PATH = "/app/templates/realtor-growth-engine/onboarding";

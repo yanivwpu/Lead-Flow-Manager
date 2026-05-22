@@ -1,9 +1,10 @@
+import { RGE_TEMPLATE_ID } from "@shared/rgePaths";
 import { storage } from "./storage";
 import type { GrowthEngineSetupTask, User } from "@shared/schema";
 import { sendGrowthEngineSessionBookedEmail } from "./email";
 import { isUserWhatsAppConnectedForActivation } from "./whatsappService";
 
-export const RGE_TEMPLATE_ID = "realtor-growth-engine";
+export { RGE_TEMPLATE_ID };
 
 export const GE_SETUP_STATUS = {
   purchased: "purchased",

@@ -8,7 +8,7 @@ import {
 } from "./shopifyMerchantResolver";
 import { storage } from "./storage";
 import { getRgeOnboardingProgress } from "./rgeOnboardingProgress";
-import { RGE_TEMPLATE_ID } from "./growthEngineSetupService";
+import { RGE_TEMPLATE_ID } from "@shared/rgePaths";
 
 export const RGE_PURCHASE_LOG = "[RGE Purchase]";
 
@@ -31,7 +31,7 @@ export async function reconcileRgeEntitlementForPurchase(userId: string): Promis
   reconciled: boolean;
   priorStatus: string | null;
 }> {
-  const existing = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
+  const existing = await storage.getTemplateEntitlement(userId, RGE_TEMPLATE_ID);
   if (existing && existing.status !== "locked") {
     return { entitlement: existing, reconciled: false, priorStatus: existing.status };
   }
@@ -55,7 +55,7 @@ export async function reconcileRgeEntitlementForPurchase(userId: string): Promis
     status = existing.status as "submitted" | "installed";
   }
 
-  const ent = await storage.upsertTemplateEntitlement(userId, TEMPLATE_ID, {
+  const ent = await storage.upsertTemplateEntitlement(userId, RGE_TEMPLATE_ID, {
     status,
     purchasedAt: existing?.purchasedAt ?? install?.createdAt ?? new Date(),
     onboardingSubmittedAt: submission?.submittedAt ?? existing?.onboardingSubmittedAt ?? undefined,
