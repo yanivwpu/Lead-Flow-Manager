@@ -972,13 +972,23 @@ export function RealtorGrowthEngine() {
         window.location.href = `/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
         throw new Error("session_expired");
       }
+      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Purchase failed");
+        const msg = typeof body?.error === "string" ? body.error : "Purchase failed";
+        const err = new Error(msg) as Error & { code?: string; reason?: string; status?: number };
+        err.code = typeof body?.code === "string" ? body.code : undefined;
+        err.reason = typeof body?.reason === "string" ? body.reason : undefined;
+        err.status = res.status;
+        throw err;
       }
-      return res.json();
+      return body;
     },
-    onSuccess: (data: { url?: string; shopifyConfirmationUrl?: string; alreadyPurchased?: boolean }) => {
+    onSuccess: (data: {
+      url?: string;
+      shopifyConfirmationUrl?: string;
+      alreadyPurchased?: boolean;
+      onboardingComplete?: boolean;
+    }) => {
       if (data.shopifyConfirmationUrl) {
         window.location.href = data.shopifyConfirmationUrl;
         return;
@@ -987,13 +997,42 @@ export function RealtorGrowthEngine() {
         window.location.href = data.url;
         return;
       }
-      queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
       if (data.alreadyPurchased) {
-        setLocation(RGE_TEMPLATE_ONBOARDING_PATH);
+        toast({
+          title: "Growth Engine already purchased",
+          description: data.onboardingComplete
+            ? "Opening your Growth Engine."
+            : "Continue your guided launch setup.",
+        });
+        setLocation(
+          data.onboardingComplete ? RGE_TEMPLATE_DETAIL_PATH : RGE_TEMPLATE_ONBOARDING_PATH,
+        );
         return;
       }
       toast({ title: "Template Unlocked", description: "Continue with your guided launch setup." });
-    }
+    },
+    onError: (err: Error & { code?: string; reason?: string; status?: number }) => {
+      if (err.message === "session_expired") return;
+      if (err.status === 403 || err.code === "rge_ge_access_denied") {
+        setSubscriptionGate({
+          show: true,
+          hasPro: templateData?.subscription?.hasPro !== false,
+          hasAI: templateData?.subscription?.hasAI !== false,
+        });
+      }
+      const title =
+        err.code === "rge_stripe_price_missing"
+          ? "Checkout unavailable"
+          : err.code === "rge_shopify_shop_required" || err.code === "rge_shopify_reconnect_required"
+            ? "Open from Shopify"
+            : "Could not start purchase";
+      toast({
+        title,
+        description: err.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const submitOnboardingMutation = useMutation({
@@ -1149,6 +1188,10 @@ export function RealtorGrowthEngine() {
   // --- Views ---
 
   const handlePurchaseContinue = async () => {
+    if (hasPurchased) {
+      setLocation(onboardingComplete ? RGE_TEMPLATE_DETAIL_PATH : RGE_TEMPLATE_ONBOARDING_PATH);
+      return;
+    }
     setCheckingSubscription(true);
     try {
       const res = await apiRequest("GET", "/api/templates/realtor-growth-engine/check-subscription");

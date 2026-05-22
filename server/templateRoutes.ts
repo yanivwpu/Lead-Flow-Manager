@@ -28,10 +28,14 @@ import {
 } from "./growthEngineSetupService";
 import { getRgeOnboardingProgress, saveRgeOnboardingProgress } from "./rgeOnboardingProgress";
 import {
+  logRgePurchaseEvent,
+  reconcileRgeEntitlementForPurchase,
+  resolveRgePurchaseBillingChannel,
+} from "./rgePurchase";
+import {
   isShopifyBillingAccount,
   rejectStripeIfShopifyUser,
 } from "./shopifyBillingGuard";
-import { resolveShopifyMerchantForBilling } from "./shopifyMerchantResolver";
 
 const TEMPLATE_ID = "realtor-growth-engine";
 const TEMPLATE_PRICE_CENTS = 19900;
@@ -137,17 +141,37 @@ export function registerTemplateRoutes(app: Express) {
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ error: "User not found" });
 
-      const existing = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
+      const reconciled = await reconcileRgeEntitlementForPurchase(userId);
+      const existing = reconciled.entitlement ?? (await storage.getTemplateEntitlement(userId, TEMPLATE_ID));
+
       if (existing && existing.status !== "locked") {
-        return res.json({ success: true, alreadyPurchased: true });
+        logRgePurchaseEvent("already_purchased", {
+          userId,
+          status: existing.status,
+          reconciled: reconciled.reconciled,
+        });
+        return res.json({
+          success: true,
+          alreadyPurchased: true,
+          entitlementStatus: existing.status,
+          onboardingComplete: Boolean(existing.onboardingSubmittedAt),
+        });
       }
 
       if (user.email !== "demo@whachat.com") {
         const ge = await evaluateGrowthEngineAccess(userId);
         if (!ge.ok) {
+          logRgePurchaseEvent("ge_access_denied", {
+            userId,
+            reason: ge.reason,
+            hasPro: ge.hasProTier,
+            hasAI: ge.hasAIBrainAddon,
+            workflowsEnabled: ge.workflowsEnabled,
+          });
           return res.status(403).json({
             error: ge.message,
-            code: ge.reason,
+            code: "rge_ge_access_denied",
+            reason: ge.reason,
             hasPro: ge.hasProTier,
             hasAI: ge.hasAIBrainAddon,
             workflowsEnabled: ge.workflowsEnabled,
@@ -174,12 +198,23 @@ export function registerTemplateRoutes(app: Express) {
         return res.json({ success: true, demo: true });
       }
 
-      if (isShopifyBillingAccount(user, req)) {
-        const resolved = await resolveShopifyMerchantForBilling(req, userId, "templates/rge/purchase");
-        if (!resolved.ok) {
-          return res.status(resolved.status).json({ error: resolved.error, code: resolved.code });
-        }
-        const { shop, accessToken } = resolved.merchant;
+      const billingChannel = await resolveRgePurchaseBillingChannel(userId, req);
+      if (billingChannel.channel === "error") {
+        logRgePurchaseEvent("billing_channel_error", {
+          userId,
+          code: billingChannel.code,
+          reason: billingChannel.reason,
+          status: billingChannel.status,
+        });
+        return res.status(billingChannel.status).json({
+          error: billingChannel.error,
+          code: billingChannel.code,
+          reason: billingChannel.reason,
+        });
+      }
+
+      if (billingChannel.channel === "shopify") {
+        const { shop, accessToken } = billingChannel.merchant;
         const base = resolveStripeCheckoutRedirectOrigin(getAppOrigin());
         const returnUrl = `${base}/api/shopify/billing/rge-onetime-callback?shop=${encodeURIComponent(shop)}`;
         const billing = await createShopifyRgeOneTimePurchase(
@@ -189,13 +224,13 @@ export function registerTemplateRoutes(app: Express) {
           process.env.NODE_ENV !== "production",
         );
         if (!billing?.confirmationUrl) {
-          return res.status(500).json({ error: "Failed to start Shopify billing for this purchase" });
+          logRgePurchaseEvent("shopify_onetime_failed", { userId, shop });
+          return res.status(500).json({
+            error: "Failed to start Shopify billing for this purchase",
+            code: "rge_shopify_billing_unavailable",
+          });
         }
         return res.json({ shopifyConfirmationUrl: billing.confirmationUrl });
-      }
-
-      if (await rejectStripeIfShopifyUser(req, res, "templates/rge/purchase", (id) => storage.getUser(id))) {
-        return;
       }
 
       const stripe = await getUncachableStripeClient();
@@ -217,7 +252,12 @@ export function registerTemplateRoutes(app: Express) {
       const cancelPath = sanitizeStripeReturnPath(cancelTo ?? redirectTo, RGE_TEMPLATE_DETAIL_PATH);
       const priceId = process.env.STRIPE_RGE_ONE_TIME_PRICE_ID;
       if (!priceId) {
-        throw new Error("Missing STRIPE_RGE_ONE_TIME_PRICE_ID");
+        logRgePurchaseEvent("stripe_price_missing", { userId });
+        return res.status(400).json({
+          error:
+            "Growth Engine checkout is not configured (missing Stripe price). Contact support@whachatcrm.com.",
+          code: "rge_stripe_price_missing",
+        });
       }
 
       const successInterstitial = buildPostCheckoutSuccessUrl(baseUrl, successPath);
@@ -233,11 +273,21 @@ export function registerTemplateRoutes(app: Express) {
         metadata: { userId, templateId: TEMPLATE_ID },
       });
 
-      if (!session.url) throw new Error("Failed to create checkout session");
+      if (!session.url) {
+        logRgePurchaseEvent("stripe_session_no_url", { userId });
+        return res.status(500).json({
+          error: "Failed to create checkout session",
+          code: "rge_stripe_checkout_failed",
+        });
+      }
       res.json({ success: true, url: session.url });
     } catch (error: any) {
       console.error("[Template] Purchase error:", error);
-      res.status(500).json({ error: "Failed to process purchase" });
+      logRgePurchaseEvent("unhandled_error", {
+        userId: (req.user as any)?.id,
+        message: error?.message,
+      });
+      res.status(500).json({ error: "Failed to process purchase", code: "rge_purchase_server_error" });
     }
   });
 
