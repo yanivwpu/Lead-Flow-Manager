@@ -28,7 +28,6 @@ import type { ContactNote } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
-  FINANCING_GUIDANCE_SUGGESTION,
   formatScoreActivityEvent,
   sanitizeUserFacingText,
 } from "@shared/customerBehaviorCopy";
@@ -36,6 +35,7 @@ import {
   buildContextualNextActionLabels,
   buildCustomerInsights,
   buildCustomerSummaryBullets,
+  composerSuggestionForAction,
   extractShowingTimingPhrase,
 } from "@shared/customerInsights";
 import {
@@ -189,6 +189,8 @@ interface InboxLeadDetailsPanelProps {
   onDeleteContact: () => void;
   /** Optional 1-line preview of the main composer draft (read-only, from parent state) */
   composerDraftPreview?: string;
+  /** Insert suggested reply text into the main message composer */
+  onInsertComposerDraft?: (text: string) => void;
   /** Override the root container class — use when embedding in a mobile sheet */
   panelClassName?: string;
 }
@@ -205,6 +207,22 @@ function formatRelativeTime(date: Date | string | null | undefined): string {
   if (hours < 24) return `${hours}h ago`;
   if (days < 7)   return `${days}d ago`;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function CopilotPopoverHeader({ title, onClose }: { title: string; onClose: () => void }) {
+  return (
+    <motion.div className="mb-2 flex items-center justify-between gap-2">
+      <span className="text-[11px] font-semibold text-gray-700">{title}</span>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="rounded p-0.5 text-gray-300 hover:text-gray-500 transition-colors"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </motion.div>
+  );
 }
 
 function RowLabel({ children }: { children: React.ReactNode }) {
@@ -734,6 +752,7 @@ export function InboxLeadDetailsPanel({
   onEditContact,
   onDeleteContact,
   composerDraftPreview,
+  onInsertComposerDraft,
   panelClassName,
 }: InboxLeadDetailsPanelProps) {
   const { toast } = useToast();
@@ -807,6 +826,7 @@ export function InboxLeadDetailsPanel({
   // Copilot action popovers
   const [assignOpen, setAssignOpen] = useState(false);
   const [followOpen, setFollowOpen] = useState(false);
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
   const [useFollowModal, setUseFollowModal] = useState(false);
   const [bookOpen,   setBookOpen]   = useState(false);
   const [completedActions, setCompletedActions] = useState<Set<string>>(new Set());
@@ -1338,7 +1358,11 @@ export function InboxLeadDetailsPanel({
   };
 
   const qualifyAction     = canSeeWorkflow ? workflow.actions.find(a => a.type === 'qualify' && !completedActions.has('qualify')) : undefined;
-  const activeChipActions = canSeeWorkflow ? workflow.actions.filter(a => a.type !== 'qualify' && !completedActions.has(a.type)) : [];
+  const activeChipActions = canSeeWorkflow
+    ? workflow.actions.filter(
+        (a) => a.type !== "qualify" && a.type !== "follow" && !completedActions.has(a.type),
+      )
+    : [];
   const hasTagSuggestion  = canSeeWorkflow && !!workflow.tagSuggestion && !workflow.tagAutoApply && !completedActions.has('tag');
   const hasStageSuggestion = canSeeWorkflow && !!workflow.stageSuggestion && !completedActions.has('stage');
   const hasAnyChips       = activeChipActions.length > 0 || hasTagSuggestion || hasStageSuggestion;
@@ -1447,47 +1471,33 @@ export function InboxLeadDetailsPanel({
   const nextBestActions = useMemo((): NextBestActionRow[] => {
     if (!canSeeWorkflow) return [];
 
+    const insertComposer = (label: string) => {
+      onInsertComposerDraft?.(composerSuggestionForAction(label));
+      toast({ title: "Suggestion added to composer", duration: 2500 });
+    };
+
     const labelToRow = (label: string, rank: number): NextBestActionRow | null => {
       const lower = label.toLowerCase();
-      if (/showing|availability|time options|appointment|schedule|confirm/.test(lower)) {
-        return { id: "book", label, priority: rank, onClick: () => setBookOpen(true), title: label };
-      }
-      if (/assign|reply personally/.test(lower)) {
+      if (/assign agent/.test(lower)) {
         return { id: "assign", label, priority: rank, onClick: () => setAssignOpen(true), title: label };
       }
-      if (/follow up|nurture/.test(lower)) {
-        return { id: "follow", label, priority: rank, onClick: () => setFollowOpen(true), title: label };
-      }
-      if (/lender|financing/.test(lower)) {
-        return {
-          id: "qualify",
-          label,
-          priority: rank,
-          onClick: () => {
-            const q = workflow.nextQuestion ?? FINANCING_GUIDANCE_SUGGESTION;
-            void navigator.clipboard?.writeText(q).catch(() => {});
-            toast({ title: "Suggestion copied — paste in the composer", duration: 2500 });
-          },
-          title: label,
-        };
-      }
-      if (/contact customer/.test(lower)) {
-        return { id: "assign", label, priority: rank, onClick: () => setAssignOpen(true), title: label };
-      }
-      if (/snooze|later/.test(lower)) {
+      if (/snooze|pause autopilot/.test(lower)) {
         return { id: "snooze", label, priority: rank, onClick: () => setAiPaused(true), title: label };
       }
-      if (/set follow-up/.test(lower)) {
-        return { id: "follow", label, priority: rank, onClick: () => setFollowOpen(true), title: label };
-      }
-      return null;
+      return {
+        id: "qualify",
+        label,
+        priority: rank,
+        onClick: () => insertComposer(label),
+        title: label,
+      };
     };
 
     return contextualActionLabels
       .map((label, i) => labelToRow(label, 100 - i))
       .filter((row): row is NextBestActionRow => row != null)
       .slice(0, 3);
-  }, [canSeeWorkflow, contextualActionLabels, workflow.nextQuestion, toast]);
+  }, [canSeeWorkflow, contextualActionLabels, onInsertComposerDraft, toast]);
 
   return (
     <div className={panelClassName ?? "hidden lg:flex w-[260px] xl:w-[272px] flex-col border-l border-gray-100 bg-white overflow-y-auto flex-shrink-0"}>
@@ -1597,13 +1607,8 @@ export function InboxLeadDetailsPanel({
                 <span className="text-[9px] text-gray-500 font-medium">Book</span>
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-64 p-3" align="start" side="bottom" onInteractOutside={(e) => e.preventDefault()}>
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-gray-700">Schedule Appointment</span>
-                <button onClick={() => setBookOpen(false)} className="text-gray-300 hover:text-gray-500">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
+            <PopoverContent className="w-[220px] p-2.5" align="start" side="bottom" sideOffset={4}>
+              <CopilotPopoverHeader title="Schedule appointment" onClose={() => setBookOpen(false)} />
               {bookingConfirmed ? (
                 <div className="flex flex-col gap-1.5 py-2">
                   <div className="flex items-center gap-1.5">
@@ -1787,8 +1792,8 @@ export function InboxLeadDetailsPanel({
                 </span>
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-48 p-1.5" align="start" side="bottom">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1.5 pb-1">Assign to</p>
+            <PopoverContent className="w-[220px] p-1.5" align="start" side="bottom" sideOffset={4}>
+              <CopilotPopoverHeader title="Assign to" onClose={() => setAssignOpen(false)} />
               <button
                 onClick={() => { onUpdateContact({ assignedTo: null }); setAssignOpen(false); }}
                 className={cn(
@@ -1843,19 +1848,20 @@ export function InboxLeadDetailsPanel({
               </button>
             </PopoverTrigger>
 
-            <PopoverContent 
-              className="w-64 p-1.5 max-h-[80vh] overflow-y-auto flex flex-col" 
-              align="start" 
+            <PopoverContent
+              className="w-[220px] p-2.5 max-h-[80vh] overflow-y-auto flex flex-col"
+              align="start"
               side="bottom"
-              onInteractOutside={(e) => e.preventDefault()}
+              sideOffset={4}
             >
+              <CopilotPopoverHeader
+                title={followView === "quick" ? "Follow-up" : "Custom follow-up"}
+                onClose={() => setFollowOpen(false)}
+              />
 
               {/* ─ QUICK OPTIONS VIEW ─ */}
               {followView === 'quick' && (
                 <>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1.5 pb-1">
-                    Follow-up in
-                  </p>
                   {[
                     { label: '24h',    display: 'Tomorrow (24h)',  },
                     { label: '3 days', display: '3 days'           },
@@ -1967,24 +1973,43 @@ export function InboxLeadDetailsPanel({
             </PopoverContent>
           </Popover>
 
-          {/* ── PAUSE ── */}
-          <button
-            onClick={() => toggleCopilotSnooze()}
-            className={cn(
-              "flex flex-col items-center gap-0.5 py-1.5 rounded-lg border transition-colors",
-              headerShowsSnoozed
-                ? "border-gray-200 bg-gray-100 hover:bg-gray-200"
-                : "border-gray-200 bg-white hover:bg-gray-50"
-            )}
-            data-testid="button-ai-pause"
-            title="Temporarily pause AI for this conversation"
-          >
-            {headerShowsSnoozed
-              ? <PlayCircle className="w-3 h-3 text-gray-500" />
-              : <PauseCircle className="w-3 h-3 text-gray-500" />
-            }
-            <span className="text-[9px] text-gray-500 font-medium">{headerShowsSnoozed ? "Unsnooze" : "Snooze"}</span>
-          </button>
+          {/* ── SNOOZE ── */}
+          <Popover open={snoozeOpen} onOpenChange={setSnoozeOpen}>
+            <PopoverTrigger asChild>
+              <button
+                className={cn(
+                  "flex flex-col items-center gap-0.5 py-1.5 rounded-lg border transition-colors",
+                  headerShowsSnoozed
+                    ? "border-gray-200 bg-gray-100 hover:bg-gray-200"
+                    : "border-gray-200 bg-white hover:bg-gray-50"
+                )}
+                data-testid="button-ai-pause"
+                title="Temporarily pause AI for this conversation"
+              >
+                {headerShowsSnoozed
+                  ? <PlayCircle className="w-3 h-3 text-gray-500" />
+                  : <PauseCircle className="w-3 h-3 text-gray-500" />
+                }
+                <span className="text-[9px] text-gray-500 font-medium">{headerShowsSnoozed ? "Unsnooze" : "Snooze"}</span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[220px] p-2.5" align="start" side="bottom" sideOffset={4}>
+              <CopilotPopoverHeader
+                title={headerShowsSnoozed ? "AI paused" : "Snooze AI"}
+                onClose={() => setSnoozeOpen(false)}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  toggleCopilotSnooze();
+                  setSnoozeOpen(false);
+                }}
+                className="w-full rounded-lg py-1.5 text-[11px] font-semibold bg-gray-900 text-white hover:bg-gray-800 transition-colors"
+              >
+                {headerShowsSnoozed ? "Resume AI" : "Pause for this conversation"}
+              </button>
+            </PopoverContent>
+          </Popover>
 
         </div>
       </div>
@@ -2226,8 +2251,7 @@ export function InboxLeadDetailsPanel({
                       {activeChipActions.slice(0, hasAIBrain ? 4 : 2).map(action => {
                         const chipHandlers: Record<string, () => void> = {
                           assign:  () => { setAssignOpen(true); completeAction(action.type, "Lead assigned"); },
-                          book:    () => { setBookOpen(true); completeAction(action.type, "Follow-up scheduled"); },
-                          follow:  () => { setFollowOpen(true); completeAction(action.type, "Follow-up scheduled"); },
+                          book:    () => { setBookOpen(true); completeAction(action.type, "Appointment scheduled"); },
                           nurture: () => { completeAction(action.type, "Added to nurture queue"); },
                         };
                         const handler = chipHandlers[action.type];

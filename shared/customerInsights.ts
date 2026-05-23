@@ -230,6 +230,30 @@ export function buildContextualNextActionLabels(ctx: ContextualActionContext): s
 
 export { FINANCING_GUIDANCE_SUGGESTION };
 
+/** Suggested reply text when agent clicks a Next Best Action. */
+export function composerSuggestionForAction(label: string): string {
+  const l = label.toLowerCase();
+  if (/confirm.*availability|next week|this week|tomorrow|friday|monday/.test(l)) {
+    return "I can confirm availability — what day and time works best for you?";
+  }
+  if (/time options/.test(l)) {
+    return "Here are a few times that work on my end:";
+  }
+  if (/financing|lender/.test(l)) {
+    return "Are you already working with a lender, or would you like me to connect you with one?";
+  }
+  if (/follow up|nurture/.test(l)) {
+    return "Just checking in — let me know if you still have any questions or want to move forward.";
+  }
+  if (/reply personally|contact customer/.test(l)) {
+    return "Hi! I wanted to follow up on our conversation.";
+  }
+  if (/schedule appointment/.test(l)) {
+    return "Would you like to schedule a time to connect?";
+  }
+  return label;
+}
+
 const SHOWING_TIMING_RE =
   /\b(next week|this week|next month|tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
 

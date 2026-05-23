@@ -2838,6 +2838,7 @@ export function UnifiedInbox() {
               ? `${messageInput.slice(0, 100)}${messageInput.length > 100 ? "…" : ""}`
               : undefined
           }
+          onInsertComposerDraft={setMessageInput}
           onUpdateContact={updateContact}
           onUpdateConversationStatus={status => {
             if (primaryConversation) {
@@ -2880,6 +2881,7 @@ export function UnifiedInbox() {
                       ? `${messageInput.slice(0, 100)}${messageInput.length > 100 ? "…" : ""}`
                       : undefined
                   }
+                  onInsertComposerDraft={setMessageInput}
                   onUpdateContact={updateContact}
                   onUpdateConversationStatus={status => {
                     if (primaryConversation) {
