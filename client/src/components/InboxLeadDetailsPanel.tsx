@@ -28,12 +28,14 @@ import type { ContactNote } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
-  COPILOT_SCORE_SUBTITLE,
   FINANCING_GUIDANCE_SUGGESTION,
   formatScoreActivityEvent,
-  humanizeScoringReasons,
   sanitizeUserFacingText,
 } from "@shared/customerBehaviorCopy";
+import {
+  buildContextualNextActionLabels,
+  buildCustomerInsights,
+} from "@shared/customerInsights";
 import {
   filterMeaningfulTimelineEvents,
   formatActivityDetailText,
@@ -636,10 +638,17 @@ function formatContactActivity(event: ContactActivityEvent): { title: string; de
     const taskTitle = title || "";
     const hay = `${taskTitle} ${content}`.toLowerCase();
     if (/scheduling link sent|scheduling link/i.test(hay)) {
-      return { title: "Scheduling link sent", detail: "Booking link sent to the customer", tone: "green" };
+      return { title: "Booking link sent to customer", detail: "", tone: "green" };
+    }
+    if (/customer requested a showing/i.test(hay)) {
+      return {
+        title: "Customer requested a showing",
+        detail: /booking link sent/i.test(hay) ? "Booking link sent to customer" : "",
+        tone: "green",
+      };
     }
     if (/showing requested|appointment requested/i.test(hay)) {
-      return { title: "Appointment requested", detail: "Customer asked for a showing", tone: "green" };
+      return { title: "Customer requested a showing", detail: "", tone: "green" };
     }
     if (/book|showing|appointment/i.test(hay)) {
       return {
@@ -1193,36 +1202,30 @@ export function InboxLeadDetailsPanel({
     return `${label} lead • ${tail}`;
   }, [intel.leadScoreDetails?.bucket, intel.leadScore.label, intel.aiState, aiStateLabel]);
 
-  /** Single primary insight line + optional supporting — display-only formatting of `reasons` */
-  const copilotInsightPresentation = useMemo(() => {
-    const reasons = humanizeScoringReasons(intel.leadScoreDetails?.reasons ?? []);
-    const qualLine = (intel.leadScoreDetails?.missingRequired ?? []).length > 0
-      ? "A few details are still missing"
-      : null;
+  const stageSignals = useMemo(
+    () => getStageSignals(messages, businessKnowledge),
+    [messages, businessKnowledge],
+  );
 
-    if (reasons.length === 0) {
-      const bucket = intel.leadScoreDetails?.bucket;
-      const fallback =
-        bucket === "hot" || bucket === "warm"
-          ? intel.intent === "Booking"
-            ? "Customer asked for a showing"
-            : "Customer showed strong interest"
-          : `${intel.intent} — ${aiStateLabel}`;
-      return {
-        headline: fallback,
-        supporting: qualLine ? [qualLine] : ([] as string[]),
-      };
-    }
-    const headline = reasons.length >= 2 ? `${reasons[0]} — ${reasons[1]}` : reasons[0];
-    const supporting = [...reasons.slice(2, 4), ...(qualLine ? [qualLine] : [])].filter(Boolean).slice(0, 2);
-    return { headline, supporting };
-  }, [
-    intel.leadScoreDetails?.reasons,
-    intel.leadScoreDetails?.missingRequired,
-    intel.leadScoreDetails?.bucket,
-    intel.intent,
-    aiStateLabel,
-  ]);
+  const customerInsights = useMemo(
+    () =>
+      buildCustomerInsights({
+        reasons: intel.leadScoreDetails?.reasons,
+        intent: intel.intent,
+        bucket: intel.leadScoreDetails?.bucket,
+        viewingIntent: stageSignals.viewingIntent,
+        signals: intel.leadScoreDetails?.signals?.detected,
+        missingRequiredCount: intel.leadScoreDetails?.missingRequired?.length ?? 0,
+      }),
+    [
+      intel.leadScoreDetails?.reasons,
+      intel.leadScoreDetails?.bucket,
+      intel.leadScoreDetails?.missingRequired,
+      intel.intent,
+      stageSignals.viewingIntent,
+      intel.leadScoreDetails?.signals?.detected,
+    ],
+  );
 
   // ── Safe AI stage suggestion (click-to-apply only) ─────────────────────────
   const stageSuggestion = useMemo(() => {
@@ -1232,7 +1235,7 @@ export function InboxLeadDetailsPanel({
     if ((d.missingRequired ?? []).length > 0) return null;
     if (!["Lead", "Contacted"].includes(contact.pipelineStage)) return null;
 
-    const signals = getStageSignals(messages, businessKnowledge);
+    const signals = stageSignals;
     const deterministicIntent = signals.strongIntent || signals.viewingIntent;
     const stageExists = (s: string) =>
       PIPELINE_STAGES.includes(s as any) ||
@@ -1272,7 +1275,7 @@ export function InboxLeadDetailsPanel({
     }
 
     return null;
-  }, [intel.leadScoreDetails, contact.pipelineStage, messages, businessKnowledge]);
+  }, [intel.leadScoreDetails, contact.pipelineStage, stageSignals]);
 
   // ── Safe system score auto-tag (server-enforced) ──────────────────────────
   const systemScoreTagKeyRef = useRef<string>("");
@@ -1340,114 +1343,102 @@ export function InboxLeadDetailsPanel({
   const activeSuggestionCount = (hasAnyChips ? 1 : 0) + (qualifyAction ? 1 : 0);
 
   type NextBestActionRow = {
-    id: "book" | "assign" | "follow" | "snooze";
+    id: "book" | "assign" | "follow" | "snooze" | "qualify";
     label: string;
     priority: number;
     onClick: () => void;
     title?: string;
   };
 
-  const nextBestActions = useMemo((): NextBestActionRow[] => {
-    if (!canSeeWorkflow) return [];
-
-    // Human handoff overrides all other actions.
-    if (handoffActive) {
-      return [
-        {
-          id: "assign",
-          label: "Assign agent",
-          priority: 999,
-          onClick: () => setAssignOpen(true),
-          title: "Customer requested human assistance",
-        },
-      ];
-    }
-
+  const contextualActionLabels = useMemo(() => {
     const intentText = `${intel.intent ?? ""}`.toLowerCase();
     const lastMsgText = `${messages[messages.length - 1]?.content ?? ""}`.toLowerCase();
-
     const hasBookingIntent =
+      stageSignals.viewingIntent ||
       /book|schedule|appointment|showing|tour|viewing|visit/.test(intentText) ||
       /book|schedule|appointment|showing|tour|viewing/.test(lastMsgText);
-
+    const hasFinancingDiscussion =
+      /\b(deposit|down payment|mortgage|loan|financ)/i.test(lastMsgText) ||
+      (!intel.hasFinancing && /\b(pre.?approv|lender|financing)\b/i.test(lastMsgText));
     const hasStrongPurchaseIntent =
       /buy|purchase|ready to buy|make an offer|offer/.test(intentText) ||
       /make an offer|offer|ready to buy/.test(lastMsgText);
-
     const hasDelayLaterSignal =
-      /\blater\b|\bnot now\b|\bnext week\b|\bnext month\b|\bbusy\b|\bmaybe later\b/.test(lastMsgText) ||
-      /later|delay/.test(intentText);
+      /\blater\b|\bnot now\b|\bnext week\b|\bnext month\b|\bbusy\b|\bmaybe later\b/.test(lastMsgText);
 
-    const needsAssignment = !contact.assignedTo;
-    const shouldSetFollowUp = !contact.followUpDate && (intel.aiState === "Waiting" || intel.aiState === "Stalled");
-
-    const candidates: NextBestActionRow[] = [];
-
-    // Priority 1: revenue actions
-    if (hasBookingIntent) {
-      candidates.push({
-        id: "book",
-        label: "Book showing",
-        priority: 100,
-        onClick: () => setBookOpen(true),
-        title: "Open booking",
-      });
-    } else if (hasStrongPurchaseIntent) {
-      // "Send offer" is supported conceptually, but we only surface actions we can trigger via existing buttons.
-      // (No-op intentionally omitted to avoid duplicating features.)
-    }
-
-    // Priority 2: workflow actions
-    if (needsAssignment) {
-      candidates.push({
-        id: "assign",
-        label: "Assign agent",
-        priority: 70,
-        onClick: () => setAssignOpen(true),
-        title: "Open assign",
-      });
-    }
-    if (shouldSetFollowUp) {
-      candidates.push({
-        id: "follow",
-        label: "Set follow-up",
-        priority: 60,
-        onClick: () => setFollowOpen(true),
-        title: "Open follow-up",
-      });
-    }
-
-    // Priority 3: secondary
-    if (!effectiveAiPaused && hasDelayLaterSignal) {
-      candidates.push({
-        id: "snooze",
-        label: "Snooze",
-        priority: 30,
-        onClick: () => setAiPaused(true),
-        title: "Temporarily pause AI for this conversation",
-      });
-    }
-
-    // Dedup by id, keep highest priority
-    const byId = new Map<NextBestActionRow["id"], NextBestActionRow>();
-    for (const c of candidates) {
-      const prev = byId.get(c.id);
-      if (!prev || c.priority > prev.priority) byId.set(c.id, c);
-    }
-
-    return Array.from(byId.values())
-      .sort((a, b) => b.priority - a.priority)
-      .slice(0, 2);
+    return buildContextualNextActionLabels({
+      handoffActive,
+      hasShowingIntent: hasBookingIntent,
+      hasFinancingDiscussion,
+      hasStrongPurchaseIntent,
+      bucket: intel.leadScoreDetails?.bucket,
+      leadLabel: intel.leadScore.label,
+      lastDirection: messages.length > 0 ? messages[messages.length - 1].direction : null,
+      hasFollowUp: !!contact.followUpDate,
+      assignedTo: contact.assignedTo,
+      confidence: intel.leadScoreDetails?.confidence01,
+      aiPaused: effectiveAiPaused,
+      hasDelayLater: hasDelayLaterSignal,
+      lastOutbound: messages.length > 0 && messages[messages.length - 1].direction === "outbound",
+    });
   }, [
-    canSeeWorkflow,
     handoffActive,
     intel.intent,
-    intel.aiState,
+    intel.hasFinancing,
+    intel.leadScore.label,
+    intel.leadScoreDetails?.bucket,
+    intel.leadScoreDetails?.confidence01,
     messages,
     contact.assignedTo,
     contact.followUpDate,
     effectiveAiPaused,
+    stageSignals.viewingIntent,
   ]);
+
+  const nextBestActions = useMemo((): NextBestActionRow[] => {
+    if (!canSeeWorkflow) return [];
+
+    const labelToRow = (label: string, rank: number): NextBestActionRow | null => {
+      const lower = label.toLowerCase();
+      if (/showing|availability|time options|appointment|schedule/.test(lower)) {
+        return { id: "book", label, priority: rank, onClick: () => setBookOpen(true), title: label };
+      }
+      if (/assign|reply personally/.test(lower)) {
+        return { id: "assign", label, priority: rank, onClick: () => setAssignOpen(true), title: label };
+      }
+      if (/follow up|nurture/.test(lower)) {
+        return { id: "follow", label, priority: rank, onClick: () => setFollowOpen(true), title: label };
+      }
+      if (/lender|financing/.test(lower)) {
+        return {
+          id: "qualify",
+          label,
+          priority: rank,
+          onClick: () => {
+            const q = workflow.nextQuestion ?? FINANCING_GUIDANCE_SUGGESTION;
+            void navigator.clipboard?.writeText(q).catch(() => {});
+            toast({ title: "Suggestion copied — paste in the composer", duration: 2500 });
+          },
+          title: label,
+        };
+      }
+      if (/contact customer/.test(lower)) {
+        return { id: "assign", label, priority: rank, onClick: () => setAssignOpen(true), title: label };
+      }
+      if (/snooze|later/.test(lower)) {
+        return { id: "snooze", label, priority: rank, onClick: () => setAiPaused(true), title: label };
+      }
+      if (/set follow-up/.test(lower)) {
+        return { id: "follow", label, priority: rank, onClick: () => setFollowOpen(true), title: label };
+      }
+      return null;
+    };
+
+    return contextualActionLabels
+      .map((label, i) => labelToRow(label, 100 - i))
+      .filter((row): row is NextBestActionRow => row != null)
+      .slice(0, 3);
+  }, [canSeeWorkflow, contextualActionLabels, workflow.nextQuestion, toast]);
 
   return (
     <div className={panelClassName ?? "hidden lg:flex w-[260px] xl:w-[272px] flex-col border-l border-gray-100 bg-white overflow-y-auto flex-shrink-0"}>
@@ -1982,50 +1973,40 @@ export function InboxLeadDetailsPanel({
                           Lead
                         </span>
                       </div>
-                      <p className="text-[11px] text-gray-500 mt-2 pl-1 border-l-2 border-gray-200 ml-0.5">
-                        <span className="font-medium text-gray-600">{intel.intent}</span>
-                        <span className="text-gray-400"> · </span>
-                        {aiStateLabel}
-                      </p>
                       {intel.leadScoreDetails ? (
-                        <div className="mt-3 space-y-2.5">
-                          {/* Insight — one primary line (+ optional supporting) */}
-                          <p className="text-[12px] font-semibold text-gray-800 leading-snug">
-                            {copilotInsightPresentation.headline}
-                          </p>
-                          {copilotInsightPresentation.supporting.length > 0 && (
-                            <div className="space-y-1">
-                              {copilotInsightPresentation.supporting.map((line, i) => (
-                                <p key={`${i}-${line.slice(0, 24)}`} className="text-[10px] text-gray-500 leading-snug">
-                                  {line}
-                                </p>
-                              ))}
+                        <div className="mt-3 space-y-3">
+                          {customerInsights.length > 0 ? (
+                            <div className="space-y-1.5">
+                              <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                                Customer insights
+                              </p>
+                              <ul className="space-y-1">
+                                {customerInsights.map((insight) => (
+                                  <li
+                                    key={insight}
+                                    className="text-[12px] font-medium text-gray-800 leading-snug flex gap-1.5"
+                                  >
+                                    <span className="text-gray-400 shrink-0">•</span>
+                                    <span>{insight}</span>
+                                  </li>
+                                ))}
+                              </ul>
                             </div>
-                          )}
-                          <div className="pt-0.5 space-y-1">
-                            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">
+                          ) : null}
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
                               Lead score
                             </p>
                             <p className="text-[22px] font-bold text-gray-900 tabular-nums leading-none">
                               {intel.leadScoreDetails.score}
                             </p>
-                            <p className="text-[11px] font-medium text-gray-600">
+                            <p className="text-[11px] font-semibold text-gray-700">
                               {(intel.leadScoreDetails?.bucket === "unqualified"
                                 ? "Unqualified"
                                 : intel.leadScore.label)}{" "}
-                              lead
-                            </p>
-                            <p className="text-[10px] text-gray-500 leading-snug">
-                              {COPILOT_SCORE_SUBTITLE}
+                              Lead
                             </p>
                           </div>
-                          {intel.leadScoreDetails.missingRequired.length > 0 ? (
-                            <div className="text-[10px] text-gray-500 leading-snug border-t border-gray-200 pt-2">
-                              <span className="text-gray-400 font-medium">Still to learn:</span>{" "}
-                              {intel.leadScoreDetails.missingRequired.slice(0, 3).join(", ")}
-                              {intel.leadScoreDetails.missingRequired.length > 3 ? "…" : ""}
-                            </div>
-                          ) : null}
                         </div>
                       ) : null}
                     </div>
@@ -2090,50 +2071,8 @@ export function InboxLeadDetailsPanel({
 
                   {/* B. Next best action — full reply text lives in composer only */}
                   {canSeeWorkflow && (() => {
-                    const nbaData = hasAIBrain
-                      ? (() => {
-                          const industry = (businessKnowledge?.industry || "").toLowerCase();
-                          const isRealEstate =
-                            industry.includes("real estate") ||
-                            industry.includes("realtor") ||
-                            industry.includes("property");
-
-                          if (qualifyingCriteria.length > 0) {
-                            const firstUnanswered = qualifyingCriteria.find(
-                              (c) => !answeredCriteriaKeys.has(c.key),
-                            );
-                            if (!firstUnanswered) return null;
-                            return {
-                              missing: [firstUnanswered.label],
-                              recommendation: firstUnanswered.question,
-                            };
-                          }
-
-                          if (!isRealEstate) return null;
-
-                          const missingLabels = [
-                            !intel.hasBudget && "Budget",
-                            !intel.hasTimeline && "Timeline",
-                            !intel.hasFinancing && "Financing",
-                          ].filter(Boolean) as string[];
-                          const nextActions: Record<string, string> = {
-                            Budget: "Ask about budget",
-                            Timeline: "Ask about timeline",
-                            Financing: FINANCING_GUIDANCE_SUGGESTION,
-                          };
-                          if (!missingLabels.length) return null;
-                          return {
-                            missing: missingLabels,
-                            recommendation: nextActions[missingLabels[0]],
-                          };
-                        })()
-                      : null;
-
-                    const fallbackAction = workflow.actions[0]?.label ?? null;
-                    const legacyPrimaryLine = nbaData?.recommendation ?? fallbackAction;
-                    const actionRows = nextBestActions.length > 0 ? nextBestActions : [];
-                    const shouldShowLegacyLine = actionRows.length === 0 && Boolean(legacyPrimaryLine);
-                    if (!shouldShowLegacyLine && actionRows.length === 0) return null;
+                    const actionRows = nextBestActions;
+                    if (actionRows.length === 0 && !handoffActive) return null;
 
                     return (
                       <div className="rounded-xl border border-gray-200/95 bg-white px-3 py-3 space-y-2 shadow-md shadow-gray-900/[0.07] ring-1 ring-gray-100/80">
@@ -2155,7 +2094,7 @@ export function InboxLeadDetailsPanel({
                         <div className="rounded-lg bg-gray-50 border border-gray-200 px-2.5 py-2 space-y-1.5">
                           {actionRows.map((row) => (
                             <button
-                              key={row.id}
+                              key={`${row.id}-${row.label}`}
                               type="button"
                               onClick={(e) => {
                                 e.preventDefault();
@@ -2172,17 +2111,6 @@ export function InboxLeadDetailsPanel({
                               </p>
                             </button>
                           ))}
-                          {shouldShowLegacyLine && (
-                            <p className="text-[12px] font-semibold text-gray-900 leading-snug flex gap-1.5 items-start px-1.5 py-1">
-                              <span className="text-gray-600 shrink-0 font-bold">→</span>
-                              <span>{legacyPrimaryLine}</span>
-                            </p>
-                          )}
-                          {nbaData && nbaData.missing.length > 0 ? (
-                            <p className="text-[10px] text-gray-500 mt-1">
-                              <span className="font-medium text-gray-600">Gap:</span> {nbaData.missing.join(", ")}
-                            </p>
-                          ) : null}
                         </div>
                         {composerDraftPreview && composerDraftPreview.trim().length > 0 ? (
                           <p

@@ -3,8 +3,6 @@
  * Use for Inbox, Copilot, Recent Activity, Growth Engines, and AI Brain — not Admin/debug.
  */
 
-export const COPILOT_SCORE_SUBTITLE = "Based on the customer's messages and activity.";
-
 export const FINANCING_GUIDANCE_SUGGESTION =
   "Ask if they're already working with a lender or need a recommendation.";
 
@@ -78,14 +76,14 @@ export function formatScoreActivityEvent(data: {
   if (bucketBefore && bucketAfter && bucketBefore !== bucketAfter) {
     if (showing) {
       return {
-        title: "Customer showed strong interest",
-        detail: "Asked about a showing or appointment",
+        title: "Customer requested a showing",
+        detail: "",
       };
     }
     if (bucketAfter === "hot" || bucketAfter === "warm") {
       return {
         title: "Customer showed strong interest",
-        detail: "Conversation suggests they may be ready to move forward",
+        detail: "",
       };
     }
     return { title: "Customer engagement changed", detail: "" };
@@ -93,24 +91,24 @@ export function formatScoreActivityEvent(data: {
 
   if (showing && prev != null && next != null && next > prev) {
     return {
-      title: "Customer appears ready to move forward",
-      detail: "Asked about a showing or appointment",
+      title: "Customer requested a showing",
+      detail: "",
     };
   }
 
   if (financing) {
     return {
-      title: "Customer may need financing guidance",
-      detail: FINANCING_GUIDANCE_SUGGESTION,
+      title: "Customer asked about financing",
+      detail: "",
     };
   }
 
   if (engaged) {
-    return { title: "Customer is highly engaged", detail: "" };
+    return { title: "Customer is actively engaging", detail: "" };
   }
 
   if (prev != null && next != null && next > prev) {
-    return { title: "Customer appears ready to move forward", detail: "" };
+    return { title: "Customer showed stronger interest", detail: "" };
   }
 
   return { title: "Customer engagement updated", detail: "" };

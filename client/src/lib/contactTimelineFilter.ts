@@ -149,6 +149,39 @@ export function dedupeTimelineEvents(events: TimelineEventLike[]): TimelineEvent
   return out;
 }
 
+function mergeSchedulingCluster(cluster: TimelineEventLike[]): TimelineEventLike {
+  cluster.sort((a, b) => {
+    const ra = SCHEDULING_RANK[schedulingBucket(a)!] ?? 0;
+    const rb = SCHEDULING_RANK[schedulingBucket(b)!] ?? 0;
+    if (rb !== ra) return rb - ra;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+  const primary = cluster[0];
+  const hasShowing = cluster.some((e) => schedulingBucket(e) === "showing_requested");
+  const hasLink = cluster.some((e) => schedulingBucket(e) === "scheduling_link");
+  const hasBooked = cluster.some((e) => schedulingBucket(e) === "appointment_booked");
+
+  if (hasBooked) return primary;
+
+  if (hasShowing && hasLink) {
+    const newest = cluster.reduce((a, b) =>
+      new Date(a.createdAt) > new Date(b.createdAt) ? a : b,
+    );
+    return {
+      ...newest,
+      eventData: {
+        ...newest.eventData,
+        kind: "workflow_task",
+        title: "Customer requested a showing",
+        content: "Booking link sent to customer",
+      },
+    };
+  }
+
+  return primary;
+}
+
 function dedupeSchedulingClusters(events: TimelineEventLike[]): TimelineEventLike[] {
   const CLUSTER_MS = 6 * 60 * 60 * 1000;
   const out: TimelineEventLike[] = [];
@@ -176,13 +209,7 @@ function dedupeSchedulingClusters(events: TimelineEventLike[]): TimelineEventLik
       i += 1;
     }
 
-    cluster.sort((a, b) => {
-      const ra = SCHEDULING_RANK[schedulingBucket(a)!] ?? 0;
-      const rb = SCHEDULING_RANK[schedulingBucket(b)!] ?? 0;
-      if (rb !== ra) return rb - ra;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-    out.push(cluster[0]);
+    out.push(mergeSchedulingCluster(cluster));
   }
   return out;
 }
@@ -191,9 +218,36 @@ export function filterMeaningfulTimelineEvents(
   events: TimelineEventLike[],
   max = 4,
 ): TimelineEventLike[] {
-  return dedupeSchedulingClusters(
-    dedupeTimelineEvents(events.filter(isMeaningfulTimelineEvent)),
+  return suppressRedundantScoreEvents(
+    dedupeSchedulingClusters(
+      dedupeTimelineEvents(events.filter(isMeaningfulTimelineEvent)),
+    ),
   ).slice(0, max);
+}
+
+/** Hide score bumps that repeat a scheduling story in the same window. */
+function suppressRedundantScoreEvents(events: TimelineEventLike[]): TimelineEventLike[] {
+  const WINDOW_MS = 6 * 60 * 60 * 1000;
+
+  return events.filter((event) => {
+    const kind = noteKind(event.eventData || {});
+    if (kind !== "lead_score_changed" && kind !== "qualification_changed") return true;
+
+    const eventTime = new Date(event.createdAt).getTime();
+    const nearScheduling = events.some((other) => {
+      if (other.id === event.id) return false;
+      if (!schedulingBucket(other)) return false;
+      return Math.abs(new Date(other.createdAt).getTime() - eventTime) <= WINDOW_MS;
+    });
+    if (!nearScheduling) return true;
+
+    const hay = `${noteTitle(event.eventData || {})} ${noteContent(event.eventData || {})}`.toLowerCase();
+    return !(
+      /strong interest|ready to move forward|engagement (changed|updated)|moved to warm|moved to hot|score updated|showing interest/i.test(
+        hay,
+      )
+    );
+  });
 }
 
 export function formatActivityDetailText(text: string): string {
