@@ -4,6 +4,7 @@
  * Computes lead score and AI state dynamically.
  */
 
+import { humanizeScoringReasons } from "@shared/customerBehaviorCopy";
 import {
   scoreLead,
   type BusinessKnowledgeForScoring,
@@ -342,7 +343,7 @@ export function analyzeConversation(
         leadScoreDetails: {
           score: crmScore,
           bucket,
-          reasons: ["Primary score from your CRM (contact lead score)."],
+          reasons: [],
           missingRequired: [],
           negativeSignals: [],
           confidence01,
@@ -398,15 +399,7 @@ export function analyzeConversation(
   const leadScore = leadScoreBadgeFromBucket(displayBucket, confidence01);
   const aiState   = computeAiState(hasBudget, hasTimeline, hasFinancing, messageCount, lastDirection, isUrgent);
 
-  const reasons = useCrm
-    ? Array.from(
-        new Set([
-          "Primary score from your CRM (contact lead score).",
-          "Conversation signals (reference only):",
-          ...scoring.reasons,
-        ]),
-      ).slice(0, 12)
-    : scoring.reasons;
+  const reasons = humanizeScoringReasons(scoring.reasons);
 
   return {
     budget, timeline, financing, intent,
@@ -720,7 +713,7 @@ export function buildAIMemorySummary(
   // ── Qualification signals as natural additions ─────────────────────────────
   if (intel.budget)    parts.push(`Budget around ${intel.budget}.`);
   if (intel.timeline)  parts.push(`Timeline: ${intel.timeline}.`);
-  if (intel.financing) parts.push(`${intel.financing} financing.`);
+  if (intel.financing) parts.push(`Financing: ${intel.financing}.`);
 
   // ── Fallback: nothing at all to show ─────────────────────────────────────
   return parts.join(' ');

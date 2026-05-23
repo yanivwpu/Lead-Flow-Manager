@@ -27,7 +27,17 @@ import {
 import type { ContactNote } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { filterMeaningfulTimelineEvents } from "@/lib/contactTimelineFilter";
+import {
+  COPILOT_SCORE_SUBTITLE,
+  FINANCING_GUIDANCE_SUGGESTION,
+  formatScoreActivityEvent,
+  humanizeScoringReasons,
+  sanitizeUserFacingText,
+} from "@shared/customerBehaviorCopy";
+import {
+  filterMeaningfulTimelineEvents,
+  formatActivityDetailText,
+} from "@/lib/contactTimelineFilter";
 import {
   Select,
   SelectContent,
@@ -566,28 +576,40 @@ function formatContactActivity(event: ContactActivityEvent): { title: string; de
   const when = startTime ? formatFollowUpDisplay(startTime) : "";
 
   if (kind === "lead_score_changed" || kind === "qualification_changed") {
-    const prev = typeof data.previousScore === "number" ? data.previousScore : null;
+    const formatted = formatScoreActivityEvent({
+      previousScore: typeof data.previousScore === "number" ? data.previousScore : null,
+      newScore: typeof data.newScore === "number" ? data.newScore : null,
+      bucketBefore: typeof data.bucketBefore === "string" ? data.bucketBefore : "",
+      bucketAfter: typeof data.bucketAfter === "string" ? data.bucketAfter : "",
+      signals: data.signals,
+      content,
+      title,
+    });
     const next = typeof data.newScore === "number" ? data.newScore : null;
-    const bucket = typeof data.bucketAfter === "string" ? data.bucketAfter : "";
+    const bucketAfter = typeof data.bucketAfter === "string" ? data.bucketAfter : "";
     return {
-      title: "Lead score updated",
-      detail: [
-        prev != null && next != null ? `${prev} → ${next}` : "",
-        bucket ? bucket.charAt(0).toUpperCase() + bucket.slice(1) : "",
-        typeof data.signals === "string" ? data.signals : "",
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      tone: next != null && next >= 50 ? "green" : "gray",
+      title: formatted.title,
+      detail: formatted.detail,
+      tone: next != null && next >= 50 ? "green" : bucketAfter === "hot" || bucketAfter === "warm" ? "green" : "gray",
     };
   }
 
   if (event.eventType === "tag_change" || kind === "tag_changed") {
     const from = typeof data.from === "string" ? data.from : "";
     const to = typeof data.to === "string" ? data.to : "";
+    if (to === "Appointment Requested" || title === "Showing requested") {
+      return {
+        title: "Appointment requested",
+        detail: "Customer asked for a showing",
+        tone: "green",
+      };
+    }
+    if (to === "Appointment Booked") {
+      return { title: "Appointment booked", detail: "Showing confirmed with the customer", tone: "green" };
+    }
     return {
       title: "Tag updated",
-      detail: from && to ? `${from} → ${to}` : to || from || "Tag changed",
+      detail: from && to ? `${from} → ${to}` : sanitizeUserFacingText(to || from) || "Contact tag updated",
       tone: "gray",
     };
   }
@@ -611,11 +633,18 @@ function formatContactActivity(event: ContactActivityEvent): { title: string; de
   }
 
   if (event.eventType === "note" && kind === "workflow_task") {
-    const taskTitle = title || "Task created";
-    if (/book|showing|appointment|scheduling link/i.test(`${taskTitle} ${content}`.toLowerCase())) {
+    const taskTitle = title || "";
+    const hay = `${taskTitle} ${content}`.toLowerCase();
+    if (/scheduling link sent|scheduling link/i.test(hay)) {
+      return { title: "Scheduling link sent", detail: "Booking link sent to the customer", tone: "green" };
+    }
+    if (/showing requested|appointment requested/i.test(hay)) {
+      return { title: "Appointment requested", detail: "Customer asked for a showing", tone: "green" };
+    }
+    if (/book|showing|appointment/i.test(hay)) {
       return {
-        title: /scheduling link/i.test(`${taskTitle} ${content}`) ? "Scheduling link sent" : "Showing requested",
-        detail: content || "Growth Engine workflow",
+        title: "Appointment requested",
+        detail: formatActivityDetailText(content) || "Customer asked about a showing or appointment",
         tone: "green",
       };
     }
@@ -623,8 +652,8 @@ function formatContactActivity(event: ContactActivityEvent): { title: string; de
 
   if (event.eventType === "ai_handoff") {
     return {
-      title: "AI qualification handoff",
-      detail: content || "Lead needs agent attention",
+      title: "Follow-up needed",
+      detail: formatActivityDetailText(content) || "This conversation needs a personal reply",
       tone: "amber",
     };
   }
@@ -632,25 +661,21 @@ function formatContactActivity(event: ContactActivityEvent): { title: string; de
   if (event.eventType === "calendly_booking") {
     return {
       title: "Appointment booked",
-      detail: [
-        eventType || title || "Calendly meeting",
-        when,
-        inviteeName || inviteeEmail ? `Invitee: ${inviteeName || inviteeEmail}` : "",
-      ].filter(Boolean).join(" · "),
+      detail: when ? `Scheduled for ${when}` : inviteeName || inviteeEmail || "Meeting confirmed",
       tone: "green",
     };
   }
   if (event.eventType === "calendly_booking_canceled") {
     return {
-      title: "Calendly booking canceled",
-      detail: [eventType || "Meeting", when].filter(Boolean).join(" · "),
+      title: "Appointment canceled",
+      detail: when ? `Was scheduled for ${when}` : "Meeting canceled",
       tone: "amber",
     };
   }
   if (event.eventType === "calendly_rescheduled") {
     return {
-      title: "Calendly meeting rescheduled",
-      detail: [eventType || "Meeting", when].filter(Boolean).join(" · "),
+      title: "Appointment rescheduled",
+      detail: when ? `New time: ${when}` : "Meeting time updated",
       tone: "green",
     };
   }
@@ -671,13 +696,14 @@ function formatContactActivity(event: ContactActivityEvent): { title: string; de
   if (event.eventType === "message") {
     return {
       title: "Message activity",
-      detail: typeof data.content === "string" ? data.content : "Conversation updated",
+      detail: formatActivityDetailText(typeof data.content === "string" ? data.content : "") || "Conversation updated",
       tone: "gray",
     };
   }
+  const fallbackTitle = event.eventType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   return {
-    title: event.eventType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-    detail: content || title || "CRM activity recorded",
+    title: fallbackTitle,
+    detail: formatActivityDetailText(content || title) || "Activity recorded",
     tone: "gray",
   };
 }
@@ -1169,21 +1195,34 @@ export function InboxLeadDetailsPanel({
 
   /** Single primary insight line + optional supporting — display-only formatting of `reasons` */
   const copilotInsightPresentation = useMemo(() => {
-    const reasons = intel.leadScoreDetails?.reasons ?? [];
-    const qualifyNoise = /configured qualification field/;
-    const mainReasons = reasons.filter((r) => !qualifyNoise.test(r));
-    const qualLine = reasons.find((r) => qualifyNoise.test(r));
-    if (mainReasons.length === 0) {
+    const reasons = humanizeScoringReasons(intel.leadScoreDetails?.reasons ?? []);
+    const qualLine = (intel.leadScoreDetails?.missingRequired ?? []).length > 0
+      ? "A few details are still missing"
+      : null;
+
+    if (reasons.length === 0) {
+      const bucket = intel.leadScoreDetails?.bucket;
+      const fallback =
+        bucket === "hot" || bucket === "warm"
+          ? intel.intent === "Booking"
+            ? "Customer asked for a showing"
+            : "Customer showed strong interest"
+          : `${intel.intent} — ${aiStateLabel}`;
       return {
-        headline: `${intel.intent} — ${aiStateLabel}`,
+        headline: fallback,
         supporting: qualLine ? [qualLine] : ([] as string[]),
       };
     }
-    const headline =
-      mainReasons.length >= 2 ? `${mainReasons[0]} — ${mainReasons[1]}` : mainReasons[0];
-    const supporting = [...mainReasons.slice(2, 4), ...(qualLine ? [qualLine] : [])].filter(Boolean).slice(0, 2);
+    const headline = reasons.length >= 2 ? `${reasons[0]} — ${reasons[1]}` : reasons[0];
+    const supporting = [...reasons.slice(2, 4), ...(qualLine ? [qualLine] : [])].filter(Boolean).slice(0, 2);
     return { headline, supporting };
-  }, [intel.leadScoreDetails?.reasons, intel.intent, aiStateLabel]);
+  }, [
+    intel.leadScoreDetails?.reasons,
+    intel.leadScoreDetails?.missingRequired,
+    intel.leadScoreDetails?.bucket,
+    intel.intent,
+    aiStateLabel,
+  ]);
 
   // ── Safe AI stage suggestion (click-to-apply only) ─────────────────────────
   const stageSuggestion = useMemo(() => {
@@ -1963,42 +2002,26 @@ export function InboxLeadDetailsPanel({
                               ))}
                             </div>
                           )}
-                          {intel.leadScoreDetails.signals?.detected &&
-                          intel.leadScoreDetails.signals.detected.length > 0 ? (
-                            <div className="flex flex-wrap gap-1.5 pt-0.5 opacity-[0.82]">
-                              {intel.leadScoreDetails.signals.detected.slice(0, 6).map((id) => (
-                                <span
-                                  key={id}
-                                  className="text-[9px] px-1.5 py-0.5 rounded-md bg-white border border-gray-200 text-gray-600 font-medium shadow-sm shadow-gray-900/[0.04]"
-                                >
-                                  {id.replace(/:/g, " · ")}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
-                          <p className="text-[10px] text-gray-400 font-medium tabular-nums pt-0.5">
-                            {intel.leadScoreDetails.scoreSource === "crm" ? (
-                              <>
-                                CRM lead score {intel.leadScoreDetails.score}
-                                {typeof intel.leadScoreDetails.conversationScore === "number" ? (
-                                  <span className="text-gray-500">
-                                    {" "}
-                                    · Conversation estimate {intel.leadScoreDetails.conversationScore}
-                                  </span>
-                                ) : null}
-                              </>
-                            ) : (
-                              <>
-                                Score {intel.leadScoreDetails.score}
-                              </>
-                            )}
-                            {intel.leadScoreDetails.signals?.decisionOverride ? (
-                              <span className="text-gray-600"> · decision override</span>
-                            ) : null}
-                          </p>
+                          <div className="pt-0.5 space-y-1">
+                            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">
+                              Lead score
+                            </p>
+                            <p className="text-[22px] font-bold text-gray-900 tabular-nums leading-none">
+                              {intel.leadScoreDetails.score}
+                            </p>
+                            <p className="text-[11px] font-medium text-gray-600">
+                              {(intel.leadScoreDetails?.bucket === "unqualified"
+                                ? "Unqualified"
+                                : intel.leadScore.label)}{" "}
+                              lead
+                            </p>
+                            <p className="text-[10px] text-gray-500 leading-snug">
+                              {COPILOT_SCORE_SUBTITLE}
+                            </p>
+                          </div>
                           {intel.leadScoreDetails.missingRequired.length > 0 ? (
                             <div className="text-[10px] text-gray-500 leading-snug border-t border-gray-200 pt-2">
-                              <span className="text-gray-400 font-medium">Missing required:</span>{" "}
+                              <span className="text-gray-400 font-medium">Still to learn:</span>{" "}
                               {intel.leadScoreDetails.missingRequired.slice(0, 3).join(", ")}
                               {intel.leadScoreDetails.missingRequired.length > 3 ? "…" : ""}
                             </div>
@@ -2096,7 +2119,7 @@ export function InboxLeadDetailsPanel({
                           const nextActions: Record<string, string> = {
                             Budget: "Ask about budget",
                             Timeline: "Ask about timeline",
-                            Financing: "Ask about financing",
+                            Financing: FINANCING_GUIDANCE_SUGGESTION,
                           };
                           if (!missingLabels.length) return null;
                           return {
@@ -2454,7 +2477,7 @@ export function InboxLeadDetailsPanel({
           <div>
             <RowLabel>Recent activity</RowLabel>
             {contactActivity.length === 0 ? (
-              <p className="mt-1 text-[11px] text-gray-400 italic">No recent CRM activity yet.</p>
+              <p className="mt-1 text-[11px] text-gray-400 italic">No recent activity yet.</p>
             ) : (
               <div className="mt-1 space-y-1.5">
                 {contactActivity.slice(0, 4).map((event) => {

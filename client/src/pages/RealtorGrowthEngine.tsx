@@ -1355,7 +1355,7 @@ export function RealtorGrowthEngine() {
   const DetailPage = () => {
     const includedItems: { Icon: typeof Sparkles; t: string; d: string }[] = [
       { Icon: Sparkles, t: "AI lead qualification", d: "Inbound messages are interpreted, scored, and routed with guardrails." },
-      { Icon: Target, t: "Buyer / seller scoring", d: "Intent and readiness signals update automatically as the thread evolves." },
+      { Icon: Target, t: "Buyer / seller scoring", d: "Intent and readiness update automatically from the conversation." },
       { Icon: Calendar, t: "Booking intent detection", d: "Tour and call language triggers the right next action and handoff." },
       { Icon: Clock, t: "No-reply nurture sequence", d: "Timed follow-ups re-engage quiet leads without manual chasing." },
       { Icon: Send, t: "WhatsApp template follow-up", d: "Structured sends when the channel requires templates outside the reply window." },
@@ -1367,7 +1367,7 @@ export function RealtorGrowthEngine() {
     const whatItDoesLines = [
       "Captures new real estate leads the moment they message you.",
       "Replies instantly across connected messaging channels with context-aware conversation.",
-      "Qualifies buyers and sellers using structured signals (financing, budget, timeline).",
+      "Qualifies buyers and sellers using budget, financing, and timeline from the conversation.",
       "Detects booking intent and moves the thread toward a showing or call.",
       "Schedules showings or calls when your calendar is connected.",
       "Follows up automatically when leads go cold on a 24h / 72h / 7d cadence.",
@@ -2270,7 +2270,7 @@ export function RealtorGrowthEngine() {
       timing: "Immediate (within seconds of first message)",
     },
     W2: {
-      summary: "Detects buyer, seller, and investor intent, scores each inbound message, extracts budget / financing / timeline signals, and asks lightweight follow-up questions when critical information is missing.",
+      summary: "Detects buyer, seller, and investor intent, scores each inbound message, learns budget / financing / timeline from the conversation, and asks lightweight follow-up questions when important details are missing.",
       triggers: "Every inbound message",
       timing: "Real-time analysis on each incoming message",
       qualificationLogic: "Financing → Budget → Timeline",
@@ -2296,7 +2296,7 @@ export function RealtorGrowthEngine() {
       timing: "168 hours (7 days) after last message",
     },
     W7: {
-      summary: "Safety workflow that detects opt-out or disinterest signals. Tags as 'Do Not Contact', moves to 'Unqualified' stage, and sends a polite close message. Prevents further automated outreach.",
+      summary: "Safety workflow that detects opt-out or disinterest. Tags as 'Do Not Contact', moves to 'Unqualified' stage, and sends a polite close message. Prevents further automated outreach.",
       triggers: "Keywords: stop, unsubscribe, spam, not interested, remove",
       timing: "Immediate on keyword detection",
     },
@@ -2998,7 +2998,7 @@ export function RealtorGrowthEngine() {
                       <div>
                         <h4 className="text-sm font-semibold text-gray-800 mb-1">Qualification logic</h4>
                         <p className="text-sm text-muted-foreground leading-relaxed">
-                          This workflow detects buyer, seller, and investor intent, scores each inbound message, extracts budget / financing / timeline signals, and asks lightweight follow-up questions when critical information is missing.
+                          This workflow detects buyer, seller, and investor intent, scores each inbound message, learns budget / financing / timeline from the conversation, and asks lightweight follow-up questions when important details are missing.
                         </p>
                       </div>
                       <div>

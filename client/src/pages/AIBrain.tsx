@@ -1697,8 +1697,8 @@ function AIBrainContent() {
               />
               <LockedFeatureTeaser
                 title="Lead scoring"
-                description="Signals from the conversation roll up into clearer priority so you focus on the right leads first."
-                preview="Hot / warm / nurture signals"
+                description="What the customer says rolls up into clearer priority so you focus on the right leads first."
+                preview="Hot, warm, and nurture leads"
               />
               <LockedFeatureTeaser
                 title="Copilot recommendations"

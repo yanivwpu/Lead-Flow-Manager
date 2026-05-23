@@ -17,6 +17,7 @@ import {
   outboundBodyContainsSchedulingUrl,
   resolveRgeCustomerSchedulingUrl,
 } from "./rgeCustomerSchedulingUrl";
+import { formatScoreActivityEvent } from "@shared/customerBehaviorCopy";
 import { channelService } from "./channelService";
 import { isLegacyCalendlyWorkflowChat } from "./userTwilio";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
@@ -460,7 +461,7 @@ async function executeSendMessageTemplateAction(params: {
         eventData: {
           kind: "workflow_task",
           title: "Scheduling link sent",
-          content: `Growth Engine ${templateKey} booking prompt delivered`,
+          content: "Booking link sent to the customer",
         },
         actorType: "system",
       })
@@ -503,8 +504,8 @@ export async function executeWorkflowActions(
               eventType: "note",
               eventData: {
                 kind: "tag_changed",
-                title: "Showing requested",
-                content: "Appointment intent detected — tag applied",
+                title: "Appointment requested",
+                content: "Customer asked for a showing",
                 to: action.tag,
               },
               actorType: "system",
@@ -606,30 +607,6 @@ export async function executeWorkflowActions(
         continue;
       }
       if (action.type === "create_task" && typeof action.title === "string" && action.title.trim() && contact?.id) {
-        const dueDays = Number.isFinite(Number(action.dueDays)) ? Number(action.dueDays) : 1;
-        const title = action.title.trim();
-        const wfLabel = workflow.name || "Workflow";
-        const dueAt = new Date();
-        dueAt.setDate(dueAt.getDate() + Math.max(0, dueDays));
-        const content = `Task: ${title}\nDue: ${dueAt.toLocaleDateString()} (${dueDays} day(s))\nWorkflow: ${wfLabel}`;
-        await storage
-          .createActivityEvent({
-            userId: workflow.userId,
-            contactId: contact.id,
-            conversationId: conversationId ?? null,
-            eventType: "note",
-            eventData: {
-              kind: "workflow_task",
-              content,
-              title,
-              dueDays,
-              dueAt: dueAt.toISOString(),
-              workflowId: workflow.id,
-              workflowName: wfLabel,
-            },
-            actorType: "system",
-          })
-          .catch(() => {});
         executedActions.push({ type: "task_created", value: action.title.trim() });
         continue;
       }
@@ -876,8 +853,8 @@ async function executeW3CalendlyKeywordResponse(
         eventType: "note",
         eventData: {
           kind: "tag_changed",
-          title: "Showing requested",
-          content: "Appointment intent detected — tag applied",
+          title: "Appointment requested",
+          content: "Customer asked for a showing",
           to: "Appointment Requested",
         },
         actorType: "system",
@@ -927,23 +904,7 @@ async function executeW3CalendlyKeywordResponse(
       )
       .catch(() => {});
     if (conversationId) {
-      await storage
-        .createActivityEvent({
-          userId: workflow.userId,
-          contactId: contact.id,
-          conversationId,
-          eventType: "note",
-          eventData: {
-            kind: "workflow_task",
-            content:
-              "RGE W3: scheduling link sent via schedule_showing template. create_task from workflow seed is skipped in Calendly mode.",
-            title: "Book appointment (W3)",
-            dueDays: 1,
-            workflowName: workflow.name || "W3",
-          },
-          actorType: "system",
-        })
-        .catch(() => {});
+      // Scheduling link activity is logged by executeSendMessageTemplateAction.
     }
     baseExecuted.push({ type: "message_template", value: "schedule_showing" });
   }
@@ -1072,7 +1033,7 @@ export async function runW2QualificationEngine(
     askBudgetFollowUp: true,
     askTimelineFollowUp: true,
     limitOneQuestion: true,
-    financingQuestion: "Are you currently pre-approved, working with a lender, or still exploring financing options?",
+    financingQuestion: "Are you already working with a lender, or would you like me to connect you with one?",
     budgetQuestion: "Do you have a budget or price range in mind?",
     timelineQuestion: "Are you planning to move soon, or are you still exploring options?",
     lenderQuestion: "If helpful, I can also connect you with a lender for pre-approval guidance.",
@@ -1105,9 +1066,17 @@ export async function runW2QualificationEngine(
   }
 
   // Financial / pre-approval signals
-  const isPreApproved = /pre.?approv|already approv/i.test(message);
+  const isPreApproved = /pre.?approv|already approv|pre.?approval (letter|in hand)/i.test(message);
   const isCashBuyer = /cash buyer|paying cash|all cash|no mortgage/i.test(message);
-  const isWorkingWithLender = /working with (a |my )?lender|have (a |my )?lender|with (a |my )?realtor/i.test(message) || (matchesAny(msgLower, financialKw) && !isPreApproved && !isCashBuyer);
+  const hasExplicitLender =
+    /\b(working with (a |my )?lender|have (a |my )?lender|my lender|spoke with (a |my )?lender|talked to (a |my )?lender|financing (is |already )?(arranged|set up|in place)|already have (a |my )?(lender|financing))\b/i.test(
+      message,
+    );
+  const isDepositMention = /\b(deposit|down payment|earnest money)\b/i.test(message);
+  const isFinancingDiscussion =
+    isDepositMention ||
+    /\b(mortgage|loan|financ(e|ing))\b/i.test(message) ||
+    (matchesAny(msgLower, financialKw) && !hasExplicitLender && !isPreApproved && !isCashBuyer);
   const isBrowsing = /just browsing|only browsing|still researching|not ready|not sure yet/i.test(message);
 
   if (isPreApproved) {
@@ -1120,13 +1089,13 @@ export async function runW2QualificationEngine(
     score += 40;
     fieldUpdates.preApproved = "yes";
     fieldUpdates.financingType = "cash";
-  } else if (isWorkingWithLender) {
+  } else if (hasExplicitLender) {
     signals.push("WORKING_WITH_LENDER");
     score += 20;
     fieldUpdates.lenderConnected = "yes";
     fieldUpdates.financingType = "mortgage";
-  } else if (matchesAny(msgLower, financialKw)) {
-    signals.push("NEEDS_FINANCING");
+  } else if (isFinancingDiscussion) {
+    signals.push("FINANCING_DISCUSSION");
     score += 5;
     if (!existingCustomFields.financingType) fieldUpdates.financingType = "unknown";
   }
@@ -1243,7 +1212,8 @@ export async function runW2QualificationEngine(
       const askTimeline = get("askTimelineFollowUp") !== false;
       const limitOne = get("limitOneQuestion") !== false;
 
-      const missingFinancing = !cf.preApproved && !cf.financingType && !isPreApproved && !isCashBuyer && !isWorkingWithLender;
+      const missingFinancing =
+        !cf.preApproved && !cf.financingType && !isPreApproved && !isCashBuyer && !hasExplicitLender;
       const missingBudget = !cf.budgetRange && !budgetMatch;
       const missingTimeline = !cf.timeline && !isAsap && !is60to90 && !isBrowsing;
 
@@ -1339,6 +1309,13 @@ export async function runW2QualificationEngine(
           .catch(() => {});
 
         if (bucketBefore !== bucketAfter || score > 0) {
+          const activityCopy = formatScoreActivityEvent({
+            previousScore: prevLead,
+            newScore: nextLead,
+            bucketBefore,
+            bucketAfter,
+            signals,
+          });
           await storage
             .createActivityEvent({
               userId,
@@ -1347,15 +1324,12 @@ export async function runW2QualificationEngine(
               eventType: "note",
               eventData: {
                 kind: bucketBefore !== bucketAfter ? "qualification_changed" : "lead_score_changed",
+                title: activityCopy.title,
                 previousScore: prevLead,
                 newScore: nextLead,
                 bucketBefore,
                 bucketAfter,
-                signals: signals.join(", "),
-                content:
-                  bucketBefore !== bucketAfter
-                    ? `Qualification: ${bucketBefore} → ${bucketAfter} (score ${nextLead})`
-                    : `Lead score ${prevLead} → ${nextLead}`,
+                content: activityCopy.detail,
               },
               actorType: "system",
             })

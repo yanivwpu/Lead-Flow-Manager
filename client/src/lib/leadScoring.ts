@@ -577,17 +577,20 @@ export function scoreLead(
 
   const reasons: string[] = [];
   if (dealReadyIntent) {
-    reasons.push("Customer ready to proceed");
-    reasons.push("Strong buying intent detected");
+    reasons.push("Customer appears ready to move forward");
   }
-  if (comboBoost > 0) reasons.push("Combined pricing and buying signals");
-  if (engagement.value >= 12) reasons.push("Strong engagement from customer");
-  else if (engagement.value >= 6) reasons.push("Some engagement from customer");
-  if (interest.detected.some((d) => d.startsWith("interest:"))) reasons.push("Interest / discovery signals");
-  if (decision.detected.length > 0) reasons.push("Strong decision / next-step intent");
-  if (urgency.detected.length > 0 || criticalUrgency.boost > 0) reasons.push("Time-sensitive / urgent");
-  if (industry?.layer === "real_estate" && (industry.bonus ?? 0) > 0) reasons.push("Real-estate-specific signals");
-  if (industry?.layer === "property_management" && (industry.bonus ?? 0) > 0) reasons.push("Property-management signals");
+  if (comboBoost > 0) reasons.push("Customer asked about pricing and buying");
+  if (engagement.value >= 12) reasons.push("Customer is highly engaged");
+  else if (engagement.value >= 6) reasons.push("Customer is engaged");
+  if (interest.detected.some((d) => d.startsWith("interest:"))) reasons.push("Customer is exploring options");
+  if (decision.detected.length > 0) reasons.push("Customer appears ready to move forward");
+  if (urgency.detected.length > 0 || criticalUrgency.boost > 0) reasons.push("Customer seems time-sensitive");
+  if (industry?.layer === "real_estate" && (industry.bonus ?? 0) > 0) {
+    reasons.push("Customer shared property-related details");
+  }
+  if (industry?.layer === "property_management" && (industry.bonus ?? 0) > 0) {
+    reasons.push("Customer shared rental-related details");
+  }
 
   const { missingRequired } = computeQualificationCompleteness({
     inbound,
@@ -596,9 +599,7 @@ export function scoreLead(
     qualifyingQuestions: businessKnowledge?.qualifyingQuestions,
   });
   if (missingRequired.length > 0 && !dealReadyIntent) {
-    reasons.push(
-      `${missingRequired.length} configured qualification field${missingRequired.length !== 1 ? "s" : ""} not yet captured`,
-    );
+    reasons.push("A few details are still missing");
   }
 
   const evidenceCount =

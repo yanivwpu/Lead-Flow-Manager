@@ -813,7 +813,7 @@
       },
       "f2": {
         "title": "AI Lead Scoring",
-        "desc": "14+ intent signals score every lead automatically."
+        "desc": "Every lead is scored automatically from the conversation."
       },
       "f3": {
         "title": "Lead Data Extraction",
