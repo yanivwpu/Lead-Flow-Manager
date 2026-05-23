@@ -12,7 +12,7 @@ import { Link, useRoute, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useSubscription } from "@/lib/subscription-context";
-import { AIComposer } from "@/components/AIComposer";
+import { AIComposer, type AIComposerHandle } from "@/components/AIComposer";
 import { WhatsAppTemplateRichPreview } from "@/components/WhatsAppTemplateRichPreview";
 import {
   Search,
@@ -511,6 +511,7 @@ export function UnifiedInbox() {
   const [showDetailsSheet, setShowDetailsSheet] = useState(false);
   const [editContactForm, setEditContactForm] = useState({ name: "", phone: "", email: "" });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<AIComposerHandle>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesInnerRef = useRef<HTMLDivElement>(null);
   const prevMsgCountRef = useRef(0);
@@ -569,22 +570,15 @@ export function UnifiedInbox() {
 
   const insertComposerDraftFromCopilot = useCallback(
     (text: string): boolean => {
-      const draft = text.trim();
-      if (!draft || !selectedContactId) {
-        console.warn("[Copilot] Cannot insert draft: empty text or no conversation selected");
+      if (!selectedContactId) {
+        console.warn("[Copilot] Cannot insert draft: no conversation selected");
         return false;
       }
-      setMessageInput(draft);
-      requestAnimationFrame(() => {
-        const el = document.querySelector<HTMLTextAreaElement>('[data-testid="input-message"]');
-        if (!el) {
-          console.warn("[Copilot] Composer textarea not found after draft insert");
-          return;
-        }
-        el.focus();
-        el.setSelectionRange(draft.length, draft.length);
-      });
-      return true;
+      const inserted = composerRef.current?.insertExternalDraft(text) ?? false;
+      if (!inserted) {
+        console.warn("[Copilot] Failed to insert composer draft");
+      }
+      return inserted;
     },
     [selectedContactId],
   );
@@ -2801,6 +2795,7 @@ export function UnifiedInbox() {
 
             {/* Composer — Meta reply-window + AI notices merge into one chip bar inside AIComposer */}
             <AIComposer
+              ref={composerRef}
               value={messageInput}
               onChange={setMessageInput}
               onSend={handleSendMessage}

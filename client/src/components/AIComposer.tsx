@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
 import {
   Send,
   Smile,
@@ -114,7 +114,12 @@ const DEMO_SUGGESTIONS = [
 ];
 let _demoCycleIdx = 0;
 
-export function AIComposer({
+export type AIComposerHandle = {
+  /** Switch to Manual, insert draft text, and focus the composer (e.g. Copilot NBA). */
+  insertExternalDraft: (text: string) => boolean;
+};
+
+export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function AIComposer({
   value,
   onChange,
   onSend,
@@ -137,7 +142,7 @@ export function AIComposer({
   contactId = null,
   metaReplyWindowNotice = null,
   hasPendingAttachment = false,
-}: AIComposerProps) {
+}, ref) {
   const isMobile = useIsMobile();
   // Resolve effective access from capabilities (falls back to legacy aiEnabled prop)
   const effectiveCanSuggest = capabilities ? capabilities.canUseSuggest : aiEnabled;
@@ -160,6 +165,34 @@ export function AIComposer({
   /** User chose Manual while workspace default is suggest — don't force Suggest back on settings sync. */
   const userLockedManualRef = useRef(false);
   const autoReplyInFlightRef = useRef(false);
+
+  useImperativeHandle(ref, () => ({
+    insertExternalDraft: (text: string) => {
+      const draft = text.trim();
+      if (!draft) return false;
+      userLockedManualRef.current = true;
+      setAutoOverride(true);
+      setAiMode("manual");
+      setAiDraft(null);
+      setIsDrafting(false);
+      setAutoSkippedWithDraft(false);
+      setAutoSendBlockedMessage(null);
+      onChange(draft);
+      const focusComposer = () => {
+        const el = textareaRef.current;
+        if (!el) return false;
+        el.focus();
+        el.setSelectionRange(draft.length, draft.length);
+        return true;
+      };
+      requestAnimationFrame(() => {
+        if (!focusComposer()) {
+          requestAnimationFrame(focusComposer);
+        }
+      });
+      return true;
+    },
+  }), [onChange]);
 
   // Auto-resize textarea — avoid height-auto jump on mobile by reading scrollHeight before reset
   useEffect(() => {
@@ -834,4 +867,4 @@ export function AIComposer({
       </div>
     </div>
   );
-}
+});
