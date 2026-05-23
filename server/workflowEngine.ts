@@ -8,14 +8,18 @@ import {
   isRuntimeSafeWorkflowActionType,
 } from "./growthEngineEntitlements";
 import {
-  getCalendlyPublicSchedulingUrl,
   isUserCalendlyBookingConnected,
-  appendCalendlyW3TrackingParams,
 } from "./calendlyBookingConnected";
+import {
+  injectRgeSchedulingTemplateVariables,
+  logRgeBookingPrompt,
+  messageTemplateExpectsSchedulingLink,
+  outboundBodyContainsSchedulingUrl,
+  resolveRgeCustomerSchedulingUrl,
+} from "./rgeCustomerSchedulingUrl";
 import { channelService } from "./channelService";
-import { sendUserWhatsAppMessage, isLegacyCalendlyWorkflowChat } from "./userTwilio";
+import { isLegacyCalendlyWorkflowChat } from "./userTwilio";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
-import { sendMetaWhatsAppMessage } from "./userMeta";
 
 export interface WorkflowAction {
   type:
@@ -195,14 +199,76 @@ function extractInboundSnippetForLanguage(triggerData: Record<string, unknown>, 
   return "";
 }
 
-function interpolateRgeMessageTemplate(body: string, contact: Contact): string {
+function interpolateRgeMessageTemplate(
+  body: string,
+  contact: Contact,
+  schedulingUrl?: string,
+): string {
   const cf = (contact.customFields as Record<string, unknown>) || {};
   const rawName = (contact.name || "").trim() || "there";
   const firstName = rawName.split(/\s+/)[0] || "there";
   const city = String(cf.city ?? cf.City ?? "your area");
-  return body
+  let out = body
     .replace(/\{\{\s*firstName\s*\}\}/gi, firstName)
     .replace(/\{\{\s*city\s*\}\}/gi, city);
+  if (schedulingUrl?.trim()) {
+    out = injectRgeSchedulingTemplateVariables(out, schedulingUrl);
+  }
+  return out;
+}
+
+async function escalateRgeSchedulingLinkMissing(params: {
+  userId: string;
+  contactId: string;
+  conversationId: string | undefined;
+  workflow: Workflow;
+  templateKey: string;
+}): Promise<void> {
+  await storage
+    .createActivityEvent({
+      userId: params.userId,
+      contactId: params.contactId,
+      conversationId: params.conversationId ?? null,
+      eventType: "note",
+      eventData: {
+        kind: "workflow_task",
+        title: "Scheduling link missing",
+        content:
+          "Appointment intent detected but no agent scheduling URL is configured. Connect Calendly in Integrations (customer showings) or set an RGE booking link in Growth Engine preferences.",
+        templateKey: params.templateKey,
+        workflowName: params.workflow.name || "W3",
+      },
+      actorType: "system",
+    })
+    .catch(() => {});
+}
+
+const W3_CALENDLY_PROMPT_THROTTLE_MS = 24 * 60 * 60 * 1000;
+const W3_CALENDLY_SENT_AT_KEY = "_w3CalendlyBookingSentAt";
+
+function readW3CalendlySentAtMs(contact: Contact | undefined, chat: Chat | null | undefined): number {
+  const cf =
+    (contact?.customFields as Record<string, unknown> | undefined) ||
+    ((chat as any)?.customFields as Record<string, unknown> | undefined);
+  const raw = cf?.[W3_CALENDLY_SENT_AT_KEY];
+  if (typeof raw === "string") return Date.parse(raw);
+  if (typeof raw === "number") return raw;
+  return NaN;
+}
+
+async function persistW3CalendlySentAt(contact: Contact | undefined, chat: Chat | null | undefined): Promise<void> {
+  const ts = new Date().toISOString();
+  if (contact) {
+    const prev = (contact.customFields as Record<string, unknown> | null) || {};
+    await storage
+      .updateContact(contact.id, { customFields: { ...prev, [W3_CALENDLY_SENT_AT_KEY]: ts } }, { skipAutomationHooks: true })
+      .catch(() => {});
+  } else if (chat) {
+    const prev = ((chat as any).customFields as Record<string, unknown> | null) || {};
+    await storage
+      .updateChat(chat.id, { customFields: { ...prev, [W3_CALENDLY_SENT_AT_KEY]: ts } } as any)
+      .catch(() => {});
+  }
 }
 
 async function executeSendMessageTemplateAction(params: {
@@ -210,8 +276,10 @@ async function executeSendMessageTemplateAction(params: {
   contact: Contact | undefined;
   conversationId: string | undefined;
   templateKey: string;
+  chat?: Chat | null;
+  throttleW3Booking?: boolean;
 }): Promise<boolean> {
-  const { workflow, contact, conversationId, templateKey } = params;
+  const { workflow, contact, conversationId, templateKey, chat, throttleW3Booking } = params;
   if (!contact?.id) {
     console.warn(
       JSON.stringify({
@@ -260,7 +328,73 @@ async function executeSendMessageTemplateAction(params: {
     );
     return false;
   }
-  const content = stripUnresolvedTemplateVars(interpolateRgeMessageTemplate(rawBody, contact));
+
+  const needsSchedulingLink = messageTemplateExpectsSchedulingLink(templateKey, rawBody);
+  let schedulingUrl = "";
+
+  if (needsSchedulingLink) {
+    if (throttleW3Booking && chat) {
+      const lastMs = readW3CalendlySentAtMs(contact, chat);
+      const now = Date.now();
+      if (!Number.isNaN(lastMs) && now - lastMs < W3_CALENDLY_PROMPT_THROTTLE_MS) {
+        return false;
+      }
+    }
+
+    const resolved = await resolveRgeCustomerSchedulingUrl(workflow.userId, contact.id);
+    schedulingUrl = resolved.url;
+
+    if (!schedulingUrl) {
+      await escalateRgeSchedulingLinkMissing({
+        userId: workflow.userId,
+        contactId: contact.id,
+        conversationId,
+        workflow,
+        templateKey,
+      });
+      console.warn(
+        JSON.stringify({
+          tag: "[WorkflowAction]",
+          event: "send_message_template_skipped",
+          reason: "scheduling_url_missing",
+          workflowId: workflow.id,
+          templateKey,
+        })
+      );
+      return false;
+    }
+
+    logRgeBookingPrompt("variablesInjected", {
+      userId: workflow.userId,
+      contactId: contact.id,
+      templateKey,
+      source: resolved.source,
+    });
+  }
+
+  const interpolated = interpolateRgeMessageTemplate(rawBody, contact, schedulingUrl);
+  const content = stripUnresolvedTemplateVars(interpolated);
+
+  if (needsSchedulingLink && !outboundBodyContainsSchedulingUrl(content)) {
+    await escalateRgeSchedulingLinkMissing({
+      userId: workflow.userId,
+      contactId: contact.id,
+      conversationId,
+      workflow,
+      templateKey,
+    });
+    console.warn(
+      JSON.stringify({
+        tag: "[WorkflowAction]",
+        event: "send_message_template_skipped",
+        reason: "scheduling_url_not_in_outbound_body",
+        workflowId: workflow.id,
+        templateKey,
+      })
+    );
+    return false;
+  }
+
   if (!content.trim()) {
     console.warn(
       JSON.stringify({
@@ -311,6 +445,11 @@ async function executeSendMessageTemplateAction(params: {
     );
     return false;
   }
+
+  if (needsSchedulingLink && throttleW3Booking && chat && contact?.id) {
+    await persistW3CalendlySentAt(contact, chat);
+  }
+
   return true;
 }
 
@@ -637,34 +776,6 @@ export async function triggerNewChatWorkflows(
   }
 }
 
-const W3_CALENDLY_PROMPT_THROTTLE_MS = 24 * 60 * 60 * 1000;
-const W3_CALENDLY_SENT_AT_KEY = "_w3CalendlyBookingSentAt";
-
-function readW3CalendlySentAtMs(contact: Contact | undefined, chat: Chat): number {
-  const cf =
-    (contact?.customFields as Record<string, unknown> | undefined) ||
-    ((chat as any).customFields as Record<string, unknown> | undefined);
-  const raw = cf?.[W3_CALENDLY_SENT_AT_KEY];
-  if (typeof raw === "string") return Date.parse(raw);
-  if (typeof raw === "number") return raw;
-  return NaN;
-}
-
-async function persistW3CalendlySentAt(contact: Contact | undefined, chat: Chat): Promise<void> {
-  const ts = new Date().toISOString();
-  if (contact) {
-    const prev = (contact.customFields as Record<string, unknown> | null) || {};
-    await storage
-      .updateContact(contact.id, { customFields: { ...prev, [W3_CALENDLY_SENT_AT_KEY]: ts } }, { skipAutomationHooks: true })
-      .catch(() => {});
-  } else {
-    const prev = ((chat as any).customFields as Record<string, unknown> | null) || {};
-    await storage
-      .updateChat(chat.id, { customFields: { ...prev, [W3_CALENDLY_SENT_AT_KEY]: ts } } as any)
-      .catch(() => {});
-  }
-}
-
 async function finalizeW3CalendlyWorkflowRun(
   workflow: Workflow,
   chat: Chat,
@@ -684,8 +795,8 @@ async function finalizeW3CalendlyWorkflowRun(
 }
 
 /**
- * RGE W3 with Calendly: keep keyword intent, tag the lead, send a single Calendly booking line (no manual W3 link).
- * Throttled per contact/chat; skips Calendly CRM/system lines and legacy Calendly-only chat keys.
+ * RGE W3 when agent Calendly integration is present: tag the lead and send schedule_showing
+ * with connected integration URL (not concierge onboarding Calendly).
  */
 async function executeW3CalendlyKeywordResponse(
   workflow: Workflow,
@@ -704,9 +815,14 @@ async function executeW3CalendlyKeywordResponse(
     return;
   }
 
-  const lastMs = readW3CalendlySentAtMs(contact, chat);
-  const now = Date.now();
-  if (!Number.isNaN(lastMs) && now - lastMs < W3_CALENDLY_PROMPT_THROTTLE_MS) {
+  if (isLegacyCalendlyWorkflowChat(chat.whatsappPhone)) {
+    await finalizeW3CalendlyWorkflowRun(
+      workflow,
+      chat,
+      conversationId,
+      { trigger: "keyword", message, templateKey: "W3", w3CalendlyPromptSent: false, w3CalendlyReason: "legacy_calendly_chat" },
+      [],
+    );
     return;
   }
 
@@ -714,160 +830,70 @@ async function executeW3CalendlyKeywordResponse(
     contact,
     { tag: "Appointment Requested" },
     chat,
-    { tag: "Appointment Requested" }
+    { tag: "Appointment Requested" },
   );
-
-  const rawSchedulingUrl = await getCalendlyPublicSchedulingUrl(workflow.userId);
-  const trackedUrl =
-    contact?.id && rawSchedulingUrl
-      ? appendCalendlyW3TrackingParams(rawSchedulingUrl, contact.id)
-      : rawSchedulingUrl;
-  const body = trackedUrl ? `You can book directly here: ${trackedUrl}` : "";
 
   const baseExecuted: WorkflowAction[] = [{ type: "tag", value: "Appointment Requested" }];
 
-  if (!body) {
-    console.log(
-      `[W3+Calendly] No calendlyPrimarySchedulingUrl for user ${workflow.userId} — tag applied, outbound skipped`
-    );
-    await persistW3CalendlySentAt(contact, chat);
+  if (!contact?.id || !conversationId) {
     await finalizeW3CalendlyWorkflowRun(
       workflow,
       chat,
       conversationId,
-      { trigger: "keyword", message, templateKey: "W3", w3CalendlyPromptSent: false, w3CalendlyReason: "no_scheduling_url" },
-      baseExecuted
+      { trigger: "keyword", message, templateKey: "W3", w3CalendlyPromptSent: false, w3CalendlyReason: "no_contact_or_conversation" },
+      baseExecuted,
     );
     return;
   }
 
-  if (isLegacyCalendlyWorkflowChat(chat.whatsappPhone)) {
-    await persistW3CalendlySentAt(contact, chat);
-    await finalizeW3CalendlyWorkflowRun(
-      workflow,
-      chat,
-      conversationId,
-      { trigger: "keyword", message, templateKey: "W3", w3CalendlyPromptSent: false, w3CalendlyReason: "legacy_calendly_chat" },
-      baseExecuted
-    );
-    return;
-  }
+  const sent = await executeSendMessageTemplateAction({
+    workflow,
+    contact,
+    conversationId,
+    templateKey: "schedule_showing",
+    chat,
+    throttleW3Booking: true,
+  });
 
-  let sent = false;
-  if (contact?.id) {
-    let forceChannel: Channel | undefined;
-    if (conversationId) {
-      const conv = await storage.getConversation(conversationId);
-      if (conv?.channel && conv.channel !== "calendly") {
-        forceChannel = conv.channel as Channel;
-      }
-    }
-    const dedupKey = `w3cal_send:${workflow.userId}:${contact.id}:${body.slice(0, 120)}`;
-    const { withAutomationSendGuard } = await import("./automationSendGuard");
-    const sendOutcome = await withAutomationSendGuard({
-      userId: workflow.userId,
-      contactId: contact.id,
-      conversationId,
-      channel: forceChannel,
-      source: "booking_flow",
-      idempotencyKey: dedupKey,
-    }, async () =>
-      channelService.sendMessage({
-        userId: workflow.userId,
-        contactId: contact.id,
-        content: body,
-        contentType: "text",
-        ...(forceChannel ? { forceChannel, suppressFallback: true as const } : {}),
-        enforceWhatsAppCustomerServiceWindow: false,
-      })
-    );
-    if (sendOutcome.ok && sendOutcome.result.success) {
-      sent = true;
-    } else if (!sendOutcome.ok) {
-      console.log(JSON.stringify({ tag: "[W3+Calendly]", guardedSkip: true, reason: sendOutcome.reason, contactId: contact.id }));
-    } else {
-      console.warn(`[W3+Calendly] channelService.sendMessage failed contact=${contact.id}: ${sendOutcome.result.error}`);
-    }
-  } else {
-    const raw = ((contact?.phone as string | undefined) || chat.whatsappPhone || "").toString();
-    const digits = raw.replace(/\D/g, "");
-    if (digits.length >= 10) {
-      try {
-        const { withAutomationSendGuard } = await import("./automationSendGuard");
-        const dedupKey = `w3cal_fallback:${workflow.userId}:${digits}:${body.slice(0, 120)}`;
-        if (!contact?.id) {
-          throw new Error("no_contact_for_guarded_w3_fallback");
-        }
-        const out = await withAutomationSendGuard({
-          userId: workflow.userId,
-          contactId: contact.id,
-          source: "booking_flow",
-          channel: "whatsapp",
-          idempotencyKey: dedupKey,
-        }, async () => {
-          const user = await storage.getUser(workflow.userId);
-          if (user?.whatsappProvider === "meta") {
-            await sendMetaWhatsAppMessage(workflow.userId, digits, body);
-          } else {
-            await sendUserWhatsAppMessage(workflow.userId, digits, body);
-          }
-        });
-        if (out.ok) {
-          sent = true;
-        } else {
-          console.log(JSON.stringify({ tag: "[W3+Calendly]", guardedSkip: true, reason: out.reason, digits }));
-        }
-      } catch (e: any) {
-        console.warn(`[W3+Calendly] WhatsApp fallback send failed: ${e?.message || e}`);
-      }
-    } else {
-      console.warn(`[W3+Calendly] No contact id or dialable phone — outbound skipped for chat ${chat.id}`);
-    }
-  }
-
-  if (sent) {
-    if (contact?.id) {
-      const fresh = await storage.getContact(contact.id);
-      const prev = ((fresh?.customFields as Record<string, unknown> | null) || {}) as Record<string, unknown>;
-      await storage
-        .updateContact(
-          contact.id,
-          {
-            customFields: {
-              ...prev,
-              [W3_CALENDLY_SENT_AT_KEY]: new Date().toISOString(),
-              _w3CalendlyAwaitBooking: {
-                conversationId: conversationId ?? null,
-                sentAt: new Date().toISOString(),
-                expiresAt: new Date(Date.now() + 14 * 86400000).toISOString(),
-              },
+  if (sent && contact.id) {
+    const fresh = await storage.getContact(contact.id);
+    const prev = ((fresh?.customFields as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+    await storage
+      .updateContact(
+        contact.id,
+        {
+          customFields: {
+            ...prev,
+            _w3CalendlyAwaitBooking: {
+              conversationId: conversationId ?? null,
+              sentAt: new Date().toISOString(),
+              expiresAt: new Date(Date.now() + 14 * 86400000).toISOString(),
             },
           },
-          { skipAutomationHooks: true }
-        )
+        },
+        { skipAutomationHooks: true },
+      )
+      .catch(() => {});
+    if (conversationId) {
+      await storage
+        .createActivityEvent({
+          userId: workflow.userId,
+          contactId: contact.id,
+          conversationId,
+          eventType: "note",
+          eventData: {
+            kind: "workflow_task",
+            content:
+              "RGE W3: scheduling link sent via schedule_showing template. create_task from workflow seed is skipped in Calendly mode.",
+            title: "Book appointment (W3)",
+            dueDays: 1,
+            workflowName: workflow.name || "W3",
+          },
+          actorType: "system",
+        })
         .catch(() => {});
-      if (conversationId) {
-        await storage
-          .createActivityEvent({
-            userId: workflow.userId,
-            contactId: contact.id,
-            conversationId,
-            eventType: "note",
-            eventData: {
-              kind: "workflow_task",
-              content:
-                "RGE W3 (Calendly mode): scheduling link sent. Seeded message template + create_task are skipped; use this thread + Calendly webhook for confirmed bookings.",
-              title: "Book appointment (W3 Calendly)",
-              dueDays: 1,
-              workflowName: workflow.name || "W3",
-            },
-            actorType: "system",
-          })
-          .catch(() => {});
-      }
-    } else {
-      await persistW3CalendlySentAt(contact, chat);
     }
+    baseExecuted.push({ type: "message_template", value: "schedule_showing" });
   }
 
   await finalizeW3CalendlyWorkflowRun(
@@ -875,7 +901,7 @@ async function executeW3CalendlyKeywordResponse(
     chat,
     conversationId,
     { trigger: "keyword", message, templateKey: "W3", w3CalendlyPromptSent: sent },
-    baseExecuted
+    baseExecuted,
   );
 }
 
@@ -892,6 +918,8 @@ export async function triggerKeywordWorkflows(
       return;
     }
     const calendlyBooking = await isUserCalendlyBookingConnected(userId);
+    const calendlyIntegration = await storage.getIntegrationByUserAndType(userId, "calendly");
+    const hasAgentCalendlyIntegration = !!calendlyIntegration?.isActive;
     let conversationChannel: string | undefined;
     if (conversationId) {
       const conv = await storage.getConversation(conversationId);
@@ -914,7 +942,7 @@ export async function triggerKeywordWorkflows(
       );
       
       if (keywordMatched) {
-        if (calendlyBooking && templateKey === "W3") {
+        if (templateKey === "W3" && (calendlyBooking || hasAgentCalendlyIntegration)) {
           await executeW3CalendlyKeywordResponse(workflow, chat, message, contact, conversationId);
         } else {
           await executeWorkflowActions(workflow, chat, { 

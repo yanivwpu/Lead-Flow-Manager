@@ -8,7 +8,7 @@ export async function isUserCalendlyBookingConnected(userId: string): Promise<bo
   return String(cfg.connectionStatus || "") === "connected";
 }
 
-/** Public Calendly scheduling URL saved at connect time (user or first active event type). */
+/** Public Calendly scheduling URL for agent → customer showings (Integrations). Not concierge onboarding. */
 export async function getCalendlyPublicSchedulingUrl(userId: string): Promise<string> {
   const row = await storage.getIntegrationByUserAndType(userId, "calendly");
   if (!row?.isActive) return "";

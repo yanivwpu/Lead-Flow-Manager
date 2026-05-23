@@ -104,8 +104,8 @@ export async function seedRealtorTemplate() {
           {
             key: "schedule_showing",
             title: "Schedule Showing / Call",
-            body: "Hi {{firstName}}! I'd love to set up a showing or a quick call to discuss your needs. What times work best for you? You can pick a time that works for you here: https://calendly.com/your-profile/showing",
-            variables: ["firstName"],
+            body: "Hi {{firstName}}! I'd love to set up a showing or a quick call to discuss your needs. What times work best for you? You can pick a time that works for you here: {{scheduling_link}}",
+            variables: ["firstName", "scheduling_link"],
           },
           {
             key: "followup_24h",

@@ -220,6 +220,10 @@ export async function recordGrowthEngineSessionBooked(params: {
   return { recorded: true, userId: user.id, taskId: task.id };
 }
 
+/**
+ * Concierge / internal launch setup Calendly only — never use for customer W3 booking prompts.
+ * Agent customer showings use Integrations → Calendly (`getCalendlyPublicSchedulingUrl`).
+ */
 export function getDefaultRgeSetupCalendarUrl(): string | null {
   const v = process.env.DEFAULT_RGE_SETUP_CALENDAR_URL?.trim();
   return v || null;
