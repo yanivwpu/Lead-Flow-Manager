@@ -146,9 +146,13 @@ export type ContextualActionContext = {
   aiPaused?: boolean;
   hasDelayLater?: boolean;
   lastOutbound?: boolean;
+  inboundText?: string;
+  showingTimingPhrase?: string | null;
+  mentionedDeposit?: boolean;
+  schedulingLinkSent?: boolean;
 };
 
-type ActionCandidate = { label: string; rank: number };
+type ActionCandidate = { label: string; rank: number; group: string };
 
 export function buildContextualNextActionLabels(ctx: ContextualActionContext): string[] {
   if (ctx.handoffActive) {
@@ -156,48 +160,165 @@ export function buildContextualNextActionLabels(ctx: ContextualActionContext): s
   }
 
   const actions: ActionCandidate[] = [];
+  const timing = ctx.showingTimingPhrase?.trim();
 
   if (ctx.hasShowingIntent) {
-    actions.push({ label: "Confirm showing availability", rank: 100 });
-    actions.push({ label: "Send available time options", rank: 95 });
-    actions.push({ label: "Follow up if no response", rank: 55 });
-  } else if (ctx.hasFinancingDiscussion) {
-    actions.push({ label: "Ask if customer already has a lender", rank: 90 });
-    actions.push({ label: "Offer lender recommendation", rank: 85 });
+    actions.push({
+      label: timing ? `Confirm ${timing} availability` : "Confirm showing availability",
+      rank: 100,
+      group: "showing",
+    });
+    if (!ctx.schedulingLinkSent) {
+      actions.push({
+        label: "Send available time options",
+        rank: 94,
+        group: "showing_times",
+      });
+    }
+  }
+
+  if (ctx.hasFinancingDiscussion || ctx.mentionedDeposit) {
+    actions.push({
+      label: "Ask if financing is already arranged",
+      rank: 88,
+      group: "financing",
+    });
+  } else if (ctx.hasStrongPurchaseIntent && !ctx.hasShowingIntent) {
+    actions.push({ label: "Contact customer", rank: 82, group: "contact" });
+    actions.push({ label: "Schedule appointment", rank: 78, group: "showing" });
   } else if (ctx.leadLabel === "Hot" || ctx.bucket === "hot") {
-    actions.push({ label: "Contact customer", rank: 82 });
-    actions.push({ label: "Schedule appointment", rank: 78 });
+    if (!actions.some((a) => a.group === "contact")) {
+      actions.push({ label: "Contact customer", rank: 80, group: "contact" });
+    }
   } else if (
     ctx.leadLabel === "Cold" ||
     ctx.bucket === "cold" ||
     ctx.bucket === "unqualified"
   ) {
-    actions.push({ label: "Send nurture follow-up", rank: 40 });
+    actions.push({ label: "Send nurture follow-up", rank: 40, group: "followup" });
   }
 
-  if (ctx.lastOutbound && !ctx.hasFollowUp && !ctx.hasShowingIntent) {
-    actions.push({ label: "Follow up if no response", rank: 52 });
-  }
+  const hasHighValueAction = actions.some((a) => a.rank >= 75);
+  const shouldSuggestFollowUp =
+    (ctx.lastOutbound && !ctx.hasFollowUp) ||
+    (ctx.hasDelayLater && !ctx.aiPaused && hasHighValueAction);
 
-  if (ctx.hasDelayLater && !ctx.aiPaused) {
-    actions.push({ label: "Follow up later", rank: 35 });
+  if (shouldSuggestFollowUp && !actions.some((a) => a.group === "followup")) {
+    actions.push({
+      label: "Follow up if no response",
+      rank: 48,
+      group: "followup",
+    });
   }
 
   const lowConfidence = (ctx.confidence ?? 1) < 0.45;
   if (actions.length === 0 && lowConfidence) {
-    if (!ctx.assignedTo) actions.push({ label: "Assign agent", rank: 20 });
-    actions.push({ label: "Set follow-up", rank: 15 });
+    if (!ctx.assignedTo) actions.push({ label: "Assign agent", rank: 20, group: "assign" });
+    actions.push({ label: "Set follow-up", rank: 15, group: "followup" });
   }
 
-  const seen = new Set<string>();
+  const byGroup = new Map<string, ActionCandidate>();
+  for (const c of actions) {
+    const prev = byGroup.get(c.group);
+    if (!prev || c.rank > prev.rank) byGroup.set(c.group, c);
+  }
+  return Array.from(byGroup.values())
+    .sort((a, b) => b.rank - a.rank)
+    .slice(0, 3)
+    .map((c) => c.label);
+}
+
+export { FINANCING_GUIDANCE_SUGGESTION };
+
+const SHOWING_TIMING_RE =
+  /\b(next week|this week|next month|tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
+
+export function extractShowingTimingPhrase(inboundText: string): string | null {
+  const m = SHOWING_TIMING_RE.exec(inboundText);
+  if (!m) return null;
+  return m[1].toLowerCase();
+}
+
+export type CustomerSummaryContext = {
+  memoryParagraph?: string;
+  inboundText?: string;
+  budget?: string | null;
+  timeline?: string | null;
+  financing?: string | null;
+  intent?: string;
+  viewingIntent?: boolean;
+};
+
+function cleanSummaryBullet(text: string): string {
+  return text
+    .replace(/\s+/g, " ")
+    .replace(/\.$/, "")
+    .trim();
+}
+
+function paragraphToBullets(paragraph: string): string[] {
+  const chunks = paragraph
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((s) => cleanSummaryBullet(s))
+    .filter((s) => s.length > 8);
   const out: string[] = [];
-  for (const a of actions.sort((x, y) => y.rank - x.rank)) {
-    if (seen.has(a.label)) continue;
-    seen.add(a.label);
-    out.push(a.label);
-    if (out.length >= 3) break;
+  for (const chunk of chunks) {
+    if (!chunk) continue;
+    const lower = chunk.toLowerCase();
+    if (/budget around/i.test(lower)) out.push(chunk.replace(/^budget around/i, "Budget around"));
+    else if (/timeline:/i.test(lower)) out.push(chunk.replace(/^timeline:\s*/i, "Timeline: "));
+    else if (/financing:/i.test(lower)) out.push(chunk.replace(/^financing:\s*/i, "Financing: "));
+    else out.push(chunk.charAt(0).toUpperCase() + chunk.slice(1));
+    if (out.length >= 4) break;
   }
   return out;
 }
 
-export { FINANCING_GUIDANCE_SUGGESTION };
+/** Compact Customer Summary bullets for sidebar (2+ facts → bullets). */
+export function buildCustomerSummaryBullets(ctx: CustomerSummaryContext): string[] {
+  const inbound = (ctx.inboundText ?? "").toLowerCase();
+  const bullets: string[] = [];
+  const seen = new Set<string>();
+
+  const add = (text: string) => {
+    const b = cleanSummaryBullet(text);
+    if (!b || seen.has(b.toLowerCase())) return;
+    seen.add(b.toLowerCase());
+    bullets.push(b);
+  };
+
+  const showingTiming = extractShowingTimingPhrase(inbound);
+  const wantsShowing =
+    ctx.viewingIntent ||
+    ctx.intent === "Booking" ||
+    /\b(showing|tour|viewing|see the (house|property|place)|schedule|appointment|availability)\b/i.test(
+      inbound,
+    );
+
+  if (wantsShowing) {
+    add(showingTiming ? `Wants a showing ${showingTiming}` : "Wants to schedule a showing");
+  }
+
+  if (/\b(ready to move|move forward|ready to proceed)\b/i.test(inbound)) {
+    add("Ready to move forward");
+  }
+
+  if (/\b(deposit|earnest money|down payment)\b/i.test(inbound)) {
+    add("Mentioned deposit");
+  }
+
+  if (ctx.budget) add(`Budget around ${ctx.budget}`);
+  if (ctx.timeline) add(`Timeline: ${ctx.timeline}`);
+  if (ctx.financing) add(`Financing: ${ctx.financing}`);
+
+  if (bullets.length >= 2) return bullets.slice(0, 4);
+
+  const fromMemory = ctx.memoryParagraph ? paragraphToBullets(ctx.memoryParagraph) : [];
+  if (fromMemory.length >= 2) return fromMemory.slice(0, 4);
+  if (bullets.length === 1 && fromMemory.length === 1) return [bullets[0], fromMemory[0]];
+  if (bullets.length === 1) return bullets;
+  if (fromMemory.length >= 1) return fromMemory.slice(0, 4);
+
+  const fallback = cleanSummaryBullet(ctx.memoryParagraph ?? "");
+  return fallback ? [fallback] : [];
+}

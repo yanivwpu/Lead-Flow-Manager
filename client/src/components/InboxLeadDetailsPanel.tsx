@@ -35,6 +35,8 @@ import {
 import {
   buildContextualNextActionLabels,
   buildCustomerInsights,
+  buildCustomerSummaryBullets,
+  extractShowingTimingPhrase,
 } from "@shared/customerInsights";
 import {
   filterMeaningfulTimelineEvents,
@@ -1350,19 +1352,60 @@ export function InboxLeadDetailsPanel({
     title?: string;
   };
 
+  const inboundText = useMemo(
+    () =>
+      messages
+        .filter((m) => m.direction === "inbound")
+        .map((m) => m.content)
+        .join(" "),
+    [messages],
+  );
+
+  const schedulingLinkSent = useMemo(
+    () =>
+      contactActivityRaw.some((e) => {
+        const hay = `${JSON.stringify(e.eventData ?? {})}`.toLowerCase();
+        return /scheduling link sent|booking link sent/i.test(hay);
+      }),
+    [contactActivityRaw],
+  );
+
+  const customerSummaryBullets = useMemo(
+    () =>
+      buildCustomerSummaryBullets({
+        memoryParagraph: aiMemory,
+        inboundText,
+        budget: intel.budget,
+        timeline: intel.timeline,
+        financing: intel.financing,
+        intent: intel.intent,
+        viewingIntent: stageSignals.viewingIntent,
+      }),
+    [
+      aiMemory,
+      inboundText,
+      intel.budget,
+      intel.timeline,
+      intel.financing,
+      intel.intent,
+      stageSignals.viewingIntent,
+    ],
+  );
+
   const contextualActionLabels = useMemo(() => {
     const intentText = `${intel.intent ?? ""}`.toLowerCase();
     const lastMsgText = `${messages[messages.length - 1]?.content ?? ""}`.toLowerCase();
+    const hay = `${inboundText} ${intentText}`.toLowerCase();
     const hasBookingIntent =
       stageSignals.viewingIntent ||
-      /book|schedule|appointment|showing|tour|viewing|visit/.test(intentText) ||
-      /book|schedule|appointment|showing|tour|viewing/.test(lastMsgText);
+      /book|schedule|appointment|showing|tour|viewing|visit|availability/.test(hay);
+    const mentionedDeposit = /\b(deposit|earnest money|down payment)\b/i.test(inboundText);
     const hasFinancingDiscussion =
-      /\b(deposit|down payment|mortgage|loan|financ)/i.test(lastMsgText) ||
-      (!intel.hasFinancing && /\b(pre.?approv|lender|financing)\b/i.test(lastMsgText));
+      mentionedDeposit ||
+      /\b(mortgage|loan|financ)\b/i.test(inboundText) ||
+      (!intel.hasFinancing && /\b(pre.?approv|lender)\b/i.test(inboundText));
     const hasStrongPurchaseIntent =
-      /buy|purchase|ready to buy|make an offer|offer/.test(intentText) ||
-      /make an offer|offer|ready to buy/.test(lastMsgText);
+      /buy|purchase|ready to buy|make an offer|offer|ready to move/.test(hay);
     const hasDelayLaterSignal =
       /\blater\b|\bnot now\b|\bnext week\b|\bnext month\b|\bbusy\b|\bmaybe later\b/.test(lastMsgText);
 
@@ -1380,6 +1423,10 @@ export function InboxLeadDetailsPanel({
       aiPaused: effectiveAiPaused,
       hasDelayLater: hasDelayLaterSignal,
       lastOutbound: messages.length > 0 && messages[messages.length - 1].direction === "outbound",
+      inboundText,
+      showingTimingPhrase: extractShowingTimingPhrase(inboundText),
+      mentionedDeposit,
+      schedulingLinkSent,
     });
   }, [
     handoffActive,
@@ -1389,10 +1436,12 @@ export function InboxLeadDetailsPanel({
     intel.leadScoreDetails?.bucket,
     intel.leadScoreDetails?.confidence01,
     messages,
+    inboundText,
     contact.assignedTo,
     contact.followUpDate,
     effectiveAiPaused,
     stageSignals.viewingIntent,
+    schedulingLinkSent,
   ]);
 
   const nextBestActions = useMemo((): NextBestActionRow[] => {
@@ -1400,7 +1449,7 @@ export function InboxLeadDetailsPanel({
 
     const labelToRow = (label: string, rank: number): NextBestActionRow | null => {
       const lower = label.toLowerCase();
-      if (/showing|availability|time options|appointment|schedule/.test(lower)) {
+      if (/showing|availability|time options|appointment|schedule|confirm/.test(lower)) {
         return { id: "book", label, priority: rank, onClick: () => setBookOpen(true), title: label };
       }
       if (/assign|reply personally/.test(lower)) {
@@ -1980,17 +2029,23 @@ export function InboxLeadDetailsPanel({
                               <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
                                 Customer insights
                               </p>
-                              <ul className="space-y-1">
-                                {customerInsights.map((insight) => (
-                                  <li
-                                    key={insight}
-                                    className="text-[12px] font-medium text-gray-800 leading-snug flex gap-1.5"
-                                  >
-                                    <span className="text-gray-400 shrink-0">•</span>
-                                    <span>{insight}</span>
-                                  </li>
-                                ))}
-                              </ul>
+                              {customerInsights.length === 1 ? (
+                                <p className="text-[12px] font-medium text-gray-800 leading-snug">
+                                  {customerInsights[0]}
+                                </p>
+                              ) : (
+                                <ul className="space-y-1">
+                                  {customerInsights.map((insight) => (
+                                    <li
+                                      key={insight}
+                                      className="text-[12px] font-medium text-gray-800 leading-snug flex gap-1.5"
+                                    >
+                                      <span className="text-gray-400 shrink-0">•</span>
+                                      <span>{insight}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
                             </div>
                           ) : null}
                           <div className="space-y-0.5">
@@ -2125,18 +2180,32 @@ export function InboxLeadDetailsPanel({
                   })()}
 
                   {/* C. CONTEXT — memory (reference, de-emphasized) */}
-                  {(aiMemory || aiMemoryLoading) && (
+                  {(customerSummaryBullets.length > 0 || aiMemoryLoading) && (
                     <div className="mt-6 pt-5 border-t border-gray-200">
                       <p className="text-[8px] uppercase tracking-widest font-semibold text-gray-400/70 mb-1.5">
-                        {hasAIBrain ? "Memory" : "Summary"}
+                        Customer summary
                       </p>
                       {aiMemoryLoading ? (
                         <div className="flex items-center gap-1.5">
                           <div className="w-1.5 h-1.5 rounded-full bg-gray-200 animate-pulse" />
-                          <span className="text-[10px] text-gray-400/90 italic">Generating…</span>
+                          <span className="text-xs text-gray-400/90 italic">Generating…</span>
                         </div>
+                      ) : customerSummaryBullets.length >= 2 ? (
+                        <ul className="space-y-1">
+                          {customerSummaryBullets.map((line) => (
+                            <li
+                              key={line}
+                              className="text-xs text-gray-600 leading-snug flex gap-1.5"
+                            >
+                              <span className="text-gray-400 shrink-0">•</span>
+                              <span>{line}</span>
+                            </li>
+                          ))}
+                        </ul>
                       ) : (
-                        <p className="text-[10px] text-gray-400/85 leading-relaxed">{aiMemory}</p>
+                        <p className="text-xs text-gray-600 leading-snug">
+                          {customerSummaryBullets[0] ?? aiMemory}
+                        </p>
                       )}
                     </div>
                   )}
