@@ -154,11 +154,7 @@ export type ContextualActionContext = {
 
 type ActionCandidate = { label: string; rank: number; group: string };
 
-export function buildContextualNextActionLabels(ctx: ContextualActionContext): string[] {
-  if (ctx.handoffActive) {
-    return ["Assign agent", "Reply personally"].slice(0, 3);
-  }
-
+function collectContextualActionCandidates(ctx: ContextualActionContext): ActionCandidate[] {
   const actions: ActionCandidate[] = [];
   const timing = ctx.showingTimingPhrase?.trim();
 
@@ -217,39 +213,110 @@ export function buildContextualNextActionLabels(ctx: ContextualActionContext): s
     actions.push({ label: "Set follow-up", rank: 15, group: "followup" });
   }
 
+  return actions;
+}
+
+function dedupeActionCandidates(candidates: ActionCandidate[]): ActionCandidate[] {
   const byGroup = new Map<string, ActionCandidate>();
-  for (const c of actions) {
+  for (const c of candidates) {
     const prev = byGroup.get(c.group);
     if (!prev || c.rank > prev.rank) byGroup.set(c.group, c);
   }
   return Array.from(byGroup.values())
     .sort((a, b) => b.rank - a.rank)
-    .slice(0, 3)
-    .map((c) => c.label);
+    .slice(0, 3);
+}
+
+export type NextBestActionBehavior = "book" | "follow" | "assign" | "snooze" | "composer";
+
+export type ContextualNextAction = {
+  label: string;
+  behavior: NextBestActionBehavior;
+};
+
+/** Map internal action group → UI surface (intent-based, not label text). */
+export function behaviorForActionGroup(group: string): NextBestActionBehavior {
+  switch (group) {
+    case "showing":
+      return "book";
+    case "followup":
+      return "follow";
+    case "assign":
+      return "assign";
+    case "showing_times":
+    case "financing":
+    case "contact":
+      return "composer";
+    default:
+      return "composer";
+  }
+}
+
+export function buildContextualNextActions(ctx: ContextualActionContext): ContextualNextAction[] {
+  if (ctx.handoffActive) {
+    return [
+      { label: "Assign agent", behavior: "assign" },
+      { label: "Reply personally", behavior: "composer" },
+    ].slice(0, 3);
+  }
+
+  return dedupeActionCandidates(collectContextualActionCandidates(ctx)).map((c) => ({
+    label: c.label,
+    behavior: behaviorForActionGroup(c.group),
+  }));
+}
+
+export function buildContextualNextActionLabels(ctx: ContextualActionContext): string[] {
+  return buildContextualNextActions(ctx).map((a) => a.label);
 }
 
 export { FINANCING_GUIDANCE_SUGGESTION };
 
-/** Suggested reply text when agent clicks a Next Best Action. */
+/** Label-only fallback when behavior is not embedded (e.g. legacy labels). */
+export function getNextBestActionBehavior(label: string): NextBestActionBehavior {
+  const l = label.toLowerCase();
+
+  if (/\b(snooze|pause autopilot|pause ai)\b/.test(l)) {
+    return "snooze";
+  }
+
+  if (/\bassign agent\b/.test(l)) {
+    return "assign";
+  }
+
+  if (
+    /\b(follow up if|follow-up|set follow-up|set follow up|remind later|no response|nurture|send nurture)\b/.test(
+      l,
+    )
+  ) {
+    return "follow";
+  }
+
+  if (
+    /\b(confirm .+ availability|confirm availability|showing availability|schedule appointment|schedule a showing|book appointment|book a (showing|meeting)|book meeting|viewing|showing)\b/.test(
+      l,
+    )
+  ) {
+    return "book";
+  }
+
+  return "composer";
+}
+
+/** Draft text for composer-only actions (never used for tool actions). */
 export function composerSuggestionForAction(label: string): string {
   const l = label.toLowerCase();
-  if (/confirm.*availability|next week|this week|tomorrow|friday|monday/.test(l)) {
-    return "I can confirm availability — what day and time works best for you?";
-  }
-  if (/time options/.test(l)) {
+  if (/time options|available time/.test(l)) {
     return "Here are a few times that work on my end:";
   }
   if (/financing|lender/.test(l)) {
     return "Are you already working with a lender, or would you like me to connect you with one?";
   }
-  if (/follow up|nurture/.test(l)) {
-    return "Just checking in — let me know if you still have any questions or want to move forward.";
+  if (/reply personally/.test(l)) {
+    return "Hi! I wanted to follow up on our conversation personally.";
   }
-  if (/reply personally|contact customer/.test(l)) {
+  if (/contact customer/.test(l)) {
     return "Hi! I wanted to follow up on our conversation.";
-  }
-  if (/schedule appointment/.test(l)) {
-    return "Would you like to schedule a time to connect?";
   }
   return label;
 }

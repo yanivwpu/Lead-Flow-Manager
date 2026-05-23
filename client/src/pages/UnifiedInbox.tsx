@@ -567,6 +567,28 @@ export function UnifiedInbox() {
     setFilePickerHint(null);
   }, [selectedContactId]);
 
+  const insertComposerDraftFromCopilot = useCallback(
+    (text: string): boolean => {
+      const draft = text.trim();
+      if (!draft || !selectedContactId) {
+        console.warn("[Copilot] Cannot insert draft: empty text or no conversation selected");
+        return false;
+      }
+      setMessageInput(draft);
+      requestAnimationFrame(() => {
+        const el = document.querySelector<HTMLTextAreaElement>('[data-testid="input-message"]');
+        if (!el) {
+          console.warn("[Copilot] Composer textarea not found after draft insert");
+          return;
+        }
+        el.focus();
+        el.setSelectionRange(draft.length, draft.length);
+      });
+      return true;
+    },
+    [selectedContactId],
+  );
+
   const {
     data: inboxData,
     isPending: inboxPending,
@@ -2838,7 +2860,7 @@ export function UnifiedInbox() {
               ? `${messageInput.slice(0, 100)}${messageInput.length > 100 ? "…" : ""}`
               : undefined
           }
-          onInsertComposerDraft={setMessageInput}
+          onInsertComposerDraft={insertComposerDraftFromCopilot}
           onUpdateContact={updateContact}
           onUpdateConversationStatus={status => {
             if (primaryConversation) {
@@ -2881,7 +2903,7 @@ export function UnifiedInbox() {
                       ? `${messageInput.slice(0, 100)}${messageInput.length > 100 ? "…" : ""}`
                       : undefined
                   }
-                  onInsertComposerDraft={setMessageInput}
+                  onInsertComposerDraft={insertComposerDraftFromCopilot}
                   onUpdateContact={updateContact}
                   onUpdateConversationStatus={status => {
                     if (primaryConversation) {

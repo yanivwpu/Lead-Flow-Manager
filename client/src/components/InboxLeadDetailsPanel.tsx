@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   Phone,
@@ -32,11 +32,12 @@ import {
   sanitizeUserFacingText,
 } from "@shared/customerBehaviorCopy";
 import {
-  buildContextualNextActionLabels,
+  buildContextualNextActions,
   buildCustomerInsights,
   buildCustomerSummaryBullets,
   composerSuggestionForAction,
   extractShowingTimingPhrase,
+  type NextBestActionBehavior,
 } from "@shared/customerInsights";
 import {
   filterMeaningfulTimelineEvents,
@@ -189,8 +190,8 @@ interface InboxLeadDetailsPanelProps {
   onDeleteContact: () => void;
   /** Optional 1-line preview of the main composer draft (read-only, from parent state) */
   composerDraftPreview?: string;
-  /** Insert suggested reply text into the main message composer */
-  onInsertComposerDraft?: (text: string) => void;
+  /** Insert suggested reply text into the main message composer. Returns true on success. */
+  onInsertComposerDraft?: (text: string) => boolean;
   /** Override the root container class — use when embedding in a mobile sheet */
   panelClassName?: string;
 }
@@ -211,7 +212,7 @@ function formatRelativeTime(date: Date | string | null | undefined): string {
 
 function CopilotPopoverHeader({ title, onClose }: { title: string; onClose: () => void }) {
   return (
-    <motion.div className="mb-2 flex items-center justify-between gap-2">
+    <div className="mb-2 flex items-center justify-between gap-2">
       <span className="text-[11px] font-semibold text-gray-700">{title}</span>
       <button
         type="button"
@@ -221,7 +222,7 @@ function CopilotPopoverHeader({ title, onClose }: { title: string; onClose: () =
       >
         <X className="w-3.5 h-3.5" />
       </button>
-    </motion.div>
+    </div>
   );
 }
 
@@ -831,6 +832,41 @@ export function InboxLeadDetailsPanel({
   const [bookOpen,   setBookOpen]   = useState(false);
   const [completedActions, setCompletedActions] = useState<Set<string>>(new Set());
   const [fadingAction, setFadingAction] = useState<string | null>(null);
+  const [followView, setFollowView] = useState<"quick" | "custom">("quick");
+
+  type CopilotPopoverTarget = "book" | "follow" | "assign" | "snooze";
+
+  const openCopilotPopover = useCallback((target: CopilotPopoverTarget) => {
+    setBookOpen(target === "book");
+    setAssignOpen(target === "assign");
+    setFollowOpen(target === "follow");
+    setSnoozeOpen(target === "snooze");
+    if (target === "follow") setFollowView("quick");
+  }, []);
+
+  const handleCopilotPopoverOpenChange = useCallback(
+    (target: CopilotPopoverTarget, open: boolean) => {
+      if (open) {
+        openCopilotPopover(target);
+      } else {
+        switch (target) {
+          case "book":
+            setBookOpen(false);
+            break;
+          case "assign":
+            setAssignOpen(false);
+            break;
+          case "follow":
+            setFollowOpen(false);
+            break;
+          case "snooze":
+            setSnoozeOpen(false);
+            break;
+        }
+      }
+    },
+    [openCopilotPopover],
+  );
 
   // Custom qualifying criteria answered by the agent (resets per contact)
   const [answeredCriteriaKeys, setAnsweredCriteriaKeys] = useState<Set<string>>(new Set());
@@ -1016,7 +1052,6 @@ export function InboxLeadDetailsPanel({
   const aiMemoryKeyRef = useRef<string>('');
 
   // Follow popover: 'quick' shows the quick options; 'custom' shows date+time picker
-  const [followView,       setFollowView]       = useState<'quick' | 'custom'>('quick');
   const [customFollowDate, setCustomFollowDate] = useState<Date | undefined>(undefined);
   const [customFollowTime, setCustomFollowTime] = useState('09:00');
 
@@ -1416,7 +1451,7 @@ export function InboxLeadDetailsPanel({
     ],
   );
 
-  const contextualActionLabels = useMemo(() => {
+  const contextualNextActions = useMemo(() => {
     const intentText = `${intel.intent ?? ""}`.toLowerCase();
     const lastMsgText = `${messages[messages.length - 1]?.content ?? ""}`.toLowerCase();
     const hay = `${inboundText} ${intentText}`.toLowerCase();
@@ -1433,7 +1468,7 @@ export function InboxLeadDetailsPanel({
     const hasDelayLaterSignal =
       /\blater\b|\bnot now\b|\bnext week\b|\bnext month\b|\bbusy\b|\bmaybe later\b/.test(lastMsgText);
 
-    return buildContextualNextActionLabels({
+    return buildContextualNextActions({
       handoffActive,
       hasShowingIntent: hasBookingIntent,
       hasFinancingDiscussion,
@@ -1471,33 +1506,43 @@ export function InboxLeadDetailsPanel({
   const nextBestActions = useMemo((): NextBestActionRow[] => {
     if (!canSeeWorkflow) return [];
 
-    const insertComposer = (label: string) => {
-      onInsertComposerDraft?.(composerSuggestionForAction(label));
-      toast({ title: "Suggestion added to composer", duration: 2500 });
+    const runToolAction = (behavior: Exclude<NextBestActionBehavior, "composer">) => {
+      openCopilotPopover(behavior);
     };
 
-    const labelToRow = (label: string, rank: number): NextBestActionRow | null => {
-      const lower = label.toLowerCase();
-      if (/assign agent/.test(lower)) {
-        return { id: "assign", label, priority: rank, onClick: () => setAssignOpen(true), title: label };
+    const runComposerAction = (label: string) => {
+      const text = composerSuggestionForAction(label);
+      if (!text.trim()) {
+        console.warn("[Copilot] Empty draft for action:", label);
+        return;
       }
-      if (/snooze|pause autopilot/.test(lower)) {
-        return { id: "snooze", label, priority: rank, onClick: () => setAiPaused(true), title: label };
+      const inserted = onInsertComposerDraft?.(text) ?? false;
+      if (inserted) {
+        toast({ title: "Draft added to composer", duration: 2500 });
+      } else {
+        console.warn("[Copilot] Failed to insert composer draft for action:", label);
       }
-      return {
-        id: "qualify",
-        label,
-        priority: rank,
-        onClick: () => insertComposer(label),
-        title: label,
+    };
+
+    return contextualNextActions.map((action, i) => {
+      const behavior = action.behavior;
+      const id: NextBestActionRow["id"] = behavior === "composer" ? "qualify" : behavior;
+      const onClick = () => {
+        if (behavior === "composer") {
+          runComposerAction(action.label);
+        } else {
+          runToolAction(behavior);
+        }
       };
-    };
-
-    return contextualActionLabels
-      .map((label, i) => labelToRow(label, 100 - i))
-      .filter((row): row is NextBestActionRow => row != null)
-      .slice(0, 3);
-  }, [canSeeWorkflow, contextualActionLabels, onInsertComposerDraft, toast]);
+      return {
+        id,
+        label: action.label,
+        priority: 100 - i,
+        onClick,
+        title: action.label,
+      };
+    });
+  }, [canSeeWorkflow, contextualNextActions, onInsertComposerDraft, openCopilotPopover, toast]);
 
   return (
     <div className={panelClassName ?? "hidden lg:flex w-[260px] xl:w-[272px] flex-col border-l border-gray-100 bg-white overflow-y-auto flex-shrink-0"}>
@@ -1597,7 +1642,7 @@ export function InboxLeadDetailsPanel({
         <div className="grid grid-cols-4 gap-1">
 
           {/* ── BOOK ── */}
-          <Popover open={bookOpen} onOpenChange={setBookOpen}>
+          <Popover open={bookOpen} onOpenChange={(open) => handleCopilotPopoverOpenChange("book", open)}>
             <PopoverTrigger asChild>
               <button
                 className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
@@ -1772,7 +1817,7 @@ export function InboxLeadDetailsPanel({
           </Popover>
 
           {/* ── ASSIGN ── */}
-          <Popover open={assignOpen} onOpenChange={setAssignOpen}>
+          <Popover open={assignOpen} onOpenChange={(open) => handleCopilotPopoverOpenChange("assign", open)}>
             <PopoverTrigger asChild>
               <button
                 className={cn(
@@ -1829,7 +1874,7 @@ export function InboxLeadDetailsPanel({
           </Popover>
 
           {/* ── FOLLOW: opens popover with quick opts + custom picker ── */}
-          <Popover open={followOpen} onOpenChange={setFollowOpen}>
+          <Popover open={followOpen} onOpenChange={(open) => handleCopilotPopoverOpenChange("follow", open)}>
             <PopoverTrigger asChild>
               <button
                 className={cn(
@@ -1974,7 +2019,7 @@ export function InboxLeadDetailsPanel({
           </Popover>
 
           {/* ── SNOOZE ── */}
-          <Popover open={snoozeOpen} onOpenChange={setSnoozeOpen}>
+          <Popover open={snoozeOpen} onOpenChange={(open) => handleCopilotPopoverOpenChange("snooze", open)}>
             <PopoverTrigger asChild>
               <button
                 className={cn(
@@ -2250,8 +2295,8 @@ export function InboxLeadDetailsPanel({
                     <div className="flex items-center gap-1 flex-wrap">
                       {activeChipActions.slice(0, hasAIBrain ? 4 : 2).map(action => {
                         const chipHandlers: Record<string, () => void> = {
-                          assign:  () => { setAssignOpen(true); completeAction(action.type, "Lead assigned"); },
-                          book:    () => { setBookOpen(true); completeAction(action.type, "Appointment scheduled"); },
+                          assign:  () => { openCopilotPopover("assign"); completeAction(action.type, "Lead assigned"); },
+                          book:    () => { openCopilotPopover("book"); completeAction(action.type, "Appointment scheduled"); },
                           nurture: () => { completeAction(action.type, "Added to nurture queue"); },
                         };
                         const handler = chipHandlers[action.type];
