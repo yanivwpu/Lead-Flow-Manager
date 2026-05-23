@@ -27,6 +27,7 @@ import {
 import type { ContactNote } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { filterMeaningfulTimelineEvents } from "@/lib/contactTimelineFilter";
 import {
   Select,
   SelectContent,
@@ -553,6 +554,7 @@ function formatContactActivity(event: ContactActivityEvent): { title: string; de
   const title = typeof data.title === "string" ? data.title : "";
   const eventType = typeof data.eventType === "string" ? data.eventType : "";
   const content = typeof data.content === "string" ? data.content : "";
+  const kind = typeof data.kind === "string" ? data.kind : "";
   const inviteeName = typeof data.inviteeName === "string" ? data.inviteeName : "";
   const inviteeEmail = typeof data.inviteeEmail === "string" ? data.inviteeEmail : "";
   const startTime =
@@ -563,9 +565,73 @@ function formatContactActivity(event: ContactActivityEvent): { title: string; de
         : "";
   const when = startTime ? formatFollowUpDisplay(startTime) : "";
 
+  if (kind === "lead_score_changed" || kind === "qualification_changed") {
+    const prev = typeof data.previousScore === "number" ? data.previousScore : null;
+    const next = typeof data.newScore === "number" ? data.newScore : null;
+    const bucket = typeof data.bucketAfter === "string" ? data.bucketAfter : "";
+    return {
+      title: "Lead score updated",
+      detail: [
+        prev != null && next != null ? `${prev} → ${next}` : "",
+        bucket ? bucket.charAt(0).toUpperCase() + bucket.slice(1) : "",
+        typeof data.signals === "string" ? data.signals : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      tone: next != null && next >= 50 ? "green" : "gray",
+    };
+  }
+
+  if (event.eventType === "tag_change" || kind === "tag_changed") {
+    const from = typeof data.from === "string" ? data.from : "";
+    const to = typeof data.to === "string" ? data.to : "";
+    return {
+      title: "Tag updated",
+      detail: from && to ? `${from} → ${to}` : to || from || "Tag changed",
+      tone: "gray",
+    };
+  }
+
+  if (event.eventType === "stage_change" || kind === "stage_changed") {
+    const from = typeof data.from === "string" ? data.from : "";
+    const to = typeof data.to === "string" ? data.to : "";
+    return {
+      title: "Pipeline stage updated",
+      detail: from && to ? `${from} → ${to}` : to || from || "Stage changed",
+      tone: "gray",
+    };
+  }
+
+  if (event.eventType === "assignment" || kind === "assignment") {
+    return {
+      title: "Agent assigned",
+      detail: content || title || "Conversation assigned",
+      tone: "gray",
+    };
+  }
+
+  if (event.eventType === "note" && kind === "workflow_task") {
+    const taskTitle = title || "Task created";
+    if (/book|showing|appointment|scheduling link/i.test(`${taskTitle} ${content}`.toLowerCase())) {
+      return {
+        title: /scheduling link/i.test(`${taskTitle} ${content}`) ? "Scheduling link sent" : "Showing requested",
+        detail: content || "Growth Engine workflow",
+        tone: "green",
+      };
+    }
+  }
+
+  if (event.eventType === "ai_handoff") {
+    return {
+      title: "AI qualification handoff",
+      detail: content || "Lead needs agent attention",
+      tone: "amber",
+    };
+  }
+
   if (event.eventType === "calendly_booking") {
     return {
-      title: "Meeting booked",
+      title: "Appointment booked",
       detail: [
         eventType || title || "Calendly meeting",
         when,
@@ -590,8 +656,15 @@ function formatContactActivity(event: ContactActivityEvent): { title: string; de
   }
   if (event.eventType === "note" && data.kind === "calendly_booking_confirmed") {
     return {
-      title: "Calendly meeting booked",
+      title: "Appointment booked",
       detail: [content || title || "Meeting", when].filter(Boolean).join(" · "),
+      tone: "green",
+    };
+  }
+  if (event.eventType === "appointment_created") {
+    return {
+      title: "Appointment booked",
+      detail: content || title || "Meeting scheduled",
       tone: "green",
     };
   }
@@ -842,15 +915,20 @@ export function InboxLeadDetailsPanel({
     enabled: !!contact.id,
   });
 
-  const { data: contactActivity = [] } = useQuery<ContactActivityEvent[]>({
-    queryKey: [`/api/contacts/${contact.id}/timeline?limit=8`],
+  const { data: contactActivityRaw = [] } = useQuery<ContactActivityEvent[]>({
+    queryKey: [`/api/contacts/${contact.id}/timeline?limit=40`],
     queryFn: async () => {
-      const r = await fetch(`/api/contacts/${contact.id}/timeline?limit=8`, { credentials: "include" });
+      const r = await fetch(`/api/contacts/${contact.id}/timeline?limit=40`, { credentials: "include" });
       if (!r.ok) throw new Error("Failed to load contact activity");
       return r.json();
     },
     enabled: !!contact.id,
   });
+
+  const contactActivity = useMemo(
+    () => filterMeaningfulTimelineEvents(contactActivityRaw, 4),
+    [contactActivityRaw],
+  );
 
   // Business knowledge — used to drive qualifying questions in the Copilot panel
   const { data: businessKnowledge } = useQuery<{

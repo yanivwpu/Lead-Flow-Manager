@@ -450,6 +450,23 @@ async function executeSendMessageTemplateAction(params: {
     await persistW3CalendlySentAt(contact, chat);
   }
 
+  if (needsSchedulingLink && contact?.id) {
+    await storage
+      .createActivityEvent({
+        userId: workflow.userId,
+        contactId: contact.id,
+        conversationId: conversationId ?? undefined,
+        eventType: "note",
+        eventData: {
+          kind: "workflow_task",
+          title: "Scheduling link sent",
+          content: `Growth Engine ${templateKey} booking prompt delivered`,
+        },
+        actorType: "system",
+      })
+      .catch(() => {});
+  }
+
   return true;
 }
 
@@ -477,6 +494,23 @@ export async function executeWorkflowActions(
           { tag: action.tag },
           { skipAutomationHooks: true }
         );
+        if (contact?.id && action.tag === "Appointment Requested") {
+          await storage
+            .createActivityEvent({
+              userId: workflow.userId,
+              contactId: contact.id,
+              conversationId: conversationId ?? null,
+              eventType: "note",
+              eventData: {
+                kind: "tag_changed",
+                title: "Showing requested",
+                content: "Appointment intent detected — tag applied",
+                to: action.tag,
+              },
+              actorType: "system",
+            })
+            .catch(() => {});
+        }
         executedActions.push({ type: "tag", value: action.tag });
         continue;
       }
@@ -833,6 +867,24 @@ async function executeW3CalendlyKeywordResponse(
     { tag: "Appointment Requested" },
   );
 
+  if (contact?.id) {
+    await storage
+      .createActivityEvent({
+        userId: workflow.userId,
+        contactId: contact.id,
+        conversationId: conversationId ?? null,
+        eventType: "note",
+        eventData: {
+          kind: "tag_changed",
+          title: "Showing requested",
+          content: "Appointment intent detected — tag applied",
+          to: "Appointment Requested",
+        },
+        actorType: "system",
+      })
+      .catch(() => {});
+  }
+
   const baseExecuted: WorkflowAction[] = [{ type: "tag", value: "Appointment Requested" }];
 
   if (!contact?.id || !conversationId) {
@@ -962,6 +1014,32 @@ export async function triggerKeywordWorkflows(
 // W2 Buyer Readiness / Financial Qualification Engine
 // ─────────────────────────────────────────────────────────────────────────────
 
+const LEAD_SCORE_LOG = "[LeadScore]";
+
+function logLeadScore(event: string, payload: Record<string, unknown>): void {
+  console.warn(LEAD_SCORE_LOG, event, payload);
+}
+
+function leadScoreBucket(score: number): "hot" | "warm" | "mild" | "cold" {
+  if (score >= 80) return "hot";
+  if (score >= 50) return "warm";
+  if (score >= 20) return "mild";
+  return "cold";
+}
+
+function tagForLeadScoreBucket(bucket: ReturnType<typeof leadScoreBucket>): string | null {
+  if (bucket === "hot") return "Hot Lead";
+  if (bucket === "warm") return "Warm Lead";
+  if (bucket === "cold" || bucket === "mild") return "Cold Lead";
+  return null;
+}
+
+const SHOWING_REQUEST_RE =
+  /\b(see|view|visit|tour|walk through|walkthrough)\s+(the|a|this|your|that|my)?\s*(house|home|property|place|listing|unit|condo|townhouse|apt|apartment)\b/i;
+const SHOWING_INTENT_RE = /\b(i'?d like|i would like|want|love|like) to (see|view|visit|tour)\b/i;
+const SPECIFIC_DATE_RE =
+  /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|tonight|next week|this week|this weekend)\b|\bon\s+(mon|tues?|wed|thur?s?|fri|sat|sun)/i;
+
 function splitKeywords(raw: string): string[] {
   return raw.split(",").map(k => k.trim().toLowerCase()).filter(Boolean);
 }
@@ -1084,14 +1162,52 @@ export async function runW2QualificationEngine(
     score += 8;
   }
 
-  // Booking / high-intent
-  const hasBookingIntent = matchesAny(msgLower, bookingKw);
+  // Booking / showing / high-intent scheduling
+  const keywordBookingIntent = matchesAny(msgLower, bookingKw);
+  const showingRequest = SHOWING_REQUEST_RE.test(message) || SHOWING_INTENT_RE.test(message);
+  const hasBookingIntent = keywordBookingIntent || showingRequest;
+  const hasSpecificDate = SPECIFIC_DATE_RE.test(message);
+
   if (hasBookingIntent) {
-    signals.push("BOOKING_INTENT");
+    signals.push(showingRequest ? "SHOWING_REQUEST" : "BOOKING_INTENT");
+    score += showingRequest ? 38 : 32;
+    fieldUpdates.appointmentIntent = showingRequest ? "showing_requested" : "booking_requested";
+    logLeadScore("signal_detected", {
+      userId,
+      contactId: contact?.id,
+      signal: showingRequest ? "SHOWING_REQUEST" : "BOOKING_INTENT",
+      messagePreview: message.slice(0, 120),
+    });
   }
 
-  // Cap per-message positive score
-  score = Math.min(score, 60);
+  if (hasSpecificDate && hasBookingIntent) {
+    signals.push("SPECIFIC_DATE_INTENT");
+    score += 18;
+    fieldUpdates.requestedWhen = message.match(SPECIFIC_DATE_RE)?.[0]?.trim() || "specific_date";
+    logLeadScore("signal_detected", {
+      userId,
+      contactId: contact?.id,
+      signal: "SPECIFIC_DATE_INTENT",
+    });
+  }
+
+  const hadPriorEngagement =
+    !!existingCustomFields.lastW2InboundAt ||
+    (Array.isArray(existingCustomFields.lastW2Signals) && existingCustomFields.lastW2Signals.length > 0);
+  if (hadPriorEngagement && message.trim().length > 8) {
+    signals.push("REPEAT_ENGAGEMENT");
+    score += 10;
+    logLeadScore("signal_detected", {
+      userId,
+      contactId: contact?.id,
+      signal: "REPEAT_ENGAGEMENT",
+    });
+  }
+
+  const bookingHeavy = signals.some((s) =>
+    ["SHOWING_REQUEST", "BOOKING_INTENT", "SPECIFIC_DATE_INTENT"].includes(s),
+  );
+  score = Math.min(score, bookingHeavy ? 75 : 60);
 
   // Apply field updates — dual-write to contact.customFields (unified inbox) and
   // chat.customFields (legacy, kept during transition window).
@@ -1158,31 +1274,101 @@ export async function runW2QualificationEngine(
       if (fresh) {
         const prevLead =
           typeof fresh.leadScore === "number" && Number.isFinite(fresh.leadScore) ? fresh.leadScore : 0;
-        const nextLead = Math.min(100, Math.max(0, prevLead + score));
+        let nextLead = Math.min(100, Math.max(0, prevLead + score));
+
+        if (bookingHeavy && !isBrowsing && nextLead < 60) {
+          nextLead = 60;
+        }
+
+        const bucketBefore = leadScoreBucket(prevLead);
+        const bucketAfter = leadScoreBucket(nextLead);
         const cfPrev = (fresh.customFields as Record<string, unknown>) || {};
+
+        logLeadScore("score_before", {
+          userId,
+          contactId: contact.id,
+          score: prevLead,
+          bucket: bucketBefore,
+        });
+        logLeadScore("score_after", {
+          userId,
+          contactId: contact.id,
+          score: nextLead,
+          bucket: bucketAfter,
+          delta: nextLead - prevLead,
+          signals,
+        });
+
+        const tagSuggestion = tagForLeadScoreBucket(bucketAfter);
+        const tagUpdate =
+          tagSuggestion &&
+          fresh.tag !== "Do Not Contact" &&
+          fresh.tag !== "Appointment Requested" &&
+          fresh.tag !== "Appointment Booked" &&
+          (bucketAfter === "hot" || bucketAfter === "warm" || (bucketBefore !== bucketAfter && bucketAfter === "cold"))
+            ? { tag: tagSuggestion }
+            : {};
+
+        if (bucketBefore !== bucketAfter) {
+          logLeadScore("qualification_changed", {
+            userId,
+            contactId: contact.id,
+            from: bucketBefore,
+            to: bucketAfter,
+            score: nextLead,
+          });
+        }
+
         await storage
           .updateContact(
             contact.id,
             {
               leadScore: nextLead,
+              ...tagUpdate,
               customFields: {
                 ...cfPrev,
+                ...fieldUpdates,
                 leadScore: nextLead,
                 lastW2InboundAt: new Date().toISOString(),
                 lastW2Signals: signals,
                 ...(signals.length ? { lastScoreReasons: signals.join(", ") } : {}),
               },
             },
-            { skipAutomationHooks: true }
+            { skipAutomationHooks: true },
           )
           .catch(() => {});
+
+        if (bucketBefore !== bucketAfter || score > 0) {
+          await storage
+            .createActivityEvent({
+              userId,
+              contactId: contact.id,
+              conversationId: undefined,
+              eventType: "note",
+              eventData: {
+                kind: bucketBefore !== bucketAfter ? "qualification_changed" : "lead_score_changed",
+                previousScore: prevLead,
+                newScore: nextLead,
+                bucketBefore,
+                bucketAfter,
+                signals: signals.join(", "),
+                content:
+                  bucketBefore !== bucketAfter
+                    ? `Qualification: ${bucketBefore} → ${bucketAfter} (score ${nextLead})`
+                    : `Lead score ${prevLead} → ${nextLead}`,
+              },
+              actorType: "system",
+            })
+            .catch(() => {});
+        }
+
         void import("./automationEventDispatcher").then(({ dispatchAiScoreChanged }) =>
           dispatchAiScoreChanged({
             userId,
             contactId: contact.id,
             score: nextLead,
-            bucket: nextLead >= 80 ? "hot" : nextLead >= 50 ? "warm" : nextLead >= 20 ? "mild" : "cold",
-          })
+            bucket: bucketAfter,
+          }),
         );
       }
     } catch {
