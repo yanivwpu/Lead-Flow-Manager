@@ -1,7 +1,49 @@
-import express, { type Express } from "express";
+import express, { type Express, type Response } from "express";
 import fs from "fs";
 import path from "path";
 import { injectSeoMeta, generateBlogListHtml, generateBlogPostHtml, generateHomepageHtml, injectHomepageSeoMeta, injectPageMeta, getMarketingRoutes } from "./seo";
+
+const ONE_YEAR = 31536000;
+const ONE_WEEK = 604800;
+const ONE_DAY = 86400;
+
+/** Long-lived cache for fingerprinted build assets; shorter cache for public media. */
+function setStaticAssetCacheHeaders(res: Response, filePath: string) {
+  const normalized = filePath.replace(/\\/g, "/").toLowerCase();
+
+  if (normalized.includes("/assets/")) {
+    res.setHeader("Cache-Control", `public, max-age=${ONE_YEAR}, immutable`);
+    return;
+  }
+
+  if (/\.(css|js|mjs|cjs|map)$/i.test(normalized)) {
+    res.setHeader("Cache-Control", `public, max-age=${ONE_YEAR}, immutable`);
+    return;
+  }
+
+  if (/\.(avif|webp|png|jpg|jpeg|gif|svg|ico|woff2?|ttf|otf|eot)$/i.test(normalized)) {
+    res.setHeader("Cache-Control", `public, max-age=${ONE_WEEK}`);
+    return;
+  }
+
+  if (normalized.includes("/.well-known/")) {
+    res.setHeader("Cache-Control", `public, max-age=${ONE_DAY}`);
+  }
+}
+
+function staticWithCache(root: string) {
+  return express.static(root, {
+    index: false,
+    setHeaders(res, filePath) {
+      setStaticAssetCacheHeaders(res, filePath);
+    },
+  });
+}
+
+function sendSpaShell(res: Response, indexPath: string) {
+  res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.sendFile(indexPath);
+}
 
 export function serveStatic(app: Express) {
   const distPath = path.resolve(__dirname, "public");
@@ -18,12 +60,12 @@ export function serveStatic(app: Express) {
   if (!fs.existsSync(uploadsPath)) {
     fs.mkdirSync(uploadsPath, { recursive: true });
   }
-  app.use("/uploads", express.static(uploadsPath));
+  app.use("/uploads", staticWithCache(uploadsPath));
 
   // Serve attached assets (avatars, stock images, etc.)
   const attachedAssetsPath = path.resolve(process.cwd(), "attached_assets");
   if (fs.existsSync(attachedAssetsPath)) {
-    app.use("/attached_assets", express.static(attachedAssetsPath));
+    app.use("/attached_assets", staticWithCache(attachedAssetsPath));
   }
 
   // Homepage SSR - MUST be before express.static to intercept /
@@ -113,10 +155,8 @@ export function serveStatic(app: Express) {
     res.redirect(301, "/user-guide");
   });
 
-  // Serve static assets (JS, CSS, images, etc.)
-  app.use(express.static(distPath, {
-    index: false // Disable automatic index.html serving for /
-  }));
+  // Serve static assets (JS, CSS, images, fonts, etc.)
+  app.use(staticWithCache(distPath));
 
   // Catch-all for SPA routes (excluding protected routes)
   app.use("*", (req, res) => {
@@ -127,10 +167,10 @@ export function serveStatic(app: Express) {
     const shouldSkipSsr = skipSsrRoutes.some(route => url.startsWith(route));
     
     if (shouldSkipSsr) {
-      return res.sendFile(indexPath);
+      return sendSpaShell(res, indexPath);
     }
     
     // All other routes - serve index.html without SSR
-    res.sendFile(indexPath);
+    sendSpaShell(res, indexPath);
   });
 }

@@ -162,17 +162,25 @@ app.use((req, res, next) => {
   next();
 });
 
-// Enable gzip compression for all responses
+// Enable gzip compression for production responses (webhooks excluded).
+// Brotli may additionally be applied by the hosting CDN/reverse proxy when configured.
+const NO_COMPRESS_PATH_PREFIXES = [
+  "/api/stripe/webhook",
+  "/api/webhook/meta",
+  "/api/shopify/webhooks",
+  "/api/webhooks/calendly",
+];
+
 app.use(compression({
   filter: (req, res) => {
-    // Don't compress responses for webhooks
-    if (req.path.includes('/webhook')) {
+    const path = req.path || "";
+    if (path.includes("/webhook") || NO_COMPRESS_PATH_PREFIXES.some((prefix) => path.startsWith(prefix))) {
       return false;
     }
-    // Use compression for everything else
     return compression.filter(req, res);
   },
-  level: 6 // Balanced compression level
+  level: 6,
+  threshold: 1024,
 }));
 
 // HTTP to HTTPS redirect for production (required for Google indexing)
@@ -301,6 +309,10 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
+      if (duration > 1000) {
+        console.log(`[SLOW_API] ${req.method} ${path} ${duration}`);
+      }
+
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
