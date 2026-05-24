@@ -1614,8 +1614,7 @@ export function Workflows() {
               <div>
                 {editingGrowthEngine && (
                   <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 mb-3">
-                    Growth Engine workflow — actions use template keys, tags, and pipeline stages from your RGE install.
-                    W2 qualification runs in the message engine (not listed here).
+                    Some steps are managed automatically by the Growth Engine and may not appear in this editor.
                   </p>
                 )}
                 {actions.map((action, i) => (
