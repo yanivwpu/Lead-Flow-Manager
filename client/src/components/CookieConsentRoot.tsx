@@ -8,7 +8,6 @@ import {
   type ReactNode,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@/lib/auth-context";
 import {
   COOKIE_CONSENT_STORAGE_KEY,
   GA_MEASUREMENT_ID,
@@ -48,7 +47,6 @@ export function useCookieConsent(): CookieConsentContextValue {
 }
 
 export function CookieConsentRoot({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
   const [stored, setStored] = useState<StoredCookieConsent | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
@@ -76,11 +74,15 @@ export function CookieConsentRoot({ children }: { children: ReactNode }) {
     setHydrated(true);
   }, []);
 
-  /** Implicit consent paths when user has not chosen yet */
+  /** Implicit consent when region is known non-EU, or unknown (conservative banner only for confirmed EU/UK). */
   useEffect(() => {
     if (!hydrated || stored !== null || !geoFetched || !geo) return;
 
     const code = geo.country;
+
+    if (code && isEuUkEeaCountry(code)) {
+      return;
+    }
 
     if (code && !isEuUkEeaCountry(code)) {
       const c: StoredCookieConsent = {
@@ -95,18 +97,17 @@ export function CookieConsentRoot({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (!code && user) {
-      const c: StoredCookieConsent = {
-        v: 1,
-        analytics: true,
-        decidedAt: new Date().toISOString(),
-        basis: "implicit-unknown-signed-in",
-      };
-      writeStoredConsent(c);
-      setStored(c);
-      loadGoogleAnalytics(GA_MEASUREMENT_ID);
-    }
-  }, [hydrated, stored, geo, geoFetched, user]);
+    // Country unknown — allow analytics (do not block anonymous visitors on Railway / without geo headers).
+    const c: StoredCookieConsent = {
+      v: 1,
+      analytics: true,
+      decidedAt: new Date().toISOString(),
+      basis: "implicit-unknown-region",
+    };
+    writeStoredConsent(c);
+    setStored(c);
+    loadGoogleAnalytics(GA_MEASUREMENT_ID);
+  }, [hydrated, stored, geo, geoFetched]);
 
   /** Load GA when stored consent allows analytics */
   useEffect(() => {
@@ -117,10 +118,8 @@ export function CookieConsentRoot({ children }: { children: ReactNode }) {
   const showBanner = useMemo(() => {
     if (!hydrated || stored !== null || !geoFetched || !geo) return false;
     const code = geo.country;
-    if (code && !isEuUkEeaCountry(code)) return false;
-    if (code && isEuUkEeaCountry(code)) return true;
-    return !user;
-  }, [hydrated, stored, geo, geoFetched, user]);
+    return !!(code && isEuUkEeaCountry(code));
+  }, [hydrated, stored, geo, geoFetched]);
 
   const persistExplicit = useCallback((analytics: boolean) => {
     const c: StoredCookieConsent = {

@@ -52,6 +52,7 @@ const UserGuide = lazy(() => import("@/pages/UserGuide").then(m => ({ default: m
 const NotFound = lazy(() => import("@/pages/not-found"));
 import { ReferralCapture } from "@/components/ReferralCapture";
 import { CookieConsentRoot } from "@/components/CookieConsentRoot";
+import { GoogleAnalyticsRouteTracker } from "@/components/GoogleAnalyticsRouteTracker";
 import { Welcome } from "@/pages/Welcome";
 
 // Wrapper for protected routes
@@ -260,6 +261,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <CookieConsentRoot>
+          <GoogleAnalyticsRouteTracker />
           <ReferralCapture />
           <Toaster />
           <Suspense fallback={<PageLoader />}>

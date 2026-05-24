@@ -447,19 +447,39 @@ export async function registerRoutes(
     }
   });
 
-  /** Approximate country for cookie / analytics consent (Cloudflare or Vercel header when present). */
+  /** Approximate country for cookie / analytics consent (CDN / edge headers when present). */
   app.get("/api/geo", (req, res) => {
     try {
-      const cf = req.headers["cf-ipcountry"];
-      const vercel = req.headers["x-vercel-ip-country"];
-      const raw = (typeof cf === "string" ? cf : typeof vercel === "string" ? vercel : "")
-        .trim()
-        .toUpperCase();
-      const country = raw && raw !== "XX" && /^[A-Z]{2}$/.test(raw) ? raw : null;
-      res.json({
-        country,
-        source: country ? (cf ? "cf-ipcountry" : "x-vercel-ip-country") : "unknown",
-      });
+      const headerCandidates: Array<[string, string]> = [
+        ["cf-ipcountry", "cf-ipcountry"],
+        ["x-vercel-ip-country", "x-vercel-ip-country"],
+        ["cloudfront-viewer-country", "cloudfront-viewer-country"],
+        ["x-country-code", "x-country-code"],
+        ["fastly-client-country", "fastly-client-country"],
+        ["x-geo-country", "x-geo-country"],
+        ["x-appengine-country", "x-appengine-country"],
+      ];
+
+      let country: string | null = null;
+      let source = "unknown";
+
+      for (const [header, label] of headerCandidates) {
+        const rawHeader = req.headers[header];
+        const raw =
+          typeof rawHeader === "string"
+            ? rawHeader
+            : Array.isArray(rawHeader)
+              ? rawHeader[0]
+              : "";
+        const normalized = raw.trim().toUpperCase();
+        if (normalized && normalized !== "XX" && /^[A-Z]{2}$/.test(normalized)) {
+          country = normalized;
+          source = label;
+          break;
+        }
+      }
+
+      res.json({ country, source });
     } catch {
       res.json({ country: null, source: "error" });
     }
