@@ -25,6 +25,7 @@ import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { ExpressAdapter } from "@bull-board/express";
 import { getAppOrigin } from "./urlOrigins";
 import { corsMiddleware } from "./corsMiddleware";
+import { rateLimitMiddleware } from "./rateLimitMiddleware";
 
 /** SaaS routes must run on APP_URL host (e.g. app.whachatcrm.com), not www marketing. */
 function isSaaSPathname(pathname: string): boolean {
@@ -162,6 +163,14 @@ app.use((req, res, next) => {
   next();
 });
 
+// ─── Webhook-safe middleware ordering ───────────────────────────────────────
+// Provider webhooks (Stripe, Meta, Shopify, Calendly) verify HMAC/signatures over the
+// exact raw request bytes. They must bypass:
+//   • compression — mutating the body breaks signature checks
+//   • global JSON/urlencoded parsers — a second parse can empty req.body / req.rawBody
+//   • rate limiting — providers retry bursts; blocking retries drops legitimate events
+// See route-specific raw-body capture below and rateLimitMiddleware exclusions.
+
 // Enable gzip compression for production responses (webhooks excluded).
 // Brotli may additionally be applied by the hosting CDN/reverse proxy when configured.
 const NO_COMPRESS_PATH_PREFIXES = [
@@ -197,6 +206,7 @@ app.use((req, res, next) => {
 setupPresenceServer(httpServer);
 
   
+// Stripe: express.raw preserves the exact body Buffer for stripe-signature verification.
 app.post(
   '/api/stripe/webhook',
   express.raw({ type: 'application/json' }),
@@ -222,22 +232,22 @@ app.post(
   }
 );
 
-// Capture raw body for Shopify webhook HMAC verification
+// Shopify: capture raw bytes in verify callback; HMAC checked via x-shopify-hmac-sha256.
 app.use('/api/shopify/webhooks', express.json({
   verify: (req: any, _res, buf) => {
     req.rawBody = buf;
   }
 }));
 
-// Capture raw body for Meta webhook HMAC verification
-// MUST be registered before the global express.json() middleware
+// Meta: capture raw bytes for X-Hub-Signature-256 (see verifyMetaWebhookSignature).
+// MUST be registered before the global express.json() middleware.
 app.use('/api/webhook/meta', express.json({
   verify: (req: any, _res, buf) => {
     req.rawBody = buf;
   }
 }));
 
-// Calendly CRM webhooks — raw body required for HMAC signature verification
+// Calendly: raw body + Calendly-Webhook-Signature HMAC (server/calendlyWebhook.ts).
 app.use('/api/webhooks/calendly', express.json({
   type: "*/*",
   verify: (req: any, _res, buf) => {
@@ -274,6 +284,10 @@ app.use(oidcRouter);
 
 // Setup authentication
 setupAuth(app);
+
+// Conservative API rate limits for abuse-prone routes (Redis/Upstash when available).
+// Webhook paths are excluded — see rateLimitMiddleware.ts and comments above.
+app.use(rateLimitMiddleware);
 
 const authDeployMarker =
   process.env.RAILWAY_GIT_COMMIT_SHA ||
