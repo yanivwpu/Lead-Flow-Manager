@@ -233,8 +233,12 @@ router.get('/callback', async (req: Request, res: Response) => {
       });
     }
 
-    // Register mandatory compliance webhooks
-    await registerMandatoryWebhooks(shop, accessToken);
+    // Best-effort webhook registration — must not block install
+    try {
+      await registerMandatoryWebhooks(shop, accessToken);
+    } catch (webhookErr) {
+      console.error('[Shopify Webhook Register Failed]', { shop, error: webhookErr });
+    }
 
     // Log the merchant into the web app so they can choose Starter vs Pro on Pricing (Shopify Billing API).
     await new Promise<void>((resolve, reject) => {
@@ -449,26 +453,43 @@ router.post('/webhooks/app-uninstalled', async (req: Request, res: Response) => 
     return res.status(401).json({ error: 'Invalid webhook signature' });
   }
 
+  console.log('[Shopify Uninstall]', { shop });
+
   try {
     const user = await storage.getUserByShopifyShop(shop);
-    
-    if (user) {
+
+    if (!user) {
+      console.log('[Shopify Uninstall Cleanup]', { shop, status: 'no_user_found' });
+      return res.status(200).json({ received: true });
+    }
+
+    try {
       await storage.updateUser(user.id, {
         shopifyAccessToken: null,
         shopifySubscriptionStatus: 'uninstalled',
         subscriptionStatus: 'canceled',
       });
+      console.log('[Shopify Uninstall Cleanup]', { shop, userId: user.id, status: 'user_updated' });
+    } catch (userErr) {
+      console.warn('[Shopify Uninstall Cleanup]', { shop, userId: user.id, status: 'user_update_skipped', error: userErr });
+    }
 
+    try {
       const integration = await storage.getIntegrationByUserAndType(user.id, 'shopify');
       if (integration) {
         await storage.updateIntegration(integration.id, { isActive: false });
+        console.log('[Shopify Uninstall Cleanup]', { shop, userId: user.id, status: 'integration_deactivated' });
+      } else {
+        console.log('[Shopify Uninstall Cleanup]', { shop, userId: user.id, status: 'no_integration_found' });
       }
+    } catch (integrationErr) {
+      console.warn('[Shopify Uninstall Cleanup]', { shop, userId: user.id, status: 'integration_update_skipped', error: integrationErr });
     }
 
-    res.status(200).json({ received: true });
+    return res.status(200).json({ received: true });
   } catch (error) {
-    console.error('Uninstall webhook error:', error);
-    res.status(500).json({ error: 'Webhook processing failed' });
+    console.error('[Shopify Uninstall]', { shop, error });
+    return res.status(200).json({ received: true });
   }
 });
 

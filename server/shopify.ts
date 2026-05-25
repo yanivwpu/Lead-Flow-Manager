@@ -597,17 +597,22 @@ export async function exchangeShopifyCode(
   }
 }
 
+/**
+ * Register shop-specific webhooks via GraphQL (Admin API 2026-01).
+ * GDPR compliance topics (customers/data_request, customers/redact, shop/redact) are not
+ * WebhookSubscriptionTopic values — they are configured in shopify.app.whachatcrm.toml.
+ */
 export async function registerMandatoryWebhooks(
   shop: string,
   accessToken: string
-): Promise<boolean> {
+): Promise<void> {
   const shopify = getShopifyApi();
-  if (!shopify) return false;
+  if (!shopify) {
+    console.warn('[Shopify Webhook Register Failed] Shopify API not configured — skipping webhook registration');
+    return;
+  }
 
   const webhookEndpoints = [
-    { topic: 'CUSTOMERS_DATA_REQUEST', address: `${HOST}/api/shopify/webhooks/customers/data_request` },
-    { topic: 'CUSTOMERS_REDACT', address: `${HOST}/api/shopify/webhooks/customers/redact` },
-    { topic: 'SHOP_REDACT', address: `${HOST}/api/shopify/webhooks/shop/redact` },
     { topic: 'APP_UNINSTALLED', address: `${HOST}/api/shopify/webhooks/app-uninstalled` },
   ];
 
@@ -648,18 +653,19 @@ export async function registerMandatoryWebhooks(
 
         const data = response.data as any;
         if (data?.webhookSubscriptionCreate?.userErrors?.length > 0) {
-          console.warn(`[Shopify Webhooks] Warning for ${webhook.topic}:`, data.webhookSubscriptionCreate.userErrors);
+          console.warn('[Shopify Webhook Register Failed]', {
+            shop,
+            topic: webhook.topic,
+            userErrors: data.webhookSubscriptionCreate.userErrors,
+          });
         } else {
-          console.log(`[Shopify Webhooks] Registered ${webhook.topic} webhook`);
+          console.log('[Shopify Webhook Register]', { shop, topic: webhook.topic, address: webhook.address });
         }
       } catch (webhookError) {
-        console.error(`[Shopify Webhooks] Failed to register ${webhook.topic}:`, webhookError);
+        console.error('[Shopify Webhook Register Failed]', { shop, topic: webhook.topic, error: webhookError });
       }
     }
-
-    return true;
   } catch (error) {
-    console.error('[Shopify Webhooks] Failed to register webhooks:', error);
-    return false;
+    console.error('[Shopify Webhook Register Failed]', { shop, error });
   }
 }
