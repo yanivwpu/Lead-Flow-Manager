@@ -342,7 +342,7 @@ router.get('/billing/callback', async (req: Request, res: Response) => {
           shopifyChargeId: subscription.id,
           shopifyAIBrainEnabled: true,
         });
-        return res.redirect(`/app?shopify_billing=success&plan=ai-brain`);
+        return res.redirect(`/app/inbox?shopify_billing=success&plan=ai-brain`);
       }
 
       // Map Shopify plan name → internal plan
@@ -360,14 +360,14 @@ router.get('/billing/callback', async (req: Request, res: Response) => {
         subscriptionStatus: 'active',
       });
 
-      return res.redirect(`/app?shopify_billing=success&plan=${internalPlan}`);
+      return res.redirect(`/app/inbox?shopify_billing=success&plan=${internalPlan}`);
     }
 
     await storage.updateUser(user.id, {
       shopifySubscriptionStatus: 'cancelled',
     });
 
-    res.redirect(`/app?shopify_billing=declined`);
+    res.redirect(`/app/inbox?shopify_billing=declined`);
   } catch (error) {
     console.error('Shopify billing callback error:', error);
     res.status(500).json({ error: 'Billing verification failed' });

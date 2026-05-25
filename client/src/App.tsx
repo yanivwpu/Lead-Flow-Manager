@@ -10,9 +10,14 @@ import { ShopifyBootstrapScreen } from "@/components/ShopifyBootstrapScreen";
 import { ShopifyBootstrapRoutes } from "@/components/ShopifyBootstrapRoutes";
 import {
   applyShopifyBootstrapDocumentFlags,
+  clearShopifyPlanPickerOpened,
+  clearShopifyPostInstallPricingPath,
+  SHOPIFY_PLAN_PICKER_OPENED_KEY,
+  isShopifyBillingSuccessReturn,
   isShopifyBootstrapDestinationReached,
   readShopifyBootstrapFromWindow,
   resolveShopifyBootstrapDestination,
+  shopifyPostApprovalInboxPath,
   shouldSuppressAppRoutes,
 } from "@/lib/shopifyBootstrap";
 
@@ -180,6 +185,42 @@ function Router() {
   );
 
   useLayoutEffect(() => {
+    if (authLoading || !user) return;
+
+    const path = window.location.pathname.replace(/\/$/, "") || "/";
+    const search = window.location.search;
+    const params = new URLSearchParams(search);
+
+    if (isShopifyBillingSuccessReturn(search)) {
+      clearShopifyPostInstallPricingPath();
+      clearShopifyPlanPickerOpened();
+      const inboxDest = shopifyPostApprovalInboxPath(search);
+      if (!path.startsWith("/app/inbox")) {
+        setLocation(inboxDest);
+      }
+      return;
+    }
+
+    if (bootstrap.active) return;
+
+    try {
+      if (sessionStorage.getItem(SHOPIFY_PLAN_PICKER_OPENED_KEY) !== "1") return;
+    } catch {
+      return;
+    }
+
+    if (params.get("shopify_installed") === "1") return;
+
+    if (path === "/" || path === "/pricing" || path.startsWith("/pricing/")) {
+      clearShopifyPostInstallPricingPath();
+      clearShopifyPlanPickerOpened();
+      if (!path.startsWith("/app/inbox")) {
+        setLocation("/app/inbox");
+      }
+    }
+  }, [authLoading, user, location, urlTick, bootstrap.active, setLocation]);
+
+  useLayoutEffect(() => {
     if (!bootstrap.active || authLoading || bootstrap.needsInstallRedirect) return;
 
     if (shouldSuppressAppRoutes(bootstrap)) {
@@ -187,7 +228,7 @@ function Router() {
     }
 
     if (!destinationReached) {
-      console.log("[ShopifyBootstrap] redirecting_to_pricing", {
+      console.log("[ShopifyBootstrap] redirecting", {
         from: `${window.location.pathname}${window.location.search}`,
         to: destination,
       });
@@ -214,6 +255,10 @@ function Router() {
   if (bootstrap.active) {
     if (authLoading || bootstrap.needsInstallRedirect || !destinationReached) {
       return <ShopifyBootstrapScreen />;
+    }
+
+    if (user && destination.startsWith("/app/inbox")) {
+      return <ProtectedRoute component={AppLayout} />;
     }
 
     return (

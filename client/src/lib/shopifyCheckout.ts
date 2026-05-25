@@ -2,6 +2,7 @@ import {
   getShopifyShopHint,
   resolveShopifyShopForCheckout,
 } from "@/lib/shopifyBillingHint";
+import { markShopifyPlanPickerOpened } from "@/lib/shopifyBootstrap";
 import {
   buildShopifyManagedPricingUrl,
   DEFAULT_SHOPIFY_APP_HANDLE,
@@ -49,6 +50,7 @@ export function shopifyBillingErrorMessage(
 }
 
 function navigateToShopifyAdmin(url: string): void {
+  markShopifyPlanPickerOpened();
   try {
     if (window.top && window.top !== window.self) {
       window.top.location.href = url;

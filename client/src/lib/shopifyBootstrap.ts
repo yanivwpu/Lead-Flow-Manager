@@ -1,6 +1,52 @@
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 
 const SHOPIFY_POST_INSTALL_STORAGE_KEY = "whachatcrm_shopify_post_install_pricing";
+/** Set when merchant leaves for Shopify plan picker; cleared on post-approval app entry. */
+export const SHOPIFY_PLAN_PICKER_OPENED_KEY = "whachatcrm_shopify_plan_picker_opened";
+
+export function isShopifyBillingSuccessReturn(
+  search: string = typeof window !== "undefined" ? window.location.search : "",
+): boolean {
+  return new URLSearchParams(search).get("shopify_billing") === "success";
+}
+
+export function shopifyPostApprovalInboxPath(
+  search: string = typeof window !== "undefined" ? window.location.search : "",
+): string {
+  const params = new URLSearchParams(search);
+  const plan = params.get("plan");
+  const q = new URLSearchParams();
+  q.set("shopify_billing", "success");
+  if (plan) q.set("plan", plan);
+  return `/app/inbox?${q.toString()}`;
+}
+
+function readPlanPickerOpened(): boolean {
+  if (typeof sessionStorage === "undefined") return false;
+  try {
+    return sessionStorage.getItem(SHOPIFY_PLAN_PICKER_OPENED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function markShopifyPlanPickerOpened(): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(SHOPIFY_PLAN_PICKER_OPENED_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearShopifyPlanPickerOpened(): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.removeItem(SHOPIFY_PLAN_PICKER_OPENED_KEY);
+  } catch {
+    /* ignore */
+  }
+}
 
 export type ShopifyBootstrapContext = {
   active: boolean;
@@ -165,6 +211,10 @@ export function isShopifyBootstrapDestinationReached(
   const params = new URLSearchParams(window.location.search);
   const current = `${path}${window.location.search}`;
 
+  if (isAuthenticated && (isShopifyBillingSuccessReturn() || readPlanPickerOpened())) {
+    return path === "/app/inbox" || path.startsWith("/app/inbox/");
+  }
+
   if (ctx.postInstallFlow || ctx.shopifyInstalled || ctx.persistedPostInstall) {
     const shopOk = !!normalizeShopifyShopDomain(params.get("shop"));
     const installedFlag = params.get("shopify_installed") === "1";
@@ -180,6 +230,21 @@ export function resolveShopifyBootstrapDestination(
   isAuthenticated: boolean,
   logRedirect = true,
 ): string {
+  if (isAuthenticated && isShopifyBillingSuccessReturn()) {
+    clearShopifyPostInstallPricingPath();
+    clearShopifyPlanPickerOpened();
+    return shopifyPostApprovalInboxPath();
+  }
+
+  if (isAuthenticated && readPlanPickerOpened()) {
+    clearShopifyPostInstallPricingPath();
+    clearShopifyPlanPickerOpened();
+    if (logRedirect) {
+      logBootstrap("redirecting_to_inbox_after_plan_picker");
+    }
+    return "/app/inbox";
+  }
+
   if (ctx.postInstallFlow || ctx.shopifyInstalled || ctx.persistedPostInstall || ctx.embedded) {
     if (logRedirect) {
       logBootstrap("redirecting_to_pricing", { pricingPath: ctx.pricingPath });
@@ -194,6 +259,9 @@ export function resolveShopifyBootstrapDestination(
 }
 
 export function shouldSuppressAppRoutes(ctx: ShopifyBootstrapContext): boolean {
+  if (isShopifyBillingSuccessReturn() || readPlanPickerOpened()) {
+    return false;
+  }
   return ctx.active && (ctx.postInstallFlow || ctx.shopifyInstalled || ctx.persistedPostInstall);
 }
 
