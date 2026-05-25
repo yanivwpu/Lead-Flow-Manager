@@ -14,6 +14,7 @@ import {
   clearShopifyPostInstallPricingPath,
   SHOPIFY_PLAN_PICKER_OPENED_KEY,
   isShopifyBillingSuccessReturn,
+  isShopifyPlanApprovalReturn,
   isShopifyBootstrapDestinationReached,
   readShopifyBootstrapFromWindow,
   resolveShopifyBootstrapDestination,
@@ -191,17 +192,48 @@ function Router() {
     const search = window.location.search;
     const params = new URLSearchParams(search);
 
-    if (isShopifyBillingSuccessReturn(search)) {
+    const enterInbox = (dest: string) => {
       clearShopifyPostInstallPricingPath();
       clearShopifyPlanPickerOpened();
-      const inboxDest = shopifyPostApprovalInboxPath(search);
       if (!path.startsWith("/app/inbox")) {
-        setLocation(inboxDest);
+        setLocation(dest);
       }
+    };
+
+    if (isShopifyPlanApprovalReturn(search)) {
+      const planHandle = params.get("plan_handle") || "";
+      const syncQs = planHandle
+        ? `?plan_handle=${encodeURIComponent(planHandle)}`
+        : "";
+      void fetch(`/api/shopify/billing/sync-return${syncQs}`, { credentials: "include" })
+        .then(async (res) => {
+          if (res.ok) {
+            const data = (await res.json()) as { redirectTo?: string };
+            enterInbox(
+              typeof data.redirectTo === "string"
+                ? data.redirectTo
+                : `/app/inbox?shopify_billing=success&plan=${encodeURIComponent(planHandle || "free")}`,
+            );
+            return;
+          }
+          enterInbox(
+            `/app/inbox?shopify_billing=success&plan=${encodeURIComponent(planHandle || "free")}`,
+          );
+        })
+        .catch(() => {
+          enterInbox(
+            `/app/inbox?shopify_billing=success&plan=${encodeURIComponent(planHandle || "free")}`,
+          );
+        });
       return;
     }
 
-    if (bootstrap.active) return;
+    if (isShopifyBillingSuccessReturn(search)) {
+      enterInbox(shopifyPostApprovalInboxPath(search));
+      return;
+    }
+
+    if (bootstrap.active && bootstrap.postInstallFlow) return;
 
     try {
       if (sessionStorage.getItem(SHOPIFY_PLAN_PICKER_OPENED_KEY) !== "1") return;
@@ -212,13 +244,17 @@ function Router() {
     if (params.get("shopify_installed") === "1") return;
 
     if (path === "/" || path === "/pricing" || path.startsWith("/pricing/")) {
-      clearShopifyPostInstallPricingPath();
-      clearShopifyPlanPickerOpened();
-      if (!path.startsWith("/app/inbox")) {
-        setLocation("/app/inbox");
-      }
+      enterInbox("/app/inbox");
     }
-  }, [authLoading, user, location, urlTick, bootstrap.active, setLocation]);
+  }, [
+    authLoading,
+    user,
+    location,
+    urlTick,
+    bootstrap.active,
+    bootstrap.postInstallFlow,
+    setLocation,
+  ]);
 
   useLayoutEffect(() => {
     if (!bootstrap.active || authLoading || bootstrap.needsInstallRedirect) return;
@@ -257,7 +293,10 @@ function Router() {
       return <ShopifyBootstrapScreen />;
     }
 
-    if (user && destination.startsWith("/app/inbox")) {
+    if (
+      user &&
+      (destination.startsWith("/app/inbox") || isShopifyPlanApprovalReturn(window.location.search))
+    ) {
       return <ProtectedRoute component={AppLayout} />;
     }
 

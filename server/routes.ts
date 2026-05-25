@@ -3600,8 +3600,7 @@ export async function registerRoutes(
               trialStartedAt: user.trialStartedAt,
               trialEndsAt: user.trialEndsAt,
               trialDaysRemaining: limits?.trialDaysRemaining ?? 0,
-              trialIncludesAIBrain:
-                isProAiTrialActive(user, now) && !user.shopifyShop,
+              trialIncludesAIBrain: isProAiTrialActive(user, now),
               trialPlan: user.trialPlan ?? null,
               isShopify,
               upgradeProvider: isShopify ? ("shopify" as const) : ("stripe" as const),

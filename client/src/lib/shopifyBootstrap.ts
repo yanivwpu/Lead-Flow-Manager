@@ -10,6 +10,20 @@ export function isShopifyBillingSuccessReturn(
   return new URLSearchParams(search).get("shopify_billing") === "success";
 }
 
+/** Shopify Managed Pricing redirects here with plan_handle after merchant approves a plan. */
+export function isShopifyPlanApprovalReturn(
+  search: string = typeof window !== "undefined" ? window.location.search : "",
+): boolean {
+  const handle = new URLSearchParams(search).get("plan_handle");
+  return !!(handle && handle.trim());
+}
+
+export function isShopifyPostApprovalReturn(
+  search: string = typeof window !== "undefined" ? window.location.search : "",
+): boolean {
+  return isShopifyBillingSuccessReturn(search) || isShopifyPlanApprovalReturn(search);
+}
+
 export function shopifyPostApprovalInboxPath(
   search: string = typeof window !== "undefined" ? window.location.search : "",
 ): string {
@@ -154,16 +168,19 @@ export function getShopifyBootstrapContext(
   const onHome = path === "/";
   const onApp = path === "/app" || path.startsWith("/app/");
 
+  const planApprovalReturn = isShopifyPlanApprovalReturn(search);
   const persisted = readPersistedPricingPath();
   const pricingPath = persisted ?? buildPricingPath(pathname, search, shop, shopifyInstalled, embedded);
 
-  if (shopifyInstalled) {
+  if (shopifyInstalled && !planApprovalReturn) {
     persistShopifyPostInstallPricingPath(pricingPath);
   }
 
-  const postInstallFlow = Boolean(
-    shopifyInstalled || persisted || (path === "/pricing" && (!!shop || shopifyInstalled)),
-  );
+  const postInstallFlow =
+    !planApprovalReturn &&
+    Boolean(
+      shopifyInstalled || persisted || (path === "/pricing" && (!!shop || shopifyInstalled)),
+    );
 
   const active = Boolean(
     postInstallFlow ||
@@ -211,7 +228,10 @@ export function isShopifyBootstrapDestinationReached(
   const params = new URLSearchParams(window.location.search);
   const current = `${path}${window.location.search}`;
 
-  if (isAuthenticated && (isShopifyBillingSuccessReturn() || readPlanPickerOpened())) {
+  if (
+    isAuthenticated &&
+    (isShopifyPostApprovalReturn() || readPlanPickerOpened())
+  ) {
     return path === "/app/inbox" || path.startsWith("/app/inbox/");
   }
 
@@ -230,10 +250,19 @@ export function resolveShopifyBootstrapDestination(
   isAuthenticated: boolean,
   logRedirect = true,
 ): string {
-  if (isAuthenticated && isShopifyBillingSuccessReturn()) {
+  if (isAuthenticated && isShopifyPostApprovalReturn()) {
     clearShopifyPostInstallPricingPath();
     clearShopifyPlanPickerOpened();
-    return shopifyPostApprovalInboxPath();
+    if (isShopifyBillingSuccessReturn()) {
+      return shopifyPostApprovalInboxPath();
+    }
+    const planHandle = new URLSearchParams(
+      typeof window !== "undefined" ? window.location.search : "",
+    ).get("plan_handle");
+    const q = new URLSearchParams();
+    q.set("shopify_billing", "success");
+    if (planHandle) q.set("plan", planHandle);
+    return `/app/inbox?${q.toString()}`;
   }
 
   if (isAuthenticated && readPlanPickerOpened()) {
@@ -259,7 +288,7 @@ export function resolveShopifyBootstrapDestination(
 }
 
 export function shouldSuppressAppRoutes(ctx: ShopifyBootstrapContext): boolean {
-  if (isShopifyBillingSuccessReturn() || readPlanPickerOpened()) {
+  if (isShopifyPostApprovalReturn() || readPlanPickerOpened()) {
     return false;
   }
   return ctx.active && (ctx.postInstallFlow || ctx.shopifyInstalled || ctx.persistedPostInstall);

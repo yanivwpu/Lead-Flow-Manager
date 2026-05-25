@@ -278,10 +278,13 @@ class SubscriptionService {
       }
       return { has: false, source: "none" };
     }
-    // Shopify App Store: AI Brain is a billed add-on — never infer it from the app's internal pro_ai trial alone.
     if (user.shopifyShop) {
       if (!!user.shopifyAIBrainEnabled) {
         return { has: true, source: "shopify" };
+      }
+      // Pro + AI trial (trial_plan pro_ai) applies to Shopify installs the same as direct signups.
+      if (isProAiTrialActive(user)) {
+        return { has: true, source: "trial" };
       }
       return { has: false, source: "none" };
     }

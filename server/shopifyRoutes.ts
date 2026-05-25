@@ -8,6 +8,7 @@ import {
   exchangeShopifyCode,
   createShopifyRgeOneTimePurchase,
   getActiveShopifySubscription,
+  syncShopifyBillingToUser,
   getAppPurchaseOneTimeStatus,
   shopifySessionMiddleware,
   registerMandatoryWebhooks,
@@ -214,6 +215,11 @@ router.get('/callback', async (req: Request, res: Response) => {
       shopifyAccessToken: accessToken,
       shopifyInstalledAt: new Date(),
       shopifySubscriptionStatus: 'pending',
+      shopifyChargeId: null,
+      billingPlan: 'free',
+      subscriptionPlan: 'free',
+      subscriptionStatus: 'active',
+      shopifyAIBrainEnabled: false,
     });
 
     const existingIntegration = await storage.getIntegrationByUserAndType(user.id, 'shopify');
@@ -325,42 +331,22 @@ router.get('/billing/callback', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Shop not found' });
     }
 
-    const subscription = await getActiveShopifySubscription(shop, user.shopifyAccessToken);
+    const planHandle =
+      typeof req.query.plan_handle === 'string' ? req.query.plan_handle.trim() : undefined;
 
-    if (subscription && subscription.status === 'ACTIVE') {
-      if (user.shopifyChargeId && subscription.id !== user.shopifyChargeId) {
-        console.warn(`Charge ID mismatch: expected ${user.shopifyChargeId}, got ${subscription.id}`);
-      }
+    const synced = await syncShopifyBillingToUser(
+      user.id,
+      shop,
+      user.shopifyAccessToken,
+      planHandle,
+    );
 
-      const name = subscription.name || '';
-      const isAIBrainAddon = name.includes('AI Brain');
-
-      if (isAIBrainAddon) {
-        // AI Brain add-on approval — do NOT overwrite the base plan
-        await storage.updateUser(user.id, {
-          shopifySubscriptionStatus: 'active',
-          shopifyChargeId: subscription.id,
-          shopifyAIBrainEnabled: true,
-        });
-        return res.redirect(`/app/inbox?shopify_billing=success&plan=ai-brain`);
-      }
-
-      // Map Shopify plan name → internal plan
-      let internalPlan: 'starter' | 'pro' = 'starter';
-      if (name.includes('Pro')) internalPlan = 'pro';
-      else if (name.includes('Starter')) internalPlan = 'starter';
-
-      await storage.updateUser(user.id, {
-        shopifySubscriptionStatus: 'active',
-        shopifyChargeId: subscription.id,
-        // keep legacy field in sync for UI/admin display
-        subscriptionPlan: internalPlan,
-        // billingPlan is the billing-derived plan (Shopify)
-        billingPlan: internalPlan,
-        subscriptionStatus: 'active',
-      });
-
-      return res.redirect(`/app/inbox?shopify_billing=success&plan=${internalPlan}`);
+    if (synced.ok) {
+      const planParam =
+        synced.aiBrainAddon && synced.billingPlan !== 'free'
+          ? 'ai-brain'
+          : synced.billingPlan;
+      return res.redirect(`/app/inbox?shopify_billing=success&plan=${encodeURIComponent(planParam)}`);
     }
 
     await storage.updateUser(user.id, {
@@ -466,7 +452,11 @@ router.post('/webhooks/app-uninstalled', async (req: Request, res: Response) => 
     try {
       await storage.updateUser(user.id, {
         shopifyAccessToken: null,
+        shopifyChargeId: null,
         shopifySubscriptionStatus: 'uninstalled',
+        shopifyAIBrainEnabled: false,
+        billingPlan: 'free',
+        subscriptionPlan: 'free',
         subscriptionStatus: 'canceled',
       });
       console.log('[Shopify Uninstall Cleanup]', { shop, userId: user.id, status: 'user_updated' });
@@ -510,12 +500,20 @@ router.post('/webhooks/subscription-update', async (req: Request, res: Response)
     const subscription = req.body;
     const user = await storage.getUserByShopifyShop(shop);
     
-    if (user) {
-      const status = subscription.status === 'ACTIVE' ? 'active' : 'cancelled';
-      await storage.updateUser(user.id, {
-        shopifySubscriptionStatus: status,
-        subscriptionStatus: status === 'active' ? 'active' : 'canceled',
-      });
+    if (user && user.shopifyAccessToken) {
+      const rawStatus = String(subscription?.status || '').toUpperCase();
+      if (rawStatus === 'ACTIVE') {
+        await syncShopifyBillingToUser(user.id, shop, user.shopifyAccessToken);
+      } else if (rawStatus === 'PENDING' || rawStatus === 'FROZEN') {
+        await storage.updateUser(user.id, {
+          shopifySubscriptionStatus: 'pending',
+        });
+      } else {
+        await storage.updateUser(user.id, {
+          shopifySubscriptionStatus: 'cancelled',
+          subscriptionStatus: 'canceled',
+        });
+      }
     }
 
     res.status(200).json({ received: true });
@@ -663,6 +661,41 @@ router.post('/webhooks/shop/redact', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('[Shopify Compliance] shop/redact error:', error);
     res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
+/** After Managed Pricing approval redirect (?plan_handle=) — sync Shopify → DB (session auth). */
+router.get('/billing/sync-return', async (req: Request, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const userId = (req.user as { id: string }).id;
+  const planHandle =
+    typeof req.query.plan_handle === 'string' ? req.query.plan_handle.trim() : undefined;
+
+  try {
+    const user = await storage.getUserForSession(userId);
+    if (!user?.shopifyShop || !user.shopifyAccessToken) {
+      return res.status(400).json({ error: 'Shopify shop not linked' });
+    }
+
+    const synced = await syncShopifyBillingToUser(
+      user.id,
+      user.shopifyShop,
+      user.shopifyAccessToken,
+      planHandle,
+    );
+
+    res.json({
+      ok: synced.ok,
+      billingPlan: synced.billingPlan,
+      shopifySubscriptionStatus: synced.shopifySubscriptionStatus,
+      redirectTo: `/app/inbox?shopify_billing=success&plan=${encodeURIComponent(synced.billingPlan)}`,
+    });
+  } catch (error) {
+    console.error('[ShopifyBilling] sync-return error:', error);
+    res.status(500).json({ error: 'Failed to sync Shopify subscription' });
   }
 });
 
