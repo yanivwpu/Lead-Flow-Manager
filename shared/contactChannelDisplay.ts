@@ -28,9 +28,10 @@ const MESSAGING_CHANNEL_ORDER: Channel[] = [
 ];
 
 export function isCommerceSourcedContact(contact: ContactChannelFields): boolean {
-  if (contact.source === "shopify") return true;
+  if (contact.source === "shopify" || contact.source === "woocommerce") return true;
   const cf = contact.customFields as Record<string, unknown> | null | undefined;
-  return cf?.lastCommerceSource === "shopify";
+  const src = cf?.lastCommerceSource;
+  return src === "shopify" || src === "woocommerce";
 }
 
 /**
@@ -43,6 +44,7 @@ function whatsappIsVerifiedMessaging(
 ): boolean {
   if (!contact.whatsappId) return false;
   if (!isCommerceSourcedContact(contact)) return true;
+  // Commerce imports may store phone on contact.phone only — never count as WhatsApp from phone alone.
   if (contact.lastIncomingChannel === "whatsapp") return true;
   return conversations?.some((c) => c.channel === "whatsapp") ?? false;
 }
@@ -83,7 +85,7 @@ export function getReachableMessagingChannels(
 export function getContactDisplayChannel(
   contact: ContactChannelFields,
   conversations?: ConversationChannelRef[],
-): Channel | "shopify" | null {
+): Channel | "shopify" | "woocommerce" | null {
   const reachable = getReachableMessagingChannels(contact, conversations);
   if (reachable.length > 0) {
     const override = contact.primaryChannelOverride as Channel | undefined;
@@ -98,7 +100,13 @@ export function getContactDisplayChannel(
     return reachable[0];
   }
 
-  if (isCommerceSourcedContact(contact)) return "shopify";
+  if (isCommerceSourcedContact(contact)) {
+    const cf = contact.customFields as Record<string, unknown> | null | undefined;
+    const last = cf?.lastCommerceSource;
+    if (last === "woocommerce" || contact.source === "woocommerce") return "woocommerce";
+    return "shopify";
+  }
+  if (conversations?.some((c) => c.channel === "woocommerce")) return "woocommerce";
   if (conversations?.some((c) => c.channel === "shopify")) return "shopify";
   return null;
 }
@@ -113,6 +121,7 @@ export const CONTACT_DISPLAY_CHANNEL_LABELS: Record<string, string> = {
   gohighlevel: "GoHighLevel",
   calendly: "Calendly",
   shopify: "Shopify",
+  woocommerce: "WooCommerce",
 };
 
 export function getContactDisplayChannelLabel(channel: string | null): string {

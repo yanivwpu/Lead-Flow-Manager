@@ -934,7 +934,7 @@ export type AgreementAcceptance = typeof agreementAcceptances.$inferSelect;
 // ============= MULTI-CHANNEL CRM SCHEMA =============
 
 // Channel enum - all supported messaging channels
-export const CHANNELS = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok', 'gohighlevel', 'calendly', 'shopify'] as const;
+export const CHANNELS = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok', 'gohighlevel', 'calendly', 'shopify', 'woocommerce'] as const;
 export type Channel = typeof CHANNELS[number];
 
 // Channel metadata for UI and logic
@@ -955,6 +955,7 @@ export const CHANNEL_INFO: Record<Channel, {
   gohighlevel: { label: 'GoHighLevel', icon: 'link-2', color: '#6366F1', isMessaging: true, supportsMedia: true },
   calendly: { label: 'Calendly', icon: 'calendar', color: '#006BFF', isMessaging: false, supportsMedia: false },
   shopify: { label: 'Shopify', icon: 'shopping-cart', color: '#96BF48', isMessaging: false, supportsMedia: false },
+  woocommerce: { label: 'WooCommerce', icon: 'shopping-cart', color: '#96588A', isMessaging: false, supportsMedia: false },
 };
 
 // Unified contacts table - one record per lead

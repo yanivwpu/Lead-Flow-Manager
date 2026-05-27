@@ -289,6 +289,7 @@ const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }
   gohighlevel: { icon: Zap, color: '#F97316', label: 'GoHighLevel' },
   calendly: { icon: Calendar, color: '#006BFF', label: 'Calendly' },
   shopify: { icon: ShoppingCart, color: '#96BF48', label: 'Shopify' },
+  woocommerce: { icon: ShoppingCart, color: '#96588A', label: 'WooCommerce' },
 };
 
 function contactHasWebchatReachability(
@@ -342,6 +343,7 @@ const SOURCE_LABELS: Record<string, string> = {
   telegram: 'Telegram',
   calendly: 'Calendly',
   shopify: 'Shopify',
+  woocommerce: 'WooCommerce',
 };
 
 const SOURCE_OPTIONS = [
@@ -504,7 +506,7 @@ export function UnifiedInbox() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
-  const allChannels: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok', 'calendly', 'shopify'];
+  const allChannels: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok', 'calendly', 'shopify', 'woocommerce'];
   const [selectedChannels, setSelectedChannels] = useState<Set<Channel>>(new Set(allChannels));
   const [messageInput, setMessageInput] = useState("");
   const isMobile = useIsMobile();

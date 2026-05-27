@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { TAG_COLORS } from "@/lib/data";
 
-type Channel = "whatsapp" | "instagram" | "facebook" | "sms" | "webchat" | "telegram" | "shopify";
+type Channel = "whatsapp" | "instagram" | "facebook" | "sms" | "webchat" | "telegram" | "shopify" | "woocommerce";
 
 /** Filter/stats key when contact has no messaging or commerce display channel */
 const DISPLAY_CHANNEL_NONE = "__none__";
@@ -60,6 +60,7 @@ const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }
   webchat: { icon: Globe, color: "#3B82F6", label: "Web Chat" },
   telegram: { icon: Send, color: "#0088CC", label: "Telegram" },
   shopify: { icon: ShoppingCart, color: "#96BF48", label: "Shopify" },
+  woocommerce: { icon: ShoppingCart, color: "#96588A", label: "WooCommerce" },
   [DISPLAY_CHANNEL_NONE]: { icon: Smartphone, color: "#9CA3AF", label: "No channel" },
 };
 

@@ -1,27 +1,37 @@
 /**
- * Commerce event ingest — contact + optional Shopify thread + activity + workflows.
- * Customer-only imports: empty thread ("No messages yet"), no chat lines.
- * Order/payment events: structured commerce message in the Shopify thread.
+ * Commerce event ingest — contact + commerce thread + activity + workflows.
+ * Shopify / WooCommerce: customer imports use empty threads; orders use structured commerce cards.
  */
 import type { Channel, Contact, Conversation, InsertMessage } from "@shared/schema";
 import { isCommerceSourcedContact } from "@shared/contactChannelDisplay";
 import { storage } from "./storage";
-import { channelService } from "./channelService";
 import { dispatchCommerceEventAutomation } from "./automationEventDispatcher";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
 import { notifyUser } from "./presence";
 
+export type CommerceSource = "shopify" | "woocommerce";
+
 export type CommerceWorkflowTrigger =
   | "shopify_order_created"
-  | "shopify_customer_created";
+  | "shopify_customer_created"
+  | "woocommerce_order_created"
+  | "woocommerce_customer_created";
 
-/** quiet_thread = contact + empty commerce thread; commerce_message = + inbox commerce line */
-export type CommerceRecordMode = "quiet_thread" | "commerce_message";
+/** quiet_thread = contact + empty commerce thread; commerce_message = + inbox card; activity_only = contact/thread + activity */
+export type CommerceRecordMode = "quiet_thread" | "commerce_message" | "activity_only";
+
+export type CommerceContactHints = {
+  name?: string;
+  email?: string;
+  phone?: string;
+  shopifyCustomerId?: string | number;
+  woocommerceCustomerId?: string | number;
+};
 
 export type CommerceIngestParams = {
   userId: string;
-  source: "shopify";
-  triggerType: CommerceWorkflowTrigger;
+  source: CommerceSource;
+  triggerType?: CommerceWorkflowTrigger;
   recordMode: CommerceRecordMode;
   /** Required when recordMode is commerce_message — used for messages.externalMessageId dedupe */
   externalMessageId?: string;
@@ -29,12 +39,7 @@ export type CommerceIngestParams = {
   messageBody?: string;
   activityEventType: string;
   metadata: Record<string, unknown>;
-  contactHints: {
-    name?: string;
-    email?: string;
-    phone?: string;
-    shopifyCustomerId?: string | number;
-  };
+  contactHints: CommerceContactHints;
 };
 
 export type CommerceIngestResult = {
@@ -60,17 +65,32 @@ function normalizeEmail(raw: string | undefined | null): string {
   return (raw || "").trim().toLowerCase();
 }
 
-function commerceChannelForSource(source: CommerceIngestParams["source"]): Channel {
-  if (source === "shopify") return "shopify";
-  return "shopify";
+function commerceChannelForSource(source: CommerceSource): Channel {
+  return source === "woocommerce" ? "woocommerce" : "shopify";
 }
 
-function commerceThreadKey(contact: Contact, hints: CommerceIngestParams["contactHints"]): string {
-  const shopifyId =
-    hints.shopifyCustomerId != null
-      ? String(hints.shopifyCustomerId)
-      : String((contact.customFields as Record<string, unknown> | null)?.shopifyCustomerId ?? "");
-  if (shopifyId) return `shopify:${shopifyId}`;
+function defaultCustomerName(source: CommerceSource): string {
+  return source === "woocommerce" ? "WooCommerce customer" : "Shopify customer";
+}
+
+function commerceThreadKey(
+  contact: Contact,
+  hints: CommerceContactHints,
+  source: CommerceSource,
+): string {
+  if (source === "woocommerce") {
+    const wooId =
+      hints.woocommerceCustomerId != null
+        ? String(hints.woocommerceCustomerId)
+        : String((contact.customFields as Record<string, unknown> | null)?.woocommerceCustomerId ?? "");
+    if (wooId) return `woocommerce:${wooId}`;
+  } else {
+    const shopifyId =
+      hints.shopifyCustomerId != null
+        ? String(hints.shopifyCustomerId)
+        : String((contact.customFields as Record<string, unknown> | null)?.shopifyCustomerId ?? "");
+    if (shopifyId) return `shopify:${shopifyId}`;
+  }
   const email = normalizeEmail(hints.email || contact.email);
   if (email.includes("@")) return `email:${email}`;
   const phone = normalizePhone(hints.phone || contact.phone);
@@ -80,12 +100,15 @@ function commerceThreadKey(contact: Contact, hints: CommerceIngestParams["contac
 
 async function findContactForCommerceHints(
   userId: string,
-  hints: CommerceIngestParams["contactHints"],
+  hints: CommerceContactHints,
+  source: CommerceSource,
 ): Promise<Contact | undefined> {
-  const phoneDigits = normalizePhone(hints.phone);
-  if (phoneDigits.length >= 8) {
-    const byPhone = await storage.getContactByChannelId(userId, "whatsapp", phoneDigits);
-    if (byPhone) return byPhone;
+  if (source !== "woocommerce") {
+    const phoneDigits = normalizePhone(hints.phone);
+    if (phoneDigits.length >= 8) {
+      const byPhone = await storage.getContactByChannelId(userId, "whatsapp", phoneDigits);
+      if (byPhone) return byPhone;
+    }
   }
 
   const email = normalizeEmail(hints.email);
@@ -94,12 +117,22 @@ async function findContactForCommerceHints(
     if (byEmail) return byEmail;
   }
 
-  const shopifyId = hints.shopifyCustomerId != null ? String(hints.shopifyCustomerId) : "";
-  if (shopifyId) {
+  if (hints.shopifyCustomerId != null) {
+    const shopifyId = String(hints.shopifyCustomerId);
     const all = await storage.getContacts(userId, 2000);
     const hit = all.find((c) => {
       const cf = (c.customFields || {}) as Record<string, unknown>;
       return cf.shopifyCustomerId != null && String(cf.shopifyCustomerId) === shopifyId;
+    });
+    if (hit) return hit;
+  }
+
+  if (hints.woocommerceCustomerId != null) {
+    const wooId = String(hints.woocommerceCustomerId);
+    const all = await storage.getContacts(userId, 2000);
+    const hit = all.find((c) => {
+      const cf = (c.customFields || {}) as Record<string, unknown>;
+      return cf.woocommerceCustomerId != null && String(cf.woocommerceCustomerId) === wooId;
     });
     if (hit) return hit;
   }
@@ -109,28 +142,39 @@ async function findContactForCommerceHints(
 
 async function upsertCommerceContact(
   userId: string,
-  hints: CommerceIngestParams["contactHints"],
+  hints: CommerceContactHints,
   metadata: Record<string, unknown>,
+  source: CommerceSource,
 ): Promise<{ contact: Contact; created: boolean }> {
-  const existing = await findContactForCommerceHints(userId, hints);
+  const existing = await findContactForCommerceHints(userId, hints, source);
   const phoneDigits = normalizePhone(hints.phone);
   const email = normalizeEmail(hints.email);
-  const name = (hints.name || "").trim() || email || phoneDigits || "Shopify customer";
+  const fallbackName = defaultCustomerName(source);
+  const name = (hints.name || "").trim() || email || phoneDigits || fallbackName;
   const shopifyCustomerId =
     hints.shopifyCustomerId != null ? String(hints.shopifyCustomerId) : undefined;
+  const woocommerceCustomerId =
+    hints.woocommerceCustomerId != null ? String(hints.woocommerceCustomerId) : undefined;
+  const commerceChannel = commerceChannelForSource(source);
 
-  const commerceCustom = {
-    shopifyCustomerId: shopifyCustomerId ?? (existing?.customFields as any)?.shopifyCustomerId,
+  const commerceCustom: Record<string, unknown> = {
+    shopifyCustomerId:
+      shopifyCustomerId ?? (existing?.customFields as Record<string, unknown> | null)?.shopifyCustomerId,
+    woocommerceCustomerId:
+      woocommerceCustomerId ??
+      (existing?.customFields as Record<string, unknown> | null)?.woocommerceCustomerId,
     commerceThreadKey: existing
-      ? commerceThreadKey(existing, hints)
-      : hints.shopifyCustomerId != null
-        ? `shopify:${String(hints.shopifyCustomerId)}`
-        : normalizeEmail(hints.email)
-          ? `email:${normalizeEmail(hints.email)}`
-          : normalizePhone(hints.phone)
-            ? `phone:${normalizePhone(hints.phone)}`
-            : "pending",
-    lastCommerceSource: "shopify",
+      ? commerceThreadKey(existing, hints, source)
+      : woocommerceCustomerId != null
+        ? `woocommerce:${woocommerceCustomerId}`
+        : shopifyCustomerId != null
+          ? `shopify:${shopifyCustomerId}`
+          : normalizeEmail(hints.email)
+            ? `email:${normalizeEmail(hints.email)}`
+            : normalizePhone(hints.phone)
+              ? `phone:${normalizePhone(hints.phone)}`
+              : "pending",
+    lastCommerceSource: source,
     lastCommerceAt: new Date().toISOString(),
     lastCommerceMetadata: metadata,
   };
@@ -145,10 +189,10 @@ async function upsertCommerceContact(
     if (phoneDigits.length >= 8 && !existing.phone) {
       patch.phone = phoneDigits;
     }
-    if (isCommerceSourcedContact(existing) || shopifyCustomerId) {
-      patch.primaryChannel = "shopify";
+    if (isCommerceSourcedContact(existing) || shopifyCustomerId || woocommerceCustomerId) {
+      patch.primaryChannel = commerceChannel;
     }
-    if (name && (existing.name === "Shopify customer" || !existing.name?.trim())) {
+    if (name && (existing.name === fallbackName || !existing.name?.trim())) {
       patch.name = name;
     }
     const updated = await storage.updateContact(existing.id, patch);
@@ -160,9 +204,12 @@ async function upsertCommerceContact(
     name,
     email: email || undefined,
     phone: phoneDigits.length >= 8 ? phoneDigits : undefined,
-    primaryChannel: "shopify",
-    source: "shopify",
-    sourceDetails: { shopifyCustomerId },
+    primaryChannel: commerceChannel,
+    source,
+    sourceDetails:
+      source === "woocommerce"
+        ? { woocommerceCustomerId }
+        : { shopifyCustomerId },
     customFields: commerceCustom,
   });
   return { contact: created, created: true };
@@ -171,11 +218,11 @@ async function upsertCommerceContact(
 async function ensureCommerceConversation(
   userId: string,
   contact: Contact,
-  source: CommerceIngestParams["source"],
-  hints: CommerceIngestParams["contactHints"],
+  source: CommerceSource,
+  hints: CommerceContactHints,
 ): Promise<{ conversation: Conversation; created: boolean }> {
   const channel = commerceChannelForSource(source);
-  const threadKey = commerceThreadKey(contact, hints);
+  const threadKey = commerceThreadKey(contact, hints, source);
   let conversation = await storage.getConversationByContactAndChannel(contact.id, channel);
   if (conversation) {
     return { conversation, created: false };
@@ -264,6 +311,47 @@ export function formatShopifyOrderCreatedMessage(body: {
     .trim();
 }
 
+export function formatWooCommerceOrderCreatedMessage(body: {
+  orderNumber?: string;
+  orderId?: string;
+  lineItems?: Array<{ name?: string; quantity?: number }>;
+  total?: string;
+  currency?: string;
+  status?: string;
+}): string {
+  const orderLabel =
+    body.orderNumber != null && body.orderNumber !== ""
+      ? `#${body.orderNumber}`
+      : body.orderId
+        ? `#${body.orderId}`
+        : "New order";
+  const lines = (body.lineItems || [])
+    .slice(0, 20)
+    .map((li) => `• ${li.name ?? "Item"} ×${li.quantity ?? 1}`);
+  const total =
+    body.total != null && body.total !== ""
+      ? `${body.currency ? `${body.currency} ` : ""}${body.total}`.trim()
+      : "";
+  const status = body.status
+    ? body.status.charAt(0).toUpperCase() + body.status.slice(1).replace(/-/g, " ")
+    : "";
+
+  return [
+    "🛒 WooCommerce Order Created",
+    "",
+    `Order ${orderLabel}`,
+    lines.length ? "Items:" : "",
+    ...lines,
+    "",
+    total ? `Total: ${total}` : "",
+    status ? `Status: ${status}` : "",
+  ]
+    .filter((line, i, arr) => line !== "" || (i > 0 && arr[i - 1] !== ""))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export async function ingestCommerceEvent(params: CommerceIngestParams): Promise<CommerceIngestResult> {
   const {
     userId,
@@ -280,7 +368,7 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
   logCommerce("received", {
     userId,
     source,
-    triggerType,
+    triggerType: triggerType || null,
     recordMode,
     externalMessageId: externalMessageId || null,
   });
@@ -298,6 +386,7 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
       userId,
       contactHints,
       metadata,
+      source,
     );
 
     logCommerce("contact_resolved", {
@@ -318,7 +407,7 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
       contactId: contact.id,
       conversationId: conversation.id,
       conversationCreated,
-      empty: recordMode === "quiet_thread",
+      empty: recordMode === "quiet_thread" || recordMode === "activity_only",
     });
 
     let messageId: string | undefined;
@@ -345,35 +434,41 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
       });
     }
 
+    const sourceLabel = source === "woocommerce" ? "WooCommerce" : "Shopify";
     const activitySummary =
       recordMode === "commerce_message"
-        ? messageBody?.split("\n").find((l) => l.trim())?.slice(0, 500) || triggerType
-        : `Shopify customer ${contactCreated ? "imported" : "updated"}`;
+        ? messageBody?.split("\n").find((l) => l.trim())?.slice(0, 500) || activityEventType
+        : recordMode === "activity_only"
+          ? `${sourceLabel} ${activityEventType.replace(/_/g, " ")}`
+          : `${sourceLabel} customer ${contactCreated ? "imported" : "updated"}`;
 
+    const { channelService } = await import("./channelService");
     await channelService.logActivity(userId, contact.id, conversation.id, activityEventType, {
       source,
-      triggerType,
+      triggerType: triggerType || null,
       recordMode,
       summary: activitySummary,
       externalMessageId: externalMessageId || null,
       ...metadata,
     });
 
-    dispatchCommerceEventAutomation({
-      userId,
-      triggerType,
-      contact,
-      conversationId: conversation.id,
-      summaryText: activitySummary,
-      metadata,
-      contactCreated,
-    }).catch((err) => {
-      logCommerce("workflow_dispatch_error", {
+    if (triggerType && recordMode !== "activity_only") {
+      dispatchCommerceEventAutomation({
         userId,
         triggerType,
-        error: err instanceof Error ? err.message : String(err),
+        contact,
+        conversationId: conversation.id,
+        summaryText: activitySummary,
+        metadata,
+        contactCreated,
+      }).catch((err) => {
+        logCommerce("workflow_dispatch_error", {
+          userId,
+          triggerType,
+          error: err instanceof Error ? err.message : String(err),
+        });
       });
-    });
+    }
 
     scheduleHubSpotAutoSync(userId, contact.id);
 
@@ -381,7 +476,7 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
       userId,
       contactId: contact.id,
       conversationId: conversation.id,
-      triggerType,
+      triggerType: triggerType || null,
       recordMode,
     });
 
@@ -394,7 +489,7 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
     };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    logCommerce("failed", { userId, triggerType, error });
+    logCommerce("failed", { userId, triggerType: triggerType || null, error });
     return { ok: false, error };
   }
 }

@@ -178,6 +178,7 @@ const NO_COMPRESS_PATH_PREFIXES = [
   "/api/webhook/meta",
   "/api/shopify/webhooks",
   "/api/webhooks/calendly",
+  "/api/webhooks/woocommerce",
 ];
 
 app.use(compression({
@@ -255,6 +256,13 @@ app.use('/api/webhooks/calendly', express.json({
   }
 }));
 
+app.use('/api/webhooks/woocommerce', express.json({
+  type: "*/*",
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+
 // Do NOT run the global JSON parser on /api/webhook/meta — a second parse can
 // consume an already-read stream and replace req.body with {}, breaking HMAC + routing.
 const globalJsonParser = express.json();
@@ -265,6 +273,9 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   if (req.path.startsWith("/api/webhooks/calendly")) {
     return next();
   }
+  if (req.path.startsWith("/api/webhooks/woocommerce")) {
+    return next();
+  }
   return globalJsonParser(req, _res, next);
 });
 const globalUrlencodedParser = express.urlencoded({ extended: false });
@@ -273,6 +284,9 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
     return next();
   }
   if (req.path.startsWith("/api/webhooks/calendly")) {
+    return next();
+  }
+  if (req.path.startsWith("/api/webhooks/woocommerce")) {
     return next();
   }
   return globalUrlencodedParser(req, _res, next);

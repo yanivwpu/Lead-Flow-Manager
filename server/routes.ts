@@ -141,6 +141,7 @@ import {
   verifyWooCommerceRestCredentials,
   fetchWooCommerceSampleOrders,
 } from "./woocommerceIntegration";
+import { createWooCommerceWebhookHandler } from "./woocommerceWebhook";
 import {
   calendlyCreateWebhookSubscription,
   calendlyDeleteWebhookSubscription,
@@ -6419,17 +6420,29 @@ export async function registerRoutes(
           return res.status(400).json({ error: "Invalid credentials or store URL" });
         }
 
+        const userIntegrations = await storage.getIntegrations(req.user.id);
+        const existingWoo = userIntegrations.find((i) => i.type === "woocommerce");
+        const priorCfg =
+          existingWoo?.config && typeof existingWoo.config === "object"
+            ? decryptIntegrationConfig(existingWoo.config as Record<string, any>)
+            : {};
+        const webhookSecret =
+          typeof priorCfg.webhookSecret === "string" && priorCfg.webhookSecret.trim()
+            ? priorCfg.webhookSecret.trim()
+            : crypto.randomBytes(32).toString("hex");
+        const syncOptions = Array.isArray(priorCfg.syncOptions) && priorCfg.syncOptions.length
+          ? priorCfg.syncOptions
+          : ["new_orders", "new_customers"];
+
         const plainConfig: Record<string, unknown> = {
           storeUrl: normalizedUrl,
           consumerKey: ck,
           consumerSecret: cs,
+          webhookSecret,
           status: "connected",
-          syncOptions: [],
+          syncOptions,
         };
         const encryptedConfig = encryptIntegrationConfig(plainConfig as Record<string, any>);
-
-        const userIntegrations = await storage.getIntegrations(req.user.id);
-        const existingWoo = userIntegrations.find((i) => i.type === "woocommerce");
         let row;
         if (existingWoo) {
           row = await storage.updateIntegration(existingWoo.id, {
@@ -6467,6 +6480,10 @@ export async function registerRoutes(
           ok: true,
           integration: safe,
           sampleOrders,
+          webhook: {
+            url: `${getAppOrigin()}/api/webhooks/woocommerce/${req.user.id}`,
+            secret: webhookSecret,
+          },
         });
       } catch (err: any) {
         console.error("[WooCommerce Connect] upstream or save error");
@@ -6479,6 +6496,11 @@ export async function registerRoutes(
       return res.status(500).json({ error: err?.message ?? "Unexpected error" });
     }
   });
+
+  app.post(
+    "/api/webhooks/woocommerce/:userId",
+    createWooCommerceWebhookHandler(decryptIntegrationConfig),
+  );
 
   // ─── TikTok Test Lead ──────────────────────────────────────────────────────
   // Creates a mock TikTok lead for the authenticated user so they can verify

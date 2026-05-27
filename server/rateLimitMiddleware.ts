@@ -7,6 +7,7 @@ export const WEBHOOK_RATE_LIMIT_EXCLUDED_PREFIXES = [
   "/api/stripe/webhook",
   "/api/shopify/webhooks",
   "/api/webhooks/calendly",
+  "/api/webhooks/woocommerce",
 ] as const;
 
 export function isWebhookPath(path: string): boolean {
