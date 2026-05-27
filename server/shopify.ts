@@ -770,11 +770,23 @@ export async function registerMandatoryWebhooks(
         });
 
         const data = response.data as any;
-        if (data?.webhookSubscriptionCreate?.userErrors?.length > 0) {
+        const userErrors = data?.webhookSubscriptionCreate?.userErrors ?? [];
+        const onlyAlreadyRegistered =
+          userErrors.length > 0 &&
+          userErrors.every((err: { message?: string }) =>
+            /already been taken/i.test(String(err?.message || '')),
+          );
+        if (onlyAlreadyRegistered) {
+          console.log('[Shopify Webhook Register] already_registered', {
+            shop,
+            topic: webhook.topic,
+            address: webhook.address,
+          });
+        } else if (userErrors.length > 0) {
           console.warn('[Shopify Webhook Register Failed]', {
             shop,
             topic: webhook.topic,
-            userErrors: data.webhookSubscriptionCreate.userErrors,
+            userErrors,
           });
         } else {
           console.log('[Shopify Webhook Register]', { shop, topic: webhook.topic, address: webhook.address });

@@ -191,7 +191,11 @@ function Router() {
       .then((res) => (res.ok ? res.json() : null))
       .then((me) => {
         if (cancelled) return;
-        setShopifyPlanGate(shopifyMerchantNeedsPlanSelection(me));
+        setShopifyPlanGate(
+          shopifyMerchantNeedsPlanSelection(me, {
+            isFreshInstallRedirect: bootstrap.shopifyInstalled,
+          }),
+        );
       })
       .catch(() => {
         if (!cancelled) setShopifyPlanGate(true);
@@ -200,7 +204,7 @@ function Router() {
     return () => {
       cancelled = true;
     };
-  }, [bootstrap.active, user, urlTick]);
+  }, [bootstrap.active, bootstrap.shopifyInstalled, user, urlTick]);
 
   const destination = useMemo(
     () => resolveShopifyBootstrapDestination(bootstrap, !!user, true, shopifyPlanGate),

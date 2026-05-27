@@ -25,6 +25,10 @@ import {
 } from './shopifyManagedPricing';
 import { SHOPIFY_MANAGED_PRICING_INSTRUCTIONS } from '@shared/shopifyManagedPricing';
 import {
+  shopifyMerchantHasUsableAppAccess,
+  shopifyMerchantIsFirstTokenInstall,
+} from '@shared/shopifyLaunchRouting';
+import {
   processShopifyCustomerCreate,
   processShopifyOrderCreate,
   scheduleShopifyCommerceProcessing,
@@ -217,13 +221,15 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     const priorShopifyStatus = (user.shopifySubscriptionStatus || '').toLowerCase();
     const shopAlreadyActive = priorShopifyStatus === 'active';
+    const firstTokenInstall = shopifyMerchantIsFirstTokenInstall(user);
+    const usableAppAccess = shopifyMerchantHasUsableAppAccess(user);
 
     const installPatch: Parameters<typeof storage.updateUser>[1] = {
       shopifyShop: shop,
       shopifyAccessToken: accessToken,
       shopifyInstalledAt: user.shopifyInstalledAt ?? new Date(),
     };
-    if (!shopAlreadyActive) {
+    if (!shopAlreadyActive && (firstTokenInstall || !usableAppAccess)) {
       Object.assign(installPatch, {
         shopifySubscriptionStatus: 'pending',
         shopifyChargeId: null,
@@ -264,7 +270,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       (req as any).login(user, (err: unknown) => (err ? reject(err) : resolve()));
     });
 
-    if (shopAlreadyActive) {
+    if (shopAlreadyActive || (usableAppAccess && !firstTokenInstall)) {
       return res.redirect('/app/inbox');
     }
 
