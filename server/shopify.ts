@@ -729,6 +729,9 @@ export async function registerMandatoryWebhooks(
 
   const webhookEndpoints = [
     { topic: 'APP_UNINSTALLED', address: `${HOST}/api/shopify/webhooks/app-uninstalled` },
+    { topic: 'CUSTOMERS_CREATE', address: `${HOST}/api/shopify/webhooks/customers-create` },
+    // ORDERS_CREATE requires read_orders + protected customer data approval — register when scopes expand.
+    { topic: 'ORDERS_CREATE', address: `${HOST}/api/shopify/webhooks/orders-create` },
   ];
 
   try {

@@ -787,6 +787,47 @@ export async function triggerNewChatWorkflows(
   }
 }
 
+/** Shopify / Woo / Stripe commerce triggers (V1 — server-side trigger_type values). */
+export async function triggerCommerceEventWorkflows(
+  userId: string,
+  triggerType: string,
+  chat: Chat,
+  contact?: Contact,
+  conversationId?: string,
+  triggerData?: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const limits = await subscriptionService.getUserLimits(userId);
+    if (!limits?.workflowsEnabled) {
+      console.log(
+        `[Workflow] Skipping ${triggerType} — plan does not include automations for user ${userId}`,
+      );
+      return;
+    }
+    const workflows = await storage.getActiveWorkflowsByTrigger(userId, triggerType);
+    console.log(
+      JSON.stringify({
+        tag: "[CommerceIngest]",
+        event: "workflow_dispatch",
+        userId,
+        triggerType,
+        workflowCount: workflows.length,
+      }),
+    );
+    for (const workflow of workflows) {
+      await executeWorkflowActions(
+        workflow,
+        chat,
+        { trigger: triggerType, ...(triggerData || {}) },
+        contact,
+        conversationId,
+      );
+    }
+  } catch (error) {
+    console.error(`Error triggering ${triggerType} workflows:`, error);
+  }
+}
+
 async function finalizeW3CalendlyWorkflowRun(
   workflow: Workflow,
   chat: Chat,

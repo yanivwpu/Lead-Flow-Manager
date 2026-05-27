@@ -2,11 +2,13 @@ import type { Chat, Contact } from "@shared/schema";
 import { storage } from "./storage";
 import { findOrCreateChatByPhone } from "./userTwilio";
 import {
+  triggerCommerceEventWorkflows,
   triggerKeywordWorkflows,
   triggerNewChatWorkflows,
   triggerPipelineChangeWorkflows,
   triggerTagChangeWorkflows,
 } from "./workflowEngine";
+import type { CommerceWorkflowTrigger } from "./commerceEventPipeline";
 
 const DEDUP_TTL_MS = 3_000;
 const recentAutomationKeys = new Map<string, number>();
@@ -138,6 +140,42 @@ export type InboundMessagingAutomationParams = {
   /** When true, skip keyword workflows (e.g. chatbot owns reply) */
   skipKeywordWorkflows?: boolean;
 };
+
+export type CommerceEventAutomationParams = {
+  userId: string;
+  triggerType: CommerceWorkflowTrigger;
+  contact: Contact;
+  conversationId?: string;
+  summaryText: string;
+  metadata: Record<string, unknown>;
+  contactCreated?: boolean;
+};
+
+/** Commerce webhooks (Shopify/Woo/Stripe) — dedicated workflow trigger types only. */
+export async function dispatchCommerceEventAutomation(
+  params: CommerceEventAutomationParams,
+): Promise<void> {
+  const { userId, triggerType, contact, conversationId, summaryText, metadata, contactCreated } = params;
+  const chat = await resolveLegacyChatForContact(contact, userId);
+  if (!chat) {
+    console.log(
+      JSON.stringify({
+        tag: "[AutomationDispatcher]",
+        event: "commerce_workflow_skipped",
+        reason: "no_legacy_chat",
+        userId,
+        triggerType,
+        contactId: contact.id,
+      }),
+    );
+    return;
+  }
+  await triggerCommerceEventWorkflows(userId, triggerType, chat, contact, conversationId, {
+    inboundText: summaryText,
+    metadata,
+    contactCreated: !!contactCreated,
+  });
+}
 
 /** Central entry for inbound-driven CRM workflow triggers (new_chat + keyword). */
 export async function dispatchInboundMessagingAutomation(

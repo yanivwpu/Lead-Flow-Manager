@@ -21,6 +21,11 @@ api_version = "2026-01"
   uri = "https://app.whachatcrm.com/api/shopify/webhooks/shop/redact"
   compliance_topics = [ "shop/redact" ]
 
+  # Commerce V1 — customers/create works with read_customers; orders/create needs read_orders (handler ready).
+  [[webhooks.subscriptions]]
+  topics = [ "customers/create" ]
+  uri = "https://app.whachatcrm.com/api/shopify/webhooks/customers-create"
+
 [access_scopes]
 # Kept in sync with server/shopify.ts
 scopes = "read_customers"

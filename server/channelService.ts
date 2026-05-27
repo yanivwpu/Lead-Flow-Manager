@@ -895,6 +895,8 @@ class ChannelService {
      * instead of creating a duplicate Calendly-only contact.
      */
     preferredContactId?: string;
+    /** Commerce mirror on existing messaging threads — skips chatbot, keyword workflows, AI handoff, auto-reply. */
+    inboundMode?: "commerce";
   }): Promise<InboundProcessingResult> {
     const {
       userId,
@@ -909,7 +911,9 @@ class ChannelService {
       telegramMedia,
       attachmentType,
       preferredContactId,
+      inboundMode,
     } = params;
+    const isCommerceInbound = inboundMode === "commerce";
     let { channelContactId, contactName } = params;
     const inboundErrors: InboundProcessingResult["errors"] = [];
 
@@ -1147,18 +1151,39 @@ class ChannelService {
     });
     console.log(`[Inbound] Conversation/thread updated — conversationId: ${conversation.id}, unreadCount: ${(conversation.unreadCount || 0) + 1}, preview: "${content.substring(0, 60)}"`);
 
-    notifyUser(userId, {
-      type: 'new_message',
-      conversationId: conversation.id,
-      contactId: contact.id,
-      ...(shouldNotifyReplyWindowReopened ? { replyWindowReopened: true } : {}),
-    });
+    if (!isCommerceInbound) {
+      notifyUser(userId, {
+        type: 'new_message',
+        conversationId: conversation.id,
+        contactId: contact.id,
+        ...(shouldNotifyReplyWindowReopened ? { replyWindowReopened: true } : {}),
+      });
+    }
 
     await this.logActivity(userId, contact.id, conversation.id, 'message', {
       direction: 'inbound',
       channel,
       preview: content.substring(0, 100),
     });
+
+    if (isCommerceInbound) {
+      return buildInboundResult({
+        success: true,
+        contact,
+        conversation,
+        message,
+        workflowState: { status: "skipped", reason: "commerce_inbound" },
+        chatbotState: { status: "skipped", reason: "commerce_inbound", willFire: false },
+        automationState: { status: "skipped", reason: "commerce_inbound" },
+        created: { contact: contactCreated, conversation: isNewConversation, message: true },
+        updated: { contact: true, conversation: true, message: false },
+        channel,
+        sourceEventId: externalMessageId || null,
+        errors: inboundErrors,
+        isNewConversation,
+        chatbotWillFire: false,
+      });
+    }
 
     // ── Human handoff (conversation-level) ───────────────────────────────────
     // Runs immediately on inbound message receipt so it can override any AI work

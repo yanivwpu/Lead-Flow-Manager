@@ -24,6 +24,11 @@ import {
   respondSessionManagedPricing,
 } from './shopifyManagedPricing';
 import { SHOPIFY_MANAGED_PRICING_INSTRUCTIONS } from '@shared/shopifyManagedPricing';
+import {
+  processShopifyCustomerCreate,
+  processShopifyOrderCreate,
+  scheduleShopifyCommerceProcessing,
+} from './shopifyCommerceWebhooks';
 
 const router = Router();
 
@@ -662,6 +667,56 @@ router.post('/webhooks/shop/redact', async (req: Request, res: Response) => {
     console.error('[Shopify Compliance] shop/redact error:', error);
     res.status(500).json({ error: 'Webhook processing failed' });
   }
+});
+
+function verifyShopifyCommerceWebhook(req: Request, res: Response): { shop: string; body: Record<string, unknown> } | null {
+  const hmac = req.headers['x-shopify-hmac-sha256'] as string;
+  const shop = req.headers['x-shopify-shop-domain'] as string;
+  if (!hmac || !shop) {
+    res.status(401).json({ error: 'Missing webhook headers' });
+    return null;
+  }
+  const rawBody = (req as { rawBody?: Buffer }).rawBody || Buffer.from(JSON.stringify(req.body ?? {}));
+  if (!verifyWebhookHmac(rawBody, hmac)) {
+    console.log(JSON.stringify({ tag: '[CommerceIngest]', event: 'shopify_hmac_invalid', shop }));
+    res.status(401).json({ error: 'Invalid webhook signature' });
+    return null;
+  }
+  return { shop, body: (req.body || {}) as Record<string, unknown> };
+}
+
+router.post('/webhooks/orders-create', (req: Request, res: Response) => {
+  const verified = verifyShopifyCommerceWebhook(req, res);
+  if (!verified) return;
+  const topic = req.headers['x-shopify-topic'];
+  console.log(
+    JSON.stringify({
+      tag: '[CommerceIngest]',
+      event: 'shopify_webhook_received',
+      topic: topic || 'orders/create',
+      shop: verified.shop,
+    }),
+  );
+  scheduleShopifyCommerceProcessing(req, res, verified.shop, () =>
+    processShopifyOrderCreate(req, verified.shop, verified.body as Parameters<typeof processShopifyOrderCreate>[2]),
+  );
+});
+
+router.post('/webhooks/customers-create', (req: Request, res: Response) => {
+  const verified = verifyShopifyCommerceWebhook(req, res);
+  if (!verified) return;
+  const topic = req.headers['x-shopify-topic'];
+  console.log(
+    JSON.stringify({
+      tag: '[CommerceIngest]',
+      event: 'shopify_webhook_received',
+      topic: topic || 'customers/create',
+      shop: verified.shop,
+    }),
+  );
+  scheduleShopifyCommerceProcessing(req, res, verified.shop, () =>
+    processShopifyCustomerCreate(req, verified.shop, verified.body as Parameters<typeof processShopifyCustomerCreate>[2]),
+  );
 });
 
 /** After Managed Pricing approval redirect (?plan_handle=) — sync Shopify → DB (session auth). */
