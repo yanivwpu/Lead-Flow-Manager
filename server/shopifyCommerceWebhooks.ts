@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { storage } from "./storage";
-import { ingestCommerceEvent } from "./commerceEventPipeline";
+import { formatShopifyOrderCreatedMessage, ingestCommerceEvent } from "./commerceEventPipeline";
 
 type ShopifyOrderPayload = {
   id?: number | string;
@@ -96,24 +96,22 @@ export async function processShopifyOrderCreate(
     customerName(customer) ||
     customerName({ first_name: body.email?.split("@")[0] }) ||
     "Shopify customer";
-  const lineSummary = (body.line_items || [])
-    .slice(0, 5)
-    .map((li) => `${li.quantity ?? 1}× ${li.title ?? "Item"}`)
-    .join(", ");
-  const summaryText = [
-    `Shopify order ${body.name || orderId || "new"}`,
-    body.total_price ? `${body.currency || ""} ${body.total_price}`.trim() : "",
-    lineSummary,
-  ]
-    .filter(Boolean)
-    .join(" — ");
+  const messageBody = formatShopifyOrderCreatedMessage({
+    orderName: body.name,
+    orderId,
+    lineItems: body.line_items,
+    totalPrice: body.total_price,
+    currency: body.currency,
+    financialStatus: body.financial_status,
+  });
 
   await ingestCommerceEvent({
     userId: merchant.userId,
     source: "shopify",
     triggerType: "shopify_order_created",
+    recordMode: "commerce_message",
     externalMessageId,
-    summaryText,
+    messageBody,
     activityEventType: "shopify_order_created",
     metadata: {
       shop,
@@ -163,16 +161,13 @@ export async function processShopifyCustomerCreate(
 
   const customerId = body.id != null ? String(body.id) : "";
   const eventId = shopifyEventId(req, `customer-${customerId}-${Date.now()}`);
-  const externalMessageId = `shopify:evt:${eventId}`;
   const name = customerName(body) || body.email || "Shopify customer";
-  const summaryText = `New Shopify customer: ${name}${body.email ? ` (${body.email})` : ""}`;
 
   await ingestCommerceEvent({
     userId: merchant.userId,
     source: "shopify",
     triggerType: "shopify_customer_created",
-    externalMessageId,
-    summaryText,
+    recordMode: "quiet_thread",
     activityEventType: "shopify_customer_created",
     metadata: {
       shop,

@@ -4,9 +4,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   Search, UserPlus, MessageCircle, Instagram, Facebook, Smartphone, Globe, Send,
-  ChevronUp, ChevronDown, ChevronsUpDown, X, Users, Phone, Mail,
+  ChevronUp, ChevronDown, ChevronsUpDown, X, Users, Phone, Mail, ShoppingCart,
   ArrowUpRight, RefreshCw, Download, StickyNote, Sparkles, Loader2,
 } from "lucide-react";
+import {
+  getContactDisplayChannel,
+  getContactDisplayChannelLabel,
+} from "@shared/contactChannelDisplay";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +23,10 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { TAG_COLORS } from "@/lib/data";
 
-type Channel = "whatsapp" | "instagram" | "facebook" | "sms" | "webchat" | "telegram";
+type Channel = "whatsapp" | "instagram" | "facebook" | "sms" | "webchat" | "telegram" | "shopify";
+
+/** Filter/stats key when contact has no messaging or commerce display channel */
+const DISPLAY_CHANNEL_NONE = "__none__";
 
 interface Contact {
   id: string;
@@ -31,6 +38,7 @@ interface Contact {
   pipelineStage: string;
   primaryChannel: Channel;
   primaryChannelOverride?: Channel;
+  lastIncomingChannel?: string;
   source?: string;
   assignedTo?: string;
   followUpDate?: string;
@@ -40,6 +48,8 @@ interface Contact {
   instagramId?: string;
   facebookId?: string;
   telegramId?: string;
+  ghlId?: string;
+  customFields?: Record<string, unknown>;
 }
 
 const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }> = {
@@ -49,20 +59,30 @@ const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }
   sms: { icon: Smartphone, color: "#6B7280", label: "SMS" },
   webchat: { icon: Globe, color: "#3B82F6", label: "Web Chat" },
   telegram: { icon: Send, color: "#0088CC", label: "Telegram" },
+  shopify: { icon: ShoppingCart, color: "#96BF48", label: "Shopify" },
+  [DISPLAY_CHANNEL_NONE]: { icon: Smartphone, color: "#9CA3AF", label: "No channel" },
 };
+
+function contactDisplayChannelKey(contact: Contact): string {
+  return getContactDisplayChannel(contact) ?? DISPLAY_CHANNEL_NONE;
+}
+
+function channelUiConfig(channelKey: string) {
+  return CHANNEL_CONFIG[channelKey] ?? CHANNEL_CONFIG[DISPLAY_CHANNEL_NONE];
+}
 
 function getTagColor(tag: string) {
   return TAG_COLORS[tag] || "bg-gray-100 text-gray-600 border-gray-200";
 }
 
 function ChannelIcon({ channel, size = "w-3.5 h-3.5" }: { channel: string; size?: string }) {
-  const cfg = CHANNEL_CONFIG[channel] || CHANNEL_CONFIG.whatsapp;
+  const cfg = channelUiConfig(channel);
   const Icon = cfg.icon;
   return <Icon className={size} style={{ color: cfg.color }} />;
 }
 
 function Avatar({ contact }: { contact: Contact }) {
-  const ch = contact.primaryChannelOverride || contact.primaryChannel;
+  const ch = contactDisplayChannelKey(contact);
   const initials = contact.name
     .split(" ")
     .slice(0, 2)
@@ -240,10 +260,7 @@ export function Contacts() {
     if (filterTag) list = list.filter((c) => c.tag === filterTag);
     if (filterStage) list = list.filter((c) => c.pipelineStage === filterStage);
     if (filterChannel) {
-      list = list.filter((c) => {
-        const ch = c.primaryChannelOverride || c.primaryChannel;
-        return ch === filterChannel;
-      });
+      list = list.filter((c) => contactDisplayChannelKey(c) === filterChannel);
     }
 
     list.sort((a, b) => {
@@ -262,7 +279,7 @@ export function Contacts() {
   const channelCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     contacts.forEach((c) => {
-      const ch = c.primaryChannelOverride || c.primaryChannel;
+      const ch = contactDisplayChannelKey(c);
       counts[ch] = (counts[ch] || 0) + 1;
     });
     return counts;
@@ -305,7 +322,7 @@ export function Contacts() {
       ["Name", "Phone", "Email", "Tag", "Pipeline Stage", "Channel", "Created"],
       ...filtered.map((c) => [
         c.name, c.phone || "", c.email || "", c.tag, c.pipelineStage,
-        c.primaryChannelOverride || c.primaryChannel,
+        getContactDisplayChannelLabel(getContactDisplayChannel(c)),
         c.createdAt ? format(new Date(c.createdAt), "yyyy-MM-dd") : "",
       ]),
     ];
@@ -369,7 +386,7 @@ export function Contacts() {
               iconColor="text-gray-500"
             />
             {topChannels.map(([ch, count]) => {
-              const cfg = CHANNEL_CONFIG[ch] || CHANNEL_CONFIG.whatsapp;
+              const cfg = channelUiConfig(ch);
               const Icon = cfg.icon;
               return (
                 <div
@@ -504,8 +521,8 @@ export function Contacts() {
             ) : (
               <div className="divide-y divide-gray-100">
                 {filtered.map((contact) => {
-                  const ch = contact.primaryChannelOverride || contact.primaryChannel;
-                  const cfg = CHANNEL_CONFIG[ch] || CHANNEL_CONFIG.whatsapp;
+                  const ch = contactDisplayChannelKey(contact);
+                  const cfg = channelUiConfig(ch);
                   return (
                     <div
                       key={contact.id}
@@ -633,8 +650,8 @@ export function Contacts() {
             ) : (
               <div className="divide-y divide-gray-50">
                 {filtered.map((contact) => {
-                  const ch = contact.primaryChannelOverride || contact.primaryChannel;
-                  const cfg = CHANNEL_CONFIG[ch] || CHANNEL_CONFIG.whatsapp;
+                  const ch = contactDisplayChannelKey(contact);
+                  const cfg = channelUiConfig(ch);
                   return (
                     <div
                       key={contact.id}

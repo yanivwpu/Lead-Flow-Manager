@@ -1,34 +1,32 @@
 /**
- * Commerce event ingest — contact + activity timeline + workflow triggers.
- * V1: no shopify/woocommerce/stripe inbox channels; optional mirror message on existing messaging threads only.
+ * Commerce event ingest — contact + optional Shopify thread + activity + workflows.
+ * Customer-only imports: empty thread ("No messages yet"), no chat lines.
+ * Order/payment events: structured commerce message in the Shopify thread.
  */
-import type { Channel, Contact, Conversation } from "@shared/schema";
+import type { Channel, Contact, Conversation, InsertMessage } from "@shared/schema";
+import { isCommerceSourcedContact } from "@shared/contactChannelDisplay";
 import { storage } from "./storage";
 import { channelService } from "./channelService";
 import { dispatchCommerceEventAutomation } from "./automationEventDispatcher";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
-
-/** Channels that represent real customer messaging (not Calendly/GHL commerce-only threads). */
-export const COMMERCE_MESSAGING_CHANNELS: readonly Channel[] = [
-  "whatsapp",
-  "instagram",
-  "facebook",
-  "sms",
-  "webchat",
-  "telegram",
-] as const;
+import { notifyUser } from "./presence";
 
 export type CommerceWorkflowTrigger =
   | "shopify_order_created"
   | "shopify_customer_created";
 
+/** quiet_thread = contact + empty commerce thread; commerce_message = + inbox commerce line */
+export type CommerceRecordMode = "quiet_thread" | "commerce_message";
+
 export type CommerceIngestParams = {
   userId: string;
   source: "shopify";
   triggerType: CommerceWorkflowTrigger;
-  /** Stable id for message dedupe — e.g. shopify:evt:{X-Shopify-Event-Id} */
-  externalMessageId: string;
-  summaryText: string;
+  recordMode: CommerceRecordMode;
+  /** Required when recordMode is commerce_message — used for messages.externalMessageId dedupe */
+  externalMessageId?: string;
+  /** Formatted commerce card text for the inbox thread (orders only) */
+  messageBody?: string;
   activityEventType: string;
   metadata: Record<string, unknown>;
   contactHints: {
@@ -62,8 +60,22 @@ function normalizeEmail(raw: string | undefined | null): string {
   return (raw || "").trim().toLowerCase();
 }
 
-function isMessagingChannel(channel: string): channel is (typeof COMMERCE_MESSAGING_CHANNELS)[number] {
-  return (COMMERCE_MESSAGING_CHANNELS as readonly string[]).includes(channel);
+function commerceChannelForSource(source: CommerceIngestParams["source"]): Channel {
+  if (source === "shopify") return "shopify";
+  return "shopify";
+}
+
+function commerceThreadKey(contact: Contact, hints: CommerceIngestParams["contactHints"]): string {
+  const shopifyId =
+    hints.shopifyCustomerId != null
+      ? String(hints.shopifyCustomerId)
+      : String((contact.customFields as Record<string, unknown> | null)?.shopifyCustomerId ?? "");
+  if (shopifyId) return `shopify:${shopifyId}`;
+  const email = normalizeEmail(hints.email || contact.email);
+  if (email.includes("@")) return `email:${email}`;
+  const phone = normalizePhone(hints.phone || contact.phone);
+  if (phone.length >= 8) return `phone:${phone}`;
+  return `contact:${contact.id}`;
 }
 
 async function findContactForCommerceHints(
@@ -109,6 +121,15 @@ async function upsertCommerceContact(
 
   const commerceCustom = {
     shopifyCustomerId: shopifyCustomerId ?? (existing?.customFields as any)?.shopifyCustomerId,
+    commerceThreadKey: existing
+      ? commerceThreadKey(existing, hints)
+      : hints.shopifyCustomerId != null
+        ? `shopify:${String(hints.shopifyCustomerId)}`
+        : normalizeEmail(hints.email)
+          ? `email:${normalizeEmail(hints.email)}`
+          : normalizePhone(hints.phone)
+            ? `phone:${normalizePhone(hints.phone)}`
+            : "pending",
     lastCommerceSource: "shopify",
     lastCommerceAt: new Date().toISOString(),
     lastCommerceMetadata: metadata,
@@ -123,7 +144,9 @@ async function upsertCommerceContact(
     if (email && !existing.email) patch.email = email;
     if (phoneDigits.length >= 8 && !existing.phone) {
       patch.phone = phoneDigits;
-      if (!existing.whatsappId) patch.whatsappId = phoneDigits;
+    }
+    if (isCommerceSourcedContact(existing) || shopifyCustomerId) {
+      patch.primaryChannel = "shopify";
     }
     if (name && (existing.name === "Shopify customer" || !existing.name?.trim())) {
       patch.name = name;
@@ -137,8 +160,7 @@ async function upsertCommerceContact(
     name,
     email: email || undefined,
     phone: phoneDigits.length >= 8 ? phoneDigits : undefined,
-    whatsappId: phoneDigits.length >= 8 ? phoneDigits : undefined,
-    primaryChannel: phoneDigits.length >= 8 ? "whatsapp" : email ? "calendly" : "manual",
+    primaryChannel: "shopify",
     source: "shopify",
     sourceDetails: { shopifyCustomerId },
     customFields: commerceCustom,
@@ -146,28 +168,110 @@ async function upsertCommerceContact(
   return { contact: created, created: true };
 }
 
-async function findLatestMessagingConversation(contactId: string): Promise<Conversation | null> {
-  const pack = await storage.getContactWithConversations(contactId);
-  if (!pack?.conversations?.length) return null;
-  const messaging = pack.conversations.filter((c) => isMessagingChannel(c.channel));
-  if (!messaging.length) return null;
-  messaging.sort(
-    (a, b) => (b.lastMessageAt?.getTime() || 0) - (a.lastMessageAt?.getTime() || 0),
-  );
-  return messaging[0] || null;
+async function ensureCommerceConversation(
+  userId: string,
+  contact: Contact,
+  source: CommerceIngestParams["source"],
+  hints: CommerceIngestParams["contactHints"],
+): Promise<{ conversation: Conversation; created: boolean }> {
+  const channel = commerceChannelForSource(source);
+  const threadKey = commerceThreadKey(contact, hints);
+  let conversation = await storage.getConversationByContactAndChannel(contact.id, channel);
+  if (conversation) {
+    return { conversation, created: false };
+  }
+  conversation = await storage.createConversation({
+    userId,
+    contactId: contact.id,
+    channel,
+    externalThreadId: threadKey,
+    status: "open",
+    windowActive: false,
+    unreadCount: 0,
+  });
+  return { conversation, created: true };
 }
 
-/**
- * Ingest a commerce webhook: dedupe via messages.externalMessageId when a messaging thread exists;
- * always writes activity + workflow triggers.
- */
+async function appendCommerceChatMessage(params: {
+  userId: string;
+  contact: Contact;
+  conversation: Conversation;
+  body: string;
+  externalMessageId: string;
+}): Promise<string> {
+  const preview = params.body.split("\n").find((l) => l.trim())?.slice(0, 100) || "Commerce update";
+  const messagePayload: InsertMessage = {
+    userId: params.userId,
+    contactId: params.contact.id,
+    conversationId: params.conversation.id,
+    direction: "inbound",
+    content: params.body,
+    contentType: "commerce_event",
+    externalMessageId: params.externalMessageId.slice(0, 500),
+    status: "delivered",
+  };
+  const message = await storage.createMessage(messagePayload);
+
+  await storage.updateConversation(params.conversation.id, {
+    lastMessageAt: new Date(),
+    lastMessagePreview: preview,
+    lastMessageDirection: "inbound",
+    unreadCount: (params.conversation.unreadCount || 0) + 1,
+  });
+
+  notifyUser(params.userId, {
+    type: "new_message",
+    conversationId: params.conversation.id,
+    contactId: params.contact.id,
+  });
+
+  return message.id;
+}
+
+export function formatShopifyOrderCreatedMessage(body: {
+  orderName?: string;
+  orderId?: string;
+  lineItems?: Array<{ title?: string; quantity?: number }>;
+  totalPrice?: string;
+  currency?: string;
+  financialStatus?: string;
+}): string {
+  const orderLabel = body.orderName || (body.orderId ? `#${body.orderId}` : "New order");
+  const lines = (body.lineItems || [])
+    .slice(0, 20)
+    .map((li) => `• ${li.title ?? "Item"} ×${li.quantity ?? 1}`);
+  const total =
+    body.totalPrice != null && body.totalPrice !== ""
+      ? `${body.currency ? `${body.currency} ` : ""}${body.totalPrice}`.trim()
+      : "";
+  const status = body.financialStatus
+    ? body.financialStatus.charAt(0).toUpperCase() + body.financialStatus.slice(1)
+    : "";
+
+  return [
+    "🛒 Shopify Order Created",
+    "",
+    `Order ${orderLabel}`,
+    lines.length ? "Items:" : "",
+    ...lines,
+    "",
+    total ? `Total: ${total}` : "",
+    status ? `Status: ${status}` : "",
+  ]
+    .filter((line, i, arr) => line !== "" || (i > 0 && arr[i - 1] !== ""))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export async function ingestCommerceEvent(params: CommerceIngestParams): Promise<CommerceIngestResult> {
   const {
     userId,
     source,
     triggerType,
+    recordMode,
     externalMessageId,
-    summaryText,
+    messageBody,
     activityEventType,
     metadata,
     contactHints,
@@ -177,10 +281,11 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
     userId,
     source,
     triggerType,
-    externalMessageId,
+    recordMode,
+    externalMessageId: externalMessageId || null,
   });
 
-  if (externalMessageId) {
+  if (recordMode === "commerce_message" && externalMessageId) {
     const existingMsg = await storage.getMessageByUserExternalId(userId, externalMessageId);
     if (existingMsg) {
       logCommerce("deduped", { userId, externalMessageId, messageId: existingMsg.id });
@@ -201,73 +306,65 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
       contactCreated,
     });
 
-    const messagingConv = await findLatestMessagingConversation(contact.id);
-    let conversationId: string | null = messagingConv?.id ?? null;
+    const { conversation, created: conversationCreated } = await ensureCommerceConversation(
+      userId,
+      contact,
+      source,
+      contactHints,
+    );
+
+    logCommerce("thread_ensured", {
+      userId,
+      contactId: contact.id,
+      conversationId: conversation.id,
+      conversationCreated,
+      empty: recordMode === "quiet_thread",
+    });
+
     let messageId: string | undefined;
 
-    if (messagingConv && externalMessageId) {
-      const channel = messagingConv.channel as Channel;
-      const channelContactId =
-        channel === "whatsapp" || channel === "sms"
-          ? normalizePhone(contact.whatsappId || contact.phone || "")
-          : channel === "telegram"
-            ? String(contact.telegramId || contact.phone || contact.id)
-            : channel === "instagram"
-              ? String((contact as any).instagramId || contact.id)
-              : channel === "facebook"
-                ? String((contact as any).facebookId || contact.id)
-                : contact.id;
-
-      const inbound = await channelService.processIncomingMessage({
-        userId,
-        channel,
-        channelContactId: channelContactId || contact.id,
-        contactName: contact.name || undefined,
-        content: summaryText,
-        contentType: "text",
-        externalMessageId,
-        preferredContactId: contact.id,
-        inboundMode: "commerce",
-      });
-
-      if (inbound.deduped) {
-        logCommerce("deduped", { userId, externalMessageId, via: "processIncomingMessage" });
-        return { ok: true, deduped: true, contactId: contact.id };
+    if (recordMode === "commerce_message") {
+      if (!messageBody?.trim()) {
+        throw new Error("commerce_message requires messageBody");
       }
-
-      if (inbound.conversation?.id) conversationId = inbound.conversation.id;
-      if (inbound.message?.id) messageId = inbound.message.id;
-
-      logCommerce("messaging_mirror", {
+      if (!externalMessageId) {
+        throw new Error("commerce_message requires externalMessageId");
+      }
+      messageId = await appendCommerceChatMessage({
+        userId,
+        contact,
+        conversation,
+        body: messageBody.trim(),
+        externalMessageId,
+      });
+      logCommerce("commerce_message_written", {
         userId,
         contactId: contact.id,
-        conversationId,
+        conversationId: conversation.id,
         messageId,
-        channel,
       });
     }
 
-    await channelService.logActivity(userId, contact.id, conversationId ?? undefined, activityEventType, {
+    const activitySummary =
+      recordMode === "commerce_message"
+        ? messageBody?.split("\n").find((l) => l.trim())?.slice(0, 500) || triggerType
+        : `Shopify customer ${contactCreated ? "imported" : "updated"}`;
+
+    await channelService.logActivity(userId, contact.id, conversation.id, activityEventType, {
       source,
       triggerType,
-      summary: summaryText.slice(0, 500),
-      externalMessageId,
+      recordMode,
+      summary: activitySummary,
+      externalMessageId: externalMessageId || null,
       ...metadata,
-    });
-
-    logCommerce("activity_written", {
-      userId,
-      contactId: contact.id,
-      conversationId,
-      activityEventType,
     });
 
     dispatchCommerceEventAutomation({
       userId,
       triggerType,
       contact,
-      conversationId: conversationId ?? undefined,
-      summaryText,
+      conversationId: conversation.id,
+      summaryText: activitySummary,
       metadata,
       contactCreated,
     }).catch((err) => {
@@ -283,14 +380,15 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
     logCommerce("completed", {
       userId,
       contactId: contact.id,
-      conversationId,
+      conversationId: conversation.id,
       triggerType,
+      recordMode,
     });
 
     return {
       ok: true,
       contactId: contact.id,
-      conversationId,
+      conversationId: conversation.id,
       messageId,
       contactCreated,
     };

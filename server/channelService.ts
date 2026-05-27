@@ -1469,6 +1469,7 @@ class ChannelService {
       case 'facebook': return 'facebookId';
       case 'telegram': return 'telegramId';
       case 'calendly': return 'email';
+      case 'shopify': return 'email';
       default: return 'phone';
     }
   }

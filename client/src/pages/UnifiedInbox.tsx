@@ -41,6 +41,7 @@ import {
   LayoutTemplate,
   ImageOff,
   Calendar,
+  ShoppingCart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -287,6 +288,7 @@ const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }
   tiktok: { icon: Video, color: '#000000', label: 'TikTok' },
   gohighlevel: { icon: Zap, color: '#F97316', label: 'GoHighLevel' },
   calendly: { icon: Calendar, color: '#006BFF', label: 'Calendly' },
+  shopify: { icon: ShoppingCart, color: '#96BF48', label: 'Shopify' },
 };
 
 function contactHasWebchatReachability(
@@ -339,6 +341,7 @@ const SOURCE_LABELS: Record<string, string> = {
   sms: 'SMS',
   telegram: 'Telegram',
   calendly: 'Calendly',
+  shopify: 'Shopify',
 };
 
 const SOURCE_OPTIONS = [
@@ -501,7 +504,7 @@ export function UnifiedInbox() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
-  const allChannels: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok', 'calendly'];
+  const allChannels: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok', 'calendly', 'shopify'];
   const [selectedChannels, setSelectedChannels] = useState<Set<Channel>>(new Set(allChannels));
   const [messageInput, setMessageInput] = useState("");
   const isMobile = useIsMobile();
@@ -2206,6 +2209,22 @@ export function UnifiedInbox() {
                   </div>
                 ) : (
                   messages.map((msg, i) => {
+                    if (msg.contentType === "commerce_event" && msg.content) {
+                      return (
+                        <div key={msg.id || i} className="flex min-w-0 justify-center px-1 py-1.5 animate-msg-in">
+                          <div className="w-full min-w-0 max-w-[min(82vw,100%)] rounded-2xl border border-lime-200 bg-white/95 px-3 py-2.5 text-sm shadow-sm sm:max-w-sm sm:px-3.5 sm:py-3">
+                            <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
+                              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-lime-50 text-lime-800">
+                                <ShoppingCart className="h-4 w-4" aria-hidden />
+                              </div>
+                              <pre className="min-w-0 flex-1 whitespace-pre-wrap font-sans text-sm text-gray-800 [overflow-wrap:anywhere] break-words">
+                                {msg.content}
+                              </pre>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
                     const calendlyEvent = parseCalendlyEventMessage(msg);
                     if (calendlyEvent) {
                       const title =

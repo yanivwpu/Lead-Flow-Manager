@@ -1,4 +1,7 @@
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
+import { shopifyMerchantNeedsPlanSelection } from "@shared/shopifyLaunchRouting";
+
+export { shopifyMerchantNeedsPlanSelection };
 
 const SHOPIFY_POST_INSTALL_STORAGE_KEY = "whachatcrm_shopify_post_install_pricing";
 /** Set when merchant leaves for Shopify plan picker; cleared on post-approval app entry. */
@@ -218,9 +221,14 @@ export function getShopifyBootstrapContext(
 }
 
 /** Post-install must reach pricing with install query intact — not inbox. */
+function shopifyInstallPricingFlow(ctx: ShopifyBootstrapContext): boolean {
+  return !!(ctx.postInstallFlow || ctx.shopifyInstalled || ctx.persistedPostInstall);
+}
+
 export function isShopifyBootstrapDestinationReached(
   ctx: ShopifyBootstrapContext,
   isAuthenticated: boolean,
+  needsPlanSelection: boolean | null = null,
 ): boolean {
   if (typeof window === "undefined") return false;
 
@@ -235,13 +243,29 @@ export function isShopifyBootstrapDestinationReached(
     return path === "/app/inbox" || path.startsWith("/app/inbox/");
   }
 
-  if (ctx.postInstallFlow || ctx.shopifyInstalled || ctx.persistedPostInstall) {
+  if (shopifyInstallPricingFlow(ctx)) {
+    if (isAuthenticated && needsPlanSelection === false) {
+      return path === "/app/inbox" || path.startsWith("/app/inbox/");
+    }
     const shopOk = !!normalizeShopifyShopDomain(params.get("shop"));
     const installedFlag = params.get("shopify_installed") === "1";
     return path === "/pricing" && installedFlag && shopOk;
   }
 
-  const dest = resolveShopifyBootstrapDestination(ctx, isAuthenticated, false);
+  if (isAuthenticated && needsPlanSelection === true) {
+    return path === "/pricing" || path.startsWith("/pricing/");
+  }
+
+  if (isAuthenticated && needsPlanSelection === null && ctx.active) {
+    return false;
+  }
+
+  const dest = resolveShopifyBootstrapDestination(
+    ctx,
+    isAuthenticated,
+    false,
+    needsPlanSelection,
+  );
   return current === dest;
 }
 
@@ -249,6 +273,7 @@ export function resolveShopifyBootstrapDestination(
   ctx: ShopifyBootstrapContext,
   isAuthenticated: boolean,
   logRedirect = true,
+  needsPlanSelection: boolean | null = null,
 ): string {
   if (isAuthenticated && isShopifyPostApprovalReturn()) {
     clearShopifyPostInstallPricingPath();
@@ -274,24 +299,55 @@ export function resolveShopifyBootstrapDestination(
     return "/app/inbox";
   }
 
-  if (ctx.postInstallFlow || ctx.shopifyInstalled || ctx.persistedPostInstall || ctx.embedded) {
+  if (shopifyInstallPricingFlow(ctx)) {
+    if (isAuthenticated && needsPlanSelection === false) {
+      clearShopifyPostInstallPricingPath();
+      if (logRedirect) {
+        logBootstrap("redirecting_to_inbox_existing_shopify_merchant");
+      }
+      return "/app/inbox";
+    }
     if (logRedirect) {
-      logBootstrap("redirecting_to_pricing", { pricingPath: ctx.pricingPath });
+      logBootstrap("redirecting_to_pricing", {
+        pricingPath: ctx.pricingPath,
+        needsPlanSelection,
+      });
     }
     return ctx.pricingPath;
   }
+
   if (isAuthenticated) {
+    if (needsPlanSelection === true) {
+      if (logRedirect) {
+        logBootstrap("redirecting_to_pricing_pending_subscription", {
+          pricingPath: ctx.pricingPath,
+        });
+      }
+      return ctx.pricingPath;
+    }
+    if (needsPlanSelection === null && ctx.active) {
+      const path =
+        typeof window !== "undefined"
+          ? `${window.location.pathname}${window.location.search}`
+          : "/";
+      return path;
+    }
     return "/app/inbox";
   }
   const redirect = encodeURIComponent(ctx.pricingPath);
   return `/auth?redirect=${redirect}`;
 }
 
-export function shouldSuppressAppRoutes(ctx: ShopifyBootstrapContext): boolean {
+export function shouldSuppressAppRoutes(
+  ctx: ShopifyBootstrapContext,
+  needsPlanSelection: boolean | null = null,
+): boolean {
   if (isShopifyPostApprovalReturn() || readPlanPickerOpened()) {
     return false;
   }
-  return ctx.active && (ctx.postInstallFlow || ctx.shopifyInstalled || ctx.persistedPostInstall);
+  if (!ctx.active || !shopifyInstallPricingFlow(ctx)) return false;
+  if (needsPlanSelection === false) return false;
+  return true;
 }
 
 export function applyShopifyBootstrapDocumentFlags(active: boolean): void {

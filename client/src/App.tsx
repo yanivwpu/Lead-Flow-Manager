@@ -19,6 +19,7 @@ import {
   readShopifyBootstrapFromWindow,
   resolveShopifyBootstrapDestination,
   shopifyPostApprovalInboxPath,
+  shopifyMerchantNeedsPlanSelection,
   shouldSuppressAppRoutes,
 } from "@/lib/shopifyBootstrap";
 
@@ -149,8 +150,12 @@ function Router() {
   const [location, setLocation] = useLocation();
   const { user, isLoading: authLoading } = useAuth();
   const [urlTick, setUrlTick] = useState(0);
+  const [shopifyPlanGate, setShopifyPlanGate] = useState<boolean | null>(null);
 
   const bootstrap = useMemo(() => readShopifyBootstrapFromWindow(), [location, urlTick]);
+
+  const shopifyInstallPricingFlow =
+    bootstrap.postInstallFlow || bootstrap.shopifyInstalled || bootstrap.persistedPostInstall;
 
   useLayoutEffect(() => {
     setUrlTick((n) => n + 1);
@@ -175,15 +180,43 @@ function Router() {
     );
   }, [bootstrap.active, bootstrap.needsInstallRedirect, bootstrap.shop]);
 
+  useEffect(() => {
+    if (!bootstrap.active || !user) {
+      setShopifyPlanGate(null);
+      return;
+    }
+
+    let cancelled = false;
+    fetch("/api/auth/me", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((me) => {
+        if (cancelled) return;
+        setShopifyPlanGate(shopifyMerchantNeedsPlanSelection(me));
+      })
+      .catch(() => {
+        if (!cancelled) setShopifyPlanGate(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bootstrap.active, user, urlTick]);
+
   const destination = useMemo(
-    () => resolveShopifyBootstrapDestination(bootstrap, !!user),
-    [bootstrap, user],
+    () => resolveShopifyBootstrapDestination(bootstrap, !!user, true, shopifyPlanGate),
+    [bootstrap, user, shopifyPlanGate],
   );
 
   const destinationReached = useMemo(
-    () => isShopifyBootstrapDestinationReached(bootstrap, !!user),
-    [bootstrap, urlTick, location, user],
+    () => isShopifyBootstrapDestinationReached(bootstrap, !!user, shopifyPlanGate),
+    [bootstrap, urlTick, location, user, shopifyPlanGate],
   );
+
+  const shopifyBootstrapLoading =
+    bootstrap.active &&
+    !bootstrap.needsInstallRedirect &&
+    !!user &&
+    shopifyPlanGate === null;
 
   useLayoutEffect(() => {
     if (authLoading || !user) return;
@@ -259,7 +292,7 @@ function Router() {
   useLayoutEffect(() => {
     if (!bootstrap.active || authLoading || bootstrap.needsInstallRedirect) return;
 
-    if (shouldSuppressAppRoutes(bootstrap)) {
+    if (shouldSuppressAppRoutes(bootstrap, shopifyPlanGate)) {
       console.log("[ShopifyBootstrap] suppressing_app_routes");
     }
 
@@ -276,6 +309,7 @@ function Router() {
     bootstrap.needsInstallRedirect,
     destination,
     destinationReached,
+    shopifyPlanGate,
     setLocation,
   ]);
 
@@ -289,7 +323,12 @@ function Router() {
   }, [authLoading, bootstrap.active, bootstrap.needsInstallRedirect, destinationReached]);
 
   if (bootstrap.active) {
-    if (authLoading || bootstrap.needsInstallRedirect || !destinationReached) {
+    if (
+      authLoading ||
+      bootstrap.needsInstallRedirect ||
+      shopifyBootstrapLoading ||
+      !destinationReached
+    ) {
       return <ShopifyBootstrapScreen />;
     }
 

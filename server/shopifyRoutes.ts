@@ -215,17 +215,25 @@ router.get('/callback', async (req: Request, res: Response) => {
       });
     }
 
-    await storage.updateUser(user.id, {
+    const priorShopifyStatus = (user.shopifySubscriptionStatus || '').toLowerCase();
+    const shopAlreadyActive = priorShopifyStatus === 'active';
+
+    const installPatch: Parameters<typeof storage.updateUser>[1] = {
       shopifyShop: shop,
       shopifyAccessToken: accessToken,
-      shopifyInstalledAt: new Date(),
-      shopifySubscriptionStatus: 'pending',
-      shopifyChargeId: null,
-      billingPlan: 'free',
-      subscriptionPlan: 'free',
-      subscriptionStatus: 'active',
-      shopifyAIBrainEnabled: false,
-    });
+      shopifyInstalledAt: user.shopifyInstalledAt ?? new Date(),
+    };
+    if (!shopAlreadyActive) {
+      Object.assign(installPatch, {
+        shopifySubscriptionStatus: 'pending',
+        shopifyChargeId: null,
+        billingPlan: 'free',
+        subscriptionPlan: 'free',
+        subscriptionStatus: 'active',
+        shopifyAIBrainEnabled: false,
+      });
+    }
+    await storage.updateUser(user.id, installPatch);
 
     const existingIntegration = await storage.getIntegrationByUserAndType(user.id, 'shopify');
     if (!existingIntegration) {
@@ -255,6 +263,10 @@ router.get('/callback', async (req: Request, res: Response) => {
     await new Promise<void>((resolve, reject) => {
       (req as any).login(user, (err: unknown) => (err ? reject(err) : resolve()));
     });
+
+    if (shopAlreadyActive) {
+      return res.redirect('/app/inbox');
+    }
 
     const trialDays = 14;
     res.redirect(
