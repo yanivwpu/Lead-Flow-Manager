@@ -8,12 +8,8 @@ import {
 import { readBuyerPreferenceProfile } from "../buyerPreferenceService";
 import { storage } from "../storage";
 import { canUseInventoryConnector } from "./inventoryGate";
-import {
-  countActiveListingsForUser,
-  countAllListingsForUser,
-  countInventorySourcesForUser,
-  fetchActiveListingsForMatching,
-} from "./inventoryDb";
+import { countActiveListingsForUser, fetchActiveListingsForMatching } from "./inventoryDb";
+import { listSavedListingIdsForContact } from "./inventorySavedMatchDb";
 
 function parseNumericField(raw: string | number | null | undefined): number | null {
   if (raw == null || raw === "") return null;
@@ -97,22 +93,6 @@ function toPublicMatch(scored: ReturnType<typeof rankInventoryMatches>[number]):
   };
 }
 
-async function buildMatchDebug(userId: string, contactUserId: string) {
-  const [sourceCount, totalListingCount, activeListingCount] = await Promise.all([
-    countInventorySourcesForUser(userId),
-    countAllListingsForUser(userId),
-    countActiveListingsForUser(userId),
-  ]);
-  return {
-    sessionUserId: userId,
-    contactUserId,
-    workspaceAligned: contactUserId === userId,
-    sourceCount,
-    totalListingCount,
-    activeListingCount,
-  };
-}
-
 export async function findMatchingListingsForContact(
   contactId: string,
   userId: string,
@@ -139,34 +119,31 @@ export async function findMatchingListingsForContact(
 
   const gate = await canUseInventoryConnector(userId);
   if (!gate.ok) {
-    const debug = await buildMatchDebug(userId, contact.userId);
     return {
       eligible: false,
       reason: gate.reason,
       matchCount: 0,
       matches: [],
-      inventoryCount: debug.activeListingCount,
-      debug,
     };
   }
 
+  const savedListingIds = await listSavedListingIdsForContact(userId, contactId);
   const profile = readBuyerPreferenceProfile(contact);
   const criteria = extractBuyerMatchCriteria(profile);
-  const debug = await buildMatchDebug(userId, contact.userId);
 
   if (!criteria.hasAnyCriteria) {
     return {
       eligible: true,
       reason: "no_buyer_preferences",
       profileStatus: profile.profileStatus,
-      inventoryCount: debug.activeListingCount,
+      inventoryCount: await countActiveListingsForUser(userId),
       matchCount: 0,
       matches: [],
-      debug,
+      savedListingIds,
     };
   }
 
-  const inventoryCount = debug.activeListingCount;
+  const inventoryCount = await countActiveListingsForUser(userId);
   if (inventoryCount === 0) {
     return {
       eligible: true,
@@ -175,7 +152,7 @@ export async function findMatchingListingsForContact(
       inventoryCount: 0,
       matchCount: 0,
       matches: [],
-      debug,
+      savedListingIds,
     };
   }
 
@@ -191,11 +168,11 @@ export async function findMatchingListingsForContact(
     inventoryCount,
     matchCount: matches.length,
     matches,
-    debug,
+    savedListingIds,
   };
 }
 
-/** Phase 3+ hook: same ranking pipeline for automations / AI recommendations. */
+/** Phase 4+ hook: same ranking pipeline for automations / AI recommendations. */
 export async function findMatchingListingsForContactActionContext(
   contactId: string,
   userId: string,

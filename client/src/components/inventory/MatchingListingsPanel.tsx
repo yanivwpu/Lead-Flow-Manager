@@ -1,16 +1,33 @@
-import { useQuery } from "@tanstack/react-query";
-import { Home, Loader2, Sparkles } from "lucide-react";
+import { useCallback, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Bookmark, BookmarkCheck, ExternalLink, Home, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import type { InventoryMatchesResponse } from "@shared/inventory/inventoryMatchTypes";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import type { InventoryMatchResult, InventoryMatchesResponse } from "@shared/inventory/inventoryMatchTypes";
 import { fetchInventoryStatus } from "@/lib/inventoryApi";
+import { apiRequest } from "@/lib/queryClient";
 
 function formatPrice(cents: number | null): string {
-  if (cents == null) return "—";
+  if (cents == null) return "Price on request";
   const dollars = cents / 100;
   if (dollars >= 1_000_000) return `$${(dollars / 1_000_000).toFixed(2).replace(/\.00$/, "")}M`;
-  if (dollars >= 1_000) return `$${Math.round(dollars / 1_000)}k`;
+  if (dollars >= 1_000) return `$${Math.round(dollars / 1_000).toLocaleString()}k`;
   return `$${Math.round(dollars).toLocaleString()}`;
+}
+
+function formatBedsBaths(beds: number | null, baths: number | null): string | null {
+  const parts: string[] = [];
+  if (beds != null) parts.push(`${beds % 1 === 0 ? beds : beds.toFixed(1)} bd`);
+  if (baths != null) parts.push(`${baths % 1 === 0 ? baths : baths.toFixed(1)} ba`);
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 function scoreBadgeClass(score: number): string {
@@ -34,6 +51,249 @@ async function fetchInventoryMatches(contactId: string): Promise<InventoryMatche
   return res.json() as Promise<InventoryMatchesResponse>;
 }
 
+type ListingDetail = {
+  listing: {
+    id: string;
+    city: string | null;
+    state: string | null;
+    addressLine1: string | null;
+    priceCents: number | null;
+    beds: string | number | null;
+    baths: string | number | null;
+    propertyType: string | null;
+    description: string | null;
+    listingUrl: string | null;
+    photos: { url: string; order?: number }[];
+    status: string;
+  };
+};
+
+function ListingDetailDialog({
+  listingId,
+  fallback,
+  open,
+  onOpenChange,
+}: {
+  listingId: string | null;
+  fallback: InventoryMatchResult["listing"] | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["/api/inventory/listings", listingId],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/inventory/listings/${listingId}`);
+      return res.json() as Promise<ListingDetail>;
+    },
+    enabled: open && !!listingId,
+    staleTime: 60_000,
+  });
+
+  const listing = data?.listing;
+  const photo =
+    listing?.photos?.[0]?.url ?? fallback?.thumbnailUrl ?? null;
+  const city = listing?.city ?? fallback?.city;
+  const state = listing?.state ?? fallback?.state;
+  const priceCents = listing?.priceCents ?? fallback?.priceCents ?? null;
+  const beds = listing?.beds != null ? Number(listing.beds) : fallback?.beds;
+  const baths = listing?.baths != null ? Number(listing.baths) : fallback?.baths;
+  const listingUrl = listing?.listingUrl ?? fallback?.listingUrl ?? null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm p-0 overflow-hidden">
+        <div className="h-36 bg-gray-100">
+          {photo ? (
+            <img src={photo} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <Home className="h-8 w-8 text-gray-300" />
+            </div>
+          )}
+        </div>
+        <div className="p-4 space-y-2">
+          <DialogHeader className="space-y-1 text-left">
+            <DialogTitle className="text-base">
+              {[city, state].filter(Boolean).join(", ") || "Listing"}
+            </DialogTitle>
+            <DialogDescription className="text-sm font-medium text-gray-900">
+              {formatPrice(priceCents)}
+            </DialogDescription>
+          </DialogHeader>
+          {formatBedsBaths(beds ?? null, baths ?? null) && (
+            <p className="text-xs text-gray-600">{formatBedsBaths(beds ?? null, baths ?? null)}</p>
+          )}
+          {(listing?.addressLine1 ?? fallback?.addressLine1) && (
+            <p className="text-xs text-gray-500">{listing?.addressLine1 ?? fallback?.addressLine1}</p>
+          )}
+          {isLoading && !listing && (
+            <p className="text-xs text-gray-400 flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" /> Loading details…
+            </p>
+          )}
+          {listing?.description && (
+            <p className="text-xs text-gray-600 line-clamp-4 leading-relaxed">{listing.description}</p>
+          )}
+          {listingUrl && (
+            <Button asChild size="sm" variant="outline" className="w-full mt-2">
+              <a href={listingUrl} target="_blank" rel="noreferrer">
+                Open listing URL
+                <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+              </a>
+            </Button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MatchListingCard({
+  contactId,
+  match,
+  saved,
+  onSavedChange,
+}: {
+  contactId: string;
+  match: InventoryMatchResult;
+  saved: boolean;
+  onSavedChange: () => void;
+}) {
+  const [detailOpen, setDetailOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const cityLine = [match.listing.city, match.listing.state].filter(Boolean).join(", ");
+  const bedsBaths = formatBedsBaths(match.listing.beds, match.listing.baths);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (saved) {
+        await apiRequest(
+          "DELETE",
+          `/api/contacts/${contactId}/inventory-matches/saved/${match.listingId}`,
+        );
+        return { saved: false };
+      }
+      await apiRequest("POST", `/api/contacts/${contactId}/inventory-matches/saved`, {
+        listingId: match.listingId,
+        score: match.score,
+        reasons: match.reasons,
+      });
+      return { saved: true };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contactId}/inventory-matches`] });
+      onSavedChange();
+    },
+  });
+
+  const viewListing = useCallback(() => {
+    if (match.listing.listingUrl) {
+      window.open(match.listing.listingUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setDetailOpen(true);
+  }, [match.listing.listingUrl]);
+
+  return (
+    <>
+      <div
+        className="rounded-md border border-gray-200 bg-white p-2 shadow-sm"
+        data-testid={`inventory-match-${match.listingId}`}
+      >
+        <div className="flex gap-2">
+          <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md bg-gray-100 flex items-center justify-center">
+            {match.listing.thumbnailUrl ? (
+              <img
+                src={match.listing.thumbnailUrl}
+                alt=""
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
+            ) : (
+              <Home className="h-5 w-5 text-gray-300" aria-hidden />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-1.5">
+              <div className="min-w-0">
+                {cityLine && (
+                  <p className="text-[11px] font-semibold text-gray-900 truncate">{cityLine}</p>
+                )}
+                <p className="text-[11px] font-medium text-gray-800">{formatPrice(match.listing.priceCents)}</p>
+                {bedsBaths && <p className="text-[10px] text-gray-500">{bedsBaths}</p>}
+              </div>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "shrink-0 text-[9px] px-1.5 py-0 h-5 font-semibold tabular-nums",
+                  scoreBadgeClass(match.score),
+                )}
+                title="Match score"
+              >
+                {match.score}
+              </Badge>
+            </div>
+          </div>
+        </div>
+
+        {match.reasons.length > 0 && (
+          <ul className="mt-1.5 space-y-0.5">
+            {match.reasons.slice(0, 4).map((reason) => (
+              <li key={reason} className="text-[10px] text-violet-800/90 leading-snug flex gap-1">
+                <span className="text-violet-400 shrink-0">•</span>
+                <span>{reason}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="mt-2 flex gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 flex-1 text-[10px] px-2"
+            onClick={viewListing}
+            data-testid={`button-view-listing-${match.listingId}`}
+          >
+            View Listing
+          </Button>
+          <Button
+            type="button"
+            variant={saved ? "secondary" : "outline"}
+            size="sm"
+            className="h-7 flex-1 text-[10px] px-2"
+            disabled={saveMutation.isPending}
+            onClick={() => saveMutation.mutate()}
+            data-testid={`button-save-match-${match.listingId}`}
+          >
+            {saveMutation.isPending ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : saved ? (
+              <>
+                <BookmarkCheck className="h-3 w-3 mr-1 shrink-0" />
+                Saved
+              </>
+            ) : (
+              <>
+                <Bookmark className="h-3 w-3 mr-1 shrink-0" />
+                Save Match
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      <ListingDetailDialog
+        listingId={match.listingId}
+        fallback={match.listing}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+      />
+    </>
+  );
+}
+
 interface MatchingListingsPanelProps {
   contactId: string;
   compact?: boolean;
@@ -48,7 +308,7 @@ export function MatchingListingsPanel({ contactId, compact = true }: MatchingLis
 
   const enabled = !!contactId && !!inventoryStatus?.canUse;
 
-  const { data, isLoading, isFetched } = useQuery({
+  const { data, isLoading, isFetched, refetch } = useQuery({
     queryKey: [`/api/contacts/${contactId}/inventory-matches`],
     queryFn: () => fetchInventoryMatches(contactId),
     enabled,
@@ -60,6 +320,7 @@ export function MatchingListingsPanel({ contactId, compact = true }: MatchingLis
   if (!contactId) return null;
 
   const matches = data?.matches ?? [];
+  const savedSet = new Set(data?.savedListingIds ?? []);
   const showEmpty =
     isFetched &&
     data?.eligible &&
@@ -100,103 +361,27 @@ export function MatchingListingsPanel({ contactId, compact = true }: MatchingLis
         </div>
       )}
 
-      {isFetched && data && (
-        <div
-          className="mb-1.5 rounded border border-dashed border-amber-300 bg-amber-50/80 px-2 py-1.5 font-mono text-[9px] leading-relaxed text-amber-950"
-          data-testid="inventory-match-debug"
-        >
-          <div>eligible: {String(data.eligible)}</div>
-          <div>reason: {data.reason}</div>
-          <div>inventoryCount: {data.inventoryCount ?? "—"}</div>
-          <div>matchCount: {data.matchCount}</div>
-          <div>sourceCount: {data.debug?.sourceCount ?? "—"}</div>
-          {data.debug && (
-            <>
-              <div>activeListingCount: {data.debug.activeListingCount}</div>
-              <div>totalListingCount: {data.debug.totalListingCount}</div>
-              <div>workspaceAligned: {String(data.debug.workspaceAligned)}</div>
-              <div className="truncate" title={data.debug.sessionUserId}>
-                sessionUserId: {data.debug.sessionUserId}
-              </div>
-              <div className="truncate" title={data.debug.contactUserId}>
-                contactUserId: {data.debug.contactUserId}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
       {showEmpty && (
         <p className="text-[11px] text-gray-500 leading-snug py-1">
           {data?.reason === "no_buyer_preferences"
             ? "Add buyer preferences to preview MLS matches."
             : data?.reason === "no_active_inventory"
-              ? data.debug?.sourceCount === 0
-                ? "No inventory source for this workspace — run seed with the session user id below."
-                : data.debug && data.debug.totalListingCount > 0 && data.debug.activeListingCount === 0
-                  ? "Listings exist but none are active — check listing status."
-                  : "Connect and sync MLS inventory to preview matches."
+              ? "Connect and sync MLS inventory to preview matches."
               : "No strong matches in active inventory yet."}
         </p>
       )}
 
       {matches.length > 0 && (
         <div className="space-y-2 mt-1">
-          {matches.map((match) => {
-            const loc = [match.listing.city, match.listing.state].filter(Boolean).join(", ");
-            const bedsBaths = [
-              match.listing.beds != null ? `${match.listing.beds} bd` : null,
-              match.listing.baths != null ? `${match.listing.baths} ba` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ");
-
-            return (
-              <div
-                key={match.listingId}
-                className="flex gap-2 rounded-md border border-gray-200 bg-white p-1.5 shadow-sm"
-                data-testid={`inventory-match-${match.listingId}`}
-              >
-                <div className="h-14 w-14 shrink-0 overflow-hidden rounded bg-gray-100 flex items-center justify-center">
-                  {match.listing.thumbnailUrl ? (
-                    <img
-                      src={match.listing.thumbnailUrl}
-                      alt=""
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <Home className="h-5 w-5 text-gray-300" aria-hidden />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-1">
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-medium text-gray-900 truncate">
-                        {formatPrice(match.listing.priceCents)}
-                        {loc ? ` · ${loc}` : ""}
-                      </p>
-                      {bedsBaths && (
-                        <p className="text-[10px] text-gray-500 truncate">{bedsBaths}</p>
-                      )}
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className={cn("shrink-0 text-[9px] px-1 py-0 h-4 font-semibold", scoreBadgeClass(match.score))}
-                    >
-                      {match.score}
-                    </Badge>
-                  </div>
-                  {match.reasons.length > 0 && (
-                    <p className="text-[10px] text-gray-600 leading-snug mt-0.5 line-clamp-2">
-                      {match.reasons.slice(0, 4).join(" · ")}
-                    </p>
-                  )}
-                  <p className="text-[9px] text-gray-400 mt-0.5 capitalize">{match.listing.status.replace(/_/g, " ")}</p>
-                </div>
-              </div>
-            );
-          })}
+          {matches.map((match) => (
+            <MatchListingCard
+              key={match.listingId}
+              contactId={contactId}
+              match={match}
+              saved={savedSet.has(match.listingId)}
+              onSavedChange={() => void refetch()}
+            />
+          ))}
         </div>
       )}
     </div>

@@ -1641,6 +1641,40 @@ export type InsertInventorySource = z.infer<typeof insertInventorySourceSchema>;
 export type InventoryListing = typeof inventoryListings.$inferSelect;
 export type InsertInventoryListing = z.infer<typeof insertInventoryListingSchema>;
 
+export const contactInventorySavedMatches = pgTable(
+  "contact_inventory_saved_matches",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+    listingId: varchar("listing_id").notNull().references(() => inventoryListings.id, { onDelete: "cascade" }),
+    matchScore: integer("match_score"),
+    matchReasons: jsonb("match_reasons").notNull().default(sql`'[]'::jsonb`),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (t) => ({
+    contactListingUnique: uniqueIndex("contact_inventory_saved_matches_contact_listing_unique").on(
+      t.contactId,
+      t.listingId,
+    ),
+    contactIdIdx: index("contact_inventory_saved_matches_contact_idx").on(t.contactId),
+  }),
+);
+
+export const insertContactInventorySavedMatchSchema = createInsertSchema(
+  contactInventorySavedMatches,
+).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type ContactInventorySavedMatch = typeof contactInventorySavedMatches.$inferSelect;
+export type InsertContactInventorySavedMatch = z.infer<
+  typeof insertContactInventorySavedMatchSchema
+>;
+
 // ─── Contact Notes (Team Notes — collaborative, workspace-scoped) ─────────────
 export const contactNotes = pgTable("contact_notes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -220,6 +220,47 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/contacts/:id/inventory-matches/saved", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const { saveListingMatchForContact } = await import("../inventory/inventorySavedMatchService");
+      const listingId = typeof req.body?.listingId === "string" ? req.body.listingId : "";
+      const score = typeof req.body?.score === "number" ? req.body.score : Number(req.body?.score);
+      const reasons = Array.isArray(req.body?.reasons)
+        ? req.body.reasons.filter((r: unknown) => typeof r === "string")
+        : [];
+      if (!listingId) return res.status(400).json({ error: "listingId is required" });
+
+      const result = await saveListingMatchForContact(req.params.id, req.user.id, {
+        listingId,
+        score: Number.isFinite(score) ? score : 0,
+        reasons,
+      });
+      if (!result.ok) return res.status(result.status).json({ error: result.error });
+      res.status(201).json({ saved: true, listingId });
+    } catch (error) {
+      console.error("Error saving inventory match:", error);
+      res.status(500).json({ error: "Failed to save match" });
+    }
+  });
+
+  app.delete("/api/contacts/:id/inventory-matches/saved/:listingId", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const { unsaveListingMatchForContact } = await import("../inventory/inventorySavedMatchService");
+      const result = await unsaveListingMatchForContact(
+        req.params.id,
+        req.user.id,
+        req.params.listingId,
+      );
+      if (!result.ok) return res.status(result.status).json({ error: result.error });
+      res.json({ removed: result.removed });
+    } catch (error) {
+      console.error("Error removing saved inventory match:", error);
+      res.status(500).json({ error: "Failed to remove saved match" });
+    }
+  });
+
   // Get single contact with all conversations
   app.get("/api/contacts/:id", async (req, res) => {
     try {

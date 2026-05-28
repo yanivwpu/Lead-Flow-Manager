@@ -184,13 +184,13 @@ function areaMatchScore(
     const a = normalizeText(area);
     if (!a) continue;
     if (cityNorm === a) {
-      return { points: 30, max: 30, reasons: [`Matches ${titleCaseArea(area)}`] };
+      return { points: 30, max: 30, reasons: ["Matches preferred area"] };
     }
     if (cityNorm.includes(a) || a.includes(cityNorm)) {
-      return { points: 24, max: 30, reasons: [`Near ${titleCaseArea(area)}`] };
+      return { points: 24, max: 30, reasons: ["Near preferred area"] };
     }
     if (hay.includes(a)) {
-      return { points: 18, max: 30, reasons: [`Area match: ${titleCaseArea(area)}`] };
+      return { points: 18, max: 30, reasons: ["Matches preferred area"] };
     }
   }
   return { points: 0, max: 30, reasons: [] };
@@ -245,7 +245,7 @@ function propertyTypeScore(
   const lt = normalizePropertyType(listingType);
   if (!lt) return { points: 0, max: 15, reasons: [] };
   if (wanted.includes(lt)) {
-    return { points: 15, max: 15, reasons: [`Matching ${formatPropertyLabel(lt).toLowerCase()}`] };
+    return { points: 15, max: 15, reasons: ["Matches property type"] };
   }
   return { points: 0, max: 15, reasons: [] };
 }
@@ -263,16 +263,14 @@ function bedsBathsScore(
     max += 10;
     if (listing.beds != null && listing.beds >= bedsMin) {
       points += 10;
-      const n = listing.beds;
-      reasons.push(`${n % 1 === 0 ? n : n.toFixed(1)} bed`);
+      reasons.push("Matches bedroom count");
     }
   }
   if (bathsMin != null) {
     max += 5;
     if (listing.baths != null && listing.baths >= bathsMin) {
       points += 5;
-      const n = listing.baths;
-      reasons.push(`${n % 1 === 0 ? n : n.toFixed(1)} bath`);
+      reasons.push("Matches bathroom count");
     }
   }
   return { points, max, reasons };
@@ -301,6 +299,23 @@ const FEATURE_LABELS: Record<keyof BuyerMatchCriteria["features"], string> = {
   schoolPriority: "Schools nearby",
   investmentIntent: "Investment potential",
 };
+
+const MUST_HAVE_REASON_LABELS: Record<string, string> = {
+  pool: "Includes pool",
+  pools: "Includes pool",
+  modern: "Modern style",
+  waterfront: "Waterfront",
+  garage: "Garage parking",
+  parking: "Garage parking",
+  gated: "Gated community",
+  "pet friendly": "Pet friendly",
+  "pet-friendly": "Pet friendly",
+};
+
+function mustHaveReason(raw: string): string {
+  const term = normalizeText(raw);
+  return MUST_HAVE_REASON_LABELS[term] ?? `Includes ${titleCaseArea(raw)}`;
+}
 
 function featureAndMustHaveScore(
   listing: MatchListingInput,
@@ -333,7 +348,7 @@ function featureAndMustHaveScore(
     max += 3;
     if (hay.includes(term)) {
       points += 3;
-      reasons.push(`Includes ${titleCaseArea(raw)}`);
+      reasons.push(mustHaveReason(raw));
     }
   }
 
@@ -413,18 +428,7 @@ export function scoreListingAgainstCriteria(
     ...financing.reasons,
   ];
 
-  const uniqueReasons = [...new Set(reasons)].slice(0, 6);
-
-  if (pType.reasons.length === 0 && listing.propertyType && criteria.propertyTypes.length === 0) {
-    const lt = normalizePropertyType(listing.propertyType);
-    if (lt && listing.beds != null) {
-      uniqueReasons.unshift(`${listing.beds % 1 === 0 ? listing.beds : listing.beds.toFixed(1)} bed ${formatPropertyLabel(lt).toLowerCase()}`);
-    }
-  }
-
-  if (listing.priceCents != null && !uniqueReasons.some((r) => r.includes("budget"))) {
-    uniqueReasons.push(formatPrice(listing.priceCents));
-  }
+  const uniqueReasons = [...new Set(reasons)].slice(0, 5);
 
   return {
     listingId: listing.id,
