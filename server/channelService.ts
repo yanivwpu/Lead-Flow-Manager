@@ -1170,10 +1170,8 @@ class ChannelService {
       const inboundTrimmed = (content || "").trim();
       const triggerSource = `channelService:${channel}`;
       if (isCommerceInbound) {
-        console.log(
-          JSON.stringify({
-            tag: "[BuyerPreference]",
-            event: "extraction_skipped",
+        void import("./buyerPreferenceService").then(({ debugLogBuyerPreference }) =>
+          debugLogBuyerPreference("extraction_skipped", {
             contactId: contact.id,
             userId,
             triggerSource,
@@ -1183,10 +1181,8 @@ class ChannelService {
           }),
         );
       } else if (inboundTrimmed.length > 0 && inboundTrimmed.length < 12) {
-        console.log(
-          JSON.stringify({
-            tag: "[BuyerPreference]",
-            event: "extraction_skipped",
+        void import("./buyerPreferenceService").then(({ debugLogBuyerPreference }) =>
+          debugLogBuyerPreference("extraction_skipped", {
             contactId: contact.id,
             userId,
             triggerSource,

@@ -2291,7 +2291,7 @@ export class DbStorage implements IStorage {
     contactId: string,
     payload: Record<string, unknown>,
   ): void {
-    if (process.env.DEBUG_BUYER_PREFS !== "1" && process.env.NODE_ENV === "production") {
+    if (process.env.DEBUG_BUYER_PREFS !== "1") {
       return;
     }
     console.log(

@@ -24,23 +24,28 @@ const TRIVIAL_INBOUND_RE =
 
 const lastExtractionByContact = new Map<string, number>();
 
-function log(event: string, payload: Record<string, unknown>): void {
+function debugBuyerPreferenceLog(event: string, payload: Record<string, unknown>): void {
+  if (process.env.DEBUG_BUYER_PREFS !== "1") return;
   console.log(JSON.stringify({ tag: "[BuyerPreference]", event, ...payload }));
 }
 
-/** Always-on trigger-path tracing (inbound schedule / run). */
+/** @internal Re-export for channel/workflow skip logging. */
+export function debugLogBuyerPreference(
+  event: string,
+  payload: Record<string, unknown>,
+): void {
+  debugBuyerPreferenceLog(event, payload);
+}
+
 function logTrigger(
   event: "extraction_triggered" | "extraction_skipped" | "extraction_started" | "extraction_completed",
   payload: Record<string, unknown>,
 ): void {
-  log(event, payload);
+  debugBuyerPreferenceLog(event, payload);
 }
 
 function logPersistence(contactId: string, step: string, data: Record<string, unknown>): void {
-  if (process.env.DEBUG_BUYER_PREFS !== "1" && process.env.NODE_ENV === "production") {
-    return;
-  }
-  log(`persist_${step}`, { contactId, ...data });
+  debugBuyerPreferenceLog(`persist_${step}`, { contactId, ...data });
 }
 
 export function isRealEstateIndustry(industry: string | null | undefined): boolean {
@@ -238,7 +243,7 @@ export async function mergeAndPersistBuyerPreferences(
 ): Promise<BuyerPreferenceProfile> {
   const patchKeys = patchFieldCount(patch);
   if (patchKeys === 0) {
-    log("llm_patch_empty", { contactId: contact.id, skipped: true });
+    debugBuyerPreferenceLog("llm_patch_empty", { contactId: contact.id, skipped: true });
     return readBuyerPreferenceProfile(contact);
   }
 
@@ -339,7 +344,10 @@ Rules:
   try {
     raw = JSON.parse(rawText) as unknown;
   } catch {
-    log("llm_json_parse_failed", { contactId: contact.id, rawPreview: rawText.slice(0, 400) });
+    debugBuyerPreferenceLog("llm_json_parse_failed", {
+      contactId: contact.id,
+      rawPreview: rawText.slice(0, 400),
+    });
     raw = {};
   }
 
@@ -358,14 +366,14 @@ Rules:
     const heuristic = heuristicPatchFromTranscript(transcript);
     const heuristicKeys = patchFieldCount(heuristic);
     if (heuristicKeys > 0) {
-      log("llm_patch_heuristic_fallback", {
+      debugBuyerPreferenceLog("llm_patch_heuristic_fallback", {
         contactId: contact.id,
         heuristicKeys,
         fields: Object.keys(heuristic),
       });
       patch = heuristic;
     } else {
-      log("llm_patch_empty_after_normalize", {
+      debugBuyerPreferenceLog("llm_patch_empty_after_normalize", {
         contactId: contact.id,
         transcriptChars: transcript.length,
       });
@@ -481,7 +489,7 @@ export async function runBuyerPreferenceExtraction(
       outcome: "error",
       error: err instanceof Error ? err.message : String(err),
     });
-    log("extract_failed", {
+    debugBuyerPreferenceLog("extract_failed", {
       userId,
       contactId,
       error: err instanceof Error ? err.message : String(err),
@@ -592,7 +600,7 @@ export function scheduleBuyerPreferenceExtraction(params: {
         triggerSource,
       });
     })().catch((err) => {
-      log("schedule_error", {
+      debugBuyerPreferenceLog("schedule_error", {
         contactId,
         triggerSource,
         error: err instanceof Error ? err.message : String(err),
