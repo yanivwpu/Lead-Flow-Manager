@@ -200,6 +200,26 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
+  // RGE inventory matching (Phase 2 — internal preview only, no outbound messaging)
+  app.get("/api/contacts/:id/inventory-matches", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const { findMatchingListingsForContact } = await import("../inventory/inventoryMatchingService");
+      const result = await findMatchingListingsForContact(req.params.id, req.user.id);
+      if (result.httpStatus === 404) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+      if (result.httpStatus === 403) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const { httpStatus: _h, ...body } = result;
+      res.json(body);
+    } catch (error) {
+      console.error("Error fetching inventory matches:", error);
+      res.status(500).json({ error: "Failed to fetch inventory matches" });
+    }
+  });
+
   // Get single contact with all conversations
   app.get("/api/contacts/:id", async (req, res) => {
     try {

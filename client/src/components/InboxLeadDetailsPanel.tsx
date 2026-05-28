@@ -77,6 +77,7 @@ import { getStageSignals } from "@/lib/leadScoring";
 import { AIUpgradePrompt } from "./AIUpgradePrompt";
 import type { AICapabilities } from "@/lib/useAICapabilities";
 import { BuyerPreferencesPanel } from "@/components/BuyerPreferencesPanel";
+import { MatchingListingsPanel } from "@/components/inventory/MatchingListingsPanel";
 import { buildBuyerPreferenceChips } from "@shared/buyerPreferenceDisplay";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
@@ -2260,6 +2261,10 @@ export function InboxLeadDetailsPanel({
                       compact
                       readOnly
                     />
+                  </div>
+
+                  <div className="rounded-lg border border-gray-200 bg-white/80 px-2.5 py-2">
+                    <MatchingListingsPanel contactId={contact.id} compact />
                   </div>
 
                   {/* D. Short narrative summary — action/context only; no duplicate criteria */}

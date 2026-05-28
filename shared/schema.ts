@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1552,6 +1552,94 @@ export type TemplateAsset = typeof templateAssets.$inferSelect;
 export type InsertTemplateAsset = z.infer<typeof insertTemplateAssetSchema>;
 export type UserTemplateData = typeof userTemplateData.$inferSelect;
 export type InsertUserTemplateData = z.infer<typeof insertUserTemplateDataSchema>;
+
+// ─── RGE Inventory Connector (Phase 1 — listing sync foundation) ─────────────
+export const inventorySources = pgTable(
+  "inventory_sources",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    displayName: text("display_name").notNull().default(""),
+    connectionStatus: text("connection_status").notNull().default("disconnected"),
+    config: jsonb("config").notNull().default(sql`'{}'::jsonb`),
+    credentialsEnc: jsonb("credentials_enc").notNull().default(sql`'{}'::jsonb`),
+    integrationId: varchar("integration_id").references(() => integrations.id, { onDelete: "set null" }),
+    lastSyncAt: timestamp("last_sync_at"),
+    lastSyncStatus: text("last_sync_status"),
+    lastSyncError: text("last_sync_error"),
+    lastSyncStats: jsonb("last_sync_stats").notNull().default(sql`'{}'::jsonb`),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (t) => ({
+    userProviderUnique: uniqueIndex("inventory_sources_user_provider_unique").on(t.userId, t.provider),
+    userIdIdx: index("inventory_sources_user_id_idx").on(t.userId),
+  }),
+);
+
+export const inventoryListings = pgTable(
+  "inventory_listings",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    sourceId: varchar("source_id").notNull().references(() => inventorySources.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    providerListingId: text("provider_listing_id").notNull(),
+    status: text("status").notNull().default("active"),
+    priceCents: integer("price_cents"),
+    currency: text("currency").notNull().default("USD"),
+    addressLine1: text("address_line1"),
+    addressLine2: text("address_line2"),
+    city: text("city"),
+    state: text("state"),
+    zip: text("zip"),
+    country: text("country").default("US"),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    beds: numeric("beds", { precision: 4, scale: 1 }),
+    baths: numeric("baths", { precision: 4, scale: 1 }),
+    propertyType: text("property_type"),
+    description: text("description"),
+    features: jsonb("features").notNull().default(sql`'[]'::jsonb`),
+    photos: jsonb("photos").notNull().default(sql`'[]'::jsonb`),
+    listingUrl: text("listing_url"),
+    sourceUpdatedAt: timestamp("source_updated_at"),
+    syncedAt: timestamp("synced_at").defaultNow().notNull(),
+    firstSeenAt: timestamp("first_seen_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (t) => ({
+    sourceListingUnique: uniqueIndex("inventory_listings_source_listing_unique").on(
+      t.sourceId,
+      t.providerListingId,
+    ),
+    userStatusIdx: index("inventory_listings_user_status_idx").on(t.userId, t.status),
+    userCityIdx: index("inventory_listings_user_city_idx").on(t.userId, t.city),
+    sourceSyncedIdx: index("inventory_listings_source_synced_idx").on(t.sourceId, t.syncedAt),
+  }),
+);
+
+export const insertInventorySourceSchema = createInsertSchema(inventorySources).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertInventoryListingSchema = createInsertSchema(inventoryListings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  firstSeenAt: true,
+  syncedAt: true,
+});
+
+export type InventorySource = typeof inventorySources.$inferSelect;
+export type InsertInventorySource = z.infer<typeof insertInventorySourceSchema>;
+export type InventoryListing = typeof inventoryListings.$inferSelect;
+export type InsertInventoryListing = z.infer<typeof insertInventoryListingSchema>;
 
 // ─── Contact Notes (Team Notes — collaborative, workspace-scoped) ─────────────
 export const contactNotes = pgTable("contact_notes", {

@@ -21,6 +21,7 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { InventorySourcesSection } from "@/components/inventory/InventorySourcesSection";
 
 function integrationBrandLogoLetter(name: string) {
   const c = name.trim().charAt(0);
@@ -317,10 +318,10 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     id: "showcase_idx", 
     name: "Showcase IDX", 
     icon: Home, 
-    description: "Real estate lead capture and property inquiries", 
+    description: "Lead and activity sync only — not MLS listing inventory", 
     color: "bg-red-500",
     category: "industry",
-    tagline: "IDX leads & property inquiries",
+    tagline: "Leads & activity (no listing sync)",
     fields: [
       { key: "apiKey", label: "API Key", placeholder: "xxxxx-xxxxx-xxxxx", type: "password", helpText: "From Showcase IDX dashboard" },
       { key: "siteId", label: "Site ID", placeholder: "12345", helpText: "Your Showcase IDX site identifier" },
@@ -949,6 +950,8 @@ export function Integrations() {
           </TabsList>
 
           <TabsContent value="native" className="space-y-12">
+            <InventorySourcesSection />
+
             {CATEGORY_SECTIONS.map(({ key, title }) => {
               const items = NATIVE_INTEGRATIONS.filter((i) => i.category === key);
               if (items.length === 0) return null;

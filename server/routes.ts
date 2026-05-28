@@ -16,6 +16,7 @@ import { registerChannelRoutes } from "./routes/channels";
 import { registerTemplateRoutes as registerAutomationTemplateRoutes } from "./routes/templates";
 import { registerCampaignEnrollmentRoutes } from "./routes/campaignEnrollments";
 import { registerWebhookRoutes } from "./routes/webhooks";
+import { registerInventoryRoutes } from "./routes/inventory";
 import {
   getWhatsAppAvailability,
   sendWhatsAppMessage,
@@ -10610,6 +10611,7 @@ export async function registerRoutes(
   registerCampaignEnrollmentRoutes(app);
   registerTemplateRoutes(app);
   registerWebhookRoutes(app);
+  registerInventoryRoutes(app);
 
   return httpServer;
 }

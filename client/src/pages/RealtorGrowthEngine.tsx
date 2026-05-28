@@ -59,6 +59,7 @@ function RealtorMark() {
 import { useLocation, Link } from "wouter";
 import { useQuery, useMutation, type UseMutationResult } from "@tanstack/react-query";
 import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
+import { InventorySourcesSection } from "@/components/inventory/InventorySourcesSection";
 import type { ActivationStatusPayload } from "@/lib/activationStatus";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
@@ -2946,6 +2947,8 @@ export function RealtorGrowthEngine() {
                 </div>
               </CardContent>
             </Card>
+
+            <InventorySourcesSection variant="compact" />
           </div>
         </div>
 
