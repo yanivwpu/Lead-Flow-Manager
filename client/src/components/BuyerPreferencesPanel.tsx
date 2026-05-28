@@ -47,7 +47,7 @@ function chipsFromRaw(raw: unknown): BuyerPreferenceChip[] {
   return buildBuyerPreferenceChips(raw);
 }
 
-function ChipBadge({ chip }: { chip: BuyerPreferenceChip }) {
+function ChipBadge({ chip, valueOnly }: { chip: BuyerPreferenceChip; valueOnly?: boolean }) {
   return (
     <span
       className={cn(
@@ -58,8 +58,14 @@ function ChipBadge({ chip }: { chip: BuyerPreferenceChip }) {
       )}
       title={chip.source === "inferred" ? "Inferred from conversation" : "Saved explicitly"}
     >
-      <span className="text-gray-500 shrink-0">{chip.label}:</span>
-      <span className="truncate">{chip.value}</span>
+      {valueOnly ? (
+        <span className="truncate">{chip.value}</span>
+      ) : (
+        <>
+          <span className="text-gray-500 shrink-0">{chip.label}:</span>
+          <span className="truncate">{chip.value}</span>
+        </>
+      )}
     </span>
   );
 }
@@ -271,7 +277,7 @@ export function BuyerPreferencesPanel({
           data-testid="buyer-preferences-chips"
         >
           {displayChips.map((chip) => (
-            <ChipBadge key={chip.id} chip={chip} />
+            <ChipBadge key={chip.id} chip={chip} valueOnly={compact} />
           ))}
         </div>
       ) : showListening ? (

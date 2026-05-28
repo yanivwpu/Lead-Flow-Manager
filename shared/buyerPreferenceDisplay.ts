@@ -95,37 +95,58 @@ export function buildBuyerPreferenceChips(raw: unknown): BuyerPreferenceChip[] {
     chips.push({ id, label, value: row.text, source: row.source });
   };
 
-  push("areas", "Areas", profile.targetAreas, (v) => (v as string[]).join(", "));
+  // Areas: show one chip per area for compact display
+  if (profile.targetAreas && profile.targetAreas.confidence >= 0.45) {
+    const areas = (profile.targetAreas.value || []).map((s) => String(s).trim()).filter(Boolean);
+    for (const area of areas.slice(0, 6)) {
+      chips.push({ id: `area:${area.toLowerCase()}`, label: "Area", value: area, source: profile.targetAreas.source });
+    }
+  }
   if (profile.priceMin || profile.priceMax) {
-    const parts: string[] = [];
     const min = profile.priceMin?.value;
     const max = profile.priceMax?.value;
-    if (min != null) parts.push(`from $${Number(min).toLocaleString()}`);
-    if (max != null) parts.push(`up to $${Number(max).toLocaleString()}`);
-    if (parts.length) {
+    if (min != null || max != null) {
+      const fmt = (n: number) => {
+        if (n >= 1_000_000) return `$${Math.round(n / 100_000) / 10}M`;
+        if (n >= 1_000) return `$${Math.round(n / 1_000)}k`;
+        return `$${n}`;
+      };
+      const text = max != null && min == null ? fmt(Number(max)) : max != null ? `${fmt(Number(min || 0))}–${fmt(Number(max))}` : fmt(Number(min || 0));
       const src =
         profile.priceMax?.source === "explicit" || profile.priceMin?.source === "explicit"
           ? "explicit"
           : "inferred";
-      chips.push({ id: "budget", label: "Budget", value: parts.join(" "), source: src });
+      chips.push({ id: "budget", label: "Budget", value: text, source: src });
     }
   }
-  push("propertyTypes", "Property type", profile.propertyTypes, (v) => (v as string[]).join(", "));
-  push("beds", "Beds", profile.bedsMin, (v) => `${v}+`);
-  push("baths", "Baths", profile.bathsMin, (v) => `${v}+`);
-  push("timeline", "Timeline", profile.timeline, (v) => String(v).replace(/_/g, " "));
-  push("financing", "Financing", profile.financingStatus, (v) => String(v).replace(/_/g, " "));
+  push("propertyTypes", "Type", profile.propertyTypes, (v) => (v as string[]).map((s) => String(s)).join(", "));
+  push("beds", "Beds", profile.bedsMin, (v) => `${v} bed`);
+  push("baths", "Baths", profile.bathsMin, (v) => `${v} bath`);
+  push("timeline", "Timeline", profile.timeline, (v) => String(v).toUpperCase().replace(/_/g, " "));
+  push("financing", "Financing", profile.financingStatus, (v) =>
+    String(v)
+      .replace(/_/g, " ")
+      .replace(/\bpre approved\b/i, "Pre-approved")
+      .replace(/\bcash\b/i, "Cash")
+      .replace(/\bexploring\b/i, "Exploring"),
+  );
 
-  const featureFlags = boolFlags(profile);
-  if (featureFlags.length) {
-    chips.push({
-      id: "features",
-      label: "Must-haves",
-      value: featureFlags.join(", "),
-      source: "inferred",
-    });
+  // Individual feature chips (pool/modern/etc.) for compact memory display
+  const feature = (id: string, label: string, f?: PreferenceField<boolean>) => {
+    if (!f || !f.value || f.confidence < 0.5) return;
+    chips.push({ id, label, value: label, source: f.source });
+  };
+  feature("pool", "Pool", profile.pool);
+  feature("modern", "Modern", profile.modernStyle);
+  feature("waterfront", "Waterfront", profile.waterfront);
+
+  // Must-haves list (free text)
+  if (profile.mustHaves && profile.mustHaves.confidence >= 0.45) {
+    const items = (profile.mustHaves.value || []).map((s) => String(s).trim()).filter(Boolean);
+    for (const item of items.slice(0, 8)) {
+      chips.push({ id: `mh:${item.toLowerCase()}`, label: "Must-have", value: item, source: profile.mustHaves.source });
+    }
   }
-  push("mustHaves", "Must-haves", profile.mustHaves, (v) => (v as string[]).join("; "));
 
   return chips;
 }

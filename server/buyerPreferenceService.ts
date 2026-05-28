@@ -5,6 +5,7 @@ import type { Contact } from "@shared/schema";
 import {
   type BuyerPreferenceExtractionPatch,
   type BuyerPreferenceProfile,
+  buyerPreferenceExtractionPatchSchema,
   emptyBuyerPreferenceProfile,
   normalizeBuyerPreferenceProfile,
 } from "@shared/buyerPreferenceSchema";
@@ -261,15 +262,37 @@ Rules:
     { jsonMode: true, maxTokens: 900 },
   );
 
-  const parsed = JSON.parse(response || "{}") as BuyerPreferenceExtractionPatch;
+  const raw = JSON.parse(response || "{}") as unknown;
   const now = new Date().toISOString();
-  for (const key of Object.keys(parsed) as (keyof BuyerPreferenceExtractionPatch)[]) {
-    const field = parsed[key];
-    if (field && typeof field === "object" && "updatedAt" in field && !field.updatedAt) {
-      (field as { updatedAt: string }).updatedAt = now;
-    }
+
+  const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const mapped: Record<string, unknown> = { ...obj };
+
+  // Defensive alias mapping — model outputs sometimes drift from the requested camelCase keys.
+  if (mapped.areas && !mapped.targetAreas) mapped.targetAreas = mapped.areas;
+  if (mapped.area && !mapped.targetAreas) mapped.targetAreas = mapped.area;
+  if (mapped.budget && !mapped.priceMax && !mapped.priceMin) {
+    mapped.priceMax = typeof mapped.budget === "number" ? { value: mapped.budget } : mapped.budget;
   }
-  return parsed;
+  if (mapped.financing && !mapped.financingStatus) mapped.financingStatus = mapped.financing;
+
+  // Ensure updatedAt exists when field objects omit it
+  for (const v of Object.values(mapped)) {
+    if (!v || typeof v !== "object") continue;
+    const vv = v as Record<string, unknown>;
+    if ("value" in vv && !("updatedAt" in vv)) vv.updatedAt = now;
+  }
+
+  const parsed = buyerPreferenceExtractionPatchSchema.safeParse(mapped);
+  if (!parsed.success) {
+    log("llm_patch_invalid", {
+      contactId: contact.id,
+      issueCount: parsed.error.issues.length,
+      issues: parsed.error.issues.slice(0, 6).map((i) => ({ path: i.path, code: i.code })),
+    });
+    return {};
+  }
+  return parsed.data;
 }
 
 export async function runBuyerPreferenceExtraction(
