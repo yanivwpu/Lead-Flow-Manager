@@ -31,6 +31,8 @@ interface BuyerPreferencesPanelProps {
   onUpdated?: () => void;
   /** Tighter layout when nested under Copilot. */
   compact?: boolean;
+  /** When true, hide refresh/edit controls (chips only). */
+  readOnly?: boolean;
 }
 
 type BuyerPreferencesApiResponse = {
@@ -67,6 +69,7 @@ export function BuyerPreferencesPanel({
   initialProfile,
   onUpdated,
   compact = false,
+  readOnly = false,
 }: BuyerPreferencesPanelProps) {
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
@@ -206,6 +209,7 @@ export function BuyerPreferencesPanel({
 
   const hasKnownChips = displayChips.length > 0;
   const showEligible = isFetched ? eligible : hasKnownChips;
+  const showControls = !readOnly && !compact;
 
   if (isFetched && !eligible && !hasKnownChips) return null;
   if (!contactId) return null;
@@ -229,7 +233,7 @@ export function BuyerPreferencesPanel({
           Buyer preferences
         </span>
         <div className="flex items-center gap-0.5">
-          {showEligible && (
+          {showControls && showEligible && (
             <>
               <button
                 type="button"

@@ -1649,8 +1649,10 @@ export function InboxLeadDetailsPanel({
         )}
       </div>
 
+      {/* Hidden but mounted: quick action popovers (Book / Assign / Follow / Snooze).
+          Utilities buttons open these via controlled state without duplicating popover bodies. */}
       {copilotExpanded && (
-      <div className="px-3 py-2 border-b border-gray-200 bg-gray-50/60 animate-in fade-in duration-150">
+      <div className="hidden px-3 py-2 border-b border-gray-200 bg-gray-50/60 animate-in fade-in duration-150">
         <div className="grid grid-cols-4 gap-1">
 
           {/* ── BOOK ── */}
@@ -2176,18 +2178,21 @@ export function InboxLeadDetailsPanel({
                     ) : null}
                   </div>
 
-                  {/* B. Next best actions */}
+                  {/* B. Primary recommendation (focused) + secondary suggestions */}
                   {canSeeWorkflow && (() => {
                     const actionRows = nextBestActions;
-                    if (actionRows.length === 0 && !handoffActive) return null;
+                    const primary = actionRows[0];
+                    const secondary = actionRows.slice(1, 3);
+                    if (!primary && !handoffActive) return null;
 
                     return (
-                      <div className="rounded-xl border border-gray-200/95 bg-white px-3 py-3 space-y-2 shadow-md shadow-gray-900/[0.07] ring-1 ring-gray-100/80">
+                      <div className="rounded-xl border border-gray-200 bg-white px-3 py-3 shadow-md shadow-gray-900/[0.06] ring-1 ring-gray-100/80">
                         <p className="text-[9px] uppercase tracking-widest font-bold text-gray-500">
-                          Next best actions
+                          Primary recommendation
                         </p>
+
                         {handoffActive && (
-                          <div className="rounded-lg border border-amber-200/70 bg-amber-50/60 px-2.5 py-2">
+                          <div className="mt-2 rounded-lg border border-amber-200/70 bg-amber-50/60 px-2.5 py-2">
                             <p className="text-[11px] font-semibold text-gray-900 leading-snug">
                               Customer requested human assistance
                             </p>
@@ -2198,34 +2203,50 @@ export function InboxLeadDetailsPanel({
                             ) : null}
                           </div>
                         )}
-                        <div className="rounded-lg bg-gray-50 border border-gray-200 px-2.5 py-2 space-y-1.5">
-                          {actionRows.map((row) => (
-                            <button
-                              key={`${row.id}-${row.label}`}
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                row.onClick();
-                              }}
-                              title={row.title ?? row.label}
-                              className="w-full text-left rounded-md px-1.5 py-1 hover:bg-white/70 transition-colors"
-                              data-testid={`next-best-action-${row.id}`}
-                            >
-                              <p className="text-[12px] font-semibold text-gray-900 leading-snug flex gap-1.5 items-start">
-                                <span className="text-gray-600 shrink-0 font-bold">→</span>
-                                <span>{row.label}</span>
-                              </p>
-                            </button>
-                          ))}
-                        </div>
-                        {composerDraftPreview && composerDraftPreview.trim().length > 0 ? (
-                          <p
-                            className="text-[10px] text-gray-400 leading-snug italic border-t border-gray-100 pt-2 mt-1 line-clamp-2"
-                            title={composerDraftPreview}
+
+                        {primary ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              primary.onClick();
+                            }}
+                            className="mt-2 w-full text-left rounded-lg border border-gray-200 bg-gray-50 hover:bg-white transition-colors px-2.5 py-2"
+                            data-testid={`next-best-action-primary-${primary.id}`}
+                            title={primary.title ?? primary.label}
                           >
-                            Draft preview: {composerDraftPreview}
-                          </p>
+                            <p className="text-[12px] font-semibold text-gray-900 leading-snug flex gap-1.5 items-start">
+                              <span className="text-gray-700 shrink-0 font-bold">→</span>
+                              <span>{primary.label}</span>
+                            </p>
+                          </button>
+                        ) : null}
+
+                        {secondary.length > 0 ? (
+                          <div className="mt-2">
+                            <p className="text-[9px] uppercase tracking-wide font-semibold text-gray-400">
+                              Also consider
+                            </p>
+                            <div className="mt-1 space-y-1">
+                              {secondary.map((row) => (
+                                <button
+                                  key={`${row.id}-${row.label}`}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    row.onClick();
+                                  }}
+                                  className="w-full text-left text-[11px] text-gray-600 hover:text-gray-900 rounded-md px-1.5 py-1 hover:bg-gray-50 transition-colors"
+                                  data-testid={`next-best-action-secondary-${row.id}`}
+                                  title={row.title ?? row.label}
+                                >
+                                  {row.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         ) : null}
                       </div>
                     );
@@ -2238,6 +2259,7 @@ export function InboxLeadDetailsPanel({
                       initialProfile={contact.buyerPreferenceProfile}
                       onUpdated={() => onUpdateContact({})}
                       compact
+                      readOnly
                     />
                   </div>
 
@@ -2405,78 +2427,6 @@ export function InboxLeadDetailsPanel({
             </div>
           </div>
 
-          {/* ── STATUS + PIPELINE (side-by-side) ─────────────────────── */}
-          {primaryConversation && (
-            <div>
-              <RowLabel>Status · Stage</RowLabel>
-              <div className="flex gap-1.5 mt-1">
-                <Select value={convStatus} onValueChange={onUpdateConversationStatus}>
-                  <SelectTrigger
-                    className={cn(
-                      "h-7 text-[11px] font-medium flex-1 bg-white border border-gray-200 px-2 shadow-none",
-                      conversationStatusRow.textClass
-                    )}
-                    data-testid="select-conversation-status"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CONVERSATION_STATUS_ROWS.map((s) => (
-                      <SelectItem
-                        key={s.value}
-                        value={s.value}
-                        className={cn(
-                          "text-[11px] font-medium rounded-sm",
-                          "focus:!bg-gray-100 focus:!text-gray-900",
-                          "data-[highlighted]:!bg-gray-100 data-[highlighted]:!text-gray-900",
-                          s.textClass
-                        )}
-                      >
-                        {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select
-                  value={contact.pipelineStage}
-                  onValueChange={val => onUpdateContact({ pipelineStage: val })}
-                >
-                  <SelectTrigger className="h-7 text-[11px] flex-1 bg-white px-2" data-testid="select-pipeline">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PIPELINE_STAGES.map(stage => (
-                      <SelectItem key={stage} value={stage} className="text-[11px]">{stage}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          )}
-
-          {/* ── STATUS TAGS ──────────────────────────────────────────── */}
-          <div>
-            <RowLabel>Tag</RowLabel>
-            <div className="flex flex-wrap gap-1 mt-1">
-              {Object.keys(TAG_COLORS).map(tag => (
-                <button
-                  key={tag}
-                  onClick={() => onUpdateContact({ tag })}
-                  className={cn(
-                    "text-[10px] px-2 py-0.5 rounded-full border transition-all font-medium",
-                    contact.tag === tag
-                      ? TAG_COLORS[tag] || 'bg-blue-100 text-blue-700 border-blue-300'
-                      : "bg-white text-gray-400 border-gray-200 hover:border-gray-300 hover:text-gray-600"
-                  )}
-                  data-testid={`button-tag-${tag.toLowerCase().replace(/\s+/g, '-')}`}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* ── FOLLOW-UP: display only — click to reopen Follow popup ── */}
           <div>
             <RowLabel>Follow-up</RowLabel>
@@ -2565,6 +2515,125 @@ export function InboxLeadDetailsPanel({
                 })}
               </div>
             )}
+          </div>
+
+          {/* ── CRM UTILITIES (quiet) ─────────────────────────────────────── */}
+          <div className="pt-3 border-t border-gray-100">
+            <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400 mb-1">
+              Utilities
+            </p>
+            <div className="rounded-xl border border-gray-200 bg-white px-2.5 py-2 space-y-2">
+              {/* Operational actions (quiet) */}
+              <div className="grid grid-cols-4 gap-1">
+                <button
+                  type="button"
+                  onClick={() => setBookOpen(true)}
+                  className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors"
+                  data-testid="button-util-book"
+                >
+                  <CalendarIcon className="w-3 h-3 text-gray-500" />
+                  <span className="text-[9px] text-gray-500 font-medium">Book</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssignOpen(true)}
+                  className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors"
+                  data-testid="button-util-assign"
+                >
+                  <UserCheck className="w-3 h-3 text-gray-500" />
+                  <span className="text-[9px] text-gray-500 font-medium">Assign</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFollowOpen(true)}
+                  className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors"
+                  data-testid="button-util-follow"
+                >
+                  <Bell className="w-3 h-3 text-gray-500" />
+                  <span className="text-[9px] text-gray-500 font-medium">Follow</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSnoozeOpen(true)}
+                  className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors"
+                  data-testid="button-util-snooze"
+                >
+                  <PauseCircle className="w-3 h-3 text-gray-500" />
+                  <span className="text-[9px] text-gray-500 font-medium">AI</span>
+                </button>
+              </div>
+
+              {/* Status / Stage / Tags stay here but low emphasis */}
+              {primaryConversation && (
+                <div>
+                  <RowLabel>Status · Stage</RowLabel>
+                  <div className="flex gap-1.5 mt-1">
+                    <Select value={convStatus} onValueChange={onUpdateConversationStatus}>
+                      <SelectTrigger
+                        className={cn(
+                          "h-7 text-[11px] font-medium flex-1 bg-white border border-gray-200 px-2 shadow-none",
+                          conversationStatusRow.textClass
+                        )}
+                        data-testid="select-conversation-status-utilities"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CONVERSATION_STATUS_ROWS.map((s) => (
+                          <SelectItem
+                            key={s.value}
+                            value={s.value}
+                            className={cn(
+                              "text-[11px] font-medium rounded-sm",
+                              "focus:!bg-gray-100 focus:!text-gray-900",
+                              "data-[highlighted]:!bg-gray-100 data-[highlighted]:!text-gray-900",
+                              s.textClass
+                            )}
+                          >
+                            {s.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={contact.pipelineStage}
+                      onValueChange={val => onUpdateContact({ pipelineStage: val })}
+                    >
+                      <SelectTrigger className="h-7 text-[11px] flex-1 bg-white px-2" data-testid="select-pipeline-utilities">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PIPELINE_STAGES.map(stage => (
+                          <SelectItem key={stage} value={stage} className="text-[11px]">{stage}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <RowLabel>Tag</RowLabel>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {Object.keys(TAG_COLORS).map(tag => (
+                    <button
+                      key={tag}
+                      onClick={() => onUpdateContact({ tag })}
+                      className={cn(
+                        "text-[10px] px-2 py-0.5 rounded-full border transition-all font-medium",
+                        contact.tag === tag
+                          ? TAG_COLORS[tag] || 'bg-blue-100 text-blue-700 border-blue-300'
+                          : "bg-white text-gray-400 border-gray-200 hover:border-gray-300 hover:text-gray-600"
+                      )}
+                      data-testid={`button-tag-util-${tag.toLowerCase().replace(/\s+/g, '-')}`}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* ── CAMPAIGNS (preset automation enrollments) ───────────────── */}
