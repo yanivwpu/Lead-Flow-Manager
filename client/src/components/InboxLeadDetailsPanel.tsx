@@ -76,6 +76,8 @@ import {
 import { getStageSignals } from "@/lib/leadScoring";
 import { AIUpgradePrompt } from "./AIUpgradePrompt";
 import type { AICapabilities } from "@/lib/useAICapabilities";
+import { BuyerPreferencesPanel } from "@/components/BuyerPreferencesPanel";
+import { buildBuyerPreferenceChips } from "@shared/buyerPreferenceDisplay";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
 
@@ -97,6 +99,8 @@ interface Contact {
   leadScore?: number | null;
   source?: string;
   createdAt: string;
+  customFields?: Record<string, unknown>;
+  buyerPreferenceProfile?: unknown;
 }
 
 interface Conversation {
@@ -1044,6 +1048,18 @@ export function InboxLeadDetailsPanel({
         required: q.required ?? true,
       }));
   }, [businessKnowledge]);
+
+  const showBuyerPreferences = useMemo(() => {
+    const ind = (businessKnowledge?.industry || "").toLowerCase();
+    const reWorkspace =
+      ind.includes("real estate") ||
+      ind.includes("realtor") ||
+      ind.includes("property");
+    const leadType = String((contact.customFields as Record<string, unknown> | undefined)?.leadType || "").toLowerCase();
+    const isBuyer = leadType === "buyer";
+    const hasChips = buildBuyerPreferenceChips(contact.buyerPreferenceProfile).length > 0;
+    return reWorkspace || isBuyer || hasChips;
+  }, [businessKnowledge?.industry, contact.customFields, contact.buyerPreferenceProfile]);
 
   // AI Memory — AI-generated natural-language summary
   const [aiMemory, setAiMemory] = useState<string>('');
@@ -2484,6 +2500,15 @@ export function InboxLeadDetailsPanel({
               ))}
             </div>
           </div>
+
+          {showBuyerPreferences && (
+            <BuyerPreferencesPanel
+              contactId={contact.id}
+              initialProfile={contact.buyerPreferenceProfile}
+              visible={showBuyerPreferences}
+              onUpdated={() => onUpdateContact({})}
+            />
+          )}
 
           {/* ── FOLLOW-UP: display only — click to reopen Follow popup ── */}
           <div>

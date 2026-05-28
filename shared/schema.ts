@@ -990,6 +990,8 @@ export const contacts = pgTable("contacts", {
   pipelineStage: text("pipeline_stage").notNull().default("Lead"),
   /** 0–100 cumulative score (W2, automations); null = never scored */
   leadScore: integer("lead_score"),
+  /** RGE buyer preference memory (Inventory Intelligence Phase 1) */
+  buyerPreferenceProfile: jsonb("buyer_preference_profile").notNull().default(sql`'{}'::jsonb`),
   notes: text("notes").default(""),
   
   // Follow-up

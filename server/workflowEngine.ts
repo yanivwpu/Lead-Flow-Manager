@@ -1391,6 +1391,16 @@ export async function runW2QualificationEngine(
     }
   }
 
+  if (contact?.id && message.trim().length >= 12) {
+    const { scheduleBuyerPreferenceExtraction } = await import("./buyerPreferenceService");
+    scheduleBuyerPreferenceExtraction({
+      userId,
+      contactId: contact.id,
+      inboundText: message,
+      w2FieldUpdates: fieldUpdates,
+    });
+  }
+
   return { scoreAdjustment: score, qualificationQuestion, fieldUpdates, signalsDetected: signals };
 }
 

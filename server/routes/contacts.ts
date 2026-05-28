@@ -85,6 +85,99 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
+  // RGE buyer preference memory (Inventory Intelligence Phase 1)
+  app.get("/api/contacts/:id/buyer-preferences", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const contact = await storage.getContact(req.params.id);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      if (contact.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+
+      const {
+        readBuyerPreferenceProfile,
+        shouldRunBuyerPreferencePipeline,
+      } = await import("../buyerPreferenceService");
+      const { buildBuyerPreferenceChips } = await import("@shared/buyerPreferenceDisplay");
+
+      const profile = readBuyerPreferenceProfile(contact);
+      const gate = await shouldRunBuyerPreferencePipeline(req.user.id, contact);
+      res.json({
+        eligible: gate.ok,
+        reason: gate.reason,
+        profile,
+        chips: buildBuyerPreferenceChips(profile),
+      });
+    } catch (error) {
+      console.error("Error fetching buyer preferences:", error);
+      res.status(500).json({ error: "Failed to fetch buyer preferences" });
+    }
+  });
+
+  app.patch("/api/contacts/:id/buyer-preferences", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const contact = await storage.getContact(req.params.id);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      if (contact.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+
+      const {
+        shouldRunBuyerPreferencePipeline,
+        buildExplicitPatchFromSimpleBody,
+        applyManualBuyerPreferencePatch,
+      } = await import("../buyerPreferenceService");
+
+      const gate = await shouldRunBuyerPreferencePipeline(req.user.id, contact);
+      if (!gate.ok) {
+        return res.status(403).json({ error: "Buyer preferences not enabled for this workspace", reason: gate.reason });
+      }
+
+      const patch = buildExplicitPatchFromSimpleBody(req.body || {});
+      if (!Object.keys(patch).length) {
+        return res.status(400).json({ error: "No valid preference fields in body" });
+      }
+
+      const profile = await applyManualBuyerPreferencePatch(req.user.id, contact.id, patch);
+      if (!profile) return res.status(404).json({ error: "Contact not found" });
+
+      const { buildBuyerPreferenceChips } = await import("@shared/buyerPreferenceDisplay");
+      res.json({ profile, chips: buildBuyerPreferenceChips(profile) });
+    } catch (error) {
+      console.error("Error updating buyer preferences:", error);
+      res.status(500).json({ error: "Failed to update buyer preferences" });
+    }
+  });
+
+  app.post("/api/contacts/:id/buyer-preferences/extract", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const contact = await storage.getContact(req.params.id);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      if (contact.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+
+      const {
+        shouldRunBuyerPreferencePipeline,
+        runBuyerPreferenceExtraction,
+        readBuyerPreferenceProfile,
+      } = await import("../buyerPreferenceService");
+      const { buildBuyerPreferenceChips } = await import("@shared/buyerPreferenceDisplay");
+
+      const gate = await shouldRunBuyerPreferencePipeline(req.user.id, contact);
+      if (!gate.ok) {
+        return res.status(403).json({ error: "Buyer preferences not enabled for this workspace", reason: gate.reason });
+      }
+
+      await runBuyerPreferenceExtraction(req.user.id, contact.id, {
+        inboundText: typeof req.body?.inboundText === "string" ? req.body.inboundText : undefined,
+      });
+      const refreshed = await storage.getContact(contact.id);
+      const profile = readBuyerPreferenceProfile(refreshed || contact);
+      res.json({ profile, chips: buildBuyerPreferenceChips(profile) });
+    } catch (error) {
+      console.error("Error extracting buyer preferences:", error);
+      res.status(500).json({ error: "Failed to extract buyer preferences" });
+    }
+  });
+
   // Get single contact with all conversations
   app.get("/api/contacts/:id", async (req, res) => {
     try {

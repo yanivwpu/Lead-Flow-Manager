@@ -1166,6 +1166,18 @@ class ChannelService {
       preview: content.substring(0, 100),
     });
 
+    if (!isCommerceInbound && (content || "").trim().length >= 12) {
+      void import("./buyerPreferenceService").then(({ scheduleBuyerPreferenceExtraction }) =>
+        scheduleBuyerPreferenceExtraction({
+          userId,
+          contactId: contact.id,
+          conversationId: conversation.id,
+          messageId: message.id,
+          inboundText: content,
+        }),
+      );
+    }
+
     if (isCommerceInbound) {
       return buildInboundResult({
         success: true,

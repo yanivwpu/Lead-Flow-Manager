@@ -82,6 +82,10 @@ import type { ActivationStatusPayload } from "@/lib/activationStatus";
 import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 import { analyzeConversation } from "@/lib/conversationIntelligence";
 import type { ContactContext } from "@/components/AIComposer";
+import {
+  formatBuyerPreferenceSummaryForAi,
+} from "@shared/buyerPreferenceDisplay";
+import { normalizeBuyerPreferenceProfile } from "@shared/buyerPreferenceSchema";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
 import {
   isGenericOutboundSendFallbackMessage,
@@ -124,6 +128,8 @@ interface Contact {
   /** Matches server: used to resolve default channel when override is invalid */
   lastIncomingChannel?: Channel;
   ghlId?: string;
+  customFields?: Record<string, unknown>;
+  buyerPreferenceProfile?: unknown;
 }
 
 interface Conversation {
@@ -1717,6 +1723,21 @@ export function UnifiedInbox() {
       industry: aiBusinessKnowledge?.industry,
       crmLeadScore: contact.leadScore ?? null,
     });
+    const buyerPrefsSummary = (() => {
+      const ind = (aiBusinessKnowledge?.industry || "").toLowerCase();
+      const re =
+        ind.includes("real estate") ||
+        ind.includes("realtor") ||
+        ind.includes("property");
+      const isBuyer =
+        String((contact.customFields as Record<string, unknown> | undefined)?.leadType || "").toLowerCase() ===
+        "buyer";
+      if (!re && !isBuyer && !contact.buyerPreferenceProfile) return undefined;
+      const profile = normalizeBuyerPreferenceProfile(contact.buyerPreferenceProfile);
+      const summary = formatBuyerPreferenceSummaryForAi(profile);
+      return summary || undefined;
+    })();
+
     return {
       name:          contact.name,
       tag:           contact.tag || undefined,
@@ -1727,6 +1748,7 @@ export function UnifiedInbox() {
       financing:     intel?.financing ?? undefined,
       intent:        intel?.intent,
       leadScore:     intel?.leadScore?.label,
+      buyerPreferences: buyerPrefsSummary,
     };
   }, [contact, messages, aiBusinessKnowledge?.industry]);
 

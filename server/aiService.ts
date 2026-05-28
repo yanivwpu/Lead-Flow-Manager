@@ -49,6 +49,7 @@ export class AIService {
       financing?: string;
       intent?: string;
       leadScore?: string;
+      buyerPreferences?: string;
     }
   ): Promise<{ suggestion: string; confidence: number }> {
     const lastMessage = conversationHistory[conversationHistory.length - 1]?.content || "";
@@ -416,6 +417,7 @@ Return JSON only: { "summary": "..." }`;
       financing?: string;
       intent?: string;
       leadScore?: string;
+      buyerPreferences?: string;
     },
     isFirstMessage?: boolean
   ): string {
@@ -472,6 +474,7 @@ ${contactContext.budget ? `- Budget (already mentioned): ${contactContext.budget
 ${contactContext.timeline ? `- Timeline (already mentioned): ${contactContext.timeline} — DO NOT ask for timeline again` : ''}
 ${contactContext.financing ? `- Financing (already mentioned): ${contactContext.financing} — DO NOT ask about financing again` : ''}
 ${contactContext.notes ? `- Agent notes: ${contactContext.notes}` : ''}
+${contactContext.buyerPreferences ? `\n${contactContext.buyerPreferences}\nUse these preferences when relevant. Do not re-ask for details already captured unless the customer contradicts them.` : ''}
 ` : ''}CORE RULES — READ CAREFULLY:
 
 1. READ THE FULL CONVERSATION before replying. Extract what is already known from the customer's messages (goals, constraints, preferences, and what they've already shared).

@@ -43,6 +43,7 @@ export interface ContactContext {
   financing?: string;
   intent?: string;
   leadScore?: string;
+  buyerPreferences?: string;
 }
 
 export interface AIComposerProps {

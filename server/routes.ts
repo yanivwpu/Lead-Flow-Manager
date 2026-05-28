@@ -10361,6 +10361,37 @@ export async function registerRoutes(
         confidence: 0,
       };
 
+      let enrichedContactContext = contactContext as Record<string, unknown> | undefined;
+      if (chatId) {
+        try {
+          const convForPrefs = await storage.getConversation(chatId);
+          if (convForPrefs?.contactId) {
+            const contactForPrefs = await storage.getContact(convForPrefs.contactId);
+            if (contactForPrefs) {
+              const {
+                shouldRunBuyerPreferencePipeline,
+                readBuyerPreferenceProfile,
+                formatBuyerPreferenceSummaryForAi,
+              } = await import("./buyerPreferenceService");
+              const prefGate = await shouldRunBuyerPreferencePipeline(userId, contactForPrefs);
+              if (prefGate.ok) {
+                const summary = formatBuyerPreferenceSummaryForAi(
+                  readBuyerPreferenceProfile(contactForPrefs),
+                );
+                if (summary) {
+                  enrichedContactContext = {
+                    ...(contactContext || {}),
+                    buyerPreferences: summary,
+                  };
+                }
+              }
+            }
+          }
+        } catch {
+          /* non-fatal — suggest without preference memory */
+        }
+      }
+
       if (!skipAiModelForAutoNonText) {
         suggestion = await aiService.suggestReply(
           userId,
@@ -10370,7 +10401,7 @@ export async function registerRoutes(
           settings || undefined,
           selectedTone,
           aiLanguage,
-          contactContext || undefined
+          enrichedContactContext || undefined
         );
       }
 
