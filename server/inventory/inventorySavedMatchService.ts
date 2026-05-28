@@ -4,6 +4,7 @@ import {
   saveContactInventoryMatch,
   unsaveContactInventoryMatch,
 } from "./inventorySavedMatchDb";
+import { markOpportunitySavedForListing } from "./inventoryOpportunityDb";
 import { getInventoryListing } from "./inventoryDb";
 import { storage } from "../storage";
 
@@ -40,6 +41,8 @@ export async function saveListingMatchForContact(
     matchScore: body.score,
     matchReasons: body.reasons.slice(0, 8),
   });
+
+  await markOpportunitySavedForListing(userId, contactId, body.listingId);
 
   return { ok: true };
 }

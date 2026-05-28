@@ -1,6 +1,7 @@
 import { providerSupportsListingSync, type InventoryProvider } from "@shared/inventory/inventoryProviderSchema";
 import type { InventorySource } from "@shared/schema";
-import { getInventorySource, markListingsInactiveExcept, patchInventorySource, upsertInventoryListing } from "./inventoryDb";
+import { getInventorySource, markListingsInactiveExcept, patchInventorySource, upsertInventoryListing, type ListingUpsertResult } from "./inventoryDb";
+import { processInventoryOpportunitiesAfterSync } from "./inventoryOpportunityService";
 import { buildAdapterContext } from "./inventorySourceService";
 import { getInventoryProviderAdapter } from "./inventoryProviderRegistry";
 
@@ -46,6 +47,7 @@ async function runInventorySyncJob(source: InventorySource): Promise<void> {
   let skipped = 0;
   let pagesFetched = 0;
   const seenIds: string[] = [];
+  const upsertResults: ListingUpsertResult[] = [];
 
   try {
     const adapter = getInventoryProviderAdapter(source.provider as InventoryProvider);
@@ -64,12 +66,14 @@ async function runInventorySyncJob(source: InventorySource): Promise<void> {
         skipped += 1;
         continue;
       }
-      await upsertInventoryListing(userId, sourceId, normalized);
+      const result = await upsertInventoryListing(userId, sourceId, normalized);
+      upsertResults.push(result);
       seenIds.push(normalized.providerListingId);
       upserted += 1;
     }
 
     const inactivated = await markListingsInactiveExcept(sourceId, seenIds);
+    const opportunityStats = await processInventoryOpportunitiesAfterSync(userId, upsertResults);
     const durationMs = Date.now() - startedAt;
 
     await patchInventorySource(sourceId, userId, {
@@ -84,6 +88,7 @@ async function runInventorySyncJob(source: InventorySource): Promise<void> {
         pagesFetched,
         durationMs,
         seenCount: seenIds.length,
+        opportunitiesMatched: opportunityStats.createdOrUpdated,
       },
     });
   } catch (err) {

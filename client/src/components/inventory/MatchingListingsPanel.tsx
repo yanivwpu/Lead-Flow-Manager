@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bookmark, BookmarkCheck, ExternalLink, Home, Loader2, Sparkles } from "lucide-react";
+import { Eye, ExternalLink, Heart, Home, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { InventoryMatchResult, InventoryMatchesResponse } from "@shared/inventory/inventoryMatchTypes";
 import { fetchInventoryStatus } from "@/lib/inventoryApi";
 import { apiRequest } from "@/lib/queryClient";
@@ -214,30 +220,76 @@ function MatchListingCard({
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-1.5">
-              <div className="min-w-0">
+            <div className="flex items-start justify-between gap-1">
+              <div className="min-w-0 flex-1">
                 {cityLine && (
                   <p className="text-[11px] font-semibold text-gray-900 truncate">{cityLine}</p>
                 )}
                 <p className="text-[11px] font-medium text-gray-800">{formatPrice(match.listing.priceCents)}</p>
                 {bedsBaths && <p className="text-[10px] text-gray-500">{bedsBaths}</p>}
               </div>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "shrink-0 text-[9px] px-1.5 py-0 h-5 font-semibold tabular-nums",
-                  scoreBadgeClass(match.score),
-                )}
-                title="Match score"
-              >
-                {match.score}
-              </Badge>
+              <div className="flex items-center gap-0.5 shrink-0">
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                        onClick={viewListing}
+                        aria-label="View listing"
+                        data-testid={`button-view-listing-${match.listingId}`}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">View listing</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          "inline-flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-gray-100",
+                          saved ? "text-rose-500 hover:text-rose-600" : "text-gray-400 hover:text-gray-700",
+                        )}
+                        disabled={saveMutation.isPending}
+                        onClick={() => saveMutation.mutate()}
+                        aria-label="Save to buyer shortlist"
+                        aria-pressed={saved}
+                        data-testid={`button-save-match-${match.listingId}`}
+                      >
+                        {saveMutation.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Heart
+                            className={cn(
+                              "h-3.5 w-3.5",
+                              saved ? "fill-rose-500 text-rose-500" : "",
+                            )}
+                          />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">Save to buyer shortlist</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[9px] px-1.5 py-0 h-5 font-semibold tabular-nums ml-0.5",
+                    scoreBadgeClass(match.score),
+                  )}
+                  title="Match score"
+                >
+                  {match.score}
+                </Badge>
+              </div>
             </div>
           </div>
         </div>
 
         {match.reasons.length > 0 && (
-          <ul className="mt-1.5 space-y-0.5">
+          <ul className="mt-1.5 space-y-0.5 pl-[4.25rem]">
             {match.reasons.slice(0, 4).map((reason) => (
               <li key={reason} className="text-[10px] text-violet-800/90 leading-snug flex gap-1">
                 <span className="text-violet-400 shrink-0">•</span>
@@ -246,42 +298,6 @@ function MatchListingCard({
             ))}
           </ul>
         )}
-
-        <div className="mt-2 flex gap-1.5">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 flex-1 text-[10px] px-2"
-            onClick={viewListing}
-            data-testid={`button-view-listing-${match.listingId}`}
-          >
-            View Listing
-          </Button>
-          <Button
-            type="button"
-            variant={saved ? "secondary" : "outline"}
-            size="sm"
-            className="h-7 flex-1 text-[10px] px-2"
-            disabled={saveMutation.isPending}
-            onClick={() => saveMutation.mutate()}
-            data-testid={`button-save-match-${match.listingId}`}
-          >
-            {saveMutation.isPending ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : saved ? (
-              <>
-                <BookmarkCheck className="h-3 w-3 mr-1 shrink-0" />
-                Saved
-              </>
-            ) : (
-              <>
-                <Bookmark className="h-3 w-3 mr-1 shrink-0" />
-                Save Match
-              </>
-            )}
-          </Button>
-        </div>
       </div>
 
       <ListingDetailDialog

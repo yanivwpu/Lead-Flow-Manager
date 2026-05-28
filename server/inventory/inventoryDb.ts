@@ -1,4 +1,4 @@
-import { and, desc, eq, notInArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import {
   inventoryListings,
   inventorySources,
@@ -6,6 +6,7 @@ import {
   type InventorySource,
 } from "@shared/schema";
 import type { NormalizedInventoryListing } from "@shared/inventory/inventoryListingSchema";
+import type { SyncAlertStatus } from "@shared/inventory/inventoryOpportunityTypes";
 import { db } from "../../drizzle/db";
 import { decryptIntegrationConfig, encryptIntegrationConfig } from "../integrationConfigCrypto";
 
@@ -118,41 +119,110 @@ function listingRowFromNormalized(
   };
 }
 
+export type ListingUpsertResult = {
+  listingId: string;
+  syncAlertStatus: SyncAlertStatus;
+  previousPriceCents: number | null;
+  currentPriceCents: number | null;
+  priceReduced: boolean;
+};
+
 export async function upsertInventoryListing(
   userId: string,
   sourceId: string,
   normalized: NormalizedInventoryListing,
-): Promise<void> {
+): Promise<ListingUpsertResult> {
   const row = listingRowFromNormalized(userId, sourceId, normalized);
-  await db
-    .insert(inventoryListings)
-    .values(row)
-    .onConflictDoUpdate({
-      target: [inventoryListings.sourceId, inventoryListings.providerListingId],
-      set: {
-        status: row.status,
-        priceCents: row.priceCents,
-        currency: row.currency,
-        addressLine1: row.addressLine1,
-        addressLine2: row.addressLine2,
-        city: row.city,
-        state: row.state,
-        zip: row.zip,
-        country: row.country,
-        latitude: row.latitude,
-        longitude: row.longitude,
-        beds: row.beds,
-        baths: row.baths,
-        propertyType: row.propertyType,
-        description: row.description,
-        features: row.features,
-        photos: row.photos,
-        listingUrl: row.listingUrl,
-        sourceUpdatedAt: row.sourceUpdatedAt,
-        syncedAt: new Date(),
-        updatedAt: new Date(),
-      },
-    });
+  const now = new Date();
+
+  const [existing] = await db
+    .select()
+    .from(inventoryListings)
+    .where(
+      and(
+        eq(inventoryListings.sourceId, sourceId),
+        eq(inventoryListings.providerListingId, normalized.providerListingId),
+      ),
+    )
+    .limit(1);
+
+  if (!existing) {
+    const [inserted] = await db
+      .insert(inventoryListings)
+      .values({
+        ...row,
+        syncAlertStatus: "new",
+        firstSeenAt: now,
+      })
+      .returning({ id: inventoryListings.id });
+    return {
+      listingId: inserted.id,
+      syncAlertStatus: "new",
+      previousPriceCents: null,
+      currentPriceCents: row.priceCents ?? null,
+      priceReduced: false,
+    };
+  }
+
+  let syncAlertStatus: SyncAlertStatus = "existing";
+  let previousPriceCents: number | null = existing.previousPriceCents ?? null;
+  let lastPriceChangeAt: Date | null = existing.lastPriceChangeAt ?? null;
+
+  if (
+    existing.priceCents != null &&
+    row.priceCents != null &&
+    existing.priceCents !== row.priceCents
+  ) {
+    syncAlertStatus = "price_changed";
+    previousPriceCents = existing.priceCents;
+    lastPriceChangeAt = now;
+  }
+
+  const currentPriceCents = row.priceCents ?? null;
+  const priceReduced =
+    syncAlertStatus === "price_changed" &&
+    previousPriceCents != null &&
+    currentPriceCents != null &&
+    currentPriceCents < previousPriceCents;
+
+  const [updated] = await db
+    .update(inventoryListings)
+    .set({
+      status: row.status,
+      priceCents: row.priceCents,
+      currency: row.currency,
+      addressLine1: row.addressLine1,
+      addressLine2: row.addressLine2,
+      city: row.city,
+      state: row.state,
+      zip: row.zip,
+      country: row.country,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      beds: row.beds,
+      baths: row.baths,
+      propertyType: row.propertyType,
+      description: row.description,
+      features: row.features,
+      photos: row.photos,
+      listingUrl: row.listingUrl,
+      sourceUpdatedAt: row.sourceUpdatedAt,
+      syncAlertStatus,
+      previousPriceCents: syncAlertStatus === "price_changed" ? previousPriceCents : existing.previousPriceCents,
+      lastPriceChangeAt,
+      syncedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(inventoryListings.id, existing.id))
+    .returning({ id: inventoryListings.id });
+
+  return {
+    listingId: updated.id,
+    syncAlertStatus,
+    previousPriceCents: syncAlertStatus === "price_changed" ? previousPriceCents : null,
+    currentPriceCents,
+    priceReduced,
+  };
 }
 
 export async function markListingsInactiveExcept(
@@ -283,4 +353,15 @@ export async function getInventoryListing(
     .where(and(eq(inventoryListings.id, listingId), eq(inventoryListings.userId, userId)))
     .limit(1);
   return row;
+}
+
+export async function getInventoryListingsByIds(
+  userId: string,
+  listingIds: string[],
+): Promise<InventoryListing[]> {
+  if (listingIds.length === 0) return [];
+  return db
+    .select()
+    .from(inventoryListings)
+    .where(and(eq(inventoryListings.userId, userId), inArray(inventoryListings.id, listingIds)));
 }

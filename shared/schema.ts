@@ -1608,6 +1608,9 @@ export const inventoryListings = pgTable(
     sourceUpdatedAt: timestamp("source_updated_at"),
     syncedAt: timestamp("synced_at").defaultNow().notNull(),
     firstSeenAt: timestamp("first_seen_at").defaultNow().notNull(),
+    syncAlertStatus: text("sync_alert_status").notNull().default("existing"),
+    previousPriceCents: integer("previous_price_cents"),
+    lastPriceChangeAt: timestamp("last_price_change_at"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
@@ -1619,6 +1622,7 @@ export const inventoryListings = pgTable(
     userStatusIdx: index("inventory_listings_user_status_idx").on(t.userId, t.status),
     userCityIdx: index("inventory_listings_user_city_idx").on(t.userId, t.city),
     sourceSyncedIdx: index("inventory_listings_source_synced_idx").on(t.sourceId, t.syncedAt),
+    userSyncAlertIdx: index("inventory_listings_user_sync_alert_idx").on(t.userId, t.syncAlertStatus),
   }),
 );
 
@@ -1673,6 +1677,48 @@ export const insertContactInventorySavedMatchSchema = createInsertSchema(
 export type ContactInventorySavedMatch = typeof contactInventorySavedMatches.$inferSelect;
 export type InsertContactInventorySavedMatch = z.infer<
   typeof insertContactInventorySavedMatchSchema
+>;
+
+export const contactInventoryOpportunities = pgTable(
+  "contact_inventory_opportunities",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+    listingId: varchar("listing_id").notNull().references(() => inventoryListings.id, { onDelete: "cascade" }),
+    opportunityType: text("opportunity_type").notNull(),
+    score: integer("score").notNull(),
+    reasons: jsonb("reasons").notNull().default(sql`'[]'::jsonb`),
+    previousPriceCents: integer("previous_price_cents"),
+    currentPriceCents: integer("current_price_cents"),
+    discoveredAt: timestamp("discovered_at").defaultNow().notNull(),
+    status: text("status").notNull().default("new"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (t) => ({
+    contactListingTypeUnique: uniqueIndex("contact_inventory_opportunities_contact_listing_type_unique").on(
+      t.contactId,
+      t.listingId,
+      t.opportunityType,
+    ),
+    contactIdIdx: index("contact_inventory_opportunities_contact_idx").on(t.contactId),
+    contactStatusIdx: index("contact_inventory_opportunities_contact_status_idx").on(t.contactId, t.status),
+    userIdIdx: index("contact_inventory_opportunities_user_idx").on(t.userId),
+  }),
+);
+
+export const insertContactInventoryOpportunitySchema = createInsertSchema(
+  contactInventoryOpportunities,
+).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type ContactInventoryOpportunity = typeof contactInventoryOpportunities.$inferSelect;
+export type InsertContactInventoryOpportunity = z.infer<
+  typeof insertContactInventoryOpportunitySchema
 >;
 
 // ─── Contact Notes (Team Notes — collaborative, workspace-scoped) ─────────────

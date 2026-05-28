@@ -78,6 +78,7 @@ import { AIUpgradePrompt } from "./AIUpgradePrompt";
 import type { AICapabilities } from "@/lib/useAICapabilities";
 import { BuyerPreferencesPanel } from "@/components/BuyerPreferencesPanel";
 import { MatchingListingsPanel } from "@/components/inventory/MatchingListingsPanel";
+import { NewOpportunitiesPanel } from "@/components/inventory/NewOpportunitiesPanel";
 import { buildBuyerPreferenceChips } from "@shared/buyerPreferenceDisplay";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
@@ -2261,6 +2262,10 @@ export function InboxLeadDetailsPanel({
                       compact
                       readOnly
                     />
+                  </div>
+
+                  <div className="rounded-lg border border-gray-200 bg-white/80 px-2.5 py-2">
+                    <NewOpportunitiesPanel contactId={contact.id} compact />
                   </div>
 
                   <div className="rounded-lg border border-gray-200 bg-white/80 px-2.5 py-2">

@@ -261,6 +261,46 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/contacts/:id/inventory-opportunities", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const { findInventoryOpportunitiesForContact } = await import("../inventory/inventoryOpportunityService");
+      const result = await findInventoryOpportunitiesForContact(req.params.id, req.user.id);
+      if (result.httpStatus === 404) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+      if (result.httpStatus === 403) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const { httpStatus: _h, ...body } = result;
+      res.json(body);
+    } catch (error) {
+      console.error("Error fetching inventory opportunities:", error);
+      res.status(500).json({ error: "Failed to fetch inventory opportunities" });
+    }
+  });
+
+  app.patch("/api/contacts/:id/inventory-opportunities/:opportunityId", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const { updateInventoryOpportunityStatus } = await import("../inventory/inventoryOpportunityService");
+      const status = typeof req.body?.status === "string" ? req.body.status : "";
+      if (!status) return res.status(400).json({ error: "status is required" });
+
+      const result = await updateInventoryOpportunityStatus(
+        req.params.id,
+        req.user.id,
+        req.params.opportunityId,
+        status as "viewed" | "saved" | "dismissed",
+      );
+      if (!result.ok) return res.status(result.status).json({ error: result.error });
+      res.json({ updated: true, status });
+    } catch (error) {
+      console.error("Error updating inventory opportunity:", error);
+      res.status(500).json({ error: "Failed to update opportunity" });
+    }
+  });
+
   // Get single contact with all conversations
   app.get("/api/contacts/:id", async (req, res) => {
     try {
