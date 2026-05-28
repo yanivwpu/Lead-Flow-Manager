@@ -100,12 +100,42 @@ export function MatchingListingsPanel({ contactId, compact = true }: MatchingLis
         </div>
       )}
 
+      {isFetched && data && (
+        <div
+          className="mb-1.5 rounded border border-dashed border-amber-300 bg-amber-50/80 px-2 py-1.5 font-mono text-[9px] leading-relaxed text-amber-950"
+          data-testid="inventory-match-debug"
+        >
+          <div>eligible: {String(data.eligible)}</div>
+          <div>reason: {data.reason}</div>
+          <div>inventoryCount: {data.inventoryCount ?? "—"}</div>
+          <div>matchCount: {data.matchCount}</div>
+          <div>sourceCount: {data.debug?.sourceCount ?? "—"}</div>
+          {data.debug && (
+            <>
+              <div>activeListingCount: {data.debug.activeListingCount}</div>
+              <div>totalListingCount: {data.debug.totalListingCount}</div>
+              <div>workspaceAligned: {String(data.debug.workspaceAligned)}</div>
+              <div className="truncate" title={data.debug.sessionUserId}>
+                sessionUserId: {data.debug.sessionUserId}
+              </div>
+              <div className="truncate" title={data.debug.contactUserId}>
+                contactUserId: {data.debug.contactUserId}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {showEmpty && (
         <p className="text-[11px] text-gray-500 leading-snug py-1">
           {data?.reason === "no_buyer_preferences"
             ? "Add buyer preferences to preview MLS matches."
             : data?.reason === "no_active_inventory"
-              ? "Connect and sync MLS inventory to preview matches."
+              ? data.debug?.sourceCount === 0
+                ? "No inventory source for this workspace — run seed with the session user id below."
+                : data.debug && data.debug.totalListingCount > 0 && data.debug.activeListingCount === 0
+                  ? "Listings exist but none are active — check listing status."
+                  : "Connect and sync MLS inventory to preview matches."
               : "No strong matches in active inventory yet."}
         </p>
       )}

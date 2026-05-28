@@ -230,6 +230,22 @@ export async function countActiveListingsForUser(userId: string): Promise<number
   return row?.count ?? 0;
 }
 
+export async function countInventorySourcesForUser(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(inventorySources)
+    .where(eq(inventorySources.userId, userId));
+  return row?.count ?? 0;
+}
+
+export async function countAllListingsForUser(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(inventoryListings)
+    .where(eq(inventoryListings.userId, userId));
+  return row?.count ?? 0;
+}
+
 export async function listInventoryListings(
   params: ListInventoryListingsParams,
 ): Promise<{ rows: InventoryListing[]; total: number }> {

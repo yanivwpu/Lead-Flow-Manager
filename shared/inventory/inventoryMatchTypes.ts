@@ -34,6 +34,17 @@ export const inventoryMatchesResponseSchema = z.object({
   inventoryCount: z.number().int().nonnegative().optional(),
   matchCount: z.number().int().nonnegative(),
   matches: z.array(inventoryMatchResultSchema),
+  /** Temporary matcher diagnostics (internal preview). */
+  debug: z
+    .object({
+      sessionUserId: z.string(),
+      contactUserId: z.string(),
+      workspaceAligned: z.boolean(),
+      sourceCount: z.number().int().nonnegative(),
+      totalListingCount: z.number().int().nonnegative(),
+      activeListingCount: z.number().int().nonnegative(),
+    })
+    .optional(),
 });
 
 export type InventoryMatchesResponse = z.infer<typeof inventoryMatchesResponseSchema>;
