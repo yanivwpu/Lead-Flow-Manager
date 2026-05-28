@@ -1398,7 +1398,20 @@ export async function runW2QualificationEngine(
       contactId: contact.id,
       inboundText: message,
       w2FieldUpdates: fieldUpdates,
+      triggerSource: "workflowEngine:runW2QualificationEngine",
     });
+  } else if (contact?.id) {
+    console.log(
+      JSON.stringify({
+        tag: "[BuyerPreference]",
+        event: "extraction_skipped",
+        contactId: contact.id,
+        userId,
+        triggerSource: "workflowEngine:runW2QualificationEngine",
+        reason: "w2_message_too_short",
+        textLen: message.trim().length,
+      }),
+    );
   }
 
   return { scoreAdjustment: score, qualificationQuestion, fieldUpdates, signalsDetected: signals };

@@ -28,6 +28,14 @@ function log(event: string, payload: Record<string, unknown>): void {
   console.log(JSON.stringify({ tag: "[BuyerPreference]", event, ...payload }));
 }
 
+/** Always-on trigger-path tracing (inbound schedule / run). */
+function logTrigger(
+  event: "extraction_triggered" | "extraction_skipped" | "extraction_started" | "extraction_completed",
+  payload: Record<string, unknown>,
+): void {
+  log(event, payload);
+}
+
 function logPersistence(contactId: string, step: string, data: Record<string, unknown>): void {
   if (process.env.DEBUG_BUYER_PREFS !== "1" && process.env.NODE_ENV === "production") {
     return;
@@ -59,18 +67,38 @@ export function contactLeadTypeIsBuyer(contact: Contact): boolean {
 export async function shouldRunBuyerPreferencePipeline(
   userId: string,
   contact: Contact,
-): Promise<{ ok: boolean; reason: string }> {
-  if (await isRgeInstalledForUser(userId)) {
-    return { ok: true, reason: "rge_installed" };
+): Promise<{ ok: boolean; reason: string; debug?: Record<string, unknown> }> {
+  const rgeInstalled = await isRgeInstalledForUser(userId);
+  if (rgeInstalled) {
+    return { ok: true, reason: "rge_installed", debug: { rgeInstalled: true } };
   }
   const bk = await storage.getAiBusinessKnowledge(userId);
-  if (isRealEstateIndustry(bk?.industry)) {
-    return { ok: true, reason: "real_estate_workspace" };
+  const industry = bk?.industry ?? null;
+  if (isRealEstateIndustry(industry)) {
+    return {
+      ok: true,
+      reason: "real_estate_workspace",
+      debug: { rgeInstalled: false, industry },
+    };
   }
-  if (contactLeadTypeIsBuyer(contact)) {
-    return { ok: true, reason: "buyer_lead_type" };
+  const isBuyer = contactLeadTypeIsBuyer(contact);
+  if (isBuyer) {
+    return {
+      ok: true,
+      reason: "buyer_lead_type",
+      debug: { rgeInstalled: false, industry, leadType: "buyer" },
+    };
   }
-  return { ok: false, reason: "not_eligible" };
+  const cf = (contact.customFields || {}) as Record<string, unknown>;
+  return {
+    ok: false,
+    reason: "not_eligible",
+    debug: {
+      rgeInstalled: false,
+      industry,
+      leadType: cf.leadType ?? null,
+    },
+  };
 }
 
 export function readBuyerPreferenceProfile(contact: Contact): BuyerPreferenceProfile {
@@ -349,27 +377,83 @@ Rules:
 export async function runBuyerPreferenceExtraction(
   userId: string,
   contactId: string,
-  options?: { conversationId?: string; messageId?: string; inboundText?: string },
+  options?: {
+    conversationId?: string;
+    messageId?: string;
+    inboundText?: string;
+    triggerSource?: string;
+  },
 ): Promise<void> {
+  const triggerSource = options?.triggerSource ?? "unknown";
+
   const contact = await storage.getContact(contactId);
-  if (!contact || contact.userId !== userId) return;
+  if (!contact || contact.userId !== userId) {
+    logTrigger("extraction_skipped", {
+      contactId,
+      userId,
+      triggerSource,
+      reason: !contact ? "contact_not_found" : "contact_user_mismatch",
+    });
+    return;
+  }
 
   const gate = await shouldRunBuyerPreferencePipeline(userId, contact);
-  if (!gate.ok) return;
+  if (!gate.ok) {
+    logTrigger("extraction_skipped", {
+      contactId,
+      userId,
+      triggerSource,
+      reason: gate.reason,
+      ...gate.debug,
+    });
+    return;
+  }
 
   const text = (options?.inboundText || "").trim();
   if (text.length > 0 && text.length < 12 && TRIVIAL_INBOUND_RE.test(text)) {
+    logTrigger("extraction_skipped", {
+      contactId,
+      userId,
+      triggerSource,
+      reason: "trivial_inbound_text",
+      textLen: text.length,
+    });
     return;
   }
 
   const history = await loadConversationForExtraction(contactId);
-  if (!history.length && !text) return;
+  if (!history.length && !text) {
+    logTrigger("extraction_skipped", {
+      contactId,
+      userId,
+      triggerSource,
+      reason: "no_conversation_history",
+      textLen: text.length,
+    });
+    return;
+  }
+
+  logTrigger("extraction_started", {
+    contactId,
+    userId,
+    triggerSource,
+    gateReason: gate.reason,
+    textLen: text.length,
+    historyMessages: history.length,
+    ...gate.debug,
+  });
 
   try {
     const existing = readBuyerPreferenceProfile(contact);
     const patch = await extractPreferencesWithLlm(contact, history, existing);
     if (patchFieldCount(patch) === 0) {
-      log("extract_skipped_empty_patch", { userId, contactId, reason: gate.reason });
+      logTrigger("extraction_completed", {
+        contactId,
+        userId,
+        triggerSource,
+        outcome: "empty_patch",
+        gateReason: gate.reason,
+      });
       return;
     }
 
@@ -379,14 +463,23 @@ export async function runBuyerPreferenceExtraction(
       messageId: options?.messageId,
       logActivity: true,
     });
-    log("extracted", {
-      userId,
+    logTrigger("extraction_completed", {
       contactId,
-      reason: gate.reason,
+      userId,
+      triggerSource,
+      outcome: "persisted",
+      gateReason: gate.reason,
       profileStatus: merged.profileStatus,
       patchKeys: patchFieldCount(patch),
     });
   } catch (err) {
+    logTrigger("extraction_completed", {
+      contactId,
+      userId,
+      triggerSource,
+      outcome: "error",
+      error: err instanceof Error ? err.message : String(err),
+    });
     log("extract_failed", {
       userId,
       contactId,
@@ -402,26 +495,83 @@ export function scheduleBuyerPreferenceExtraction(params: {
   messageId?: string;
   inboundText?: string;
   w2FieldUpdates?: Record<string, unknown>;
+  /** Where the schedule call originated (channelService, workflowEngine, …). */
+  triggerSource?: string;
 }): void {
-  const { userId, contactId, conversationId, messageId, inboundText, w2FieldUpdates } = params;
+  const {
+    userId,
+    contactId,
+    conversationId,
+    messageId,
+    inboundText,
+    w2FieldUpdates,
+    triggerSource = "schedule",
+  } = params;
   const text = (inboundText || "").trim();
+
   if (text.length > 0 && text.length < 12 && TRIVIAL_INBOUND_RE.test(text)) {
+    logTrigger("extraction_skipped", {
+      contactId,
+      userId,
+      triggerSource,
+      reason: "trivial_inbound_text",
+      textLen: text.length,
+    });
     return;
   }
 
   const now = Date.now();
   const last = lastExtractionByContact.get(contactId) || 0;
+  const debounceRemainingMs = DEBOUNCE_MS - (now - last);
   if (now - last < DEBOUNCE_MS) {
+    logTrigger("extraction_skipped", {
+      contactId,
+      userId,
+      triggerSource,
+      reason: "debounce",
+      debounceRemainingMs,
+      textLen: text.length,
+    });
     return;
   }
-  lastExtractionByContact.set(contactId, now);
+
+  logTrigger("extraction_triggered", {
+    contactId,
+    userId,
+    triggerSource,
+    textLen: text.length,
+    hasW2FieldUpdates: !!(w2FieldUpdates && Object.keys(w2FieldUpdates).length > 0),
+    conversationId,
+    messageId,
+  });
 
   setImmediate(() => {
     void (async () => {
       const contact = await storage.getContact(contactId);
-      if (!contact) return;
+      if (!contact) {
+        logTrigger("extraction_skipped", {
+          contactId,
+          userId,
+          triggerSource,
+          reason: "contact_not_found",
+        });
+        return;
+      }
+
       const gate = await shouldRunBuyerPreferencePipeline(userId, contact);
-      if (!gate.ok) return;
+      if (!gate.ok) {
+        logTrigger("extraction_skipped", {
+          contactId,
+          userId,
+          triggerSource,
+          reason: gate.reason,
+          ...gate.debug,
+        });
+        return;
+      }
+
+      // Only arm debounce once we know extraction will run (gate passed).
+      lastExtractionByContact.set(contactId, Date.now());
 
       if (w2FieldUpdates && Object.keys(w2FieldUpdates).length > 0) {
         const bridge = buildW2BridgePatch(w2FieldUpdates);
@@ -438,10 +588,12 @@ export function scheduleBuyerPreferenceExtraction(params: {
         conversationId,
         messageId,
         inboundText: text,
+        triggerSource,
       });
     })().catch((err) => {
       log("schedule_error", {
         contactId,
+        triggerSource,
         error: err instanceof Error ? err.message : String(err),
       });
     });

@@ -218,6 +218,7 @@ export function registerContactRoutes(app: Express): void {
 
       await runBuyerPreferenceExtraction(req.user.id, contact.id, {
         inboundText: typeof req.body?.inboundText === "string" ? req.body.inboundText : undefined,
+        triggerSource: "api:buyer-preferences/extract",
       });
       const refreshed = await storage.getContact(contact.id);
       const rawProfile = readBuyerPreferenceProfileRaw(refreshed || contact);

@@ -1166,16 +1166,48 @@ class ChannelService {
       preview: content.substring(0, 100),
     });
 
-    if (!isCommerceInbound && (content || "").trim().length >= 12) {
-      void import("./buyerPreferenceService").then(({ scheduleBuyerPreferenceExtraction }) =>
-        scheduleBuyerPreferenceExtraction({
-          userId,
-          contactId: contact.id,
-          conversationId: conversation.id,
-          messageId: message.id,
-          inboundText: content,
-        }),
-      );
+    {
+      const inboundTrimmed = (content || "").trim();
+      const triggerSource = `channelService:${channel}`;
+      if (isCommerceInbound) {
+        console.log(
+          JSON.stringify({
+            tag: "[BuyerPreference]",
+            event: "extraction_skipped",
+            contactId: contact.id,
+            userId,
+            triggerSource,
+            reason: "commerce_inbound",
+            channel,
+            textLen: inboundTrimmed.length,
+          }),
+        );
+      } else if (inboundTrimmed.length > 0 && inboundTrimmed.length < 12) {
+        console.log(
+          JSON.stringify({
+            tag: "[BuyerPreference]",
+            event: "extraction_skipped",
+            contactId: contact.id,
+            userId,
+            triggerSource,
+            reason: "inbound_text_too_short",
+            channel,
+            textLen: inboundTrimmed.length,
+            note: "channelService requires >= 12 chars (or media-only with empty text)",
+          }),
+        );
+      } else {
+        void import("./buyerPreferenceService").then(({ scheduleBuyerPreferenceExtraction }) =>
+          scheduleBuyerPreferenceExtraction({
+            userId,
+            contactId: contact.id,
+            conversationId: conversation.id,
+            messageId: message.id,
+            inboundText: content,
+            triggerSource,
+          }),
+        );
+      }
     }
 
     if (isCommerceInbound) {
