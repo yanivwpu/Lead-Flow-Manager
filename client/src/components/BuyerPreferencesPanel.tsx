@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, RefreshCw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,6 +29,20 @@ interface BuyerPreferencesPanelProps {
   /** Raw profile from contact row (optional seed until API loads). */
   initialProfile?: unknown;
   onUpdated?: () => void;
+  /** Tighter layout when nested under Copilot. */
+  compact?: boolean;
+}
+
+type BuyerPreferencesApiResponse = {
+  eligible?: boolean;
+  reason?: string;
+  profile?: unknown;
+  rawProfile?: unknown;
+  chips?: BuyerPreferenceChip[];
+};
+
+function chipsFromRaw(raw: unknown): BuyerPreferenceChip[] {
+  return buildBuyerPreferenceChips(raw);
 }
 
 function ChipBadge({ chip }: { chip: BuyerPreferenceChip }) {
@@ -52,6 +66,7 @@ export function BuyerPreferencesPanel({
   contactId,
   initialProfile,
   onUpdated,
+  compact = false,
 }: BuyerPreferencesPanelProps) {
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
@@ -63,26 +78,69 @@ export function BuyerPreferencesPanel({
   const [financing, setFinancing] = useState("");
   const [mustHaves, setMustHaves] = useState("");
 
-  const { data, isLoading, isFetching, isFetched } = useQuery({
+  const stickyChipsRef = useRef<BuyerPreferenceChip[]>([]);
+  const prevContactIdRef = useRef(contactId);
+  if (prevContactIdRef.current !== contactId) {
+    prevContactIdRef.current = contactId;
+    stickyChipsRef.current = [];
+  }
+
+  const { data, isLoading, isFetched } = useQuery<BuyerPreferencesApiResponse>({
     queryKey: [`/api/contacts/${contactId}/buyer-preferences`],
     enabled: !!contactId,
     staleTime: 30_000,
     refetchOnWindowFocus: true,
   });
 
-  const profile = (data as { profile?: unknown } | undefined)?.profile ?? initialProfile;
-  const eligible = (data as { eligible?: boolean } | undefined)?.eligible ?? false;
-  const chips = useMemo(() => {
-    const fromApi = (data as { chips?: BuyerPreferenceChip[] } | undefined)?.chips;
-    if (fromApi && fromApi.length > 0) return fromApi;
-    return buildBuyerPreferenceChips(profile);
-  }, [data, profile]);
+  // Reset sticky cache when switching contacts
+  useEffect(() => {
+    stickyChipsRef.current = [];
+  }, [contactId]);
 
-  const seedChips = useMemo(() => buildBuyerPreferenceChips(initialProfile), [initialProfile]);
-  const displayChips = chips.length > 0 ? chips : seedChips;
+  const apiRaw = data?.rawProfile ?? data?.profile;
+  const rawForDisplay = apiRaw ?? initialProfile;
+
+  const resolvedChips = useMemo(() => {
+    if (data?.chips && data.chips.length > 0) return data.chips;
+    if (apiRaw != null) return chipsFromRaw(apiRaw);
+    if (initialProfile != null) return chipsFromRaw(initialProfile);
+    return [];
+  }, [data?.chips, apiRaw, initialProfile]);
+
+  useEffect(() => {
+    if (resolvedChips.length > 0) {
+      stickyChipsRef.current = resolvedChips;
+    }
+  }, [resolvedChips]);
+
+  const displayChips =
+    resolvedChips.length > 0 ? resolvedChips : stickyChipsRef.current;
+
+  const eligible = data?.eligible ?? false;
+
+  const profileForEdit = rawForDisplay;
+
+  useEffect(() => {
+    if (import.meta.env.DEV && isFetched && data) {
+      console.debug("[BuyerPrefs:panel]", {
+        contactId,
+        eligible: data.eligible,
+        reason: data.reason,
+        apiChipCount: data.chips?.length ?? 0,
+        resolvedChipCount: resolvedChips.length,
+        displayChipCount: displayChips.length,
+        hasInitialProfile: initialProfile != null,
+        hasRawProfile: data.rawProfile != null,
+        profileStatus:
+          data.profile && typeof data.profile === "object"
+            ? (data.profile as { profileStatus?: string }).profileStatus
+            : undefined,
+      });
+    }
+  }, [contactId, isFetched, data, resolvedChips.length, displayChips.length, initialProfile]);
 
   const openEdit = useCallback(() => {
-    const p = profile as Record<string, { value?: unknown }> | undefined;
+    const p = profileForEdit as Record<string, { value?: unknown }> | undefined;
     setAreas((p?.targetAreas?.value as string[] | undefined)?.join(", ") || "");
     setBudgetMax(p?.priceMax?.value != null ? String(p.priceMax.value) : "");
     setBeds(p?.bedsMin?.value != null ? String(p.bedsMin.value) : "");
@@ -91,7 +149,7 @@ export function BuyerPreferencesPanel({
     setFinancing((p?.financingStatus?.value as string) || "");
     setMustHaves((p?.mustHaves?.value as string[] | undefined)?.join(", ") || "");
     setEditOpen(true);
-  }, [profile]);
+  }, [profileForEdit]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -146,18 +204,32 @@ export function BuyerPreferencesPanel({
     },
   });
 
-  // Server eligibility gate (RGE / real-estate / buyer lead type) — hide only after fetch confirms ineligible + no chips
-  if (isFetched && !eligible && displayChips.length === 0) return null;
+  const hasKnownChips = displayChips.length > 0;
+  const showEligible = isFetched ? eligible : hasKnownChips;
+
+  if (isFetched && !eligible && !hasKnownChips) return null;
   if (!contactId) return null;
 
+  const showListening = isFetched && showEligible && !hasKnownChips && !isLoading;
+
   return (
-    <div className="mt-3" data-testid="buyer-preferences-panel">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+    <div
+      className={cn(compact ? "mt-0" : "mt-3")}
+      data-testid="buyer-preferences-panel"
+    >
+      <div className={cn("flex items-center justify-between", compact ? "mb-0.5" : "mb-1")}>
+        <span
+          className={cn(
+            "font-semibold uppercase tracking-wide",
+            compact
+              ? "text-[9px] text-violet-600/90"
+              : "text-[10px] text-gray-400",
+          )}
+        >
           Buyer preferences
         </span>
         <div className="flex items-center gap-0.5">
-          {eligible && (
+          {showEligible && (
             <>
               <button
                 type="button"
@@ -187,18 +259,23 @@ export function BuyerPreferencesPanel({
         </div>
       </div>
 
-      {isLoading || (isFetching && !displayChips.length) ? (
-        <p className="text-[11px] text-gray-400 italic">Loading…</p>
-      ) : displayChips.length > 0 ? (
-        <div className="flex flex-wrap gap-1" data-testid="buyer-preferences-chips">
+      {isLoading && !hasKnownChips ? (
+        <p className={cn("text-gray-400 italic", compact ? "text-[10px]" : "text-[11px]")}>Loading…</p>
+      ) : hasKnownChips ? (
+        <div
+          className={cn("flex flex-wrap", compact ? "gap-0.5" : "gap-1")}
+          data-testid="buyer-preferences-chips"
+        >
           {displayChips.map((chip) => (
             <ChipBadge key={chip.id} chip={chip} />
           ))}
         </div>
-      ) : eligible ? (
-        <p className="text-[11px] text-gray-400 italic leading-snug">
+      ) : showListening ? (
+        <p className={cn("text-gray-400 italic leading-snug", compact ? "text-[10px]" : "text-[11px]")}>
           Listening for areas, budget, and must-haves in this thread.
         </p>
+      ) : !isFetched ? (
+        <p className={cn("text-gray-400 italic", compact ? "text-[10px]" : "text-[11px]")}>Loading…</p>
       ) : null}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

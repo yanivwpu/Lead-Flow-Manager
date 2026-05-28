@@ -77,6 +77,7 @@ import { getStageSignals } from "@/lib/leadScoring";
 import { AIUpgradePrompt } from "./AIUpgradePrompt";
 import type { AICapabilities } from "@/lib/useAICapabilities";
 import { BuyerPreferencesPanel } from "@/components/BuyerPreferencesPanel";
+import { buildBuyerPreferenceChips } from "@shared/buyerPreferenceDisplay";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
 
@@ -1432,6 +1433,12 @@ export function InboxLeadDetailsPanel({
     [contactActivityRaw],
   );
 
+  const buyerPrefChips = useMemo(
+    () => buildBuyerPreferenceChips(contact.buyerPreferenceProfile),
+    [contact.buyerPreferenceProfile],
+  );
+  const buyerPrefsHasCriteria = buyerPrefChips.length > 0;
+
   const customerSummaryBullets = useMemo(
     () =>
       buildCustomerSummaryBullets({
@@ -1442,6 +1449,7 @@ export function InboxLeadDetailsPanel({
         financing: intel.financing,
         intent: intel.intent,
         viewingIntent: stageSignals.viewingIntent,
+        suppressCriteriaBullets: buyerPrefsHasCriteria,
       }),
     [
       aiMemory,
@@ -1451,6 +1459,7 @@ export function InboxLeadDetailsPanel({
       intel.financing,
       intel.intent,
       stageSignals.viewingIntent,
+      buyerPrefsHasCriteria,
     ],
   );
 
@@ -2078,71 +2087,65 @@ export function InboxLeadDetailsPanel({
                 />
               ) : (
                 <>
-                  {/* A. SNAPSHOT — hierarchy: lead status → insight → chips → score */}
+                  {/* A. Lead score + insights (action-oriented; criteria live in Buyer Preferences) */}
                   <div className="space-y-3">
-                    <div>
-                      <div className="flex items-center gap-2.5">
-                        <span className={cn("w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-white shadow-sm", intel.leadScore.dot)} />
-                        <span
-                          className={cn(
-                            "text-[15px] font-bold tracking-tight leading-none",
-                            intel.leadScore.color,
-                          )}
-                        >
-                          {(intel.leadScoreDetails?.bucket === "unqualified"
-                            ? "Unqualified"
-                            : intel.leadScore.label)}{" "}
-                          Lead
-                        </span>
-                      </div>
-                      {intel.leadScoreDetails ? (
-                        <div className="mt-3 space-y-3">
-                          {customerInsights.length > 0 ? (
-                            <div className="space-y-1.5">
-                              <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
-                                Customer insights
-                              </p>
-                              {customerInsights.length === 1 ? (
-                                <p className="text-[12px] font-medium text-gray-800 leading-snug">
-                                  {customerInsights[0]}
-                                </p>
-                              ) : (
-                                <ul className="space-y-1">
-                                  {customerInsights.map((insight) => (
-                                    <li
-                                      key={insight}
-                                      className="text-[12px] font-medium text-gray-800 leading-snug flex gap-1.5"
-                                    >
-                                      <span className="text-gray-400 shrink-0">•</span>
-                                      <span>{insight}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </div>
-                          ) : null}
-                          <div className="space-y-0.5">
-                            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
-                              Lead score
-                            </p>
-                            <p className="text-[22px] font-bold text-gray-900 tabular-nums leading-none">
-                              {intel.leadScoreDetails.score}
-                            </p>
-                            <p className="text-[11px] font-semibold text-gray-700">
+                    {intel.leadScoreDetails ? (
+                      <div className="flex items-end justify-between gap-2">
+                        <div className="space-y-0.5 min-w-0">
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                            Lead score
+                          </p>
+                          <p className="text-[22px] font-bold text-gray-900 tabular-nums leading-none">
+                            {intel.leadScoreDetails.score}
+                          </p>
+                          <div className="flex items-center gap-1.5 pt-0.5">
+                            <span className={cn("w-2 h-2 rounded-full shrink-0", intel.leadScore.dot)} />
+                            <span className={cn("text-[11px] font-semibold truncate", intel.leadScore.color)}>
                               {(intel.leadScoreDetails?.bucket === "unqualified"
                                 ? "Unqualified"
                                 : intel.leadScore.label)}{" "}
                               Lead
-                            </p>
+                            </span>
                           </div>
                         </div>
-                      ) : null}
-                    </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", intel.leadScore.dot)} />
+                        <span className={cn("text-[13px] font-bold", intel.leadScore.color)}>
+                          {intel.leadScore.label} Lead
+                        </span>
+                      </div>
+                    )}
 
-                    <div className="flex flex-col gap-1">
-                      {qualifyingCriteria.length > 0 ? (
-                        // Business-defined qualifying criteria — agent manually marks answered
-                        qualifyingCriteria.map((criterion) => {
+                    {customerInsights.length > 0 ? (
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                          Customer insights
+                        </p>
+                        {customerInsights.length === 1 ? (
+                          <p className="text-[12px] font-medium text-gray-800 leading-snug">
+                            {customerInsights[0]}
+                          </p>
+                        ) : (
+                          <ul className="space-y-0.5">
+                            {customerInsights.map((insight) => (
+                              <li
+                                key={insight}
+                                className="text-[12px] font-medium text-gray-800 leading-snug flex gap-1.5"
+                              >
+                                <span className="text-gray-400 shrink-0">•</span>
+                                <span>{insight}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ) : null}
+
+                    {qualifyingCriteria.length > 0 && !buyerPrefsHasCriteria ? (
+                      <div className="flex flex-col gap-1">
+                        {qualifyingCriteria.map((criterion) => {
                           const isAnswered = answeredCriteriaKeys.has(criterion.key);
                           return (
                             <button
@@ -2168,36 +2171,12 @@ export function InboxLeadDetailsPanel({
                               </span>
                             </button>
                           );
-                        })
-                      ) : (() => {
-                        const industry = (businessKnowledge?.industry || "").toLowerCase();
-                        const isRealEstate = industry.includes("real estate") || industry.includes("realtor") || industry.includes("property");
-                        if (!isRealEstate) return null;
-                        // Only show real-estate defaults when the business is configured as real estate
-                        return [
-                          { ok: intel.hasBudget,    label: 'Budget',    value: intel.budget },
-                          { ok: intel.hasTimeline,  label: 'Timeline',  value: intel.timeline },
-                          { ok: intel.hasFinancing, label: 'Financing', value: intel.financing },
-                        ].map(({ ok, label, value }) => (
-                          <div key={label} className="flex items-center gap-1.5 min-w-0">
-                            {ok
-                              ? <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
-                              : <Circle className="w-3 h-3 text-gray-300 shrink-0" />
-                            }
-                            <span className={cn("text-[11px] truncate", ok ? "text-gray-700" : "text-gray-400")}>
-                              <span className="font-medium">{label}</span>
-                              {ok && value
-                                ? <span className="font-normal">: {value}</span>
-                                : <span className="text-gray-300"> —</span>
-                              }
-                            </span>
-                          </div>
-                        ));
-                      })()}
-                    </div>
+                        })}
+                      </div>
+                    ) : null}
                   </div>
 
-                  {/* B. Next best action — full reply text lives in composer only */}
+                  {/* B. Next best actions */}
                   {canSeeWorkflow && (() => {
                     const actionRows = nextBestActions;
                     if (actionRows.length === 0 && !handoffActive) return null;
@@ -2252,31 +2231,41 @@ export function InboxLeadDetailsPanel({
                     );
                   })()}
 
-                  {/* C. CONTEXT — memory (reference, de-emphasized) */}
+                  {/* C. Buyer preferences — structured criteria (distinct from Copilot narrative) */}
+                  <div className="rounded-lg border border-violet-100 bg-violet-50/40 px-2.5 py-2">
+                    <BuyerPreferencesPanel
+                      contactId={contact.id}
+                      initialProfile={contact.buyerPreferenceProfile}
+                      onUpdated={() => onUpdateContact({})}
+                      compact
+                    />
+                  </div>
+
+                  {/* D. Short narrative summary — action/context only; no duplicate criteria */}
                   {(customerSummaryBullets.length > 0 || aiMemoryLoading) && (
-                    <div className="mt-6 pt-5 border-t border-gray-200">
-                      <p className="text-[8px] uppercase tracking-widest font-semibold text-gray-400/70 mb-1.5">
-                        Customer summary
+                    <div className="pt-2 border-t border-gray-100">
+                      <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400 mb-1">
+                        Summary
                       </p>
                       {aiMemoryLoading ? (
                         <div className="flex items-center gap-1.5">
                           <div className="w-1.5 h-1.5 rounded-full bg-gray-200 animate-pulse" />
-                          <span className="text-xs text-gray-400/90 italic">Generating…</span>
+                          <span className="text-[11px] text-gray-400 italic">Generating…</span>
                         </div>
                       ) : customerSummaryBullets.length >= 2 ? (
-                        <ul className="space-y-1">
-                          {customerSummaryBullets.map((line) => (
+                        <ul className="space-y-0.5">
+                          {customerSummaryBullets.slice(0, 2).map((line) => (
                             <li
                               key={line}
-                              className="text-xs text-gray-600 leading-snug flex gap-1.5"
+                              className="text-[11px] text-gray-600 leading-snug flex gap-1.5"
                             >
-                              <span className="text-gray-400 shrink-0">•</span>
+                              <span className="text-gray-300 shrink-0">•</span>
                               <span>{line}</span>
                             </li>
                           ))}
                         </ul>
                       ) : (
-                        <p className="text-xs text-gray-600 leading-snug">
+                        <p className="text-[11px] text-gray-600 leading-snug line-clamp-3">
                           {customerSummaryBullets[0] ?? aiMemory}
                         </p>
                       )}
@@ -2378,13 +2367,6 @@ export function InboxLeadDetailsPanel({
       {/* ══ Body ════════════════════════════════════════════════════════════ */}
       <div className="flex-1 overflow-y-auto">
         <div className="px-3 py-3 space-y-3">
-
-          {/* Buyer preferences — top of CRM body so chips stay visible without scrolling past Copilot */}
-          <BuyerPreferencesPanel
-            contactId={contact.id}
-            initialProfile={contact.buyerPreferenceProfile}
-            onUpdated={() => onUpdateContact({})}
-          />
 
           {/* ── CONTACT INFO ─────────────────────────────────────────── */}
           <div>

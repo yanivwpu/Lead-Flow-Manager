@@ -95,17 +95,41 @@ export function registerContactRoutes(app: Express): void {
 
       const {
         readBuyerPreferenceProfile,
+        readBuyerPreferenceProfileRaw,
         shouldRunBuyerPreferencePipeline,
       } = await import("../buyerPreferenceService");
       const { buildBuyerPreferenceChips } = await import("@shared/buyerPreferenceDisplay");
 
+      const rawProfile = readBuyerPreferenceProfileRaw(contact);
       const profile = readBuyerPreferenceProfile(contact);
       const gate = await shouldRunBuyerPreferencePipeline(req.user.id, contact);
+      const chips = buildBuyerPreferenceChips(rawProfile);
+
+      if (process.env.NODE_ENV !== "production") {
+        const rawKeys =
+          rawProfile && typeof rawProfile === "object"
+            ? Object.keys(rawProfile as Record<string, unknown>)
+            : [];
+        console.log(
+          JSON.stringify({
+            tag: "[BuyerPrefs:GET]",
+            contactId: req.params.id,
+            eligible: gate.ok,
+            reason: gate.reason,
+            rawKeyCount: rawKeys.length,
+            rawFieldKeys: rawKeys.filter((k) => k !== "schemaVersion" && k !== "profileStatus"),
+            chipCount: chips.length,
+            profileStatus: profile.profileStatus,
+          }),
+        );
+      }
+
       res.json({
         eligible: gate.ok,
         reason: gate.reason,
         profile,
-        chips: buildBuyerPreferenceChips(profile),
+        rawProfile,
+        chips,
       });
     } catch (error) {
       console.error("Error fetching buyer preferences:", error);
@@ -139,8 +163,18 @@ export function registerContactRoutes(app: Express): void {
       const profile = await applyManualBuyerPreferencePatch(req.user.id, contact.id, patch);
       if (!profile) return res.status(404).json({ error: "Contact not found" });
 
+      const refreshed = await storage.getContact(contact.id);
+      const { readBuyerPreferenceProfileRaw, readBuyerPreferenceProfile } = await import(
+        "../buyerPreferenceService"
+      );
       const { buildBuyerPreferenceChips } = await import("@shared/buyerPreferenceDisplay");
-      res.json({ profile, chips: buildBuyerPreferenceChips(profile) });
+      const rawProfile = refreshed ? readBuyerPreferenceProfileRaw(refreshed) : profile;
+      const normalized = refreshed ? readBuyerPreferenceProfile(refreshed) : profile;
+      res.json({
+        profile: normalized,
+        rawProfile,
+        chips: buildBuyerPreferenceChips(rawProfile),
+      });
     } catch (error) {
       console.error("Error updating buyer preferences:", error);
       res.status(500).json({ error: "Failed to update buyer preferences" });
@@ -158,6 +192,7 @@ export function registerContactRoutes(app: Express): void {
         shouldRunBuyerPreferencePipeline,
         runBuyerPreferenceExtraction,
         readBuyerPreferenceProfile,
+        readBuyerPreferenceProfileRaw,
       } = await import("../buyerPreferenceService");
       const { buildBuyerPreferenceChips } = await import("@shared/buyerPreferenceDisplay");
 
@@ -170,8 +205,13 @@ export function registerContactRoutes(app: Express): void {
         inboundText: typeof req.body?.inboundText === "string" ? req.body.inboundText : undefined,
       });
       const refreshed = await storage.getContact(contact.id);
+      const rawProfile = readBuyerPreferenceProfileRaw(refreshed || contact);
       const profile = readBuyerPreferenceProfile(refreshed || contact);
-      res.json({ profile, chips: buildBuyerPreferenceChips(profile) });
+      res.json({
+        profile,
+        rawProfile,
+        chips: buildBuyerPreferenceChips(rawProfile),
+      });
     } catch (error) {
       console.error("Error extracting buyer preferences:", error);
       res.status(500).json({ error: "Failed to extract buyer preferences" });

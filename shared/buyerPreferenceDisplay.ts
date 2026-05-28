@@ -62,8 +62,8 @@ const PROFILE_FIELD_KEYS = [
   "investmentIntent",
 ] as const;
 
-/** UI display: retry normalize when strict parse fails on persisted jsonb (extra keys, missing schemaVersion). */
-function normalizeForDisplay(raw: unknown): BuyerPreferenceProfile {
+/** UI/display: retry normalize when strict parse fails on persisted jsonb (extra keys, missing schemaVersion). */
+export function normalizeForDisplay(raw: unknown): BuyerPreferenceProfile {
   const first = normalizeBuyerPreferenceProfile(raw);
   if (first.profileStatus !== "empty" || !raw || typeof raw !== "object") {
     return first;

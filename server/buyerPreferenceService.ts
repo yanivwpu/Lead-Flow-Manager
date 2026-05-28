@@ -9,7 +9,7 @@ import {
   normalizeBuyerPreferenceProfile,
 } from "@shared/buyerPreferenceSchema";
 import { mergeBuyerPreferenceProfile } from "@shared/buyerPreferenceMerge";
-import { formatBuyerPreferenceSummaryForAi } from "@shared/buyerPreferenceDisplay";
+import { formatBuyerPreferenceSummaryForAi, normalizeForDisplay } from "@shared/buyerPreferenceDisplay";
 import { aiProvider } from "./aiProvider";
 import { storage } from "./storage";
 import { channelService } from "./channelService";
@@ -65,7 +65,11 @@ export async function shouldRunBuyerPreferencePipeline(
 
 export function readBuyerPreferenceProfile(contact: Contact): BuyerPreferenceProfile {
   const raw = (contact as Contact & { buyerPreferenceProfile?: unknown }).buyerPreferenceProfile;
-  return normalizeBuyerPreferenceProfile(raw);
+  return normalizeForDisplay(raw);
+}
+
+export function readBuyerPreferenceProfileRaw(contact: Contact): unknown {
+  return (contact as Contact & { buyerPreferenceProfile?: unknown }).buyerPreferenceProfile ?? {};
 }
 
 export { formatBuyerPreferenceSummaryForAi };

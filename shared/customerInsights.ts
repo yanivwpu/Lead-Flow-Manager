@@ -338,6 +338,8 @@ export type CustomerSummaryContext = {
   financing?: string | null;
   intent?: string;
   viewingIntent?: boolean;
+  /** When Buyer Preferences panel already shows structured criteria, omit duplicate summary lines. */
+  suppressCriteriaBullets?: boolean;
 };
 
 function cleanSummaryBullet(text: string): string {
@@ -347,7 +349,18 @@ function cleanSummaryBullet(text: string): string {
     .trim();
 }
 
-function paragraphToBullets(paragraph: string): string[] {
+function isCriteriaSummaryBullet(text: string): boolean {
+  const lower = text.toLowerCase();
+  return (
+    /^budget\b/i.test(lower) ||
+    /\btimeline\b/i.test(lower) ||
+    /\bfinancing\b/i.test(lower) ||
+    /\bpre-?approved\b/i.test(lower) ||
+    /\$\d/.test(lower)
+  );
+}
+
+function paragraphToBullets(paragraph: string, suppressCriteria = false): string[] {
   const chunks = paragraph
     .split(/(?<=[.!?])\s+|\n+/)
     .map((s) => cleanSummaryBullet(s))
@@ -356,11 +369,12 @@ function paragraphToBullets(paragraph: string): string[] {
   for (const chunk of chunks) {
     if (!chunk) continue;
     const lower = chunk.toLowerCase();
+    if (suppressCriteria && isCriteriaSummaryBullet(chunk)) continue;
     if (/budget around/i.test(lower)) out.push(chunk.replace(/^budget around/i, "Budget around"));
     else if (/timeline:/i.test(lower)) out.push(chunk.replace(/^timeline:\s*/i, "Timeline: "));
     else if (/financing:/i.test(lower)) out.push(chunk.replace(/^financing:\s*/i, "Financing: "));
     else out.push(chunk.charAt(0).toUpperCase() + chunk.slice(1));
-    if (out.length >= 4) break;
+    if (out.length >= 2) break;
   }
   return out;
 }
@@ -398,18 +412,23 @@ export function buildCustomerSummaryBullets(ctx: CustomerSummaryContext): string
     add("Mentioned deposit");
   }
 
-  if (ctx.budget) add(`Budget around ${ctx.budget}`);
-  if (ctx.timeline) add(`Timeline: ${ctx.timeline}`);
-  if (ctx.financing) add(`Financing: ${ctx.financing}`);
+  if (!ctx.suppressCriteriaBullets) {
+    if (ctx.budget) add(`Budget around ${ctx.budget}`);
+    if (ctx.timeline) add(`Timeline: ${ctx.timeline}`);
+    if (ctx.financing) add(`Financing: ${ctx.financing}`);
+  }
 
-  if (bullets.length >= 2) return bullets.slice(0, 4);
+  if (bullets.length >= 2) return bullets.slice(0, 2);
 
-  const fromMemory = ctx.memoryParagraph ? paragraphToBullets(ctx.memoryParagraph) : [];
-  if (fromMemory.length >= 2) return fromMemory.slice(0, 4);
+  const fromMemory = ctx.memoryParagraph
+    ? paragraphToBullets(ctx.memoryParagraph, !!ctx.suppressCriteriaBullets)
+    : [];
+  if (fromMemory.length >= 2) return fromMemory.slice(0, 2);
   if (bullets.length === 1 && fromMemory.length === 1) return [bullets[0], fromMemory[0]];
   if (bullets.length === 1) return bullets;
-  if (fromMemory.length >= 1) return fromMemory.slice(0, 4);
+  if (fromMemory.length >= 1) return fromMemory.slice(0, 2);
 
   const fallback = cleanSummaryBullet(ctx.memoryParagraph ?? "");
-  return fallback ? [fallback] : [];
+  if (fallback && ctx.suppressCriteriaBullets && isCriteriaSummaryBullet(fallback)) return bullets;
+  return fallback ? [fallback] : bullets;
 }
