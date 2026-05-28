@@ -5,10 +5,12 @@ import type { Contact } from "@shared/schema";
 import {
   type BuyerPreferenceExtractionPatch,
   type BuyerPreferenceProfile,
-  buyerPreferenceExtractionPatchSchema,
-  emptyBuyerPreferenceProfile,
-  normalizeBuyerPreferenceProfile,
 } from "@shared/buyerPreferenceSchema";
+import {
+  heuristicPatchFromTranscript,
+  normalizeLlmExtractionPatch,
+  patchFieldCount,
+} from "@shared/buyerPreferenceExtractionNormalize";
 import { mergeBuyerPreferenceProfile } from "@shared/buyerPreferenceMerge";
 import { formatBuyerPreferenceSummaryForAi, normalizeForDisplay } from "@shared/buyerPreferenceDisplay";
 import { aiProvider } from "./aiProvider";
@@ -156,11 +158,29 @@ export async function persistBuyerPreferenceProfile(
   profile: BuyerPreferenceProfile,
   options?: { logActivity?: boolean; userId?: string; conversationId?: string },
 ): Promise<Contact | undefined> {
+  logPersistence(contactId, "db_update_payload", {
+    profileStatus: profile.profileStatus,
+    fieldKeys: Object.keys(profile).filter(
+      (k) => !["schemaVersion", "profileStatus", "lastExtractedAt", "lastInboundAt"].includes(k),
+    ),
+    payloadBytes: JSON.stringify(profile).length,
+  });
+
   const updated = await storage.updateContact(
     contactId,
     { buyerPreferenceProfile: profile } as Partial<Contact>,
     { skipAutomationHooks: true },
   );
+
+  if (updated) {
+    const saved = readBuyerPreferenceProfileRaw(updated);
+    logPersistence(contactId, "db_saved_profile", {
+      savedKeys: Object.keys((saved as object) || {}).length,
+      savedFieldKeys: Object.keys((saved as object) || {}).filter(
+        (k) => !["schemaVersion", "profileStatus", "lastExtractedAt", "lastInboundAt"].includes(k),
+      ),
+    });
+  }
   if (options?.logActivity && options.userId) {
     await channelService.logActivity(
       options.userId,
@@ -181,11 +201,27 @@ export async function mergeAndPersistBuyerPreferences(
   patch: BuyerPreferenceExtractionPatch,
   meta?: { conversationId?: string; messageId?: string; logActivity?: boolean },
 ): Promise<BuyerPreferenceProfile> {
+  const patchKeys = patchFieldCount(patch);
+  if (patchKeys === 0) {
+    log("llm_patch_empty", { contactId: contact.id, skipped: true });
+    return readBuyerPreferenceProfile(contact);
+  }
+
   const current = readBuyerPreferenceProfile(contact);
   const merged = mergeBuyerPreferenceProfile(current, patch, {
     lastExtractedAt: new Date().toISOString(),
     lastInboundAt: new Date().toISOString(),
   });
+
+  logPersistence(contact.id, "merged_before_save", {
+    patchKeys,
+    patchFields: Object.keys(patch),
+    mergedStatus: merged.profileStatus,
+    mergedFieldKeys: Object.keys(merged).filter(
+      (k) => !["schemaVersion", "profileStatus", "lastExtractedAt", "lastInboundAt"].includes(k),
+    ),
+  });
+
   await persistBuyerPreferenceProfile(contact.id, merged, {
     logActivity: meta?.logActivity,
     userId: contact.userId,
@@ -262,62 +298,45 @@ Rules:
     { jsonMode: true, maxTokens: 900 },
   );
 
-  const raw = JSON.parse(response || "{}") as unknown;
-  const now = new Date().toISOString();
-
-  const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  const mapped: Record<string, unknown> = { ...obj };
-
-  // Defensive alias mapping — model outputs sometimes drift from the requested camelCase keys.
-  if (mapped.areas && !mapped.targetAreas) mapped.targetAreas = mapped.areas;
-  if (mapped.area && !mapped.targetAreas) mapped.targetAreas = mapped.area;
-  if (mapped.budget && !mapped.priceMax && !mapped.priceMin) {
-    mapped.priceMax = typeof mapped.budget === "number" ? { value: mapped.budget } : mapped.budget;
+  const rawText = response || "{}";
+  let raw: unknown;
+  try {
+    raw = JSON.parse(rawText) as unknown;
+  } catch {
+    log("llm_json_parse_failed", { contactId: contact.id, rawPreview: rawText.slice(0, 400) });
+    raw = {};
   }
-  if (mapped.financing && !mapped.financingStatus) mapped.financingStatus = mapped.financing;
 
-  // Coerce common primitive outputs into field objects
-  const coerceFieldObject = (key: string, value: unknown) => {
-    if (value && typeof value === "object" && "value" in (value as any)) return value;
-    return { value };
-  };
-  if (Array.isArray(mapped.targetAreas)) mapped.targetAreas = coerceFieldObject("targetAreas", mapped.targetAreas);
-  if (typeof mapped.priceMin === "number") mapped.priceMin = coerceFieldObject("priceMin", mapped.priceMin);
-  if (typeof mapped.priceMax === "number") mapped.priceMax = coerceFieldObject("priceMax", mapped.priceMax);
-  if (typeof mapped.bedsMin === "number") mapped.bedsMin = coerceFieldObject("bedsMin", mapped.bedsMin);
-  if (typeof mapped.bathsMin === "number") mapped.bathsMin = coerceFieldObject("bathsMin", mapped.bathsMin);
-  if (Array.isArray(mapped.propertyTypes)) mapped.propertyTypes = coerceFieldObject("propertyTypes", mapped.propertyTypes);
-  if (typeof mapped.timeline === "string") mapped.timeline = coerceFieldObject("timeline", mapped.timeline);
-  if (typeof mapped.financingStatus === "string") mapped.financingStatus = coerceFieldObject("financingStatus", mapped.financingStatus);
-  if (typeof mapped.pool === "boolean") mapped.pool = coerceFieldObject("pool", mapped.pool);
-  if (typeof mapped.modernStyle === "boolean") mapped.modernStyle = coerceFieldObject("modernStyle", mapped.modernStyle);
-  if (Array.isArray(mapped.mustHaves)) mapped.mustHaves = coerceFieldObject("mustHaves", mapped.mustHaves);
+  logPersistence(contact.id, "llm_raw", {
+    rawPreview: JSON.stringify(raw).slice(0, 1200),
+    rawKeys: raw && typeof raw === "object" ? Object.keys(raw as object) : [],
+  });
 
-  // Ensure updatedAt exists when field objects omit it
-  for (const [k, v] of Object.entries(mapped)) {
-    if (!v || typeof v !== "object") continue;
-    const vv = v as Record<string, unknown>;
-    if (!("value" in vv)) continue;
-    if (!("updatedAt" in vv)) vv.updatedAt = now;
-    // Default missing fields so valid extractions persist (model often omits these)
-    if (!("source" in vv)) vv.source = "inferred";
-    if (!("confidence" in vv)) vv.confidence = vv.source === "explicit" ? 0.9 : 0.65;
-    // If model mistakenly returned primitives for known keys, coerce where safe
-    if ((k === "targetAreas" || k === "propertyTypes" || k === "mustHaves" || k === "dealBreakers") && Array.isArray(vv.value)) {
-      vv.value = vv.value.map((x) => String(x).trim()).filter(Boolean);
+  let patch = normalizeLlmExtractionPatch(raw);
+  logPersistence(contact.id, "normalized_patch", {
+    patchKeys: patchFieldCount(patch),
+    patchFields: Object.keys(patch),
+  });
+
+  if (patchFieldCount(patch) === 0) {
+    const heuristic = heuristicPatchFromTranscript(transcript);
+    const heuristicKeys = patchFieldCount(heuristic);
+    if (heuristicKeys > 0) {
+      log("llm_patch_heuristic_fallback", {
+        contactId: contact.id,
+        heuristicKeys,
+        fields: Object.keys(heuristic),
+      });
+      patch = heuristic;
+    } else {
+      log("llm_patch_empty_after_normalize", {
+        contactId: contact.id,
+        transcriptChars: transcript.length,
+      });
     }
   }
 
-  const parsed = buyerPreferenceExtractionPatchSchema.safeParse(mapped);
-  if (!parsed.success) {
-    log("llm_patch_invalid", {
-      contactId: contact.id,
-      issueCount: parsed.error.issues.length,
-      issues: parsed.error.issues.slice(0, 6).map((i) => ({ path: i.path, code: i.code })),
-    });
-    return {};
-  }
-  return parsed.data;
+  return patch;
 }
 
 export async function runBuyerPreferenceExtraction(
@@ -342,7 +361,13 @@ export async function runBuyerPreferenceExtraction(
   try {
     const existing = readBuyerPreferenceProfile(contact);
     const patch = await extractPreferencesWithLlm(contact, history, existing);
-    const merged = await mergeAndPersistBuyerPreferences(contact, patch, {
+    if (patchFieldCount(patch) === 0) {
+      log("extract_skipped_empty_patch", { userId, contactId, reason: gate.reason });
+      return;
+    }
+
+    const fresh = (await storage.getContact(contactId)) || contact;
+    const merged = await mergeAndPersistBuyerPreferences(fresh, patch, {
       conversationId: options?.conversationId,
       messageId: options?.messageId,
       logActivity: true,
@@ -352,6 +377,7 @@ export async function runBuyerPreferenceExtraction(
       contactId,
       reason: gate.reason,
       profileStatus: merged.profileStatus,
+      patchKeys: patchFieldCount(patch),
     });
   } catch (err) {
     log("extract_failed", {
