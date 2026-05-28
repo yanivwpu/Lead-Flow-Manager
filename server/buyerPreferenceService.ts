@@ -269,7 +269,8 @@ async function loadConversationForExtraction(
   contactId: string,
   limit = 16,
 ): Promise<Array<{ role: string; content: string }>> {
-  const conversations = await storage.getConversationsByContact(contactId);
+  const bundle = await storage.getContactWithConversations(contactId);
+  const conversations = bundle?.conversations ?? [];
   const sorted = [...conversations].sort((a, b) => {
     const at = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
     const bt = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
