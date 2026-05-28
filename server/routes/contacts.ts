@@ -105,6 +105,21 @@ export function registerContactRoutes(app: Express): void {
       const gate = await shouldRunBuyerPreferencePipeline(req.user.id, contact);
       const chips = buildBuyerPreferenceChips(rawProfile);
 
+      if (process.env.NODE_ENV !== "production" || process.env.DEBUG_BUYER_PREFS === "1") {
+        console.log(
+          JSON.stringify({
+            tag: "[BuyerPreference] profile_loaded",
+            contactId: req.params.id,
+            eligible: gate.ok,
+            reason: gate.reason,
+            chipCount: chips.length,
+            chipValues: chips.map((c) => c.value).slice(0, 12),
+            rawProfileType: rawProfile ? typeof rawProfile : "null",
+            profileStatus: profile.profileStatus,
+          }),
+        );
+      }
+
       if (process.env.NODE_ENV !== "production") {
         const rawKeys =
           rawProfile && typeof rawProfile === "object"

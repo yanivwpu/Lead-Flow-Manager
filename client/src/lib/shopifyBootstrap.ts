@@ -147,7 +147,6 @@ function buildPricingPath(
 
   const qs = params.toString();
   const destination = qs ? `/pricing?${qs}` : "/pricing";
-  logBootstrap("preserving_query", { destination });
   return destination;
 }
 
@@ -173,10 +172,10 @@ export function getShopifyBootstrapContext(
 
   const planApprovalReturn = isShopifyPlanApprovalReturn(search);
   const persisted = readPersistedPricingPath();
-  const pricingPath = persisted ?? buildPricingPath(pathname, search, shop, shopifyInstalled, embedded);
 
   if (shopifyInstalled && !planApprovalReturn) {
-    persistShopifyPostInstallPricingPath(pricingPath);
+    const pricingPathForPersist = buildPricingPath(pathname, search, shop, shopifyInstalled, embedded);
+    persistShopifyPostInstallPricingPath(pricingPathForPersist);
   }
 
   const postInstallFlow =
@@ -184,6 +183,21 @@ export function getShopifyBootstrapContext(
     Boolean(
       shopifyInstalled || persisted || (path === "/pricing" && (!!shop || shopifyInstalled)),
     );
+
+  // Stop stale pricing destination from leaking into normal /app routes.
+  if (onApp && !postInstallFlow && persisted && !shop && !embedded && !shopifyInstalled) {
+    clearShopifyPostInstallPricingPath();
+  }
+
+  const pricingPath =
+    persisted ??
+    (postInstallFlow || onPricing
+      ? buildPricingPath(pathname, search, shop, shopifyInstalled, embedded)
+      : "/pricing");
+
+  if (postInstallFlow || onPricing) {
+    logBootstrap("preserving_query", { destination: pricingPath });
+  }
 
   const active = Boolean(
     postInstallFlow ||

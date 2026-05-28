@@ -116,6 +116,40 @@ export function BuyerPreferencesPanel({
     return [];
   }, [data?.chips, apiRaw, initialProfile]);
 
+  // Temporary debug logs (enable via window.__debugBuyerPrefs = true)
+  useEffect(() => {
+    const enabled = typeof window !== "undefined" && (window as any).__debugBuyerPrefs;
+    if (!enabled) return;
+    const initialChips = initialProfile != null ? chipsFromRaw(initialProfile) : [];
+    console.log("[BuyerPreferencePanel] mounted", { contactId });
+    console.log("[BuyerPreferencePanel] initialProfile/chips", {
+      contactId,
+      hasInitialProfile: initialProfile != null,
+      initialChipCount: initialChips.length,
+      initialChipValues: initialChips.map((c) => c.value).slice(0, 12),
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contactId]);
+
+  useEffect(() => {
+    const enabled = typeof window !== "undefined" && (window as any).__debugBuyerPrefs;
+    if (!enabled) return;
+    if (!isFetched) return;
+    console.log("[BuyerPreferencePanel] apiResponse/chips/eligible", {
+      contactId,
+      eligible: data?.eligible,
+      reason: data?.reason,
+      apiChipCount: data?.chips?.length ?? 0,
+      resolvedChipCount: resolvedChips.length,
+      resolvedChipValues: resolvedChips.map((c) => c.value).slice(0, 12),
+      hasRawProfile: data?.rawProfile != null,
+      profileStatus:
+        data?.profile && typeof data.profile === "object"
+          ? (data.profile as any).profileStatus
+          : undefined,
+    });
+  }, [contactId, isFetched, data, resolvedChips]);
+
   useEffect(() => {
     if (resolvedChips.length > 0) {
       stickyChipsRef.current = resolvedChips;
