@@ -77,7 +77,6 @@ import { getStageSignals } from "@/lib/leadScoring";
 import { AIUpgradePrompt } from "./AIUpgradePrompt";
 import type { AICapabilities } from "@/lib/useAICapabilities";
 import { BuyerPreferencesPanel } from "@/components/BuyerPreferencesPanel";
-import { buildBuyerPreferenceChips } from "@shared/buyerPreferenceDisplay";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
 
@@ -1048,18 +1047,6 @@ export function InboxLeadDetailsPanel({
         required: q.required ?? true,
       }));
   }, [businessKnowledge]);
-
-  const showBuyerPreferences = useMemo(() => {
-    const ind = (businessKnowledge?.industry || "").toLowerCase();
-    const reWorkspace =
-      ind.includes("real estate") ||
-      ind.includes("realtor") ||
-      ind.includes("property");
-    const leadType = String((contact.customFields as Record<string, unknown> | undefined)?.leadType || "").toLowerCase();
-    const isBuyer = leadType === "buyer";
-    const hasChips = buildBuyerPreferenceChips(contact.buyerPreferenceProfile).length > 0;
-    return reWorkspace || isBuyer || hasChips;
-  }, [businessKnowledge?.industry, contact.customFields, contact.buyerPreferenceProfile]);
 
   // AI Memory — AI-generated natural-language summary
   const [aiMemory, setAiMemory] = useState<string>('');
@@ -2392,6 +2379,13 @@ export function InboxLeadDetailsPanel({
       <div className="flex-1 overflow-y-auto">
         <div className="px-3 py-3 space-y-3">
 
+          {/* Buyer preferences — top of CRM body so chips stay visible without scrolling past Copilot */}
+          <BuyerPreferencesPanel
+            contactId={contact.id}
+            initialProfile={contact.buyerPreferenceProfile}
+            onUpdated={() => onUpdateContact({})}
+          />
+
           {/* ── CONTACT INFO ─────────────────────────────────────────── */}
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -2500,15 +2494,6 @@ export function InboxLeadDetailsPanel({
               ))}
             </div>
           </div>
-
-          {showBuyerPreferences && (
-            <BuyerPreferencesPanel
-              contactId={contact.id}
-              initialProfile={contact.buyerPreferenceProfile}
-              visible={showBuyerPreferences}
-              onUpdated={() => onUpdateContact({})}
-            />
-          )}
 
           {/* ── FOLLOW-UP: display only — click to reopen Follow popup ── */}
           <div>

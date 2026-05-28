@@ -26,10 +26,8 @@ import {
 
 interface BuyerPreferencesPanelProps {
   contactId: string;
-  /** Raw profile from contact row (optional — refetched via API when visible). */
+  /** Raw profile from contact row (optional seed until API loads). */
   initialProfile?: unknown;
-  /** Show section when true (real-estate workspace, RGE, or buyer lead type). */
-  visible: boolean;
   onUpdated?: () => void;
 }
 
@@ -53,7 +51,6 @@ function ChipBadge({ chip }: { chip: BuyerPreferenceChip }) {
 export function BuyerPreferencesPanel({
   contactId,
   initialProfile,
-  visible,
   onUpdated,
 }: BuyerPreferencesPanelProps) {
   const queryClient = useQueryClient();
@@ -66,19 +63,23 @@ export function BuyerPreferencesPanel({
   const [financing, setFinancing] = useState("");
   const [mustHaves, setMustHaves] = useState("");
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isFetched } = useQuery({
     queryKey: [`/api/contacts/${contactId}/buyer-preferences`],
-    enabled: visible && !!contactId,
-    staleTime: 60_000,
+    enabled: !!contactId,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
 
   const profile = (data as { profile?: unknown } | undefined)?.profile ?? initialProfile;
-  const eligible = (data as { eligible?: boolean } | undefined)?.eligible ?? visible;
+  const eligible = (data as { eligible?: boolean } | undefined)?.eligible ?? false;
   const chips = useMemo(() => {
     const fromApi = (data as { chips?: BuyerPreferenceChip[] } | undefined)?.chips;
-    if (fromApi?.length) return fromApi;
+    if (fromApi && fromApi.length > 0) return fromApi;
     return buildBuyerPreferenceChips(profile);
   }, [data, profile]);
+
+  const seedChips = useMemo(() => buildBuyerPreferenceChips(initialProfile), [initialProfile]);
+  const displayChips = chips.length > 0 ? chips : seedChips;
 
   const openEdit = useCallback(() => {
     const p = profile as Record<string, { value?: unknown }> | undefined;
@@ -122,6 +123,7 @@ export function BuyerPreferencesPanel({
     onSuccess: () => {
       setEditOpen(false);
       queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contactId}/buyer-preferences`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId] });
       onUpdated?.();
     },
   });
@@ -139,11 +141,14 @@ export function BuyerPreferencesPanel({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contactId}/buyer-preferences`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId] });
       onUpdated?.();
     },
   });
 
-  if (!visible && !chips.length) return null;
+  // Server eligibility gate (RGE / real-estate / buyer lead type) — hide only after fetch confirms ineligible + no chips
+  if (isFetched && !eligible && displayChips.length === 0) return null;
+  if (!contactId) return null;
 
   return (
     <div className="mt-3" data-testid="buyer-preferences-panel">
@@ -182,11 +187,11 @@ export function BuyerPreferencesPanel({
         </div>
       </div>
 
-      {isLoading || isFetching ? (
+      {isLoading || (isFetching && !displayChips.length) ? (
         <p className="text-[11px] text-gray-400 italic">Loading…</p>
-      ) : chips.length > 0 ? (
-        <div className="flex flex-wrap gap-1">
-          {chips.map((chip) => (
+      ) : displayChips.length > 0 ? (
+        <div className="flex flex-wrap gap-1" data-testid="buyer-preferences-chips">
+          {displayChips.map((chip) => (
             <ChipBadge key={chip.id} chip={chip} />
           ))}
         </div>

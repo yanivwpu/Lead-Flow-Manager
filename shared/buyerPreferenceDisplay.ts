@@ -38,8 +38,54 @@ function boolFlags(profile: BuyerPreferenceProfile): string[] {
   return flags;
 }
 
+const PROFILE_FIELD_KEYS = [
+  "targetAreas",
+  "priceMin",
+  "priceMax",
+  "bedsMin",
+  "bathsMin",
+  "propertyTypes",
+  "timeline",
+  "financingStatus",
+  "mustHaves",
+  "dealBreakers",
+  "pool",
+  "waterfront",
+  "modernStyle",
+  "gatedCommunity",
+  "parking",
+  "petFriendly",
+  "lowHoa",
+  "walkability",
+  "schoolPriority",
+  "shortTermRentalAllowed",
+  "investmentIntent",
+] as const;
+
+/** UI display: retry normalize when strict parse fails on persisted jsonb (extra keys, missing schemaVersion). */
+function normalizeForDisplay(raw: unknown): BuyerPreferenceProfile {
+  const first = normalizeBuyerPreferenceProfile(raw);
+  if (first.profileStatus !== "empty" || !raw || typeof raw !== "object") {
+    return first;
+  }
+  const obj = raw as Record<string, unknown>;
+  const hasPreferenceFields = PROFILE_FIELD_KEYS.some((k) => obj[k] != null);
+  if (!hasPreferenceFields) return first;
+
+  const stripped: Record<string, unknown> = {
+    schemaVersion: 1,
+    profileStatus: typeof obj.profileStatus === "string" ? obj.profileStatus : "partial",
+  };
+  for (const key of PROFILE_FIELD_KEYS) {
+    if (obj[key] != null) stripped[key] = obj[key];
+  }
+  if (typeof obj.lastExtractedAt === "string") stripped.lastExtractedAt = obj.lastExtractedAt;
+  if (typeof obj.lastInboundAt === "string") stripped.lastInboundAt = obj.lastInboundAt;
+  return normalizeBuyerPreferenceProfile(stripped);
+}
+
 export function buildBuyerPreferenceChips(raw: unknown): BuyerPreferenceChip[] {
-  const profile = normalizeBuyerPreferenceProfile(raw);
+  const profile = normalizeForDisplay(raw);
   const chips: BuyerPreferenceChip[] = [];
 
   const push = (id: string, label: string, field: PreferenceField<unknown> | undefined, format?: (v: unknown) => string) => {
