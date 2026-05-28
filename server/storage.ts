@@ -337,6 +337,12 @@ export interface IStorage {
   getContactByChannelId(userId: string, channel: Channel, channelId: string): Promise<Contact | undefined>;
   createContact(contact: InsertContact): Promise<Contact>;
   updateContact(id: string, updates: Partial<Contact>, options?: UpdateContactOptions): Promise<Contact | undefined>;
+  /** Explicit jsonb write for buyer_preference_profile (traced). */
+  updateContactBuyerPreferenceProfile(
+    contactId: string,
+    profile: Record<string, unknown>,
+    options?: UpdateContactOptions,
+  ): Promise<Contact | undefined>;
   deleteContact(id: string): Promise<void>;
   mergeContacts(targetId: string, sourceId: string): Promise<Contact>;
   searchContacts(userId: string, query: string, limit?: number): Promise<Contact[]>;
@@ -2280,11 +2286,150 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
+  private logBuyerPreferenceDbWrite(
+    event: string,
+    contactId: string,
+    payload: Record<string, unknown>,
+  ): void {
+    if (process.env.DEBUG_BUYER_PREFS !== "1" && process.env.NODE_ENV === "production") {
+      return;
+    }
+    console.log(
+      JSON.stringify({
+        tag: "[BuyerPreference:DB]",
+        event,
+        contactId,
+        ...payload,
+      }),
+    );
+  }
+
+  private buyerPreferenceProfileFieldKeys(profile: unknown): string[] {
+    if (!profile || typeof profile !== "object") return [];
+    return Object.keys(profile as Record<string, unknown>).filter(
+      (k) => !["schemaVersion", "profileStatus", "lastExtractedAt", "lastInboundAt"].includes(k),
+    );
+  }
+
+  /**
+   * Dedicated write for contacts.buyer_preference_profile — avoids silent drops from generic partial updates.
+   */
+  async updateContactBuyerPreferenceProfile(
+    contactId: string,
+    profile: Record<string, unknown>,
+    options?: UpdateContactOptions,
+  ): Promise<Contact | undefined> {
+    const profileJson = JSON.parse(JSON.stringify(profile)) as Record<string, unknown>;
+    const before = await this.getContact(contactId);
+
+    this.logBuyerPreferenceDbWrite("update_input", contactId, {
+      hasBefore: !!before,
+      inputFieldKeys: this.buyerPreferenceProfileFieldKeys(profileJson),
+      inputBytes: JSON.stringify(profileJson).length,
+      column: "buyer_preference_profile",
+      drizzleKey: "buyerPreferenceProfile",
+    });
+
+    let after: Contact | undefined;
+    try {
+      const result = await db
+        .update(contacts)
+        .set({
+          buyerPreferenceProfile: profileJson,
+          updatedAt: new Date(),
+        })
+        .where(eq(contacts.id, contactId))
+        .returning();
+
+      after = result[0];
+
+      this.logBuyerPreferenceDbWrite("drizzle_returning", contactId, {
+        rowCount: result.length,
+        returnedFieldKeys: after
+          ? this.buyerPreferenceProfileFieldKeys(after.buyerPreferenceProfile)
+          : [],
+        returnedProfileStatus:
+          after?.buyerPreferenceProfile &&
+          typeof after.buyerPreferenceProfile === "object" &&
+          "profileStatus" in (after.buyerPreferenceProfile as object)
+            ? (after.buyerPreferenceProfile as { profileStatus?: string }).profileStatus
+            : undefined,
+      });
+    } catch (err) {
+      const pgCode = (err as { code?: string })?.code;
+      this.logBuyerPreferenceDbWrite("drizzle_update_error", contactId, {
+        error: err instanceof Error ? err.message : String(err),
+        pgCode,
+        hint:
+          pgCode === "42703"
+            ? "Column buyer_preference_profile missing — run migrations/0030_contacts_buyer_preference_profile.sql"
+            : undefined,
+      });
+      throw err;
+    }
+
+    if (!after) {
+      this.logBuyerPreferenceDbWrite("update_no_row", contactId, {});
+      return undefined;
+    }
+
+    // Verify persisted value with a targeted read (catches driver/schema mapping issues).
+    const verify = await db
+      .select({ buyerPreferenceProfile: contacts.buyerPreferenceProfile })
+      .from(contacts)
+      .where(eq(contacts.id, contactId))
+      .limit(1);
+
+    const verified = verify[0]?.buyerPreferenceProfile;
+    this.logBuyerPreferenceDbWrite("verify_select", contactId, {
+      verifiedFieldKeys: this.buyerPreferenceProfileFieldKeys(verified),
+      verifiedBytes: verified ? JSON.stringify(verified).length : 0,
+    });
+
+    if (before && !options?.skipAutomationHooks) {
+      try {
+        const { dispatchAutomationContactDiff } = await import("./automationEventDispatcher");
+        await dispatchAutomationContactDiff({
+          userId: before.userId,
+          before,
+          after,
+        });
+      } catch (e) {
+        console.warn("[updateContactBuyerPreferenceProfile] automation dispatch error:", (e as Error)?.message || e);
+      }
+    }
+
+    return after;
+  }
+
   async updateContact(
     id: string,
     updates: Partial<Contact>,
     options?: UpdateContactOptions
   ): Promise<Contact | undefined> {
+    const hasBuyerPref = Object.prototype.hasOwnProperty.call(updates, "buyerPreferenceProfile");
+
+    if (hasBuyerPref) {
+      this.logBuyerPreferenceDbWrite("updateContact_delegating", id, {
+        inputFieldKeys: this.buyerPreferenceProfileFieldKeys(updates.buyerPreferenceProfile),
+        note: "routing to updateContactBuyerPreferenceProfile",
+      });
+      const { buyerPreferenceProfile, ...rest } = updates;
+      let contact: Contact | undefined;
+      if (buyerPreferenceProfile != null && typeof buyerPreferenceProfile === "object") {
+        contact = await this.updateContactBuyerPreferenceProfile(
+          id,
+          buyerPreferenceProfile as Record<string, unknown>,
+          { skipAutomationHooks: true },
+        );
+      }
+      const otherKeys = Object.keys(rest).filter((k) => k !== "updatedAt");
+      if (otherKeys.length === 0) {
+        return contact;
+      }
+      return this.updateContact(id, rest, options);
+    }
+
     const before = await this.getContact(id);
     if (!before) {
       const result = await db.update(contacts)

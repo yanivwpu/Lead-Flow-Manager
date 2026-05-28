@@ -28,6 +28,13 @@ function log(event: string, payload: Record<string, unknown>): void {
   console.log(JSON.stringify({ tag: "[BuyerPreference]", event, ...payload }));
 }
 
+function logPersistence(contactId: string, step: string, data: Record<string, unknown>): void {
+  if (process.env.DEBUG_BUYER_PREFS !== "1" && process.env.NODE_ENV === "production") {
+    return;
+  }
+  log(`persist_${step}`, { contactId, ...data });
+}
+
 export function isRealEstateIndustry(industry: string | null | undefined): boolean {
   const s = (industry || "").toLowerCase();
   return (
@@ -166,9 +173,9 @@ export async function persistBuyerPreferenceProfile(
     payloadBytes: JSON.stringify(profile).length,
   });
 
-  const updated = await storage.updateContact(
+  const updated = await storage.updateContactBuyerPreferenceProfile(
     contactId,
-    { buyerPreferenceProfile: profile } as Partial<Contact>,
+    profile as Record<string, unknown>,
     { skipAutomationHooks: true },
   );
 
