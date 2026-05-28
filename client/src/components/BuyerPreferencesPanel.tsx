@@ -163,6 +163,30 @@ export function BuyerPreferencesPanel({
 
   const profileForEdit = rawForDisplay;
 
+  const showDebugUi = useMemo(() => {
+    if (import.meta.env.DEV) return true;
+    if (typeof window === "undefined") return false;
+    try {
+      return new URLSearchParams(window.location.search).get("debugBuyerPrefs") === "1";
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const debug = useMemo(() => {
+    const source = isFetched ? "api" : initialProfile != null ? "initial" : "none";
+    const profileObj =
+      apiRaw && typeof apiRaw === "object"
+        ? (apiRaw as Record<string, unknown>)
+        : initialProfile && typeof initialProfile === "object"
+          ? (initialProfile as Record<string, unknown>)
+          : null;
+    const profileKeys = profileObj ? Object.keys(profileObj).length : 0;
+    const chipCount = displayChips.length;
+    const apiReturned = isFetched && data != null;
+    return { source, profileKeys, chipCount, apiReturned };
+  }, [apiRaw, initialProfile, isFetched, data, displayChips.length]);
+
   useEffect(() => {
     if (import.meta.env.DEV && isFetched && data) {
       console.debug("[BuyerPrefs:panel]", {
@@ -321,6 +345,17 @@ export function BuyerPreferencesPanel({
       ) : !isFetched ? (
         <p className={cn("text-gray-400 italic", compact ? "text-[10px]" : "text-[11px]")}>Loading…</p>
       ) : null}
+
+      {showDebugUi && (
+        <div className={cn("mt-1.5 text-[10px] text-gray-400 font-mono", compact && "text-[9px]")}>
+          <div>eligible: {String(eligible)}</div>
+          <div>chipCount: {debug.chipCount}</div>
+          <div>profileKeys: {debug.profileKeys}</div>
+          <div>source: {debug.source}</div>
+          <div>apiReturned: {String(debug.apiReturned)}</div>
+          <div>initialProfile: {String(initialProfile != null)}</div>
+        </div>
+      )}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-sm">
