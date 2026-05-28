@@ -276,11 +276,36 @@ Rules:
   }
   if (mapped.financing && !mapped.financingStatus) mapped.financingStatus = mapped.financing;
 
+  // Coerce common primitive outputs into field objects
+  const coerceFieldObject = (key: string, value: unknown) => {
+    if (value && typeof value === "object" && "value" in (value as any)) return value;
+    return { value };
+  };
+  if (Array.isArray(mapped.targetAreas)) mapped.targetAreas = coerceFieldObject("targetAreas", mapped.targetAreas);
+  if (typeof mapped.priceMin === "number") mapped.priceMin = coerceFieldObject("priceMin", mapped.priceMin);
+  if (typeof mapped.priceMax === "number") mapped.priceMax = coerceFieldObject("priceMax", mapped.priceMax);
+  if (typeof mapped.bedsMin === "number") mapped.bedsMin = coerceFieldObject("bedsMin", mapped.bedsMin);
+  if (typeof mapped.bathsMin === "number") mapped.bathsMin = coerceFieldObject("bathsMin", mapped.bathsMin);
+  if (Array.isArray(mapped.propertyTypes)) mapped.propertyTypes = coerceFieldObject("propertyTypes", mapped.propertyTypes);
+  if (typeof mapped.timeline === "string") mapped.timeline = coerceFieldObject("timeline", mapped.timeline);
+  if (typeof mapped.financingStatus === "string") mapped.financingStatus = coerceFieldObject("financingStatus", mapped.financingStatus);
+  if (typeof mapped.pool === "boolean") mapped.pool = coerceFieldObject("pool", mapped.pool);
+  if (typeof mapped.modernStyle === "boolean") mapped.modernStyle = coerceFieldObject("modernStyle", mapped.modernStyle);
+  if (Array.isArray(mapped.mustHaves)) mapped.mustHaves = coerceFieldObject("mustHaves", mapped.mustHaves);
+
   // Ensure updatedAt exists when field objects omit it
-  for (const v of Object.values(mapped)) {
+  for (const [k, v] of Object.entries(mapped)) {
     if (!v || typeof v !== "object") continue;
     const vv = v as Record<string, unknown>;
-    if ("value" in vv && !("updatedAt" in vv)) vv.updatedAt = now;
+    if (!("value" in vv)) continue;
+    if (!("updatedAt" in vv)) vv.updatedAt = now;
+    // Default missing fields so valid extractions persist (model often omits these)
+    if (!("source" in vv)) vv.source = "inferred";
+    if (!("confidence" in vv)) vv.confidence = vv.source === "explicit" ? 0.9 : 0.65;
+    // If model mistakenly returned primitives for known keys, coerce where safe
+    if ((k === "targetAreas" || k === "propertyTypes" || k === "mustHaves" || k === "dealBreakers") && Array.isArray(vv.value)) {
+      vv.value = vv.value.map((x) => String(x).trim()).filter(Boolean);
+    }
   }
 
   const parsed = buyerPreferenceExtractionPatchSchema.safeParse(mapped);

@@ -1649,10 +1649,9 @@ export function InboxLeadDetailsPanel({
         )}
       </div>
 
-      {/* Hidden but mounted: quick action popovers (Book / Assign / Follow / Snooze).
-          Utilities buttons open these via controlled state without duplicating popover bodies. */}
+      {/* Utilities (operational) — keep near top under header */}
       {copilotExpanded && (
-      <div className="hidden px-3 py-2 border-b border-gray-200 bg-gray-50/60 animate-in fade-in duration-150">
+      <div className="px-3 py-2 border-b border-gray-200 bg-gray-50/60 animate-in fade-in duration-150">
         <div className="grid grid-cols-4 gap-1">
 
           {/* ── BOOK ── */}
@@ -2049,7 +2048,7 @@ export function InboxLeadDetailsPanel({
                   ? <PlayCircle className="w-3 h-3 text-gray-500" />
                   : <PauseCircle className="w-3 h-3 text-gray-500" />
                 }
-                <span className="text-[9px] text-gray-500 font-medium">{headerShowsSnoozed ? "Unsnooze" : "Snooze"}</span>
+                <span className="text-[9px] text-gray-500 font-medium">AI</span>
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-[220px] p-2.5" align="start" side="bottom" sideOffset={4}>
@@ -2427,6 +2426,78 @@ export function InboxLeadDetailsPanel({
             </div>
           </div>
 
+          {/* ── STATUS + PIPELINE (side-by-side) ─────────────────────── */}
+          {primaryConversation && (
+            <div>
+              <RowLabel>Status · Stage</RowLabel>
+              <div className="flex gap-1.5 mt-1">
+                <Select value={convStatus} onValueChange={onUpdateConversationStatus}>
+                  <SelectTrigger
+                    className={cn(
+                      "h-7 text-[11px] font-medium flex-1 bg-white border border-gray-200 px-2 shadow-none",
+                      conversationStatusRow.textClass
+                    )}
+                    data-testid="select-conversation-status"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CONVERSATION_STATUS_ROWS.map((s) => (
+                      <SelectItem
+                        key={s.value}
+                        value={s.value}
+                        className={cn(
+                          "text-[11px] font-medium rounded-sm",
+                          "focus:!bg-gray-100 focus:!text-gray-900",
+                          "data-[highlighted]:!bg-gray-100 data-[highlighted]:!text-gray-900",
+                          s.textClass
+                        )}
+                      >
+                        {s.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={contact.pipelineStage}
+                  onValueChange={val => onUpdateContact({ pipelineStage: val })}
+                >
+                  <SelectTrigger className="h-7 text-[11px] flex-1 bg-white px-2" data-testid="select-pipeline">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PIPELINE_STAGES.map(stage => (
+                      <SelectItem key={stage} value={stage} className="text-[11px]">{stage}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          {/* ── STATUS TAGS ──────────────────────────────────────────── */}
+          <div>
+            <RowLabel>Tag</RowLabel>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {Object.keys(TAG_COLORS).map(tag => (
+                <button
+                  key={tag}
+                  onClick={() => onUpdateContact({ tag })}
+                  className={cn(
+                    "text-[10px] px-2 py-0.5 rounded-full border transition-all font-medium",
+                    contact.tag === tag
+                      ? TAG_COLORS[tag] || 'bg-blue-100 text-blue-700 border-blue-300'
+                      : "bg-white text-gray-400 border-gray-200 hover:border-gray-300 hover:text-gray-600"
+                  )}
+                  data-testid={`button-tag-${tag.toLowerCase().replace(/\s+/g, '-')}`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* ── FOLLOW-UP: display only — click to reopen Follow popup ── */}
           <div>
             <RowLabel>Follow-up</RowLabel>
@@ -2517,124 +2588,7 @@ export function InboxLeadDetailsPanel({
             )}
           </div>
 
-          {/* ── CRM UTILITIES (quiet) ─────────────────────────────────────── */}
-          <div className="pt-3 border-t border-gray-100">
-            <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400 mb-1">
-              Utilities
-            </p>
-            <div className="rounded-xl border border-gray-200 bg-white px-2.5 py-2 space-y-2">
-              {/* Operational actions (quiet) */}
-              <div className="grid grid-cols-4 gap-1">
-                <button
-                  type="button"
-                  onClick={() => setBookOpen(true)}
-                  className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors"
-                  data-testid="button-util-book"
-                >
-                  <CalendarIcon className="w-3 h-3 text-gray-500" />
-                  <span className="text-[9px] text-gray-500 font-medium">Book</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAssignOpen(true)}
-                  className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors"
-                  data-testid="button-util-assign"
-                >
-                  <UserCheck className="w-3 h-3 text-gray-500" />
-                  <span className="text-[9px] text-gray-500 font-medium">Assign</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFollowOpen(true)}
-                  className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors"
-                  data-testid="button-util-follow"
-                >
-                  <Bell className="w-3 h-3 text-gray-500" />
-                  <span className="text-[9px] text-gray-500 font-medium">Follow</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSnoozeOpen(true)}
-                  className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors"
-                  data-testid="button-util-snooze"
-                >
-                  <PauseCircle className="w-3 h-3 text-gray-500" />
-                  <span className="text-[9px] text-gray-500 font-medium">AI</span>
-                </button>
-              </div>
-
-              {/* Status / Stage / Tags stay here but low emphasis */}
-              {primaryConversation && (
-                <div>
-                  <RowLabel>Status · Stage</RowLabel>
-                  <div className="flex gap-1.5 mt-1">
-                    <Select value={convStatus} onValueChange={onUpdateConversationStatus}>
-                      <SelectTrigger
-                        className={cn(
-                          "h-7 text-[11px] font-medium flex-1 bg-white border border-gray-200 px-2 shadow-none",
-                          conversationStatusRow.textClass
-                        )}
-                        data-testid="select-conversation-status-utilities"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CONVERSATION_STATUS_ROWS.map((s) => (
-                          <SelectItem
-                            key={s.value}
-                            value={s.value}
-                            className={cn(
-                              "text-[11px] font-medium rounded-sm",
-                              "focus:!bg-gray-100 focus:!text-gray-900",
-                              "data-[highlighted]:!bg-gray-100 data-[highlighted]:!text-gray-900",
-                              s.textClass
-                            )}
-                          >
-                            {s.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    <Select
-                      value={contact.pipelineStage}
-                      onValueChange={val => onUpdateContact({ pipelineStage: val })}
-                    >
-                      <SelectTrigger className="h-7 text-[11px] flex-1 bg-white px-2" data-testid="select-pipeline-utilities">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PIPELINE_STAGES.map(stage => (
-                          <SelectItem key={stage} value={stage} className="text-[11px]">{stage}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <RowLabel>Tag</RowLabel>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {Object.keys(TAG_COLORS).map(tag => (
-                    <button
-                      key={tag}
-                      onClick={() => onUpdateContact({ tag })}
-                      className={cn(
-                        "text-[10px] px-2 py-0.5 rounded-full border transition-all font-medium",
-                        contact.tag === tag
-                          ? TAG_COLORS[tag] || 'bg-blue-100 text-blue-700 border-blue-300'
-                          : "bg-white text-gray-400 border-gray-200 hover:border-gray-300 hover:text-gray-600"
-                      )}
-                      data-testid={`button-tag-util-${tag.toLowerCase().replace(/\s+/g, '-')}`}
-                    >
-                      {tag}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Utilities moved back under Copilot header */}
 
           {/* ── CAMPAIGNS (preset automation enrollments) ───────────────── */}
           <div className="mt-6 pt-4 border-t border-[#eee]">
