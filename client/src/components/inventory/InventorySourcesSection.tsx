@@ -27,6 +27,13 @@ import {
   type PublicInventorySource,
 } from "@/lib/inventoryApi";
 import {
+  focusInventoryFormField,
+  inventoryFieldHasError,
+  validateInventorySourceForm,
+  type InventoryFormField,
+  type InventoryFormFieldErrors,
+} from "@/lib/inventorySourceFormValidation";
+import {
   INVENTORY_PROVIDER_UI_OPTIONS,
   inventoryProviderUserLabel,
   sanitizeInventoryDisplayNameForUi,
@@ -97,6 +104,10 @@ function phaseStatusIcon(phase: string, syncRunning: boolean) {
   return null;
 }
 
+function inventoryInputClass(hasError: boolean, extra?: string): string {
+  return cn(hasError && "border-red-500 focus-visible:ring-red-500", extra);
+}
+
 function loadFormFromSource(source: PublicInventorySource | undefined): InventorySourceForm {
   if (!source) return { ...EMPTY_FORM };
   const cfg = source.config || {};
@@ -119,6 +130,22 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const [showSecrets, setShowSecrets] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [selectedProvider, setSelectedProvider] = useState<InventoryProvider>("mls_grid");
+  const [fieldErrors, setFieldErrors] = useState<InventoryFormFieldErrors>({});
+  const [formBannerError, setFormBannerError] = useState<string | null>(null);
+
+  const clearFieldError = (field: InventoryFormField) => {
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const clearFormValidation = () => {
+    setFieldErrors({});
+    setFormBannerError(null);
+  };
 
   const { data: status, isLoading: statusLoading } = useQuery({
     queryKey: ["/api/inventory/status"],
@@ -159,43 +186,18 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     } else {
       setForm({ ...EMPTY_FORM });
     }
+    setFieldErrors({});
+    setFormBannerError(null);
   }, [selectedProvider, activeSource?.id, activeSource?.updatedAt, sources]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!providerAvailable) {
-        throw new Error(`${providerOption?.label ?? "This provider"} is not available yet.`);
-      }
-      if (!providerSupportsListingSync(selectedProvider)) {
-        throw new Error("This provider is not available yet.");
-      }
       const isUpdate = !!activeSource;
       const payload = buildInventorySourcePayload(
         selectedProvider as "mls_grid" | "trestle" | "bridge_interactive",
         form,
         isUpdate,
       );
-      if (selectedProvider === "bridge_interactive") {
-        if (!(payload.config as { datasetId?: string }).datasetId) {
-          throw new Error("Dataset ID is required.");
-        }
-        if (!isUpdate && !(payload.credentials as { serverToken?: string } | undefined)?.serverToken) {
-          throw new Error("Server token is required when connecting a new source.");
-        }
-      } else if (!payload.config.originatingSystemName) {
-        throw new Error("Originating system name is required.");
-      }
-      if (selectedProvider === "mls_grid") {
-        if (!isUpdate && !(payload.credentials as { accessToken?: string } | undefined)?.accessToken) {
-          throw new Error("Access token is required when connecting a new source.");
-        }
-      }
-      if (selectedProvider === "trestle") {
-        const creds = payload.credentials as { clientId?: string; clientSecret?: string } | undefined;
-        if (!isUpdate && (!creds?.clientId || !creds?.clientSecret)) {
-          throw new Error("Trestle client ID and client secret are required when connecting a new source.");
-        }
-      }
       if (isUpdate) {
         const res = await apiRequest("PATCH", `/api/inventory/sources/${activeSource!.id}`, payload);
         return res.json();
@@ -206,6 +208,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
       setForm((f) => ({ ...f, accessToken: "", clientId: "", clientSecret: "", serverToken: "" }));
+      clearFormValidation();
       toast({
         title: "Inventory source saved",
         description: "Validate your connection to start importing listings.",
@@ -222,8 +225,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
 
   const validateMutation = useMutation({
     mutationFn: async () => {
-      if (!activeSource) throw new Error("Save your inventory source before validating.");
-      const res = await apiRequest("POST", `/api/inventory/sources/${activeSource.id}/validate`);
+      const res = await apiRequest("POST", `/api/inventory/sources/${activeSource!.id}/validate`);
       return res.json() as Promise<{
         ok: boolean;
         message?: string;
@@ -316,6 +318,56 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     },
   });
 
+  const runFormValidation = (requireSavedSource: boolean) => {
+    clearFormValidation();
+
+    if (!providerAvailable || !providerSupportsListingSync(selectedProvider)) {
+      toast({
+        title: "Provider not available",
+        description: `${providerOption?.label ?? "This provider"} is not available yet.`,
+      });
+      return false;
+    }
+
+    if (requireSavedSource && !activeSource) {
+      setFormBannerError("Save your connection settings before continuing.");
+    }
+
+    const validation = validateInventorySourceForm({
+      provider: selectedProvider,
+      form,
+      isUpdate: !!activeSource,
+      hasStoredCredentials: activeSource?.hasCredentials ?? false,
+    });
+
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      focusInventoryFormField(validation.firstInvalidField);
+      return false;
+    }
+
+    if (requireSavedSource && !activeSource) {
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSave = () => {
+    if (!runFormValidation(false)) return;
+    saveMutation.mutate();
+  };
+
+  const handleValidate = () => {
+    if (!runFormValidation(true)) return;
+    validateMutation.mutate();
+  };
+
+  const handleSync = () => {
+    if (!runFormValidation(true)) return;
+    syncMutation.mutate();
+  };
+
   const deleteMutation = useMutation({
     mutationFn: async () => {
       if (!activeSource) return;
@@ -406,7 +458,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                   <Label htmlFor="inventory-provider">Provider</Label>
                   <Select
                     value={selectedProvider}
-                    onValueChange={(v) => setSelectedProvider(v as InventoryProvider)}
+                    onValueChange={(v) => {
+                      setSelectedProvider(v as InventoryProvider);
+                      setFieldErrors({});
+                      setFormBannerError(null);
+                    }}
                   >
                     <SelectTrigger id="inventory-provider" data-testid="select-inventory-provider">
                       <SelectValue placeholder="Select provider" />
@@ -440,6 +496,15 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
 
                 {isListingSyncProvider && providerAvailable && (
                   <>
+                    {formBannerError && (
+                      <div
+                        className="sm:col-span-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                        role="alert"
+                        data-testid="inventory-form-banner"
+                      >
+                        {formBannerError}
+                      </div>
+                    )}
                     <div className="space-y-2 sm:col-span-2 sm:max-w-md">
                       <Label htmlFor="inventory-display-name">Display name</Label>
                       <Input
@@ -456,16 +521,29 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         <Input
                           id="inventory-originating-system"
                           value={form.originatingSystemName}
-                          onChange={(e) => setForm((f) => ({ ...f, originatingSystemName: e.target.value }))}
+                          onChange={(e) => {
+                            setForm((f) => ({ ...f, originatingSystemName: e.target.value }));
+                            clearFieldError("originatingSystemName");
+                          }}
                           placeholder={originatingSystemPlaceholder(selectedProvider)}
                           autoComplete="off"
+                          aria-invalid={inventoryFieldHasError(fieldErrors, "originatingSystemName")}
+                          className={inventoryInputClass(
+                            inventoryFieldHasError(fieldErrors, "originatingSystemName"),
+                          )}
                           data-testid="input-inventory-originating-system"
                         />
-                        <p className="text-[11px] text-muted-foreground">
-                          {isTrestle
-                            ? "Use the originating system name from your Trestle feed configuration."
-                            : "Use the originating system name and access token provided by your MLS data provider."}
-                        </p>
+                        {fieldErrors.originatingSystemName ? (
+                          <p className="text-xs text-red-600" role="alert">
+                            {fieldErrors.originatingSystemName}
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground">
+                            {isTrestle
+                              ? "Use the originating system name from your Trestle feed configuration."
+                              : "Use the originating system name and access token provided by your MLS data provider."}
+                          </p>
+                        )}
                       </div>
                     )}
                     {isBridge && (
@@ -474,14 +552,25 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         <Input
                           id="inventory-dataset-id"
                           value={form.datasetId}
-                          onChange={(e) => setForm((f) => ({ ...f, datasetId: e.target.value }))}
+                          onChange={(e) => {
+                            setForm((f) => ({ ...f, datasetId: e.target.value }));
+                            clearFieldError("datasetId");
+                          }}
                           placeholder={datasetIdPlaceholder()}
                           autoComplete="off"
+                          aria-invalid={inventoryFieldHasError(fieldErrors, "datasetId")}
+                          className={inventoryInputClass(inventoryFieldHasError(fieldErrors, "datasetId"))}
                           data-testid="input-inventory-dataset-id"
                         />
-                        <p className="text-[11px] text-muted-foreground">
-                          Use the dataset ID from your Bridge Data Output account (e.g. your MLS dataset key).
-                        </p>
+                        {fieldErrors.datasetId ? (
+                          <p className="text-xs text-red-600" role="alert">
+                            {fieldErrors.datasetId}
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground">
+                            Use the dataset ID from your Bridge Data Output account (e.g. your MLS dataset key).
+                          </p>
+                        )}
                       </div>
                     )}
                     {isMlsGrid && (
@@ -492,14 +581,21 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                             id="inventory-access-token"
                             type={showSecrets ? "text" : "password"}
                             value={form.accessToken}
-                            onChange={(e) => setForm((f) => ({ ...f, accessToken: e.target.value }))}
+                            onChange={(e) => {
+                              setForm((f) => ({ ...f, accessToken: e.target.value }));
+                              clearFieldError("accessToken");
+                            }}
                             placeholder={
                               activeSource?.hasCredentials
                                 ? "••••••••  (leave blank to keep)"
                                 : "Paste access token"
                             }
                             autoComplete="off"
-                            className="pr-10"
+                            aria-invalid={inventoryFieldHasError(fieldErrors, "accessToken")}
+                            className={inventoryInputClass(
+                              inventoryFieldHasError(fieldErrors, "accessToken"),
+                              "pr-10",
+                            )}
                             data-testid="input-inventory-access-token"
                           />
                           <button
@@ -511,11 +607,17 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                             {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
                         </div>
-                        {activeSource?.hasCredentials && (
-                          <p className="text-[11px] text-muted-foreground">
-                            Token is stored securely and never shown again after save. If MLS Grid rotates your
-                            token, paste the new one here and save — the previous token is replaced.
+                        {fieldErrors.accessToken ? (
+                          <p className="text-xs text-red-600" role="alert">
+                            {fieldErrors.accessToken}
                           </p>
+                        ) : (
+                          activeSource?.hasCredentials && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Token is stored securely and never shown again after save. If MLS Grid rotates your
+                              token, paste the new one here and save — the previous token is replaced.
+                            </p>
+                          )
                         )}
                       </div>
                     )}
@@ -527,14 +629,21 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                             id="inventory-server-token"
                             type={showSecrets ? "text" : "password"}
                             value={form.serverToken}
-                            onChange={(e) => setForm((f) => ({ ...f, serverToken: e.target.value }))}
+                            onChange={(e) => {
+                              setForm((f) => ({ ...f, serverToken: e.target.value }));
+                              clearFieldError("serverToken");
+                            }}
                             placeholder={
                               activeSource?.hasCredentials
                                 ? "••••••••  (leave blank to keep)"
                                 : "Paste Bridge server token"
                             }
                             autoComplete="off"
-                            className="pr-10"
+                            aria-invalid={inventoryFieldHasError(fieldErrors, "serverToken")}
+                            className={inventoryInputClass(
+                              inventoryFieldHasError(fieldErrors, "serverToken"),
+                              "pr-10",
+                            )}
                             data-testid="input-inventory-server-token"
                           />
                           <button
@@ -546,11 +655,17 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                             {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
                         </div>
-                        {activeSource?.hasCredentials && (
-                          <p className="text-[11px] text-muted-foreground">
-                            Token is stored securely and never shown again after save. Paste a new server
-                            token here to rotate credentials.
+                        {fieldErrors.serverToken ? (
+                          <p className="text-xs text-red-600" role="alert">
+                            {fieldErrors.serverToken}
                           </p>
+                        ) : (
+                          activeSource?.hasCredentials && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Token is stored securely and never shown again after save. Paste a new server
+                              token here to rotate credentials.
+                            </p>
+                          )
                         )}
                       </div>
                     )}
@@ -561,15 +676,25 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                           <Input
                             id="inventory-client-id"
                             value={form.clientId}
-                            onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}
+                            onChange={(e) => {
+                              setForm((f) => ({ ...f, clientId: e.target.value }));
+                              clearFieldError("clientId");
+                            }}
                             placeholder={
                               activeSource?.hasCredentials
                                 ? "••••••••  (leave blank to keep)"
                                 : "Paste Trestle client ID"
                             }
                             autoComplete="off"
+                            aria-invalid={inventoryFieldHasError(fieldErrors, "clientId")}
+                            className={inventoryInputClass(inventoryFieldHasError(fieldErrors, "clientId"))}
                             data-testid="input-inventory-client-id"
                           />
+                          {fieldErrors.clientId && (
+                            <p className="text-xs text-red-600" role="alert">
+                              {fieldErrors.clientId}
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="inventory-client-secret">Client secret</Label>
@@ -578,14 +703,21 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               id="inventory-client-secret"
                               type={showSecrets ? "text" : "password"}
                               value={form.clientSecret}
-                              onChange={(e) => setForm((f) => ({ ...f, clientSecret: e.target.value }))}
+                              onChange={(e) => {
+                                setForm((f) => ({ ...f, clientSecret: e.target.value }));
+                                clearFieldError("clientSecret");
+                              }}
                               placeholder={
                                 activeSource?.hasCredentials
                                   ? "••••••••  (leave blank to keep)"
                                   : "Paste Trestle client secret"
                               }
                               autoComplete="off"
-                              className="pr-10"
+                              aria-invalid={inventoryFieldHasError(fieldErrors, "clientSecret")}
+                              className={inventoryInputClass(
+                                inventoryFieldHasError(fieldErrors, "clientSecret"),
+                                "pr-10",
+                              )}
                               data-testid="input-inventory-client-secret"
                             />
                             <button
@@ -597,11 +729,17 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                             </button>
                           </div>
-                          {activeSource?.hasCredentials && (
-                            <p className="text-[11px] text-muted-foreground">
-                              Credentials are stored securely and never shown again after save. Paste updated
-                              values here to rotate your Trestle client secret.
+                          {fieldErrors.clientSecret ? (
+                            <p className="text-xs text-red-600" role="alert">
+                              {fieldErrors.clientSecret}
                             </p>
+                          ) : (
+                            activeSource?.hasCredentials && (
+                              <p className="text-[11px] text-muted-foreground">
+                                Credentials are stored securely and never shown again after save. Paste updated
+                                values here to rotate your Trestle client secret.
+                              </p>
+                            )
                           )}
                         </div>
                       </>
@@ -616,7 +754,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                     type="button"
                     className="bg-brand-green hover:bg-brand-green/90"
                     disabled={saveMutation.isPending}
-                    onClick={() => saveMutation.mutate()}
+                    onClick={handleSave}
                     data-testid="button-inventory-save"
                   >
                     {saveMutation.isPending ? (
@@ -624,17 +762,15 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         Saving…
                       </>
-                    ) : activeSource ? (
-                      "Save changes"
                     ) : (
-                      "Connect inventory source"
+                      "Save changes"
                     )}
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={!activeSource || validateMutation.isPending || syncRunning}
-                    onClick={() => validateMutation.mutate()}
+                    disabled={validateMutation.isPending || syncRunning}
+                    onClick={handleValidate}
                     data-testid="button-inventory-validate"
                   >
                     {validateMutation.isPending ? (
@@ -647,12 +783,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                     type="button"
                     variant="outline"
                     disabled={
-                      !activeSource ||
                       syncMutation.isPending ||
                       validateMutation.isPending ||
                       syncRunning
                     }
-                    onClick={() => syncMutation.mutate()}
+                    onClick={handleSync}
                     data-testid="button-inventory-sync"
                   >
                     <RefreshCw className={cn("h-4 w-4 mr-1", syncRunning && "animate-spin")} />
