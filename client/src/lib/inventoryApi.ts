@@ -123,3 +123,5 @@ export function isInventorySourceConnected(sources: PublicInventorySource[]): bo
 }
 
 export { formatInventorySyncStatRows, friendlyInventoryErrorMessage, getInventoryStatusHighlights, formatInventorySourceStatusRows };
+export { deriveInventorySourcePhase, inventorySourcePhaseBadgeClass } from "@shared/inventory/inventorySourcePhase";
+export type { InventorySourcePhase, InventorySourcePhaseDetails } from "@shared/inventory/inventorySourcePhase";

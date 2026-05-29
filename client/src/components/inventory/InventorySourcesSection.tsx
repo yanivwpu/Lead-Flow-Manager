@@ -21,8 +21,6 @@ import {
   buildMlsSourcePayload,
   fetchInventorySources,
   fetchInventoryStatus,
-  formatInventoryConnectionStatus,
-  formatInventorySyncStatus,
   friendlyInventoryErrorMessage,
   formatInventorySyncStatRows,
   type PublicInventorySource,
@@ -35,6 +33,10 @@ import {
   getInventoryStatusHighlights,
   formatInventorySourceStatusRows,
 } from "@shared/inventory/inventoryProviderDisplay";
+import {
+  deriveInventorySourcePhase,
+  inventorySourcePhaseBadgeClass,
+} from "@shared/inventory/inventorySourcePhase";
 import type { InventoryProvider } from "@shared/inventory/inventoryProviderSchema";
 import { Home, RefreshCw, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2, XCircle } from "lucide-react";
 import { RGE_TEMPLATE_DETAIL_PATH } from "@shared/rgePaths";
@@ -56,11 +58,20 @@ const ORIGINATING_SYSTEM_PLACEHOLDER = PRODUCTION_UI
   ? "Provided by your MLS data provider"
   : "e.g. miamire";
 
-function connectionBadgeClass(status: string): string {
-  if (status === "connected") return "bg-emerald-50 text-emerald-800 border-emerald-200";
-  if (status === "error") return "bg-red-50 text-red-800 border-red-200";
-  if (status === "running" || status === "configuring") return "bg-amber-50 text-amber-800 border-amber-200";
-  return "bg-gray-50 text-gray-700 border-gray-200";
+function phaseStatusIcon(phase: string, syncRunning: boolean) {
+  if (syncRunning) {
+    return <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600 shrink-0" />;
+  }
+  if (phase === "sync_failed") {
+    return <XCircle className="h-3.5 w-3.5 text-red-600 shrink-0" />;
+  }
+  if (phase === "needs_validation" || phase === "ready_for_import") {
+    return <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />;
+  }
+  if (phase === "initial_import_complete" || phase === "up_to_date") {
+    return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />;
+  }
+  return null;
 }
 
 function loadFormFromSource(source: PublicInventorySource | undefined) {
@@ -253,17 +264,28 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const isCompact = variant === "compact";
   const syncRunning = activeSource?.lastSyncStatus === "running";
   const syncFailed = activeSource?.lastSyncStatus === "failed";
-  const syncSucceeded = activeSource?.lastSyncStatus === "success";
   const lastSyncAt = activeSource?.lastSyncAt ? new Date(activeSource.lastSyncAt).toLocaleString() : null;
+  const sourcePhase = activeSource
+    ? deriveInventorySourcePhase({
+        connectionStatus: activeSource.connectionStatus,
+        lastSyncStatus: activeSource.lastSyncStatus,
+        lastSyncStats: activeSource.lastSyncStats,
+        config: activeSource.config,
+        listingCount: activeSource.listingCount,
+      })
+    : null;
   const syncStatRows = formatInventorySourceStatusRows(
     activeSource?.lastSyncStats,
     activeSource?.config as Record<string, unknown> | undefined,
   );
   const statusHighlights = getInventoryStatusHighlights(activeSource?.lastSyncStats);
   const devSyncRows = formatInventorySyncStatRows(activeSource?.lastSyncStats);
-  const initialImportComplete =
-    (activeSource?.config as Record<string, unknown> | undefined)?.initialImportComplete === true;
   const isMlsGrid = selectedProvider === "mls_grid";
+  const showSyncMetrics =
+    sourcePhase?.phase === "initial_import_running" ||
+    sourcePhase?.phase === "initial_import_complete" ||
+    sourcePhase?.phase === "up_to_date" ||
+    sourcePhase?.phase === "sync_failed";
 
   const inner = (
     <div className={cn("space-y-4", className)}>
@@ -450,51 +472,56 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       <dt className="text-muted-foreground">Provider</dt>
                       <dd className="font-medium">{inventoryProviderUserLabel(activeSource.provider)}</dd>
                     </div>
-                    <div>
-                      <dt className="text-muted-foreground">Connection status</dt>
-                      <dd>
-                        <Badge
-                          variant="outline"
-                          className={cn("font-normal", connectionBadgeClass(activeSource.connectionStatus))}
-                        >
-                          {formatInventoryConnectionStatus(activeSource.connectionStatus)}
-                        </Badge>
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">Sync status</dt>
-                      <dd className="font-medium flex items-center gap-1.5">
-                        {syncSucceeded && !syncRunning && (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                        )}
-                        {syncFailed && !syncRunning && (
-                          <XCircle className="h-3.5 w-3.5 text-red-600 shrink-0" />
-                        )}
-                        {syncRunning && (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600 shrink-0" />
-                        )}
-                        {formatInventorySyncStatus(activeSource.lastSyncStatus)}
-                      </dd>
-                    </div>
+                    {sourcePhase && (
+                      <div className="sm:col-span-2">
+                        <dt className="text-muted-foreground">Status</dt>
+                        <dd className="space-y-1.5">
+                          <div className="flex items-center gap-1.5 font-medium">
+                            {phaseStatusIcon(sourcePhase.phase, syncRunning)}
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "font-normal",
+                                inventorySourcePhaseBadgeClass(sourcePhase.phase),
+                              )}
+                              data-testid="inventory-source-phase"
+                            >
+                              {sourcePhase.message}
+                            </Badge>
+                          </div>
+                          {sourcePhase.detail && (
+                            <p
+                              className={cn(
+                                "text-xs leading-relaxed",
+                                sourcePhase.phase === "ready_for_import"
+                                  ? "text-blue-900/90 bg-blue-50 border border-blue-200 rounded px-2 py-1"
+                                  : sourcePhase.phase === "initial_import_running"
+                                    ? "text-blue-900/90"
+                                    : sourcePhase.phase === "sync_failed"
+                                      ? "text-red-900/90"
+                                      : "text-muted-foreground",
+                              )}
+                              data-testid="inventory-source-phase-detail"
+                            >
+                              {sourcePhase.detail}
+                            </p>
+                          )}
+                        </dd>
+                      </div>
+                    )}
                     <div>
                       <dt className="text-muted-foreground">Listings in workspace</dt>
                       <dd className="font-medium" data-testid="inventory-listing-count">
                         {activeSource.listingCount.toLocaleString()}
                       </dd>
                     </div>
-                    <div>
-                      <dt className="text-muted-foreground">Last sync</dt>
-                      <dd className="font-medium">{lastSyncAt ?? "Not synced yet"}</dd>
-                    </div>
-                    {!initialImportComplete && activeSource.lastSyncStatus !== "running" && (
-                      <div className="sm:col-span-2">
-                        <dt className="text-muted-foreground">Import progress</dt>
-                        <dd className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-0.5">
-                          Initial import in progress — keep syncing until all listings are loaded.
-                        </dd>
+                    {lastSyncAt && (
+                      <div>
+                        <dt className="text-muted-foreground">Last sync</dt>
+                        <dd className="font-medium">{lastSyncAt}</dd>
                       </div>
                     )}
-                    {statusHighlights.updatedListings != null && (
+                    {showSyncMetrics && statusHighlights.updatedListings != null && (
                       <div>
                         <dt className="text-muted-foreground">Updated listings</dt>
                         <dd className="font-medium tabular-nums">
@@ -502,7 +529,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         </dd>
                       </div>
                     )}
-                    {statusHighlights.newListings != null && statusHighlights.newListings > 0 && (
+                    {showSyncMetrics && statusHighlights.newListings != null && statusHighlights.newListings > 0 && (
                       <div>
                         <dt className="text-muted-foreground">New listings</dt>
                         <dd className="font-medium tabular-nums">
@@ -510,7 +537,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         </dd>
                       </div>
                     )}
-                    {statusHighlights.priceChanges != null && statusHighlights.priceChanges > 0 && (
+                    {showSyncMetrics && statusHighlights.priceChanges != null && statusHighlights.priceChanges > 0 && (
                       <div>
                         <dt className="text-muted-foreground">Price changes</dt>
                         <dd className="font-medium tabular-nums">
@@ -518,7 +545,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         </dd>
                       </div>
                     )}
-                    {statusHighlights.inactiveListings != null && (
+                    {showSyncMetrics && statusHighlights.inactiveListings != null && (
                       <div>
                         <dt className="text-muted-foreground">Inactive listings</dt>
                         <dd className="font-medium tabular-nums">
@@ -528,7 +555,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                     )}
                   </dl>
 
-                  {syncStatRows.length > 0 && (
+                  {showSyncMetrics && syncStatRows.length > 0 && (
                     <div className="border-t border-gray-200 pt-3">
                       <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">
                         Last sync summary
@@ -547,7 +574,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                   {syncFailed && activeSource.lastSyncError && (
                     <Alert variant="destructive" className="py-2">
                       <AlertCircle className="h-4 w-4" />
-                      <AlertTitle className="text-sm">Last sync failed</AlertTitle>
+                      <AlertTitle className="text-sm">Sync failed</AlertTitle>
                       <AlertDescription
                         className="text-xs leading-relaxed"
                         data-testid="inventory-sync-error"

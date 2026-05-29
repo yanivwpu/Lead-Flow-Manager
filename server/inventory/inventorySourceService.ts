@@ -207,6 +207,13 @@ export async function updateSourceForUser(
     patch.connectionStatus = "configuring";
   }
 
+  if (origChanged) {
+    patch.lastSyncStatus = null;
+    patch.lastSyncAt = null;
+    patch.lastSyncError = null;
+    patch.lastSyncStats = null;
+  }
+
   const row = await patchInventorySource(sourceId, userId, patch);
   if (!row) return null;
   const counts = await countListingsBySourceForUser(userId);

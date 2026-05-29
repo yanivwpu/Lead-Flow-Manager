@@ -143,6 +143,11 @@ export function formatInventorySourceStatusRows(
   const synced = n("seenCount") ?? n("upserted");
   if (synced != null) rows.push({ label: "Listings synced", value: synced.toLocaleString() });
 
+  const pagesFetched = n("pagesFetched");
+  if (pagesFetched != null && pagesFetched > 0) {
+    rows.push({ label: "Pages processed", value: pagesFetched.toLocaleString() });
+  }
+
   const newListings = n("newListings");
   if (newListings != null) {
     rows.push({ label: "New listings", value: newListings.toLocaleString() });
