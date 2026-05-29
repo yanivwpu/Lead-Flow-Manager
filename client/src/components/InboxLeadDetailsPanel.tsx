@@ -2311,10 +2311,18 @@ export function InboxLeadDetailsPanel({
                   {showCopilotInventoryPanels && (
                     <>
                       <div className="rounded-lg border border-gray-200 bg-white/80 px-2.5 py-2">
-                        <NewOpportunitiesPanel contactId={contact.id} compact />
+                        <NewOpportunitiesPanel
+                          contactId={contact.id}
+                          compact
+                          onInsertComposerDraft={onInsertComposerDraft}
+                        />
                       </div>
                       <div className="rounded-lg border border-gray-200 bg-white/80 px-2.5 py-2">
-                        <MatchingListingsPanel contactId={contact.id} compact />
+                        <MatchingListingsPanel
+                          contactId={contact.id}
+                          compact
+                          onInsertComposerDraft={onInsertComposerDraft}
+                        />
                       </div>
                     </>
                   )}

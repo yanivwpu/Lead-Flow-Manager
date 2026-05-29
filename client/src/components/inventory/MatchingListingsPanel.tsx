@@ -1,9 +1,8 @@
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, ExternalLink, Heart, Home, Loader2, Sparkles } from "lucide-react";
+import { Eye, Heart, Home, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type { InventoryMatchResult, InventoryMatchesResponse } from "@shared/inventory/inventoryMatchTypes";
 import { fetchInventoryStatus } from "@/lib/inventoryApi";
 import { apiRequest } from "@/lib/queryClient";
+import { ListingDetailDialog } from "@/components/inventory/ListingDetailDialog";
 
 function formatPrice(cents: number | null): string {
   if (cents == null) return "Price on request";
@@ -54,113 +54,18 @@ async function fetchInventoryMatches(contactId: string): Promise<InventoryMatche
 
 const SIDEBAR_PREVIEW_LIMIT = 3;
 
-type ListingDetail = {
-  listing: {
-    id: string;
-    city: string | null;
-    state: string | null;
-    addressLine1: string | null;
-    priceCents: number | null;
-    beds: string | number | null;
-    baths: string | number | null;
-    propertyType: string | null;
-    description: string | null;
-    listingUrl: string | null;
-    photos: { url: string; order?: number }[];
-    status: string;
-  };
-};
-
-function ListingDetailDialog({
-  listingId,
-  fallback,
-  open,
-  onOpenChange,
-}: {
-  listingId: string | null;
-  fallback: InventoryMatchResult["listing"] | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const { data, isLoading } = useQuery({
-    queryKey: ["/api/inventory/listings", listingId],
-    queryFn: async () => {
-      const res = await apiRequest("GET", `/api/inventory/listings/${listingId}`);
-      return res.json() as Promise<ListingDetail>;
-    },
-    enabled: open && !!listingId,
-    staleTime: 60_000,
-  });
-
-  const listing = data?.listing;
-  const photo =
-    listing?.photos?.[0]?.url ?? fallback?.thumbnailUrl ?? null;
-  const city = listing?.city ?? fallback?.city;
-  const state = listing?.state ?? fallback?.state;
-  const priceCents = listing?.priceCents ?? fallback?.priceCents ?? null;
-  const beds = listing?.beds != null ? Number(listing.beds) : fallback?.beds;
-  const baths = listing?.baths != null ? Number(listing.baths) : fallback?.baths;
-  const listingUrl = listing?.listingUrl ?? fallback?.listingUrl ?? null;
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm p-0 overflow-hidden">
-        <div className="h-36 bg-gray-100">
-          {photo ? (
-            <img src={photo} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full items-center justify-center">
-              <Home className="h-8 w-8 text-gray-300" />
-            </div>
-          )}
-        </div>
-        <div className="p-4 space-y-2">
-          <DialogHeader className="space-y-1 text-left">
-            <DialogTitle className="text-base">
-              {[city, state].filter(Boolean).join(", ") || "Listing"}
-            </DialogTitle>
-            <DialogDescription className="text-sm font-medium text-gray-900">
-              {formatPrice(priceCents)}
-            </DialogDescription>
-          </DialogHeader>
-          {formatBedsBaths(beds ?? null, baths ?? null) && (
-            <p className="text-xs text-gray-600">{formatBedsBaths(beds ?? null, baths ?? null)}</p>
-          )}
-          {(listing?.addressLine1 ?? fallback?.addressLine1) && (
-            <p className="text-xs text-gray-500">{listing?.addressLine1 ?? fallback?.addressLine1}</p>
-          )}
-          {isLoading && !listing && (
-            <p className="text-xs text-gray-400 flex items-center gap-1">
-              <Loader2 className="h-3 w-3 animate-spin" /> Loading details…
-            </p>
-          )}
-          {listing?.description && (
-            <p className="text-xs text-gray-600 line-clamp-4 leading-relaxed">{listing.description}</p>
-          )}
-          {listingUrl && (
-            <Button asChild size="sm" variant="outline" className="w-full mt-2">
-              <a href={listingUrl} target="_blank" rel="noreferrer">
-                Open listing URL
-                <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
-              </a>
-            </Button>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function MatchListingCard({
   contactId,
   match,
   saved,
   onSavedChange,
+  onInsertComposerDraft,
 }: {
   contactId: string;
   match: InventoryMatchResult;
   saved: boolean;
   onSavedChange: () => void;
+  onInsertComposerDraft?: (text: string) => boolean;
 }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -190,12 +95,8 @@ function MatchListingCard({
   });
 
   const viewListing = useCallback(() => {
-    if (match.listing.listingUrl) {
-      window.open(match.listing.listingUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
     setDetailOpen(true);
-  }, [match.listing.listingUrl]);
+  }, []);
 
   return (
     <>
@@ -287,10 +188,13 @@ function MatchListingCard({
       </div>
 
       <ListingDetailDialog
+        contactId={contactId}
         listingId={match.listingId}
         fallback={match.listing}
+        matchReasons={match.reasons}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        onInsertComposerDraft={onInsertComposerDraft}
       />
     </>
   );
@@ -303,6 +207,7 @@ function AllMatchesDialog({
   open,
   onOpenChange,
   onSavedChange,
+  onInsertComposerDraft,
 }: {
   contactId: string;
   matches: InventoryMatchResult[];
@@ -310,6 +215,7 @@ function AllMatchesDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSavedChange: () => void;
+  onInsertComposerDraft?: (text: string) => boolean;
 }) {
   const savedSet = new Set(savedListingIds);
 
@@ -334,6 +240,7 @@ function AllMatchesDialog({
                 match={match}
                 saved={savedSet.has(match.listingId)}
                 onSavedChange={onSavedChange}
+                onInsertComposerDraft={onInsertComposerDraft}
               />
             ))}
           </div>
@@ -346,9 +253,14 @@ function AllMatchesDialog({
 interface MatchingListingsPanelProps {
   contactId: string;
   compact?: boolean;
+  onInsertComposerDraft?: (text: string) => boolean;
 }
 
-export function MatchingListingsPanel({ contactId, compact = true }: MatchingListingsPanelProps) {
+export function MatchingListingsPanel({
+  contactId,
+  compact = true,
+  onInsertComposerDraft,
+}: MatchingListingsPanelProps) {
   const [allMatchesOpen, setAllMatchesOpen] = useState(false);
   const { data: inventoryStatus } = useQuery({
     queryKey: ["/api/inventory/status"],
@@ -436,6 +348,7 @@ export function MatchingListingsPanel({ contactId, compact = true }: MatchingLis
               match={match}
               saved={savedSet.has(match.listingId)}
               onSavedChange={() => void refetch()}
+              onInsertComposerDraft={onInsertComposerDraft}
             />
           ))}
           {hasMoreMatches && (
@@ -458,6 +371,7 @@ export function MatchingListingsPanel({ contactId, compact = true }: MatchingLis
         open={allMatchesOpen}
         onOpenChange={setAllMatchesOpen}
         onSavedChange={() => void refetch()}
+        onInsertComposerDraft={onInsertComposerDraft}
       />
     </div>
   );

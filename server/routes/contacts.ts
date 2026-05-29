@@ -266,6 +266,37 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/contacts/:id/inventory-matches/:listingId/draft", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const { inventoryMatchDraftRequestSchema } = await import("@shared/inventory/inventoryDraftTypes");
+      const { generateInventoryMatchDraft } = await import("../inventory/inventoryDraftService");
+
+      const parsed = inventoryMatchDraftRequestSchema.safeParse(req.body ?? {});
+      const body = parsed.success ? parsed.data : {};
+
+      const result = await generateInventoryMatchDraft(
+        req.params.id,
+        req.params.listingId,
+        req.user.id,
+        {
+          reasons: body.reasons,
+          opportunityType: body.opportunityType,
+          priceReductionLabel: body.priceReductionLabel,
+        },
+      );
+
+      if ("error" in result) {
+        return res.status(result.httpStatus ?? 500).json({ error: result.error });
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating inventory match draft:", error);
+      res.status(500).json({ error: "Failed to generate draft" });
+    }
+  });
+
   app.get("/api/contacts/:id/inventory-opportunities", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
