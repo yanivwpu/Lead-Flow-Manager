@@ -164,7 +164,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       setForm((f) => ({ ...f, accessToken: "" }));
       toast({
         title: "Inventory source saved",
-        description: "Your connection settings were saved. Validate the connection, then sync your listings.",
+        description: "Validate your connection to start importing listings.",
       });
     },
     onError: (err: Error) => {
@@ -180,16 +180,54 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     mutationFn: async () => {
       if (!activeSource) throw new Error("Save your inventory source before validating.");
       const res = await apiRequest("POST", `/api/inventory/sources/${activeSource.id}/validate`);
-      return res.json() as Promise<{ ok: boolean; message?: string }>;
+      return res.json() as Promise<{
+        ok: boolean;
+        message?: string;
+        autoSyncStarted?: boolean;
+        autoSyncFailed?: boolean;
+        autoSyncError?: string;
+      }>;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
+
+      if (!data.ok) {
+        toast({
+          title: "Validation failed",
+          description: friendlyInventoryErrorMessage(
+            data.message || "Check your credentials and try again.",
+          ),
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (data.autoSyncStarted) {
+        toast({
+          title: "Connection verified",
+          description: "Starting listing import…",
+        });
+        void refetchSources();
+        return;
+      }
+
+      if (data.autoSyncFailed) {
+        toast({
+          title: "Connection verified",
+          description: friendlyInventoryErrorMessage(
+            data.autoSyncError ||
+              "Import could not start automatically. Click Sync Now to try again.",
+          ),
+          variant: "destructive",
+        });
+        return;
+      }
+
       toast({
-        title: data.ok ? "Connection verified" : "Validation failed",
+        title: "Connection verified",
         description: friendlyInventoryErrorMessage(
-          data.message || (data.ok ? "Your inventory source is ready to sync." : "Check your credentials and try again."),
+          data.message || "Your inventory source is ready.",
         ),
-        variant: data.ok ? "default" : "destructive",
       });
     },
     onError: (err: Error) => {
@@ -437,7 +475,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={!activeSource || validateMutation.isPending}
+                    disabled={!activeSource || validateMutation.isPending || syncRunning}
                     onClick={() => validateMutation.mutate()}
                     data-testid="button-inventory-validate"
                   >
@@ -450,7 +488,12 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={!activeSource || syncMutation.isPending || syncRunning}
+                    disabled={
+                      !activeSource ||
+                      syncMutation.isPending ||
+                      validateMutation.isPending ||
+                      syncRunning
+                    }
                     onClick={() => syncMutation.mutate()}
                     data-testid="button-inventory-sync"
                   >

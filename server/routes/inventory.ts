@@ -159,7 +159,34 @@ export function registerInventoryRoutes(app: Express): void {
 
       const result = await validateSourceConnection(req.user.id, req.params.id);
       if (!result) return res.status(404).json({ error: "Inventory source not found" });
-      res.json(result);
+
+      let autoSyncStarted = false;
+      let autoSyncFailed = false;
+      let autoSyncError: string | undefined;
+
+      if (result.ok) {
+        const source = await getInventorySource(req.user.id, req.params.id);
+        const cfg = (source?.config || {}) as Record<string, unknown>;
+        const initialImportComplete = cfg.initialImportComplete === true;
+
+        if (source && !initialImportComplete) {
+          const outcome = await startInventorySourceSync(req.user.id, req.params.id);
+          if (outcome.started) {
+            autoSyncStarted = true;
+          } else if (outcome.reason === "already_running") {
+            // Import already in progress — no error, no duplicate start.
+          } else if (outcome.reason === "not_supported") {
+            autoSyncFailed = true;
+            autoSyncError =
+              "This inventory source does not support listing sync. Connect a listing feed provider as your inventory source.";
+          } else {
+            autoSyncFailed = true;
+            autoSyncError = "Import could not start automatically. Click Sync Now to try again.";
+          }
+        }
+      }
+
+      res.json({ ...result, autoSyncStarted, autoSyncFailed, autoSyncError });
     } catch (error) {
       console.error("[inventory] validate source", error);
       res.status(500).json({ error: "Failed to validate inventory source" });
