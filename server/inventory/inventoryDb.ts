@@ -316,6 +316,25 @@ export async function countAllListingsForUser(userId: string): Promise<number> {
   return row?.count ?? 0;
 }
 
+/** Active MLS Grid sources ready for scheduled reconciliation. */
+export async function listMlsGridSourcesForReconciliation(): Promise<InventorySource[]> {
+  const rows = await db
+    .select()
+    .from(inventorySources)
+    .where(
+      and(
+        eq(inventorySources.provider, "mls_grid"),
+        eq(inventorySources.isActive, true),
+        sql`${inventorySources.connectionStatus} = 'connected'`,
+      ),
+    );
+
+  return rows.filter((row) => {
+    const cfg = (row.config || {}) as Record<string, unknown>;
+    return cfg.initialImportComplete === true;
+  });
+}
+
 export async function listInventoryListings(
   params: ListInventoryListingsParams,
 ): Promise<{ rows: InventoryListing[]; total: number }> {

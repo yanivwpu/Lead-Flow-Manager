@@ -299,6 +299,8 @@ let cronInterval: NodeJS.Timeout | null = null;
 let hotListRanToday = false;
 let lastWebhookHealthHour = -1;
 
+let lastInventoryReconcileHour = -1;
+
 export function startCronJobs() {
   console.log('[Cron] Starting cron scheduler...');
   
@@ -336,6 +338,14 @@ export function startCronJobs() {
     if (utcMin === 0 && utcHour !== lastWebhookHealthHour) {
       lastWebhookHealthHour = utcHour;
       runMetaWebhookHealthCheck().catch(err => console.error('[WebhookHealth] Hourly check error:', err));
+    }
+
+    // Inventory reconciliation — every 6 hours at :30 UTC
+    if (utcMin === 30 && utcHour % 6 === 0 && utcHour !== lastInventoryReconcileHour) {
+      lastInventoryReconcileHour = utcHour;
+      import("./inventory/inventorySyncService")
+        .then(({ runInventoryReconciliationCron }) => runInventoryReconciliationCron())
+        .catch((err) => console.error("[inventory-reconcile] cron error:", err));
     }
 
     runCampaignSchedulerTick(40).catch((err) =>

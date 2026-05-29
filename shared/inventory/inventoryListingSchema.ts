@@ -52,6 +52,13 @@ export const mlsGridSourceConfigSchema = z.object({
   /** OData filter fragment after OriginatingSystemName (optional extra AND clauses). */
   additionalFilter: z.string().optional(),
   expandMedia: z.boolean().default(true),
+  /** True after the first full MlgCanView import completes. */
+  initialImportComplete: z.boolean().optional(),
+  /** Greatest ModificationTimestamp received from MLS Grid (incremental cursor). */
+  maxModificationTimestamp: z.string().optional(),
+  lastReconciliationAt: z.string().optional(),
+  lastSuccessfulSyncAt: z.string().optional(),
+  lastFailedSyncAt: z.string().optional(),
 });
 
 export type MlsGridSourceConfig = z.infer<typeof mlsGridSourceConfigSchema>;

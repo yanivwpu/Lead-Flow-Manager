@@ -96,14 +96,92 @@ function statNumber(stats: Record<string, unknown> | null | undefined, key: stri
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
+function statString(stats: Record<string, unknown> | null | undefined, key: string): string | null {
+  if (!stats || typeof stats !== "object") return null;
+  const v = stats[key];
+  return typeof v === "string" && v.trim() ? v : null;
+}
+
+function formatSyncTimestamp(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString();
+}
+
 /** Key stats for the inventory status card. */
 export function getInventoryStatusHighlights(
   stats: Record<string, unknown> | null | undefined,
-): { newListings: number | null; priceChanges: number | null } {
+): {
+  newListings: number | null;
+  priceChanges: number | null;
+  updatedListings: number | null;
+  inactiveListings: number | null;
+} {
+  const inactiveFromFeed = statNumber(stats, "inactiveFromFeed");
+  const inactivated = statNumber(stats, "inactivated");
+  const inactiveTotal = (inactiveFromFeed ?? 0) + (inactivated ?? 0);
+
   return {
     newListings: statNumber(stats, "newListings"),
     priceChanges: statNumber(stats, "priceChanges"),
+    updatedListings: statNumber(stats, "updatedListings"),
+    inactiveListings: inactiveTotal > 0 ? inactiveTotal : null,
   };
+}
+
+/** Production status card rows for Inventory Source settings. */
+export function formatInventorySourceStatusRows(
+  stats: Record<string, unknown> | null | undefined,
+  config: Record<string, unknown> | null | undefined,
+): InventorySyncStatRow[] {
+  if (!stats || typeof stats !== "object") return [];
+
+  const rows: InventorySyncStatRow[] = [];
+  const n = (key: string) => statNumber(stats, key);
+
+  const synced = n("seenCount") ?? n("upserted");
+  if (synced != null) rows.push({ label: "Listings synced", value: synced.toLocaleString() });
+
+  const newListings = n("newListings");
+  if (newListings != null) {
+    rows.push({ label: "New listings", value: newListings.toLocaleString() });
+  }
+
+  const updated = n("updatedListings");
+  if (updated != null) {
+    rows.push({ label: "Updated listings", value: updated.toLocaleString() });
+  }
+
+  const inactiveFromFeed = n("inactiveFromFeed");
+  const inactivated = n("inactivated");
+  const inactiveTotal = (inactiveFromFeed ?? 0) + (inactivated ?? 0);
+  if (inactiveTotal > 0) {
+    rows.push({ label: "Inactive listings", value: inactiveTotal.toLocaleString() });
+  }
+
+  const priceChanges = n("priceChanges");
+  if (priceChanges != null && priceChanges > 0) {
+    rows.push({ label: "Price changes", value: priceChanges.toLocaleString() });
+  }
+
+  const lastSuccess =
+    formatSyncTimestamp(statString(stats, "lastSuccessfulSyncAt")) ??
+    formatSyncTimestamp(
+      typeof config?.lastSuccessfulSyncAt === "string" ? config.lastSuccessfulSyncAt : null,
+    );
+  if (lastSuccess) {
+    rows.push({ label: "Last successful sync", value: lastSuccess });
+  }
+
+  const lastFailed =
+    formatSyncTimestamp(statString(stats, "lastFailedSyncAt")) ??
+    formatSyncTimestamp(typeof config?.lastFailedSyncAt === "string" ? config.lastFailedSyncAt : null);
+  if (lastFailed) {
+    rows.push({ label: "Last failed sync", value: lastFailed });
+  }
+
+  return rows;
 }
 
 /** Human-readable last-sync stats for settings UI. */
@@ -136,6 +214,26 @@ export function formatInventorySyncStatRows(
   const inactivated = n("inactivated");
   if (inactivated != null && inactivated > 0) {
     rows.push({ label: "Inactive listings", value: inactivated.toLocaleString() });
+  }
+
+  const inactiveFromFeed = n("inactiveFromFeed");
+  if (inactiveFromFeed != null && inactiveFromFeed > 0) {
+    rows.push({ label: "Removed from feed", value: inactiveFromFeed.toLocaleString() });
+  }
+
+  const syncMode = stats.syncMode;
+  if (typeof syncMode === "string") {
+    rows.push({ label: "Sync mode", value: syncMode });
+  }
+
+  const requestsMade = n("requestsMade");
+  if (requestsMade != null && requestsMade > 0) {
+    rows.push({ label: "API requests", value: requestsMade.toLocaleString() });
+  }
+
+  const rateLimitHits = n("rateLimitHits");
+  if (rateLimitHits != null && rateLimitHits > 0) {
+    rows.push({ label: "Rate limit retries", value: rateLimitHits.toLocaleString() });
   }
 
   return rows;

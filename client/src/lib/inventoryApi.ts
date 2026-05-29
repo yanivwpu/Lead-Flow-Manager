@@ -122,4 +122,4 @@ export function isInventorySourceConnected(sources: PublicInventorySource[]): bo
   );
 }
 
-export { formatInventorySyncStatRows, friendlyInventoryErrorMessage, getInventoryStatusHighlights };
+export { formatInventorySyncStatRows, friendlyInventoryErrorMessage, getInventoryStatusHighlights, formatInventorySourceStatusRows };

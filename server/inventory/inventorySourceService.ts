@@ -152,7 +152,26 @@ export async function updateSourceForUser(
   const existing = await getInventorySource(userId, sourceId);
   if (!existing) return null;
 
-  const nextConfig = body.config ?? (existing.config as Record<string, unknown>);
+  const existingConfig = (existing.config || {}) as Record<string, unknown>;
+  const incomingConfig = body.config as Record<string, unknown> | undefined;
+  let nextConfig: Record<string, unknown> = incomingConfig
+    ? { ...existingConfig, ...incomingConfig }
+    : existingConfig;
+
+  const origChanged =
+    incomingConfig?.originatingSystemName != null &&
+    String(incomingConfig.originatingSystemName).trim() !==
+      String(existingConfig.originatingSystemName ?? "").trim();
+  if (origChanged) {
+    nextConfig = {
+      ...nextConfig,
+      initialImportComplete: false,
+      maxModificationTimestamp: undefined,
+      lastReconciliationAt: undefined,
+    };
+    delete nextConfig.maxModificationTimestamp;
+    delete nextConfig.lastReconciliationAt;
+  }
   const existingDecrypted = decryptSourceCredentials(
     (existing.credentialsEnc || {}) as Record<string, unknown>,
   );
@@ -177,7 +196,7 @@ export async function updateSourceForUser(
 
   const patch: Partial<typeof inventorySources.$inferInsert> = {
     ...(body.displayName !== undefined ? { displayName: body.displayName.trim() } : {}),
-    ...(body.config !== undefined ? { config: body.config } : {}),
+    ...(body.config !== undefined ? { config: nextConfig } : {}),
     ...(credentialsPatch !== undefined ? { credentialsEnc: nextCreds } : {}),
     ...(body.integrationId !== undefined ? { integrationId: body.integrationId } : {}),
     ...(body.isActive !== undefined ? { isActive: body.isActive } : {}),

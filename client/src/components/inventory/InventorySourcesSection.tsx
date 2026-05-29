@@ -33,6 +33,7 @@ import {
   sanitizeInventoryDisplayNameForUi,
   sanitizeOriginatingSystemForUi,
   getInventoryStatusHighlights,
+  formatInventorySourceStatusRows,
 } from "@shared/inventory/inventoryProviderDisplay";
 import type { InventoryProvider } from "@shared/inventory/inventoryProviderSchema";
 import { Home, RefreshCw, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2, XCircle } from "lucide-react";
@@ -254,8 +255,14 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const syncFailed = activeSource?.lastSyncStatus === "failed";
   const syncSucceeded = activeSource?.lastSyncStatus === "success";
   const lastSyncAt = activeSource?.lastSyncAt ? new Date(activeSource.lastSyncAt).toLocaleString() : null;
-  const syncStatRows = formatInventorySyncStatRows(activeSource?.lastSyncStats);
+  const syncStatRows = formatInventorySourceStatusRows(
+    activeSource?.lastSyncStats,
+    activeSource?.config as Record<string, unknown> | undefined,
+  );
   const statusHighlights = getInventoryStatusHighlights(activeSource?.lastSyncStats);
+  const devSyncRows = formatInventorySyncStatRows(activeSource?.lastSyncStats);
+  const initialImportComplete =
+    (activeSource?.config as Record<string, unknown> | undefined)?.initialImportComplete === true;
   const isMlsGrid = selectedProvider === "mls_grid";
 
   const inner = (
@@ -376,7 +383,8 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       </div>
                       {activeSource?.hasCredentials && (
                         <p className="text-[11px] text-muted-foreground">
-                          Token is stored securely and never shown again after save.
+                          Token is stored securely and never shown again after save. If MLS Grid rotates your
+                          token, paste the new one here and save — the previous token is replaced.
                         </p>
                       )}
                     </div>
@@ -478,6 +486,22 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       <dt className="text-muted-foreground">Last sync</dt>
                       <dd className="font-medium">{lastSyncAt ?? "Not synced yet"}</dd>
                     </div>
+                    {!initialImportComplete && activeSource.lastSyncStatus !== "running" && (
+                      <div className="sm:col-span-2">
+                        <dt className="text-muted-foreground">Import progress</dt>
+                        <dd className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-0.5">
+                          Initial import in progress — keep syncing until all listings are loaded.
+                        </dd>
+                      </div>
+                    )}
+                    {statusHighlights.updatedListings != null && (
+                      <div>
+                        <dt className="text-muted-foreground">Updated listings</dt>
+                        <dd className="font-medium tabular-nums">
+                          {statusHighlights.updatedListings.toLocaleString()}
+                        </dd>
+                      </div>
+                    )}
                     {statusHighlights.newListings != null && statusHighlights.newListings > 0 && (
                       <div>
                         <dt className="text-muted-foreground">New listings</dt>
@@ -494,7 +518,31 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         </dd>
                       </div>
                     )}
+                    {statusHighlights.inactiveListings != null && (
+                      <div>
+                        <dt className="text-muted-foreground">Inactive listings</dt>
+                        <dd className="font-medium tabular-nums">
+                          {statusHighlights.inactiveListings.toLocaleString()}
+                        </dd>
+                      </div>
+                    )}
                   </dl>
+
+                  {syncStatRows.length > 0 && (
+                    <div className="border-t border-gray-200 pt-3">
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">
+                        Last sync summary
+                      </p>
+                      <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                        {syncStatRows.map((row) => (
+                          <div key={row.label} className="flex justify-between gap-2 text-xs">
+                            <span className="text-muted-foreground">{row.label}</span>
+                            <span className="font-medium tabular-nums">{row.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {syncFailed && activeSource.lastSyncError && (
                     <Alert variant="destructive" className="py-2">
@@ -519,13 +567,13 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                     </Alert>
                   )}
 
-                  {import.meta.env.DEV && syncStatRows.length > 0 && (
+                  {import.meta.env.DEV && devSyncRows.length > 0 && (
                     <div className="border-t border-gray-200 pt-3">
                       <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">
-                        Sync details (dev)
+                        Sync diagnostics (dev)
                       </p>
                       <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
-                        {syncStatRows.map((row) => (
+                        {devSyncRows.map((row) => (
                           <div key={row.label} className="flex justify-between gap-2 text-xs">
                             <span className="text-muted-foreground">{row.label}</span>
                             <span className="font-medium tabular-nums">{row.value}</span>
