@@ -57,6 +57,15 @@ export type MlsInventorySourceForm = {
   accessToken: string;
 };
 
+export type TrestleInventorySourceForm = {
+  displayName: string;
+  originatingSystemName: string;
+  clientId: string;
+  clientSecret: string;
+};
+
+export type InventorySourceForm = MlsInventorySourceForm & TrestleInventorySourceForm;
+
 export function buildMlsSourcePayload(form: MlsInventorySourceForm, isUpdate: boolean) {
   const defaultName = typeof import.meta !== "undefined" && import.meta.env?.PROD
     ? "My MLS inventory"
@@ -79,6 +88,43 @@ export function buildMlsSourcePayload(form: MlsInventorySourceForm, isUpdate: bo
     payload.credentials = { accessToken: token };
   }
   return payload;
+}
+
+export function buildTrestleSourcePayload(form: TrestleInventorySourceForm, isUpdate: boolean) {
+  const defaultName =
+    typeof import.meta !== "undefined" && import.meta.env?.PROD
+      ? "My Trestle inventory"
+      : "Trestle inventory source";
+  const payload: {
+    provider: "trestle";
+    displayName: string;
+    config: { originatingSystemName: string; expandMedia: boolean };
+    credentials?: { clientId: string; clientSecret: string };
+  } = {
+    provider: "trestle",
+    displayName: form.displayName.trim() || defaultName,
+    config: {
+      originatingSystemName: form.originatingSystemName.trim(),
+      expandMedia: true,
+    },
+  };
+  const clientId = form.clientId.trim();
+  const clientSecret = form.clientSecret.trim();
+  if (!isUpdate || clientId || clientSecret) {
+    payload.credentials = { clientId, clientSecret };
+  }
+  return payload;
+}
+
+export function buildInventorySourcePayload(
+  provider: "mls_grid" | "trestle",
+  form: InventorySourceForm,
+  isUpdate: boolean,
+) {
+  if (provider === "trestle") {
+    return buildTrestleSourcePayload(form, isUpdate);
+  }
+  return buildMlsSourcePayload(form, isUpdate);
 }
 
 export function formatInventorySyncStatus(status: string | null | undefined): string {

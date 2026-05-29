@@ -30,7 +30,7 @@ export const INVENTORY_PROVIDER_UI_OPTIONS: Array<{
   helper?: string;
 }> = [
   { id: "mls_grid", label: "MLS Grid", available: true, tier: "primary" },
-  { id: "trestle", label: "Trestle", available: false, tier: "primary", helper: "Coming soon" },
+  { id: "trestle", label: "Trestle", available: true, tier: "primary", helper: "CoreLogic Trestle RESO feed" },
   {
     id: "bridge_interactive",
     label: "Bridge Interactive",
@@ -259,6 +259,21 @@ export function friendlyInventoryErrorMessage(raw: string | null | undefined): s
   }
   if (msg.includes("MLS Grid HTTP")) {
     return "Could not reach the listing feed. Try again later or contact your data provider.";
+  }
+  if (msg.includes("Trestle credentials were rejected") || msg.includes("Trestle authentication failed")) {
+    return "Trestle credentials were rejected. Confirm your client ID, client secret, and originating system name.";
+  }
+  if (msg.includes("Trestle HTTP 401") || msg.includes("Trestle HTTP 403")) {
+    return "Trestle access was denied. Verify your feed credentials with your data provider.";
+  }
+  if (msg.includes("Trestle HTTP 429")) {
+    return "Too many requests to Trestle. Wait a few minutes and sync again.";
+  }
+  if (msg.includes("Trestle HTTP")) {
+    return "Could not reach Trestle. Try again later or contact your data provider.";
+  }
+  if (msg.includes("clientId") || msg.includes("clientSecret") || msg.includes("client ID")) {
+    return "Trestle client ID and client secret are required when connecting a new inventory source.";
   }
   if (msg.includes("originatingSystemName")) {
     return "Originating system name is required.";

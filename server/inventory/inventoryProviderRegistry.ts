@@ -1,5 +1,6 @@
 import type { InventoryProvider } from "@shared/inventory/inventoryProviderSchema";
 import { mlsGridInventoryAdapter } from "./providers/mlsGridInventoryAdapter";
+import { trestleInventoryAdapter } from "./providers/trestleInventoryAdapter";
 import { showcaseIdxListingStubAdapter, createStubInventoryAdapter } from "./providers/stubInventoryAdapter";
 import type { InventoryProviderAdapter } from "./providers/types";
 
@@ -8,7 +9,7 @@ const stubMessage = (label: string) =>
 
 const adapters: Record<InventoryProvider, InventoryProviderAdapter> = {
   mls_grid: mlsGridInventoryAdapter,
-  trestle: createStubInventoryAdapter("trestle", stubMessage("Trestle")),
+  trestle: trestleInventoryAdapter,
   bridge_interactive: createStubInventoryAdapter(
     "bridge_interactive",
     stubMessage("Bridge Interactive"),

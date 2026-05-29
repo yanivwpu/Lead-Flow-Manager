@@ -18,11 +18,12 @@ import { apiRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
-  buildMlsSourcePayload,
+  buildInventorySourcePayload,
   fetchInventorySources,
   fetchInventoryStatus,
   friendlyInventoryErrorMessage,
   formatInventorySyncStatRows,
+  type InventorySourceForm,
   type PublicInventorySource,
 } from "@/lib/inventoryApi";
 import {
@@ -38,6 +39,7 @@ import {
   inventorySourcePhaseBadgeClass,
 } from "@shared/inventory/inventorySourcePhase";
 import type { InventoryProvider } from "@shared/inventory/inventoryProviderSchema";
+import { providerSupportsListingSync } from "@shared/inventory/inventoryProviderSchema";
 import { Home, RefreshCw, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2, XCircle } from "lucide-react";
 import { RGE_TEMPLATE_DETAIL_PATH } from "@shared/rgePaths";
 
@@ -46,17 +48,29 @@ type Props = {
   className?: string;
 };
 
-const EMPTY_FORM = {
+const EMPTY_FORM: InventorySourceForm = {
   displayName: "",
   originatingSystemName: "",
   accessToken: "",
+  clientId: "",
+  clientSecret: "",
 };
 
 const PRODUCTION_UI = import.meta.env.PROD;
-const DISPLAY_NAME_PLACEHOLDER = PRODUCTION_UI ? "My MLS inventory" : "Primary inventory source";
-const ORIGINATING_SYSTEM_PLACEHOLDER = PRODUCTION_UI
-  ? "Provided by your MLS data provider"
-  : "e.g. miamire";
+
+function defaultDisplayNamePlaceholder(provider: InventoryProvider): string {
+  if (provider === "trestle") {
+    return PRODUCTION_UI ? "My Trestle inventory" : "Trestle inventory source";
+  }
+  return PRODUCTION_UI ? "My MLS inventory" : "Primary inventory source";
+}
+
+function originatingSystemPlaceholder(provider: InventoryProvider): string {
+  if (provider === "trestle") {
+    return PRODUCTION_UI ? "From your Trestle feed configuration" : "e.g. trestle";
+  }
+  return PRODUCTION_UI ? "Provided by your MLS data provider" : "e.g. miamire";
+}
 
 function phaseStatusIcon(phase: string, syncRunning: boolean) {
   if (syncRunning) {
@@ -74,8 +88,8 @@ function phaseStatusIcon(phase: string, syncRunning: boolean) {
   return null;
 }
 
-function loadFormFromSource(source: PublicInventorySource | undefined) {
-  if (!source) return { ...EMPTY_FORM, accessToken: "" };
+function loadFormFromSource(source: PublicInventorySource | undefined): InventorySourceForm {
+  if (!source) return { ...EMPTY_FORM };
   const cfg = source.config || {};
   const rawDisplayName = source.displayName || "";
   const rawOrigin =
@@ -84,12 +98,14 @@ function loadFormFromSource(source: PublicInventorySource | undefined) {
     displayName: sanitizeInventoryDisplayNameForUi(rawDisplayName, PRODUCTION_UI),
     originatingSystemName: sanitizeOriginatingSystemForUi(rawOrigin, PRODUCTION_UI),
     accessToken: "",
+    clientId: "",
+    clientSecret: "",
   };
 }
 
 export function InventorySourcesSection({ variant = "section", className }: Props) {
   const queryClient = useQueryClient();
-  const [showToken, setShowToken] = useState(false);
+  const [showSecrets, setShowSecrets] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [selectedProvider, setSelectedProvider] = useState<InventoryProvider>("mls_grid");
 
@@ -126,31 +142,41 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const providerAvailable = providerOption?.available ?? false;
 
   useEffect(() => {
-    if (activeSource) {
-      setForm(loadFormFromSource(activeSource));
-      setSelectedProvider(activeSource.provider as InventoryProvider);
-    } else if (sources.length > 0) {
-      const first = sources[0];
-      setSelectedProvider(first.provider as InventoryProvider);
-      setForm(loadFormFromSource(first));
+    const source = sources.find((s) => s.provider === selectedProvider);
+    if (source) {
+      setForm(loadFormFromSource(source));
+    } else {
+      setForm({ ...EMPTY_FORM });
     }
-  }, [activeSource?.id, activeSource?.updatedAt, sources.length]);
+  }, [selectedProvider, activeSource?.id, activeSource?.updatedAt, sources]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!providerAvailable) {
         throw new Error(`${providerOption?.label ?? "This provider"} is not available yet.`);
       }
-      if (selectedProvider !== "mls_grid") {
+      if (!providerSupportsListingSync(selectedProvider)) {
         throw new Error("This provider is not available yet.");
       }
       const isUpdate = !!activeSource;
-      const payload = buildMlsSourcePayload(form, isUpdate);
+      const payload = buildInventorySourcePayload(
+        selectedProvider as "mls_grid" | "trestle",
+        form,
+        isUpdate,
+      );
       if (!payload.config.originatingSystemName) {
         throw new Error("Originating system name is required.");
       }
-      if (!isUpdate && !payload.credentials?.accessToken) {
-        throw new Error("Access token is required when connecting a new source.");
+      if (selectedProvider === "mls_grid") {
+        if (!isUpdate && !(payload.credentials as { accessToken?: string } | undefined)?.accessToken) {
+          throw new Error("Access token is required when connecting a new source.");
+        }
+      }
+      if (selectedProvider === "trestle") {
+        const creds = payload.credentials as { clientId?: string; clientSecret?: string } | undefined;
+        if (!isUpdate && (!creds?.clientId || !creds?.clientSecret)) {
+          throw new Error("Trestle client ID and client secret are required when connecting a new source.");
+        }
       }
       if (isUpdate) {
         const res = await apiRequest("PATCH", `/api/inventory/sources/${activeSource!.id}`, payload);
@@ -161,7 +187,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
-      setForm((f) => ({ ...f, accessToken: "" }));
+      setForm((f) => ({ ...f, accessToken: "", clientId: "", clientSecret: "" }));
       toast({
         title: "Inventory source saved",
         description: "Validate your connection to start importing listings.",
@@ -318,7 +344,9 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   );
   const statusHighlights = getInventoryStatusHighlights(activeSource?.lastSyncStats);
   const devSyncRows = formatInventorySyncStatRows(activeSource?.lastSyncStats);
+  const isListingSyncProvider = providerSupportsListingSync(selectedProvider);
   const isMlsGrid = selectedProvider === "mls_grid";
+  const isTrestle = selectedProvider === "trestle";
   const showSyncMetrics =
     sourcePhase?.phase === "initial_import_running" ||
     sourcePhase?.phase === "initial_import_complete" ||
@@ -360,7 +388,6 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                   <Select
                     value={selectedProvider}
                     onValueChange={(v) => setSelectedProvider(v as InventoryProvider)}
-                    disabled={!!activeSource}
                   >
                     <SelectTrigger id="inventory-provider" data-testid="select-inventory-provider">
                       <SelectValue placeholder="Select provider" />
@@ -387,9 +414,12 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       yet.
                     </p>
                   )}
+                  {providerAvailable && isListingSyncProvider && providerOption?.helper && (
+                    <p className="text-[11px] text-muted-foreground">{providerOption.helper}</p>
+                  )}
                 </div>
 
-                {isMlsGrid && providerAvailable && (
+                {isListingSyncProvider && providerAvailable && (
                   <>
                     <div className="space-y-2 sm:col-span-2 sm:max-w-md">
                       <Label htmlFor="inventory-display-name">Display name</Label>
@@ -397,7 +427,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         id="inventory-display-name"
                         value={form.displayName}
                         onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-                        placeholder={DISPLAY_NAME_PLACEHOLDER}
+                        placeholder={defaultDisplayNamePlaceholder(selectedProvider)}
                         data-testid="input-inventory-display-name"
                       />
                     </div>
@@ -407,52 +437,108 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         id="inventory-originating-system"
                         value={form.originatingSystemName}
                         onChange={(e) => setForm((f) => ({ ...f, originatingSystemName: e.target.value }))}
-                        placeholder={ORIGINATING_SYSTEM_PLACEHOLDER}
+                        placeholder={originatingSystemPlaceholder(selectedProvider)}
                         autoComplete="off"
                         data-testid="input-inventory-originating-system"
                       />
                       <p className="text-[11px] text-muted-foreground">
-                        Use the originating system name and access token provided by your MLS data provider.
+                        {isTrestle
+                          ? "Use the originating system name from your Trestle feed configuration."
+                          : "Use the originating system name and access token provided by your MLS data provider."}
                       </p>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="inventory-access-token">Access token</Label>
-                      <div className="relative">
-                        <Input
-                          id="inventory-access-token"
-                          type={showToken ? "text" : "password"}
-                          value={form.accessToken}
-                          onChange={(e) => setForm((f) => ({ ...f, accessToken: e.target.value }))}
-                          placeholder={
-                            activeSource?.hasCredentials
-                              ? "••••••••  (leave blank to keep)"
-                              : "Paste access token"
-                          }
-                          autoComplete="off"
-                          className="pr-10"
-                          data-testid="input-inventory-access-token"
-                        />
-                        <button
-                          type="button"
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                          onClick={() => setShowToken((v) => !v)}
-                          aria-label={showToken ? "Hide token" : "Show token"}
-                        >
-                          {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
+                    {isMlsGrid && (
+                      <div className="space-y-2">
+                        <Label htmlFor="inventory-access-token">Access token</Label>
+                        <div className="relative">
+                          <Input
+                            id="inventory-access-token"
+                            type={showSecrets ? "text" : "password"}
+                            value={form.accessToken}
+                            onChange={(e) => setForm((f) => ({ ...f, accessToken: e.target.value }))}
+                            placeholder={
+                              activeSource?.hasCredentials
+                                ? "••••••••  (leave blank to keep)"
+                                : "Paste access token"
+                            }
+                            autoComplete="off"
+                            className="pr-10"
+                            data-testid="input-inventory-access-token"
+                          />
+                          <button
+                            type="button"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            onClick={() => setShowSecrets((v) => !v)}
+                            aria-label={showSecrets ? "Hide token" : "Show token"}
+                          >
+                            {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                        {activeSource?.hasCredentials && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Token is stored securely and never shown again after save. If MLS Grid rotates your
+                            token, paste the new one here and save — the previous token is replaced.
+                          </p>
+                        )}
                       </div>
-                      {activeSource?.hasCredentials && (
-                        <p className="text-[11px] text-muted-foreground">
-                          Token is stored securely and never shown again after save. If MLS Grid rotates your
-                          token, paste the new one here and save — the previous token is replaced.
-                        </p>
-                      )}
-                    </div>
+                    )}
+                    {isTrestle && (
+                      <>
+                        <div className="space-y-2">
+                          <Label htmlFor="inventory-client-id">Client ID</Label>
+                          <Input
+                            id="inventory-client-id"
+                            value={form.clientId}
+                            onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}
+                            placeholder={
+                              activeSource?.hasCredentials
+                                ? "••••••••  (leave blank to keep)"
+                                : "Paste Trestle client ID"
+                            }
+                            autoComplete="off"
+                            data-testid="input-inventory-client-id"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="inventory-client-secret">Client secret</Label>
+                          <div className="relative">
+                            <Input
+                              id="inventory-client-secret"
+                              type={showSecrets ? "text" : "password"}
+                              value={form.clientSecret}
+                              onChange={(e) => setForm((f) => ({ ...f, clientSecret: e.target.value }))}
+                              placeholder={
+                                activeSource?.hasCredentials
+                                  ? "••••••••  (leave blank to keep)"
+                                  : "Paste Trestle client secret"
+                              }
+                              autoComplete="off"
+                              className="pr-10"
+                              data-testid="input-inventory-client-secret"
+                            />
+                            <button
+                              type="button"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                              onClick={() => setShowSecrets((v) => !v)}
+                              aria-label={showSecrets ? "Hide secret" : "Show secret"}
+                            >
+                              {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                          </div>
+                          {activeSource?.hasCredentials && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Credentials are stored securely and never shown again after save. Paste updated
+                              values here to rotate your Trestle client secret.
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>
 
-              {isMlsGrid && providerAvailable && (
+              {isListingSyncProvider && providerAvailable && (
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
@@ -503,7 +589,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                 </div>
               )}
 
-              {activeSource && isMlsGrid && (
+              {activeSource && isListingSyncProvider && (
                 <div
                   className="rounded-lg border border-gray-200 bg-gray-50/80 p-4 text-sm space-y-4"
                   data-testid="inventory-source-status"

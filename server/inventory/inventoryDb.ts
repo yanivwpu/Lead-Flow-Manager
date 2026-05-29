@@ -316,14 +316,14 @@ export async function countAllListingsForUser(userId: string): Promise<number> {
   return row?.count ?? 0;
 }
 
-/** Active MLS Grid sources ready for scheduled reconciliation. */
-export async function listMlsGridSourcesForReconciliation(): Promise<InventorySource[]> {
+/** Active listing-sync sources ready for scheduled reconciliation. */
+export async function listListingSyncSourcesForReconciliation(): Promise<InventorySource[]> {
   const rows = await db
     .select()
     .from(inventorySources)
     .where(
       and(
-        eq(inventorySources.provider, "mls_grid"),
+        sql`${inventorySources.provider} in ('mls_grid', 'trestle')`,
         eq(inventorySources.isActive, true),
         sql`${inventorySources.connectionStatus} = 'connected'`,
       ),
@@ -333,6 +333,11 @@ export async function listMlsGridSourcesForReconciliation(): Promise<InventorySo
     const cfg = (row.config || {}) as Record<string, unknown>;
     return cfg.initialImportComplete === true;
   });
+}
+
+/** @deprecated Use listListingSyncSourcesForReconciliation */
+export async function listMlsGridSourcesForReconciliation(): Promise<InventorySource[]> {
+  return listListingSyncSourcesForReconciliation();
 }
 
 export async function listInventoryListings(

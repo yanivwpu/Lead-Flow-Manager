@@ -68,3 +68,24 @@ export const mlsGridCredentialsSchema = z.object({
 });
 
 export type MlsGridCredentials = z.infer<typeof mlsGridCredentialsSchema>;
+
+/** Trestle source config — shares RESO sync cursor fields with MLS Grid. */
+export const trestleSourceConfigSchema = z.object({
+  originatingSystemName: z.string().min(1),
+  additionalFilter: z.string().optional(),
+  expandMedia: z.boolean().default(true),
+  initialImportComplete: z.boolean().optional(),
+  maxModificationTimestamp: z.string().optional(),
+  lastReconciliationAt: z.string().optional(),
+  lastSuccessfulSyncAt: z.string().optional(),
+  lastFailedSyncAt: z.string().optional(),
+});
+
+export type TrestleSourceConfig = z.infer<typeof trestleSourceConfigSchema>;
+
+export const trestleCredentialsSchema = z.object({
+  clientId: z.string().min(1),
+  clientSecret: z.string().min(1),
+});
+
+export type TrestleCredentials = z.infer<typeof trestleCredentialsSchema>;

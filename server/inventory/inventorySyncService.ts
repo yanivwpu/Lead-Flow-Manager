@@ -46,6 +46,18 @@ function friendlySyncError(raw: string): string {
   if (raw.includes("MLS Grid HTTP")) {
     return "Could not reach the listing feed. Try again later.";
   }
+  if (raw.includes("Trestle credentials were rejected") || raw.includes("Trestle authentication failed")) {
+    return "Trestle credentials were rejected. Check your client ID and secret, then validate again.";
+  }
+  if (raw.includes("Trestle HTTP 401") || raw.includes("Trestle HTTP 403")) {
+    return "Trestle access was denied. Verify your feed credentials and originating system name.";
+  }
+  if (raw.includes("Trestle HTTP 429")) {
+    return "Trestle rate limit reached. Wait a few minutes and sync again.";
+  }
+  if (raw.includes("Trestle HTTP")) {
+    return "Could not reach Trestle. Try again later or contact your data provider.";
+  }
   return raw.slice(0, 2000);
 }
 
@@ -224,10 +236,10 @@ async function runInventorySyncJob(source: InventorySource, syncMode: ResoSyncMo
   }
 }
 
-/** Scheduled reconciliation for MLS Grid sources with a completed initial import. */
+/** Scheduled reconciliation for RESO listing-sync sources with a completed initial import. */
 export async function runInventoryReconciliationCron(): Promise<{ started: number; skipped: number }> {
-  const { listMlsGridSourcesForReconciliation } = await import("./inventoryDb");
-  const sources = await listMlsGridSourcesForReconciliation();
+  const { listListingSyncSourcesForReconciliation } = await import("./inventoryDb");
+  const sources = await listListingSyncSourcesForReconciliation();
   let started = 0;
   let skipped = 0;
 

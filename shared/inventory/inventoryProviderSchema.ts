@@ -46,7 +46,7 @@ export const INVENTORY_PROVIDER_LABELS: Record<InventoryProvider, string> = {
   csv: "CSV import",
 };
 
-export const LISTING_SYNC_CAPABLE_PROVIDERS: InventoryProvider[] = ["mls_grid"];
+export const LISTING_SYNC_CAPABLE_PROVIDERS: InventoryProvider[] = ["mls_grid", "trestle"];
 
 export function providerSupportsListingSync(provider: InventoryProvider): boolean {
   return LISTING_SYNC_CAPABLE_PROVIDERS.includes(provider);

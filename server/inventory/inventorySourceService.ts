@@ -5,7 +5,7 @@ import {
   providerSupportsListingSync,
   type InventoryProvider,
 } from "@shared/inventory/inventoryProviderSchema";
-import { mlsGridCredentialsSchema, mlsGridSourceConfigSchema } from "@shared/inventory/inventoryListingSchema";
+import { mlsGridCredentialsSchema, mlsGridSourceConfigSchema, trestleCredentialsSchema, trestleSourceConfigSchema } from "@shared/inventory/inventoryListingSchema";
 import { inventorySources, type InventorySource } from "@shared/schema";
 import {
   decryptSourceCredentials,
@@ -46,7 +46,7 @@ export const patchInventorySourceBodySchema = z.object({
 
 export function toPublicInventorySource(source: InventorySource, listingCount = 0) {
   const creds = (source.credentialsEnc || {}) as Record<string, unknown>;
-  const hasToken = typeof creds.accessToken === "string" && creds.accessToken.length > 0;
+  const hasCredentials = sourceHasStoredCredentials(source.provider as InventoryProvider, creds);
   const rawConfig = (source.config || {}) as Record<string, unknown>;
   const config = { ...rawConfig };
   if (typeof config.originatingSystemName === "string") {
@@ -68,16 +68,37 @@ export function toPublicInventorySource(source: InventorySource, listingCount = 
     lastSyncStats: source.lastSyncStats,
     isActive: source.isActive,
     listingSyncSupported: providerSupportsListingSync(source.provider as InventoryProvider),
-    hasCredentials: hasToken,
+    hasCredentials,
     listingCount,
     createdAt: source.createdAt,
     updatedAt: source.updatedAt,
   };
 }
 
+function sourceHasStoredCredentials(
+  provider: InventoryProvider,
+  creds: Record<string, unknown>,
+): boolean {
+  if (provider === "trestle") {
+    return (
+      typeof creds.clientId === "string" &&
+      creds.clientId.length > 0 &&
+      typeof creds.clientSecret === "string" &&
+      creds.clientSecret.length > 0
+    );
+  }
+  if (provider === "mls_grid") {
+    return typeof creds.accessToken === "string" && creds.accessToken.length > 0;
+  }
+  return false;
+}
+
 function defaultDisplayName(provider: InventoryProvider): string {
   if (provider === "mls_grid") {
     return IS_PRODUCTION ? "My MLS inventory" : "Primary inventory source";
+  }
+  if (provider === "trestle") {
+    return IS_PRODUCTION ? "My Trestle inventory" : "Trestle inventory source";
   }
   return "Inventory source";
 }
@@ -97,7 +118,50 @@ function validateProviderPayload(
       return { ok: false, message: "Access token is required when connecting a new source." };
     }
   }
+  if (provider === "trestle") {
+    const cfg = trestleSourceConfigSchema.safeParse(config);
+    if (!cfg.success) {
+      return { ok: false, message: "Originating system name is required." };
+    }
+    const creds = trestleCredentialsSchema.safeParse(credentials);
+    if (!creds.success) {
+      return { ok: false, message: "Trestle client ID and client secret are required when connecting a new source." };
+    }
+  }
   return { ok: true };
+}
+
+function mergeCredentialsPatch(
+  provider: InventoryProvider,
+  existing: Record<string, unknown>,
+  patch: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!patch) return undefined;
+
+  if (provider === "mls_grid") {
+    if (typeof patch.accessToken === "string" && patch.accessToken.trim() === "") {
+      return undefined;
+    }
+    return patch;
+  }
+
+  if (provider === "trestle") {
+    if (!patch) return undefined;
+    const hasClientId = typeof patch.clientId === "string" && patch.clientId.trim() !== "";
+    const hasClientSecret = typeof patch.clientSecret === "string" && patch.clientSecret.trim() !== "";
+    if (!hasClientId && !hasClientSecret) return undefined;
+
+    const next: Record<string, unknown> = { ...existing, ...patch };
+    if (typeof patch.clientSecret === "string" && patch.clientSecret.trim() === "") {
+      next.clientSecret = existing.clientSecret;
+    }
+    if (typeof patch.clientId === "string" && patch.clientId.trim() === "") {
+      next.clientId = existing.clientId;
+    }
+    return next;
+  }
+
+  return patch;
 }
 
 export function buildAdapterContext(source: InventorySource): InventoryAdapterContext {
@@ -175,12 +239,11 @@ export async function updateSourceForUser(
   const existingDecrypted = decryptSourceCredentials(
     (existing.credentialsEnc || {}) as Record<string, unknown>,
   );
-  const credentialsPatch =
-    body.credentials &&
-    typeof body.credentials.accessToken === "string" &&
-    body.credentials.accessToken.trim() === ""
-      ? undefined
-      : body.credentials;
+  const credentialsPatch = mergeCredentialsPatch(
+    existing.provider as InventoryProvider,
+    existingDecrypted,
+    body.credentials as Record<string, unknown> | undefined,
+  );
   const nextCreds = credentialsPatch
     ? encryptSourceCredentials(credentialsPatch)
     : (existing.credentialsEnc as Record<string, unknown>);
