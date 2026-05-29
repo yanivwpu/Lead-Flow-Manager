@@ -58,6 +58,9 @@ export type MlsInventorySourceForm = {
 };
 
 export function buildMlsSourcePayload(form: MlsInventorySourceForm, isUpdate: boolean) {
+  const defaultName = typeof import.meta !== "undefined" && import.meta.env?.PROD
+    ? "My MLS inventory"
+    : "Primary inventory source";
   const payload: {
     provider: "mls_grid";
     displayName: string;
@@ -65,7 +68,7 @@ export function buildMlsSourcePayload(form: MlsInventorySourceForm, isUpdate: bo
     credentials?: { accessToken: string };
   } = {
     provider: "mls_grid",
-    displayName: form.displayName.trim() || "Primary inventory source",
+    displayName: form.displayName.trim() || defaultName,
     config: {
       originatingSystemName: form.originatingSystemName.trim(),
       expandMedia: true,
@@ -119,4 +122,4 @@ export function isInventorySourceConnected(sources: PublicInventorySource[]): bo
   );
 }
 
-export { formatInventorySyncStatRows, friendlyInventoryErrorMessage };
+export { formatInventorySyncStatRows, friendlyInventoryErrorMessage, getInventoryStatusHighlights };

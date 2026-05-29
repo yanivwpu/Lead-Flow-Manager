@@ -25,5 +25,5 @@ export function createStubInventoryAdapter(
 
 export const showcaseIdxListingStubAdapter = createStubInventoryAdapter(
   "showcase_idx",
-  "Showcase IDX supports lead and activity sync only. Connect MLS Grid as your inventory source to sync listings.",
+  "Showcase IDX supports lead and activity sync only. Connect a listing feed provider to sync inventory.",
 );

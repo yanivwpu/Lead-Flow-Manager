@@ -1,8 +1,19 @@
 import type { InventoryProvider } from "./inventoryProviderSchema";
 
+/**
+ * Inventory feed roadmap (listing sync providers only — not CRM bridges):
+ * - Primary: MLS Grid, Trestle, Bridge Interactive
+ * - Secondary: IDX Broker, Showcase IDX, iHomefinder
+ *
+ * BoldTrail / Inside Real Estate: CRM intelligence only — no public MLS inventory API/feed.
+ * Do not treat BoldTrail as an inventory source.
+ */
+
 /** User-facing provider labels (avoid technical jargon in primary UI). */
 export const INVENTORY_PROVIDER_USER_LABELS: Record<InventoryProvider, string> = {
   mls_grid: "MLS Grid",
+  trestle: "Trestle",
+  bridge_interactive: "Bridge Interactive",
   showcase_idx: "Showcase IDX",
   idx_broker: "IDX Broker",
   ihomefinder: "iHomefinder",
@@ -10,19 +21,67 @@ export const INVENTORY_PROVIDER_USER_LABELS: Record<InventoryProvider, string> =
   csv: "CSV import",
 };
 
-/** Provider picker options — extend `available: true` when connector ships. */
+/** Provider picker — set `available: true` when connector ships. Order reflects roadmap priority. */
 export const INVENTORY_PROVIDER_UI_OPTIONS: Array<{
   id: InventoryProvider;
   label: string;
   available: boolean;
+  tier: "primary" | "secondary";
   helper?: string;
 }> = [
-  { id: "mls_grid", label: "MLS Grid", available: true },
-  { id: "idx_broker", label: "IDX Broker", available: false, helper: "Coming soon" },
-  { id: "showcase_idx", label: "Showcase IDX", available: false, helper: "Coming soon" },
-  { id: "ihomefinder", label: "iHomefinder", available: false, helper: "Coming soon" },
-  { id: "reso", label: "Other RESO feed", available: false, helper: "Coming soon" },
+  { id: "mls_grid", label: "MLS Grid", available: true, tier: "primary" },
+  { id: "trestle", label: "Trestle", available: false, tier: "primary", helper: "Coming soon" },
+  {
+    id: "bridge_interactive",
+    label: "Bridge Interactive",
+    available: false,
+    tier: "primary",
+    helper: "Coming soon",
+  },
+  { id: "idx_broker", label: "IDX Broker", available: false, tier: "secondary", helper: "Coming soon" },
+  {
+    id: "showcase_idx",
+    label: "Showcase IDX",
+    available: false,
+    tier: "secondary",
+    helper: "Coming soon",
+  },
+  { id: "ihomefinder", label: "iHomefinder", available: false, tier: "secondary", helper: "Coming soon" },
 ];
+
+const DEV_SEED_LABEL_PATTERN = /dev[\s-]?seed/i;
+
+export function isDevSeedDisplayName(value: string | null | undefined): boolean {
+  if (!value?.trim()) return false;
+  return DEV_SEED_LABEL_PATTERN.test(value.trim());
+}
+
+export function isDevSeedOriginatingSystem(value: string | null | undefined): boolean {
+  if (!value?.trim()) return false;
+  const v = value.trim().toLowerCase();
+  return v === "dev-seed" || v.includes("dev-seed");
+}
+
+/** Hide dev-seed labels in production UI — seed scripts unchanged. */
+export function sanitizeInventoryDisplayNameForUi(
+  value: string | null | undefined,
+  isProduction: boolean,
+): string {
+  const v = (value ?? "").trim();
+  if (!v) return "";
+  if (isProduction && isDevSeedDisplayName(v)) return "";
+  return v;
+}
+
+export function sanitizeOriginatingSystemForUi(
+  value: string | null | undefined,
+  isProduction: boolean,
+): string {
+  const v = (value ?? "").trim();
+  if (!v) return "";
+  if (isProduction && isDevSeedOriginatingSystem(v)) return "";
+  return v;
+}
 
 export function inventoryProviderUserLabel(provider: string): string {
   const key = provider as InventoryProvider;
@@ -31,6 +90,22 @@ export function inventoryProviderUserLabel(provider: string): string {
 
 export type InventorySyncStatRow = { label: string; value: string };
 
+function statNumber(stats: Record<string, unknown> | null | undefined, key: string): number | null {
+  if (!stats || typeof stats !== "object") return null;
+  const v = stats[key];
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+/** Key stats for the inventory status card. */
+export function getInventoryStatusHighlights(
+  stats: Record<string, unknown> | null | undefined,
+): { newListings: number | null; priceChanges: number | null } {
+  return {
+    newListings: statNumber(stats, "newListings"),
+    priceChanges: statNumber(stats, "priceChanges"),
+  };
+}
+
 /** Human-readable last-sync stats for settings UI. */
 export function formatInventorySyncStatRows(
   stats: Record<string, unknown> | null | undefined,
@@ -38,10 +113,7 @@ export function formatInventorySyncStatRows(
   if (!stats || typeof stats !== "object") return [];
 
   const rows: InventorySyncStatRow[] = [];
-  const n = (key: string) => {
-    const v = stats[key];
-    return typeof v === "number" && Number.isFinite(v) ? v : null;
-  };
+  const n = (key: string) => statNumber(stats, key);
 
   const synced = n("seenCount") ?? n("upserted");
   if (synced != null) rows.push({ label: "Listings synced", value: synced.toLocaleString() });

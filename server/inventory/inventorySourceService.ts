@@ -20,6 +20,12 @@ import {
 } from "./inventoryDb";
 import { getInventoryProviderAdapter } from "./inventoryProviderRegistry";
 import type { InventoryAdapterContext } from "./providers/types";
+import {
+  sanitizeInventoryDisplayNameForUi,
+  sanitizeOriginatingSystemForUi,
+} from "@shared/inventory/inventoryProviderDisplay";
+
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
 export const createInventorySourceBodySchema = z.object({
   provider: inventoryProviderSchema,
@@ -41,12 +47,20 @@ export const patchInventorySourceBodySchema = z.object({
 export function toPublicInventorySource(source: InventorySource, listingCount = 0) {
   const creds = (source.credentialsEnc || {}) as Record<string, unknown>;
   const hasToken = typeof creds.accessToken === "string" && creds.accessToken.length > 0;
+  const rawConfig = (source.config || {}) as Record<string, unknown>;
+  const config = { ...rawConfig };
+  if (typeof config.originatingSystemName === "string") {
+    config.originatingSystemName = sanitizeOriginatingSystemForUi(
+      config.originatingSystemName,
+      IS_PRODUCTION,
+    );
+  }
   return {
     id: source.id,
     provider: source.provider,
-    displayName: source.displayName,
+    displayName: sanitizeInventoryDisplayNameForUi(source.displayName, IS_PRODUCTION),
     connectionStatus: source.connectionStatus,
-    config: source.config,
+    config,
     integrationId: source.integrationId,
     lastSyncAt: source.lastSyncAt,
     lastSyncStatus: source.lastSyncStatus,
@@ -62,7 +76,9 @@ export function toPublicInventorySource(source: InventorySource, listingCount = 
 }
 
 function defaultDisplayName(provider: InventoryProvider): string {
-  if (provider === "mls_grid") return "Primary inventory source";
+  if (provider === "mls_grid") {
+    return IS_PRODUCTION ? "My MLS inventory" : "Primary inventory source";
+  }
   return "Inventory source";
 }
 
