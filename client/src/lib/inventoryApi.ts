@@ -1,5 +1,10 @@
 import { apiRequest } from "@/lib/queryClient";
 
+import {
+  friendlyInventoryErrorMessage,
+  formatInventorySyncStatRows,
+} from "@shared/inventory/inventoryProviderDisplay";
+
 export type InventoryConnectorStatus = {
   featureEnabled: boolean;
   rgeInstalled: boolean;
@@ -60,7 +65,7 @@ export function buildMlsSourcePayload(form: MlsInventorySourceForm, isUpdate: bo
     credentials?: { accessToken: string };
   } = {
     provider: "mls_grid",
-    displayName: form.displayName.trim() || "MLS inventory",
+    displayName: form.displayName.trim() || "Primary inventory source",
     config: {
       originatingSystemName: form.originatingSystemName.trim(),
       expandMedia: true,
@@ -77,16 +82,41 @@ export function formatInventorySyncStatus(status: string | null | undefined): st
   if (!status) return "Never synced";
   switch (status) {
     case "running":
-      return "Syncing…";
+      return "Sync in progress";
     case "success":
-      return "Last sync succeeded";
+      return "Succeeded";
     case "failed":
-      return "Last sync failed";
+      return "Failed";
     case "partial":
-      return "Last sync partial";
+      return "Partially completed";
     case "idle":
-      return "Idle";
+      return "Ready to sync";
     default:
       return status.replace(/_/g, " ");
   }
 }
+
+export function formatInventoryConnectionStatus(status: string | null | undefined): string {
+  if (!status) return "Not connected";
+  switch (status) {
+    case "connected":
+      return "Connected";
+    case "error":
+      return "Connection error";
+    case "configuring":
+      return "Needs validation";
+    case "running":
+      return "Syncing";
+    default:
+      return status.replace(/_/g, " ");
+  }
+}
+
+/** True when an active listing-sync source has passed validation or sync. */
+export function isInventorySourceConnected(sources: PublicInventorySource[]): boolean {
+  return sources.some(
+    (s) => s.isActive && s.listingSyncSupported && s.connectionStatus === "connected",
+  );
+}
+
+export { formatInventorySyncStatRows, friendlyInventoryErrorMessage };

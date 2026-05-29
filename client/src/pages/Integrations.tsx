@@ -318,7 +318,7 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     id: "showcase_idx", 
     name: "Showcase IDX", 
     icon: Home, 
-    description: "Lead and activity sync only — not MLS listing inventory", 
+    description: "Lead and activity sync only — not listing inventory", 
     color: "bg-red-500",
     category: "industry",
     tagline: "Leads & activity (no listing sync)",

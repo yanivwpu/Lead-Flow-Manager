@@ -5,6 +5,10 @@ export const RGE_TEMPLATE_ID = "realtor-growth-engine";
 export const RGE_TEMPLATE_DETAIL_PATH = "/app/templates/realtor-growth-engine";
 export const RGE_TEMPLATE_ONBOARDING_PATH = "/app/templates/realtor-growth-engine/onboarding";
 
+/** RGE Dashboard + Integrations — inventory source configuration (not Copilot). */
+export const RGE_INVENTORY_SETTINGS_PATH = RGE_TEMPLATE_DETAIL_PATH;
+export const INTEGRATIONS_INVENTORY_SETTINGS_PATH = "/app/integrations";
+
 export type RgeEntitlementStatus = "locked" | "purchased" | "submitted" | "installed";
 
 export type RgeEntitlementSnapshot = {

@@ -4,7 +4,7 @@ import { showcaseIdxListingStubAdapter, createStubInventoryAdapter } from "./pro
 import type { InventoryProviderAdapter } from "./providers/types";
 
 const stubMessage = (label: string) =>
-  `${label} listing sync is not available in this release. Connect your MLS inventory via an MLS Grid source.`;
+  `${label} is not available yet. Connect MLS Grid as your inventory source for now.`;
 
 const adapters: Record<InventoryProvider, InventoryProviderAdapter> = {
   mls_grid: mlsGridInventoryAdapter,
@@ -14,7 +14,7 @@ const adapters: Record<InventoryProvider, InventoryProviderAdapter> = {
   reso: createStubInventoryAdapter("reso", stubMessage("RESO")),
   csv: createStubInventoryAdapter(
     "csv",
-    "CSV import is available as an admin fallback later. Connect your MLS inventory to sync listings.",
+    "CSV import is available as an admin fallback later. Connect MLS Grid to sync listings.",
   ),
 };
 

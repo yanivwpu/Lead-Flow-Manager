@@ -7,6 +7,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -14,10 +21,18 @@ import {
   buildMlsSourcePayload,
   fetchInventorySources,
   fetchInventoryStatus,
+  formatInventoryConnectionStatus,
   formatInventorySyncStatus,
+  friendlyInventoryErrorMessage,
+  formatInventorySyncStatRows,
   type PublicInventorySource,
 } from "@/lib/inventoryApi";
-import { Home, RefreshCw, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import {
+  INVENTORY_PROVIDER_UI_OPTIONS,
+  inventoryProviderUserLabel,
+} from "@shared/inventory/inventoryProviderDisplay";
+import type { InventoryProvider } from "@shared/inventory/inventoryProviderSchema";
+import { Home, RefreshCw, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2, XCircle } from "lucide-react";
 import { RGE_TEMPLATE_DETAIL_PATH } from "@shared/rgePaths";
 
 type Props = {
@@ -26,7 +41,7 @@ type Props = {
 };
 
 const EMPTY_FORM = {
-  displayName: "MLS inventory",
+  displayName: "Primary inventory source",
   originatingSystemName: "",
   accessToken: "",
 };
@@ -42,7 +57,7 @@ function loadFormFromSource(source: PublicInventorySource | undefined) {
   if (!source) return { ...EMPTY_FORM, accessToken: "" };
   const cfg = source.config || {};
   return {
-    displayName: source.displayName || "MLS inventory",
+    displayName: source.displayName || "Primary inventory source",
     originatingSystemName:
       typeof cfg.originatingSystemName === "string" ? cfg.originatingSystemName : "",
     accessToken: "",
@@ -53,6 +68,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const queryClient = useQueryClient();
   const [showToken, setShowToken] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [selectedProvider, setSelectedProvider] = useState<InventoryProvider>("mls_grid");
 
   const { data: status, isLoading: statusLoading } = useQuery({
     queryKey: ["/api/inventory/status"],
@@ -73,34 +89,48 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     staleTime: 5_000,
     refetchInterval: (query) => {
       const list = query.state.data as PublicInventorySource[] | undefined;
-      const mls = list?.find((s) => s.provider === "mls_grid");
-      return mls?.lastSyncStatus === "running" ? 4_000 : false;
+      const active = list?.find((s) => s.provider === selectedProvider);
+      return active?.lastSyncStatus === "running" ? 4_000 : false;
     },
   });
 
-  const mlsSource = useMemo(
-    () => sources.find((s) => s.provider === "mls_grid"),
-    [sources],
+  const activeSource = useMemo(
+    () => sources.find((s) => s.provider === selectedProvider),
+    [sources, selectedProvider],
   );
 
+  const providerOption = INVENTORY_PROVIDER_UI_OPTIONS.find((o) => o.id === selectedProvider);
+  const providerAvailable = providerOption?.available ?? false;
+
   useEffect(() => {
-    if (mlsSource) {
-      setForm(loadFormFromSource(mlsSource));
+    if (activeSource) {
+      setForm(loadFormFromSource(activeSource));
+      setSelectedProvider(activeSource.provider as InventoryProvider);
+    } else if (sources.length > 0) {
+      const first = sources[0];
+      setSelectedProvider(first.provider as InventoryProvider);
+      setForm(loadFormFromSource(first));
     }
-  }, [mlsSource?.id, mlsSource?.updatedAt]);
+  }, [activeSource?.id, activeSource?.updatedAt, sources.length]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const isUpdate = !!mlsSource;
+      if (!providerAvailable) {
+        throw new Error(`${providerOption?.label ?? "This provider"} is not available yet.`);
+      }
+      if (selectedProvider !== "mls_grid") {
+        throw new Error("Only MLS Grid is supported for listing sync right now.");
+      }
+      const isUpdate = !!activeSource;
       const payload = buildMlsSourcePayload(form, isUpdate);
       if (!payload.config.originatingSystemName) {
-        throw new Error("MLS / originating system name is required");
+        throw new Error("Originating system name is required.");
       }
       if (!isUpdate && !payload.credentials?.accessToken) {
-        throw new Error("Access token is required");
+        throw new Error("Access token is required when connecting a new source.");
       }
       if (isUpdate) {
-        const res = await apiRequest("PATCH", `/api/inventory/sources/${mlsSource!.id}`, payload);
+        const res = await apiRequest("PATCH", `/api/inventory/sources/${activeSource!.id}`, payload);
         return res.json();
       }
       const res = await apiRequest("POST", "/api/inventory/sources", payload);
@@ -109,12 +139,15 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
       setForm((f) => ({ ...f, accessToken: "" }));
-      toast({ title: "Inventory source saved", description: "Your MLS inventory connection settings were updated." });
+      toast({
+        title: "Inventory source saved",
+        description: "Your connection settings were saved. Validate the connection, then sync your listings.",
+      });
     },
     onError: (err: Error) => {
       toast({
         title: "Could not save inventory source",
-        description: err.message.replace(/^\d+:\s*/, ""),
+        description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
         variant: "destructive",
       });
     },
@@ -122,22 +155,24 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
 
   const validateMutation = useMutation({
     mutationFn: async () => {
-      if (!mlsSource) throw new Error("Save your inventory source before validating");
-      const res = await apiRequest("POST", `/api/inventory/sources/${mlsSource.id}/validate`);
+      if (!activeSource) throw new Error("Save your inventory source before validating.");
+      const res = await apiRequest("POST", `/api/inventory/sources/${activeSource.id}/validate`);
       return res.json() as Promise<{ ok: boolean; message?: string }>;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
       toast({
         title: data.ok ? "Connection verified" : "Validation failed",
-        description: data.message || (data.ok ? "MLS inventory connection is ready." : "Check your credentials."),
+        description: friendlyInventoryErrorMessage(
+          data.message || (data.ok ? "Your inventory source is ready to sync." : "Check your credentials and try again."),
+        ),
         variant: data.ok ? "default" : "destructive",
       });
     },
     onError: (err: Error) => {
       toast({
         title: "Validation failed",
-        description: err.message.replace(/^\d+:\s*/, ""),
+        description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
         variant: "destructive",
       });
     },
@@ -145,17 +180,17 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
 
   const syncMutation = useMutation({
     mutationFn: async () => {
-      if (!mlsSource) throw new Error("Save your inventory source before syncing");
-      const res = await fetch(`/api/inventory/sources/${mlsSource.id}/sync`, {
+      if (!activeSource) throw new Error("Save your inventory source before syncing.");
+      const res = await fetch(`/api/inventory/sources/${activeSource.id}/sync`, {
         method: "POST",
         credentials: "include",
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (res.status === 409) {
-        throw new Error(body.error || "Sync already in progress");
+        throw new Error(body.error || "A sync is already in progress.");
       }
       if (!res.ok) {
-        throw new Error(body.error || `Sync failed (${res.status})`);
+        throw new Error(body.error || `Sync could not be started (${res.status}).`);
       }
       return body;
     },
@@ -163,14 +198,14 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
       toast({
         title: "Sync started",
-        description: "Listing inventory is syncing in the background. Refresh status in a moment.",
+        description: "Your listings are syncing in the background. Status updates below.",
       });
       void refetchSources();
     },
     onError: (err: Error) => {
       toast({
         title: "Could not start sync",
-        description: err.message.replace(/^\d+:\s*/, ""),
+        description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
         variant: "destructive",
       });
     },
@@ -178,8 +213,8 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      if (!mlsSource) return;
-      await apiRequest("DELETE", `/api/inventory/sources/${mlsSource.id}`);
+      if (!activeSource) return;
+      await apiRequest("DELETE", `/api/inventory/sources/${activeSource.id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
@@ -189,7 +224,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     onError: (err: Error) => {
       toast({
         title: "Could not remove source",
-        description: err.message.replace(/^\d+:\s*/, ""),
+        description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
         variant: "destructive",
       });
     },
@@ -204,12 +239,12 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   }
 
   const isCompact = variant === "compact";
-  const syncRunning = mlsSource?.lastSyncStatus === "running";
-  const lastSyncAt = mlsSource?.lastSyncAt ? new Date(mlsSource.lastSyncAt).toLocaleString() : null;
-  const seenInLastSync =
-    typeof mlsSource?.lastSyncStats?.seenCount === "number"
-      ? (mlsSource.lastSyncStats.seenCount as number)
-      : null;
+  const syncRunning = activeSource?.lastSyncStatus === "running";
+  const syncFailed = activeSource?.lastSyncStatus === "failed";
+  const syncSucceeded = activeSource?.lastSyncStatus === "success";
+  const lastSyncAt = activeSource?.lastSyncAt ? new Date(activeSource.lastSyncAt).toLocaleString() : null;
+  const syncStatRows = formatInventorySyncStatRows(activeSource?.lastSyncStats);
+  const isMlsGrid = selectedProvider === "mls_grid";
 
   const inner = (
     <div className={cn("space-y-4", className)}>
@@ -218,7 +253,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
           <AlertCircle className="h-4 w-4 text-amber-800" />
           <AlertTitle className="text-amber-950">Realtor Growth Engine required</AlertTitle>
           <AlertDescription className="text-amber-900/90 text-sm">
-            Install the Realtor Growth Engine to connect MLS listing inventory.{" "}
+            Install the Realtor Growth Engine to connect an inventory source.{" "}
             <Link href={RGE_TEMPLATE_DETAIL_PATH} className="font-medium underline underline-offset-2">
               Open Growth Engine
             </Link>
@@ -228,9 +263,9 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
 
       {status.canUse && (
         <>
-          <p className={cn("text-sm text-muted-foreground", isCompact && "text-xs")}>
-            Sync active listings from your MLS feed for buyer matching and inventory intelligence (coming soon).
-            Showcase IDX remains for leads and activity only.
+          <p className={cn("text-sm text-muted-foreground leading-relaxed", isCompact && "text-xs")}>
+            Your inventory provider supplies the listing feed used by RGE to power buyer matching, new
+            opportunities, price reduction alerts, and AI listing drafts.
           </p>
 
           {sourcesLoading ? (
@@ -242,134 +277,194 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
             <>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2 sm:col-span-2 sm:max-w-md">
-                  <Label htmlFor="inventory-display-name">Display name</Label>
-                  <Input
-                    id="inventory-display-name"
-                    value={form.displayName}
-                    onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-                    placeholder="MLS inventory"
-                    data-testid="input-inventory-display-name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="inventory-originating-system">MLS / originating system name</Label>
-                  <Input
-                    id="inventory-originating-system"
-                    value={form.originatingSystemName}
-                    onChange={(e) => setForm((f) => ({ ...f, originatingSystemName: e.target.value }))}
-                    placeholder="e.g. miamire"
-                    autoComplete="off"
-                    data-testid="input-inventory-originating-system"
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    Provided by your MLS or data vendor — identifies which feed to pull.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="inventory-access-token">Access token</Label>
-                  <div className="relative">
-                    <Input
-                      id="inventory-access-token"
-                      type={showToken ? "text" : "password"}
-                      value={form.accessToken}
-                      onChange={(e) => setForm((f) => ({ ...f, accessToken: e.target.value }))}
-                      placeholder={mlsSource?.hasCredentials ? "••••••••  (leave blank to keep)" : "Paste access token"}
-                      autoComplete="off"
-                      className="pr-10"
-                      data-testid="input-inventory-access-token"
-                    />
-                    <button
-                      type="button"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      onClick={() => setShowToken((v) => !v)}
-                      aria-label={showToken ? "Hide token" : "Show token"}
-                    >
-                      {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  {mlsSource?.hasCredentials && (
-                    <p className="text-[11px] text-muted-foreground">Token is stored securely and never shown again.</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  className="bg-brand-green hover:bg-brand-green/90"
-                  disabled={saveMutation.isPending}
-                  onClick={() => saveMutation.mutate()}
-                  data-testid="button-inventory-save"
-                >
-                  {saveMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Saving…
-                    </>
-                  ) : mlsSource ? (
-                    "Save changes"
-                  ) : (
-                    "Connect MLS inventory"
-                  )}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={!mlsSource || validateMutation.isPending}
-                  onClick={() => validateMutation.mutate()}
-                  data-testid="button-inventory-validate"
-                >
-                  {validateMutation.isPending ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                  ) : (
-                    "Validate connection"
-                  )}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={!mlsSource || syncMutation.isPending || syncRunning}
-                  onClick={() => syncMutation.mutate()}
-                  data-testid="button-inventory-sync"
-                >
-                  <RefreshCw className={cn("h-4 w-4 mr-1", syncRunning && "animate-spin")} />
-                  {syncRunning ? "Syncing…" : "Sync now"}
-                </Button>
-                {mlsSource && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    disabled={deleteMutation.isPending}
-                    onClick={() => {
-                      if (window.confirm("Remove this inventory source? Synced listings will be deleted.")) {
-                        deleteMutation.mutate();
-                      }
-                    }}
-                    data-testid="button-inventory-remove"
+                  <Label htmlFor="inventory-provider">Provider</Label>
+                  <Select
+                    value={selectedProvider}
+                    onValueChange={(v) => setSelectedProvider(v as InventoryProvider)}
+                    disabled={!!activeSource}
                   >
-                    Remove
-                  </Button>
+                    <SelectTrigger id="inventory-provider" data-testid="select-inventory-provider">
+                      <SelectValue placeholder="Select provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {INVENTORY_PROVIDER_UI_OPTIONS.map((option) => (
+                        <SelectItem
+                          key={option.id}
+                          value={option.id}
+                          disabled={!option.available && !activeSource}
+                        >
+                          {option.label}
+                          {!option.available ? " — Coming soon" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!providerAvailable && (
+                    <p className="text-[11px] text-muted-foreground">
+                      {providerOption?.helper ?? "Coming soon"} — select MLS Grid to sync listings today.
+                    </p>
+                  )}
+                </div>
+
+                {isMlsGrid && providerAvailable && (
+                  <>
+                    <div className="space-y-2 sm:col-span-2 sm:max-w-md">
+                      <Label htmlFor="inventory-display-name">Display name</Label>
+                      <Input
+                        id="inventory-display-name"
+                        value={form.displayName}
+                        onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
+                        placeholder="Primary inventory source"
+                        data-testid="input-inventory-display-name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="inventory-originating-system">Originating system name</Label>
+                      <Input
+                        id="inventory-originating-system"
+                        value={form.originatingSystemName}
+                        onChange={(e) => setForm((f) => ({ ...f, originatingSystemName: e.target.value }))}
+                        placeholder="e.g. miamire"
+                        autoComplete="off"
+                        data-testid="input-inventory-originating-system"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        Use the originating system name and access token provided by your MLS data provider.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="inventory-access-token">Access token</Label>
+                      <div className="relative">
+                        <Input
+                          id="inventory-access-token"
+                          type={showToken ? "text" : "password"}
+                          value={form.accessToken}
+                          onChange={(e) => setForm((f) => ({ ...f, accessToken: e.target.value }))}
+                          placeholder={
+                            activeSource?.hasCredentials
+                              ? "••••••••  (leave blank to keep)"
+                              : "Paste access token"
+                          }
+                          autoComplete="off"
+                          className="pr-10"
+                          data-testid="input-inventory-access-token"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          onClick={() => setShowToken((v) => !v)}
+                          aria-label={showToken ? "Hide token" : "Show token"}
+                        >
+                          {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      {activeSource?.hasCredentials && (
+                        <p className="text-[11px] text-muted-foreground">
+                          Token is stored securely and never shown again after save.
+                        </p>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
 
-              {mlsSource && (
+              {isMlsGrid && providerAvailable && (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    className="bg-brand-green hover:bg-brand-green/90"
+                    disabled={saveMutation.isPending}
+                    onClick={() => saveMutation.mutate()}
+                    data-testid="button-inventory-save"
+                  >
+                    {saveMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Saving…
+                      </>
+                    ) : activeSource ? (
+                      "Save changes"
+                    ) : (
+                      "Connect inventory source"
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!activeSource || validateMutation.isPending}
+                    onClick={() => validateMutation.mutate()}
+                    data-testid="button-inventory-validate"
+                  >
+                    {validateMutation.isPending ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Validate connection"
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!activeSource || syncMutation.isPending || syncRunning}
+                    onClick={() => syncMutation.mutate()}
+                    data-testid="button-inventory-sync"
+                  >
+                    <RefreshCw className={cn("h-4 w-4 mr-1", syncRunning && "animate-spin")} />
+                    {syncRunning ? "Syncing…" : "Sync now"}
+                  </Button>
+                  {activeSource && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            "Remove this inventory source? Synced listings will be deleted from your workspace.",
+                          )
+                        ) {
+                          deleteMutation.mutate();
+                        }
+                      }}
+                      data-testid="button-inventory-remove"
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {activeSource && isMlsGrid && (
                 <div
                   className="rounded-lg border border-gray-200 bg-gray-50/80 p-4 text-sm space-y-3"
                   data-testid="inventory-source-status"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium text-gray-900">Inventory source status</span>
-                    <Badge variant="outline" className={connectionBadgeClass(mlsSource.connectionStatus)}>
-                      {mlsSource.connectionStatus.replace(/_/g, " ")}
+                    <Badge variant="outline" className={connectionBadgeClass(activeSource.connectionStatus)}>
+                      {formatInventoryConnectionStatus(activeSource.connectionStatus)}
                     </Badge>
                     {syncRunning && (
                       <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-800">
                         Sync in progress
                       </Badge>
                     )}
+                    {!syncRunning && syncSucceeded && (
+                      <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-800">
+                        Last sync succeeded
+                      </Badge>
+                    )}
+                    {!syncRunning && syncFailed && (
+                      <Badge variant="outline" className="border-red-200 bg-red-50 text-red-800">
+                        Last sync failed
+                      </Badge>
+                    )}
                   </div>
                   <dl className="grid gap-2 sm:grid-cols-2 text-xs sm:text-sm">
+                    <div>
+                      <dt className="text-muted-foreground">Provider</dt>
+                      <dd className="font-medium">{inventoryProviderUserLabel(activeSource.provider)}</dd>
+                    </div>
                     <div>
                       <dt className="text-muted-foreground">Last sync</dt>
                       <dd className="font-medium">{lastSyncAt ?? "—"}</dd>
@@ -377,34 +472,43 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                     <div>
                       <dt className="text-muted-foreground">Sync status</dt>
                       <dd className="font-medium flex items-center gap-1">
-                        {mlsSource.lastSyncStatus === "success" && (
+                        {syncSucceeded && !syncRunning && (
                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                         )}
-                        {formatInventorySyncStatus(mlsSource.lastSyncStatus)}
+                        {syncFailed && !syncRunning && (
+                          <XCircle className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                        )}
+                        {syncRunning && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600 shrink-0" />}
+                        {formatInventorySyncStatus(activeSource.lastSyncStatus)}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-muted-foreground">Listings in workspace</dt>
                       <dd className="font-medium" data-testid="inventory-listing-count">
-                        {mlsSource.listingCount.toLocaleString()}
-                        {seenInLastSync != null && mlsSource.lastSyncStatus === "success" && (
-                          <span className="text-muted-foreground font-normal">
-                            {" "}
-                            ({seenInLastSync.toLocaleString()} in last sync)
-                          </span>
-                        )}
+                        {activeSource.listingCount.toLocaleString()}
                       </dd>
                     </div>
-                    <div>
-                      <dt className="text-muted-foreground">Originating system</dt>
-                      <dd className="font-medium font-mono text-xs">
-                        {String((mlsSource.config as Record<string, unknown>)?.originatingSystemName ?? "—")}
-                      </dd>
-                    </div>
+                    {syncStatRows.length > 0 && (
+                      <div className="sm:col-span-2">
+                        <dt className="text-muted-foreground mb-1">Last sync summary</dt>
+                        <dd className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                          {syncStatRows.map((row) => (
+                            <div key={row.label} className="flex justify-between gap-2 text-xs sm:text-sm">
+                              <span className="text-muted-foreground">{row.label}</span>
+                              <span className="font-medium tabular-nums">{row.value}</span>
+                            </div>
+                          ))}
+                        </dd>
+                      </div>
+                    )}
                   </dl>
-                  {mlsSource.lastSyncError && (
-                    <p className="text-xs text-red-700 leading-relaxed" role="alert" data-testid="inventory-sync-error">
-                      {mlsSource.lastSyncError}
+                  {activeSource.lastSyncError && (
+                    <p
+                      className="text-xs text-red-700 leading-relaxed"
+                      role="alert"
+                      data-testid="inventory-sync-error"
+                    >
+                      {friendlyInventoryErrorMessage(activeSource.lastSyncError)}
                     </p>
                   )}
                 </div>
@@ -422,9 +526,9 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Home className="h-4 w-4 text-brand-green" />
-            MLS inventory
+            Inventory source
           </CardTitle>
-          <CardDescription>Connect your MLS inventory for listing sync.</CardDescription>
+          <CardDescription>Connect your inventory source and sync your listings.</CardDescription>
         </CardHeader>
         <CardContent>{inner}</CardContent>
       </Card>
@@ -434,17 +538,20 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   return (
     <section className={cn("space-y-4", className)} data-testid="section-inventory-sources">
       <div>
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Inventory sources</h2>
-        <p className="mt-1 text-sm text-gray-600">Connect your MLS inventory to sync listings into your workspace.</p>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Inventory intelligence</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Connect your inventory source to sync listings into your workspace.
+        </p>
       </div>
       <Card className="border-gray-200 shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg flex items-center gap-2">
             <Home className="h-5 w-5 text-brand-green" />
-            Connect your MLS inventory
+            Connect your inventory source
           </CardTitle>
           <CardDescription>
-            Pull active listings from your MLS feed. Tokens are encrypted and never returned to the browser after save.
+            Sync your listings for buyer matching and inventory intelligence. Credentials are encrypted and never
+            returned to the browser after save.
           </CardDescription>
         </CardHeader>
         <CardContent>{inner}</CardContent>

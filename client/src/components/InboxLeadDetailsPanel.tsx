@@ -80,7 +80,8 @@ import { BuyerPreferencesPanel } from "@/components/BuyerPreferencesPanel";
 import { MatchingListingsPanel } from "@/components/inventory/MatchingListingsPanel";
 import { NewOpportunitiesPanel } from "@/components/inventory/NewOpportunitiesPanel";
 import { buildBuyerPreferenceChips } from "@shared/buyerPreferenceDisplay";
-import { fetchInventoryStatus } from "@/lib/inventoryApi";
+import { fetchInventoryStatus, fetchInventorySources, isInventorySourceConnected } from "@/lib/inventoryApi";
+import { CopilotInventoryEmptyState } from "@/components/inventory/CopilotInventoryEmptyState";
 import {
   shouldShowCopilotBuyerPreferences,
   shouldShowCopilotInventoryPanels,
@@ -1282,6 +1283,18 @@ export function InboxLeadDetailsPanel({
     staleTime: 60_000,
   });
 
+  const { data: inventorySources = [] } = useQuery({
+    queryKey: ["/api/inventory/sources"],
+    queryFn: fetchInventorySources,
+    enabled: !!inventoryStatus?.canUse,
+    staleTime: 60_000,
+  });
+
+  const inventoryConnected = useMemo(
+    () => isInventorySourceConnected(inventorySources),
+    [inventorySources],
+  );
+
   const showCopilotBuyerPreferences = useMemo(
     () =>
       shouldShowCopilotBuyerPreferences({
@@ -2308,7 +2321,11 @@ export function InboxLeadDetailsPanel({
                     </div>
                   )}
 
-                  {showCopilotInventoryPanels && (
+                  {showCopilotInventoryPanels && !inventoryConnected && (
+                    <CopilotInventoryEmptyState compact />
+                  )}
+
+                  {showCopilotInventoryPanels && inventoryConnected && (
                     <>
                       <div className="rounded-lg border border-gray-200 bg-white/80 px-2.5 py-2">
                         <NewOpportunitiesPanel

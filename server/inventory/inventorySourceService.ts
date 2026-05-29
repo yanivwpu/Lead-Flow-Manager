@@ -62,7 +62,7 @@ export function toPublicInventorySource(source: InventorySource, listingCount = 
 }
 
 function defaultDisplayName(provider: InventoryProvider): string {
-  if (provider === "mls_grid") return "MLS inventory";
+  if (provider === "mls_grid") return "Primary inventory source";
   return "Inventory source";
 }
 
@@ -74,11 +74,11 @@ function validateProviderPayload(
   if (provider === "mls_grid") {
     const cfg = mlsGridSourceConfigSchema.safeParse(config);
     if (!cfg.success) {
-      return { ok: false, message: "originatingSystemName is required for MLS inventory" };
+      return { ok: false, message: "Originating system name is required." };
     }
     const creds = mlsGridCredentialsSchema.safeParse(credentials);
     if (!creds.success) {
-      return { ok: false, message: "MLS Grid access token is required" };
+      return { ok: false, message: "Access token is required when connecting a new source." };
     }
   }
   return { ok: true };

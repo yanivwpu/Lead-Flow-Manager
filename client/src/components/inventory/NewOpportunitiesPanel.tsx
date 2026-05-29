@@ -336,7 +336,7 @@ export function NewOpportunitiesPanel({
               New Opportunities{opportunityCount > 0 ? ` (${opportunityCount})` : ""}
             </span>
           </span>
-          {opportunities.length > 0 && (
+          {import.meta.env.DEV && opportunities.length > 0 && (
             <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-violet-200 text-violet-700 shrink-0">
               Internal preview
             </Badge>

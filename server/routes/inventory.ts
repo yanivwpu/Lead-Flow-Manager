@@ -179,7 +179,7 @@ export function registerInventoryRoutes(app: Express): void {
       if (outcome.reason === "not_supported") {
         return res.status(400).json({
           error:
-            "This inventory source does not support listing sync. Connect your MLS inventory via MLS Grid.",
+            "This inventory source does not support listing sync. Connect MLS Grid as your inventory source.",
           code: "listing_sync_not_supported",
         });
       }

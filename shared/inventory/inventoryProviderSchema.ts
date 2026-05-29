@@ -32,9 +32,10 @@ export const inventorySyncStatusSchema = z.enum([
 
 export type InventorySyncStatus = z.infer<typeof inventorySyncStatusSchema>;
 
+/** Internal / admin labels — prefer `inventoryProviderUserLabel()` in UI. */
 export const INVENTORY_PROVIDER_LABELS: Record<InventoryProvider, string> = {
-  mls_grid: "MLS inventory",
-  showcase_idx: "Showcase IDX (leads only)",
+  mls_grid: "MLS Grid",
+  showcase_idx: "Showcase IDX",
   idx_broker: "IDX Broker",
   ihomefinder: "iHomefinder",
   reso: "RESO feed",

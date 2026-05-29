@@ -76,6 +76,15 @@ async function runInventorySyncJob(source: InventorySource): Promise<void> {
     const opportunityStats = await processInventoryOpportunitiesAfterSync(userId, upsertResults);
     const durationMs = Date.now() - startedAt;
 
+    let newListings = 0;
+    let priceChanges = 0;
+    let updatedListings = 0;
+    for (const r of upsertResults) {
+      if (r.syncAlertStatus === "new") newListings += 1;
+      else if (r.syncAlertStatus === "price_changed" || r.priceReduced) priceChanges += 1;
+      else updatedListings += 1;
+    }
+
     await patchInventorySource(sourceId, userId, {
       lastSyncAt: new Date(),
       lastSyncStatus: "success",
@@ -88,11 +97,22 @@ async function runInventorySyncJob(source: InventorySource): Promise<void> {
         pagesFetched,
         durationMs,
         seenCount: seenIds.length,
+        newListings,
+        updatedListings,
+        priceChanges,
         opportunitiesMatched: opportunityStats.createdOrUpdated,
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const raw = err instanceof Error ? err.message : String(err);
+    const message =
+      raw.includes("MLS Grid HTTP 401")
+        ? "Access token was rejected. Check your token and originating system name."
+        : raw.includes("MLS Grid HTTP 403")
+          ? "Access denied for this listing feed."
+          : raw.includes("MLS Grid HTTP")
+            ? "Could not reach the listing feed. Try again later."
+            : raw.slice(0, 2000);
     await patchInventorySource(sourceId, userId, {
       lastSyncStatus: "failed",
       lastSyncError: message.slice(0, 2000),
