@@ -80,6 +80,11 @@ import { BuyerPreferencesPanel } from "@/components/BuyerPreferencesPanel";
 import { MatchingListingsPanel } from "@/components/inventory/MatchingListingsPanel";
 import { NewOpportunitiesPanel } from "@/components/inventory/NewOpportunitiesPanel";
 import { buildBuyerPreferenceChips } from "@shared/buyerPreferenceDisplay";
+import { fetchInventoryStatus } from "@/lib/inventoryApi";
+import {
+  shouldShowCopilotBuyerPreferences,
+  shouldShowCopilotInventoryPanels,
+} from "@/lib/copilotRgeVisibility";
 import { isQualificationDowngrade, systemTagForQualification } from "@shared/leadQualification";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
@@ -1271,6 +1276,24 @@ export function InboxLeadDetailsPanel({
     [messages, businessKnowledge],
   );
 
+  const { data: inventoryStatus } = useQuery({
+    queryKey: ["/api/inventory/status"],
+    queryFn: fetchInventoryStatus,
+    staleTime: 60_000,
+  });
+
+  const showCopilotBuyerPreferences = useMemo(
+    () =>
+      shouldShowCopilotBuyerPreferences({
+        inventoryStatus,
+        industry: businessKnowledge?.industry,
+        customFields: contact.customFields,
+      }),
+    [inventoryStatus, businessKnowledge?.industry, contact.customFields],
+  );
+
+  const showCopilotInventoryPanels = shouldShowCopilotInventoryPanels(inventoryStatus);
+
   const customerInsights = useMemo(
     () =>
       buildCustomerInsights({
@@ -2272,24 +2295,29 @@ export function InboxLeadDetailsPanel({
                     );
                   })()}
 
-                  {/* C. Buyer preferences — structured criteria (distinct from Copilot narrative) */}
-                  <div className="rounded-lg border border-violet-100 bg-violet-50/40 px-2.5 py-2">
-                    <BuyerPreferencesPanel
-                      contactId={contact.id}
-                      initialProfile={contact.buyerPreferenceProfile}
-                      onUpdated={() => onUpdateContact({})}
-                      compact
-                      readOnly
-                    />
-                  </div>
+                  {/* C. Buyer preferences — RGE / real-estate workspace only */}
+                  {showCopilotBuyerPreferences && (
+                    <div className="rounded-lg border border-violet-100 bg-violet-50/40 px-2.5 py-2">
+                      <BuyerPreferencesPanel
+                        contactId={contact.id}
+                        initialProfile={contact.buyerPreferenceProfile}
+                        onUpdated={() => onUpdateContact({})}
+                        compact
+                        readOnly
+                      />
+                    </div>
+                  )}
 
-                  <div className="rounded-lg border border-gray-200 bg-white/80 px-2.5 py-2">
-                    <NewOpportunitiesPanel contactId={contact.id} compact />
-                  </div>
-
-                  <div className="rounded-lg border border-gray-200 bg-white/80 px-2.5 py-2">
-                    <MatchingListingsPanel contactId={contact.id} compact />
-                  </div>
+                  {showCopilotInventoryPanels && (
+                    <>
+                      <div className="rounded-lg border border-gray-200 bg-white/80 px-2.5 py-2">
+                        <NewOpportunitiesPanel contactId={contact.id} compact />
+                      </div>
+                      <div className="rounded-lg border border-gray-200 bg-white/80 px-2.5 py-2">
+                        <MatchingListingsPanel contactId={contact.id} compact />
+                      </div>
+                    </>
+                  )}
 
                   {/* D. Short narrative summary — action/context only; no duplicate criteria */}
                   {(customerSummaryBullets.length > 0 || aiMemoryLoading) && (

@@ -365,8 +365,8 @@ export function MatchingListingsPanel({ contactId, compact = true }: MatchingLis
     staleTime: 30_000,
   });
 
-  if (!inventoryStatus?.featureEnabled) return null;
-  if (!inventoryStatus.rgeInstalled) return null;
+  if (!inventoryStatus) return null;
+  if (!inventoryStatus.canUse) return null;
   if (!contactId) return null;
 
   const matches = data?.matches ?? [];
@@ -420,9 +420,9 @@ export function MatchingListingsPanel({ contactId, compact = true }: MatchingLis
       {showEmpty && (
         <p className="text-[11px] text-gray-500 leading-snug py-1">
           {data?.reason === "no_buyer_preferences"
-            ? "Add buyer preferences to preview MLS matches."
+            ? "Matches will appear once buyer preferences and inventory are available."
             : data?.reason === "no_active_inventory"
-              ? "Connect and sync MLS inventory to preview matches."
+              ? "Matches will appear once buyer preferences and inventory are available."
               : "No strong matches in active inventory yet."}
         </p>
       )}

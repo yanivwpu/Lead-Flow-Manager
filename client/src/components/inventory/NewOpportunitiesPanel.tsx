@@ -392,8 +392,8 @@ export function NewOpportunitiesPanel({ contactId, compact = true }: NewOpportun
     staleTime: 30_000,
   });
 
-  if (!inventoryStatus?.featureEnabled) return null;
-  if (!inventoryStatus.rgeInstalled) return null;
+  if (!inventoryStatus) return null;
+  if (!inventoryStatus.canUse) return null;
   if (!contactId) return null;
 
   const opportunities = data?.opportunities ?? [];

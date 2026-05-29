@@ -198,7 +198,7 @@ export function BuyerPreferencesPanel({
   const showEligible = isFetched ? eligible : hasKnownChips;
   const showControls = !readOnly && !compact;
 
-  if (isFetched && !eligible && !hasKnownChips) return null;
+  if (isFetched && !eligible) return null;
   if (!contactId) return null;
 
   const showListening = isFetched && showEligible && !hasKnownChips && !isLoading;
@@ -263,7 +263,7 @@ export function BuyerPreferencesPanel({
         </div>
       ) : showListening ? (
         <p className={cn("text-gray-400 italic leading-snug", compact ? "text-[10px]" : "text-[11px]")}>
-          Listening for areas, budget, and must-haves in this thread.
+          Buyer preferences will appear here as the conversation develops.
         </p>
       ) : !isFetched ? (
         <p className={cn("text-gray-400 italic", compact ? "text-[10px]" : "text-[11px]")}>Loading…</p>
