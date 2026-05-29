@@ -7,7 +7,7 @@
 import "dotenv/config";
 import { eq, and, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
-import { contacts, inventoryListings, inventorySources, users } from "../shared/schema";
+import { contacts, contactInventoryOpportunities, inventoryListings, inventorySources, users } from "../shared/schema";
 
 const contactId = (process.argv[2] || "").trim();
 if (!contactId) {
@@ -77,7 +77,7 @@ async function main() {
   console.log("Contact workspace userId:", contactUserId);
   console.log("User email:", userRow?.email ?? "(user row missing)");
   console.log("\nSeed command for THIS workspace:");
-  console.log(`  npx tsx scripts/seed-inventory.ts ${contactUserId} --clearExisting`);
+  console.log(`  npx tsx scripts/seed-inventory.ts ${contactUserId} --clearExisting --processOpportunities`);
   console.log("\nInventory sources:", sources.length);
   for (const s of sources) {
     console.log(`  - ${s.id} | ${s.provider} | ${s.displayName}`);
@@ -93,6 +93,26 @@ async function main() {
   console.log("\ndev-seed-* listings:", devSeedCount[0]?.count ?? 0);
   console.log("Active listings (matcher uses these):", activeCount);
   console.log("Total listings:", totalCount);
+
+  const [oppRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(contactInventoryOpportunities)
+    .where(eq(contactInventoryOpportunities.contactId, contactId));
+
+  const newAlertCount = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(inventoryListings)
+    .where(
+      and(
+        eq(inventoryListings.userId, contactUserId),
+        eq(inventoryListings.status, "active"),
+        eq(inventoryListings.syncAlertStatus, "new"),
+      ),
+    );
+
+  console.log("\nNew Opportunities (contact):", oppRow?.count ?? 0);
+  console.log("Listings flagged sync_alert_status=new:", newAlertCount[0]?.count ?? 0);
+  console.log(`  GET /api/contacts/${contactId}/inventory-opportunities`);
 
   if (sources.length === 0) {
     console.log("\n⚠ No inventory_sources for contact workspace — run seed-inventory.ts with userId above.");

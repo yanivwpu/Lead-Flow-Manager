@@ -225,10 +225,11 @@ export function NewOpportunitiesPanel({ contactId, compact = true }: NewOpportun
 
   const opportunities = data?.opportunities ?? [];
   const activeCount = opportunities.filter((o) => o.status === "new" || o.status === "viewed").length;
+  const showDevDiagnostics = import.meta.env.DEV && isFetched;
 
   if (!enabled && !isLoading) return null;
   if (isFetched && !data?.eligible && data?.reason === "feature_disabled") return null;
-  if (isFetched && data?.eligible && opportunities.length === 0) return null;
+  if (isFetched && data?.eligible && opportunities.length === 0 && !import.meta.env.DEV) return null;
 
   return (
     <div className={cn(compact ? "mt-0" : "mt-3")} data-testid="new-opportunities-panel">
@@ -242,11 +243,6 @@ export function NewOpportunitiesPanel({ contactId, compact = true }: NewOpportun
           <Sparkles className="h-3 w-3 text-violet-500" aria-hidden />
           New Opportunities{activeCount > 0 ? ` (${activeCount})` : ""}
         </span>
-        {opportunities.length > 0 && (
-          <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-violet-200 text-violet-700">
-            Internal preview
-          </Badge>
-        )}
       </div>
 
       {isLoading && (
@@ -267,6 +263,16 @@ export function NewOpportunitiesPanel({ contactId, compact = true }: NewOpportun
             />
           ))}
         </div>
+      )}
+
+      {showDevDiagnostics && opportunities.length === 0 && !isLoading && (
+        <p
+          className="text-[9px] text-gray-400 leading-snug font-mono mt-1"
+          data-testid="new-opportunities-diagnostics"
+        >
+          eligible={String(data?.eligible ?? false)} reason={data?.reason ?? "—"} count=
+          {data?.opportunityCount ?? 0}
+        </p>
       )}
     </div>
   );

@@ -6,7 +6,10 @@
  * and never invoked automatically — run manually in local/dev only.
  *
  * Usage:
- *   npx tsx scripts/seed-inventory.ts <userId> [--clearExisting]
+ *   npx tsx scripts/seed-inventory.ts <userId> [--clearExisting] [--processOpportunities]
+ *
+ * Examples:
+ *   npx tsx scripts/seed-inventory.ts <userId> --clearExisting --processOpportunities
  *
  * Requires:
  *   - DATABASE_URL in `.env`
@@ -15,9 +18,15 @@
  * Creates a dev `mls_grid` inventory source if the workspace has none yet.
  */
 import "dotenv/config";
-import { eq, and, like } from "drizzle-orm";
+import { eq, and, like, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
-import { inventoryListings, inventorySources, users } from "../shared/schema";
+import { contactInventoryOpportunities, inventoryListings, inventorySources, users } from "../shared/schema";
+import type { NormalizedInventoryListing } from "../shared/inventory/inventoryListingSchema";
+import { upsertInventoryListing, type ListingUpsertResult } from "../server/inventory/inventoryDb";
+import {
+  processInventoryOpportunitiesAfterSync,
+  rebuildOpportunitiesFromSyncAlerts,
+} from "../server/inventory/inventoryOpportunityService";
 
 const DEV_PROVIDER_LISTING_PREFIX = "dev-seed-";
 const LISTING_COUNT = 40;
@@ -50,15 +59,45 @@ function assertDevEnvironment(): void {
   }
 }
 
-function parseArgs(): { userId: string; clearExisting: boolean } {
+function parseArgs(): { userId: string; clearExisting: boolean; processOpportunities: boolean } {
   const args = process.argv.slice(2).filter((a) => a !== "--");
   const clearExisting = args.includes("--clearExisting");
+  const processOpportunities = args.includes("--processOpportunities");
   const userId = args.find((a) => !a.startsWith("--"))?.trim() ?? "";
   if (!userId) {
-    console.error("Usage: npx tsx scripts/seed-inventory.ts <userId> [--clearExisting]");
+    console.error(
+      "Usage: npx tsx scripts/seed-inventory.ts <userId> [--clearExisting] [--processOpportunities]",
+    );
     process.exit(1);
   }
-  return { userId, clearExisting };
+  return { userId, clearExisting, processOpportunities };
+}
+
+function seedToNormalized(seed: SeedListing): NormalizedInventoryListing {
+  return {
+    provider: "mls_grid",
+    providerListingId: seed.providerListingId,
+    status: "active",
+    priceCents: seed.priceCents,
+    currency: "USD",
+    address: {
+      line1: seed.addressLine1,
+      city: seed.city,
+      state: seed.state,
+      zip: seed.zip,
+      country: "US",
+    },
+    latitude: seed.latitude,
+    longitude: seed.longitude,
+    beds: seed.beds,
+    baths: seed.baths,
+    propertyType: seed.propertyType,
+    description: `${seed.neighborhood}. ${seed.description}`,
+    features: seed.features,
+    photos: photoUrl(seed.providerListingId),
+    listingUrl: null,
+    sourceUpdatedAt: new Date().toISOString(),
+  };
 }
 
 function photoUrl(seed: string): { url: string; order: number }[] {
@@ -519,9 +558,34 @@ async function clearDevListings(userId: string, sourceId: string): Promise<numbe
   return deleted.length;
 }
 
+async function markDevSeedListingsAsNew(userId: string, sourceId: string): Promise<number> {
+  const updated = await db
+    .update(inventoryListings)
+    .set({ syncAlertStatus: "new", updatedAt: new Date() })
+    .where(
+      and(
+        eq(inventoryListings.userId, userId),
+        eq(inventoryListings.sourceId, sourceId),
+        eq(inventoryListings.status, "active"),
+        like(inventoryListings.providerListingId, `${DEV_PROVIDER_LISTING_PREFIX}%`),
+        eq(inventoryListings.syncAlertStatus, "existing"),
+      ),
+    )
+    .returning({ id: inventoryListings.id });
+  return updated.length;
+}
+
+async function countOpportunitiesForUser(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(contactInventoryOpportunities)
+    .where(eq(contactInventoryOpportunities.userId, userId));
+  return row?.count ?? 0;
+}
+
 async function main(): Promise<void> {
   assertDevEnvironment();
-  const { userId, clearExisting } = parseArgs();
+  const { userId, clearExisting, processOpportunities } = parseArgs();
 
   if (!process.env.DATABASE_URL) {
     console.error("DATABASE_URL is required");
@@ -543,54 +607,39 @@ async function main(): Promise<void> {
   }
 
   let inserted = 0;
+  let newListings = 0;
+  let priceReduced = 0;
+  const upsertResults: ListingUpsertResult[] = [];
+
   for (const seed of seeds) {
-    await db
-      .insert(inventoryListings)
-      .values({
-        userId,
-        sourceId: source.id,
-        provider: "mls_grid",
-        providerListingId: seed.providerListingId,
-        status: "active",
-        priceCents: seed.priceCents,
-        currency: "USD",
-        addressLine1: seed.addressLine1,
-        city: seed.city,
-        state: seed.state,
-        zip: seed.zip,
-        country: "US",
-        latitude: seed.latitude,
-        longitude: seed.longitude,
-        beds: String(seed.beds),
-        baths: String(seed.baths),
-        propertyType: seed.propertyType,
-        description: `${seed.neighborhood}. ${seed.description}`,
-        features: seed.features,
-        photos: photoUrl(seed.providerListingId),
-        listingUrl: null,
-        sourceUpdatedAt: new Date(),
-        syncedAt: new Date(),
-        firstSeenAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [inventoryListings.sourceId, inventoryListings.providerListingId],
-        set: {
-          status: "active",
-          priceCents: seed.priceCents,
-          city: seed.city,
-          state: seed.state,
-          beds: String(seed.beds),
-          baths: String(seed.baths),
-          propertyType: seed.propertyType,
-          description: `${seed.neighborhood}. ${seed.description}`,
-          features: seed.features,
-          photos: photoUrl(seed.providerListingId),
-          updatedAt: new Date(),
-          syncedAt: new Date(),
-        },
-      });
+    const result = await upsertInventoryListing(userId, source.id, seedToNormalized(seed));
+    upsertResults.push(result);
     inserted += 1;
+    if (result.syncAlertStatus === "new") newListings += 1;
+    if (result.priceReduced) priceReduced += 1;
+  }
+
+  let opportunityStats = { createdOrUpdated: 0, alertCount: 0, skippedReason: undefined as string | undefined };
+
+  if (processOpportunities) {
+    opportunityStats = await processInventoryOpportunitiesAfterSync(userId, upsertResults, {
+      skipGate: true,
+    });
+
+    if (opportunityStats.createdOrUpdated === 0) {
+      const marked = await markDevSeedListingsAsNew(userId, source.id);
+      if (marked > 0) {
+        console.log(`Marked ${marked} dev-seed listing(s) as new for opportunity processing.`);
+        opportunityStats = await rebuildOpportunitiesFromSyncAlerts(userId, {
+          skipGate: true,
+          sourceId: source.id,
+        });
+      }
+    }
+
+    if (opportunityStats.skippedReason) {
+      console.warn(`Opportunity processing skipped: ${opportunityStats.skippedReason}`);
+    }
   }
 
   const strongMatches = seeds.filter(
@@ -607,10 +656,23 @@ async function main(): Promise<void> {
   console.log(`  User:     ${userId}`);
   console.log(`  Source:   ${source.id}`);
   console.log(`  Listings: ${inserted} (prefix ${DEV_PROVIDER_LISTING_PREFIX})`);
+  console.log(`  Sync alerts: ${newListings} new, ${priceReduced} price-reduced`);
   console.log(`  Strong match targets (Brickell / 2bd / condo / pool / ~$800k): ${strongMatches.length}`);
+  if (processOpportunities) {
+    const totalOpportunities = await countOpportunitiesForUser(userId);
+    console.log(`  Opportunities: ${opportunityStats.createdOrUpdated} created/updated this run (${totalOpportunities} total in workspace)`);
+    if (opportunityStats.createdOrUpdated === 0) {
+      console.log("  Tip: use --clearExisting with --processOpportunities so listings are flagged new.");
+    }
+  }
   console.log("\nTest matching with buyer preferences e.g.:");
   console.log('  targetAreas: ["Brickell"], propertyTypes: ["condo"], bedsMin: 2, priceMax: 800000, pool: true');
-  console.log(`  GET /api/contacts/:contactId/inventory-matches\n`);
+  console.log(`  GET /api/contacts/:contactId/inventory-matches`);
+  if (processOpportunities) {
+    console.log(`  GET /api/contacts/:contactId/inventory-opportunities\n`);
+  } else {
+    console.log(`  Re-run with --processOpportunities to populate New Opportunities\n`);
+  }
 }
 
 main().catch((err) => {

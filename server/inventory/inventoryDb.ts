@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
 import {
   inventoryListings,
   inventorySources,
@@ -364,4 +364,31 @@ export async function getInventoryListingsByIds(
     .select()
     .from(inventoryListings)
     .where(and(eq(inventoryListings.userId, userId), inArray(inventoryListings.id, listingIds)));
+}
+
+/** Active listings flagged new or price-reduced since last sync — for opportunity rebuild. */
+export async function fetchActiveListingsWithOpportunityAlerts(
+  userId: string,
+  sourceId?: string,
+): Promise<InventoryListing[]> {
+  const conditions = [
+    eq(inventoryListings.userId, userId),
+    eq(inventoryListings.status, "active"),
+    or(
+      eq(inventoryListings.syncAlertStatus, "new"),
+      and(
+        eq(inventoryListings.syncAlertStatus, "price_changed"),
+        sql`${inventoryListings.previousPriceCents} IS NOT NULL`,
+        sql`${inventoryListings.priceCents} IS NOT NULL`,
+        sql`${inventoryListings.priceCents} < ${inventoryListings.previousPriceCents}`,
+      ),
+    ),
+  ];
+  if (sourceId) conditions.push(eq(inventoryListings.sourceId, sourceId));
+
+  return db
+    .select()
+    .from(inventoryListings)
+    .where(and(...conditions))
+    .orderBy(desc(inventoryListings.syncedAt));
 }

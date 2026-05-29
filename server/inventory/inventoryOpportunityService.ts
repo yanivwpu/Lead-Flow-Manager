@@ -16,7 +16,7 @@ import { readBuyerPreferenceProfile } from "../buyerPreferenceService";
 import { storage } from "../storage";
 import { canUseInventoryConnector } from "./inventoryGate";
 import type { ListingUpsertResult } from "./inventoryDb";
-import { getInventoryListingsByIds } from "./inventoryDb";
+import { fetchActiveListingsWithOpportunityAlerts, getInventoryListingsByIds } from "./inventoryDb";
 import {
   inventoryListingToMatchInput,
 } from "./inventoryMatchingService";
@@ -28,6 +28,102 @@ import {
 import type { InventoryOpportunityStatus } from "@shared/inventory/inventoryOpportunityTypes";
 
 const OPPORTUNITY_MIN_SCORE = 50;
+
+export type ProcessOpportunitiesResult = {
+  createdOrUpdated: number;
+  skippedReason?: string;
+  alertCount?: number;
+};
+
+export type ProcessOpportunitiesOptions = {
+  /** Dev scripts only — bypass RGE / feature gate checks. */
+  skipGate?: boolean;
+};
+
+function listingRowToUpsertResult(listing: InventoryListing): ListingUpsertResult {
+  const syncAlertStatus = listing.syncAlertStatus as ListingUpsertResult["syncAlertStatus"];
+  const priceReduced =
+    syncAlertStatus === "price_changed" &&
+    listing.previousPriceCents != null &&
+    listing.priceCents != null &&
+    listing.priceCents < listing.previousPriceCents;
+
+  return {
+    listingId: listing.id,
+    syncAlertStatus,
+    previousPriceCents: syncAlertStatus === "price_changed" ? listing.previousPriceCents : null,
+    currentPriceCents: listing.priceCents,
+    priceReduced,
+  };
+}
+
+async function processAlertResults(
+  userId: string,
+  alertResults: ListingUpsertResult[],
+): Promise<number> {
+  const listingIds = [...new Set(alertResults.map((r) => r.listingId))];
+  const listings = await getInventoryListingsByIds(userId, listingIds);
+  const listingById = new Map(listings.map((l) => [l.id, l]));
+
+  const contacts = await storage.getContacts(userId, 5000);
+  const contactsWithCriteria = contacts.filter((contact) => {
+    const profile = readBuyerPreferenceProfile(contact);
+    const criteria = extractBuyerMatchCriteria(profile);
+    return profile.profileStatus !== "empty" && criteria.hasAnyCriteria;
+  });
+
+  if (contactsWithCriteria.length === 0) return 0;
+
+  let createdOrUpdated = 0;
+
+  for (const alert of alertResults) {
+    const listing = listingById.get(alert.listingId);
+    if (!listing || listing.status !== "active") continue;
+
+    const opportunityType: InventoryOpportunityType | null =
+      alert.syncAlertStatus === "new"
+        ? "new_listing"
+        : alert.priceReduced
+          ? "price_reduced"
+          : null;
+    if (!opportunityType) continue;
+
+    const matchInput = inventoryListingToMatchInput(listing);
+
+    for (const contact of contactsWithCriteria) {
+      const profile = readBuyerPreferenceProfile(contact);
+      const criteria = extractBuyerMatchCriteria(profile);
+      const scored = scoreListingAgainstCriteria(matchInput, criteria);
+      if (!scored || scored.score < OPPORTUNITY_MIN_SCORE) continue;
+
+      const reasons = [...scored.reasons];
+      if (
+        opportunityType === "price_reduced" &&
+        alert.previousPriceCents != null &&
+        alert.currentPriceCents != null
+      ) {
+        const delta = alert.previousPriceCents - alert.currentPriceCents;
+        if (delta > 0) {
+          reasons.unshift(formatPriceReductionLabel(delta));
+        }
+      }
+
+      await upsertContactInventoryOpportunity({
+        userId,
+        contactId: contact.id,
+        listingId: listing.id,
+        opportunityType,
+        score: scored.score,
+        reasons: reasons.slice(0, 6),
+        previousPriceCents: alert.previousPriceCents,
+        currentPriceCents: alert.currentPriceCents,
+      });
+      createdOrUpdated += 1;
+    }
+  }
+
+  return createdOrUpdated;
+}
 
 function parseNumericField(raw: string | number | null | undefined): number | null {
   if (raw == null || raw === "") return null;
@@ -106,77 +202,44 @@ function toPublicOpportunity(
 export async function processInventoryOpportunitiesAfterSync(
   userId: string,
   upsertResults: ListingUpsertResult[],
-): Promise<{ createdOrUpdated: number }> {
-  const gate = await canUseInventoryConnector(userId);
-  if (!gate.ok) return { createdOrUpdated: 0 };
+  options?: ProcessOpportunitiesOptions,
+): Promise<ProcessOpportunitiesResult> {
+  if (!options?.skipGate) {
+    const gate = await canUseInventoryConnector(userId);
+    if (!gate.ok) return { createdOrUpdated: 0, skippedReason: gate.reason };
+  }
 
   const alertResults = upsertResults.filter(
     (r) => r.syncAlertStatus === "new" || r.priceReduced,
   );
-  if (alertResults.length === 0) return { createdOrUpdated: 0 };
-
-  const listingIds = [...new Set(alertResults.map((r) => r.listingId))];
-  const listings = await getInventoryListingsByIds(userId, listingIds);
-  const listingById = new Map(listings.map((l) => [l.id, l]));
-
-  const contacts = await storage.getContacts(userId, 5000);
-  const contactsWithCriteria = contacts.filter((contact) => {
-    const profile = readBuyerPreferenceProfile(contact);
-    const criteria = extractBuyerMatchCriteria(profile);
-    return profile.profileStatus !== "empty" && criteria.hasAnyCriteria;
-  });
-
-  if (contactsWithCriteria.length === 0) return { createdOrUpdated: 0 };
-
-  let createdOrUpdated = 0;
-
-  for (const alert of alertResults) {
-    const listing = listingById.get(alert.listingId);
-    if (!listing || listing.status !== "active") continue;
-
-    const opportunityType: InventoryOpportunityType | null =
-      alert.syncAlertStatus === "new"
-        ? "new_listing"
-        : alert.priceReduced
-          ? "price_reduced"
-          : null;
-    if (!opportunityType) continue;
-
-    const matchInput = inventoryListingToMatchInput(listing);
-
-    for (const contact of contactsWithCriteria) {
-      const profile = readBuyerPreferenceProfile(contact);
-      const criteria = extractBuyerMatchCriteria(profile);
-      const scored = scoreListingAgainstCriteria(matchInput, criteria);
-      if (!scored || scored.score < OPPORTUNITY_MIN_SCORE) continue;
-
-      const reasons = [...scored.reasons];
-      if (
-        opportunityType === "price_reduced" &&
-        alert.previousPriceCents != null &&
-        alert.currentPriceCents != null
-      ) {
-        const delta = alert.previousPriceCents - alert.currentPriceCents;
-        if (delta > 0) {
-          reasons.unshift(formatPriceReductionLabel(delta));
-        }
-      }
-
-      await upsertContactInventoryOpportunity({
-        userId,
-        contactId: contact.id,
-        listingId: listing.id,
-        opportunityType,
-        score: scored.score,
-        reasons: reasons.slice(0, 6),
-        previousPriceCents: alert.previousPriceCents,
-        currentPriceCents: alert.currentPriceCents,
-      });
-      createdOrUpdated += 1;
-    }
+  if (alertResults.length === 0) {
+    return { createdOrUpdated: 0, alertCount: 0 };
   }
 
-  return { createdOrUpdated };
+  const createdOrUpdated = await processAlertResults(userId, alertResults);
+  return { createdOrUpdated, alertCount: alertResults.length };
+}
+
+/** Rebuild opportunities from persisted sync alert flags (dev repair / batch). */
+export async function rebuildOpportunitiesFromSyncAlerts(
+  userId: string,
+  options?: ProcessOpportunitiesOptions & { sourceId?: string },
+): Promise<ProcessOpportunitiesResult> {
+  if (!options?.skipGate) {
+    const gate = await canUseInventoryConnector(userId);
+    if (!gate.ok) return { createdOrUpdated: 0, skippedReason: gate.reason };
+  }
+
+  const listings = await fetchActiveListingsWithOpportunityAlerts(userId, options?.sourceId);
+  const alertResults = listings
+    .map(listingRowToUpsertResult)
+    .filter((r) => r.syncAlertStatus === "new" || r.priceReduced);
+  if (alertResults.length === 0) {
+    return { createdOrUpdated: 0, alertCount: 0 };
+  }
+
+  const createdOrUpdated = await processAlertResults(userId, alertResults);
+  return { createdOrUpdated, alertCount: alertResults.length };
 }
 
 export async function findInventoryOpportunitiesForContact(
