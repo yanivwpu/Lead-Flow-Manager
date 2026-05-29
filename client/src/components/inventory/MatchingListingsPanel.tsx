@@ -206,11 +206,11 @@ function MatchListingCard({
   return (
     <>
       <div
-        className="rounded-md border border-gray-200 bg-white p-2 shadow-sm"
+        className="rounded-md border border-gray-200 bg-white p-2.5 shadow-sm"
         data-testid={`inventory-match-${match.listingId}`}
       >
-        <div className="flex gap-2">
-          <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md bg-gray-100 flex items-center justify-center">
+        <div className="flex gap-2.5">
+          <div className="h-[4.5rem] w-16 shrink-0 overflow-hidden rounded-md bg-gray-100 flex items-center justify-center self-start">
             {match.listing.thumbnailUrl ? (
               <img
                 src={match.listing.thumbnailUrl}
@@ -222,17 +222,25 @@ function MatchListingCard({
               <Home className="h-5 w-5 text-gray-300" aria-hidden />
             )}
           </div>
-          <div className="min-w-0 flex-1 flex items-center">
-            <p className="text-[11px] text-gray-900 truncate leading-snug min-w-0">
-              {cityLine && <span className="font-semibold">{cityLine}</span>}
-              <span className="font-medium text-gray-800">
-                {cityLine ? " · " : ""}
-                {formatPrice(match.listing.priceCents)}
-              </span>
-              {bedsBaths && <span className="text-gray-500"> · {bedsBaths}</span>}
+          <div className="min-w-0 flex-1 self-start pr-1">
+            {cityLine && (
+              <p className="text-[11px] font-semibold text-gray-900 leading-snug truncate">
+                {cityLine}
+              </p>
+            )}
+            <p className="text-[11px] font-medium text-gray-800 leading-snug mt-0.5">
+              {formatPrice(match.listing.priceCents)}
             </p>
+            {bedsBaths && (
+              <p className="text-[10px] text-gray-600 leading-snug mt-0.5">{bedsBaths}</p>
+            )}
+            {match.listing.addressLine1 && (
+              <p className="text-[10px] text-gray-500 leading-snug mt-0.5 truncate">
+                {match.listing.addressLine1}
+              </p>
+            )}
           </div>
-          <div className="flex shrink-0 flex-col items-center gap-0.5 self-start">
+          <div className="flex shrink-0 flex-col items-center gap-1 self-start w-7">
             <Badge
               variant="outline"
               className={cn(
@@ -291,7 +299,7 @@ function MatchListingCard({
         </div>
 
         {match.reasons.length > 0 && (
-          <ul className="mt-1.5 space-y-0.5 pl-[4.25rem]">
+          <ul className="mt-2 space-y-0.5 pl-[4.5rem]">
             {match.reasons.slice(0, 4).map((reason) => (
               <li key={reason} className="text-[10px] text-violet-800/90 leading-snug flex gap-1">
                 <span className="text-violet-400 shrink-0">•</span>
@@ -337,12 +345,12 @@ function AllMatchesDialog({
             <Sparkles className="h-4 w-4 text-violet-500" aria-hidden />
             Matching Listings ({matches.length})
           </DialogTitle>
-          <DialogDescription className="text-xs">
-            Ranked by buyer preference fit. Internal preview only — not sent to the contact.
+          <DialogDescription className="text-xs text-gray-500">
+            These matches are for your review only. Ranked by buyer preference fit.
           </DialogDescription>
         </DialogHeader>
         <ScrollArea className="max-h-[min(70vh,520px)] px-4 pb-4">
-          <div className="space-y-2 pr-3">
+          <div className="space-y-2.5 pr-3">
             {matches.map((match) => (
               <MatchListingCard
                 key={match.listingId}
@@ -407,7 +415,7 @@ export function MatchingListingsPanel({ contactId, compact = true }: MatchingLis
       className={cn(compact ? "mt-0" : "mt-3")}
       data-testid="matching-listings-panel"
     >
-      <div className={cn("flex items-center justify-between gap-2", compact ? "mb-1" : "mb-2")}>
+      <div className={cn(compact ? "mb-1" : "mb-2")}>
         <span
           className={cn(
             "font-semibold uppercase tracking-wide flex items-center gap-1 min-w-0",
@@ -420,9 +428,9 @@ export function MatchingListingsPanel({ contactId, compact = true }: MatchingLis
           </span>
         </span>
         {matches.length > 0 && (
-          <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-violet-200 text-violet-700 shrink-0">
-            Internal preview
-          </Badge>
+          <p className="text-[10px] text-gray-400 leading-snug mt-0.5">
+            These matches are for your review only.
+          </p>
         )}
       </div>
 
