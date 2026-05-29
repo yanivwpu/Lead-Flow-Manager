@@ -17,6 +17,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import type { InventoryMatchResult, InventoryMatchesResponse } from "@shared/inventory/inventoryMatchTypes";
 import { fetchInventoryStatus } from "@/lib/inventoryApi";
 import { apiRequest } from "@/lib/queryClient";
@@ -56,6 +57,8 @@ async function fetchInventoryMatches(contactId: string): Promise<InventoryMatche
   }
   return res.json() as Promise<InventoryMatchesResponse>;
 }
+
+const SIDEBAR_PREVIEW_LIMIT = 3;
 
 type ListingDetail = {
   listing: {
@@ -219,72 +222,71 @@ function MatchListingCard({
               <Home className="h-5 w-5 text-gray-300" aria-hidden />
             )}
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-1">
-              <div className="min-w-0 flex-1">
-                {cityLine && (
-                  <p className="text-[11px] font-semibold text-gray-900 truncate">{cityLine}</p>
-                )}
-                <p className="text-[11px] font-medium text-gray-800">{formatPrice(match.listing.priceCents)}</p>
-                {bedsBaths && <p className="text-[10px] text-gray-500">{bedsBaths}</p>}
-              </div>
-              <div className="flex items-center gap-0.5 shrink-0">
-                <TooltipProvider delayDuration={200}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
-                        onClick={viewListing}
-                        aria-label="View listing"
-                        data-testid={`button-view-listing-${match.listingId}`}
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">View listing</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
+          <div className="min-w-0 flex-1 flex items-center">
+            <p className="text-[11px] text-gray-900 truncate leading-snug min-w-0">
+              {cityLine && <span className="font-semibold">{cityLine}</span>}
+              <span className="font-medium text-gray-800">
+                {cityLine ? " · " : ""}
+                {formatPrice(match.listing.priceCents)}
+              </span>
+              {bedsBaths && <span className="text-gray-500"> · {bedsBaths}</span>}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-col items-center gap-0.5 self-start">
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-[9px] px-1.5 py-0 h-5 font-semibold tabular-nums",
+                scoreBadgeClass(match.score),
+              )}
+              title="Match score"
+            >
+              {match.score}
+            </Badge>
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex h-5 w-5 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                    onClick={viewListing}
+                    aria-label="View listing"
+                    data-testid={`button-view-listing-${match.listingId}`}
+                  >
+                    <Eye className="h-3 w-3" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="left">View listing</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "inline-flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-gray-100",
+                      saved ? "text-rose-500 hover:text-rose-600" : "text-gray-400 hover:text-gray-600",
+                    )}
+                    disabled={saveMutation.isPending}
+                    onClick={() => saveMutation.mutate()}
+                    aria-label="Save to buyer shortlist"
+                    aria-pressed={saved}
+                    data-testid={`button-save-match-${match.listingId}`}
+                  >
+                    {saveMutation.isPending ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Heart
                         className={cn(
-                          "inline-flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-gray-100",
-                          saved ? "text-rose-500 hover:text-rose-600" : "text-gray-400 hover:text-gray-700",
+                          "h-3 w-3",
+                          saved ? "fill-rose-500 text-rose-500" : "",
                         )}
-                        disabled={saveMutation.isPending}
-                        onClick={() => saveMutation.mutate()}
-                        aria-label="Save to buyer shortlist"
-                        aria-pressed={saved}
-                        data-testid={`button-save-match-${match.listingId}`}
-                      >
-                        {saveMutation.isPending ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Heart
-                            className={cn(
-                              "h-3.5 w-3.5",
-                              saved ? "fill-rose-500 text-rose-500" : "",
-                            )}
-                          />
-                        )}
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">Save to buyer shortlist</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-[9px] px-1.5 py-0 h-5 font-semibold tabular-nums ml-0.5",
-                    scoreBadgeClass(match.score),
-                  )}
-                  title="Match score"
-                >
-                  {match.score}
-                </Badge>
-              </div>
-            </div>
+                      />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="left">Save to buyer shortlist</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
 
@@ -310,12 +312,60 @@ function MatchListingCard({
   );
 }
 
+function AllMatchesDialog({
+  contactId,
+  matches,
+  savedListingIds,
+  open,
+  onOpenChange,
+  onSavedChange,
+}: {
+  contactId: string;
+  matches: InventoryMatchResult[];
+  savedListingIds: string[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSavedChange: () => void;
+}) {
+  const savedSet = new Set(savedListingIds);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
+        <DialogHeader className="px-4 pt-4 pb-2 text-left space-y-1">
+          <DialogTitle className="text-base flex items-center gap-1.5">
+            <Sparkles className="h-4 w-4 text-violet-500" aria-hidden />
+            Matching Listings ({matches.length})
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Ranked by buyer preference fit. Internal preview only — not sent to the contact.
+          </DialogDescription>
+        </DialogHeader>
+        <ScrollArea className="max-h-[min(70vh,520px)] px-4 pb-4">
+          <div className="space-y-2 pr-3">
+            {matches.map((match) => (
+              <MatchListingCard
+                key={match.listingId}
+                contactId={contactId}
+                match={match}
+                saved={savedSet.has(match.listingId)}
+                onSavedChange={onSavedChange}
+              />
+            ))}
+          </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 interface MatchingListingsPanelProps {
   contactId: string;
   compact?: boolean;
 }
 
 export function MatchingListingsPanel({ contactId, compact = true }: MatchingListingsPanelProps) {
+  const [allMatchesOpen, setAllMatchesOpen] = useState(false);
   const { data: inventoryStatus } = useQuery({
     queryKey: ["/api/inventory/status"],
     queryFn: fetchInventoryStatus,
@@ -336,7 +386,11 @@ export function MatchingListingsPanel({ contactId, compact = true }: MatchingLis
   if (!contactId) return null;
 
   const matches = data?.matches ?? [];
-  const savedSet = new Set(data?.savedListingIds ?? []);
+  const matchCount = data?.matchCount ?? matches.length;
+  const previewMatches = matches.slice(0, SIDEBAR_PREVIEW_LIMIT);
+  const savedListingIds = data?.savedListingIds ?? [];
+  const savedSet = new Set(savedListingIds);
+  const hasMoreMatches = matches.length > SIDEBAR_PREVIEW_LIMIT;
   const showEmpty =
     isFetched &&
     data?.eligible &&
@@ -353,18 +407,20 @@ export function MatchingListingsPanel({ contactId, compact = true }: MatchingLis
       className={cn(compact ? "mt-0" : "mt-3")}
       data-testid="matching-listings-panel"
     >
-      <div className={cn("flex items-center justify-between", compact ? "mb-1" : "mb-2")}>
+      <div className={cn("flex items-center justify-between gap-2", compact ? "mb-1" : "mb-2")}>
         <span
           className={cn(
-            "font-semibold uppercase tracking-wide flex items-center gap-1",
+            "font-semibold uppercase tracking-wide flex items-center gap-1 min-w-0",
             compact ? "text-[9px] text-gray-500" : "text-xs text-gray-600",
           )}
         >
-          <Sparkles className="h-3 w-3 text-violet-500" aria-hidden />
-          Matching listings
+          <Sparkles className="h-3 w-3 text-violet-500 shrink-0" aria-hidden />
+          <span className="truncate">
+            Matching Listings{matchCount > 0 ? ` (${matchCount})` : ""}
+          </span>
         </span>
         {matches.length > 0 && (
-          <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-violet-200 text-violet-700">
+          <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-violet-200 text-violet-700 shrink-0">
             Internal preview
           </Badge>
         )}
@@ -387,9 +443,9 @@ export function MatchingListingsPanel({ contactId, compact = true }: MatchingLis
         </p>
       )}
 
-      {matches.length > 0 && (
+      {previewMatches.length > 0 && (
         <div className="space-y-2 mt-1">
-          {matches.map((match) => (
+          {previewMatches.map((match) => (
             <MatchListingCard
               key={match.listingId}
               contactId={contactId}
@@ -398,8 +454,27 @@ export function MatchingListingsPanel({ contactId, compact = true }: MatchingLis
               onSavedChange={() => void refetch()}
             />
           ))}
+          {hasMoreMatches && (
+            <button
+              type="button"
+              className="text-[10px] font-medium text-violet-700 hover:text-violet-900 hover:underline w-full text-left py-0.5"
+              onClick={() => setAllMatchesOpen(true)}
+              data-testid="button-view-all-matches"
+            >
+              View all matches
+            </button>
+          )}
         </div>
       )}
+
+      <AllMatchesDialog
+        contactId={contactId}
+        matches={matches}
+        savedListingIds={savedListingIds}
+        open={allMatchesOpen}
+        onOpenChange={setAllMatchesOpen}
+        onSavedChange={() => void refetch()}
+      />
     </div>
   );
 }
