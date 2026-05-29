@@ -11,12 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { InventoryMatchResult, InventoryMatchesResponse } from "@shared/inventory/inventoryMatchTypes";
 import { fetchInventoryStatus } from "@/lib/inventoryApi";
@@ -234,11 +228,6 @@ function MatchListingCard({
             {bedsBaths && (
               <p className="text-[10px] text-gray-600 leading-snug mt-0.5">{bedsBaths}</p>
             )}
-            {match.listing.addressLine1 && (
-              <p className="text-[10px] text-gray-500 leading-snug mt-0.5 truncate">
-                {match.listing.addressLine1}
-              </p>
-            )}
           </div>
           <div className="flex shrink-0 flex-col items-center gap-1 self-start w-7">
             <Badge
@@ -247,54 +236,41 @@ function MatchListingCard({
                 "text-[9px] px-1.5 py-0 h-5 font-semibold tabular-nums",
                 scoreBadgeClass(match.score),
               )}
-              title="Match score"
             >
               {match.score}
             </Badge>
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className="inline-flex h-5 w-5 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-                    onClick={viewListing}
-                    aria-label="View listing"
-                    data-testid={`button-view-listing-${match.listingId}`}
-                  >
-                    <Eye className="h-3 w-3" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="left">View listing</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className={cn(
-                      "inline-flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-gray-100",
-                      saved ? "text-rose-500 hover:text-rose-600" : "text-gray-400 hover:text-gray-600",
-                    )}
-                    disabled={saveMutation.isPending}
-                    onClick={() => saveMutation.mutate()}
-                    aria-label="Save to buyer shortlist"
-                    aria-pressed={saved}
-                    data-testid={`button-save-match-${match.listingId}`}
-                  >
-                    {saveMutation.isPending ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Heart
-                        className={cn(
-                          "h-3 w-3",
-                          saved ? "fill-rose-500 text-rose-500" : "",
-                        )}
-                      />
-                    )}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="left">Save to buyer shortlist</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <button
+              type="button"
+              className="inline-flex h-5 w-5 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+              onClick={viewListing}
+              aria-label="View listing"
+              data-testid={`button-view-listing-${match.listingId}`}
+            >
+              <Eye className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "inline-flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-gray-100",
+                saved ? "text-rose-500 hover:text-rose-600" : "text-gray-400 hover:text-gray-600",
+              )}
+              disabled={saveMutation.isPending}
+              onClick={() => saveMutation.mutate()}
+              aria-label="Save to buyer shortlist"
+              aria-pressed={saved}
+              data-testid={`button-save-match-${match.listingId}`}
+            >
+              {saveMutation.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Heart
+                  className={cn(
+                    "h-3 w-3",
+                    saved ? "fill-rose-500 text-rose-500" : "",
+                  )}
+                />
+              )}
+            </button>
           </div>
         </div>
 

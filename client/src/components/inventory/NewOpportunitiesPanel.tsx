@@ -3,12 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, Heart, Home, Loader2, Sparkles, Tag, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import type {
   InventoryOpportunitiesResponse,
   InventoryOpportunityResult,
@@ -142,64 +136,46 @@ function OpportunityCard({
               </p>
             </div>
             <div className="flex items-center gap-0.5 shrink-0">
-              <TooltipProvider delayDuration={200}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
-                      onClick={viewListing}
-                      aria-label="View listing"
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">View listing</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className={cn(
-                        "inline-flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-gray-100",
-                        saved ? "text-rose-500 hover:text-rose-600" : "text-gray-400 hover:text-gray-700",
-                      )}
-                      disabled={saveMutation.isPending}
-                      onClick={() => saveMutation.mutate()}
-                      aria-label="Save to buyer shortlist"
-                      aria-pressed={saved}
-                    >
-                      {saveMutation.isPending ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Heart className={cn("h-3.5 w-3.5", saved ? "fill-rose-500 text-rose-500" : "")} />
-                      )}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Save to buyer shortlist</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
-                      disabled={statusMutation.isPending}
-                      onClick={() => statusMutation.mutate("dismissed")}
-                      aria-label="Dismiss opportunity"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Dismiss</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <button
+                type="button"
+                className="inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                onClick={viewListing}
+                aria-label="View listing"
+              >
+                <Eye className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-gray-100",
+                  saved ? "text-rose-500 hover:text-rose-600" : "text-gray-400 hover:text-gray-700",
+                )}
+                disabled={saveMutation.isPending}
+                onClick={() => saveMutation.mutate()}
+                aria-label="Save to buyer shortlist"
+                aria-pressed={saved}
+              >
+                {saveMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Heart className={cn("h-3.5 w-3.5", saved ? "fill-rose-500 text-rose-500" : "")} />
+                )}
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                disabled={statusMutation.isPending}
+                onClick={() => statusMutation.mutate("dismissed")}
+                aria-label="Dismiss opportunity"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
               <Badge
                 variant="outline"
                 className={cn(
                   "text-[9px] px-1.5 py-0 h-5 font-semibold tabular-nums ml-0.5",
                   scoreBadgeClass(opportunity.score),
                 )}
-                title="Match score"
               >
                 {opportunity.score}
               </Badge>
