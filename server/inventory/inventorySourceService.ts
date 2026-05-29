@@ -5,7 +5,7 @@ import {
   providerSupportsListingSync,
   type InventoryProvider,
 } from "@shared/inventory/inventoryProviderSchema";
-import { mlsGridCredentialsSchema, mlsGridSourceConfigSchema, trestleCredentialsSchema, trestleSourceConfigSchema } from "@shared/inventory/inventoryListingSchema";
+import { mlsGridCredentialsSchema, mlsGridSourceConfigSchema, trestleCredentialsSchema, trestleSourceConfigSchema, bridgeInteractiveCredentialsSchema, bridgeInteractiveSourceConfigSchema } from "@shared/inventory/inventoryListingSchema";
 import { inventorySources, type InventorySource } from "@shared/schema";
 import {
   decryptSourceCredentials,
@@ -90,6 +90,9 @@ function sourceHasStoredCredentials(
   if (provider === "mls_grid") {
     return typeof creds.accessToken === "string" && creds.accessToken.length > 0;
   }
+  if (provider === "bridge_interactive") {
+    return typeof creds.serverToken === "string" && creds.serverToken.length > 0;
+  }
   return false;
 }
 
@@ -99,6 +102,9 @@ function defaultDisplayName(provider: InventoryProvider): string {
   }
   if (provider === "trestle") {
     return IS_PRODUCTION ? "My Trestle inventory" : "Trestle inventory source";
+  }
+  if (provider === "bridge_interactive") {
+    return IS_PRODUCTION ? "My Bridge inventory" : "Bridge inventory source";
   }
   return "Inventory source";
 }
@@ -126,6 +132,16 @@ function validateProviderPayload(
     const creds = trestleCredentialsSchema.safeParse(credentials);
     if (!creds.success) {
       return { ok: false, message: "Trestle client ID and client secret are required when connecting a new source." };
+    }
+  }
+  if (provider === "bridge_interactive") {
+    const cfg = bridgeInteractiveSourceConfigSchema.safeParse(config);
+    if (!cfg.success) {
+      return { ok: false, message: "Dataset ID is required." };
+    }
+    const creds = bridgeInteractiveCredentialsSchema.safeParse(credentials);
+    if (!creds.success) {
+      return { ok: false, message: "Server token is required when connecting a new source." };
     }
   }
   return { ok: true };
@@ -159,6 +175,13 @@ function mergeCredentialsPatch(
       next.clientId = existing.clientId;
     }
     return next;
+  }
+
+  if (provider === "bridge_interactive") {
+    if (typeof patch.serverToken === "string" && patch.serverToken.trim() === "") {
+      return undefined;
+    }
+    return patch;
   }
 
   return patch;
@@ -226,7 +249,11 @@ export async function updateSourceForUser(
     incomingConfig?.originatingSystemName != null &&
     String(incomingConfig.originatingSystemName).trim() !==
       String(existingConfig.originatingSystemName ?? "").trim();
-  if (origChanged) {
+  const datasetChanged =
+    incomingConfig?.datasetId != null &&
+    String(incomingConfig.datasetId).trim() !== String(existingConfig.datasetId ?? "").trim();
+  const feedIdentityChanged = origChanged || datasetChanged;
+  if (feedIdentityChanged) {
     nextConfig = {
       ...nextConfig,
       initialImportComplete: false,
@@ -270,7 +297,7 @@ export async function updateSourceForUser(
     patch.connectionStatus = "configuring";
   }
 
-  if (origChanged) {
+  if (feedIdentityChanged) {
     patch.lastSyncStatus = null;
     patch.lastSyncAt = null;
     patch.lastSyncError = null;

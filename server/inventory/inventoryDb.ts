@@ -323,7 +323,7 @@ export async function listListingSyncSourcesForReconciliation(): Promise<Invento
     .from(inventorySources)
     .where(
       and(
-        sql`${inventorySources.provider} in ('mls_grid', 'trestle')`,
+        sql`${inventorySources.provider} in ('mls_grid', 'trestle', 'bridge_interactive')`,
         eq(inventorySources.isActive, true),
         sql`${inventorySources.connectionStatus} = 'connected'`,
       ),

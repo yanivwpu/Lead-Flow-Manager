@@ -53,10 +53,13 @@ export async function runResoReplicationFetch(
   if (mode === "reconciliation") {
     const filter = provider.buildPropertyFilter(mode, options.maxModificationTimestamp);
     const extras = provider.buildPropertyQueryExtras(mode);
-    const startUrl = buildPropertyCollectionUrl(endpoint.baseUrl, endpoint.propertyResource, {
+    const propertyResource = provider.resolvePropertyResource?.(mode) ?? endpoint.propertyResource;
+    const pageSize = provider.resolvePageSize?.(mode) ?? endpoint.pageSize;
+    const startUrl = buildPropertyCollectionUrl(endpoint.baseUrl, propertyResource, {
       filter,
-      top: endpoint.pageSize,
+      top: pageSize,
       select: extras.select,
+      unselect: extras.unselect,
     });
 
     const activeListingIds: string[] = [];
@@ -87,11 +90,14 @@ export async function runResoReplicationFetch(
 
   const filter = provider.buildPropertyFilter(mode, options.maxModificationTimestamp);
   const extras = provider.buildPropertyQueryExtras(mode);
-  const startUrl = buildPropertyCollectionUrl(endpoint.baseUrl, endpoint.propertyResource, {
+  const propertyResource = provider.resolvePropertyResource?.(mode) ?? endpoint.propertyResource;
+  const pageSize = provider.resolvePageSize?.(mode) ?? endpoint.pageSize;
+  const startUrl = buildPropertyCollectionUrl(endpoint.baseUrl, propertyResource, {
     filter,
-    top: endpoint.pageSize,
+    top: pageSize,
     expand: extras.expand,
     select: extras.select,
+    unselect: extras.unselect,
   });
 
   const { rows: listings, pagesFetched } = await client.paginateCollection(startUrl, metrics);
@@ -129,9 +135,12 @@ export async function runResoConnectionProbe(
       endpoint.providerLabel,
     );
     const metrics = emptyResoFetchMetrics();
-    const url = buildPropertyCollectionUrl(endpoint.baseUrl, endpoint.propertyResource, {
+    const propertyResource = provider.resolvePropertyResource?.("initial") ?? endpoint.propertyResource;
+    const pageSize = provider.resolvePageSize?.("initial") ?? endpoint.pageSize;
+    const url = buildPropertyCollectionUrl(endpoint.baseUrl, propertyResource, {
       filter,
       top: 1,
+      unselect: provider.buildPropertyQueryExtras("initial").unselect,
     });
     const body = await client.fetchJson(url, metrics);
     const count = Array.isArray(body.value) ? body.value.length : 0;

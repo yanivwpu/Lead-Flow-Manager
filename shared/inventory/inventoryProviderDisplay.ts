@@ -34,9 +34,10 @@ export const INVENTORY_PROVIDER_UI_OPTIONS: Array<{
   {
     id: "bridge_interactive",
     label: "Bridge Interactive",
-    available: false,
+    available: true,
     tier: "primary",
-    helper: "Coming soon",
+    helper:
+      "Bridge Interactive RESO feed. Obtain your dataset ID and server token from your Bridge Data Output account.",
   },
   { id: "idx_broker", label: "IDX Broker", available: false, tier: "secondary", helper: "Coming soon" },
   {
@@ -271,6 +272,21 @@ export function friendlyInventoryErrorMessage(raw: string | null | undefined): s
   }
   if (msg.includes("Trestle HTTP")) {
     return "Could not reach Trestle. Try again later or contact your data provider.";
+  }
+  if (msg.includes("Bridge Interactive HTTP 401") || msg.includes("Bridge Interactive HTTP 403")) {
+    return "Bridge server token was rejected. Confirm your dataset ID and server token, then validate again.";
+  }
+  if (msg.includes("Bridge Interactive HTTP 429")) {
+    return "Too many requests to Bridge Interactive. Wait a few minutes and sync again.";
+  }
+  if (msg.includes("Bridge Interactive HTTP")) {
+    return "Could not reach Bridge Interactive. Try again later or contact your data provider.";
+  }
+  if (msg.includes("datasetId") || msg.includes("Dataset ID")) {
+    return "Dataset ID is required.";
+  }
+  if (msg.includes("serverToken") || msg.includes("server token")) {
+    return "Server token is required when connecting a new inventory source.";
   }
   if (msg.includes("clientId") || msg.includes("clientSecret") || msg.includes("client ID")) {
     return "Trestle client ID and client secret are required when connecting a new inventory source.";

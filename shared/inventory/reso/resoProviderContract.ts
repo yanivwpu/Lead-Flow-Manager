@@ -28,6 +28,7 @@ export type ResoEndpointConfig = {
 export type ResoPropertyQueryExtras = {
   expand?: string;
   select?: string;
+  unselect?: string;
 };
 
 /** Provider-specific RESO replication hooks — auth, filters, normalization. */
@@ -41,6 +42,10 @@ export interface ResoReplicationProviderContract {
   buildPropertyQueryExtras(mode: ResoSyncMode): ResoPropertyQueryExtras;
   extractListingId(raw: unknown): string | null;
   normalizeProperty(raw: unknown): NormalizedInventoryListing | null;
+  /** Override OData resource path segment, e.g. Property/replication. */
+  resolvePropertyResource?(mode: ResoSyncMode): string;
+  /** Override page size per sync mode when provider limits differ. */
+  resolvePageSize?(mode: ResoSyncMode): number;
 }
 
 export type ResoReplicationFetchOptions = {

@@ -58,6 +58,15 @@ function friendlySyncError(raw: string): string {
   if (raw.includes("Trestle HTTP")) {
     return "Could not reach Trestle. Try again later or contact your data provider.";
   }
+  if (raw.includes("Bridge Interactive HTTP 401") || raw.includes("Bridge Interactive HTTP 403")) {
+    return "Bridge server token was rejected. Check your token and dataset ID.";
+  }
+  if (raw.includes("Bridge Interactive HTTP 429")) {
+    return "Bridge rate limit reached. Wait a few minutes and sync again.";
+  }
+  if (raw.includes("Bridge Interactive HTTP")) {
+    return "Could not reach Bridge Interactive. Try again later or contact your data provider.";
+  }
   return raw.slice(0, 2000);
 }
 

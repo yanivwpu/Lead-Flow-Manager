@@ -20,6 +20,7 @@ export function buildPropertyCollectionUrl(
     top?: number;
     expand?: string;
     select?: string;
+    unselect?: string;
   },
 ): string {
   const parts: string[] = [`${baseUrl.replace(/\/$/, "")}/${resource}?`];
@@ -28,6 +29,7 @@ export function buildPropertyCollectionUrl(
   if (params.top != null) query.push(`$top=${params.top}`);
   if (params.expand) query.push(`$expand=${encodeURIComponent(params.expand)}`);
   if (params.select) query.push(`$select=${encodeURIComponent(params.select)}`);
+  if (params.unselect) query.push(`$unselect=${encodeURIComponent(params.unselect)}`);
   return parts[0] + query.join("&");
 }
 

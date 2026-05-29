@@ -64,7 +64,11 @@ export type TrestleInventorySourceForm = {
   clientSecret: string;
 };
 
-export type InventorySourceForm = MlsInventorySourceForm & TrestleInventorySourceForm;
+export type InventorySourceForm = MlsInventorySourceForm &
+  TrestleInventorySourceForm & {
+    datasetId: string;
+    serverToken: string;
+  };
 
 export function buildMlsSourcePayload(form: MlsInventorySourceForm, isUpdate: boolean) {
   const defaultName = typeof import.meta !== "undefined" && import.meta.env?.PROD
@@ -116,13 +120,44 @@ export function buildTrestleSourcePayload(form: TrestleInventorySourceForm, isUp
   return payload;
 }
 
+export function buildBridgeSourcePayload(
+  form: Pick<InventorySourceForm, "displayName" | "datasetId" | "serverToken">,
+  isUpdate: boolean,
+) {
+  const defaultName =
+    typeof import.meta !== "undefined" && import.meta.env?.PROD
+      ? "My Bridge inventory"
+      : "Bridge inventory source";
+  const payload: {
+    provider: "bridge_interactive";
+    displayName: string;
+    config: { datasetId: string; expandMedia: boolean };
+    credentials?: { serverToken: string };
+  } = {
+    provider: "bridge_interactive",
+    displayName: form.displayName.trim() || defaultName,
+    config: {
+      datasetId: form.datasetId.trim(),
+      expandMedia: true,
+    },
+  };
+  const serverToken = form.serverToken.trim();
+  if (serverToken || !isUpdate) {
+    payload.credentials = { serverToken };
+  }
+  return payload;
+}
+
 export function buildInventorySourcePayload(
-  provider: "mls_grid" | "trestle",
+  provider: "mls_grid" | "trestle" | "bridge_interactive",
   form: InventorySourceForm,
   isUpdate: boolean,
 ) {
   if (provider === "trestle") {
     return buildTrestleSourcePayload(form, isUpdate);
+  }
+  if (provider === "bridge_interactive") {
+    return buildBridgeSourcePayload(form, isUpdate);
   }
   return buildMlsSourcePayload(form, isUpdate);
 }

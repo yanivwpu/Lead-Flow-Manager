@@ -89,3 +89,24 @@ export const trestleCredentialsSchema = z.object({
 });
 
 export type TrestleCredentials = z.infer<typeof trestleCredentialsSchema>;
+
+/** Bridge Interactive source config — dataset + shared RESO sync cursor fields. */
+export const bridgeInteractiveSourceConfigSchema = z.object({
+  datasetId: z.string().min(1),
+  additionalFilter: z.string().optional(),
+  /** When false, omit embedded Media from Property payloads via $unselect. */
+  expandMedia: z.boolean().default(true),
+  initialImportComplete: z.boolean().optional(),
+  maxModificationTimestamp: z.string().optional(),
+  lastReconciliationAt: z.string().optional(),
+  lastSuccessfulSyncAt: z.string().optional(),
+  lastFailedSyncAt: z.string().optional(),
+});
+
+export type BridgeInteractiveSourceConfig = z.infer<typeof bridgeInteractiveSourceConfigSchema>;
+
+export const bridgeInteractiveCredentialsSchema = z.object({
+  serverToken: z.string().min(1),
+});
+
+export type BridgeInteractiveCredentials = z.infer<typeof bridgeInteractiveCredentialsSchema>;

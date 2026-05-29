@@ -54,15 +54,24 @@ const EMPTY_FORM: InventorySourceForm = {
   accessToken: "",
   clientId: "",
   clientSecret: "",
+  datasetId: "",
+  serverToken: "",
 };
 
 const PRODUCTION_UI = import.meta.env.PROD;
 
 function defaultDisplayNamePlaceholder(provider: InventoryProvider): string {
+  if (provider === "bridge_interactive") {
+    return PRODUCTION_UI ? "My Bridge inventory" : "Bridge inventory source";
+  }
   if (provider === "trestle") {
     return PRODUCTION_UI ? "My Trestle inventory" : "Trestle inventory source";
   }
   return PRODUCTION_UI ? "My MLS inventory" : "Primary inventory source";
+}
+
+function datasetIdPlaceholder(): string {
+  return PRODUCTION_UI ? "From your Bridge Data Output account" : "e.g. abor_ref";
 }
 
 function originatingSystemPlaceholder(provider: InventoryProvider): string {
@@ -100,6 +109,8 @@ function loadFormFromSource(source: PublicInventorySource | undefined): Inventor
     accessToken: "",
     clientId: "",
     clientSecret: "",
+    datasetId: typeof cfg.datasetId === "string" ? cfg.datasetId : "",
+    serverToken: "",
   };
 }
 
@@ -160,11 +171,18 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       }
       const isUpdate = !!activeSource;
       const payload = buildInventorySourcePayload(
-        selectedProvider as "mls_grid" | "trestle",
+        selectedProvider as "mls_grid" | "trestle" | "bridge_interactive",
         form,
         isUpdate,
       );
-      if (!payload.config.originatingSystemName) {
+      if (selectedProvider === "bridge_interactive") {
+        if (!(payload.config as { datasetId?: string }).datasetId) {
+          throw new Error("Dataset ID is required.");
+        }
+        if (!isUpdate && !(payload.credentials as { serverToken?: string } | undefined)?.serverToken) {
+          throw new Error("Server token is required when connecting a new source.");
+        }
+      } else if (!payload.config.originatingSystemName) {
         throw new Error("Originating system name is required.");
       }
       if (selectedProvider === "mls_grid") {
@@ -187,7 +205,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
-      setForm((f) => ({ ...f, accessToken: "", clientId: "", clientSecret: "" }));
+      setForm((f) => ({ ...f, accessToken: "", clientId: "", clientSecret: "", serverToken: "" }));
       toast({
         title: "Inventory source saved",
         description: "Validate your connection to start importing listings.",
@@ -347,6 +365,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const isListingSyncProvider = providerSupportsListingSync(selectedProvider);
   const isMlsGrid = selectedProvider === "mls_grid";
   const isTrestle = selectedProvider === "trestle";
+  const isBridge = selectedProvider === "bridge_interactive";
   const showSyncMetrics =
     sourcePhase?.phase === "initial_import_running" ||
     sourcePhase?.phase === "initial_import_complete" ||
@@ -431,22 +450,40 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         data-testid="input-inventory-display-name"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="inventory-originating-system">Originating system name</Label>
-                      <Input
-                        id="inventory-originating-system"
-                        value={form.originatingSystemName}
-                        onChange={(e) => setForm((f) => ({ ...f, originatingSystemName: e.target.value }))}
-                        placeholder={originatingSystemPlaceholder(selectedProvider)}
-                        autoComplete="off"
-                        data-testid="input-inventory-originating-system"
-                      />
-                      <p className="text-[11px] text-muted-foreground">
-                        {isTrestle
-                          ? "Use the originating system name from your Trestle feed configuration."
-                          : "Use the originating system name and access token provided by your MLS data provider."}
-                      </p>
-                    </div>
+                    {(isMlsGrid || isTrestle) && (
+                      <div className="space-y-2">
+                        <Label htmlFor="inventory-originating-system">Originating system name</Label>
+                        <Input
+                          id="inventory-originating-system"
+                          value={form.originatingSystemName}
+                          onChange={(e) => setForm((f) => ({ ...f, originatingSystemName: e.target.value }))}
+                          placeholder={originatingSystemPlaceholder(selectedProvider)}
+                          autoComplete="off"
+                          data-testid="input-inventory-originating-system"
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          {isTrestle
+                            ? "Use the originating system name from your Trestle feed configuration."
+                            : "Use the originating system name and access token provided by your MLS data provider."}
+                        </p>
+                      </div>
+                    )}
+                    {isBridge && (
+                      <div className="space-y-2">
+                        <Label htmlFor="inventory-dataset-id">Dataset ID</Label>
+                        <Input
+                          id="inventory-dataset-id"
+                          value={form.datasetId}
+                          onChange={(e) => setForm((f) => ({ ...f, datasetId: e.target.value }))}
+                          placeholder={datasetIdPlaceholder()}
+                          autoComplete="off"
+                          data-testid="input-inventory-dataset-id"
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Use the dataset ID from your Bridge Data Output account (e.g. your MLS dataset key).
+                        </p>
+                      </div>
+                    )}
                     {isMlsGrid && (
                       <div className="space-y-2">
                         <Label htmlFor="inventory-access-token">Access token</Label>
@@ -478,6 +515,41 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                           <p className="text-[11px] text-muted-foreground">
                             Token is stored securely and never shown again after save. If MLS Grid rotates your
                             token, paste the new one here and save — the previous token is replaced.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {isBridge && (
+                      <div className="space-y-2">
+                        <Label htmlFor="inventory-server-token">Server token</Label>
+                        <div className="relative">
+                          <Input
+                            id="inventory-server-token"
+                            type={showSecrets ? "text" : "password"}
+                            value={form.serverToken}
+                            onChange={(e) => setForm((f) => ({ ...f, serverToken: e.target.value }))}
+                            placeholder={
+                              activeSource?.hasCredentials
+                                ? "••••••••  (leave blank to keep)"
+                                : "Paste Bridge server token"
+                            }
+                            autoComplete="off"
+                            className="pr-10"
+                            data-testid="input-inventory-server-token"
+                          />
+                          <button
+                            type="button"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            onClick={() => setShowSecrets((v) => !v)}
+                            aria-label={showSecrets ? "Hide token" : "Show token"}
+                          >
+                            {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                        {activeSource?.hasCredentials && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Token is stored securely and never shown again after save. Paste a new server
+                            token here to rotate credentials.
                           </p>
                         )}
                       </div>
