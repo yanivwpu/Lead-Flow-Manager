@@ -1,6 +1,15 @@
 import type { ConversationMessage } from "./conversationIntelligence";
+import {
+  bucketFromNumericScore,
+  buildTagDiagnostics,
+  hasGenuineConversationActivity,
+  hasSubstantiveInboundText,
+  isInboundMediaOnlyMessages,
+  MIN_HOT_TAG_SCORE,
+  type LeadBucket,
+} from "@shared/leadQualification";
 
-export type LeadBucket = "hot" | "warm" | "cold" | "unqualified";
+export type { LeadBucket } from "@shared/leadQualification";
 
 export type BusinessQualifyingQuestion = {
   key?: string;
@@ -42,6 +51,9 @@ export type LeadScoreResult = {
   negativeSignals: string[];
   confidence: number; // 0–1
   signals: LeadScoringSignals;
+  /** Why inbox system tags would apply (audit / logging). */
+  tagDiagnostics: string[];
+  mediaOnly: boolean;
 };
 
 type ScoreOptions = {
@@ -190,14 +202,21 @@ function detectQuestionInterest(inbound: string): boolean {
   );
 }
 
-function computeEngagementScore(stats: ReturnType<typeof messageStats>): { value: number; detected: string[] } {
+function computeEngagementScore(
+  stats: ReturnType<typeof messageStats>,
+  inboundJoined: string,
+): { value: number; detected: string[] } {
   const detected: string[] = [];
-  const msgPts =
-    stats.inbound >= 4 ? 14 : stats.inbound === 3 ? 12 : stats.inbound === 2 ? 8 : stats.inbound === 1 ? 5 : 0;
-  if (msgPts >= 12) detected.push("engagement:messages_high");
-  else if (msgPts >= 5) detected.push("engagement:messages_some");
+  if (!hasGenuineConversationActivity(stats, inboundJoined)) {
+    return { value: 0, detected: ["engagement:insufficient_activity"] };
+  }
 
-  const turnPts = stats.turns >= 3 ? 11 : stats.turns === 2 ? 8 : stats.turns === 1 ? 4 : 0;
+  const msgPts =
+    stats.inbound >= 4 ? 14 : stats.inbound === 3 ? 12 : stats.inbound === 2 ? 8 : 0;
+  if (msgPts >= 12) detected.push("engagement:messages_high");
+  else if (msgPts >= 8) detected.push("engagement:messages_some");
+
+  const turnPts = stats.turns >= 3 ? 11 : stats.turns === 2 ? 8 : 0;
   if (turnPts >= 8) detected.push("engagement:back_and_forth");
   else if (turnPts >= 4) detected.push("engagement:dialog_started");
 
@@ -473,6 +492,43 @@ export function scoreLead(
   const stats = messageStats(messages);
   const isRealEstate = inferIsRealEstate(businessKnowledge, options);
   const reSignalsForQual = isRealEstate ? extractRealEstateSignals(inbound) : null;
+  const mediaOnly = isInboundMediaOnlyMessages(messages);
+
+  if (mediaOnly && !hasSubstantiveInboundText(inbound)) {
+    const { missingRequired } = computeQualificationCompleteness({
+      inbound,
+      isRealEstate,
+      realEstateSignals: reSignalsForQual,
+      qualifyingQuestions: businessKnowledge?.qualifyingQuestions,
+    });
+    const reasons = ["Media-only message — no buyer inquiry"];
+    const tagDiagnostics = buildTagDiagnostics({
+      score: 8,
+      bucket: "unqualified",
+      confidence: 0.88,
+      reasons,
+      stats,
+      mediaOnly: true,
+      inboundJoined: inbound,
+      scoreSource: "conversation",
+    });
+    console.info("[lead-qualification]", { tagDiagnostics });
+    return {
+      score: 8,
+      bucket: "unqualified",
+      reasons,
+      missingRequired,
+      negativeSignals: reasons,
+      confidence: 0.88,
+      signals: {
+        core: { ...emptyCoreSignals(), negativeScore: 12 },
+        industry: null,
+        detected: ["negative:media_only"],
+      },
+      tagDiagnostics,
+      mediaOnly: true,
+    };
+  }
 
   const hardHits = HARD_NEGATIVE_PATTERNS.filter((p) => p.re.test(inbound));
   const negativeSignals = hardHits.map((n) => n.reason);
@@ -483,6 +539,17 @@ export function scoreLead(
       realEstateSignals: reSignalsForQual,
       qualifyingQuestions: businessKnowledge?.qualifyingQuestions,
     });
+    const tagDiagnostics = buildTagDiagnostics({
+      score: 0,
+      bucket: "unqualified",
+      confidence: 0.9,
+      reasons: negativeSignals,
+      stats,
+      mediaOnly,
+      inboundJoined: inbound,
+      scoreSource: "conversation",
+    });
+    console.info("[lead-qualification]", { tagDiagnostics });
     return {
       score: 0,
       bucket: "unqualified",
@@ -495,10 +562,12 @@ export function scoreLead(
         industry: null,
         detected: hardHits.map((h) => `negative:${h.key}`),
       },
+      tagDiagnostics,
+      mediaOnly,
     };
   }
 
-  const engagement = computeEngagementScore(stats);
+  const engagement = computeEngagementScore(stats, inbound);
   const interest = computeInterestScore(inbound);
   const decision = computeDecisionScore(inbound);
   const urgency = computeUrgencyScore(inbound);
@@ -538,7 +607,7 @@ export function scoreLead(
     score += comboBoost;
   }
 
-  const dealReadyIntent = detectDealReadyIntent(inbound);
+  const dealReadyIntent = !mediaOnly && detectDealReadyIntent(inbound);
 
   let decisionOverride = false;
   let dealReadyOverride = false;
@@ -580,8 +649,9 @@ export function scoreLead(
     reasons.push("Customer appears ready to move forward");
   }
   if (comboBoost > 0) reasons.push("Customer asked about pricing and buying");
-  if (engagement.value >= 12) reasons.push("Customer is highly engaged");
-  else if (engagement.value >= 6) reasons.push("Customer is engaged");
+  const genuineActivity = hasGenuineConversationActivity(stats, inbound);
+  if (genuineActivity && engagement.value >= 12) reasons.push("Customer is highly engaged");
+  else if (genuineActivity && engagement.value >= 6) reasons.push("Customer is engaged");
   if (interest.detected.some((d) => d.startsWith("interest:"))) reasons.push("Customer is exploring options");
   if (decision.detected.length > 0) reasons.push("Customer appears ready to move forward");
   if (urgency.detected.length > 0 || criticalUrgency.boost > 0) reasons.push("Customer seems time-sensitive");
@@ -616,6 +686,18 @@ export function scoreLead(
 
   const uniqReasons = Array.from(new Set(reasons)).slice(0, 10);
 
+  const tagDiagnostics = buildTagDiagnostics({
+    score,
+    bucket,
+    confidence,
+    reasons: uniqReasons,
+    stats,
+    mediaOnly,
+    inboundJoined: inbound,
+    scoreSource: "conversation",
+  });
+  console.info("[lead-qualification]", { tagDiagnostics });
+
   return {
     score,
     bucket,
@@ -630,6 +712,8 @@ export function scoreLead(
       decisionOverride,
       dealReadyOverride,
     },
+    tagDiagnostics,
+    mediaOnly,
   };
 }
 

@@ -18,6 +18,7 @@ import {
   resolveRgeCustomerSchedulingUrl,
 } from "./rgeCustomerSchedulingUrl";
 import { formatScoreActivityEvent } from "@shared/customerBehaviorCopy";
+import { bucketFromNumericScore, systemTagForQualification } from "@shared/leadQualification";
 import { channelService } from "./channelService";
 import { isLegacyCalendlyWorkflowChat } from "./userTwilio";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
@@ -1029,11 +1030,9 @@ function leadScoreBucket(score: number): "hot" | "warm" | "mild" | "cold" {
   return "cold";
 }
 
-function tagForLeadScoreBucket(bucket: ReturnType<typeof leadScoreBucket>): string | null {
-  if (bucket === "hot") return "Hot Lead";
-  if (bucket === "warm") return "Warm Lead";
-  if (bucket === "cold" || bucket === "mild") return "Cold Lead";
-  return null;
+function tagForLeadScore(score: number): string | null {
+  const bucket = bucketFromNumericScore(score);
+  return systemTagForQualification(bucket, score);
 }
 
 const SHOWING_REQUEST_RE =
@@ -1310,13 +1309,17 @@ export async function runW2QualificationEngine(
           signals,
         });
 
-        const tagSuggestion = tagForLeadScoreBucket(bucketAfter);
+        const tagSuggestion = tagForLeadScore(nextLead);
+        const unifiedBucket = bucketFromNumericScore(nextLead);
         const tagUpdate =
           tagSuggestion &&
           fresh.tag !== "Do Not Contact" &&
           fresh.tag !== "Appointment Requested" &&
           fresh.tag !== "Appointment Booked" &&
-          (bucketAfter === "hot" || bucketAfter === "warm" || (bucketBefore !== bucketAfter && bucketAfter === "cold"))
+          (unifiedBucket === "hot" ||
+            unifiedBucket === "warm" ||
+            unifiedBucket === "unqualified" ||
+            (bucketBefore !== bucketAfter && bucketAfter === "cold"))
             ? { tag: tagSuggestion }
             : {};
 

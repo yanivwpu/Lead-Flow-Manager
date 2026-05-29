@@ -6,6 +6,12 @@
 
 import { humanizeScoringReasons } from "@shared/customerBehaviorCopy";
 import {
+  bucketFromNumericScore,
+  buildTagDiagnostics,
+  MIN_HOT_TAG_SCORE,
+  qualifiesForHotTag,
+} from "@shared/leadQualification";
+import {
   scoreLead,
   type BusinessKnowledgeForScoring,
   type LeadScoringSignals,
@@ -61,6 +67,8 @@ export interface LeadScoreDetails {
   scoreSource?: "crm" | "conversation";
   /** Message-only score (same scale as `score`) when `scoreSource === "crm"`. */
   conversationScore?: number;
+  tagDiagnostics?: string[];
+  mediaOnly?: boolean;
 }
 
 export interface CopilotIntelligence extends QualificationData {
@@ -300,10 +308,6 @@ function normalizeCrmLeadScore(raw: unknown): number | null {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
-function bucketFromNumericScore(score: number): LeadBucket {
-  return score >= 75 ? "hot" : score >= 45 ? "warm" : score >= 15 ? "cold" : "unqualified";
-}
-
 function leadScoreBadgeFromBucket(bucket: LeadBucket, confidence01: number): LeadScore {
   const confidence = Math.round(Math.max(0, Math.min(1, confidence01)) * 100);
   if (bucket === "unqualified") {
@@ -392,10 +396,49 @@ export function analyzeConversation(
   const signalCount   = [hasBudget, hasTimeline, hasFinancing].filter(Boolean).length;
 
   const scoring = scoreLead(messages, opts?.businessKnowledge ?? { industry: opts?.industry }, { isRealEstate });
-  const useCrm = crmScore != null;
-  const displayBucket: LeadBucket = useCrm ? bucketFromNumericScore(crmScore) : scoring.bucket;
-  const displayScore = useCrm ? crmScore : scoring.score;
-  const confidence01 = useCrm ? Math.max(scoring.confidence, 0.78) : scoring.confidence;
+
+  const conversationDisqualifies =
+    scoring.bucket === "unqualified" ||
+    scoring.score < MIN_HOT_TAG_SCORE ||
+    scoring.mediaOnly;
+
+  let displayBucket: LeadBucket = scoring.bucket;
+  let displayScore = scoring.score;
+  let scoreSource: "crm" | "conversation" = "conversation";
+
+  if (crmScore != null && !conversationDisqualifies) {
+    const crmBucket = bucketFromNumericScore(crmScore);
+    displayBucket = crmBucket;
+    displayScore = crmScore;
+    scoreSource = "crm";
+    if (displayBucket === "hot" && displayScore < MIN_HOT_TAG_SCORE) {
+      displayBucket = "unqualified";
+    }
+  }
+
+  const confidence01 =
+    scoreSource === "crm"
+      ? Math.max(scoring.confidence, 0.78)
+      : scoring.confidence;
+
+  const tagDiagnostics =
+    scoreSource === "crm"
+      ? buildTagDiagnostics({
+          score: displayScore,
+          bucket: displayBucket,
+          confidence: confidence01,
+          reasons: scoring.reasons,
+          stats: {
+            inbound: inboundCount,
+            outbound: messages.length - inboundCount,
+            turns: Math.min(inboundCount, messages.filter((m) => m.direction === "outbound").length),
+          },
+          mediaOnly: scoring.mediaOnly,
+          inboundJoined: messages.filter((m) => m.direction === "inbound").map((m) => m.content).join(" "),
+          scoreSource,
+        })
+      : scoring.tagDiagnostics;
+
   const leadScore = leadScoreBadgeFromBucket(displayBucket, confidence01);
   const aiState   = computeAiState(hasBudget, hasTimeline, hasFinancing, messageCount, lastDirection, isUrgent);
 
@@ -413,8 +456,10 @@ export function analyzeConversation(
       negativeSignals: scoring.negativeSignals,
       confidence01,
       signals: scoring.signals,
-      scoreSource: useCrm ? "crm" : "conversation",
-      conversationScore: useCrm ? scoring.score : undefined,
+      scoreSource,
+      conversationScore: scoreSource === "crm" ? scoring.score : undefined,
+      tagDiagnostics,
+      mediaOnly: scoring.mediaOnly,
     },
     aiState,
     signalCount, isUrgent, messageCount, lastDirection,
@@ -558,8 +603,11 @@ export function computeWorkflow(
   let tagAutoApply = false;
   const isNeutralTag = NEUTRAL_TAGS.has(contact.tag || '');
 
-  // Hot lead overrides to Hot Lead tag
-  if (intel.leadScore.label === 'Hot' && contact.tag !== 'Hot Lead') {
+  // Hot lead overrides to Hot Lead tag (aligned with unified qualification model)
+  const hotEligible =
+    intel.leadScoreDetails?.bucket === "hot" &&
+    qualifiesForHotTag(intel.leadScoreDetails.bucket, intel.leadScoreDetails.score ?? 0);
+  if (hotEligible && contact.tag !== "Hot Lead") {
     tagSuggestion = 'Hot Lead';
     tagAutoApply = isNeutralTag || contact.tag === 'Warm Lead';
   } else if (intel.intent !== 'Browsing') {

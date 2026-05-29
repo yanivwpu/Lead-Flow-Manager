@@ -9,6 +9,10 @@ import {
   hasFinancingDiscussionFromSignals,
   hasShowingInterestFromSignals,
 } from "./customerBehaviorCopy";
+import {
+  hasGenuineConversationActivity,
+  MIN_HOT_TAG_SCORE,
+} from "./leadQualification";
 
 export type CustomerInsightContext = {
   reasons?: string[];
@@ -17,6 +21,11 @@ export type CustomerInsightContext = {
   viewingIntent?: boolean;
   signals?: unknown;
   missingRequiredCount?: number;
+  score?: number;
+  mediaOnly?: boolean;
+  inboundCount?: number;
+  conversationTurns?: number;
+  inboundText?: string;
 };
 
 type InsightCandidate = { group: string; rank: number; bullet: string };
@@ -70,13 +79,28 @@ const REASON_INSIGHTS: Record<string, InsightCandidate> = {
 };
 
 export function buildCustomerInsights(ctx: CustomerInsightContext): string[] {
+  const bucket = ctx.bucket ?? "";
+  const score = ctx.score ?? 0;
+  const mediaOnly = ctx.mediaOnly === true;
+  const activityStats = {
+    inbound: ctx.inboundCount ?? 0,
+    outbound: 0,
+    turns: ctx.conversationTurns ?? 0,
+  };
+  const genuineActivity =
+    !mediaOnly &&
+    bucket !== "unqualified" &&
+    hasGenuineConversationActivity(activityStats, ctx.inboundText ?? "");
+
   const items: InsightCandidate[] = [];
   const rawReasons = ctx.reasons ?? [];
   for (const reason of rawReasons) {
     const human = humanizeScoringReason(reason);
     if (!human) continue;
     const mapped = REASON_INSIGHTS[human];
-    if (mapped) items.push(mapped);
+    if (!mapped) continue;
+    if (mapped.group === "engagement" && !genuineActivity) continue;
+    items.push(mapped);
   }
 
   const showing =
@@ -105,7 +129,9 @@ export function buildCustomerInsights(ctx: CustomerInsightContext): string[] {
 
   if (
     items.length === 0 &&
-    (ctx.bucket === "hot" || ctx.bucket === "warm") &&
+    (bucket === "hot" || bucket === "warm") &&
+    score >= MIN_HOT_TAG_SCORE &&
+    !mediaOnly &&
     ctx.intent &&
     ctx.intent !== "Browsing"
   ) {

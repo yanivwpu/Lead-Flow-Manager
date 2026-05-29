@@ -80,6 +80,7 @@ import { BuyerPreferencesPanel } from "@/components/BuyerPreferencesPanel";
 import { MatchingListingsPanel } from "@/components/inventory/MatchingListingsPanel";
 import { NewOpportunitiesPanel } from "@/components/inventory/NewOpportunitiesPanel";
 import { buildBuyerPreferenceChips } from "@shared/buyerPreferenceDisplay";
+import { isQualificationDowngrade, systemTagForQualification } from "@shared/leadQualification";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
 
@@ -1279,14 +1280,25 @@ export function InboxLeadDetailsPanel({
         viewingIntent: stageSignals.viewingIntent,
         signals: intel.leadScoreDetails?.signals?.detected,
         missingRequiredCount: intel.leadScoreDetails?.missingRequired?.length ?? 0,
+        score: intel.leadScoreDetails?.score,
+        mediaOnly: intel.leadScoreDetails?.mediaOnly,
+        inboundCount: messages.filter((m) => m.direction === "inbound").length,
+        conversationTurns: Math.min(
+          messages.filter((m) => m.direction === "inbound").length,
+          messages.filter((m) => m.direction === "outbound").length,
+        ),
+        inboundText: messages.filter((m) => m.direction === "inbound").map((m) => m.content).join(" "),
       }),
     [
       intel.leadScoreDetails?.reasons,
       intel.leadScoreDetails?.bucket,
       intel.leadScoreDetails?.missingRequired,
+      intel.leadScoreDetails?.score,
+      intel.leadScoreDetails?.mediaOnly,
       intel.intent,
       stageSignals.viewingIntent,
       intel.leadScoreDetails?.signals?.detected,
+      messages,
     ],
   );
 
@@ -1346,16 +1358,14 @@ export function InboxLeadDetailsPanel({
     const d = intel.leadScoreDetails;
     if (!d) return;
 
-    // Mapping: hot/warm/unqualified only. cold → no auto-tag.
-    const desiredTag =
-      d.bucket === "hot" ? "Hot Lead" :
-      d.bucket === "warm" ? "Warm Lead" :
-      d.bucket === "unqualified" ? "Unqualified" :
-      null;
+    const desiredTag = systemTagForQualification(
+      d.bucket as "hot" | "warm" | "cold" | "unqualified",
+      d.score ?? 0,
+    );
     if (!desiredTag) return;
 
-    // Confidence threshold
-    if ((d.confidence01 ?? 0) < 0.75) return;
+    const isDowngrade = isQualificationDowngrade(desiredTag, contact.tag);
+    if (!isDowngrade && (d.confidence01 ?? 0) < 0.75) return;
 
     const key = `${contact.id}:${desiredTag}:${Math.round((d.confidence01 ?? 0) * 100)}:${d.score}`;
     if (systemScoreTagKeyRef.current === key) return;
@@ -1369,25 +1379,34 @@ export function InboxLeadDetailsPanel({
         bucket: d.bucket,
         score: d.score,
         confidence: d.confidence01,
+        reasons: d.reasons,
+        tagDiagnostics: d.tagDiagnostics,
       }),
     })
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((resp) => {
-        // Server is source of truth; log for auditability without mutating UI state here.
-        // Contact updates will arrive via normal refetch/invalidation paths in the app.
-        if (resp?.applied) {
-          console.info("[system-score-tag] applied", {
+        if (resp?.applied || resp?.skipped) {
+          console.info("[system-score-tag]", {
             contactId: contact.id,
+            applied: resp.applied,
+            skipped: resp.skipped,
+            reason: resp.reason,
             oldTag: resp.oldTag,
             newTag: resp.newTag,
             bucket: d.bucket,
             score: d.score,
             confidence: d.confidence01,
+            tagDiagnostics: d.tagDiagnostics ?? resp.tagDiagnostics,
           });
+        }
+        if (resp?.applied && resp.newTag) {
+          onUpdateContact({ tag: resp.newTag });
+          void queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+          void queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
         }
       })
       .catch(() => {});
-  }, [contact.id, intel.leadScoreDetails]);
+  }, [contact.id, intel.leadScoreDetails, contact.tag, onUpdateContact, queryClient]);
 
   const completeAction = (actionType: string, toastMsg: string) => {
     setFadingAction(actionType);

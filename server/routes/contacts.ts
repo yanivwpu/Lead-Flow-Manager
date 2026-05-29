@@ -6,6 +6,11 @@ import { storage } from "../storage";
 import { channelService } from "../channelService";
 import { scheduleHubSpotAutoSync, contactPatchAffectsHubSpot } from "../hubspotAutoSync";
 import { withAutomationSendGuard, type AutomationSendGuardSource } from "../automationSendGuard";
+import {
+  isQualificationDowngrade,
+  MIN_HOT_TAG_SCORE,
+  systemTagForQualification,
+} from "@shared/leadQualification";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
@@ -429,6 +434,12 @@ export function registerContactRoutes(app: Express): void {
       const bucket = String(req.body?.bucket || "").toLowerCase();
       const score = typeof req.body?.score === "number" ? req.body.score : undefined;
       const confidence = typeof req.body?.confidence === "number" ? req.body.confidence : undefined;
+      const reasons = Array.isArray(req.body?.reasons)
+        ? req.body.reasons.filter((r: unknown) => typeof r === "string")
+        : [];
+      const tagDiagnostics = Array.isArray(req.body?.tagDiagnostics)
+        ? req.body.tagDiagnostics.filter((r: unknown) => typeof r === "string")
+        : [];
 
       const SYSTEM_TAGS = ["Hot Lead", "Warm Lead", "Unqualified"] as const;
       const isSystemTag = (t: string | null | undefined) => SYSTEM_TAGS.includes((t || "") as any);
@@ -437,19 +448,38 @@ export function registerContactRoutes(app: Express): void {
         return v === "" || v.toLowerCase() === "new";
       };
 
-      const desiredTag =
-        bucket === "hot" ? "Hot Lead" :
-        bucket === "warm" ? "Warm Lead" :
-        bucket === "unqualified" ? "Unqualified" :
-        null; // cold → no auto-tag
+      const numericScore = score ?? 0;
+      const bucketTyped = (["hot", "warm", "cold", "unqualified"].includes(bucket)
+        ? bucket
+        : "cold") as "hot" | "warm" | "cold" | "unqualified";
+
+      const desiredTag = systemTagForQualification(bucketTyped, numericScore);
 
       const oldTag = (contact as any).tag as string;
 
       if (!desiredTag) {
-        return res.json({ applied: false, skipped: true, reason: "bucket_not_eligible", oldTag, newTag: null });
+        return res.json({
+          applied: false,
+          skipped: true,
+          reason: "bucket_not_eligible",
+          oldTag,
+          newTag: null,
+          tagDiagnostics,
+        });
       }
 
-      if (confidence == null || confidence < 0.75) {
+      const downgrade = isQualificationDowngrade(desiredTag, oldTag);
+      if (!downgrade && (confidence == null || confidence < 0.75)) {
+        console.info("[system-score-tag] skipped", {
+          contactId: contact.id,
+          reason: "confidence_below_threshold",
+          oldTag,
+          bucket,
+          score,
+          confidence,
+          tagDiagnostics,
+          reasons: reasons.slice(0, 4),
+        });
         return res.json({
           applied: false,
           skipped: true,
@@ -459,6 +489,29 @@ export function registerContactRoutes(app: Express): void {
           bucket,
           score,
           confidence,
+          tagDiagnostics,
+        });
+      }
+
+      if (desiredTag === "Hot Lead" && numericScore < MIN_HOT_TAG_SCORE) {
+        console.info("[system-score-tag] skipped", {
+          contactId: contact.id,
+          reason: "score_below_hot_minimum",
+          oldTag,
+          score: numericScore,
+          minHotScore: MIN_HOT_TAG_SCORE,
+          tagDiagnostics,
+        });
+        return res.json({
+          applied: false,
+          skipped: true,
+          reason: "score_below_hot_minimum",
+          oldTag,
+          newTag: null,
+          bucket,
+          score,
+          confidence,
+          tagDiagnostics,
         });
       }
 
@@ -499,7 +552,10 @@ export function registerContactRoutes(app: Express): void {
         bucket,
         score,
         confidence,
-        reason: "eligible_and_confident",
+        downgrade,
+        reasons: reasons.slice(0, 4),
+        tagDiagnostics,
+        reason: downgrade ? "downgrade_applied" : "eligible_and_confident",
       });
 
       res.json({
@@ -509,6 +565,7 @@ export function registerContactRoutes(app: Express): void {
         bucket,
         score,
         confidence,
+        tagDiagnostics,
         contact: updated,
       });
     } catch (error) {
