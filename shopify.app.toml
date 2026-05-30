@@ -9,7 +9,7 @@ embedded = false
 
 [access_scopes]
 # Kept in sync with server/shopify.ts — see SHOPIFY_SCOPES comment there.
-scopes = "read_customers"
+scopes = "read_customers,read_orders"
 
 [auth]
 redirect_urls = ["https://app.whachatcrm.com/api/shopify/callback"]

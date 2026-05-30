@@ -4,9 +4,11 @@ import { db } from "../drizzle/db";
 import { users } from "../shared/schema";
 import {
   SHOPIFY_APP_CONFIG_WEBHOOK_SPECS,
+  SHOPIFY_APP_TOML_COMMERCE_WEBHOOK_SPECS,
   SHOPIFY_GRAPHQL_WEBHOOK_SPECS,
   SHOPIFY_ORDERS_CREATE_SCOPE,
   type ShopifyOrdersCreateAudit,
+  type ShopifyOrdersCreateRegistrationBlockedReason,
   type ShopifyShopWebhookSummary,
   type ShopifyWebhookHealthItem,
   type ShopifyWebhookHealthReport,
@@ -142,25 +144,71 @@ export async function listShopWebhookSubscriptions(
   return listed;
 }
 
-function buildOrdersCreateAudit(grantedScopes: string[]): ShopifyOrdersCreateAudit {
-  const hasReadOrders = grantedScopes.includes(SHOPIFY_ORDERS_CREATE_SCOPE);
-  const spec = SHOPIFY_GRAPHQL_WEBHOOK_SPECS.find((s) => s.topic === "ORDERS_CREATE")!;
+function isProtectedCustomerDataRegistrationError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("protected customer") ||
+    m.includes("protected data") ||
+    m.includes("customer data access") ||
+    m.includes("not approved for") ||
+    (m.includes("access") && m.includes("order")) ||
+    m.includes("pcd")
+  );
+}
 
+function classifyRegistrationFailure(
+  topic: string,
+  message: string,
+): ShopifyWebhookRegistrationAttempt["status"] {
+  if (
+    topic === "ORDERS_CREATE" &&
+    isProtectedCustomerDataRegistrationError(message)
+  ) {
+    return "skipped_protected_data";
+  }
+  return "failed";
+}
+
+function buildOrdersCreateAudit(
+  grantedScopes: string[],
+  listed: ListedWebhook[],
+): ShopifyOrdersCreateAudit {
+  const oauthScopesRequested = [...SHOPIFY_SCOPES];
+  const hasReadOrders = grantedScopes.includes(SHOPIFY_ORDERS_CREATE_SCOPE);
+  const missingGrantedScopes = oauthScopesRequested.filter(
+    (scope) => !grantedScopes.includes(scope),
+  );
+  const spec = SHOPIFY_GRAPHQL_WEBHOOK_SPECS.find((s) => s.topic === "ORDERS_CREATE")!;
+  const ordersRegistered = findRegisteredUrl(listed, spec);
+
+  let registrationBlockedReason: ShopifyOrdersCreateRegistrationBlockedReason = "none";
   let note: string;
-  if (hasReadOrders) {
+
+  if (!hasReadOrders) {
+    registrationBlockedReason = "missing_scope";
     note =
-      "read_orders is granted. ORDERS_CREATE can be registered if protected customer data access is approved in Partner Dashboard.";
+      missingGrantedScopes.includes(SHOPIFY_ORDERS_CREATE_SCOPE)
+        ? "This shop was installed before read_orders was added. Reinstall the app or approve the new scope in Shopify Admin to grant read_orders."
+        : `read_orders is not granted on this shop. OAuth requests: ${oauthScopesRequested.join(", ")}.`;
+  } else if (ordersRegistered) {
+    registrationBlockedReason = "none";
+    note = "ORDERS_CREATE is registered for this shop.";
   } else {
+    registrationBlockedReason = "protected_customer_data";
     note =
-      "read_orders is not in the app install scopes (current: read_customers only). Add read_orders to shopify.app.whachatcrm.toml and request protected customer data approval before order webhooks can register.";
+      "read_orders is granted but ORDERS_CREATE is not registered. Request Protected Customer Data (order access) approval in Shopify Partner Dashboard, then click Re-register.";
   }
 
   return {
     requiredScopes: spec.requiredScopes ?? [SHOPIFY_ORDERS_CREATE_SCOPE],
+    oauthScopesRequested,
     grantedScopes,
+    missingGrantedScopes,
     hasReadOrders,
     requiresProtectedCustomerData: Boolean(spec.requiresProtectedCustomerData),
     canRegister: hasReadOrders,
+    protectedCustomerDataApprovalRequired: Boolean(spec.requiresProtectedCustomerData),
+    registrationBlockedReason,
     note,
   };
 }
@@ -183,7 +231,7 @@ export function buildShopWebhookHealthReport(params: {
   grantedScopes: string[];
 }): ShopifyWebhookHealthReport {
   const { shop, listed, grantedScopes } = params;
-  const ordersCreateAudit = buildOrdersCreateAudit(grantedScopes);
+  const ordersCreateAudit = buildOrdersCreateAudit(grantedScopes, listed);
   const webhooks: ShopifyWebhookHealthItem[] = [];
 
   for (const spec of SHOPIFY_GRAPHQL_WEBHOOK_SPECS) {
@@ -216,6 +264,23 @@ export function buildShopWebhookHealthReport(params: {
       required: spec.required,
       registrationMethod: "graphql",
       scopeNotes,
+    });
+  }
+
+  for (const spec of SHOPIFY_APP_TOML_COMMERCE_WEBHOOK_SPECS) {
+    webhooks.push({
+      topic: spec.topic,
+      restTopic: spec.topic,
+      label: spec.label,
+      expectedCallbackUrl: expectedCallbackUrl(spec.pathSuffix),
+      registeredCallbackUrl: null,
+      status: "app_config",
+      required: spec.topic === "orders/create",
+      registrationMethod: "app_toml",
+      scopeNotes:
+        spec.topic === "orders/create"
+          ? "App config + per-shop GraphQL. Requires read_orders and Protected Customer Data approval."
+          : "App config + per-shop GraphQL on install.",
     });
   }
 
@@ -254,6 +319,7 @@ export function buildShopWebhookHealthReport(params: {
     shop,
     host: HOST,
     configured: true,
+    oauthScopesRequested: [...SHOPIFY_SCOPES],
     grantedScopes,
     webhooks,
     ordersCreateAudit,
@@ -307,12 +373,14 @@ export async function registerShopWebhooks(
       spec.requiredScopes?.length &&
       !spec.requiredScopes.every((scope) => grantedScopes.includes(scope))
     ) {
+      const message = `Missing scope(s): ${spec.requiredScopes.join(", ")}. OAuth requests: ${SHOPIFY_SCOPES.join(", ")}. Reinstall the app if this shop predates read_orders.`;
       results.push({
         topic: spec.topic,
         address,
         status: "skipped_scope",
-        message: `Missing scope(s): ${spec.requiredScopes.join(", ")}`,
+        message,
       });
+      console.warn("[Shopify Webhook Register] skipped_scope", { shop, topic: spec.topic, message });
       continue;
     }
 
@@ -356,22 +424,49 @@ export async function registerShopWebhooks(
       if (onlyAlreadyRegistered) {
         results.push({ topic: spec.topic, address, status: "already_registered" });
       } else if (userErrors.length > 0) {
+        const message = userErrors.map((e) => e.message).filter(Boolean).join("; ");
+        const status = classifyRegistrationFailure(spec.topic, message);
         results.push({
           topic: spec.topic,
           address,
-          status: "failed",
-          message: userErrors.map((e) => e.message).filter(Boolean).join("; "),
+          status,
+          message,
         });
+        if (status === "skipped_protected_data") {
+          console.warn("[Shopify Webhook Register] skipped_protected_data", {
+            shop,
+            topic: spec.topic,
+            message,
+            hint: "Request Protected Customer Data (order access) approval in Shopify Partner Dashboard.",
+          });
+        } else {
+          console.warn("[Shopify Webhook Register Failed]", {
+            shop,
+            topic: spec.topic,
+            userErrors,
+          });
+        }
       } else {
         results.push({ topic: spec.topic, address, status: "registered" });
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = classifyRegistrationFailure(spec.topic, message);
       results.push({
         topic: spec.topic,
         address,
-        status: "failed",
-        message: err instanceof Error ? err.message : String(err),
+        status,
+        message,
       });
+      if (status === "skipped_protected_data") {
+        console.warn("[Shopify Webhook Register] skipped_protected_data", {
+          shop,
+          topic: spec.topic,
+          message,
+        });
+      } else {
+        console.error("[Shopify Webhook Register Failed]", { shop, topic: spec.topic, error: err });
+      }
     }
   }
 
@@ -389,6 +484,13 @@ export async function registerMandatoryWebhooks(shop: string, accessToken: strin
         shop,
         topic: result.topic,
         message: result.message,
+      });
+    } else if (result.status === "skipped_protected_data") {
+      console.warn("[Shopify Webhook Register] skipped_protected_data", {
+        shop,
+        topic: result.topic,
+        message: result.message,
+        hint: "Protected Customer Data approval required for ORDERS_CREATE.",
       });
     } else {
       console.warn("[Shopify Webhook Register Failed]", {

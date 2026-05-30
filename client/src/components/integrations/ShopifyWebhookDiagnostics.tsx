@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,7 @@ function statusBadge(item: ShopifyWebhookHealthItem) {
 
 export function ShopifyWebhookDiagnostics() {
   const queryClient = useQueryClient();
+  const [lastAttempts, setLastAttempts] = useState<ReregisterResponse["attempts"] | null>(null);
 
   const { data, isLoading, isFetching, refetch, error } = useQuery<HealthResponse>({
     queryKey: ["/api/shopify/webhooks/health"],
@@ -84,16 +86,22 @@ export function ShopifyWebhookDiagnostics() {
       return body;
     },
     onSuccess: (result) => {
+      setLastAttempts(result.attempts);
       queryClient.setQueryData(["/api/shopify/webhooks/health"], {
         ok: true,
         report: result.report,
       });
-      const failed = result.attempts.filter((a) => a.status === "failed").length;
+      const blocked = result.attempts.filter(
+        (a) =>
+          a.status === "failed" ||
+          a.status === "skipped_scope" ||
+          a.status === "skipped_protected_data",
+      ).length;
       toast({
-        title: failed > 0 ? "Webhooks partially registered" : "Webhooks updated",
+        title: blocked > 0 ? "Webhooks partially registered" : "Webhooks updated",
         description:
-          failed > 0
-            ? "Some topics could not be registered. Review scope notes below."
+          blocked > 0
+            ? "Some topics could not be registered. Review scope and protected data notes below."
             : "Shopify webhook subscriptions were refreshed.",
       });
     },
@@ -174,6 +182,22 @@ export function ShopifyWebhookDiagnostics() {
 
       {report && (
         <>
+          <div className="rounded border border-white/60 bg-white/50 px-2 py-2 text-xs space-y-1">
+            <p className="font-medium text-gray-900">OAuth scopes</p>
+            <p className="text-muted-foreground">
+              Requested: {(report.oauthScopesRequested ?? report.ordersCreateAudit.oauthScopesRequested).join(", ")}
+            </p>
+            <p className="text-muted-foreground">
+              Granted on shop: {report.grantedScopes.join(", ") || "unknown"}
+            </p>
+            {report.ordersCreateAudit.missingGrantedScopes.length > 0 && (
+              <p className="text-amber-900" role="alert">
+                Missing on shop: {report.ordersCreateAudit.missingGrantedScopes.join(", ")} — reinstall or approve
+                scopes in Shopify Admin.
+              </p>
+            )}
+          </div>
+
           <div className="space-y-2">
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Per-shop webhooks</p>
             {graphqlWebhooks.map((item) => (
@@ -189,16 +213,38 @@ export function ShopifyWebhookDiagnostics() {
 
           {report.ordersCreateAudit && (
             <div className="rounded border border-amber-200/80 bg-white/60 px-2 py-2 text-xs space-y-1">
-              <p className="font-medium text-gray-900">Orders webhook scope audit</p>
+              <p className="font-medium text-gray-900">Orders webhook (ORDERS_CREATE)</p>
               <p className="text-gray-700 leading-snug">{report.ordersCreateAudit.note}</p>
-              <p className="text-muted-foreground">
-                Granted scopes: {report.ordersCreateAudit.grantedScopes.join(", ") || "unknown"}
-              </p>
+              {report.ordersCreateAudit.protectedCustomerDataApprovalRequired && (
+                <p className="text-muted-foreground leading-snug">
+                  Protected Customer Data approval is required for order webhooks in Partner Dashboard.
+                </p>
+              )}
+              {report.ordersCreateAudit.registrationBlockedReason !== "none" && (
+                <p className="text-amber-900 capitalize">
+                  Blocked: {report.ordersCreateAudit.registrationBlockedReason.replace(/_/g, " ")}
+                </p>
+              )}
+            </div>
+          )}
+
+          {lastAttempts && lastAttempts.length > 0 && (
+            <div className="rounded border border-gray-200 bg-white/60 px-2 py-2 text-xs space-y-1">
+              <p className="font-medium text-gray-900">Last registration attempt</p>
+              {lastAttempts.map((attempt) => (
+                <div key={attempt.topic} className="flex flex-wrap gap-2">
+                  <span className="font-medium">{attempt.topic}</span>
+                  <span className="text-muted-foreground">{attempt.status.replace(/_/g, " ")}</span>
+                  {attempt.message && (
+                    <span className="text-muted-foreground">{attempt.message}</span>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 
           <div className="space-y-1.5">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">App config (GDPR)</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">App config (deploy + GDPR)</p>
             {appConfigWebhooks.map((item) => (
               <div key={item.topic} className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="font-medium min-w-[120px]">{item.label}</span>

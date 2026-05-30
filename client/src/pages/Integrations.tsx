@@ -420,9 +420,9 @@ function WebhookUrlDisplay({ integrationType }: { integrationType: string }) {
     switch (integrationType) {
       case 'shopify':
         return [
-          "Event connections are registered automatically when you install the app",
-          "New orders and customers will sync to WhachatCRM automatically",
-          "Use the connection URL above for custom Zapier/Make.com workflows"
+          "Webhooks register automatically when you install or re-authorize the app",
+          "New customers and orders sync when read_orders and Protected Customer Data access are approved",
+          "Use Manage → Webhook registration to verify or re-register subscriptions",
         ];
       case 'calendly':
         return [

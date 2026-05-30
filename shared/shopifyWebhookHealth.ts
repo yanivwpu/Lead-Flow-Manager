@@ -54,6 +54,20 @@ export const SHOPIFY_APP_CONFIG_WEBHOOK_SPECS = [
   },
 ] as const;
 
+/** Commerce webhooks declared in shopify.app.whachatcrm.toml (app-level + per-shop GraphQL on install). */
+export const SHOPIFY_APP_TOML_COMMERCE_WEBHOOK_SPECS = [
+  {
+    topic: "customers/create",
+    pathSuffix: "/api/shopify/webhooks/customers-create",
+    label: "Customer created (app config)",
+  },
+  {
+    topic: "orders/create",
+    pathSuffix: "/api/shopify/webhooks/orders-create",
+    label: "Order created (app config)",
+  },
+] as const;
+
 export const SHOPIFY_ORDERS_CREATE_SCOPE = "read_orders";
 
 export type ShopifyWebhookItemStatus =
@@ -75,12 +89,35 @@ export type ShopifyWebhookHealthItem = {
   scopeNotes: string | null;
 };
 
+export type ShopifyWebhookRegistrationAttempt = {
+  topic: string;
+  address: string;
+  status:
+    | "registered"
+    | "already_registered"
+    | "failed"
+    | "skipped_scope"
+    | "skipped_protected_data";
+  message?: string;
+};
+
+export type ShopifyOrdersCreateRegistrationBlockedReason =
+  | "none"
+  | "missing_scope"
+  | "protected_customer_data"
+  | "registration_failed"
+  | "not_attempted";
+
 export type ShopifyOrdersCreateAudit = {
   requiredScopes: string[];
+  oauthScopesRequested: string[];
   grantedScopes: string[];
+  missingGrantedScopes: string[];
   hasReadOrders: boolean;
   requiresProtectedCustomerData: boolean;
   canRegister: boolean;
+  protectedCustomerDataApprovalRequired: boolean;
+  registrationBlockedReason: ShopifyOrdersCreateRegistrationBlockedReason;
   note: string;
 };
 
@@ -88,6 +125,7 @@ export type ShopifyWebhookHealthReport = {
   shop: string;
   host: string;
   configured: boolean;
+  oauthScopesRequested: string[];
   grantedScopes: string[];
   webhooks: ShopifyWebhookHealthItem[];
   ordersCreateAudit: ShopifyOrdersCreateAudit;
@@ -98,13 +136,6 @@ export type ShopifyWebhookHealthReport = {
     blockedByScope: number;
     wrongUrl: number;
   };
-};
-
-export type ShopifyWebhookRegistrationAttempt = {
-  topic: string;
-  address: string;
-  status: "registered" | "already_registered" | "failed" | "skipped_scope";
-  message?: string;
 };
 
 export type ShopifyShopWebhookSummary = {

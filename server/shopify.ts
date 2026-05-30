@@ -12,10 +12,10 @@ const SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY || '';
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
 /**
  * Shopify OAuth scopes (keep in sync with shopify.app.whachatcrm.toml).
- * We only request read_customers today: used for GDPR customer/redact flows (correlate phone ↔ chats)
- * and future CRM sync. Product/order REST reads are not implemented yet — do not add scopes until features ship.
+ * read_customers — GDPR redact flows and customers/create commerce webhooks.
+ * read_orders — orders/create webhook and order ingestion (requires protected customer data approval in Partner Dashboard).
  */
-export const SHOPIFY_SCOPES = ['read_customers'] as const;
+export const SHOPIFY_SCOPES = ['read_customers', 'read_orders'] as const;
 export const HOST = process.env.APP_URL || process.env.SHOPIFY_APP_HOST || process.env.HOST || 'https://app.whachatcrm.com';
 
 /** Amounts must match public pricing / App Store listing (Starter $19/mo, Pro $49/mo, AI Brain add-on +$29/mo). */
@@ -51,7 +51,7 @@ export function getShopifyApi() {
     shopifyInstance = shopifyApi({
       apiKey: SHOPIFY_API_KEY,
       apiSecretKey: SHOPIFY_API_SECRET,
-      scopes: SHOPIFY_SCOPES,
+      scopes: [...SHOPIFY_SCOPES],
       hostName: HOST.replace(/^https?:\/\//, ''),
       apiVersion: API_VERSION,
       isEmbeddedApp: false,
