@@ -5,9 +5,10 @@ export const RGE_TEMPLATE_ID = "realtor-growth-engine";
 export const RGE_TEMPLATE_DETAIL_PATH = "/app/templates/realtor-growth-engine";
 export const RGE_TEMPLATE_ONBOARDING_PATH = "/app/templates/realtor-growth-engine/onboarding";
 
-/** RGE Dashboard + Integrations — inventory source configuration (not Copilot). */
+/** RGE dashboard — inventory source configuration (MLS Grid, Trestle, Bridge, etc.). */
 export const RGE_INVENTORY_SETTINGS_PATH = RGE_TEMPLATE_DETAIL_PATH;
-export const INTEGRATIONS_INVENTORY_SETTINGS_PATH = "/app/integrations";
+/** @deprecated Use RGE_INVENTORY_SETTINGS_PATH — inventory is not configured on Integrations. */
+export const INTEGRATIONS_INVENTORY_SETTINGS_PATH = RGE_INVENTORY_SETTINGS_PATH;
 
 export type RgeEntitlementStatus = "locked" | "purchased" | "submitted" | "installed";
 

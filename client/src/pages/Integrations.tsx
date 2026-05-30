@@ -21,7 +21,6 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { InventorySourcesSection } from "@/components/inventory/InventorySourcesSection";
 import { ShopifyWebhookDiagnostics } from "@/components/integrations/ShopifyWebhookDiagnostics";
 
 function integrationBrandLogoLetter(name: string) {
@@ -590,7 +589,6 @@ export function Integrations() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/status"] });
       setConnectingIntegration(null);
       setIntegrationForm({});
       setSelectedSyncOptions([]);
@@ -662,7 +660,6 @@ export function Integrations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/status"] });
       toast({
         title: pendingDisconnectType === "calendly" ? "Calendly disconnected" : "Integration disconnected",
         description:
@@ -983,8 +980,6 @@ export function Integrations() {
           </TabsList>
 
           <TabsContent value="native" className="space-y-12">
-            <InventorySourcesSection />
-
             {CATEGORY_SECTIONS.map(({ key, title }) => {
               const items = NATIVE_INTEGRATIONS.filter((i) => i.category === key);
               if (items.length === 0) return null;
