@@ -22,6 +22,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { InventorySourcesSection } from "@/components/inventory/InventorySourcesSection";
+import { ShopifyWebhookDiagnostics } from "@/components/integrations/ShopifyWebhookDiagnostics";
 
 function integrationBrandLogoLetter(name: string) {
   const c = name.trim().charAt(0);
@@ -679,6 +680,38 @@ export function Integrations() {
         variant: "destructive",
       });
       setPendingDisconnectType(null);
+    },
+  });
+
+  const shopifyWebhookReregisterMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/shopify/webhooks/reregister", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; report?: { summary?: { healthy?: boolean } } };
+      if (!res.ok) {
+        throw new Error(data.error || "Webhook re-registration failed");
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shopify/webhooks/health"] });
+      const healthy = data.report?.summary?.healthy;
+      toast({
+        title: healthy ? "Webhooks registered" : "Webhooks partially registered",
+        description: healthy
+          ? "All required Shopify webhooks are registered."
+          : "Review webhook diagnostics for missing topics or scope requirements.",
+        variant: healthy ? "default" : "destructive",
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Webhook re-registration failed",
+        description: err.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -1857,6 +1890,7 @@ export function Integrations() {
                       More advanced HubSpot features will be added in future updates.
                     </p>
                   )}
+                  {managingIntegration.id === "shopify" && <ShopifyWebhookDiagnostics />}
                   {["shopify", "calendly", "stripe"].includes(managingIntegration.id) && (
                     <WebhookUrlDisplay integrationType={managingIntegration.id} />
                   )}
@@ -1865,18 +1899,38 @@ export function Integrations() {
                       variant="outline"
                       size="sm"
                       className="flex-1 border-gray-200"
-                      onClick={() => syncIntegrationMutation.mutate(managingConnected.id)}
-                      disabled={syncIntegrationMutation.isPending}
+                      onClick={() => {
+                        if (managingIntegration.id === "shopify") {
+                          shopifyWebhookReregisterMutation.mutate();
+                          return;
+                        }
+                        syncIntegrationMutation.mutate(managingConnected.id);
+                      }}
+                      disabled={
+                        managingIntegration.id === "shopify"
+                          ? shopifyWebhookReregisterMutation.isPending
+                          : syncIntegrationMutation.isPending
+                      }
                       data-testid={`button-sync-${managingIntegration.id}`}
                     >
                       <RefreshCw
-                        className={`h-3 w-3 mr-1 ${syncIntegrationMutation.isPending ? "animate-spin" : ""}`}
+                        className={`h-3 w-3 mr-1 ${
+                          (
+                            managingIntegration.id === "shopify"
+                              ? shopifyWebhookReregisterMutation.isPending
+                              : syncIntegrationMutation.isPending
+                          )
+                            ? "animate-spin"
+                            : ""
+                        }`}
                       />
                       {managingIntegration.id === "calendly" &&
                       (managingConnected.config as Record<string, unknown>)?.calendlyWebhookStatus === "failed"
                         ? "Retry webhook"
                         : managingIntegration.id === "calendly"
                           ? "Sync Calendly"
+                        : managingIntegration.id === "shopify"
+                          ? "Re-register webhooks"
                         : "Sync now"}
                     </Button>
                     <Button

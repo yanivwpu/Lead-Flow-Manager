@@ -33,6 +33,11 @@ import {
   processShopifyOrderCreate,
   scheduleShopifyCommerceProcessing,
 } from './shopifyCommerceWebhooks';
+import {
+  auditAllShopifyShopsWebhookHealth,
+  auditShopWebhookHealth,
+  registerShopWebhooks,
+} from './shopifyWebhookHealth';
 
 const router = Router();
 
@@ -448,6 +453,81 @@ function verifyWebhookHmac(rawBody: Buffer | string, hmac: string): boolean {
     return false;
   }
 }
+
+function requireAdminSession(req: Request, res: Response): boolean {
+  if ((req.session as { isAdmin?: boolean })?.isAdmin === true) return true;
+  res.status(403).json({ error: "Forbidden" });
+  return false;
+}
+
+async function resolveSessionShopifyMerchant(userId: string) {
+  const user = await storage.getUserForSession(userId);
+  if (!user?.shopifyShop || !user.shopifyAccessToken) {
+    return null;
+  }
+  return { shop: user.shopifyShop, accessToken: user.shopifyAccessToken };
+}
+
+router.get('/webhooks/health', async (req: Request, res: Response) => {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    const merchant = await resolveSessionShopifyMerchant((req.user as { id: string }).id);
+    if (!merchant) {
+      return res.status(400).json({
+        error: 'No Shopify shop linked to this account.',
+        configured: isShopifyConfigured(),
+      });
+    }
+
+    const report = await auditShopWebhookHealth(merchant.shop, merchant.accessToken);
+    res.json({ ok: true, report });
+  } catch (error) {
+    console.error('[Shopify Webhook Health]', error);
+    res.status(500).json({ error: 'Failed to audit Shopify webhooks' });
+  }
+});
+
+router.get('/webhooks/health/all', async (req: Request, res: Response) => {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  if (!requireAdminSession(req, res)) return;
+
+  try {
+    const shops = await auditAllShopifyShopsWebhookHealth();
+    res.json({
+      ok: true,
+      shopCount: shops.length,
+      unhealthyCount: shops.filter((s) => !s.healthy).length,
+      shops,
+    });
+  } catch (error) {
+    console.error('[Shopify Webhook Health/all]', error);
+    res.status(500).json({ error: 'Failed to audit Shopify shops' });
+  }
+});
+
+router.post('/webhooks/reregister', async (req: Request, res: Response) => {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    const merchant = await resolveSessionShopifyMerchant((req.user as { id: string }).id);
+    if (!merchant) {
+      return res.status(400).json({ error: 'No Shopify shop linked to this account.' });
+    }
+
+    const attempts = await registerShopWebhooks(merchant.shop, merchant.accessToken);
+    const report = await auditShopWebhookHealth(merchant.shop, merchant.accessToken);
+
+    res.json({
+      ok: true,
+      attempts,
+      report,
+    });
+  } catch (error) {
+    console.error('[Shopify Webhook Reregister]', error);
+    res.status(500).json({ error: 'Failed to re-register Shopify webhooks' });
+  }
+});
 
 router.post('/webhooks/app-uninstalled', async (req: Request, res: Response) => {
   const hmac = req.headers['x-shopify-hmac-sha256'] as string;

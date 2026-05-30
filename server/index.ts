@@ -591,6 +591,9 @@ app.use((req, res, next) => {
       import("./inventory/inventoryDevSeedAudit")
         .then(({ runInventoryDevSeedProductionAudit }) => runInventoryDevSeedProductionAudit())
         .catch((err) => console.error("[inventory-dev-seed] Startup audit failed:", err));
+      import("./shopifyWebhookHealth")
+        .then(({ runShopifyWebhookStartupAudit }) => runShopifyWebhookStartupAudit())
+        .catch((err) => console.error("[shopify-webhooks] Startup audit failed:", err));
 
       setTimeout(() => {
         (async () => {

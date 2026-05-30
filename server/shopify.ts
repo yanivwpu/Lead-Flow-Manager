@@ -15,8 +15,8 @@ const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
  * We only request read_customers today: used for GDPR customer/redact flows (correlate phone ↔ chats)
  * and future CRM sync. Product/order REST reads are not implemented yet — do not add scopes until features ship.
  */
-const SHOPIFY_SCOPES = ['read_customers'];
-const HOST = process.env.APP_URL || process.env.SHOPIFY_APP_HOST || process.env.HOST || 'https://app.whachatcrm.com';
+export const SHOPIFY_SCOPES = ['read_customers'] as const;
+export const HOST = process.env.APP_URL || process.env.SHOPIFY_APP_HOST || process.env.HOST || 'https://app.whachatcrm.com';
 
 /** Amounts must match public pricing / App Store listing (Starter $19/mo, Pro $49/mo, AI Brain add-on +$29/mo). */
 export const SHOPIFY_BILLING_PLANS = {
@@ -712,90 +712,4 @@ export async function exchangeShopifyCode(
   }
 }
 
-/**
- * Register shop-specific webhooks via GraphQL (Admin API 2026-01).
- * GDPR compliance topics (customers/data_request, customers/redact, shop/redact) are not
- * WebhookSubscriptionTopic values — they are configured in shopify.app.whachatcrm.toml.
- */
-export async function registerMandatoryWebhooks(
-  shop: string,
-  accessToken: string
-): Promise<void> {
-  const shopify = getShopifyApi();
-  if (!shopify) {
-    console.warn('[Shopify Webhook Register Failed] Shopify API not configured — skipping webhook registration');
-    return;
-  }
-
-  const webhookEndpoints = [
-    { topic: 'APP_UNINSTALLED', address: `${HOST}/api/shopify/webhooks/app-uninstalled` },
-    { topic: 'CUSTOMERS_CREATE', address: `${HOST}/api/shopify/webhooks/customers-create` },
-    // ORDERS_CREATE requires read_orders + protected customer data approval — register when scopes expand.
-    { topic: 'ORDERS_CREATE', address: `${HOST}/api/shopify/webhooks/orders-create` },
-  ];
-
-  try {
-    const client = new shopify.clients.Graphql({
-      session: { shop, accessToken } as Session,
-    });
-
-    for (const webhook of webhookEndpoints) {
-      try {
-        const response = await client.request(`
-          mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
-            webhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
-              webhookSubscription {
-                id
-                topic
-                endpoint {
-                  ... on WebhookHttpEndpoint {
-                    callbackUrl
-                  }
-                }
-              }
-              userErrors {
-                field
-                message
-              }
-            }
-          }
-        `, {
-          variables: {
-            topic: webhook.topic,
-            webhookSubscription: {
-              callbackUrl: webhook.address,
-              format: 'JSON',
-            },
-          },
-        });
-
-        const data = response.data as any;
-        const userErrors = data?.webhookSubscriptionCreate?.userErrors ?? [];
-        const onlyAlreadyRegistered =
-          userErrors.length > 0 &&
-          userErrors.every((err: { message?: string }) =>
-            /already been taken/i.test(String(err?.message || '')),
-          );
-        if (onlyAlreadyRegistered) {
-          console.log('[Shopify Webhook Register] already_registered', {
-            shop,
-            topic: webhook.topic,
-            address: webhook.address,
-          });
-        } else if (userErrors.length > 0) {
-          console.warn('[Shopify Webhook Register Failed]', {
-            shop,
-            topic: webhook.topic,
-            userErrors,
-          });
-        } else {
-          console.log('[Shopify Webhook Register]', { shop, topic: webhook.topic, address: webhook.address });
-        }
-      } catch (webhookError) {
-        console.error('[Shopify Webhook Register Failed]', { shop, topic: webhook.topic, error: webhookError });
-      }
-    }
-  } catch (error) {
-    console.error('[Shopify Webhook Register Failed]', { shop, error });
-  }
-}
+export { registerMandatoryWebhooks } from "./shopifyWebhookHealth";
