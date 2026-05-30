@@ -21,7 +21,7 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { ShopifyWebhookDiagnostics } from "@/components/integrations/ShopifyWebhookDiagnostics";
+import { ShopifyManagePanel } from "@/components/integrations/ShopifyManagePanel";
 
 function integrationBrandLogoLetter(name: string) {
   const c = name.trim().charAt(0);
@@ -419,9 +419,9 @@ function WebhookUrlDisplay({ integrationType }: { integrationType: string }) {
     switch (integrationType) {
       case 'shopify':
         return [
-          "Webhooks register automatically when you install or re-authorize the app",
-          "New customers and orders sync when read_orders and Protected Customer Data access are approved",
-          "Use Manage → Webhook registration to verify or re-register subscriptions",
+          "Install WhachatCRM from the Shopify App Store",
+          "Approve permissions in your Shopify admin",
+          "Customers and orders sync automatically when connected",
         ];
       case 'calendly':
         return [
@@ -557,6 +557,24 @@ export function Integrations() {
     placeholderData: { connected: false, tokenExpired: false },
   });
 
+  const {
+    data: shopifyStatus,
+    isFetching: shopifyStatusFetching,
+  } = useQuery<{ connected: boolean; shop: string | null; syncEnabled: boolean; integrationId: string | null }>({
+    queryKey: ["/api/shopify/connection-status"],
+    queryFn: async () => {
+      const res = await fetch("/api/shopify/connection-status", { credentials: "include" });
+      if (!res.ok) {
+        return { connected: false, shop: null, syncEnabled: false, integrationId: null };
+      }
+      return res.json();
+    },
+    enabled: !!integrationsEnabled,
+    staleTime: 30_000,
+  });
+
+  const shopifyConnected = !!shopifyStatus?.connected;
+
   const createWebhookMutation = useMutation({
     mutationFn: async (data: { name: string; url: string; events: string[] }) => {
       return apiRequest("POST", "/api/webhooks", data);
@@ -651,7 +669,10 @@ export function Integrations() {
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
       return apiRequest("PATCH", `/api/integrations/${id}`, { isActive });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/integrations"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shopify/connection-status"] });
+    },
   });
 
   const deleteIntegrationMutation = useMutation({
@@ -660,6 +681,7 @@ export function Integrations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shopify/connection-status"] });
       toast({
         title: pendingDisconnectType === "calendly" ? "Calendly disconnected" : "Integration disconnected",
         description:
@@ -677,38 +699,6 @@ export function Integrations() {
         variant: "destructive",
       });
       setPendingDisconnectType(null);
-    },
-  });
-
-  const shopifyWebhookReregisterMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/shopify/webhooks/reregister", {
-        method: "POST",
-        credentials: "include",
-      });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; report?: { summary?: { healthy?: boolean } } };
-      if (!res.ok) {
-        throw new Error(data.error || "Webhook re-registration failed");
-      }
-      return data;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/shopify/webhooks/health"] });
-      const healthy = data.report?.summary?.healthy;
-      toast({
-        title: healthy ? "Webhooks registered" : "Webhooks partially registered",
-        description: healthy
-          ? "All required Shopify webhooks are registered."
-          : "Review webhook diagnostics for missing topics or scope requirements.",
-        variant: healthy ? "default" : "destructive",
-      });
-    },
-    onError: (err: Error) => {
-      toast({
-        title: "Webhook re-registration failed",
-        description: err.message,
-        variant: "destructive",
-      });
     },
   });
 
@@ -993,6 +983,7 @@ export function Integrations() {
                       const lcConnected = !!lcStatus?.connected;
                       const wooConnected = integration.id === "woocommerce" && !!connected;
                       const calendlyConnected = integration.id === "calendly" && !!connected;
+                      const shopifyManageConnected = integration.id === "shopify" && shopifyConnected;
                       const hubspotValidated =
                         integration.id === "hubspot" &&
                         !!connected &&
@@ -1028,7 +1019,11 @@ export function Integrations() {
                         primaryLabel = "Manage";
                         primaryTestId = "button-calendly-connected";
                         primaryAction = () => setManageIntegrationId(integration.id);
-                      } else if (connected) {
+                      } else if (shopifyManageConnected) {
+                        primaryLabel = "Manage";
+                        primaryTestId = "button-manage-shopify";
+                        primaryAction = () => setManageIntegrationId(integration.id);
+                      } else if (connected && integration.id !== "shopify") {
                         primaryLabel = "Manage";
                         primaryTestId = `button-manage-${integration.id}`;
                         primaryAction = () => setManageIntegrationId(integration.id);
@@ -1059,6 +1054,7 @@ export function Integrations() {
                               <h3 className="text-sm font-semibold leading-snug text-gray-900">{integration.name}</h3>
                               {(wooConnected ||
                                 calendlyConnected ||
+                                shopifyManageConnected ||
                                 hubspotValidated ||
                                 (isLeadConnector && lcConnected)) && (
                                 <Badge
@@ -1083,6 +1079,11 @@ export function Integrations() {
                               data-testid={primaryTestId}
                             >
                               {lcStatusFetching && isLeadConnector ? (
+                                <span className="inline-flex items-center gap-2">
+                                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-gray-400" />
+                                  Loading…
+                                </span>
+                              ) : shopifyStatusFetching && integration.id === "shopify" ? (
                                 <span className="inline-flex items-center gap-2">
                                   <RefreshCw className="h-3.5 w-3.5 animate-spin text-gray-400" />
                                   Loading…
@@ -1678,7 +1679,7 @@ export function Integrations() {
         {/* Native integration — manage connected account */}
         <Dialog open={manageIntegrationId !== null} onOpenChange={(open) => !open && setManageIntegrationId(null)}>
           <DialogContent className="w-[calc(100vw-1.5rem)] max-w-2xl max-h-[88vh] overflow-y-auto p-4 sm:p-6">
-            {managingIntegration && managingConnected && (
+            {managingIntegration && (managingIntegration.id === "shopify" || managingConnected) && (
               <>
                 <DialogHeader>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -1690,6 +1691,7 @@ export function Integrations() {
                       <DialogTitle>{managingIntegration.name}</DialogTitle>
                       <DialogDescription>{managingIntegration.description}</DialogDescription>
                       {managingIntegration.id === "woocommerce" &&
+                        managingConnected &&
                         typeof (managingConnected.config as Record<string, unknown>)?.storeUrl === "string" && (
                           <p className="mt-1 text-xs text-gray-600">
                             Store:{" "}
@@ -1701,6 +1703,28 @@ export function Integrations() {
                     </div>
                   </div>
                 </DialogHeader>
+                {managingIntegration.id === "shopify" ? (
+                  <div className="pt-2">
+                    <ShopifyManagePanel
+                      onConnect={() => {
+                        setManageIntegrationId(null);
+                        setShopifyListingState(
+                          VITE_SHOPIFY_APP_STORE_URL ? "checking" : "unavailable",
+                        );
+                        setShowShopifyInfo(true);
+                      }}
+                      onDisconnect={(integrationId) =>
+                        handleDisconnectIntegration(integrationId, managingIntegration.name, managingIntegration.id)
+                      }
+                      disconnectPending={deleteIntegrationMutation.isPending}
+                      onToggleSync={(integrationId, isActive) =>
+                        toggleIntegrationMutation.mutate({ id: integrationId, isActive })
+                      }
+                      toggleSyncPending={toggleIntegrationMutation.isPending}
+                    />
+                  </div>
+                ) : (
+                managingConnected && (
                 <div className="space-y-3 pt-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-500">Sync</span>
@@ -1885,8 +1909,7 @@ export function Integrations() {
                       More advanced HubSpot features will be added in future updates.
                     </p>
                   )}
-                  {managingIntegration.id === "shopify" && <ShopifyWebhookDiagnostics />}
-                  {["shopify", "calendly", "stripe"].includes(managingIntegration.id) && (
+                  {["calendly", "stripe"].includes(managingIntegration.id) && (
                     <WebhookUrlDisplay integrationType={managingIntegration.id} />
                   )}
                   <div className="flex gap-2 pt-2">
@@ -1894,39 +1917,19 @@ export function Integrations() {
                       variant="outline"
                       size="sm"
                       className="flex-1 border-gray-200"
-                      onClick={() => {
-                        if (managingIntegration.id === "shopify") {
-                          shopifyWebhookReregisterMutation.mutate();
-                          return;
-                        }
-                        syncIntegrationMutation.mutate(managingConnected.id);
-                      }}
-                      disabled={
-                        managingIntegration.id === "shopify"
-                          ? shopifyWebhookReregisterMutation.isPending
-                          : syncIntegrationMutation.isPending
-                      }
+                      onClick={() => syncIntegrationMutation.mutate(managingConnected.id)}
+                      disabled={syncIntegrationMutation.isPending}
                       data-testid={`button-sync-${managingIntegration.id}`}
                     >
                       <RefreshCw
-                        className={`h-3 w-3 mr-1 ${
-                          (
-                            managingIntegration.id === "shopify"
-                              ? shopifyWebhookReregisterMutation.isPending
-                              : syncIntegrationMutation.isPending
-                          )
-                            ? "animate-spin"
-                            : ""
-                        }`}
+                        className={`h-3 w-3 mr-1 ${syncIntegrationMutation.isPending ? "animate-spin" : ""}`}
                       />
                       {managingIntegration.id === "calendly" &&
                       (managingConnected.config as Record<string, unknown>)?.calendlyWebhookStatus === "failed"
                         ? "Retry webhook"
                         : managingIntegration.id === "calendly"
                           ? "Sync Calendly"
-                        : managingIntegration.id === "shopify"
-                          ? "Re-register webhooks"
-                        : "Sync now"}
+                          : "Sync now"}
                     </Button>
                     <Button
                       variant="outline"
@@ -1942,6 +1945,7 @@ export function Integrations() {
                     </Button>
                   </div>
                 </div>
+                ))}
               </>
             )}
           </DialogContent>

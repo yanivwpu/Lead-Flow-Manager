@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronRight, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import type {
@@ -12,7 +13,8 @@ import type {
 
 type HealthResponse = {
   ok: boolean;
-  report: ShopifyWebhookHealthReport;
+  report?: ShopifyWebhookHealthReport;
+  error?: string;
 };
 
 type ReregisterResponse = {
@@ -56,21 +58,32 @@ function statusBadge(item: ShopifyWebhookHealthItem) {
   }
 }
 
-export function ShopifyWebhookDiagnostics() {
+type DiagnosticsBodyProps = {
+  enabled: boolean;
+  onReregisterComplete?: () => void;
+};
+
+function ShopifyWebhookDiagnosticsBody({ enabled, onReregisterComplete }: DiagnosticsBodyProps) {
   const queryClient = useQueryClient();
   const [lastAttempts, setLastAttempts] = useState<ReregisterResponse["attempts"] | null>(null);
 
   const { data, isLoading, isFetching, refetch, error } = useQuery<HealthResponse>({
     queryKey: ["/api/shopify/webhooks/health"],
+    enabled,
     queryFn: async () => {
       const res = await fetch("/api/shopify/webhooks/health", { credentials: "include" });
-      const body = (await res.json().catch(() => ({}))) as HealthResponse & { error?: string };
+      const body = (await res.json().catch(() => ({}))) as HealthResponse;
       if (!res.ok) {
-        throw new Error(body.error || "Could not load webhook health");
+        return {
+          ok: false,
+          error: body.error || "Could not load webhook health",
+          report: undefined,
+        };
       }
       return body;
     },
     staleTime: 30_000,
+    retry: false,
   });
 
   const reregisterMutation = useMutation({
@@ -91,6 +104,7 @@ export function ShopifyWebhookDiagnostics() {
         ok: true,
         report: result.report,
       });
+      onReregisterComplete?.();
       const blocked = result.attempts.filter(
         (a) =>
           a.status === "failed" ||
@@ -103,6 +117,7 @@ export function ShopifyWebhookDiagnostics() {
           blocked > 0
             ? "Some topics could not be registered. Review scope and protected data notes below."
             : "Shopify webhook subscriptions were refreshed.",
+        variant: blocked > 0 ? "destructive" : "default",
       });
     },
     onError: (err: Error) => {
@@ -118,22 +133,37 @@ export function ShopifyWebhookDiagnostics() {
   const graphqlWebhooks = report?.webhooks.filter((w) => w.registrationMethod === "graphql") ?? [];
   const appConfigWebhooks = report?.webhooks.filter((w) => w.registrationMethod === "app_toml") ?? [];
   const panelHealthy = report?.summary.healthy ?? false;
+  const inlineError = data?.error || (error as Error | null)?.message;
 
   return (
     <div
       className={cn(
         "rounded-md border p-3 text-sm space-y-3",
-        panelHealthy ? "border-emerald-100 bg-emerald-50/80" : "border-amber-200 bg-amber-50/80",
+        !report
+          ? "border-gray-200 bg-gray-50/80"
+          : panelHealthy
+            ? "border-emerald-100 bg-emerald-50/80"
+            : "border-amber-200 bg-amber-50/80",
       )}
       data-testid="shopify-webhook-diagnostics"
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className={cn("font-medium", panelHealthy ? "text-emerald-900" : "text-amber-950")}>
+          <p
+            className={cn(
+              "font-medium",
+              !report ? "text-gray-900" : panelHealthy ? "text-emerald-900" : "text-amber-950",
+            )}
+          >
             Webhook registration
           </p>
           {report?.shop && (
-            <p className={cn("text-xs mt-0.5", panelHealthy ? "text-emerald-800/90" : "text-amber-900/90")}>
+            <p
+              className={cn(
+                "text-xs mt-0.5",
+                panelHealthy ? "text-emerald-800/90" : "text-amber-900/90",
+              )}
+            >
               {report.shop}
             </p>
           )}
@@ -166,7 +196,7 @@ export function ShopifyWebhookDiagnostics() {
                 Registering…
               </>
             ) : (
-              "Re-register"
+              "Re-register webhooks"
             )}
           </Button>
         </div>
@@ -174,9 +204,9 @@ export function ShopifyWebhookDiagnostics() {
 
       {isLoading && <p className="text-xs text-muted-foreground">Checking Shopify webhooks…</p>}
 
-      {error && (
-        <p className="text-xs text-red-700" role="alert">
-          {(error as Error).message}
+      {inlineError && !isLoading && (
+        <p className="text-xs text-gray-700" role="status">
+          {inlineError}
         </p>
       )}
 
@@ -191,7 +221,7 @@ export function ShopifyWebhookDiagnostics() {
               Granted on shop: {report.grantedScopes.join(", ") || "unknown"}
             </p>
             {report.ordersCreateAudit.missingGrantedScopes.length > 0 && (
-              <p className="text-amber-900" role="alert">
+              <p className="text-amber-900" role="status">
                 Missing on shop: {report.ordersCreateAudit.missingGrantedScopes.join(", ")} — reinstall or approve
                 scopes in Shopify Admin.
               </p>
@@ -204,9 +234,7 @@ export function ShopifyWebhookDiagnostics() {
               <div key={item.topic} className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="font-medium min-w-[120px]">{item.label}</span>
                 {statusBadge(item)}
-                {item.scopeNotes && (
-                  <span className="text-muted-foreground">{item.scopeNotes}</span>
-                )}
+                {item.scopeNotes && <span className="text-muted-foreground">{item.scopeNotes}</span>}
               </div>
             ))}
           </div>
@@ -235,9 +263,7 @@ export function ShopifyWebhookDiagnostics() {
                 <div key={attempt.topic} className="flex flex-wrap gap-2">
                   <span className="font-medium">{attempt.topic}</span>
                   <span className="text-muted-foreground">{attempt.status.replace(/_/g, " ")}</span>
-                  {attempt.message && (
-                    <span className="text-muted-foreground">{attempt.message}</span>
-                  )}
+                  {attempt.message && <span className="text-muted-foreground">{attempt.message}</span>}
                 </div>
               ))}
             </div>
@@ -255,11 +281,49 @@ export function ShopifyWebhookDiagnostics() {
 
           {!panelHealthy && (
             <p className="text-xs text-amber-900 leading-snug">
-              Required webhooks are missing or misconfigured. Click Re-register after confirming your shop is linked.
+              Required webhooks are missing or misconfigured. Use Re-register webhooks after confirming your shop is
+              linked.
             </p>
           )}
         </>
       )}
     </div>
   );
+}
+
+type AdvancedToolsProps = {
+  enabled: boolean;
+  onReregisterComplete?: () => void;
+};
+
+/** Collapsed by default; auto-expanded in local dev. Only mount when Shopify is linked. */
+export function ShopifyWebhookAdvancedTools({ enabled, onReregisterComplete }: AdvancedToolsProps) {
+  const [open, setOpen] = useState(import.meta.env.DEV);
+
+  if (!enabled) return null;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="pt-2 border-t border-gray-100">
+      <CollapsibleTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 px-2 text-xs text-gray-600 hover:text-gray-900 -ml-2"
+          data-testid="button-shopify-advanced-toggle"
+        >
+          <ChevronRight className={cn("h-3.5 w-3.5 mr-1 transition-transform", open && "rotate-90")} />
+          Advanced — webhook health &amp; registration
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-2">
+        <ShopifyWebhookDiagnosticsBody enabled={enabled} onReregisterComplete={onReregisterComplete} />
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/** @deprecated Use ShopifyWebhookAdvancedTools inside ShopifyManagePanel */
+export function ShopifyWebhookDiagnostics() {
+  return <ShopifyWebhookDiagnosticsBody enabled={true} />;
 }

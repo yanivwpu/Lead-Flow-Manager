@@ -468,6 +468,35 @@ async function resolveSessionShopifyMerchant(userId: string) {
   return { shop: user.shopifyShop, accessToken: user.shopifyAccessToken };
 }
 
+router.get('/connection-status', async (req: Request, res: Response) => {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    const userId = (req.user as { id: string }).id;
+    const user = await storage.getUserForSession(userId);
+    const shop = typeof user?.shopifyShop === 'string' ? user.shopifyShop.trim() : '';
+    const hasToken = typeof user?.shopifyAccessToken === 'string' && user.shopifyAccessToken.trim().length > 0;
+    const connected = !!(shop && hasToken);
+
+    const integration = await storage.getIntegrationByUserAndType(userId, 'shopify');
+    const shopFromIntegration =
+      integration?.config && typeof integration.config === 'object'
+        ? String((integration.config as Record<string, unknown>).shopUrl ?? '').trim()
+        : '';
+
+    res.json({
+      connected,
+      shop: connected ? shop : shop || shopFromIntegration || null,
+      syncEnabled: connected && !!integration?.isActive,
+      integrationId: integration?.id ?? null,
+      uninstalled: !connected && !!(shop || shopFromIntegration),
+    });
+  } catch (error) {
+    console.error('[Shopify Connection Status]', error);
+    res.status(500).json({ error: 'Failed to load Shopify connection status' });
+  }
+});
+
 router.get('/webhooks/health', async (req: Request, res: Response) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
