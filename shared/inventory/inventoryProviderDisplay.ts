@@ -57,11 +57,7 @@ export function isDevSeedDisplayName(value: string | null | undefined): boolean 
   return DEV_SEED_LABEL_PATTERN.test(value.trim());
 }
 
-export function isDevSeedOriginatingSystem(value: string | null | undefined): boolean {
-  if (!value?.trim()) return false;
-  const v = value.trim().toLowerCase();
-  return v === "dev-seed" || v.includes("dev-seed");
-}
+export { isDevSeedOriginatingSystem } from "./inventoryDevSeedGuard";
 
 /** Hide dev-seed labels in production UI — seed scripts unchanged. */
 export function sanitizeInventoryDisplayNameForUi(

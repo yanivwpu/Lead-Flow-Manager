@@ -588,6 +588,9 @@ app.use((req, res, next) => {
         `${appUrl || "(set APP_URL env)"}/api/webhook/meta`,
       );
       runStartupGhlCleanup().catch(err => console.error('[GHL Startup Cleanup] Unhandled error:', err));
+      import("./inventory/inventoryDevSeedAudit")
+        .then(({ runInventoryDevSeedProductionAudit }) => runInventoryDevSeedProductionAudit())
+        .catch((err) => console.error("[inventory-dev-seed] Startup audit failed:", err));
 
       setTimeout(() => {
         (async () => {

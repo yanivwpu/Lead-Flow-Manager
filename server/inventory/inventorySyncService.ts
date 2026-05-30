@@ -1,3 +1,4 @@
+import { assertProductionDevSeedSourceAllowed } from "@shared/inventory/inventoryDevSeedGuard";
 import { providerSupportsListingSync, type InventoryProvider } from "@shared/inventory/inventoryProviderSchema";
 import {
   mergeResoSyncCursor,
@@ -24,7 +25,7 @@ export type StartSyncOptions = {
 
 export type StartSyncResult =
   | { started: true }
-  | { started: false; reason: "already_running" | "not_supported" | "source_not_found" };
+  | { started: false; reason: "already_running" | "not_supported" | "source_not_found" | "dev_seed_blocked" };
 
 function resolveSyncMode(source: InventorySource, options?: StartSyncOptions): ResoSyncMode {
   if (options?.mode) return options.mode;
@@ -80,6 +81,14 @@ export async function startInventorySourceSync(
   if (!providerSupportsListingSync(source.provider as InventoryProvider)) {
     return { started: false, reason: "not_supported" };
   }
+
+  const devSeedGuard = assertProductionDevSeedSourceAllowed(
+    (source.config || {}) as Record<string, unknown>,
+  );
+  if (!devSeedGuard.ok) {
+    return { started: false, reason: "dev_seed_blocked" };
+  }
+
   if (runningSyncs.has(sourceId)) {
     return { started: false, reason: "already_running" };
   }

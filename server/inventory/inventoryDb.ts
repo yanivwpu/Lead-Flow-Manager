@@ -7,8 +7,22 @@ import {
 } from "@shared/schema";
 import type { NormalizedInventoryListing } from "@shared/inventory/inventoryListingSchema";
 import type { SyncAlertStatus } from "@shared/inventory/inventoryOpportunityTypes";
+import {
+  assertProductionDevSeedListingAllowed,
+  isDevSeedProviderListingId,
+  isProductionDevSeedGuardEnabled,
+} from "@shared/inventory/inventoryDevSeedGuard";
 import { db } from "../../drizzle/db";
 import { decryptIntegrationConfig, encryptIntegrationConfig } from "../integrationConfigCrypto";
+
+function devSeedListingExcludeCondition() {
+  if (!isProductionDevSeedGuardEnabled()) return null;
+  return sql`${inventoryListings.providerListingId} not like 'dev-seed-%'`;
+}
+
+function isBlockedDevSeedListingRow(row: InventoryListing): boolean {
+  return isProductionDevSeedGuardEnabled() && isDevSeedProviderListingId(row.providerListingId);
+}
 
 export function decryptSourceCredentials(
   credentialsEnc: Record<string, unknown>,
@@ -132,6 +146,11 @@ export async function upsertInventoryListing(
   sourceId: string,
   normalized: NormalizedInventoryListing,
 ): Promise<ListingUpsertResult> {
+  const listingGuard = assertProductionDevSeedListingAllowed(normalized.providerListingId);
+  if (!listingGuard.ok) {
+    throw new Error(listingGuard.message);
+  }
+
   const row = listingRowFromNormalized(userId, sourceId, normalized);
   const now = new Date();
 
@@ -284,19 +303,27 @@ export async function fetchActiveListingsForMatching(
   userId: string,
   limit = 2500,
 ): Promise<InventoryListing[]> {
+  const conditions = [eq(inventoryListings.userId, userId), eq(inventoryListings.status, "active")];
+  const devSeedExclude = devSeedListingExcludeCondition();
+  if (devSeedExclude) conditions.push(devSeedExclude);
+
   return db
     .select()
     .from(inventoryListings)
-    .where(and(eq(inventoryListings.userId, userId), eq(inventoryListings.status, "active")))
+    .where(and(...conditions))
     .orderBy(desc(inventoryListings.syncedAt))
     .limit(limit);
 }
 
 export async function countActiveListingsForUser(userId: string): Promise<number> {
+  const conditions = [eq(inventoryListings.userId, userId), eq(inventoryListings.status, "active")];
+  const devSeedExclude = devSeedListingExcludeCondition();
+  if (devSeedExclude) conditions.push(devSeedExclude);
+
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(inventoryListings)
-    .where(and(eq(inventoryListings.userId, userId), eq(inventoryListings.status, "active")));
+    .where(and(...conditions));
   return row?.count ?? 0;
 }
 
@@ -376,6 +403,7 @@ export async function getInventoryListing(
     .from(inventoryListings)
     .where(and(eq(inventoryListings.id, listingId), eq(inventoryListings.userId, userId)))
     .limit(1);
+  if (!row || isBlockedDevSeedListingRow(row)) return undefined;
   return row;
 }
 
@@ -384,10 +412,12 @@ export async function getInventoryListingsByIds(
   listingIds: string[],
 ): Promise<InventoryListing[]> {
   if (listingIds.length === 0) return [];
-  return db
+  const rows = await db
     .select()
     .from(inventoryListings)
     .where(and(eq(inventoryListings.userId, userId), inArray(inventoryListings.id, listingIds)));
+  if (!isProductionDevSeedGuardEnabled()) return rows;
+  return rows.filter((row) => !isDevSeedProviderListingId(row.providerListingId));
 }
 
 /** Active listings flagged new or price-reduced since last sync — for opportunity rebuild. */
@@ -409,6 +439,8 @@ export async function fetchActiveListingsWithOpportunityAlerts(
     ),
   ];
   if (sourceId) conditions.push(eq(inventoryListings.sourceId, sourceId));
+  const devSeedExclude = devSeedListingExcludeCondition();
+  if (devSeedExclude) conditions.push(devSeedExclude);
 
   return db
     .select()

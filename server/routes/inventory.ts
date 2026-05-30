@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { z } from "zod";
+import { DEV_SEED_PRODUCTION_BLOCK_MESSAGE } from "@shared/inventory/inventoryDevSeedGuard";
 import { inventoryListingStatusSchema } from "@shared/inventory/inventoryListingSchema";
 import { canUseInventoryConnector, isInventoryConnectorEnabled } from "../inventory/inventoryGate";
 import { isRgeInstalledForUser } from "../buyerPreferenceService";
@@ -175,6 +176,9 @@ export function registerInventoryRoutes(app: Express): void {
             autoSyncStarted = true;
           } else if (outcome.reason === "already_running") {
             // Import already in progress — no error, no duplicate start.
+          } else if (outcome.reason === "dev_seed_blocked") {
+            autoSyncFailed = true;
+            autoSyncError = DEV_SEED_PRODUCTION_BLOCK_MESSAGE;
           } else if (outcome.reason === "not_supported") {
             autoSyncFailed = true;
             autoSyncError =
@@ -208,6 +212,12 @@ export function registerInventoryRoutes(app: Express): void {
           error:
             "This inventory source does not support listing sync. Connect a listing feed provider as your inventory source.",
           code: "listing_sync_not_supported",
+        });
+      }
+      if (outcome.reason === "dev_seed_blocked") {
+        return res.status(403).json({
+          error: DEV_SEED_PRODUCTION_BLOCK_MESSAGE,
+          code: "dev_seed_not_allowed",
         });
       }
       if (!outcome.started) {

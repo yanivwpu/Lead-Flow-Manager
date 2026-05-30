@@ -21,6 +21,9 @@ import {
 import { getInventoryProviderAdapter } from "./inventoryProviderRegistry";
 import type { InventoryAdapterContext } from "./providers/types";
 import {
+  assertProductionDevSeedSourceAllowed,
+} from "@shared/inventory/inventoryDevSeedGuard";
+import {
   sanitizeInventoryDisplayNameForUi,
   sanitizeOriginatingSystemForUi,
 } from "@shared/inventory/inventoryProviderDisplay";
@@ -212,6 +215,11 @@ export async function createSourceForUser(
   }
 
   const credentials = body.credentials ?? {};
+  const devSeedGuard = assertProductionDevSeedSourceAllowed(body.config as Record<string, unknown>);
+  if (!devSeedGuard.ok) {
+    throw new InventorySourceError(devSeedGuard.code, devSeedGuard.message);
+  }
+
   const validation = validateProviderPayload(body.provider, body.config, credentials);
   if (!validation.ok) {
     throw new InventorySourceError("invalid_payload", validation.message);
@@ -284,6 +292,11 @@ export async function updateSourceForUser(
     throw new InventorySourceError("invalid_payload", validation.message);
   }
 
+  const devSeedGuard = assertProductionDevSeedSourceAllowed(nextConfig);
+  if (!devSeedGuard.ok) {
+    throw new InventorySourceError(devSeedGuard.code, devSeedGuard.message);
+  }
+
   const patch: Partial<typeof inventorySources.$inferInsert> = {
     ...(body.displayName !== undefined ? { displayName: body.displayName.trim() } : {}),
     ...(body.config !== undefined ? { config: nextConfig } : {}),
@@ -317,6 +330,13 @@ export async function removeSourceForUser(userId: string, sourceId: string): Pro
 export async function validateSourceConnection(userId: string, sourceId: string) {
   const source = await getInventorySource(userId, sourceId);
   if (!source) return null;
+
+  const devSeedGuard = assertProductionDevSeedSourceAllowed(
+    (source.config || {}) as Record<string, unknown>,
+  );
+  if (!devSeedGuard.ok) {
+    return { ok: false, message: devSeedGuard.message, connectionStatus: source.connectionStatus };
+  }
 
   const adapter = getInventoryProviderAdapter(source.provider as InventoryProvider);
   const ctx = buildAdapterContext(source);
