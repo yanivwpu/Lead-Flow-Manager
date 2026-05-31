@@ -24,7 +24,7 @@ export function GoogleAnalyticsRouteTracker() {
     const sendRoutePageView = () => {
       if (lastTrackedPathRef.current === pagePath) return;
       lastTrackedPathRef.current = pagePath;
-      trackGoogleAnalyticsPageView(pagePath, "route");
+      trackGoogleAnalyticsPageView(pagePath);
     };
 
     const trySendRoute = () => {

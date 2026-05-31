@@ -81,10 +81,6 @@ export function CookieConsentRoot({ children }: { children: ReactNode }) {
     const code = geo.country;
 
     if (code && isEuUkEeaCountry(code)) {
-      console.info("[GA4] consent pending — EU/UK/EEA visitor must accept analytics", {
-        country: code,
-        source: geo.source ?? null,
-      });
       return;
     }
 
@@ -95,7 +91,6 @@ export function CookieConsentRoot({ children }: { children: ReactNode }) {
         decidedAt: new Date().toISOString(),
         basis: "implicit-non-eu",
       };
-      console.info("[GA4] consent granted — implicit non-EU", { country: code, source: geo.source ?? null });
       writeStoredConsent(c);
       setStored(c);
       loadGoogleAnalytics(GA_MEASUREMENT_ID);
@@ -109,7 +104,6 @@ export function CookieConsentRoot({ children }: { children: ReactNode }) {
       decidedAt: new Date().toISOString(),
       basis: "implicit-unknown-region",
     };
-    console.info("[GA4] consent granted — implicit unknown region", { source: geo.source ?? null });
     writeStoredConsent(c);
     setStored(c);
     loadGoogleAnalytics(GA_MEASUREMENT_ID);
@@ -134,7 +128,6 @@ export function CookieConsentRoot({ children }: { children: ReactNode }) {
       decidedAt: new Date().toISOString(),
       basis: "explicit",
     };
-    console.info("[GA4] consent explicit choice", { analytics });
     writeStoredConsent(c);
     setStored(c);
     if (analytics) {
