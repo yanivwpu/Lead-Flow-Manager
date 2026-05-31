@@ -5,7 +5,7 @@ export const COOKIE_CONSENT_STORAGE_KEY = "whachat_cookie_consent";
 export const GA_MEASUREMENT_ID =
   (typeof import.meta.env.VITE_GA_MEASUREMENT_ID === "string" &&
     import.meta.env.VITE_GA_MEASUREMENT_ID.trim()) ||
-  "G-6Y1CWBVBHL";
+  "G-6Y1CWVBVHL";
 
 export type ConsentBasis =
   | "explicit"
@@ -76,6 +76,11 @@ export function readStoredConsent(): StoredCookieConsent | null {
 export function writeStoredConsent(c: StoredCookieConsent): void {
   const prev = readStoredConsent();
   localStorage.setItem(COOKIE_CONSENT_STORAGE_KEY, JSON.stringify(c));
+  console.info("[GA4] consent stored", {
+    analytics: c.analytics,
+    basis: c.basis ?? null,
+    previousAnalytics: prev?.analytics ?? null,
+  });
   if (c.analytics && prev?.analytics !== true) {
     notifyAnalyticsConsentGranted();
   }
@@ -87,11 +92,25 @@ export function hasAnalyticsConsent(): boolean {
 
 let gaInjected = false;
 let gaReady = false;
+let activeMeasurementId: string | null = null;
 const gaReadyListeners = new Set<() => void>();
 const consentGrantedListeners = new Set<() => void>();
 
+type GtagWindow = Window & {
+  dataLayer?: unknown[];
+  gtag?: (...args: unknown[]) => void;
+};
+
+function gtagWindow(): GtagWindow {
+  return window as GtagWindow;
+}
+
 export function isGoogleAnalyticsReady(): boolean {
   return gaReady;
+}
+
+export function getActiveGaMeasurementId(): string | null {
+  return activeMeasurementId;
 }
 
 /** Subscribe when gtag script has finished loading. Returns unsubscribe. */
@@ -106,9 +125,12 @@ export function onGoogleAnalyticsReady(listener: () => void): () => void {
 
 function notifyGoogleAnalyticsReady(measurementId: string): void {
   gaReady = true;
+  activeMeasurementId = measurementId;
+  const w = gtagWindow();
   console.info("[GA4] loaded", measurementId, {
-    dataLayer: Array.isArray((window as Window & { dataLayer?: unknown[] }).dataLayer),
-    gtagType: typeof (window as Window & { gtag?: unknown }).gtag,
+    dataLayer: Array.isArray(w.dataLayer),
+    gtagType: typeof w.gtag,
+    consentAtLoad: hasAnalyticsConsent(),
   });
   for (const listener of gaReadyListeners) {
     listener();
@@ -138,24 +160,22 @@ export function getAnalyticsPagePath(): string {
 
 type PageViewSource = "initial" | "route";
 
-/** Fire a GA4 page_view (only when consent granted and gtag ready). */
-export function trackGoogleAnalyticsPageView(
-  pagePath: string = getAnalyticsPagePath(),
-  source: PageViewSource = "initial",
-): void {
-  if (!hasAnalyticsConsent()) return;
-  if (!gaReady) return;
-
-  const w = window as Window & { gtag?: (...args: unknown[]) => void; dataLayer?: unknown[] };
+function pushPageViewEvent(
+  measurementId: string,
+  pagePath: string,
+  source: PageViewSource,
+): boolean {
+  const w = gtagWindow();
   if (typeof w.gtag !== "function") {
-    console.warn("[GA4] page_view skipped — gtag is not a function yet", { pagePath, source });
-    return;
+    console.warn("[GA4] page_view skipped — gtag is not a function", { pagePath, source });
+    return false;
   }
 
   w.gtag("event", "page_view", {
+    send_to: measurementId,
     page_path: pagePath,
-    page_location: typeof window !== "undefined" ? window.location.href : pagePath,
-    page_title: typeof document !== "undefined" ? document.title : "",
+    page_location: window.location.href,
+    page_title: document.title,
   });
 
   if (source === "route") {
@@ -163,36 +183,81 @@ export function trackGoogleAnalyticsPageView(
   } else {
     console.info("[GA4] page_view fired", pagePath);
   }
+  return true;
+}
+
+/** Fire a GA4 page_view (only when consent granted and gtag ready). */
+export function trackGoogleAnalyticsPageView(
+  pagePath: string = getAnalyticsPagePath(),
+  source: PageViewSource = "initial",
+): void {
+  if (!gaReady) {
+    console.info("[GA4] page_view skipped — gtag not ready", { pagePath, source });
+    return;
+  }
+  if (!hasAnalyticsConsent()) {
+    console.info("[GA4] page_view skipped — analytics consent false", { pagePath, source });
+    return;
+  }
+  const measurementId = activeMeasurementId ?? GA_MEASUREMENT_ID;
+  pushPageViewEvent(measurementId, pagePath, source);
 }
 
 /** Loads gtag once after analytics consent. Safe to call multiple times. */
 export function loadGoogleAnalytics(measurementId: string = GA_MEASUREMENT_ID): void {
-  if (typeof window === "undefined" || gaInjected) return;
-  if (!hasAnalyticsConsent()) return;
-  gaInjected = true;
+  if (typeof window === "undefined" || gaInjected) {
+    if (gaInjected) {
+      console.info("[GA4] load skipped — already injected", { measurementId });
+    }
+    return;
+  }
 
-  const w = window as Window & {
-    dataLayer?: unknown[];
-    gtag?: (...args: unknown[]) => void;
-  };
+  const consentGrantedAtLoad = hasAnalyticsConsent();
+  console.info("[GA4] load requested", {
+    measurementId,
+    consentGranted: consentGrantedAtLoad,
+    host: window.location.host,
+  });
+  if (!consentGrantedAtLoad) {
+    console.info("[GA4] load blocked — no analytics consent in localStorage");
+    return;
+  }
+
+  gaInjected = true;
+  activeMeasurementId = measurementId;
+
+  const w = gtagWindow();
   w.dataLayer = w.dataLayer || [];
-  function gtag(...args: unknown[]) {
+  function gtagStub(...args: unknown[]) {
     w.dataLayer!.push(args);
   }
-  w.gtag = gtag;
+  w.gtag = w.gtag ?? gtagStub;
 
   const s = document.createElement("script");
   s.async = true;
-  s.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
+  s.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`;
   document.head.appendChild(s);
+
   s.onerror = () => {
     console.warn("[GA4] gtag script failed to load", measurementId);
     gaInjected = false;
+    activeMeasurementId = null;
   };
+
   s.onload = () => {
-    gtag("js", new Date());
-    gtag("config", measurementId, { send_page_view: false });
+    const gtagFn = gtagWindow().gtag ?? gtagStub;
+    gtagFn("js", new Date());
+    // send_page_view:true ensures at least one collect hit even if manual event dispatch fails.
+    gtagFn("config", measurementId, { send_page_view: true });
+
     notifyGoogleAnalyticsReady(measurementId);
-    trackGoogleAnalyticsPageView(getAnalyticsPagePath(), "initial");
+
+    const pagePath = getAnalyticsPagePath();
+    const sent = pushPageViewEvent(measurementId, pagePath, "initial");
+    if (!sent) {
+      window.setTimeout(() => {
+        pushPageViewEvent(measurementId, pagePath, "initial");
+      }, 0);
+    }
   };
 }
