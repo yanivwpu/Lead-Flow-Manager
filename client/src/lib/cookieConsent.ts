@@ -5,7 +5,7 @@ export const COOKIE_CONSENT_STORAGE_KEY = "whachat_cookie_consent";
 export const GA_MEASUREMENT_ID =
   (typeof import.meta.env.VITE_GA_MEASUREMENT_ID === "string" &&
     import.meta.env.VITE_GA_MEASUREMENT_ID.trim()) ||
-  "G-6Y1CWVBVHL";
+  "G-6Y1CWBVBHL";
 
 /** TEMP: remove after DebugView / Realtime verification. Sends page_view hits to GA4 DebugView. */
 const GA4_TEMP_DEBUG_MODE = true;
