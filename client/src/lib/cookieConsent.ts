@@ -190,57 +190,55 @@ function gtagWindow(): GtagWindow {
   return window as GtagWindow;
 }
 
-/** Pre-load queue only — never assign to window.gtag (blocks gtag.js from installing). */
-let preloadQueue: ((...args: unknown[]) => void) | null = null;
-
-function queueToDataLayer(...args: unknown[]): void {
+/**
+ * Standard Google gtag bootstrap (must run before gtag/js loads):
+ *   window.dataLayer = window.dataLayer || [];
+ *   function gtag(){window.dataLayer.push(arguments);}
+ *   window.gtag = gtag;
+ */
+function ensureGoogleGtagSnippet(): (...args: unknown[]) => void {
   const w = gtagWindow();
   w.dataLayer = w.dataLayer || [];
-  if (!preloadQueue) {
-    preloadQueue = function dataLayerPreloadQueue() {
-      // Must match Google's snippet: push `arguments`, not a rest-param array.
-      // eslint-disable-next-line prefer-rest-params
-      w.dataLayer!.push(arguments);
-    };
+  if (typeof w.gtag === "function") {
+    return w.gtag;
   }
-  preloadQueue(...args);
+  const gtag = function gtag() {
+    // eslint-disable-next-line prefer-rest-params
+    w.dataLayer!.push(arguments);
+  };
+  w.gtag = gtag;
+  return gtag;
 }
 
-/** True when gtag.js has defined window.gtag (not our preload queue). */
-function isGoogleGtagInstalled(): boolean {
-  const gtag = gtagWindow().gtag;
-  return typeof gtag === "function" && gtag !== preloadQueue;
+function isUsableGtag(): boolean {
+  return typeof gtagWindow().gtag === "function";
 }
 
-function invokeGtag(...args: unknown[]): void {
-  const w = gtagWindow();
-  if (isGoogleGtagInstalled()) {
-    w.gtag!(...args);
-    return;
-  }
-  queueToDataLayer(...args);
+function callGtag(...args: unknown[]): void {
+  ensureGoogleGtagSnippet()(...args);
 }
 
 function queueGtagConsentBootstrap(): void {
-  queueToDataLayer("consent", "default", {
+  callGtag("consent", "default", {
     ...GA_CONSENT_ALL_DENIED,
     region: EU_UK_EEA_REGIONS,
   });
-  queueToDataLayer("consent", "default", GA_CONSENT_ALL_DENIED);
-  queueToDataLayer("consent", "update", GA_CONSENT_ANALYTICS_GRANTED);
+  callGtag("consent", "default", GA_CONSENT_ALL_DENIED);
+  callGtag("consent", "update", GA_CONSENT_ANALYTICS_GRANTED);
 
   console.info("[GA4] consent bootstrap queued", {
     default: GA_CONSENT_ALL_DENIED,
     update: GA_CONSENT_ANALYTICS_GRANTED,
     expectedCollectGcs: "G101",
+    gtagUsable: isUsableGtag(),
   });
 }
 
 function applyAnalyticsConsentUpdate(source: string): void {
-  invokeGtag("consent", "update", GA_CONSENT_ANALYTICS_GRANTED);
+  callGtag("consent", "update", GA_CONSENT_ANALYTICS_GRANTED);
   console.info("[GA4] consent update applied", {
     source,
-    gtagFromGoogle: isGoogleGtagInstalled(),
+    gtagUsable: isUsableGtag(),
     ...GA_CONSENT_ANALYTICS_GRANTED,
     expectedCollectGcs: "G101",
   });
@@ -364,7 +362,8 @@ function notifyGoogleAnalyticsReady(measurementId: string): void {
   const w = gtagWindow();
   console.info("[GA4] loaded", measurementId, {
     dataLayer: Array.isArray(w.dataLayer),
-    gtagFromGoogle: isGoogleGtagInstalled(),
+    gtagUsable: isUsableGtag(),
+    gtagType: typeof w.gtag,
     dataLayerLength: Array.isArray(w.dataLayer) ? w.dataLayer.length : null,
     consentAtLoad: hasAnalyticsConsent(),
   });
@@ -411,16 +410,16 @@ function pushPageViewEvent(
     source,
     measurementId,
     payload,
-    gtagFromGoogle: isGoogleGtagInstalled(),
+    gtagUsable: isUsableGtag(),
     dataLayerLength: Array.isArray(gtagWindow().dataLayer) ? gtagWindow().dataLayer!.length : null,
   });
 
-  invokeGtag("event", "page_view", payload);
+  callGtag("event", "page_view", payload);
 
   console.info("[GA4] page_view queued", {
     source,
     pagePath,
-    gtagFromGoogle: isGoogleGtagInstalled(),
+    gtagUsable: isUsableGtag(),
   });
   return true;
 }
@@ -466,14 +465,16 @@ export function loadGoogleAnalytics(measurementId: string = GA_MEASUREMENT_ID): 
   activeMeasurementId = measurementId;
   installCollectNetworkObserver(measurementId);
 
+  ensureGoogleGtagSnippet();
   queueGtagConsentBootstrap();
-  queueToDataLayer("js", new Date());
-  queueToDataLayer("config", measurementId, { send_page_view: false });
+  callGtag("js", new Date());
+  callGtag("config", measurementId, { send_page_view: false });
 
   console.info("[GA4] bootstrap queued", {
     measurementId,
     dataLayerLength: gtagWindow().dataLayer?.length ?? 0,
-    gtagFromGoogle: isGoogleGtagInstalled(),
+    gtagUsable: isUsableGtag(),
+    gtagType: typeof gtagWindow().gtag,
   });
 
   const s = document.createElement("script");
@@ -489,19 +490,17 @@ export function loadGoogleAnalytics(measurementId: string = GA_MEASUREMENT_ID): 
 
   s.onload = () => {
     const w = gtagWindow();
-    const gtagFromGoogle = isGoogleGtagInstalled();
+    const gtagUsable = isUsableGtag();
 
     console.info("[GA4] gtag script onload", {
       measurementId,
-      gtagFromGoogle,
+      gtagUsable,
       gtagType: typeof w.gtag,
       dataLayerLength: Array.isArray(w.dataLayer) ? w.dataLayer.length : null,
     });
 
-    if (!gtagFromGoogle) {
-      console.warn(
-        "[GA4] gtag.js did not define window.gtag — hits may queue in dataLayer without measurement",
-      );
+    if (!gtagUsable) {
+      console.warn("[GA4] window.gtag is not a function after gtag.js onload");
     }
 
     applyAnalyticsConsentUpdate("gtag-script-onload");
