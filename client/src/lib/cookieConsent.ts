@@ -107,36 +107,34 @@ function parseCollectConsentParams(url: string): CollectConsentParams | null {
   }
 }
 
-function queueGtagConsentBootstrap(gtag: GtagFn): void {
-  // 1) EEA/UK: default denied until explicit accept (GA only loads after accept anyway).
-  gtag("consent", "default", {
-    ...GA_CONSENT_ALL_DENIED,
-    region: EU_UK_EEA_REGIONS,
-  });
-  // 2) Global baseline denied — required before update; gtag.js regional defaults won't win.
-  gtag("consent", "default", GA_CONSENT_ALL_DENIED);
-  // 3) Our CMP already granted analytics — update BEFORE js/config so hits are not cookieless.
-  gtag("consent", "update", GA_CONSENT_ANALYTICS_GRANTED);
+type CollectHitSummary = CollectConsentParams & {
+  tid: string | null;
+  en: string | null;
+  cid: string | null;
+  sid: string | null;
+  dl: string | null;
+  _s: string | null;
+  v: string | null;
+};
 
-  console.info("[GA4] consent bootstrap queued", {
-    default: GA_CONSENT_ALL_DENIED,
-    update: GA_CONSENT_ANALYTICS_GRANTED,
-    expectedCollectGcs: "G101",
-  });
-}
-
-function applyAnalyticsConsentUpdate(source: string): void {
-  const gtag = gtagWindow().gtag;
-  if (typeof gtag !== "function") {
-    console.info("[GA4] consent update skipped — gtag not ready", { source });
-    return;
+function parseCollectHitSummary(url: string): CollectHitSummary | null {
+  try {
+    const u = new URL(url, window.location.origin);
+    const consent = parseCollectConsentParams(url);
+    if (!consent) return null;
+    return {
+      ...consent,
+      tid: u.searchParams.get("tid"),
+      en: u.searchParams.get("en"),
+      cid: u.searchParams.get("cid"),
+      sid: u.searchParams.get("sid"),
+      dl: u.searchParams.get("dl"),
+      _s: u.searchParams.get("_s"),
+      v: u.searchParams.get("v"),
+    };
+  } catch {
+    return null;
   }
-  gtag("consent", "update", GA_CONSENT_ANALYTICS_GRANTED);
-  console.info("[GA4] consent update applied", {
-    source,
-    ...GA_CONSENT_ANALYTICS_GRANTED,
-    expectedCollectGcs: "G101",
-  });
 }
 
 export function isEuUkEeaCountry(code: string | null | undefined): boolean {
@@ -185,37 +183,67 @@ const consentGrantedListeners = new Set<() => void>();
 
 type GtagWindow = Window & {
   dataLayer?: unknown[];
-  gtag?: GtagFn;
-};
-
-type GtagFn = {
-  (...args: unknown[]): void;
-  /** Set on our pre-load stub; real gtag.js clears this when it takes over. */
-  __whachatStub?: true;
+  gtag?: (...args: unknown[]) => void;
 };
 
 function gtagWindow(): GtagWindow {
   return window as GtagWindow;
 }
 
-function isWhachatGtagStub(gtag: GtagFn | undefined): boolean {
-  return typeof gtag === "function" && gtag.__whachatStub === true;
-}
+/** Pre-load queue only — never assign to window.gtag (blocks gtag.js from installing). */
+let preloadQueue: ((...args: unknown[]) => void) | null = null;
 
-function ensureGtagStub(): GtagFn {
+function queueToDataLayer(...args: unknown[]): void {
   const w = gtagWindow();
   w.dataLayer = w.dataLayer || [];
-  if (typeof w.gtag === "function" && !isWhachatGtagStub(w.gtag)) {
-    return w.gtag;
+  if (!preloadQueue) {
+    preloadQueue = function dataLayerPreloadQueue() {
+      // Must match Google's snippet: push `arguments`, not a rest-param array.
+      // eslint-disable-next-line prefer-rest-params
+      w.dataLayer!.push(arguments);
+    };
   }
-  const stub: GtagFn = function gtagStub() {
-    // Must match Google's snippet: push `arguments`, not a rest-param array.
-    // eslint-disable-next-line prefer-rest-params
-    w.dataLayer!.push(arguments);
-  };
-  stub.__whachatStub = true;
-  w.gtag = stub;
-  return stub;
+  preloadQueue(...args);
+}
+
+/** True when gtag.js has defined window.gtag (not our preload queue). */
+function isGoogleGtagInstalled(): boolean {
+  const gtag = gtagWindow().gtag;
+  return typeof gtag === "function" && gtag !== preloadQueue;
+}
+
+function invokeGtag(...args: unknown[]): void {
+  const w = gtagWindow();
+  if (isGoogleGtagInstalled()) {
+    w.gtag!(...args);
+    return;
+  }
+  queueToDataLayer(...args);
+}
+
+function queueGtagConsentBootstrap(): void {
+  queueToDataLayer("consent", "default", {
+    ...GA_CONSENT_ALL_DENIED,
+    region: EU_UK_EEA_REGIONS,
+  });
+  queueToDataLayer("consent", "default", GA_CONSENT_ALL_DENIED);
+  queueToDataLayer("consent", "update", GA_CONSENT_ANALYTICS_GRANTED);
+
+  console.info("[GA4] consent bootstrap queued", {
+    default: GA_CONSENT_ALL_DENIED,
+    update: GA_CONSENT_ANALYTICS_GRANTED,
+    expectedCollectGcs: "G101",
+  });
+}
+
+function applyAnalyticsConsentUpdate(source: string): void {
+  invokeGtag("consent", "update", GA_CONSENT_ANALYTICS_GRANTED);
+  console.info("[GA4] consent update applied", {
+    source,
+    gtagFromGoogle: isGoogleGtagInstalled(),
+    ...GA_CONSENT_ANALYTICS_GRANTED,
+    expectedCollectGcs: "G101",
+  });
 }
 
 let collectObserverInstalled = false;
@@ -231,22 +259,37 @@ function installCollectNetworkObserver(measurementId: string): void {
       url,
     );
 
-  const logHit = (url: string, via: string) => {
+  const logHit = (url: string, via: string, responseStatus?: number) => {
     if (!matchCollect(url)) return;
     collectHitIndex += 1;
-    const consent = parseCollectConsentParams(url);
-    const cookielessPing = consent?.analyticsStorageGranted === false;
+    const hit = parseCollectHitSummary(url);
+    const cookielessPing = hit?.analyticsStorageGranted === false;
+    const isMeasurementHit =
+      hit?.tid === measurementId &&
+      hit?.en === "page_view" &&
+      hit?.analyticsStorageGranted === true &&
+      !!hit?.cid;
     console.info("[GA4] collect request observed", {
       via,
       hitIndex: collectHitIndex,
       measurementId,
-      hasTid: url.includes(measurementId) || url.includes("tid="),
-      consent,
+      responseStatus: responseStatus ?? null,
+      hit,
+      isMeasurementHit,
       cookielessPing,
+      ...(responseStatus != null && responseStatus !== 204 && responseStatus !== 200
+        ? { warning: `unexpected collect HTTP status ${responseStatus}` }
+        : {}),
       ...(cookielessPing
         ? {
             warning:
               "analytics_storage denied in collect URL (gcs G100) — Realtime will not count this hit",
+          }
+        : {}),
+      ...(!isMeasurementHit && !cookielessPing
+        ? {
+            warning:
+              "collect fired but may not be a full page_view measurement hit — check tid/en/cid",
           }
         : {}),
     });
@@ -255,15 +298,20 @@ function installCollectNetworkObserver(measurementId: string): void {
   const origFetch = window.fetch.bind(window);
   window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    logHit(url, "fetch");
-    return origFetch(input, init);
+    const matched = matchCollect(url);
+    return origFetch(input, init).then((response) => {
+      if (matched) logHit(url, "fetch", response.status);
+      return response;
+    });
   }) as typeof window.fetch;
 
   const origBeacon = navigator.sendBeacon?.bind(navigator);
   if (origBeacon) {
     navigator.sendBeacon = (url: string | URL, data?: BodyInit | null) => {
-      logHit(typeof url === "string" ? url : url.href, "sendBeacon");
-      return origBeacon(url, data);
+      const href = typeof url === "string" ? url : url.href;
+      const ok = origBeacon(url, data);
+      if (matchCollect(href)) logHit(href, "sendBeacon", ok ? 204 : 0);
+      return ok;
     };
   }
 
@@ -271,10 +319,8 @@ function installCollectNetworkObserver(measurementId: string): void {
     const entries = performance.getEntriesByType("resource") as PerformanceResourceTiming[];
     for (const e of entries) {
       if (matchCollect(e.name)) {
-        console.info("[GA4] collect already in resource timing", {
-          url: e.name.slice(0, 220),
-          measurementId,
-        });
+        const status = "responseStatus" in e ? (e as PerformanceResourceTiming & { responseStatus?: number }).responseStatus : undefined;
+        logHit(e.name, "resource-timing", status);
       }
     }
   }, 3000);
@@ -283,7 +329,8 @@ function installCollectNetworkObserver(measurementId: string): void {
     try {
       const obs = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
-          logHit(entry.name, "resource");
+          const timing = entry as PerformanceResourceTiming & { responseStatus?: number };
+          logHit(entry.name, "resource", timing.responseStatus);
         }
       });
       obs.observe({ type: "resource", buffered: true });
@@ -317,8 +364,7 @@ function notifyGoogleAnalyticsReady(measurementId: string): void {
   const w = gtagWindow();
   console.info("[GA4] loaded", measurementId, {
     dataLayer: Array.isArray(w.dataLayer),
-    gtagType: typeof w.gtag,
-    gtagIsStub: isWhachatGtagStub(w.gtag),
+    gtagFromGoogle: isGoogleGtagInstalled(),
     dataLayerLength: Array.isArray(w.dataLayer) ? w.dataLayer.length : null,
     consentAtLoad: hasAnalyticsConsent(),
   });
@@ -355,13 +401,6 @@ function pushPageViewEvent(
   pagePath: string,
   source: PageViewSource,
 ): boolean {
-  const w = gtagWindow();
-  const gtag = w.gtag;
-  if (typeof gtag !== "function") {
-    console.warn("[GA4] page_view skipped — gtag is not a function", { pagePath, source });
-    return false;
-  }
-
   const payload = {
     page_path: pagePath,
     page_location: window.location.href,
@@ -372,17 +411,16 @@ function pushPageViewEvent(
     source,
     measurementId,
     payload,
-    gtagIsStub: isWhachatGtagStub(gtag),
-    dataLayerLength: Array.isArray(w.dataLayer) ? w.dataLayer.length : null,
+    gtagFromGoogle: isGoogleGtagInstalled(),
+    dataLayerLength: Array.isArray(gtagWindow().dataLayer) ? gtagWindow().dataLayer!.length : null,
   });
 
-  gtag("event", "page_view", payload);
+  invokeGtag("event", "page_view", payload);
 
   console.info("[GA4] page_view queued", {
     source,
     pagePath,
-    gtagIsStub: isWhachatGtagStub(w.gtag),
-    dataLayerLength: Array.isArray(w.dataLayer) ? w.dataLayer.length : null,
+    gtagFromGoogle: isGoogleGtagInstalled(),
   });
   return true;
 }
@@ -428,18 +466,14 @@ export function loadGoogleAnalytics(measurementId: string = GA_MEASUREMENT_ID): 
   activeMeasurementId = measurementId;
   installCollectNetworkObserver(measurementId);
 
-  const gtag = ensureGtagStub();
-
-  // Consent default (denied) + update (analytics granted) MUST precede js/config.
-  queueGtagConsentBootstrap(gtag);
-  gtag("js", new Date());
-  // Manual page_view only after onload consent re-apply — avoids cookieless config hit.
-  gtag("config", measurementId, { send_page_view: false });
+  queueGtagConsentBootstrap();
+  queueToDataLayer("js", new Date());
+  queueToDataLayer("config", measurementId, { send_page_view: false });
 
   console.info("[GA4] bootstrap queued", {
     measurementId,
     dataLayerLength: gtagWindow().dataLayer?.length ?? 0,
-    gtagIsStub: isWhachatGtagStub(gtagWindow().gtag),
+    gtagFromGoogle: isGoogleGtagInstalled(),
   });
 
   const s = document.createElement("script");
@@ -455,23 +489,21 @@ export function loadGoogleAnalytics(measurementId: string = GA_MEASUREMENT_ID): 
 
   s.onload = () => {
     const w = gtagWindow();
-    const gtagAfterLoad = w.gtag;
-    const stillStub = isWhachatGtagStub(gtagAfterLoad);
+    const gtagFromGoogle = isGoogleGtagInstalled();
 
     console.info("[GA4] gtag script onload", {
       measurementId,
-      gtagIsStub: stillStub,
-      gtagType: typeof gtagAfterLoad,
+      gtagFromGoogle,
+      gtagType: typeof w.gtag,
       dataLayerLength: Array.isArray(w.dataLayer) ? w.dataLayer.length : null,
     });
 
-    if (stillStub) {
+    if (!gtagFromGoogle) {
       console.warn(
-        "[GA4] gtag.js did not replace stub — collect hits will not fire until real gtag loads",
+        "[GA4] gtag.js did not define window.gtag — hits may queue in dataLayer without measurement",
       );
     }
 
-    // Re-apply update after gtag.js init in case built-in regional defaults reset consent.
     applyAnalyticsConsentUpdate("gtag-script-onload");
 
     notifyGoogleAnalyticsReady(measurementId);
