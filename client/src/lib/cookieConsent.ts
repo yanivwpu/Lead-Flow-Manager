@@ -55,6 +55,90 @@ const EU_UK_EEA = new Set([
   "GB",
 ]);
 
+const EU_UK_EEA_REGIONS = [...EU_UK_EEA];
+
+const GA_CONSENT_ALL_DENIED = {
+  ad_storage: "denied",
+  analytics_storage: "denied",
+  ad_user_data: "denied",
+  ad_personalization: "denied",
+} as const;
+
+/** Analytics-only grant — ads stay denied (matches our cookie banner). */
+const GA_CONSENT_ANALYTICS_GRANTED = {
+  analytics_storage: "granted",
+  ad_storage: "denied",
+  ad_user_data: "denied",
+  ad_personalization: "denied",
+} as const;
+
+type CollectConsentParams = {
+  gcs: string | null;
+  gcd: string | null;
+  pscdl: string | null;
+  gcu: string | null;
+  npa: string | null;
+  adStorageGranted: boolean | null;
+  analyticsStorageGranted: boolean | null;
+};
+
+function parseCollectConsentParams(url: string): CollectConsentParams | null {
+  try {
+    const u = new URL(url, window.location.origin);
+    const gcs = u.searchParams.get("gcs");
+    let adStorageGranted: boolean | null = null;
+    let analyticsStorageGranted: boolean | null = null;
+    // gcs format: G1 + ad_storage (0|1) + analytics_storage (0|1)
+    if (gcs && gcs.startsWith("G") && gcs.length >= 4) {
+      adStorageGranted = gcs.charAt(2) === "1";
+      analyticsStorageGranted = gcs.charAt(3) === "1";
+    }
+    return {
+      gcs,
+      gcd: u.searchParams.get("gcd"),
+      pscdl: u.searchParams.get("pscdl"),
+      gcu: u.searchParams.get("gcu"),
+      npa: u.searchParams.get("npa"),
+      adStorageGranted,
+      analyticsStorageGranted,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function queueGtagConsentBootstrap(gtag: GtagFn): void {
+  // 1) EEA/UK: default denied until explicit accept (GA only loads after accept anyway).
+  gtag("consent", "default", {
+    ...GA_CONSENT_ALL_DENIED,
+    region: EU_UK_EEA_REGIONS,
+  });
+  // 2) Global baseline denied — required before update; gtag.js regional defaults won't win.
+  gtag("consent", "default", GA_CONSENT_ALL_DENIED);
+  // 3) Our CMP already granted analytics — update BEFORE js/config so hits are not cookieless.
+  gtag("consent", "update", GA_CONSENT_ANALYTICS_GRANTED);
+
+  console.info("[GA4] consent bootstrap queued", {
+    default: GA_CONSENT_ALL_DENIED,
+    update: GA_CONSENT_ANALYTICS_GRANTED,
+    expectedCollectGcs: "G101",
+  });
+}
+
+function applyAnalyticsConsentUpdate(source: string): void {
+  const gtag = gtagWindow().gtag;
+  if (typeof gtag !== "function") {
+    console.info("[GA4] consent update skipped — gtag not ready", { source });
+    return;
+  }
+  gtag("consent", "update", GA_CONSENT_ANALYTICS_GRANTED);
+  console.info("[GA4] consent update applied", {
+    source,
+    ...GA_CONSENT_ANALYTICS_GRANTED,
+    expectedCollectGcs: "G101",
+  });
+}
+
 export function isEuUkEeaCountry(code: string | null | undefined): boolean {
   if (!code || code.length !== 2) return false;
   return EU_UK_EEA.has(code.toUpperCase());
@@ -82,6 +166,9 @@ export function writeStoredConsent(c: StoredCookieConsent): void {
     previousAnalytics: prev?.analytics ?? null,
   });
   if (c.analytics && prev?.analytics !== true) {
+    if (gaInjected) {
+      applyAnalyticsConsentUpdate("stored-consent-granted");
+    }
     notifyAnalyticsConsentGranted();
   }
 }
@@ -132,6 +219,7 @@ function ensureGtagStub(): GtagFn {
 }
 
 let collectObserverInstalled = false;
+let collectHitIndex = 0;
 
 /** Temporary: log when the browser sends GA4 collect/beacon requests. */
 function installCollectNetworkObserver(measurementId: string): void {
@@ -145,11 +233,22 @@ function installCollectNetworkObserver(measurementId: string): void {
 
   const logHit = (url: string, via: string) => {
     if (!matchCollect(url)) return;
+    collectHitIndex += 1;
+    const consent = parseCollectConsentParams(url);
+    const cookielessPing = consent?.analyticsStorageGranted === false;
     console.info("[GA4] collect request observed", {
       via,
-      url: url.slice(0, 220),
+      hitIndex: collectHitIndex,
       measurementId,
       hasTid: url.includes(measurementId) || url.includes("tid="),
+      consent,
+      cookielessPing,
+      ...(cookielessPing
+        ? {
+            warning:
+              "analytics_storage denied in collect URL (gcs G100) — Realtime will not count this hit",
+          }
+        : {}),
     });
   };
 
@@ -331,15 +430,11 @@ export function loadGoogleAnalytics(measurementId: string = GA_MEASUREMENT_ID): 
 
   const gtag = ensureGtagStub();
 
-  // Queue commands before gtag.js executes (Google's required bootstrap order).
-  gtag("consent", "default", {
-    analytics_storage: "granted",
-    ad_storage: "denied",
-    ad_user_data: "denied",
-    ad_personalization: "denied",
-  });
+  // Consent default (denied) + update (analytics granted) MUST precede js/config.
+  queueGtagConsentBootstrap(gtag);
   gtag("js", new Date());
-  gtag("config", measurementId, { send_page_view: true });
+  // Manual page_view only after onload consent re-apply — avoids cookieless config hit.
+  gtag("config", measurementId, { send_page_view: false });
 
   console.info("[GA4] bootstrap queued", {
     measurementId,
@@ -375,6 +470,9 @@ export function loadGoogleAnalytics(measurementId: string = GA_MEASUREMENT_ID): 
         "[GA4] gtag.js did not replace stub — collect hits will not fire until real gtag loads",
       );
     }
+
+    // Re-apply update after gtag.js init in case built-in regional defaults reset consent.
+    applyAnalyticsConsentUpdate("gtag-script-onload");
 
     notifyGoogleAnalyticsReady(measurementId);
 
