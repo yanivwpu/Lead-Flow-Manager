@@ -7,6 +7,9 @@ export const GA_MEASUREMENT_ID =
     import.meta.env.VITE_GA_MEASUREMENT_ID.trim()) ||
   "G-6Y1CWVBVHL";
 
+/** TEMP: remove after DebugView / Realtime verification. Sends page_view hits to GA4 DebugView. */
+const GA4_TEMP_DEBUG_MODE = true;
+
 export type ConsentBasis =
   | "explicit"
   | "implicit-non-eu"
@@ -115,6 +118,7 @@ type CollectHitSummary = CollectConsentParams & {
   dl: string | null;
   _s: string | null;
   v: string | null;
+  dbg: string | null;
 };
 
 function parseCollectHitSummary(url: string): CollectHitSummary | null {
@@ -131,6 +135,7 @@ function parseCollectHitSummary(url: string): CollectHitSummary | null {
       dl: u.searchParams.get("dl"),
       _s: u.searchParams.get("_s"),
       v: u.searchParams.get("v"),
+      dbg: u.searchParams.get("_dbg"),
     };
   } catch {
     return null;
@@ -274,6 +279,7 @@ function installCollectNetworkObserver(measurementId: string): void {
       responseStatus: responseStatus ?? null,
       hit,
       isMeasurementHit,
+      debugViewHit: hit?.dbg === "1",
       cookielessPing,
       ...(responseStatus != null && responseStatus !== 204 && responseStatus !== 200
         ? { warning: `unexpected collect HTTP status ${responseStatus}` }
@@ -400,16 +406,20 @@ function pushPageViewEvent(
   pagePath: string,
   source: PageViewSource,
 ): boolean {
-  const payload = {
+  const payload: Record<string, string | boolean> = {
     page_path: pagePath,
     page_location: window.location.href,
     page_title: document.title,
   };
+  if (GA4_TEMP_DEBUG_MODE) {
+    payload.debug_mode = true;
+  }
 
   console.info("[GA4] page_view dispatch", {
     source,
     measurementId,
     payload,
+    debugMode: GA4_TEMP_DEBUG_MODE,
     gtagUsable: isUsableGtag(),
     dataLayerLength: Array.isArray(gtagWindow().dataLayer) ? gtagWindow().dataLayer!.length : null,
   });
