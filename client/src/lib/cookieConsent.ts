@@ -98,11 +98,100 @@ const consentGrantedListeners = new Set<() => void>();
 
 type GtagWindow = Window & {
   dataLayer?: unknown[];
-  gtag?: (...args: unknown[]) => void;
+  gtag?: GtagFn;
+};
+
+type GtagFn = {
+  (...args: unknown[]): void;
+  /** Set on our pre-load stub; real gtag.js clears this when it takes over. */
+  __whachatStub?: true;
 };
 
 function gtagWindow(): GtagWindow {
   return window as GtagWindow;
+}
+
+function isWhachatGtagStub(gtag: GtagFn | undefined): boolean {
+  return typeof gtag === "function" && gtag.__whachatStub === true;
+}
+
+function ensureGtagStub(): GtagFn {
+  const w = gtagWindow();
+  w.dataLayer = w.dataLayer || [];
+  if (typeof w.gtag === "function" && !isWhachatGtagStub(w.gtag)) {
+    return w.gtag;
+  }
+  const stub: GtagFn = function gtagStub() {
+    // Must match Google's snippet: push `arguments`, not a rest-param array.
+    // eslint-disable-next-line prefer-rest-params
+    w.dataLayer!.push(arguments);
+  };
+  stub.__whachatStub = true;
+  w.gtag = stub;
+  return stub;
+}
+
+let collectObserverInstalled = false;
+
+/** Temporary: log when the browser sends GA4 collect/beacon requests. */
+function installCollectNetworkObserver(measurementId: string): void {
+  if (collectObserverInstalled || typeof window === "undefined") return;
+  collectObserverInstalled = true;
+
+  const matchCollect = (url: string) =>
+    /google-analytics\.com\/g\/collect|google-analytics\.com\/j\/collect|analytics\.google\.com\/g\/collect/.test(
+      url,
+    );
+
+  const logHit = (url: string, via: string) => {
+    if (!matchCollect(url)) return;
+    console.info("[GA4] collect request observed", {
+      via,
+      url: url.slice(0, 220),
+      measurementId,
+      hasTid: url.includes(measurementId) || url.includes("tid="),
+    });
+  };
+
+  const origFetch = window.fetch.bind(window);
+  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    logHit(url, "fetch");
+    return origFetch(input, init);
+  }) as typeof window.fetch;
+
+  const origBeacon = navigator.sendBeacon?.bind(navigator);
+  if (origBeacon) {
+    navigator.sendBeacon = (url: string | URL, data?: BodyInit | null) => {
+      logHit(typeof url === "string" ? url : url.href, "sendBeacon");
+      return origBeacon(url, data);
+    };
+  }
+
+  window.setTimeout(() => {
+    const entries = performance.getEntriesByType("resource") as PerformanceResourceTiming[];
+    for (const e of entries) {
+      if (matchCollect(e.name)) {
+        console.info("[GA4] collect already in resource timing", {
+          url: e.name.slice(0, 220),
+          measurementId,
+        });
+      }
+    }
+  }, 3000);
+
+  if ("PerformanceObserver" in window) {
+    try {
+      const obs = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          logHit(entry.name, "resource");
+        }
+      });
+      obs.observe({ type: "resource", buffered: true });
+    } catch {
+      // ignore unsupported buffered option
+    }
+  }
 }
 
 export function isGoogleAnalyticsReady(): boolean {
@@ -130,6 +219,8 @@ function notifyGoogleAnalyticsReady(measurementId: string): void {
   console.info("[GA4] loaded", measurementId, {
     dataLayer: Array.isArray(w.dataLayer),
     gtagType: typeof w.gtag,
+    gtagIsStub: isWhachatGtagStub(w.gtag),
+    dataLayerLength: Array.isArray(w.dataLayer) ? w.dataLayer.length : null,
     consentAtLoad: hasAnalyticsConsent(),
   });
   for (const listener of gaReadyListeners) {
@@ -166,23 +257,34 @@ function pushPageViewEvent(
   source: PageViewSource,
 ): boolean {
   const w = gtagWindow();
-  if (typeof w.gtag !== "function") {
+  const gtag = w.gtag;
+  if (typeof gtag !== "function") {
     console.warn("[GA4] page_view skipped — gtag is not a function", { pagePath, source });
     return false;
   }
 
-  w.gtag("event", "page_view", {
-    send_to: measurementId,
+  const payload = {
     page_path: pagePath,
     page_location: window.location.href,
     page_title: document.title,
+  };
+
+  console.info("[GA4] page_view dispatch", {
+    source,
+    measurementId,
+    payload,
+    gtagIsStub: isWhachatGtagStub(gtag),
+    dataLayerLength: Array.isArray(w.dataLayer) ? w.dataLayer.length : null,
   });
 
-  if (source === "route") {
-    console.info("[GA4] route page_view fired", pagePath);
-  } else {
-    console.info("[GA4] page_view fired", pagePath);
-  }
+  gtag("event", "page_view", payload);
+
+  console.info("[GA4] page_view queued", {
+    source,
+    pagePath,
+    gtagIsStub: isWhachatGtagStub(w.gtag),
+    dataLayerLength: Array.isArray(w.dataLayer) ? w.dataLayer.length : null,
+  });
   return true;
 }
 
@@ -225,13 +327,25 @@ export function loadGoogleAnalytics(measurementId: string = GA_MEASUREMENT_ID): 
 
   gaInjected = true;
   activeMeasurementId = measurementId;
+  installCollectNetworkObserver(measurementId);
 
-  const w = gtagWindow();
-  w.dataLayer = w.dataLayer || [];
-  function gtagStub(...args: unknown[]) {
-    w.dataLayer!.push(args);
-  }
-  w.gtag = w.gtag ?? gtagStub;
+  const gtag = ensureGtagStub();
+
+  // Queue commands before gtag.js executes (Google's required bootstrap order).
+  gtag("consent", "default", {
+    analytics_storage: "granted",
+    ad_storage: "denied",
+    ad_user_data: "denied",
+    ad_personalization: "denied",
+  });
+  gtag("js", new Date());
+  gtag("config", measurementId, { send_page_view: true });
+
+  console.info("[GA4] bootstrap queued", {
+    measurementId,
+    dataLayerLength: gtagWindow().dataLayer?.length ?? 0,
+    gtagIsStub: isWhachatGtagStub(gtagWindow().gtag),
+  });
 
   const s = document.createElement("script");
   s.async = true;
@@ -245,19 +359,26 @@ export function loadGoogleAnalytics(measurementId: string = GA_MEASUREMENT_ID): 
   };
 
   s.onload = () => {
-    const gtagFn = gtagWindow().gtag ?? gtagStub;
-    gtagFn("js", new Date());
-    // send_page_view:true ensures at least one collect hit even if manual event dispatch fails.
-    gtagFn("config", measurementId, { send_page_view: true });
+    const w = gtagWindow();
+    const gtagAfterLoad = w.gtag;
+    const stillStub = isWhachatGtagStub(gtagAfterLoad);
+
+    console.info("[GA4] gtag script onload", {
+      measurementId,
+      gtagIsStub: stillStub,
+      gtagType: typeof gtagAfterLoad,
+      dataLayerLength: Array.isArray(w.dataLayer) ? w.dataLayer.length : null,
+    });
+
+    if (stillStub) {
+      console.warn(
+        "[GA4] gtag.js did not replace stub — collect hits will not fire until real gtag loads",
+      );
+    }
 
     notifyGoogleAnalyticsReady(measurementId);
 
     const pagePath = getAnalyticsPagePath();
-    const sent = pushPageViewEvent(measurementId, pagePath, "initial");
-    if (!sent) {
-      window.setTimeout(() => {
-        pushPageViewEvent(measurementId, pagePath, "initial");
-      }, 0);
-    }
+    pushPageViewEvent(measurementId, pagePath, "initial");
   };
 }
