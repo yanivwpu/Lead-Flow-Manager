@@ -3623,6 +3623,17 @@ export async function registerRoutes(
           trialEndsAt: response?.subscription?.trialEndsAt ?? null,
           hasAIBrainAddon: !!response?.limits?.hasAIBrainAddon,
           aiEnabled: !!response?.limits?.effectiveHasAIBrain,
+          growthEngineEligible: !!response?.limits?.growthEngineEligible,
+          overrides: limits
+            ? {
+                planOverrideEnabled: limits.planOverrideEnabled,
+                planOverride: limits.planOverride,
+                aiBrainEntitlementOverrideEnabled: limits.aiBrainEntitlementOverrideEnabled,
+                aiBrainEntitlementOverrideGrant: limits.aiBrainEntitlementOverrideGrant,
+                growthEngineEntitlementOverrideEnabled: limits.growthEngineEntitlementOverrideEnabled,
+                growthEngineEntitlementOverrideGrant: limits.growthEngineEntitlementOverrideGrant,
+              }
+            : null,
         })}`,
       );
 

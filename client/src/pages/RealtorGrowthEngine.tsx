@@ -180,6 +180,10 @@ interface TemplateData {
     hasPro: boolean;
     hasAI: boolean;
     active: boolean;
+    growthEngineEligible?: boolean;
+    accessOk?: boolean;
+    denialReason?: string | null;
+    templateAccessGranted?: boolean;
   };
 }
 
@@ -981,7 +985,6 @@ export function RealtorGrowthEngine() {
       try {
         const res = await apiRequest("GET", url);
         const json = await res.json();
-        console.log("[RealtorGrowthEngine] Template data loaded:", { status: json?.entitlement?.status, hasInstall: !!json?.install });
         return json;
       } catch (err) {
         console.error("[RealtorGrowthEngine] Load error:", err);
@@ -1070,6 +1073,7 @@ export function RealtorGrowthEngine() {
       url?: string;
       shopifyConfirmationUrl?: string;
       alreadyPurchased?: boolean;
+      adminOverride?: boolean;
       onboardingComplete?: boolean;
     }) => {
       if (data.shopifyConfirmationUrl) {
@@ -1081,9 +1085,9 @@ export function RealtorGrowthEngine() {
         return;
       }
       void queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
-      if (data.alreadyPurchased) {
+      if (data.alreadyPurchased || data.adminOverride) {
         toast({
-          title: "Growth Engine already purchased",
+          title: data.adminOverride ? "Growth Engine access granted" : "Growth Engine already purchased",
           description: data.onboardingComplete
             ? "Opening your Growth Engine."
             : "Continue your guided launch setup.",
@@ -1156,7 +1160,8 @@ export function RealtorGrowthEngine() {
   const entitlement = templateData?.entitlement;
   const onboardingComplete =
     isRgeOnboardingComplete(entitlement) || templateData?.onboardingComplete === true;
-  const hasPurchased = isRgePurchased(status, entitlement);
+  const hasPurchased =
+    isRgePurchased(status, entitlement) || templateData?.subscription?.templateAccessGranted === true;
   const onboardingStep = templateData?.onboardingProgress?.step ?? null;
 
   React.useEffect(() => {
@@ -1199,7 +1204,7 @@ export function RealtorGrowthEngine() {
     return list;
   }, [rawWorkflows]);
   const pipeline = assetsData?.assets?.find((a: any) => a.assetType === 'pipeline')?.definition || { stages: [] };
-  const subscriptionActive = templateData?.subscription?.active !== false;
+  const subscriptionActive = templateData?.subscription?.accessOk !== false;
   const isPaused = !subscriptionActive && (status === 'purchased' || status === 'submitted' || status === 'installed');
 
   const primaryMarketingCta = React.useMemo(() => {
@@ -1277,13 +1282,35 @@ export function RealtorGrowthEngine() {
       setLocation(onboardingComplete ? RGE_TEMPLATE_DETAIL_PATH : RGE_TEMPLATE_ONBOARDING_PATH);
       return;
     }
+    const templateSub = templateData?.subscription;
+    if (templateSub?.accessOk === false) {
+      setSubscriptionGate({
+        show: true,
+        hasPro: templateSub.hasPro,
+        hasAI: templateSub.hasAI,
+      });
+      return;
+    }
+    if (templateSub?.accessOk && templateSub?.templateAccessGranted) {
+      purchaseMutation.mutate();
+      return;
+    }
     setCheckingSubscription(true);
     try {
       const res = await apiRequest("GET", "/api/templates/realtor-growth-engine/check-subscription");
       const data = await res.json();
-      if (!data.hasPro || !data.hasAI) {
-        setSubscriptionGate({ show: true, hasPro: data.hasPro, hasAI: data.hasAI });
+      if (data.accessOk === false || !data.hasPro || !data.hasAI) {
+        setSubscriptionGate({
+          show: true,
+          hasPro: data.hasPro ?? false,
+          hasAI: data.hasAI ?? false,
+        });
         setCheckingSubscription(false);
+        return;
+      }
+      if (data.templateAccessGranted) {
+        setCheckingSubscription(false);
+        purchaseMutation.mutate();
         return;
       }
       setCheckingSubscription(false);

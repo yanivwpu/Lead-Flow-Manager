@@ -33,10 +33,30 @@ import {
   logRgePurchaseEvent,
   reconcileRgeEntitlementForPurchase,
   resolveRgePurchaseBillingChannel,
+  ensureAdminOverrideGrowthEngineEntitlement,
+  shouldAutoGrantGrowthEngineViaAdminOverride,
 } from "./rgePurchase";
 
 const TEMPLATE_ID = "realtor-growth-engine";
 const TEMPLATE_PRICE_CENTS = 19900;
+
+function buildRgeSubscriptionPayload(ge: Awaited<ReturnType<typeof evaluateGrowthEngineAccess>>) {
+  const limits = ge.ok ? ge.limits : ge.limits;
+  const hasPro = ge.ok
+    ? ge.limits.plan === "pro" || ge.limits.plan === "scale"
+    : ge.hasProTier;
+  const hasAI = ge.ok ? !!ge.limits.hasAIBrainAddon : ge.hasAIBrainAddon;
+  return {
+    hasPro,
+    hasAI,
+    active: ge.ok,
+    growthEngineEligible: limits?.growthEngineEligible ?? ge.ok,
+    accessOk: ge.ok,
+    denialReason: ge.ok ? null : ge.reason,
+    templateAccessGranted:
+      ge.ok && limits ? shouldAutoGrantGrowthEngineViaAdminOverride(limits) : false,
+  };
+}
 
 export function registerTemplateRoutes(app: Express) {
   app.get("/api/templates/realtor-growth-engine/check-subscription", requireAuth, async (req, res) => {
@@ -47,10 +67,14 @@ export function registerTemplateRoutes(app: Express) {
 
       const ge = await evaluateGrowthEngineAccess(userId);
       const plan = ge.ok ? ge.limits.plan : (await subscriptionService.getUserLimits(userId))?.plan || "free";
-      const hasPro = ge.ok ? ge.limits.plan === "pro" || ge.limits.plan === "scale" : ge.hasProTier;
-      const hasAI = ge.ok ? !!ge.limits.hasAIBrainAddon : ge.hasAIBrainAddon;
+      const subscription = buildRgeSubscriptionPayload(ge);
 
-      res.json({ hasPro, hasAI, plan });
+      res.json({
+        hasPro: subscription.hasPro,
+        hasAI: subscription.hasAI,
+        plan,
+        ...subscription,
+      });
     } catch (error: any) {
       console.error("[Template] Subscription check error:", error);
       res.status(500).json({ error: "Failed to check subscription" });
@@ -73,8 +97,6 @@ export function registerTemplateRoutes(app: Express) {
       const userId = (req.user as any).id;
       const user = await storage.getUser(userId);
       const template = await storage.getTemplateById(TEMPLATE_ID);
-      const entitlement = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
-      const install = await storage.getTemplateInstall(userId, TEMPLATE_ID);
 
       // Bypass for demo user or anyone else we want to grant immediate access
       if (user?.email === "demo@whachat.com" || user?.email?.includes("admin") || req.query.bypass === "true") {
@@ -100,9 +122,15 @@ export function registerTemplateRoutes(app: Express) {
       }
 
       const ge = await evaluateGrowthEngineAccess(userId);
-      const hasPro = ge.ok ? ge.limits.plan === "pro" || ge.limits.plan === "scale" : ge.hasProTier;
-      const hasAI = ge.ok ? !!ge.limits.hasAIBrainAddon : ge.hasAIBrainAddon;
-      const subscriptionActive = ge.ok;
+      let entitlement = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
+      if (ge.ok) {
+        const granted = await ensureAdminOverrideGrowthEngineEntitlement(userId, ge.limits);
+        if (granted) entitlement = granted;
+      }
+      const install = await storage.getTemplateInstall(userId, TEMPLATE_ID);
+      const subscription = buildRgeSubscriptionPayload(ge);
+      const templateAccessGranted =
+        (entitlement && entitlement.status !== "locked") || subscription.templateAccessGranted;
 
       res.json({
         template: template || {
@@ -122,7 +150,7 @@ export function registerTemplateRoutes(app: Express) {
         install: install
           ? { installStatus: install.installStatus, installedAt: install.installedAt }
           : { installStatus: null, installedAt: null },
-        subscription: { hasPro, hasAI, active: subscriptionActive },
+        subscription: { ...subscription, templateAccessGranted },
         onboardingProgress: await getRgeOnboardingProgress(userId),
         onboardingComplete: Boolean(entitlement?.onboardingSubmittedAt),
       });
@@ -173,6 +201,17 @@ export function registerTemplateRoutes(app: Express) {
             hasPro: ge.hasProTier,
             hasAI: ge.hasAIBrainAddon,
             workflowsEnabled: ge.workflowsEnabled,
+          });
+        }
+
+        if (shouldAutoGrantGrowthEngineViaAdminOverride(ge.limits)) {
+          const entitlement = await ensureAdminOverrideGrowthEngineEntitlement(userId, ge.limits);
+          return res.json({
+            success: true,
+            adminOverride: true,
+            alreadyPurchased: true,
+            entitlementStatus: entitlement?.status ?? "purchased",
+            onboardingComplete: Boolean(entitlement?.onboardingSubmittedAt),
           });
         }
       }
@@ -349,13 +388,17 @@ export function registerTemplateRoutes(app: Express) {
       const userId = (req.user as any).id;
       const user = await storage.getUser(userId);
 
+      const ge = await evaluateGrowthEngineAccess(userId);
+      if (ge.ok) {
+        await ensureAdminOverrideGrowthEngineEntitlement(userId, ge.limits);
+      }
+
       const entitlement = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
       if (!entitlement || entitlement.status === "locked") {
         return res.status(403).json({ error: "Template not purchased" });
       }
 
       if (user.email !== "demo@whachat.com") {
-        const ge = await evaluateGrowthEngineAccess(userId);
         if (!ge.ok) {
           return res.status(403).json({
             error: ge.message,
@@ -507,13 +550,17 @@ export function registerTemplateRoutes(app: Express) {
       const userId = (req.user as any).id;
       const user = await storage.getUser(userId);
 
+      const ge = await evaluateGrowthEngineAccess(userId);
+      if (ge.ok) {
+        await ensureAdminOverrideGrowthEngineEntitlement(userId, ge.limits);
+      }
+
       const entitlement = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
       if (!entitlement || entitlement.status === "locked") {
         return res.status(403).json({ error: "Template not purchased" });
       }
 
       if (user && user.email !== "demo@whachat.com") {
-        const ge = await evaluateGrowthEngineAccess(userId);
         if (!ge.ok) {
           return res.status(403).json({
             error: ge.message,

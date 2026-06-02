@@ -64,6 +64,11 @@ export interface UserLimits {
   /** When true, admin has toggled Growth Engine override; use with growthEngineEntitlementOverrideGrant. */
   growthEngineEntitlementOverrideEnabled?: boolean;
   growthEngineEntitlementOverrideGrant?: boolean;
+  /** Admin plan override (effective plan uses this when planOverrideEnabled). */
+  planOverrideEnabled?: boolean;
+  planOverride?: string | null;
+  aiBrainEntitlementOverrideEnabled?: boolean;
+  aiBrainEntitlementOverrideGrant?: boolean;
   /** Starter or Pro effective plan — required before AI Brain add-on can apply. */
   aiBrainBasePlanEligible: boolean;
 }
@@ -171,6 +176,10 @@ class SubscriptionService {
       growthEngineEligible,
       growthEngineEntitlementOverrideEnabled: !!user.growthEngineEntitlementOverrideEnabled,
       growthEngineEntitlementOverrideGrant: !!user.growthEngineEntitlementOverrideGrant,
+      planOverrideEnabled: !!user.planOverrideEnabled,
+      planOverride: user.planOverrideEnabled ? user.planOverride ?? null : null,
+      aiBrainEntitlementOverrideEnabled: !!user.aiBrainEntitlementOverrideEnabled,
+      aiBrainEntitlementOverrideGrant: !!user.aiBrainEntitlementOverrideGrant,
       aiBrainBasePlanEligible,
     };
   }

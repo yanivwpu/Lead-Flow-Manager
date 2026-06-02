@@ -18,6 +18,13 @@ interface SubscriptionLimits {
   usageReports: boolean;
   assignmentEnabled: boolean;
   workflowsEnabled: boolean;
+  growthEngineEligible?: boolean;
+  planOverrideEnabled?: boolean;
+  planOverride?: string | null;
+  aiBrainEntitlementOverrideEnabled?: boolean;
+  aiBrainEntitlementOverrideGrant?: boolean;
+  growthEngineEntitlementOverrideEnabled?: boolean;
+  growthEngineEntitlementOverrideGrant?: boolean;
   isAtLimit: boolean;
   isInTrial: boolean;
   trialEndsAt: string | null;

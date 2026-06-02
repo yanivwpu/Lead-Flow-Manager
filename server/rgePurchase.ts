@@ -10,6 +10,7 @@ import { storage } from "./storage";
 import { getRgeOnboardingProgress, saveRgeOnboardingProgress } from "./rgeOnboardingProgress";
 import { RGE_TEMPLATE_ID } from "@shared/rgePaths";
 import { ensureGrowthEnginePurchasedTask } from "./growthEngineSetupService";
+import type { UserLimits } from "./subscriptionService";
 
 export const RGE_PURCHASE_LOG = "[RGE Purchase]";
 export const RGE_CHECKOUT_SUCCESS_LOG = "[RGE Checkout Success]";
@@ -50,9 +51,43 @@ export type FulfillRgePurchaseResult = {
 };
 
 /** Idempotent: entitlement purchased + pending install + onboarding step 1 + GE setup task. */
+export function shouldAutoGrantGrowthEngineViaAdminOverride(
+  limits: Pick<
+    UserLimits,
+    "growthEngineEntitlementOverrideEnabled" | "growthEngineEntitlementOverrideGrant"
+  >,
+): boolean {
+  return !!(
+    limits.growthEngineEntitlementOverrideEnabled && limits.growthEngineEntitlementOverrideGrant
+  );
+}
+
+/** Admin "Force Growth Engine access" — skip $199 checkout and unlock template entitlement. */
+export async function ensureAdminOverrideGrowthEngineEntitlement(
+  userId: string,
+  limits: Pick<
+    UserLimits,
+    "growthEngineEntitlementOverrideEnabled" | "growthEngineEntitlementOverrideGrant"
+  >,
+): Promise<TemplateEntitlement | undefined> {
+  if (!shouldAutoGrantGrowthEngineViaAdminOverride(limits)) return undefined;
+
+  const prior = await storage.getTemplateEntitlement(userId, RGE_TEMPLATE_ID);
+  if (prior && prior.status !== "locked") return prior;
+
+  const result = await fulfillRgePurchaseAfterPayment(userId, { source: "admin_override" });
+  logRgePurchaseEvent("admin_override_entitlement_granted", {
+    userId,
+    templateId: RGE_TEMPLATE_ID,
+    entitlementCreated: result.entitlementCreated,
+    status: result.entitlement.status,
+  });
+  return result.entitlement;
+}
+
 export async function fulfillRgePurchaseAfterPayment(
   userId: string,
-  opts?: { sessionId?: string; source?: "verify" | "webhook" },
+  opts?: { sessionId?: string; source?: "verify" | "webhook" | "admin_override" },
 ): Promise<FulfillRgePurchaseResult> {
   const prior = await storage.getTemplateEntitlement(userId, RGE_TEMPLATE_ID);
   const entitlementCreated = !prior || prior.status === "locked";

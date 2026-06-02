@@ -1,8 +1,11 @@
-import type { Workflow } from "@shared/schema";
+import type { User, Workflow } from "@shared/schema";
 import { subscriptionService, type UserLimits } from "./subscriptionService";
+import { storage } from "./storage";
 
 /** Template IDs that denote an installed Growth Engine (extensible for future engines). */
 export const GROWTH_ENGINE_TEMPLATE_IDS = new Set<string>(["realtor-growth-engine"]);
+
+export const GROWTH_ENGINE_ACCESS_LOG = "[GrowthEngineAccess]";
 
 export type GrowthEngineDenialReason =
   | "limits_unavailable"
@@ -22,6 +25,80 @@ export type GrowthEngineAccessResult =
       hasAIBrainAddon: boolean;
       workflowsEnabled: boolean;
     };
+
+export type GrowthEngineAccessLogPayload = {
+  userId: string;
+  result: "granted" | "denied";
+  reason: GrowthEngineDenialReason | null;
+  message: string | null;
+  actualSubscription: {
+    billingPlan: string | null;
+    subscriptionPlan: string | null;
+    subscriptionStatus: string | null;
+  };
+  overrides: {
+    planOverrideEnabled: boolean;
+    planOverride: string | null;
+    aiBrainEntitlementOverrideEnabled: boolean;
+    aiBrainEntitlementOverrideGrant: boolean;
+    growthEngineEntitlementOverrideEnabled: boolean;
+    growthEngineEntitlementOverrideGrant: boolean;
+  };
+  effective: {
+    plan: string | null;
+    hasAIBrainAddon: boolean;
+    workflowsEnabled: boolean;
+    growthEngineEligible: boolean;
+  };
+};
+
+function buildAccessLogPayload(
+  userId: string,
+  user: User | undefined,
+  limits: UserLimits | null,
+  result: GrowthEngineAccessResult,
+): GrowthEngineAccessLogPayload {
+  const ok = result.ok;
+  return {
+    userId,
+    result: ok ? "granted" : "denied",
+    reason: ok ? null : result.reason,
+    message: ok ? null : result.message,
+    actualSubscription: {
+      billingPlan: user?.billingPlan ?? null,
+      subscriptionPlan: user?.subscriptionPlan ?? null,
+      subscriptionStatus: user?.subscriptionStatus ?? null,
+    },
+    overrides: {
+      planOverrideEnabled: !!user?.planOverrideEnabled,
+      planOverride: user?.planOverrideEnabled ? user?.planOverride ?? null : null,
+      aiBrainEntitlementOverrideEnabled: !!user?.aiBrainEntitlementOverrideEnabled,
+      aiBrainEntitlementOverrideGrant: !!user?.aiBrainEntitlementOverrideGrant,
+      growthEngineEntitlementOverrideEnabled: !!user?.growthEngineEntitlementOverrideEnabled,
+      growthEngineEntitlementOverrideGrant: !!user?.growthEngineEntitlementOverrideGrant,
+    },
+    effective: {
+      plan: limits?.plan ?? null,
+      hasAIBrainAddon: limits?.hasAIBrainAddon ?? false,
+      workflowsEnabled: limits?.workflowsEnabled ?? false,
+      growthEngineEligible: limits?.growthEngineEligible ?? false,
+    },
+  };
+}
+
+export function logGrowthEngineAccessDecision(
+  userId: string,
+  user: User | undefined,
+  result: GrowthEngineAccessResult,
+): void {
+  const limits = result.ok ? result.limits : result.limits;
+  const payload = buildAccessLogPayload(userId, user, limits, result);
+  if (result.ok) {
+    console.info(GROWTH_ENGINE_ACCESS_LOG, JSON.stringify(payload));
+  } else {
+    console.warn(GROWTH_ENGINE_ACCESS_LOG, JSON.stringify(payload));
+  }
+}
 
 /**
  * True when this workflow row was created from a Growth Engine template install.
@@ -46,13 +123,15 @@ export function isGrowthEngineWorkflow(
  * Product rule: Growth Engine install, activation, and runtime all require
  * Pro (or Scale) + AI Brain + plan automations enabled.
  *
+ * Admin overrides (plan / AI Brain / Growth Engine) are honored here.
  * This is the single source of truth for server-side Growth Engine gating.
  * Do not infer entitlement from `templateKey` alone (W1–W8 keys are not unique across products).
  */
 export async function evaluateGrowthEngineAccess(userId: string): Promise<GrowthEngineAccessResult> {
+  const user = await storage.getUserForSession(userId);
   const limits = await subscriptionService.getUserLimits(userId);
   if (!limits) {
-    return {
+    const result: GrowthEngineAccessResult = {
       ok: false,
       reason: "limits_unavailable",
       message: "Subscription state could not be loaded; Growth Engine actions are blocked.",
@@ -61,6 +140,8 @@ export async function evaluateGrowthEngineAccess(userId: string): Promise<Growth
       hasAIBrainAddon: false,
       workflowsEnabled: false,
     };
+    logGrowthEngineAccessDecision(userId, user, result);
+    return result;
   }
 
   const hasProTier = limits.plan === "pro" || limits.plan === "scale";
@@ -69,9 +150,11 @@ export async function evaluateGrowthEngineAccess(userId: string): Promise<Growth
 
   if (limits.growthEngineEntitlementOverrideEnabled) {
     if (limits.growthEngineEntitlementOverrideGrant) {
-      return { ok: true, limits };
+      const result: GrowthEngineAccessResult = { ok: true, limits };
+      logGrowthEngineAccessDecision(userId, user, result);
+      return result;
     }
-    return {
+    const result: GrowthEngineAccessResult = {
       ok: false,
       reason: "admin_override_disabled",
       message: "Growth Engine is disabled by an administrator override for this account.",
@@ -80,10 +163,12 @@ export async function evaluateGrowthEngineAccess(userId: string): Promise<Growth
       hasAIBrainAddon,
       workflowsEnabled,
     };
+    logGrowthEngineAccessDecision(userId, user, result);
+    return result;
   }
 
   if (!workflowsEnabled) {
-    return {
+    const result: GrowthEngineAccessResult = {
       ok: false,
       reason: "automations_not_in_plan",
       message:
@@ -93,10 +178,12 @@ export async function evaluateGrowthEngineAccess(userId: string): Promise<Growth
       hasAIBrainAddon,
       workflowsEnabled,
     };
+    logGrowthEngineAccessDecision(userId, user, result);
+    return result;
   }
 
   if (!hasProTier) {
-    return {
+    const result: GrowthEngineAccessResult = {
       ok: false,
       reason: "pro_plan_required",
       message: "Growth Engine requires an active Pro (or Scale) subscription.",
@@ -105,10 +192,12 @@ export async function evaluateGrowthEngineAccess(userId: string): Promise<Growth
       hasAIBrainAddon,
       workflowsEnabled,
     };
+    logGrowthEngineAccessDecision(userId, user, result);
+    return result;
   }
 
   if (!hasAIBrainAddon) {
-    return {
+    const result: GrowthEngineAccessResult = {
       ok: false,
       reason: "ai_brain_required",
       message: "Growth Engine requires the AI Brain add-on on your account.",
@@ -117,9 +206,13 @@ export async function evaluateGrowthEngineAccess(userId: string): Promise<Growth
       hasAIBrainAddon,
       workflowsEnabled,
     };
+    logGrowthEngineAccessDecision(userId, user, result);
+    return result;
   }
 
-  return { ok: true, limits };
+  const result: GrowthEngineAccessResult = { ok: true, limits };
+  logGrowthEngineAccessDecision(userId, user, result);
+  return result;
 }
 
 /**
