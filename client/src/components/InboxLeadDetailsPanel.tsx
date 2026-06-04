@@ -35,8 +35,10 @@ import {
   buildContextualNextActions,
   buildCustomerInsights,
   buildCustomerSummaryBullets,
+  buildSchedulingComposerDraft,
   composerSuggestionForAction,
   extractShowingTimingPhrase,
+  isSchedulingComposerAction,
   type NextBestActionBehavior,
 } from "@shared/customerInsights";
 import {
@@ -1572,14 +1574,78 @@ export function InboxLeadDetailsPanel({
     schedulingLinkSent,
   ]);
 
-  const nextBestActions = useMemo((): NextBestActionRow[] => {
-    if (!canSeeWorkflow) return [];
+  const runComposerAction = useCallback(
+    async (label: string) => {
+      if (isSchedulingComposerAction(label)) {
+        try {
+          const params = new URLSearchParams();
+          if (contact.id) params.set("contactId", contact.id);
+          const res = await fetch(`/api/scheduling/customer-url?${params.toString()}`, {
+            credentials: "include",
+          });
+          if (res.status === 401) {
+            toast({
+              title: "Session expired",
+              description: "Sign in again to insert a scheduling link.",
+              variant: "destructive",
+            });
+            return;
+          }
+          if (!res.ok) {
+            throw new Error((await res.text()) || "Failed to load scheduling URL");
+          }
+          const data = (await res.json()) as {
+            url?: string;
+            source?: string;
+            syncWarning?: string | null;
+          };
+          const draft = buildSchedulingComposerDraft(data.url || "");
+          console.info(
+            "[CopilotSchedulingDraft]",
+            JSON.stringify({
+              contactId: contact.id,
+              source: data.source ?? null,
+              hasUrl: !!data.url,
+              syncWarning: data.syncWarning ?? null,
+            }),
+          );
+          const inserted = onInsertComposerDraft?.(draft) ?? false;
+          if (!inserted) {
+            console.warn("[CopilotSchedulingDraft] Failed to insert composer draft for action:", label);
+            return;
+          }
+          if (data.syncWarning) {
+            console.warn("[CalendlySyncWarning]", data.syncWarning);
+            toast({
+              title: "Draft added to composer",
+              description: data.syncWarning,
+              duration: 5000,
+            });
+          } else if (!data.url?.trim()) {
+            toast({
+              title: "Draft added to composer",
+              description: "Connect Calendly in Integrations to include your booking link.",
+              duration: 4500,
+            });
+          } else {
+            toast({ title: "Draft added to composer", duration: 2500 });
+          }
+        } catch (err) {
+          console.warn("[CopilotSchedulingDraft] scheduling URL fetch failed:", err);
+          const fallback = composerSuggestionForAction(label);
+          const inserted = onInsertComposerDraft?.(fallback) ?? false;
+          if (inserted) {
+            toast({
+              title: "Draft added without booking link",
+              description: "Could not load your Calendly URL. Connect Calendly in Integrations and try again.",
+              variant: "destructive",
+              duration: 4500,
+            });
+          }
+        }
+        return;
+      }
 
-    const runToolAction = (behavior: Exclude<NextBestActionBehavior, "composer">) => {
-      openCopilotPopover(behavior);
-    };
-
-    const runComposerAction = (label: string) => {
       const text = composerSuggestionForAction(label);
       if (!text.trim()) {
         console.warn("[Copilot] Empty draft for action:", label);
@@ -1591,6 +1657,15 @@ export function InboxLeadDetailsPanel({
       } else {
         console.warn("[Copilot] Failed to insert composer draft for action:", label);
       }
+    },
+    [contact.id, onInsertComposerDraft, toast],
+  );
+
+  const nextBestActions = useMemo((): NextBestActionRow[] => {
+    if (!canSeeWorkflow) return [];
+
+    const runToolAction = (behavior: Exclude<NextBestActionBehavior, "composer">) => {
+      openCopilotPopover(behavior);
     };
 
     return contextualNextActions.map((action, i) => {
@@ -1598,7 +1673,7 @@ export function InboxLeadDetailsPanel({
       const id: NextBestActionRow["id"] = behavior === "composer" ? "qualify" : behavior;
       const onClick = () => {
         if (behavior === "composer") {
-          runComposerAction(action.label);
+          void runComposerAction(action.label);
         } else {
           runToolAction(behavior);
         }
@@ -1611,7 +1686,7 @@ export function InboxLeadDetailsPanel({
         title: action.label,
       };
     });
-  }, [canSeeWorkflow, contextualNextActions, onInsertComposerDraft, openCopilotPopover, toast]);
+  }, [canSeeWorkflow, contextualNextActions, openCopilotPopover, runComposerAction]);
 
   return (
     <div className={panelClassName ?? "hidden lg:flex w-[260px] xl:w-[272px] flex-col border-l border-gray-100 bg-white overflow-y-auto flex-shrink-0"}>

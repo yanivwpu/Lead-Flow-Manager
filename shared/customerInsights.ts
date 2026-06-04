@@ -329,11 +329,26 @@ export function getNextBestActionBehavior(label: string): NextBestActionBehavior
   return "composer";
 }
 
+export const SCHEDULING_COMPOSER_INTRO = "Here are a few times that work on my end:";
+
+/** Copilot / manual "Send available time options" — needs server-resolved scheduling URL. */
+export function isSchedulingComposerAction(label: string): boolean {
+  const l = label.toLowerCase();
+  return /time options|available time/.test(l);
+}
+
+/** Composer draft for scheduling actions once the public booking URL is resolved. */
+export function buildSchedulingComposerDraft(schedulingUrl: string): string {
+  const url = schedulingUrl.trim();
+  if (!url) return SCHEDULING_COMPOSER_INTRO;
+  return `${SCHEDULING_COMPOSER_INTRO}\n${url}`;
+}
+
 /** Draft text for composer-only actions (never used for tool actions). */
 export function composerSuggestionForAction(label: string): string {
   const l = label.toLowerCase();
-  if (/time options|available time/.test(l)) {
-    return "Here are a few times that work on my end:";
+  if (isSchedulingComposerAction(label)) {
+    return SCHEDULING_COMPOSER_INTRO;
   }
   if (/financing|lender/.test(l)) {
     return "Are you already working with a lender, or would you like me to connect you with one?";

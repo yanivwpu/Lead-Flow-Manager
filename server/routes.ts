@@ -11,6 +11,7 @@ import {
 } from "@shared/schema";
 import { eq, and, or, isNotNull, ilike, desc, sql } from "drizzle-orm";
 import { registerContactRoutes } from "./routes/contacts";
+import { registerSchedulingRoutes } from "./routes/scheduling";
 import { registerConversationRoutes } from "./routes/conversations";
 import { registerChannelRoutes } from "./routes/channels";
 import { registerTemplateRoutes as registerAutomationTemplateRoutes } from "./routes/templates";
@@ -10616,6 +10617,7 @@ export async function registerRoutes(
   registerMediaRoutes(app);
   registerWhatsappIntegrationRoutes(app);
   registerContactRoutes(app);
+  registerSchedulingRoutes(app);
   registerConversationRoutes(app);
   registerChannelRoutes(app);
   registerAutomationTemplateRoutes(app);

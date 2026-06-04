@@ -33,6 +33,15 @@ export async function applyCalendlyBookingLinkForAi<T extends { bookingLink?: st
   return { ...knowledge, bookingLink: calUrl || "" } as T;
 }
 
+/** Soft warning when Calendly is connected but booking confirmation sync (webhooks) is not active. */
+export async function getCalendlyBookingSyncWarning(userId: string): Promise<string | null> {
+  const row = await storage.getIntegrationByUserAndType(userId, "calendly");
+  if (!row?.isActive) return null;
+  const cfg = (row.config || {}) as Record<string, unknown>;
+  if (String(cfg.calendlyWebhookStatus || "") !== "failed") return null;
+  return "Booking link will send. Confirmations may not sync until Calendly sync is fixed.";
+}
+
 export function appendCalendlyW3TrackingParams(schedulingUrl: string, contactId: string): string {
   const raw = (schedulingUrl || "").trim();
   if (!raw || !contactId) return raw;
