@@ -300,6 +300,7 @@ let hotListRanToday = false;
 let lastWebhookHealthHour = -1;
 
 let lastInventoryReconcileHour = -1;
+let lastCalendlyPollMinute = -1;
 
 export function startCronJobs() {
   console.log('[Cron] Starting cron scheduler...');
@@ -351,6 +352,14 @@ export function startCronJobs() {
     runCampaignSchedulerTick(40).catch((err) =>
       console.error('[CampaignScheduler] tick error:', err)
     );
+
+    // Calendly polling fallback — every 10 minutes for integrations without webhooks
+    if (utcMin % 10 === 5 && utcMin !== lastCalendlyPollMinute) {
+      lastCalendlyPollMinute = utcMin;
+      import("./calendlySyncService")
+        .then(({ runCalendlyPollingCron }) => runCalendlyPollingCron())
+        .catch((err) => console.error("[CalendlyPoll] cron error:", err));
+    }
   }, 60000);
   
   console.log('[Cron] Cron scheduler started (trial check-in: 10 AM EST, hot list: 9 AM EST, webhook health: hourly)');

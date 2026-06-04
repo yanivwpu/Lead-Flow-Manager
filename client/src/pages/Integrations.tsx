@@ -620,10 +620,14 @@ export function Integrations() {
         toast({
           title: "Calendly connected",
           description:
-            typeof data?.calendlyWebhookError === "string"
-              ? `Booking link is connected, but booking sync needs another try: ${data.calendlyWebhookError}`
-              : "Booking link is connected, but booking sync needs another try. Use Manage > Sync now to retry.",
-          variant: "destructive",
+            typeof data?.calendlySyncMessage === "string"
+              ? data.calendlySyncMessage
+              : "Booking link is connected. Booking confirmations will sync by polling.",
+        });
+      } else if (data?.type === "calendly" && data?.calendlySyncMode === "polling") {
+        toast({
+          title: "Calendly connected",
+          description: "Booking link is connected. Booking confirmations will sync by polling.",
         });
       } else if (Array.isArray(types) && types.length > 0) {
         toast({
@@ -725,11 +729,14 @@ export function Integrations() {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
       const partial = data.success === false;
       const linkedExistingCalendlyWebhook = data.message === "Existing Calendly webhook found and linked.";
+      const calendlyPollingSync = data.calendlySyncMode === "polling";
       const title = linkedExistingCalendlyWebhook
         ? "Existing Calendly webhook linked"
-        : partial
-          ? "Sync finished with issues"
-          : "Sync complete";
+        : calendlyPollingSync
+          ? "Bookings synced"
+          : partial
+            ? "Sync finished with issues"
+            : "Sync complete";
       const description =
         (linkedExistingCalendlyWebhook && typeof data.message === "string" ? data.message : "") ||
         (typeof data.details === "string" && data.details) ||
@@ -1824,7 +1831,11 @@ export function Integrations() {
                       const bookingLink =
                         typeof cfg.calendlyPrimarySchedulingUrl === "string" ? cfg.calendlyPrimarySchedulingUrl : "";
                       const webhookStatus = String(cfg.calendlyWebhookStatus || "unknown");
-                      const webhookFailed = webhookStatus === "failed";
+                      const syncMode = String(cfg.calendlySyncMode || (webhookStatus === "failed" ? "polling" : "webhook"));
+                      const pollingActive = syncMode === "polling";
+                      const webhookActive = syncMode === "webhook" && webhookStatus === "connected";
+                      const lastPollAt =
+                        typeof cfg.calendlyLastPollAt === "string" ? cfg.calendlyLastPollAt : "";
                       const accountEmail =
                         typeof cfg.calendlyUserEmail === "string" && cfg.calendlyUserEmail.trim()
                           ? cfg.calendlyUserEmail.trim()
@@ -1841,28 +1852,28 @@ export function Integrations() {
                         <div
                           className={cn(
                             "rounded-lg border p-4 text-sm",
-                            webhookFailed
-                              ? "border-amber-200 bg-amber-50 text-amber-900"
+                            pollingActive
+                              ? "border-sky-200 bg-sky-50 text-sky-950"
                               : "border-emerald-100 bg-emerald-50/80 text-emerald-900",
                           )}
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="font-semibold">Calendly connected</p>
                             <Badge
-                              variant={webhookFailed ? "secondary" : "default"}
+                              variant="default"
                               className={cn(
                                 "text-[10px]",
-                                webhookFailed
-                                  ? "bg-amber-100 text-amber-800"
+                                pollingActive
+                                  ? "bg-sky-600 text-white"
                                   : "bg-emerald-600 text-white",
                               )}
                             >
-                              {webhookFailed ? "Booking sync needs retry" : "Booking sync active"}
+                              {pollingActive ? "Polling sync active" : "Real-time sync active"}
                             </Badge>
                           </div>
                           <div className="mt-3 space-y-2 text-xs sm:text-sm">
                             <div className="grid gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-start">
-                              <span className={webhookFailed ? "text-amber-800" : "text-emerald-800"}>
+                              <span className={pollingActive ? "text-sky-800" : "text-emerald-800"}>
                                 Calendly account
                               </span>
                               <span className="min-w-0 break-words font-medium sm:text-right">
@@ -1870,11 +1881,25 @@ export function Integrations() {
                               </span>
                             </div>
                             <div className="grid gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-start">
-                              <span className={webhookFailed ? "text-amber-800" : "text-emerald-800"}>
-                                Booking sync status
+                              <span className={pollingActive ? "text-sky-800" : "text-emerald-800"}>
+                                Booking sync
                               </span>
-                              <span className="font-medium capitalize sm:text-right">{webhookStatus.replace(/_/g, " ")}</span>
+                              <span className="font-medium sm:text-right">
+                                {pollingActive
+                                  ? "Polling (Calendly Free / no webhooks)"
+                                  : webhookActive
+                                    ? "Webhooks"
+                                    : webhookStatus.replace(/_/g, " ")}
+                              </span>
                             </div>
+                            {lastPollAt && pollingActive && (
+                              <div className="grid gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-start">
+                                <span className="text-sky-800">Last sync</span>
+                                <span className="font-medium sm:text-right">
+                                  {new Date(lastPollAt).toLocaleString()}
+                                </span>
+                              </div>
+                            )}
                           </div>
                           {bookingLink ? (
                             <a
@@ -1883,7 +1908,7 @@ export function Integrations() {
                               rel="noreferrer"
                               className={cn(
                                 "mt-3 block break-all text-xs underline sm:text-sm",
-                                webhookFailed ? "text-amber-800" : "text-emerald-800",
+                                pollingActive ? "text-sky-800" : "text-emerald-800",
                               )}
                             >
                               {bookingLink}
@@ -1891,15 +1916,11 @@ export function Integrations() {
                           ) : (
                             <p className="mt-1">Calendly is connected, but no public booking link was detected.</p>
                           )}
-                          {webhookFailed && (
-                            <>
-                              <p className="mt-2">
-                                Booking links can be sent, but booking confirmations may not sync until webhook setup succeeds.
-                              </p>
-                              {typeof cfg.calendlyWebhookError === "string" && (
-                                <p className="mt-1 text-amber-800">{cfg.calendlyWebhookError}</p>
-                              )}
-                            </>
+                          {pollingActive && (
+                            <p className="mt-2 text-xs sm:text-sm text-sky-900">
+                              Booking confirmations may sync by polling every few minutes, or immediately when you use
+                              Sync bookings now.
+                            </p>
                           )}
                         </div>
                       );
@@ -1925,11 +1946,14 @@ export function Integrations() {
                         className={`h-3 w-3 mr-1 ${syncIntegrationMutation.isPending ? "animate-spin" : ""}`}
                       />
                       {managingIntegration.id === "calendly" &&
-                      (managingConnected.config as Record<string, unknown>)?.calendlyWebhookStatus === "failed"
-                        ? "Retry webhook"
-                        : managingIntegration.id === "calendly"
-                          ? "Sync Calendly"
-                          : "Sync now"}
+                      (managingConnected.config as Record<string, unknown>)?.calendlySyncMode === "polling"
+                        ? "Sync bookings now"
+                        : managingIntegration.id === "calendly" &&
+                            (managingConnected.config as Record<string, unknown>)?.calendlyWebhookStatus === "failed"
+                          ? "Sync bookings now"
+                          : managingIntegration.id === "calendly"
+                            ? "Sync Calendly"
+                            : "Sync now"}
                     </Button>
                     <Button
                       variant="outline"

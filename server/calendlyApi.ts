@@ -152,3 +152,88 @@ export async function calendlyListEventTypes(token: string, organizationUri: str
     collection?: Array<{ name?: string; slug?: string; uri?: string; scheduling_url?: string }>;
   }>(`/event_types?organization=${q}&active=true`, token);
 }
+
+export type CalendlyScheduledEventResource = {
+  uri?: string;
+  name?: string;
+  status?: string;
+  start_time?: string;
+  end_time?: string;
+  event_type?: string;
+  location?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type CalendlyEventInviteeResource = {
+  uri?: string;
+  email?: string;
+  name?: string;
+  first_name?: string;
+  last_name?: string;
+  status?: string;
+  tracking?: Record<string, unknown>;
+  reschedule_url?: string;
+  cancel_url?: string;
+  scheduled_event?: string | Record<string, unknown>;
+  cancellation?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+type CalendlyPagination = {
+  count?: number;
+  next_page?: string | null;
+  next_page_token?: string | null;
+  previous_page?: string | null;
+  previous_page_token?: string | null;
+};
+
+export async function calendlyListScheduledEvents(
+  token: string,
+  params: {
+    user?: string;
+    organization?: string;
+    minStartTime: string;
+    maxStartTime?: string;
+    count?: number;
+    pageToken?: string;
+  },
+) {
+  const search = new URLSearchParams();
+  if (params.user) search.set("user", params.user);
+  if (params.organization) search.set("organization", params.organization);
+  search.set("min_start_time", params.minStartTime);
+  if (params.maxStartTime) search.set("max_start_time", params.maxStartTime);
+  search.set("count", String(Math.min(params.count ?? 100, 100)));
+  if (params.pageToken) search.set("page_token", params.pageToken);
+  return calendlyJson<{
+    collection?: CalendlyScheduledEventResource[];
+    pagination?: CalendlyPagination;
+    message?: string;
+    title?: string;
+  }>(`/scheduled_events?${search.toString()}`, token);
+}
+
+export async function calendlyListEventInvitees(
+  token: string,
+  scheduledEventUri: string,
+  pageToken?: string,
+) {
+  const uuid = calendlyResourceUuid(scheduledEventUri);
+  if (!uuid) {
+    return {
+      ok: false,
+      status: 0,
+      data: { collection: [] as CalendlyEventInviteeResource[] },
+      rawBody: "",
+    };
+  }
+  const search = new URLSearchParams({ count: "100" });
+  if (pageToken) search.set("page_token", pageToken);
+  return calendlyJson<{
+    collection?: CalendlyEventInviteeResource[];
+    pagination?: CalendlyPagination;
+    message?: string;
+  }>(`/scheduled_events/${uuid}/invitees?${search.toString()}`, token);
+}

@@ -1585,3 +1585,11 @@ export async function handleCalendlyWebhook(req: Request, res: Response): Promis
       });
   });
 }
+
+/** Shared ingest for webhooks and polling — same CRM/inbox/appointment pipeline. */
+export async function ingestCalendlyEvent(
+  userId: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  await processCalendlyPayload(userId, body);
+}

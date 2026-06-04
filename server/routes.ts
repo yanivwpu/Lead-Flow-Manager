@@ -153,7 +153,13 @@ import {
   calendlyListEventTypes,
   calendlyListWebhookSubscriptions,
 } from "./calendlyApi";
-import { isUserCalendlyBookingConnected, applyCalendlyBookingLinkForAi } from "./calendlyBookingConnected";
+import {
+  isUserCalendlyBookingConnected,
+  applyCalendlyBookingLinkForAi,
+  calendlySyncModeConfigPatch,
+  resolveCalendlySyncModeFromConfig,
+} from "./calendlyBookingConnected";
+import { pollCalendlyBookingsForUser } from "./calendlySyncService";
 import { hubspotValidatePrivateAppToken } from "./hubspotApi";
 import { pushLeadsToHubSpot } from "./hubspotSync";
 import { SALESPERSON_AGREEMENT_VERSION } from "@shared/salespersonAgreement";
@@ -6920,6 +6926,7 @@ export async function registerRoutes(
           ...(webhookRegistrationError ? { calendlyWebhookError: webhookRegistrationError } : { calendlyWebhookError: null }),
           connectionStatus: "connected",
           calendlyPrimarySchedulingUrl,
+          ...calendlySyncModeConfigPatch(!webhookRegistrationError, !!webhookRegistrationError),
         };
         calendlyExtra = {
           calendlyEventTypes: eventNames,
@@ -6928,8 +6935,11 @@ export async function registerRoutes(
             ? {
                 calendlyWebhookStatus: "failed",
                 calendlyWebhookError: webhookRegistrationError,
+                calendlySyncMode: "polling",
+                calendlySyncMessage:
+                  "Booking link is connected. Booking confirmations will sync by polling (Calendly webhooks unavailable on this plan).",
               }
-            : { calendlyWebhookStatus: "connected" }),
+            : { calendlyWebhookStatus: "connected", calendlySyncMode: "webhook" }),
         };
       }
 
@@ -6961,6 +6971,15 @@ export async function registerRoutes(
         config: encryptedConfig,
         isActive: true,
       });
+
+      if (type === "calendly" && calendlyExtra?.calendlySyncMode === "polling") {
+        const connectUserId = req.user.id;
+        setImmediate(() => {
+          pollCalendlyBookingsForUser(connectUserId, { manual: true, backfillDays: 7 }).catch((err) =>
+            console.error("[CalendlyPoll] connect_initial_poll_failed", connectUserId, err),
+          );
+        });
+      }
 
       // Dual-write to channelSettings for Facebook/Instagram so the messaging
       // engine (adapters + webhook handler) can find the credentials.
@@ -7353,6 +7372,37 @@ export async function registerRoutes(
           }
         }
 
+        const refreshCalendlyConfigPatch = () => ({
+          ...config,
+          calendlyOrganizationUri: orgUri,
+          calendlyUserUri: meResource?.uri || config.calendlyUserUri,
+          calendlyUserEmail: meResource?.email || config.calendlyUserEmail || "",
+          calendlyUserName: meResource?.name || config.calendlyUserName || "",
+          calendlyPrimarySchedulingUrl: refreshedBookingUrl,
+          connectionStatus: "connected",
+        });
+
+        if (resolveCalendlySyncModeFromConfig(config) === "polling") {
+          await storage.updateIntegration(req.params.id, {
+            lastSyncAt: new Date(),
+            config: encryptIntegrationConfig({
+              ...refreshCalendlyConfigPatch(),
+              ...calendlySyncModeConfigPatch(false, true),
+            }),
+          });
+          const pollResult = await pollCalendlyBookingsForUser(req.user.id, { manual: true });
+          return res.json({
+            success: true,
+            message: "Calendly polling sync active",
+            details: pollResult.ok
+              ? `Imported ${pollResult.imported} booking(s)${pollResult.canceled ? `, ${pollResult.canceled} cancellation(s)` : ""} from Calendly. Booking confirmations will continue syncing by polling.`
+              : `Polling sync is active but the latest import did not complete: ${pollResult.error || "unknown error"}. Your booking link remains connected.`,
+            calendlySyncMode: "polling",
+            calendlyWebhookStatus: String(config.calendlyWebhookStatus || "failed"),
+            poll: pollResult,
+          });
+        }
+
         const webhookUrl = `https://app.whachatcrm.com/api/webhooks/calendly/${req.user.id}`;
         const calendlyWebhookEvents = ["invitee.created", "invitee.canceled"];
         const requestedSigningKey =
@@ -7439,12 +7489,15 @@ export async function registerRoutes(
                   calendlyWebhookStatus: "connected",
                   calendlyWebhookError: null,
                   connectionStatus: "connected",
+                  ...calendlySyncModeConfigPatch(true, false),
                 }),
               });
               return res.json({
                 success: true,
                 message: "Existing Calendly webhook found and linked.",
                 details: "Booking sync is active for booking confirmations and cancellations.",
+                calendlySyncMode: "webhook",
+                calendlyWebhookStatus: "connected",
               });
             }
           }
@@ -7466,13 +7519,20 @@ export async function registerRoutes(
               calendlyWebhookStatus: "failed",
               calendlyWebhookError: errMsg,
               calendlyWebhookCallbackUrl: webhookUrl,
+              connectionStatus: "connected",
+              ...calendlySyncModeConfigPatch(false, true),
             }),
           });
-          return res.status(400).json({
-            success: false,
-            error: `Webhook registration failed: ${errMsg}`,
-            message: "Calendly webhook retry failed",
-            details: "Your Calendly booking link remains connected. Retry webhook registration after checking token scopes.",
+          const pollResult = await pollCalendlyBookingsForUser(req.user.id, { manual: true });
+          return res.json({
+            success: true,
+            message: "Calendly polling sync active",
+            details: pollResult.ok
+              ? `Imported ${pollResult.imported} booking(s)${pollResult.canceled ? `, ${pollResult.canceled} cancellation(s)` : ""} from Calendly. Booking confirmations will continue syncing by polling.`
+              : `Polling sync is active but the latest import did not complete: ${pollResult.error || "unknown error"}. Your booking link remains connected.`,
+            calendlySyncMode: "polling",
+            calendlyWebhookStatus: "failed",
+            poll: pollResult,
           });
         }
         await storage.updateIntegration(req.params.id, {
@@ -7490,12 +7550,15 @@ export async function registerRoutes(
             calendlyWebhookStatus: "connected",
             calendlyWebhookError: null,
             connectionStatus: "connected",
+            ...calendlySyncModeConfigPatch(true, false),
           }),
         });
         return res.json({
           success: true,
           message: "Calendly refreshed",
           details: "Booking link was refreshed and webhook subscription is active for booking confirmations and cancellations.",
+          calendlySyncMode: "webhook",
+          calendlyWebhookStatus: "connected",
         });
       } else if (integration.type === "hubspot") {
         if (config.connectionStatus !== "connected") {

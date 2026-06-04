@@ -33,13 +33,30 @@ export async function applyCalendlyBookingLinkForAi<T extends { bookingLink?: st
   return { ...knowledge, bookingLink: calUrl || "" } as T;
 }
 
-/** Soft warning when Calendly is connected but booking confirmation sync (webhooks) is not active. */
+/** Soft warning when the booking link works but confirmation sync is not available (neither webhooks nor polling). */
 export async function getCalendlyBookingSyncWarning(userId: string): Promise<string | null> {
   const row = await storage.getIntegrationByUserAndType(userId, "calendly");
   if (!row?.isActive) return null;
   const cfg = (row.config || {}) as Record<string, unknown>;
-  if (String(cfg.calendlyWebhookStatus || "") !== "failed") return null;
+  if (String(cfg.connectionStatus || "") !== "connected") return null;
+  if (String(cfg.calendlyWebhookStatus || "") === "connected") return null;
+  if (resolveCalendlySyncModeFromConfig(cfg) === "polling") return null;
   return "Booking link will send. Confirmations may not sync until Calendly sync is fixed.";
+}
+
+export type CalendlySyncMode = "webhook" | "polling";
+
+/** Webhook when connected; polling when webhook registration failed (Calendly Free). */
+export function resolveCalendlySyncModeFromConfig(cfg: Record<string, unknown>): CalendlySyncMode {
+  if (String(cfg.calendlyWebhookStatus || "") === "connected") return "webhook";
+  if (String(cfg.calendlyWebhookStatus || "") === "failed") return "polling";
+  return String(cfg.calendlySyncMode || "") === "polling" ? "polling" : "webhook";
+}
+
+export function calendlySyncModeConfigPatch(webhookConnected: boolean, webhookFailed: boolean): Record<string, unknown> {
+  if (webhookConnected) return { calendlySyncMode: "webhook" as const };
+  if (webhookFailed) return { calendlySyncMode: "polling" as const };
+  return {};
 }
 
 export function appendCalendlyW3TrackingParams(schedulingUrl: string, contactId: string): string {
