@@ -15,6 +15,11 @@ import { useSubscription } from "@/lib/subscription-context";
 import { AIComposer, type AIComposerHandle } from "@/components/AIComposer";
 import { WhatsAppTemplateRichPreview } from "@/components/WhatsAppTemplateRichPreview";
 import {
+  CalendlyAppointmentChip,
+  findExpandedCalendlyMessageIndex,
+  parseCalendlyEventMessage,
+} from "@/components/inbox/CalendlyAppointmentChip";
+import {
   Search,
   Send,
   User,
@@ -163,39 +168,6 @@ interface Message {
   deliveryFailureInline?: string;
   errorMessage?: string | null;
   errorCode?: string | null;
-}
-
-type CalendlyEventMessage = {
-  type?: string;
-  kind?: "booked" | "canceled" | "rescheduled" | "no_show";
-  title?: string;
-  eventName?: string;
-  startTime?: string | null;
-  timeLabel?: string;
-  cardTimeLabel?: string;
-  meetingLink?: string | null;
-};
-
-function parseCalendlyEventMessage(msg: Message): CalendlyEventMessage | null {
-  if (msg.contentType !== "calendly_event") return null;
-  try {
-    const parsed = JSON.parse(msg.content || "{}") as CalendlyEventMessage;
-    return parsed?.type === "calendly_booking" ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function formatCalendlyEventCardTime(event: CalendlyEventMessage): string {
-  if (event.cardTimeLabel) return event.cardTimeLabel;
-  if (event.startTime) {
-    try {
-      return format(new Date(event.startTime), "EEE, MMM d, h:mm a");
-    } catch {
-      // Fall back to the server-rendered label below.
-    }
-  }
-  return event.timeLabel || "Time TBD";
 }
 
 /** Prefer direct <img src> for permanent URLs (R2, app uploads); never use expiring provider CDNs. */
@@ -781,6 +753,11 @@ export function UnifiedInbox() {
     refetchIntervalInBackground: true,
     placeholderData: keepPreviousData,
   });
+
+  const expandedCalendlyMessageIndex = useMemo(
+    () => findExpandedCalendlyMessageIndex(messages),
+    [messages],
+  );
 
   const { data: windowStatus } = useQuery<WindowStatus>({
     queryKey: ["/api/conversations", windowConversationId, "window-status"],
@@ -2251,47 +2228,12 @@ export function UnifiedInbox() {
                     }
                     const calendlyEvent = parseCalendlyEventMessage(msg);
                     if (calendlyEvent) {
-                      const title =
-                        calendlyEvent.kind === "booked"
-                          ? "Meeting booked"
-                          : calendlyEvent.kind === "canceled"
-                            ? "Meeting canceled"
-                            : calendlyEvent.kind === "rescheduled"
-                              ? "Meeting rescheduled"
-                              : calendlyEvent.title || "Calendly activity";
-                      const bookingUrl =
-                        typeof calendlyEvent.meetingLink === "string" &&
-                        /^https?:\/\//i.test(calendlyEvent.meetingLink)
-                          ? calendlyEvent.meetingLink
-                          : "";
                       return (
-                        <div key={msg.id || i} className="flex min-w-0 justify-center px-1 py-1.5 animate-msg-in">
-                          <div className="w-full min-w-0 max-w-[min(82vw,100%)] rounded-2xl border border-emerald-200 bg-white/95 px-3 py-2.5 text-sm shadow-sm sm:max-w-sm sm:px-3.5 sm:py-3">
-                            <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
-                              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
-                                <Calendar className="h-4 w-4" aria-hidden />
-                              </div>
-                              <div className="min-w-0 flex-1 [overflow-wrap:anywhere] break-words">
-                                <p className="text-sm font-semibold text-gray-900 [overflow-wrap:anywhere] break-words">{title}</p>
-                                <p className="mt-0.5 whitespace-pre-wrap text-sm text-gray-700 [overflow-wrap:anywhere] break-words">
-                                  {calendlyEvent.eventName || "Calendly meeting"}
-                                </p>
-                                <p className="mt-1 text-xs font-medium text-gray-500 [overflow-wrap:anywhere] break-words">
-                                  {formatCalendlyEventCardTime(calendlyEvent)}
-                                </p>
-                                {bookingUrl ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => window.open(bookingUrl, "_blank", "noopener,noreferrer")}
-                                    className="mt-2 max-w-full whitespace-normal text-left text-xs font-semibold text-emerald-700 underline-offset-2 [overflow-wrap:anywhere] break-words hover:underline"
-                                  >
-                                    {calendlyEvent.kind === "rescheduled" ? "View booking" : "View / Reschedule"}
-                                  </button>
-                                ) : null}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
+                        <CalendlyAppointmentChip
+                          key={msg.id || i}
+                          event={calendlyEvent}
+                          expanded={i === expandedCalendlyMessageIndex}
+                        />
                       );
                     }
                     const isOut = msg.direction === 'outbound';

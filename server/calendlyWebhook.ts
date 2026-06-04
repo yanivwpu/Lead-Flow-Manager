@@ -163,10 +163,13 @@ function buildCalendlyConversationEvent(params: {
   title: string;
   eventName: string;
   startTime?: string;
+  endTime?: string;
+  previousStartTime?: string;
   meetingLink?: string;
   timeZone?: string;
   inviteeName?: string;
   inviteeEmail?: string;
+  isRescheduleCancellation?: boolean;
 }): { content: string; preview: string } {
   const preview =
     params.kind === "booked"
@@ -184,11 +187,17 @@ function buildCalendlyConversationEvent(params: {
       title: params.title,
       eventName: params.eventName,
       startTime: params.startTime || null,
+      endTime: params.endTime || null,
+      previousStartTime: params.previousStartTime || null,
       timeLabel: formatBookingTime(params.startTime, params.timeZone),
       cardTimeLabel: formatBookingCardTime(params.startTime, params.timeZone),
+      previousTimeLabel: params.previousStartTime
+        ? formatBookingCardTime(params.previousStartTime, params.timeZone)
+        : null,
       meetingLink: params.meetingLink || null,
       inviteeName: params.inviteeName || null,
       inviteeEmail: params.inviteeEmail || null,
+      isRescheduleCancellation: params.isRescheduleCancellation === true,
       source: "calendly",
     }),
   };
@@ -800,6 +809,7 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
     title: "Meeting booked",
     eventName: eventTypeName,
     startTime,
+    endTime,
     meetingLink,
     timeZone,
     inviteeName: name,
@@ -1061,10 +1071,12 @@ async function handleInviteeCanceled(userId: string, body: Record<string, unknow
     title: "Meeting canceled",
     eventName: parsed.eventTypeName,
     startTime: parsed.startTime,
+    endTime: parsed.endTime,
     meetingLink: parsed.meetingLink,
     timeZone,
     inviteeName: parsed.name,
     inviteeEmail: parsed.email,
+    isRescheduleCancellation: parsed.isRescheduleCancellation,
   });
   const written = await writeCalendlyConversationActivity({
     userId,
@@ -1198,11 +1210,21 @@ async function handleInviteeRescheduled(userId: string, body: Record<string, unk
   const timeLabel = formatBookingTime(parsed.startTime, timeZone);
   if (contact) {
     const conversationId = bookingMatch?.conversationId;
+    const oldAppointment = await findCalendlyAppointmentForLifecycle({
+      userId,
+      contactId: contact.id,
+      scheduledEventUri: parsed.scheduledEventUri,
+      inviteeUri: parsed.inviteeUri,
+      oldScheduledEventUri: parsed.oldScheduledEventUri,
+      oldInviteeUri: parsed.oldInviteeUri,
+    });
     const bookingEvent = buildCalendlyConversationEvent({
       kind: "rescheduled",
       title: "Meeting rescheduled",
       eventName: parsed.eventTypeName,
       startTime: parsed.startTime,
+      endTime: parsed.endTime,
+      previousStartTime: oldAppointment?.appointmentDate?.toISOString(),
       meetingLink: parsed.meetingLink,
       timeZone,
       inviteeName: parsed.name,
@@ -1224,14 +1246,6 @@ async function handleInviteeRescheduled(userId: string, body: Record<string, unk
     const endDate = parsed.endTime ? new Date(parsed.endTime) : undefined;
     const title = `${parsed.eventTypeName} · ${timeLabel}`;
     const stableDedupeKey = (parsed.scheduledEventUri || parsed.inviteeUri || parsed.externalMessageId).trim();
-    const oldAppointment = await findCalendlyAppointmentForLifecycle({
-      userId,
-      contactId: contact.id,
-      scheduledEventUri: parsed.scheduledEventUri,
-      inviteeUri: parsed.inviteeUri,
-      oldScheduledEventUri: parsed.oldScheduledEventUri,
-      oldInviteeUri: parsed.oldInviteeUri,
-    });
     const existingNewAppointment =
       stableDedupeKey ? await storage.getAppointmentByCalendlyScheduledEventUri(userId, stableDedupeKey) : undefined;
     const previousStatus = oldAppointment?.status || "none";
