@@ -139,10 +139,40 @@ export const TAG_COLORS: Record<string, string> = {
 
 export const PIPELINE_STAGES = ['Lead', 'Contacted', 'Proposal', 'Negotiation', 'Closed'];
 
-/** RGE-style names not in PIPELINE_STAGES; client-only hint for “stage exists” in Copilot suggestions (real-estate). */
+/** RGE Realtor Growth Engine pipeline display names (template seed). */
+export const RGE_PIPELINE_STAGES = [
+  'New Lead',
+  'Responded',
+  'Qualified (Hot)',
+  'Qualified (Warm)',
+  'Nurture / Follow-Up',
+  'Appointment Set',
+  'Under Contract',
+  'Closed',
+  'Unqualified',
+] as const;
+
+/** RGE-style names used by automations but not in the core template pipeline list. */
 export const RGE_OPTIONAL_PIPELINE_STAGES = [
   'Qualified (Hot)',
   'Appointment Requested',
   'Appointment Booked',
   'Appointment Set',
 ] as const;
+
+/** Ordered union for CRM dropdowns; always includes the contact's current stage. */
+export function pipelineStageOptions(currentStage?: string | null): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (stage: string) => {
+    const trimmed = stage.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    out.push(trimmed);
+  };
+  for (const stage of RGE_PIPELINE_STAGES) add(stage);
+  for (const stage of PIPELINE_STAGES) add(stage);
+  for (const stage of RGE_OPTIONAL_PIPELINE_STAGES) add(stage);
+  add(currentStage || '');
+  return out;
+}

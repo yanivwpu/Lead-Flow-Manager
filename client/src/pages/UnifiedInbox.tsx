@@ -1288,9 +1288,60 @@ export function UnifiedInbox() {
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error("Failed to update contact");
-      return res.json();
+      return res.json() as Promise<Contact>;
     },
-    onSuccess: () => {
+    onMutate: async (data) => {
+      const { contactId, ...body } = data;
+      const contactKey = ["/api/contacts", contactId] as const;
+      await queryClient.cancelQueries({ queryKey: contactKey });
+      await queryClient.cancelQueries({ queryKey: ["/api/inbox"] });
+
+      const previousContact = queryClient.getQueryData<{ contact: Contact; conversations: Conversation[] }>(contactKey);
+      const previousInbox = queryClient.getQueryData<InboxItem[]>(["/api/inbox"]);
+
+      const patchContact = (contact: Contact): Contact => ({ ...contact, ...body });
+
+      if (previousContact?.contact) {
+        queryClient.setQueryData(contactKey, {
+          ...previousContact,
+          contact: patchContact(previousContact.contact),
+        });
+      }
+
+      if (previousInbox) {
+        queryClient.setQueryData<InboxItem[]>(
+          ["/api/inbox"],
+          previousInbox.map((item) =>
+            item.contact.id === contactId
+              ? { ...item, contact: patchContact(item.contact) }
+              : item,
+          ),
+        );
+      }
+
+      return { previousContact, previousInbox, contactId };
+    },
+    onError: (_err, _data, context) => {
+      if (context?.previousContact) {
+        queryClient.setQueryData(["/api/contacts", context.contactId], context.previousContact);
+      }
+      if (context?.previousInbox) {
+        queryClient.setQueryData(["/api/inbox"], context.previousInbox);
+      }
+    },
+    onSuccess: (updatedContact, variables) => {
+      const contactId = variables.contactId;
+      queryClient.setQueryData<{ contact: Contact; conversations: Conversation[] }>(
+        ["/api/contacts", contactId],
+        (old) => (old ? { ...old, contact: { ...old.contact, ...updatedContact } } : old),
+      );
+      queryClient.setQueryData<InboxItem[]>(["/api/inbox"], (old) =>
+        old?.map((item) =>
+          item.contact.id === contactId
+            ? { ...item, contact: { ...item.contact, ...updatedContact } }
+            : item,
+        ),
+      );
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       setShowEditContact(false);

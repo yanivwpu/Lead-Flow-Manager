@@ -65,7 +65,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { MODAL_OVERLAY_BACKDROP } from "@/lib/modalOverlay";
 import { format, parseISO } from "date-fns";
-import { TAG_COLORS, PIPELINE_STAGES, RGE_OPTIONAL_PIPELINE_STAGES } from "@/lib/data";
+import { TAG_COLORS, pipelineStageOptions } from "@/lib/data";
 import { CONVERSATION_STATUS_ROWS, getConversationStatusRow } from "@/lib/conversationStatusUi";
 import {
   analyzeConversation,
@@ -1145,6 +1145,10 @@ export function InboxLeadDetailsPanel({
   const convStatus = primaryConversation?.status || 'open';
   const conversationStatusRow = getConversationStatusRow(convStatus);
   const followUpSt = getFollowUpStatus(contact.followUpDate);
+  const contactPipelineStageOptions = useMemo(
+    () => pipelineStageOptions(contact.pipelineStage),
+    [contact.pipelineStage],
+  );
 
   // ── Conversation intelligence — re-runs whenever messages change ──
   const intel = useMemo(
@@ -1350,9 +1354,7 @@ export function InboxLeadDetailsPanel({
 
     const signals = stageSignals;
     const deterministicIntent = signals.strongIntent || signals.viewingIntent;
-    const stageExists = (s: string) =>
-      PIPELINE_STAGES.includes(s as any) ||
-      (signals.isRealEstate && (RGE_OPTIONAL_PIPELINE_STAGES as readonly string[]).includes(s));
+    const stageExists = (s: string) => contactPipelineStageOptions.includes(s);
 
     // Generic: Lead → Contacted only, when deterministic intent from inbound (detectIntent), not auto-move.
     if (!signals.isRealEstate) {
@@ -1388,7 +1390,7 @@ export function InboxLeadDetailsPanel({
     }
 
     return null;
-  }, [intel.leadScoreDetails, contact.pipelineStage, stageSignals]);
+  }, [intel.leadScoreDetails, contact.pipelineStage, contactPipelineStageOptions, stageSignals]);
 
   // ── Safe system score auto-tag (server-enforced) ──────────────────────────
   const systemScoreTagKeyRef = useRef<string>("");
@@ -2621,10 +2623,10 @@ export function InboxLeadDetailsPanel({
                   onValueChange={val => onUpdateContact({ pipelineStage: val })}
                 >
                   <SelectTrigger className="h-7 text-[11px] flex-1 bg-white px-2" data-testid="select-pipeline">
-                    <SelectValue />
+                    <SelectValue placeholder="Stage" />
                   </SelectTrigger>
                   <SelectContent>
-                    {PIPELINE_STAGES.map(stage => (
+                    {contactPipelineStageOptions.map(stage => (
                       <SelectItem key={stage} value={stage} className="text-[11px]">{stage}</SelectItem>
                     ))}
                   </SelectContent>
