@@ -13,6 +13,7 @@ import {
   hasGenuineConversationActivity,
   MIN_HOT_TAG_SCORE,
 } from "./leadQualification";
+import { resolveAiRouting, type AiRoutingDecision } from "./aiRouting";
 
 export type CustomerInsightContext = {
   reasons?: string[];
@@ -176,6 +177,9 @@ export type ContextualActionContext = {
   showingTimingPhrase?: string | null;
   mentionedDeposit?: boolean;
   schedulingLinkSent?: boolean;
+  /** Platform routing decision — aligns Copilot with AI auto-reply routing */
+  aiRoutingDecision?: AiRoutingDecision;
+  needsRoutingClarification?: boolean;
 };
 
 type ActionCandidate = { label: string; rank: number; group: string };
@@ -184,7 +188,35 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
   const actions: ActionCandidate[] = [];
   const timing = ctx.showingTimingPhrase?.trim();
 
-  if (ctx.hasShowingIntent) {
+  const routingDecision =
+    ctx.aiRoutingDecision ??
+    (ctx.inboundText?.trim()
+      ? resolveAiRouting({ inbound: ctx.inboundText, joinedInbound: ctx.inboundText }).decision
+      : undefined);
+  const needsClarify =
+    ctx.needsRoutingClarification ??
+    (ctx.inboundText?.trim()
+      ? resolveAiRouting({ inbound: ctx.inboundText, joinedInbound: ctx.inboundText }).needsRoutingClarification
+      : false);
+
+  if (needsClarify) {
+    actions.push({
+      label: "Clarify chat vs schedule",
+      rank: 93,
+      group: "contact",
+    });
+  } else if (routingDecision === "ASSIGN_AGENT" && !ctx.assignedTo) {
+    actions.push({ label: "Assign agent", rank: 96, group: "assign" });
+  } else if (routingDecision === "START_NURTURE") {
+    actions.push({ label: "Send nurture follow-up", rank: 52, group: "followup" });
+  }
+
+  const allowBookingActions =
+    routingDecision === "BOOK_APPOINTMENT" ||
+    (!routingDecision && ctx.hasShowingIntent) ||
+    (routingDecision === "CONTINUE_AI" && ctx.hasShowingIntent && !needsClarify);
+
+  if (allowBookingActions && ctx.hasShowingIntent) {
     actions.push({
       label: timing ? `Confirm ${timing} availability` : "Confirm showing availability",
       rank: 100,
@@ -205,9 +237,16 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
       rank: 88,
       group: "financing",
     });
-  } else if (ctx.hasStrongPurchaseIntent && !ctx.hasShowingIntent) {
+  } else if (
+    ctx.hasStrongPurchaseIntent &&
+    !ctx.hasShowingIntent &&
+    routingDecision !== "ASSIGN_AGENT" &&
+    !needsClarify
+  ) {
     actions.push({ label: "Contact customer", rank: 82, group: "contact" });
-    actions.push({ label: "Schedule appointment", rank: 78, group: "showing" });
+    if (allowBookingActions) {
+      actions.push({ label: "Schedule appointment", rank: 78, group: "showing" });
+    }
   } else if (ctx.leadLabel === "Hot" || ctx.bucket === "hot") {
     if (!actions.some((a) => a.group === "contact")) {
       actions.push({ label: "Contact customer", rank: 80, group: "contact" });
@@ -306,6 +345,10 @@ export function getNextBestActionBehavior(label: string): NextBestActionBehavior
     return "snooze";
   }
 
+  if (/\b(clarify chat vs schedule|clarify human vs schedule)\b/.test(l)) {
+    return "composer";
+  }
+
   if (/\bassign agent\b/.test(l)) {
     return "assign";
   }
@@ -352,6 +395,9 @@ export function composerSuggestionForAction(label: string): string {
   }
   if (/financing|lender/.test(l)) {
     return "Are you already working with a lender, or would you like me to connect you with one?";
+  }
+  if (/clarify chat vs schedule|clarify human vs schedule/.test(l)) {
+    return "Happy to help — are you looking to chat with someone now about a specific question, or would you prefer to schedule a call?";
   }
   if (/reply personally/.test(l)) {
     return "Hi! I wanted to follow up on our conversation personally.";

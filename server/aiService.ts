@@ -7,6 +7,7 @@ import {
   type AiBusinessKnowledge,
   type AiSettings,
 } from "@shared/schema";
+import type { AiRoutingResult } from "@shared/aiRouting";
 
 export type SupportedAiLanguage = "en" | "he" | "es" | "ar";
 
@@ -50,7 +51,8 @@ export class AIService {
       intent?: string;
       leadScore?: string;
       buyerPreferences?: string;
-    }
+    },
+    routing?: AiRoutingResult,
   ): Promise<{ suggestion: string; confidence: number }> {
     const lastMessage = conversationHistory[conversationHistory.length - 1]?.content || "";
 
@@ -68,7 +70,7 @@ export class AIService {
 
     const detectedLanguage = language || await this.detectMessageLanguage(lastMessage);
     const isFirstMessage = conversationHistory.length <= 2;
-    const systemPrompt = this.buildSystemPrompt(businessKnowledge, settings, tone, detectedLanguage, contactContext, isFirstMessage);
+    const systemPrompt = this.buildSystemPrompt(businessKnowledge, settings, tone, detectedLanguage, contactContext, isFirstMessage, routing);
     
     try {
       const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
@@ -419,7 +421,8 @@ Return JSON only: { "summary": "..." }`;
       leadScore?: string;
       buyerPreferences?: string;
     },
-    isFirstMessage?: boolean
+    isFirstMessage?: boolean,
+    routing?: AiRoutingResult,
   ): string {
     const langInstruction = language ? LANGUAGE_PROMPTS[language].instruction : LANGUAGE_PROMPTS.en.instruction;
     const industry = (businessKnowledge?.industry || "general").toLowerCase();
@@ -495,7 +498,7 @@ ${contactContext.buyerPreferences ? `\n${contactContext.buyerPreferences}\nUse t
 
 6. ADVANCE THE CONVERSATION — every reply must do one of:
    - Clarify lead intent or interest
-   - Move toward a viewing / meeting / booking
+   - Move toward the appropriate next step (qualify, human handoff, or booking — see ROUTING below)
    - Clarify the single most important missing detail for the next step (only if it is relevant and not already answered)
    - Confirm next step or route them to action
 
@@ -508,7 +511,10 @@ FIRST MESSAGE RULE: This is the very start of the conversation. The lead has jus
 - Example: if they said "hi" or something vague, reply warmly and ask what brings them here today.
 - Never cold-open with qualification questions on a first message.` : ""}
 
-${bookingUrl ? `SCHEDULING LINK (Calendly — only when the customer asks to book, schedule, pick a time, or clearly wants a meeting):
+${routing?.promptGuidance ? `ROUTING (follow strictly — do not skip to booking unless routing allows it):
+${routing.promptGuidance}` : ""}
+
+${bookingUrl && routing?.decision === "BOOK_APPOINTMENT" && !routing.needsRoutingClarification ? `SCHEDULING LINK (Calendly — customer wants to book/schedule):
 - You may share the scheduling URL at most once in this conversation when appropriate.
 - Use a short intro line, then a blank line, then the URL alone on its own line (no brackets, no placeholder tokens). Example shape:
   Sure — you can pick a time here:
@@ -516,7 +522,10 @@ ${bookingUrl ? `SCHEDULING LINK (Calendly — only when the customer asks to boo
   ${bookingUrl}
 
   I’ll make sure we have the right details ready.
-- Never invent or alter the URL; copy it exactly as given above.` : `SCHEDULING / BOOKING:
+- Never invent or alter the URL; copy it exactly as given above.` : bookingUrl ? `SCHEDULING / BOOKING:
+- A scheduling URL exists but routing does NOT allow sending it in this reply (customer may need human help or clarification first).
+- Do NOT paste the booking URL.
+- Ask a clarifying or qualifying question, or acknowledge handoff to a team member.` : `SCHEDULING / BOOKING:
 - No self-service scheduling URL is configured. Do NOT invent, guess, or paste booking URLs (including Google Calendar links).
 - If they want to book, acknowledge and say your team will follow up with times, or ask what times work — do not claim they can self-book online unless a link was already shared earlier in this thread.`}`;
 
@@ -525,7 +534,8 @@ ${bookingUrl ? `SCHEDULING LINK (Calendly — only when the customer asks to boo
 
 REAL ESTATE SPECIFIC:
 - Always identify which property/area the lead is interested in and reference it by name if mentioned
-- Prioritize moving toward: property viewing > callback > details > qualification
+- Prioritize: answer their question → human callback when they ask to speak with someone → viewing/booking only when they want to schedule
+- Do NOT send a booking link when they ask to speak with an advisor/agent unless they confirm they want to schedule
 - Qualification order: intent (buy/rent/invest) → budget → timeline → financing
 - If viewing intent is shown: "Would you like to book a viewing this week?" / "Weekday or weekend works better for you?"
 - If budget unknown: "Do you have a target price range in mind?" 

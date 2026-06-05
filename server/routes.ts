@@ -107,8 +107,16 @@ import {
   isSubstantiveTextForAiAutoSend,
   normalizeBusinessAiMode,
   shouldBypassAutoGuardsForInbound,
+  toConversationMessages,
   type ChatTurn,
 } from "./aiAutoSendGate";
+import { getStageSignals } from "../client/src/lib/leadScoring";
+import {
+  resolveAiRouting,
+  routingAllowsSchedulingLink,
+  routingShouldTriggerHandoff,
+  stripSchedulingUrlsFromReply,
+} from "@shared/aiRouting";
 import {
   scrapeGuidedWebsiteKnowledgePages,
   combineScrapedText,
@@ -10313,6 +10321,32 @@ export async function registerRoutes(
       const knowledge = await applyCalendlyBookingLinkForAi(userId, knowledgeRaw);
       const settings = await storage.getAiSettings(userId);
 
+      const inboundContentsEarly = historyTurns.filter((m) => m.role === "user").map((m) => m.content || "");
+      const joinedInboundEarly = inboundContentsEarly.join("\n");
+      const scoringKnowledgeEarly = businessKnowledgeFromAiRecord(knowledge as Record<string, unknown>);
+      const stageSignalsEarly = getStageSignals(toConversationMessages(historyTurns), scoringKnowledgeEarly);
+      const aiRouting = resolveAiRouting({
+        inbound: lastInbound,
+        joinedInbound: joinedInboundEarly,
+        history: historyTurns.map((m) => ({ role: m.role, content: m.content })),
+        handoffKeywords: settings?.handoffKeywords ?? undefined,
+        industry: knowledge?.industry ?? undefined,
+        industrySignals: {
+          viewingIntent: stageSignalsEarly.viewingIntent,
+          strongIntent: stageSignalsEarly.strongIntent,
+        },
+      });
+
+      console.info("[AI-ROUTING]", {
+        userId,
+        chatId: chatId ?? null,
+        decision: aiRouting.decision,
+        confidence: aiRouting.confidence,
+        reason: aiRouting.reason,
+        needsRoutingClarification: aiRouting.needsRoutingClarification,
+        signals: aiRouting.signals,
+      });
+
       // ── Human handoff: hard block AI reply generation/autosend ──────────────
       // Follow-up force phrases bypass stale handoff so customers get a reply when nudging.
       if (chatId && !forceAutoBypass) {
@@ -10337,53 +10371,36 @@ export async function registerRoutes(
         }
       }
 
-      if (lastInbound && !forceAutoBypass) {
-        const handoff = await aiService.checkHandoffNeeded(lastInbound, settings || undefined);
-        if (handoff.shouldHandoff) {
-          let contactIdForLog: string | null = null;
-          try {
-            if (chatId) {
-              const conv = await storage.getConversation(chatId);
-              contactIdForLog = conv?.contactId ?? null;
-              if (conv?.contactId) {
-                const keywords = (settings?.handoffKeywords || ["call me", "human", "agent", "speak to someone"])
-                  .map((k) => String(k || "").trim())
-                  .filter(Boolean);
-                const lower = lastInbound.toLowerCase();
-                const matchedKeyword =
-                  keywords.find((k) => lower.includes(k.toLowerCase())) || "unknown";
-                console.info("[HANDOFF_TRIGGERED]", {
-                  contactId: conv.contactId,
-                  matchedKeyword,
+      let routingHandoffLogged = false;
+      if (lastInbound && !forceAutoBypass && routingShouldTriggerHandoff(aiRouting)) {
+        try {
+          if (chatId) {
+            const conv = await storage.getConversation(chatId);
+            if (conv?.contactId) {
+              console.info("[HANDOFF_TRIGGERED]", {
+                contactId: conv.contactId,
+                routingDecision: aiRouting.decision,
+                reason: aiRouting.reason,
+                message: lastInbound.slice(0, 500),
+              });
+              await storage.createActivityEvent({
+                userId,
+                contactId: conv.contactId,
+                conversationId: chatId,
+                eventType: "ai_handoff",
+                eventData: {
+                  routingDecision: aiRouting.decision,
+                  routingReason: aiRouting.reason,
                   message: lastInbound.slice(0, 500),
-                });
-                await storage.createActivityEvent({
-                  userId,
-                  contactId: conv.contactId,
-                  conversationId: chatId,
-                  eventType: "ai_handoff",
-                  eventData: {
-                    matchedKeyword,
-                    message: lastInbound.slice(0, 500),
-                    reason: handoff.reason || "handoff_keyword_match",
-                  },
-                  actorType: "system",
-                });
-              }
+                  reason: "ai_routing_assign_agent",
+                },
+                actorType: "system",
+              });
+              routingHandoffLogged = true;
             }
-          } catch {
-            // ignore
           }
-
-          console.info("[AI-AUTO] triggered", false);
-          console.info("[AI-AUTO] blocked", "handoff_triggered");
-          return res.json({
-            suggestion: "",
-            confidence: 0,
-            status: "handoff",
-            autoSendAllowed: false,
-            autoSendReason: "handoff_triggered",
-          });
+        } catch {
+          // ignore
         }
       }
       
@@ -10477,8 +10494,13 @@ export async function registerRoutes(
           settings || undefined,
           selectedTone,
           aiLanguage,
-          enrichedContactContext || undefined
+          enrichedContactContext || undefined,
+          aiRouting,
         );
+      }
+
+      if (suggestion.suggestion && !routingAllowsSchedulingLink(aiRouting)) {
+        suggestion.suggestion = stripSchedulingUrlsFromReply(suggestion.suggestion);
       }
 
       let autoSendAllowed = false;
@@ -10507,6 +10529,9 @@ export async function registerRoutes(
           autoSendReason = chatbotArb.flowMatched
             ? "non_text_inbound_chatbot_active"
             : "non_text_inbound";
+        } else if (routingHandoffLogged || routingShouldTriggerHandoff(aiRouting)) {
+          autoSendAllowed = false;
+          autoSendReason = "routing_assign_agent";
         } else if (chatbotArb.flowMatched) {
           autoSendAllowed = false;
           autoSendReason = "chatbot_flow_active";
@@ -10578,6 +10603,13 @@ export async function registerRoutes(
         autoSendAllowed,
         autoSendReason,
         flowMatched: chatbotArb.flowMatched,
+        aiRouting: {
+          decision: aiRouting.decision,
+          confidence: aiRouting.confidence,
+          reason: aiRouting.reason,
+          needsRoutingClarification: aiRouting.needsRoutingClarification,
+          signals: aiRouting.signals,
+        },
         aiAutoSuppressed:
           wantsAuto &&
           (!autoSendAllowed) &&

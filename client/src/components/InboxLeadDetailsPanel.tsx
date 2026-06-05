@@ -41,6 +41,7 @@ import {
   isSchedulingComposerAction,
   type NextBestActionBehavior,
 } from "@shared/customerInsights";
+import { resolveAiRouting } from "@shared/aiRouting";
 import {
   filterMeaningfulTimelineEvents,
   formatActivityDetailText,
@@ -1528,9 +1529,23 @@ export function InboxLeadDetailsPanel({
     const intentText = `${intel.intent ?? ""}`.toLowerCase();
     const lastMsgText = `${messages[messages.length - 1]?.content ?? ""}`.toLowerCase();
     const hay = `${inboundText} ${intentText}`.toLowerCase();
+    const aiRouting = resolveAiRouting({
+      inbound: lastMsgText || inboundText,
+      joinedInbound: inboundText,
+      history: messages.map((m) => ({
+        role: m.direction === "inbound" ? "user" : "assistant",
+        content: m.content,
+      })),
+      industry: businessKnowledge?.industry,
+      industrySignals: {
+        viewingIntent: stageSignals.viewingIntent,
+        strongIntent: stageSignals.strongIntent,
+      },
+    });
     const hasBookingIntent =
-      stageSignals.viewingIntent ||
-      /book|schedule|appointment|showing|tour|viewing|visit|availability/.test(hay);
+      aiRouting.decision === "BOOK_APPOINTMENT" ||
+      (stageSignals.viewingIntent ||
+        /book|schedule|appointment|showing|tour|viewing|visit|availability/.test(hay));
     const mentionedDeposit = /\b(deposit|earnest money|down payment)\b/i.test(inboundText);
     const hasFinancingDiscussion =
       mentionedDeposit ||
@@ -1559,6 +1574,8 @@ export function InboxLeadDetailsPanel({
       showingTimingPhrase: extractShowingTimingPhrase(inboundText),
       mentionedDeposit,
       schedulingLinkSent,
+      aiRoutingDecision: aiRouting.decision,
+      needsRoutingClarification: aiRouting.needsRoutingClarification,
     });
   }, [
     handoffActive,
@@ -1573,6 +1590,8 @@ export function InboxLeadDetailsPanel({
     contact.followUpDate,
     effectiveAiPaused,
     stageSignals.viewingIntent,
+    stageSignals.strongIntent,
+    businessKnowledge?.industry,
     schedulingLinkSent,
   ]);
 
