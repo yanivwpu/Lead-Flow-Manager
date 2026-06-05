@@ -21,6 +21,8 @@ export type CalendlyMessageLike = {
   content?: string | null;
 };
 
+const CHIP_MAX = "max-w-[min(320px,88vw)]";
+
 export function parseCalendlyEventMessage(msg: CalendlyMessageLike): CalendlyEventMessage | null {
   if (msg.contentType !== "calendly_event") return null;
   try {
@@ -112,22 +114,18 @@ type CalendlyAppointmentChipProps = {
 };
 
 export function CalendlyAppointmentChip({ event, expanded }: CalendlyAppointmentChipProps) {
-  const bookingUrl =
-    typeof event.meetingLink === "string" && /^https?:\/\//i.test(event.meetingLink)
-      ? event.meetingLink
-      : "";
   const time = formatEventTime(event);
   const duration = formatDurationMinutes(event);
   const metaLine = duration ? `${time} · ${duration}` : time;
 
   if (!expanded) {
     return (
-      <div className="flex min-w-0 justify-center px-1 py-0.5 animate-msg-in">
+      <div className="flex min-w-0 justify-center px-1 py-px animate-msg-in">
         <div
-          className="inline-flex max-w-[420px] min-w-0 items-center gap-1.5 rounded-md border border-gray-200/90 bg-white/90 px-2 py-1 text-[11px] leading-snug text-gray-600 shadow-sm"
+          className={`inline-flex w-fit ${CHIP_MAX} min-w-0 items-center gap-1 rounded-md border border-gray-200/70 bg-white/80 px-1.5 py-0.5 text-[10px] leading-snug text-gray-500`}
           title={event.eventName || undefined}
         >
-          <Calendar className="h-3 w-3 shrink-0 text-gray-400" aria-hidden />
+          <Calendar className="h-2.5 w-2.5 shrink-0 text-gray-400" aria-hidden />
           <span className="min-w-0 [overflow-wrap:anywhere] break-words">{compactHeadline(event)}</span>
         </div>
       </div>
@@ -135,22 +133,16 @@ export function CalendlyAppointmentChip({ event, expanded }: CalendlyAppointment
   }
 
   return (
-    <div className="flex min-w-0 justify-center px-1 py-0.5 animate-msg-in">
-      <div className="w-full min-w-0 max-w-[420px] rounded-lg border border-emerald-200/80 bg-white/95 px-2.5 py-1.5 text-xs shadow-sm">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <Calendar className="h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden />
-          <span className="font-semibold text-gray-900">{expandedHeadline(event)}</span>
+    <div className="flex min-w-0 justify-center px-1 py-px animate-msg-in">
+      <div
+        className={`inline-flex w-fit ${CHIP_MAX} min-w-0 flex-col rounded-md border border-emerald-100/90 bg-white/85 px-1.5 py-1`}
+        title={event.eventName || undefined}
+      >
+        <div className="flex items-center gap-1">
+          <Calendar className="h-2.5 w-2.5 shrink-0 text-emerald-600" aria-hidden />
+          <span className="text-[11px] font-medium leading-tight text-gray-800">{expandedHeadline(event)}</span>
         </div>
-        <p className="mt-0.5 pl-5 text-[11px] text-gray-600">{metaLine}</p>
-        {bookingUrl ? (
-          <button
-            type="button"
-            onClick={() => window.open(bookingUrl, "_blank", "noopener,noreferrer")}
-            className="mt-0.5 pl-5 text-left text-[11px] font-medium text-emerald-700 underline-offset-2 hover:underline"
-          >
-            View appointment
-          </button>
-        ) : null}
+        <p className="pl-[calc(0.625rem+0.25rem)] text-[10px] leading-tight text-gray-500">{metaLine}</p>
       </div>
     </div>
   );
