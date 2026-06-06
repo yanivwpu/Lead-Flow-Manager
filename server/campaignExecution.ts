@@ -328,7 +328,7 @@ export async function processCampaignEnrollmentStep(enrollmentId: string): Promi
     return;
   }
 
-  if (campaign.status === "paused" || campaign.status === "completed") {
+  if (campaign.status === "paused" || campaign.status === "completed" || campaign.status === "draft") {
     return;
   }
 

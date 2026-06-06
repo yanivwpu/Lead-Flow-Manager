@@ -246,13 +246,13 @@ export function resolveAiRouting(input: AiRoutingInput): AiRoutingResult {
   const inbound = (input.inbound || "").trim();
   const text = norm(input.joinedInbound ? `${input.joinedInbound}\n${inbound}` : inbound);
   const signals: string[] = [];
+  const industry = (input.industry || "").toLowerCase();
 
   if (!inbound) {
     return continueAiResult("empty_inbound", signals, 0, false, industry);
   }
 
   const clarify = detectClarificationFromHistory(input.history);
-  const industry = (input.industry || "").toLowerCase();
   const isRealEstate =
     industry.includes("real estate") ||
     industry.includes("realestate") ||

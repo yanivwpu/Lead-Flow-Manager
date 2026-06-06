@@ -180,6 +180,8 @@ export type ContextualActionContext = {
   /** Platform routing decision — aligns Copilot with AI auto-reply routing */
   aiRoutingDecision?: AiRoutingDecision;
   needsRoutingClarification?: boolean;
+  /** Count of active preset campaigns this contact can enroll in from the current channel */
+  enrollableCampaignCount?: number;
 };
 
 type ActionCandidate = { label: string; rank: number; group: string };
@@ -206,7 +208,11 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
   } else if (routingDecision === "ASSIGN_AGENT" && !ctx.assignedTo) {
     actions.push({ label: "Assign agent", rank: 96, group: "assign" });
   } else if (routingDecision === "START_NURTURE") {
-    actions.push({ label: "Send nurture follow-up", rank: 52, group: "followup" });
+    if ((ctx.enrollableCampaignCount ?? 0) > 0) {
+      actions.push({ label: "Enroll in nurture campaign", rank: 54, group: "campaign" });
+    } else {
+      actions.push({ label: "Send nurture follow-up", rank: 52, group: "followup" });
+    }
   } else if (infoSeeking) {
     actions.push({ label: "Ask qualifying question", rank: 84, group: "contact" });
   }
@@ -256,7 +262,11 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
     ctx.bucket === "cold" ||
     ctx.bucket === "unqualified"
   ) {
-    actions.push({ label: "Send nurture follow-up", rank: 40, group: "followup" });
+    if ((ctx.enrollableCampaignCount ?? 0) > 0) {
+      actions.push({ label: "Enroll in nurture campaign", rank: 42, group: "campaign" });
+    } else {
+      actions.push({ label: "Send nurture follow-up", rank: 40, group: "followup" });
+    }
   }
 
   const hasHighValueAction = actions.some((a) => a.rank >= 75);
@@ -292,7 +302,7 @@ function dedupeActionCandidates(candidates: ActionCandidate[]): ActionCandidate[
     .slice(0, 3);
 }
 
-export type NextBestActionBehavior = "book" | "follow" | "assign" | "snooze" | "composer";
+export type NextBestActionBehavior = "book" | "follow" | "assign" | "snooze" | "composer" | "campaign";
 
 export type ContextualNextAction = {
   label: string;
@@ -306,6 +316,8 @@ export function behaviorForActionGroup(group: string): NextBestActionBehavior {
       return "book";
     case "followup":
       return "follow";
+    case "campaign":
+      return "campaign";
     case "assign":
       return "assign";
     case "showing_times":

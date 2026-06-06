@@ -43,6 +43,12 @@ import {
 } from "@shared/customerInsights";
 import { resolveAiRouting } from "@shared/aiRouting";
 import {
+  evaluatePresetCampaignEnrollability,
+  formatCampaignEnrollmentSubtitle,
+  inferContactConversationChannel,
+  sortCampaignsForContact,
+} from "@shared/campaignEnrollment";
+import {
   filterMeaningfulTimelineEvents,
   formatActivityDetailText,
 } from "@/lib/contactTimelineFilter";
@@ -208,6 +214,8 @@ interface InboxLeadDetailsPanelProps {
   composerDraftPreview?: string;
   /** Insert suggested reply text into the main message composer. Returns true on success. */
   onInsertComposerDraft?: (text: string) => boolean;
+  /** Channel connection map from /api/channel-health — used for campaign compatibility */
+  connectedChannels?: Record<string, boolean>;
   /** Override the root container class — use when embedding in a mobile sheet */
   panelClassName?: string;
 }
@@ -566,6 +574,7 @@ type CampaignEnrollmentRow = {
   currentStepIndex: number;
   createdAt?: string | null;
   totalSteps?: number | null;
+  failureReason?: string | null;
 };
 
 type ContactActivityEvent = {
@@ -575,28 +584,6 @@ type ContactActivityEvent = {
   actorType: string;
   createdAt: string;
 };
-
-function formatCampaignEnrollmentSubtitle(e: CampaignEnrollmentRow): string {
-  const total = typeof e.totalSteps === "number" ? e.totalSteps : 0;
-  const idx = e.currentStepIndex;
-  const humanStep =
-    total > 0 ? Math.min(Math.max(0, idx) + 1, total) : Math.max(1, idx + 1);
-
-  switch (e.status) {
-    case "active":
-      return total > 0 ? `Active · Step ${humanStep} of ${total}` : "Active";
-    case "paused":
-      return total > 0 ? `Paused · Step ${humanStep} of ${total}` : "Paused";
-    case "failed":
-      return "Failed · needs review";
-    case "completed":
-      return "Completed";
-    case "cancelled":
-      return "Cancelled";
-    default:
-      return e.status;
-  }
-}
 
 function formatContactActivity(event: ContactActivityEvent): { title: string; detail: string; tone: "green" | "amber" | "gray" } {
   const data = event.eventData || {};
@@ -746,12 +733,29 @@ function formatContactActivity(event: ContactActivityEvent): { title: string; de
       tone: "gray",
     };
   }
+  if (kind === "campaign_enrolled" || title.toLowerCase().includes("enrolled in")) {
+    return {
+      title: title || "Campaign enrollment",
+      detail: formatActivityDetailText(content) || "Contact added to a saved campaign",
+      tone: "green",
+    };
+  }
   const fallbackTitle = event.eventType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   return {
     title: fallbackTitle,
     detail: formatActivityDetailText(content || title) || "Activity recorded",
     tone: "gray",
   };
+}
+
+function enrollmentCardSubtitle(e: CampaignEnrollmentRow): string {
+  return formatCampaignEnrollmentSubtitle({
+    status: e.status,
+    currentStepIndex: e.currentStepIndex,
+    totalSteps: e.totalSteps,
+    failureReason: e.failureReason,
+    campaignStatus: e.campaignStatus,
+  });
 }
 
 export function InboxLeadDetailsPanel({
@@ -770,6 +774,7 @@ export function InboxLeadDetailsPanel({
   onDeleteContact,
   composerDraftPreview,
   onInsertComposerDraft,
+  connectedChannels,
   panelClassName,
 }: InboxLeadDetailsPanelProps) {
   const { toast } = useToast();
@@ -910,7 +915,7 @@ export function InboxLeadDetailsPanel({
   });
 
   const { data: presetCampaignPickList = [] } = useQuery<
-    Array<{ id: string; name: string; status: string; channel?: string }>
+    Array<{ id: string; name: string; status: string; channel?: string; messages?: unknown }>
   >({
     queryKey: ["/api/preset-campaigns"],
     queryFn: async () => {
@@ -920,6 +925,67 @@ export function InboxLeadDetailsPanel({
     },
     enabled: !!contact.id,
   });
+
+  const contactOutreachChannel = useMemo(
+    () => inferContactConversationChannel(contact, primaryConversation?.channel),
+    [contact, primaryConversation?.channel],
+  );
+
+  const activeEnrollmentCampaignIds = useMemo(() => {
+    const list = campaignEnrollmentPayload?.enrollments ?? [];
+    return new Set(
+      list.filter((e) => e.status === "active" || e.status === "paused").map((e) => e.campaignId),
+    );
+  }, [campaignEnrollmentPayload?.enrollments]);
+
+  const campaignPickOptions = useMemo(() => {
+    const sorted = sortCampaignsForContact(
+      presetCampaignPickList,
+      contact,
+      primaryConversation?.channel,
+    );
+    return sorted.map((c) => {
+      const channel = (c.channel || "whatsapp").toLowerCase();
+      const channelConnected =
+        channel === "whatsapp"
+          ? connectedChannels?.whatsapp !== false
+          : connectedChannels?.[channel] ?? true;
+      const eligibility = evaluatePresetCampaignEnrollability({
+        contact,
+        campaign: c,
+        conversationChannel: primaryConversation?.channel,
+        channelConnected,
+        alreadyEnrolled: activeEnrollmentCampaignIds.has(c.id),
+      });
+      return { ...c, eligibility };
+    });
+  }, [
+    presetCampaignPickList,
+    contact,
+    primaryConversation?.channel,
+    connectedChannels,
+    activeEnrollmentCampaignIds,
+  ]);
+
+  const compatibleCampaignOptions = useMemo(
+    () => campaignPickOptions.filter((c) => c.eligibility.eligible),
+    [campaignPickOptions],
+  );
+
+  const enrollableCampaignCount = compatibleCampaignOptions.length;
+
+  const openCampaignPicker = useCallback(
+    (preferredCampaignId?: string) => {
+      const preferred =
+        preferredCampaignId &&
+        compatibleCampaignOptions.some((c) => c.id === preferredCampaignId)
+          ? preferredCampaignId
+          : compatibleCampaignOptions[0]?.id || "";
+      setPickedCampaignId(preferred);
+      setCampaignPickerOpen(true);
+    },
+    [compatibleCampaignOptions],
+  );
 
   const enrollContactCampaignMutation = useMutation({
     mutationFn: async () => {
@@ -932,8 +998,11 @@ export function InboxLeadDetailsPanel({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/campaign-enrollments", contact.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contact.id}/timeline?limit=40`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contact.id}/timeline?limit=60`] });
       setCampaignPickerOpen(false);
       setPickedCampaignId("");
+      toast({ title: "Enrolled in campaign", duration: 2500 });
     },
     onError: (e: Error) => {
       toast({
@@ -993,10 +1062,15 @@ export function InboxLeadDetailsPanel({
   });
 
   useEffect(() => {
-    if (campaignPickerOpen && presetCampaignPickList.length > 0 && !pickedCampaignId) {
-      setPickedCampaignId(presetCampaignPickList[0].id);
+    if (!campaignPickerOpen) return;
+    if (compatibleCampaignOptions.length === 0) {
+      setPickedCampaignId("");
+      return;
     }
-  }, [campaignPickerOpen, presetCampaignPickList, pickedCampaignId]);
+    if (!pickedCampaignId || !compatibleCampaignOptions.some((c) => c.id === pickedCampaignId)) {
+      setPickedCampaignId(compatibleCampaignOptions[0].id);
+    }
+  }, [campaignPickerOpen, compatibleCampaignOptions, pickedCampaignId]);
 
   useEffect(() => {
     setShowCampaignHistory(false);
@@ -1470,7 +1544,7 @@ export function InboxLeadDetailsPanel({
   const activeSuggestionCount = (hasAnyChips ? 1 : 0) + (qualifyAction ? 1 : 0);
 
   type NextBestActionRow = {
-    id: "book" | "assign" | "follow" | "snooze" | "qualify";
+    id: "book" | "assign" | "follow" | "snooze" | "qualify" | "campaign";
     label: string;
     priority: number;
     onClick: () => void;
@@ -1576,6 +1650,7 @@ export function InboxLeadDetailsPanel({
       schedulingLinkSent,
       aiRoutingDecision: aiRouting.decision,
       needsRoutingClarification: aiRouting.needsRoutingClarification,
+      enrollableCampaignCount,
     });
   }, [
     handoffActive,
@@ -1593,6 +1668,7 @@ export function InboxLeadDetailsPanel({
     stageSignals.strongIntent,
     businessKnowledge?.industry,
     schedulingLinkSent,
+    enrollableCampaignCount,
   ]);
 
   const runComposerAction = useCallback(
@@ -1685,16 +1761,23 @@ export function InboxLeadDetailsPanel({
   const nextBestActions = useMemo((): NextBestActionRow[] => {
     if (!canSeeWorkflow) return [];
 
-    const runToolAction = (behavior: Exclude<NextBestActionBehavior, "composer">) => {
+    const runToolAction = (behavior: Exclude<NextBestActionBehavior, "composer" | "campaign">) => {
       openCopilotPopover(behavior);
     };
 
     return contextualNextActions.map((action, i) => {
       const behavior = action.behavior;
-      const id: NextBestActionRow["id"] = behavior === "composer" ? "qualify" : behavior;
+      const id: NextBestActionRow["id"] =
+        behavior === "composer"
+          ? "qualify"
+          : behavior === "campaign"
+            ? "campaign"
+            : behavior;
       const onClick = () => {
         if (behavior === "composer") {
           void runComposerAction(action.label);
+        } else if (behavior === "campaign") {
+          openCampaignPicker();
         } else {
           runToolAction(behavior);
         }
@@ -1707,7 +1790,7 @@ export function InboxLeadDetailsPanel({
         title: action.label,
       };
     });
-  }, [canSeeWorkflow, contextualNextActions, openCopilotPopover, runComposerAction]);
+  }, [canSeeWorkflow, contextualNextActions, openCopilotPopover, openCampaignPicker, runComposerAction]);
 
   return (
     <div className={panelClassName ?? "hidden lg:flex w-[260px] xl:w-[272px] flex-col border-l border-gray-100 bg-white overflow-y-auto flex-shrink-0"}>
@@ -2774,7 +2857,7 @@ export function InboxLeadDetailsPanel({
               <p className="text-xs uppercase tracking-wide text-gray-500">Campaigns</p>
               <button
                 type="button"
-                onClick={() => setCampaignPickerOpen(true)}
+                onClick={() => openCampaignPicker()}
                 className="flex items-center gap-0.5 text-[11px] font-medium text-gray-400 hover:text-gray-700 transition-colors"
                 data-testid="button-add-to-campaign"
               >
@@ -2803,7 +2886,7 @@ export function InboxLeadDetailsPanel({
                           <div className="min-w-0 flex-1">
                             <p className="font-medium text-gray-800 truncate">{e.campaignName ?? "Campaign"}</p>
                             <p className="mt-0.5 text-[10px] text-gray-500">
-                              {formatCampaignEnrollmentSubtitle(e)}
+                              {enrollmentCardSubtitle(e)}
                             </p>
                           </div>
                           <div className="flex shrink-0 flex-col items-end gap-1">
@@ -2869,7 +2952,7 @@ export function InboxLeadDetailsPanel({
                           >
                             <p className="truncate font-medium text-gray-700">{e.campaignName ?? "Campaign"}</p>
                             <p className="mt-0.5 text-gray-500">
-                              {formatCampaignEnrollmentSubtitle(e)}
+                              {enrollmentCardSubtitle(e)}
                             </p>
                           </div>
                         ))}
@@ -2897,22 +2980,59 @@ export function InboxLeadDetailsPanel({
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 py-2">
+                {contactOutreachChannel ? (
+                  <p className="text-xs text-gray-500">
+                    Showing campaigns for{" "}
+                    <span className="font-medium text-gray-700">
+                      {CHANNEL_LABELS[contactOutreachChannel] || contactOutreachChannel}
+                    </span>
+                    . Incompatible campaigns are disabled.
+                  </p>
+                ) : null}
                 <Select value={pickedCampaignId} onValueChange={setPickedCampaignId}>
                   <SelectTrigger data-testid="select-campaign-enroll">
                     <SelectValue placeholder="Choose a saved campaign" />
                   </SelectTrigger>
                   <SelectContent>
-                    {presetCampaignPickList.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
+                    {campaignPickOptions.map((c) => (
+                      <SelectItem
+                        key={c.id}
+                        value={c.id}
+                        disabled={!c.eligibility.eligible}
+                        title={c.eligibility.userMessage}
+                      >
                         {c.name}
+                        {!c.eligibility.eligible && c.eligibility.userMessage
+                          ? ` · ${c.eligibility.userMessage.replace(/^Cannot enroll: /, "")}`
+                          : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {presetCampaignPickList.length === 0 && (
+                {campaignPickOptions.length === 0 && (
                   <p className="text-xs text-gray-500">
                     No saved campaigns yet. Create one under Templates → Presets → Saved Campaigns.
                   </p>
+                )}
+                {campaignPickOptions.length > 0 && compatibleCampaignOptions.length === 0 && (
+                  <p className="text-xs text-amber-700">
+                    No campaigns match this contact&apos;s channel
+                    {contactOutreachChannel
+                      ? ` (${CHANNEL_LABELS[contactOutreachChannel] || contactOutreachChannel})`
+                      : ""}
+                    . Create or activate an matching campaign first.
+                  </p>
+                )}
+                {pickedCampaignId && (
+                  (() => {
+                    const picked = campaignPickOptions.find((c) => c.id === pickedCampaignId);
+                    if (picked?.eligibility.eligible) return null;
+                    return (
+                      <p className="text-xs text-amber-700">
+                        {picked?.eligibility.userMessage || "This campaign cannot be used for this contact."}
+                      </p>
+                    );
+                  })()
                 )}
               </div>
               <DialogFooter className="gap-2 sm:gap-0">
@@ -2925,7 +3045,8 @@ export function InboxLeadDetailsPanel({
                   disabled={
                     !pickedCampaignId ||
                     enrollContactCampaignMutation.isPending ||
-                    presetCampaignPickList.length === 0
+                    compatibleCampaignOptions.length === 0 ||
+                    !campaignPickOptions.find((c) => c.id === pickedCampaignId)?.eligibility.eligible
                   }
                   onClick={() => enrollContactCampaignMutation.mutate()}
                   data-testid="button-confirm-campaign-enroll"

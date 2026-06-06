@@ -435,6 +435,10 @@ export interface IStorage {
     campaignId: string,
     limit?: number
   ): Promise<CampaignStepEvent[]>;
+  getLatestCampaignStepEventForEnrollment(
+    enrollmentId: string,
+    status?: "failed" | "sent" | "skipped"
+  ): Promise<CampaignStepEvent | undefined>;
   getCampaignAggregatesForUser(
     userId: string
   ): Promise<
@@ -3564,6 +3568,22 @@ export class DbStorage implements IStorage {
       .where(eq(campaignStepEvents.campaignId, campaignId))
       .orderBy(desc(campaignStepEvents.createdAt))
       .limit(limit);
+  }
+
+  async getLatestCampaignStepEventForEnrollment(
+    enrollmentId: string,
+    status?: "failed" | "sent" | "skipped"
+  ): Promise<CampaignStepEvent | undefined> {
+    const conditions = status
+      ? and(eq(campaignStepEvents.enrollmentId, enrollmentId), eq(campaignStepEvents.status, status))
+      : eq(campaignStepEvents.enrollmentId, enrollmentId);
+    const rows = await db
+      .select()
+      .from(campaignStepEvents)
+      .where(conditions)
+      .orderBy(desc(campaignStepEvents.createdAt))
+      .limit(1);
+    return rows[0];
   }
 
   async getCampaignAggregatesForUser(

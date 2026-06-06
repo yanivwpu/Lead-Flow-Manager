@@ -956,6 +956,14 @@ export function UnifiedInbox() {
   const showDegradedAlert =
     degradedChannels.length > 0 && unhealthyChannels.length === 0 && dismissedDegradedAlert !== degradedKey;
 
+  const connectedChannelsMap = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    for (const entry of channelHealth) {
+      map[entry.channel] = entry.isConnected;
+    }
+    return map;
+  }, [channelHealth]);
+
 
   // Smart scroll: runs synchronously after DOM commit (useLayoutEffect) so
   // scrollHeight already reflects the new message text. Images/media are handled
@@ -2892,6 +2900,7 @@ export function UnifiedInbox() {
               : undefined
           }
           onInsertComposerDraft={insertComposerDraftFromCopilot}
+          connectedChannels={connectedChannelsMap}
           onUpdateContact={updateContact}
           onUpdateConversationStatus={status => {
             if (primaryConversation) {
@@ -2935,6 +2944,7 @@ export function UnifiedInbox() {
                       : undefined
                   }
                   onInsertComposerDraft={insertComposerDraftFromCopilot}
+                  connectedChannels={connectedChannelsMap}
                   onUpdateContact={updateContact}
                   onUpdateConversationStatus={status => {
                     if (primaryConversation) {

@@ -131,6 +131,11 @@ test("info seeking prompt includes general business options", () => {
   assert.ok(infoSeekingQualificationOptions("SaaS").includes("AI qualification"));
 });
 
+test("empty inbound does not throw", () => {
+  assert.doesNotThrow(() => resolveAiRouting({ inbound: "" }));
+  assert.equal(resolveAiRouting({ inbound: "" }).decision, "CONTINUE_AI");
+});
+
 test("strip calendly urls from reply", () => {
   const raw = "Pick a time here:\n\nhttps://calendly.com/foo/bar\n\nThanks!";
   assert.equal(stripSchedulingUrlsFromReply(raw), "Pick a time here:\n\nThanks!");

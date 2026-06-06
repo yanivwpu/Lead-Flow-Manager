@@ -2,34 +2,13 @@ import type { Express } from "express";
 import type { Channel } from "@shared/schema";
 import { CHANNEL_INFO } from "@shared/schema";
 import { parsePresetDelayToMs } from "@shared/campaignDelays";
+import {
+  contactHasChannelIdentifier,
+  evaluatePresetCampaignEnrollability,
+} from "@shared/campaignEnrollment";
 import { storage } from "../storage";
 import { getWhatsAppAvailability } from "../whatsappService";
-import { contactBlocksCampaignSends } from "../campaignExecution";
-
-function contactHasChannelIdentifier(contact: {
-  phone?: string | null;
-  whatsappId?: string | null;
-  instagramId?: string | null;
-  facebookId?: string | null;
-  telegramId?: string | null;
-  primaryChannel?: string | null;
-  lastIncomingChannel?: string | null;
-  source?: string | null;
-}, channel: Channel): boolean {
-  if (channel === "whatsapp") return !!(contact.phone || contact.whatsappId);
-  if (channel === "instagram") return !!contact.instagramId;
-  if (channel === "facebook") return !!contact.facebookId;
-  if (channel === "sms") return !!contact.phone;
-  if (channel === "telegram") return !!contact.telegramId;
-  if (channel === "webchat") {
-    return (
-      contact.lastIncomingChannel === "webchat" ||
-      contact.primaryChannel === "webchat" ||
-      contact.source === "webchat"
-    );
-  }
-  return false;
-}
+import { contactBlocksCampaignSends, processCampaignEnrollmentStep } from "../campaignExecution";
 
 async function assessChannelInfrastructure(userId: string, channel: Channel): Promise<{ ok: boolean; reason?: string }> {
   if (channel === "whatsapp") {
@@ -84,28 +63,55 @@ export function registerCampaignEnrollmentRoutes(app: Express): void {
       if (dup) {
         return res.status(409).json({
           error: "This contact already has an active enrollment for this campaign.",
+          code: "already_enrolled",
           enrollment: dup,
         });
       }
 
       const gate = contactBlocksCampaignSends(contact);
-      if (gate.blocked) {
-        return res.status(400).json({ error: gate.reason || "Cannot enroll this contact." });
+      let conversationChannel: string | undefined;
+      if (conversationId) {
+        const conv = await storage.getConversation(conversationId);
+        if (conv?.channel) conversationChannel = conv.channel;
       }
 
-      const channel = (campaign.channel || "whatsapp") as Channel;
-      if (!contactHasChannelIdentifier(contact, channel)) {
-        const label = CHANNEL_INFO[channel]?.label || channel;
+      const channelInfra = (campaign.channel || "whatsapp") as Channel;
+      const infra = await assessChannelInfrastructure(req.user.id, channelInfra);
+
+      const eligibility = evaluatePresetCampaignEnrollability({
+        contact,
+        campaign,
+        conversationChannel,
+        channelConnected: infra.ok,
+        alreadyEnrolled: false,
+        contactOptOut: gate.blocked,
+        optOutReason: gate.reason,
+      });
+
+      if (!eligibility.eligible) {
+        return res.status(400).json({
+          error: eligibility.userMessage || "Cannot enroll this contact.",
+          code: eligibility.code,
+          needsSetup:
+            eligibility.code === "missing_contact_channel_id" ||
+            eligibility.code === "channel_not_connected" ||
+            eligibility.code === "channel_mismatch",
+        });
+      }
+
+      if (!contactHasChannelIdentifier(contact, channelInfra)) {
+        const label = CHANNEL_INFO[channelInfra]?.label || channelInfra;
         return res.status(400).json({
           error: `Contact has no ${label} identifier. Add the required channel info before enrolling.`,
+          code: "missing_contact_channel_id",
           needsSetup: true,
         });
       }
 
-      const infra = await assessChannelInfrastructure(req.user.id, channel);
       if (!infra.ok) {
         return res.status(400).json({
           error: infra.reason,
+          code: "channel_not_connected",
           needsSetup: true,
         });
       }
@@ -132,7 +138,36 @@ export function registerCampaignEnrollmentRoutes(app: Express): void {
         nextRunAt,
       });
 
-      res.status(201).json({ enrollment });
+      await storage.createActivityEvent({
+        userId: req.user.id,
+        contactId,
+        conversationId: conversationId ?? null,
+        eventType: "note",
+        actorType: "user",
+        actorId: req.user.id,
+        eventData: {
+          kind: "campaign_enrolled",
+          title: `Enrolled in ${campaign.name || "campaign"}`,
+          content: `${campaign.name || "Campaign"} · ${CHANNEL_INFO[channelInfra]?.label || channelInfra}`,
+          campaignId,
+          enrollmentId: enrollment.id,
+          channel: channelInfra,
+        },
+      });
+
+      if (firstDelayMs === 0) {
+        try {
+          await processCampaignEnrollmentStep(enrollment.id);
+        } catch (stepErr) {
+          console.warn("[CAMPAIGN_ENROLL] immediate step failed", {
+            enrollmentId: enrollment.id,
+            error: stepErr instanceof Error ? stepErr.message : stepErr,
+          });
+        }
+      }
+
+      const fresh = await storage.getCampaignEnrollmentById(enrollment.id);
+      res.status(201).json({ enrollment: fresh ?? enrollment });
     } catch (err) {
       console.error("POST /api/campaign-enrollments:", err);
       res.status(500).json({ error: "Failed to create enrollment" });
@@ -153,12 +188,17 @@ export function registerCampaignEnrollmentRoutes(app: Express): void {
           const c = await storage.getPresetCampaignForUser(e.campaignId, req.user.id);
           const messages = Array.isArray(c?.messages) ? c.messages : [];
           const totalSteps = messages.length;
+          const failedStep =
+            e.status === "failed"
+              ? await storage.getLatestCampaignStepEventForEnrollment(e.id, "failed")
+              : undefined;
           return {
             ...e,
             campaignName: c?.name ?? "(deleted campaign)",
             campaignChannel: c?.channel ?? null,
             campaignStatus: c?.status ?? null,
             totalSteps,
+            failureReason: failedStep?.errorMessage ?? null,
           };
         })
       );
