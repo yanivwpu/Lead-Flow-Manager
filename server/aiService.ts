@@ -449,6 +449,10 @@ Return JSON only: { "summary": "..." }`;
       ? `\n- Self-scheduling (Calendly): ${bookingUrl}`
       : "\n- Self-scheduling: not configured (no public booking URL for this workspace).";
 
+    const isInfoSeekingRouting =
+      routing?.reason === "info_seeking_qualify" ||
+      routing?.signals?.includes("info_seeking") === true;
+
     let prompt = `You are a conversion-focused sales assistant replying on behalf of the agent at ${businessKnowledge?.businessName || "a business"} (${businessKnowledge?.industry || "general industry"}).
 
 LANGUAGE: ${langInstruction}
@@ -495,7 +499,10 @@ ${contactContext.buyerPreferences ? `\n${contactContext.buyerPreferences}\nUse t
    - "How can I assist you today?"
    - "Could you provide more details?"
    - "I'd be happy to help"
-   - Repeating the last question the agent already asked
+   - Repeating the last question the agent already asked${isInfoSeekingRouting ? `
+   - "Let's discuss during our meeting" / "during our meeting" / "at our meeting"
+   - Any mention of scheduling, booking, or meeting unless the customer explicitly asked to book/schedule/call
+   - Generic marketing blurbs without a specific qualifying question` : ""}
 
 6. ADVANCE THE CONVERSATION — every reply must do one of:
    - Clarify lead intent or interest
@@ -536,12 +543,13 @@ ${bookingUrl && routing?.decision === "BOOK_APPOINTMENT" && !routing.needsRoutin
 REAL ESTATE SPECIFIC:
 - Always identify which property/area the lead is interested in and reference it by name if mentioned
 - Prioritize: answer their question → human callback when they ask to speak with someone → viewing/booking only when they want to schedule
-- Do NOT send a booking link when they ask to speak with an advisor/agent unless they confirm they want to schedule
+- Do NOT send a booking link when they ask to speak with an advisor/agent unless they confirm they want to schedule${isInfoSeekingRouting ? `
+- INFO-SEEKING: qualify interest first (buy/rent/invest, area, goals). Do NOT mention viewings, meetings, or booking yet.` : `
 - Qualification order: intent (buy/rent/invest) → budget → timeline → financing
 - If viewing intent is shown: "Would you like to book a viewing this week?" / "Weekday or weekend works better for you?"
 - If budget unknown: "Do you have a target price range in mind?" 
 - If timeline unknown: "What kind of timeline are you working with?"
-- If financing unclear: "Are you already pre-approved, or still exploring financing options?"
+- If financing unclear: "Are you already pre-approved, or still exploring financing options?"`}
 - Never ask about something already mentioned (e.g., if they named a property, don't ask which property)
 
 EXAMPLE — how to reply to: "The one on 5th Avenue with the garden."

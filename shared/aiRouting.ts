@@ -109,10 +109,6 @@ export function matchesHandoffKeyword(text: string, keywords?: string[]): boolea
   });
 }
 
-function isInfoSeeking(text: string): boolean {
-  return INFO_SEEKING_RE.test(text);
-}
-
 function detectClarificationFromHistory(history: AiRoutingHistoryTurn[] | undefined): {
   asked: boolean;
   choseLiveChat: boolean;
@@ -147,7 +143,54 @@ function detectClarificationFromHistory(history: AiRoutingHistoryTurn[] | undefi
   return { asked, choseLiveChat: false, choseSchedule: false };
 }
 
-function buildPromptGuidance(result: Omit<AiRoutingResult, "promptGuidance">): string {
+function isInfoSeeking(text: string): boolean {
+  return INFO_SEEKING_RE.test(text);
+}
+
+/** Short option list for info-seeking qualification questions, by industry. */
+export function infoSeekingQualificationOptions(industry?: string): string {
+  const i = (industry || "").toLowerCase();
+  if (i.includes("property management") || i.includes("property_management")) {
+    return "maintenance requests, leasing inquiries, tenant renewals, or owner/investor leads";
+  }
+  if (
+    i.includes("med spa") ||
+    i.includes("medspa") ||
+    i.includes("medical spa") ||
+    i.includes("aesthetic") ||
+    i.includes("cosmetic")
+  ) {
+    return "treatment inquiries, booking a consultation, treatment follow-ups, or membership/packages";
+  }
+  if (
+    i.includes("real estate") ||
+    i.includes("realestate") ||
+    i.includes("realtor") ||
+    (i.includes("property") && !i.includes("management"))
+  ) {
+    return "buyer qualification, scheduling showings, automated follow-ups, or MLS/inventory search";
+  }
+  return "faster lead response, AI qualification, automated follow-ups, or managing all messages in one inbox";
+}
+
+/** Prompt fragment when routing is CONTINUE_AI with info_seeking. */
+export function buildInfoSeekingPromptGuidance(industry?: string): string {
+  const options = infoSeekingQualificationOptions(industry);
+  return `INFO-SEEKING QUALIFICATION — customer wants to learn, not book yet:
+- Do NOT mention a meeting, call, appointment, viewing, demo, or scheduling unless they explicitly asked to book/schedule/call.
+- Do NOT say "during our meeting", "let's discuss on a call", "pick a time", or similar — routing is CONTINUE_AI, not booking.
+- Do NOT give a generic marketing pitch, feature dump, or "how can I help" opener.
+- Reply in 1–2 short, natural sentences. Warm acknowledgment + ONE question only.
+- Ask which area they care about. When useful, offer 3–4 short options inside that single question.
+- Example: "Absolutely — are you mainly interested in ${options}?"
+- Tailor options using WEBSITE KNOWLEDGE / SERVICES when available; prefer concrete business capabilities over vague marketing.
+- If they already named a topic (e.g. "automation"), acknowledge it and ask one sharper follow-up about their goal — do not repeat a generic brochure.`;
+}
+
+function buildPromptGuidance(
+  result: Omit<AiRoutingResult, "promptGuidance">,
+  industry?: string,
+): string {
   if (result.needsRoutingClarification) {
     return `The customer asked to speak with a person/advisor but did not clearly request a scheduled meeting.
 - Do NOT send a scheduling or booking link.
@@ -171,9 +214,7 @@ function buildPromptGuidance(result: Omit<AiRoutingResult, "promptGuidance">): s
 - Be helpful and low-pressure. Offer to follow up when timing is better.`;
     default:
       if (result.signals.includes("info_seeking")) {
-        return `The customer is asking for information or learning about your offering.
-- Do NOT escalate to a human or send a booking link yet.
-- Answer briefly if you can, then ask ONE qualifying question about their goal or interest.`;
+        return buildInfoSeekingPromptGuidance(industry);
       }
       return `Continue the conversation naturally.
 - Do NOT send a scheduling link unless the customer clearly asks to book or schedule.
@@ -186,6 +227,7 @@ function continueAiResult(
   signals: string[],
   confidence: number,
   needsRoutingClarification = false,
+  industry?: string,
 ): AiRoutingResult {
   const base = {
     decision: "CONTINUE_AI" as const,
@@ -194,7 +236,7 @@ function continueAiResult(
     signals,
     needsRoutingClarification,
   };
-  return { ...base, promptGuidance: buildPromptGuidance(base) };
+  return { ...base, promptGuidance: buildPromptGuidance(base, industry) };
 }
 
 /**
@@ -206,7 +248,7 @@ export function resolveAiRouting(input: AiRoutingInput): AiRoutingResult {
   const signals: string[] = [];
 
   if (!inbound) {
-    return continueAiResult("empty_inbound", signals, 0);
+    return continueAiResult("empty_inbound", signals, 0, false, industry);
   }
 
   const clarify = detectClarificationFromHistory(input.history);
@@ -267,7 +309,7 @@ export function resolveAiRouting(input: AiRoutingInput): AiRoutingResult {
   }
 
   if (infoSeeking && !hasAppointment && !clarify.choseLiveChat) {
-    return continueAiResult("info_seeking_qualify", signals, 0.88);
+    return continueAiResult("info_seeking_qualify", signals, 0.88, false, industry);
   }
 
   if (hasExplicitHuman && !hasAppointment) {
@@ -288,7 +330,7 @@ export function resolveAiRouting(input: AiRoutingInput): AiRoutingResult {
     !clarify.choseLiveChat &&
     !clarify.choseSchedule
   ) {
-    return continueAiResult("soft_human_needs_clarification", [...signals, "clarify:human_vs_book"], 0.72, true);
+    return continueAiResult("soft_human_needs_clarification", [...signals, "clarify:human_vs_book"], 0.72, true, industry);
   }
 
   if (hasAppointment && !hasNurture) {
@@ -322,7 +364,7 @@ export function resolveAiRouting(input: AiRoutingInput): AiRoutingResult {
       needsRoutingClarification: !clarify.asked,
     };
     if (base.needsRoutingClarification) {
-      return continueAiResult("mixed_signals_needs_clarification", [...signals, "clarify:mixed"], 0.65, true);
+      return continueAiResult("mixed_signals_needs_clarification", [...signals, "clarify:mixed"], 0.65, true, industry);
     }
     return { ...base, promptGuidance: buildPromptGuidance(base) };
   }
@@ -338,7 +380,7 @@ export function resolveAiRouting(input: AiRoutingInput): AiRoutingResult {
     return { ...base, promptGuidance: buildPromptGuidance(base) };
   }
 
-  return continueAiResult("default_continue", signals, 0.5);
+  return continueAiResult("default_continue", signals, 0.5, false, industry);
 }
 
 /** Remove scheduling URLs from AI output when routing disallows booking. */

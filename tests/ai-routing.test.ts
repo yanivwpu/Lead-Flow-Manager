@@ -5,6 +5,8 @@ import {
   routingShouldTriggerHandoff,
   stripSchedulingUrlsFromReply,
   matchesHandoffKeyword,
+  buildInfoSeekingPromptGuidance,
+  infoSeekingQualificationOptions,
 } from "../shared/aiRouting";
 
 function test(name: string, fn: () => void) {
@@ -80,6 +82,9 @@ test("learn more about automation → continue AI (not assign)", () => {
   assert.equal(r.reason, "info_seeking_qualify");
   assert.equal(routingShouldTriggerHandoff(r), false);
   assert.ok(r.signals.includes("info_seeking"));
+  assert.ok(r.promptGuidance.includes("INFO-SEEKING QUALIFICATION"));
+  assert.ok(r.promptGuidance.includes("Do NOT mention a meeting"));
+  assert.ok(r.promptGuidance.includes('Do NOT say "during our meeting"'));
 });
 
 test("agent keyword does not match automation substring", () => {
@@ -104,6 +109,26 @@ test("how does it work → continue AI qualify", () => {
 test("interested in features → continue AI qualify", () => {
   const r = resolveAiRouting({ inbound: "I'm interested in your automation features" });
   assert.equal(r.decision, "CONTINUE_AI");
+});
+
+test("info seeking prompt includes industry options — real estate", () => {
+  const guidance = buildInfoSeekingPromptGuidance("Real Estate");
+  assert.ok(guidance.includes("buyer qualification"));
+  assert.ok(guidance.includes("MLS/inventory search"));
+});
+
+test("info seeking prompt includes industry options — med spa", () => {
+  const guidance = buildInfoSeekingPromptGuidance("Med Spa");
+  assert.ok(guidance.includes("treatment inquiries"));
+});
+
+test("info seeking prompt includes industry options — property management", () => {
+  assert.ok(infoSeekingQualificationOptions("Property Management").includes("maintenance requests"));
+});
+
+test("info seeking prompt includes general business options", () => {
+  assert.ok(infoSeekingQualificationOptions("SaaS").includes("faster lead response"));
+  assert.ok(infoSeekingQualificationOptions("SaaS").includes("AI qualification"));
 });
 
 test("strip calendly urls from reply", () => {
