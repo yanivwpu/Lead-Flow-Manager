@@ -521,46 +521,43 @@ export function ConnectWhatsAppHub({
       }
 
       await new Promise<void>((resolve, reject) => {
-        const loginCb = async (response: unknown) => {
-          try {
-            const code = (response as { authResponse?: { code?: string } })?.authResponse?.code;
-            if (!code) {
-              const metaMsg = inferMetaLoginFailureMessage(response);
-              const loginDiag = {
-                ...preLoginDiag,
-                phase: "fb_login_callback_no_code",
-                fbResponse: redactFbLoginResponse(response),
-                metaMessage: metaMsg,
-              };
-              console.warn("[WhatsApp Embedded Signup] fb_login_no_code", loginDiag);
-              void postWhatsappEmbeddedSignupDiagnostics(loginDiag);
+        const handleEmbeddedSignupLoginResponse = async (response: unknown) => {
+          const code = (response as { authResponse?: { code?: string } })?.authResponse?.code;
+          if (!code) {
+            const metaMsg = inferMetaLoginFailureMessage(response);
+            const loginDiag = {
+              ...preLoginDiag,
+              phase: "fb_login_callback_no_code",
+              fbResponse: redactFbLoginResponse(response),
+              metaMessage: metaMsg,
+            };
+            console.warn("[WhatsApp Embedded Signup] fb_login_no_code", loginDiag);
+            void postWhatsappEmbeddedSignupDiagnostics(loginDiag);
 
-              if (metaMsg && isMetaEmbeddedSignupBlockedError(metaMsg)) {
-                reject(new Error(META_EMBEDDED_SIGNUP_BLOCKED_MESSAGE));
-                return;
-              }
-              reject(new Error(META_CANCELLED_MESSAGE));
-              return;
+            if (metaMsg && isMetaEmbeddedSignupBlockedError(metaMsg)) {
+              throw new Error(META_EMBEDDED_SIGNUP_BLOCKED_MESSAGE);
             }
-
-            const r = await fetch("/api/integrations/whatsapp/meta/complete-sdk", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              credentials: "include",
-              body: JSON.stringify({ code, state: session!.state }),
-            });
-            const j = await r.json().catch(() => ({}));
-            if (!r.ok) throw new Error(j?.error || "Could not complete Meta signup");
-            if (j?.needsWabaPick && j?.state) {
-              window.location.href = `/app/settings?section=channels&whatsapp_embedded=pick&state=${encodeURIComponent(j.state)}`;
-              return;
-            }
-            setPostConnectHealthOpen(true);
-            await refreshConnectionHealth(true);
-            resolve();
-          } catch (e: unknown) {
-            reject(e);
+            throw new Error(META_CANCELLED_MESSAGE);
           }
+
+          const r = await fetch("/api/integrations/whatsapp/meta/complete-sdk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ code, state: session!.state }),
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(j?.error || "Could not complete Meta signup");
+          if (j?.needsWabaPick && j?.state) {
+            window.location.href = `/app/settings?section=channels&whatsapp_embedded=pick&state=${encodeURIComponent(j.state)}`;
+            return;
+          }
+          setPostConnectHealthOpen(true);
+          await refreshConnectionHealth(true);
+        };
+
+        const loginCb = (response: unknown) => {
+          void handleEmbeddedSignupLoginResponse(response).then(resolve).catch(reject);
         };
 
         try {
