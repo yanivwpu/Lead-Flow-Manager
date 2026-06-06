@@ -1855,23 +1855,27 @@ export async function completeEmbeddedSignupOAuth(params: {
 
     if (totalPhones === 0) {
       let msg: string;
+      const isCoexistence = row.flow === "coexistence";
       if (
         discoveryDiagnostics &&
         discoveryDiagnostics.distinctWabaCount === 0 &&
         discoveryDiagnostics.businessesCount === 0
       ) {
-        msg =
-          "Coexistence: Meta returned no Businesses linked to this login. Confirm you used the coexistence Embedded Signup configuration and granted WhatsApp / Business scopes.";
+        msg = isCoexistence
+          ? "Meta returned no Businesses linked to this login. Confirm you used the coexistence Embedded Signup configuration and granted WhatsApp / Business scopes."
+          : "Meta returned no Business Manager linked to this Facebook account. Create or join a Business Manager at business.facebook.com, then try again.";
       } else if (
         discoveryDiagnostics &&
         discoveryDiagnostics.distinctWabaCount > 0 &&
         discoveryDiagnostics.totalPhonesListed === 0
       ) {
-        msg =
-          "Coexistence: Meta lists your WhatsApp Business Account but returned no phone numbers from Graph (GET …/phone_numbers empty). This is often a discovery or permission gap; your number may still exist in Meta. Try again or use Option A.";
+        msg = isCoexistence
+          ? "Meta lists your WhatsApp Business Account but returned no phone numbers from Graph (GET …/phone_numbers empty). This is often a discovery or permission gap; your number may still exist in Meta. Try again or use Option A."
+          : "Meta found your WhatsApp Business Account but no phone numbers yet. Add or verify a phone number in Meta Business Manager, wait a minute, then try again.";
       } else {
-        msg =
-          "Coexistence: WhatsApp discovery did not yield a selectable phone line. Confirm the number appears under your WABA in Meta Business Manager.";
+        msg = isCoexistence
+          ? "WhatsApp discovery did not yield a selectable phone line. Confirm the number appears under your WABA in Meta Business Manager."
+          : "We could not find a WhatsApp phone number on your account. Finish setup in Meta Embedded Signup or add a number in Meta Business Manager, then reconnect.";
       }
 
       const recoverableMsg =

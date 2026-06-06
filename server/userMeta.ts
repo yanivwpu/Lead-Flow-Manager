@@ -309,6 +309,15 @@ export async function connectUserMeta(
   credentials: MetaCredentials,
   extras?: MetaConnectExtras & { skipCredentialValidation?: boolean }
 ): Promise<{ success: boolean; error?: string; phoneNumber?: string }> {
+  const conflict = await findMetaPhoneNumberConflict(credentials.phoneNumberId, userId);
+  if (conflict) {
+    return {
+      success: false,
+      error:
+        "This WhatsApp phone number is already connected to another WhachatCRM workspace. Disconnect it there first, or choose a different number in Meta.",
+    };
+  }
+
   const validation =
     extras?.skipCredentialValidation === true
       ? { valid: true as const, phoneNumber: undefined as string | undefined }
@@ -1010,6 +1019,21 @@ export async function findUserByMetaPhoneNumberId(phoneNumberId: string): Promis
   }
 
   return result[0];
+}
+
+/** Returns another workspace already using this Cloud API phone number id (if any). */
+export async function findMetaPhoneNumberConflict(
+  phoneNumberId: string,
+  excludeUserId: string,
+): Promise<User | undefined> {
+  const id = phoneNumberId.trim();
+  if (!id) return undefined;
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.metaPhoneNumberId, id))
+    .limit(5);
+  return rows.find((u) => u.id !== excludeUserId);
 }
 
 export async function getMediaUrl(

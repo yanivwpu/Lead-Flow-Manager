@@ -234,8 +234,17 @@ interface WindowStatus {
 interface WhatsAppAvailability {
   available: boolean;
   provider: "meta" | "twilio";
+  fullyReady?: boolean;
+  setupIncomplete?: boolean;
   reason?: string;
   message?: string;
+  readiness?: {
+    wabaSaved: boolean;
+    phoneSaved: boolean;
+    phoneStatusReady: boolean;
+    webhookSubscribed: boolean;
+    inboxReady: boolean;
+  };
 }
 
 interface MessageTemplate {
@@ -857,6 +866,11 @@ export function UnifiedInbox() {
     enabled: isWhatsAppContact && !!selectedContactId,
     refetchInterval: 30000,
   });
+
+  const whatsappNotReady =
+    isWhatsAppContact &&
+    whatsappAvailability &&
+    !whatsappAvailability.available;
 
   const { data: inboxTemplates = [] } = useQuery<MessageTemplate[]>({
     queryKey: ["/api/templates"],
@@ -2834,6 +2848,19 @@ export function UnifiedInbox() {
                     </button>
                   </>
                 ) : null}
+              </div>
+            )}
+
+            {whatsappNotReady && (
+              <div className="border-t border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-950 flex gap-2 items-start shrink-0">
+                <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" aria-hidden />
+                <div>
+                  <p className="font-medium">WhatsApp setup incomplete</p>
+                  <p className="mt-0.5">
+                    {whatsappAvailability?.message ||
+                      "Finish WhatsApp setup in Settings before sending messages."}
+                  </p>
+                </div>
               </div>
             )}
 

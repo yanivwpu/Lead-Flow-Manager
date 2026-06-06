@@ -24,7 +24,7 @@ import {
 import { getAppOrigin } from "../urlOrigins";
 import { storage } from "../storage";
 import { classifyMetaWhatsAppPhone } from "../metaWhatsAppPhoneKind";
-import { disconnectWhatsAppProvider, getProviderStatus } from "../whatsappService";
+import { disconnectWhatsAppProvider, getProviderStatus, buildMetaWhatsAppReadinessForUser } from "../whatsappService";
 import { getMetaGraphApiBase } from "../metaGraphVersion";
 import { getMetaAccessToken, fetchMetaWhatsAppPhoneNumberGraphSnapshotVerbose } from "../userMeta";
 import { db } from "../../drizzle/db";
@@ -742,9 +742,26 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         webhookSubscribed: !!userAfter.metaWebhookSubscribed,
       });
 
+      const readiness = buildMetaWhatsAppReadinessForUser(userAfter, phoneGraphSnapshot);
+      const fullyReady =
+        base.activeProvider === "meta"
+          ? readiness.fullyReady
+          : base.activeProvider === "twilio"
+            ? !!base.twilio.connected
+            : false;
+
       res.json({
         activeProvider: base.activeProvider,
         whatsappConnectedReason: base.whatsappConnectedReason,
+        fullyReady,
+        readiness: {
+          wabaSaved: readiness.wabaSaved,
+          phoneSaved: readiness.phoneSaved,
+          phoneStatusReady: readiness.phoneStatusReady,
+          webhookSubscribed: readiness.webhookSubscribed,
+          inboxReady: readiness.inboxReady,
+        },
+        setupIncomplete: readiness.setupIncomplete,
         metaPersistedButTwilioSelected: !!(userAfter.metaConnected && userAfter.whatsappProvider !== "meta"),
         coexistenceEnabled: coexistenceCfg.coexistenceEnabled,
         coexistenceConfigId: coexistenceCfg.coexistenceConfigId,
@@ -757,6 +774,8 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         },
         meta: {
           ...base.meta,
+          /** True only when inbox can send/receive (canonical gate). */
+          fullyReady: base.activeProvider === "meta" ? readiness.fullyReady : false,
           providerLabel: "Meta Cloud API",
           connectionType: userAfter.metaConnectionType || null,
           displayPhoneNumber: userAfter.metaDisplayPhoneNumber || null,

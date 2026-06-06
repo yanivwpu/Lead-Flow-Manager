@@ -33,6 +33,10 @@ import {
   postWhatsappEmbeddedSignupDiagnostics,
   redactFbLoginResponse,
 } from "@/lib/whatsappEmbeddedSignupDiagnostics";
+import {
+  WhatsAppConnectionHealthChecklist,
+  type WhatsAppReadinessChecklist,
+} from "@/components/WhatsAppConnectionHealthChecklist";
 
 const META_TEST_NUMBER_HELP = "Connected to Meta test number. Ready for testing.";
 
@@ -90,6 +94,9 @@ function defaultWabaPhoneSelection(choices: WabaChoice[]): { wabaId: string; pho
 interface WhatsappStatusResponse {
   activeProvider: string;
   whatsappConnectedReason: "twilio" | "meta" | "none";
+  fullyReady?: boolean;
+  setupIncomplete?: boolean;
+  readiness?: WhatsAppReadinessChecklist;
   /** Server: Meta rows exist but `whatsapp_provider` is still twilio */
   metaPersistedButTwilioSelected?: boolean;
   coexistenceEnabled?: boolean;
@@ -104,6 +111,7 @@ interface WhatsappStatusResponse {
   phoneGraphSnapshot?: Record<string, unknown> | null;
   meta: {
     connected: boolean;
+    fullyReady?: boolean;
     phoneNumberId: string | null;
     businessAccountId: string | null;
     providerLabel: string;
@@ -176,6 +184,8 @@ interface ConnectWhatsAppHubProps {
   onOpenTwilio: () => void;
   onOpenManualMeta: () => void;
   onClose: () => void;
+  /** When true, show post-connect health checklist (e.g. after OAuth redirect). */
+  showPostConnectHealth?: boolean;
 }
 
 const META_CANCELLED_MESSAGE =
@@ -187,6 +197,7 @@ export function ConnectWhatsAppHub({
   onOpenTwilio,
   onOpenManualMeta,
   onClose,
+  showPostConnectHealth = false,
 }: ConnectWhatsAppHubProps) {
   const { user: authedUser } = useAuth();
   const queryClient = useQueryClient();
@@ -198,6 +209,8 @@ export function ConnectWhatsAppHub({
   const [wabaPickerState, setWabaPickerState] = useState<string | null>(null);
   const [selectedWabaId, setSelectedWabaId] = useState<string | null>(null);
   const [selectedPhoneNumberId, setSelectedPhoneNumberId] = useState<string | null>(null);
+  const [postConnectHealthOpen, setPostConnectHealthOpen] = useState(showPostConnectHealth);
+  const [healthPollBusy, setHealthPollBusy] = useState(false);
 
   // Redirect flow multi-WABA picker: Settings redirects back with ?state=<oauth_state>.
   // If present, fetch pending choices from the server and open the picker.
@@ -227,9 +240,9 @@ export function ConnectWhatsAppHub({
       if (!data.verified && data.error) throw new Error(data.error);
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    onSuccess: async () => {
+      await refreshConnectionHealth(true);
+      setPostConnectHealthOpen(true);
       setHubBanner(null);
     },
     onError: (e: Error) => setHubBanner({ variant: "error", message: e.message }),
@@ -261,8 +274,41 @@ export function ConnectWhatsAppHub({
 
   const loading = cfgLoading || statusLoading;
   const meta = status?.meta;
-  const metaActive = status?.activeProvider === "meta" && meta?.connected;
+  const metaFullyReady =
+    status?.activeProvider === "meta" &&
+    (status.fullyReady === true || meta?.fullyReady === true);
+  const metaPartialSetup =
+    status?.activeProvider === "meta" &&
+    !!meta?.connected &&
+    !metaFullyReady;
+  const metaManageView = metaFullyReady || metaPartialSetup;
+  const readiness = status?.readiness;
   const supportMode = authedUser?.role === "owner" || authedUser?.role === "admin";
+
+  async function refreshConnectionHealth(pollUntilReady = false): Promise<void> {
+    setHealthPollBusy(true);
+    try {
+      for (let attempt = 0; attempt < (pollUntilReady ? 12 : 1); attempt++) {
+        await queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
+        const res = await fetch("/api/integrations/whatsapp/status", { credentials: "include" });
+        if (res.ok) {
+          const s = (await res.json()) as WhatsappStatusResponse;
+          if (s.fullyReady || s.activeProvider !== "meta" || !pollUntilReady) break;
+        }
+        if (pollUntilReady && attempt < 11) {
+          await new Promise((r) => setTimeout(r, 450));
+        }
+      }
+    } finally {
+      setHealthPollBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (showPostConnectHealth) setPostConnectHealthOpen(true);
+  }, [showPostConnectHealth]);
 
   function getWhatsappFbSdkState(w: Window & typeof globalThis & Record<string, unknown>): WhatsappFbSdkState {
     if (!w[WCS_WHATSAPP_FB_SDK]) w[WCS_WHATSAPP_FB_SDK] = {};
@@ -434,8 +480,8 @@ export function ConnectWhatsAppHub({
               window.location.href = `/app/settings?section=channels&whatsapp_embedded=pick&state=${encodeURIComponent(j.state)}`;
               return;
             }
-            await queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
-            await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+            setPostConnectHealthOpen(true);
+            await refreshConnectionHealth(true);
             resolve();
           } catch (e: unknown) {
             reject(e);
@@ -498,7 +544,7 @@ export function ConnectWhatsAppHub({
     refetch: refetchDiag,
   } = useQuery<CoexistenceDiagnosticsResponse>({
     queryKey: ["/api/integrations/whatsapp/coexistence-diagnostics"],
-    enabled: !!metaActive,
+    enabled: !!metaManageView,
     staleTime: 20_000,
     refetchOnWindowFocus: true,
   });
@@ -509,7 +555,7 @@ export function ConnectWhatsAppHub({
   const graphPhoneDisconnected = graphPhoneStatus === "DISCONNECTED";
   const graphSubscriptionConfirmed = coexistenceDiag?.wabaSubscribedApps?.configuredAppIdPresent === true;
   const setupIncomplete =
-    metaActive &&
+    metaPartialSetup &&
     !meta?.connectedToMetaTestNumber &&
     (!meta?.phoneNumberId || graphPhoneDisconnected);
   const incompleteMessage =
@@ -598,16 +644,45 @@ export function ConnectWhatsAppHub({
         <div className="flex justify-center py-8">
           <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
         </div>
-      ) : metaActive ? (
+      ) : metaManageView ? (
         <div className="space-y-3">
-          <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-3">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+          {(postConnectHealthOpen || metaPartialSetup) && (
+            <WhatsAppConnectionHealthChecklist
+              readiness={readiness}
+              fullyReady={metaFullyReady}
+              loading={healthPollBusy || statusLoading}
+            />
+          )}
+
+          <div
+            className={cn(
+              "flex items-start gap-2 rounded-xl border px-3 py-3",
+              metaFullyReady
+                ? "border-emerald-200 bg-emerald-50/80"
+                : "border-amber-200 bg-amber-50/80",
+            )}
+          >
+            {metaFullyReady ? (
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+            ) : (
+              <AlertTriangle className="h-5 w-5 text-amber-700 shrink-0 mt-0.5" />
+            )}
             <div className="min-w-0 text-sm flex-1">
-              <p className="font-semibold text-emerald-900">Connected</p>
+              <p
+                className={cn(
+                  "font-semibold",
+                  metaFullyReady ? "text-emerald-900" : "text-amber-900",
+                )}
+              >
+                {metaFullyReady ? "Connected" : "Setup incomplete"}
+              </p>
               {meta?.connectedToMetaTestNumber && (
                 <p className="text-xs text-amber-900 mt-2 border border-amber-200 rounded-md px-2 py-1.5 bg-amber-50/90">
                   {META_TEST_NUMBER_HELP}
                 </p>
+              )}
+              {!metaFullyReady && meta?.lastErrorMessage && (
+                <p className="text-xs text-amber-900/90 mt-2">{meta.lastErrorMessage}</p>
               )}
               <dl className="mt-2 space-y-1.5 text-xs text-gray-700">
                 <div className="flex justify-between gap-2">
@@ -678,67 +753,29 @@ export function ConnectWhatsAppHub({
                   {incompleteMessage}
                 </p>
               )}
-
-              {supportMode &&
-                meta?.integrationStatus === "needs_attention" &&
-                meta?.lastErrorMessage &&
-                !String(meta.lastErrorMessage).toLowerCase().includes("webhook subscription could not be confirmed") && (
-                  <p className="text-xs text-amber-800 mt-2 border border-amber-100 rounded-md px-2 py-1 bg-white/80">
-                    WhatsApp needs attention. Open Manage to review the setup.
-                  </p>
-                )}
-
-              {supportMode && (
-                <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="mt-3">
-                  <CollapsibleTrigger className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 py-1">
-                    <ChevronDown
-                      className={cn("h-4 w-4 transition-transform", advancedOpen && "rotate-180")}
-                    />
-                    Advanced details
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <dl className="mt-2 space-y-1 text-xs text-gray-700 border border-slate-200 rounded-lg p-2 bg-white/80">
-                      <div className="flex justify-between gap-2">
-                        <dt className="text-gray-500">Provider</dt>
-                        <dd className="font-medium">{meta?.providerLabel || "Meta"}</dd>
-                      </div>
-                      <div className="flex justify-between gap-2">
-                        <dt className="text-gray-500">WABA ID</dt>
-                        <dd className="font-mono text-[11px] truncate">{meta?.businessAccountId || "—"}</dd>
-                      </div>
-                      <div className="flex justify-between gap-2">
-                        <dt className="text-gray-500">Phone number ID</dt>
-                        <dd className="font-mono text-[11px] truncate">{meta?.phoneNumberId || "—"}</dd>
-                      </div>
-                      <div className="flex justify-between gap-2">
-                        <dt className="text-gray-500">Connection</dt>
-                        <dd className="font-medium capitalize">{meta?.connectionType?.replace(/_/g, " ") || "—"}</dd>
-                      </div>
-                      {status?.inboundRouting && (
-                        <div className="pt-1 mt-1 border-t border-slate-100 space-y-1">
-                          <div className="flex justify-between gap-2">
-                            <dt className="text-gray-500">Inbound routing (diag.)</dt>
-                            <dd className="font-medium text-right text-[10px] max-w-[58%]">
-                              {status.inboundRouting.customerMessageDelivery.replace(/_/g, " ")}
-                            </dd>
-                          </div>
-                          <p className="text-[10px] text-gray-600 leading-snug">{status.inboundRouting.detail}</p>
-                        </div>
-                      )}
-                      <div className="flex justify-between gap-2">
-                        <dt className="text-gray-500">Callback URL</dt>
-                        <dd className="font-mono text-[10px] truncate max-w-[55%] text-right" title={meta?.webhookUrl}>
-                          {meta?.webhookUrl || "—"}
-                        </dd>
-                      </div>
-                    </dl>
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={subscribeMutation.isPending || healthPollBusy}
+              onClick={async () => {
+                await subscribeMutation.mutateAsync();
+                await refreshConnectionHealth(true);
+              }}
+              title="Re-subscribe webhooks and refresh WhatsApp connection status"
+            >
+              {subscribeMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-1" />
+              )}
+              Repair / Refresh WhatsApp connection
+            </Button>
+
             {supportMode && (
               <>
                 <Button
@@ -754,26 +791,6 @@ export function ConnectWhatsAppHub({
                     <RefreshCw className="h-4 w-4 mr-1" />
                   )}
                   Refresh connection check
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={subscribeMutation.isPending}
-                  onClick={async () => {
-                    await subscribeMutation.mutateAsync();
-                    queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
-                    await refetchDiag();
-                  }}
-                  title="Refresh the Meta app connection for this WhatsApp account"
-                >
-                  {subscribeMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                  )}
-                  Refresh Meta connection
                 </Button>
               </>
             )}
@@ -1007,8 +1024,8 @@ export function ConnectWhatsAppHub({
                     }
                     setWabaPickerOpen(false);
                     setHubBanner(null);
-                    await queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
-                    await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+                    setPostConnectHealthOpen(true);
+                    await refreshConnectionHealth(true);
                   } catch (e: any) {
                     setHubBanner({ variant: "error", message: e?.message || "Could not finalize selection." });
                   }

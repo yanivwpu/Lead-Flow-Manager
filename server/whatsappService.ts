@@ -1,5 +1,12 @@
 import type { User } from "@shared/schema";
+import {
+  evaluateMetaWhatsAppReadiness,
+  isCanonicalWhatsAppFullyConnectedFromUser,
+  type WhatsAppReadinessChecklist,
+  type WhatsAppReadinessEvaluation,
+} from "@shared/whatsappReadiness";
 import { storage } from "./storage";
+import { classifyMetaWhatsAppPhone } from "./metaWhatsAppPhoneKind";
 import {
   sendUserWhatsAppMessage,
   sendUserWhatsAppMedia,
@@ -20,7 +27,13 @@ export interface AvailabilityResult {
   provider: WhatsAppProvider;
   reason?: string;
   message?: string;
+  /** Aligns with inbox gate — true only when send/receive is allowed. */
+  fullyReady?: boolean;
+  readiness?: WhatsAppReadinessChecklist;
+  setupIncomplete?: boolean;
 }
+
+export type { WhatsAppReadinessChecklist, WhatsAppReadinessEvaluation };
 
 export interface SendResult {
   success: boolean;
@@ -81,29 +94,36 @@ export type CanonicalWhatsAppUser = Pick<
   | "metaPhoneNumberId"
   | "metaBusinessAccountId"
   | "metaDisplayPhoneNumber"
+  | "metaVerifiedName"
 >;
 
 /**
  * Canonical WhatsApp “connected” for UI (Meta Cloud vs Twilio), independent of `channel_settings` rows.
- * Meta: active provider meta + connected + WABA webhook subscribed + integration status connected (same fallback as status API).
- * Twilio: active provider twilio + Twilio connected flag.
+ * @see shared/whatsappReadiness.ts
  */
 export function isCanonicalWhatsAppFullyConnected(user: CanonicalWhatsAppUser): boolean {
-  const activeProvider: WhatsAppProvider = (user.whatsappProvider as WhatsAppProvider) || "twilio";
-  if (activeProvider === "meta") {
-    const integrationStatus =
-      user.metaIntegrationStatus ||
-      (user.metaConnected ? "connected" : "disconnected");
-    return (
-      !!user.metaConnected &&
-      !!user.metaWebhookSubscribed &&
-      integrationStatus === "connected"
-    );
-  }
-  if (activeProvider === "twilio") {
-    return !!user.twilioConnected;
-  }
-  return false;
+  return isCanonicalWhatsAppFullyConnectedFromUser(user);
+}
+
+/** Readiness checklist for Settings / post-connect health UI. */
+export function buildMetaWhatsAppReadinessForUser(
+  user: CanonicalWhatsAppUser,
+  phoneGraphSnapshot?: Record<string, unknown> | null,
+): WhatsAppReadinessEvaluation {
+  const inner =
+    phoneGraphSnapshot?.data && typeof phoneGraphSnapshot.data === "object"
+      ? (phoneGraphSnapshot.data as Record<string, unknown>)
+      : phoneGraphSnapshot;
+  const phoneKind = classifyMetaWhatsAppPhone({
+    displayPhoneNumber: user.metaDisplayPhoneNumber,
+    verifiedName: user.metaVerifiedName,
+  });
+  return evaluateMetaWhatsAppReadiness(user, {
+    phoneGraphStatus: inner?.status != null ? String(inner.status) : null,
+    phoneGraphCodeVerification:
+      inner?.code_verification_status != null ? String(inner.code_verification_status) : null,
+    isTestNumber: phoneKind.kind === "test",
+  });
 }
 
 export function logWhatsAppChannelState(payload: {
@@ -179,12 +199,34 @@ export async function getWhatsAppAvailability(userId: string): Promise<Availabil
   const provider: WhatsAppProvider = (user.whatsappProvider as WhatsAppProvider) || "twilio";
 
   if (provider === "meta") {
-    const ok = isCanonicalWhatsAppFullyConnected(user);
+    const oauthDbg =
+      user.metaLastOAuthDebug && typeof user.metaLastOAuthDebug === "object"
+        ? (user.metaLastOAuthDebug as Record<string, unknown>)
+        : null;
+    const phoneGraphSnapshot =
+      oauthDbg?.phoneGraphSnapshot && typeof oauthDbg.phoneGraphSnapshot === "object"
+        ? (oauthDbg.phoneGraphSnapshot as Record<string, unknown>)
+        : null;
+    const readiness = buildMetaWhatsAppReadinessForUser(user, phoneGraphSnapshot);
+    const ok = readiness.fullyReady;
     return {
       available: ok,
       provider: "meta",
-      reason: ok ? undefined : "Meta WhatsApp Business API not connected or not ready",
-      message: ok ? undefined : "Connect Meta WhatsApp in Settings to send messages",
+      fullyReady: ok,
+      readiness: {
+        wabaSaved: readiness.wabaSaved,
+        phoneSaved: readiness.phoneSaved,
+        phoneStatusReady: readiness.phoneStatusReady,
+        webhookSubscribed: readiness.webhookSubscribed,
+        inboxReady: readiness.inboxReady,
+      },
+      setupIncomplete: readiness.setupIncomplete,
+      reason: ok ? undefined : "WhatsApp setup is incomplete or not ready for messaging",
+      message: ok
+        ? undefined
+        : readiness.setupIncomplete
+          ? "Finish WhatsApp setup in Settings — connection is not fully ready yet"
+          : "Connect Meta WhatsApp in Settings to send messages",
     };
   }
 
@@ -192,6 +234,7 @@ export async function getWhatsAppAvailability(userId: string): Promise<Availabil
   return {
     available: isConnected,
     provider: "twilio",
+    fullyReady: isConnected,
     reason: isConnected ? undefined : "Twilio WhatsApp connection not found",
     message: isConnected ? undefined : "Connect Twilio in Settings to send messages",
   };

@@ -204,6 +204,7 @@ export function ChannelSettings() {
   const queryClient = useQueryClient();
   const [configChannel, setConfigChannel] = useState<Channel | null>(null);
   const [whatsappEmbeddedInlineError, setWhatsappEmbeddedInlineError] = useState<string | null>(null);
+  const [whatsappShowPostConnectHealth, setWhatsappShowPostConnectHealth] = useState(false);
   const [telegramToken, setTelegramToken] = useState("");
   const [telegramStep, setTelegramStep] = useState<1 | 2 | 3>(1);
   const [telegramError, setTelegramError] = useState<string | null>(null);
@@ -290,13 +291,16 @@ export function ChannelSettings() {
           const res = await fetch("/api/integrations/whatsapp/status", { credentials: "include" });
           if (res.ok) {
             const s = await res.json();
+            if (s.fullyReady && s.activeProvider === "meta") {
+              metaReady = true;
+              break;
+            }
             if (
               s.activeProvider === "meta" &&
               s.meta?.connected &&
               (s.meta?.businessAccountId || s.meta?.phoneNumberId)
             ) {
-              metaReady = true;
-              break;
+              setWhatsappShowPostConnectHealth(true);
             }
           }
           await new Promise((r) => setTimeout(r, 450));
@@ -306,13 +310,15 @@ export function ChannelSettings() {
         if (metaReady) {
           toast({
             title: "WhatsApp connected",
-            description: "Meta Cloud API is active and saved. You can send and receive from the inbox.",
+            description: "Meta Cloud API is active. You can send and receive from the inbox.",
           });
         } else {
+          setWhatsappShowPostConnectHealth(true);
+          setConfigChannel("whatsapp");
           toast({
-            title: "Could not confirm Meta Cloud API yet",
+            title: "WhatsApp setup incomplete",
             description:
-              "OAuth finished, but the server did not report Meta as the active provider with saved IDs. Open WhatsApp settings and check diagnostics, or refresh and try again.",
+              "Meta login finished, but messaging is not fully ready yet. Review the checklist in WhatsApp settings.",
             variant: "destructive",
           });
         }
@@ -323,18 +329,15 @@ export function ChannelSettings() {
       window.history.replaceState({}, "", `${window.location.pathname}${q ? `?${q}` : ""}`);
     } else if (embedded === "error") {
       const reason = params.get("reason") || "Meta signup did not complete.";
-      // Show inline (non-destructive) messaging inside the WhatsApp connect dialog.
-      setWhatsappEmbeddedInlineError(
-        "Couldn’t find a WhatsApp phone number on the selected business. Please select the WABA that has your number or add a phone number in Meta."
-      );
+      setWhatsappEmbeddedInlineError(reason);
       setConfigChannel("whatsapp");
       params.delete("whatsapp_embedded");
       params.delete("reason");
       const q = params.toString();
       window.history.replaceState({}, "", `${window.location.pathname}${q ? `?${q}` : ""}`);
     } else if (embedded === "pick") {
-      // Paused OAuth: user must pick WABA + phone (production vs test) before we save credentials.
       setConfigChannel("whatsapp");
+      setWhatsappShowPostConnectHealth(false);
       toast({
         title: "Choose your WhatsApp number",
         description:
@@ -381,11 +384,14 @@ export function ChannelSettings() {
 
   const { data: waIntegrationStatus } = useQuery<{
     activeProvider: string;
+    fullyReady?: boolean;
+    setupIncomplete?: boolean;
     whatsappConnectedReason: "twilio" | "meta" | "none";
     metaPersistedButTwilioSelected?: boolean;
     twilio: { connected: boolean };
     meta: {
       connected: boolean;
+      fullyReady?: boolean;
       phoneNumberId: string | null;
       businessAccountId: string | null;
       integrationStatus?: string;
@@ -542,8 +548,11 @@ export function ChannelSettings() {
     const setting = channels.find(c => c.channel === channel);
 
     if (channel === 'whatsapp') {
-      if (user?.whatsappProvider === 'meta' && user?.metaConnected) return 'connected';
-      if (user?.twilioConnected) return 'connected';
+      if (waIntegrationStatus?.fullyReady && waIntegrationStatus.activeProvider === 'meta') return 'connected';
+      if (waIntegrationStatus?.setupIncomplete || (user?.whatsappProvider === 'meta' && user?.metaConnected)) {
+        return 'pending';
+      }
+      if (user?.twilioConnected && waIntegrationStatus?.activeProvider === 'twilio') return 'connected';
       return 'disconnected';
     }
 
@@ -687,6 +696,8 @@ export function ChannelSettings() {
       const sigHealth = meta?.webhookSignatureHealth ?? meta?.webhookHealth;
       const metaRoute =
         wa.activeProvider === "meta" && !!meta?.connected;
+      const metaFullyReady =
+        wa.fullyReady === true || meta?.fullyReady === true;
       const twilioRoute =
         wa.activeProvider === "twilio" && !!wa.twilio?.connected;
 
@@ -704,7 +715,7 @@ export function ChannelSettings() {
         };
       }
 
-      if (metaRoute && meta?.connectedToMetaTestNumber) {
+      if (metaRoute && meta?.connectedToMetaTestNumber && metaFullyReady) {
         return {
           pill: "test_number",
           subline: "Connected via Meta Cloud API",
@@ -719,6 +730,22 @@ export function ChannelSettings() {
       }
 
       if (metaRoute) {
+        if (!metaFullyReady) {
+          return {
+            pill: "needs_attention",
+            pillLabel: "Setup incomplete",
+            subline: "Meta login saved — finish WhatsApp setup",
+            warning:
+              meta?.lastErrorMessage ||
+              "Open Manage to review the connection checklist and refresh the webhook subscription.",
+            footerHint: "Messaging stays disabled until all setup steps are complete.",
+            action: "manage",
+            actionLabel: "Manage",
+            onAction: () => setConfigChannel("whatsapp"),
+            cardClass: baseAmber,
+            showReceiveToggle: false,
+          };
+        }
         if (meta?.integrationStatus === "failed") {
           return {
             pill: "needs_attention",
@@ -1149,7 +1176,11 @@ export function ChannelSettings() {
             </div>
           )}
           <ConnectWhatsAppHub
-            onClose={() => setConfigChannel(null)}
+            showPostConnectHealth={whatsappShowPostConnectHealth}
+            onClose={() => {
+              setConfigChannel(null);
+              setWhatsappShowPostConnectHealth(false);
+            }}
             onOpenTwilio={() => {
               setConfigChannel(null);
               setConnectTwilioOpen(true);
