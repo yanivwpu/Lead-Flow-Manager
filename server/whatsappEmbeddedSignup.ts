@@ -135,7 +135,22 @@ export interface WhatsappMetaPublicConfig {
   missingEnvHints: string[];
 }
 
+/** Deprecated General login config — use WhatsApp Embedded Signup variation instead. */
+const DEPRECATED_EMBEDDED_SIGNUP_CONFIG_ID = "1334305135262470";
+
 export function logWhatsappEmbeddedSignupStartupWarnings(): void {
+  const embeddedConfigId = process.env.META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID?.trim() || "";
+  if (embeddedConfigId === DEPRECATED_EMBEDDED_SIGNUP_CONFIG_ID) {
+    console.error(
+      "[WhatsApp Embedded Signup] META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID is still the deprecated General login config (1334305135262470). Set the WhatsApp Embedded Signup configuration ID (1774700346847063) and redeploy."
+    );
+  }
+  const legacyMetaConfigId = process.env.META_CONFIG_ID?.trim() || "";
+  if (legacyMetaConfigId === DEPRECATED_EMBEDDED_SIGNUP_CONFIG_ID) {
+    console.warn(
+      "[WhatsApp Embedded Signup] META_CONFIG_ID is the deprecated General login config (1334305135262470) — Embedded Signup ignores META_CONFIG_ID; use META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID=1774700346847063 instead."
+    );
+  }
   const embedded =
     process.env.WHATSAPP_EMBEDDED_SIGNUP_ENABLED === "true" ||
     process.env.WHATSAPP_EMBEDDED_SIGNUP_ENABLED === "1";
