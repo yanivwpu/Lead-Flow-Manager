@@ -44,19 +44,22 @@ export type AiRoutingResult = {
   promptGuidance: string;
 };
 
+const DEFAULT_HANDOFF_KEYWORDS = ["call me", "human", "agent", "speak to someone"];
+
 const APPOINTMENT_RE =
   /\b(book(?:ing)?\s+(?:a\s+)?(?:meeting|call|appointment|consultation|demo|viewing|showing|slot)|schedule\s+(?:a\s+)?(?:meeting|call|appointment|consultation|demo|viewing|showing|time)|set up\s+(?:a\s+)?(?:call|meeting|appointment)|pick\s+a\s+time|discovery\s+call|(?:property\s+)?viewing|(?:home\s+)?showing|(?:book|schedule)\s+(?:me|us)\s+(?:a|for)|calendly|when\s+(?:are\s+you|can\s+(?:we|i))\s+(?:available|free))\b/i;
 
-const HUMAN_CHAT_RE =
-  /\b(speak\s+(?:with|to)|talk\s+(?:with|to)|chat\s+with|connect\s+me|human|live\s+(?:person|agent|rep)|real\s+person|(?:sales|support)\s+(?:rep|agent|person)|customer\s+service|someone\s+(?:help|assist)|can\s+(?:someone|you)\s+help|help\s+me\s+(?:understand|with)|(?:pricing|price|cost|rate|fee)s?\b|how\s+much|clarif|explain\s+(?:this|that|the)|(?:too\s+expensive|not\s+sure|concerned|objection)|advisor|representative)\b/i;
+/** Product/education intent — qualify with AI, do not escalate to human. */
+const INFO_SEEKING_RE =
+  /\b(learn\s+more|tell\s+me\s+more|more\s+information|more\s+info|more\s+details|how\s+does\s+(?:it|this|your|the)\s+work|how\s+do\s+(?:you|your)|what\s+(?:is|are)\s+(?:your|the)|interested\s+in|curious\s+about|want\s+to\s+(?:know|learn|understand)|looking\s+to\s+learn|about\s+your\s+(?:product|service|platform|automation|software|tool|features?)|(?:your|the)\s+features?\b|what\s+can\s+(?:it|you|this)\s+do|can\s+you\s+(?:tell|explain)\s+(?:me\s+)?(?:more|about)|do\s+you\s+(?:offer|have|support))\b/i;
 
-/** High-confidence human handoff — pricing, support, objections (not vague "speak with someone"). */
+/** High-confidence human handoff — pricing, support, escalation (not product curiosity). */
 const EXPLICIT_HUMAN_CHAT_RE =
-  /\b((?:pricing|price|cost|rate|fee)s?\b|how\s+much|support|help\s+me\s+(?:understand|with)|clarif|explain\s+(?:this|that|the)|(?:too\s+expensive|not\s+sure|concerned|objection)|customer\s+service)\b/i;
+  /\b((?:pricing|price|cost|rate|fee)s?\b|how\s+much|(?:customer|technical)\s+support|billing\s+(?:issue|problem)|help\s+me\s+with\s+(?:my|an|a)\s+(?:issue|problem|order|account|billing|refund)|(?:too\s+expensive|refund|chargeback|complaint|not\s+happy|unsatisfied)|(?:speak|talk)\s+(?:to|with)\s+(?:a\s+)?(?:human|person|manager|supervisor|advisor)|(?:need|want)\s+(?:a\s+)?(?:human|person|real\s+person)|(?:i\s+)?need\s+to\s+speak\s+(?:to|with)|can\s+someone\s+call\s+me|(?:please\s+)?call\s+me\b|(?:i\s+)?(?:want|would\s+like)\s+(?:a\s+)?human\b|escalat(?:e|ion))\b/i;
 
 /** Vague human request — clarify live chat vs schedule before handoff or booking. */
 const SOFT_HUMAN_CHAT_RE =
-  /\b(speak\s+(?:with|to)|talk\s+(?:with|to)|chat\s+with|connect\s+me|(?:speak|talk)\s+(?:with\s+)?(?:an?\s+)?(?:advisor|agent|human|rep|someone)|human|live\s+(?:person|agent|rep)|real\s+person|someone\s+(?:help|assist)|can\s+(?:someone|you)\s+help|advisor|representative)\b/i;
+  /\b(speak\s+(?:with|to)|talk\s+(?:with|to)|chat\s+with|connect\s+me\s+(?:with|to)|(?:speak|talk)\s+(?:with\s+)?(?:an?\s+)?(?:advisor|agent|rep|representative)|(?:live|real)\s+(?:person|agent|rep)|someone\s+(?:help|assist)\s+me|can\s+someone\s+(?:help|assist)|(?:human|real)\s+(?:advisor|agent|rep))\b/i;
 
 const NURTURE_RE =
   /\b(just\s+browsing|not\s+ready|maybe\s+later|not\s+now|no\s+rush|in\s+the\s+future|(?:still\s+)?researching|looking\s+around|exploring\s+options|not\s+yet|sometime\s+next|few\s+months\s+out)\b/i;
@@ -65,7 +68,7 @@ const CLARIFY_OUTBOUND_RE =
   /\b(chat with someone now|speak with someone now|talk to someone now|schedule a (?:call|meeting)|book a (?:call|meeting)|live chat|or schedule)\b/i;
 
 const LIVE_CHAT_CHOICE_RE =
-  /\b(now|right now|live|chat|question|pricing|help me|speak|talk|asap|today|this week)\b/i;
+  /\b(now|right now|live|asap|today|this week|pricing|help me with my)\b/i;
 
 const SCHEDULE_CHOICE_RE =
   /\b(schedule|book|appointment|time slot|calendly|meeting|set up a call|pick a time)\b/i;
@@ -74,8 +77,8 @@ function norm(text: string): string {
   return text.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function matchesAny(text: string, patterns: RegExp[]): boolean {
-  return patterns.some((re) => re.test(text));
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function matchesCustomPhrases(text: string, phrases?: string[]): boolean {
@@ -87,6 +90,27 @@ function matchesCustomPhrases(text: string, phrases?: string[]): boolean {
       return text.includes(p.toLowerCase());
     }
   });
+}
+
+/** Word-boundary keyword match — avoids false positives like "agent" inside "automation". */
+export function matchesHandoffKeyword(text: string, keywords?: string[]): boolean {
+  const list = (keywords?.length ? keywords : DEFAULT_HANDOFF_KEYWORDS)
+    .map((k) => k.trim().toLowerCase())
+    .filter(Boolean);
+  return list.some((kw) => {
+    if (/\s/.test(kw)) {
+      return text.includes(kw);
+    }
+    try {
+      return new RegExp(`\\b${escapeRegex(kw)}\\b`, "i").test(text);
+    } catch {
+      return false;
+    }
+  });
+}
+
+function isInfoSeeking(text: string): boolean {
+  return INFO_SEEKING_RE.test(text);
 }
 
 function detectClarificationFromHistory(history: AiRoutingHistoryTurn[] | undefined): {
@@ -123,13 +147,6 @@ function detectClarificationFromHistory(history: AiRoutingHistoryTurn[] | undefi
   return { asked, choseLiveChat: false, choseSchedule: false };
 }
 
-function matchesHandoffKeyword(text: string, keywords?: string[]): boolean {
-  const list = (keywords?.length ? keywords : ["call me", "human", "agent", "speak to someone"]).map((k) =>
-    k.trim().toLowerCase(),
-  ).filter(Boolean);
-  return list.some((kw) => text.includes(kw));
-}
-
 function buildPromptGuidance(result: Omit<AiRoutingResult, "promptGuidance">): string {
   if (result.needsRoutingClarification) {
     return `The customer asked to speak with a person/advisor but did not clearly request a scheduled meeting.
@@ -153,10 +170,31 @@ function buildPromptGuidance(result: Omit<AiRoutingResult, "promptGuidance">): s
 - Do NOT send a scheduling link or push for a meeting.
 - Be helpful and low-pressure. Offer to follow up when timing is better.`;
     default:
+      if (result.signals.includes("info_seeking")) {
+        return `The customer is asking for information or learning about your offering.
+- Do NOT escalate to a human or send a booking link yet.
+- Answer briefly if you can, then ask ONE qualifying question about their goal or interest.`;
+      }
       return `Continue the conversation naturally.
 - Do NOT send a scheduling link unless the customer clearly asks to book or schedule.
 - Prefer one useful qualifying question over jumping to booking.`;
   }
+}
+
+function continueAiResult(
+  reason: string,
+  signals: string[],
+  confidence: number,
+  needsRoutingClarification = false,
+): AiRoutingResult {
+  const base = {
+    decision: "CONTINUE_AI" as const,
+    confidence,
+    reason,
+    signals,
+    needsRoutingClarification,
+  };
+  return { ...base, promptGuidance: buildPromptGuidance(base) };
 }
 
 /**
@@ -168,20 +206,7 @@ export function resolveAiRouting(input: AiRoutingInput): AiRoutingResult {
   const signals: string[] = [];
 
   if (!inbound) {
-    return {
-      decision: "CONTINUE_AI",
-      confidence: 0,
-      reason: "empty_inbound",
-      signals,
-      needsRoutingClarification: false,
-      promptGuidance: buildPromptGuidance({
-        decision: "CONTINUE_AI",
-        confidence: 0,
-        reason: "empty_inbound",
-        signals,
-        needsRoutingClarification: false,
-      }),
-    };
+    return continueAiResult("empty_inbound", signals, 0);
   }
 
   const clarify = detectClarificationFromHistory(input.history);
@@ -192,33 +217,65 @@ export function resolveAiRouting(input: AiRoutingInput): AiRoutingResult {
     industry.includes("property") ||
     industry.includes("realtor");
 
+  const infoSeeking = isInfoSeeking(text);
   const hasAppointment =
     APPOINTMENT_RE.test(text) ||
     matchesCustomPhrases(text, input.industrySignals?.appointmentPhrases) ||
     (input.industrySignals?.viewingIntent === true && /\b(view|tour|showing|see the)\b/i.test(text));
   const hasExplicitHuman =
-    EXPLICIT_HUMAN_CHAT_RE.test(text) ||
-    matchesCustomPhrases(text, input.industrySignals?.humanChatPhrases);
+    !infoSeeking &&
+    (EXPLICIT_HUMAN_CHAT_RE.test(text) ||
+      matchesCustomPhrases(text, input.industrySignals?.humanChatPhrases));
+  const handoffKeywordMatch = !infoSeeking && matchesHandoffKeyword(text, input.handoffKeywords);
   const hasSoftHuman =
-    (SOFT_HUMAN_CHAT_RE.test(text) || matchesHandoffKeyword(text, input.handoffKeywords)) &&
+    !infoSeeking &&
+    (SOFT_HUMAN_CHAT_RE.test(text) || handoffKeywordMatch) &&
     !hasExplicitHuman;
   const hasHumanChat = hasExplicitHuman || hasSoftHuman;
   const hasNurture = NURTURE_RE.test(text);
 
+  if (infoSeeking) signals.push("info_seeking");
   if (hasAppointment) signals.push("appointment_intent");
   if (hasExplicitHuman) signals.push("human_chat_explicit");
   if (hasSoftHuman) signals.push("human_chat_soft");
+  if (handoffKeywordMatch) signals.push("handoff_keyword");
   if (hasHumanChat) signals.push("human_chat_intent");
   if (hasNurture) signals.push("nurture_intent");
   if (input.industrySignals?.viewingIntent) signals.push("industry:viewing");
   if (input.industrySignals?.strongIntent) signals.push("industry:strong_intent");
 
-  if (clarify.choseLiveChat || (hasExplicitHuman && !hasAppointment)) {
+  if (clarify.choseLiveChat) {
     const base = {
       decision: "ASSIGN_AGENT" as const,
-      confidence: clarify.choseLiveChat ? 0.9 : 0.85,
-      reason: clarify.choseLiveChat ? "clarified_live_chat" : "explicit_human_chat_signals",
-      signals: [...signals, ...(clarify.choseLiveChat ? ["clarified:live_chat"] : [])],
+      confidence: 0.9,
+      reason: "clarified_live_chat",
+      signals: [...signals, "clarified:live_chat"],
+      needsRoutingClarification: false,
+    };
+    return { ...base, promptGuidance: buildPromptGuidance(base) };
+  }
+
+  if (clarify.choseSchedule) {
+    const base = {
+      decision: "BOOK_APPOINTMENT" as const,
+      confidence: 0.92,
+      reason: "clarified_schedule",
+      signals: [...signals, "clarified:schedule"],
+      needsRoutingClarification: false,
+    };
+    return { ...base, promptGuidance: buildPromptGuidance(base) };
+  }
+
+  if (infoSeeking && !hasAppointment && !clarify.choseLiveChat) {
+    return continueAiResult("info_seeking_qualify", signals, 0.88);
+  }
+
+  if (hasExplicitHuman && !hasAppointment) {
+    const base = {
+      decision: "ASSIGN_AGENT" as const,
+      confidence: 0.88,
+      reason: "explicit_human_chat_signals",
+      signals,
       needsRoutingClarification: false,
     };
     return { ...base, promptGuidance: buildPromptGuidance(base) };
@@ -231,22 +288,15 @@ export function resolveAiRouting(input: AiRoutingInput): AiRoutingResult {
     !clarify.choseLiveChat &&
     !clarify.choseSchedule
   ) {
-    const base = {
-      decision: "CONTINUE_AI" as const,
-      confidence: 0.72,
-      reason: "soft_human_needs_clarification",
-      signals: [...signals, "clarify:human_vs_book"],
-      needsRoutingClarification: true,
-    };
-    return { ...base, promptGuidance: buildPromptGuidance(base) };
+    return continueAiResult("soft_human_needs_clarification", [...signals, "clarify:human_vs_book"], 0.72, true);
   }
 
-  if (clarify.choseSchedule || (hasAppointment && !hasNurture)) {
+  if (hasAppointment && !hasNurture) {
     const base = {
       decision: "BOOK_APPOINTMENT" as const,
-      confidence: clarify.choseSchedule ? 0.92 : 0.85,
-      reason: clarify.choseSchedule ? "clarified_schedule" : "appointment_signals",
-      signals: [...signals, ...(clarify.choseSchedule ? ["clarified:schedule"] : [])],
+      confidence: 0.85,
+      reason: "appointment_signals",
+      signals,
       needsRoutingClarification: false,
     };
     return { ...base, promptGuidance: buildPromptGuidance(base) };
@@ -272,9 +322,7 @@ export function resolveAiRouting(input: AiRoutingInput): AiRoutingResult {
       needsRoutingClarification: !clarify.asked,
     };
     if (base.needsRoutingClarification) {
-      base.decision = "CONTINUE_AI";
-      base.reason = "mixed_signals_needs_clarification";
-      base.signals.push("clarify:mixed");
+      return continueAiResult("mixed_signals_needs_clarification", [...signals, "clarify:mixed"], 0.65, true);
     }
     return { ...base, promptGuidance: buildPromptGuidance(base) };
   }
@@ -290,14 +338,7 @@ export function resolveAiRouting(input: AiRoutingInput): AiRoutingResult {
     return { ...base, promptGuidance: buildPromptGuidance(base) };
   }
 
-  const base = {
-    decision: "CONTINUE_AI" as const,
-    confidence: 0.5,
-    reason: "default_continue",
-    signals,
-    needsRoutingClarification: false,
-  };
-  return { ...base, promptGuidance: buildPromptGuidance(base) };
+  return continueAiResult("default_continue", signals, 0.5);
 }
 
 /** Remove scheduling URLs from AI output when routing disallows booking. */

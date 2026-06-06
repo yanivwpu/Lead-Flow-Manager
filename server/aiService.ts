@@ -8,6 +8,7 @@ import {
   type AiSettings,
 } from "@shared/schema";
 import type { AiRoutingResult } from "@shared/aiRouting";
+import { resolveAiRouting, routingShouldTriggerHandoff } from "@shared/aiRouting";
 
 export type SupportedAiLanguage = "en" | "he" | "es" | "ar";
 
@@ -342,15 +343,15 @@ Write a short natural summary of what this lead wants.`;
     message: string,
     settings?: AiSettings
   ): Promise<{ shouldHandoff: boolean; reason?: string }> {
-    const keywords = settings?.handoffKeywords || ["call me", "human", "agent", "speak to someone"];
-    const lowerMessage = message.toLowerCase();
-    
-    for (const keyword of keywords) {
-      if (lowerMessage.includes(keyword.toLowerCase())) {
-        return { shouldHandoff: true, reason: `Customer requested: "${keyword}"` };
-      }
+    const routing = resolveAiRouting({
+      inbound: message,
+      handoffKeywords: settings?.handoffKeywords ?? undefined,
+    });
+
+    if (routingShouldTriggerHandoff(routing)) {
+      return { shouldHandoff: true, reason: routing.reason };
     }
-    
+
     return { shouldHandoff: false };
   }
 

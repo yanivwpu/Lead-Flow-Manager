@@ -188,16 +188,14 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
   const actions: ActionCandidate[] = [];
   const timing = ctx.showingTimingPhrase?.trim();
 
-  const routingDecision =
-    ctx.aiRoutingDecision ??
-    (ctx.inboundText?.trim()
-      ? resolveAiRouting({ inbound: ctx.inboundText, joinedInbound: ctx.inboundText }).decision
-      : undefined);
+  const routing =
+    ctx.inboundText?.trim()
+      ? resolveAiRouting({ inbound: ctx.inboundText, joinedInbound: ctx.inboundText })
+      : null;
+  const routingDecision = ctx.aiRoutingDecision ?? routing?.decision;
   const needsClarify =
-    ctx.needsRoutingClarification ??
-    (ctx.inboundText?.trim()
-      ? resolveAiRouting({ inbound: ctx.inboundText, joinedInbound: ctx.inboundText }).needsRoutingClarification
-      : false);
+    ctx.needsRoutingClarification ?? routing?.needsRoutingClarification ?? false;
+  const infoSeeking = routing?.signals.includes("info_seeking") ?? false;
 
   if (needsClarify) {
     actions.push({
@@ -209,6 +207,8 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
     actions.push({ label: "Assign agent", rank: 96, group: "assign" });
   } else if (routingDecision === "START_NURTURE") {
     actions.push({ label: "Send nurture follow-up", rank: 52, group: "followup" });
+  } else if (infoSeeking) {
+    actions.push({ label: "Ask qualifying question", rank: 84, group: "contact" });
   }
 
   const allowBookingActions =

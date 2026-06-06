@@ -10,6 +10,7 @@ import {
   AI_HANDOFF_RESOLVED_EVENT,
   isConversationHandoffActive,
 } from "@shared/handoffActivity";
+import { matchesHandoffKeyword } from "@shared/aiRouting";
 import { db } from "../drizzle/db";
 import { messages as messagesTbl } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
@@ -1235,13 +1236,11 @@ class ChannelService {
       const handoff = await aiService.checkHandoffNeeded(content || "", aiSettings || undefined);
       if (handoff.shouldHandoff) {
         handoffTriggered = true;
-        // Best-effort keyword extraction for logging/debugging.
         const keywords = (aiSettings?.handoffKeywords || ["call me", "human", "agent", "speak to someone"])
           .map((k) => String(k || "").trim())
           .filter(Boolean);
-        const lower = (content || "").toLowerCase();
         const matchedKeyword =
-          keywords.find((k) => lower.includes(k.toLowerCase())) || "unknown";
+          keywords.find((k) => matchesHandoffKeyword(content || "", [k])) || handoff.reason || "routing_assign_agent";
 
         console.info("[HANDOFF_TRIGGERED]", {
           contactId: contact.id,

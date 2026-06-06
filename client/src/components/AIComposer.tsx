@@ -22,6 +22,7 @@ import { AICreditBadge, AIUpgradePrompt } from "./AIUpgradePrompt";
 import type { AICapabilities } from "@/lib/useAICapabilities";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { LucideIcon } from "lucide-react";
+import { resolveAiRouting, routingShouldTriggerHandoff } from "@shared/aiRouting";
 
 type AIMode = "manual" | "suggest" | "auto";
 type AutoPhase = "idle" | "typing" | "replied" | "waiting";
@@ -263,16 +264,17 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       return (inbound[inbound.length - 1] || "").trim();
     })();
     console.info("[AI-AUTO-CLIENT]", { mode: "auto", latestMessage: lastInboundText.slice(0, 500) });
-    if (lastInboundText && handoffKeywords && handoffKeywords.length > 0) {
-      const msgLower = lastInboundText.toLowerCase();
-      const matched = handoffKeywords
-        .map((k) => String(k || "").trim())
-        .filter(Boolean)
-        .some((k) => msgLower.includes(k.toLowerCase()));
-      if (matched) {
+    if (lastInboundText) {
+      const routing = resolveAiRouting({
+        inbound: lastInboundText,
+        history: history.slice(-12).map((m) => ({ role: m.role, content: m.content })),
+        handoffKeywords,
+      });
+      if (routingShouldTriggerHandoff(routing)) {
         console.info("[HANDOFF_TRIGGERED]", {
           contactId: contactId || "unknown",
-          matchedKeyword: "client_precheck",
+          matchedKeyword: "routing_assign_agent",
+          routingReason: routing.reason,
           message: lastInboundText.slice(0, 500),
         });
         setAutoPhase("waiting");

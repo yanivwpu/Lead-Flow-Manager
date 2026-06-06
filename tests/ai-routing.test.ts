@@ -4,6 +4,7 @@ import {
   routingAllowsSchedulingLink,
   routingShouldTriggerHandoff,
   stripSchedulingUrlsFromReply,
+  matchesHandoffKeyword,
 } from "../shared/aiRouting";
 
 function test(name: string, fn: () => void) {
@@ -68,6 +69,41 @@ test("clarify then schedule → book appointment", () => {
 test("just browsing → nurture", () => {
   const r = resolveAiRouting({ inbound: "Just browsing for now, not ready yet" });
   assert.equal(r.decision, "START_NURTURE");
+});
+
+test("learn more about automation → continue AI (not assign)", () => {
+  const r = resolveAiRouting({
+    inbound: "I'd like to learn more about your automation.",
+    handoffKeywords: ["call me", "human", "agent", "speak to someone"],
+  });
+  assert.equal(r.decision, "CONTINUE_AI");
+  assert.equal(r.reason, "info_seeking_qualify");
+  assert.equal(routingShouldTriggerHandoff(r), false);
+  assert.ok(r.signals.includes("info_seeking"));
+});
+
+test("agent keyword does not match automation substring", () => {
+  assert.equal(
+    matchesHandoffKeyword("I'd like to learn more about your automation.", ["agent"]),
+    false,
+  );
+  assert.equal(matchesHandoffKeyword("I need an agent please", ["agent"]), true);
+});
+
+test("tell me more → continue AI qualify", () => {
+  const r = resolveAiRouting({ inbound: "Can you tell me more about your features?" });
+  assert.equal(r.decision, "CONTINUE_AI");
+  assert.equal(r.reason, "info_seeking_qualify");
+});
+
+test("how does it work → continue AI qualify", () => {
+  const r = resolveAiRouting({ inbound: "How does your automation work?" });
+  assert.equal(r.decision, "CONTINUE_AI");
+});
+
+test("interested in features → continue AI qualify", () => {
+  const r = resolveAiRouting({ inbound: "I'm interested in your automation features" });
+  assert.equal(r.decision, "CONTINUE_AI");
 });
 
 test("strip calendly urls from reply", () => {
