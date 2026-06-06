@@ -47,6 +47,7 @@ import {
   formatCampaignEnrollmentSubtitle,
   inferContactConversationChannel,
   sortCampaignsForContact,
+  campaignChannelLabel,
 } from "@shared/campaignEnrollment";
 import {
   filterMeaningfulTimelineEvents,
@@ -2984,7 +2985,7 @@ export function InboxLeadDetailsPanel({
                   <p className="text-xs text-gray-500">
                     Showing campaigns for{" "}
                     <span className="font-medium text-gray-700">
-                      {CHANNEL_LABELS[contactOutreachChannel] || contactOutreachChannel}
+                      {campaignChannelLabel(contactOutreachChannel)}
                     </span>
                     . Incompatible campaigns are disabled.
                   </p>
@@ -3018,7 +3019,7 @@ export function InboxLeadDetailsPanel({
                   <p className="text-xs text-amber-700">
                     No campaigns match this contact&apos;s channel
                     {contactOutreachChannel
-                      ? ` (${CHANNEL_LABELS[contactOutreachChannel] || contactOutreachChannel})`
+                      ? ` (${campaignChannelLabel(contactOutreachChannel)})`
                       : ""}
                     . Create or activate an matching campaign first.
                   </p>
