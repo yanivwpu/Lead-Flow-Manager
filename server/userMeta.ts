@@ -140,6 +140,7 @@ export async function fetchMetaWhatsAppPhoneNumberGraphSnapshot(
 }> {
   const base = getMetaGraphApiBase();
   const fieldSets = [
+    "id,display_phone_number,verified_name,quality_rating,code_verification_status,status,platform_type,account_mode,messaging_limit_tier,name_status,throughput",
     "id,display_phone_number,verified_name,quality_rating,code_verification_status,messaging_limit_tier,name_status,throughput",
     "id,display_phone_number,verified_name,quality_rating,code_verification_status",
     "id,display_phone_number,verified_name,quality_rating",

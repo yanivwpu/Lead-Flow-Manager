@@ -6,7 +6,10 @@ import {
   type WhatsAppReadinessEvaluation,
 } from "@shared/whatsappReadiness";
 import { storage } from "./storage";
-import { classifyMetaWhatsAppPhone } from "./metaWhatsAppPhoneKind";
+import {
+  buildMetaWhatsAppPhoneClassificationInput,
+  classifyMetaWhatsAppPhone,
+} from "./metaWhatsAppPhoneKind";
 import {
   sendUserWhatsAppMessage,
   sendUserWhatsAppMedia,
@@ -114,10 +117,9 @@ export function buildMetaWhatsAppReadinessForUser(
     phoneGraphSnapshot?.data && typeof phoneGraphSnapshot.data === "object"
       ? (phoneGraphSnapshot.data as Record<string, unknown>)
       : phoneGraphSnapshot;
-  const phoneKind = classifyMetaWhatsAppPhone({
-    displayPhoneNumber: user.metaDisplayPhoneNumber,
-    verifiedName: user.metaVerifiedName,
-  });
+  const phoneKind = classifyMetaWhatsAppPhone(
+    buildMetaWhatsAppPhoneClassificationInput(user, phoneGraphSnapshot),
+  );
   return evaluateMetaWhatsAppReadiness(user, {
     phoneGraphStatus: inner?.status != null ? String(inner.status) : null,
     phoneGraphCodeVerification:

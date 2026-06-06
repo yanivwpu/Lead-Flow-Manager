@@ -23,7 +23,10 @@ import {
 } from "../whatsappEmbeddedSignup";
 import { getAppOrigin } from "../urlOrigins";
 import { storage } from "../storage";
-import { classifyMetaWhatsAppPhone } from "../metaWhatsAppPhoneKind";
+import {
+  buildMetaWhatsAppPhoneClassificationInput,
+  classifyMetaWhatsAppPhone,
+} from "../metaWhatsAppPhoneKind";
 import { disconnectWhatsAppProvider, getProviderStatus, buildMetaWhatsAppReadinessForUser } from "../whatsappService";
 import { getMetaGraphApiBase } from "../metaGraphVersion";
 import { getMetaAccessToken, fetchMetaWhatsAppPhoneNumberGraphSnapshotVerbose } from "../userMeta";
@@ -729,10 +732,9 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         webhookLikelyOk = !!(process.env.META_APP_SECRET || userAfter.metaAppSecret);
       }
 
-      const connectedPhoneClassification = classifyMetaWhatsAppPhone({
-        displayPhoneNumber: userAfter.metaDisplayPhoneNumber,
-        verifiedName: userAfter.metaVerifiedName,
-      });
+      const connectedPhoneClassification = classifyMetaWhatsAppPhone(
+        buildMetaWhatsAppPhoneClassificationInput(userAfter, phoneGraphSnapshot),
+      );
 
       const inboundRouting = buildWhatsAppInboundRoutingDiagnostics({
         metaConnected: !!userAfter.metaConnected,
@@ -784,7 +786,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
           connectedToMetaTestNumber: connectedPhoneClassification.kind === "test",
           metaTestNumberWarning:
             connectedPhoneClassification.kind === "test"
-              ? "Connected to Meta test number — choose a production WhatsApp number."
+              ? "Connected to Meta test number — ready for testing only."
               : null,
           integrationStatus:
             userAfter.metaIntegrationStatus ||

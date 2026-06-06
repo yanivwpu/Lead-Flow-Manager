@@ -718,9 +718,10 @@ export function ChannelSettings() {
       if (metaRoute && meta?.connectedToMetaTestNumber && metaFullyReady) {
         return {
           pill: "test_number",
-          subline: "Connected via Meta Cloud API",
+          pillLabel: "Test number",
+          subline: "Connected to Meta test number — ready for testing only.",
           warning:
-            "You're connected to a Meta test number. Choose a production WhatsApp number before going live.",
+            "Add a production WhatsApp number in Meta Business Manager and reconnect before messaging real customers.",
           action: "manage",
           actionLabel: "Manage",
           onAction: () => setConfigChannel("whatsapp"),

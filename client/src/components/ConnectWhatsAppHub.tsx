@@ -38,7 +38,8 @@ import {
   type WhatsAppReadinessChecklist,
 } from "@/components/WhatsAppConnectionHealthChecklist";
 
-const META_TEST_NUMBER_HELP = "Connected to Meta test number. Ready for testing.";
+const META_TEST_NUMBER_HELP =
+  "Connected to Meta test number — ready for testing only.";
 
 interface MetaConfigResponse {
   appIdSource?: "META_APP_ID";
@@ -70,25 +71,55 @@ type WabaChoice = {
     id: string;
     displayPhoneNumber?: string;
     verifiedName?: string;
+    qualityRating?: string;
+    platformType?: string;
+    accountMode?: string;
+    status?: string;
+    codeVerificationStatus?: string;
     phoneKind?: "production" | "test" | "unknown";
     phoneKindReasons?: string[];
   }>;
 };
 
 /** Prefer production lines when opening the pending picker (server sends phoneKind). */
-function defaultWabaPhoneSelection(choices: WabaChoice[]): { wabaId: string; phoneId: string } | null {
+function flattenWabaPhones(choices: WabaChoice[]) {
   const flat: Array<{ wabaId: string; p: WabaChoice["phoneNumbers"][number] }> = [];
   for (const c of choices) {
     for (const p of c.phoneNumbers) {
       flat.push({ wabaId: c.wabaId, p });
     }
   }
+  return flat;
+}
+
+function wabaChoicesHaveProduction(choices: WabaChoice[]): boolean {
+  return flattenWabaPhones(choices).some((x) => x.p.phoneKind === "production");
+}
+
+function defaultWabaPhoneSelection(choices: WabaChoice[]): { wabaId: string; phoneId: string } | null {
+  const flat = flattenWabaPhones(choices);
   const prod = flat.find((x) => x.p.phoneKind === "production");
   if (prod) return { wabaId: prod.wabaId, phoneId: prod.p.id };
   const unk = flat.find((x) => x.p.phoneKind === "unknown");
   if (unk) return { wabaId: unk.wabaId, phoneId: unk.p.id };
+  const test = flat.find((x) => x.p.phoneKind === "test");
+  if (test) return { wabaId: test.wabaId, phoneId: test.p.id };
   const first = flat[0];
   return first ? { wabaId: first.wabaId, phoneId: first.p.id } : null;
+}
+
+function findSelectedPhoneKind(
+  choices: WabaChoice[] | null,
+  wabaId: string | null,
+  phoneId: string | null,
+): "production" | "test" | "unknown" | null {
+  if (!choices || !wabaId || !phoneId) return null;
+  for (const c of choices) {
+    if (c.wabaId !== wabaId) continue;
+    const p = c.phoneNumbers.find((row) => row.id === phoneId);
+    return (p?.phoneKind as "production" | "test" | "unknown" | undefined) ?? null;
+  }
+  return null;
 }
 
 interface WhatsappStatusResponse {
@@ -211,6 +242,7 @@ export function ConnectWhatsAppHub({
   const [selectedPhoneNumberId, setSelectedPhoneNumberId] = useState<string | null>(null);
   const [postConnectHealthOpen, setPostConnectHealthOpen] = useState(showPostConnectHealth);
   const [healthPollBusy, setHealthPollBusy] = useState(false);
+  const [testConnectConfirmOpen, setTestConnectConfirmOpen] = useState(false);
 
   // Redirect flow multi-WABA picker: Settings redirects back with ?state=<oauth_state>.
   // If present, fetch pending choices from the server and open the picker.
@@ -282,7 +314,10 @@ export function ConnectWhatsAppHub({
     !!meta?.connected &&
     !metaFullyReady;
   const metaManageView = metaFullyReady || metaPartialSetup;
+  const metaTestConnected = !!meta?.connectedToMetaTestNumber && status?.activeProvider === "meta" && !!meta?.connected;
   const readiness = status?.readiness;
+  const pickerHasProduction = wabaChoices ? wabaChoicesHaveProduction(wabaChoices) : false;
+  const selectedPhoneKind = findSelectedPhoneKind(wabaChoices, selectedWabaId, selectedPhoneNumberId);
   const supportMode = authedUser?.role === "owner" || authedUser?.role === "admin";
 
   async function refreshConnectionHealth(pollUntilReady = false): Promise<void> {
@@ -309,6 +344,46 @@ export function ConnectWhatsAppHub({
   useEffect(() => {
     if (showPostConnectHealth) setPostConnectHealthOpen(true);
   }, [showPostConnectHealth]);
+
+  async function finalizeWabaSelection() {
+    if (!wabaPickerState || !selectedWabaId || !selectedPhoneNumberId) return;
+    try {
+      const res = await fetch("/api/integrations/whatsapp/meta/choose-waba", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          state: wabaPickerState,
+          wabaId: selectedWabaId,
+          phoneNumberId: selectedPhoneNumberId,
+        }),
+      });
+      const j = (await res.json()) as { success?: boolean; error?: string };
+      if (!res.ok || !j.success) {
+        setHubBanner({ variant: "error", message: j.error || "Could not finalize selection." });
+        return;
+      }
+      setWabaPickerOpen(false);
+      setTestConnectConfirmOpen(false);
+      setHubBanner(null);
+      setPostConnectHealthOpen(true);
+      await refreshConnectionHealth(true);
+    } catch (e: unknown) {
+      setHubBanner({
+        variant: "error",
+        message: e instanceof Error ? e.message : "Could not finalize selection.",
+      });
+    }
+  }
+
+  function handleWabaPickerConnectClick() {
+    if (!wabaPickerState || !selectedWabaId || !selectedPhoneNumberId) return;
+    if (selectedPhoneKind === "test") {
+      setTestConnectConfirmOpen(true);
+      return;
+    }
+    void finalizeWabaSelection();
+  }
 
   function getWhatsappFbSdkState(w: Window & typeof globalThis & Record<string, unknown>): WhatsappFbSdkState {
     if (!w[WCS_WHATSAPP_FB_SDK]) w[WCS_WHATSAPP_FB_SDK] = {};
@@ -657,12 +732,16 @@ export function ConnectWhatsAppHub({
           <div
             className={cn(
               "flex items-start gap-2 rounded-xl border px-3 py-3",
-              metaFullyReady
-                ? "border-emerald-200 bg-emerald-50/80"
-                : "border-amber-200 bg-amber-50/80",
+              metaTestConnected
+                ? "border-amber-200 bg-amber-50/90"
+                : metaFullyReady
+                  ? "border-emerald-200 bg-emerald-50/80"
+                  : "border-amber-200 bg-amber-50/80",
             )}
           >
-            {metaFullyReady ? (
+            {metaTestConnected ? (
+              <AlertTriangle className="h-5 w-5 text-amber-700 shrink-0 mt-0.5" />
+            ) : metaFullyReady ? (
               <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
             ) : (
               <AlertTriangle className="h-5 w-5 text-amber-700 shrink-0 mt-0.5" />
@@ -671,14 +750,22 @@ export function ConnectWhatsAppHub({
               <p
                 className={cn(
                   "font-semibold",
-                  metaFullyReady ? "text-emerald-900" : "text-amber-900",
+                  metaTestConnected
+                    ? "text-amber-900"
+                    : metaFullyReady
+                      ? "text-emerald-900"
+                      : "text-amber-900",
                 )}
               >
-                {metaFullyReady ? "Connected" : "Setup incomplete"}
+                {metaTestConnected
+                  ? META_TEST_NUMBER_HELP
+                  : metaFullyReady
+                    ? "Connected"
+                    : "Setup incomplete"}
               </p>
-              {meta?.connectedToMetaTestNumber && (
-                <p className="text-xs text-amber-900 mt-2 border border-amber-200 rounded-md px-2 py-1.5 bg-amber-50/90">
-                  {META_TEST_NUMBER_HELP}
+              {metaTestConnected && metaFullyReady && (
+                <p className="text-xs text-amber-800/90 mt-1">
+                  Add a production number in Meta Business Manager and reconnect to message real customers.
                 </p>
               )}
               {!metaFullyReady && meta?.lastErrorMessage && (
@@ -932,9 +1019,27 @@ export function ConnectWhatsAppHub({
           <AlertDialogHeader>
             <AlertDialogTitle>Select WhatsApp number</AlertDialogTitle>
             <AlertDialogDescription>
-              Pick the WhatsApp number you want to connect to this workspace. Test lines are labeled — avoid them for live customers.
+              Pick the WhatsApp number for this workspace. Production numbers are for live customers; test numbers are for Meta sandbox testing only.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {pickerHasProduction ? (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50/90 px-3 py-2 text-xs text-emerald-900">
+              A production WhatsApp number is available — select it to message real customers. Test numbers are disabled while a production line exists.
+            </div>
+          ) : null}
+          {selectedPhoneKind === "test" && !pickerHasProduction ? (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              <p className="font-semibold">Test number warning</p>
+              <p className="mt-1">
+                Meta test numbers cannot message real customers. Use this only for development and testing.
+              </p>
+            </div>
+          ) : null}
+          {selectedPhoneKind === "unknown" ? (
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+              This number could not be classified automatically. Confirm with Meta Business Manager that you are selecting your live business line.
+            </div>
+          ) : null}
           <div className="space-y-3 text-sm max-h-[min(60vh,420px)] overflow-y-auto pr-1">
             {(wabaChoices ?? []).map((c) => (
               <div
@@ -949,8 +1054,13 @@ export function ConnectWhatsAppHub({
                     const selected =
                       selectedWabaId === c.wabaId && selectedPhoneNumberId === p.id;
                     const kind = p.phoneKind ?? "unknown";
-                    const badge =
-                      kind === "test" ? "Test" : kind === "production" ? "Production" : "Unknown";
+                    const testDisabled = pickerHasProduction && kind === "test";
+                    const badgeLabel =
+                      kind === "test"
+                        ? "Test Number"
+                        : kind === "production"
+                          ? "Production Number"
+                          : "Unknown type";
                     const badgeClass =
                       kind === "test"
                         ? "bg-amber-100 text-amber-900 border-amber-200"
@@ -961,11 +1071,14 @@ export function ConnectWhatsAppHub({
                       <button
                         key={p.id}
                         type="button"
+                        disabled={testDisabled}
                         className={cn(
                           "w-full text-left px-3 py-2 flex items-start justify-between gap-2 hover:bg-slate-50/80",
-                          selected && "bg-emerald-50"
+                          selected && "bg-emerald-50",
+                          testDisabled && "opacity-50 cursor-not-allowed hover:bg-transparent",
                         )}
                         onClick={() => {
+                          if (testDisabled) return;
                           setSelectedWabaId(c.wabaId);
                           setSelectedPhoneNumberId(p.id);
                         }}
@@ -974,17 +1087,22 @@ export function ConnectWhatsAppHub({
                           <div className="text-sm text-slate-900 font-medium truncate">
                             {p.displayPhoneNumber || p.verifiedName || p.id}
                           </div>
-                          {p.verifiedName ? (
+                          {p.verifiedName && p.displayPhoneNumber ? (
                             <div className="text-[11px] text-slate-500 truncate">{p.verifiedName}</div>
+                          ) : null}
+                          {testDisabled ? (
+                            <div className="text-[11px] text-amber-800 mt-0.5">
+                              Disabled — connect your production number instead.
+                            </div>
                           ) : null}
                         </div>
                         <span
                           className={cn(
-                            "text-[10px] px-1.5 py-0.5 rounded border shrink-0 font-medium",
-                            badgeClass
+                            "text-[10px] px-1.5 py-0.5 rounded border shrink-0 font-semibold uppercase tracking-wide",
+                            badgeClass,
                           )}
                         >
-                          {badge}
+                          {badgeLabel}
                         </span>
                       </button>
                     );
@@ -1004,35 +1122,35 @@ export function ConnectWhatsAppHub({
             </AlertDialogCancel>
             <AlertDialogAction
               disabled={!wabaPickerState || !selectedWabaId || !selectedPhoneNumberId}
-              onClick={() => {
-                void (async () => {
-                  try {
-                    const res = await fetch("/api/integrations/whatsapp/meta/choose-waba", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      credentials: "include",
-                      body: JSON.stringify({
-                        state: wabaPickerState,
-                        wabaId: selectedWabaId,
-                        phoneNumberId: selectedPhoneNumberId,
-                      }),
-                    });
-                    const j = (await res.json()) as { success?: boolean; error?: string };
-                    if (!res.ok || !j.success) {
-                      setHubBanner({ variant: "error", message: j.error || "Could not finalize selection." });
-                      return;
-                    }
-                    setWabaPickerOpen(false);
-                    setHubBanner(null);
-                    setPostConnectHealthOpen(true);
-                    await refreshConnectionHealth(true);
-                  } catch (e: any) {
-                    setHubBanner({ variant: "error", message: e?.message || "Could not finalize selection." });
-                  }
-                })();
+              onClick={(e) => {
+                e.preventDefault();
+                handleWabaPickerConnectClick();
               }}
             >
               Connect selected account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={testConnectConfirmOpen} onOpenChange={setTestConnectConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Connect Meta test number?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to connect a Meta test number. It cannot message real customers and is intended for development and testing only. Add a production number in Meta Business Manager when you are ready to go live.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Choose a different number</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-600 hover:bg-amber-700"
+              onClick={(e) => {
+                e.preventDefault();
+                void finalizeWabaSelection();
+              }}
+            >
+              Connect test number anyway
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
