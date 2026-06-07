@@ -12,7 +12,7 @@ import { Link, useRoute, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useSubscription } from "@/lib/subscription-context";
-import { AIComposer, type AIComposerHandle } from "@/components/AIComposer";
+import { AIComposer, type AIComposerHandle, type ContactContext } from "@/components/AIComposer";
 import { WhatsAppTemplateRichPreview } from "@/components/WhatsAppTemplateRichPreview";
 import {
   CalendlyAppointmentChip,
@@ -86,7 +86,10 @@ import { useAICapabilities } from "@/lib/useAICapabilities";
 import type { ActivationStatusPayload } from "@/lib/activationStatus";
 import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 import { analyzeConversation } from "@/lib/conversationIntelligence";
-import type { ContactContext } from "@/components/AIComposer";
+import {
+  WHATSAPP_SETUP_INCOMPLETE_TITLE,
+  whatsappSetupIncompleteBannerText,
+} from "@shared/whatsappSetupMessages";
 import {
   formatBuyerPreferenceSummaryForAi,
 } from "@shared/buyerPreferenceDisplay";
@@ -233,11 +236,12 @@ interface WindowStatus {
 
 interface WhatsAppAvailability {
   available: boolean;
-  provider: "meta" | "twilio";
+  provider: "meta" | "twilio" | "none";
   fullyReady?: boolean;
   setupIncomplete?: boolean;
   reason?: string;
   message?: string;
+  bannerText?: string;
   readiness?: {
     wabaSaved: boolean;
     phoneSaved: boolean;
@@ -2854,12 +2858,20 @@ export function UnifiedInbox() {
             {whatsappNotReady && (
               <div className="border-t border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-950 flex gap-2 items-start shrink-0">
                 <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" aria-hidden />
-                <div>
-                  <p className="font-medium">WhatsApp setup incomplete</p>
-                  <p className="mt-0.5">
-                    {whatsappAvailability?.message ||
-                      "Finish WhatsApp setup in Settings before sending messages."}
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium leading-snug">
+                    {whatsappAvailability?.bannerText ||
+                      (whatsappAvailability?.message
+                        ? `${WHATSAPP_SETUP_INCOMPLETE_TITLE} — ${whatsappAvailability.message}`
+                        : whatsappSetupIncompleteBannerText({ activeProvider: "none" }))}
                   </p>
+                  <a
+                    href={settingsChannelsHref({ provider: "whatsapp" })}
+                    className="text-[11px] text-amber-900 font-medium underline underline-offset-2 mt-1 inline-block"
+                    data-testid="whatsapp-setup-incomplete-settings-link"
+                  >
+                    Open WhatsApp settings →
+                  </a>
                 </div>
               </div>
             )}

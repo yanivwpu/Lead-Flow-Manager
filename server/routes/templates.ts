@@ -29,6 +29,8 @@ import { isPersistableWhatsAppTemplateDefaultUrl } from "../templateMediaPersist
 import { getUserTwilioClient } from "../userTwilio";
 import { subscriptionService } from "../subscriptionService";
 import { withAutomationSendGuard, automationSendGuardBlockUserMessage } from "../automationSendGuard";
+import { getWhatsAppAvailability } from "../whatsappService";
+import { whatsappProviderNotReadyError, resolveWhatsAppActiveProvider } from "@shared/whatsappSetupMessages";
 import { RE_ENGAGEMENT_REOPENABLE_CONVERSATION_STATUSES } from "@shared/automationSendGuardMessages";
 import {
   extractPlaceholderKeysFromCampaignMessages,
@@ -101,7 +103,10 @@ function formatFriendlyMetaTemplateUserMessage(metaErr: unknown): string {
     httpStatus?: number;
   };
   if (e.fetchFailureKind === "missing_token_or_phone_number_id") {
-    return String(e.message || "Connect WhatsApp (Meta) in Settings.");
+    return whatsappProviderNotReadyError({
+      activeProvider: "meta",
+      metaConnected: false,
+    });
   }
   if (
     e.fetchFailureKind === "timeout" ||
@@ -1059,17 +1064,21 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       // Provider detection (supports Meta, Twilio, and future providers)
-      const providerPref = (user.whatsappProvider || "").toString().trim().toLowerCase();
-      const isMetaConnected = !!user.metaConnected;
-      const isTwilioConnected = !!user.twilioConnected;
-      const resolvedProvider =
-        providerPref === "meta" || providerPref === "twilio"
-          ? providerPref
-          : isMetaConnected
-            ? "meta"
-            : isTwilioConnected
-              ? "twilio"
-              : "none";
+      const resolvedProvider = resolveWhatsAppActiveProvider(user);
+      const waSyncAvailability = await getWhatsAppAvailability(req.user.id);
+      if (!waSyncAvailability.available) {
+        return res.status(403).json({
+          error:
+            waSyncAvailability.bannerText ||
+            whatsappProviderNotReadyError({
+              activeProvider: waSyncAvailability.provider,
+              metaConnected: !!user.metaConnected,
+              readiness: waSyncAvailability.readiness,
+            }),
+          provider: waSyncAvailability.provider,
+          reason: waSyncAvailability.reason,
+        });
+      }
 
       const wabaId = user.metaBusinessAccountId ? String(user.metaBusinessAccountId) : null;
 
@@ -1117,7 +1126,11 @@ export function registerTemplateRoutes(app: Express): void {
             })}`
           );
           return res.status(400).json({
-            error: "Meta WhatsApp account not connected",
+            error: whatsappProviderNotReadyError({
+              activeProvider: "meta",
+              metaConnected: !!user.metaConnected,
+              readiness: waSyncAvailability.readiness,
+            }),
           });
         }
 
@@ -1236,7 +1249,7 @@ export function registerTemplateRoutes(app: Express): void {
             })}`
           );
           return res.status(400).json({
-            error: "Twilio WhatsApp account not connected",
+            error: whatsappProviderNotReadyError({ activeProvider: "twilio" }),
           });
         }
 
@@ -1344,7 +1357,9 @@ export function registerTemplateRoutes(app: Express): void {
             error: "no_provider_connected",
           })}`
         );
-        return res.status(400).json({ error: "No WhatsApp provider connected" });
+        return res.status(400).json({
+          error: whatsappProviderNotReadyError({ activeProvider: "none" }),
+        });
       }
 
       console.log(
@@ -2015,17 +2030,30 @@ export function registerTemplateRoutes(app: Express): void {
         return reply(404, { error: "User not found" }, "user_session_not_found");
       }
 
-      const providerPref = (user.whatsappProvider || "").toString().trim().toLowerCase();
-      const isMetaConnected = !!user.metaConnected;
-      const isTwilioConnected = !!user.twilioConnected;
-      const resolvedProvider =
-        providerPref === "meta" || providerPref === "twilio"
-          ? providerPref
-          : isMetaConnected
-            ? "meta"
-            : isTwilioConnected
-              ? "twilio"
-              : "none";
+      const waAvailability = await getWhatsAppAvailability(req.user.id);
+      if (!waAvailability.available) {
+        console.warn(
+          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=403 reason=whatsapp_not_available userId=${req.user.id} provider=${waAvailability.provider} waReason=${waAvailability.reason ?? "null"}`
+        );
+        return reply(
+          403,
+          {
+            error:
+              waAvailability.bannerText ||
+              whatsappProviderNotReadyError({
+                activeProvider: waAvailability.provider,
+                metaConnected: !!user.metaConnected,
+                readiness: waAvailability.readiness,
+              }),
+            provider: waAvailability.provider,
+            reason: waAvailability.reason,
+            readiness: waAvailability.readiness,
+          },
+          "whatsapp_not_available"
+        );
+      }
+
+      const resolvedProvider = resolveWhatsAppActiveProvider(user);
 
       const phoneNumberId = user.metaPhoneNumberId ? String(user.metaPhoneNumberId) : null;
       const wabaId = user.metaBusinessAccountId ? String(user.metaBusinessAccountId) : null;
@@ -2118,19 +2146,11 @@ export function registerTemplateRoutes(app: Express): void {
         console.warn(
           `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=no_whatsapp_provider userId=${req.user.id}`
         );
-        console.warn(
-          `[WA_TEMPLATE_SEND] ${JSON.stringify({
-            phase: "error",
-            provider: resolvedProvider,
-            templateName: template.name,
-            language: templateLang,
-            phoneNumberId,
-            recipient: recipientLog,
-            responseStatus: 400,
-            metaError: "no_provider_connected",
-          })}`
+        return reply(
+          400,
+          { error: whatsappProviderNotReadyError({ activeProvider: "none" }) },
+          "no_whatsapp_provider"
         );
-        return reply(400, { error: "No WhatsApp provider connected" }, "no_whatsapp_provider");
       }
 
       if (resolvedProvider === "meta") {
@@ -2138,21 +2158,15 @@ export function registerTemplateRoutes(app: Express): void {
           console.warn(
             `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=meta_not_connected userId=${req.user.id} metaConnected=${!!user.metaConnected} hasPhoneNumberId=${!!phoneNumberId}`
           );
-          console.warn(
-            `[WA_TEMPLATE_SEND] ${JSON.stringify({
-              phase: "error",
-              provider: resolvedProvider,
-              templateName: template.name,
-              language: templateLang,
-              phoneNumberId,
-              recipient: recipientLog,
-              responseStatus: 400,
-              metaError: "meta_not_connected",
-            })}`
-          );
           return reply(
             400,
-            { error: "Meta WhatsApp account not connected" },
+            {
+              error: whatsappProviderNotReadyError({
+                activeProvider: "meta",
+                metaConnected: !!user.metaConnected,
+                readiness: waAvailability.readiness,
+              }),
+            },
             "meta_not_connected"
           );
         }

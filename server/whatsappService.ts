@@ -1,5 +1,11 @@
 import type { User } from "@shared/schema";
 import {
+  resolveWhatsAppActiveProvider,
+  whatsappSetupIncompleteBannerText,
+  whatsappSetupIncompleteSubtitle,
+  type WhatsAppActiveProvider,
+} from "@shared/whatsappSetupMessages";
+import {
   evaluateMetaWhatsAppReadiness,
   isCanonicalWhatsAppFullyConnectedFromUser,
   type WhatsAppReadinessChecklist,
@@ -21,7 +27,7 @@ import {
   disconnectUserMeta,
 } from "./userMeta";
 
-export type WhatsAppProvider = "meta" | "twilio";
+export type WhatsAppProvider = "meta" | "twilio" | "none";
 
 // ─── Result types ────────────────────────────────────────────────────────────
 
@@ -30,6 +36,8 @@ export interface AvailabilityResult {
   provider: WhatsAppProvider;
   reason?: string;
   message?: string;
+  /** Full line for banners: "WhatsApp setup incomplete — …" */
+  bannerText?: string;
   /** Aligns with inbox gate — true only when send/receive is allowed. */
   fullyReady?: boolean;
   readiness?: WhatsAppReadinessChecklist;
@@ -80,9 +88,9 @@ export interface ProviderStatus {
 export function deriveWhatsappConnectedReason(
   user: Pick<User, "whatsappProvider" | "metaConnected" | "twilioConnected">
 ): WhatsappConnectedReason {
-  const pref: WhatsAppProvider = (user.whatsappProvider as WhatsAppProvider) || "twilio";
-  if (pref === "meta" && !!user.metaConnected) return "meta";
-  if (pref === "twilio" && !!user.twilioConnected) return "twilio";
+  const active = resolveWhatsAppActiveProvider(user);
+  if (active === "meta") return "meta";
+  if (active === "twilio") return "twilio";
   return "none";
 }
 
@@ -146,7 +154,7 @@ export async function syncWhatsAppChannelRowFromCanonicalMeta(userId: string): P
   const user = await storage.getUserForSession(userId);
   if (!user) return;
 
-  const activeProvider: WhatsAppProvider = (user.whatsappProvider as WhatsAppProvider) || "twilio";
+  const activeProvider: WhatsAppActiveProvider = resolveWhatsAppActiveProvider(user);
   if (activeProvider !== "meta") return;
   if (!isCanonicalWhatsAppFullyConnected(user)) return;
 
@@ -192,15 +200,27 @@ export async function getWhatsAppAvailability(userId: string): Promise<Availabil
   if (!user) {
     return {
       available: false,
-      provider: "twilio",
+      provider: "none",
       reason: "User not found",
       message: "User not found",
     };
   }
 
-  const provider: WhatsAppProvider = (user.whatsappProvider as WhatsAppProvider) || "twilio";
+  const activeProvider = resolveWhatsAppActiveProvider(user);
 
-  if (provider === "meta") {
+  if (activeProvider === "none") {
+    const messageOpts = { activeProvider: "none" as const };
+    const message = whatsappSetupIncompleteSubtitle(messageOpts);
+    return {
+      available: false,
+      provider: "none",
+      reason: "no_whatsapp_provider",
+      message,
+      bannerText: whatsappSetupIncompleteBannerText(messageOpts),
+    };
+  }
+
+  if (activeProvider === "meta") {
     const oauthDbg =
       user.metaLastOAuthDebug && typeof user.metaLastOAuthDebug === "object"
         ? (user.metaLastOAuthDebug as Record<string, unknown>)
@@ -211,34 +231,39 @@ export async function getWhatsAppAvailability(userId: string): Promise<Availabil
         : null;
     const readiness = buildMetaWhatsAppReadinessForUser(user, phoneGraphSnapshot);
     const ok = readiness.fullyReady;
+    const readinessChecklist: WhatsAppReadinessChecklist = {
+      wabaSaved: readiness.wabaSaved,
+      phoneSaved: readiness.phoneSaved,
+      phoneStatusReady: readiness.phoneStatusReady,
+      webhookSubscribed: readiness.webhookSubscribed,
+      inboxReady: readiness.inboxReady,
+    };
+    const messageOpts = {
+      activeProvider: "meta" as const,
+      metaConnected: !!user.metaConnected,
+      readiness: readinessChecklist,
+    };
     return {
       available: ok,
       provider: "meta",
       fullyReady: ok,
-      readiness: {
-        wabaSaved: readiness.wabaSaved,
-        phoneSaved: readiness.phoneSaved,
-        phoneStatusReady: readiness.phoneStatusReady,
-        webhookSubscribed: readiness.webhookSubscribed,
-        inboxReady: readiness.inboxReady,
-      },
+      readiness: readinessChecklist,
       setupIncomplete: readiness.setupIncomplete,
-      reason: ok ? undefined : "WhatsApp setup is incomplete or not ready for messaging",
-      message: ok
-        ? undefined
-        : readiness.setupIncomplete
-          ? "Finish WhatsApp setup in Settings — connection is not fully ready yet"
-          : "Connect Meta WhatsApp in Settings to send messages",
+      reason: ok ? undefined : "whatsapp_setup_incomplete",
+      message: ok ? undefined : whatsappSetupIncompleteSubtitle(messageOpts),
+      bannerText: ok ? undefined : whatsappSetupIncompleteBannerText(messageOpts),
     };
   }
 
-  const isConnected = user.twilioConnected || false;
+  const isConnected = !!user.twilioConnected;
+  const messageOpts = { activeProvider: "twilio" as const };
   return {
     available: isConnected,
     provider: "twilio",
     fullyReady: isConnected,
-    reason: isConnected ? undefined : "Twilio WhatsApp connection not found",
-    message: isConnected ? undefined : "Connect Twilio in Settings to send messages",
+    reason: isConnected ? undefined : "twilio_not_connected",
+    message: isConnected ? undefined : whatsappSetupIncompleteSubtitle(messageOpts),
+    bannerText: isConnected ? undefined : whatsappSetupIncompleteBannerText(messageOpts),
   };
 }
 
@@ -259,7 +284,7 @@ export async function sendWhatsAppMessage(
       success: false,
       messageId: "",
       provider: availability.provider,
-      error: availability.reason,
+      error: availability.bannerText || availability.message || availability.reason,
     };
   }
 
@@ -297,7 +322,7 @@ export async function sendWhatsAppMedia(
       success: false,
       messageId: "",
       provider: availability.provider,
-      error: availability.reason,
+      error: availability.bannerText || availability.message || availability.reason,
     };
   }
 
