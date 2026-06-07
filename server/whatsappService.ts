@@ -1,8 +1,8 @@
 import type { User } from "@shared/schema";
 import {
   resolveWhatsAppActiveProvider,
-  whatsappSetupIncompleteBannerText,
-  whatsappSetupIncompleteSubtitle,
+  WHATSAPP_SETUP_INCOMPLETE_BANNER,
+  WHATSAPP_SETUP_INCOMPLETE_SUBTITLE,
   type WhatsAppActiveProvider,
 } from "@shared/whatsappSetupMessages";
 import {
@@ -209,14 +209,12 @@ export async function getWhatsAppAvailability(userId: string): Promise<Availabil
   const activeProvider = resolveWhatsAppActiveProvider(user);
 
   if (activeProvider === "none") {
-    const messageOpts = { activeProvider: "none" as const };
-    const message = whatsappSetupIncompleteSubtitle(messageOpts);
     return {
       available: false,
       provider: "none",
       reason: "no_whatsapp_provider",
-      message,
-      bannerText: whatsappSetupIncompleteBannerText(messageOpts),
+      message: WHATSAPP_SETUP_INCOMPLETE_SUBTITLE,
+      bannerText: WHATSAPP_SETUP_INCOMPLETE_BANNER,
     };
   }
 
@@ -238,11 +236,6 @@ export async function getWhatsAppAvailability(userId: string): Promise<Availabil
       webhookSubscribed: readiness.webhookSubscribed,
       inboxReady: readiness.inboxReady,
     };
-    const messageOpts = {
-      activeProvider: "meta" as const,
-      metaConnected: !!user.metaConnected,
-      readiness: readinessChecklist,
-    };
     return {
       available: ok,
       provider: "meta",
@@ -250,20 +243,19 @@ export async function getWhatsAppAvailability(userId: string): Promise<Availabil
       readiness: readinessChecklist,
       setupIncomplete: readiness.setupIncomplete,
       reason: ok ? undefined : "whatsapp_setup_incomplete",
-      message: ok ? undefined : whatsappSetupIncompleteSubtitle(messageOpts),
-      bannerText: ok ? undefined : whatsappSetupIncompleteBannerText(messageOpts),
+      message: ok ? undefined : WHATSAPP_SETUP_INCOMPLETE_SUBTITLE,
+      bannerText: ok ? undefined : WHATSAPP_SETUP_INCOMPLETE_BANNER,
     };
   }
 
   const isConnected = !!user.twilioConnected;
-  const messageOpts = { activeProvider: "twilio" as const };
   return {
     available: isConnected,
     provider: "twilio",
     fullyReady: isConnected,
     reason: isConnected ? undefined : "twilio_not_connected",
-    message: isConnected ? undefined : whatsappSetupIncompleteSubtitle(messageOpts),
-    bannerText: isConnected ? undefined : whatsappSetupIncompleteBannerText(messageOpts),
+    message: isConnected ? undefined : WHATSAPP_SETUP_INCOMPLETE_SUBTITLE,
+    bannerText: isConnected ? undefined : WHATSAPP_SETUP_INCOMPLETE_BANNER,
   };
 }
 

@@ -86,10 +86,7 @@ import { useAICapabilities } from "@/lib/useAICapabilities";
 import type { ActivationStatusPayload } from "@/lib/activationStatus";
 import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 import { analyzeConversation } from "@/lib/conversationIntelligence";
-import {
-  WHATSAPP_SETUP_INCOMPLETE_TITLE,
-  whatsappSetupIncompleteBannerText,
-} from "@shared/whatsappSetupMessages";
+import { WHATSAPP_SETUP_INCOMPLETE_BANNER } from "@shared/whatsappSetupMessages";
 import {
   formatBuyerPreferenceSummaryForAi,
 } from "@shared/buyerPreferenceDisplay";
@@ -2858,21 +2855,9 @@ export function UnifiedInbox() {
             {whatsappNotReady && (
               <div className="border-t border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-950 flex gap-2 items-start shrink-0">
                 <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" aria-hidden />
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium leading-snug">
-                    {whatsappAvailability?.bannerText ||
-                      (whatsappAvailability?.message
-                        ? `${WHATSAPP_SETUP_INCOMPLETE_TITLE} — ${whatsappAvailability.message}`
-                        : whatsappSetupIncompleteBannerText({ activeProvider: "none" }))}
-                  </p>
-                  <a
-                    href={settingsChannelsHref({ provider: "whatsapp" })}
-                    className="text-[11px] text-amber-900 font-medium underline underline-offset-2 mt-1 inline-block"
-                    data-testid="whatsapp-setup-incomplete-settings-link"
-                  >
-                    Open WhatsApp settings →
-                  </a>
-                </div>
+                <p className="font-medium leading-snug min-w-0 flex-1">
+                  {whatsappAvailability?.bannerText || WHATSAPP_SETUP_INCOMPLETE_BANNER}
+                </p>
               </div>
             )}
 

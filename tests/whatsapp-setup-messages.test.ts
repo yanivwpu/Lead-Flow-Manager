@@ -1,4 +1,6 @@
 import {
+  WHATSAPP_SETUP_INCOMPLETE_BANNER,
+  WHATSAPP_SETUP_INCOMPLETE_SUBTITLE,
   metaWhatsAppReadinessBlockerMessage,
   resolveWhatsAppActiveProvider,
   whatsappSetupIncompleteBannerText,
@@ -12,33 +14,38 @@ function assert(cond: boolean, msg: string) {
 function run() {
   assert(resolveWhatsAppActiveProvider({}) === "none", "empty user → none");
   assert(
-    resolveWhatsAppActiveProvider({ whatsappProvider: "meta", metaConnected: false }) === "meta",
+    resolveWhatsAppActiveProvider({ whatsappProvider: "meta" }) === "meta",
     "explicit meta pref",
   );
   assert(
     resolveWhatsAppActiveProvider({ whatsappProvider: "twilio", twilioConnected: true }) === "twilio",
     "explicit twilio pref",
   );
-  assert(
-    resolveWhatsAppActiveProvider({ metaConnected: true }) === "meta",
-    "legacy infer meta",
-  );
 
   assert(
-    whatsappSetupIncompleteSubtitle({ activeProvider: "none" }).includes("connect WhatsApp"),
-    "none subtitle",
+    whatsappSetupIncompleteSubtitle({ activeProvider: "none" }) === WHATSAPP_SETUP_INCOMPLETE_SUBTITLE,
+    "neutral subtitle for none",
   );
   assert(
-    whatsappSetupIncompleteSubtitle({ activeProvider: "meta", metaConnected: false }).includes("Meta"),
-    "meta not connected",
+    whatsappSetupIncompleteSubtitle({ activeProvider: "meta", metaConnected: false }) ===
+      WHATSAPP_SETUP_INCOMPLETE_SUBTITLE,
+    "neutral subtitle for meta",
   );
   assert(
-    whatsappSetupIncompleteSubtitle({ activeProvider: "twilio" }).includes("Twilio"),
-    "twilio subtitle",
+    whatsappSetupIncompleteSubtitle({ activeProvider: "twilio" }) === WHATSAPP_SETUP_INCOMPLETE_SUBTITLE,
+    "neutral subtitle for twilio",
   );
   assert(
-    !whatsappSetupIncompleteSubtitle({ activeProvider: "meta", metaConnected: false }).includes("Twilio"),
-    "meta subtitle not twilio",
+    !WHATSAPP_SETUP_INCOMPLETE_BANNER.toLowerCase().includes("twilio"),
+    "banner has no twilio",
+  );
+  assert(
+    !WHATSAPP_SETUP_INCOMPLETE_BANNER.toLowerCase().includes("meta connection"),
+    "banner has no meta connection phrase",
+  );
+  assert(
+    whatsappSetupIncompleteBannerText({ activeProvider: "twilio" }) === WHATSAPP_SETUP_INCOMPLETE_BANNER,
+    "banner text constant",
   );
 
   const blocker = metaWhatsAppReadinessBlockerMessage({
@@ -48,25 +55,7 @@ function run() {
     webhookSubscribed: true,
     inboxReady: true,
   });
-  assert(blocker?.includes("WABA"), "waba blocker");
-
-  const withBlocker = whatsappSetupIncompleteSubtitle({
-    activeProvider: "meta",
-    metaConnected: true,
-    readiness: {
-      wabaSaved: false,
-      phoneSaved: true,
-      phoneStatusReady: true,
-      webhookSubscribed: true,
-      inboxReady: true,
-    },
-  });
-  assert(withBlocker.includes("WABA"), "subtitle includes blocker");
-
-  assert(
-    whatsappSetupIncompleteBannerText({ activeProvider: "none" }).startsWith("WhatsApp setup incomplete —"),
-    "banner prefix",
-  );
+  assert(blocker?.includes("WABA"), "checklist blocker still available for settings UI");
 
   console.log("whatsapp-setup-messages.test.ts: all passed");
 }

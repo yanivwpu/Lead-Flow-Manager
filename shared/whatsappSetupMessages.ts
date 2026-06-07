@@ -1,5 +1,5 @@
 /**
- * Provider-aware WhatsApp setup / readiness copy for inbox, composer banners, and template send errors.
+ * WhatsApp setup / readiness copy for inbox banners and send errors.
  */
 
 import type { WhatsAppReadinessChecklist } from "./whatsappReadiness";
@@ -7,6 +7,12 @@ import type { WhatsAppReadinessChecklist } from "./whatsappReadiness";
 export type WhatsAppActiveProvider = "meta" | "twilio" | "none";
 
 export const WHATSAPP_SETUP_INCOMPLETE_TITLE = "WhatsApp setup incomplete";
+
+/** Provider-neutral inbox banner (Meta is default; Twilio is legacy). */
+export const WHATSAPP_SETUP_INCOMPLETE_SUBTITLE =
+  "finish WhatsApp setup in Settings to send messages.";
+
+export const WHATSAPP_SETUP_INCOMPLETE_BANNER = `${WHATSAPP_SETUP_INCOMPLETE_TITLE} — ${WHATSAPP_SETUP_INCOMPLETE_SUBTITLE}`;
 
 export function resolveWhatsAppActiveProvider(user: {
   whatsappProvider?: string | null;
@@ -23,7 +29,7 @@ export function resolveWhatsAppActiveProvider(user: {
   return "none";
 }
 
-/** First failing Meta readiness step, when connected but not fully ready. */
+/** First failing Meta readiness step — used by Settings health checklist, not inbox banner. */
 export function metaWhatsAppReadinessBlockerMessage(
   readiness: Partial<WhatsAppReadinessChecklist> | null | undefined,
 ): string | null {
@@ -38,44 +44,25 @@ export function metaWhatsAppReadinessBlockerMessage(
 
 export type WhatsAppSetupIncompleteMessageOpts = {
   activeProvider: WhatsAppActiveProvider;
-  /** Meta OAuth / embedded signup completed but checklist may be incomplete. */
   metaConnected?: boolean;
   readiness?: Partial<WhatsAppReadinessChecklist> | null;
 };
 
-/**
- * Subtitle shown after the title (or after "WhatsApp setup incomplete —").
- * Does not include the title prefix.
- */
+/** Subtitle after "WhatsApp setup incomplete —" (provider-neutral). */
 export function whatsappSetupIncompleteSubtitle(
-  opts: WhatsAppSetupIncompleteMessageOpts,
+  _opts?: WhatsAppSetupIncompleteMessageOpts,
 ): string {
-  if (opts.activeProvider === "none") {
-    return "connect WhatsApp in Settings to send messages.";
-  }
-  if (opts.activeProvider === "twilio") {
-    return "finish Twilio connection in Settings to send messages.";
-  }
-  if (!opts.metaConnected) {
-    return "finish Meta connection in Settings to send messages.";
-  }
-  const blocker = metaWhatsAppReadinessBlockerMessage(opts.readiness);
-  if (blocker) {
-    return `${blocker} Finish setup in Settings to send messages.`;
-  }
-  return "finish Meta connection in Settings to send messages.";
+  return WHATSAPP_SETUP_INCOMPLETE_SUBTITLE;
 }
 
-/** Full banner line: "WhatsApp setup incomplete — …" */
 export function whatsappSetupIncompleteBannerText(
-  opts: WhatsAppSetupIncompleteMessageOpts,
+  _opts?: WhatsAppSetupIncompleteMessageOpts,
 ): string {
-  return `${WHATSAPP_SETUP_INCOMPLETE_TITLE} — ${whatsappSetupIncompleteSubtitle(opts)}`;
+  return WHATSAPP_SETUP_INCOMPLETE_BANNER;
 }
 
-/** Template sync / send errors when WhatsApp is not ready. */
 export function whatsappProviderNotReadyError(
-  opts: WhatsAppSetupIncompleteMessageOpts,
+  _opts?: WhatsAppSetupIncompleteMessageOpts,
 ): string {
-  return whatsappSetupIncompleteBannerText(opts);
+  return WHATSAPP_SETUP_INCOMPLETE_BANNER;
 }
