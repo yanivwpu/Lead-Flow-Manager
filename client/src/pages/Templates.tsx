@@ -82,6 +82,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useLocation, useSearch } from "wouter";
 import { useTranslation } from "react-i18next";
 import { formatDistanceToNow, format } from "date-fns";
+import { automationSendGuardBlockUserMessage } from "@shared/automationSendGuardMessages";
 import { isResendCoolingDown } from "@shared/reEngagement";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -1335,25 +1336,37 @@ export function Templates() {
       setCarouselCardMediaByIndex({});
       setCarouselSavedDefaultsHint(false);
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/templates/retargetable-chats"] });
-      const msg = String(error?.message || "");
+      const msg = String((error as { message?: string })?.message || "");
       const afterStatus = msg.replace(/^\d+:\s*/, "");
       let clean = afterStatus;
       try {
-        const parsed = JSON.parse(afterStatus) as { error?: string };
+        const parsed = JSON.parse(afterStatus) as {
+          error?: string;
+          reason?: string;
+          detail?: string | null;
+        };
         if (typeof parsed?.error === "string" && parsed.error.trim()) {
           clean = parsed.error.trim();
+        } else if (typeof parsed?.reason === "string" && parsed.reason.trim()) {
+          clean = automationSendGuardBlockUserMessage(parsed.reason, parsed.detail);
         }
       } catch {
         clean = afterStatus.replace(/^\{"error":"/, "").replace(/"\}$/, "");
       }
       if (/^\s*\{/.test(clean)) {
         try {
-          const parsed2 = JSON.parse(clean) as { error?: string };
+          const parsed2 = JSON.parse(clean) as {
+            error?: string;
+            reason?: string;
+            detail?: string | null;
+          };
           if (typeof parsed2?.error === "string" && parsed2.error.trim()) {
             clean = parsed2.error.trim();
+          } else if (typeof parsed2?.reason === "string" && parsed2.reason.trim()) {
+            clean = automationSendGuardBlockUserMessage(parsed2.reason, parsed2.detail);
           }
         } catch {
           /* keep clean */

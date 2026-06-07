@@ -1,5 +1,13 @@
+import {
+  automationSendGuardBlockUserMessage,
+  HARD_BLOCKED_CONVERSATION_STATUSES,
+  RE_ENGAGEMENT_REOPENABLE_CONVERSATION_STATUSES,
+  type AutomationSendGuardBlockReason as SharedAutomationSendGuardBlockReason,
+} from "@shared/automationSendGuardMessages";
 import { storage } from "./storage";
 import type { Channel, Contact, Conversation } from "@shared/schema";
+
+export { automationSendGuardBlockUserMessage };
 
 export type AutomationSendDedupResult<T> =
   | { ok: true; result: T }
@@ -16,15 +24,7 @@ export type AutomationSendGuardSource =
   | "chatbot"
   | "campaign";
 
-export type AutomationSendGuardBlockReason =
-  | "missing_idempotency_key"
-  | "contact_missing"
-  | "contact_wrong_user"
-  | "do_not_contact"
-  | "unsubscribed"
-  | "channel_ineligible"
-  | "conversation_inactive"
-  | "duplicate";
+export type AutomationSendGuardBlockReason = SharedAutomationSendGuardBlockReason;
 
 export type AutomationSendGuardDecision =
   | { ok: true; contact: Contact; conversation?: Conversation; channel?: Channel }
@@ -40,6 +40,11 @@ export type AutomationSendGuardParams = {
   conversationId?: string | null;
   /** Most automation sends should not create/reopen closed conversations. */
   allowMissingConversation?: boolean;
+  /**
+   * WhatsApp re-engagement template sends (`templates_campaign`) may target conversations
+   * closed/resolved/archived/inactive; hard blocks (blocked/deleted/wrong_user) still apply.
+   */
+  allowReEngagementTemplateSend?: boolean;
 };
 
 function normalizedChannel(channel: unknown): Channel | undefined {
@@ -99,10 +104,25 @@ function contactEligibleForChannel(contact: Contact, channel: Channel | undefine
   }
 }
 
-function conversationInactive(conversation: Conversation | undefined): boolean {
+export function isConversationInactiveForAutomation(
+  conversation: Conversation | undefined,
+  opts?: { allowReEngagementTemplateSend?: boolean }
+): boolean {
   if (!conversation) return false;
   const status = String(conversation.status || "").toLowerCase();
-  return ["closed", "resolved", "archived", "inactive", "blocked", "deleted"].includes(status);
+  if ((HARD_BLOCKED_CONVERSATION_STATUSES as readonly string[]).includes(status)) {
+    return true;
+  }
+  if (
+    opts?.allowReEngagementTemplateSend &&
+    (RE_ENGAGEMENT_REOPENABLE_CONVERSATION_STATUSES as readonly string[]).includes(status)
+  ) {
+    return false;
+  }
+  return [
+    ...RE_ENGAGEMENT_REOPENABLE_CONVERSATION_STATUSES,
+    ...HARD_BLOCKED_CONVERSATION_STATUSES,
+  ].includes(status as (typeof RE_ENGAGEMENT_REOPENABLE_CONVERSATION_STATUSES)[number]);
 }
 
 export async function evaluateAutomationSendGuard(
@@ -140,7 +160,11 @@ export async function evaluateAutomationSendGuard(
     conversation = await storage.getConversationByContactAndChannel(contact.id, channel);
   }
 
-  if (conversationInactive(conversation)) {
+  if (
+    isConversationInactiveForAutomation(conversation, {
+      allowReEngagementTemplateSend: params.allowReEngagementTemplateSend,
+    })
+  ) {
     return {
       ok: false,
       reason: "conversation_inactive",

@@ -28,7 +28,8 @@ import { WA_TEMPLATE_MEDIA_NEEDS_CONVERSION_MESSAGE } from "../waTemplateMediaUs
 import { isPersistableWhatsAppTemplateDefaultUrl } from "../templateMediaPersistPolicy";
 import { getUserTwilioClient } from "../userTwilio";
 import { subscriptionService } from "../subscriptionService";
-import { withAutomationSendGuard } from "../automationSendGuard";
+import { withAutomationSendGuard, automationSendGuardBlockUserMessage } from "../automationSendGuard";
+import { RE_ENGAGEMENT_REOPENABLE_CONVERSATION_STATUSES } from "@shared/automationSendGuardMessages";
 import {
   extractPlaceholderKeysFromCampaignMessages,
   getPresetCampaignStepCount,
@@ -1951,6 +1952,7 @@ export function registerTemplateRoutes(app: Express): void {
         typeof idempotencyKey === "string" && idempotencyKey.trim()
           ? idempotencyKey.trim()
           : `template:${sendSourceTag}:${req.user.id}:${crmContactId}:${template.id}:${JSON.stringify(variables || {}).slice(0, 240)}:${Math.floor(Date.now() / 60_000)}`;
+      const isReEngagementCampaignSend = sendSourceTag === "templates_campaign";
       const templateGuard = await withAutomationSendGuard({
         userId: req.user.id,
         contactId: crmContactId,
@@ -1958,15 +1960,16 @@ export function registerTemplateRoutes(app: Express): void {
         channel: "whatsapp",
         source: "template",
         idempotencyKey: templateGuardKey,
+        allowReEngagementTemplateSend: isReEngagementCampaignSend,
       }, async () => true);
       if (!templateGuard.ok) {
         console.warn(
-          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=409 reason=automation_send_guard_blocked guardReason=${templateGuard.reason}`
+          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=409 reason=automation_send_guard_blocked guardReason=${templateGuard.reason} guardDetail=${templateGuard.detail ?? "null"} contactId=${crmContactId} conversationId=${waConversationIdForReEngagement ?? "null"} templateId=${template.id}`
         );
         return reply(
           templateGuard.reason === "duplicate" ? 409 : 403,
           {
-            error: "Template send blocked by automation safety checks.",
+            error: automationSendGuardBlockUserMessage(templateGuard.reason, templateGuard.detail),
             reason: templateGuard.reason,
             detail: templateGuard.detail,
           },
@@ -1978,9 +1981,20 @@ export function registerTemplateRoutes(app: Express): void {
         if (!waConversationIdForReEngagement) return;
         const conv = await storage.getConversation(waConversationIdForReEngagement);
         const prev = parseConversationReEngagement(conv?.reEngagement);
-        await storage.updateConversation(waConversationIdForReEngagement, {
+        const patch: {
+          reEngagement: Record<string, unknown>;
+          status?: "open";
+        } = {
           reEngagement: buildReEngagementAfterSuccessfulSend(template.name, prev) as Record<string, unknown>,
-        });
+        };
+        const convStatus = String(conv?.status || "").toLowerCase();
+        if (
+          isReEngagementCampaignSend &&
+          (RE_ENGAGEMENT_REOPENABLE_CONVERSATION_STATUSES as readonly string[]).includes(convStatus)
+        ) {
+          patch.status = "open";
+        }
+        await storage.updateConversation(waConversationIdForReEngagement, patch);
       };
 
       const persistReEngagementFailure = async () => {
