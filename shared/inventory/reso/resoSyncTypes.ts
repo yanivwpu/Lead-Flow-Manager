@@ -9,6 +9,8 @@ export type InventorySyncMode = ResoSyncMode;
 export const resoSyncCursorSchema = z.object({
   initialImportComplete: z.boolean().optional(),
   maxModificationTimestamp: z.string().optional(),
+  /** OData @odata.nextLink to resume an interrupted initial import. */
+  initialImportResumeUrl: z.string().optional(),
   lastReconciliationAt: z.string().optional(),
   lastSuccessfulSyncAt: z.string().optional(),
   lastFailedSyncAt: z.string().optional(),

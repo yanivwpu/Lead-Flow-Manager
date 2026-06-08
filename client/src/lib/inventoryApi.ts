@@ -1,4 +1,11 @@
 import { apiRequest } from "@/lib/queryClient";
+import {
+  DEFAULT_MAX_LISTINGS,
+  INVENTORY_MAX_LISTINGS_OPTIONS,
+  buildSyncScopeConfigPatch,
+  formatCommaSeparatedList,
+  type InventoryMaxListings,
+} from "@shared/inventory/reso/resoSyncScope";
 
 import {
   friendlyInventoryErrorMessage,
@@ -68,16 +75,44 @@ export type InventorySourceForm = MlsInventorySourceForm &
   TrestleInventorySourceForm & {
     datasetId: string;
     serverToken: string;
+    syncCities: string;
+    syncZipCodes: string;
+    maxListings: InventoryMaxListings;
   };
 
-export function buildMlsSourcePayload(form: MlsInventorySourceForm, isUpdate: boolean) {
+function syncScopeFromForm(form: Pick<InventorySourceForm, "syncCities" | "syncZipCodes" | "maxListings">) {
+  return buildSyncScopeConfigPatch(form);
+}
+
+export function readSyncScopeFromConfig(config: Record<string, unknown>): Pick<
+  InventorySourceForm,
+  "syncCities" | "syncZipCodes" | "maxListings"
+> {
+  const cities = Array.isArray(config.syncCities)
+    ? config.syncCities.filter((v): v is string => typeof v === "string")
+    : [];
+  const zipCodes = Array.isArray(config.syncZipCodes)
+    ? config.syncZipCodes.filter((v): v is string => typeof v === "string")
+    : [];
+  const maxRaw = config.maxListings;
+  const maxListings = INVENTORY_MAX_LISTINGS_OPTIONS.includes(maxRaw as InventoryMaxListings)
+    ? (maxRaw as InventoryMaxListings)
+    : DEFAULT_MAX_LISTINGS;
+  return {
+    syncCities: formatCommaSeparatedList(cities),
+    syncZipCodes: formatCommaSeparatedList(zipCodes),
+    maxListings,
+  };
+}
+
+export function buildMlsSourcePayload(form: InventorySourceForm, isUpdate: boolean) {
   const defaultName = typeof import.meta !== "undefined" && import.meta.env?.PROD
     ? "My MLS inventory"
     : "Primary inventory source";
   const payload: {
     provider: "mls_grid";
     displayName: string;
-    config: { originatingSystemName: string; expandMedia: boolean };
+    config: Record<string, unknown>;
     credentials?: { accessToken: string };
   } = {
     provider: "mls_grid",
@@ -85,6 +120,7 @@ export function buildMlsSourcePayload(form: MlsInventorySourceForm, isUpdate: bo
     config: {
       originatingSystemName: form.originatingSystemName.trim(),
       expandMedia: true,
+      ...syncScopeFromForm(form),
     },
   };
   const token = form.accessToken.trim();
@@ -94,7 +130,7 @@ export function buildMlsSourcePayload(form: MlsInventorySourceForm, isUpdate: bo
   return payload;
 }
 
-export function buildTrestleSourcePayload(form: TrestleInventorySourceForm, isUpdate: boolean) {
+export function buildTrestleSourcePayload(form: InventorySourceForm, isUpdate: boolean) {
   const defaultName =
     typeof import.meta !== "undefined" && import.meta.env?.PROD
       ? "My Trestle inventory"
@@ -102,7 +138,7 @@ export function buildTrestleSourcePayload(form: TrestleInventorySourceForm, isUp
   const payload: {
     provider: "trestle";
     displayName: string;
-    config: { originatingSystemName: string; expandMedia: boolean };
+    config: Record<string, unknown>;
     credentials?: { clientId: string; clientSecret: string };
   } = {
     provider: "trestle",
@@ -110,6 +146,7 @@ export function buildTrestleSourcePayload(form: TrestleInventorySourceForm, isUp
     config: {
       originatingSystemName: form.originatingSystemName.trim(),
       expandMedia: true,
+      ...syncScopeFromForm(form),
     },
   };
   const clientId = form.clientId.trim();
@@ -120,10 +157,7 @@ export function buildTrestleSourcePayload(form: TrestleInventorySourceForm, isUp
   return payload;
 }
 
-export function buildBridgeSourcePayload(
-  form: Pick<InventorySourceForm, "displayName" | "datasetId" | "serverToken">,
-  isUpdate: boolean,
-) {
+export function buildBridgeSourcePayload(form: InventorySourceForm, isUpdate: boolean) {
   const defaultName =
     typeof import.meta !== "undefined" && import.meta.env?.PROD
       ? "My Bridge inventory"
@@ -131,7 +165,7 @@ export function buildBridgeSourcePayload(
   const payload: {
     provider: "bridge_interactive";
     displayName: string;
-    config: { datasetId: string; expandMedia: boolean };
+    config: Record<string, unknown>;
     credentials?: { serverToken: string };
   } = {
     provider: "bridge_interactive",
@@ -139,6 +173,7 @@ export function buildBridgeSourcePayload(
     config: {
       datasetId: form.datasetId.trim(),
       expandMedia: true,
+      ...syncScopeFromForm(form),
     },
   };
   const serverToken = form.serverToken.trim();

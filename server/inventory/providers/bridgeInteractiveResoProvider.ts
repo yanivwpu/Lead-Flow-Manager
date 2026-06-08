@@ -4,6 +4,11 @@ import {
 } from "@shared/inventory/inventoryListingSchema";
 import { buildODataFilter } from "@shared/inventory/reso/resoOData";
 import {
+  appendScopeToPropertyFilter,
+  buildSyncableStandardStatusFilter,
+  readInventorySyncScope,
+} from "@shared/inventory/reso/resoSyncScope";
+import {
   defaultResoListingId,
   mapResoStandardStatus,
   normalizeResoMediaItems,
@@ -53,14 +58,11 @@ export function normalizeBridgeInteractiveProperty(raw: unknown) {
 
 function buildBridgePropertyFilter(
   mode: ResoSyncMode,
-  maxModificationTimestamp?: string,
-  additionalFilter?: string,
+  maxModificationTimestamp: string | undefined,
+  additionalFilter: string | undefined,
+  scope: ReturnType<typeof readInventorySyncScope>,
 ): string {
   const clauses: string[] = [];
-
-  if (mode === "initial" || mode === "reconciliation") {
-    clauses.push("StandardStatus eq 'Active'");
-  }
 
   if ((mode === "incremental" || mode === "initial") && maxModificationTimestamp) {
     clauses.push(`${BRIDGE_MODIFICATION_FIELD} gt ${maxModificationTimestamp}`);
@@ -70,7 +72,8 @@ function buildBridgePropertyFilter(
     clauses.push(additionalFilter.trim());
   }
 
-  return buildODataFilter(clauses);
+  const base = buildODataFilter(clauses);
+  return appendScopeToPropertyFilter(base, mode, scope);
 }
 
 export function createBridgeInteractiveResoProvider(
@@ -100,8 +103,16 @@ export function createBridgeInteractiveResoProvider(
     resolvePageSize(mode) {
       return mode === "reconciliation" ? BRIDGE_STANDARD_PAGE_SIZE : BRIDGE_REPLICATION_PAGE_SIZE;
     },
+    resolveOrderBy(mode) {
+      return mode === "initial" ? `${BRIDGE_MODIFICATION_FIELD} desc` : undefined;
+    },
     buildPropertyFilter(mode, maxModificationTimestamp) {
-      return buildBridgePropertyFilter(mode, maxModificationTimestamp, cfg.additionalFilter);
+      return buildBridgePropertyFilter(
+        mode,
+        maxModificationTimestamp,
+        cfg.additionalFilter,
+        readInventorySyncScope(cfg),
+      );
     },
     buildPropertyQueryExtras(mode): ResoPropertyQueryExtras {
       if (mode === "reconciliation") {
@@ -147,7 +158,7 @@ export async function validateBridgeInteractiveResoConnection(ctx: InventoryAdap
   const probe = await runResoConnectionProbe(
     ctx.source.id,
     provider,
-    "StandardStatus eq 'Active'",
+    buildSyncableStandardStatusFilter(),
   );
 
   if (!probe.ok) {

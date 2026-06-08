@@ -1,4 +1,4 @@
-import { buildPropertyCollectionUrl } from "@shared/inventory/reso/resoOData";
+import { buildPropertyCollectionUrl, oDataNextLink, oDataValueRows } from "@shared/inventory/reso/resoOData";
 import type {
   ResoReplicationFetchOptions,
   ResoReplicationFetchResult,
@@ -29,7 +29,7 @@ function toSyncDiagnostics(
 
 /**
  * Shared RESO replication fetch — initial import, incremental sync, reconciliation.
- * Provider supplies auth, filters, and normalization only.
+ * When `onPage` is provided, rows are streamed page-by-page (not held in memory).
  */
 export async function runResoReplicationFetch(
   sourceKey: string,
@@ -42,6 +42,7 @@ export async function runResoReplicationFetch(
   const auth = provider.getAuth();
   const mode = options.mode;
   const modField = endpoint.modificationTimestampField ?? "ModificationTimestamp";
+  const streaming = typeof options.onPage === "function";
 
   const client = new ResoClient(
     sourceKey,
@@ -76,8 +77,7 @@ export async function runResoReplicationFetch(
           if (id) activeListingIds.push(id);
         }
       }
-      const next = body["@odata.nextLink"];
-      url = typeof next === "string" && next.length > 0 ? next : null;
+      url = oDataNextLink(body);
     }
 
     return {
@@ -95,24 +95,67 @@ export async function runResoReplicationFetch(
   const startUrl = buildPropertyCollectionUrl(endpoint.baseUrl, propertyResource, {
     filter,
     top: pageSize,
+    orderBy: provider.resolveOrderBy?.(mode),
     expand: extras.expand,
     select: extras.select,
     unselect: extras.unselect,
   });
 
-  const { rows: listings, pagesFetched } = await client.paginateCollection(
-    startUrl,
-    metrics,
-    options.onFetchProgress,
-  );
+  const accumulatedRows: unknown[] = [];
+  let pagesFetched = 0;
+  let rowsFetchedTotal = 0;
+  let runningMaxTs = options.maxModificationTimestamp;
+  let url: string | null =
+    options.resumeFromUrl && options.resumeFromUrl.trim().length > 0
+      ? options.resumeFromUrl
+      : startUrl;
 
-  const maxModificationTimestamp = maxTimestampFromRows(
-    listings,
-    modField,
-    options.maxModificationTimestamp,
-  );
+  while (url) {
+    const body = await client.fetchJson(url, metrics);
+    pagesFetched += 1;
+    let pageRows = oDataValueRows(body);
+    rowsFetchedTotal += pageRows.length;
+    runningMaxTs = maxTimestampFromRows(pageRows, modField, runningMaxTs);
 
-  const initialImportComplete = mode === "initial" ? true : undefined;
+    let stopAfterPage = false;
+    if (options.maxRows != null && options.maxRows > 0 && rowsFetchedTotal > options.maxRows) {
+      const overflow = rowsFetchedTotal - options.maxRows;
+      pageRows = pageRows.slice(0, Math.max(0, pageRows.length - overflow));
+      rowsFetchedTotal = options.maxRows;
+      stopAfterPage = true;
+    }
+
+    if (streaming) {
+      const nextLink = stopAfterPage ? null : oDataNextLink(body);
+      await options.onPage!({
+        rows: pageRows,
+        pageNumber: pagesFetched,
+        nextLink,
+        rowsFetchedTotal,
+      });
+      if (options.onFetchProgress) {
+        await options.onFetchProgress({ pagesFetched, rowsFetched: rowsFetchedTotal });
+      }
+      url = nextLink;
+    } else {
+      accumulatedRows.push(...pageRows);
+      if (options.onFetchProgress) {
+        await options.onFetchProgress({ pagesFetched, rowsFetched: accumulatedRows.length });
+      }
+      if (stopAfterPage) {
+        url = null;
+      } else {
+        url = oDataNextLink(body);
+      }
+    }
+  }
+
+  const listings = streaming ? [] : accumulatedRows;
+  const maxModificationTimestamp = streaming
+    ? runningMaxTs
+    : maxTimestampFromRows(listings, modField, options.maxModificationTimestamp);
+
+  const initialImportComplete = mode === "initial" && !streaming ? true : undefined;
 
   return {
     listings,

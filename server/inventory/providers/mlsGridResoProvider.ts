@@ -4,6 +4,11 @@ import {
 } from "@shared/inventory/inventoryListingSchema";
 import { buildODataFilter, escapeODataString } from "@shared/inventory/reso/resoOData";
 import {
+  appendScopeToPropertyFilter,
+  buildSyncableStandardStatusFilter,
+  readInventorySyncScope,
+} from "@shared/inventory/reso/resoSyncScope";
+import {
   defaultResoListingId,
   mapResoStandardStatus,
   normalizeResoMediaItems,
@@ -50,8 +55,9 @@ export function normalizeMlsGridProperty(raw: unknown) {
 function buildMlsGridPropertyFilter(
   originatingSystemName: string,
   mode: ResoSyncMode,
-  maxModificationTimestamp?: string,
-  additionalFilter?: string,
+  maxModificationTimestamp: string | undefined,
+  additionalFilter: string | undefined,
+  scope: ReturnType<typeof readInventorySyncScope>,
 ): string {
   const clauses = [`OriginatingSystemName eq '${escapeODataString(originatingSystemName)}'`];
 
@@ -67,7 +73,8 @@ function buildMlsGridPropertyFilter(
     clauses.push(additionalFilter.trim());
   }
 
-  return buildODataFilter(clauses);
+  const base = buildODataFilter(clauses);
+  return appendScopeToPropertyFilter(base, mode, scope);
 }
 
 /** Build MLS Grid RESO replication contract from adapter context. */
@@ -95,7 +102,11 @@ export function createMlsGridResoProvider(ctx: InventoryAdapterContext): ResoRep
         mode,
         maxModificationTimestamp,
         cfg.additionalFilter,
+        readInventorySyncScope(cfg),
       );
+    },
+    resolveOrderBy(mode) {
+      return mode === "initial" ? "ModificationTimestamp desc" : undefined;
     },
     buildPropertyQueryExtras(mode): ResoPropertyQueryExtras {
       if (mode === "reconciliation") {

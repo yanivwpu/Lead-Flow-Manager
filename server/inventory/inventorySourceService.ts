@@ -201,10 +201,10 @@ export function buildAdapterContext(source: InventorySource): InventoryAdapterCo
 
 export async function listSourcesForUser(userId: string) {
   const rows = await listInventorySources(userId);
-  const { recoverOrphanedInventorySync } = await import("./inventorySyncService");
+  const { recoverStaleInventorySync } = await import("./inventorySyncService");
   const recovered: typeof rows = [];
   for (const row of rows) {
-    recovered.push(row.lastSyncStatus === "running" ? await recoverOrphanedInventorySync(row) : row);
+    recovered.push(row.lastSyncStatus === "running" ? await recoverStaleInventorySync(row) : row);
   }
   const counts = await countListingsBySourceForUser(userId);
   return recovered.map((row) => toPublicInventorySource(row, counts[row.id] ?? 0));

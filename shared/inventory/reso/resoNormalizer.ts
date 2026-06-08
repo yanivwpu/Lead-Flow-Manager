@@ -18,9 +18,17 @@ export function mapResoStandardStatus(raw: unknown): InventoryListingStatus {
   const s = String(raw ?? "").replace(/\s+/g, "");
   const lower = s.toLowerCase();
   if (lower === "active") return "active";
+  if (lower === "comingsoon") return "coming_soon";
   if (lower === "activeundercontract" || lower === "pending") return "pending";
   if (lower === "closed" || lower === "sold") return "sold";
-  if (lower === "canceled" || lower === "cancelled" || lower === "expired" || lower === "withdrawn") {
+  if (
+    lower === "canceled" ||
+    lower === "cancelled" ||
+    lower === "expired" ||
+    lower === "withdrawn" ||
+    lower === "rented" ||
+    lower === "leased"
+  ) {
     return "off_market";
   }
   if (lower === "inactive" || lower === "delete") return "inactive";
@@ -74,6 +82,12 @@ export function buildResoAddress(row: Record<string, unknown>): NormalizedInvent
   };
 }
 
+function resoOptionalNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 function normalizeResoTimestamp(value: unknown): string | undefined {
   if (value == null || value === "") return undefined;
   const d = value instanceof Date ? value : new Date(String(value));
@@ -109,15 +123,12 @@ export function normalizeResoPropertyRow(
     priceCents: resoListPriceToCents(row.ListPrice),
     currency: "USD",
     address: buildResoAddress(row),
-    latitude: typeof row.Latitude === "number" ? row.Latitude : null,
-    longitude: typeof row.Longitude === "number" ? row.Longitude : null,
-    beds: row.BedroomsTotal != null ? Number(row.BedroomsTotal) : null,
+    latitude: resoOptionalNumber(row.Latitude),
+    longitude: resoOptionalNumber(row.Longitude),
+    beds: resoOptionalNumber(row.BedroomsTotal),
     baths:
-      row.BathroomsTotalInteger != null
-        ? Number(row.BathroomsTotalInteger)
-        : row.BathroomsFull != null
-          ? Number(row.BathroomsFull)
-          : null,
+      resoOptionalNumber(row.BathroomsTotalInteger) ??
+      resoOptionalNumber(row.BathroomsFull),
     propertyType: mapResoPropertyType(row.PropertyType, row.PropertySubType),
     description:
       row.PublicRemarks != null
@@ -130,5 +141,53 @@ export function normalizeResoPropertyRow(
   };
 
   const parsed = normalizedInventoryListingSchema.safeParse(candidate);
-  return parsed.success ? parsed.data : null;
+  if (parsed.success) return parsed.data;
+  return null;
+}
+
+/** First validation issue for import diagnostics. */
+export function describeResoNormalizationFailure(
+  raw: unknown,
+  contract?: ResoPropertyNormalizerContract,
+  options?: { modificationTimestampField?: string },
+): string | null {
+  if (!raw || typeof raw !== "object") return "row is not an object";
+  if (!contract) {
+    const row = raw as Record<string, unknown>;
+    const id = row.ListingId ?? row.ListingKey;
+    if (id == null || String(id).trim() === "") return "missing ListingId/ListingKey";
+    return "listing failed normalization";
+  }
+  const row = raw as Record<string, unknown>;
+  const modField = options?.modificationTimestampField ?? "ModificationTimestamp";
+  const providerListingId = contract.extractListingId(row);
+  if (!providerListingId) return "missing ListingId/ListingKey";
+
+  const candidate = {
+    provider: contract.provider,
+    providerListingId,
+    status: contract.resolveStatus(row),
+    priceCents: resoListPriceToCents(row.ListPrice),
+    currency: "USD",
+    address: buildResoAddress(row),
+    latitude: resoOptionalNumber(row.Latitude),
+    longitude: resoOptionalNumber(row.Longitude),
+    beds: resoOptionalNumber(row.BedroomsTotal),
+    baths:
+      resoOptionalNumber(row.BathroomsTotalInteger) ?? resoOptionalNumber(row.BathroomsFull),
+    propertyType: mapResoPropertyType(row.PropertyType, row.PropertySubType),
+    description:
+      row.PublicRemarks != null
+        ? String(row.PublicRemarks).slice(0, 8000)
+        : undefined,
+    features: [] as string[],
+    photos: contract.extractPhotos?.(row) ?? normalizeResoMediaItems(row.Media),
+    listingUrl: contract.extractListingUrl?.(row) ?? null,
+    sourceUpdatedAt: normalizeResoTimestamp(row[modField]),
+  };
+
+  const parsed = normalizedInventoryListingSchema.safeParse(candidate);
+  if (parsed.success) return null;
+  const issue = parsed.error.issues[0];
+  return issue ? `${issue.path.join(".")}: ${issue.message}` : "schema validation failed";
 }

@@ -12,6 +12,7 @@ import {
   extractBuyerMatchCriteria,
   scoreListingAgainstCriteria,
 } from "@shared/inventory/inventoryMatchScoring";
+import { isMatchableInventoryStatus } from "@shared/inventory/inventoryListingSchema";
 import { readBuyerPreferenceProfile } from "../buyerPreferenceService";
 import { storage } from "../storage";
 import { canUseInventoryConnector } from "./inventoryGate";
@@ -78,7 +79,7 @@ async function processAlertResults(
 
   for (const alert of alertResults) {
     const listing = listingById.get(alert.listingId);
-    if (!listing || listing.status !== "active") continue;
+    if (!listing || !isMatchableInventoryStatus(listing.status)) continue;
 
     const opportunityType: InventoryOpportunityType | null =
       alert.syncAlertStatus === "new"
@@ -304,7 +305,7 @@ export async function findInventoryOpportunitiesForContact(
   const opportunities = rows
     .map((row) => {
       const listing = listingById.get(row.listingId);
-      if (!listing || listing.status !== "active") return null;
+      if (!listing || !isMatchableInventoryStatus(listing.status)) return null;
       return toPublicOpportunity(row, listing);
     })
     .filter(Boolean) as InventoryOpportunityResult[];

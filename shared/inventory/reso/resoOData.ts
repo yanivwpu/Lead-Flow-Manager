@@ -18,6 +18,7 @@ export function buildPropertyCollectionUrl(
   params: {
     filter?: string;
     top?: number;
+    orderBy?: string;
     expand?: string;
     select?: string;
     unselect?: string;
@@ -27,6 +28,7 @@ export function buildPropertyCollectionUrl(
   const query: string[] = [];
   if (params.filter) query.push(`$filter=${encodeODataFilter(params.filter)}`);
   if (params.top != null) query.push(`$top=${params.top}`);
+  if (params.orderBy) query.push(`$orderby=${encodeURIComponent(params.orderBy)}`);
   if (params.expand) query.push(`$expand=${encodeURIComponent(params.expand)}`);
   if (params.select) query.push(`$select=${encodeURIComponent(params.select)}`);
   if (params.unselect) query.push(`$unselect=${encodeURIComponent(params.unselect)}`);

@@ -23,6 +23,7 @@ import {
   fetchInventoryStatus,
   friendlyInventoryErrorMessage,
   formatInventorySyncStatRows,
+  readSyncScopeFromConfig,
   type InventorySourceForm,
   type PublicInventorySource,
 } from "@/lib/inventoryApi";
@@ -48,7 +49,7 @@ import {
 import type { InventoryProvider } from "@shared/inventory/inventoryProviderSchema";
 import { providerSupportsListingSync } from "@shared/inventory/inventoryProviderSchema";
 import { Home, RefreshCw, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2, XCircle } from "lucide-react";
-import { RGE_TEMPLATE_DETAIL_PATH } from "@shared/rgePaths";
+import { INVENTORY_MAX_LISTINGS_OPTIONS, DEFAULT_MAX_LISTINGS } from "@shared/inventory/reso/resoSyncScope";
 
 type Props = {
   variant?: "section" | "compact";
@@ -63,6 +64,9 @@ const EMPTY_FORM: InventorySourceForm = {
   clientSecret: "",
   datasetId: "",
   serverToken: "",
+  syncCities: "",
+  syncZipCodes: "",
+  maxListings: DEFAULT_MAX_LISTINGS,
 };
 
 const PRODUCTION_UI = import.meta.env.PROD;
@@ -123,6 +127,7 @@ function loadFormFromSource(source: PublicInventorySource | undefined): Inventor
     clientSecret: "",
     datasetId: typeof cfg.datasetId === "string" ? cfg.datasetId : "",
     serverToken: "",
+    ...readSyncScopeFromConfig(cfg),
   };
 }
 
@@ -554,6 +559,65 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         placeholder={defaultDisplayNamePlaceholder(selectedProvider)}
                         data-testid="input-inventory-display-name"
                       />
+                    </div>
+                    <div className="space-y-4 sm:col-span-2 rounded-md border border-border/60 bg-muted/20 p-4">
+                      <p className="text-sm font-medium">Market scope</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Sync only active and coming soon listings in your market. Use cities or ZIP codes
+                        to avoid importing the full MLS.
+                      </p>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor="inventory-sync-cities">Cities</Label>
+                          <Input
+                            id="inventory-sync-cities"
+                            value={form.syncCities}
+                            onChange={(e) => setForm((f) => ({ ...f, syncCities: e.target.value }))}
+                            placeholder="Fort Lauderdale, Miami, Hollywood"
+                            autoComplete="off"
+                            data-testid="input-inventory-sync-cities"
+                          />
+                          <p className="text-[11px] text-muted-foreground">Comma-separated city names.</p>
+                        </div>
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor="inventory-sync-zips">ZIP codes</Label>
+                          <Input
+                            id="inventory-sync-zips"
+                            value={form.syncZipCodes}
+                            onChange={(e) => setForm((f) => ({ ...f, syncZipCodes: e.target.value }))}
+                            placeholder="33301, 33304, 33139"
+                            autoComplete="off"
+                            data-testid="input-inventory-sync-zips"
+                          />
+                          <p className="text-[11px] text-muted-foreground">Comma-separated postal codes.</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="inventory-max-listings">Max listings</Label>
+                          <Select
+                            value={String(form.maxListings)}
+                            onValueChange={(value) =>
+                              setForm((f) => ({
+                                ...f,
+                                maxListings: Number(value) as InventorySourceForm["maxListings"],
+                              }))
+                            }
+                          >
+                            <SelectTrigger id="inventory-max-listings" data-testid="select-inventory-max-listings">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {INVENTORY_MAX_LISTINGS_OPTIONS.map((limit) => (
+                                <SelectItem key={limit} value={String(limit)}>
+                                  {limit.toLocaleString()}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-[11px] text-muted-foreground">
+                            Cap for the first import (newest listings first).
+                          </p>
+                        </div>
+                      </div>
                     </div>
                     {(isMlsGrid || isTrestle) && (
                       <div className="space-y-2">

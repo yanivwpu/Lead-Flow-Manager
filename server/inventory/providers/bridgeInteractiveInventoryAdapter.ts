@@ -28,7 +28,10 @@ export const bridgeInteractiveInventoryAdapter: InventoryProviderAdapter = {
     return fetchBridgeInteractiveReplication(ctx, {
       mode: options.mode,
       maxModificationTimestamp: options.maxModificationTimestamp,
+      resumeFromUrl: options.resumeFromUrl,
       onFetchProgress: options.onFetchProgress,
+      onPage: options.onPage,
+      maxRows: options.maxRows,
     });
   },
 

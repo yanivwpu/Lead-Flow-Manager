@@ -1,4 +1,5 @@
 import type { BuyerPreferenceProfile } from "../buyerPreferenceSchema";
+import { isMatchableInventoryStatus } from "./inventoryListingSchema";
 
 const MIN_CONFIDENCE = 0.5;
 const NEAR_PRICE_TOLERANCE = 0.12;
@@ -384,7 +385,7 @@ export function scoreListingAgainstCriteria(
   listing: MatchListingInput,
   criteria: BuyerMatchCriteria,
 ): ScoredInventoryMatch | null {
-  if (listing.status !== "active") return null;
+  if (!isMatchableInventoryStatus(listing.status)) return null;
 
   const breaker = hitsDealBreaker(listing, criteria.dealBreakers);
   if (breaker) return null;

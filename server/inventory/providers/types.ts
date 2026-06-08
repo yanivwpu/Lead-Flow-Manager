@@ -1,4 +1,4 @@
-import type { NormalizedInventoryListing } from "@shared/inventory/inventoryListingSchema";
+import type { ResoReplicationFetchOptions } from "@shared/inventory/reso/resoProviderContract";
 import type { InventorySyncMode, ResoSyncDiagnostics } from "@shared/inventory/reso/resoSyncTypes";
 import type { InventoryProvider } from "@shared/inventory/inventoryProviderSchema";
 import type { InventorySource } from "@shared/schema";
@@ -19,7 +19,10 @@ export type ValidateConnectionResult = {
 export type FetchListingsOptions = {
   mode: InventorySyncMode;
   maxModificationTimestamp?: string;
+  resumeFromUrl?: string | null;
   onFetchProgress?: (progress: { pagesFetched: number; rowsFetched: number }) => void | Promise<void>;
+  onPage?: ResoReplicationFetchOptions["onPage"];
+  maxRows?: number;
 };
 
 export type FetchListingsResult = {

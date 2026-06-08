@@ -1,7 +1,11 @@
 import { assertProductionDevSeedSourceAllowed } from "@shared/inventory/inventoryDevSeedGuard";
 import { providerSupportsListingSync, type InventoryProvider } from "@shared/inventory/inventoryProviderSchema";
+import { describeResoNormalizationFailure } from "@shared/inventory/reso/resoNormalizer";
+import { isMatchableInventoryStatus } from "@shared/inventory/inventoryListingSchema";
+import { readInventorySyncScope } from "@shared/inventory/reso/resoSyncScope";
 import {
   mergeResoSyncCursor,
+  maxTimestampFromRows,
   readResoSyncCursor,
   type ResoSyncMode,
 } from "@shared/inventory/reso/resoSyncTypes";
@@ -18,10 +22,13 @@ import { buildAdapterContext } from "./inventorySourceService";
 import { getInventoryProviderAdapter } from "./inventoryProviderRegistry";
 
 const runningSyncs = new Set<string>();
-const PROGRESS_UPSERT_INTERVAL = 25;
+/** No progress for this long → treat DB "running" as stale (safe for multi-instance). */
+const STALE_SYNC_MS = 5 * 60 * 1000;
 
 export type StartSyncOptions = {
   mode?: ResoSyncMode;
+  /** Force a fresh initial import (ignore resume checkpoint). */
+  fresh?: boolean;
 };
 
 export type StartSyncResult =
@@ -44,6 +51,49 @@ function readDatasetId(source: InventorySource): string | null {
     return typeof cfg.originatingSystemName === "string" ? cfg.originatingSystemName : null;
   }
   return null;
+}
+
+function modificationTimestampField(provider: string): string {
+  return provider === "bridge_interactive" ? "BridgeModificationTimestamp" : "ModificationTimestamp";
+}
+
+function statNum(stats: Record<string, unknown> | null | undefined, key: string): number {
+  const v = stats?.[key];
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+function lastProgressMs(source: InventorySource): number {
+  const stats = (source.lastSyncStats || {}) as Record<string, unknown>;
+  const raw = stats.lastProgressAt ?? stats.startedAt;
+  if (typeof raw === "string") {
+    const t = new Date(raw).getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  return 0;
+}
+
+function buildStaleSyncError(source: InventorySource): string {
+  const stats = (source.lastSyncStats || {}) as Record<string, unknown>;
+  const imported = statNum(stats, "listingsImported") || statNum(stats, "upserted");
+  const fetched = statNum(stats, "listingsFetched");
+  const skipped = statNum(stats, "listingsSkipped") || statNum(stats, "skipped");
+  const pages = statNum(stats, "pagesFetched");
+  const cursor = readResoSyncCursor((source.config || {}) as Record<string, unknown>);
+
+  if (imported > 0) {
+    const resumeHint = cursor.initialImportResumeUrl
+      ? " Sync Now will resume from the last checkpoint."
+      : " Sync Now to continue.";
+    return `Sync stopped at page ${pages} with ${imported.toLocaleString()} listings saved.${resumeHint}`;
+  }
+  if (fetched > 0 && skipped >= fetched && fetched > 0) {
+    const sample = typeof stats.sampleSkipReason === "string" ? stats.sampleSkipReason : null;
+    return `${fetched.toLocaleString()} listings were fetched but none could be imported (${skipped.toLocaleString()} skipped${sample ? `: ${sample}` : ""}). Verify your dataset fields with support.`;
+  }
+  if (fetched > 0) {
+    return `Sync stopped after fetching ${fetched.toLocaleString()} listings (page ${pages}) before import finished. Sync Now resumes from the last saved checkpoint.`;
+  }
+  return "Sync was interrupted before listings were fetched. Click Sync Now to retry.";
 }
 
 function friendlySyncError(raw: string): string {
@@ -81,53 +131,81 @@ function friendlySyncError(raw: string): string {
     return "Could not reach Bridge Interactive. Try again later or contact your data provider.";
   }
   if (raw.includes("timed out") || raw.includes("TimeoutError") || raw.includes("AbortError")) {
-    return "Listing feed request timed out. Try Sync Now again — large datasets may take several minutes.";
+    return "Listing feed request timed out. Sync Now resumes from the last checkpoint when available.";
   }
   return raw.slice(0, 2000);
 }
 
-async function mergeSyncProgress(
+function buildImportFailureMessage(
+  listingsFetched: number,
+  skipped: number,
+  sampleSkipReason: string | null,
+): string {
+  const sample = sampleSkipReason ? ` Example: ${sampleSkipReason}.` : "";
+  return `${listingsFetched.toLocaleString()} listings were fetched but none could be imported (${skipped.toLocaleString()} rows skipped).${sample} Contact support if this persists.`;
+}
+
+async function persistSyncCheckpoint(
   sourceId: string,
   userId: string,
-  patch: Record<string, unknown>,
+  config: Record<string, unknown>,
+  stats: Record<string, unknown>,
 ): Promise<void> {
-  const current = await getInventorySource(userId, sourceId);
-  const existing = ((current?.lastSyncStats || {}) as Record<string, unknown>) ?? {};
   await patchInventorySource(sourceId, userId, {
+    config,
     lastSyncStats: {
-      ...existing,
-      ...patch,
+      ...stats,
       lastProgressAt: new Date().toISOString(),
     },
   });
 }
 
-/** Clear DB "running" when no in-process job exists (e.g. after server restart). */
-export async function recoverOrphanedInventorySync(
+/**
+ * Mark stale DB "running" syncs as failed so a new sync can start.
+ * Only runs when progress has been idle longer than STALE_SYNC_MS.
+ * Preserves resume URL and imported listings.
+ */
+export async function recoverStaleInventorySync(
   source: InventorySource,
 ): Promise<InventorySource> {
   if (source.lastSyncStatus !== "running") return source;
   if (runningSyncs.has(source.id)) return source;
 
-  console.warn("[inventory-sync] recovering orphaned sync", {
+  const progressAt = lastProgressMs(source);
+  if (progressAt > 0 && Date.now() - progressAt < STALE_SYNC_MS) {
+    return source;
+  }
+
+  const error = buildStaleSyncError(source);
+  const stats = (source.lastSyncStats || {}) as Record<string, unknown>;
+  const imported = statNum(stats, "listingsImported") || statNum(stats, "upserted");
+
+  console.warn("[inventory-sync] recovering stale sync", {
     sourceId: source.id,
     provider: source.provider,
     datasetId: readDatasetId(source),
+    pagesFetched: statNum(stats, "pagesFetched"),
+    listingsImported: imported,
+    listingsFetched: statNum(stats, "listingsFetched"),
   });
 
-  const stats = (source.lastSyncStats || {}) as Record<string, unknown>;
   const recovered = await patchInventorySource(source.id, source.userId, {
     lastSyncStatus: "failed",
-    lastSyncError: "Previous sync was interrupted. Click Sync Now to retry.",
-    connectionStatus: source.connectionStatus === "connected" ? "connected" : "error",
+    lastSyncError: error,
+    connectionStatus: imported > 0 || source.connectionStatus === "connected" ? "connected" : "error",
     lastSyncStats: {
       ...stats,
       failed: true,
-      orphanedRecovery: true,
+      staleRecovery: true,
       recoveredAt: new Date().toISOString(),
     },
   });
   return recovered ?? source;
+}
+
+/** @deprecated Use recoverStaleInventorySync */
+export async function recoverOrphanedInventorySync(source: InventorySource): Promise<InventorySource> {
+  return recoverStaleInventorySync(source);
 }
 
 export async function startInventorySourceSync(
@@ -152,7 +230,11 @@ export async function startInventorySourceSync(
     if (runningSyncs.has(sourceId)) {
       return { started: false, reason: "already_running" };
     }
-    source = await recoverOrphanedInventorySync(source);
+    const progressAt = lastProgressMs(source);
+    if (progressAt > 0 && Date.now() - progressAt < STALE_SYNC_MS) {
+      return { started: false, reason: "already_running" };
+    }
+    source = await recoverStaleInventorySync(source);
   }
 
   if (runningSyncs.has(sourceId)) {
@@ -162,6 +244,14 @@ export async function startInventorySourceSync(
   runningSyncs.add(sourceId);
   const syncMode = resolveSyncMode(source, options);
   const datasetId = readDatasetId(source);
+  const cursor = readResoSyncCursor((source.config || {}) as Record<string, unknown>);
+  const isResume =
+    !options?.fresh &&
+    syncMode === "initial" &&
+    !cursor.initialImportComplete &&
+    !!cursor.initialImportResumeUrl?.trim();
+
+  const prevStats = (source.lastSyncStats || {}) as Record<string, unknown>;
 
   console.log("[inventory-sync] starting", {
     sourceId,
@@ -169,24 +259,38 @@ export async function startInventorySourceSync(
     provider: source.provider,
     syncMode,
     datasetId,
+    resume: isResume,
   });
 
+  let nextConfig = { ...(source.config || {}) } as Record<string, unknown>;
+  if (options?.fresh && syncMode === "initial") {
+    nextConfig = mergeResoSyncCursor(nextConfig, {
+      initialImportResumeUrl: undefined,
+      maxModificationTimestamp: undefined,
+    });
+    delete nextConfig.initialImportResumeUrl;
+    delete nextConfig.maxModificationTimestamp;
+  }
+
   await patchInventorySource(sourceId, userId, {
+    config: nextConfig,
     lastSyncStatus: "running",
     lastSyncError: null,
     lastSyncStats: {
       syncMode,
-      startedAt: new Date().toISOString(),
+      startedAt: isResume ? prevStats.startedAt ?? new Date().toISOString() : new Date().toISOString(),
+      resumedAt: isResume ? new Date().toISOString() : undefined,
       datasetId,
-      listingsFetched: 0,
-      listingsImported: 0,
-      listingsSkipped: 0,
-      pagesFetched: 0,
+      listingsFetched: isResume ? statNum(prevStats, "listingsFetched") : 0,
+      listingsImported: isResume ? statNum(prevStats, "listingsImported") : 0,
+      listingsSkipped: isResume ? statNum(prevStats, "listingsSkipped") : 0,
+      pagesFetched: isResume ? statNum(prevStats, "pagesFetched") : 0,
+      resume: isResume,
     },
   });
 
   setImmediate(() => {
-    void runInventorySyncJob(sourceId, userId, syncMode).finally(() => {
+    void runInventorySyncJob(sourceId, userId, syncMode, options?.fresh === true).finally(() => {
       runningSyncs.delete(sourceId);
     });
   });
@@ -198,88 +302,143 @@ async function runInventorySyncJob(
   sourceId: string,
   userId: string,
   syncMode: ResoSyncMode,
+  freshStart: boolean,
 ): Promise<void> {
-  const source = await getInventorySource(userId, sourceId);
+  let source = await getInventorySource(userId, sourceId);
   if (!source) {
     console.error("[inventory-sync] source missing at job start", { sourceId, userId });
     return;
   }
 
   const startedAt = Date.now();
-  let upserted = 0;
-  let skipped = 0;
-  let pagesFetched = 0;
-  let listingsFetched = 0;
+  const prevStats = (source.lastSyncStats || {}) as Record<string, unknown>;
+  let upserted = statNum(prevStats, "listingsImported");
+  let skipped = statNum(prevStats, "listingsSkipped");
+  let pagesFetched = statNum(prevStats, "pagesFetched");
+  let listingsFetched = statNum(prevStats, "listingsFetched");
   let inactivated = 0;
   let inactiveFromFeed = 0;
   const upsertResults: ListingUpsertResult[] = [];
   const datasetId = readDatasetId(source);
+  let sampleSkipReason: string | null =
+    typeof prevStats.sampleSkipReason === "string" ? prevStats.sampleSkipReason : null;
 
-  const config = (source.config || {}) as Record<string, unknown>;
-  const cursor = readResoSyncCursor(config);
+  let config = { ...(source.config || {}) } as Record<string, unknown>;
+  let cursor = readResoSyncCursor(config);
+  let runningMaxTs = cursor.maxModificationTimestamp;
+  const syncScope = readInventorySyncScope(config);
+  const importCapRemaining =
+    syncMode === "initial" ? Math.max(0, syncScope.maxListings - upserted) : undefined;
+
+  const resumeUrl =
+    !freshStart && syncMode === "initial" && !cursor.initialImportComplete
+      ? cursor.initialImportResumeUrl ?? null
+      : null;
 
   console.log("[inventory-sync] job running", {
     sourceId,
     provider: source.provider,
     syncMode,
     datasetId,
+    resumeUrl: resumeUrl ? "(checkpoint)" : null,
+    listingsImportedSoFar: upserted,
+    maxListings: syncMode === "initial" ? syncScope.maxListings : undefined,
   });
 
   try {
     const adapter = getInventoryProviderAdapter(source.provider as InventoryProvider);
     const ctx = buildAdapterContext(source);
 
+    const useStreaming = syncMode === "initial" || syncMode === "incremental";
+
     const fetchResult = await adapter.fetchListings(ctx, {
       mode: syncMode,
       maxModificationTimestamp: cursor.maxModificationTimestamp,
-      onFetchProgress: async ({ pagesFetched: pages, rowsFetched }) => {
-        pagesFetched = pages;
-        listingsFetched = rowsFetched;
-        await mergeSyncProgress(sourceId, userId, {
-          syncMode,
-          datasetId,
-          pagesFetched: pages,
-          listingsFetched: rowsFetched,
-          listingsImported: upserted,
-          listingsSkipped: skipped,
-        });
-      },
+      resumeFromUrl: resumeUrl,
+      maxRows: importCapRemaining && importCapRemaining > 0 ? importCapRemaining : undefined,
+      onPage: useStreaming
+        ? async ({ rows, pageNumber, nextLink, rowsFetchedTotal }) => {
+            pagesFetched = pageNumber;
+            listingsFetched = rowsFetchedTotal;
+
+            for (const raw of rows) {
+              if (syncMode === "initial" && upserted >= syncScope.maxListings) break;
+
+              const normalized = adapter.normalizeListing(raw, ctx);
+              if (!normalized) {
+                skipped += 1;
+                if (!sampleSkipReason) {
+                  sampleSkipReason = describeResoNormalizationFailure(raw);
+                }
+                continue;
+              }
+
+              if (!isMatchableInventoryStatus(normalized.status)) {
+                inactiveFromFeed += 1;
+              }
+
+              const result = await upsertInventoryListing(userId, sourceId, normalized);
+              upsertResults.push(result);
+              upserted += 1;
+            }
+
+            runningMaxTs = maxTimestampFromRows(
+              rows,
+              modificationTimestampField(source.provider),
+              runningMaxTs,
+            );
+
+            const hitImportCap = syncMode === "initial" && upserted >= syncScope.maxListings;
+            const cursorPatch: Record<string, unknown> = {
+              maxModificationTimestamp: runningMaxTs,
+            };
+            if (syncMode === "initial") {
+              if (nextLink && !hitImportCap) {
+                cursorPatch.initialImportResumeUrl = nextLink;
+              } else {
+                delete cursorPatch.initialImportResumeUrl;
+              }
+            }
+
+            config = mergeResoSyncCursor(config, cursorPatch);
+            if (!nextLink && syncMode === "initial") {
+              delete config.initialImportResumeUrl;
+            }
+
+            await persistSyncCheckpoint(sourceId, userId, config, {
+              syncMode,
+              datasetId,
+              pagesFetched,
+              listingsFetched,
+              listingsImported: upserted,
+              listingsSkipped: skipped,
+              sampleSkipReason,
+              maxListings: syncScope.maxListings,
+              importCapReached: hitImportCap,
+              importResumeNextLink: hitImportCap ? null : nextLink ?? null,
+              checkpointPage: pageNumber,
+            });
+          }
+        : undefined,
     });
 
     pagesFetched = fetchResult.pagesFetched;
-    listingsFetched = fetchResult.listings.length;
-
-    console.log("[inventory-sync] fetch complete", {
-      sourceId,
-      datasetId,
-      syncMode,
-      pagesFetched,
-      listingsFetched,
-      provider: source.provider,
-    });
-
-    await mergeSyncProgress(sourceId, userId, {
-      syncMode,
-      datasetId,
-      pagesFetched,
-      listingsFetched,
-      listingsImported: 0,
-      listingsSkipped: 0,
-      fetchCompleteAt: new Date().toISOString(),
-    });
+    if (!useStreaming) {
+      listingsFetched = fetchResult.listings.length;
+    }
 
     if (syncMode === "reconciliation") {
       const activeIds = fetchResult.activeListingIds ?? [];
       inactivated = await markListingsInactiveExcept(sourceId, activeIds);
 
       const nowIso = new Date().toISOString();
-      const mergedConfig = mergeResoSyncCursor(config, {
+      config = mergeResoSyncCursor(config, {
         lastReconciliationAt: nowIso,
         lastSuccessfulSyncAt: nowIso,
       });
 
       await patchInventorySource(sourceId, userId, {
-        config: mergedConfig,
+        config,
         lastSyncAt: new Date(),
         lastSyncStatus: "success",
         lastSyncError: null,
@@ -297,42 +456,26 @@ async function runInventorySyncJob(
           ...fetchResult.diagnostics,
         },
       });
-
-      console.log("[inventory-sync] reconciliation success", {
-        sourceId,
-        datasetId,
-        inactivated,
-        seenCount: activeIds.length,
-      });
       return;
     }
 
-    for (const raw of fetchResult.listings) {
-      const normalized = adapter.normalizeListing(raw, ctx);
-      if (!normalized) {
-        skipped += 1;
-        continue;
-      }
-
-      if (normalized.status === "inactive") {
-        inactiveFromFeed += 1;
-      }
-
-      const result = await upsertInventoryListing(userId, sourceId, normalized);
-      upsertResults.push(result);
-      upserted += 1;
-
-      if (upserted % PROGRESS_UPSERT_INTERVAL === 0) {
-        await mergeSyncProgress(sourceId, userId, {
-          syncMode,
-          datasetId,
-          pagesFetched,
-          listingsFetched,
-          listingsImported: upserted,
-          listingsSkipped: skipped,
-        });
+    // Non-streaming fallback (should not run for initial/incremental)
+    if (!useStreaming) {
+      for (const raw of fetchResult.listings) {
+        const normalized = adapter.normalizeListing(raw, ctx);
+        if (!normalized) {
+          skipped += 1;
+          if (!sampleSkipReason) sampleSkipReason = describeResoNormalizationFailure(raw);
+          continue;
+        }
+        if (!isMatchableInventoryStatus(normalized.status)) inactiveFromFeed += 1;
+        const result = await upsertInventoryListing(userId, sourceId, normalized);
+        upsertResults.push(result);
+        upserted += 1;
       }
     }
+
+    runningMaxTs = fetchResult.maxModificationTimestamp ?? runningMaxTs ?? cursor.maxModificationTimestamp;
 
     const opportunityStats = await processInventoryOpportunitiesAfterSync(userId, upsertResults);
 
@@ -346,21 +489,24 @@ async function runInventorySyncJob(
     }
 
     const nowIso = new Date().toISOString();
-    const importSucceeded = upserted > 0 || listingsFetched === 0;
+    const hitImportCap = syncMode === "initial" && upserted >= syncScope.maxListings;
+    const importSucceeded = upserted > 0 || listingsFetched === 0 || hitImportCap;
     const cursorPatch = mergeResoSyncCursor(config, {
-      maxModificationTimestamp:
-        fetchResult.maxModificationTimestamp ?? cursor.maxModificationTimestamp,
+      maxModificationTimestamp: runningMaxTs,
       lastSuccessfulSyncAt: nowIso,
-      ...(fetchResult.initialImportComplete && importSucceeded
-        ? { initialImportComplete: true }
+      ...(syncMode === "initial" && importSucceeded
+        ? { initialImportComplete: true, initialImportResumeUrl: undefined }
         : {}),
     });
+    if (syncMode === "initial" && importSucceeded) {
+      delete cursorPatch.initialImportResumeUrl;
+    }
 
     const finalStatus = importSucceeded ? "success" : "failed";
     const finalError =
-      importSucceeded || syncMode !== "initial"
+      finalStatus === "success"
         ? null
-        : `${listingsFetched.toLocaleString()} listings were fetched but none could be imported. Check dataset access or contact support.`;
+        : buildImportFailureMessage(listingsFetched, skipped, sampleSkipReason);
 
     await patchInventorySource(sourceId, userId, {
       config: cursorPatch,
@@ -376,18 +522,21 @@ async function runInventorySyncJob(
         listingsFetched,
         listingsImported: upserted,
         listingsSkipped: skipped,
+        sampleSkipReason,
         inactivated,
         inactiveFromFeed,
         pagesFetched,
         durationMs: Date.now() - startedAt,
         seenCount: upserted,
+        maxListings: syncScope.maxListings,
+        importCapReached: hitImportCap,
         newListings,
         updatedListings,
         priceChanges,
         opportunitiesMatched: opportunityStats.createdOrUpdated,
         lastSuccessfulSyncAt: finalStatus === "success" ? nowIso : undefined,
         lastFailedSyncAt: finalStatus === "failed" ? nowIso : undefined,
-        maxModificationTimestamp: fetchResult.maxModificationTimestamp ?? cursor.maxModificationTimestamp,
+        maxModificationTimestamp: runningMaxTs,
         initialImportComplete: cursorPatch.initialImportComplete === true,
         ...fetchResult.diagnostics,
       },
@@ -408,13 +557,14 @@ async function runInventorySyncJob(
     const raw = err instanceof Error ? err.message : String(err);
     const message = friendlySyncError(raw);
     const nowIso = new Date().toISOString();
-    const failedConfig = mergeResoSyncCursor(config, { lastFailedSyncAt: nowIso });
+
+    config = mergeResoSyncCursor(config, { lastFailedSyncAt: nowIso });
 
     await patchInventorySource(sourceId, userId, {
-      config: failedConfig,
+      config,
       lastSyncStatus: "failed",
       lastSyncError: message,
-      connectionStatus: "error",
+      connectionStatus: upserted > 0 ? "connected" : "error",
       lastSyncStats: {
         syncMode,
         datasetId,
@@ -423,12 +573,14 @@ async function runInventorySyncJob(
         listingsFetched,
         listingsImported: upserted,
         listingsSkipped: skipped,
+        sampleSkipReason,
         inactivated,
         inactiveFromFeed,
         pagesFetched,
         durationMs: Date.now() - startedAt,
         failed: true,
         lastFailedSyncAt: nowIso,
+        importResumeNextLink: readResoSyncCursor(config).initialImportResumeUrl ?? null,
       },
     });
 

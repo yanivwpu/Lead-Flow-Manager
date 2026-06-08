@@ -4,6 +4,11 @@ import {
 } from "@shared/inventory/inventoryListingSchema";
 import { buildODataFilter, escapeODataString } from "@shared/inventory/reso/resoOData";
 import {
+  appendScopeToPropertyFilter,
+  buildSyncableStandardStatusFilter,
+  readInventorySyncScope,
+} from "@shared/inventory/reso/resoSyncScope";
+import {
   defaultResoListingId,
   mapResoStandardStatus,
   normalizeResoMediaItems,
@@ -51,14 +56,11 @@ export function normalizeTrestleProperty(raw: unknown) {
 function buildTrestlePropertyFilter(
   originatingSystemName: string,
   mode: ResoSyncMode,
-  maxModificationTimestamp?: string,
-  additionalFilter?: string,
+  maxModificationTimestamp: string | undefined,
+  additionalFilter: string | undefined,
+  scope: ReturnType<typeof readInventorySyncScope>,
 ): string {
   const clauses = [`OriginatingSystemName eq '${escapeODataString(originatingSystemName)}'`];
-
-  if (mode === "initial" || mode === "reconciliation") {
-    clauses.push("StandardStatus eq 'Active'");
-  }
 
   if ((mode === "incremental" || mode === "initial") && maxModificationTimestamp) {
     clauses.push(`ModificationTimestamp gt ${maxModificationTimestamp}`);
@@ -68,7 +70,8 @@ function buildTrestlePropertyFilter(
     clauses.push(additionalFilter.trim());
   }
 
-  return buildODataFilter(clauses);
+  const base = buildODataFilter(clauses);
+  return appendScopeToPropertyFilter(base, mode, scope);
 }
 
 export function createTrestleResoProvider(
@@ -97,7 +100,11 @@ export function createTrestleResoProvider(
         mode,
         maxModificationTimestamp,
         cfg.additionalFilter,
+        readInventorySyncScope(cfg),
       );
+    },
+    resolveOrderBy(mode) {
+      return mode === "initial" ? "ModificationTimestamp desc" : undefined;
     },
     buildPropertyQueryExtras(mode): ResoPropertyQueryExtras {
       if (mode === "reconciliation") {

@@ -46,12 +46,28 @@ export interface ResoReplicationProviderContract {
   resolvePropertyResource?(mode: ResoSyncMode): string;
   /** Override page size per sync mode when provider limits differ. */
   resolvePageSize?(mode: ResoSyncMode): number;
+  /** OData $orderby for initial import (newest modifications first). */
+  resolveOrderBy?(mode: ResoSyncMode): string | undefined;
 }
 
 export type ResoReplicationFetchOptions = {
   mode: ResoSyncMode;
   maxModificationTimestamp?: string;
+  /** Resume initial import from a saved @odata.nextLink (stored on source config). */
+  resumeFromUrl?: string | null;
   onFetchProgress?: (progress: { pagesFetched: number; rowsFetched: number }) => void | Promise<void>;
+  /**
+   * When set, each page is delivered immediately and rows are NOT accumulated in memory.
+   * Use for large initial imports — import inside this callback.
+   */
+  onPage?: (page: {
+    rows: unknown[];
+    pageNumber: number;
+    nextLink: string | null;
+    rowsFetchedTotal: number;
+  }) => Promise<void>;
+  /** Stop after this many rows (initial import cap). */
+  maxRows?: number;
 };
 
 export type ResoReplicationFetchResult = {

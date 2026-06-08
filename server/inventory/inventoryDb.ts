@@ -6,6 +6,7 @@ import {
   type InventorySource,
 } from "@shared/schema";
 import type { NormalizedInventoryListing } from "@shared/inventory/inventoryListingSchema";
+import { MATCHABLE_INVENTORY_STATUSES } from "@shared/inventory/inventoryListingSchema";
 import type { SyncAlertStatus } from "@shared/inventory/inventoryOpportunityTypes";
 import {
   assertProductionDevSeedListingAllowed,
@@ -303,7 +304,10 @@ export async function fetchActiveListingsForMatching(
   userId: string,
   limit = 2500,
 ): Promise<InventoryListing[]> {
-  const conditions = [eq(inventoryListings.userId, userId), eq(inventoryListings.status, "active")];
+  const conditions = [
+    eq(inventoryListings.userId, userId),
+    inArray(inventoryListings.status, [...MATCHABLE_INVENTORY_STATUSES]),
+  ];
   const devSeedExclude = devSeedListingExcludeCondition();
   if (devSeedExclude) conditions.push(devSeedExclude);
 
@@ -316,7 +320,10 @@ export async function fetchActiveListingsForMatching(
 }
 
 export async function countActiveListingsForUser(userId: string): Promise<number> {
-  const conditions = [eq(inventoryListings.userId, userId), eq(inventoryListings.status, "active")];
+  const conditions = [
+    eq(inventoryListings.userId, userId),
+    inArray(inventoryListings.status, [...MATCHABLE_INVENTORY_STATUSES]),
+  ];
   const devSeedExclude = devSeedListingExcludeCondition();
   if (devSeedExclude) conditions.push(devSeedExclude);
 
@@ -427,7 +434,7 @@ export async function fetchActiveListingsWithOpportunityAlerts(
 ): Promise<InventoryListing[]> {
   const conditions = [
     eq(inventoryListings.userId, userId),
-    eq(inventoryListings.status, "active"),
+    inArray(inventoryListings.status, [...MATCHABLE_INVENTORY_STATUSES]),
     or(
       eq(inventoryListings.syncAlertStatus, "new"),
       and(
