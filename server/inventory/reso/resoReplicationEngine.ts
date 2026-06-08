@@ -1,4 +1,8 @@
 import { buildPropertyCollectionUrl, oDataNextLink, oDataValueRows } from "@shared/inventory/reso/resoOData";
+import {
+  buildResoFailureUserMessage,
+  resoFailureDiagnosticsFromError,
+} from "@shared/inventory/reso/resoSyncFailureDiagnostics";
 import type {
   ResoReplicationFetchOptions,
   ResoReplicationFetchResult,
@@ -16,6 +20,7 @@ function toSyncDiagnostics(
   pagesFetched: number,
   metrics: ReturnType<typeof emptyResoFetchMetrics>,
   startedAt: number,
+  queryContext?: { oDataFilter?: string; requestUrl?: string },
 ): ResoSyncDiagnostics {
   return {
     syncMode,
@@ -24,6 +29,8 @@ function toSyncDiagnostics(
     retries: metrics.retries,
     rateLimitHits: metrics.rateLimitHits,
     durationMs: Date.now() - startedAt,
+    oDataFilter: queryContext?.oDataFilter,
+    requestUrl: queryContext?.requestUrl,
   };
 }
 
@@ -84,7 +91,7 @@ export async function runResoReplicationFetch(
       listings: [],
       pagesFetched,
       activeListingIds,
-      diagnostics: toSyncDiagnostics(mode, pagesFetched, metrics, startedAt),
+      diagnostics: toSyncDiagnostics(mode, pagesFetched, metrics, startedAt, { oDataFilter: filter }),
     };
   }
 
@@ -162,7 +169,10 @@ export async function runResoReplicationFetch(
     pagesFetched,
     maxModificationTimestamp,
     initialImportComplete,
-    diagnostics: toSyncDiagnostics(mode, pagesFetched, metrics, startedAt),
+    diagnostics: toSyncDiagnostics(mode, pagesFetched, metrics, startedAt, {
+      oDataFilter: filter,
+      requestUrl: startUrl,
+    }),
   };
 }
 
@@ -193,9 +203,16 @@ export async function runResoConnectionProbe(
     const count = Array.isArray(body.value) ? body.value.length : 0;
     return { ok: true, sampleRows: count };
   } catch (err) {
+    const endpoint = provider.getEndpointConfig();
+    const diag = resoFailureDiagnosticsFromError(err, {
+      phase: "validation",
+      provider: endpoint.providerLabel,
+      oDataFilter: filter,
+    });
     return {
       ok: false,
-      message: err instanceof Error ? err.message : String(err),
+      message: buildResoFailureUserMessage(err, diag),
+      diagnostics: diag,
     };
   }
 }

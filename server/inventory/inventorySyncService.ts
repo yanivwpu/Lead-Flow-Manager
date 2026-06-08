@@ -2,6 +2,12 @@ import { assertProductionDevSeedSourceAllowed } from "@shared/inventory/inventor
 import { providerSupportsListingSync, type InventoryProvider } from "@shared/inventory/inventoryProviderSchema";
 import { describeResoNormalizationFailure } from "@shared/inventory/reso/resoNormalizer";
 import { isMatchableInventoryStatus } from "@shared/inventory/inventoryListingSchema";
+import {
+  buildResoFailureUserMessage,
+  isResoHttpError,
+  resoFailureDiagnosticsFromError,
+  type ResoSyncFailureDiagnostics,
+} from "@shared/inventory/reso/resoSyncFailureDiagnostics";
 import { readInventorySyncScope } from "@shared/inventory/reso/resoSyncScope";
 import {
   mergeResoSyncCursor,
@@ -94,6 +100,39 @@ function buildStaleSyncError(source: InventorySource): string {
     return `Sync stopped after fetching ${fetched.toLocaleString()} listings (page ${pages}) before import finished. Sync Now resumes from the last saved checkpoint.`;
   }
   return "Sync was interrupted before listings were fetched. Click Sync Now to retry.";
+}
+
+function isResoAuthFailure(err: unknown): boolean {
+  return isResoHttpError(err) && (err.status === 401 || err.status === 403);
+}
+
+function readODataFilterFromUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    const raw = parsed.searchParams.get("$filter");
+    return raw ? decodeURIComponent(raw) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function buildSyncFailureDiagnostics(
+  err: unknown,
+  source: InventorySource,
+  syncMode: ResoSyncMode,
+  datasetId: string | null,
+  queryContext?: { oDataFilter?: string; requestUrl?: string },
+): ResoSyncFailureDiagnostics {
+  const requestUrl = isResoHttpError(err) ? err.requestUrl : queryContext?.requestUrl;
+  return resoFailureDiagnosticsFromError(err, {
+    phase: "import",
+    provider: source.provider,
+    datasetId,
+    syncMode,
+    oDataFilter: queryContext?.oDataFilter ?? readODataFilterFromUrl(requestUrl),
+    requestUrl,
+  });
 }
 
 function friendlySyncError(raw: string): string {
@@ -554,8 +593,10 @@ async function runInventorySyncJob(
       durationMs: Date.now() - startedAt,
     });
   } catch (err) {
-    const raw = err instanceof Error ? err.message : String(err);
-    const message = friendlySyncError(raw);
+    const failureDiag = buildSyncFailureDiagnostics(err, source, syncMode, datasetId);
+    const message = isResoHttpError(err)
+      ? buildResoFailureUserMessage(err, failureDiag)
+      : friendlySyncError(err instanceof Error ? err.message : String(err));
     const nowIso = new Date().toISOString();
 
     config = mergeResoSyncCursor(config, { lastFailedSyncAt: nowIso });
@@ -564,7 +605,7 @@ async function runInventorySyncJob(
       config,
       lastSyncStatus: "failed",
       lastSyncError: message,
-      connectionStatus: upserted > 0 ? "connected" : "error",
+      connectionStatus: isResoAuthFailure(err) ? "error" : "connected",
       lastSyncStats: {
         syncMode,
         datasetId,
@@ -579,6 +620,8 @@ async function runInventorySyncJob(
         pagesFetched,
         durationMs: Date.now() - startedAt,
         failed: true,
+        failurePhase: "import",
+        failureDiagnostics: failureDiag,
         lastFailedSyncAt: nowIso,
         importResumeNextLink: readResoSyncCursor(config).initialImportResumeUrl ?? null,
       },
@@ -594,6 +637,7 @@ async function runInventorySyncJob(
       listingsFetched,
       listingsImported: upserted,
       listingsSkipped: skipped,
+      ...failureDiag,
     });
   }
 }

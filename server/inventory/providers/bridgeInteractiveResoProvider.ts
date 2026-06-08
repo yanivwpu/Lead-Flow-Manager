@@ -103,8 +103,9 @@ export function createBridgeInteractiveResoProvider(
     resolvePageSize(mode) {
       return mode === "reconciliation" ? BRIDGE_STANDARD_PAGE_SIZE : BRIDGE_REPLICATION_PAGE_SIZE;
     },
-    resolveOrderBy(mode) {
-      return mode === "initial" ? `${BRIDGE_MODIFICATION_FIELD} desc` : undefined;
+    /** Bridge Property/replication does not support $orderby (docs: skip/orderby unavailable). */
+    resolveOrderBy(_mode) {
+      return undefined;
     },
     buildPropertyFilter(mode, maxModificationTimestamp) {
       return buildBridgePropertyFilter(

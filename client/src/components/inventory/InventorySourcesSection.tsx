@@ -139,6 +139,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const [fieldErrors, setFieldErrors] = useState<InventoryFormFieldErrors>({});
   const [formBannerError, setFormBannerError] = useState<string | null>(null);
   const providerInitialized = useRef(false);
+  const awaitingImportAfterValidate = useRef(false);
 
   const clearFieldError = (field: InventoryFormField) => {
     setFieldErrors((prev) => {
@@ -211,6 +212,23 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     () => sources.find((s) => s.provider === selectedProvider),
     [sources, selectedProvider],
   );
+
+  const syncRunningForEffect = activeSource?.lastSyncStatus === "running";
+
+  useEffect(() => {
+    if (!awaitingImportAfterValidate.current || !activeSource || syncRunningForEffect) return;
+    awaitingImportAfterValidate.current = false;
+    if (activeSource.lastSyncStatus === "failed" && activeSource.lastSyncError) {
+      const detail = friendlyInventoryErrorMessage(activeSource.lastSyncError);
+      toast({
+        title: "Connection verified",
+        description: detail.startsWith("Import failed:")
+          ? detail
+          : `Import failed: ${detail}`,
+        variant: "destructive",
+      });
+    }
+  }, [activeSource, syncRunningForEffect]);
 
   const providerOption = INVENTORY_PROVIDER_UI_OPTIONS.find((o) => o.id === selectedProvider);
   const providerAvailable = providerOption?.available ?? false;
@@ -285,6 +303,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       }
 
       if (data.autoSyncStarted) {
+        awaitingImportAfterValidate.current = true;
         toast({
           title: "Connection verified",
           description: "Starting listing import…",
@@ -1046,7 +1065,9 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                   {syncFailed && activeSource.lastSyncError && (
                     <Alert variant="destructive" className="py-2">
                       <AlertCircle className="h-4 w-4" />
-                      <AlertTitle className="text-sm">Sync failed</AlertTitle>
+                      <AlertTitle className="text-sm">
+                        {activeSource.connectionStatus === "connected" ? "Import failed" : "Sync failed"}
+                      </AlertTitle>
                       <AlertDescription
                         className="text-xs leading-relaxed"
                         data-testid="inventory-sync-error"

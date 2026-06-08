@@ -72,6 +72,7 @@ export class ResoHttpError extends Error {
     readonly providerLabel: string,
     readonly status: number,
     readonly body: string,
+    readonly requestUrl?: string,
   ) {
     super(`${providerLabel} HTTP ${status}: ${body.slice(0, 500)}`);
     this.name = "ResoHttpError";
@@ -129,7 +130,7 @@ export class ResoClient {
       }
 
       if (!res.ok) {
-        throw new ResoHttpError(this.providerLabel, res.status, text);
+        throw new ResoHttpError(this.providerLabel, res.status, text, url);
       }
 
       return JSON.parse(text) as Record<string, unknown>;

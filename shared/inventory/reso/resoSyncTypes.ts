@@ -28,6 +28,8 @@ export type ResoSyncDiagnostics = {
   retries: number;
   rateLimitHits: number;
   durationMs: number;
+  oDataFilter?: string;
+  requestUrl?: string;
 };
 
 /** @deprecated Use ResoSyncDiagnostics */

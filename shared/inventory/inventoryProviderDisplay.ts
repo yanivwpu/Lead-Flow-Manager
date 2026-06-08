@@ -268,6 +268,37 @@ export function formatInventorySyncStatRows(
     rows.push({ label: "Rate limit retries", value: rateLimitHits.toLocaleString() });
   }
 
+  const failureDiag = stats.failureDiagnostics;
+  if (failureDiag && typeof failureDiag === "object") {
+    const d = failureDiag as Record<string, unknown>;
+    const httpStatus = typeof d.httpStatus === "number" ? d.httpStatus : null;
+    if (httpStatus != null) {
+      rows.push({ label: "HTTP status", value: String(httpStatus) });
+    }
+    const phase = typeof d.phase === "string" ? d.phase : null;
+    if (phase) {
+      rows.push({ label: "Failure phase", value: phase });
+    }
+    const requestUrl = typeof d.requestUrl === "string" ? d.requestUrl : null;
+    if (requestUrl) {
+      rows.push({ label: "Request URL", value: requestUrl.length > 80 ? `${requestUrl.slice(0, 80)}…` : requestUrl });
+    }
+    const oDataFilter = typeof d.oDataFilter === "string" ? d.oDataFilter : null;
+    if (oDataFilter) {
+      rows.push({
+        label: "OData filter",
+        value: oDataFilter.length > 80 ? `${oDataFilter.slice(0, 80)}…` : oDataFilter,
+      });
+    }
+    const httpBody = typeof d.httpBody === "string" ? d.httpBody : null;
+    if (httpBody) {
+      rows.push({
+        label: "API response",
+        value: httpBody.length > 120 ? `${httpBody.slice(0, 120)}…` : httpBody,
+      });
+    }
+  }
+
   return rows;
 }
 
@@ -304,6 +335,9 @@ export function friendlyInventoryErrorMessage(raw: string | null | undefined): s
   }
   if (msg.includes("Bridge Interactive HTTP 429")) {
     return "Too many requests to Bridge Interactive. Wait a few minutes and sync again.";
+  }
+  if (msg.startsWith("Import failed:") || msg.startsWith("Connection failed:")) {
+    return msg;
   }
   if (msg.includes("Bridge Interactive HTTP")) {
     return "Could not reach Bridge Interactive. Try again later or contact your data provider.";
