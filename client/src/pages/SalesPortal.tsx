@@ -23,11 +23,19 @@ import {
   Eye, EyeOff, ClipboardList, CircleHelp
 } from "lucide-react";
 import {
-  SALESPERSON_AGREEMENT_TEXT,
   SALESPERSON_AGREEMENT_VERSION,
 } from "@shared/salespersonAgreement";
 
 const DEMO_PAYOUT_DOLLARS = 50;
+
+/** Payout-only policy shown in Sales Portal (no subscription commission language). */
+const SALES_PORTAL_PAYOUT_POLICY_TEXT = `WhachatCRM Sales Portal payout policy
+
+Demo session payouts: $${DEMO_PAYOUT_DOLLARS} per completed and approved demo session.
+
+Growth Engine setup payouts: $${DEMO_PAYOUT_DOLLARS} per completed and approved setup/onboarding session.
+
+All payouts are reviewed and approved by admin before being credited to your account.`;
 
 interface Demo {
   id: string;
@@ -83,10 +91,6 @@ const SALES_PORTAL_QUERY_KEYS = [
   ["/api/sales-portal/setup-tasks"],
 ] as const;
 
-function shortId(id: string): string {
-  return id.length > 8 ? id.slice(0, 8) : id;
-}
-
 function demoStatusLabel(status: string): string {
   if (status === "converted" || status === "completed") return "Completed";
   if (status === "cancelled") return "Cancelled";
@@ -139,83 +143,51 @@ function EarningsInfoSection({
   );
 }
 
-function SalesPortalEarningsDialogs({
+function SalesPortalEarningsDialog({
   earningsOpen,
   onEarningsOpenChange,
-  policyOpen,
-  onPolicyOpenChange,
   stats,
 }: {
   earningsOpen: boolean;
   onEarningsOpenChange: (open: boolean) => void;
-  policyOpen: boolean;
-  onPolicyOpenChange: (open: boolean) => void;
   stats?: Stats;
 }) {
   const setupPayout =
     stats?.effectiveTaskPayoutDollars ?? stats?.defaultTaskPayoutDollars ?? DEMO_PAYOUT_DOLLARS;
 
   return (
-    <>
-      <Dialog open={earningsOpen} onOpenChange={onEarningsOpenChange}>
-        <DialogContent className="max-w-md gap-0 p-0 overflow-hidden sm:max-w-md">
-          <DialogHeader className="px-5 pt-5 pb-0 text-start space-y-1">
-            <DialogTitle className="text-base font-semibold text-slate-900">How earnings work</DialogTitle>
-            <DialogDescription className="text-sm text-slate-500">
-              Fixed payouts for completed demo and Growth Engine setup sessions.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="px-5 pb-5 pt-3 max-h-[min(70vh,520px)] overflow-y-auto">
-            <EarningsInfoSection title="Demo payouts">
-              <ul className="list-disc pl-4 space-y-1.5 text-sm text-slate-600 leading-relaxed">
-                <li>
-                  <span className="font-medium text-slate-800">${DEMO_PAYOUT_DOLLARS.toFixed(2)}</span> per completed
-                  and approved demo session.
-                </li>
-              </ul>
-            </EarningsInfoSection>
-            <EarningsInfoSection title="Growth Engine setup payouts">
-              <ul className="list-disc pl-4 space-y-1.5 text-sm text-slate-600 leading-relaxed">
-                <li>
-                  <span className="font-medium text-slate-800">${setupPayout.toFixed(2)}</span> per completed and
-                  approved setup/onboarding session
-                  {stats?.hasCustomTaskPayout ? " (custom rate)" : ""}.
-                </li>
-              </ul>
-            </EarningsInfoSection>
-            <p className="text-sm text-slate-600 leading-relaxed pt-2">
-              Payouts are reviewed and approved by admin.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-4 w-full rounded-lg border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              onClick={() => {
-                onEarningsOpenChange(false);
-                onPolicyOpenChange(true);
-              }}
-            >
-              <FileText className="h-4 w-4 mr-2 shrink-0" />
-              View full commission policy
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={policyOpen} onOpenChange={onPolicyOpenChange}>
-        <DialogContent className="max-w-2xl gap-0 p-0 overflow-hidden sm:max-w-2xl">
-          <DialogHeader className="px-5 pt-5 pb-3 text-start border-b border-slate-100">
-            <DialogTitle className="text-base font-semibold text-slate-900">Commission policy</DialogTitle>
-            <DialogDescription className="text-xs text-slate-500">Version {SALESPERSON_AGREEMENT_VERSION}</DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="h-[min(60vh,480px)] px-5 py-4">
-            <pre className="whitespace-pre-wrap text-sm text-slate-600 font-sans leading-relaxed">
-              {SALESPERSON_AGREEMENT_TEXT}
-            </pre>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
-    </>
+    <Dialog open={earningsOpen} onOpenChange={onEarningsOpenChange}>
+      <DialogContent className="max-w-md gap-0 p-0 overflow-hidden sm:max-w-md">
+        <DialogHeader className="px-5 pt-5 pb-0 text-start space-y-1">
+          <DialogTitle className="text-base font-semibold text-slate-900">How earnings work</DialogTitle>
+          <DialogDescription className="text-sm text-slate-500">
+            Fixed payouts for completed demo and Growth Engine setup sessions.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="px-5 pb-5 pt-3 max-h-[min(70vh,520px)] overflow-y-auto">
+          <EarningsInfoSection title="Demo payouts">
+            <ul className="list-disc pl-4 space-y-1.5 text-sm text-slate-600 leading-relaxed">
+              <li>
+                <span className="font-medium text-slate-800">${DEMO_PAYOUT_DOLLARS.toFixed(2)}</span> per completed
+                and approved demo session.
+              </li>
+            </ul>
+          </EarningsInfoSection>
+          <EarningsInfoSection title="Growth Engine setup payouts">
+            <ul className="list-disc pl-4 space-y-1.5 text-sm text-slate-600 leading-relaxed">
+              <li>
+                <span className="font-medium text-slate-800">${setupPayout.toFixed(2)}</span> per completed and
+                approved setup/onboarding session
+                {stats?.hasCustomTaskPayout ? " (custom rate)" : ""}.
+              </li>
+            </ul>
+          </EarningsInfoSection>
+          <p className="text-sm text-slate-600 leading-relaxed pt-2">
+            Payouts are reviewed and approved by admin.
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -232,8 +204,6 @@ export function SalesPortal() {
   const [acceptError, setAcceptError] = useState("");
   const [showCode, setShowCode] = useState(false);
   const [earningsInfoOpen, setEarningsInfoOpen] = useState(false);
-  const [policyModalOpen, setPolicyModalOpen] = useState(false);
-  const [showDebugIds, setShowDebugIds] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -335,8 +305,6 @@ export function SalesPortal() {
       setEmail("");
       setLoginCode("");
       setEarningsInfoOpen(false);
-      setPolicyModalOpen(false);
-      setShowDebugIds(false);
     }
   };
 
@@ -488,8 +456,8 @@ export function SalesPortal() {
             <div className="h-14 w-14 bg-amber-100 rounded-xl flex items-center justify-center mx-auto mb-4">
               <FileText className="h-7 w-7 text-amber-600" />
             </div>
-            <h1 className="text-2xl font-display font-bold text-gray-900">Internal Sales Commission Policy</h1>
-            <p className="text-gray-600 mt-2">Please review and accept the policy to continue</p>
+            <h1 className="text-2xl font-display font-bold text-gray-900">Sales payout policy</h1>
+            <p className="text-gray-600 mt-2">Please review and accept the payout policy to continue</p>
             <p className="text-xs text-gray-500 mt-1">Version {SALESPERSON_AGREEMENT_VERSION}</p>
           </div>
 
@@ -503,7 +471,7 @@ export function SalesPortal() {
 
             <ScrollArea className="h-80 border rounded-lg p-4 bg-gray-50">
               <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans">
-                {SALESPERSON_AGREEMENT_TEXT}
+                {SALES_PORTAL_PAYOUT_POLICY_TEXT}
               </pre>
             </ScrollArea>
           </div>
@@ -526,7 +494,7 @@ export function SalesPortal() {
                 htmlFor="agreement-check" 
                 className="text-sm text-gray-700 cursor-pointer leading-relaxed"
               >
-                I have read and agree to the Internal Sales Commission Policy (version{" "}
+                I have read and agree to the Sales payout policy (version{" "}
                 {SALESPERSON_AGREEMENT_VERSION}). I understand that my acceptance is legally binding and my
                 salesperson account ID, IP address, user agent, and timestamp will be recorded.
               </label>
@@ -577,26 +545,9 @@ export function SalesPortal() {
             <div>
               <h1 className="text-lg font-display font-bold text-gray-900">Sales Portal</h1>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
-                <p className="text-sm text-gray-500" data-testid="salesportal-debug-name">
-                  Welcome, {salesperson?.name}
-                </p>
+                <p className="text-sm text-gray-500">Welcome, {salesperson?.name}</p>
                 {salesperson?.email && (
-                  <p className="text-xs text-gray-400" data-testid="salesportal-debug-email">
-                    {salesperson.email}
-                  </p>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setShowDebugIds((v) => !v)}
-                  className="text-[10px] text-gray-400 underline underline-offset-2 hover:text-gray-600"
-                  data-testid="button-salesportal-debug-toggle"
-                >
-                  {showDebugIds ? "Hide debug" : "Debug"}
-                </button>
-                {showDebugIds && salesperson?.id && (
-                  <p className="text-[10px] text-gray-400 font-mono" data-testid="salesportal-debug-id">
-                    Salesperson: {shortId(salesperson.id)}
-                  </p>
+                  <p className="text-xs text-gray-400">{salesperson.email}</p>
                 )}
                 <button
                   type="button"
@@ -785,11 +736,6 @@ export function SalesPortal() {
                               <span className="truncate">{task.userEmail || "—"}</span>
                             </span>
                           </div>
-                          {showDebugIds && task.userId && (
-                            <p className="text-xs text-gray-400 font-mono truncate" data-testid="salesportal-debug-user-id">
-                              User: {shortId(task.userId)}
-                            </p>
-                          )}
                           {task.onboardingSummary && typeof task.onboardingSummary === "object" ? (
                             <p className="text-xs text-gray-600 line-clamp-2">
                               {String(
@@ -864,16 +810,7 @@ export function SalesPortal() {
 
           <TabsContent value="earnings">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="p-4 border-b border-gray-200">
-                <h2 className="font-semibold text-gray-900">Earnings</h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  ${DEMO_PAYOUT_DOLLARS} per completed and approved demo session · $
-                  {setupPayoutRate.toFixed(0)} per completed and approved Growth Engine setup session. Payouts are
-                  reviewed and approved by admin.
-                </p>
-              </div>
-
-              <div className="grid gap-3 border-b border-gray-100 bg-slate-50/90 p-4 sm:grid-cols-3">
+              <div className="grid gap-3 p-4 sm:grid-cols-3">
                 <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Demo session payouts</p>
                   <p className="mt-1 text-2xl font-bold text-gray-900">${demoPayoutsTotal.toFixed(2)}</p>
@@ -905,11 +842,9 @@ export function SalesPortal() {
         </Tabs>
       </main>
 
-      <SalesPortalEarningsDialogs
+      <SalesPortalEarningsDialog
         earningsOpen={earningsInfoOpen}
         onEarningsOpenChange={setEarningsInfoOpen}
-        policyOpen={policyModalOpen}
-        onPolicyOpenChange={setPolicyModalOpen}
         stats={stats}
       />
     </div>

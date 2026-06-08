@@ -44,7 +44,6 @@ import {
   Eye, EyeOff
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isSalespersonSubscriptionCommissionActiveAt } from "@shared/salespersonSubscriptionCommissionWindow";
 
 /** Centered compact admin form dialogs (~520–600px; scroll inside body only). */
 const ADMIN_FORM_MODAL_CLASS =
@@ -94,13 +93,6 @@ interface Conversion {
   paid: boolean;
   paidAt?: string;
   createdAt: string;
-}
-
-function salespersonSubscriptionCommissionBadge(createdAt: string): { label: string; active: boolean } {
-  const d = new Date(createdAt);
-  if (Number.isNaN(d.getTime())) return { label: "Commission expired", active: false };
-  const active = isSalespersonSubscriptionCommissionActiveAt(d, new Date());
-  return { label: active ? "Commission active" : "Commission expired", active };
 }
 
 interface AdminUser {
@@ -208,10 +200,10 @@ function SalespersonRolePayoutHint({ role }: { role: string }) {
   const r = role === "demo" ? "sales" : role || "sales";
   const text =
     r === "sales"
-      ? "Demo conversion commission: 30% recurring on base subscription for life (excludes AI Brain, Growth Engines, and add-ons)."
+      ? `$${ADMIN_DEFAULT_TASK_PAYOUT} per completed and approved demo session (admin approval required).`
       : r === "setup"
-        ? `Setup task payout: $${ADMIN_DEFAULT_TASK_PAYOUT} default. Override below if needed.`
-        : `Demo commission: 30% recurring on base subscription for life (excludes add-ons) + setup task payout: $${ADMIN_DEFAULT_TASK_PAYOUT}. Override setup payout below if needed.`;
+        ? `$${ADMIN_DEFAULT_TASK_PAYOUT} per completed and approved Growth Engine setup/onboarding session (admin approval required). Override setup payout below if needed.`
+        : `$${ADMIN_DEFAULT_TASK_PAYOUT} per completed and approved demo session and $${ADMIN_DEFAULT_TASK_PAYOUT} per completed and approved Growth Engine setup/onboarding session (admin approval required). Override setup payout below if needed.`;
   return (
     <p className="mt-1.5 rounded-md border border-muted bg-muted/40 px-2.5 py-1.5 text-[11px] leading-snug text-muted-foreground">
       {text}
@@ -634,7 +626,7 @@ export function Admin() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...data,
-          calendarLink: data.calendarLink?.trim() || undefined,
+          calendarLink: data.calendarLink?.trim(),
           role: data.role || "sales",
           ...(data.taskPayoutAmount != null &&
             String(data.taskPayoutAmount).trim() !== "" && {
@@ -850,7 +842,7 @@ export function Admin() {
               <div className="h-8 w-8 sm:h-10 sm:w-10 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
                 <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
               </div>
-              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Conversions</span>
+              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Demo payouts</span>
             </div>
             <p className="text-2xl sm:text-3xl font-bold text-gray-900">{totalConversions}</p>
           </div>
@@ -909,8 +901,8 @@ export function Admin() {
               </TabsTrigger>
               <TabsTrigger value="conversions" className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4">
                 <DollarSign className="h-4 w-4 shrink-0" />
-                <span className="hidden sm:inline">Conversions</span>
-                <span className="sm:hidden">Conv</span>
+                <span className="hidden sm:inline">Demo payouts</span>
+                <span className="sm:hidden">Payouts</span>
               </TabsTrigger>
               <TabsTrigger value="users" className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4">
                 <UserCircle className="h-4 w-4 shrink-0" />
@@ -965,7 +957,7 @@ export function Admin() {
                     <TableHead>Total payout</TableHead>
                     <TableHead>Setup done</TableHead>
                     <TableHead>Bookings</TableHead>
-                    <TableHead>Conversions</TableHead>
+                    <TableHead>Demo payouts</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -1001,7 +993,7 @@ export function Admin() {
                         </TableCell>
                         <TableCell
                           className="text-sm font-medium text-gray-900 whitespace-nowrap"
-                          title="Demo conversion credits and subscription commissions, plus Growth Engine setup task payouts credited over time."
+                          title="Approved demo session and Growth Engine setup payouts credited over time."
                         >
                           ${parseFloat(person.totalEarnings || "0").toFixed(2)}
                         </TableCell>
@@ -1121,7 +1113,10 @@ export function Admin() {
           <TabsContent value="conversions">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="p-4 border-b border-gray-200">
-                <h2 className="font-semibold text-gray-900">Conversion Payouts</h2>
+                <h2 className="font-semibold text-gray-900">Demo session payouts</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  ${ADMIN_DEFAULT_TASK_PAYOUT} per completed and approved demo session. Admin approval required.
+                </p>
               </div>
               <Table>
                 <TableHeader>
@@ -1129,16 +1124,15 @@ export function Admin() {
                     <TableHead>Salesperson</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Date</TableHead>
-                    <TableHead>Payment Status</TableHead>
-                    <TableHead>Subscription commission</TableHead>
+                    <TableHead>Payment status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {conversions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                        No conversions yet.
+                      <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                        No demo session payouts yet.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -1153,18 +1147,8 @@ export function Admin() {
                         </TableCell>
                         <TableCell>
                           <Badge variant={conversion.paid ? "default" : "outline"}>
-                            {conversion.paid ? 'Paid' : 'Pending'}
+                            {conversion.paid ? 'Paid' : 'Pending approval'}
                           </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {(() => {
-                            const { label, active } = salespersonSubscriptionCommissionBadge(conversion.createdAt);
-                            return (
-                              <Badge variant={active ? "default" : "secondary"} className="whitespace-nowrap font-normal">
-                                {label}
-                              </Badge>
-                            );
-                          })()}
                         </TableCell>
                         <TableCell>
                           {!conversion.paid && (
@@ -1173,7 +1157,7 @@ export function Admin() {
                               onClick={() => markConversionPaid.mutate(conversion.id)}
                               className="bg-brand-green hover:bg-brand-dark"
                             >
-                              Mark Paid
+                              Mark paid
                             </Button>
                           )}
                           {conversion.paid && conversion.paidAt && (
@@ -2203,16 +2187,20 @@ export function Admin() {
             </div>
             <div>
               <Label htmlFor="new-cal" className="text-xs font-medium text-muted-foreground">
-                Scheduling link <span className="font-normal">(optional)</span>
+                Booking Calendar URL <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="new-cal"
                 type="url"
+                required
                 value={newPerson.calendarLink}
                 onChange={(e) => setNewPerson({ ...newPerson, calendarLink: e.target.value })}
-                placeholder="https://your-booking-link.com"
+                placeholder="https://calendly.com/your-name/demo"
                 className="mt-1 h-9"
               />
+              <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                Required. Used for demo and Growth Engine setup bookings.
+              </p>
             </div>
             <div>
               <Label htmlFor="new-role" className="text-xs font-medium text-muted-foreground">
@@ -2245,8 +2233,8 @@ export function Admin() {
                 className="mt-1 h-9"
               />
               <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                Leave blank for default ${ADMIN_DEFAULT_TASK_PAYOUT}. For future task payouts; does not change subscription
-                commissions.
+                Leave blank for default ${ADMIN_DEFAULT_TASK_PAYOUT}. Applies to Growth Engine setup/onboarding
+                sessions only.
               </p>
             </div>
           </div>
@@ -2257,10 +2245,19 @@ export function Admin() {
             <Button
               type="button"
               size="sm"
-              disabled={!newPerson.name || !newPerson.email || createSalesperson.isPending}
+              disabled={
+                !newPerson.name ||
+                !newPerson.email ||
+                !newPerson.calendarLink.trim() ||
+                createSalesperson.isPending
+              }
               className="bg-brand-green hover:bg-brand-dark"
               data-testid="button-submit-salesperson"
               onClick={async () => {
+                if (!newPerson.calendarLink.trim()) {
+                  window.alert("Booking Calendar URL is required.");
+                  return;
+                }
                 try {
                   await createSalesperson.mutateAsync(newPerson);
                 } catch (err: unknown) {
@@ -2325,16 +2322,20 @@ export function Admin() {
               </div>
               <div>
                 <Label htmlFor="edit-cal" className="text-xs font-medium text-muted-foreground">
-                  Scheduling link
+                  Booking Calendar URL <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   id="edit-cal"
                   className="mt-1 h-9"
                   type="url"
+                  required
                   value={editingPerson.calendarLink || ""}
                   onChange={(e) => setEditingPerson({ ...editingPerson, calendarLink: e.target.value })}
-                  placeholder="https://your-booking-link.com"
+                  placeholder="https://calendly.com/your-name/demo"
                 />
+                <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                  Required. Used for demo and Growth Engine setup bookings.
+                </p>
               </div>
               <div>
                 <Label htmlFor="edit-role" className="text-xs font-medium text-muted-foreground">
@@ -2399,6 +2400,10 @@ export function Admin() {
               disabled={updateSalesperson.isPending}
               onClick={() => {
                 if (editingPerson) {
+                  if (!editingPerson.calendarLink?.trim()) {
+                    window.alert("Booking Calendar URL is required.");
+                    return;
+                  }
                   const raw = (editingPerson.taskPayoutAmount ?? "").toString().trim();
                   let taskPayoutAmount: string | null;
                   if (raw === "") {
