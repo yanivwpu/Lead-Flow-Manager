@@ -8217,15 +8217,29 @@ export async function registerRoutes(
   // Admin: Update booking status
   app.patch("/api/admin/bookings/:id", requireAdmin, async (req, res) => {
     try {
-      const { status, notes } = req.body;
-      
+      const { status, notes, salespersonId } = req.body as {
+        status?: string;
+        notes?: string;
+        salespersonId?: string | null;
+      };
+      const { DEMO_BOOKING_STATUS } = await import("@shared/salesCompensation");
+
       // Get the current booking to check if status is changing to converted
       const currentBooking = await storage.getDemoBooking(req.params.id);
-      
-      const booking = await storage.updateDemoBooking(req.params.id, {
-        ...(status !== undefined && { status }),
-        ...(notes !== undefined && { notes }),
-      });
+
+      const bookingUpdates: Record<string, unknown> = {};
+      if (status !== undefined) bookingUpdates.status = status;
+      if (notes !== undefined) bookingUpdates.notes = notes;
+      if (salespersonId !== undefined) {
+        bookingUpdates.salespersonId = salespersonId || null;
+        if (salespersonId) {
+          bookingUpdates.status = DEMO_BOOKING_STATUS.pendingAcceptance;
+          bookingUpdates.assignedAt = new Date();
+          bookingUpdates.acceptedAt = null;
+        }
+      }
+
+      const booking = await storage.updateDemoBooking(req.params.id, bookingUpdates as any);
       
       // If status changed to 'converted', automatically create a conversion record
       if (status === 'converted' && currentBooking && currentBooking.status !== 'converted') {
@@ -9182,6 +9196,7 @@ export async function registerRoutes(
 
   app.patch("/api/sales-portal/demos/:id/decline", requireSalesperson, async (req: any, res) => {
     try {
+      const { isDemoAwaitingAcceptance } = await import("@shared/salesCompensation");
       const { reason } = req.body as { reason?: string };
       if (!reason?.trim()) {
         return res.status(400).json({ error: "Decline reason is required" });
@@ -9189,6 +9204,9 @@ export async function registerRoutes(
       const demo = await storage.getDemoBooking(req.params.id);
       if (!demo || demo.salespersonId !== req.salesperson.id) {
         return res.status(404).json({ error: "Demo not found" });
+      }
+      if (!isDemoAwaitingAcceptance(demo.status)) {
+        return res.status(400).json({ error: "Demo is not awaiting acceptance" });
       }
       const { reassignDemoBookingToPool } = await import("./demoAssignmentService");
       const result = await reassignDemoBookingToPool(req.params.id, {

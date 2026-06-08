@@ -92,7 +92,7 @@ interface Salesperson {
 
 interface Booking {
   id: string;
-  salespersonId: string;
+  salespersonId: string | null;
   visitorName: string;
   visitorEmail: string;
   visitorPhone: string;
@@ -742,6 +742,22 @@ export function Admin() {
     }
   });
 
+  const assignBookingSalesperson = useMutation({
+    mutationFn: async ({ id, salespersonId }: { id: string; salespersonId: string }) => {
+      const res = await fetch(`/api/admin/bookings/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ salespersonId }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to assign salesperson");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bookings"] });
+    },
+  });
+
   const updateBookingStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const res = await fetch(`/api/admin/bookings/${id}`, {
@@ -1099,9 +1115,30 @@ export function Admin() {
                         </TableCell>
                         <TableCell>{formatDemoScheduledDate(booking.scheduledDate)}</TableCell>
                         <TableCell>
-                          {booking.salespersonId
-                            ? getSalespersonName(booking.salespersonId)
-                            : "—"}
+                          {booking.status === "needs_reassignment" || !booking.salespersonId ? (
+                            <select
+                              value={booking.salespersonId ?? ""}
+                              onChange={(e) => {
+                                const nextId = e.target.value;
+                                if (nextId) {
+                                  assignBookingSalesperson.mutate({ id: booking.id, salespersonId: nextId });
+                                }
+                              }}
+                              className="text-sm border rounded px-2 py-1 max-w-[160px]"
+                              disabled={assignBookingSalesperson.isPending}
+                            >
+                              <option value="">Assign salesperson…</option>
+                              {salespeople
+                                .filter((sp) => sp.isActive)
+                                .map((sp) => (
+                                  <option key={sp.id} value={sp.id}>
+                                    {sp.name}
+                                  </option>
+                                ))}
+                            </select>
+                          ) : (
+                            getSalespersonName(booking.salespersonId)
+                          )}
                         </TableCell>
                         <TableCell>
                           <Badge
@@ -1112,7 +1149,9 @@ export function Admin() {
                                   ? "secondary"
                                   : booking.status === "cancelled"
                                     ? "destructive"
-                                    : "outline"
+                                    : booking.status === "needs_reassignment"
+                                      ? "destructive"
+                                      : "outline"
                             }
                           >
                             {demoStatusLabel(booking.status)}
@@ -1145,6 +1184,7 @@ export function Admin() {
                             className="text-sm border rounded px-2 py-1"
                           >
                             <option value="pending_acceptance">Pending acceptance</option>
+                            <option value="needs_reassignment">Needs reassignment</option>
                             <option value="accepted">Accepted</option>
                             <option value="completed">Completed</option>
                             <option value="converted">Converted</option>

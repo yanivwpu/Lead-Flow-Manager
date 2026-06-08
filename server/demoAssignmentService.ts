@@ -1,10 +1,11 @@
-import { and, eq, sql } from "drizzle-orm";
-import { db } from "../drizzle/db";
-import { demoBookings } from "@shared/schema";
 import {
   DEMO_ACCEPTANCE_TIMEOUT_HOURS,
   DEMO_BOOKING_STATUS,
 } from "@shared/salesCompensation";
+import type { DemoBooking } from "@shared/schema";
+import { and, eq, sql } from "drizzle-orm";
+import { db } from "../drizzle/db";
+import { demoBookings } from "@shared/schema";
 import { storage } from "./storage";
 
 type DemoEligibleSalesperson = {
@@ -35,6 +36,44 @@ export async function pickSalespersonForDemoAssignment(
   );
 }
 
+/** Pure decline/reassign update — used by reassignDemoBookingToPool and regression tests. */
+export function buildDemoDeclineReassignmentUpdate(
+  booking: Pick<DemoBooking, "salespersonId">,
+  options: {
+    declineReason: string;
+    declinedBySalespersonId: string;
+    nextSalespersonId?: string | null;
+  },
+): Partial<DemoBooking> {
+  const now = new Date();
+  const reason = options.declineReason.trim();
+  const base = {
+    declineReason: reason,
+    declinedBySalespersonId: options.declinedBySalespersonId,
+    declinedAt: now,
+    acceptedAt: null as Date | null,
+  };
+
+  const nextId = options.nextSalespersonId ?? null;
+  const currentId = booking.salespersonId ?? null;
+
+  if (nextId && nextId !== currentId) {
+    return {
+      ...base,
+      salespersonId: nextId,
+      status: DEMO_BOOKING_STATUS.pendingAcceptance,
+      assignedAt: now,
+    };
+  }
+
+  return {
+    ...base,
+    salespersonId: null,
+    status: DEMO_BOOKING_STATUS.needsReassignment,
+    assignedAt: null,
+  };
+}
+
 export async function reassignDemoBookingToPool(
   bookingId: string,
   options?: {
@@ -46,35 +85,22 @@ export async function reassignDemoBookingToPool(
   const booking = await storage.getDemoBooking(bookingId);
   if (!booking) return { reassigned: false, bookingId };
 
-  const now = new Date();
   const declineReason = options?.declineReason?.trim();
   const declinedBy = options?.declinedBySalespersonId ?? options?.excludeSalespersonId;
-
-  const next = await pickSalespersonForDemoAssignment(
-    options?.excludeSalespersonId ?? booking.salespersonId,
-  );
-  if (!next) {
-    await storage.updateDemoBooking(bookingId, {
-      status: DEMO_BOOKING_STATUS.pendingAcceptance,
-      declineReason: declineReason || booking.declineReason,
-      declinedBySalespersonId: declinedBy ?? booking.declinedBySalespersonId,
-      declinedAt: declineReason ? now : booking.declinedAt,
-      acceptedAt: null,
-    } as Partial<typeof booking>);
-    return { reassigned: false, bookingId };
+  if (!declineReason || !declinedBy) {
+    throw new Error("Decline reason and declining salesperson are required");
   }
 
-  await storage.updateDemoBooking(bookingId, {
-    salespersonId: next.id,
-    status: DEMO_BOOKING_STATUS.pendingAcceptance,
-    assignedAt: now,
-    acceptedAt: null,
-    declineReason: declineReason || booking.declineReason || null,
-    declinedBySalespersonId: declinedBy ?? booking.declinedBySalespersonId ?? null,
-    declinedAt: declineReason ? now : booking.declinedAt ?? null,
-  } as Partial<typeof booking>);
+  const excludeId = options?.excludeSalespersonId ?? booking.salespersonId ?? undefined;
+  const next = await pickSalespersonForDemoAssignment(excludeId);
+  const updates = buildDemoDeclineReassignmentUpdate(booking, {
+    declineReason,
+    declinedBySalespersonId: declinedBy,
+    nextSalespersonId: next?.id ?? null,
+  });
 
-  return { reassigned: true, bookingId };
+  await storage.updateDemoBooking(bookingId, updates);
+  return { reassigned: updates.status === DEMO_BOOKING_STATUS.pendingAcceptance, bookingId };
 }
 
 /** Reassign demos that were not accepted within 24 hours. */
@@ -95,7 +121,8 @@ export async function processExpiredDemoAcceptances(): Promise<number> {
 
     for (const row of stale) {
       const result = await reassignDemoBookingToPool(row.id, {
-        excludeSalespersonId: row.salespersonId,
+        excludeSalespersonId: row.salespersonId ?? undefined,
+        declinedBySalespersonId: row.salespersonId ?? undefined,
         declineReason: "Auto-reassigned: no acceptance within 24 hours",
       });
       if (result.reassigned) reassigned++;

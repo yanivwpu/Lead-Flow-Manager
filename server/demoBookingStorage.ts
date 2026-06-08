@@ -133,6 +133,31 @@ function appendDeclineNote(
   return existingNotes?.trim() ? `${existingNotes.trim()}\n${line}` : line;
 }
 
+async function tryPersistDeclineFields(
+  id: string,
+  updates: Partial<DemoBooking>,
+): Promise<void> {
+  if (
+    updates.declineReason == null &&
+    updates.declinedBySalespersonId == null &&
+    updates.declinedAt == null
+  ) {
+    return;
+  }
+  try {
+    await db.execute(sql`
+      UPDATE demo_bookings
+      SET
+        decline_reason = ${updates.declineReason ?? null},
+        declined_by_salesperson_id = ${updates.declinedBySalespersonId ?? null},
+        declined_at = ${updates.declinedAt ?? null}
+      WHERE id = ${id}
+    `);
+  } catch {
+    /* decline columns may not exist yet */
+  }
+}
+
 async function updateDemoBookingLegacy(
   id: string,
   updates: Partial<DemoBooking>,
@@ -142,7 +167,8 @@ async function updateDemoBookingLegacy(
   if (!booking) return undefined;
 
   const status = updates.status ?? booking.status;
-  const salespersonId = updates.salespersonId ?? booking.salespersonId;
+  const salespersonId =
+    updates.salespersonId !== undefined ? updates.salespersonId : booking.salespersonId;
   let notes = updates.notes ?? booking.notes;
 
   if (updates.declineReason?.trim()) {
@@ -156,6 +182,8 @@ async function updateDemoBookingLegacy(
         notes = ${notes ?? null}
     WHERE id = ${id}
   `);
+
+  await tryPersistDeclineFields(id, updates);
 
   const extended = await tryFetchDemoBookingsExtendedLegacy({ id });
   if (extended?.[0]) return extended[0];
@@ -197,9 +225,18 @@ export async function writeDemoBookingUpdate(
   } catch (error) {
     if (!isDemoBookingsSchemaMismatchError(error)) throw error;
     console.warn("[Storage] demo_bookings update schema mismatch; using legacy update");
-    const extended = await updateDemoBookingExtendedLegacy(id, updates);
-    if (extended) return extended;
-    return updateDemoBookingLegacy(id, updates);
+    try {
+      const extended = await updateDemoBookingExtendedLegacy(id, updates);
+      if (extended) return extended;
+    } catch (extendedError) {
+      console.warn("[Storage] extended demo_bookings update failed:", extendedError);
+    }
+    const legacy = await updateDemoBookingLegacy(id, updates);
+    if (legacy) return legacy;
+    await tryPersistDeclineFields(id, updates);
+    const reread = await tryFetchDemoBookingsExtendedLegacy({ id });
+    if (reread?.[0]) return reread[0];
+    return (await fetchDemoBookingsLegacy({ id }))[0];
   }
 }
 

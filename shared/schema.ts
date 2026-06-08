@@ -777,13 +777,13 @@ export const salespeople = pgTable("salespeople", {
 // Demo bookings from visitors
 export const demoBookings = pgTable("demo_bookings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  salespersonId: varchar("salesperson_id").notNull().references(() => salespeople.id, { onDelete: "cascade" }),
+  salespersonId: varchar("salesperson_id").references(() => salespeople.id, { onDelete: "set null" }),
   visitorName: text("visitor_name").notNull(),
   visitorEmail: text("visitor_email").notNull(),
   visitorPhone: text("visitor_phone").notNull(),
   scheduledDate: timestamp("scheduled_date").notNull(),
   consentGiven: boolean("consent_given").default(true),
-  status: text("status").notNull().default("pending_acceptance"), // pending_acceptance, accepted, completed, converted, cancelled
+  status: text("status").notNull().default("pending_acceptance"), // pending_acceptance, accepted, completed, converted, cancelled, needs_reassignment
   notes: text("notes"),
   source: text("source").default("web"), // web, qr_code
   assignedAt: timestamp("assigned_at"),

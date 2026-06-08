@@ -13,6 +13,7 @@ export const DEMO_BOOKING_STATUS = {
   completed: "completed",
   converted: "converted",
   cancelled: "cancelled",
+  needsReassignment: "needs_reassignment",
 } as const;
 
 export type DemoBookingStatus = (typeof DEMO_BOOKING_STATUS)[keyof typeof DEMO_BOOKING_STATUS];
@@ -50,6 +51,8 @@ export function demoStatusLabel(status: string): string {
       return "Converted";
     case DEMO_BOOKING_STATUS.cancelled:
       return "Cancelled";
+    case DEMO_BOOKING_STATUS.needsReassignment:
+      return "Needs Reassignment";
     default:
       return status;
   }

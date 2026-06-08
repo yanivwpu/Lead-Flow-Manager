@@ -25,9 +25,15 @@ export function mapDemoBookingRow(row: Record<string, unknown>): DemoBooking {
         ? new Date(String(createdRaw))
         : new Date();
 
+  const rawSalespersonId = row.salesperson_id ?? row.salespersonId;
+  const salespersonId =
+    rawSalespersonId == null || rawSalespersonId === ""
+      ? null
+      : String(rawSalespersonId);
+
   return {
     id: String(row.id ?? ""),
-    salespersonId: String(row.salesperson_id ?? row.salespersonId ?? ""),
+    salespersonId,
     visitorName: String(row.visitor_name ?? row.visitorName ?? ""),
     visitorEmail: String(row.visitor_email ?? row.visitorEmail ?? ""),
     visitorPhone: String(row.visitor_phone ?? row.visitorPhone ?? ""),

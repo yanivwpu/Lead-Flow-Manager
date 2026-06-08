@@ -398,13 +398,15 @@ export function SalesPortal() {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: { reassigned?: boolean }) => {
       setDeclineDemoId(null);
       setDeclineReason("");
       invalidateDemoQueries();
       toast({
         title: "Demo declined",
-        description: "Demo declined. It has been returned to the assignment pool.",
+        description: data.reassigned
+          ? "The demo was returned to the assignment pool and assigned to another salesperson."
+          : "The demo was unassigned and flagged for admin reassignment.",
       });
     },
     onError: (err: Error) => {
