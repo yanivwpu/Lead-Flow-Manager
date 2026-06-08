@@ -103,6 +103,7 @@ export class ResoClient {
           Accept: "application/json",
           "Accept-Encoding": "gzip",
         },
+        signal: AbortSignal.timeout(120_000),
       });
 
       const text = await res.text();
@@ -141,6 +142,7 @@ export class ResoClient {
   async paginateCollection(
     startUrl: string,
     metrics: ResoFetchMetrics,
+    onPage?: (progress: { pagesFetched: number; rowsFetched: number }) => void | Promise<void>,
   ): Promise<{ rows: unknown[]; pagesFetched: number }> {
     const rows: unknown[] = [];
     let pagesFetched = 0;
@@ -150,6 +152,9 @@ export class ResoClient {
       const body = await this.fetchJson(url, metrics);
       pagesFetched += 1;
       rows.push(...oDataValueRows(body));
+      if (onPage) {
+        await onPage({ pagesFetched, rowsFetched: rows.length });
+      }
       url = oDataNextLink(body);
     }
 

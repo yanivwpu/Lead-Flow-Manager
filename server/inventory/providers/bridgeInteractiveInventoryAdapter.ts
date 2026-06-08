@@ -25,7 +25,11 @@ export const bridgeInteractiveInventoryAdapter: InventoryProviderAdapter = {
   },
 
   async fetchListings(ctx, options) {
-    return fetchBridgeInteractiveReplication(ctx, options);
+    return fetchBridgeInteractiveReplication(ctx, {
+      mode: options.mode,
+      maxModificationTimestamp: options.maxModificationTimestamp,
+      onFetchProgress: options.onFetchProgress,
+    });
   },
 
   normalizeListing(raw: unknown, _ctx: InventoryAdapterContext) {

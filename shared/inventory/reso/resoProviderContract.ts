@@ -51,6 +51,7 @@ export interface ResoReplicationProviderContract {
 export type ResoReplicationFetchOptions = {
   mode: ResoSyncMode;
   maxModificationTimestamp?: string;
+  onFetchProgress?: (progress: { pagesFetched: number; rowsFetched: number }) => void | Promise<void>;
 };
 
 export type ResoReplicationFetchResult = {

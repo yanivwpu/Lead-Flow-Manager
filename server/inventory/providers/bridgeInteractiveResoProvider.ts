@@ -46,7 +46,9 @@ const bridgePropertyNormalizer: ResoPropertyNormalizerContract = {
 };
 
 export function normalizeBridgeInteractiveProperty(raw: unknown) {
-  return normalizeResoPropertyRow(raw, bridgePropertyNormalizer);
+  return normalizeResoPropertyRow(raw, bridgePropertyNormalizer, {
+    modificationTimestampField: BRIDGE_MODIFICATION_FIELD,
+  });
 }
 
 function buildBridgePropertyFilter(

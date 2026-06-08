@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -66,6 +66,7 @@ const EMPTY_FORM: InventorySourceForm = {
 };
 
 const PRODUCTION_UI = import.meta.env.PROD;
+const INVENTORY_PROVIDER_STORAGE_KEY = "inventory-selected-provider";
 
 function defaultDisplayNamePlaceholder(provider: InventoryProvider): string {
   if (provider === "bridge_interactive") {
@@ -132,6 +133,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const [selectedProvider, setSelectedProvider] = useState<InventoryProvider>("mls_grid");
   const [fieldErrors, setFieldErrors] = useState<InventoryFormFieldErrors>({});
   const [formBannerError, setFormBannerError] = useState<string | null>(null);
+  const providerInitialized = useRef(false);
 
   const clearFieldError = (field: InventoryFormField) => {
     setFieldErrors((prev) => {
@@ -166,10 +168,39 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     staleTime: 5_000,
     refetchInterval: (query) => {
       const list = query.state.data as PublicInventorySource[] | undefined;
-      const active = list?.find((s) => s.provider === selectedProvider);
-      return active?.lastSyncStatus === "running" ? 4_000 : false;
+      const hasRunning = list?.some((s) => s.lastSyncStatus === "running");
+      return hasRunning ? 3_000 : false;
     },
   });
+
+  useEffect(() => {
+    if (sourcesLoading || providerInitialized.current) return;
+    if (sources.length === 0) {
+      const saved = sessionStorage.getItem(INVENTORY_PROVIDER_STORAGE_KEY);
+      if (saved) setSelectedProvider(saved as InventoryProvider);
+      providerInitialized.current = true;
+      return;
+    }
+
+    const saved = sessionStorage.getItem(INVENTORY_PROVIDER_STORAGE_KEY);
+    if (saved && sources.some((s) => s.provider === saved)) {
+      setSelectedProvider(saved as InventoryProvider);
+      providerInitialized.current = true;
+      return;
+    }
+
+    const running = sources.find((s) => s.lastSyncStatus === "running");
+    const connected = sources.find((s) => s.connectionStatus === "connected");
+    const preferred = running ?? connected ?? sources[0];
+    if (preferred) {
+      setSelectedProvider(preferred.provider as InventoryProvider);
+    }
+    providerInitialized.current = true;
+  }, [sources, sourcesLoading]);
+
+  useEffect(() => {
+    sessionStorage.setItem(INVENTORY_PROVIDER_STORAGE_KEY, selectedProvider);
+  }, [selectedProvider]);
 
   const activeSource = useMemo(
     () => sources.find((s) => s.provider === selectedProvider),
@@ -423,6 +454,15 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     sourcePhase?.phase === "initial_import_complete" ||
     sourcePhase?.phase === "up_to_date" ||
     sourcePhase?.phase === "sync_failed";
+  const importJustFinished =
+    sourcePhase?.phase === "initial_import_complete" ||
+    (sourcePhase?.phase === "up_to_date" && activeSource?.lastSyncStatus === "success");
+  const datasetId =
+    typeof activeSource?.config?.datasetId === "string" ? activeSource.config.datasetId : null;
+  const originatingSystem =
+    typeof activeSource?.config?.originatingSystemName === "string"
+      ? activeSource.config.originatingSystemName
+      : null;
 
   const inner = (
     <div className={cn("space-y-4", className)}>
@@ -845,6 +885,18 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         </dd>
                       </div>
                     )}
+                    {datasetId && (
+                      <div>
+                        <dt className="text-muted-foreground">Dataset ID</dt>
+                        <dd className="font-medium font-mono text-xs">{datasetId}</dd>
+                      </div>
+                    )}
+                    {originatingSystem && (
+                      <div>
+                        <dt className="text-muted-foreground">Originating system</dt>
+                        <dd className="font-medium font-mono text-xs">{originatingSystem}</dd>
+                      </div>
+                    )}
                     <div>
                       <dt className="text-muted-foreground">Listings in workspace</dt>
                       <dd className="font-medium" data-testid="inventory-listing-count">
@@ -855,6 +907,14 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       <div>
                         <dt className="text-muted-foreground">Last sync</dt>
                         <dd className="font-medium">{lastSyncAt}</dd>
+                      </div>
+                    )}
+                    {syncRunning && (
+                      <div className="sm:col-span-2">
+                        <dt className="text-muted-foreground">Import progress</dt>
+                        <dd className="text-xs text-blue-900/90 leading-relaxed">
+                          {sourcePhase?.detail ?? "Fetching listings from your data provider…"}
+                        </dd>
                       </div>
                     )}
                     {showSyncMetrics && statusHighlights.updatedListings != null && (
@@ -894,7 +954,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                   {showSyncMetrics && syncStatRows.length > 0 && (
                     <div className="border-t border-gray-200 pt-3">
                       <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">
-                        Last sync summary
+                        {syncRunning ? "Live sync progress" : "Last sync summary"}
                       </p>
                       <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
                         {syncStatRows.map((row) => (
@@ -905,6 +965,18 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         ))}
                       </div>
                     </div>
+                  )}
+
+                  {importJustFinished && !syncFailed && (
+                    <Alert className="border-emerald-200 bg-emerald-50/80 py-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-700" />
+                      <AlertTitle className="text-sm text-emerald-950">Import complete</AlertTitle>
+                      <AlertDescription className="text-xs text-emerald-900/90">
+                        {activeSource.listingCount > 0
+                          ? `${activeSource.listingCount.toLocaleString()} listings are now in your workspace.`
+                          : "Sync finished. No listings were imported — verify your dataset ID and token with Bridge Data Output."}
+                      </AlertDescription>
+                    </Alert>
                   )}
 
                   {syncFailed && activeSource.lastSyncError && (

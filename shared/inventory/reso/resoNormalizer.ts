@@ -74,6 +74,13 @@ export function buildResoAddress(row: Record<string, unknown>): NormalizedInvent
   };
 }
 
+function normalizeResoTimestamp(value: unknown): string | undefined {
+  if (value == null || value === "") return undefined;
+  const d = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
 export function defaultResoListingId(row: Record<string, unknown>): string | null {
   const id = row.ListingId ?? row.ListingKey;
   if (id == null || String(id).trim() === "") return null;
@@ -94,7 +101,6 @@ export function normalizeResoPropertyRow(
   if (!providerListingId) return null;
 
   const modField = options?.modificationTimestampField ?? "ModificationTimestamp";
-  const modTs = row[modField];
 
   const candidate: NormalizedInventoryListing = {
     provider: contract.provider,
@@ -120,7 +126,7 @@ export function normalizeResoPropertyRow(
     features: [],
     photos: contract.extractPhotos?.(row) ?? normalizeResoMediaItems(row.Media),
     listingUrl: contract.extractListingUrl?.(row) ?? null,
-    sourceUpdatedAt: typeof modTs === "string" ? modTs : undefined,
+    sourceUpdatedAt: normalizeResoTimestamp(row[modField]),
   };
 
   const parsed = normalizedInventoryListingSchema.safeParse(candidate);

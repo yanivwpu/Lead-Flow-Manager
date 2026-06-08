@@ -100,7 +100,11 @@ export async function runResoReplicationFetch(
     unselect: extras.unselect,
   });
 
-  const { rows: listings, pagesFetched } = await client.paginateCollection(startUrl, metrics);
+  const { rows: listings, pagesFetched } = await client.paginateCollection(
+    startUrl,
+    metrics,
+    options.onFetchProgress,
+  );
 
   const maxModificationTimestamp = maxTimestampFromRows(
     listings,

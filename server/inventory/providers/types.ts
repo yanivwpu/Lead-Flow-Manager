@@ -19,6 +19,7 @@ export type ValidateConnectionResult = {
 export type FetchListingsOptions = {
   mode: InventorySyncMode;
   maxModificationTimestamp?: string;
+  onFetchProgress?: (progress: { pagesFetched: number; rowsFetched: number }) => void | Promise<void>;
 };
 
 export type FetchListingsResult = {

@@ -137,8 +137,23 @@ export function formatInventorySourceStatusRows(
   const rows: InventorySyncStatRow[] = [];
   const n = (key: string) => statNumber(stats, key);
 
-  const synced = n("seenCount") ?? n("upserted");
-  if (synced != null) rows.push({ label: "Listings synced", value: synced.toLocaleString() });
+  const synced = n("listingsImported") ?? n("seenCount") ?? n("upserted");
+  if (synced != null) rows.push({ label: "Listings imported", value: synced.toLocaleString() });
+
+  const fetched = n("listingsFetched");
+  if (fetched != null && fetched > 0) {
+    rows.push({ label: "Listings fetched", value: fetched.toLocaleString() });
+  }
+
+  const skipped = n("listingsSkipped") ?? n("skipped");
+  if (skipped != null && skipped > 0) {
+    rows.push({ label: "Skipped (invalid rows)", value: skipped.toLocaleString() });
+  }
+
+  const datasetId = statString(stats, "datasetId");
+  if (datasetId) {
+    rows.push({ label: "Dataset", value: datasetId });
+  }
 
   const pagesFetched = n("pagesFetched");
   if (pagesFetched != null && pagesFetched > 0) {
@@ -195,8 +210,23 @@ export function formatInventorySyncStatRows(
   const rows: InventorySyncStatRow[] = [];
   const n = (key: string) => statNumber(stats, key);
 
-  const synced = n("seenCount") ?? n("upserted");
-  if (synced != null) rows.push({ label: "Listings synced", value: synced.toLocaleString() });
+  const synced = n("listingsImported") ?? n("seenCount") ?? n("upserted");
+  if (synced != null) rows.push({ label: "Listings imported", value: synced.toLocaleString() });
+
+  const fetched = n("listingsFetched");
+  if (fetched != null && fetched > 0) {
+    rows.push({ label: "Listings fetched", value: fetched.toLocaleString() });
+  }
+
+  const skipped = n("listingsSkipped") ?? n("skipped");
+  if (skipped != null && skipped > 0) {
+    rows.push({ label: "Skipped (invalid rows)", value: skipped.toLocaleString() });
+  }
+
+  const datasetId = statString(stats, "datasetId");
+  if (datasetId) {
+    rows.push({ label: "Dataset", value: datasetId });
+  }
 
   const newListings = n("newListings");
   if (newListings != null && newListings > 0) {

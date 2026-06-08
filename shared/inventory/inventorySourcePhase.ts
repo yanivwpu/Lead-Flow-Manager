@@ -47,22 +47,33 @@ function syncMode(stats: Record<string, unknown> | null | undefined): string | n
 function importProgressMetrics(
   stats: Record<string, unknown> | null | undefined,
   listingCount: number,
-): { listingsImported: number | null; pagesProcessed: number | null } {
+): { listingsImported: number | null; pagesProcessed: number | null; listingsFetched: number | null } {
   const pagesProcessed = statNumber(stats, "pagesFetched");
-  const fromStats = statNumber(stats, "upserted") ?? statNumber(stats, "seenCount");
+  const listingsFetched = statNumber(stats, "listingsFetched");
+  const fromStats =
+    statNumber(stats, "listingsImported") ??
+    statNumber(stats, "upserted") ??
+    statNumber(stats, "seenCount");
   const listingsImported =
     fromStats != null && fromStats > 0
       ? fromStats
       : listingCount > 0
         ? listingCount
         : null;
-  return { listingsImported, pagesProcessed };
+  return { listingsImported, pagesProcessed, listingsFetched };
 }
 
-function formatProgressDetail(listingsImported: number | null, pagesProcessed: number | null): string | null {
+function formatProgressDetail(
+  listingsImported: number | null,
+  pagesProcessed: number | null,
+  listingsFetched: number | null,
+): string | null {
   const parts: string[] = [];
+  if (listingsFetched != null && listingsFetched > 0) {
+    parts.push(`${listingsFetched.toLocaleString()} listings fetched`);
+  }
   if (listingsImported != null && listingsImported > 0) {
-    parts.push(`${listingsImported.toLocaleString()} listings imported`);
+    parts.push(`${listingsImported.toLocaleString()} imported`);
   }
   if (pagesProcessed != null && pagesProcessed > 0) {
     parts.push(`${pagesProcessed.toLocaleString()} pages processed`);
@@ -122,16 +133,24 @@ export function deriveInventorySourcePhase(input: InventorySourcePhaseInput): In
 
   if (lastSyncStatus === "running") {
     if (!initialComplete) {
-      const progressDetail = formatProgressDetail(progress.listingsImported, progress.pagesProcessed);
+      const progressDetail = formatProgressDetail(
+        progress.listingsImported,
+        progress.pagesProcessed,
+        progress.listingsFetched,
+      );
       return {
         phase: "initial_import_running",
         message: "Importing listings…",
-        detail: progressDetail,
+        detail: progressDetail ?? "Fetching listings from your data provider…",
         listingsImported: progress.listingsImported,
         pagesProcessed: progress.pagesProcessed,
       };
     }
-    const progressDetail = formatProgressDetail(progress.listingsImported, progress.pagesProcessed);
+    const progressDetail = formatProgressDetail(
+      progress.listingsImported,
+      progress.pagesProcessed,
+      progress.listingsFetched,
+    );
     return {
       phase: "up_to_date",
       message: "Syncing listings…",
@@ -152,7 +171,11 @@ export function deriveInventorySourcePhase(input: InventorySourcePhaseInput): In
   }
 
   if (lastSyncStatus === "success" && mode === "initial") {
-    const progressDetail = formatProgressDetail(progress.listingsImported, progress.pagesProcessed);
+    const progressDetail = formatProgressDetail(
+      progress.listingsImported,
+      progress.pagesProcessed,
+      progress.listingsFetched,
+    );
     return {
       phase: "initial_import_complete",
       message: "Initial import complete",
@@ -162,7 +185,11 @@ export function deriveInventorySourcePhase(input: InventorySourcePhaseInput): In
     };
   }
 
-  const progressDetail = formatProgressDetail(progress.listingsImported, progress.pagesProcessed);
+  const progressDetail = formatProgressDetail(
+    progress.listingsImported,
+    progress.pagesProcessed,
+    progress.listingsFetched,
+  );
   return {
     phase: "up_to_date",
     message: "Up to date",
