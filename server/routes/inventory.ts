@@ -161,36 +161,7 @@ export function registerInventoryRoutes(app: Express): void {
       const result = await validateSourceConnection(req.user.id, req.params.id);
       if (!result) return res.status(404).json({ error: "Inventory source not found" });
 
-      let autoSyncStarted = false;
-      let autoSyncFailed = false;
-      let autoSyncError: string | undefined;
-
-      if (result.ok) {
-        const source = await getInventorySource(req.user.id, req.params.id);
-        const cfg = (source?.config || {}) as Record<string, unknown>;
-        const initialImportComplete = cfg.initialImportComplete === true;
-
-        if (source && !initialImportComplete) {
-          const outcome = await startInventorySourceSync(req.user.id, req.params.id);
-          if (outcome.started) {
-            autoSyncStarted = true;
-          } else if (outcome.reason === "already_running") {
-            // Import already in progress — no error, no duplicate start.
-          } else if (outcome.reason === "dev_seed_blocked") {
-            autoSyncFailed = true;
-            autoSyncError = DEV_SEED_PRODUCTION_BLOCK_MESSAGE;
-          } else if (outcome.reason === "not_supported") {
-            autoSyncFailed = true;
-            autoSyncError =
-              "This inventory source does not support listing sync. Connect a listing feed provider as your inventory source.";
-          } else {
-            autoSyncFailed = true;
-            autoSyncError = "Import could not start automatically. Click Sync Now to try again.";
-          }
-        }
-      }
-
-      res.json({ ...result, autoSyncStarted, autoSyncFailed, autoSyncError });
+      res.json(result);
     } catch (error) {
       console.error("[inventory] validate source", error);
       res.status(500).json({ error: "Failed to validate inventory source" });
@@ -202,6 +173,17 @@ export function registerInventoryRoutes(app: Express): void {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const gate = await requireInventoryAccess(req.user.id);
       if (!gate.ok) return res.status(gate.status).json(gate.body);
+
+      const validation = await validateSourceConnection(req.user.id, req.params.id);
+      if (!validation) {
+        return res.status(404).json({ error: "Inventory source not found" });
+      }
+      if (!validation.ok) {
+        return res.status(400).json({
+          error: validation.message ?? "Connection validation failed",
+          code: "validation_failed",
+        });
+      }
 
       const outcome = await startInventorySourceSync(req.user.id, req.params.id);
       if (outcome.reason === "source_not_found") {
@@ -223,7 +205,7 @@ export function registerInventoryRoutes(app: Express): void {
       if (!outcome.started) {
         return res.status(409).json({ error: "Sync already running", code: "sync_in_progress" });
       }
-      res.status(202).json({ syncStarted: true });
+      res.status(202).json({ syncStarted: true, validated: true });
     } catch (error) {
       console.error("[inventory] sync source", error);
       res.status(500).json({ error: "Failed to start inventory sync" });

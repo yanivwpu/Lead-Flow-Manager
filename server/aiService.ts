@@ -52,6 +52,7 @@ export class AIService {
       intent?: string;
       leadScore?: string;
       buyerPreferences?: string;
+      inventoryMatchSummary?: string;
     },
     routing?: AiRoutingResult,
   ): Promise<{ suggestion: string; confidence: number }> {
@@ -421,6 +422,7 @@ Return JSON only: { "summary": "..." }`;
       intent?: string;
       leadScore?: string;
       buyerPreferences?: string;
+      inventoryMatchSummary?: string;
     },
     isFirstMessage?: boolean,
     routing?: AiRoutingResult,
@@ -483,6 +485,7 @@ ${contactContext.timeline ? `- Timeline (already mentioned): ${contactContext.ti
 ${contactContext.financing ? `- Financing (already mentioned): ${contactContext.financing} — DO NOT ask about financing again` : ''}
 ${contactContext.notes ? `- Agent notes: ${contactContext.notes}` : ''}
 ${contactContext.buyerPreferences ? `\n${contactContext.buyerPreferences}\nUse these preferences when relevant. Do not re-ask for details already captured unless the customer contradicts them.` : ''}
+${contactContext.inventoryMatchSummary ? `\n${contactContext.inventoryMatchSummary}` : ''}
 ` : ''}CORE RULES — READ CAREFULLY:
 
 1. READ THE FULL CONVERSATION before replying. Extract what is already known from the customer's messages (goals, constraints, preferences, and what they've already shared).
@@ -545,12 +548,19 @@ REAL ESTATE SPECIFIC:
 - Prioritize: answer their question → human callback when they ask to speak with someone → viewing/booking only when they want to schedule
 - Do NOT send a booking link when they ask to speak with an advisor/agent unless they confirm they want to schedule${isInfoSeekingRouting ? `
 - INFO-SEEKING: qualify interest first (buy/rent/invest, area, goals). Do NOT mention viewings, meetings, or booking yet.` : `
-- Qualification order: intent (buy/rent/invest) → budget → timeline → financing
+- Qualification order: intent (buy/rent/invest) → budget → timeline → financing → occupancy → motivation
 - If viewing intent is shown: "Would you like to book a viewing this week?" / "Weekday or weekend works better for you?"
 - If budget unknown: "Do you have a target price range in mind?" 
 - If timeline unknown: "What kind of timeline are you working with?"
 - If financing unclear: "Are you already pre-approved, or still exploring financing options?"`}
-- Never ask about something already mentioned (e.g., if they named a property, don't ask which property)
+- Never ask about something already mentioned (e.g., if they named a property, don't ask which property)${contactContext?.inventoryMatchSummary ? `
+
+INVENTORY AWARENESS (critical — matching listings already exist):
+- Matching properties are already in the connected inventory feed (see MATCHING INVENTORY above). Do NOT say you will "check for available options", "search for listings", or "look for properties" — that work is done.
+- Briefly acknowledge matches exist in the relevant area, e.g. "I found several properties that appear to match your criteria in [area]. I'll prepare the best options and send them shortly."
+- Do NOT paste listing addresses, URLs, photos, or MLS details in this reply. Listings require agent review before sending.
+- Do NOT auto-send or promise immediate delivery of listings — say you are preparing curated options to send shortly.
+- After the inventory acknowledgment, continue buyer qualification with ONE question: financing, timeline, occupancy, or motivation (skip any already captured in conversation or CRM context).` : ""}
 
 EXAMPLE — how to reply to: "The one on 5th Avenue with the garden."
 BAD: "Thank you! Could you provide more details about which listing?"  

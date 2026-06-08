@@ -10560,16 +10560,27 @@ export async function registerRoutes(
                 formatBuyerPreferenceSummaryForAi,
               } = await import("./buyerPreferenceService");
               const prefGate = await shouldRunBuyerPreferencePipeline(userId, contactForPrefs);
+              const contextPatch: Record<string, unknown> = { ...(contactContext || {}) };
               if (prefGate.ok) {
                 const summary = formatBuyerPreferenceSummaryForAi(
                   readBuyerPreferenceProfile(contactForPrefs),
                 );
                 if (summary) {
-                  enrichedContactContext = {
-                    ...(contactContext || {}),
-                    buyerPreferences: summary,
-                  };
+                  contextPatch.buyerPreferences = summary;
                 }
+              }
+              const { getInventoryMatchSummaryForContact } = await import(
+                "./inventory/inventoryMatchingService"
+              );
+              const inventorySummary = await getInventoryMatchSummaryForContact(
+                convForPrefs.contactId,
+                userId,
+              );
+              if (inventorySummary) {
+                contextPatch.inventoryMatchSummary = inventorySummary;
+              }
+              if (Object.keys(contextPatch).length > 0) {
+                enrichedContactContext = contextPatch;
               }
             }
           }

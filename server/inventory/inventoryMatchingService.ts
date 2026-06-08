@@ -1,5 +1,6 @@
 import type { InventoryListing } from "@shared/schema";
 import type { InventoryMatchesResponse, InventoryMatchResult } from "@shared/inventory/inventoryMatchTypes";
+import { formatInventoryMatchSummaryForAi } from "@shared/inventory/inventoryMatchDisplay";
 import {
   extractBuyerMatchCriteria,
   rankInventoryMatches,
@@ -170,6 +171,28 @@ export async function findMatchingListingsForContact(
     matches,
     savedListingIds,
   };
+}
+
+/** Inventory context for AI Brain suggest-reply when matches exist. */
+export async function getInventoryMatchSummaryForContact(
+  contactId: string,
+  userId: string,
+): Promise<string> {
+  const result = await findMatchingListingsForContact(contactId, userId);
+  if (!result.eligible || result.matchCount <= 0 || result.matches.length === 0) {
+    return "";
+  }
+
+  const contact = await storage.getContact(contactId);
+  const buyerAreas = contact
+    ? extractBuyerMatchCriteria(readBuyerPreferenceProfile(contact)).areas
+    : [];
+
+  return formatInventoryMatchSummaryForAi({
+    matchCount: result.matchCount,
+    matches: result.matches,
+    buyerAreas,
+  });
 }
 
 /** Phase 4+ hook: same ranking pipeline for automations / AI recommendations. */
