@@ -250,6 +250,14 @@ export class WebhookHandlers {
       return;
     }
 
+    // Attribute demo → paid conversion ($100 policy) on first qualifying payment
+    try {
+      const { tryRecordDemoConversionForUser } = await import("./salesConversionAttribution");
+      await tryRecordDemoConversionForUser(user, new Date());
+    } catch (attrErr) {
+      console.error("[Stripe Webhook] demo conversion attribution error:", attrErr);
+    }
+
     // Check if this user came from a salesperson conversion
     const conversion = await storage.getSalesConversionByUserId(user.id);
     if (conversion) {

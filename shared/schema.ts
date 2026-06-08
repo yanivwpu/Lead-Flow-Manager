@@ -783,9 +783,12 @@ export const demoBookings = pgTable("demo_bookings", {
   visitorPhone: text("visitor_phone").notNull(),
   scheduledDate: timestamp("scheduled_date").notNull(),
   consentGiven: boolean("consent_given").default(true),
-  status: text("status").notNull().default("pending"), // pending, completed, cancelled, converted
+  status: text("status").notNull().default("pending_acceptance"), // pending_acceptance, accepted, completed, converted, cancelled
   notes: text("notes"),
   source: text("source").default("web"), // web, qr_code
+  assignedAt: timestamp("assigned_at"),
+  acceptedAt: timestamp("accepted_at"),
+  declineReason: text("decline_reason"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -795,10 +798,14 @@ export const salesConversions = pgTable("sales_conversions", {
   bookingId: varchar("booking_id").notNull().references(() => demoBookings.id, { onDelete: "cascade" }),
   salespersonId: varchar("salesperson_id").notNull().references(() => salespeople.id, { onDelete: "cascade" }),
   userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }), // The user who subscribed
-  amount: numeric("amount", { precision: 10, scale: 2 }).default("50"), // Commission amount
+  amount: numeric("amount", { precision: 10, scale: 2 }).default("100"), // Conversion payout amount ($100 when eligible)
   totalRevenue: numeric("total_revenue", { precision: 10, scale: 2 }).default("0"), // Cumulative subscription revenue from this user
   paid: boolean("paid").default(false),
   paidAt: timestamp("paid_at"),
+  conversionDate: timestamp("conversion_date"),
+  demoDate: timestamp("demo_date"),
+  payoutEligible: boolean("payout_eligible").notNull().default(true),
+  eligibilityNotes: text("eligibility_notes"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

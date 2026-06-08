@@ -353,6 +353,10 @@ export function startCronJobs() {
       console.error('[CampaignScheduler] tick error:', err)
     );
 
+    import("./demoAssignmentService")
+      .then(({ processExpiredDemoAcceptances }) => processExpiredDemoAcceptances())
+      .catch((err) => console.error("[DemoAssignment] cron error:", err));
+
     // Calendly polling fallback — every 10 minutes for integrations without webhooks
     if (utcMin % 10 === 5 && utcMin !== lastCalendlyPollMinute) {
       lastCalendlyPollMinute = utcMin;

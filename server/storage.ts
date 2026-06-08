@@ -2085,10 +2085,13 @@ export class DbStorage implements IStorage {
   }
 
   async createDemoBooking(booking: InsertDemoBooking): Promise<DemoBooking> {
+    const now = new Date();
     // Try to insert with source column, fall back to without if it doesn't exist
     try {
       const result = await db.insert(demoBookings).values({
         ...booking,
+        status: booking.status || "pending_acceptance",
+        assignedAt: booking.assignedAt ?? now,
         source: booking.source || 'web'
       }).returning();
       await db.update(salespeople)
@@ -2145,15 +2148,25 @@ export class DbStorage implements IStorage {
   }
 
   async createSalesConversion(conversion: InsertSalesConversion): Promise<SalesConversion> {
-    const result = await db.insert(salesConversions).values(conversion).returning();
-    await db.update(salespeople)
-      .set({ 
-        totalConversions: sql`${salespeople.totalConversions} + 1`,
-        totalEarnings: sql`${salespeople.totalEarnings} + ${conversion.amount || 50}`
-      })
-      .where(eq(salespeople.id, conversion.salespersonId));
+    const payoutAmount = parseFloat(String(conversion.amount ?? 0));
+    const creditEarnings =
+      conversion.payoutEligible !== false && !Number.isNaN(payoutAmount) && payoutAmount > 0
+        ? payoutAmount
+        : 0;
+    const result = await db.insert(salesConversions).values({
+      ...conversion,
+      conversionDate: conversion.conversionDate ?? new Date(),
+    }).returning();
+    if (creditEarnings > 0) {
+      await db.update(salespeople)
+        .set({
+          totalConversions: sql`${salespeople.totalConversions} + 1`,
+          totalEarnings: sql`${salespeople.totalEarnings} + ${creditEarnings}`,
+        })
+        .where(eq(salespeople.id, conversion.salespersonId));
+    }
     await db.update(demoBookings)
-      .set({ status: 'converted' })
+      .set({ status: "converted" })
       .where(eq(demoBookings.id, conversion.bookingId));
     return result[0];
   }

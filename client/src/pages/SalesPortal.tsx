@@ -20,22 +20,39 @@ import {
 import { 
   Calendar, DollarSign, CheckCircle, Clock, LogOut, Loader2, 
   User, Phone, Mail, ExternalLink, FileText, AlertCircle,
-  Eye, EyeOff, ClipboardList, CircleHelp
+  Eye, EyeOff, ClipboardList, CircleHelp, XCircle, TrendingUp
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import {
   SALESPERSON_AGREEMENT_VERSION,
 } from "@shared/salespersonAgreement";
+import {
+  SALES_CONVERSION_PAYOUT_DOLLARS,
+  demoStatusLabel as sharedDemoStatusLabel,
+  isDemoAwaitingAcceptance,
+  isDemoUpcoming,
+  isDemoCompleted,
+  normalizeDemoBookingStatus,
+} from "@shared/salesCompensation";
+import {
+  SALES_PAYOUT_REVIEW_NOTE,
+  computeAggregatePayoutTotals,
+} from "@/lib/salesPayoutTotals";
 
-const DEMO_PAYOUT_DOLLARS = 50;
+const SETUP_PAYOUT_DEFAULT_DOLLARS = 50;
 
 /** Payout-only policy shown in Sales Portal (no subscription commission language). */
 const SALES_PORTAL_PAYOUT_POLICY_TEXT = `WhachatCRM Sales Portal payout policy
 
-Demo session payouts: $${DEMO_PAYOUT_DOLLARS} per completed and approved demo session.
+Demo conversion payouts:
+- $${SALES_CONVERSION_PAYOUT_DOLLARS} when your demo lead becomes a paying subscriber.
+- Free plan signups do not qualify.
+- Demo completion alone does not create a payout.
 
-Growth Engine setup payouts: $${DEMO_PAYOUT_DOLLARS} per completed and approved setup/onboarding session.
+Growth Engine setup payouts:
+- $${SETUP_PAYOUT_DEFAULT_DOLLARS} per completed setup/onboarding session.
 
-All payouts are reviewed and approved by admin before being credited to your account.`;
+${SALES_PAYOUT_REVIEW_NOTE}`;
 
 interface Demo {
   id: string;
@@ -51,11 +68,26 @@ interface Demo {
 
 interface Stats {
   totalEarnings: string;
+  totalConversions?: number;
   defaultTaskPayoutDollars?: number;
   effectiveTaskPayoutDollars?: number;
   hasCustomTaskPayout?: boolean;
+  conversionPayoutsTotal?: string;
   demoConversionBonusesTotal?: string;
   setupTaskPayoutsTotal?: string;
+}
+
+interface Conversion {
+  id: string;
+  bookingId: string;
+  amount: string;
+  paid: boolean;
+  paidAt?: string;
+  payoutEligible?: boolean;
+  eligibilityNotes?: string;
+  conversionDate?: string;
+  demoDate?: string;
+  createdAt: string;
 }
 
 interface SetupTaskRow {
@@ -88,15 +120,9 @@ interface SalespersonInfo {
 const SALES_PORTAL_QUERY_KEYS = [
   ["/api/sales-portal/stats"],
   ["/api/sales-portal/demos"],
+  ["/api/sales-portal/conversions"],
   ["/api/sales-portal/setup-tasks"],
 ] as const;
-
-function demoStatusLabel(status: string): string {
-  if (status === "converted" || status === "completed") return "Completed";
-  if (status === "cancelled") return "Cancelled";
-  if (status === "pending") return "Pending";
-  return status;
-}
 
 function isSalesPortalQueryKey(key: readonly unknown[]): boolean {
   const path = key[0];
@@ -128,6 +154,31 @@ async function fetchSalesPortalCheck(): Promise<{
   return res.json();
 }
 
+function DemoContactBlock({ demo }: { demo: Demo }) {
+  return (
+    <div className="space-y-1">
+      <h3 className="font-medium text-gray-900">{demo.visitorName}</h3>
+      <div className="flex flex-wrap gap-4 text-sm text-gray-500">
+        <span className="flex items-center gap-1">
+          <Mail className="h-3.5 w-3.5" />
+          {demo.visitorEmail}
+        </span>
+        <span className="flex items-center gap-1">
+          <Phone className="h-3.5 w-3.5" />
+          {demo.visitorPhone}
+        </span>
+      </div>
+      <p className="text-sm text-brand-green font-medium">
+        <Calendar className="h-3.5 w-3.5 inline mr-1" />
+        {new Date(demo.scheduledDate).toLocaleString("en-US", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })}
+      </p>
+    </div>
+  );
+}
+
 function EarningsInfoSection({
   title,
   children,
@@ -153,7 +204,7 @@ function SalesPortalEarningsDialog({
   stats?: Stats;
 }) {
   const setupPayout =
-    stats?.effectiveTaskPayoutDollars ?? stats?.defaultTaskPayoutDollars ?? DEMO_PAYOUT_DOLLARS;
+    stats?.effectiveTaskPayoutDollars ?? stats?.defaultTaskPayoutDollars ?? SETUP_PAYOUT_DEFAULT_DOLLARS;
 
   return (
     <Dialog open={earningsOpen} onOpenChange={onEarningsOpenChange}>
@@ -161,30 +212,30 @@ function SalesPortalEarningsDialog({
         <DialogHeader className="px-5 pt-5 pb-0 text-start space-y-1">
           <DialogTitle className="text-base font-semibold text-slate-900">How earnings work</DialogTitle>
           <DialogDescription className="text-sm text-slate-500">
-            Fixed payouts for completed demo and Growth Engine setup sessions.
+            Demo conversion payouts plus Growth Engine setup payouts.
           </DialogDescription>
         </DialogHeader>
         <div className="px-5 pb-5 pt-3 max-h-[min(70vh,520px)] overflow-y-auto">
-          <EarningsInfoSection title="Demo payouts">
+          <EarningsInfoSection title="Demo conversion payouts">
             <ul className="list-disc pl-4 space-y-1.5 text-sm text-slate-600 leading-relaxed">
               <li>
-                <span className="font-medium text-slate-800">${DEMO_PAYOUT_DOLLARS.toFixed(2)}</span> per completed
-                and approved demo session.
+                <span className="font-medium text-slate-800">${SALES_CONVERSION_PAYOUT_DOLLARS.toFixed(0)}</span> when
+                your demo lead becomes a paying subscriber.
               </li>
+              <li>Free plan signups do not qualify.</li>
+              <li>Demo completion alone does not create a payout.</li>
             </ul>
           </EarningsInfoSection>
           <EarningsInfoSection title="Growth Engine setup payouts">
             <ul className="list-disc pl-4 space-y-1.5 text-sm text-slate-600 leading-relaxed">
               <li>
-                <span className="font-medium text-slate-800">${setupPayout.toFixed(2)}</span> per completed and
-                approved setup/onboarding session
+                <span className="font-medium text-slate-800">${setupPayout.toFixed(0)}</span> per completed
+                setup/onboarding session
                 {stats?.hasCustomTaskPayout ? " (custom rate)" : ""}.
               </li>
             </ul>
           </EarningsInfoSection>
-          <p className="text-sm text-slate-600 leading-relaxed pt-2">
-            Payouts are reviewed and approved by admin.
-          </p>
+          <p className="text-sm text-slate-600 leading-relaxed pt-2">{SALES_PAYOUT_REVIEW_NOTE}</p>
         </div>
       </DialogContent>
     </Dialog>
@@ -204,6 +255,8 @@ export function SalesPortal() {
   const [acceptError, setAcceptError] = useState("");
   const [showCode, setShowCode] = useState(false);
   const [earningsInfoOpen, setEarningsInfoOpen] = useState(false);
+  const [declineDemoId, setDeclineDemoId] = useState<string | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
 
   const queryClient = useQueryClient();
 
@@ -318,21 +371,56 @@ export function SalesPortal() {
     enabled: isLoggedIn,
   });
 
+  const { data: conversions = [] } = useQuery<Conversion[]>({
+    queryKey: ['/api/sales-portal/conversions'],
+    enabled: isLoggedIn,
+  });
+
   const { data: setupTasks = [] } = useQuery<SetupTaskRow[]>({
     queryKey: ['/api/sales-portal/setup-tasks'],
     enabled: isLoggedIn,
   });
 
-  const markComplete = useMutation({
+  const invalidateDemoQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['/api/sales-portal/demos'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/sales-portal/stats'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/sales-portal/conversions'] });
+  };
+
+  const acceptDemo = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/sales-portal/demos/${id}/complete`, { method: 'PATCH' });
-      if (!res.ok) throw new Error('Failed to mark complete');
+      const res = await fetch(`/api/sales-portal/demos/${id}/accept`, { method: 'PATCH', credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to accept demo');
+      return res.json();
+    },
+    onSuccess: invalidateDemoQueries,
+  });
+
+  const declineDemo = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const res = await fetch(`/api/sales-portal/demos/${id}/decline`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      if (!res.ok) throw new Error('Failed to decline demo');
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/sales-portal/demos'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/sales-portal/stats'] });
-    }
+      setDeclineDemoId(null);
+      setDeclineReason("");
+      invalidateDemoQueries();
+    },
+  });
+
+  const markComplete = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/sales-portal/demos/${id}/complete`, { method: 'PATCH', credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to mark complete');
+      return res.json();
+    },
+    onSuccess: invalidateDemoQueries,
   });
 
   const markSetupComplete = useMutation({
@@ -347,17 +435,17 @@ export function SalesPortal() {
     }
   });
 
-  const demoPayoutsTotal = parseFloat(stats?.demoConversionBonusesTotal ?? "0");
   const setupPayoutsTotal = parseFloat(stats?.setupTaskPayoutsTotal ?? "0");
+  const payoutTotals = computeAggregatePayoutTotals(conversions, setupPayoutsTotal);
   const totalEarningsLedger = parseFloat(stats?.totalEarnings ?? "0");
-  const earningsBreakdownSum = demoPayoutsTotal + setupPayoutsTotal;
   const earningsBreakdownMismatch =
-    stats != null && Math.abs(earningsBreakdownSum - totalEarningsLedger) > 0.05;
+    stats != null && Math.abs(payoutTotals.earned - totalEarningsLedger) > 0.05;
   const setupPayoutRate =
-    stats?.effectiveTaskPayoutDollars ?? stats?.defaultTaskPayoutDollars ?? DEMO_PAYOUT_DOLLARS;
+    stats?.effectiveTaskPayoutDollars ?? stats?.defaultTaskPayoutDollars ?? SETUP_PAYOUT_DEFAULT_DOLLARS;
 
-  const pendingDemos = demos.filter(d => d.status === 'pending');
-  const completedDemos = demos.filter(d => d.status !== 'pending');
+  const pendingAcceptanceDemos = demos.filter((d) => isDemoAwaitingAcceptance(d.status));
+  const upcomingDemos = demos.filter((d) => isDemoUpcoming(d.status));
+  const completedDemos = demos.filter((d) => isDemoCompleted(d.status));
   const pendingSetup = setupTasks.filter(t => t.status !== 'setup_completed');
   const completedSetup = setupTasks.filter(t => t.status === 'setup_completed');
 
@@ -569,15 +657,23 @@ export function SalesPortal() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <Tabs defaultValue="pending" className="space-y-4">
+        <Tabs defaultValue="pending-acceptance" className="space-y-4">
           <TabsList className="flex flex-wrap h-auto gap-1">
-            <TabsTrigger value="pending" className="gap-2">
+            <TabsTrigger value="pending-acceptance" className="gap-2">
               <Clock className="h-4 w-4" />
-              Pending Demos ({pendingDemos.length})
+              Pending Acceptance ({pendingAcceptanceDemos.length})
+            </TabsTrigger>
+            <TabsTrigger value="upcoming" className="gap-2">
+              <Calendar className="h-4 w-4" />
+              Upcoming Demos ({upcomingDemos.length})
             </TabsTrigger>
             <TabsTrigger value="completed" className="gap-2">
               <CheckCircle className="h-4 w-4" />
               Completed Demos ({completedDemos.length})
+            </TabsTrigger>
+            <TabsTrigger value="conversions" className="gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Conversions ({conversions.length})
             </TabsTrigger>
             <TabsTrigger value="setup-pending" className="gap-2">
               <ClipboardList className="h-4 w-4" />
@@ -593,48 +689,64 @@ export function SalesPortal() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="pending">
+          <TabsContent value="pending-acceptance">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-200">
+                <h2 className="font-semibold text-gray-900">Pending Acceptance</h2>
+                <p className="text-sm text-gray-500">
+                  Accept or decline within 24 hours. Declined demos return to the assignment pool.
+                </p>
+              </div>
+              {pendingAcceptanceDemos.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">No demos awaiting your acceptance.</div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {pendingAcceptanceDemos.map((demo) => (
+                    <div key={demo.id} className="p-4 hover:bg-gray-50">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <DemoContactBlock demo={demo} />
+                        <div className="flex flex-wrap gap-2 shrink-0">
+                          <Button
+                            onClick={() => acceptDemo.mutate(demo.id)}
+                            disabled={acceptDemo.isPending}
+                            className="bg-brand-green hover:bg-brand-dark"
+                          >
+                            Accept
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setDeclineDemoId(demo.id);
+                              setDeclineReason("");
+                            }}
+                          >
+                            Decline
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="upcoming">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="p-4 border-b border-gray-200">
                 <h2 className="font-semibold text-gray-900">Upcoming Demos</h2>
-                <p className="text-sm text-gray-500">Mark as completed after the demo call</p>
+                <p className="text-sm text-gray-500">
+                  Mark complete after the demo call. Demo completion alone does not create a payout.
+                </p>
               </div>
-              {pendingDemos.length === 0 ? (
-                <div className="p-8 text-center text-gray-500">
-                  No pending demos. Check back later for new assignments.
-                </div>
+              {upcomingDemos.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">No accepted upcoming demos.</div>
               ) : (
                 <div className="divide-y divide-gray-100">
-                  {pendingDemos.map((demo) => (
+                  {upcomingDemos.map((demo) => (
                     <div key={demo.id} className="p-4 hover:bg-gray-50">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-medium text-gray-900">{demo.visitorName}</h3>
-                            {demo.source === 'qr_code' && (
-                              <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">
-                                QR Scan
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="flex flex-wrap gap-4 text-sm text-gray-500">
-                            <span className="flex items-center gap-1">
-                              <Mail className="h-3.5 w-3.5" />
-                              {demo.visitorEmail}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Phone className="h-3.5 w-3.5" />
-                              {demo.visitorPhone}
-                            </span>
-                          </div>
-                          <p className="text-sm text-brand-green font-medium">
-                            <Calendar className="h-3.5 w-3.5 inline mr-1" />
-                            {new Date(demo.scheduledDate).toLocaleString('en-US', {
-                              dateStyle: 'medium',
-                              timeStyle: 'short'
-                            })}
-                          </p>
-                        </div>
+                        <DemoContactBlock demo={demo} />
                         <Button
                           onClick={() => markComplete.mutate(demo.id)}
                           disabled={markComplete.isPending}
@@ -691,9 +803,61 @@ export function SalesPortal() {
                           {new Date(demo.scheduledDate).toLocaleDateString()}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={demo.status === "pending" ? "outline" : "secondary"}>
-                            {demoStatusLabel(demo.status)}
-                          </Badge>
+                          <Badge variant="secondary">{sharedDemoStatusLabel(demo.status)}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="conversions">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-200">
+                <h2 className="font-semibold text-gray-900">Conversions</h2>
+                <p className="text-sm text-gray-500">
+                  ${SALES_CONVERSION_PAYOUT_DOLLARS} when your demo lead becomes a paying subscriber. Free plan signups
+                  do not qualify.
+                </p>
+              </div>
+              {conversions.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">No conversions yet.</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Eligible</TableHead>
+                      <TableHead>Payment status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {conversions.map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell>
+                          {new Date(c.conversionDate || c.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>${parseFloat(c.amount || "0").toFixed(2)}</TableCell>
+                        <TableCell>
+                          {c.payoutEligible === false ? (
+                            <Badge variant="outline" className="text-amber-700">
+                              Ineligible
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-green-100 text-green-800">Eligible</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {c.payoutEligible === false ? (
+                            <span className="text-sm text-gray-400">—</span>
+                          ) : c.paid ? (
+                            <Badge>Paid</Badge>
+                          ) : (
+                            <Badge variant="outline">Unpaid</Badge>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -809,31 +973,70 @@ export function SalesPortal() {
 
           <TabsContent value="earnings">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="grid gap-3 p-4 sm:grid-cols-3">
+              <div className="p-4 border-b border-gray-200">
+                <p className="text-sm text-gray-600">{SALES_PAYOUT_REVIEW_NOTE}</p>
+              </div>
+              <div className="grid gap-3 p-4 sm:grid-cols-3 border-b border-gray-200">
                 <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Demo session payouts</p>
-                  <p className="mt-1 text-2xl font-bold text-gray-900">${demoPayoutsTotal.toFixed(2)}</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Earned payouts</p>
+                  <p className="mt-1 text-2xl font-bold text-gray-900">${payoutTotals.earned.toFixed(2)}</p>
                   <p className="mt-2 text-[11px] leading-snug text-gray-500">
-                    ${DEMO_PAYOUT_DOLLARS} per completed and approved demo.
+                    Credited when an eligible conversion or setup session completes.
                   </p>
                 </div>
                 <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">GE setup payouts</p>
-                  <p className="mt-1 text-2xl font-bold text-gray-900">${setupPayoutsTotal.toFixed(2)}</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Paid payouts</p>
+                  <p className="mt-1 text-2xl font-bold text-emerald-800">${payoutTotals.paid.toFixed(2)}</p>
                   <p className="mt-2 text-[11px] leading-snug text-gray-500">
-                    ${setupPayoutRate.toFixed(0)} per completed and approved setup/onboarding session.
+                    Demo conversions marked paid by admin.
                   </p>
                 </div>
                 <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Total earnings</p>
-                  <p className="mt-1 text-2xl font-bold text-emerald-800">${totalEarningsLedger.toFixed(2)}</p>
-                  <p className="mt-2 text-[11px] leading-snug text-gray-500">Approved payouts credited to your account.</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Unpaid payouts</p>
+                  <p className="mt-1 text-2xl font-bold text-amber-800">${payoutTotals.unpaid.toFixed(2)}</p>
+                  <p className="mt-2 text-[11px] leading-snug text-gray-500">
+                    Earned but not yet marked paid (includes GE setup until paid out).
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-3 p-4 sm:grid-cols-2">
+                <div className="rounded-lg border border-gray-100 bg-gray-50/50 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Demo conversions</p>
+                  <dl className="mt-2 space-y-1 text-sm">
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-600">Earned</dt>
+                      <dd className="font-medium text-gray-900">${payoutTotals.conversionEarned.toFixed(2)}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-600">Paid</dt>
+                      <dd className="font-medium text-emerald-800">${payoutTotals.conversionPaid.toFixed(2)}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-600">Unpaid</dt>
+                      <dd className="font-medium text-amber-800">${payoutTotals.conversionUnpaid.toFixed(2)}</dd>
+                    </div>
+                  </dl>
+                  <p className="mt-2 text-[11px] leading-snug text-gray-500">
+                    ${SALES_CONVERSION_PAYOUT_DOLLARS} per paying subscriber from your demos.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-100 bg-gray-50/50 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">GE setup</p>
+                  <dl className="mt-2 space-y-1 text-sm">
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-600">Earned</dt>
+                      <dd className="font-medium text-gray-900">${payoutTotals.setupEarned.toFixed(2)}</dd>
+                    </div>
+                  </dl>
+                  <p className="mt-2 text-[11px] leading-snug text-gray-500">
+                    ${setupPayoutRate.toFixed(0)} per completed setup/onboarding session.
+                  </p>
                 </div>
               </div>
 
               {earningsBreakdownMismatch && (
-                <div className="px-4 py-3 text-xs text-amber-900 bg-amber-50 border-b border-amber-200">
-                  Total may include older payouts recorded before setup payouts were tracked separately.
+                <div className="px-4 py-3 text-xs text-amber-900 bg-amber-50 border-t border-amber-200">
+                  Earned total may differ from your account ledger if older commission payouts were recorded separately.
                 </div>
               )}
             </div>
@@ -846,6 +1049,37 @@ export function SalesPortal() {
         onEarningsOpenChange={setEarningsInfoOpen}
         stats={stats}
       />
+
+      <Dialog open={!!declineDemoId} onOpenChange={(open) => !open && setDeclineDemoId(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Decline demo assignment</DialogTitle>
+            <DialogDescription>
+              A reason is required. This demo will return to the assignment pool for another salesperson.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={declineReason}
+            onChange={(e) => setDeclineReason(e.target.value)}
+            placeholder="Why are you declining this demo?"
+            rows={4}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeclineDemoId(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!declineReason.trim() || declineDemo.isPending}
+              onClick={() =>
+                declineDemoId && declineDemo.mutate({ id: declineDemoId, reason: declineReason.trim() })
+              }
+            >
+              {declineDemo.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Decline demo"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -50,6 +50,15 @@ import {
   PARTNER_COMMISSION_TERM_LABEL,
   PARTNER_DEFAULT_COMMISSION_RATE,
 } from "@/lib/partnerProgram";
+import {
+  DEMO_BOOKING_STATUS,
+  normalizeDemoBookingStatus,
+} from "@shared/salesCompensation";
+import {
+  SALES_PAYOUT_REVIEW_NOTE,
+  computeAggregatePayoutTotals,
+  computeSalespersonPayoutTotals,
+} from "@/lib/salesPayoutTotals";
 
 /** Centered compact admin form dialogs (~520–600px; scroll inside body only). */
 const ADMIN_FORM_MODAL_CLASS =
@@ -99,6 +108,10 @@ interface Conversion {
   amount: string;
   paid: boolean;
   paidAt?: string;
+  payoutEligible?: boolean;
+  eligibilityNotes?: string;
+  conversionDate?: string;
+  demoDate?: string;
   createdAt: string;
 }
 
@@ -207,10 +220,10 @@ function SalespersonRolePayoutHint({ role }: { role: string }) {
   const r = role === "demo" ? "sales" : role || "sales";
   const text =
     r === "sales"
-      ? `$${ADMIN_DEFAULT_TASK_PAYOUT} per completed and approved demo session (admin approval required).`
+      ? "$100 when a demo lead becomes a paying subscriber. Free plan signups do not qualify. Demo completion alone does not create a payout."
       : r === "setup"
-        ? `$${ADMIN_DEFAULT_TASK_PAYOUT} per completed and approved Growth Engine setup/onboarding session (admin approval required). Override setup payout below if needed.`
-        : `$${ADMIN_DEFAULT_TASK_PAYOUT} per completed and approved demo session and $${ADMIN_DEFAULT_TASK_PAYOUT} per completed and approved Growth Engine setup/onboarding session (admin approval required). Override setup payout below if needed.`;
+        ? `$${ADMIN_DEFAULT_TASK_PAYOUT} per completed Growth Engine setup/onboarding session. Override setup payout below if needed.`
+        : `$100 per demo conversion when the lead becomes a paying subscriber (free plans do not qualify), plus $${ADMIN_DEFAULT_TASK_PAYOUT} per completed GE setup session.`;
   return (
     <p className="mt-1.5 rounded-md border border-muted bg-muted/40 px-2.5 py-1.5 text-[11px] leading-snug text-muted-foreground">
       {text}
@@ -222,12 +235,6 @@ function calendarLinkSnippet(link: string | null | undefined): string {
   if (!link?.trim()) return "—";
   const t = link.trim();
   return t.length > 36 ? `${t.slice(0, 36)}…` : t;
-}
-
-function demoPayoutTotalForSalesperson(conversions: Conversion[], salespersonId: string, paidOnly = true): number {
-  return conversions
-    .filter((c) => c.salespersonId === salespersonId && (!paidOnly || c.paid))
-    .reduce((sum, c) => sum + parseFloat(c.amount || "0"), 0);
 }
 
 function formatGeSetupPipelineStatus(status: string): string {
@@ -758,17 +765,21 @@ export function Admin() {
   };
 
   const totalCost = salespeople.reduce((sum, p) => sum + parseFloat(p.totalEarnings || "0"), 0);
-  const pendingBookings = bookings.filter((b) => b.status === "pending").length;
+  const pendingBookings = bookings.filter((b) =>
+    normalizeDemoBookingStatus(b.status) === DEMO_BOOKING_STATUS.pendingAcceptance,
+  ).length;
+  const acceptedBookings = bookings.filter(
+    (b) => normalizeDemoBookingStatus(b.status) === DEMO_BOOKING_STATUS.accepted,
+  ).length;
+  const convertedCustomers = conversions.filter((c) => c.payoutEligible !== false).length;
   const pendingGeSetups = adminUsers.filter(
     (u) => u.growthEngineSetup && u.growthEngineSetup.status !== "setup_completed",
   ).length;
-  const totalDemoPayouts = conversions
-    .filter((c) => c.paid)
-    .reduce((sum, c) => sum + parseFloat(c.amount || "0"), 0);
-  const totalGePayouts = salespeople.reduce(
+  const totalGeEarned = salespeople.reduce(
     (sum, p) => sum + parseFloat(String(p.setupTaskEarningsTotal ?? 0)),
     0,
   );
+  const payoutTotals = computeAggregatePayoutTotals(conversions, totalGeEarned);
 
   if (!isLoggedIn) {
     return (
@@ -851,7 +862,7 @@ export function Admin() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-4 mb-6 sm:mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4 mb-6 sm:mb-8">
           <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
             <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
               <div className="h-8 w-8 sm:h-10 sm:w-10 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
@@ -860,6 +871,24 @@ export function Admin() {
               <span className="text-xs sm:text-sm text-gray-600 leading-tight">Pending Demos</span>
             </div>
             <p className="text-2xl sm:text-3xl font-bold text-gray-900">{pendingBookings}</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
+            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-indigo-100 rounded-lg flex items-center justify-center shrink-0">
+                <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-600" />
+              </div>
+              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Accepted Demos</span>
+            </div>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{acceptedBookings}</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
+            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-emerald-100 rounded-lg flex items-center justify-center shrink-0">
+                <Users className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
+              </div>
+              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Converted Customers</span>
+            </div>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{convertedCustomers}</p>
           </div>
           <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
             <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
@@ -875,47 +904,42 @@ export function Admin() {
               <div className="h-8 w-8 sm:h-10 sm:w-10 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
                 <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
               </div>
-              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Demo Payouts</span>
+              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Earned payouts</span>
             </div>
-            <p className="text-2xl sm:text-3xl font-bold text-gray-900">${totalDemoPayouts.toFixed(2)}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
-            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
-              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-teal-100 rounded-lg flex items-center justify-center shrink-0">
-                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-teal-600" />
-              </div>
-              <span className="text-xs sm:text-sm text-gray-600 leading-tight">GE Payouts</span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-gray-900">${totalGePayouts.toFixed(2)}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
-            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
-              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
-                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-red-600" />
-              </div>
-              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Total Cost</span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-gray-900">${totalCost.toFixed(2)}</p>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-900">${payoutTotals.earned.toFixed(2)}</p>
+            <p className="text-[10px] sm:text-xs text-gray-500 mt-1 leading-snug">
+              Conversions ${payoutTotals.conversionEarned.toFixed(2)} + GE ${payoutTotals.setupEarned.toFixed(2)}
+            </p>
           </div>
           <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
             <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
               <div className="h-8 w-8 sm:h-10 sm:w-10 bg-emerald-100 rounded-lg flex items-center justify-center shrink-0">
-                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
+                <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
               </div>
-              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Revenue</span>
+              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Paid payouts</span>
             </div>
-            <p className="text-2xl sm:text-3xl font-bold text-gray-900">${(roiStats?.totalRevenue || 0).toFixed(2)}</p>
+            <p className="text-2xl sm:text-3xl font-bold text-emerald-800">${payoutTotals.paid.toFixed(2)}</p>
+            <p className="text-[10px] sm:text-xs text-gray-500 mt-1 leading-snug">Demo conversions marked paid</p>
           </div>
           <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
             <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
               <div className="h-8 w-8 sm:h-10 sm:w-10 bg-amber-100 rounded-lg flex items-center justify-center shrink-0">
-                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600" />
+                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-amber-700" />
               </div>
-              <span className="text-xs sm:text-sm text-gray-600 leading-tight">ROI</span>
+              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Unpaid payouts</span>
             </div>
-            <p className={`text-2xl sm:text-3xl font-bold ${(roiStats?.roi || 0) >= 100 ? "text-green-600" : "text-red-600"}`}>
-              {(roiStats?.roi || 0).toFixed(0)}%
-            </p>
+            <p className="text-2xl sm:text-3xl font-bold text-amber-800">${payoutTotals.unpaid.toFixed(2)}</p>
+            <p className="text-[10px] sm:text-xs text-gray-500 mt-1 leading-snug">Earned, not yet marked paid</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200 col-span-2 sm:col-span-3 lg:col-span-1">
+            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
+                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-red-600" />
+              </div>
+              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Account ledger</span>
+            </div>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-900">${totalCost.toFixed(2)}</p>
+            <p className="text-[10px] sm:text-xs text-gray-500 mt-1 leading-snug">Sum of salesperson total earnings</p>
           </div>
         </div>
 
@@ -934,8 +958,8 @@ export function Admin() {
               </TabsTrigger>
               <TabsTrigger value="conversions" className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4">
                 <DollarSign className="h-4 w-4 shrink-0" />
-                <span className="hidden sm:inline">Demo payouts</span>
-                <span className="sm:hidden">Payouts</span>
+                <span className="hidden sm:inline">Demo conversion payouts</span>
+                <span className="sm:hidden">Conversions</span>
               </TabsTrigger>
               <TabsTrigger value="users" className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4">
                 <UserCircle className="h-4 w-4 shrink-0" />
@@ -987,11 +1011,11 @@ export function Admin() {
                     <TableHead>Phone</TableHead>
                     <TableHead>Calendar</TableHead>
                     <TableHead>Role</TableHead>
-                    <TableHead>Total payout</TableHead>
+                    <TableHead>Earned</TableHead>
+                    <TableHead>Paid</TableHead>
+                    <TableHead>Unpaid</TableHead>
                     <TableHead>Setup done</TableHead>
                     <TableHead>Bookings</TableHead>
-                    <TableHead>Demo paid</TableHead>
-                    <TableHead>GE paid</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -1004,7 +1028,13 @@ export function Admin() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    salespeople.map((person) => (
+                    salespeople.map((person) => {
+                      const personPayouts = computeSalespersonPayoutTotals(
+                        conversions,
+                        person.id,
+                        parseFloat(String(person.setupTaskEarningsTotal ?? 0)),
+                      );
+                      return (
                       <TableRow key={person.id}>
                         <TableCell className="font-medium">{person.name}</TableCell>
                         <TableCell>
@@ -1025,20 +1055,17 @@ export function Admin() {
                             {formatSalespersonRole(person.role)}
                           </Badge>
                         </TableCell>
-                        <TableCell
-                          className="text-sm font-medium text-gray-900 whitespace-nowrap"
-                          title={`Demo $${demoPayoutTotalForSalesperson(conversions, person.id).toFixed(2)} + GE $${parseFloat(String(person.setupTaskEarningsTotal ?? 0)).toFixed(2)}`}
-                        >
-                          ${parseFloat(person.totalEarnings || "0").toFixed(2)}
+                        <TableCell className="text-sm font-medium text-gray-900 whitespace-nowrap">
+                          ${personPayouts.earned.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-sm text-emerald-800 whitespace-nowrap">
+                          ${personPayouts.paid.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-sm text-amber-800 whitespace-nowrap">
+                          ${personPayouts.unpaid.toFixed(2)}
                         </TableCell>
                         <TableCell>{person.setupTasksCompleted ?? 0}</TableCell>
                         <TableCell>{person.totalBookings || 0}</TableCell>
-                        <TableCell className="text-sm text-gray-900 whitespace-nowrap">
-                          ${demoPayoutTotalForSalesperson(conversions, person.id).toFixed(2)}
-                        </TableCell>
-                        <TableCell className="text-sm text-gray-900 whitespace-nowrap">
-                          ${parseFloat(String(person.setupTaskEarningsTotal ?? 0)).toFixed(2)}
-                        </TableCell>
                         <TableCell>
                           <Badge variant={person.isActive ? "default" : "secondary"}>
                             {person.isActive ? 'Active' : 'Inactive'}
@@ -1068,7 +1095,8 @@ export function Admin() {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
@@ -1135,7 +1163,8 @@ export function Admin() {
                             })}
                             className="text-sm border rounded px-2 py-1"
                           >
-                            <option value="pending">Pending</option>
+                            <option value="pending_acceptance">Pending acceptance</option>
+                            <option value="accepted">Accepted</option>
                             <option value="completed">Completed</option>
                             <option value="converted">Converted</option>
                             <option value="cancelled">Cancelled</option>
@@ -1152,9 +1181,10 @@ export function Admin() {
           <TabsContent value="conversions">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="p-4 border-b border-gray-200">
-                <h2 className="font-semibold text-gray-900">Demo session payouts</h2>
+                <h2 className="font-semibold text-gray-900">Demo conversion payouts</h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  ${ADMIN_DEFAULT_TASK_PAYOUT} per completed and approved demo session. Admin approval required.
+                  $100 when a demo lead becomes a paying subscriber. Free plan signups do not qualify. Demo completion
+                  alone does not create a payout. {SALES_PAYOUT_REVIEW_NOTE}
                 </p>
               </div>
               <Table>
@@ -1163,6 +1193,7 @@ export function Admin() {
                     <TableHead>Salesperson</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Date</TableHead>
+                    <TableHead>Eligible</TableHead>
                     <TableHead>Payment status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -1170,8 +1201,8 @@ export function Admin() {
                 <TableBody>
                   {conversions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-gray-500">
-                        No demo session payouts yet.
+                      <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                        No conversion payouts yet.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -1182,11 +1213,18 @@ export function Admin() {
                         </TableCell>
                         <TableCell>${parseFloat(conversion.amount).toFixed(2)}</TableCell>
                         <TableCell>
-                          {new Date(conversion.createdAt).toLocaleDateString()}
+                          {new Date(conversion.conversionDate || conversion.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          {conversion.payoutEligible === false ? (
+                            <Badge variant="outline" className="text-amber-700">No</Badge>
+                          ) : (
+                            <Badge className="bg-green-100 text-green-800">Yes</Badge>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Badge variant={conversion.paid ? "default" : "outline"}>
-                            {conversion.paid ? 'Paid' : 'Pending approval'}
+                            {conversion.paid ? 'Paid' : 'Unpaid'}
                           </Badge>
                         </TableCell>
                         <TableCell>

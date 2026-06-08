@@ -7876,7 +7876,8 @@ export async function registerRoutes(
         visitorPhone: phone,
         scheduledDate: new Date(scheduledDate),
         consentGiven: consent,
-        status: 'pending',
+        status: "pending_acceptance",
+        assignedAt: new Date(),
         source: source || 'web'
       });
 
@@ -8232,11 +8233,16 @@ export async function registerRoutes(
       
       // If status changed to 'converted', automatically create a conversion record
       if (status === 'converted' && currentBooking && currentBooking.status !== 'converted') {
+        const { SALES_CONVERSION_PAYOUT_DOLLARS } = await import("@shared/salesCompensation");
         await storage.createSalesConversion({
           bookingId: req.params.id,
           salespersonId: currentBooking.salespersonId,
           userId: null,
-          amount: "50"
+          amount: String(SALES_CONVERSION_PAYOUT_DOLLARS),
+          demoDate: currentBooking.scheduledDate,
+          conversionDate: new Date(),
+          payoutEligible: true,
+          eligibilityNotes: "Manually marked converted by admin",
         });
       }
       
@@ -8262,11 +8268,14 @@ export async function registerRoutes(
   app.post("/api/admin/conversions", requireAdmin, async (req, res) => {
     try {
       const { bookingId, salespersonId, userId, amount } = req.body;
+      const { SALES_CONVERSION_PAYOUT_DOLLARS } = await import("@shared/salesCompensation");
       const conversion = await storage.createSalesConversion({
         bookingId,
         salespersonId,
         userId,
-        amount: amount || "50"
+        amount: amount || String(SALES_CONVERSION_PAYOUT_DOLLARS),
+        conversionDate: new Date(),
+        payoutEligible: true,
       });
       res.json(conversion);
     } catch (error) {
@@ -8640,6 +8649,14 @@ export async function registerRoutes(
       });
       
       const updated = await storage.getUser(userId);
+      if (updated && subscriptionPlan !== "free") {
+        try {
+          const { tryRecordDemoConversionForUser } = await import("./salesConversionAttribution");
+          await tryRecordDemoConversionForUser(updated, new Date());
+        } catch (attrErr) {
+          console.error("[Admin] demo conversion attribution error:", attrErr);
+        }
+      }
       console.log(
         JSON.stringify({
           tag: "ADMIN_PLAN_OVERRIDE_SET",
@@ -9035,8 +9052,9 @@ export async function registerRoutes(
       storage.getSalesConversionsBySalesperson(salesperson.id),
       storage.getCommissionsBySalesperson(salesperson.id),
     ]);
-    const demoConversionBonusesTotal = convRows.reduce(
-      (s, c) => s + parseFloat(String(c.amount ?? 0)),
+    const conversionPayoutsTotal = convRows.reduce(
+      (s, c) =>
+        c.payoutEligible !== false ? s + parseFloat(String(c.amount ?? 0)) : s,
       0,
     );
     const subscriptionCommissionsTotal = commissionRows.reduce(
@@ -9053,7 +9071,8 @@ export async function registerRoutes(
       defaultTaskPayoutDollars: DEFAULT_SALES_TASK_PAYOUT_DOLLARS,
       effectiveTaskPayoutDollars,
       hasCustomTaskPayout,
-      demoConversionBonusesTotal: demoConversionBonusesTotal.toFixed(2),
+      conversionPayoutsTotal: conversionPayoutsTotal.toFixed(2),
+      demoConversionBonusesTotal: conversionPayoutsTotal.toFixed(2),
       subscriptionCommissionsTotal: subscriptionCommissionsTotal.toFixed(2),
       setupTaskPayoutsTotal: setupTaskPayoutsTotal.toFixed(2),
     });
@@ -9125,6 +9144,8 @@ export async function registerRoutes(
   // Salesperson Portal: Get my demos
   app.get("/api/sales-portal/demos", requireSalesperson, async (req: any, res) => {
     try {
+      const { processExpiredDemoAcceptances } = await import("./demoAssignmentService");
+      await processExpiredDemoAcceptances();
       const demos = await storage.getDemoBookingsBySalesperson(req.salesperson.id);
       res.json(demos);
     } catch (error) {
@@ -9133,14 +9154,63 @@ export async function registerRoutes(
     }
   });
 
-  // Salesperson Portal: Mark demo as completed
-  app.patch("/api/sales-portal/demos/:id/complete", requireSalesperson, async (req: any, res) => {
+  app.patch("/api/sales-portal/demos/:id/accept", requireSalesperson, async (req: any, res) => {
     try {
+      const { DEMO_BOOKING_STATUS } = await import("@shared/salesCompensation");
       const demo = await storage.getDemoBooking(req.params.id);
       if (!demo || demo.salespersonId !== req.salesperson.id) {
         return res.status(404).json({ error: "Demo not found" });
       }
-      const updated = await storage.updateDemoBooking(req.params.id, { status: 'completed' });
+      const status = demo.status === "pending" ? "pending_acceptance" : demo.status;
+      if (status !== DEMO_BOOKING_STATUS.pendingAcceptance) {
+        return res.status(400).json({ error: "Demo is not awaiting acceptance" });
+      }
+      const updated = await storage.updateDemoBooking(req.params.id, {
+        status: DEMO_BOOKING_STATUS.accepted,
+        acceptedAt: new Date(),
+      } as any);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error accepting demo:", error);
+      res.status(500).json({ error: "Failed to accept demo" });
+    }
+  });
+
+  app.patch("/api/sales-portal/demos/:id/decline", requireSalesperson, async (req: any, res) => {
+    try {
+      const { reason } = req.body as { reason?: string };
+      if (!reason?.trim()) {
+        return res.status(400).json({ error: "Decline reason is required" });
+      }
+      const demo = await storage.getDemoBooking(req.params.id);
+      if (!demo || demo.salespersonId !== req.salesperson.id) {
+        return res.status(404).json({ error: "Demo not found" });
+      }
+      const { reassignDemoBookingToPool } = await import("./demoAssignmentService");
+      const result = await reassignDemoBookingToPool(req.params.id, {
+        declineReason: reason.trim(),
+        excludeSalespersonId: req.salesperson.id,
+      });
+      const updated = await storage.getDemoBooking(req.params.id);
+      res.json({ ...result, booking: updated });
+    } catch (error) {
+      console.error("Error declining demo:", error);
+      res.status(500).json({ error: "Failed to decline demo" });
+    }
+  });
+
+  // Salesperson Portal: Mark demo as completed (no demo completion payout)
+  app.patch("/api/sales-portal/demos/:id/complete", requireSalesperson, async (req: any, res) => {
+    try {
+      const { DEMO_BOOKING_STATUS } = await import("@shared/salesCompensation");
+      const demo = await storage.getDemoBooking(req.params.id);
+      if (!demo || demo.salespersonId !== req.salesperson.id) {
+        return res.status(404).json({ error: "Demo not found" });
+      }
+      if (demo.status !== DEMO_BOOKING_STATUS.accepted && demo.status !== "pending") {
+        return res.status(400).json({ error: "Only accepted demos can be marked complete" });
+      }
+      const updated = await storage.updateDemoBooking(req.params.id, { status: DEMO_BOOKING_STATUS.completed });
       res.json(updated);
     } catch (error) {
       console.error("Error completing demo:", error);
