@@ -1,73 +1,68 @@
 /** Bump when policy text changes — salespeople must re-accept if their stored version differs. */
-export const SALESPERSON_AGREEMENT_VERSION = "2026-05-18";
+export const SALESPERSON_AGREEMENT_VERSION = "2026-06-07";
 
-export const SALESPERSON_AGREEMENT_TEXT = `Internal Sales Commission Policy
+export const SALESPERSON_AGREEMENT_TEXT = `Internal Sales Payout Policy
 
-This document defines commission eligibility, attribution rules, and payout policies for WhachatCRM internal sales representatives and onboarding specialists.
+This document defines payout eligibility, attribution rules, and payment terms for WhachatCRM internal sales representatives and onboarding specialists.
 
 1. Purpose
-This policy governs commission eligibility, sales attribution, setup task payouts, and payment terms for internal team members involved in customer acquisition, demos, onboarding, or related revenue-generating activities.
+This policy governs payout eligibility, demo attribution, setup task payouts, and payment terms for internal team members involved in customer acquisition, demos, onboarding, or related revenue-generating activities.
 
 2. Eligibility
 A salesperson or specialist may be eligible for compensation if:
 - They conduct or materially contribute to a demo, onboarding session, or sales process
-- The prospect becomes a paying customer or completes an eligible setup task
-- Payment is successfully collected by WhachatCRM
+- The prospect becomes a qualifying paying customer or completes an eligible setup task
+- Payment is successfully collected by WhachatCRM where applicable
 
 Eligibility and attribution are determined using WhachatCRM internal tracking systems and administrative records.
 
 3. Lead Ownership & Attribution
 - Leads and demo ownership are assigned through WhachatCRM internal systems
-- Subscription commission credit is based on recorded attribution at the time of conversion
+- Demo conversion payout credit is based on recorded attribution at the time of conversion
 - Internal setup task payouts are based on assigned task completion records
 - Management decisions regarding attribution or disputes are final
 
-4. Commission Structure & Setup Payouts
+4. Payout Structure
 
-A) Subscription Commission (Demo / Sales Conversion)
+A) Demo Conversion Payout (one-time)
 Eligible internal sales representatives may earn:
-- 30% recurring commission
-- On successfully converted base subscription revenue only
-- For as long as the customer remains active and paying
+- $100 one-time payout when a demo lead becomes a paying Starter or Pro subscriber
+- Attribution must fall within the company-defined conversion window from the demo date
+- Free plan signups do not qualify
+- Demo completion alone does not create a payout
 
-Subscription commissions do not apply to:
-- AI Brain add-ons
-- Growth Engines
-- One-time purchases
-- Messaging fees
-- Third-party platform costs
-- Taxes or processing fees
-
-Commissions are calculated from successfully collected Stripe subscription payments.
-Upgrades may increase commission proportionally. Downgrades reduce commission proportionally.
-Refunded, disputed, failed, fraudulent, or reversed payments are not commissionable and may result in commission reversals.
+There are no recurring subscription commissions for internal salespeople under this policy.
 
 B) Growth Engine & Internal Setup Task Payouts
-Separately from subscription commission, eligible specialists may receive:
-- Fixed payouts for approved internal setup or onboarding tasks
+Eligible specialists may receive:
+- Fixed payouts for completed and approved internal setup or onboarding tasks
 - White-glove onboarding compensation
 - Growth Engine installation/setup compensation
 - Other company-defined operational task payouts
 
+Default setup payout is $50 per completed session unless a custom task rate is configured.
+
 Task payouts are:
-- Not subscription percentages
+- Fixed amounts, not subscription percentages
 - Configurable by management
-- Subject to completion verification and approval
+- Credited when eligible work is completed and tracked in the portal
 
 Admins may define global payout defaults or per-person overrides.
 
-5. Commission Plan Changes
+5. Policy Changes
 WhachatCRM reserves the right to:
-- Modify commission percentages
+- Modify payout amounts
 - Change payout structures
 - Adjust eligibility requirements
 - Update attribution rules
-- Suspend or terminate commission programs
+- Suspend or terminate payout programs
 
-Any future policy updates apply prospectively and do not create vested ownership rights to future commissions beyond active approved plans.
+Any future policy updates apply prospectively.
 
 6. Exclusions
-No subscription commission is paid for:
+No demo conversion payout is paid for:
+- Free plan signups
+- Demo completion without a qualifying paid conversion
 - Organic signups with no meaningful sales involvement
 - Partner-referred customers unless explicitly approved
 - Internal test accounts
@@ -77,18 +72,17 @@ No subscription commission is paid for:
 Task payouts only apply to approved and completed assignments credited under company policy.
 
 7. Payment Timing
-- Commissions and payouts are typically calculated monthly
-- Payments may be issued on the first business day of the month
-- Payments are subject to successful customer payment collection and internal review
+- Payouts are tracked automatically in the Sales Portal
+- Payments are reviewed before disbursement
 - Chargebacks, refunds, or payment disputes may result in payout reversals or adjustments
 
 8. Employment Status
-Commission eligibility does not alter employment classification, contractor status, or employment terms.
-Participation in commission programs does not guarantee continued employment, contractor engagement, or future payout eligibility.
+Payout eligibility does not alter employment classification, contractor status, or employment terms.
+Participation in payout programs does not guarantee continued employment, contractor engagement, or future payout eligibility.
 
 9. Misconduct
 Manipulating attribution, self-dealing, falsifying activity, abusing systems, or violating company policies may result in:
-- Loss of commissions or payouts
+- Loss of payouts
 - Account suspension
 - Termination
 - Legal action if applicable

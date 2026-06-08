@@ -1,13 +1,15 @@
-/** Months from `sales_conversions.created_at` during which Stripe subscription commissions are credited (policy). */
+/** @deprecated Legacy window for pre-2026 recurring subscription commission rows; new salespeople earn one-time demo conversion payouts only. */
 export const SALESPERSON_SUBSCRIPTION_COMMISSION_MONTHS = 12;
 
-export function getSalespersonSubscriptionCommissionEndDate(conversionCreatedAt: Date): Date {
-  const end = new Date(conversionCreatedAt.getTime());
+export function salespersonSubscriptionCommissionEndsAt(conversionCreatedAt: Date): Date {
+  const end = new Date(conversionCreatedAt);
   end.setMonth(end.getMonth() + SALESPERSON_SUBSCRIPTION_COMMISSION_MONTHS);
   return end;
 }
 
-/** True when `now` is on or before the end of the subscription-commission window (inclusive end instant). */
-export function isSalespersonSubscriptionCommissionActiveAt(conversionCreatedAt: Date, now: Date): boolean {
-  return now.getTime() <= getSalespersonSubscriptionCommissionEndDate(conversionCreatedAt).getTime();
+export function isSalespersonSubscriptionCommissionActiveAt(
+  conversionCreatedAt: Date,
+  at: Date = new Date(),
+): boolean {
+  return at <= salespersonSubscriptionCommissionEndsAt(conversionCreatedAt);
 }

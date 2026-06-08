@@ -1,6 +1,7 @@
 import {
-  SALESPERSON_SUBSCRIPTION_COMMISSION_DESCRIPTION,
-  SALESPERSON_SUBSCRIPTION_COMMISSION_SHORT,
+  SALESPERSON_GE_SETUP_PAYOUT_NOTE,
+  SALESPERSON_PAYOUT_POLICY_DESCRIPTION,
+  SALESPERSON_PAYOUT_POLICY_SHORT,
 } from "@shared/salespersonCommissionCopy";
 import {
   escapeHtml,
@@ -240,7 +241,7 @@ export async function sendDemoBookingNotification(
        <strong>Scheduled:</strong> ${escapeHtml(formattedDate)} EST`
     ),
     emailParagraph(
-      `Please reach out to confirm the demo. ${SALESPERSON_SUBSCRIPTION_COMMISSION_SHORT}`
+      `Please reach out to confirm the demo. Accept or decline the assignment in the Sales Portal within 24 hours. ${SALESPERSON_PAYOUT_POLICY_SHORT}`
     ),
     emailButton(`mailto:${visitor.email}`, "Contact visitor"),
   ].join("");
@@ -320,12 +321,13 @@ export async function sendSalespersonWelcomeEmail(
     emailList([
       "<strong>Dashboard:</strong> View your demos, conversions, and earnings at a glance",
       "<strong>Pending demos:</strong> See scheduled demos assigned to you and mark them complete after each call",
-      `<strong>Earnings:</strong> Track commission payments (${SALESPERSON_SUBSCRIPTION_COMMISSION_DESCRIPTION})`,
+      `<strong>Earnings:</strong> Track demo conversion and setup payouts (${SALESPERSON_PAYOUT_POLICY_SHORT})`,
     ]),
     emailSectionHeading("How conversions are tracked"),
     emailParagraph(
-      `When a prospect you've demoed signs up and becomes a paying customer, our system automatically matches their information to your demo booking. We have a <strong>180-day tracking window</strong>, so you'll get credit for conversions within 6 months of your demo. You earn <strong>${SALESPERSON_SUBSCRIPTION_COMMISSION_DESCRIPTION}</strong>`
+      `When a prospect you've demoed signs up for a paid Starter or Pro plan, our system automatically matches their information to your demo booking. ${SALESPERSON_PAYOUT_POLICY_DESCRIPTION}`
     ),
+    emailParagraph(SALESPERSON_GE_SETUP_PAYOUT_NOTE),
     emailHighlightBox(
       `<strong>Pro tip:</strong> Explore WhaChatCRM and the <a href="${APP_URL}/help" style="color: #059669; text-decoration: none; font-weight: 500;">Help Center</a> — the more familiar you are with the product, the better you can showcase its value.`
     ),

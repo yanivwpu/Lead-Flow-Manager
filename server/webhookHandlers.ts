@@ -273,7 +273,7 @@ export class WebhookHandlers {
         isSalespersonSubscriptionCommissionActiveAt(conversionStarted, now);
 
       if (withinSalespersonCommissionWindow) {
-        // Create salesperson commission (30% rate) only within 12 months of conversion.created_at
+        // Legacy: pre-2026 policy credited recurring subscription commissions; no longer created for new conversions
         const salespersonCommission = (amountPaid * 0.30).toFixed(2);
         await storage.createCommission({
           userId: user.id,

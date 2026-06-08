@@ -153,7 +153,7 @@ export function renderSalespersonAssignedResponsibilitiesSection(
         ? `$${taskPayoutDollars.toFixed(2)}`
         : "a fixed amount";
     payoutNote = emailParagraph(
-      `Growth Engine setup assignments also earn <strong>${amount}</strong> per completed task (separate from subscription commission).`
+      `Growth Engine setup assignments earn <strong>${amount}</strong> per completed and approved setup/onboarding session. This is separate from demo conversion payouts.`
     );
   }
 

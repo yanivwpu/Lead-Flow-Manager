@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  SALESPERSON_AGREEMENT_TEXT,
   SALESPERSON_AGREEMENT_VERSION,
 } from "@shared/salespersonAgreement";
 import {
@@ -42,19 +43,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 
 const SETUP_PAYOUT_DEFAULT_DOLLARS = 50;
-
-/** Payout-only policy shown in Sales Portal (no subscription commission language). */
-const SALES_PORTAL_PAYOUT_POLICY_TEXT = `WhachatCRM Sales Portal payout policy
-
-Demo conversion payouts:
-- $${SALES_CONVERSION_PAYOUT_DOLLARS} when your demo lead becomes a paying subscriber.
-- Free plan signups do not qualify.
-- Demo completion alone does not create a payout.
-
-Growth Engine setup payouts:
-- $${SETUP_PAYOUT_DEFAULT_DOLLARS} per completed setup/onboarding session.
-
-${SALES_PAYOUT_REVIEW_NOTE}`;
 
 interface Demo {
   id: string;
@@ -219,7 +207,7 @@ function SalesPortalEarningsDialog({
             <ul className="list-disc pl-4 space-y-1.5 text-sm text-slate-600 leading-relaxed">
               <li>
                 <span className="font-medium text-slate-800">${SALES_CONVERSION_PAYOUT_DOLLARS.toFixed(0)}</span> when
-                your demo lead becomes a paying subscriber.
+                your demo lead becomes a paying Starter or Pro subscriber.
               </li>
               <li>Free plan signups do not qualify.</li>
               <li>Demo completion alone does not create a payout.</li>
@@ -573,7 +561,7 @@ export function SalesPortal() {
 
             <ScrollArea className="h-80 border rounded-lg p-4 bg-gray-50">
               <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans">
-                {SALES_PORTAL_PAYOUT_POLICY_TEXT}
+                {SALESPERSON_AGREEMENT_TEXT}
               </pre>
             </ScrollArea>
           </div>
@@ -832,7 +820,7 @@ export function SalesPortal() {
               <div className="p-4 border-b border-gray-200">
                 <h2 className="font-semibold text-gray-900">Conversions</h2>
                 <p className="text-sm text-gray-500">
-                  ${SALES_CONVERSION_PAYOUT_DOLLARS} when your demo lead becomes a paying subscriber. Free plan signups
+                  ${SALES_CONVERSION_PAYOUT_DOLLARS} when your demo lead becomes a paying Starter or Pro subscriber. Free plan signups
                   do not qualify.
                 </p>
               </div>
@@ -1031,7 +1019,7 @@ export function SalesPortal() {
                     </div>
                   </dl>
                   <p className="mt-2 text-[11px] leading-snug text-gray-500">
-                    ${SALES_CONVERSION_PAYOUT_DOLLARS} per paying subscriber from your demos.
+                    ${SALES_CONVERSION_PAYOUT_DOLLARS} per Starter or Pro subscriber from your demos.
                   </p>
                 </div>
                 <div className="rounded-lg border border-gray-100 bg-gray-50/50 p-4">
@@ -1050,7 +1038,7 @@ export function SalesPortal() {
 
               {earningsBreakdownMismatch && (
                 <div className="px-4 py-3 text-xs text-amber-900 bg-amber-50 border-t border-amber-200">
-                  Earned total may differ from your account ledger if older commission payouts were recorded separately.
+                  Earned total may differ from your account ledger if older payout records were tracked separately.
                 </div>
               )}
             </div>

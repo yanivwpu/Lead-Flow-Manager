@@ -9234,7 +9234,7 @@ export async function registerRoutes(
     }
   });
 
-  // Salesperson Portal: Subscription commission rows (Stripe invoice payouts; 30% / 12 months policy)
+  // Salesperson Portal: Legacy subscription commission rows (pre-2026 payout policy; retained for history)
   app.get("/api/sales-portal/commissions", requireSalesperson, async (req: any, res) => {
     try {
       const rows = await storage.getCommissionsBySalesperson(req.salesperson.id);
