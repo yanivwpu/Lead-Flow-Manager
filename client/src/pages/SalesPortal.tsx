@@ -22,12 +22,12 @@ import {
   User, Phone, Mail, ExternalLink, FileText, AlertCircle,
   Eye, EyeOff, ClipboardList, CircleHelp
 } from "lucide-react";
-import { isSalespersonSubscriptionCommissionActiveAt } from "@shared/salespersonSubscriptionCommissionWindow";
-import { SALESPERSON_SUBSCRIPTION_COMMISSION_SHORT } from "@shared/salespersonCommissionCopy";
 import {
   SALESPERSON_AGREEMENT_TEXT,
   SALESPERSON_AGREEMENT_VERSION,
 } from "@shared/salespersonAgreement";
+
+const DEMO_PAYOUT_DOLLARS = 50;
 
 interface Demo {
   id: string;
@@ -41,36 +41,12 @@ interface Demo {
   source?: string;
 }
 
-interface Conversion {
-  id: string;
-  bookingId: string;
-  amount: string;
-  paid: boolean;
-  paidAt?: string;
-  createdAt: string;
-}
-
-interface CommissionRow {
-  id: string;
-  amount: string;
-  status: string;
-  createdAt: string;
-  billingPeriod?: string | null;
-  invoiceId?: string | null;
-  paidAt?: string | null;
-}
-
 interface Stats {
-  totalBookings: number;
-  totalConversions: number;
   totalEarnings: string;
-  pendingSetupTasks?: number;
-  setupTasksCompleted?: number;
   defaultTaskPayoutDollars?: number;
   effectiveTaskPayoutDollars?: number;
   hasCustomTaskPayout?: boolean;
   demoConversionBonusesTotal?: string;
-  subscriptionCommissionsTotal?: string;
   setupTaskPayoutsTotal?: string;
 }
 
@@ -105,9 +81,18 @@ const SALES_PORTAL_QUERY_KEYS = [
   ["/api/sales-portal/stats"],
   ["/api/sales-portal/demos"],
   ["/api/sales-portal/setup-tasks"],
-  ["/api/sales-portal/conversions"],
-  ["/api/sales-portal/commissions"],
 ] as const;
+
+function shortId(id: string): string {
+  return id.length > 8 ? id.slice(0, 8) : id;
+}
+
+function demoStatusLabel(status: string): string {
+  if (status === "converted" || status === "completed") return "Completed";
+  if (status === "cancelled") return "Cancelled";
+  if (status === "pending") return "Pending";
+  return status;
+}
 
 function isSalesPortalQueryKey(key: readonly unknown[]): boolean {
   const path = key[0];
@@ -139,11 +124,6 @@ async function fetchSalesPortalCheck(): Promise<{
   return res.json();
 }
 
-function salespersonHasSetupPayouts(role?: string): boolean {
-  const r = role === "demo" ? "sales" : role || "sales";
-  return r === "setup" || r === "both";
-}
-
 function EarningsInfoSection({
   title,
   children,
@@ -165,17 +145,15 @@ function SalesPortalEarningsDialogs({
   policyOpen,
   onPolicyOpenChange,
   stats,
-  role,
 }: {
   earningsOpen: boolean;
   onEarningsOpenChange: (open: boolean) => void;
   policyOpen: boolean;
   onPolicyOpenChange: (open: boolean) => void;
   stats?: Stats;
-  role?: string;
 }) {
-  const taskPayout = stats?.effectiveTaskPayoutDollars ?? stats?.defaultTaskPayoutDollars ?? 50;
-  const showSetup = salespersonHasSetupPayouts(role);
+  const setupPayout =
+    stats?.effectiveTaskPayoutDollars ?? stats?.defaultTaskPayoutDollars ?? DEMO_PAYOUT_DOLLARS;
 
   return (
     <>
@@ -184,37 +162,30 @@ function SalesPortalEarningsDialogs({
           <DialogHeader className="px-5 pt-5 pb-0 text-start space-y-1">
             <DialogTitle className="text-base font-semibold text-slate-900">How earnings work</DialogTitle>
             <DialogDescription className="text-sm text-slate-500">
-              Quick summary of commission and payout rules.
+              Fixed payouts for completed demo and Growth Engine setup sessions.
             </DialogDescription>
           </DialogHeader>
           <div className="px-5 pb-5 pt-3 max-h-[min(70vh,520px)] overflow-y-auto">
-            <EarningsInfoSection title="Subscription commission">
+            <EarningsInfoSection title="Demo payouts">
               <ul className="list-disc pl-4 space-y-1.5 text-sm text-slate-600 leading-relaxed">
-                <li>{SALESPERSON_SUBSCRIPTION_COMMISSION_SHORT}</li>
-                <li>Applies while the customer remains active and paying on a qualifying base plan.</li>
-                <li>Demo conversions may also include one-time conversion credits.</li>
+                <li>
+                  <span className="font-medium text-slate-800">${DEMO_PAYOUT_DOLLARS.toFixed(2)}</span> per completed
+                  and approved demo session.
+                </li>
               </ul>
             </EarningsInfoSection>
-            {showSetup && (
-              <EarningsInfoSection title="Setup task payouts">
-                <ul className="list-disc pl-4 space-y-1.5 text-sm text-slate-600 leading-relaxed">
-                  <li>
-                    <span className="font-medium text-slate-800">${taskPayout.toFixed(2)}</span> per completed Growth
-                    Engine / concierge setup task
-                    {stats?.hasCustomTaskPayout ? " (custom rate)" : " (default rate)"}.
-                  </li>
-                  <li>Fixed payout — separate from subscription commission.</li>
-                </ul>
-              </EarningsInfoSection>
-            )}
-            <EarningsInfoSection title="Exclusions">
+            <EarningsInfoSection title="Growth Engine setup payouts">
               <ul className="list-disc pl-4 space-y-1.5 text-sm text-slate-600 leading-relaxed">
-                <li>AI Brain add-ons</li>
-                <li>Growth Engines</li>
-                <li>One-time purchases and other add-ons outside the base plan</li>
-                <li>Messaging fees and third-party platform costs</li>
+                <li>
+                  <span className="font-medium text-slate-800">${setupPayout.toFixed(2)}</span> per completed and
+                  approved setup/onboarding session
+                  {stats?.hasCustomTaskPayout ? " (custom rate)" : ""}.
+                </li>
               </ul>
             </EarningsInfoSection>
+            <p className="text-sm text-slate-600 leading-relaxed pt-2">
+              Payouts are reviewed and approved by admin.
+            </p>
             <Button
               type="button"
               variant="outline"
@@ -248,13 +219,6 @@ function SalesPortalEarningsDialogs({
   );
 }
 
-function subscriptionCommissionWindowBadge(createdAt: string): { label: string; active: boolean } {
-  const d = new Date(createdAt);
-  if (Number.isNaN(d.getTime())) return { label: "Commission expired", active: false };
-  const active = isSalespersonSubscriptionCommissionActiveAt(d, new Date());
-  return { label: active ? "Commission active" : "Commission expired", active };
-}
-
 export function SalesPortal() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [salesperson, setSalesperson] = useState<SalespersonInfo | null>(null);
@@ -269,6 +233,7 @@ export function SalesPortal() {
   const [showCode, setShowCode] = useState(false);
   const [earningsInfoOpen, setEarningsInfoOpen] = useState(false);
   const [policyModalOpen, setPolicyModalOpen] = useState(false);
+  const [showDebugIds, setShowDebugIds] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -371,6 +336,7 @@ export function SalesPortal() {
       setLoginCode("");
       setEarningsInfoOpen(false);
       setPolicyModalOpen(false);
+      setShowDebugIds(false);
     }
   };
 
@@ -381,16 +347,6 @@ export function SalesPortal() {
 
   const { data: demos = [] } = useQuery<Demo[]>({
     queryKey: ['/api/sales-portal/demos'],
-    enabled: isLoggedIn,
-  });
-
-  const { data: conversions = [] } = useQuery<Conversion[]>({
-    queryKey: ['/api/sales-portal/conversions'],
-    enabled: isLoggedIn,
-  });
-
-  const { data: commissions = [] } = useQuery<CommissionRow[]>({
-    queryKey: ['/api/sales-portal/commissions'],
     enabled: isLoggedIn,
   });
 
@@ -423,14 +379,14 @@ export function SalesPortal() {
     }
   });
 
-  const demoBonusTotal = parseFloat(stats?.demoConversionBonusesTotal ?? '0');
-  const subscriptionCommissionsTotal = parseFloat(stats?.subscriptionCommissionsTotal ?? '0');
-  const setupTaskPayoutsLedger = parseFloat(stats?.setupTaskPayoutsTotal ?? '0');
-  const demoCommissionsCombined = demoBonusTotal + subscriptionCommissionsTotal;
-  const totalEarningsLedger = parseFloat(stats?.totalEarnings ?? '0');
-  const earningsBreakdownSum = demoCommissionsCombined + setupTaskPayoutsLedger;
+  const demoPayoutsTotal = parseFloat(stats?.demoConversionBonusesTotal ?? "0");
+  const setupPayoutsTotal = parseFloat(stats?.setupTaskPayoutsTotal ?? "0");
+  const totalEarningsLedger = parseFloat(stats?.totalEarnings ?? "0");
+  const earningsBreakdownSum = demoPayoutsTotal + setupPayoutsTotal;
   const earningsBreakdownMismatch =
     stats != null && Math.abs(earningsBreakdownSum - totalEarningsLedger) > 0.05;
+  const setupPayoutRate =
+    stats?.effectiveTaskPayoutDollars ?? stats?.defaultTaskPayoutDollars ?? DEMO_PAYOUT_DOLLARS;
 
   const pendingDemos = demos.filter(d => d.status === 'pending');
   const completedDemos = demos.filter(d => d.status !== 'pending');
@@ -629,12 +585,17 @@ export function SalesPortal() {
                     {salesperson.email}
                   </p>
                 )}
-                {salesperson?.id && (
-                  <p
-                    className="text-[10px] text-gray-400 font-mono"
-                    data-testid="salesportal-debug-id"
-                  >
-                    ID: {salesperson.id}
+                <button
+                  type="button"
+                  onClick={() => setShowDebugIds((v) => !v)}
+                  className="text-[10px] text-gray-400 underline underline-offset-2 hover:text-gray-600"
+                  data-testid="button-salesportal-debug-toggle"
+                >
+                  {showDebugIds ? "Hide debug" : "Debug"}
+                </button>
+                {showDebugIds && salesperson?.id && (
+                  <p className="text-[10px] text-gray-400 font-mono" data-testid="salesportal-debug-id">
+                    Salesperson: {shortId(salesperson.id)}
                   </p>
                 )}
                 <button
@@ -656,56 +617,8 @@ export function SalesPortal() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Calendar className="h-5 w-5 text-blue-600" />
-              </div>
-              <span className="text-gray-600">Total Demos</span>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{stats?.totalBookings || 0}</p>
-          </div>
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <CheckCircle className="h-5 w-5 text-green-600" />
-              </div>
-              <span className="text-gray-600">Conversions</span>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{stats?.totalConversions || 0}</p>
-          </div>
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-                <DollarSign className="h-5 w-5 text-emerald-600" />
-              </div>
-              <span className="text-gray-600">Earnings</span>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">${parseFloat(stats?.totalEarnings || '0').toFixed(2)}</p>
-          </div>
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 bg-violet-100 rounded-lg flex items-center justify-center">
-                <ClipboardList className="h-5 w-5 text-violet-600" />
-              </div>
-              <span className="text-gray-600">GE setup open</span>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{stats?.pendingSetupTasks ?? 0}</p>
-          </div>
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 bg-slate-100 rounded-lg flex items-center justify-center">
-                <CheckCircle className="h-5 w-5 text-slate-600" />
-              </div>
-              <span className="text-gray-600">GE setups done</span>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{stats?.setupTasksCompleted ?? 0}</p>
-          </div>
-        </div>
-
-        <Tabs defaultValue="pending" className="space-y-6">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <Tabs defaultValue="pending" className="space-y-4">
           <TabsList className="flex flex-wrap h-auto gap-1">
             <TabsTrigger value="pending" className="gap-2">
               <Clock className="h-4 w-4" />
@@ -827,8 +740,8 @@ export function SalesPortal() {
                           {new Date(demo.scheduledDate).toLocaleDateString()}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={demo.status === 'converted' ? 'default' : 'secondary'}>
-                            {demo.status}
+                          <Badge variant={demo.status === "pending" ? "outline" : "secondary"}>
+                            {demoStatusLabel(demo.status)}
                           </Badge>
                         </TableCell>
                       </TableRow>
@@ -872,7 +785,11 @@ export function SalesPortal() {
                               <span className="truncate">{task.userEmail || "—"}</span>
                             </span>
                           </div>
-                          <p className="text-xs text-gray-400 font-mono truncate">User ID: {task.userId}</p>
+                          {showDebugIds && task.userId && (
+                            <p className="text-xs text-gray-400 font-mono truncate" data-testid="salesportal-debug-user-id">
+                              User: {shortId(task.userId)}
+                            </p>
+                          )}
                           {task.onboardingSummary && typeof task.onboardingSummary === "object" ? (
                             <p className="text-xs text-gray-600 line-clamp-2">
                               {String(
@@ -950,135 +867,39 @@ export function SalesPortal() {
               <div className="p-4 border-b border-gray-200">
                 <h2 className="font-semibold text-gray-900">Earnings</h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  Earnings include demo conversion commissions and completed setup task payouts.
+                  ${DEMO_PAYOUT_DOLLARS} per completed and approved demo session · $
+                  {setupPayoutRate.toFixed(0)} per completed and approved Growth Engine setup session. Payouts are
+                  reviewed and approved by admin.
                 </p>
               </div>
 
               <div className="grid gap-3 border-b border-gray-100 bg-slate-50/90 p-4 sm:grid-cols-3">
                 <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Demo commissions</p>
-                  <p className="mt-1 text-2xl font-bold text-gray-900">${demoCommissionsCombined.toFixed(2)}</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Demo session payouts</p>
+                  <p className="mt-1 text-2xl font-bold text-gray-900">${demoPayoutsTotal.toFixed(2)}</p>
                   <p className="mt-2 text-[11px] leading-snug text-gray-500">
-                    Conversion credits ${demoBonusTotal.toFixed(2)} + subscription payouts $
-                    {subscriptionCommissionsTotal.toFixed(2)}
+                    ${DEMO_PAYOUT_DOLLARS} per completed and approved demo.
                   </p>
                 </div>
                 <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Setup task payouts</p>
-                  <p className="mt-1 text-2xl font-bold text-gray-900">${setupTaskPayoutsLedger.toFixed(2)}</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">GE setup payouts</p>
+                  <p className="mt-1 text-2xl font-bold text-gray-900">${setupPayoutsTotal.toFixed(2)}</p>
                   <p className="mt-2 text-[11px] leading-snug text-gray-500">
-                    Fixed amount per completed internal Growth Engine setup (tracked separately from subscription commission).
+                    ${setupPayoutRate.toFixed(0)} per completed and approved setup/onboarding session.
                   </p>
                 </div>
-                <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:col-span-1">
+                <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Total earnings</p>
                   <p className="mt-1 text-2xl font-bold text-emerald-800">${totalEarningsLedger.toFixed(2)}</p>
-                  <p className="mt-2 text-[11px] leading-snug text-gray-500">Ledger total on your account (all credited sources).</p>
+                  <p className="mt-2 text-[11px] leading-snug text-gray-500">Approved payouts credited to your account.</p>
                 </div>
               </div>
 
               {earningsBreakdownMismatch && (
-                <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
-                  The sum of the breakdown above may differ from total earnings for older activity recorded before setup payouts
-                  were tracked separately, or after manual adjustments.
+                <div className="px-4 py-3 text-xs text-amber-900 bg-amber-50 border-b border-amber-200">
+                  Total may include older payouts recorded before setup payouts were tracked separately.
                 </div>
               )}
-
-              <div className="divide-y divide-gray-100">
-                <div className="p-4">
-                  <h3 className="text-sm font-semibold text-gray-900">Demo conversion records</h3>
-                  <p className="text-xs text-gray-500 mt-0.5 mb-3">One-time credits when a booked demo converts.</p>
-                  {conversions.length === 0 ? (
-                    <div className="rounded-md border border-dashed border-gray-200 py-8 text-center text-sm text-gray-500">
-                      No conversion records yet.
-                    </div>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Amount</TableHead>
-                          <TableHead>Payment status</TableHead>
-                          <TableHead>Subscription commission</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {conversions.map((conv) => {
-                          const sub = subscriptionCommissionWindowBadge(conv.createdAt);
-                          return (
-                            <TableRow key={conv.id}>
-                              <TableCell>{new Date(conv.createdAt).toLocaleDateString()}</TableCell>
-                              <TableCell className="font-medium">${parseFloat(conv.amount).toFixed(2)}</TableCell>
-                              <TableCell>
-                                <Badge variant={conv.paid ? 'default' : 'outline'}>
-                                  {conv.paid ? 'Paid' : 'Pending'}
-                                </Badge>
-                                {conv.paid && conv.paidAt && (
-                                  <span className="ml-2 text-xs text-gray-500">
-                                    {new Date(conv.paidAt).toLocaleDateString()}
-                                  </span>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={sub.active ? 'default' : 'secondary'} className="whitespace-nowrap font-normal">
-                                  {sub.label}
-                                </Badge>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  )}
-                </div>
-
-                <div className="p-4">
-                  <h3 className="text-sm font-semibold text-gray-900">Subscription commissions</h3>
-                  <p className="text-xs text-gray-500 mt-0.5 mb-3">
-                    Ongoing commission from paid base-plan subscription invoices (30% recurring while the customer
-                    remains active). Excludes AI Brain, Growth Engines, one-time purchases, and other add-ons.
-                  </p>
-                  {commissions.length === 0 ? (
-                    <div className="rounded-md border border-dashed border-gray-200 py-8 text-center text-sm text-gray-500">
-                      No subscription commission rows yet.
-                    </div>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Billing period</TableHead>
-                          <TableHead>Amount</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="hidden sm:table-cell">Invoice</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {commissions.map((row) => (
-                          <TableRow key={row.id}>
-                            <TableCell>
-                              {row.billingPeriod
-                                ? new Date(row.billingPeriod).toLocaleDateString()
-                                : new Date(row.createdAt).toLocaleDateString()}
-                            </TableCell>
-                            <TableCell className="font-medium">${parseFloat(row.amount).toFixed(2)}</TableCell>
-                            <TableCell>
-                              <Badge variant={row.status === 'paid' ? 'default' : 'outline'}>{row.status}</Badge>
-                              {row.paidAt && (
-                                <span className="ml-2 text-xs text-gray-500">
-                                  Paid {new Date(row.paidAt).toLocaleDateString()}
-                                </span>
-                              )}
-                            </TableCell>
-                            <TableCell className="hidden max-w-[140px] truncate font-mono text-xs text-gray-600 sm:table-cell">
-                              {row.invoiceId || '—'}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </div>
-              </div>
             </div>
           </TabsContent>
         </Tabs>
@@ -1090,7 +911,6 @@ export function SalesPortal() {
         policyOpen={policyModalOpen}
         onPolicyOpenChange={setPolicyModalOpen}
         stats={stats}
-        role={salesperson?.role}
       />
     </div>
   );
