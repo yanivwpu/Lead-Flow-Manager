@@ -213,8 +213,11 @@ export function TermsOfUse() {
           </p>
 
           <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">8.4 Commission Terms</h3>
+          <p className="text-gray-600 mb-4">
+            Partners earn 30% recurring commission on qualifying base subscription revenue for the lifetime of the customer while the account remains active.
+          </p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
-            <li>Commission rates and durations are defined in the Partner dashboard or written agreement</li>
+            <li>Commission rates for individual partners may be defined in the Partner dashboard or written agreement</li>
             <li>Commissions are calculated as a percentage of subscription revenue actually received</li>
             <li>Commissions are paid only while the referred customer remains an active paying subscriber</li>
             <li>If a subscription is refunded or charged back, related commissions may be reversed</li>

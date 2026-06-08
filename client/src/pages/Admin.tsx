@@ -41,9 +41,15 @@ import {
   Users, Calendar, DollarSign, Plus, Edit2, Trash2, 
   LogOut, Loader2, CheckCircle, XCircle, Lock, UserCircle,
   AlertCircle, MessageCircle, ArrowUpDown, Link2, Percent,
-  Eye, EyeOff
+  Eye, EyeOff, ClipboardList
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  PARTNER_COMMISSION_POLICY_TEXT,
+  PARTNER_COMMISSION_TERM_DISPLAY,
+  PARTNER_COMMISSION_TERM_LABEL,
+  PARTNER_DEFAULT_COMMISSION_RATE,
+} from "@/lib/partnerProgram";
 
 /** Centered compact admin form dialogs (~520–600px; scroll inside body only). */
 const ADMIN_FORM_MODAL_CLASS =
@@ -65,6 +71,7 @@ interface Salesperson {
   role?: string;
   taskPayoutAmount?: string | null;
   setupTasksCompleted?: number;
+  setupTaskEarningsTotal?: string | null;
   isActive: boolean;
   totalBookings: number;
   totalConversions: number;
@@ -215,6 +222,12 @@ function calendarLinkSnippet(link: string | null | undefined): string {
   if (!link?.trim()) return "—";
   const t = link.trim();
   return t.length > 36 ? `${t.slice(0, 36)}…` : t;
+}
+
+function demoPayoutTotalForSalesperson(conversions: Conversion[], salespersonId: string, paidOnly = true): number {
+  return conversions
+    .filter((c) => c.salespersonId === salespersonId && (!paidOnly || c.paid))
+    .reduce((sum, c) => sum + parseFloat(c.amount || "0"), 0);
 }
 
 function formatGeSetupPipelineStatus(status: string): string {
@@ -370,7 +383,12 @@ export function Admin() {
   const [addError, setAddError] = useState("");
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
   const [isAddingPartner, setIsAddingPartner] = useState(false);
-  const [newPartner, setNewPartner] = useState({ name: "", email: "", password: "", commissionRate: "50.00", commissionDurationMonths: 6 });
+  const [newPartner, setNewPartner] = useState({
+    name: "",
+    email: "",
+    password: "",
+    commissionRate: PARTNER_DEFAULT_COMMISSION_RATE,
+  });
   const [addPartnerError, setAddPartnerError] = useState("");
   const queryClient = useQueryClient();
 
@@ -563,7 +581,7 @@ export function Admin() {
   }, [userSearch, planFilter, statusFilter, aiFilter, overrideFilter, pageSize, showSupportOnly]);
 
   const createPartner = useMutation({
-    mutationFn: async (data: { name: string; email: string; password: string; commissionRate?: string; commissionDurationMonths?: number }) => {
+    mutationFn: async (data: { name: string; email: string; password: string; commissionRate?: string }) => {
       const res = await adminFetch('/api/admin/partners', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -578,7 +596,7 @@ export function Admin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/partners'] });
       setIsAddingPartner(false);
-      setNewPartner({ name: "", email: "", password: "", commissionRate: "50.00", commissionDurationMonths: 6 });
+      setNewPartner({ name: "", email: "", password: "", commissionRate: PARTNER_DEFAULT_COMMISSION_RATE });
       setAddPartnerError("");
     },
     onError: (error: Error) => {
@@ -739,12 +757,18 @@ export function Admin() {
     return salespeople.find(p => p.id === id)?.name || 'Unknown';
   };
 
-  const totalCost = salespeople.reduce((sum, p) => sum + parseFloat(p.totalEarnings || '0'), 0);
-  const totalConversions = salespeople.reduce((sum, p) => sum + (p.totalConversions || 0), 0);
-  const pendingBookings = bookings.filter(b => b.status === 'pending').length;
-  const conversionRate = bookings.length > 0 
-    ? ((bookings.filter(b => b.status === 'converted').length / bookings.length) * 100).toFixed(1)
-    : '0';
+  const totalCost = salespeople.reduce((sum, p) => sum + parseFloat(p.totalEarnings || "0"), 0);
+  const pendingBookings = bookings.filter((b) => b.status === "pending").length;
+  const pendingGeSetups = adminUsers.filter(
+    (u) => u.growthEngineSetup && u.growthEngineSetup.status !== "setup_completed",
+  ).length;
+  const totalDemoPayouts = conversions
+    .filter((c) => c.paid)
+    .reduce((sum, c) => sum + parseFloat(c.amount || "0"), 0);
+  const totalGePayouts = salespeople.reduce(
+    (sum, p) => sum + parseFloat(String(p.setupTaskEarningsTotal ?? 0)),
+    0,
+  );
 
   if (!isLoggedIn) {
     return (
@@ -827,7 +851,7 @@ export function Admin() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-6 sm:mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-4 mb-6 sm:mb-8">
           <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
             <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
               <div className="h-8 w-8 sm:h-10 sm:w-10 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
@@ -839,12 +863,30 @@ export function Admin() {
           </div>
           <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
             <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
-              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
-                <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
+              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-violet-100 rounded-lg flex items-center justify-center shrink-0">
+                <ClipboardList className="h-4 w-4 sm:h-5 sm:w-5 text-violet-600" />
               </div>
-              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Demo payouts</span>
+              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Pending GE Setups</span>
             </div>
-            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{totalConversions}</p>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{pendingGeSetups}</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
+            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
+                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
+              </div>
+              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Demo Payouts</span>
+            </div>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-900">${totalDemoPayouts.toFixed(2)}</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
+            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-teal-100 rounded-lg flex items-center justify-center shrink-0">
+                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-teal-600" />
+              </div>
+              <span className="text-xs sm:text-sm text-gray-600 leading-tight">GE Payouts</span>
+            </div>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-900">${totalGePayouts.toFixed(2)}</p>
           </div>
           <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
             <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
@@ -866,21 +908,12 @@ export function Admin() {
           </div>
           <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
             <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
-              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-purple-100 rounded-lg flex items-center justify-center shrink-0">
-                <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
-              </div>
-              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Conv. Rate</span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{conversionRate}%</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
-            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
               <div className="h-8 w-8 sm:h-10 sm:w-10 bg-amber-100 rounded-lg flex items-center justify-center shrink-0">
                 <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600" />
               </div>
               <span className="text-xs sm:text-sm text-gray-600 leading-tight">ROI</span>
             </div>
-            <p className={`text-2xl sm:text-3xl font-bold ${(roiStats?.roi || 0) >= 100 ? 'text-green-600' : 'text-red-600'}`}>
+            <p className={`text-2xl sm:text-3xl font-bold ${(roiStats?.roi || 0) >= 100 ? "text-green-600" : "text-red-600"}`}>
               {(roiStats?.roi || 0).toFixed(0)}%
             </p>
           </div>
@@ -957,7 +990,8 @@ export function Admin() {
                     <TableHead>Total payout</TableHead>
                     <TableHead>Setup done</TableHead>
                     <TableHead>Bookings</TableHead>
-                    <TableHead>Demo payouts</TableHead>
+                    <TableHead>Demo paid</TableHead>
+                    <TableHead>GE paid</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -965,7 +999,7 @@ export function Admin() {
                 <TableBody>
                   {salespeople.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={12} className="text-center py-8 text-gray-500">
+                      <TableCell colSpan={13} className="text-center py-8 text-gray-500">
                         No salespeople yet. Add your first salesperson to get started.
                       </TableCell>
                     </TableRow>
@@ -993,13 +1027,18 @@ export function Admin() {
                         </TableCell>
                         <TableCell
                           className="text-sm font-medium text-gray-900 whitespace-nowrap"
-                          title="Approved demo session and Growth Engine setup payouts credited over time."
+                          title={`Demo $${demoPayoutTotalForSalesperson(conversions, person.id).toFixed(2)} + GE $${parseFloat(String(person.setupTaskEarningsTotal ?? 0)).toFixed(2)}`}
                         >
                           ${parseFloat(person.totalEarnings || "0").toFixed(2)}
                         </TableCell>
                         <TableCell>{person.setupTasksCompleted ?? 0}</TableCell>
                         <TableCell>{person.totalBookings || 0}</TableCell>
-                        <TableCell>{person.totalConversions || 0}</TableCell>
+                        <TableCell className="text-sm text-gray-900 whitespace-nowrap">
+                          ${demoPayoutTotalForSalesperson(conversions, person.id).toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-900 whitespace-nowrap">
+                          ${parseFloat(String(person.setupTaskEarningsTotal ?? 0)).toFixed(2)}
+                        </TableCell>
                         <TableCell>
                           <Badge variant={person.isActive ? "default" : "secondary"}>
                             {person.isActive ? 'Active' : 'Inactive'}
@@ -1740,7 +1779,10 @@ export function Admin() {
           <TabsContent value="partners">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <h2 className="font-semibold text-gray-900">Partner Program</h2>
+                <div>
+                  <h2 className="font-semibold text-gray-900">Partner Program</h2>
+                  <p className="text-sm text-gray-500 mt-1 max-w-2xl">{PARTNER_COMMISSION_POLICY_TEXT}</p>
+                </div>
                 <Button 
                   onClick={() => setIsAddingPartner(true)}
                   className="bg-brand-green hover:bg-brand-dark min-h-[44px] min-w-[44px] touch-manipulation"
@@ -1758,7 +1800,7 @@ export function Admin() {
                     <TableHead>Ref Code</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Rate</TableHead>
-                    <TableHead>Duration</TableHead>
+                    <TableHead>Term</TableHead>
                     <TableHead>Referrals</TableHead>
                     <TableHead>Earnings</TableHead>
                     <TableHead>Status</TableHead>
@@ -1788,7 +1830,7 @@ export function Admin() {
                             {partner.commissionRate}
                           </div>
                         </TableCell>
-                        <TableCell>{partner.commissionDurationMonths}mo</TableCell>
+                        <TableCell>{PARTNER_COMMISSION_TERM_DISPLAY}</TableCell>
                         <TableCell>{partner.totalReferrals || 0}</TableCell>
                         <TableCell className="text-green-600 font-medium">
                           ${parseFloat(partner.totalEarnings || '0').toFixed(2)}
@@ -1921,6 +1963,7 @@ export function Admin() {
         <DialogContent className={cn(ADMIN_FORM_MODAL_CLASS)}>
           <DialogHeader className={ADMIN_FORM_MODAL_HEADER}>
             <DialogTitle>Add Partner</DialogTitle>
+            <p className="text-sm text-muted-foreground pt-1">{PARTNER_COMMISSION_POLICY_TEXT}</p>
           </DialogHeader>
           <div className={cn(ADMIN_FORM_MODAL_BODY, "space-y-3")}>
             {addPartnerError && (
@@ -1969,36 +2012,27 @@ export function Admin() {
                 data-testid="input-partner-password"
               />
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="new-partner-rate" className="text-xs font-medium text-muted-foreground">
-                  Commission rate (%)
-                </Label>
-                <Input
-                  id="new-partner-rate"
-                  value={newPartner.commissionRate}
-                  onChange={(e) => setNewPartner({ ...newPartner, commissionRate: e.target.value })}
-                  placeholder="20.00"
-                  className="mt-1 h-9"
-                  data-testid="input-partner-rate"
-                />
-              </div>
-              <div>
-                <Label htmlFor="new-partner-duration" className="text-xs font-medium text-muted-foreground">
-                  Duration (months)
-                </Label>
-                <Input
-                  id="new-partner-duration"
-                  type="number"
-                  value={newPartner.commissionDurationMonths}
-                  onChange={(e) =>
-                    setNewPartner({ ...newPartner, commissionDurationMonths: parseInt(e.target.value) || 6 })
-                  }
-                  placeholder="6"
-                  className="mt-1 h-9"
-                  data-testid="input-partner-duration"
-                />
-              </div>
+            <div>
+              <Label htmlFor="new-partner-rate" className="text-xs font-medium text-muted-foreground">
+                Commission rate (%)
+              </Label>
+              <Input
+                id="new-partner-rate"
+                value={newPartner.commissionRate}
+                onChange={(e) => setNewPartner({ ...newPartner, commissionRate: e.target.value })}
+                placeholder={PARTNER_DEFAULT_COMMISSION_RATE}
+                className="mt-1 h-9"
+                data-testid="input-partner-rate"
+              />
+              <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                Default is {PARTNER_DEFAULT_COMMISSION_RATE.replace(".00", "")}% on qualifying base subscription revenue.
+              </p>
+            </div>
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">Commission term</Label>
+              <p className="mt-1 rounded-md border bg-muted/40 px-2.5 py-2 text-sm text-muted-foreground">
+                {PARTNER_COMMISSION_TERM_LABEL}
+              </p>
             </div>
           </div>
           <DialogFooter className={cn(ADMIN_FORM_MODAL_FOOTER, "sm:justify-end")}>
@@ -2052,31 +2086,21 @@ export function Admin() {
                   data-testid="input-edit-partner-email"
                 />
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <Label className="text-xs font-medium text-muted-foreground">Commission rate (%)</Label>
-                  <Input
-                    className="mt-1 h-9"
-                    value={editingPartner.commissionRate}
-                    onChange={(e) => setEditingPartner({ ...editingPartner, commissionRate: e.target.value })}
-                    data-testid="input-edit-partner-rate"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs font-medium text-muted-foreground">Duration (months)</Label>
-                  <Input
-                    className="mt-1 h-9"
-                    type="number"
-                    value={editingPartner.commissionDurationMonths}
-                    onChange={(e) =>
-                      setEditingPartner({
-                        ...editingPartner,
-                        commissionDurationMonths: parseInt(e.target.value) || 6,
-                      })
-                    }
-                    data-testid="input-edit-partner-duration"
-                  />
-                </div>
+              <div>
+                <Label className="text-xs font-medium text-muted-foreground">Commission rate (%)</Label>
+                <Input
+                  className="mt-1 h-9"
+                  value={editingPartner.commissionRate}
+                  onChange={(e) => setEditingPartner({ ...editingPartner, commissionRate: e.target.value })}
+                  data-testid="input-edit-partner-rate"
+                />
+                <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{PARTNER_COMMISSION_POLICY_TEXT}</p>
+              </div>
+              <div>
+                <Label className="text-xs font-medium text-muted-foreground">Commission term</Label>
+                <p className="mt-1 rounded-md border bg-muted/40 px-2.5 py-2 text-sm text-muted-foreground">
+                  {PARTNER_COMMISSION_TERM_LABEL}
+                </p>
               </div>
               <div>
                 <Label className="text-xs font-medium text-muted-foreground">Status</Label>
@@ -2117,7 +2141,6 @@ export function Admin() {
                     name: editingPartner.name,
                     email: editingPartner.email,
                     commissionRate: editingPartner.commissionRate,
-                    commissionDurationMonths: editingPartner.commissionDurationMonths,
                     status: editingPartner.status,
                   });
                 }

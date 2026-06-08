@@ -17,6 +17,7 @@ import {
   Eye, EyeOff, Facebook, Instagram, Twitter, Share2, BookOpen, Clock, ExternalLink
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PARTNER_COMMISSION_POLICY_TEXT, PARTNER_COMMISSION_TERM_LABEL } from "@/lib/partnerProgram";
 
 // Social Media Icons component for consistency
 const XIcon = ({ className }: { className?: string }) => (
@@ -156,7 +157,7 @@ const SHAREABLE_CONTENT = [
 const PARTNER_AGREEMENT_TEXT = `Partner Referral Agreement
 
 WhachatCRM Partner Program
-Last updated: February 14, 2026
+Last updated: June 7, 2026
 
 This Partner Referral Agreement ("Agreement") governs participation in the WhachatCRM Partner Program.
 
@@ -168,8 +169,6 @@ By registering as a Partner and clicking “I Agree,” you acknowledge that you
 "Partner" – An approved freelancer, agency, consultant, or individual promoting WhachatCRM.
 "Referral Link" – A unique tracking link or identifier assigned to the Partner.
 "Qualified Referral" – A referred user who becomes a paying subscriber in good standing.
-"Basic Referrer" – A Partner who refers a customer that becomes a Qualified Referral.
-"Pro Partner" – A Partner who qualifies for enhanced commission on a specific client by assisting with activation as defined in Section 4.
 
 2. Program Participation
 
@@ -189,39 +188,13 @@ WhachatCRM’s determination of attribution and qualification is final and bindi
 
 4. Commission Structure
 
-WhachatCRM offers two commission tiers per Qualified Referral:
+${PARTNER_COMMISSION_POLICY_TEXT}
 
-A. Basic Referrer Tier
-
-• Commission Rate: 30% of base subscription revenue
-• Duration: Up to twelve (12) months from the customer’s first successful paid invoice
-
-Basic Referrer status applies when a Partner refers a Qualified Referral but does not meet Pro activation requirements.
-
-B. Pro Partner Tier (Per-Client Qualification)
-
-A Partner may qualify as a Pro Partner for a specific referred client if ALL of the following conditions are verified by WhachatCRM’s system:
-
-The customer signed up using the Partner’s Referral Link or identifier.
-
-The customer successfully connects and activates WhatsApp Business API (via Meta or Twilio).
-
-The Partner assists the customer in connecting the customer’s communication channel(s), as applicable to the customer’s business.
-
-At least one message is successfully sent or received through the system.
-
-If these conditions are verified within sixty (60) days of the customer’s signup:
-
-• Commission Rate: 40% of base subscription revenue
-• Duration: Up to twenty-four (24) months from the customer’s first successful paid invoice
-
-Pro status applies per client only and does not automatically upgrade the Partner globally.
-
-WhachatCRM reserves the right to verify activation through system logs and internal review.
+Commission term: ${PARTNER_COMMISSION_TERM_LABEL}.
 
 5. Commission Scope
 
-Commissions apply to base subscription revenue only.
+Commissions apply to qualifying base subscription revenue only.
 
 Commissions do NOT apply to:
 
@@ -245,20 +218,15 @@ If a customer payment is refunded, disputed, reversed, or fails, the related com
 
 Partners are responsible for all applicable taxes related to commission payments.
 
-7. No Lifetime Commission Guarantee
+7. Program Changes
 
-Commissions are not guaranteed for the lifetime of any customer.
-
-Commission payments are limited to the applicable commission duration in effect at the time the commission is earned (12 months for Basic Referrer; 24 months for Pro Partner unless otherwise specified in writing).
-
-WhachatCRM reserves the right to modify commission rates, durations, eligibility requirements, or payout terms at any time. Such changes will not retroactively reduce commissions already earned.
+WhachatCRM reserves the right to modify commission rates, eligibility requirements, or payout terms for future referrals at any time. Such changes will not retroactively reduce commissions already earned for active customers.
 
 8. Administrative Overrides
 
 WhachatCRM reserves the right, at its sole discretion, to:
 
-• Approve or deny Pro status qualification
-• Override commission rates or durations for any specific Partner or referral
+• Override commission rates or terms for any specific Partner or referral
 • Adjust commissions in cases of error, fraud, abuse, or dispute
 
 All administrative decisions are final.
@@ -640,6 +608,7 @@ export function PartnerPortal() {
                   {stats?.refLink || `${MARKETING_URL}/?ref=${partner?.refCode}`}
                 </span>
               </div>
+              <p className="text-green-100 text-sm mt-2 max-w-xl">{PARTNER_COMMISSION_POLICY_TEXT}</p>
             </div>
             <Button 
               variant="secondary" 

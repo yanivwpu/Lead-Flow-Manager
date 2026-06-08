@@ -713,8 +713,7 @@ export function SalesPortal() {
               </div>
               {pendingSetup.length === 0 ? (
                 <div className="p-8 text-center text-gray-500">
-                  No open setup tasks. If you expect work here, ask an admin to set your role to &quot;setup&quot; or &quot;both&quot; and assign
-                  calendar links.
+                  No open setup tasks.
                 </div>
               ) : (
                 <div className="divide-y divide-gray-100">
