@@ -206,6 +206,25 @@ interface Partner {
 
 const ADMIN_DEFAULT_TASK_PAYOUT = 50;
 
+function AdminKpiStripItem({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: string | number;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="flex min-w-[6.75rem] flex-1 flex-col gap-0.5 rounded-md border border-gray-200 bg-white px-2.5 py-2 sm:min-w-[7.25rem] sm:px-3">
+      <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500 leading-tight">{label}</span>
+      <span className={cn("text-sm font-semibold tabular-nums text-gray-900 sm:text-base", valueClassName)}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
 function formatSalespersonRole(role: string | undefined): string {
   const r = role === "demo" ? "sales" : role || "sales";
   const labels: Record<string, string> = {
@@ -764,14 +783,13 @@ export function Admin() {
     return salespeople.find(p => p.id === id)?.name || 'Unknown';
   };
 
-  const totalCost = salespeople.reduce((sum, p) => sum + parseFloat(p.totalEarnings || "0"), 0);
   const pendingBookings = bookings.filter((b) =>
     normalizeDemoBookingStatus(b.status) === DEMO_BOOKING_STATUS.pendingAcceptance,
   ).length;
   const acceptedBookings = bookings.filter(
     (b) => normalizeDemoBookingStatus(b.status) === DEMO_BOOKING_STATUS.accepted,
   ).length;
-  const convertedCustomers = conversions.filter((c) => c.payoutEligible !== false).length;
+  const convertedPaidCustomers = conversions.filter((c) => c.paid && c.payoutEligible !== false).length;
   const pendingGeSetups = adminUsers.filter(
     (u) => u.growthEngineSetup && u.growthEngineSetup.status !== "setup_completed",
   ).length;
@@ -862,85 +880,22 @@ export function Admin() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4 mb-6 sm:mb-8">
-          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
-            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
-              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
-                <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
-              </div>
-              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Pending Demos</span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{pendingBookings}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
-            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
-              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-indigo-100 rounded-lg flex items-center justify-center shrink-0">
-                <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-600" />
-              </div>
-              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Accepted Demos</span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{acceptedBookings}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
-            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
-              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-emerald-100 rounded-lg flex items-center justify-center shrink-0">
-                <Users className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
-              </div>
-              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Converted Customers</span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{convertedCustomers}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
-            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
-              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-violet-100 rounded-lg flex items-center justify-center shrink-0">
-                <ClipboardList className="h-4 w-4 sm:h-5 sm:w-5 text-violet-600" />
-              </div>
-              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Pending GE Setups</span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{pendingGeSetups}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
-            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
-              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
-                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
-              </div>
-              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Earned payouts</span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-gray-900">${payoutTotals.earned.toFixed(2)}</p>
-            <p className="text-[10px] sm:text-xs text-gray-500 mt-1 leading-snug">
-              Conversions ${payoutTotals.conversionEarned.toFixed(2)} + GE ${payoutTotals.setupEarned.toFixed(2)}
-            </p>
-          </div>
-          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
-            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
-              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-emerald-100 rounded-lg flex items-center justify-center shrink-0">
-                <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
-              </div>
-              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Paid payouts</span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-emerald-800">${payoutTotals.paid.toFixed(2)}</p>
-            <p className="text-[10px] sm:text-xs text-gray-500 mt-1 leading-snug">Demo conversions marked paid</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
-            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
-              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-amber-100 rounded-lg flex items-center justify-center shrink-0">
-                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-amber-700" />
-              </div>
-              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Unpaid payouts</span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-amber-800">${payoutTotals.unpaid.toFixed(2)}</p>
-            <p className="text-[10px] sm:text-xs text-gray-500 mt-1 leading-snug">Earned, not yet marked paid</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200 col-span-2 sm:col-span-3 lg:col-span-1">
-            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
-              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
-                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-red-600" />
-              </div>
-              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Account ledger</span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-gray-900">${totalCost.toFixed(2)}</p>
-            <p className="text-[10px] sm:text-xs text-gray-500 mt-1 leading-snug">Sum of salesperson total earnings</p>
-          </div>
+        <div className="mb-6 flex gap-2 overflow-x-auto pb-1">
+          <AdminKpiStripItem label="Pending demos" value={pendingBookings} />
+          <AdminKpiStripItem label="Accepted demos" value={acceptedBookings} />
+          <AdminKpiStripItem label="Converted paid customers" value={convertedPaidCustomers} />
+          <AdminKpiStripItem label="Pending GE setups" value={pendingGeSetups} />
+          <AdminKpiStripItem label="Earned" value={`$${payoutTotals.earned.toFixed(2)}`} />
+          <AdminKpiStripItem
+            label="Paid"
+            value={`$${payoutTotals.paid.toFixed(2)}`}
+            valueClassName="text-emerald-700"
+          />
+          <AdminKpiStripItem
+            label="Unpaid"
+            value={`$${payoutTotals.unpaid.toFixed(2)}`}
+            valueClassName="text-amber-700"
+          />
         </div>
 
         <Tabs defaultValue="salespeople" className="space-y-6">

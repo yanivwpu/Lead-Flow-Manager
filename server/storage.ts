@@ -592,6 +592,64 @@ async function loadLatestOutboundTemplateSnapshotsByConversationIds(
   return out;
 }
 
+/** Legacy sales_conversions rows before migration 0035 (no conversion_date / payout_eligible columns). */
+function isSalesConversionsSchemaMismatchError(error: unknown): boolean {
+  const msg = String((error as { message?: string })?.message ?? error ?? "").toLowerCase();
+  return (
+    (msg.includes("sales_conversions") ||
+      msg.includes("conversion_date") ||
+      msg.includes("demo_date") ||
+      msg.includes("payout_eligible") ||
+      msg.includes("eligibility_notes")) &&
+    (msg.includes("does not exist") || msg.includes("failed query"))
+  );
+}
+
+function mapLegacySalesConversionRow(row: Record<string, unknown>): SalesConversion {
+  const createdRaw = row.created_at ?? row.createdAt;
+  const createdAt =
+    createdRaw instanceof Date ? createdRaw : createdRaw ? new Date(String(createdRaw)) : new Date();
+  const paidAtRaw = row.paid_at ?? row.paidAt;
+  const paidAt =
+    paidAtRaw == null
+      ? null
+      : paidAtRaw instanceof Date
+        ? paidAtRaw
+        : new Date(String(paidAtRaw));
+
+  return {
+    id: String(row.id),
+    bookingId: String(row.booking_id ?? row.bookingId),
+    salespersonId: String(row.salesperson_id ?? row.salespersonId),
+    userId: row.user_id != null || row.userId != null ? String(row.user_id ?? row.userId) : null,
+    amount: String(row.amount ?? "0"),
+    totalRevenue: String(row.total_revenue ?? row.totalRevenue ?? "0"),
+    paid: Boolean(row.paid ?? false),
+    paidAt,
+    conversionDate: createdAt,
+    demoDate: null,
+    payoutEligible: true,
+    eligibilityNotes: null,
+    createdAt,
+  };
+}
+
+async function fetchSalesConversionsLegacy(salespersonId?: string): Promise<SalesConversion[]> {
+  const result = salespersonId
+    ? await db.execute(sql`
+        SELECT id, booking_id, salesperson_id, user_id, amount, total_revenue, paid, paid_at, created_at
+        FROM sales_conversions
+        WHERE salesperson_id = ${salespersonId}
+        ORDER BY created_at DESC
+      `)
+    : await db.execute(sql`
+        SELECT id, booking_id, salesperson_id, user_id, amount, total_revenue, paid, paid_at, created_at
+        FROM sales_conversions
+        ORDER BY created_at DESC
+      `);
+  return (result.rows as Record<string, unknown>[]).map(mapLegacySalesConversionRow);
+}
+
 export class DbStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
     // Same minimal projection as login — session/deserialize must not Drizzle-select missing columns on older Neon DBs.
@@ -2138,13 +2196,27 @@ export class DbStorage implements IStorage {
 
   // Sales Conversion methods
   async getSalesConversions(): Promise<SalesConversion[]> {
-    return await db.select().from(salesConversions).orderBy(desc(salesConversions.createdAt));
+    try {
+      return await db.select().from(salesConversions).orderBy(desc(salesConversions.createdAt));
+    } catch (error) {
+      if (!isSalesConversionsSchemaMismatchError(error)) throw error;
+      console.warn("[Storage] sales_conversions schema mismatch; using legacy column select");
+      return fetchSalesConversionsLegacy();
+    }
   }
 
   async getSalesConversionsBySalesperson(salespersonId: string): Promise<SalesConversion[]> {
-    return await db.select().from(salesConversions)
-      .where(eq(salesConversions.salespersonId, salespersonId))
-      .orderBy(desc(salesConversions.createdAt));
+    try {
+      return await db
+        .select()
+        .from(salesConversions)
+        .where(eq(salesConversions.salespersonId, salespersonId))
+        .orderBy(desc(salesConversions.createdAt));
+    } catch (error) {
+      if (!isSalesConversionsSchemaMismatchError(error)) throw error;
+      console.warn("[Storage] sales_conversions schema mismatch; using legacy column select");
+      return fetchSalesConversionsLegacy(salespersonId);
+    }
   }
 
   async createSalesConversion(conversion: InsertSalesConversion): Promise<SalesConversion> {
@@ -2180,9 +2252,14 @@ export class DbStorage implements IStorage {
   }
 
   async getSalesConversionByUserId(userId: string): Promise<SalesConversion | undefined> {
-    const result = await db.select().from(salesConversions)
-      .where(eq(salesConversions.userId, userId));
-    return result[0];
+    try {
+      const result = await db.select().from(salesConversions).where(eq(salesConversions.userId, userId));
+      return result[0];
+    } catch (error) {
+      if (!isSalesConversionsSchemaMismatchError(error)) throw error;
+      const rows = await fetchSalesConversionsLegacy();
+      return rows.find((c) => c.userId === userId);
+    }
   }
 
   async addConversionRevenue(userId: string, amount: number): Promise<void> {
@@ -2194,7 +2271,7 @@ export class DbStorage implements IStorage {
   }
 
   async getConversionROIStats(): Promise<{ totalCost: number; totalRevenue: number; roi: number }> {
-    const conversions = await db.select().from(salesConversions);
+    const conversions = await this.getSalesConversions();
     const totalCost = conversions.reduce((sum, c) => sum + parseFloat(c.amount || '0'), 0);
     const totalRevenue = conversions.reduce((sum, c) => sum + parseFloat(c.totalRevenue || '0'), 0);
     const roi = totalCost > 0 ? ((totalRevenue / totalCost) * 100) : 0;

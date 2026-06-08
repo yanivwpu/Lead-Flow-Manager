@@ -8448,8 +8448,16 @@ export async function registerRoutes(
       const allTickets = await storage.getSupportTickets();
       console.log('[Admin Users] Tickets:', allTickets.length);
       
-      const allConversions = await storage.getSalesConversions();
-      console.log('[Admin Users] Conversions:', allConversions.length);
+      let allConversions: Awaited<ReturnType<typeof storage.getSalesConversions>> = [];
+      try {
+        allConversions = await storage.getSalesConversions();
+        console.log('[Admin Users] Conversions:', allConversions.length);
+      } catch (convErr: unknown) {
+        console.warn(
+          "[Admin Users] Conversions unavailable; continuing without salesperson attribution",
+          (convErr as { message?: string })?.message ?? convErr,
+        );
+      }
       
       const allPartners = await storage.getPartners();
       console.log('[Admin Users] Partners:', allPartners.length);
