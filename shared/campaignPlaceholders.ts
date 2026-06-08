@@ -11,6 +11,99 @@ import {
 
 const PLACEHOLDER_TOKEN_RE = /\{\{\s*([^}]+?)\s*\}\}/g;
 
+/** Sample defaults for new preset campaigns (never `{{token}}` self-references). */
+const PRESET_PLACEHOLDER_SEED_VALUES: Record<string, string> = {
+  discount_percent: "20",
+  hours_left: "24",
+  offer_link: "https://example.com",
+  cart_link: "https://example.com/cart",
+  discount_code: "SAVE20",
+  promo_code: "SAVE20",
+  promotion_details: "Limited-time offer on subscription plans",
+  expiry_date: "Dec 31, 2026",
+  product_list: "Item A, Item B",
+  property_name: "Sample Property",
+  location: "Miami, FL",
+  price: "$450,000",
+  clinic_name: "Sample Clinic",
+  appointment_time: "10:00 AM",
+  doctor_name: "Dr. Smith",
+  destination: "Paris",
+  travel_date: "Aug 15, 2026",
+  departure_time: "8:30 AM",
+};
+
+export const CAMPAIGN_PLACEHOLDER_DEFAULTS_HELPER =
+  "These values are used when the contact does not have a matching custom field.";
+
+export function isPlaceholderSelfReference(key: string, value: string): boolean {
+  const t = value.trim();
+  return t === `{{${key}}}` || t === `{{ ${key} }}`;
+}
+
+/** Build initial placeholder defaults when creating a campaign from a preset blueprint. */
+export function buildNewCampaignPlaceholderDefaults(placeholderKeys: string[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const key of placeholderKeys) {
+    result[key] = PRESET_PLACEHOLDER_SEED_VALUES[key] ?? "";
+  }
+  return result;
+}
+
+/** Replace legacy `{{key}}` stored defaults with real sample values for display/editing. */
+export function normalizeCampaignPlaceholderDefaults(
+  defaults: Record<string, unknown> | null | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!defaults || typeof defaults !== "object") return out;
+  for (const [k, v] of Object.entries(defaults)) {
+    const s = v == null ? "" : String(v);
+    out[k] = isPlaceholderSelfReference(k, s) ? (PRESET_PLACEHOLDER_SEED_VALUES[k] ?? "") : s;
+  }
+  return out;
+}
+
+export function getPlaceholderDefaultInputHint(key: string): string {
+  const seed = PRESET_PLACEHOLDER_SEED_VALUES[key];
+  if (seed) return `e.g. ${seed}`;
+  if (key === "name") return "Uses contact name when empty";
+  return "";
+}
+
+export function buildSampleCampaignPreviewContact(
+  overrides?: Partial<Pick<Contact, "name" | "phone" | "email" | "customFields">>,
+): Contact {
+  return {
+    id: "preview",
+    name: overrides?.name ?? "Alex",
+    phone: overrides?.phone ?? "+15551234567",
+    email: overrides?.email ?? "alex@example.com",
+    customFields: overrides?.customFields ?? {},
+  } as Contact;
+}
+
+export type CampaignMessagePreviewStep = {
+  delay: string;
+  type: string;
+  rendered: string;
+};
+
+export function previewCampaignMessageSteps(
+  messages: unknown[],
+  placeholderDefaults: Record<string, unknown> | null | undefined,
+  contact: Contact,
+): CampaignMessagePreviewStep[] {
+  const rows = parsePresetCampaignMessagesArray(messages);
+  return rows.map((raw) => {
+    const m = raw as { delay?: string; content?: string; type?: string };
+    return {
+      delay: String(m.delay ?? "0"),
+      type: typeof m.type === "string" ? m.type : "text",
+      rendered: interpolateCampaignBody(typeof m.content === "string" ? m.content : "", placeholderDefaults, contact),
+    };
+  });
+}
+
 function trimStr(v: unknown): string {
   if (v == null) return "";
   return String(v).trim();

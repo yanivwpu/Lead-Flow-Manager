@@ -39,6 +39,11 @@ import {
 } from "lucide-react";
 import { getCurrentLanguage, getDirection } from "@/lib/i18n";
 import { apiRequest } from "@/lib/queryClient";
+import {
+  buildNewCampaignPlaceholderDefaults,
+  buildSampleCampaignPreviewContact,
+  interpolateCampaignBody,
+} from "@shared/campaignPlaceholders";
 
 interface AutomationTemplate {
   id: string;
@@ -83,11 +88,7 @@ const INDUSTRY_ICONS: Record<string, any> = {
 };
 
 function defaultPlaceholderMap(template: AutomationTemplate): Record<string, string> {
-  const initial: Record<string, string> = {};
-  template.placeholders.forEach((p) => {
-    initial[p] = `{{${p}}}`;
-  });
-  return initial;
+  return buildNewCampaignPlaceholderDefaults(template.placeholders);
 }
 
 interface LocalizedTemplateSelectorProps {
@@ -185,17 +186,13 @@ export function LocalizedTemplateSelector({
     });
   };
 
-  const replacePlaceholders = (content: string, map: Record<string, string>): string => {
-    let result = content;
-    for (const [key, value] of Object.entries(map)) {
-      result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value || `{{${key}}}`);
-    }
-    return result;
-  };
-
-  const readOnlyPlaceholderMap = readOnlyPreviewTemplate
+  const previewContact = buildSampleCampaignPreviewContact();
+  const readOnlyPlaceholderDefaults = readOnlyPreviewTemplate
     ? defaultPlaceholderMap(readOnlyPreviewTemplate)
     : {};
+
+  const renderPreviewContent = (content: string, defaults: Record<string, string>): string =>
+    interpolateCampaignBody(content, defaults, previewContact);
 
   const getCategoryIcon = (category: string) => {
     const IconComponent = CATEGORY_ICONS[category] || Tag;
@@ -392,7 +389,7 @@ export function LocalizedTemplateSelector({
               <p className="text-xs text-muted-foreground mb-3">
                 {t(
                   "templates.readOnlyPreviewHint",
-                  "Read-only preview. Placeholders show as {{name}} until you edit the campaign."
+                  "Read-only preview with sample placeholder defaults. Contact name uses “Alex” as an example."
                 )}
               </p>
               <div className="space-y-4 pr-2">
@@ -409,7 +406,7 @@ export function LocalizedTemplateSelector({
                       className="whitespace-pre-wrap text-sm bg-white p-3 rounded border"
                       dir={readOnlyPreviewTemplate.language === "he" ? "rtl" : "ltr"}
                     >
-                      {replacePlaceholders(msg.content, readOnlyPlaceholderMap)}
+                      {renderPreviewContent(msg.content, readOnlyPlaceholderDefaults)}
                     </div>
                   </div>
                 ))}

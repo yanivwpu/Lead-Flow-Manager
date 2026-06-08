@@ -23,6 +23,7 @@ import {
   Save,
   ChevronDown,
   Plus,
+  Eye,
 } from "lucide-react";
 import type { ContactNote } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -49,6 +50,11 @@ import {
   sortCampaignsForContact,
   campaignChannelLabel,
 } from "@shared/campaignEnrollment";
+import {
+  normalizeCampaignPlaceholderDefaults,
+  previewCampaignMessageSteps,
+} from "@shared/campaignPlaceholders";
+import type { Contact as SchemaContact } from "@shared/schema";
 import {
   filterMeaningfulTimelineEvents,
   formatActivityDetailText,
@@ -899,6 +905,7 @@ export function InboxLeadDetailsPanel({
   const [campaignPickerOpen, setCampaignPickerOpen] = useState(false);
   const [pickedCampaignId, setPickedCampaignId] = useState<string>("");
   const [showCampaignHistory, setShowCampaignHistory] = useState(false);
+  const [enrollmentPreviewOpen, setEnrollmentPreviewOpen] = useState(false);
 
   const { data: campaignEnrollmentPayload } = useQuery<{
     enrollments: CampaignEnrollmentRow[];
@@ -916,7 +923,14 @@ export function InboxLeadDetailsPanel({
   });
 
   const { data: presetCampaignPickList = [] } = useQuery<
-    Array<{ id: string; name: string; status: string; channel?: string; messages?: unknown }>
+    Array<{
+      id: string;
+      name: string;
+      status: string;
+      channel?: string;
+      messages?: unknown;
+      placeholderDefaults?: Record<string, unknown> | null;
+    }>
   >({
     queryKey: ["/api/preset-campaigns"],
     queryFn: async () => {
@@ -974,6 +988,21 @@ export function InboxLeadDetailsPanel({
   );
 
   const enrollableCampaignCount = compatibleCampaignOptions.length;
+
+  const pickedCampaignForEnroll = useMemo(
+    () => campaignPickOptions.find((c) => c.id === pickedCampaignId),
+    [campaignPickOptions, pickedCampaignId],
+  );
+
+  const enrollmentPreviewSteps = useMemo(() => {
+    if (!pickedCampaignForEnroll?.messages) return [];
+    const defaults = normalizeCampaignPlaceholderDefaults(pickedCampaignForEnroll.placeholderDefaults);
+    return previewCampaignMessageSteps(
+      pickedCampaignForEnroll.messages,
+      defaults,
+      contact as unknown as SchemaContact,
+    );
+  }, [pickedCampaignForEnroll, contact]);
 
   const openCampaignPicker = useCallback(
     (preferredCampaignId?: string) => {
@@ -2969,7 +2998,10 @@ export function InboxLeadDetailsPanel({
             open={campaignPickerOpen}
             onOpenChange={(open) => {
               setCampaignPickerOpen(open);
-              if (!open) setPickedCampaignId("");
+              if (!open) {
+                setPickedCampaignId("");
+                setEnrollmentPreviewOpen(false);
+              }
             }}
           >
             <DialogContent className="sm:max-w-md">
@@ -3036,23 +3068,61 @@ export function InboxLeadDetailsPanel({
                   })()
                 )}
               </div>
-              <DialogFooter className="gap-2 sm:gap-0">
-                <Button type="button" variant="outline" onClick={() => setCampaignPickerOpen(false)}>
-                  Close
-                </Button>
+              <DialogFooter className="gap-2 sm:gap-0 sm:justify-between">
                 <Button
                   type="button"
-                  className="bg-gray-900 text-white hover:bg-gray-800"
-                  disabled={
-                    !pickedCampaignId ||
-                    enrollContactCampaignMutation.isPending ||
-                    compatibleCampaignOptions.length === 0 ||
-                    !campaignPickOptions.find((c) => c.id === pickedCampaignId)?.eligibility.eligible
-                  }
-                  onClick={() => enrollContactCampaignMutation.mutate()}
-                  data-testid="button-confirm-campaign-enroll"
+                  variant="outline"
+                  disabled={!pickedCampaignId || enrollmentPreviewSteps.length === 0}
+                  onClick={() => setEnrollmentPreviewOpen(true)}
+                  data-testid="button-preview-campaign-enroll"
                 >
-                  {enrollContactCampaignMutation.isPending ? "Enrolling…" : "Enroll"}
+                  <Eye className="mr-1.5 h-4 w-4" />
+                  Preview
+                </Button>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" onClick={() => setCampaignPickerOpen(false)}>
+                    Close
+                  </Button>
+                  <Button
+                    type="button"
+                    className="bg-gray-900 text-white hover:bg-gray-800"
+                    disabled={
+                      !pickedCampaignId ||
+                      enrollContactCampaignMutation.isPending ||
+                      compatibleCampaignOptions.length === 0 ||
+                      !pickedCampaignForEnroll?.eligibility.eligible
+                    }
+                    onClick={() => enrollContactCampaignMutation.mutate()}
+                    data-testid="button-confirm-campaign-enroll"
+                  >
+                    {enrollContactCampaignMutation.isPending ? "Enrolling…" : "Enroll"}
+                  </Button>
+                </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={enrollmentPreviewOpen} onOpenChange={setEnrollmentPreviewOpen}>
+            <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col">
+              <DialogHeader>
+                <DialogTitle>Campaign preview</DialogTitle>
+                <DialogDescription>
+                  Final messages for {contact.name || "this contact"} using their fields and campaign defaults.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto py-1">
+                {enrollmentPreviewSteps.map((step, idx) => (
+                  <div key={idx} className="rounded-lg border bg-gray-50 p-3">
+                    <p className="mb-1.5 text-xs text-gray-500">
+                      Step {idx + 1} · {step.delay === "0" ? "Immediate" : step.delay}
+                    </p>
+                    <p className="whitespace-pre-wrap text-sm text-gray-900">{step.rendered || "—"}</p>
+                  </div>
+                ))}
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setEnrollmentPreviewOpen(false)}>
+                  Back
                 </Button>
               </DialogFooter>
             </DialogContent>

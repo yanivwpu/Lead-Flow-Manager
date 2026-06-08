@@ -36,8 +36,13 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  CAMPAIGN_PLACEHOLDER_DEFAULTS_HELPER,
+  buildSampleCampaignPreviewContact,
   extractPlaceholderKeysFromCampaignMessages,
+  getPlaceholderDefaultInputHint,
+  normalizeCampaignPlaceholderDefaults,
   parsePresetCampaignMessagesArray,
+  previewCampaignMessageSteps,
 } from "@shared/campaignPlaceholders";
 import { getPresetCampaignStatusLabel } from "@shared/presetCampaignLabels";
 import { getLocalizedPresetDisplayName } from "@shared/localizedTemplates";
@@ -47,6 +52,7 @@ import {
   Clock,
   Copy,
   ExternalLink,
+  Eye,
   Pause,
   Pencil,
   Play,
@@ -149,11 +155,9 @@ function detailToDraft(d: SavedCampaignDetailShape): CampaignDraft {
       type: typeof m.type === "string" ? m.type : "text",
     };
   });
-  const defaults: Record<string, string> = {};
-  if (d.placeholderDefaults && typeof d.placeholderDefaults === "object") {
-    for (const [k, v] of Object.entries(d.placeholderDefaults)) {
-      defaults[k] = v == null ? "" : String(v);
-    }
+  const defaults = normalizeCampaignPlaceholderDefaults(d.placeholderDefaults);
+  for (const key of extractPlaceholderKeysFromCampaignMessages(normalized)) {
+    if (!(key in defaults)) defaults[key] = "";
   }
   return {
     name: d.name,
@@ -296,6 +300,7 @@ export function SavedPresetCampaignModals(props: Props) {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<CampaignDraft | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [messagePreviewOpen, setMessagePreviewOpen] = useState(false);
 
   const viewDraft = savedCampaignDetail ? detailToDraft(savedCampaignDetail) : null;
   const displayDraft = isEditing ? draft : viewDraft;
@@ -331,6 +336,15 @@ export function SavedPresetCampaignModals(props: Props) {
   }, [savedCampaignDetail?.enrollments]);
 
   const stepEditWarning = isEditing && inflightEnrollmentCount > 0;
+
+  const previewSteps = useMemo(() => {
+    if (!displayDraft) return [];
+    return previewCampaignMessageSteps(
+      displayDraft.messages,
+      displayDraft.placeholderDefaults,
+      buildSampleCampaignPreviewContact(),
+    );
+  }, [displayDraft]);
 
   const startEdit = () => {
     if (!savedCampaignDetail) return;
@@ -906,10 +920,7 @@ export function SavedPresetCampaignModals(props: Props) {
                         <Label className="text-xs uppercase tracking-wide text-gray-500">
                           Placeholder defaults
                         </Label>
-                        <p className="text-xs text-gray-500">
-                          Values used when a contact has no matching field for{" "}
-                          <span className="font-mono">{"{{name}}"}</span> style variables.
-                        </p>
+                        <p className="text-xs text-gray-500">{CAMPAIGN_PLACEHOLDER_DEFAULTS_HELPER}</p>
                         <div className="space-y-2 rounded-lg border border-gray-100 bg-white p-2">
                           {placeholderKeysForDraft(displayDraft).length === 0 ? (
                             <p className="text-xs text-gray-400">No placeholders detected.</p>
@@ -923,6 +934,7 @@ export function SavedPresetCampaignModals(props: Props) {
                                   <Input
                                     value={displayDraft.placeholderDefaults[key] ?? ""}
                                     onChange={(e) => updatePlaceholderDefault(key, e.target.value)}
+                                    placeholder={getPlaceholderDefaultInputHint(key)}
                                     className="text-xs"
                                     data-testid={`saved-campaign-placeholder-${key}`}
                                   />
@@ -935,6 +947,18 @@ export function SavedPresetCampaignModals(props: Props) {
                             ))
                           )}
                         </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                          onClick={() => setMessagePreviewOpen(true)}
+                          disabled={!displayDraft.messages.some((m) => m.content.trim())}
+                          data-testid="saved-campaign-preview-messages"
+                        >
+                          <Eye className="mr-1.5 h-4 w-4" />
+                          Preview messages
+                        </Button>
                       </div>
                     )}
 
@@ -1168,6 +1192,43 @@ export function SavedPresetCampaignModals(props: Props) {
               <p className="text-center text-sm text-gray-500">Could not load campaign.</p>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={messagePreviewOpen} onOpenChange={setMessagePreviewOpen}>
+        <DialogContent className="flex max-h-[85vh] w-[calc(100%-2rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+          <DialogHeader className="border-b px-6 py-4 text-left">
+            <DialogTitle>Message preview</DialogTitle>
+            <DialogDescription>
+              Sample contact “Alex” with your placeholder defaults. Real enrollments use each contact&apos;s fields
+              when available.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
+            {previewSteps.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No messages to preview.</p>
+            ) : (
+              previewSteps.map((step, idx) => (
+                <div key={idx} className="rounded-lg border bg-gray-50 p-3">
+                  <div className="mb-2 flex items-center gap-2 text-xs text-gray-500">
+                    <Badge variant="secondary" className="capitalize">
+                      {step.type}
+                    </Badge>
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {step.delay === "0" ? "Immediate" : step.delay}
+                    </span>
+                  </div>
+                  <p className="whitespace-pre-wrap text-sm text-gray-900">{step.rendered || "—"}</p>
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter className="border-t px-6 py-4">
+            <Button type="button" variant="outline" onClick={() => setMessagePreviewOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
