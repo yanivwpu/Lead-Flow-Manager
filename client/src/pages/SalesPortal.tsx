@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -98,6 +98,45 @@ interface SalespersonInfo {
   name: string;
   email: string;
   role?: string;
+}
+
+/** React Query keys scoped to Sales Portal — cleared on login/logout to avoid cross-account stale cache. */
+const SALES_PORTAL_QUERY_KEYS = [
+  ["/api/sales-portal/stats"],
+  ["/api/sales-portal/demos"],
+  ["/api/sales-portal/setup-tasks"],
+  ["/api/sales-portal/conversions"],
+  ["/api/sales-portal/commissions"],
+] as const;
+
+function isSalesPortalQueryKey(key: readonly unknown[]): boolean {
+  const path = key[0];
+  return typeof path === "string" && path.startsWith("/api/sales-portal/");
+}
+
+function removeSalesPortalQueries(queryClient: QueryClient) {
+  queryClient.removeQueries({
+    predicate: (q) => isSalesPortalQueryKey(q.queryKey as readonly unknown[]),
+  });
+}
+
+async function refetchSalesPortalQueries(queryClient: QueryClient) {
+  // fetchQuery runs even before enabled queries mount (e.g. immediately after login).
+  await Promise.all(
+    SALES_PORTAL_QUERY_KEYS.map((queryKey) => queryClient.fetchQuery({ queryKey })),
+  );
+}
+
+async function fetchSalesPortalCheck(): Promise<{
+  authenticated: boolean;
+  agreementRequired?: boolean;
+  salesperson?: SalespersonInfo;
+}> {
+  const res = await fetch("/api/sales-portal/check", {
+    credentials: "include",
+    cache: "no-store",
+  });
+  return res.json();
 }
 
 function salespersonHasSetupPayouts(role?: string): boolean {
@@ -234,17 +273,18 @@ export function SalesPortal() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    fetch('/api/sales-portal/check')
-      .then(res => res.json())
-      .then(data => {
+    fetchSalesPortalCheck()
+      .then(async (data) => {
         if (data.authenticated) {
+          removeSalesPortalQueries(queryClient);
           setIsLoggedIn(true);
-          setSalesperson(data.salesperson);
+          setSalesperson(data.salesperson ?? null);
           setAgreementRequired(data.agreementRequired === true);
+          await refetchSalesPortalQueries(queryClient);
         }
       })
       .catch(() => setIsLoggedIn(false));
-  }, []);
+  }, [queryClient]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -252,27 +292,36 @@ export function SalesPortal() {
     setIsLoggingIn(true);
 
     try {
-      const res = await fetch('/api/sales-portal/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, loginCode })
+      const res = await fetch("/api/sales-portal/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, loginCode }),
       });
 
       const data = await res.json();
-      
+
       if (!res.ok) {
-        throw new Error(data.error || 'Login failed');
+        throw new Error(data.error || "Login failed");
       }
+
+      // Drop cached data from any prior salesperson session before refetching.
+      removeSalesPortalQueries(queryClient);
 
       setIsLoggedIn(true);
       setSalesperson(data.salesperson);
       setEmail("");
       setLoginCode("");
-      
-      // Check if agreement is required after login
-      const checkRes = await fetch('/api/sales-portal/check');
-      const checkData = await checkRes.json();
+      setAgreementChecked(false);
+      setAcceptError("");
+
+      const checkData = await fetchSalesPortalCheck();
+      if (checkData.salesperson) {
+        setSalesperson(checkData.salesperson);
+      }
       setAgreementRequired(checkData.agreementRequired === true);
+
+      await refetchSalesPortalQueries(queryClient);
     } catch (err: any) {
       setLoginError(err.message);
     } finally {
@@ -305,10 +354,24 @@ export function SalesPortal() {
   };
 
   const handleLogout = async () => {
-    await fetch('/api/sales-portal/logout', { method: 'POST' });
-    setIsLoggedIn(false);
-    setSalesperson(null);
-    queryClient.clear();
+    try {
+      await fetch("/api/sales-portal/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+    } finally {
+      removeSalesPortalQueries(queryClient);
+      setIsLoggedIn(false);
+      setSalesperson(null);
+      setAgreementRequired(false);
+      setAgreementChecked(false);
+      setAcceptError("");
+      setLoginError("");
+      setEmail("");
+      setLoginCode("");
+      setEarningsInfoOpen(false);
+      setPolicyModalOpen(false);
+    }
   };
 
   const { data: stats } = useQuery<Stats>({
@@ -558,7 +621,22 @@ export function SalesPortal() {
             <div>
               <h1 className="text-lg font-display font-bold text-gray-900">Sales Portal</h1>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
-                <p className="text-sm text-gray-500">Welcome, {salesperson?.name}</p>
+                <p className="text-sm text-gray-500" data-testid="salesportal-debug-name">
+                  Welcome, {salesperson?.name}
+                </p>
+                {salesperson?.email && (
+                  <p className="text-xs text-gray-400" data-testid="salesportal-debug-email">
+                    {salesperson.email}
+                  </p>
+                )}
+                {salesperson?.id && (
+                  <p
+                    className="text-[10px] text-gray-400 font-mono"
+                    data-testid="salesportal-debug-id"
+                  >
+                    ID: {salesperson.id}
+                  </p>
+                )}
                 <button
                   type="button"
                   onClick={() => setEarningsInfoOpen(true)}
