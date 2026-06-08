@@ -53,7 +53,9 @@ import {
 import {
   DEMO_BOOKING_STATUS,
   normalizeDemoBookingStatus,
+  demoStatusLabel,
 } from "@shared/salesCompensation";
+import { formatDemoScheduledDate } from "@shared/demoBookingDisplay";
 import {
   SALES_PAYOUT_REVIEW_NOTE,
   computeAggregatePayoutTotals,
@@ -97,6 +99,9 @@ interface Booking {
   scheduledDate: string;
   status: string;
   notes?: string;
+  declineReason?: string | null;
+  declinedBySalespersonId?: string | null;
+  declinedAt?: string | null;
   createdAt: string;
 }
 
@@ -1071,43 +1076,64 @@ export function Admin() {
                     <TableHead>Scheduled</TableHead>
                     <TableHead>Assigned To</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Decline info</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {bookings.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                      <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                         No demo bookings yet.
                       </TableCell>
                     </TableRow>
                   ) : (
                     bookings.map((booking) => (
                       <TableRow key={booking.id}>
-                        <TableCell className="font-medium">{booking.visitorName}</TableCell>
+                        <TableCell className="font-medium">{booking.visitorName || "—"}</TableCell>
                         <TableCell>
                           <div className="text-sm">
-                            <div>{booking.visitorEmail}</div>
-                            <div className="text-gray-500">{booking.visitorPhone}</div>
+                            <div>{booking.visitorEmail || "—"}</div>
+                            <div className="text-gray-500">{booking.visitorPhone || "—"}</div>
                           </div>
                         </TableCell>
+                        <TableCell>{formatDemoScheduledDate(booking.scheduledDate)}</TableCell>
                         <TableCell>
-                          {new Date(booking.scheduledDate).toLocaleString('en-US', {
-                            dateStyle: 'medium',
-                            timeStyle: 'short'
-                          })}
+                          {booking.salespersonId
+                            ? getSalespersonName(booking.salespersonId)
+                            : "—"}
                         </TableCell>
-                        <TableCell>{getSalespersonName(booking.salespersonId)}</TableCell>
                         <TableCell>
-                          <Badge 
+                          <Badge
                             variant={
-                              booking.status === 'converted' ? 'default' : 
-                              booking.status === 'completed' ? 'secondary' : 
-                              booking.status === 'cancelled' ? 'destructive' : 'outline'
+                              booking.status === "converted"
+                                ? "default"
+                                : booking.status === "completed"
+                                  ? "secondary"
+                                  : booking.status === "cancelled"
+                                    ? "destructive"
+                                    : "outline"
                             }
                           >
-                            {booking.status}
+                            {demoStatusLabel(booking.status)}
                           </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-[220px]">
+                          {booking.declineReason ? (
+                            <div className="text-xs text-gray-600 space-y-1">
+                              <p className="line-clamp-3">{booking.declineReason}</p>
+                              {booking.declinedBySalespersonId ? (
+                                <p className="text-gray-500">
+                                  By {getSalespersonName(booking.declinedBySalespersonId)}
+                                  {booking.declinedAt
+                                    ? ` · ${formatDemoScheduledDate(booking.declinedAt)}`
+                                    : ""}
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-gray-400">—</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <select

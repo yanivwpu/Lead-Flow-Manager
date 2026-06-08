@@ -37,10 +37,18 @@ export async function pickSalespersonForDemoAssignment(
 
 export async function reassignDemoBookingToPool(
   bookingId: string,
-  options?: { declineReason?: string; excludeSalespersonId?: string },
+  options?: {
+    declineReason?: string;
+    excludeSalespersonId?: string;
+    declinedBySalespersonId?: string;
+  },
 ): Promise<{ reassigned: boolean; bookingId: string }> {
   const booking = await storage.getDemoBooking(bookingId);
   if (!booking) return { reassigned: false, bookingId };
+
+  const now = new Date();
+  const declineReason = options?.declineReason?.trim();
+  const declinedBy = options?.declinedBySalespersonId ?? options?.excludeSalespersonId;
 
   const next = await pickSalespersonForDemoAssignment(
     options?.excludeSalespersonId ?? booking.salespersonId,
@@ -48,20 +56,23 @@ export async function reassignDemoBookingToPool(
   if (!next) {
     await storage.updateDemoBooking(bookingId, {
       status: DEMO_BOOKING_STATUS.pendingAcceptance,
-      declineReason: options?.declineReason?.trim() || booking.declineReason,
+      declineReason: declineReason || booking.declineReason,
+      declinedBySalespersonId: declinedBy ?? booking.declinedBySalespersonId,
+      declinedAt: declineReason ? now : booking.declinedAt,
       acceptedAt: null,
-    } as any);
+    } as Partial<typeof booking>);
     return { reassigned: false, bookingId };
   }
 
-  const now = new Date();
   await storage.updateDemoBooking(bookingId, {
     salespersonId: next.id,
     status: DEMO_BOOKING_STATUS.pendingAcceptance,
     assignedAt: now,
     acceptedAt: null,
-    declineReason: options?.declineReason?.trim() || null,
-  } as any);
+    declineReason: declineReason || booking.declineReason || null,
+    declinedBySalespersonId: declinedBy ?? booking.declinedBySalespersonId ?? null,
+    declinedAt: declineReason ? now : booking.declinedAt ?? null,
+  } as Partial<typeof booking>);
 
   return { reassigned: true, bookingId };
 }

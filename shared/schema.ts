@@ -789,6 +789,8 @@ export const demoBookings = pgTable("demo_bookings", {
   assignedAt: timestamp("assigned_at"),
   acceptedAt: timestamp("accepted_at"),
   declineReason: text("decline_reason"),
+  declinedBySalespersonId: varchar("declined_by_salesperson_id"),
+  declinedAt: timestamp("declined_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

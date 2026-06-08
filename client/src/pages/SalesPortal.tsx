@@ -34,10 +34,12 @@ import {
   isDemoCompleted,
   normalizeDemoBookingStatus,
 } from "@shared/salesCompensation";
+import { formatDemoScheduledDate } from "@shared/demoBookingDisplay";
 import {
   SALES_PAYOUT_REVIEW_NOTE,
   computeAggregatePayoutTotals,
 } from "@/lib/salesPayoutTotals";
+import { useToast } from "@/hooks/use-toast";
 
 const SETUP_PAYOUT_DEFAULT_DOLLARS = 50;
 
@@ -170,10 +172,7 @@ function DemoContactBlock({ demo }: { demo: Demo }) {
       </div>
       <p className="text-sm text-brand-green font-medium">
         <Calendar className="h-3.5 w-3.5 inline mr-1" />
-        {new Date(demo.scheduledDate).toLocaleString("en-US", {
-          dateStyle: "medium",
-          timeStyle: "short",
-        })}
+        {formatDemoScheduledDate(demo.scheduledDate)}
       </p>
     </div>
   );
@@ -259,6 +258,7 @@ export function SalesPortal() {
   const [declineReason, setDeclineReason] = useState("");
 
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchSalesPortalCheck()
@@ -404,13 +404,27 @@ export function SalesPortal() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
       });
-      if (!res.ok) throw new Error('Failed to decline demo');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to decline demo');
+      }
       return res.json();
     },
     onSuccess: () => {
       setDeclineDemoId(null);
       setDeclineReason("");
       invalidateDemoQueries();
+      toast({
+        title: "Demo declined",
+        description: "Demo declined. It has been returned to the assignment pool.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Could not decline demo",
+        description: err.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -800,7 +814,7 @@ export function SalesPortal() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {new Date(demo.scheduledDate).toLocaleDateString()}
+                          {formatDemoScheduledDate(demo.scheduledDate)}
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary">{sharedDemoStatusLabel(demo.status)}</Badge>

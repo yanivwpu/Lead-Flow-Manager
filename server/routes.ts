@@ -7854,20 +7854,16 @@ export async function registerRoutes(
         return res.status(400).json({ error: "All fields are required including consent" });
       }
 
-      // Get an active salesperson (round-robin style - pick the one with fewest bookings)
-      const salespeople = await storage.getActiveSalespeople();
-      const demoEligible = salespeople.filter((p) => {
-        const r = (p.role || "sales") as string;
-        return r === "sales" || r === "both" || r === "demo";
-      });
-      if (demoEligible.length === 0) {
+      // Assign to salesperson with fewest bookings
+      const { pickSalespersonForDemoAssignment } = await import("./demoAssignmentService");
+      const assigned = await pickSalespersonForDemoAssignment();
+      if (!assigned) {
         return res.status(400).json({ error: "No salespeople available" });
       }
-
-      // Pick salesperson with fewest bookings
-      const salesperson = demoEligible.reduce((min, p) => 
-        (p.totalBookings || 0) < (min.totalBookings || 0) ? p : min
-      );
+      const salesperson = await storage.getSalesperson(assigned.id);
+      if (!salesperson) {
+        return res.status(400).json({ error: "No salespeople available" });
+      }
 
       const booking = await storage.createDemoBooking({
         salespersonId: salesperson.id,
@@ -9198,6 +9194,7 @@ export async function registerRoutes(
       const result = await reassignDemoBookingToPool(req.params.id, {
         declineReason: reason.trim(),
         excludeSalespersonId: req.salesperson.id,
+        declinedBySalespersonId: req.salesperson.id,
       });
       const updated = await storage.getDemoBooking(req.params.id);
       res.json({ ...result, booking: updated });

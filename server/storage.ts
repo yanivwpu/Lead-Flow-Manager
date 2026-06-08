@@ -70,6 +70,11 @@ import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, campaignEnrollments, type InsertConversationWindow, type ConversationWindow, growthEngineSetupTasks } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray, lt, count } from "drizzle-orm";
 import { getEffectiveTaskPayoutDollars, type TaskPayoutFields } from "./salespersonTaskPayout";
+import {
+  isDemoBookingsSchemaMismatchError,
+  mapDemoBookingRow,
+} from "./demoBookingRows";
+import { readDemoBookings, writeDemoBookingUpdate } from "./demoBookingStorage";
 
 /** Columns always present on legacy Neon `public.users`; avoids Drizzle hydrating rows when DB lacks newer schema columns (42703). */
 type UsersAuthCoreRow = {
@@ -2065,133 +2070,64 @@ export class DbStorage implements IStorage {
   }
 
   // Demo Booking methods
-  // Note: Using raw SQL query to avoid issues with missing 'source' column in older production DBs
   async getDemoBookings(): Promise<DemoBooking[]> {
-    try {
-      // Try full select first
-      return await db.select().from(demoBookings).orderBy(desc(demoBookings.createdAt));
-    } catch (error: any) {
-      if (error?.message?.includes('source')) {
-        // Fallback: query without source column, add default
-        const rows = await db.execute(sql`
-          SELECT id, salesperson_id, visitor_name, visitor_email, visitor_phone, 
-                 scheduled_date, consent_given, status, notes, created_at,
-                 'web' as source
-          FROM demo_bookings ORDER BY created_at DESC
-        `);
-        return rows.rows as DemoBooking[];
-      }
-      throw error;
-    }
+    return readDemoBookings();
   }
 
   async getDemoBookingsBySalesperson(salespersonId: string): Promise<DemoBooking[]> {
-    try {
-      return await db.select().from(demoBookings)
-        .where(eq(demoBookings.salespersonId, salespersonId))
-        .orderBy(desc(demoBookings.createdAt));
-    } catch (error: any) {
-      if (error?.message?.includes('source')) {
-        const rows = await db.execute(sql`
-          SELECT id, salesperson_id, visitor_name, visitor_email, visitor_phone, 
-                 scheduled_date, consent_given, status, notes, created_at,
-                 'web' as source
-          FROM demo_bookings WHERE salesperson_id = ${salespersonId} ORDER BY created_at DESC
-        `);
-        return rows.rows as DemoBooking[];
-      }
-      throw error;
-    }
+    return readDemoBookings({ salespersonId });
   }
 
   async getDemoBooking(id: string): Promise<DemoBooking | undefined> {
-    try {
-      const result = await db.select().from(demoBookings).where(eq(demoBookings.id, id));
-      return result[0];
-    } catch (error: any) {
-      if (error?.message?.includes('source')) {
-        const rows = await db.execute(sql`
-          SELECT id, salesperson_id, visitor_name, visitor_email, visitor_phone, 
-                 scheduled_date, consent_given, status, notes, created_at,
-                 'web' as source
-          FROM demo_bookings WHERE id = ${id}
-        `);
-        return rows.rows[0] as DemoBooking | undefined;
-      }
-      throw error;
-    }
+    const rows = await readDemoBookings({ id });
+    return rows[0];
   }
 
   async getDemoBookingByEmail(email: string): Promise<DemoBooking | undefined> {
-    try {
-      const result = await db.select().from(demoBookings)
-        .where(eq(demoBookings.visitorEmail, email))
-        .orderBy(desc(demoBookings.createdAt));
-      return result[0];
-    } catch (error: any) {
-      if (error?.message?.includes('source')) {
-        const rows = await db.execute(sql`
-          SELECT id, salesperson_id, visitor_name, visitor_email, visitor_phone, 
-                 scheduled_date, consent_given, status, notes, created_at,
-                 'web' as source
-          FROM demo_bookings WHERE visitor_email = ${email} ORDER BY created_at DESC
-        `);
-        return rows.rows[0] as DemoBooking | undefined;
-      }
-      throw error;
-    }
+    const rows = await readDemoBookings({ email });
+    return rows[0];
   }
 
   async createDemoBooking(booking: InsertDemoBooking): Promise<DemoBooking> {
     const now = new Date();
-    // Try to insert with source column, fall back to without if it doesn't exist
     try {
       const result = await db.insert(demoBookings).values({
         ...booking,
         status: booking.status || "pending_acceptance",
         assignedAt: booking.assignedAt ?? now,
-        source: booking.source || 'web'
+        source: booking.source || "web",
       }).returning();
       await db.update(salespeople)
         .set({ totalBookings: sql`${salespeople.totalBookings} + 1` })
         .where(eq(salespeople.id, booking.salespersonId));
-      return result[0];
-    } catch (error: any) {
-      if (error?.message?.includes('source')) {
-        // Insert without source column
-        const rows = await db.execute(sql`
-          INSERT INTO demo_bookings (salesperson_id, visitor_name, visitor_email, visitor_phone, scheduled_date, consent_given, status, notes)
-          VALUES (${booking.salespersonId}, ${booking.visitorName}, ${booking.visitorEmail}, ${booking.visitorPhone}, ${booking.scheduledDate}, ${booking.consentGiven ?? true}, ${booking.status || 'pending'}, ${booking.notes || null})
-          RETURNING *, 'web' as source
-        `);
-        await db.update(salespeople)
-          .set({ totalBookings: sql`${salespeople.totalBookings} + 1` })
-          .where(eq(salespeople.id, booking.salespersonId));
-        return rows.rows[0] as DemoBooking;
-      }
-      throw error;
+      return mapDemoBookingRow(result[0] as Record<string, unknown>);
+    } catch (error: unknown) {
+      if (!isDemoBookingsSchemaMismatchError(error)) throw error;
+      const rows = await db.execute(sql`
+        INSERT INTO demo_bookings (
+          salesperson_id, visitor_name, visitor_email, visitor_phone,
+          scheduled_date, consent_given, status, notes
+        )
+        VALUES (
+          ${booking.salespersonId}, ${booking.visitorName}, ${booking.visitorEmail},
+          ${booking.visitorPhone}, ${booking.scheduledDate}, ${booking.consentGiven ?? true},
+          ${booking.status || "pending_acceptance"}, ${booking.notes || null}
+        )
+        RETURNING id, salesperson_id, visitor_name, visitor_email, visitor_phone,
+                  scheduled_date, consent_given, status, notes, created_at
+      `);
+      await db.update(salespeople)
+        .set({ totalBookings: sql`${salespeople.totalBookings} + 1` })
+        .where(eq(salespeople.id, booking.salespersonId));
+      return mapDemoBookingRow({
+        ...(rows.rows[0] as Record<string, unknown>),
+        source: booking.source || "web",
+      });
     }
   }
 
   async updateDemoBooking(id: string, updates: Partial<DemoBooking>): Promise<DemoBooking | undefined> {
-    // Exclude source from updates if column doesn't exist
-    const { source, ...safeUpdates } = updates;
-    try {
-      const result = await db.update(demoBookings)
-        .set(updates)
-        .where(eq(demoBookings.id, id))
-        .returning();
-      return result[0];
-    } catch (error: any) {
-      if (error?.message?.includes('source')) {
-        const result = await db.update(demoBookings)
-          .set(safeUpdates)
-          .where(eq(demoBookings.id, id))
-          .returning();
-        return result[0] ? { ...result[0], source: 'web' } as DemoBooking : undefined;
-      }
-      throw error;
-    }
+    return writeDemoBookingUpdate(id, updates);
   }
 
   // Sales Conversion methods
