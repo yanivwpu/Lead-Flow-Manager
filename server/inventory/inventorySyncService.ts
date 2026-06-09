@@ -135,6 +135,15 @@ function buildSyncFailureDiagnostics(
   });
 }
 
+function extractSyncErrorDetail(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const cause = (err as { cause?: unknown }).cause;
+  if (cause instanceof Error && cause.message && !err.message.includes(cause.message)) {
+    return `${err.message} | Postgres: ${cause.message}`;
+  }
+  return err.message;
+}
+
 function friendlySyncError(raw: string): string {
   if (raw.includes("MLS Grid HTTP 401") || raw.includes("Unauthorized")) {
     return "Access token was rejected. Check your token and originating system name.";
@@ -596,7 +605,7 @@ async function runInventorySyncJob(
     const failureDiag = buildSyncFailureDiagnostics(err, source, syncMode, datasetId);
     const message = isResoHttpError(err)
       ? buildResoFailureUserMessage(err, failureDiag)
-      : friendlySyncError(err instanceof Error ? err.message : String(err));
+      : friendlySyncError(extractSyncErrorDetail(err));
     const nowIso = new Date().toISOString();
 
     config = mergeResoSyncCursor(config, { lastFailedSyncAt: nowIso });
@@ -633,6 +642,10 @@ async function runInventorySyncJob(
       syncMode,
       datasetId,
       message,
+      postgresCause:
+        err instanceof Error && (err as { cause?: Error }).cause instanceof Error
+          ? (err as { cause: Error }).cause.message
+          : undefined,
       pagesFetched,
       listingsFetched,
       listingsImported: upserted,

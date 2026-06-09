@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, bigint, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1605,7 +1605,7 @@ export const inventoryListings = pgTable(
     provider: text("provider").notNull(),
     providerListingId: text("provider_listing_id").notNull(),
     status: text("status").notNull().default("active"),
-    priceCents: integer("price_cents"),
+    priceCents: bigint("price_cents", { mode: "number" }),
     currency: text("currency").notNull().default("USD"),
     addressLine1: text("address_line1"),
     addressLine2: text("address_line2"),
@@ -1631,7 +1631,7 @@ export const inventoryListings = pgTable(
     syncedAt: timestamp("synced_at").defaultNow().notNull(),
     firstSeenAt: timestamp("first_seen_at").defaultNow().notNull(),
     syncAlertStatus: text("sync_alert_status").notNull().default("existing"),
-    previousPriceCents: integer("previous_price_cents"),
+    previousPriceCents: bigint("previous_price_cents", { mode: "number" }),
     lastPriceChangeAt: timestamp("last_price_change_at"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
@@ -1711,8 +1711,8 @@ export const contactInventoryOpportunities = pgTable(
     opportunityType: text("opportunity_type").notNull(),
     score: integer("score").notNull(),
     reasons: jsonb("reasons").notNull().default(sql`'[]'::jsonb`),
-    previousPriceCents: integer("previous_price_cents"),
-    currentPriceCents: integer("current_price_cents"),
+    previousPriceCents: bigint("previous_price_cents", { mode: "number" }),
+    currentPriceCents: bigint("current_price_cents", { mode: "number" }),
     discoveredAt: timestamp("discovered_at").defaultNow().notNull(),
     status: text("status").notNull().default("new"),
     createdAt: timestamp("created_at").defaultNow(),
