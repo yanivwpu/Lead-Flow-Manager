@@ -713,3 +713,48 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
 </body>
 </html>`;
 }
+
+function publicListingErrorPageShell(title: string, message: string, hint?: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
+    .wrap { max-width: 28rem; margin: 4rem auto; padding: 2rem; text-align: center; }
+    h1 { font-size: 1.25rem; margin: 0 0 0.75rem; }
+    p { font-size: 0.9375rem; line-height: 1.5; color: #475569; margin: 0 0 0.5rem; }
+    .hint { font-size: 0.8125rem; color: #64748b; margin-top: 1rem; }
+    a { color: #6d28d9; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>${escapeHtml(title)}</h1>
+    <p>${escapeHtml(message)}</p>
+    ${hint ? `<p class="hint">${escapeHtml(hint)}</p>` : ""}
+    <p class="hint"><a href="${WHACHATCRM_HOME_URL}">WhachatCRM</a></p>
+  </div>
+</body>
+</html>`;
+}
+
+/** Friendly 404 when listing is inactive, missing, or not shareable. */
+export function buildPublicListingNotFoundHtml(): string {
+  return publicListingErrorPageShell(
+    "Listing not available",
+    "This listing may have been sold, taken off market, or the link is no longer valid.",
+  );
+}
+
+/** Generic load failure — distinct from not-found (e.g. unexpected server error). */
+export function buildPublicListingLoadErrorHtml(): string {
+  return publicListingErrorPageShell(
+    "Could not load listing",
+    "Something went wrong while loading this page. Please try again in a moment.",
+    "If the problem continues, ask your agent for an updated link.",
+  );
+}

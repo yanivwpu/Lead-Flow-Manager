@@ -125,4 +125,40 @@ const noPhotoHtml = buildPublicListingFlyerHtml({
 assert(!noPhotoHtml.includes('class="gallery"'), "gallery hidden without photos");
 assert(noPhotoHtml.includes("View on map"), "address map link fallback");
 
+const coreOnlyListing = inventoryRowToFlyerListing({
+  id: "22222222-2222-4222-8222-222222222222",
+  priceCents: 325_000_00,
+  beds: 2,
+  baths: 1,
+  squareFeet: null,
+  yearBuilt: null,
+  hoaFeeCents: null,
+  propertyType: "condo",
+  propertySubtype: null,
+  description: "Updated kitchen and balcony.",
+  features: ["Balcony"],
+  photos: [{ url: "https://cdn.example.com/c.jpg", order: 0 }],
+  addressLine1: "88 Ocean Dr",
+  addressLine2: null,
+  city: "Miami",
+  state: "FL",
+  zip: "33139",
+  latitude: 25.7617,
+  longitude: -80.1918,
+  status: "active",
+  providerListingId: "MLS-99",
+  listingDetails: {},
+});
+
+const coreHtml = buildPublicListingFlyerHtml({
+  listing: coreOnlyListing,
+  agent: { name: "Sam Agent", email: null, phone: null, avatarUrl: null, brokerageName: null, bookingLink: null },
+  shareUrl: "https://app.example.com/share/listings/22222222-2222-4222-8222-222222222222",
+  qrDataUrl: "data:image/png;base64,TEST",
+});
+assert(coreHtml.includes("$325,000"), "core-only listing shows price");
+assert(coreHtml.includes("88 Ocean Dr"), "core-only listing shows address");
+assert(coreHtml.includes('property="og:title"'), "OG tags on core-only listing");
+assert(coreHtml.includes("2 bed / 1 bath"), "beds/baths on core-only page");
+
 console.log("inventory-public-flyer.test.ts: OK");

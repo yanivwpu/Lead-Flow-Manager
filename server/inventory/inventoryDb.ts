@@ -363,6 +363,52 @@ function inventoryListingFromCoreRow(row: CoreInventoryListingRow): InventoryLis
   };
 }
 
+/** Flyer-only columns from migration 0038 — loaded separately so share page works without migration. */
+const FLYER_EXTRA_LISTING_SELECT = {
+  propertySubtype: inventoryListings.propertySubtype,
+  squareFeet: inventoryListings.squareFeet,
+  yearBuilt: inventoryListings.yearBuilt,
+  hoaFeeCents: inventoryListings.hoaFeeCents,
+  listingDetails: inventoryListings.listingDetails,
+} as const;
+
+type FlyerExtraListingFields = Pick<
+  InventoryListing,
+  "propertySubtype" | "squareFeet" | "yearBuilt" | "hoaFeeCents" | "listingDetails"
+>;
+
+const EMPTY_FLYER_EXTRA_FIELDS: FlyerExtraListingFields = {
+  propertySubtype: null,
+  squareFeet: null,
+  yearBuilt: null,
+  hoaFeeCents: null,
+  listingDetails: {},
+};
+
+async function tryLoadFlyerExtraFields(listingId: string): Promise<FlyerExtraListingFields> {
+  try {
+    const [row] = await db
+      .select(FLYER_EXTRA_LISTING_SELECT)
+      .from(inventoryListings)
+      .where(eq(inventoryListings.id, listingId))
+      .limit(1);
+    if (!row) return EMPTY_FLYER_EXTRA_FIELDS;
+    return {
+      propertySubtype: row.propertySubtype ?? null,
+      squareFeet: row.squareFeet ?? null,
+      yearBuilt: row.yearBuilt ?? null,
+      hoaFeeCents: row.hoaFeeCents ?? null,
+      listingDetails: row.listingDetails ?? {},
+    };
+  } catch (error) {
+    console.warn("[public-listing] flyer columns unavailable (apply migration 0038 for extended details)", {
+      listingId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return EMPTY_FLYER_EXTRA_FIELDS;
+  }
+}
+
 export async function fetchActiveListingsForMatching(
   userId: string,
   limit = 2500,
@@ -481,14 +527,24 @@ export async function getInventoryListing(
 
 /** Public share page — active/coming_soon listings only. */
 export async function getPublicShareListing(listingId: string): Promise<InventoryListing | undefined> {
-  const [row] = await db
-    .select()
-    .from(inventoryListings)
-    .where(eq(inventoryListings.id, listingId))
-    .limit(1);
-  if (!row || isBlockedDevSeedListingRow(row)) return undefined;
-  if (row.status !== "active" && row.status !== "coming_soon") return undefined;
-  return row;
+  try {
+    const [row] = await db
+      .select(MATCHING_LISTING_SELECT)
+      .from(inventoryListings)
+      .where(eq(inventoryListings.id, listingId))
+      .limit(1);
+    if (!row || isBlockedDevSeedListingRow(row)) return undefined;
+    if (row.status !== "active" && row.status !== "coming_soon") return undefined;
+
+    const extras = await tryLoadFlyerExtraFields(listingId);
+    return { ...inventoryListingFromCoreRow(row), ...extras };
+  } catch (error) {
+    console.error("[public-listing] failed to load listing row", {
+      listingId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
 export type PublicListingAgentProfile = {
@@ -511,39 +567,61 @@ export async function getPublicListingFlyerData(
   listingId: string,
   shareUrl: string,
 ): Promise<PublicListingFlyerData | undefined> {
-  const listing = await getPublicShareListing(listingId);
-  if (!listing) return undefined;
+  let listing: InventoryListing | undefined;
+  try {
+    listing = await getPublicShareListing(listingId);
+  } catch (error) {
+    console.error("[public-listing] getPublicShareListing failed", {
+      listingId,
+      shareUrl,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+  if (!listing) {
+    console.info("[public-listing] listing not found or not shareable", { listingId });
+    return undefined;
+  }
 
-  const [userRow] = await db
-    .select({
-      name: users.name,
-      email: users.email,
-      avatarUrl: users.avatarUrl,
-      twilioWhatsappNumber: users.twilioWhatsappNumber,
-      metaDisplayPhoneNumber: users.metaDisplayPhoneNumber,
-    })
-    .from(users)
-    .where(eq(users.id, listing.userId))
-    .limit(1);
+  try {
+    const [userRow] = await db
+      .select({
+        name: users.name,
+        email: users.email,
+        avatarUrl: users.avatarUrl,
+        twilioWhatsappNumber: users.twilioWhatsappNumber,
+        metaDisplayPhoneNumber: users.metaDisplayPhoneNumber,
+      })
+      .from(users)
+      .where(eq(users.id, listing.userId))
+      .limit(1);
 
-  const { storage } = await import("../storage");
-  const knowledge = await storage.getAiBusinessKnowledge(listing.userId);
+    const { storage } = await import("../storage");
+    const knowledge = await storage.getAiBusinessKnowledge(listing.userId);
 
-  const phone =
-    (userRow?.metaDisplayPhoneNumber || "").trim() ||
-    (userRow?.twilioWhatsappNumber || "").trim() ||
-    null;
+    const phone =
+      (userRow?.metaDisplayPhoneNumber || "").trim() ||
+      (userRow?.twilioWhatsappNumber || "").trim() ||
+      null;
 
-  const agent: PublicListingAgentProfile = {
-    name: userRow?.name?.trim() || null,
-    email: userRow?.email?.trim() || null,
-    phone,
-    avatarUrl: userRow?.avatarUrl?.trim() || null,
-    brokerageName: knowledge?.businessName?.trim() || null,
-    bookingLink: knowledge?.bookingLink?.trim() || null,
-  };
+    const agent: PublicListingAgentProfile = {
+      name: userRow?.name?.trim() || null,
+      email: userRow?.email?.trim() || null,
+      phone,
+      avatarUrl: userRow?.avatarUrl?.trim() || null,
+      brokerageName: knowledge?.businessName?.trim() || null,
+      bookingLink: knowledge?.bookingLink?.trim() || null,
+    };
 
-  return { listing, agent, shareUrl };
+    return { listing, agent, shareUrl };
+  } catch (error) {
+    console.error("[public-listing] failed to load agent profile for flyer", {
+      listingId,
+      userId: listing.userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
 export async function getInventoryListingsByIds(
