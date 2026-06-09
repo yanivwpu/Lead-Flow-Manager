@@ -354,10 +354,23 @@ export function ListingDetailDialog({
                     )}
 
                     <div>
-                      <p className="text-[10px] font-medium text-gray-600 mb-1">Suggested outreach</p>
+                      <p className="text-[10px] font-medium text-gray-600 mb-1">
+                        Message that will be sent
+                      </p>
                       <p className="text-[11px] text-gray-800 leading-relaxed whitespace-pre-wrap rounded-md bg-white/80 border border-violet-100/80 p-2.5">
                         {resolveComposerDraft()?.text ?? draftData.draft}
                       </p>
+                      {primaryPhotoUrl && (
+                        <p className="text-[10px] text-gray-500 mt-1.5 leading-snug">
+                          Photo: included as a separate attachment after this text on Messenger and
+                          Facebook. WhatsApp sends the photo with this text as the caption.
+                        </p>
+                      )}
+                      {resolveComposerDraft()?.viewUrl && (
+                        <p className="text-[10px] text-violet-700 mt-1 break-all leading-snug">
+                          View listing: {resolveComposerDraft()?.viewUrl}
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex flex-col gap-1.5 pt-0.5">

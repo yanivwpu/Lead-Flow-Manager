@@ -11,6 +11,7 @@ import {
 } from "./userTwilio";
 import { CHANNEL_INFO } from "@shared/schema";
 import { userFacingReplyWindowBlockedMessage } from "@shared/metaReplyWindowError";
+import { buildMetaOutboundSteps, type MetaOutboundStep } from "@shared/metaOutboundMessagePlan";
 
 // Meta's 24-hour messaging window constants
 const META_WINDOW_HOURS = 24;
@@ -88,6 +89,85 @@ function parseMetaError(error: any, metaChannel: "facebook" | "instagram"): stri
   }
 
   return error?.message || `Failed to send ${label} message`;
+}
+
+async function sendMetaGraphMessage(input: {
+  pageId: string;
+  accessToken: string;
+  recipientId: string;
+  step: MetaOutboundStep;
+  messagingType: string;
+  channelLabel: string;
+}): Promise<{ ok: true; messageId?: string } | { ok: false; error: string }> {
+  const messageBody =
+    input.step.kind === "text"
+      ? { text: input.step.text }
+      : {
+          attachment: {
+            type: input.step.attachmentType,
+            payload: { url: input.step.url },
+          },
+        };
+
+  const response = await fetch(`https://graph.facebook.com/v19.0/${input.pageId}/messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${input.accessToken}`,
+    },
+    body: JSON.stringify({
+      recipient: { id: input.recipientId },
+      message: messageBody,
+      messaging_type: input.messagingType,
+    }),
+  });
+
+  const result = await response.json();
+  if (!response.ok || result.error) {
+    const errorMessage = parseMetaError(result.error, input.channelLabel === "Instagram" ? "instagram" : "facebook");
+    console.error(`[Outbound] ${input.channelLabel} API error:`, response.status, result.error);
+    return { ok: false, error: errorMessage };
+  }
+
+  return { ok: true, messageId: result.message_id as string | undefined };
+}
+
+async function sendMetaOutboundSequence(input: {
+  pageId: string;
+  accessToken: string;
+  recipientId: string;
+  content: string;
+  contentType?: string;
+  mediaUrl?: string;
+  messagingType: string;
+  channelLabel: "Instagram" | "Facebook Messenger";
+}): Promise<{ success: boolean; externalMessageId?: string; error?: string }> {
+  const steps = buildMetaOutboundSteps({
+    content: input.content,
+    mediaUrl: input.mediaUrl,
+    contentType: input.contentType,
+  });
+  if (steps.length === 0) {
+    return { success: false, error: "Message must have content or media" };
+  }
+
+  let lastMessageId: string | undefined;
+  for (const step of steps) {
+    const sent = await sendMetaGraphMessage({
+      pageId: input.pageId,
+      accessToken: input.accessToken,
+      recipientId: input.recipientId,
+      step,
+      messagingType: input.messagingType,
+      channelLabel: input.channelLabel,
+    });
+    if (!sent.ok) {
+      return { success: false, error: sent.error };
+    }
+    lastMessageId = sent.messageId ?? lastMessageId;
+  }
+
+  return { success: true, externalMessageId: lastMessageId };
 }
 
 class WhatsAppAdapter implements ChannelAdapter {
@@ -359,35 +439,24 @@ class InstagramAdapter implements ChannelAdapter {
       // Use RESPONSE messaging type (within 24-hour window) or MESSAGE_TAG for allowed cases
       const messagingType = windowStatus.isExpiringSoon ? 'RESPONSE' : 'RESPONSE';
 
-      const response = await fetch(
-        `https://graph.facebook.com/v19.0/${pageId}/messages`,
-        {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`
-          },
-          body: JSON.stringify({
-            recipient: { id: recipientId },
-            message: params.mediaUrl
-              ? { attachment: { type: igAttachmentType, payload: { url: params.mediaUrl } } }
-              : { text: params.content },
-            messaging_type: messagingType,
-          }),
-        }
-      );
+      const sendResult = await sendMetaOutboundSequence({
+        pageId,
+        accessToken,
+        recipientId,
+        content: params.content,
+        contentType: params.contentType || igAttachmentType,
+        mediaUrl: params.mediaUrl,
+        messagingType,
+        channelLabel: "Instagram",
+      });
 
-      const result = await response.json();
-
-      if (!response.ok || result.error) {
-        const errorMessage = parseMetaError(result.error, "instagram");
-        console.error("Instagram API error:", response.status, result.error);
-        return { success: false, error: errorMessage, windowStatus };
+      if (!sendResult.success) {
+        return { success: false, error: sendResult.error, windowStatus };
       }
 
       return {
         success: true,
-        externalMessageId: result.message_id,
+        externalMessageId: sendResult.externalMessageId,
         windowStatus,
       };
     } catch (error: any) {
@@ -497,35 +566,24 @@ class FacebookAdapter implements ChannelAdapter {
       // Use RESPONSE messaging type (within 24-hour window)
       const messagingType = 'RESPONSE';
 
-      const response = await fetch(
-        `https://graph.facebook.com/v19.0/${pageId}/messages`,
-        {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`
-          },
-          body: JSON.stringify({
-            recipient: { id: recipientId },
-            message: params.mediaUrl
-              ? { attachment: { type: fbAttachmentType, payload: { url: params.mediaUrl } } }
-              : { text: params.content },
-            messaging_type: messagingType,
-          }),
-        }
-      );
+      const sendResult = await sendMetaOutboundSequence({
+        pageId,
+        accessToken,
+        recipientId,
+        content: params.content,
+        contentType: params.contentType || fbAttachmentType,
+        mediaUrl: params.mediaUrl,
+        messagingType,
+        channelLabel: "Facebook Messenger",
+      });
 
-      const result = await response.json();
-
-      if (!response.ok || result.error) {
-        const errorMessage = parseMetaError(result.error, 'Facebook Messenger');
-        console.error("Facebook API error:", response.status, result.error);
-        return { success: false, error: errorMessage, windowStatus };
+      if (!sendResult.success) {
+        return { success: false, error: sendResult.error, windowStatus };
       }
 
       return {
         success: true,
-        externalMessageId: result.message_id,
+        externalMessageId: sendResult.externalMessageId,
         windowStatus,
       };
     } catch (error: any) {

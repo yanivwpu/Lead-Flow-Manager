@@ -1458,6 +1458,16 @@ export function UnifiedInbox() {
   const handleSendMessage = () => {
     if (!messageInput.trim() && !pendingFile) return;
     if (!selectedContactId) return;
+    if (pendingFile && !messageInput.trim()) {
+      toast({
+        title: "Add listing details text",
+        description:
+          "When sending a photo with a listing recommendation, include the property message text so the customer receives price, location, and the View listing link.",
+        variant: "destructive",
+        duration: 5000,
+      });
+      return;
+    }
     setFilePickerHint(null);
     if (pendingFile) {
       const outboundChannel = clampOutboundChannel(
