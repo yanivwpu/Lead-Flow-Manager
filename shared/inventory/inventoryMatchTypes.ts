@@ -27,6 +27,16 @@ export const inventoryMatchResultSchema = z.object({
 
 export type InventoryMatchResult = z.infer<typeof inventoryMatchResultSchema>;
 
+export const inventoryMatchDiagnosticsSchema = z.object({
+  activeInventoryCount: z.number().int().nonnegative(),
+  listingsScored: z.number().int().nonnegative(),
+  matchesReturned: z.number().int().nonnegative(),
+  lastMatchRunAt: z.string().datetime(),
+  lastMatchingError: z.string().nullable(),
+});
+
+export type InventoryMatchDiagnostics = z.infer<typeof inventoryMatchDiagnosticsSchema>;
+
 export const inventoryMatchesResponseSchema = z.object({
   eligible: z.boolean(),
   reason: z.string(),
@@ -35,6 +45,8 @@ export const inventoryMatchesResponseSchema = z.object({
   matchCount: z.number().int().nonnegative(),
   matches: z.array(inventoryMatchResultSchema),
   savedListingIds: z.array(z.string()).optional(),
+  diagnostics: inventoryMatchDiagnosticsSchema.optional(),
+  error: z.string().optional(),
 });
 
 export type InventoryMatchesResponse = z.infer<typeof inventoryMatchesResponseSchema>;

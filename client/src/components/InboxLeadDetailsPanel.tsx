@@ -1349,6 +1349,12 @@ export function InboxLeadDetailsPanel({
   }, []);
 
   const activeMembers  = teamMembers.filter(m => m.status === 'active');
+  const currentWorkspaceMember = teamMembers.find(
+    (m) => (m.memberId || m.id) === currentUserId,
+  );
+  const isWorkspaceAdmin =
+    currentWorkspaceMember?.role === "owner" ||
+    currentWorkspaceMember?.role === "admin";
   const assignedMember = activeMembers.find(m => (m.memberId || m.id) === contact.assignedTo);
   const assignedLabel  = assignedMember
     ? (assignedMember.name || assignedMember.email.split('@')[0])
@@ -2540,6 +2546,7 @@ export function InboxLeadDetailsPanel({
                         contactId={contact.id}
                         contactFirstName={contact.name?.trim().split(/\s+/)[0]}
                         compact
+                        isWorkspaceAdmin={isWorkspaceAdmin}
                         onInsertComposerDraft={onInsertComposerDraft}
                       />
                     </div>

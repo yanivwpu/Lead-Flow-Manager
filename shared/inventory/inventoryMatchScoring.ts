@@ -159,6 +159,10 @@ export function extractBuyerMatchCriteria(profile: BuyerPreferenceProfile): Buye
   };
 }
 
+function listingFeatureTerms(listing: MatchListingInput): string[] {
+  return Array.isArray(listing.features) ? listing.features : [];
+}
+
 function listingHaystack(listing: MatchListingInput): string {
   const parts = [
     listing.city,
@@ -168,7 +172,21 @@ function listingHaystack(listing: MatchListingInput): string {
     listing.zip,
     listing.description,
     listing.propertyType,
-    ...listing.features,
+    ...listingFeatureTerms(listing),
+  ];
+  return normalizeText(parts.filter(Boolean).join(" "));
+}
+
+/** Deal-breaker scan — omit MLS feature tokens (noisy after RESO sync). */
+function listingDealBreakerHaystack(listing: MatchListingInput): string {
+  const parts = [
+    listing.city,
+    listing.state,
+    listing.addressLine1,
+    listing.addressLine2,
+    listing.zip,
+    listing.description,
+    listing.propertyType,
   ];
   return normalizeText(parts.filter(Boolean).join(" "));
 }
@@ -358,7 +376,7 @@ function featureAndMustHaveScore(
 
 function hitsDealBreaker(listing: MatchListingInput, dealBreakers: string[]): string | null {
   if (dealBreakers.length === 0) return null;
-  const hay = listingHaystack(listing);
+  const hay = listingDealBreakerHaystack(listing);
   for (const db of dealBreakers) {
     const term = normalizeText(db);
     if (term && hay.includes(term)) return titleCaseArea(db);

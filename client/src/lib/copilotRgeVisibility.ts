@@ -37,3 +37,11 @@ export function shouldShowCopilotInventoryPanels(
 ): boolean {
   return inventoryStatus?.canUse === true;
 }
+
+/** Inventory match health panel — local dev or workspace owner/admin only. */
+export function shouldShowInventoryHealthDiagnostics(input: {
+  isDev?: boolean;
+  isWorkspaceAdmin?: boolean;
+}): boolean {
+  return !!input.isDev || !!input.isWorkspaceAdmin;
+}

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, Heart, Home, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,9 @@ import type { InventoryMatchResult, InventoryMatchesResponse } from "@shared/inv
 import { fetchInventoryStatus } from "@/lib/inventoryApi";
 import { apiRequest } from "@/lib/queryClient";
 import { ListingDetailDialog } from "@/components/inventory/ListingDetailDialog";
+import { InventoryHealthDiagnosticsPanel } from "@/components/inventory/InventoryHealthDiagnosticsPanel";
 import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
+import { shouldShowInventoryHealthDiagnostics } from "@/lib/copilotRgeVisibility";
 
 function formatPrice(cents: number | null): string {
   if (cents == null) return "Price on request";
@@ -261,6 +263,7 @@ interface MatchingListingsPanelProps {
   contactId: string;
   contactFirstName?: string;
   compact?: boolean;
+  isWorkspaceAdmin?: boolean;
   onInsertComposerDraft?: (draft: CopilotComposerInsert) => boolean;
 }
 
@@ -268,9 +271,15 @@ export function MatchingListingsPanel({
   contactId,
   contactFirstName,
   compact = true,
+  isWorkspaceAdmin = false,
   onInsertComposerDraft,
 }: MatchingListingsPanelProps) {
   const [allMatchesOpen, setAllMatchesOpen] = useState(false);
+  const [lastClientFetchAt, setLastClientFetchAt] = useState<string | null>(null);
+  const showHealthDiagnostics = shouldShowInventoryHealthDiagnostics({
+    isDev: import.meta.env.DEV,
+    isWorkspaceAdmin,
+  });
   const { data: inventoryStatus } = useQuery({
     queryKey: ["/api/inventory/status"],
     queryFn: fetchInventoryStatus,
@@ -279,12 +288,17 @@ export function MatchingListingsPanel({
 
   const enabled = !!contactId && !!inventoryStatus?.canUse;
 
-  const { data, isLoading, isFetched, refetch } = useQuery({
+  const { data, isLoading, isFetched, isError, error, refetch } = useQuery({
     queryKey: [`/api/contacts/${contactId}/inventory-matches`],
     queryFn: () => fetchInventoryMatches(contactId),
     enabled,
     staleTime: 30_000,
   });
+
+  useEffect(() => {
+    if (!isFetched && !isError) return;
+    setLastClientFetchAt(new Date().toISOString());
+  }, [isFetched, isError, contactId, data?.diagnostics?.lastMatchRunAt]);
 
   if (!inventoryStatus) return null;
   if (!inventoryStatus.canUse) return null;
@@ -303,6 +317,10 @@ export function MatchingListingsPanel({
     (data.reason === "no_matches" ||
       data.reason === "no_buyer_preferences" ||
       data.reason === "no_active_inventory");
+
+  const showFetchError =
+    isError ||
+    (isFetched && data?.reason === "listing_fetch_failed");
 
   if (!enabled && !isLoading) return null;
   if (isFetched && !data?.eligible && data?.reason === "feature_disabled") return null;
@@ -338,6 +356,34 @@ export function MatchingListingsPanel({
         </div>
       )}
 
+      {showFetchError && (
+        <p
+          className="text-[11px] text-amber-700 leading-snug py-1"
+          data-testid="matching-listings-fetch-error"
+        >
+          Unable to load matching listings
+          {data?.diagnostics
+            ? ` (${data.diagnostics.matchesReturned} of ${data.diagnostics.activeInventoryCount} scored).`
+            : "."}
+        </p>
+      )}
+
+      {showHealthDiagnostics && (isFetched || isError) && (
+        <InventoryHealthDiagnosticsPanel
+          diagnostics={data?.diagnostics}
+          clientError={
+            isError
+              ? error instanceof Error
+                ? error.message
+                : "Request failed"
+              : data?.error ?? null
+          }
+          lastClientFetchAt={lastClientFetchAt}
+          reason={data?.reason}
+          compact={compact}
+        />
+      )}
+
       {showEmpty && (
         <p className="text-[11px] text-gray-500 leading-snug py-1">
           {data?.reason === "no_buyer_preferences"
@@ -349,7 +395,12 @@ export function MatchingListingsPanel({
       )}
 
       {previewMatches.length > 0 && (
-        <div className="space-y-2 mt-1">
+        <div
+          className="space-y-2 mt-1"
+          data-testid="matching-listings-cards"
+          data-match-count={matches.length}
+          data-rendered-count={previewMatches.length}
+        >
           {previewMatches.map((match) => (
             <MatchListingCard
               key={match.listingId}

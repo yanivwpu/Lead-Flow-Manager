@@ -311,6 +311,41 @@ export async function countListingsBySourceForUser(
   return out;
 }
 
+/** Columns required for buyer matching (excludes flyer-only fields from migration 0038). */
+const MATCHING_LISTING_SELECT = {
+  id: inventoryListings.id,
+  userId: inventoryListings.userId,
+  sourceId: inventoryListings.sourceId,
+  provider: inventoryListings.provider,
+  providerListingId: inventoryListings.providerListingId,
+  status: inventoryListings.status,
+  priceCents: inventoryListings.priceCents,
+  currency: inventoryListings.currency,
+  addressLine1: inventoryListings.addressLine1,
+  addressLine2: inventoryListings.addressLine2,
+  city: inventoryListings.city,
+  state: inventoryListings.state,
+  zip: inventoryListings.zip,
+  country: inventoryListings.country,
+  latitude: inventoryListings.latitude,
+  longitude: inventoryListings.longitude,
+  beds: inventoryListings.beds,
+  baths: inventoryListings.baths,
+  propertyType: inventoryListings.propertyType,
+  description: inventoryListings.description,
+  features: inventoryListings.features,
+  photos: inventoryListings.photos,
+  listingUrl: inventoryListings.listingUrl,
+  sourceUpdatedAt: inventoryListings.sourceUpdatedAt,
+  syncedAt: inventoryListings.syncedAt,
+  firstSeenAt: inventoryListings.firstSeenAt,
+  syncAlertStatus: inventoryListings.syncAlertStatus,
+  previousPriceCents: inventoryListings.previousPriceCents,
+  lastPriceChangeAt: inventoryListings.lastPriceChangeAt,
+  createdAt: inventoryListings.createdAt,
+  updatedAt: inventoryListings.updatedAt,
+} as const;
+
 export async function fetchActiveListingsForMatching(
   userId: string,
   limit = 2500,
@@ -322,12 +357,21 @@ export async function fetchActiveListingsForMatching(
   const devSeedExclude = devSeedListingExcludeCondition();
   if (devSeedExclude) conditions.push(devSeedExclude);
 
-  return db
-    .select()
+  const rows = await db
+    .select(MATCHING_LISTING_SELECT)
     .from(inventoryListings)
     .where(and(...conditions))
     .orderBy(desc(inventoryListings.syncedAt))
     .limit(limit);
+
+  return rows.map((row) => ({
+    ...row,
+    propertySubtype: null,
+    squareFeet: null,
+    yearBuilt: null,
+    hoaFeeCents: null,
+    listingDetails: {},
+  }));
 }
 
 export async function countActiveListingsForUser(userId: string): Promise<number> {

@@ -1,5 +1,6 @@
 import type { InventoryListing } from "@shared/schema";
 import type { InventoryMatchesResponse, InventoryMatchResult } from "@shared/inventory/inventoryMatchTypes";
+import { buildInventoryMatchDiagnostics } from "@shared/inventory/inventoryMatchDiagnostics";
 import { formatInventoryMatchSummaryForAi } from "@shared/inventory/inventoryMatchDisplay";
 import {
   extractBuyerMatchCriteria,
@@ -133,14 +134,20 @@ export async function findMatchingListingsForContact(
   const criteria = extractBuyerMatchCriteria(profile);
 
   if (!criteria.hasAnyCriteria) {
+    const inventoryCount = await countActiveListingsForUser(userId);
     return {
       eligible: true,
       reason: "no_buyer_preferences",
       profileStatus: profile.profileStatus,
-      inventoryCount: await countActiveListingsForUser(userId),
+      inventoryCount,
       matchCount: 0,
       matches: [],
       savedListingIds,
+      diagnostics: buildInventoryMatchDiagnostics({
+        activeInventoryCount: inventoryCount,
+        listingsScored: 0,
+        matchesReturned: 0,
+      }),
     };
   }
 
@@ -154,10 +161,42 @@ export async function findMatchingListingsForContact(
       matchCount: 0,
       matches: [],
       savedListingIds,
+      diagnostics: buildInventoryMatchDiagnostics({
+        activeInventoryCount: 0,
+        listingsScored: 0,
+        matchesReturned: 0,
+      }),
     };
   }
 
-  const rows = await fetchActiveListingsForMatching(userId);
+  let rows;
+  try {
+    rows = await fetchActiveListingsForMatching(userId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[inventory-matches] fetchActiveListingsForMatching failed", {
+      userId,
+      contactId,
+      message,
+    });
+    return {
+      eligible: false,
+      reason: "listing_fetch_failed",
+      profileStatus: profile.profileStatus,
+      inventoryCount,
+      matchCount: 0,
+      matches: [],
+      savedListingIds,
+      error: message,
+      diagnostics: buildInventoryMatchDiagnostics({
+        activeInventoryCount: inventoryCount,
+        listingsScored: 0,
+        matchesReturned: 0,
+        lastMatchingError: message,
+      }),
+    };
+  }
+
   const inputs = rows.map(inventoryListingToMatchInput);
   const ranked = rankInventoryMatches(inputs, criteria, 10);
   const matches = ranked.map(toPublicMatch);
@@ -170,6 +209,11 @@ export async function findMatchingListingsForContact(
     matchCount: matches.length,
     matches,
     savedListingIds,
+    diagnostics: buildInventoryMatchDiagnostics({
+      activeInventoryCount: inventoryCount,
+      listingsScored: inputs.length,
+      matchesReturned: matches.length,
+    }),
   };
 }
 
