@@ -10,7 +10,7 @@ import {
 import { readBuyerPreferenceProfile } from "../buyerPreferenceService";
 import { storage } from "../storage";
 import { canUseInventoryConnector } from "./inventoryGate";
-import { countActiveListingsForUser, fetchActiveListingsForMatching } from "./inventoryDb";
+import { countActiveListingsForUser, fetchActiveListingsForMatching, resolveMatchingListingLimitForUser } from "./inventoryDb";
 import { listSavedListingIdsForContact } from "./inventorySavedMatchDb";
 
 function parseNumericField(raw: string | number | null | undefined): number | null {
@@ -171,7 +171,8 @@ export async function findMatchingListingsForContact(
 
   let rows;
   try {
-    rows = await fetchActiveListingsForMatching(userId);
+    const matchingLimit = await resolveMatchingListingLimitForUser(userId);
+    rows = await fetchActiveListingsForMatching(userId, matchingLimit);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[inventory-matches] fetchActiveListingsForMatching failed", {

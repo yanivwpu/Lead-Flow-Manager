@@ -7,8 +7,15 @@ import {
   type InventorySource,
 } from "@shared/schema";
 import type { NormalizedInventoryListing } from "@shared/inventory/inventoryListingSchema";
-import { MATCHABLE_INVENTORY_STATUSES } from "@shared/inventory/inventoryListingSchema";
+import { MATCHABLE_INVENTORY_STATUSES, isMatchableInventoryStatus } from "@shared/inventory/inventoryListingSchema";
 import type { SyncAlertStatus } from "@shared/inventory/inventoryOpportunityTypes";
+import {
+  DEFAULT_MAX_LISTINGS,
+  normalizedListingInSyncAreaScope,
+  readInventorySyncScope,
+  type InventorySyncScope,
+} from "@shared/inventory/reso/resoSyncScope";
+import { providerSupportsListingSync } from "@shared/inventory/inventoryProviderSchema";
 import {
   assertProductionDevSeedListingAllowed,
   isDevSeedProviderListingId,
@@ -148,48 +155,84 @@ export type ListingUpsertResult = {
   priceReduced: boolean;
 };
 
-export async function upsertInventoryListing(
-  userId: string,
-  sourceId: string,
-  normalized: NormalizedInventoryListing,
-): Promise<ListingUpsertResult> {
-  const listingGuard = assertProductionDevSeedListingAllowed(normalized.providerListingId);
-  if (!listingGuard.ok) {
-    throw new Error(listingGuard.message);
-  }
+export type ListingUpsertOutcome =
+  | { outcome: "inserted"; result: ListingUpsertResult }
+  | { outcome: "updated"; result: ListingUpsertResult }
+  | { outcome: "skipped_cap" }
+  | { outcome: "skipped_out_of_scope" };
 
-  const row = listingRowFromNormalized(userId, sourceId, normalized);
-  const now = new Date();
+export type InventoryListingUpsertPolicy = Pick<InventorySyncScope, "maxListings" | "cities" | "zipCodes">;
 
-  const [existing] = await db
-    .select()
+export type SourceListingStats = {
+  total: number;
+  matchable: number;
+};
+
+/** In-memory matchable count cache — increment when inserting matchable listings. */
+export type MatchableCountCache = { value: number };
+
+export async function countMatchableListingsForSource(sourceId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
     .from(inventoryListings)
     .where(
       and(
         eq(inventoryListings.sourceId, sourceId),
-        eq(inventoryListings.providerListingId, normalized.providerListingId),
+        inArray(inventoryListings.status, [...MATCHABLE_INVENTORY_STATUSES]),
       ),
-    )
-    .limit(1);
+    );
+  return row?.count ?? 0;
+}
 
-  if (!existing) {
-    const [inserted] = await db
-      .insert(inventoryListings)
-      .values({
-        ...row,
-        syncAlertStatus: "new",
-        firstSeenAt: now,
-      })
-      .returning({ id: inventoryListings.id });
-    return {
-      listingId: inserted.id,
-      syncAlertStatus: "new",
-      previousPriceCents: null,
-      currentPriceCents: row.priceCents ?? null,
-      priceReduced: false,
-    };
+export async function countListingStatsBySourceForUser(
+  userId: string,
+): Promise<Record<string, SourceListingStats>> {
+  const rows = await db
+    .select({
+      sourceId: inventoryListings.sourceId,
+      total: sql<number>`count(*)::int`,
+      matchable: sql<number>`count(*) filter (where ${inventoryListings.status} in ('active', 'coming_soon'))::int`,
+    })
+    .from(inventoryListings)
+    .where(eq(inventoryListings.userId, userId))
+    .groupBy(inventoryListings.sourceId);
+
+  const out: Record<string, SourceListingStats> = {};
+  for (const row of rows) {
+    out[row.sourceId] = { total: row.total, matchable: row.matchable };
   }
+  return out;
+}
 
+/** @deprecated Use countListingStatsBySourceForUser — kept for callers expecting total-only map. */
+export async function countListingsBySourceForUser(
+  userId: string,
+): Promise<Record<string, number>> {
+  const stats = await countListingStatsBySourceForUser(userId);
+  const out: Record<string, number> = {};
+  for (const [sourceId, s] of Object.entries(stats)) {
+    out[sourceId] = s.total;
+  }
+  return out;
+}
+
+/** Max listings to score for buyer matching — highest cap among user's listing-sync sources. */
+export async function resolveMatchingListingLimitForUser(userId: string): Promise<number> {
+  const sources = await listInventorySources(userId);
+  let limit = DEFAULT_MAX_LISTINGS;
+  for (const source of sources) {
+    if (!providerSupportsListingSync(source.provider)) continue;
+    const scope = readInventorySyncScope((source.config || {}) as Record<string, unknown>);
+    limit = Math.max(limit, scope.maxListings);
+  }
+  return limit;
+}
+
+async function updateExistingInventoryListing(
+  existing: typeof inventoryListings.$inferSelect,
+  row: ReturnType<typeof listingRowFromNormalized>,
+  now: Date,
+): Promise<ListingUpsertResult> {
   let syncAlertStatus: SyncAlertStatus = "existing";
   let previousPriceCents: number | null = existing.previousPriceCents ?? null;
   let lastPriceChangeAt: Date | null = existing.lastPriceChangeAt ?? null;
@@ -256,6 +299,123 @@ export async function upsertInventoryListing(
   };
 }
 
+export async function upsertInventoryListingWithPolicy(
+  userId: string,
+  sourceId: string,
+  normalized: NormalizedInventoryListing,
+  policy: InventoryListingUpsertPolicy,
+  matchableCountCache: MatchableCountCache,
+): Promise<ListingUpsertOutcome> {
+  const listingGuard = assertProductionDevSeedListingAllowed(normalized.providerListingId);
+  if (!listingGuard.ok) {
+    throw new Error(listingGuard.message);
+  }
+
+  const row = listingRowFromNormalized(userId, sourceId, normalized);
+  const now = new Date();
+
+  const [existing] = await db
+    .select({ id: inventoryListings.id, status: inventoryListings.status, priceCents: inventoryListings.priceCents, previousPriceCents: inventoryListings.previousPriceCents, lastPriceChangeAt: inventoryListings.lastPriceChangeAt })
+    .from(inventoryListings)
+    .where(
+      and(
+        eq(inventoryListings.sourceId, sourceId),
+        eq(inventoryListings.providerListingId, normalized.providerListingId),
+      ),
+    )
+    .limit(1);
+
+  if (!existing) {
+    if (!normalizedListingInSyncAreaScope(normalized, policy)) {
+      return { outcome: "skipped_out_of_scope" };
+    }
+    if (matchableCountCache.value >= policy.maxListings) {
+      return { outcome: "skipped_cap" };
+    }
+
+    const [inserted] = await db
+      .insert(inventoryListings)
+      .values({
+        ...row,
+        syncAlertStatus: "new",
+        firstSeenAt: now,
+      })
+      .returning({ id: inventoryListings.id });
+
+    if (isMatchableInventoryStatus(normalized.status)) {
+      matchableCountCache.value += 1;
+    }
+
+    return {
+      outcome: "inserted",
+      result: {
+        listingId: inserted.id,
+        syncAlertStatus: "new",
+        previousPriceCents: null,
+        currentPriceCents: row.priceCents ?? null,
+        priceReduced: false,
+      },
+    };
+  }
+
+  const wasMatchable = isMatchableInventoryStatus(existing.status as NormalizedInventoryListing["status"]);
+  const updateResult = await updateExistingInventoryListing(existing as typeof inventoryListings.$inferSelect, row, now);
+  const nowMatchable = isMatchableInventoryStatus(normalized.status);
+  if (!wasMatchable && nowMatchable) {
+    matchableCountCache.value += 1;
+  } else if (wasMatchable && !nowMatchable) {
+    matchableCountCache.value = Math.max(0, matchableCountCache.value - 1);
+  }
+
+  return { outcome: "updated", result: updateResult };
+}
+
+export async function upsertInventoryListing(
+  userId: string,
+  sourceId: string,
+  normalized: NormalizedInventoryListing,
+): Promise<ListingUpsertResult> {
+  const listingGuard = assertProductionDevSeedListingAllowed(normalized.providerListingId);
+  if (!listingGuard.ok) {
+    throw new Error(listingGuard.message);
+  }
+
+  const row = listingRowFromNormalized(userId, sourceId, normalized);
+  const now = new Date();
+
+  const [existing] = await db
+    .select()
+    .from(inventoryListings)
+    .where(
+      and(
+        eq(inventoryListings.sourceId, sourceId),
+        eq(inventoryListings.providerListingId, normalized.providerListingId),
+      ),
+    )
+    .limit(1);
+
+  if (!existing) {
+    const [inserted] = await db
+      .insert(inventoryListings)
+      .values({
+        ...row,
+        syncAlertStatus: "new",
+        firstSeenAt: now,
+      })
+      .returning({ id: inventoryListings.id });
+    return {
+      listingId: inserted.id,
+      syncAlertStatus: "new",
+      previousPriceCents: null,
+      currentPriceCents: row.priceCents ?? null,
+      priceReduced: false,
+    };
+  }
+
+  const updateResult = await updateExistingInventoryListing(existing, row, now);
+  return updateResult;
+}
+
 export async function markListingsInactiveExcept(
   sourceId: string,
   seenProviderListingIds: string[],
@@ -291,25 +451,6 @@ export type ListInventoryListingsParams = {
   page: number;
   limit: number;
 };
-
-export async function countListingsBySourceForUser(
-  userId: string,
-): Promise<Record<string, number>> {
-  const rows = await db
-    .select({
-      sourceId: inventoryListings.sourceId,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(inventoryListings)
-    .where(eq(inventoryListings.userId, userId))
-    .groupBy(inventoryListings.sourceId);
-
-  const out: Record<string, number> = {};
-  for (const row of rows) {
-    out[row.sourceId] = row.count;
-  }
-  return out;
-}
 
 /** Columns required for buyer matching (excludes flyer-only fields from migration 0038). */
 const MATCHING_LISTING_SELECT = {

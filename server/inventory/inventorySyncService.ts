@@ -17,11 +17,13 @@ import {
 } from "@shared/inventory/reso/resoSyncTypes";
 import type { InventorySource } from "@shared/schema";
 import {
+  countMatchableListingsForSource,
   getInventorySource,
   markListingsInactiveExcept,
   patchInventorySource,
-  upsertInventoryListing,
+  upsertInventoryListingWithPolicy,
   type ListingUpsertResult,
+  type MatchableCountCache,
 } from "./inventoryDb";
 import { processInventoryOpportunitiesAfterSync } from "./inventoryOpportunityService";
 import { buildAdapterContext } from "./inventorySourceService";
@@ -182,6 +184,76 @@ function friendlySyncError(raw: string): string {
     return "Listing feed request timed out. Sync Now resumes from the last checkpoint when available.";
   }
   return raw.slice(0, 2000);
+}
+
+async function processSyncListingRow(
+  userId: string,
+  sourceId: string,
+  raw: unknown,
+  adapter: ReturnType<typeof getInventoryProviderAdapter>,
+  ctx: ReturnType<typeof buildAdapterContext>,
+  syncScope: ReturnType<typeof readInventorySyncScope>,
+  matchableCountCache: MatchableCountCache,
+  upsertResults: ListingUpsertResult[],
+): Promise<{
+  skippedInvalid: boolean;
+  skippedDueToCap: boolean;
+  skippedOutOfScope: boolean;
+  upserted: boolean;
+  inactiveFromFeed: boolean;
+  sampleSkipReason: string | null;
+}> {
+  const normalized = adapter.normalizeListing(raw, ctx);
+  if (!normalized) {
+    return {
+      skippedInvalid: true,
+      skippedDueToCap: false,
+      skippedOutOfScope: false,
+      upserted: false,
+      inactiveFromFeed: false,
+      sampleSkipReason: describeResoNormalizationFailure(raw),
+    };
+  }
+
+  const inactiveFromFeed = !isMatchableInventoryStatus(normalized.status);
+  const outcome = await upsertInventoryListingWithPolicy(
+    userId,
+    sourceId,
+    normalized,
+    syncScope,
+    matchableCountCache,
+  );
+
+  if (outcome.outcome === "skipped_cap") {
+    return {
+      skippedInvalid: false,
+      skippedDueToCap: true,
+      skippedOutOfScope: false,
+      upserted: false,
+      inactiveFromFeed,
+      sampleSkipReason: null,
+    };
+  }
+  if (outcome.outcome === "skipped_out_of_scope") {
+    return {
+      skippedInvalid: false,
+      skippedDueToCap: false,
+      skippedOutOfScope: true,
+      upserted: false,
+      inactiveFromFeed,
+      sampleSkipReason: null,
+    };
+  }
+
+  upsertResults.push(outcome.result);
+  return {
+    skippedInvalid: false,
+    skippedDueToCap: false,
+    skippedOutOfScope: false,
+    upserted: true,
+    inactiveFromFeed,
+    sampleSkipReason: null,
+  };
 }
 
 function buildImportFailureMessage(
@@ -366,6 +438,8 @@ async function runInventorySyncJob(
   let listingsFetched = statNum(prevStats, "listingsFetched");
   let inactivated = 0;
   let inactiveFromFeed = 0;
+  let skippedDueToCap = statNum(prevStats, "skippedDueToCap");
+  let skippedOutOfScope = statNum(prevStats, "skippedOutOfScope");
   const upsertResults: ListingUpsertResult[] = [];
   const datasetId = readDatasetId(source);
   let sampleSkipReason: string | null =
@@ -375,8 +449,12 @@ async function runInventorySyncJob(
   let cursor = readResoSyncCursor(config);
   let runningMaxTs = cursor.maxModificationTimestamp;
   const syncScope = readInventorySyncScope(config);
+  const matchableCountAtStart = await countMatchableListingsForSource(sourceId);
+  const matchableCountCache: MatchableCountCache = { value: matchableCountAtStart };
   const importCapRemaining =
-    syncMode === "initial" ? Math.max(0, syncScope.maxListings - upserted) : undefined;
+    syncMode === "initial"
+      ? Math.max(0, syncScope.maxListings - matchableCountCache.value)
+      : undefined;
 
   const resumeUrl =
     !freshStart && syncMode === "initial" && !cursor.initialImportComplete
@@ -390,7 +468,8 @@ async function runInventorySyncJob(
     datasetId,
     resumeUrl: resumeUrl ? "(checkpoint)" : null,
     listingsImportedSoFar: upserted,
-    maxListings: syncMode === "initial" ? syncScope.maxListings : undefined,
+    maxListings: syncScope.maxListings,
+    matchableAtStart: matchableCountAtStart,
   });
 
   try {
@@ -410,23 +489,34 @@ async function runInventorySyncJob(
             listingsFetched = rowsFetchedTotal;
 
             for (const raw of rows) {
-              if (syncMode === "initial" && upserted >= syncScope.maxListings) break;
-
-              const normalized = adapter.normalizeListing(raw, ctx);
-              if (!normalized) {
+              const rowResult = await processSyncListingRow(
+                userId,
+                sourceId,
+                raw,
+                adapter,
+                ctx,
+                syncScope,
+                matchableCountCache,
+                upsertResults,
+              );
+              if (rowResult.skippedInvalid) {
                 skipped += 1;
-                if (!sampleSkipReason) {
-                  sampleSkipReason = describeResoNormalizationFailure(raw);
+                if (!sampleSkipReason && rowResult.sampleSkipReason) {
+                  sampleSkipReason = rowResult.sampleSkipReason;
                 }
                 continue;
               }
-
-              if (!isMatchableInventoryStatus(normalized.status)) {
-                inactiveFromFeed += 1;
+              if (rowResult.skippedDueToCap) {
+                skippedDueToCap += 1;
+                if (rowResult.inactiveFromFeed) inactiveFromFeed += 1;
+                continue;
               }
-
-              const result = await upsertInventoryListing(userId, sourceId, normalized);
-              upsertResults.push(result);
+              if (rowResult.skippedOutOfScope) {
+                skippedOutOfScope += 1;
+                if (rowResult.inactiveFromFeed) inactiveFromFeed += 1;
+                continue;
+              }
+              if (rowResult.inactiveFromFeed) inactiveFromFeed += 1;
               upserted += 1;
             }
 
@@ -436,7 +526,8 @@ async function runInventorySyncJob(
               runningMaxTs,
             );
 
-            const hitImportCap = syncMode === "initial" && upserted >= syncScope.maxListings;
+            const hitImportCap =
+              syncMode === "initial" && matchableCountCache.value >= syncScope.maxListings;
             const cursorPatch: Record<string, unknown> = {
               maxModificationTimestamp: runningMaxTs,
             };
@@ -460,6 +551,9 @@ async function runInventorySyncJob(
               listingsFetched,
               listingsImported: upserted,
               listingsSkipped: skipped,
+              skippedDueToCap,
+              skippedOutOfScope,
+              matchableCount: matchableCountCache.value,
               sampleSkipReason,
               maxListings: syncScope.maxListings,
               importCapReached: hitImportCap,
@@ -510,15 +604,34 @@ async function runInventorySyncJob(
     // Non-streaming fallback (should not run for initial/incremental)
     if (!useStreaming) {
       for (const raw of fetchResult.listings) {
-        const normalized = adapter.normalizeListing(raw, ctx);
-        if (!normalized) {
+        const rowResult = await processSyncListingRow(
+          userId,
+          sourceId,
+          raw,
+          adapter,
+          ctx,
+          syncScope,
+          matchableCountCache,
+          upsertResults,
+        );
+        if (rowResult.skippedInvalid) {
           skipped += 1;
-          if (!sampleSkipReason) sampleSkipReason = describeResoNormalizationFailure(raw);
+          if (!sampleSkipReason && rowResult.sampleSkipReason) {
+            sampleSkipReason = rowResult.sampleSkipReason;
+          }
           continue;
         }
-        if (!isMatchableInventoryStatus(normalized.status)) inactiveFromFeed += 1;
-        const result = await upsertInventoryListing(userId, sourceId, normalized);
-        upsertResults.push(result);
+        if (rowResult.skippedDueToCap) {
+          skippedDueToCap += 1;
+          if (rowResult.inactiveFromFeed) inactiveFromFeed += 1;
+          continue;
+        }
+        if (rowResult.skippedOutOfScope) {
+          skippedOutOfScope += 1;
+          if (rowResult.inactiveFromFeed) inactiveFromFeed += 1;
+          continue;
+        }
+        if (rowResult.inactiveFromFeed) inactiveFromFeed += 1;
         upserted += 1;
       }
     }
@@ -537,7 +650,8 @@ async function runInventorySyncJob(
     }
 
     const nowIso = new Date().toISOString();
-    const hitImportCap = syncMode === "initial" && upserted >= syncScope.maxListings;
+    const hitImportCap =
+      syncMode === "initial" && matchableCountCache.value >= syncScope.maxListings;
     const importSucceeded = upserted > 0 || listingsFetched === 0 || hitImportCap;
     const cursorPatch = mergeResoSyncCursor(config, {
       maxModificationTimestamp: runningMaxTs,
@@ -569,7 +683,11 @@ async function runInventorySyncJob(
         skipped,
         listingsFetched,
         listingsImported: upserted,
+        listingsUpserted: upserted,
         listingsSkipped: skipped,
+        skippedDueToCap,
+        skippedOutOfScope,
+        matchableCount: matchableCountCache.value,
         sampleSkipReason,
         inactivated,
         inactiveFromFeed,
@@ -599,6 +717,9 @@ async function runInventorySyncJob(
       listingsFetched,
       listingsImported: upserted,
       listingsSkipped: skipped,
+      skippedDueToCap,
+      skippedOutOfScope,
+      matchableCount: matchableCountCache.value,
       durationMs: Date.now() - startedAt,
     });
   } catch (err) {
@@ -622,7 +743,11 @@ async function runInventorySyncJob(
         skipped,
         listingsFetched,
         listingsImported: upserted,
+        listingsUpserted: upserted,
         listingsSkipped: skipped,
+        skippedDueToCap,
+        skippedOutOfScope,
+        matchableCount: matchableCountCache.value,
         sampleSkipReason,
         inactivated,
         inactiveFromFeed,
@@ -650,6 +775,8 @@ async function runInventorySyncJob(
       listingsFetched,
       listingsImported: upserted,
       listingsSkipped: skipped,
+      skippedDueToCap,
+      skippedOutOfScope,
       ...failureDiag,
     });
   }

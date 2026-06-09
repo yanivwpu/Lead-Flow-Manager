@@ -22,7 +22,7 @@ export const inventorySyncScopeFieldsSchema = z.object({
   syncCities: z.array(z.string()).optional(),
   /** ZIP / postal codes to include on initial import (stored as array). */
   syncZipCodes: z.array(z.string()).optional(),
-  /** Cap for the first full import; incremental sync is not capped. */
+  /** Max active/coming-soon listings per source available for matching. */
   maxListings: inventoryMaxListingsSchema.optional(),
 });
 
@@ -139,4 +139,31 @@ export function appendScopeToPropertyFilter(
   scope: Pick<InventorySyncScope, "cities" | "zipCodes">,
 ): string {
   return buildODataFilter([...buildMarketListingScopeClauses(mode, scope), baseFilter].filter(Boolean));
+}
+
+/** Whether a normalized listing falls within configured city/ZIP scope (OR when both are set). */
+export function normalizedListingInSyncAreaScope(
+  listing: { address: { city?: string; zip?: string } },
+  scope: Pick<InventorySyncScope, "cities" | "zipCodes">,
+): boolean {
+  const { cities, zipCodes } = scope;
+  if (cities.length === 0 && zipCodes.length === 0) return true;
+
+  const cityNorm = listing.address.city?.trim().toLowerCase() ?? "";
+  const zipNorm = listing.address.zip?.trim() ?? "";
+  const cityMatch =
+    cities.length > 0 &&
+    cityNorm.length > 0 &&
+    cities.some((c) => c.trim().toLowerCase() === cityNorm);
+  const zipMatch =
+    zipCodes.length > 0 &&
+    zipNorm.length > 0 &&
+    zipCodes.some((z) => {
+      const target = z.trim();
+      return zipNorm === target || zipNorm.startsWith(target);
+    });
+
+  if (cities.length > 0 && zipCodes.length > 0) return cityMatch || zipMatch;
+  if (cities.length > 0) return cityMatch;
+  return zipMatch;
 }

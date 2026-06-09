@@ -373,7 +373,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
         lastSyncStatus: activeSource.lastSyncStatus,
         lastSyncStats: activeSource.lastSyncStats,
         config: activeSource.config,
-        listingCount: activeSource.listingCount,
+        listingCount: activeSource.inventoryStats?.totalSynced ?? activeSource.listingCount,
       })
     : null;
   const syncStatRows = formatInventorySourceStatusRows(
@@ -388,8 +388,26 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     ? "Syncing"
     : formatInventoryConnectionStatus(activeSource?.connectionStatus);
   const technicalDetailRows = syncStatRows.filter(
-    (row) => row.label !== "Listings imported" && row.label !== "Dataset",
+    (row) =>
+      row.label !== "Last sync upserted" &&
+      row.label !== "Last sync fetched" &&
+      row.label !== "Dataset",
   );
+  const lastSyncUpserted =
+    typeof activeSource?.lastSyncStats?.listingsUpserted === "number"
+      ? activeSource.lastSyncStats.listingsUpserted
+      : typeof activeSource?.lastSyncStats?.listingsImported === "number"
+        ? activeSource.lastSyncStats.listingsImported
+        : null;
+  const lastSyncFetched =
+    typeof activeSource?.lastSyncStats?.listingsFetched === "number"
+      ? activeSource.lastSyncStats.listingsFetched
+      : null;
+  const lastSyncSkippedCap =
+    typeof activeSource?.lastSyncStats?.skippedDueToCap === "number"
+      ? activeSource.lastSyncStats.skippedDueToCap
+      : null;
+  const inventoryStats = activeSource?.inventoryStats;
   const isListingSyncProvider = providerSupportsListingSync(selectedProvider);
   const isMlsGrid = selectedProvider === "mls_grid";
   const isTrestle = selectedProvider === "trestle";
@@ -546,7 +564,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                             </SelectContent>
                           </Select>
                           <p className="text-[11px] text-muted-foreground">
-                            Cap for the first import (newest listings first).
+                            Max active listings available for buyer matching per source.
                           </p>
                         </div>
                       </div>
@@ -850,9 +868,45 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-muted-foreground">Listings imported</dt>
-                      <dd className="font-medium tabular-nums" data-testid="inventory-listing-count">
-                        {activeSource.listingCount.toLocaleString()}
+                      <dt className="text-muted-foreground">Active for matching</dt>
+                      <dd className="font-medium tabular-nums" data-testid="inventory-active-for-matching">
+                        {(inventoryStats?.activeForMatching ?? 0).toLocaleString()}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">Configured cap</dt>
+                      <dd className="font-medium tabular-nums" data-testid="inventory-configured-cap">
+                        {(inventoryStats?.configuredCap ?? form.maxListings).toLocaleString()}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">Total synced</dt>
+                      <dd className="font-medium tabular-nums" data-testid="inventory-total-synced">
+                        {(inventoryStats?.totalSynced ?? activeSource.listingCount).toLocaleString()}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">Inactive / off-market</dt>
+                      <dd className="font-medium tabular-nums" data-testid="inventory-inactive-off-market">
+                        {(inventoryStats?.inactiveOffMarket ?? 0).toLocaleString()}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">Last sync fetched</dt>
+                      <dd className="font-medium tabular-nums">
+                        {lastSyncFetched != null ? lastSyncFetched.toLocaleString() : "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">Last sync upserted</dt>
+                      <dd className="font-medium tabular-nums">
+                        {lastSyncUpserted != null ? lastSyncUpserted.toLocaleString() : "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">Skipped due to cap</dt>
+                      <dd className="font-medium tabular-nums" data-testid="inventory-skipped-cap">
+                        {lastSyncSkippedCap != null ? lastSyncSkippedCap.toLocaleString() : "—"}
                       </dd>
                     </div>
                     <div>
@@ -927,8 +981,8 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       <CheckCircle2 className="h-4 w-4 text-emerald-700" />
                       <AlertTitle className="text-sm text-emerald-950">Import complete</AlertTitle>
                       <AlertDescription className="text-xs text-emerald-900/90">
-                        {activeSource.listingCount > 0
-                          ? `${activeSource.listingCount.toLocaleString()} listings are now in your workspace.`
+                        {(inventoryStats?.totalSynced ?? activeSource.listingCount) > 0
+                          ? `${(inventoryStats?.totalSynced ?? activeSource.listingCount).toLocaleString()} listings synced (${(inventoryStats?.activeForMatching ?? 0).toLocaleString()} active for matching).`
                           : "Sync finished. No listings were imported — verify your dataset ID and token with Bridge Data Output."}
                       </AlertDescription>
                     </Alert>
@@ -1000,8 +1054,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
               </p>
               {activeSource != null && (
                 <p>
-                  This source currently has {activeSource.listingCount.toLocaleString()} synced listing
-                  {activeSource.listingCount === 1 ? "" : "s"}.
+                  This source currently has {(inventoryStats?.totalSynced ?? activeSource.listingCount).toLocaleString()} synced listing
+                  {(inventoryStats?.totalSynced ?? activeSource.listingCount) === 1 ? "" : "s"}
+                  {inventoryStats
+                    ? ` (${inventoryStats.activeForMatching.toLocaleString()} active for matching, cap ${inventoryStats.configuredCap.toLocaleString()}).`
+                    : "."}
                 </p>
               )}
             </div>

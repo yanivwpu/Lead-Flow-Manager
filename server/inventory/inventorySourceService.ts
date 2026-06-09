@@ -14,10 +14,12 @@ import {
   getInventorySource,
   getInventorySourceByProvider,
   insertInventorySource,
-  countListingsBySourceForUser,
+  countListingStatsBySourceForUser,
   listInventorySources,
   patchInventorySource,
+  type SourceListingStats,
 } from "./inventoryDb";
+import { readInventorySyncScope } from "@shared/inventory/reso/resoSyncScope";
 import { getInventoryProviderAdapter } from "./inventoryProviderRegistry";
 import type { InventoryAdapterContext } from "./providers/types";
 import {
@@ -47,11 +49,28 @@ export const patchInventorySourceBodySchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export function toPublicInventorySource(source: InventorySource, listingCount = 0) {
+export type PublicInventoryListingStats = {
+  activeForMatching: number;
+  configuredCap: number;
+  totalSynced: number;
+  inactiveOffMarket: number;
+};
+
+export function toPublicInventorySource(
+  source: InventorySource,
+  listingStats: SourceListingStats = { total: 0, matchable: 0 },
+) {
   const creds = (source.credentialsEnc || {}) as Record<string, unknown>;
   const hasCredentials = sourceHasStoredCredentials(source.provider as InventoryProvider, creds);
   const rawConfig = (source.config || {}) as Record<string, unknown>;
   const config = { ...rawConfig };
+  const configuredCap = readInventorySyncScope(rawConfig).maxListings;
+  const inventoryStats: PublicInventoryListingStats = {
+    activeForMatching: listingStats.matchable,
+    configuredCap,
+    totalSynced: listingStats.total,
+    inactiveOffMarket: Math.max(0, listingStats.total - listingStats.matchable),
+  };
   if (typeof config.originatingSystemName === "string") {
     config.originatingSystemName = sanitizeOriginatingSystemForUi(
       config.originatingSystemName,
@@ -72,7 +91,8 @@ export function toPublicInventorySource(source: InventorySource, listingCount = 
     isActive: source.isActive,
     listingSyncSupported: providerSupportsListingSync(source.provider as InventoryProvider),
     hasCredentials,
-    listingCount,
+    listingCount: listingStats.total,
+    inventoryStats,
     createdAt: source.createdAt,
     updatedAt: source.updatedAt,
   };
@@ -206,8 +226,10 @@ export async function listSourcesForUser(userId: string) {
   for (const row of rows) {
     recovered.push(row.lastSyncStatus === "running" ? await recoverStaleInventorySync(row) : row);
   }
-  const counts = await countListingsBySourceForUser(userId);
-  return recovered.map((row) => toPublicInventorySource(row, counts[row.id] ?? 0));
+  const counts = await countListingStatsBySourceForUser(userId);
+  return recovered.map((row) =>
+    toPublicInventorySource(row, counts[row.id] ?? { total: 0, matchable: 0 }),
+  );
 }
 
 export async function createSourceForUser(
@@ -324,8 +346,8 @@ export async function updateSourceForUser(
 
   const row = await patchInventorySource(sourceId, userId, patch);
   if (!row) return null;
-  const counts = await countListingsBySourceForUser(userId);
-  return toPublicInventorySource(row, counts[row.id] ?? 0);
+  const counts = await countListingStatsBySourceForUser(userId);
+  return toPublicInventorySource(row, counts[row.id] ?? { total: 0, matchable: 0 });
 }
 
 export async function removeSourceForUser(userId: string, sourceId: string): Promise<boolean> {

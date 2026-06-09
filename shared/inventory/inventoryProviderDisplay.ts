@@ -137,12 +137,22 @@ export function formatInventorySourceStatusRows(
   const rows: InventorySyncStatRow[] = [];
   const n = (key: string) => statNumber(stats, key);
 
-  const synced = n("listingsImported") ?? n("seenCount") ?? n("upserted");
-  if (synced != null) rows.push({ label: "Listings imported", value: synced.toLocaleString() });
+  const skippedDueToCap = n("skippedDueToCap");
+  if (skippedDueToCap != null && skippedDueToCap > 0) {
+    rows.push({ label: "Skipped due to cap", value: skippedDueToCap.toLocaleString() });
+  }
+
+  const skippedOutOfScope = n("skippedOutOfScope");
+  if (skippedOutOfScope != null && skippedOutOfScope > 0) {
+    rows.push({ label: "Skipped (out of scope)", value: skippedOutOfScope.toLocaleString() });
+  }
+
+  const synced = n("listingsUpserted") ?? n("listingsImported") ?? n("seenCount") ?? n("upserted");
+  if (synced != null) rows.push({ label: "Last sync upserted", value: synced.toLocaleString() });
 
   const fetched = n("listingsFetched");
   if (fetched != null && fetched > 0) {
-    rows.push({ label: "Listings fetched", value: fetched.toLocaleString() });
+    rows.push({ label: "Last sync fetched", value: fetched.toLocaleString() });
   }
 
   const skipped = n("listingsSkipped") ?? n("skipped");
@@ -210,12 +220,22 @@ export function formatInventorySyncStatRows(
   const rows: InventorySyncStatRow[] = [];
   const n = (key: string) => statNumber(stats, key);
 
-  const synced = n("listingsImported") ?? n("seenCount") ?? n("upserted");
-  if (synced != null) rows.push({ label: "Listings imported", value: synced.toLocaleString() });
+  const skippedDueToCap = n("skippedDueToCap");
+  if (skippedDueToCap != null && skippedDueToCap > 0) {
+    rows.push({ label: "Skipped due to cap", value: skippedDueToCap.toLocaleString() });
+  }
+
+  const skippedOutOfScope = n("skippedOutOfScope");
+  if (skippedOutOfScope != null && skippedOutOfScope > 0) {
+    rows.push({ label: "Skipped (out of scope)", value: skippedOutOfScope.toLocaleString() });
+  }
+
+  const synced = n("listingsUpserted") ?? n("listingsImported") ?? n("seenCount") ?? n("upserted");
+  if (synced != null) rows.push({ label: "Last sync upserted", value: synced.toLocaleString() });
 
   const fetched = n("listingsFetched");
   if (fetched != null && fetched > 0) {
-    rows.push({ label: "Listings fetched", value: fetched.toLocaleString() });
+    rows.push({ label: "Last sync fetched", value: fetched.toLocaleString() });
   }
 
   const skipped = n("listingsSkipped") ?? n("skipped");

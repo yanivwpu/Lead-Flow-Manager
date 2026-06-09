@@ -19,6 +19,13 @@ export type InventoryConnectorStatus = {
   reason: "feature_disabled" | "rge_not_installed" | "ok";
 };
 
+export type PublicInventoryListingStats = {
+  activeForMatching: number;
+  configuredCap: number;
+  totalSynced: number;
+  inactiveOffMarket: number;
+};
+
 export type PublicInventorySource = {
   id: string;
   provider: string;
@@ -33,7 +40,9 @@ export type PublicInventorySource = {
   isActive: boolean;
   listingSyncSupported: boolean;
   hasCredentials: boolean;
+  /** @deprecated Prefer inventoryStats.totalSynced */
   listingCount: number;
+  inventoryStats: PublicInventoryListingStats;
   createdAt: string | null;
   updatedAt: string | null;
 };
