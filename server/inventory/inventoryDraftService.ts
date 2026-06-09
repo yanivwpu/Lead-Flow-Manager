@@ -1,5 +1,6 @@
 import type { Contact } from "@shared/schema";
 import type { InventoryMatchDraftResponse } from "@shared/inventory/inventoryDraftTypes";
+import { buildListingComposerMessage } from "@shared/inventory/inventoryComposerDraft";
 import {
   extractBuyerMatchCriteria,
   scoreListingAgainstCriteria,
@@ -243,9 +244,28 @@ export async function generateInventoryMatchDraft(
       priceReductionLabel: options?.priceReductionLabel,
     });
 
+  const bullets = aiResult?.matchBullets ?? matchBullets;
+  const composerDraft = buildListingComposerMessage({
+    listing: {
+      listingId,
+      priceCents: listing.priceCents,
+      beds: listing.beds,
+      baths: listing.baths,
+      city: listing.city,
+      state: listing.state,
+      propertyType: listing.propertyType,
+      listingUrl: listing.listingUrl,
+      description: listing.description,
+    },
+    contactFirstName: firstName,
+    introDraft: draft,
+    featureHints: bullets,
+  });
+
   return {
     draft,
-    matchBullets: aiResult?.matchBullets ?? matchBullets,
+    composerDraft,
+    matchBullets: bullets,
     listingId,
     contactId,
   };

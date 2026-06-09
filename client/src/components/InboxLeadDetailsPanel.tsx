@@ -94,7 +94,6 @@ import { AIUpgradePrompt } from "./AIUpgradePrompt";
 import type { AICapabilities } from "@/lib/useAICapabilities";
 import { BuyerPreferencesPanel } from "@/components/BuyerPreferencesPanel";
 import { MatchingListingsPanel } from "@/components/inventory/MatchingListingsPanel";
-import { NewOpportunitiesPanel } from "@/components/inventory/NewOpportunitiesPanel";
 import { buildBuyerPreferenceChips } from "@shared/buyerPreferenceDisplay";
 import { fetchInventoryStatus, fetchInventorySources, isInventorySourceConnected } from "@/lib/inventoryApi";
 import { CopilotInventoryEmptyState } from "@/components/inventory/CopilotInventoryEmptyState";
@@ -2535,22 +2534,14 @@ export function InboxLeadDetailsPanel({
                   )}
 
                   {showCopilotInventoryPanels && inventoryConnected && (
-                    <>
-                      <div className="rounded-lg border border-gray-200 bg-white/80 px-2.5 py-2">
-                        <NewOpportunitiesPanel
-                          contactId={contact.id}
-                          compact
-                          onInsertComposerDraft={onInsertComposerDraft}
-                        />
-                      </div>
-                      <div className="rounded-lg border border-gray-200 bg-white/80 px-2.5 py-2">
-                        <MatchingListingsPanel
-                          contactId={contact.id}
-                          compact
-                          onInsertComposerDraft={onInsertComposerDraft}
-                        />
-                      </div>
-                    </>
+                    <div className="rounded-lg border border-gray-200 bg-white/80 px-2.5 py-2">
+                      <MatchingListingsPanel
+                        contactId={contact.id}
+                        contactFirstName={contact.name?.trim().split(/\s+/)[0]}
+                        compact
+                        onInsertComposerDraft={onInsertComposerDraft}
+                      />
+                    </div>
                   )}
 
                   {/* D. Short narrative summary — action/context only; no duplicate criteria */}

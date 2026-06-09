@@ -13,6 +13,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { fetchInventoryMatchDraft } from "@/lib/inventoryDraftApi";
+import {
+  buildListingComposerMessage,
+  listingComposerDraftIncludesRequiredDetails,
+} from "@shared/inventory/inventoryComposerDraft";
 import type { InventoryMatchListingSummary } from "@shared/inventory/inventoryMatchTypes";
 
 function formatPrice(cents: number | null): string {
@@ -57,6 +61,7 @@ export type ListingDetailDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onInsertComposerDraft?: (text: string) => boolean;
+  contactFirstName?: string;
 };
 
 export function ListingDetailDialog({
@@ -69,6 +74,7 @@ export function ListingDetailDialog({
   open,
   onOpenChange,
   onInsertComposerDraft,
+  contactFirstName,
 }: ListingDetailDialogProps) {
   const { toast } = useToast();
   const [draftKey, setDraftKey] = useState("");
@@ -117,9 +123,51 @@ export function ListingDetailDialog({
   const beds = listing?.beds != null ? Number(listing.beds) : fallback?.beds;
   const baths = listing?.baths != null ? Number(listing.baths) : fallback?.baths;
   const listingUrl = listing?.listingUrl ?? fallback?.listingUrl ?? null;
+  const propertyType = listing?.propertyType ?? fallback?.propertyType ?? null;
+  const description = listing?.description ?? null;
+
+  const resolveComposerText = useCallback((): string | null => {
+    if (!listingId) return null;
+    const listingInput = {
+      listingId,
+      priceCents,
+      beds: beds ?? null,
+      baths: baths ?? null,
+      city: city ?? null,
+      state: state ?? null,
+      propertyType,
+      listingUrl,
+      description,
+    };
+    const fromApi = draftData?.composerDraft?.trim();
+    if (fromApi) return fromApi;
+    const intro = draftData?.draft?.trim();
+    if (!intro && priceCents == null && beds == null && baths == null && !city) return null;
+    return buildListingComposerMessage({
+      listing: listingInput,
+      contactFirstName,
+      introDraft: intro,
+      featureHints: draftData?.matchBullets ?? matchReasons,
+    });
+  }, [
+    listingId,
+    priceCents,
+    beds,
+    baths,
+    city,
+    state,
+    propertyType,
+    listingUrl,
+    description,
+    draftData?.composerDraft,
+    draftData?.draft,
+    draftData?.matchBullets,
+    contactFirstName,
+    matchReasons,
+  ]);
 
   const handleCopyDraft = useCallback(async () => {
-    const text = draftData?.draft?.trim();
+    const text = resolveComposerText();
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
@@ -127,11 +175,35 @@ export function ListingDetailDialog({
     } catch {
       toast({ title: "Copy failed", variant: "destructive", duration: 2500 });
     }
-  }, [draftData?.draft, toast]);
+  }, [resolveComposerText, toast]);
 
   const handleInsertDraft = useCallback(() => {
-    const text = draftData?.draft?.trim();
-    if (!text) return;
+    const text = resolveComposerText();
+    if (!text || !listingId) return;
+
+    const hasUrl = !!(listingUrl && /^https?:\/\//i.test(listingUrl));
+    const includesRequired = listingComposerDraftIncludesRequiredDetails(text, {
+      priceCents,
+      beds: beds ?? null,
+      baths: baths ?? null,
+      city: city ?? null,
+      listingUrl,
+    });
+    console.info(
+      "[ListingComposerDraft]",
+      JSON.stringify({
+        contactId,
+        listingId,
+        hasPrice: priceCents != null,
+        beds,
+        baths,
+        location: [city, state].filter(Boolean).join(", "),
+        hasUrl,
+        includesRequiredDetails: includesRequired,
+        messageLength: text.length,
+      }),
+    );
+
     const inserted = onInsertComposerDraft?.(text) ?? false;
     if (inserted) {
       toast({ title: "Draft inserted into composer", duration: 2000 });
@@ -144,7 +216,7 @@ export function ListingDetailDialog({
         duration: 3000,
       });
     }
-  }, [draftData?.draft, onInsertComposerDraft, onOpenChange, toast]);
+  }, [resolveComposerText, listingId, contactId, priceCents, beds, baths, city, state, listingUrl, onInsertComposerDraft, onOpenChange, toast]);
 
   const matchBullets = draftData?.matchBullets ?? [];
 
@@ -245,7 +317,7 @@ export function ListingDetailDialog({
                     <div>
                       <p className="text-[10px] font-medium text-gray-600 mb-1">Suggested outreach</p>
                       <p className="text-[11px] text-gray-800 leading-relaxed whitespace-pre-wrap rounded-md bg-white/80 border border-violet-100/80 p-2.5">
-                        {draftData.draft}
+                        {resolveComposerText() ?? draftData.draft}
                       </p>
                     </div>
 

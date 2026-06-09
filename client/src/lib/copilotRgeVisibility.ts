@@ -31,7 +31,7 @@ export function shouldShowCopilotBuyerPreferences(input: {
   return false;
 }
 
-/** Matching Listings + New Opportunities — full inventory connector (RGE + env flag). */
+/** Matching Listings — full inventory connector (RGE + env flag). */
 export function shouldShowCopilotInventoryPanels(
   inventoryStatus?: InventoryConnectorStatus | null,
 ): boolean {

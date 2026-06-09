@@ -10,6 +10,8 @@ export type InventoryMatchDraftRequest = z.infer<typeof inventoryMatchDraftReque
 
 export const inventoryMatchDraftResponseSchema = z.object({
   draft: z.string(),
+  /** Full composer message with listing price, beds/baths, location, and URL when available. */
+  composerDraft: z.string(),
   matchBullets: z.array(z.string()),
   listingId: z.string(),
   contactId: z.string(),

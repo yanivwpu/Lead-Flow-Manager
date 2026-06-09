@@ -56,12 +56,14 @@ const SIDEBAR_PREVIEW_LIMIT = 3;
 
 function MatchListingCard({
   contactId,
+  contactFirstName,
   match,
   saved,
   onSavedChange,
   onInsertComposerDraft,
 }: {
   contactId: string;
+  contactFirstName?: string;
   match: InventoryMatchResult;
   saved: boolean;
   onSavedChange: () => void;
@@ -195,6 +197,7 @@ function MatchListingCard({
         open={detailOpen}
         onOpenChange={setDetailOpen}
         onInsertComposerDraft={onInsertComposerDraft}
+        contactFirstName={contactFirstName}
       />
     </>
   );
@@ -202,6 +205,7 @@ function MatchListingCard({
 
 function AllMatchesDialog({
   contactId,
+  contactFirstName,
   matches,
   savedListingIds,
   open,
@@ -210,6 +214,7 @@ function AllMatchesDialog({
   onInsertComposerDraft,
 }: {
   contactId: string;
+  contactFirstName?: string;
   matches: InventoryMatchResult[];
   savedListingIds: string[];
   open: boolean;
@@ -237,6 +242,7 @@ function AllMatchesDialog({
               <MatchListingCard
                 key={match.listingId}
                 contactId={contactId}
+                contactFirstName={contactFirstName}
                 match={match}
                 saved={savedSet.has(match.listingId)}
                 onSavedChange={onSavedChange}
@@ -252,12 +258,14 @@ function AllMatchesDialog({
 
 interface MatchingListingsPanelProps {
   contactId: string;
+  contactFirstName?: string;
   compact?: boolean;
   onInsertComposerDraft?: (text: string) => boolean;
 }
 
 export function MatchingListingsPanel({
   contactId,
+  contactFirstName,
   compact = true,
   onInsertComposerDraft,
 }: MatchingListingsPanelProps) {
@@ -345,6 +353,7 @@ export function MatchingListingsPanel({
             <MatchListingCard
               key={match.listingId}
               contactId={contactId}
+              contactFirstName={contactFirstName}
               match={match}
               saved={savedSet.has(match.listingId)}
               onSavedChange={() => void refetch()}
@@ -366,6 +375,7 @@ export function MatchingListingsPanel({
 
       <AllMatchesDialog
         contactId={contactId}
+        contactFirstName={contactFirstName}
         matches={matches}
         savedListingIds={savedListingIds}
         open={allMatchesOpen}

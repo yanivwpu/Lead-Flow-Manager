@@ -40,7 +40,6 @@ export function CopilotInventoryEmptyState({ compact = true }: Props) {
         }
       >
         <li>Matching Listings</li>
-        <li>New Opportunities</li>
         <li>Price Reduction Alerts</li>
       </ul>
       <Button
