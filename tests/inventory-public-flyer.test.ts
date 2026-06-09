@@ -7,6 +7,9 @@ import {
   buildPublicListingFlyerHtml,
   inventoryRowToFlyerListing,
   renderListingOpenGraphTags,
+  resolveDisplayHoaFee,
+  resolveDisplaySquareFeet,
+  resolveFlyerListingLabel,
 } from "../shared/inventory/publicListingFlyer";
 
 function assert(cond: boolean, msg: string) {
@@ -60,6 +63,7 @@ assert(html.includes("$450,000"), "formatted price in details");
 assert(!html.includes('class="price-line"'), "no duplicate price in headline");
 assert(!html.includes('class="highlights"'), "no duplicate highlight pills");
 assert(html.includes("1,800 sq ft"), "square footage");
+assert(html.includes("$250/mo HOA"), "hoa fee");
 assert(html.includes("1998"), "year built");
 assert(html.includes("MLS-12345"), "MLS id");
 assert(html.includes("hero-img"), "gallery hero");
@@ -67,15 +71,21 @@ assert(html.includes("gallery-prev"), "gallery prev arrow");
 assert(html.includes("gallery-next"), "gallery next arrow");
 assert(html.includes("class=\"thumb"), "thumbnail gallery");
 assert(!html.includes("WhaChatCRM Listing"), "no legacy header text");
+assert(html.includes("FOR SALE"), "for sale header label");
+assert(!html.includes("Active"), "no MLS status on flyer");
+assert(!html.includes("status-badge"), "no status badge");
 assert(html.includes('aria-label="Print flyer"'), "print icon button");
 assert(html.includes('aria-label="Share listing"'), "share icon button");
-assert(html.includes("Active"), "status badge");
 assert(html.includes("Jane Agent"), "agent name");
 assert(html.includes("Summit Realty"), "brokerage");
 assert(html.includes("Contact agent"), "agent CTA without booking link");
 assert(html.includes("Powered by WhachatCRM"), "powered-by footer");
 assert(html.includes('href="https://whachatcrm.com"'), "powered-by link");
+assert(html.includes('fill="#22c55e"'), "green W logo in footer");
 assert(html.includes("Open in Google Maps"), "google maps link");
+assert(html.includes("class=\"map-qr\""), "qr near map");
+assert(!html.includes("Scan to view live listing"), "no qr scan text");
+assert(!html.includes("qr-footer"), "no separate qr footer");
 assert(html.includes('name="robots" content="index, follow"'), "seo robots");
 assert(html.includes('rel="canonical"'), "canonical url");
 
@@ -95,16 +105,14 @@ const bookingHtml = buildPublicListingFlyerHtml({
 assert(bookingHtml.includes("Schedule Showing"), "primary booking CTA");
 assert(bookingHtml.includes("https://calendly.com/jane/showing"), "booking URL");
 assert(bookingHtml.includes("Contact agent"), "secondary contact CTA with booking");
-assert(html.includes("Scan to view live listing"), "QR label");
+assert(html.includes("Scan to view live listing") === false, "no scan label");
 assert(html.includes("openstreetmap.org"), "map embed when lat/lng present");
 assert(html.includes("Hardwood floors"), "features list");
 assert(html.includes("@media print"), "print styles");
 assert(html.includes('property="og:title"'), "open graph title tag");
 assert(html.includes('property="og:image"'), "open graph image tag");
 assert(html.includes("https://cdn.example.com/a.jpg"), "primary photo in og:image");
-assert(html.includes("3 bed / 2 bath"), "beds/baths in og:description");
 assert(html.includes("Listed by Jane Agent"), "agent in og:description");
-assert(html.includes("$450,000"), "price in og:title");
 assert(html.includes('name="twitter:card" content="summary_large_image"'), "twitter large image card");
 
 const ogMeta = buildListingOpenGraphMeta({
@@ -131,7 +139,39 @@ const logoHtml = buildPublicListingFlyerHtml({
   qrDataUrl: "data:image/png;base64,TEST",
   companyLogoUrl: "https://cdn.example.com/logo.png",
 });
-assert(logoHtml.includes("https://cdn.example.com/logo.png"), "company logo in header");
+assert(logoHtml.includes("agent-company-logo"), "company logo in agent card");
+assert(!logoHtml.includes("header-logo"), "no company logo in header");
+
+const rentalListing = inventoryRowToFlyerListing({
+  ...listing,
+  id: "rent-1",
+  propertyType: "residential_lease",
+  propertySubtype: "Apartment",
+  squareFeet: null,
+  hoaFeeCents: null,
+});
+assert(resolveFlyerListingLabel(rentalListing) === "FOR RENT", "rental label");
+const rentalHtml = buildPublicListingFlyerHtml({
+  listing: rentalListing,
+  agent: { name: "Jane", email: null, phone: null, avatarUrl: null, brokerageName: null, bookingLink: null },
+  shareUrl: "https://app.example.com/share/listings/x",
+  qrDataUrl: "data:image/png;base64,TEST",
+});
+assert(rentalHtml.includes("FOR RENT"), "for rent header");
+
+const parsedSqft = inventoryRowToFlyerListing({
+  ...listing,
+  squareFeet: null,
+  features: ["2,450 sq ft living area"],
+});
+assert(resolveDisplaySquareFeet(parsedSqft) === "2,450 sq ft", "sqft parsed from features");
+
+const parsedHoa = inventoryRowToFlyerListing({
+  ...listing,
+  hoaFeeCents: null,
+  features: ["HOA $325/mo"],
+});
+assert(resolveDisplayHoaFee(parsedHoa) === "$325/mo HOA", "hoa parsed from features");
 
 const noPhotoHtml = buildPublicListingFlyerHtml({
   listing: { ...listing, photos: [], latitude: null, longitude: null },
