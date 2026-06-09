@@ -15,6 +15,7 @@ import type { InventoryMatchResult, InventoryMatchesResponse } from "@shared/inv
 import { fetchInventoryStatus } from "@/lib/inventoryApi";
 import { apiRequest } from "@/lib/queryClient";
 import { ListingDetailDialog } from "@/components/inventory/ListingDetailDialog";
+import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
 
 function formatPrice(cents: number | null): string {
   if (cents == null) return "Price on request";
@@ -67,7 +68,7 @@ function MatchListingCard({
   match: InventoryMatchResult;
   saved: boolean;
   onSavedChange: () => void;
-  onInsertComposerDraft?: (text: string) => boolean;
+  onInsertComposerDraft?: (draft: CopilotComposerInsert) => boolean;
 }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -220,7 +221,7 @@ function AllMatchesDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSavedChange: () => void;
-  onInsertComposerDraft?: (text: string) => boolean;
+  onInsertComposerDraft?: (draft: CopilotComposerInsert) => boolean;
 }) {
   const savedSet = new Set(savedListingIds);
 
@@ -260,7 +261,7 @@ interface MatchingListingsPanelProps {
   contactId: string;
   contactFirstName?: string;
   compact?: boolean;
-  onInsertComposerDraft?: (text: string) => boolean;
+  onInsertComposerDraft?: (draft: CopilotComposerInsert) => boolean;
 }
 
 export function MatchingListingsPanel({

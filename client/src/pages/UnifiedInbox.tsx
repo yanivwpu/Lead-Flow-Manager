@@ -93,6 +93,10 @@ import {
 import { normalizeBuyerPreferenceProfile } from "@shared/buyerPreferenceSchema";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
 import {
+  type CopilotComposerInsert,
+  normalizeCopilotComposerInsert,
+} from "@/lib/copilotComposerInsert";
+import {
   isGenericOutboundSendFallbackMessage,
   isMetaReplyWindowExpiredError,
   errorLooksLikeReplyWindowOrTemplateBlock,
@@ -562,18 +566,40 @@ export function UnifiedInbox() {
   }, [selectedContactId]);
 
   const insertComposerDraftFromCopilot = useCallback(
-    (text: string): boolean => {
+    (draft: CopilotComposerInsert): boolean => {
       if (!selectedContactId) {
         console.warn("[Copilot] Cannot insert draft: no conversation selected");
         return false;
       }
-      const inserted = composerRef.current?.insertExternalDraft(text) ?? false;
+      const normalized = normalizeCopilotComposerInsert(draft);
+      const inserted =
+        composerRef.current?.insertExternalDraft(normalized.text, {
+          preserveAiMode: normalized.preserveAiMode,
+          primaryPhotoUrl: normalized.primaryPhotoUrl,
+        }) ?? false;
       if (!inserted) {
         console.warn("[Copilot] Failed to insert composer draft");
       }
       return inserted;
     },
     [selectedContactId],
+  );
+
+  const attachComposerPendingMedia = useCallback(
+    (media: { url: string; mediaType: "image" | "video"; filename?: string } | null) => {
+      if (!media) {
+        setPendingFile(null);
+        return;
+      }
+      setPendingFile({
+        localPreview: media.url,
+        mediaUrl: media.url,
+        mediaType: media.mediaType,
+        mediaFilename: media.filename || "listing-photo.jpg",
+        mimeType: media.mediaType === "image" ? "image/jpeg" : "",
+      });
+    },
+    [],
   );
 
   const {
@@ -2886,6 +2912,7 @@ export function UnifiedInbox() {
               handleFileSelect={handleFileSelect}
               metaReplyWindowNotice={metaComposerWindowNotice}
               hasPendingAttachment={!!pendingFile}
+              onAttachPendingMedia={attachComposerPendingMedia}
             />
           </>
         ) : (

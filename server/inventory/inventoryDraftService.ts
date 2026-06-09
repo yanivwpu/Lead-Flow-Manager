@@ -9,6 +9,7 @@ import { formatBuyerPreferenceSummaryForAi } from "@shared/buyerPreferenceDispla
 import { readBuyerPreferenceProfile } from "../buyerPreferenceService";
 import { aiProvider } from "../aiProvider";
 import { storage } from "../storage";
+import { getAppOrigin } from "../urlOrigins";
 import { canUseInventoryConnector } from "./inventoryGate";
 import { getInventoryListing } from "./inventoryDb";
 import { inventoryListingToMatchInput } from "./inventoryMatchingService";
@@ -245,7 +246,7 @@ export async function generateInventoryMatchDraft(
     });
 
   const bullets = aiResult?.matchBullets ?? matchBullets;
-  const composerDraft = buildListingComposerMessage({
+  const composer = buildListingComposerMessage({
     listing: {
       listingId,
       priceCents: listing.priceCents,
@@ -256,6 +257,8 @@ export async function generateInventoryMatchDraft(
       propertyType: listing.propertyType,
       listingUrl: listing.listingUrl,
       description: listing.description,
+      photos: listing.photos,
+      appOrigin: getAppOrigin(),
     },
     contactFirstName: firstName,
     introDraft: draft,
@@ -264,7 +267,9 @@ export async function generateInventoryMatchDraft(
 
   return {
     draft,
-    composerDraft,
+    composerDraft: composer.text,
+    viewUrl: composer.viewUrl,
+    primaryPhotoUrl: composer.primaryPhotoUrl,
     matchBullets: bullets,
     listingId,
     contactId,

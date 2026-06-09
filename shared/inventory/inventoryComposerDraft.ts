@@ -1,3 +1,8 @@
+import {
+  pickPrimaryPhotoUrl,
+  resolveListingViewUrl,
+} from "./listingViewUrl";
+
 export type ListingComposerListing = {
   listingId: string;
   priceCents: number | null;
@@ -8,6 +13,10 @@ export type ListingComposerListing = {
   propertyType: string | null;
   listingUrl: string | null;
   description?: string | null;
+  photos?: { url: string; order?: number }[];
+  thumbnailUrl?: string | null;
+  /** App origin for internal share URL fallback, e.g. https://app.example.com */
+  appOrigin?: string | null;
 };
 
 export function formatListingPriceForComposer(cents: number | null): string | null {
@@ -71,7 +80,13 @@ export type BuildListingComposerMessageInput = {
   featureHints?: string[];
 };
 
-export function buildListingComposerMessage(input: BuildListingComposerMessageInput): string {
+export type ListingComposerMessageResult = {
+  text: string;
+  viewUrl: string | null;
+  primaryPhotoUrl: string | null;
+};
+
+export function buildListingComposerMessage(input: BuildListingComposerMessageInput): ListingComposerMessageResult {
   const { listing, introDraft, featureHints = [] } = input;
   const firstName = (input.contactFirstName || "there").trim() || "there";
 
@@ -101,25 +116,34 @@ export function buildListingComposerMessage(input: BuildListingComposerMessageIn
   const feature = pickFeatureLine(featureHints, listing.description);
   if (feature) detailLines.push(feature);
 
+  const viewUrl = resolveListingViewUrl({
+    listingId: listing.listingId,
+    listingUrl: listing.listingUrl,
+    appOrigin: listing.appOrigin,
+  });
+  const primaryPhotoUrl = pickPrimaryPhotoUrl(listing.photos, listing.thumbnailUrl);
+
   const parts: string[] = [intro, "", ...detailLines];
 
-  const url = listing.listingUrl?.trim();
-  const hasValidUrl = !!url && /^https?:\/\//i.test(url);
-  if (hasValidUrl) {
-    parts.push("", `View listing: ${url}`);
+  if (viewUrl) {
+    parts.push("", `View listing: ${viewUrl}`);
   }
 
   parts.push("", closing ?? "Would you like me to send more details or schedule a showing?");
 
-  return parts.join("\n");
+  return {
+    text: parts.join("\n"),
+    viewUrl,
+    primaryPhotoUrl,
+  };
 }
 
-/** Test/trace helper — verifies composer text includes core listing facts. */
+/** Test/trace helper — verifies composer text includes core listing facts and a view link when expected. */
 export function listingComposerDraftIncludesRequiredDetails(
   message: string,
   listing: Pick<
     ListingComposerListing,
-    "priceCents" | "beds" | "baths" | "city" | "listingUrl"
+    "priceCents" | "beds" | "baths" | "city" | "listingUrl" | "listingId" | "appOrigin"
   >,
 ): boolean {
   const price = formatListingPriceForComposer(listing.priceCents);
@@ -133,7 +157,11 @@ export function listingComposerDraftIncludesRequiredDetails(
   const hasBedsBaths = !bedsBaths || (hasBeds && hasBaths);
   const hasLocation =
     !listing.city || message.toLowerCase().includes(listing.city.toLowerCase());
-  const url = listing.listingUrl?.trim();
-  const hasUrl = !url || !/^https?:\/\//i.test(url) || message.includes(url);
-  return hasPrice && hasBedsBaths && hasLocation && hasUrl;
+  const expectedUrl = resolveListingViewUrl({
+    listingId: listing.listingId,
+    listingUrl: listing.listingUrl,
+    appOrigin: listing.appOrigin,
+  });
+  const hasViewLink = !expectedUrl || message.includes(expectedUrl);
+  return hasPrice && hasBedsBaths && hasLocation && hasViewLink;
 }

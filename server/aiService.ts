@@ -53,6 +53,7 @@ export class AIService {
       leadScore?: string;
       buyerPreferences?: string;
       inventoryMatchSummary?: string;
+      listingFollowUp?: string;
     },
     routing?: AiRoutingResult,
   ): Promise<{ suggestion: string; confidence: number }> {
@@ -423,6 +424,7 @@ Return JSON only: { "summary": "..." }`;
       leadScore?: string;
       buyerPreferences?: string;
       inventoryMatchSummary?: string;
+      listingFollowUp?: string;
     },
     isFirstMessage?: boolean,
     routing?: AiRoutingResult,
@@ -486,6 +488,7 @@ ${contactContext.financing ? `- Financing (already mentioned): ${contactContext.
 ${contactContext.notes ? `- Agent notes: ${contactContext.notes}` : ''}
 ${contactContext.buyerPreferences ? `\n${contactContext.buyerPreferences}\nUse these preferences when relevant. Do not re-ask for details already captured unless the customer contradicts them.` : ''}
 ${contactContext.inventoryMatchSummary ? `\n${contactContext.inventoryMatchSummary}` : ''}
+${contactContext.listingFollowUp ? `\n${contactContext.listingFollowUp}\nThe customer is asking for more details about a listing already shared — continue that listing thread.` : ''}
 ` : ''}CORE RULES — READ CAREFULLY:
 
 1. READ THE FULL CONVERSATION before replying. Extract what is already known from the customer's messages (goals, constraints, preferences, and what they've already shared).

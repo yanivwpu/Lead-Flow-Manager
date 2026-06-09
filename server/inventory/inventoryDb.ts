@@ -414,6 +414,18 @@ export async function getInventoryListing(
   return row;
 }
 
+/** Public share page — active/coming_soon listings only. */
+export async function getPublicShareListing(listingId: string): Promise<InventoryListing | undefined> {
+  const [row] = await db
+    .select()
+    .from(inventoryListings)
+    .where(eq(inventoryListings.id, listingId))
+    .limit(1);
+  if (!row || isBlockedDevSeedListingRow(row)) return undefined;
+  if (row.status !== "active" && row.status !== "coming_soon") return undefined;
+  return row;
+}
+
 export async function getInventoryListingsByIds(
   userId: string,
   listingIds: string[],

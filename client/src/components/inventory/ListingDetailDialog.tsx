@@ -13,10 +13,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { fetchInventoryMatchDraft } from "@/lib/inventoryDraftApi";
+import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
 import {
   buildListingComposerMessage,
   listingComposerDraftIncludesRequiredDetails,
 } from "@shared/inventory/inventoryComposerDraft";
+import { pickPrimaryPhotoUrl } from "@shared/inventory/listingViewUrl";
 import type { InventoryMatchListingSummary } from "@shared/inventory/inventoryMatchTypes";
 
 function formatPrice(cents: number | null): string {
@@ -60,7 +62,7 @@ export type ListingDetailDialogProps = {
   priceReductionLabel?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onInsertComposerDraft?: (text: string) => boolean;
+  onInsertComposerDraft?: (draft: CopilotComposerInsert) => boolean;
   contactFirstName?: string;
 };
 
@@ -126,8 +128,18 @@ export function ListingDetailDialog({
   const propertyType = listing?.propertyType ?? fallback?.propertyType ?? null;
   const description = listing?.description ?? null;
 
-  const resolveComposerText = useCallback((): string | null => {
+  const listingPhotos = listing?.photos ?? null;
+  const primaryPhotoUrl =
+    draftData?.primaryPhotoUrl ??
+    pickPrimaryPhotoUrl(listingPhotos ?? undefined, fallback?.thumbnailUrl ?? null);
+
+  const resolveComposerDraft = useCallback((): {
+    text: string;
+    viewUrl: string | null;
+    primaryPhotoUrl: string | null;
+  } | null => {
     if (!listingId) return null;
+    const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
     const listingInput = {
       listingId,
       priceCents,
@@ -138,17 +150,31 @@ export function ListingDetailDialog({
       propertyType,
       listingUrl,
       description,
+      photos: listingPhotos ?? undefined,
+      thumbnailUrl: fallback?.thumbnailUrl ?? null,
+      appOrigin,
     };
     const fromApi = draftData?.composerDraft?.trim();
-    if (fromApi) return fromApi;
+    if (fromApi) {
+      return {
+        text: fromApi,
+        viewUrl: draftData?.viewUrl ?? null,
+        primaryPhotoUrl,
+      };
+    }
     const intro = draftData?.draft?.trim();
     if (!intro && priceCents == null && beds == null && baths == null && !city) return null;
-    return buildListingComposerMessage({
+    const built = buildListingComposerMessage({
       listing: listingInput,
       contactFirstName,
       introDraft: intro,
       featureHints: draftData?.matchBullets ?? matchReasons,
     });
+    return {
+      text: built.text,
+      viewUrl: built.viewUrl,
+      primaryPhotoUrl: built.primaryPhotoUrl ?? primaryPhotoUrl,
+    };
   }, [
     listingId,
     priceCents,
@@ -159,35 +185,41 @@ export function ListingDetailDialog({
     propertyType,
     listingUrl,
     description,
+    listingPhotos,
+    fallback?.thumbnailUrl,
     draftData?.composerDraft,
+    draftData?.viewUrl,
     draftData?.draft,
     draftData?.matchBullets,
+    primaryPhotoUrl,
     contactFirstName,
     matchReasons,
   ]);
 
   const handleCopyDraft = useCallback(async () => {
-    const text = resolveComposerText();
-    if (!text) return;
+    const draft = resolveComposerDraft();
+    if (!draft?.text) return;
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(draft.text);
       toast({ title: "Draft copied", duration: 2000 });
     } catch {
       toast({ title: "Copy failed", variant: "destructive", duration: 2500 });
     }
-  }, [resolveComposerText, toast]);
+  }, [resolveComposerDraft, toast]);
 
   const handleInsertDraft = useCallback(() => {
-    const text = resolveComposerText();
-    if (!text || !listingId) return;
+    const draft = resolveComposerDraft();
+    if (!draft?.text || !listingId) return;
 
-    const hasUrl = !!(listingUrl && /^https?:\/\//i.test(listingUrl));
-    const includesRequired = listingComposerDraftIncludesRequiredDetails(text, {
+    const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
+    const includesRequired = listingComposerDraftIncludesRequiredDetails(draft.text, {
+      listingId,
       priceCents,
       beds: beds ?? null,
       baths: baths ?? null,
       city: city ?? null,
       listingUrl,
+      appOrigin,
     });
     console.info(
       "[ListingComposerDraft]",
@@ -198,13 +230,20 @@ export function ListingDetailDialog({
         beds,
         baths,
         location: [city, state].filter(Boolean).join(", "),
-        hasUrl,
+        viewUrl: draft.viewUrl,
+        hasPhoto: !!draft.primaryPhotoUrl,
         includesRequiredDetails: includesRequired,
-        messageLength: text.length,
+        messageLength: draft.text.length,
       }),
     );
 
-    const inserted = onInsertComposerDraft?.(text) ?? false;
+    const inserted =
+      onInsertComposerDraft?.({
+        text: draft.text,
+        primaryPhotoUrl: draft.primaryPhotoUrl,
+        listingId,
+        preserveAiMode: true,
+      }) ?? false;
     if (inserted) {
       toast({ title: "Draft inserted into composer", duration: 2000 });
       onOpenChange(false);
@@ -216,7 +255,7 @@ export function ListingDetailDialog({
         duration: 3000,
       });
     }
-  }, [resolveComposerText, listingId, contactId, priceCents, beds, baths, city, state, listingUrl, onInsertComposerDraft, onOpenChange, toast]);
+  }, [resolveComposerDraft, listingId, contactId, priceCents, beds, baths, city, state, listingUrl, onInsertComposerDraft, onOpenChange, toast]);
 
   const matchBullets = draftData?.matchBullets ?? [];
 
@@ -317,7 +356,7 @@ export function ListingDetailDialog({
                     <div>
                       <p className="text-[10px] font-medium text-gray-600 mb-1">Suggested outreach</p>
                       <p className="text-[11px] text-gray-800 leading-relaxed whitespace-pre-wrap rounded-md bg-white/80 border border-violet-100/80 p-2.5">
-                        {resolveComposerText() ?? draftData.draft}
+                        {resolveComposerDraft()?.text ?? draftData.draft}
                       </p>
                     </div>
 

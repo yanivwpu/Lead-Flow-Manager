@@ -4,6 +4,8 @@
  * Growth Engines may pass `industrySignals` to boost industry-specific routes.
  */
 
+import { detectListingFollowUp } from "./inventory/inventoryListingFollowUp";
+
 export type AiRoutingDecision =
   | "CONTINUE_AI"
   | "ASSIGN_AGENT"
@@ -213,6 +215,14 @@ function buildPromptGuidance(
 - Do NOT send a scheduling link or push for a meeting.
 - Be helpful and low-pressure. Offer to follow up when timing is better.`;
     default:
+      if (result.signals.includes("listing_follow_up")) {
+        return `LISTING FOLLOW-UP — the customer is responding to a listing recommendation recently sent in this thread.
+- Continue the same listing conversation — share more property details (features, neighborhood, price, beds/baths, description).
+- Re-include the View listing link if one was shared earlier and it is still relevant.
+- Do NOT treat this as a human handoff or switch to unrelated qualification.
+- Do NOT say you will "check for available options" — they are asking about a listing already discussed.
+- Offer a showing or next step in one short question at the end.`;
+      }
       if (result.signals.includes("info_seeking")) {
         return buildInfoSeekingPromptGuidance(industry);
       }
@@ -306,6 +316,12 @@ export function resolveAiRouting(input: AiRoutingInput): AiRoutingResult {
       needsRoutingClarification: false,
     };
     return { ...base, promptGuidance: buildPromptGuidance(base) };
+  }
+
+  const listingFollowUp =
+    isRealEstate && detectListingFollowUp(input.history, inbound).active;
+  if (listingFollowUp) {
+    return continueAiResult("listing_follow_up", [...signals, "listing_follow_up"], 0.92, false, industry);
   }
 
   if (infoSeeking && !hasAppointment && !clarify.choseLiveChat) {

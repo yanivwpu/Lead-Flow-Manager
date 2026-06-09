@@ -95,6 +95,23 @@ function normalizeResoTimestamp(value: unknown): string | undefined {
   return d.toISOString();
 }
 
+/** RESO / MLS public URL fields used when provider omits extractListingUrl. */
+export function defaultResoListingUrl(row: Record<string, unknown>): string | null {
+  const candidates = [
+    row.ListingURL,
+    row.ListingUrl,
+    row.VirtualTourURLUnbranded,
+    row.VirtualTourURLBranded,
+    row.UnparsedAddressURL,
+  ];
+  for (const raw of candidates) {
+    if (typeof raw === "string" && /^https?:\/\//i.test(raw.trim())) {
+      return raw.trim();
+    }
+  }
+  return null;
+}
+
 export function defaultResoListingId(row: Record<string, unknown>): string | null {
   const id = row.ListingId ?? row.ListingKey;
   if (id == null || String(id).trim() === "") return null;

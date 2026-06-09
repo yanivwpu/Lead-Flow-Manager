@@ -18,6 +18,7 @@ import { registerTemplateRoutes as registerAutomationTemplateRoutes } from "./ro
 import { registerCampaignEnrollmentRoutes } from "./routes/campaignEnrollments";
 import { registerWebhookRoutes } from "./routes/webhooks";
 import { registerInventoryRoutes } from "./routes/inventory";
+import { registerPublicListingRoutes } from "./routes/publicListings";
 import {
   getWhatsAppAvailability,
   sendWhatsAppMessage,
@@ -10579,6 +10580,47 @@ export async function registerRoutes(
               if (inventorySummary) {
                 contextPatch.inventoryMatchSummary = inventorySummary;
               }
+              const historyTurns = conversationHistory as Array<{ role: string; content?: string }>;
+              const lastUserInbound =
+                historyTurns.filter((m) => m.role === "user").pop()?.content?.trim() || "";
+              if (lastUserInbound) {
+                const { detectListingFollowUp } = await import(
+                  "@shared/inventory/inventoryListingFollowUp"
+                );
+                const { buildListingComposerMessage } = await import(
+                  "@shared/inventory/inventoryComposerDraft"
+                );
+                const { getInventoryListing } = await import("./inventory/inventoryDb");
+                const { inventoryListingToMatchInput } = await import(
+                  "./inventory/inventoryMatchingService"
+                );
+                const { getAppOrigin } = await import("./urlOrigins");
+                const followUp = detectListingFollowUp(historyTurns, lastUserInbound);
+                if (followUp.active && followUp.listingId) {
+                  const listingRow = await getInventoryListing(userId, followUp.listingId);
+                  if (listingRow) {
+                    const listing = inventoryListingToMatchInput(listingRow);
+                    const composer = buildListingComposerMessage({
+                      listing: {
+                        listingId: listingRow.id,
+                        priceCents: listing.priceCents,
+                        beds: listing.beds,
+                        baths: listing.baths,
+                        city: listing.city,
+                        state: listing.state,
+                        propertyType: listing.propertyType,
+                        listingUrl: listing.listingUrl,
+                        description: listing.description,
+                        photos: listing.photos,
+                        appOrigin: getAppOrigin(),
+                      },
+                      contactFirstName: (contactForPrefs.name || "").trim().split(/\s+/)[0],
+                      featureHints: [],
+                    });
+                    contextPatch.listingFollowUp = `Listing already recommended in thread:\n${composer.text}`;
+                  }
+                }
+              }
               if (Object.keys(contextPatch).length > 0) {
                 enrichedContactContext = contextPatch;
               }
@@ -10824,6 +10866,7 @@ export async function registerRoutes(
   registerTemplateRoutes(app);
   registerWebhookRoutes(app);
   registerInventoryRoutes(app);
+  registerPublicListingRoutes(app);
 
   return httpServer;
 }

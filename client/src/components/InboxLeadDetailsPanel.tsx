@@ -94,6 +94,7 @@ import { AIUpgradePrompt } from "./AIUpgradePrompt";
 import type { AICapabilities } from "@/lib/useAICapabilities";
 import { BuyerPreferencesPanel } from "@/components/BuyerPreferencesPanel";
 import { MatchingListingsPanel } from "@/components/inventory/MatchingListingsPanel";
+import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
 import { buildBuyerPreferenceChips } from "@shared/buyerPreferenceDisplay";
 import { fetchInventoryStatus, fetchInventorySources, isInventorySourceConnected } from "@/lib/inventoryApi";
 import { CopilotInventoryEmptyState } from "@/components/inventory/CopilotInventoryEmptyState";
@@ -219,7 +220,7 @@ interface InboxLeadDetailsPanelProps {
   /** Optional 1-line preview of the main composer draft (read-only, from parent state) */
   composerDraftPreview?: string;
   /** Insert suggested reply text into the main message composer. Returns true on success. */
-  onInsertComposerDraft?: (text: string) => boolean;
+  onInsertComposerDraft?: (draft: CopilotComposerInsert) => boolean;
   /** Channel connection map from /api/channel-health — used for campaign compatibility */
   connectedChannels?: Record<string, boolean>;
   /** Override the root container class — use when embedding in a mobile sheet */

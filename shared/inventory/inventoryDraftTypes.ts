@@ -12,6 +12,8 @@ export const inventoryMatchDraftResponseSchema = z.object({
   draft: z.string(),
   /** Full composer message with listing price, beds/baths, location, and URL when available. */
   composerDraft: z.string(),
+  viewUrl: z.string().nullable(),
+  primaryPhotoUrl: z.string().nullable(),
   matchBullets: z.array(z.string()),
   listingId: z.string(),
   contactId: z.string(),

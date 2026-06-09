@@ -10,6 +10,7 @@ import {
 } from "@shared/inventory/reso/resoSyncScope";
 import {
   defaultResoListingId,
+  defaultResoListingUrl,
   mapResoStandardStatus,
   normalizeResoMediaItems,
   normalizeResoPropertyRow,
@@ -48,6 +49,7 @@ const bridgePropertyNormalizer: ResoPropertyNormalizerContract = {
   extractPhotos(row) {
     return normalizeResoMediaItems(row.Media);
   },
+  extractListingUrl: defaultResoListingUrl,
 };
 
 export function normalizeBridgeInteractiveProperty(raw: unknown) {

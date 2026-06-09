@@ -8,13 +8,17 @@ import {
   formatListingPriceForComposer,
   listingComposerDraftIncludesRequiredDetails,
 } from "../shared/inventory/inventoryComposerDraft";
+import { buildListingShareUrl } from "../shared/inventory/listingViewUrl";
 
 function assert(cond: boolean, msg: string) {
   if (!cond) throw new Error(msg);
 }
 
+const listingId = "22222222-2222-4222-8222-222222222222";
+const appOrigin = "https://app.example.com";
+
 const listing = {
-  listingId: "lst-1",
+  listingId,
   priceCents: 26_900_000,
   beds: 2,
   baths: 2,
@@ -23,6 +27,8 @@ const listing = {
   propertyType: "condo",
   listingUrl: "https://example.com/listing/123",
   description: "Modern condo with ocean and golf views",
+  photos: [{ url: "https://example.com/photo.jpg", order: 0 }],
+  appOrigin,
 };
 
 assert(formatListingPriceForComposer(26_900_000) === "$269,000", "price format");
@@ -36,13 +42,15 @@ const withUrl = buildListingComposerMessage({
   featureHints: ["Modern condo with ocean/golf view features"],
 });
 
-assert(withUrl.includes("Hi Susu"), "includes greeting");
-assert(withUrl.includes("$269,000"), "includes price");
-assert(withUrl.includes("2 bed / 2 bath"), "includes beds/baths");
-assert(withUrl.includes("Pompano Beach, FL"), "includes location");
-assert(withUrl.includes("View listing: https://example.com/listing/123"), "includes URL");
+assert(withUrl.text.includes("Hi Susu"), "includes greeting");
+assert(withUrl.text.includes("$269,000"), "includes price");
+assert(withUrl.text.includes("2 bed / 2 bath"), "includes beds/baths");
+assert(withUrl.text.includes("Pompano Beach, FL"), "includes location");
+assert(withUrl.text.includes("View listing: https://example.com/listing/123"), "includes external URL");
+assert(withUrl.viewUrl === "https://example.com/listing/123", "viewUrl external");
+assert(withUrl.primaryPhotoUrl === "https://example.com/photo.jpg", "primary photo");
 assert(
-  listingComposerDraftIncludesRequiredDetails(withUrl, listing),
+  listingComposerDraftIncludesRequiredDetails(withUrl.text, listing),
   "trace helper passes for full draft",
 );
 
@@ -52,11 +60,11 @@ const withoutUrl = buildListingComposerMessage({
   featureHints: ["Pool and updated kitchen"],
 });
 
-assert(!withoutUrl.includes("View listing:"), "no fake URL line");
-assert(withoutUrl.includes("$269,000"), "no-url draft still has price");
+const shareUrl = buildListingShareUrl(listingId, appOrigin);
+assert(withoutUrl.text.includes(`View listing: ${shareUrl}`), "share URL fallback");
 assert(
-  listingComposerDraftIncludesRequiredDetails(withoutUrl, { ...listing, listingUrl: null }),
-  "trace helper passes without URL",
+  listingComposerDraftIncludesRequiredDetails(withoutUrl.text, { ...listing, listingUrl: null }),
+  "trace helper passes with share URL",
 );
 
 console.log("inventory-composer-draft.test.ts: all passed");

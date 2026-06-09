@@ -72,8 +72,12 @@ export interface AIComposerProps {
   typingTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
   fileInputRef?: React.RefObject<HTMLInputElement>;
   handleFileSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  /** Opens the inline template picker for WhatsApp template sends */
-  onTemplate?: () => void;
+  /** When set, Copilot can attach listing photo without switching AI mode to Manual. */
+  onAttachPendingMedia?: (media: {
+    url: string;
+    mediaType: "image" | "video";
+    filename?: string;
+  } | null) => void;
   className?: string;
   /** Meta reply-window hint (Inbox only); merged into composer chip bar. */
   metaReplyWindowNotice?: { variant: "soon" | "expired"; text: string } | null;
@@ -118,7 +122,10 @@ let _demoCycleIdx = 0;
 
 export type AIComposerHandle = {
   /** Switch to Manual, insert draft text, and focus the composer (e.g. Copilot NBA). */
-  insertExternalDraft: (text: string) => boolean;
+  insertExternalDraft: (
+    text: string,
+    options?: { preserveAiMode?: boolean; primaryPhotoUrl?: string | null },
+  ) => boolean;
 };
 
 export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function AIComposer({
@@ -138,6 +145,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   fileInputRef,
   handleFileSelect,
   onTemplate,
+  onAttachPendingMedia,
   className,
   businessAiMode = "suggest",
   handoffKeywords,
@@ -169,17 +177,27 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   const autoReplyInFlightRef = useRef(false);
 
   useImperativeHandle(ref, () => ({
-    insertExternalDraft: (text: string) => {
+    insertExternalDraft: (text: string, options?: { preserveAiMode?: boolean; primaryPhotoUrl?: string | null }) => {
       const draft = text.trim();
       if (!draft) return false;
-      userLockedManualRef.current = true;
-      setAutoOverride(true);
-      setAiMode("manual");
+      if (!options?.preserveAiMode) {
+        userLockedManualRef.current = true;
+        setAutoOverride(true);
+        setAiMode("manual");
+      }
       setAiDraft(null);
       setIsDrafting(false);
       setAutoSkippedWithDraft(false);
       setAutoSendBlockedMessage(null);
       onChange(draft);
+      const photoUrl = options?.primaryPhotoUrl?.trim();
+      if (photoUrl && /^https?:\/\//i.test(photoUrl) && onAttachPendingMedia) {
+        onAttachPendingMedia({
+          url: photoUrl,
+          mediaType: "image",
+          filename: "listing-photo.jpg",
+        });
+      }
       const focusComposer = () => {
         const el = textareaRef.current;
         if (!el) return false;
@@ -194,7 +212,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       });
       return true;
     },
-  }), [onChange]);
+  }), [onChange, onAttachPendingMedia]);
 
   // Auto-resize textarea — avoid height-auto jump on mobile by reading scrollHeight before reset
   useEffect(() => {
