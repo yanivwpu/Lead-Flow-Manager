@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
 import {
   inventoryListings,
   inventorySources,
+  users,
   type InventoryListing,
   type InventorySource,
 } from "@shared/schema";
@@ -124,6 +125,11 @@ function listingRowFromNormalized(
     beds: normalized.beds != null ? String(normalized.beds) : null,
     baths: normalized.baths != null ? String(normalized.baths) : null,
     propertyType: normalized.propertyType,
+    propertySubtype: normalized.propertySubtype ?? null,
+    squareFeet: normalized.squareFeet ?? null,
+    yearBuilt: normalized.yearBuilt ?? null,
+    hoaFeeCents: normalized.hoaFeeCents ?? null,
+    listingDetails: normalized.listingDetails ?? {},
     description: normalized.description ?? null,
     features: normalized.features,
     photos: normalized.photos,
@@ -222,6 +228,11 @@ export async function upsertInventoryListing(
       beds: row.beds,
       baths: row.baths,
       propertyType: row.propertyType,
+      propertySubtype: row.propertySubtype,
+      squareFeet: row.squareFeet,
+      yearBuilt: row.yearBuilt,
+      hoaFeeCents: row.hoaFeeCents,
+      listingDetails: row.listingDetails,
       description: row.description,
       features: row.features,
       photos: row.photos,
@@ -424,6 +435,61 @@ export async function getPublicShareListing(listingId: string): Promise<Inventor
   if (!row || isBlockedDevSeedListingRow(row)) return undefined;
   if (row.status !== "active" && row.status !== "coming_soon") return undefined;
   return row;
+}
+
+export type PublicListingAgentProfile = {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  avatarUrl: string | null;
+  brokerageName: string | null;
+  bookingLink: string | null;
+};
+
+export type PublicListingFlyerData = {
+  listing: InventoryListing;
+  agent: PublicListingAgentProfile;
+  shareUrl: string;
+};
+
+/** Listing + sanitized agent branding for public flyer (no CRM contact data). */
+export async function getPublicListingFlyerData(
+  listingId: string,
+  shareUrl: string,
+): Promise<PublicListingFlyerData | undefined> {
+  const listing = await getPublicShareListing(listingId);
+  if (!listing) return undefined;
+
+  const [userRow] = await db
+    .select({
+      name: users.name,
+      email: users.email,
+      avatarUrl: users.avatarUrl,
+      twilioWhatsappNumber: users.twilioWhatsappNumber,
+      metaDisplayPhoneNumber: users.metaDisplayPhoneNumber,
+    })
+    .from(users)
+    .where(eq(users.id, listing.userId))
+    .limit(1);
+
+  const { storage } = await import("../storage");
+  const knowledge = await storage.getAiBusinessKnowledge(listing.userId);
+
+  const phone =
+    (userRow?.metaDisplayPhoneNumber || "").trim() ||
+    (userRow?.twilioWhatsappNumber || "").trim() ||
+    null;
+
+  const agent: PublicListingAgentProfile = {
+    name: userRow?.name?.trim() || null,
+    email: userRow?.email?.trim() || null,
+    phone,
+    avatarUrl: userRow?.avatarUrl?.trim() || null,
+    brokerageName: knowledge?.businessName?.trim() || null,
+    bookingLink: knowledge?.bookingLink?.trim() || null,
+  };
+
+  return { listing, agent, shareUrl };
 }
 
 export async function getInventoryListingsByIds(

@@ -28,6 +28,16 @@ export const inventoryPhotoSchema = z.object({
 
 export type InventoryPhoto = z.infer<typeof inventoryPhotoSchema>;
 
+/** Optional RESO-derived fields for public listing flyer (stored as listing_details jsonb). */
+export const inventoryListingDetailsSchema = z.object({
+  parkingGarage: z.string().optional(),
+  waterfront: z.boolean().optional(),
+  pool: z.boolean().optional(),
+  view: z.string().optional(),
+});
+
+export type InventoryListingDetails = z.infer<typeof inventoryListingDetailsSchema>;
+
 export const normalizedInventoryListingSchema = z.object({
   provider: inventoryProviderSchema,
   providerListingId: z.string().min(1),
@@ -47,6 +57,11 @@ export const normalizedInventoryListingSchema = z.object({
   beds: z.number().nullable(),
   baths: z.number().nullable(),
   propertyType: z.string().nullable(),
+  propertySubtype: z.string().nullable().optional(),
+  squareFeet: z.number().int().positive().nullable().optional(),
+  yearBuilt: z.number().int().nullable().optional(),
+  hoaFeeCents: z.number().int().nonnegative().nullable().optional(),
+  listingDetails: inventoryListingDetailsSchema.optional(),
   description: z.string().optional(),
   features: z.array(z.string()),
   photos: z.array(inventoryPhotoSchema),

@@ -1,6 +1,7 @@
 import type { InventoryProvider } from "../inventoryProviderSchema";
 import {
   normalizedInventoryListingSchema,
+  type InventoryListingDetails,
   type InventoryListingStatus,
   type NormalizedInventoryListing,
 } from "../inventoryListingSchema";
@@ -95,6 +96,139 @@ function normalizeResoTimestamp(value: unknown): string | undefined {
   return d.toISOString();
 }
 
+function resoOptionalInt(value: unknown): number | null {
+  const n = resoOptionalNumber(value);
+  if (n == null) return null;
+  return Math.round(n);
+}
+
+function resoYesNo(value: unknown): boolean | null {
+  if (value === true || value === 1) return true;
+  if (value === false || value === 0) return false;
+  const s = String(value ?? "").trim().toLowerCase();
+  if (s === "y" || s === "yes" || s === "true") return true;
+  if (s === "n" || s === "no" || s === "false") return false;
+  return null;
+}
+
+function extractResoStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/[,;|]/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+/** RESO amenity / feature fields merged into a deduplicated list. */
+export function extractResoFeatures(row: Record<string, unknown>): string[] {
+  const fields = [
+    "InteriorFeatures",
+    "ExteriorFeatures",
+    "CommunityFeatures",
+    "Appliances",
+    "Flooring",
+    "Heating",
+    "Cooling",
+    "LaundryFeatures",
+    "PatioAndPorchFeatures",
+    "FireplaceFeatures",
+    "PoolFeatures",
+    "SecurityFeatures",
+    "WindowFeatures",
+  ];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const field of fields) {
+    for (const item of extractResoStringList(row[field])) {
+      const key = item.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+      if (out.length >= 40) return out;
+    }
+  }
+  return out;
+}
+
+export function extractResoSquareFeet(row: Record<string, unknown>): number | null {
+  return (
+    resoOptionalInt(row.LivingArea) ??
+    resoOptionalInt(row.BuildingAreaTotal) ??
+    resoOptionalInt(row.AboveGradeFinishedArea)
+  );
+}
+
+export function extractResoYearBuilt(row: Record<string, unknown>): number | null {
+  return resoOptionalInt(row.YearBuilt);
+}
+
+export function extractResoHoaFeeCents(row: Record<string, unknown>): number | null {
+  const fee =
+    resoOptionalNumber(row.AssociationFee) ??
+    resoOptionalNumber(row.AssociationFee2) ??
+    resoOptionalNumber(row.AssociationFeeMonthly);
+  if (fee == null || fee < 0) return null;
+  return Math.round(fee * 100);
+}
+
+export function extractResoPropertySubtype(row: Record<string, unknown>): string | null {
+  const raw = row.PropertySubType;
+  if (raw == null || String(raw).trim() === "") return null;
+  return String(raw).trim();
+}
+
+export function extractResoListingDetails(row: Record<string, unknown>): InventoryListingDetails {
+  const parkingParts: string[] = [];
+  const garageSpaces = row.GarageSpaces ?? row.GarageYN;
+  if (garageSpaces != null && String(garageSpaces).trim() !== "") {
+    parkingParts.push(
+      typeof garageSpaces === "number" || /^\d+$/.test(String(garageSpaces))
+        ? `Garage (${garageSpaces})`
+        : `Garage: ${String(garageSpaces)}`,
+    );
+  }
+  const parkingFeatures = extractResoStringList(row.ParkingFeatures);
+  if (parkingFeatures.length > 0) {
+    parkingParts.push(parkingFeatures.join(", "));
+  }
+  const carport = row.CarportSpaces;
+  if (carport != null && String(carport).trim() !== "") {
+    parkingParts.push(`Carport (${carport})`);
+  }
+  const parkingTotal = row.ParkingTotal;
+  if (parkingTotal != null && String(parkingTotal).trim() !== "") {
+    parkingParts.push(`Parking spaces: ${parkingTotal}`);
+  }
+
+  const viewParts = extractResoStringList(row.View);
+  const view =
+    viewParts.length > 0
+      ? viewParts.join(", ")
+      : row.ViewYN != null
+        ? resoYesNo(row.ViewYN) === true
+          ? "Yes"
+          : null
+        : null;
+
+  const pool =
+    resoYesNo(row.PoolPrivateYN) ??
+    (extractResoStringList(row.PoolFeatures).length > 0 ? true : null);
+
+  const waterfront = resoYesNo(row.WaterfrontYN);
+
+  const details: InventoryListingDetails = {};
+  if (parkingParts.length > 0) details.parkingGarage = parkingParts.join(" · ");
+  if (waterfront != null) details.waterfront = waterfront;
+  if (pool != null) details.pool = pool;
+  if (view) details.view = view;
+  return details;
+}
+
 /** RESO / MLS public URL fields used when provider omits extractListingUrl. */
 export function defaultResoListingUrl(row: Record<string, unknown>): string | null {
   const candidates = [
@@ -147,11 +281,16 @@ export function normalizeResoPropertyRow(
       resoOptionalNumber(row.BathroomsTotalInteger) ??
       resoOptionalNumber(row.BathroomsFull),
     propertyType: mapResoPropertyType(row.PropertyType, row.PropertySubType),
+    propertySubtype: extractResoPropertySubtype(row),
+    squareFeet: extractResoSquareFeet(row),
+    yearBuilt: extractResoYearBuilt(row),
+    hoaFeeCents: extractResoHoaFeeCents(row),
+    listingDetails: extractResoListingDetails(row),
     description:
       row.PublicRemarks != null
         ? String(row.PublicRemarks).slice(0, options?.descriptionMaxLength ?? 8000)
         : undefined,
-    features: [],
+    features: extractResoFeatures(row),
     photos: contract.extractPhotos?.(row) ?? normalizeResoMediaItems(row.Media),
     listingUrl: contract.extractListingUrl?.(row) ?? null,
     sourceUpdatedAt: normalizeResoTimestamp(row[modField]),
@@ -193,11 +332,16 @@ export function describeResoNormalizationFailure(
     baths:
       resoOptionalNumber(row.BathroomsTotalInteger) ?? resoOptionalNumber(row.BathroomsFull),
     propertyType: mapResoPropertyType(row.PropertyType, row.PropertySubType),
+    propertySubtype: extractResoPropertySubtype(row),
+    squareFeet: extractResoSquareFeet(row),
+    yearBuilt: extractResoYearBuilt(row),
+    hoaFeeCents: extractResoHoaFeeCents(row),
+    listingDetails: extractResoListingDetails(row),
     description:
       row.PublicRemarks != null
         ? String(row.PublicRemarks).slice(0, 8000)
         : undefined,
-    features: [] as string[],
+    features: extractResoFeatures(row),
     photos: contract.extractPhotos?.(row) ?? normalizeResoMediaItems(row.Media),
     listingUrl: contract.extractListingUrl?.(row) ?? null,
     sourceUpdatedAt: normalizeResoTimestamp(row[modField]),
