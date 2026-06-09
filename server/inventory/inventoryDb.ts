@@ -346,6 +346,23 @@ const MATCHING_LISTING_SELECT = {
   updatedAt: inventoryListings.updatedAt,
 } as const;
 
+type CoreInventoryListingRow = Omit<
+  InventoryListing,
+  "propertySubtype" | "squareFeet" | "yearBuilt" | "hoaFeeCents" | "listingDetails"
+>;
+
+/** Map core DB row to InventoryListing (flyer-only columns null until migration 0038). */
+function inventoryListingFromCoreRow(row: CoreInventoryListingRow): InventoryListing {
+  return {
+    ...row,
+    propertySubtype: null,
+    squareFeet: null,
+    yearBuilt: null,
+    hoaFeeCents: null,
+    listingDetails: {},
+  };
+}
+
 export async function fetchActiveListingsForMatching(
   userId: string,
   limit = 2500,
@@ -364,14 +381,7 @@ export async function fetchActiveListingsForMatching(
     .orderBy(desc(inventoryListings.syncedAt))
     .limit(limit);
 
-  return rows.map((row) => ({
-    ...row,
-    propertySubtype: null,
-    squareFeet: null,
-    yearBuilt: null,
-    hoaFeeCents: null,
-    listingDetails: {},
-  }));
+  return rows.map(inventoryListingFromCoreRow);
 }
 
 export async function countActiveListingsForUser(userId: string): Promise<number> {
@@ -461,12 +471,12 @@ export async function getInventoryListing(
   listingId: string,
 ): Promise<InventoryListing | undefined> {
   const [row] = await db
-    .select()
+    .select(MATCHING_LISTING_SELECT)
     .from(inventoryListings)
     .where(and(eq(inventoryListings.id, listingId), eq(inventoryListings.userId, userId)))
     .limit(1);
   if (!row || isBlockedDevSeedListingRow(row)) return undefined;
-  return row;
+  return inventoryListingFromCoreRow(row);
 }
 
 /** Public share page — active/coming_soon listings only. */

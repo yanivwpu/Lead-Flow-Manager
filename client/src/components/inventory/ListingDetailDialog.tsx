@@ -163,7 +163,6 @@ export function ListingDetailDialog({
       };
     }
     const intro = draftData?.draft?.trim();
-    if (!intro && priceCents == null && beds == null && baths == null && !city) return null;
     const built = buildListingComposerMessage({
       listing: listingInput,
       contactFirstName,
@@ -257,7 +256,11 @@ export function ListingDetailDialog({
     }
   }, [resolveComposerDraft, listingId, contactId, priceCents, beds, baths, city, state, listingUrl, onInsertComposerDraft, onOpenChange, toast]);
 
-  const matchBullets = draftData?.matchBullets ?? [];
+  const composerPreview = resolveComposerDraft();
+  const matchBullets = draftData?.matchBullets ?? matchReasons;
+  const showDraftContent = !draftLoading && !!composerPreview?.text;
+  const showDraftRetry = !draftLoading && draftError && !composerPreview?.text;
+  const usingTemplateFallback = draftError && !!composerPreview?.text;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -323,7 +326,7 @@ export function ListingDetailDialog({
                   </div>
                 )}
 
-                {draftError && !draftLoading && (
+                {showDraftRetry && (
                   <div className="space-y-2">
                     <p className="text-[11px] text-gray-500">Could not generate a draft right now.</p>
                     <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => void refetchDraft()}>
@@ -332,8 +335,13 @@ export function ListingDetailDialog({
                   </div>
                 )}
 
-                {!draftLoading && !draftError && draftData && (
+                {showDraftContent && (
                   <>
+                    {usingTemplateFallback && (
+                      <p className="text-[10px] text-gray-500">
+                        Using a template draft — AI was unavailable.
+                      </p>
+                    )}
                     {matchBullets.length > 0 && (
                       <div>
                         <p className="text-[10px] font-medium text-gray-600 mb-1">
@@ -358,7 +366,7 @@ export function ListingDetailDialog({
                         Message that will be sent
                       </p>
                       <p className="text-[11px] text-gray-800 leading-relaxed whitespace-pre-wrap rounded-md bg-white/80 border border-violet-100/80 p-2.5">
-                        {resolveComposerDraft()?.text ?? draftData.draft}
+                        {composerPreview.text}
                       </p>
                       {primaryPhotoUrl && (
                         <p className="text-[10px] text-gray-500 mt-1.5 leading-snug">
@@ -366,9 +374,9 @@ export function ListingDetailDialog({
                           Facebook. WhatsApp sends the photo with this text as the caption.
                         </p>
                       )}
-                      {resolveComposerDraft()?.viewUrl && (
+                      {composerPreview.viewUrl && (
                         <p className="text-[10px] text-violet-700 mt-1 break-all leading-snug">
-                          View listing: {resolveComposerDraft()?.viewUrl}
+                          View listing: {composerPreview.viewUrl}
                         </p>
                       )}
                     </div>
