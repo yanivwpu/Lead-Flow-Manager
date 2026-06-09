@@ -293,11 +293,7 @@ function renderMapQr(qrDataUrl: string): string {
   </div>`;
 }
 
-function buildMapSection(
-  listing: PublicListingFlyerListing,
-  qrDataUrl: string,
-  printAdditionalDetailsHtml: string,
-): string {
+function buildMapSection(listing: PublicListingFlyerListing, qrDataUrl: string): string {
   const googleUrl = buildGoogleMapsUrl(listing);
   const mapsBtn = googleUrl
     ? `<a class="btn btn-outline map-btn no-print" href="${escapeHtml(googleUrl)}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>`
@@ -318,14 +314,13 @@ function buildMapSection(
           </div>
           ${mapsBtn}
         </div>
-        ${printAdditionalDetailsHtml}
         ${qr}
       </div>
       <p class="print-disclaimer">All information deemed reliable but not guaranteed. Buyer to verify all information.</p>
     </section>`;
   }
   const address = buildFullAddress(listing);
-  if (!address && !mapsBtn && !qr && !printAdditionalDetailsHtml) return "";
+  if (!address && !mapsBtn && !qr) return "";
   return `<section class="map-section">
     <h2>Location</h2>
     <div class="map-page2">
@@ -333,7 +328,6 @@ function buildMapSection(
         ${address ? `<p class="map-address">${escapeHtml(address)}</p>` : ""}
         ${mapsBtn}
       </div>
-      ${printAdditionalDetailsHtml}
       ${qr}
     </div>
     <p class="print-disclaimer">All information deemed reliable but not guaranteed. Buyer to verify all information.</p>
@@ -390,27 +384,6 @@ function resolveDisplayPropertyType(
   propertySubtype: string | null,
 ): string | null {
   return propertySubtype ? formatLabel(propertySubtype) : formatLabel(propertyType);
-}
-
-function renderPrintAdditionalDetails(
-  yearBuilt: string | null,
-  waterfront: string | null,
-  pool: string | null,
-  view: string | null,
-): string {
-  const items = [
-    renderDetailItem("Year built", yearBuilt),
-    renderDetailItem("Waterfront", waterfront),
-    renderDetailItem("Pool", pool),
-    renderDetailItem("View", view),
-  ]
-    .filter(Boolean)
-    .join("");
-  if (!items) return "";
-  return `<div class="print-additional-details">
-    <h2>Additional details</h2>
-    <dl class="details-grid details-grid-compact">${items}</dl>
-  </div>`;
 }
 
 function renderCompanyLogo(companyLogoUrl: string | null): string {
@@ -621,7 +594,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   const view = details.view || null;
 
   const detailGrid = [
-    renderDetailItem("Property type", propertyType),
+    renderDetailItem("Property Type", propertyType),
     renderDetailItem("MLS / Listing ID", listing.providerListingId || null),
     renderDetailItem("Parking", parkingGarage),
     renderDetailItem("Waterfront", waterfront),
@@ -630,8 +603,6 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   ]
     .filter(Boolean)
     .join("");
-
-  const printAdditionalDetails = renderPrintAdditionalDetails(yearBuilt, waterfront, pool, view);
 
   const descHtml = description
     ? `<section class="description-section">
@@ -796,28 +767,6 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     }
     h2 { font-size: 0.75rem; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; }
     .details-section { margin-bottom: 0; }
-    .details-panel { border: none; margin: 0; padding: 0; }
-    .details-panel summary {
-      list-style: none;
-      cursor: pointer;
-      font-size: 0.75rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--muted);
-      padding: 8px 0;
-    }
-    .details-panel summary::-webkit-details-marker { display: none; }
-    .details-panel summary::after { content: " ▾"; font-size: 0.875rem; }
-    .details-panel[open] summary::after { content: " ▴"; }
-    @media (min-width: 768px) {
-      .details-panel summary { display: none; }
-      .details-section > h2 { display: block; }
-    }
-    @media (max-width: 767px) {
-      .details-section > h2 { display: none; }
-      .details-panel { border: 1px solid var(--border); border-radius: 8px; padding: 0 12px 10px; margin-bottom: 12px; }
-    }
     .details-grid {
       display: grid;
       grid-template-columns: 1fr;
@@ -856,7 +805,6 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     .map-btn { margin-top: 2px; }
     .map-qr { flex: 0 0 auto; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
     .map-qr img { display: block; width: 96px; height: 96px; }
-    .print-additional-details { display: none; }
     .print-disclaimer { display: none; }
     .agent-card {
       display: flex;
@@ -983,9 +931,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       .agent-brokerage, .agent-contact { font-size: 0.625rem; }
       .agent-actions { gap: 3px; margin-top: 4px; }
       .agent-cta, .agent-cta-secondary { width: 100%; padding: 4px 5px; font-size: 0.5625rem; line-height: 1.2; }
-      .details-panel { border: none; padding: 0; }
-      .details-panel summary { display: none; }
-      .details-section > h2 { display: block !important; font-size: 0.625rem; }
+      .details-section > h2 { font-size: 0.625rem; }
       .details-grid { grid-template-columns: 1fr 1fr; gap: 4px 8px; }
       .detail-item dt { font-size: 0.5625rem; }
       .detail-item dd { font-size: 0.6875rem; }
@@ -1002,14 +948,6 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       .map-main { flex: 1 1 55%; max-width: 55%; }
       .map-embed-wrap { max-width: none; aspect-ratio: 4 / 3; margin-bottom: 0; }
       .map-address { display: none; }
-      .print-additional-details {
-        display: block;
-        flex: 1 1 40%;
-        max-width: 42%;
-        padding-left: 8px;
-      }
-      .print-additional-details h2 { font-size: 0.625rem; margin-bottom: 6px; }
-      .details-grid-compact { grid-template-columns: 1fr; gap: 4px; }
       .print-disclaimer {
         display: block;
         margin: 10px 0 0;
@@ -1042,11 +980,8 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
           <div class="main-col">
             ${renderKeyStats(price, listing.beds, listing.baths, sqft, hoa, yearBuilt)}
             <section class="details-section">
-              <h2>Property details</h2>
-              <details class="details-panel">
-                <summary>Details</summary>
-                <dl class="details-grid">${detailGrid}</dl>
-              </details>
+              <h2>Property Details</h2>
+              <dl class="details-grid">${detailGrid}</dl>
             </section>
           </div>
           <div class="side-col">
@@ -1054,7 +989,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
           </div>
         </div>
         ${descHtml}
-        ${buildMapSection(listing, qrDataUrl, printAdditionalDetails)}
+        ${buildMapSection(listing, qrDataUrl)}
       </div>
       ${renderPoweredByFooter()}
     </div>

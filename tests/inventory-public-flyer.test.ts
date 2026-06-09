@@ -70,7 +70,14 @@ assert(html.indexOf('class="main-col"') < html.indexOf('class="side-col"'), "mai
 assert(html.includes("Built 1998"), "year built in specs row");
 assert(!html.includes("Features &amp; amenities"), "no features section");
 assert(!html.includes("Hardwood floors"), "features list removed");
-assert(html.includes("details-panel"), "mobile details accordion");
+assert(html.includes("Property Details"), "property details heading");
+assert(html.includes("Property Type"), "property type label");
+assert(html.includes("Single Family Residence"), "property type value");
+assert(html.includes("Garage (2)"), "parking value");
+assert(html.includes(">Pool<"), "pool label in details");
+assert(html.includes(">View<"), "view label in details");
+assert(!html.includes("Year built"), "year built not duplicated in details");
+assert(!html.includes("Garage</dt>"), "no separate garage field");
 assert(html.includes("MLS-12345"), "MLS id");
 assert(html.includes("hero-img"), "gallery hero");
 assert(html.includes("gallery-prev"), "gallery prev arrow");
@@ -114,7 +121,7 @@ assert(bookingHtml.includes("Contact Agent"), "secondary contact CTA with bookin
 assert(html.includes("Scan to view live listing") === false, "no scan label");
 assert(html.includes("openstreetmap.org"), "map embed when lat/lng present");
 assert(html.includes("map-embed-wrap"), "map aspect ratio wrapper");
-assert(html.includes("print-additional-details"), "print page 2 details block");
+assert(!html.includes("print-additional-details"), "no duplicate details block on print page 2");
 assert(html.includes("@media print"), "print styles");
 assert(html.includes('property="og:title"'), "open graph title tag");
 assert(html.includes('property="og:image"'), "open graph image tag");
