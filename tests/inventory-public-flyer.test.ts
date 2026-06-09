@@ -62,8 +62,11 @@ assert(html.includes("123 Main St"), "address in headline");
 assert(html.includes("$450,000"), "formatted price in details");
 assert(!html.includes('class="price-line"'), "no duplicate price in headline");
 assert(!html.includes('class="highlights"'), "no duplicate highlight pills");
-assert(html.includes("1,800 sq ft"), "square footage");
+assert(html.includes("1,800 Sq Ft"), "square footage");
 assert(html.includes("$250/mo HOA"), "hoa fee");
+assert(html.includes('class="key-stats"'), "key stats row");
+assert(html.includes("layout-page1"), "page1 layout wrapper");
+assert(html.indexOf('class="main-col"') < html.indexOf('class="side-col"'), "main column before sidebar in DOM");
 assert(html.includes("1998"), "year built");
 assert(html.includes("MLS-12345"), "MLS id");
 assert(html.includes("hero-img"), "gallery hero");
@@ -164,7 +167,7 @@ const parsedSqft = inventoryRowToFlyerListing({
   squareFeet: null,
   features: ["2,450 sq ft living area"],
 });
-assert(resolveDisplaySquareFeet(parsedSqft) === "2,450 sq ft", "sqft parsed from features");
+assert(resolveDisplaySquareFeet(parsedSqft) === "2,450 Sq Ft", "sqft parsed from features");
 
 const parsedHoa = inventoryRowToFlyerListing({
   ...listing,

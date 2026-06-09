@@ -79,11 +79,11 @@ function formatLabel(value: string | null | undefined): string | null {
 
 function formatSquareFeet(sqft: number | null): string | null {
   if (sqft == null || sqft <= 0) return null;
-  return `${sqft.toLocaleString("en-US")} sq ft`;
+  return `${sqft.toLocaleString("en-US")} Sq Ft`;
 }
 
 function formatHoaFee(cents: number | null): string | null {
-  if (cents == null) return null;
+  if (cents == null || cents <= 0) return null;
   return `$${Math.round(cents / 100).toLocaleString("en-US")}/mo HOA`;
 }
 
@@ -107,10 +107,19 @@ export function resolveFlyerListingLabel(listing: PublicListingFlyerListing): "F
 }
 
 function parseSquareFeetFromText(text: string): number | null {
-  const match = text.match(/(\d{1,3}(?:,\d{3})+|\d+)\s*(?:sq\.?\s*ft|sqft|square\s*feet)/i);
-  if (!match) return null;
-  const n = parseInt(match[1].replace(/,/g, ""), 10);
-  return Number.isFinite(n) && n > 0 ? n : null;
+  const patterns = [
+    /(\d{1,3}(?:,\d{3})+|\d+)\s*(?:sq\.?\s*ft|sqft|square\s*feet)/i,
+    /(\d{1,3}(?:,\d{3})+|\d+)\s*sf\b/i,
+    /living\s*area[:\s]*(\d{1,3}(?:,\d{3})+|\d+)/i,
+    /(?:adjusted|total|interior)\s*(?:area|sq\.?\s*ft)[:\s]*(\d{1,3}(?:,\d{3})+|\d+)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    const n = parseInt(match[1].replace(/,/g, ""), 10);
+    if (Number.isFinite(n) && n > 0 && n < 100_000) return n;
+  }
+  return null;
 }
 
 function parseHoaCentsFromText(text: string): number | null {
@@ -327,13 +336,39 @@ function renderDetailItem(label: string, value: string | null): string {
 }
 
 function renderFlyerHeader(listingLabel: "FOR SALE" | "FOR RENT"): string {
-  return `<header class="flyer-header no-print">
+  return `<header class="flyer-header">
       <div class="header-left"><p class="listing-label">${escapeHtml(listingLabel)}</p></div>
-      <div class="header-right">
+      <div class="header-right no-print">
         <button type="button" class="icon-btn" id="btn-share" aria-label="Share listing">${SHARE_ICON_SVG}</button>
         <button type="button" class="icon-btn" id="btn-print" aria-label="Print flyer">${PRINT_ICON_SVG}</button>
       </div>
     </header>`;
+}
+
+function formatBedsBathsSummary(beds: number | null, baths: number | null): string | null {
+  const parts: string[] = [];
+  if (beds != null) {
+    parts.push(`${beds % 1 === 0 ? beds : beds.toFixed(1)} bd`);
+  }
+  if (baths != null) {
+    parts.push(`${baths % 1 === 0 ? baths : baths.toFixed(1)} ba`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+function renderKeyStats(
+  price: string,
+  beds: number | null,
+  baths: number | null,
+  sqft: string | null,
+  hoa: string | null,
+): string {
+  const items: string[] = [`<span class="key-stat key-price">${escapeHtml(price)}</span>`];
+  const bedsBaths = formatBedsBathsSummary(beds, baths);
+  if (bedsBaths) items.push(`<span class="key-stat">${escapeHtml(bedsBaths)}</span>`);
+  if (sqft) items.push(`<span class="key-stat">${escapeHtml(sqft)}</span>`);
+  if (hoa) items.push(`<span class="key-stat">${escapeHtml(hoa)}</span>`);
+  return `<div class="key-stats">${items.join("")}</div>`;
 }
 
 function renderCompanyLogo(companyLogoUrl: string | null): string {
@@ -500,12 +535,12 @@ export function inventoryRowToFlyerListing(row: {
   const detailsParsed = inventoryListingDetailsSchema.safeParse(row.listingDetails ?? {});
   return {
     id: row.id,
-    priceCents: row.priceCents,
+    priceCents: row.priceCents != null ? Number(row.priceCents) : null,
     beds: row.beds != null ? Number(row.beds) : null,
     baths: row.baths != null ? Number(row.baths) : null,
-    squareFeet: row.squareFeet,
-    yearBuilt: row.yearBuilt,
-    hoaFeeCents: row.hoaFeeCents,
+    squareFeet: row.squareFeet != null ? Number(row.squareFeet) : null,
+    yearBuilt: row.yearBuilt != null ? Number(row.yearBuilt) : null,
+    hoaFeeCents: row.hoaFeeCents != null ? Number(row.hoaFeeCents) : null,
     propertyType: row.propertyType,
     propertySubtype: row.propertySubtype,
     description: row.description,
@@ -542,12 +577,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   const parkingGarage = details.parkingGarage || null;
 
   const detailGrid = [
-    renderDetailItem("Price", price),
-    renderDetailItem("Bedrooms", listing.beds != null ? String(listing.beds % 1 === 0 ? listing.beds : listing.beds.toFixed(1)) : null),
-    renderDetailItem("Bathrooms", listing.baths != null ? String(listing.baths % 1 === 0 ? listing.baths : listing.baths.toFixed(1)) : null),
-    renderDetailItem("Square footage", sqft),
     renderDetailItem("Year built", yearBuilt),
-    renderDetailItem("HOA fee", hoa),
     renderDetailItem("Property type", propertyType),
     renderDetailItem("Property subtype", propertySubtype),
     renderDetailItem("MLS / Listing ID", listing.providerListingId || null),
@@ -700,12 +730,23 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .headline { padding: 6px 0 14px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
     .headline h1 { margin: 0; font-size: 1.375rem; line-height: 1.3; font-weight: 700; }
-    .layout { display: grid; gap: 16px; }
+    .layout { display: flex; flex-direction: column; gap: 16px; }
+    .layout-page1 { display: grid; gap: 16px; align-items: start; }
     @media (min-width: 768px) {
-      .layout { grid-template-columns: 1fr 260px; align-items: start; }
-      .main-col { grid-column: 1; grid-row: 1; }
-      .side-col { grid-column: 2; grid-row: 1; }
+      .layout-page1 { grid-template-columns: minmax(0, 1fr) minmax(220px, 28%); }
+      .side-col { position: sticky; top: 12px; }
     }
+    .key-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      align-items: baseline;
+      margin-bottom: 14px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .key-stat { font-size: 0.9375rem; font-weight: 500; color: #334155; }
+    .key-stat.key-price { font-size: 1.5rem; font-weight: 700; color: var(--ink); width: 100%; }
     h2 { font-size: 0.8125rem; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
     .details-section { margin-bottom: 14px; }
     .details-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px 16px; margin-bottom: 14px; }
@@ -727,8 +768,8 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       flex-direction: column;
       align-items: center;
       text-align: center;
-      gap: 10px;
-      padding: 16px 14px;
+      gap: 8px;
+      padding: 14px 12px;
       border: 1px solid var(--border);
       border-radius: 12px;
       background: #fff;
@@ -749,8 +790,8 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       object-fit: contain;
     }
     .agent-avatar {
-      width: 72px;
-      height: 72px;
+      width: 64px;
+      height: 64px;
       border-radius: 50%;
       object-fit: cover;
       flex-shrink: 0;
@@ -764,14 +805,14 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       font-weight: 700;
       font-size: 1.375rem;
     }
-    .agent-name { margin: 0 0 2px; font-weight: 700; font-size: 1rem; }
-    .agent-brokerage { margin: 0 0 8px; color: var(--muted); font-size: 0.875rem; }
-    .agent-contact { margin: 0 0 4px; font-size: 0.875rem; }
+    .agent-name { margin: 0 0 2px; font-weight: 700; font-size: 0.9375rem; }
+    .agent-brokerage { margin: 0 0 6px; color: var(--muted); font-size: 0.8125rem; }
+    .agent-contact { margin: 0 0 3px; font-size: 0.8125rem; }
     .agent-contact a { color: var(--ink); text-decoration: none; }
     .agent-contact a:hover { text-decoration: underline; }
     .agent-body { width: 100%; }
-    .agent-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
-    .agent-cta, .agent-cta-secondary { width: 100%; text-align: center; }
+    .agent-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+    .agent-cta, .agent-cta-secondary { width: 100%; text-align: center; font-size: 0.8125rem; padding: 8px 12px; }
     .description-section, .features-section { margin-bottom: 14px; }
     .site-footer {
       padding: 12px 20px 16px;
@@ -809,20 +850,36 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       body { background: #fff; font-size: 11pt; }
       .no-print { display: none !important; }
       .flyer { max-width: none; box-shadow: none; }
+      .flyer-header { padding: 8px 12px; border-bottom: 1px solid #ddd; }
+      .listing-label { font-size: 1.125rem; }
       .flyer-body { padding: 0 12px 10px; }
       .gallery { margin: 0 0 10px; }
-      .hero-img { max-height: 240px; }
+      .hero-img { max-height: 220px; }
       .thumbs, .gallery-nav { display: none; }
-      .headline { margin-bottom: 10px; padding-bottom: 8px; }
-      .layout { display: block; gap: 0; }
-      .side-col { margin-bottom: 12px; }
-      .agent-card { break-inside: avoid; page-break-inside: avoid; padding: 12px; box-shadow: none; }
-      .agent-actions { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 10px; }
-      .agent-cta, .agent-cta-secondary { width: auto; min-width: 0; padding: 7px 14px; font-size: 0.8125rem; }
-      .details-grid { gap: 8px 12px; margin-bottom: 10px; }
+      .headline { margin-bottom: 8px; padding-bottom: 6px; }
+      .headline h1 { font-size: 1.125rem; }
+      .layout-page1 {
+        display: grid;
+        grid-template-columns: 1fr 155px;
+        gap: 10px 12px;
+        align-items: end;
+      }
+      .key-stats { margin-bottom: 10px; padding-bottom: 10px; gap: 6px 12px; }
+      .key-stat.key-price { font-size: 1.25rem; width: auto; }
+      .key-stat { font-size: 0.8125rem; }
+      .side-col { align-self: end; }
+      .agent-card { break-inside: avoid; page-break-inside: avoid; padding: 8px 6px; box-shadow: none; gap: 6px; }
+      .agent-avatar { width: 48px; height: 48px; font-size: 1rem; }
+      .agent-company-logo { max-height: 32px; max-width: 90px; }
+      .agent-name { font-size: 0.8125rem; }
+      .agent-brokerage, .agent-contact { font-size: 0.6875rem; }
+      .agent-actions { flex-direction: column; gap: 4px; margin-top: 6px; }
+      .agent-cta, .agent-cta-secondary { width: 100%; padding: 5px 6px; font-size: 0.625rem; line-height: 1.2; }
+      .details-grid { gap: 6px 10px; margin-bottom: 8px; }
+      .map-section { page-break-before: always; break-before: page; margin-top: 0; padding-top: 8px; }
       .map-embed { height: 160px; }
       .map-qr img { width: 80px; height: 80px; }
-      .description-section, .features-section { margin-bottom: 10px; }
+      .description-section, .features-section { margin-bottom: 8px; }
       .features-list { columns: 2; }
       a { color: inherit; text-decoration: none; }
     }
@@ -841,18 +898,21 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
         <h1>${escapeHtml(headline)}</h1>
       </div>
       <div class="layout">
-        <div class="side-col">
-          ${renderAgentCard(agent, listing, companyLogoUrl)}
+        <div class="layout-page1">
+          <div class="main-col">
+            ${renderKeyStats(price, listing.beds, listing.baths, sqft, hoa)}
+            <section class="details-section">
+              <h2>Property details</h2>
+              <dl class="details-grid">${detailGrid}</dl>
+            </section>
+            ${descHtml}
+            ${featuresHtml}
+          </div>
+          <div class="side-col">
+            ${renderAgentCard(agent, listing, companyLogoUrl)}
+          </div>
         </div>
-        <div class="main-col">
-          <section class="details-section">
-            <h2>Property details</h2>
-            <dl class="details-grid">${detailGrid}</dl>
-          </section>
-          ${descHtml}
-          ${featuresHtml}
-          ${buildMapSection(listing, qrDataUrl)}
-        </div>
+        ${buildMapSection(listing, qrDataUrl)}
       </div>
       ${renderPoweredByFooter()}
     </div>

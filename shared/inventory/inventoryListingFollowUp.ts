@@ -7,7 +7,7 @@ export type ConversationTurn = {
 
 /** Outbound message looks like a listing recommendation (composer format). */
 export const LISTING_RECOMMENDATION_OUTBOUND_RE =
-  /(?:View listing:\s*https?:\/\/|\$\d{1,3}(?:,\d{3})+[\s\S]{0,120}?(?:\d+(?:\.\d+)?\s*bed|\bbed\s*\/\s*\d))/i;
+  /(?:View(?: Property Flyer| listing):\s*https?:\/\/|\$\d{1,3}(?:,\d{3})+[\s\S]{0,120}?(?:\d+(?:\.\d+)?\s*bed|\bbed\s*\/\s*\d))/i;
 
 export const LISTING_FOLLOW_UP_INBOUND_RE =
   /\b(?:yes\s*(?:please|pls)?|send\s+(?:me\s+)?more\s+details|more\s+(?:details|info|information|photos|pictures|pics)|tell\s+me\s+more(?:\s+about\s+(?:it|this|the\s+(?:property|listing|condo|home|house))?)?|can\s+(?:you|i)\s+(?:see|get|send)\s+more|(?:looks?|sounds?)\s+good|(?:i'?m\s+)?interested|that\s+(?:one|listing|property)\s+(?:looks?|sounds?)\s+good)\b/i;
@@ -29,7 +29,7 @@ export function isListingRecommendationOutbound(content: string): boolean {
 }
 
 export function parseListingIdFromRecommendation(content: string): string | null {
-  const viewLine = content.match(/View listing:\s*(https?:\/\/\S+)/i);
+  const viewLine = content.match(/View(?: Property Flyer| listing):\s*(https?:\/\/\S+)/i);
   if (viewLine?.[1]) {
     const fromShare = extractListingIdFromShareUrl(viewLine[1]);
     if (fromShare) return fromShare;

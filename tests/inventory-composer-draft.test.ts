@@ -16,6 +16,7 @@ function assert(cond: boolean, msg: string) {
 
 const listingId = "22222222-2222-4222-8222-222222222222";
 const appOrigin = "https://app.example.com";
+const shareUrl = buildListingShareUrl(listingId, appOrigin);
 
 const listing = {
   listingId,
@@ -46,8 +47,9 @@ assert(withUrl.text.includes("Hi Susu"), "includes greeting");
 assert(withUrl.text.includes("$269,000"), "includes price");
 assert(withUrl.text.includes("2 bed / 2 bath"), "includes beds/baths");
 assert(withUrl.text.includes("Pompano Beach, FL"), "includes location");
-assert(withUrl.text.includes("View listing: https://example.com/listing/123"), "includes external URL");
-assert(withUrl.viewUrl === "https://example.com/listing/123", "viewUrl external");
+assert(withUrl.text.includes(`View Property Flyer: ${shareUrl}`), "always uses share URL");
+assert(withUrl.viewUrl === shareUrl, "viewUrl is share URL");
+assert(!withUrl.text.includes("example.com/listing/123"), "no external MLS URL");
 assert(withUrl.primaryPhotoUrl === "https://example.com/photo.jpg", "primary photo");
 assert(
   listingComposerDraftIncludesRequiredDetails(withUrl.text, listing),
@@ -60,8 +62,7 @@ const withoutUrl = buildListingComposerMessage({
   featureHints: ["Pool and updated kitchen"],
 });
 
-const shareUrl = buildListingShareUrl(listingId, appOrigin);
-assert(withoutUrl.text.includes(`View listing: ${shareUrl}`), "share URL fallback");
+assert(withoutUrl.text.includes(`View Property Flyer: ${shareUrl}`), "share URL");
 assert(
   listingComposerDraftIncludesRequiredDetails(withoutUrl.text, { ...listing, listingUrl: null }),
   "trace helper passes with share URL",

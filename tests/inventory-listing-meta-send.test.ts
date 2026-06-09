@@ -40,7 +40,7 @@ const composer = buildListingComposerMessage({
 const shareUrl = buildListingShareUrl(listingId, appOrigin);
 assert(composer.text.includes("$269,000"), "composer price");
 assert(composer.text.includes("2 bed / 2 bath"), "composer beds/baths");
-assert(composer.text.includes(`View listing: ${shareUrl}`), "composer share URL");
+assert(composer.text.includes(`View Property Flyer: ${shareUrl}`), "composer share URL");
 assert(composer.primaryPhotoUrl === "https://cdn.example.com/listing.jpg", "composer photo");
 assert(
   listingComposerDraftIncludesRequiredDetails(composer.text, {

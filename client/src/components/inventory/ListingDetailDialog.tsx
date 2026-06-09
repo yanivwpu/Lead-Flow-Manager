@@ -18,7 +18,7 @@ import {
   buildListingComposerMessage,
   listingComposerDraftIncludesRequiredDetails,
 } from "@shared/inventory/inventoryComposerDraft";
-import { pickPrimaryPhotoUrl } from "@shared/inventory/listingViewUrl";
+import { buildListingShareUrl, pickPrimaryPhotoUrl } from "@shared/inventory/listingViewUrl";
 import type { InventoryMatchListingSummary } from "@shared/inventory/inventoryMatchTypes";
 
 function formatPrice(cents: number | null): string {
@@ -125,6 +125,10 @@ export function ListingDetailDialog({
   const beds = listing?.beds != null ? Number(listing.beds) : fallback?.beds;
   const baths = listing?.baths != null ? Number(listing.baths) : fallback?.baths;
   const listingUrl = listing?.listingUrl ?? fallback?.listingUrl ?? null;
+  const flyerUrl =
+    listingId && typeof window !== "undefined"
+      ? buildListingShareUrl(listingId, window.location.origin)
+      : null;
   const propertyType = listing?.propertyType ?? fallback?.propertyType ?? null;
   const description = listing?.description ?? null;
 
@@ -298,10 +302,10 @@ export function ListingDetailDialog({
             {listing?.description && (
               <p className="text-xs text-gray-600 line-clamp-4 leading-relaxed">{listing.description}</p>
             )}
-            {listingUrl && (
+            {flyerUrl && (
               <Button asChild size="sm" variant="outline" className="w-full">
-                <a href={listingUrl} target="_blank" rel="noreferrer">
-                  Open listing URL
+                <a href={flyerUrl} target="_blank" rel="noreferrer">
+                  View Property Flyer
                   <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
                 </a>
               </Button>
@@ -376,7 +380,7 @@ export function ListingDetailDialog({
                       )}
                       {composerPreview.viewUrl && (
                         <p className="text-[10px] text-violet-700 mt-1 break-all leading-snug">
-                          View listing: {composerPreview.viewUrl}
+                          View Property Flyer: {composerPreview.viewUrl}
                         </p>
                       )}
                     </div>

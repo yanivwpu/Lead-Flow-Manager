@@ -21,10 +21,8 @@ export type ResolveListingViewUrlInput = {
   appOrigin?: string | null;
 };
 
-/** Prefer external MLS URL; fall back to internal public share page. */
+/** Always use the WhachatCRM public flyer — never external MLS / PropertyPanorama URLs. */
 export function resolveListingViewUrl(input: ResolveListingViewUrlInput): string | null {
-  const external = (input.listingUrl || "").trim();
-  if (/^https?:\/\//i.test(external)) return external;
   if (!input.listingId) return null;
   const origin = (input.appOrigin || "").trim();
   if (!origin) return null;

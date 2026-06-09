@@ -126,7 +126,7 @@ export function buildListingComposerMessage(input: BuildListingComposerMessageIn
   const parts: string[] = [intro, "", ...detailLines];
 
   if (viewUrl) {
-    parts.push("", `View listing: ${viewUrl}`);
+    parts.push("", `View Property Flyer: ${viewUrl}`);
   }
 
   parts.push("", closing ?? "Would you like me to send more details or schedule a showing?");

@@ -220,7 +220,7 @@ export async function generateInventoryMatchDraft(
     options?.priceReductionLabel,
   );
 
-  const hasListingUrl = !!(listing.listingUrl && listing.listingUrl.startsWith("http"));
+  const hasListingUrl = true;
   const firstName = contactFirstName(contact);
 
   const aiResult = await generateAiDraft({

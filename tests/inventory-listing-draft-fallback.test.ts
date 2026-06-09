@@ -39,8 +39,8 @@ assert(clientFallback.text.includes("$425,000"), "includes price from match card
 assert(clientFallback.text.includes("3 bed / 2 bath"), "includes beds/baths");
 assert(clientFallback.text.includes("Fort Lauderdale, FL"), "includes location");
 assert(
-  clientFallback.text.includes(`View listing: ${appOrigin}/share/listings/${listingId}`),
-  "share URL when MLS listingUrl missing",
+  clientFallback.text.includes(`View Property Flyer: ${appOrigin}/share/listings/${listingId}`),
+  "share URL in customer message",
 );
 assert(
   listingComposerDraftIncludesRequiredDetails(clientFallback.text, matchCardFallback),

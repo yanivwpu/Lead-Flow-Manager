@@ -218,7 +218,7 @@ function buildPromptGuidance(
       if (result.signals.includes("listing_follow_up")) {
         return `LISTING FOLLOW-UP — the customer is responding to a listing recommendation recently sent in this thread.
 - Continue the same listing conversation — share more property details (features, neighborhood, price, beds/baths, description).
-- Re-include the View listing link if one was shared earlier and it is still relevant.
+- Re-include the View Property Flyer link if one was shared earlier and it is still relevant.
 - Do NOT treat this as a human handoff or switch to unrelated qualification.
 - Do NOT say you will "check for available options" — they are asking about a listing already discussed.
 - Offer a showing or next step in one short question at the end.`;
