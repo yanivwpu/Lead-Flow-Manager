@@ -84,7 +84,7 @@ function formatSquareFeet(sqft: number | null): string | null {
 
 function formatHoaFee(cents: number | null): string | null {
   if (cents == null || cents <= 0) return null;
-  return `$${Math.round(cents / 100).toLocaleString("en-US")}/mo HOA`;
+  return `HOA $${Math.round(cents / 100).toLocaleString("en-US")}/mo`;
 }
 
 function listingHaystack(listing: PublicListingFlyerListing): string {
@@ -293,10 +293,14 @@ function renderMapQr(qrDataUrl: string): string {
   </div>`;
 }
 
-function buildMapSection(listing: PublicListingFlyerListing, qrDataUrl: string): string {
+function buildMapSection(
+  listing: PublicListingFlyerListing,
+  qrDataUrl: string,
+  printAdditionalDetailsHtml: string,
+): string {
   const googleUrl = buildGoogleMapsUrl(listing);
   const mapsBtn = googleUrl
-    ? `<a class="btn btn-outline map-btn" href="${escapeHtml(googleUrl)}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>`
+    ? `<a class="btn btn-outline map-btn no-print" href="${escapeHtml(googleUrl)}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>`
     : "";
   const qr = qrDataUrl ? renderMapQr(qrDataUrl) : "";
   const lat = listing.latitude;
@@ -307,26 +311,32 @@ function buildMapSection(listing: PublicListingFlyerListing, qrDataUrl: string):
     const embed = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat}%2C${lng}`;
     return `<section class="map-section">
       <h2>Location</h2>
-      <div class="map-row">
+      <div class="map-page2">
         <div class="map-main">
-          <iframe class="map-embed" title="Property location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="${escapeHtml(embed)}"></iframe>
+          <div class="map-embed-wrap">
+            <iframe class="map-embed" title="Property location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="${escapeHtml(embed)}"></iframe>
+          </div>
           ${mapsBtn}
         </div>
+        ${printAdditionalDetailsHtml}
         ${qr}
       </div>
+      <p class="print-disclaimer">All information deemed reliable but not guaranteed. Buyer to verify all information.</p>
     </section>`;
   }
   const address = buildFullAddress(listing);
-  if (!address && !mapsBtn && !qr) return "";
+  if (!address && !mapsBtn && !qr && !printAdditionalDetailsHtml) return "";
   return `<section class="map-section">
     <h2>Location</h2>
-    <div class="map-row">
+    <div class="map-page2">
       <div class="map-main">
         ${address ? `<p class="map-address">${escapeHtml(address)}</p>` : ""}
         ${mapsBtn}
       </div>
+      ${printAdditionalDetailsHtml}
       ${qr}
     </div>
+    <p class="print-disclaimer">All information deemed reliable but not guaranteed. Buyer to verify all information.</p>
   </section>`;
 }
 
@@ -362,13 +372,45 @@ function renderKeyStats(
   baths: number | null,
   sqft: string | null,
   hoa: string | null,
+  yearBuilt: string | null,
 ): string {
-  const items: string[] = [`<span class="key-stat key-price">${escapeHtml(price)}</span>`];
+  const items: string[] = [];
+  items.push(`<span class="key-stat key-price">${escapeHtml(price)}</span>`);
   const bedsBaths = formatBedsBathsSummary(beds, baths);
   if (bedsBaths) items.push(`<span class="key-stat">${escapeHtml(bedsBaths)}</span>`);
   if (sqft) items.push(`<span class="key-stat">${escapeHtml(sqft)}</span>`);
   if (hoa) items.push(`<span class="key-stat">${escapeHtml(hoa)}</span>`);
-  return `<div class="key-stats">${items.join("")}</div>`;
+  if (yearBuilt) items.push(`<span class="key-stat">Built ${escapeHtml(yearBuilt)}</span>`);
+  const body = items.join('<span class="key-stat-sep" aria-hidden="true">|</span>');
+  return `<div class="key-stats">${body}</div>`;
+}
+
+function resolveDisplayPropertyType(
+  propertyType: string | null,
+  propertySubtype: string | null,
+): string | null {
+  return propertySubtype ? formatLabel(propertySubtype) : formatLabel(propertyType);
+}
+
+function renderPrintAdditionalDetails(
+  yearBuilt: string | null,
+  waterfront: string | null,
+  pool: string | null,
+  view: string | null,
+): string {
+  const items = [
+    renderDetailItem("Year built", yearBuilt),
+    renderDetailItem("Waterfront", waterfront),
+    renderDetailItem("Pool", pool),
+    renderDetailItem("View", view),
+  ]
+    .filter(Boolean)
+    .join("");
+  if (!items) return "";
+  return `<div class="print-additional-details">
+    <h2>Additional details</h2>
+    <dl class="details-grid details-grid-compact">${items}</dl>
+  </div>`;
 }
 
 function renderCompanyLogo(companyLogoUrl: string | null): string {
@@ -421,12 +463,12 @@ function renderAgentActions(agent: PublicListingFlyerAgent, listing: PublicListi
     );
     if (contactHref) {
       buttons.push(
-        `<a class="btn agent-cta-secondary" href="${escapeHtml(contactHref)}">Contact agent</a>`,
+        `<a class="btn agent-cta-secondary" href="${escapeHtml(contactHref)}">Contact Agent</a>`,
       );
     }
   } else if (contactHref) {
     buttons.push(
-      `<a class="btn btn-primary agent-cta" href="${escapeHtml(contactHref)}">Contact agent</a>`,
+      `<a class="btn btn-primary agent-cta" href="${escapeHtml(contactHref)}">Contact Agent</a>`,
     );
   }
 
@@ -466,7 +508,9 @@ function renderAgentCard(
 
   const lines: string[] = [];
   if (agent.name) lines.push(`<p class="agent-name">${escapeHtml(agent.name)}</p>`);
-  if (agent.brokerageName) lines.push(`<p class="agent-brokerage">${escapeHtml(agent.brokerageName)}</p>`);
+  if (!companyLogo && agent.brokerageName) {
+    lines.push(`<p class="agent-brokerage">${escapeHtml(agent.brokerageName)}</p>`);
+  }
   if (agent.phone) {
     const tel = agent.phone.replace(/\D/g, "");
     lines.push(
@@ -482,14 +526,12 @@ function renderAgentCard(
   }
 
   return `<aside class="agent-card">
-    <div class="agent-brand-row">
-      ${avatar}
-      ${companyLogo}
-    </div>
+    ${avatar}
     <div class="agent-body">
       ${lines.join("")}
       ${renderAgentActions(agent, listing)}
     </div>
+    ${companyLogo ? `<div class="agent-logo-footer">${companyLogo}</div>` : ""}
   </aside>`;
 }
 
@@ -570,33 +612,26 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   const sqft = resolveDisplaySquareFeet(listing);
   const hoa = resolveDisplayHoaFee(listing);
   const yearBuilt = formatYearBuilt(listing.yearBuilt);
-  const propertyType = formatLabel(listing.propertyType);
-  const propertySubtype = listing.propertySubtype ? formatLabel(listing.propertySubtype) : null;
+  const propertyType = resolveDisplayPropertyType(listing.propertyType, listing.propertySubtype);
   const details = listing.listingDetails;
   const description = (listing.description || "").trim();
   const parkingGarage = details.parkingGarage || null;
+  const waterfront = formatYesNo(details.waterfront);
+  const pool = formatYesNo(details.pool);
+  const view = details.view || null;
 
   const detailGrid = [
-    renderDetailItem("Year built", yearBuilt),
     renderDetailItem("Property type", propertyType),
-    renderDetailItem("Property subtype", propertySubtype),
     renderDetailItem("MLS / Listing ID", listing.providerListingId || null),
     renderDetailItem("Parking", parkingGarage),
-    renderDetailItem("Garage", parkingGarage),
-    renderDetailItem("Waterfront", formatYesNo(details.waterfront)),
-    renderDetailItem("Pool", formatYesNo(details.pool)),
-    renderDetailItem("View", details.view || null),
+    renderDetailItem("Waterfront", waterfront),
+    renderDetailItem("Pool", pool),
+    renderDetailItem("View", view),
   ]
     .filter(Boolean)
     .join("");
 
-  const featuresHtml =
-    listing.features.length > 0
-      ? `<section class="features-section">
-      <h2>Features &amp; amenities</h2>
-      <ul class="features-list">${listing.features.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul>
-    </section>`
-      : "";
+  const printAdditionalDetails = renderPrintAdditionalDetails(yearBuilt, waterfront, pool, view);
 
   const descHtml = description
     ? `<section class="description-section">
@@ -647,11 +682,15 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     .header-left { display: flex; align-items: center; min-width: 0; }
     .listing-label {
       margin: 0;
-      font-size: 1.5rem;
+      font-size: 2.25rem;
       font-weight: 800;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.04em;
       color: var(--ink);
-      line-height: 1.1;
+      line-height: 1.05;
+      text-align: left;
+    }
+    @media (min-width: 768px) {
+      .listing-label { font-size: 2.75rem; }
     }
     .header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
     .icon-btn {
@@ -728,41 +767,97 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     }
     .thumb.active { border-color: var(--accent); }
     .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .headline { padding: 6px 0 14px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
-    .headline h1 { margin: 0; font-size: 1.375rem; line-height: 1.3; font-weight: 700; }
-    .layout { display: flex; flex-direction: column; gap: 16px; }
-    .layout-page1 { display: grid; gap: 16px; align-items: start; }
+    .headline { padding: 10px 0 12px; margin-bottom: 0; border-bottom: none; }
+    .headline h1 { margin: 0; font-size: 1.125rem; line-height: 1.35; font-weight: 700; }
     @media (min-width: 768px) {
-      .layout-page1 { grid-template-columns: minmax(0, 1fr) minmax(220px, 28%); }
+      .headline h1 { font-size: 1.25rem; }
+    }
+    .layout { display: flex; flex-direction: column; gap: 0; }
+    .layout-page1 { display: grid; gap: 16px; align-items: start; margin-top: 12px; }
+    @media (min-width: 768px) {
+      .layout-page1 { grid-template-columns: minmax(0, 1fr) minmax(200px, 26%); gap: 20px; }
       .side-col { position: sticky; top: 12px; }
     }
     .key-stats {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px 16px;
-      align-items: baseline;
-      margin-bottom: 14px;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 16px;
       padding-bottom: 14px;
       border-bottom: 1px solid var(--border);
     }
-    .key-stat { font-size: 0.9375rem; font-weight: 500; color: #334155; }
-    .key-stat.key-price { font-size: 1.5rem; font-weight: 700; color: var(--ink); width: 100%; }
-    h2 { font-size: 0.8125rem; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
-    .details-section { margin-bottom: 14px; }
-    .details-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px 16px; margin-bottom: 14px; }
+    .key-stat { font-size: 0.875rem; font-weight: 500; color: #334155; white-space: nowrap; }
+    .key-stat.key-price { font-size: 1.125rem; font-weight: 700; color: var(--ink); }
+    .key-stat-sep { color: #cbd5e1; margin: 0 10px; font-weight: 300; user-select: none; }
+    @media (min-width: 768px) {
+      .key-stat { font-size: 0.9375rem; }
+      .key-stat.key-price { font-size: 1.25rem; }
+    }
+    h2 { font-size: 0.75rem; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; }
+    .details-section { margin-bottom: 0; }
+    .details-panel { border: none; margin: 0; padding: 0; }
+    .details-panel summary {
+      list-style: none;
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      padding: 8px 0;
+    }
+    .details-panel summary::-webkit-details-marker { display: none; }
+    .details-panel summary::after { content: " ▾"; font-size: 0.875rem; }
+    .details-panel[open] summary::after { content: " ▴"; }
+    @media (min-width: 768px) {
+      .details-panel summary { display: none; }
+      .details-section > h2 { display: block; }
+    }
+    @media (max-width: 767px) {
+      .details-section > h2 { display: none; }
+      .details-panel { border: 1px solid var(--border); border-radius: 8px; padding: 0 12px 10px; margin-bottom: 12px; }
+    }
+    .details-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px 16px;
+      margin: 0;
+    }
+    @media (min-width: 768px) {
+      .details-grid { grid-template-columns: 1fr 1fr; }
+    }
     .detail-item dt { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 2px; }
     .detail-item dd { margin: 0; font-weight: 500; font-size: 0.9375rem; }
-    .description { white-space: pre-wrap; margin: 0; color: #334155; }
-    .features-list { margin: 0; padding-left: 1.2rem; columns: 2; column-gap: 24px; }
-    .features-list li { margin-bottom: 6px; break-inside: avoid; }
-    .map-section { margin-top: 6px; }
-    .map-row { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
-    .map-main { flex: 1 1 220px; min-width: 0; }
-    .map-embed { width: 100%; height: 220px; border: 1px solid var(--border); border-radius: 10px; display: block; margin-bottom: 10px; }
+    .description { white-space: pre-wrap; margin: 0; color: #334155; font-size: 0.9375rem; line-height: 1.6; }
+    .description-section { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .map-section { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .map-page2 { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+    .map-main { flex: 1 1 280px; min-width: 0; max-width: 100%; }
+    .map-embed-wrap {
+      position: relative;
+      width: 100%;
+      max-width: 640px;
+      aspect-ratio: 16 / 9;
+      background: #e2e8f0;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    .map-embed {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
     .map-address { margin: 0 0 10px; color: #334155; }
     .map-btn { margin-top: 2px; }
     .map-qr { flex: 0 0 auto; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
     .map-qr img { display: block; width: 96px; height: 96px; }
+    .print-additional-details { display: none; }
+    .print-disclaimer { display: none; }
     .agent-card {
       display: flex;
       flex-direction: column;
@@ -776,12 +871,15 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       box-shadow: 0 1px 3px rgba(15,23,42,0.06);
     }
     .agent-brand-row {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      flex-wrap: wrap;
+      display: none;
+    }
+    .agent-logo-footer {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
       width: 100%;
+      display: flex;
+      justify-content: center;
     }
     .agent-company-logo {
       max-height: 44px;
@@ -813,7 +911,15 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     .agent-body { width: 100%; }
     .agent-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
     .agent-cta, .agent-cta-secondary { width: 100%; text-align: center; font-size: 0.8125rem; padding: 8px 12px; }
-    .description-section, .features-section { margin-bottom: 14px; }
+    .agent-cta-secondary {
+      background: transparent;
+      border-color: transparent;
+      color: var(--accent);
+      font-weight: 600;
+      padding: 6px 8px;
+    }
+    .agent-cta-secondary:hover { text-decoration: underline; background: transparent; }
+    .description-section { margin-bottom: 14px; }
     .site-footer {
       padding: 12px 20px 16px;
       border-top: 1px solid var(--border);
@@ -847,45 +953,79 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     }
     .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
     @media print {
-      body { background: #fff; font-size: 11pt; }
+      body { background: #fff; font-size: 10pt; }
       .no-print { display: none !important; }
       .flyer { max-width: none; box-shadow: none; }
-      .flyer-header { padding: 8px 12px; border-bottom: 1px solid #ddd; }
-      .listing-label { font-size: 1.125rem; }
-      .flyer-body { padding: 0 12px 10px; }
-      .gallery { margin: 0 0 10px; }
-      .hero-img { max-height: 220px; }
+      .flyer-header { padding: 10px 12px 8px; border-bottom: 1px solid #ddd; }
+      .listing-label { font-size: 2rem; }
+      .flyer-body { padding: 0 12px 8px; }
+      .gallery { margin: 0 0 8px; }
+      .hero-img { max-height: 200px; }
       .thumbs, .gallery-nav { display: none; }
-      .headline { margin-bottom: 8px; padding-bottom: 6px; }
-      .headline h1 { font-size: 1.125rem; }
+      .headline { padding: 6px 0 8px; }
+      .headline h1 { font-size: 1rem; }
       .layout-page1 {
         display: grid;
-        grid-template-columns: 1fr 155px;
-        gap: 10px 12px;
-        align-items: end;
+        grid-template-columns: 1fr 150px;
+        gap: 8px 12px;
+        align-items: start;
+        margin-top: 8px;
       }
-      .key-stats { margin-bottom: 10px; padding-bottom: 10px; gap: 6px 12px; }
-      .key-stat.key-price { font-size: 1.25rem; width: auto; }
-      .key-stat { font-size: 0.8125rem; }
-      .side-col { align-self: end; }
-      .agent-card { break-inside: avoid; page-break-inside: avoid; padding: 8px 6px; box-shadow: none; gap: 6px; }
-      .agent-avatar { width: 48px; height: 48px; font-size: 1rem; }
-      .agent-company-logo { max-height: 32px; max-width: 90px; }
-      .agent-name { font-size: 0.8125rem; }
-      .agent-brokerage, .agent-contact { font-size: 0.6875rem; }
-      .agent-actions { flex-direction: column; gap: 4px; margin-top: 6px; }
-      .agent-cta, .agent-cta-secondary { width: 100%; padding: 5px 6px; font-size: 0.625rem; line-height: 1.2; }
-      .details-grid { gap: 6px 10px; margin-bottom: 8px; }
-      .map-section { page-break-before: always; break-before: page; margin-top: 0; padding-top: 8px; }
-      .map-embed { height: 160px; }
-      .map-qr img { width: 80px; height: 80px; }
-      .description-section, .features-section { margin-bottom: 8px; }
-      .features-list { columns: 2; }
+      .key-stats { margin-bottom: 8px; padding-bottom: 8px; flex-wrap: wrap; }
+      .key-stat.key-price { font-size: 1.0625rem; }
+      .key-stat { font-size: 0.75rem; }
+      .key-stat-sep { margin: 0 6px; }
+      .side-col { align-self: start; }
+      .agent-card { break-inside: avoid; page-break-inside: avoid; padding: 8px 6px; box-shadow: none; gap: 4px; }
+      .agent-avatar { width: 44px; height: 44px; font-size: 0.875rem; }
+      .agent-company-logo { max-height: 28px; max-width: 80px; }
+      .agent-name { font-size: 0.75rem; }
+      .agent-brokerage, .agent-contact { font-size: 0.625rem; }
+      .agent-actions { gap: 3px; margin-top: 4px; }
+      .agent-cta, .agent-cta-secondary { width: 100%; padding: 4px 5px; font-size: 0.5625rem; line-height: 1.2; }
+      .details-panel { border: none; padding: 0; }
+      .details-panel summary { display: none; }
+      .details-section > h2 { display: block !important; font-size: 0.625rem; }
+      .details-grid { grid-template-columns: 1fr 1fr; gap: 4px 8px; }
+      .detail-item dt { font-size: 0.5625rem; }
+      .detail-item dd { font-size: 0.6875rem; }
+      .description-section { margin-top: 10px; padding-top: 8px; page-break-inside: avoid; }
+      .description { font-size: 0.6875rem; line-height: 1.45; }
+      .map-section {
+        page-break-before: always;
+        break-before: page;
+        margin-top: 0;
+        padding-top: 10px;
+        border-top: none;
+      }
+      .map-page2 { flex-wrap: nowrap; align-items: stretch; }
+      .map-main { flex: 1 1 55%; max-width: 55%; }
+      .map-embed-wrap { max-width: none; aspect-ratio: 4 / 3; margin-bottom: 0; }
+      .map-address { display: none; }
+      .print-additional-details {
+        display: block;
+        flex: 1 1 40%;
+        max-width: 42%;
+        padding-left: 8px;
+      }
+      .print-additional-details h2 { font-size: 0.625rem; margin-bottom: 6px; }
+      .details-grid-compact { grid-template-columns: 1fr; gap: 4px; }
+      .print-disclaimer {
+        display: block;
+        margin: 10px 0 0;
+        font-size: 0.5625rem;
+        color: #64748b;
+        line-height: 1.4;
+        text-align: right;
+      }
+      .map-qr { display: none; }
+      .site-footer { padding: 8px 12px; }
       a { color: inherit; text-decoration: none; }
     }
     @media (max-width: 480px) {
-      .features-list { columns: 1; }
+      .listing-label { font-size: 1.75rem; }
       .gallery-nav { width: 34px; height: 34px; }
+      .key-stat-sep { margin: 0 6px; }
     }
   </style>
 </head>
@@ -900,19 +1040,21 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       <div class="layout">
         <div class="layout-page1">
           <div class="main-col">
-            ${renderKeyStats(price, listing.beds, listing.baths, sqft, hoa)}
+            ${renderKeyStats(price, listing.beds, listing.baths, sqft, hoa, yearBuilt)}
             <section class="details-section">
               <h2>Property details</h2>
-              <dl class="details-grid">${detailGrid}</dl>
+              <details class="details-panel">
+                <summary>Details</summary>
+                <dl class="details-grid">${detailGrid}</dl>
+              </details>
             </section>
-            ${descHtml}
-            ${featuresHtml}
           </div>
           <div class="side-col">
             ${renderAgentCard(agent, listing, companyLogoUrl)}
           </div>
         </div>
-        ${buildMapSection(listing, qrDataUrl)}
+        ${descHtml}
+        ${buildMapSection(listing, qrDataUrl, printAdditionalDetails)}
       </div>
       ${renderPoweredByFooter()}
     </div>

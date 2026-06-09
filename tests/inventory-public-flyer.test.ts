@@ -63,11 +63,14 @@ assert(html.includes("$450,000"), "formatted price in details");
 assert(!html.includes('class="price-line"'), "no duplicate price in headline");
 assert(!html.includes('class="highlights"'), "no duplicate highlight pills");
 assert(html.includes("1,800 Sq Ft"), "square footage");
-assert(html.includes("$250/mo HOA"), "hoa fee");
+assert(html.includes("HOA $250/mo"), "hoa fee");
 assert(html.includes('class="key-stats"'), "key stats row");
 assert(html.includes("layout-page1"), "page1 layout wrapper");
 assert(html.indexOf('class="main-col"') < html.indexOf('class="side-col"'), "main column before sidebar in DOM");
-assert(html.includes("1998"), "year built");
+assert(html.includes("Built 1998"), "year built in specs row");
+assert(!html.includes("Features &amp; amenities"), "no features section");
+assert(!html.includes("Hardwood floors"), "features list removed");
+assert(html.includes("details-panel"), "mobile details accordion");
 assert(html.includes("MLS-12345"), "MLS id");
 assert(html.includes("hero-img"), "gallery hero");
 assert(html.includes("gallery-prev"), "gallery prev arrow");
@@ -81,7 +84,7 @@ assert(html.includes('aria-label="Print flyer"'), "print icon button");
 assert(html.includes('aria-label="Share listing"'), "share icon button");
 assert(html.includes("Jane Agent"), "agent name");
 assert(html.includes("Summit Realty"), "brokerage");
-assert(html.includes("Contact agent"), "agent CTA without booking link");
+assert(html.includes("Contact Agent"), "agent CTA without booking link");
 assert(html.includes("Powered by WhachatCRM"), "powered-by footer");
 assert(html.includes('href="https://whachatcrm.com"'), "powered-by link");
 assert(html.includes('fill="#22c55e"'), "green W logo in footer");
@@ -107,10 +110,11 @@ const bookingHtml = buildPublicListingFlyerHtml({
 });
 assert(bookingHtml.includes("Schedule Showing"), "primary booking CTA");
 assert(bookingHtml.includes("https://calendly.com/jane/showing"), "booking URL");
-assert(bookingHtml.includes("Contact agent"), "secondary contact CTA with booking");
+assert(bookingHtml.includes("Contact Agent"), "secondary contact CTA with booking");
 assert(html.includes("Scan to view live listing") === false, "no scan label");
 assert(html.includes("openstreetmap.org"), "map embed when lat/lng present");
-assert(html.includes("Hardwood floors"), "features list");
+assert(html.includes("map-embed-wrap"), "map aspect ratio wrapper");
+assert(html.includes("print-additional-details"), "print page 2 details block");
 assert(html.includes("@media print"), "print styles");
 assert(html.includes('property="og:title"'), "open graph title tag");
 assert(html.includes('property="og:image"'), "open graph image tag");
@@ -174,7 +178,7 @@ const parsedHoa = inventoryRowToFlyerListing({
   hoaFeeCents: null,
   features: ["HOA $325/mo"],
 });
-assert(resolveDisplayHoaFee(parsedHoa) === "$325/mo HOA", "hoa parsed from features");
+assert(resolveDisplayHoaFee(parsedHoa) === "HOA $325/mo", "hoa parsed from features");
 
 const noPhotoHtml = buildPublicListingFlyerHtml({
   listing: { ...listing, photos: [], latitude: null, longitude: null },
