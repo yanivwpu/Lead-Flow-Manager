@@ -1291,6 +1291,14 @@ export const aiBusinessKnowledge = pgTable("ai_business_knowledge", {
   businessHours: text("business_hours"), // Business hours description
   locations: text("locations"), // Comma-separated locations
   bookingLink: text("booking_link"),
+  /** Public-facing display name (overrides users.name on flyers). */
+  displayName: text("display_name"),
+  /** Company/agency logo URL or data URL. */
+  companyLogo: text("company_logo"),
+  publicPhone: text("public_phone"),
+  publicEmail: text("public_email"),
+  publicWebsite: text("public_website"),
+  aboutText: text("about_text"),
   faqs: jsonb("faqs").default(sql`'[]'::jsonb`), // Array of {question, answer}
   salesGoals: text("sales_goals"), // book_call, get_phone, collect_deposit, etc.
   customInstructions: text("custom_instructions"), // Additional AI instructions

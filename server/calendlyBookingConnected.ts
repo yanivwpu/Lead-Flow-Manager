@@ -59,6 +59,15 @@ export function calendlySyncModeConfigPatch(webhookConnected: boolean, webhookFa
   return {};
 }
 
+/** Primary Calendly event type label saved at connect time. */
+export async function getCalendlyPrimaryEventTypeName(userId: string): Promise<string> {
+  const row = await storage.getIntegrationByUserAndType(userId, "calendly");
+  if (!row?.isActive) return "";
+  const cfg = (row.config || {}) as Record<string, unknown>;
+  const name = cfg.calendlyPrimaryEventTypeName;
+  return typeof name === "string" ? name.trim() : "";
+}
+
 export function appendCalendlyW3TrackingParams(schedulingUrl: string, contactId: string): string {
   const raw = (schedulingUrl || "").trim();
   if (!raw || !contactId) return raw;

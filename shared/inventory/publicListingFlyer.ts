@@ -47,11 +47,16 @@ export type PublicListingFlyerInput = {
   agent: PublicListingFlyerAgent;
   shareUrl: string;
   qrDataUrl: string;
-  /** Small brand mark, e.g. /favicon.svg — omitted when unavailable. */
-  brandLogoUrl?: string | null;
+  /** Company/agency logo from Business Profile; W logo fallback when absent. */
+  companyLogoUrl?: string | null;
 };
 
 const WHACHATCRM_HOME_URL = "https://whachatcrm.com";
+const WHACHAT_W_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect width="24" height="24" rx="5" fill="#334155"/><text x="12" y="16.5" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="13" font-weight="700" fill="#fff">W</text></svg>`;
+const SHARE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>`;
+const PRINT_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>`;
+const CHEVRON_LEFT = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>`;
+const CHEVRON_RIGHT = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>`;
 
 const STATUS_LABELS: Record<string, string> = {
   active: "Active",
@@ -89,7 +94,7 @@ function formatHoaFee(cents: number | null): string | null {
 
 function formatYearBuilt(year: number | null): string | null {
   if (year == null || year < 1600) return null;
-  return `Built ${year}`;
+  return String(year);
 }
 
 function formatYesNo(value: boolean | undefined): string | null {
@@ -127,6 +132,7 @@ export type ListingOpenGraphMeta = {
   description: string;
   imageUrl: string | null;
   shareUrl: string;
+  keywords: string;
 };
 
 /** Build share-preview title, description, and image for social crawlers. */
@@ -138,6 +144,7 @@ export function buildListingOpenGraphMeta(input: ListingOpenGraphInput): Listing
     "Property listing";
   const price = formatListingPriceForComposer(listing.priceCents);
   const bedsBaths = formatBedsBathsForComposer(listing.beds, listing.baths);
+  const descSnippet = truncateMetaText((listing.description || "").trim(), 120);
 
   const title = truncateMetaText(price ? `${price} · ${address}` : address, 95);
 
@@ -145,15 +152,21 @@ export function buildListingOpenGraphMeta(input: ListingOpenGraphInput): Listing
   if (price) descriptionParts.push(price);
   if (address) descriptionParts.push(address);
   if (bedsBaths) descriptionParts.push(bedsBaths);
+  if (descSnippet) descriptionParts.push(descSnippet);
   if (agent.name) descriptionParts.push(`Listed by ${agent.name}`);
   const description = truncateMetaText(
     descriptionParts.length > 0 ? descriptionParts.join(" · ") : address,
     200,
   );
 
+  const keywordParts = [address, listing.city, listing.state, price, bedsBaths, formatLabel(listing.propertyType)]
+    .filter(Boolean)
+    .map(String);
+  const keywords = [...new Set(keywordParts)].join(", ");
+
   const imageUrl = pickPrimaryPhotoUrl(listing.photos);
 
-  return { title, description, imageUrl, shareUrl };
+  return { title, description, imageUrl, shareUrl, keywords };
 }
 
 export function renderListingOpenGraphTags(meta: ListingOpenGraphMeta): string {
@@ -202,7 +215,22 @@ function buildAgentContactHref(
   return null;
 }
 
+function buildGoogleMapsUrl(listing: PublicListingFlyerListing): string | null {
+  const lat = listing.latitude;
+  const lng = listing.longitude;
+  if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
+    return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  }
+  const address = buildFullAddress(listing);
+  if (!address) return null;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+}
+
 function buildMapSection(listing: PublicListingFlyerListing): string {
+  const googleUrl = buildGoogleMapsUrl(listing);
+  const mapsBtn = googleUrl
+    ? `<a class="btn btn-outline map-btn" href="${escapeHtml(googleUrl)}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>`
+    : "";
   const lat = listing.latitude;
   const lng = listing.longitude;
   if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
@@ -212,14 +240,15 @@ function buildMapSection(listing: PublicListingFlyerListing): string {
     return `<section class="map-section">
       <h2>Location</h2>
       <iframe class="map-embed" title="Property location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="${escapeHtml(embed)}"></iframe>
+      ${mapsBtn}
     </section>`;
   }
   const address = buildFullAddress(listing);
-  if (!address) return "";
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+  if (!address && !mapsBtn) return "";
   return `<section class="map-section">
     <h2>Location</h2>
-    <p><a class="map-link" href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer">View on map</a></p>
+    ${address ? `<p class="map-address">${escapeHtml(address)}</p>` : ""}
+    ${mapsBtn}
   </section>`;
 }
 
@@ -228,22 +257,56 @@ function renderDetailItem(label: string, value: string | null): string {
   return `<div class="detail-item"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
 }
 
+function renderHeaderLogo(companyLogoUrl: string | null): string {
+  if (
+    companyLogoUrl &&
+    (companyLogoUrl.startsWith("data:image/") ||
+      /^https?:\/\//i.test(companyLogoUrl) ||
+      companyLogoUrl.startsWith("/"))
+  ) {
+    return `<img class="header-logo" src="${escapeHtml(companyLogoUrl)}" alt="" />`;
+  }
+  return `<span class="header-logo-fallback">${WHACHAT_W_LOGO_SVG}</span>`;
+}
+
+function renderFlyerHeader(companyLogoUrl: string | null, statusLabel: string | null): string {
+  const badge = statusLabel
+    ? `<span class="status-badge">${escapeHtml(statusLabel)}</span>`
+    : "";
+  return `<header class="flyer-header no-print">
+      <div class="header-left">${renderHeaderLogo(companyLogoUrl)}</div>
+      <div class="header-right">
+        ${badge}
+        <button type="button" class="icon-btn" id="btn-share" aria-label="Share listing">${SHARE_ICON_SVG}</button>
+        <button type="button" class="icon-btn" id="btn-print" aria-label="Print flyer">${PRINT_ICON_SVG}</button>
+      </div>
+    </header>`;
+}
+
 function renderGallery(photos: { url: string; order: number }[]): string {
   if (photos.length === 0) return "";
   const hero = photos[0].url;
+  const urlsJson = JSON.stringify(photos.map((p) => p.url));
   const thumbs = photos
     .map(
       (p, idx) =>
-        `<button type="button" class="thumb${idx === 0 ? " active" : ""}" data-url="${escapeHtml(p.url)}" aria-label="Photo ${idx + 1}">
+        `<button type="button" class="thumb${idx === 0 ? " active" : ""}" data-index="${idx}" data-url="${escapeHtml(p.url)}" aria-label="Photo ${idx + 1}">
           <img src="${escapeHtml(p.url)}" alt="" loading="lazy" />
         </button>`,
     )
     .join("");
+  const nav =
+    photos.length > 1
+      ? `<button type="button" class="gallery-nav gallery-prev" id="gallery-prev" aria-label="Previous photo">${CHEVRON_LEFT}</button>
+         <button type="button" class="gallery-nav gallery-next" id="gallery-next" aria-label="Next photo">${CHEVRON_RIGHT}</button>`
+      : "";
   return `<section class="gallery">
     <div class="hero-wrap">
       <img id="hero-img" class="hero-img" src="${escapeHtml(hero)}" alt="Property photo" />
+      ${nav}
     </div>
     ${photos.length > 1 ? `<div class="thumbs" role="list">${thumbs}</div>` : ""}
+    <script type="application/json" id="gallery-urls">${urlsJson.replace(/</g, "\\u003c")}</script>
   </section>`;
 }
 
@@ -254,7 +317,7 @@ function renderAgentActions(agent: PublicListingFlyerAgent, listing: PublicListi
 
   if (bookingHref) {
     buttons.push(
-      `<a class="btn btn-primary agent-cta" href="${escapeHtml(bookingHref)}" target="_blank" rel="noopener noreferrer">Book a showing</a>`,
+      `<a class="btn btn-primary agent-cta" href="${escapeHtml(bookingHref)}" target="_blank" rel="noopener noreferrer">Schedule Showing</a>`,
     );
     if (contactHref) {
       buttons.push(
@@ -269,6 +332,13 @@ function renderAgentActions(agent: PublicListingFlyerAgent, listing: PublicListi
 
   if (buttons.length === 0) return "";
   return `<div class="agent-actions">${buttons.join("")}</div>`;
+}
+
+function agentInitials(agent: PublicListingFlyerAgent): string {
+  const source = agent.name || agent.brokerageName || "W";
+  const parts = source.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+  return source.charAt(0).toUpperCase();
 }
 
 function renderAgentCard(agent: PublicListingFlyerAgent, listing: PublicListingFlyerListing): string {
@@ -286,7 +356,7 @@ function renderAgentCard(agent: PublicListingFlyerAgent, listing: PublicListingF
 
   const avatar = agent.avatarUrl
     ? `<img class="agent-avatar" src="${escapeHtml(agent.avatarUrl)}" alt="" />`
-    : `<div class="agent-avatar placeholder" aria-hidden="true">${escapeHtml((agent.name || agent.brokerageName || "A").charAt(0))}</div>`;
+    : `<div class="agent-avatar placeholder" aria-hidden="true">${escapeHtml(agentInitials(agent))}</div>`;
 
   const lines: string[] = [];
   if (agent.name) lines.push(`<p class="agent-name">${escapeHtml(agent.name)}</p>`);
@@ -314,14 +384,11 @@ function renderAgentCard(agent: PublicListingFlyerAgent, listing: PublicListingF
   </aside>`;
 }
 
-function renderPoweredByFooter(brandLogoUrl?: string | null): string {
-  const logo =
-    brandLogoUrl && /^\/\S+/.test(brandLogoUrl)
-      ? `<img src="${escapeHtml(brandLogoUrl)}" alt="" class="powered-logo" width="16" height="16" />`
-      : "";
+function renderPoweredByFooter(): string {
   return `<footer class="site-footer">
     <a class="powered-by" href="${WHACHATCRM_HOME_URL}" target="_blank" rel="noopener noreferrer">
-      ${logo}<span>Powered by WhachatCRM</span>
+      <span class="powered-logo">${WHACHAT_W_LOGO_SVG}</span>
+      <span>Powered by WhachatCRM</span>
     </a>
   </footer>`;
 }
@@ -384,10 +451,10 @@ export function inventoryRowToFlyerListing(row: {
 }
 
 export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): string {
-  const { listing, agent, shareUrl, qrDataUrl, brandLogoUrl = "/favicon.svg" } = input;
+  const { listing, agent, shareUrl, qrDataUrl, companyLogoUrl = null } = input;
   const photos = parsePhotos(listing.photos);
   const address = buildFullAddress(listing);
-  const title = address || [listing.city, listing.state].filter(Boolean).join(", ") || "Property Listing";
+  const headline = address || [listing.city, listing.state].filter(Boolean).join(", ") || "Property Listing";
   const openGraph = buildListingOpenGraphMeta({ listing, agent, shareUrl });
   const price = formatListingPriceForComposer(listing.priceCents) || "Price on request";
   const bedsBaths = formatBedsBathsForComposer(listing.beds, listing.baths);
@@ -399,21 +466,21 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   const status = STATUS_LABELS[listing.status] || formatLabel(listing.status);
   const details = listing.listingDetails;
   const description = (listing.description || "").trim();
-
-  const highlights = [bedsBaths, sqft, yearBuilt, propertyType].filter(Boolean) as string[];
+  const parkingGarage = details.parkingGarage || null;
 
   const detailGrid = [
     renderDetailItem("Price", price),
-    renderDetailItem("Bedrooms / Baths", bedsBaths),
+    renderDetailItem("Bedrooms", listing.beds != null ? String(listing.beds % 1 === 0 ? listing.beds : listing.beds.toFixed(1)) : null),
+    renderDetailItem("Bathrooms", listing.baths != null ? String(listing.baths % 1 === 0 ? listing.baths : listing.baths.toFixed(1)) : null),
     renderDetailItem("Square footage", sqft),
-    renderDetailItem("Property type", propertyType),
-    renderDetailItem("Property subtype", propertySubtype),
     renderDetailItem("Year built", yearBuilt),
     renderDetailItem("HOA fee", hoa),
-    renderDetailItem("Address", address || null),
+    renderDetailItem("Property type", propertyType),
+    renderDetailItem("Property subtype", propertySubtype),
     renderDetailItem("Status", status || null),
     renderDetailItem("MLS / Listing ID", listing.providerListingId || null),
-    renderDetailItem("Parking / garage", details.parkingGarage || null),
+    renderDetailItem("Parking", parkingGarage),
+    renderDetailItem("Garage", parkingGarage),
     renderDetailItem("Waterfront", formatYesNo(details.waterfront)),
     renderDetailItem("Pool", formatYesNo(details.pool)),
     renderDetailItem("View", details.view || null),
@@ -442,17 +509,20 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="${escapeHtml(openGraph.description)}" />
+  <meta name="keywords" content="${escapeHtml(openGraph.keywords)}" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="${escapeHtml(shareUrl)}" />
   <title>${escapeHtml(openGraph.title)}</title>
   ${renderListingOpenGraphTags(openGraph)}
   <style>
     :root {
-      --brand: #25D366;
-      --brand-dark: #1da851;
+      --accent: #4f46e5;
+      --accent-dark: #4338ca;
       --ink: #0f172a;
       --muted: #64748b;
       --border: #e2e8f0;
       --surface: #ffffff;
-      --bg: #f1f5f9;
+      --bg: #f8fafc;
     }
     * { box-sizing: border-box; }
     body {
@@ -468,33 +538,78 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 16px 20px;
+      padding: 14px 20px;
       border-bottom: 1px solid var(--border);
-      background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+      background: #fff;
     }
-    .brand { font-weight: 700; font-size: 0.95rem; color: var(--brand-dark); letter-spacing: 0.02em; }
-    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .header-left { display: flex; align-items: center; min-width: 0; }
+    .header-logo { max-height: 40px; max-width: 180px; width: auto; object-fit: contain; display: block; }
+    .header-logo-fallback { display: flex; align-items: center; line-height: 0; }
+    .header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .status-badge {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #4338ca;
+      border: 1px solid #c7d2fe;
+    }
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .icon-btn:hover { color: var(--ink); border-color: #cbd5e1; background: #f8fafc; }
     .btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      padding: 8px 14px;
+      padding: 10px 16px;
       border-radius: 8px;
       font-size: 0.875rem;
       font-weight: 600;
       text-decoration: none;
       cursor: pointer;
-      border: 1px solid var(--border);
-      background: #fff;
-      color: var(--ink);
+      border: 1px solid transparent;
     }
-    .btn:hover { border-color: #cbd5e1; }
-    .btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; }
-    .btn-primary:hover { background: var(--brand-dark); border-color: var(--brand-dark); }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+    .btn-outline { background: #fff; border-color: var(--border); color: var(--ink); }
+    .btn-outline:hover { border-color: #cbd5e1; background: #f8fafc; }
     .flyer-body { padding: 0 20px 32px; }
-    .gallery { margin: 0 -20px 20px; }
-    .hero-wrap { background: #e2e8f0; }
+    .gallery { margin: 0 -20px 16px; }
+    .hero-wrap { position: relative; background: #e2e8f0; }
     .hero-img { display: block; width: 100%; max-height: 480px; object-fit: cover; }
+    .gallery-nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.92);
+      color: var(--ink);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(15,23,42,0.12);
+    }
+    .gallery-nav:hover { background: #fff; }
+    .gallery-prev { left: 12px; }
+    .gallery-next { right: 12px; }
     .thumbs {
       display: flex;
       gap: 8px;
@@ -514,25 +629,15 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       cursor: pointer;
       background: #e2e8f0;
     }
-    .thumb.active { border-color: var(--brand); }
+    .thumb.active { border-color: var(--accent); }
     .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .headline { padding-top: 8px; }
-    .headline h1 { margin: 0 0 6px; font-size: 1.5rem; line-height: 1.25; }
-    .price-line { font-size: 1.35rem; font-weight: 700; color: var(--brand-dark); margin: 0 0 8px; }
-    .highlights { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 20px; padding: 0; list-style: none; }
-    .highlights li {
-      background: #f1f5f9;
-      color: var(--muted);
-      padding: 4px 10px;
-      border-radius: 999px;
-      font-size: 0.8125rem;
-      font-weight: 500;
-    }
+    .headline { padding: 8px 0 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+    .headline h1 { margin: 0; font-size: 1.375rem; line-height: 1.3; font-weight: 700; }
     .layout { display: grid; gap: 24px; }
     @media (min-width: 768px) {
       .layout { grid-template-columns: 1fr 280px; align-items: start; }
     }
-    h2 { font-size: 1rem; margin: 0 0 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    h2 { font-size: 0.8125rem; margin: 0 0 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
     .details-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px 20px; margin-bottom: 24px; }
     .detail-item dt { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 2px; }
     .detail-item dd { margin: 0; font-weight: 500; font-size: 0.9375rem; }
@@ -540,19 +645,24 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     .features-list { margin: 0; padding-left: 1.2rem; columns: 2; column-gap: 24px; }
     .features-list li { margin-bottom: 6px; break-inside: avoid; }
     .map-section { margin-top: 8px; }
-    .map-embed { width: 100%; height: 260px; border: 1px solid var(--border); border-radius: 10px; }
-    .map-link { color: var(--brand-dark); font-weight: 600; }
+    .map-embed { width: 100%; height: 260px; border: 1px solid var(--border); border-radius: 10px; display: block; margin-bottom: 12px; }
+    .map-address { margin: 0 0 12px; color: #334155; }
+    .map-btn { margin-top: 4px; }
     .agent-card {
       display: flex;
-      gap: 14px;
-      padding: 16px;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 12px;
+      padding: 20px 16px;
       border: 1px solid var(--border);
       border-radius: 12px;
-      background: #f8fafc;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.06);
     }
     .agent-avatar {
-      width: 56px;
-      height: 56px;
+      width: 72px;
+      height: 72px;
       border-radius: 50%;
       object-fit: cover;
       flex-shrink: 0;
@@ -561,19 +671,19 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       display: flex;
       align-items: center;
       justify-content: center;
-      background: var(--brand);
-      color: #fff;
+      background: #e2e8f0;
+      color: #475569;
       font-weight: 700;
-      font-size: 1.25rem;
+      font-size: 1.375rem;
     }
     .agent-name { margin: 0 0 2px; font-weight: 700; font-size: 1rem; }
     .agent-brokerage { margin: 0 0 8px; color: var(--muted); font-size: 0.875rem; }
     .agent-contact { margin: 0 0 4px; font-size: 0.875rem; }
     .agent-contact a { color: var(--ink); text-decoration: none; }
     .agent-contact a:hover { text-decoration: underline; }
-    .agent-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+    .agent-body { width: 100%; }
+    .agent-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
     .agent-cta, .agent-cta-secondary { width: 100%; text-align: center; }
-    .agent-cta-secondary { background: #fff; }
     .qr-footer {
       margin-top: 32px;
       padding: 20px;
@@ -602,7 +712,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       text-decoration: none;
     }
     .powered-by:hover { color: var(--muted); }
-    .powered-logo { display: block; flex-shrink: 0; opacity: 0.9; }
+    .powered-logo { display: flex; align-items: center; line-height: 0; }
     .toast {
       position: fixed;
       bottom: 24px;
@@ -625,7 +735,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       .flyer { max-width: none; box-shadow: none; }
       .gallery { margin: 0 0 16px; }
       .hero-img { max-height: 320px; }
-      .thumbs { display: none; }
+      .thumbs, .gallery-nav { display: none; }
       .map-embed { height: 200px; }
       .agent-card { break-inside: avoid; }
       .qr-footer { break-inside: avoid; page-break-inside: avoid; }
@@ -633,27 +743,17 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     }
     @media (max-width: 480px) {
       .features-list { columns: 1; }
-      .flyer-header { flex-direction: column; align-items: stretch; }
-      .actions { justify-content: stretch; }
-      .actions .btn { flex: 1; }
+      .gallery-nav { width: 34px; height: 34px; }
     }
   </style>
 </head>
 <body>
   <div class="flyer">
-    <header class="flyer-header no-print">
-      <span class="brand">WhaChatCRM Listing</span>
-      <div class="actions">
-        <button type="button" class="btn" id="btn-print">Print Flyer</button>
-        <button type="button" class="btn" id="btn-share">Share Listing</button>
-      </div>
-    </header>
+    ${renderFlyerHeader(companyLogoUrl, status || null)}
     <div class="flyer-body">
       ${renderGallery(photos)}
       <div class="headline">
-        <h1>${escapeHtml(title)}</h1>
-        <p class="price-line">${escapeHtml(price)}</p>
-        ${highlights.length > 0 ? `<ul class="highlights">${highlights.map((h) => `<li>${escapeHtml(h)}</li>`).join("")}</ul>` : ""}
+        <h1>${escapeHtml(headline)}</h1>
       </div>
       <div class="layout">
         <div class="main-col">
@@ -673,20 +773,34 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
         <img src="${escapeHtml(qrDataUrl)}" alt="QR code for listing URL" width="120" height="120" />
         <p class="qr-label">Scan to view live listing.<br /><span class="no-print">${escapeHtml(shareUrl)}</span></p>
       </footer>
-      ${renderPoweredByFooter(brandLogoUrl)}
+      ${renderPoweredByFooter()}
     </div>
   </div>
   <div id="toast" class="toast no-print" role="status" aria-live="polite">Listing link copied.</div>
   <script>
     (function () {
       var hero = document.getElementById("hero-img");
-      document.querySelectorAll(".thumb").forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          if (!hero) return;
-          hero.src = btn.getAttribute("data-url") || "";
-          document.querySelectorAll(".thumb").forEach(function (t) { t.classList.remove("active"); });
-          btn.classList.add("active");
+      var urlsEl = document.getElementById("gallery-urls");
+      var urls = [];
+      try { urls = urlsEl ? JSON.parse(urlsEl.textContent || "[]") : []; } catch (e) {}
+      var index = 0;
+      function setPhoto(i) {
+        if (!hero || !urls.length) return;
+        index = (i + urls.length) % urls.length;
+        hero.src = urls[index];
+        document.querySelectorAll(".thumb").forEach(function (t, ti) {
+          t.classList.toggle("active", ti === index);
         });
+      }
+      document.getElementById("gallery-prev")?.addEventListener("click", function () { setPhoto(index - 1); });
+      document.getElementById("gallery-next")?.addEventListener("click", function () { setPhoto(index + 1); });
+      document.querySelectorAll(".thumb").forEach(function (btn, i) {
+        btn.addEventListener("click", function () { setPhoto(i); });
+      });
+      document.addEventListener("keydown", function (e) {
+        if (!urls.length || urls.length < 2) return;
+        if (e.key === "ArrowLeft") setPhoto(index - 1);
+        if (e.key === "ArrowRight") setPhoto(index + 1);
       });
       var toast = document.getElementById("toast");
       function showToast() {

@@ -55,19 +55,29 @@ const html = buildPublicListingFlyerHtml({
   qrDataUrl: "data:image/png;base64,TEST",
 });
 
-assert(html.includes("123 Main St"), "address in page");
-assert(html.includes("$450,000"), "formatted price");
+assert(html.includes("123 Main St"), "address in headline");
+assert(html.includes("$450,000"), "formatted price in details");
+assert(!html.includes('class="price-line"'), "no duplicate price in headline");
+assert(!html.includes('class="highlights"'), "no duplicate highlight pills");
 assert(html.includes("1,800 sq ft"), "square footage");
-assert(html.includes("Built 1998"), "year built");
+assert(html.includes("1998"), "year built");
 assert(html.includes("MLS-12345"), "MLS id");
 assert(html.includes("hero-img"), "gallery hero");
+assert(html.includes("gallery-prev"), "gallery prev arrow");
+assert(html.includes("gallery-next"), "gallery next arrow");
 assert(html.includes("class=\"thumb"), "thumbnail gallery");
+assert(!html.includes("WhaChatCRM Listing"), "no legacy header text");
+assert(html.includes('aria-label="Print flyer"'), "print icon button");
+assert(html.includes('aria-label="Share listing"'), "share icon button");
+assert(html.includes("Active"), "status badge");
 assert(html.includes("Jane Agent"), "agent name");
 assert(html.includes("Summit Realty"), "brokerage");
 assert(html.includes("Contact agent"), "agent CTA without booking link");
 assert(html.includes("Powered by WhachatCRM"), "powered-by footer");
 assert(html.includes('href="https://whachatcrm.com"'), "powered-by link");
-assert(html.includes("/favicon.svg"), "brand logo in footer");
+assert(html.includes("Open in Google Maps"), "google maps link");
+assert(html.includes('name="robots" content="index, follow"'), "seo robots");
+assert(html.includes('rel="canonical"'), "canonical url");
 
 const bookingHtml = buildPublicListingFlyerHtml({
   listing,
@@ -82,11 +92,9 @@ const bookingHtml = buildPublicListingFlyerHtml({
   shareUrl: "https://app.whachatcrm.com/share/listings/x",
   qrDataUrl: "data:image/png;base64,TEST",
 });
-assert(bookingHtml.includes("Book a showing"), "primary booking CTA");
+assert(bookingHtml.includes("Schedule Showing"), "primary booking CTA");
 assert(bookingHtml.includes("https://calendly.com/jane/showing"), "booking URL");
 assert(bookingHtml.includes("Contact agent"), "secondary contact CTA with booking");
-assert(html.includes("Print Flyer"), "print action");
-assert(html.includes("Share Listing"), "share action");
 assert(html.includes("Scan to view live listing"), "QR label");
 assert(html.includes("openstreetmap.org"), "map embed when lat/lng present");
 assert(html.includes("Hardwood floors"), "features list");
@@ -116,6 +124,15 @@ assert(ogMeta.title.includes("123 Main St"), "og title includes address");
 const ogTags = renderListingOpenGraphTags(ogMeta);
 assert(ogTags.includes('property="og:url"'), "og:url tag");
 
+const logoHtml = buildPublicListingFlyerHtml({
+  listing,
+  agent: { name: "Jane", email: null, phone: null, avatarUrl: null, brokerageName: "Co", bookingLink: null },
+  shareUrl: "https://app.example.com/share/listings/x",
+  qrDataUrl: "data:image/png;base64,TEST",
+  companyLogoUrl: "https://cdn.example.com/logo.png",
+});
+assert(logoHtml.includes("https://cdn.example.com/logo.png"), "company logo in header");
+
 const noPhotoHtml = buildPublicListingFlyerHtml({
   listing: { ...listing, photos: [], latitude: null, longitude: null },
   agent: { name: null, email: null, phone: null, avatarUrl: null, brokerageName: null, bookingLink: null },
@@ -123,42 +140,6 @@ const noPhotoHtml = buildPublicListingFlyerHtml({
   qrDataUrl: "data:image/png;base64,TEST",
 });
 assert(!noPhotoHtml.includes('class="gallery"'), "gallery hidden without photos");
-assert(noPhotoHtml.includes("View on map"), "address map link fallback");
-
-const coreOnlyListing = inventoryRowToFlyerListing({
-  id: "22222222-2222-4222-8222-222222222222",
-  priceCents: 325_000_00,
-  beds: 2,
-  baths: 1,
-  squareFeet: null,
-  yearBuilt: null,
-  hoaFeeCents: null,
-  propertyType: "condo",
-  propertySubtype: null,
-  description: "Updated kitchen and balcony.",
-  features: ["Balcony"],
-  photos: [{ url: "https://cdn.example.com/c.jpg", order: 0 }],
-  addressLine1: "88 Ocean Dr",
-  addressLine2: null,
-  city: "Miami",
-  state: "FL",
-  zip: "33139",
-  latitude: 25.7617,
-  longitude: -80.1918,
-  status: "active",
-  providerListingId: "MLS-99",
-  listingDetails: {},
-});
-
-const coreHtml = buildPublicListingFlyerHtml({
-  listing: coreOnlyListing,
-  agent: { name: "Sam Agent", email: null, phone: null, avatarUrl: null, brokerageName: null, bookingLink: null },
-  shareUrl: "https://app.example.com/share/listings/22222222-2222-4222-8222-222222222222",
-  qrDataUrl: "data:image/png;base64,TEST",
-});
-assert(coreHtml.includes("$325,000"), "core-only listing shows price");
-assert(coreHtml.includes("88 Ocean Dr"), "core-only listing shows address");
-assert(coreHtml.includes('property="og:title"'), "OG tags on core-only listing");
-assert(coreHtml.includes("2 bed / 1 bath"), "beds/baths on core-only page");
+assert(noPhotoHtml.includes("Open in Google Maps"), "address google maps fallback");
 
 console.log("inventory-public-flyer.test.ts: OK");

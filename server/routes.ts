@@ -19,6 +19,7 @@ import { registerCampaignEnrollmentRoutes } from "./routes/campaignEnrollments";
 import { registerWebhookRoutes } from "./routes/webhooks";
 import { registerInventoryRoutes } from "./routes/inventory";
 import { registerPublicListingRoutes } from "./routes/publicListings";
+import { registerBusinessProfileRoutes } from "./routes/businessProfile";
 import {
   getWhatsAppAvailability,
   sendWhatsAppMessage,
@@ -6826,6 +6827,7 @@ export async function registerRoutes(
         }
 
         let eventNames: string[] | undefined;
+        let calendlyPrimaryEventTypeName = "";
         const userScheduling = meResource?.scheduling_url;
         let calendlyPrimarySchedulingUrl =
           typeof userScheduling === "string" && /^https?:\/\//i.test(userScheduling) ? userScheduling.trim() : "";
@@ -6855,6 +6857,15 @@ export async function registerRoutes(
           if (!calendlyPrimarySchedulingUrl && schedulingUrls[0]) {
             calendlyPrimarySchedulingUrl = schedulingUrls[0].trim();
           }
+          const primaryMatch = coll.find(
+            (x) =>
+              typeof x.scheduling_url === "string" &&
+              x.scheduling_url.trim() === calendlyPrimarySchedulingUrl,
+          );
+          calendlyPrimaryEventTypeName =
+            (typeof primaryMatch?.name === "string" && primaryMatch.name.trim()) ||
+            (typeof coll[0]?.name === "string" && coll[0].name.trim()) ||
+            "";
         }
 
         const webhookUrl = `https://app.whachatcrm.com/api/webhooks/calendly/${req.user.id}`;
@@ -6935,6 +6946,7 @@ export async function registerRoutes(
           ...(webhookRegistrationError ? { calendlyWebhookError: webhookRegistrationError } : { calendlyWebhookError: null }),
           connectionStatus: "connected",
           calendlyPrimarySchedulingUrl,
+          calendlyPrimaryEventTypeName,
           ...calendlySyncModeConfigPatch(!webhookRegistrationError, !!webhookRegistrationError),
         };
         calendlyExtra = {
@@ -10867,6 +10879,7 @@ export async function registerRoutes(
   registerWebhookRoutes(app);
   registerInventoryRoutes(app);
   registerPublicListingRoutes(app);
+  registerBusinessProfileRoutes(app);
 
   return httpServer;
 }

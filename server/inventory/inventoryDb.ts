@@ -559,6 +559,7 @@ export type PublicListingAgentProfile = {
 export type PublicListingFlyerData = {
   listing: InventoryListing;
   agent: PublicListingAgentProfile;
+  companyLogoUrl: string | null;
   shareUrl: string;
 };
 
@@ -584,36 +585,11 @@ export async function getPublicListingFlyerData(
   }
 
   try {
-    const [userRow] = await db
-      .select({
-        name: users.name,
-        email: users.email,
-        avatarUrl: users.avatarUrl,
-        twilioWhatsappNumber: users.twilioWhatsappNumber,
-        metaDisplayPhoneNumber: users.metaDisplayPhoneNumber,
-      })
-      .from(users)
-      .where(eq(users.id, listing.userId))
-      .limit(1);
+    const { resolvePublicListingAgent } = await import("../businessProfileService");
+    const resolved = await resolvePublicListingAgent(listing.userId);
+    const { companyLogoUrl, ...agent } = resolved;
 
-    const { storage } = await import("../storage");
-    const knowledge = await storage.getAiBusinessKnowledge(listing.userId);
-
-    const phone =
-      (userRow?.metaDisplayPhoneNumber || "").trim() ||
-      (userRow?.twilioWhatsappNumber || "").trim() ||
-      null;
-
-    const agent: PublicListingAgentProfile = {
-      name: userRow?.name?.trim() || null,
-      email: userRow?.email?.trim() || null,
-      phone,
-      avatarUrl: userRow?.avatarUrl?.trim() || null,
-      brokerageName: knowledge?.businessName?.trim() || null,
-      bookingLink: knowledge?.bookingLink?.trim() || null,
-    };
-
-    return { listing, agent, shareUrl };
+    return { listing, agent, companyLogoUrl, shareUrl };
   } catch (error) {
     console.error("[public-listing] failed to load agent profile for flyer", {
       listingId,

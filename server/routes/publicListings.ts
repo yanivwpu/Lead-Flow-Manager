@@ -33,6 +33,7 @@ export function registerPublicListingRoutes(app: Express): void {
         agent: flyerData.agent,
         shareUrl: flyerData.shareUrl,
         qrDataUrl,
+        companyLogoUrl: flyerData.companyLogoUrl,
       });
 
       res.type("html").send(html);

@@ -13,6 +13,7 @@ import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
 import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
 import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { ChannelSettings } from "@/components/ChannelSettings";
+import { BusinessProfileSettings } from "@/components/settings/BusinessProfileSettings";
 import { cn } from "@/lib/utils";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
@@ -385,7 +386,6 @@ export function Settings() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
-  const [isUploading, setIsUploading] = useState(false);
   const channelsSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -440,49 +440,6 @@ export function Settings() {
     );
   }
 
-  const updateAvatarMutation = useMutation({
-    mutationFn: async (avatarUrl: string) => {
-      // For Replit environment, we'll try a different approach if standard fetch fails
-      const fetchWithRetry = async (url: string, options: any, retries = 1) => {
-        try {
-          const res = await fetch(url, options);
-          if (res.status === 401 && retries > 0) {
-            // If unauthorized, try to refresh session once
-            await fetch('/api/auth/me', { credentials: 'include' });
-            return fetch(url, options);
-          }
-          return res;
-        } catch (e) {
-          if (retries > 0) return fetchWithRetry(url, options, retries - 1);
-          throw e;
-        }
-      };
-
-      const res = await fetchWithRetry("/api/users/avatar", {
-        method: "PATCH",
-        headers: { 
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        body: JSON.stringify({ avatarUrl }),
-        credentials: "include",
-      });
-      
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({ error: "Failed to update avatar" }));
-        throw new Error(error.error || "Failed to update avatar");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      toast({ title: "Avatar Updated", description: "Your profile picture has been updated successfully." });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
-  });
-
   const deleteAccountMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/account/delete-request", {
@@ -511,35 +468,6 @@ export function Settings() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
-
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 2000000) {
-      toast({ title: "File too large", description: "Please use an image under 2MB", variant: "destructive" });
-      return;
-    }
-
-    setIsUploading(true);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      // Extract just the base64 part for size validation if it's a data URL
-      const base64Content = base64String.includes(',') ? base64String.split(',')[1] : base64String;
-      
-      // Rough check for base64 size (4 chars = 3 bytes)
-      if (base64Content.length > 2800000) {
-        toast({ title: "File too large", description: "The processed image is too large. Please try a smaller file.", variant: "destructive" });
-        setIsUploading(false);
-        return;
-      }
-      
-      updateAvatarMutation.mutate(base64String);
-      setIsUploading(false);
-    };
-    reader.readAsDataURL(file);
-  };
 
   useEffect(() => {
     const params = new URLSearchParams(searchString);
@@ -1224,58 +1152,7 @@ export function Settings() {
             )}
           </div>
 
-          {/* Your Profile */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
-            <div className="flex items-center gap-3 mb-4 sm:mb-6">
-              <div className="h-9 w-9 sm:h-10 sm:w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                <Users className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-base sm:text-lg font-bold text-gray-900">Your Profile</h2>
-                <p className="text-xs sm:text-sm text-gray-500">Customize how you appear to your team.</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="relative group">
-                {user?.avatarUrl ? (
-                  <img
-                    src={user?.avatarUrl || ""}
-                    alt={user?.name || "Profile"}
-                    className="h-16 w-16 rounded-full object-cover border-2 border-white shadow-sm"
-                  />
-                ) : (
-                  <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xl font-bold border-2 border-white shadow-sm">
-                    {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                  </div>
-                )}
-                <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                  {isUploading ? (
-                    <Loader2 className="h-5 w-5 text-white animate-spin" />
-                  ) : (
-                    <Smartphone className="h-5 w-5 text-white" />
-                  )}
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept="image/*"
-                    onChange={handleAvatarChange}
-                    disabled={isUploading}
-                  />
-                </label>
-              </div>
-              <div>
-                <p className="font-medium text-gray-900">{user?.name}</p>
-                <p className="text-sm text-gray-500">{user?.email}</p>
-                <button 
-                  onClick={() => document.querySelector<HTMLInputElement>('input[type="file"]')?.click()}
-                  className="text-xs text-blue-600 hover:text-blue-700 font-medium mt-1"
-                >
-                  Change Photo
-                </button>
-              </div>
-            </div>
-          </div>
+          <BusinessProfileSettings />
 
           {/* Danger Zone — last section */}
           <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 sm:p-5 shadow-none">
