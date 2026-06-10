@@ -159,11 +159,37 @@ function formatYearBuilt(year: number | null): string | null {
   return String(year);
 }
 
-function parsePhotos(raw: { url: string; order?: number }[]): { url: string; order: number }[] {
+function parsePhotos(
+  raw: { url: string; order?: number; caption?: string }[],
+): { url: string; order: number; caption?: string }[] {
   return raw
     .filter((p) => typeof p.url === "string" && /^https?:\/\//i.test(p.url))
-    .map((p, idx) => ({ url: p.url.trim(), order: p.order ?? idx }))
+    .map((p, idx) => ({
+      url: p.url.trim(),
+      order: p.order ?? idx,
+      caption: typeof p.caption === "string" ? p.caption.trim() : undefined,
+    }))
     .sort((a, b) => a.order - b.order);
+}
+
+/** Heuristic only — MLS feeds sometimes expose both watermarked and clean variants. */
+const MLS_WATERMARK_URL_PATTERN = /watermark|mlswatermark|\/wm[/_-]|[_-]wm[./-]/i;
+
+function isLikelyWatermarkedPhoto(photo: { url: string; caption?: string }): boolean {
+  if (photo.caption && /watermark/i.test(photo.caption)) return true;
+  return MLS_WATERMARK_URL_PATTERN.test(photo.url);
+}
+
+/** Prefer a clean hero when the primary MLS photo is watermarked but a clean variant exists. */
+export function pickFlyerHeroPhotos(
+  photos: { url: string; order: number; caption?: string }[],
+): { url: string; order: number; caption?: string }[] {
+  if (photos.length <= 1) return photos;
+  const sorted = [...photos].sort((a, b) => a.order - b.order);
+  if (!isLikelyWatermarkedPhoto(sorted[0])) return sorted;
+  const clean = sorted.find((p) => !isLikelyWatermarkedPhoto(p));
+  if (!clean) return sorted;
+  return [clean, ...sorted.filter((p) => p.url !== clean.url)];
 }
 
 function buildFullAddress(listing: PublicListingFlyerListing): string {
@@ -365,8 +391,11 @@ function buildFlyerBottomRow(
 function renderFlyerHeader(listingLabel: "FOR SALE" | "FOR RENT"): string {
   return `<header class="flyer-header">
       <div class="header-actions no-print">
-        <button type="button" class="icon-btn" id="btn-share" aria-label="Share listing">${SHARE_ICON_SVG}</button>
-        <button type="button" class="icon-btn" id="btn-print" aria-label="Print flyer">${PRINT_ICON_SVG}</button>
+        <p class="print-hint">For best print results, turn off browser Headers and footers.</p>
+        <div class="header-action-btns">
+          <button type="button" class="icon-btn" id="btn-share" aria-label="Share listing">${SHARE_ICON_SVG}</button>
+          <button type="button" class="icon-btn" id="btn-print" aria-label="Print flyer">${PRINT_ICON_SVG}</button>
+        </div>
       </div>
       <div class="listing-banner" aria-label="${escapeHtml(listingLabel)}">${escapeHtml(listingLabel)}</div>
     </header>`;
@@ -623,7 +652,7 @@ export function inventoryRowToFlyerListing(row: {
 
 export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): string {
   const { listing, agent, shareUrl, qrDataUrl, companyLogoUrl = null } = input;
-  const photos = parsePhotos(listing.photos);
+  const photos = pickFlyerHeroPhotos(parsePhotos(listing.photos));
   const openGraph = buildListingOpenGraphMeta({ listing, agent, shareUrl });
   const listingLabel = resolveFlyerListingLabel(listing);
   const price = formatListingPriceForComposer(listing.priceCents) || "Price on request";
@@ -694,10 +723,19 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     }
     .header-actions {
       display: flex;
-      align-items: center;
-      gap: 8px;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
       flex-shrink: 0;
+      max-width: min(240px, 52%);
     }
+    .print-hint {
+      margin: 0;
+      font-size: 0.6875rem;
+      line-height: 1.35;
+      color: #94a3b8;
+    }
+    .header-action-btns { display: flex; align-items: center; gap: 8px; }
     .icon-btn {
       display: inline-flex;
       align-items: center;
@@ -879,13 +917,13 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       flex-direction: column;
       align-items: center;
       text-align: center;
-      gap: 6px;
+      gap: 8px;
       height: 100%;
-      padding: 14px 12px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
+      padding: 16px 14px;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 12px;
       background: #fff;
-      box-shadow: 0 1px 2px rgba(15,23,42,0.05);
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
     }
     .agent-logo-footer {
       margin-top: auto;
@@ -902,11 +940,12 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       object-fit: contain;
     }
     .agent-avatar {
-      width: 64px;
-      height: 64px;
+      width: 72px;
+      height: 72px;
       border-radius: 50%;
       object-fit: cover;
       flex-shrink: 0;
+      border: 2px solid #f1f5f9;
     }
     .agent-avatar.placeholder {
       display: flex;
@@ -917,7 +956,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       font-weight: 700;
       font-size: 1.375rem;
     }
-    .agent-name { margin: 0 0 2px; font-weight: 700; font-size: 0.9375rem; }
+    .agent-name { margin: 0 0 2px; font-weight: 700; font-size: 1rem; }
     .agent-brokerage { margin: 0 0 6px; color: var(--muted); font-size: 0.8125rem; }
     .agent-contact { margin: 0 0 3px; font-size: 0.8125rem; }
     .agent-contact a { color: var(--ink); text-decoration: none; }
@@ -973,35 +1012,35 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       }
       .no-print { display: none !important; }
       .flyer { max-width: none; box-shadow: none; }
-      .flyer-header { padding: 0 0 6px; justify-content: flex-end; }
+      .flyer-header { padding: 0 0 4px; justify-content: flex-end; }
       .listing-banner {
         font-size: 11pt;
-        padding: 6px 22px 6px 16px;
+        padding: 5px 20px 5px 14px;
         margin-right: 0;
       }
       .flyer-body { padding: 0; }
-      .gallery { margin: 0 0 8px; }
+      .gallery { margin: 0 0 6px; }
       .hero-wrap {
-        height: 3.75in;
+        height: 4.1in;
         min-height: 0;
       }
       .hero-img { max-height: none; }
       .thumbs, .gallery-nav { display: none !important; }
-      .property-header { padding: 0 0 8px; }
+      .property-header { padding: 0 0 6px; }
       .property-street { font-size: 14pt; margin-bottom: 2px; }
-      .property-location { font-size: 10pt; margin-bottom: 6px; }
+      .property-location { font-size: 10pt; margin-bottom: 4px; }
       .key-stats { flex-wrap: wrap; }
       .key-stat.key-price { font-size: 12pt; }
       .key-stat { font-size: 9pt; }
       .key-stat-sep { margin: 0 6px; }
-      .description-section { margin: 8px 0; page-break-inside: avoid; break-inside: avoid; }
-      .description-section h2 { font-size: 8pt; margin-bottom: 4px; }
-      .description { font-size: 10pt; line-height: 1.45; }
+      .description-section { margin: 6px 0; page-break-inside: avoid; break-inside: avoid; }
+      .description-section h2 { font-size: 8pt; margin-bottom: 3px; }
+      .description { font-size: 10pt; line-height: 1.42; }
       .flyer-bottom-row {
         display: grid;
         grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.05fr) minmax(0, 1.12fr);
         gap: 10px;
-        margin-top: 10px;
+        margin-top: 8px;
         page-break-inside: avoid;
         break-inside: avoid;
       }
@@ -1027,19 +1066,21 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       .agent-card {
         break-inside: avoid;
         page-break-inside: avoid;
-        padding: 8px 6px;
+        padding: 10px 8px;
         box-shadow: none;
-        gap: 4px;
-        border-radius: 6px;
+        gap: 5px;
+        border-radius: 8px;
+        border-width: 1.5pt;
+        border-color: #94a3b8;
       }
-      .agent-avatar { width: 48px; height: 48px; font-size: 1rem; }
+      .agent-avatar { width: 54px; height: 54px; font-size: 1.05rem; border-width: 1.5pt; }
       .agent-company-logo { max-height: 28px; max-width: 90px; }
-      .agent-name { font-size: 9pt; }
+      .agent-name { font-size: 10pt; }
       .agent-brokerage, .agent-contact { font-size: 8pt; }
       .agent-actions { gap: 4px; margin-top: 6px; }
       .agent-cta, .agent-cta-secondary { padding: 5px 8px; font-size: 7.5pt; line-height: 1.2; }
       .agent-logo-footer { margin-top: auto; padding-top: 6px; }
-      .site-footer { padding: 6px 0 0; border-top: 1px solid #e2e8f0; margin-top: 8px; background: #fff; }
+      .site-footer { padding: 4px 0 0; border-top: 1px solid #e2e8f0; margin-top: 6px; background: #fff; }
       .powered-by { font-size: 7pt; }
       a { color: inherit; text-decoration: none; }
     }
@@ -1047,6 +1088,8 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       .listing-banner { font-size: 0.9375rem; padding: 8px 20px 8px 14px; }
       .gallery-nav { width: 34px; height: 34px; }
       .key-stat-sep { margin: 0 6px; }
+      .header-actions { max-width: 100%; }
+      .print-hint { font-size: 0.625rem; }
     }
   </style>
 </head>

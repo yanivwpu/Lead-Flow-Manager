@@ -6,6 +6,7 @@ import {
   buildListingOpenGraphMeta,
   buildPublicListingFlyerHtml,
   inventoryRowToFlyerListing,
+  pickFlyerHeroPhotos,
   renderListingOpenGraphTags,
   resolveDisplayHoaFee,
   resolveDisplaySquareFeet,
@@ -58,27 +59,44 @@ const html = buildPublicListingFlyerHtml({
   qrDataUrl: "data:image/png;base64,TEST",
 });
 
-assert(html.includes("123 Main St"), "address in headline");
+assert(html.includes("123 Main St"), "street address");
+assert(html.includes("Austin, TX, 78701"), "city state zip line");
 assert(html.includes("$450,000"), "formatted price in specs row");
 assert(html.includes("1,800 Sq Ft"), "square footage in specs row");
 assert(html.includes("HOA $250/mo"), "hoa fee in specs row");
 assert(html.includes("Built 1998"), "year built in specs row");
+assert(html.includes("3 Beds"), "beds in specs row");
+assert(html.includes("2 Baths"), "baths in specs row");
 assert(html.includes('class="key-stats"'), "specs row");
-assert(html.indexOf('class="main-col"') < html.indexOf('class="side-col"'), "main column before sidebar");
+const bottomRowMatch = html.match(/class="flyer-bottom-row"[^>]*>([\s\S]*?)<\/section>/);
+const bottomRow = bottomRowMatch?.[1] ?? "";
+assert(bottomRow.includes("bottom-col-map"), "map column");
+assert(bottomRow.includes("bottom-col-qr"), "qr column");
+assert(bottomRow.includes("bottom-col-agent"), "agent column");
+assert(bottomRow.indexOf("bottom-col-map") < bottomRow.indexOf("bottom-col-qr"), "map before qr");
+assert(bottomRow.indexOf("bottom-col-qr") < bottomRow.indexOf("bottom-col-agent"), "qr before agent");
 assert(html.includes("Bright corner unit with skyline views."), "description body");
 assert(html.includes(">Description<"), "description heading");
 assert(!html.includes("Property Details"), "no property details section");
 assert(!html.includes("Features &amp; amenities"), "no features section");
 assert(!html.includes("Hardwood floors"), "features list removed");
 assert(!html.includes("map-address"), "no duplicate address in map block");
-assert(html.includes("map-qr-row"), "map and qr grouped");
-assert(html.includes("class=\"map-qr\""), "qr present");
+assert(html.includes("flyer-bottom-row"), "three-column bottom row");
+assert(html.includes("qr-block"), "qr present");
+assert(html.includes("Scan To View Listing"), "qr headline");
+assert(html.includes("Open listing on your phone"), "qr helper text");
 assert(html.includes("hero-img"), "gallery hero");
 assert(html.includes("FOR SALE"), "for sale header label");
 assert(!html.includes("Active"), "no MLS status on flyer");
 assert(html.includes("Jane Agent"), "agent name");
 assert(html.includes("Contact Agent"), "agent CTA");
 assert(html.includes("Powered by WhachatCRM"), "powered-by footer");
+assert(html.includes("listing-banner"), "for sale banner");
+assert(html.includes("property-street"), "split address street line");
+assert(html.includes("height: 4.1in"), "print hero height ~40% page");
+assert(html.includes("print-hint"), "print hint near actions");
+assert(html.includes("turn off browser Headers and footers"), "print hint copy");
+assert(html.includes("--brand-green"), "brand green design token in styles");
 assert(html.includes('fill="#059669"'), "brand green W logo");
 assert(!html.includes('fill="#22c55e"'), "no incorrect bright green");
 assert(html.includes("@page"), "print page rules");
@@ -145,6 +163,18 @@ const noPhotoHtml = buildPublicListingFlyerHtml({
   qrDataUrl: "data:image/png;base64,TEST",
 });
 assert(!noPhotoHtml.includes('class="gallery"'), "gallery hidden without photos");
-assert(noPhotoHtml.includes("class=\"map-qr\""), "qr still shown without map coords");
+assert(noPhotoHtml.includes("qr-block"), "qr still shown without map coords");
+
+const heroPhotos = pickFlyerHeroPhotos([
+  { url: "https://cdn.example.com/a-watermark.jpg", order: 0 },
+  { url: "https://cdn.example.com/b-clean.jpg", order: 1 },
+]);
+assert(heroPhotos[0]?.url.includes("b-clean"), "prefer clean hero over watermarked primary");
+
+const onlyWatermarked = pickFlyerHeroPhotos([
+  { url: "https://cdn.example.com/x-watermark.jpg", order: 0 },
+  { url: "https://cdn.example.com/y-watermark.jpg", order: 1 },
+]);
+assert(onlyWatermarked[0]?.url.includes("x-watermark"), "keep order when all watermarked");
 
 console.log("inventory-public-flyer.test.ts: OK");

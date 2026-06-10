@@ -24,7 +24,7 @@ export function registerPublicListingRoutes(app: Express): void {
 
       const qrDataUrl = await QRCode.toDataURL(shareUrl, {
         margin: 1,
-        width: 240,
+        width: 320,
         errorCorrectionLevel: "M",
       });
 
