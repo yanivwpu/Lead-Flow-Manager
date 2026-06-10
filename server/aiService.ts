@@ -9,6 +9,7 @@ import {
 } from "@shared/schema";
 import type { AiRoutingResult } from "@shared/aiRouting";
 import { resolveAiRouting, routingShouldTriggerHandoff } from "@shared/aiRouting";
+import { sanitizeRoboticBuyerReply } from "@shared/buyerQualification";
 
 export type SupportedAiLanguage = "en" | "he" | "es" | "ar";
 
@@ -52,6 +53,7 @@ export class AIService {
       intent?: string;
       leadScore?: string;
       buyerPreferences?: string;
+      buyerQualificationContext?: string;
       inventoryMatchSummary?: string;
       listingFollowUp?: string;
     },
@@ -87,9 +89,10 @@ export class AIService {
       const response = await aiProvider.complete("reply", messages, { jsonMode: true });
       const result = JSON.parse(response || "{}");
       
+      const rawReply = result.reply || "";
       return {
-        suggestion: result.reply || "I'll be happy to help you with that.",
-        confidence: result.confidence || 0.7
+        suggestion: sanitizeRoboticBuyerReply(rawReply),
+        confidence: result.confidence || 0.7,
       };
     } catch (error) {
       console.error("[AI] Error generating suggestion:", error);
@@ -423,6 +426,7 @@ Return JSON only: { "summary": "..." }`;
       intent?: string;
       leadScore?: string;
       buyerPreferences?: string;
+      buyerQualificationContext?: string;
       inventoryMatchSummary?: string;
       listingFollowUp?: string;
     },
@@ -487,6 +491,7 @@ ${contactContext.timeline ? `- Timeline (already mentioned): ${contactContext.ti
 ${contactContext.financing ? `- Financing (already mentioned): ${contactContext.financing} — DO NOT ask about financing again` : ''}
 ${contactContext.notes ? `- Agent notes: ${contactContext.notes}` : ''}
 ${contactContext.buyerPreferences ? `\n${contactContext.buyerPreferences}\nUse these preferences when relevant. Do not re-ask for details already captured unless the customer contradicts them.` : ''}
+${contactContext.buyerQualificationContext ? `\n${contactContext.buyerQualificationContext}` : ''}
 ${contactContext.inventoryMatchSummary ? `\n${contactContext.inventoryMatchSummary}` : ''}
 ${contactContext.listingFollowUp ? `\n${contactContext.listingFollowUp}\nThe customer is asking for more details about a listing already shared — continue that listing thread.` : ''}
 ` : ''}CORE RULES — READ CAREFULLY:
@@ -505,6 +510,11 @@ ${contactContext.listingFollowUp ? `\n${contactContext.listingFollowUp}\nThe cus
    - "How can I assist you today?"
    - "Could you provide more details?"
    - "I'd be happy to help"
+   - "Let me check" / "Let me verify" / "I'll check our listings"
+   - "I'll get back to you shortly"
+   - "Waiting for approval" / "I'm waiting for approval"
+   - Exact match counts ("I found 10 properties", "I found 5 listings")
+   - "I searched our listings" / "searching our listings"
    - Repeating the last question the agent already asked${isInfoSeekingRouting ? `
    - "Let's discuss during our meeting" / "during our meeting" / "at our meeting"
    - Any mention of scheduling, booking, or meeting unless the customer explicitly asked to book/schedule/call
@@ -556,14 +566,19 @@ REAL ESTATE SPECIFIC:
 - If budget unknown: "Do you have a target price range in mind?" 
 - If timeline unknown: "What kind of timeline are you working with?"
 - If financing unclear: "Are you already pre-approved, or still exploring financing options?"`}
-- Never ask about something already mentioned (e.g., if they named a property, don't ask which property)${contactContext?.inventoryMatchSummary ? `
+- Never ask about something already mentioned (e.g., if they named a property, don't ask which property)
+- Sound like an experienced buyer agent — warm, direct, never like a search bot
 
-INVENTORY AWARENESS (critical — matching listings already exist):
-- Matching properties are already in the connected inventory feed (see MATCHING INVENTORY above). Do NOT say you will "check for available options", "search for listings", or "look for properties" — that work is done.
-- Briefly acknowledge matches exist in the relevant area, e.g. "I found several properties that appear to match your criteria in [area]. I'll prepare the best options and send them shortly."
-- Do NOT paste listing addresses, URLs, photos, or MLS details in this reply. Listings require agent review before sending.
-- Do NOT auto-send or promise immediate delivery of listings — say you are preparing curated options to send shortly.
-- After the inventory acknowledgment, continue buyer qualification with ONE question: financing, timeline, occupancy, or motivation (skip any already captured in conversation or CRM context).` : ""}
+BUYER QUALIFICATION (critical — follow Buyer qualification assessment above if present):
+- Ask ONLY ONE question per reply — never a form-style list of questions
+- LOW tier: do NOT claim matches. Ask the single suggested next question.
+- MEDIUM tier: acknowledge known criteria in natural language, then ask ONE confirmation or gap question (e.g. budget or buy/rent). Do NOT state exact match counts.
+- HIGH tier: you may say "a few homes stand out" and offer to send best matches or schedule a review
+- If prior budget/beds/baths are on file, confirm whether to keep or broaden — do not re-ask from scratch
+- If property type changed (e.g. condo → house), only reference the current type — never mention old types
+- Prefer: "A few homes stand out", "I can narrow this down", "Would you like the best matches here?", "Would you like to schedule a showing?"
+${contactContext?.inventoryMatchSummary ? `
+- Matching inventory context is internal — follow qualification tier rules before mentioning listings` : ""}
 
 EXAMPLE — how to reply to: "The one on 5th Avenue with the garden."
 BAD: "Thank you! Could you provide more details about which listing?"  

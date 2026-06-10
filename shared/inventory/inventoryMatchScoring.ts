@@ -1,8 +1,11 @@
 import type { BuyerPreferenceProfile } from "../buyerPreferenceSchema";
+import type { InventoryListingDetails } from "./inventoryListingSchema";
+import { parseSqftMinFromProfile } from "../buyerQualification";
 import { isMatchableInventoryStatus } from "./inventoryListingSchema";
 
 const MIN_CONFIDENCE = 0.5;
 const NEAR_PRICE_TOLERANCE = 0.12;
+const MIN_STRONG_MATCH_SCORE = 35;
 
 export type BuyerMatchCriteria = {
   hasAnyCriteria: boolean;
@@ -15,6 +18,10 @@ export type BuyerMatchCriteria = {
   mustHaves: string[];
   dealBreakers: string[];
   financingStatus: string | null;
+  sqftMin: number | null;
+  lowHoa: boolean;
+  hardRequirePool: boolean;
+  hardRequireWaterfront: boolean;
   features: {
     pool: boolean;
     waterfront: boolean;
@@ -41,6 +48,11 @@ export type MatchListingInput = {
   beds: number | null;
   baths: number | null;
   propertyType: string | null;
+  propertySubtype?: string | null;
+  squareFeet?: number | null;
+  yearBuilt?: number | null;
+  hoaFeeCents?: number | null;
+  listingDetails?: InventoryListingDetails;
   description: string | null;
   features: string[];
   listingUrl: string | null;
@@ -69,14 +81,19 @@ function normalizeText(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function normalizePropertyType(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  const s = normalizeText(raw).replace(/-/g, "_");
+export function normalizeListingPropertyType(
+  propertyType: string | null | undefined,
+  propertySubtype?: string | null,
+): string | null {
+  const combined = [propertyType, propertySubtype].filter(Boolean).join(" ");
+  if (!combined) return null;
+  const s = normalizeText(combined).replace(/-/g, "_");
+  if (/\b(sfh|single[\s_]?family)\b/.test(s)) return "house";
   if (s.includes("condo")) return "condo";
   if (s.includes("townhouse") || s.includes("town house")) return "townhouse";
   if (s.includes("multi")) return "multi_family";
   if (s.includes("land")) return "land";
-  if (s.includes("house") || s.includes("single")) return "house";
+  if (s.includes("house") || s.includes("single") || s.includes("residence")) return "house";
   return s;
 }
 
@@ -99,12 +116,12 @@ function formatPropertyLabel(type: string): string {
   return map[type] || titleCaseArea(type.replace(/_/g, " "));
 }
 
-function formatPrice(cents: number | null): string {
-  if (cents == null) return "Price on request";
-  const dollars = cents / 100;
-  if (dollars >= 1_000_000) return `$${(dollars / 1_000_000).toFixed(2).replace(/\.00$/, "")}M`;
-  if (dollars >= 1_000) return `$${Math.round(dollars / 1_000)}k`;
-  return `$${Math.round(dollars).toLocaleString()}`;
+function mustHaveRequiresPool(mustHaves: string[]): boolean {
+  return mustHaves.some((raw) => /\b(must have pool|pool required|needs? pool)\b/i.test(raw));
+}
+
+function mustHaveRequiresWaterfront(mustHaves: string[]): boolean {
+  return mustHaves.some((raw) => /\b(must have waterfront|waterfront required)\b/i.test(raw));
 }
 
 export function extractBuyerMatchCriteria(profile: BuyerPreferenceProfile): BuyerMatchCriteria {
@@ -114,11 +131,13 @@ export function extractBuyerMatchCriteria(profile: BuyerPreferenceProfile): Buye
   const bedsMin = fieldValue<number>(profile, "bedsMin");
   const bathsMin = fieldValue<number>(profile, "bathsMin");
   const propertyTypes = (fieldValue<string[]>(profile, "propertyTypes") ?? []).map(
-    (t) => normalizePropertyType(t) ?? t,
+    (t) => normalizeListingPropertyType(t) ?? t,
   );
   const mustHaves = fieldValue<string[]>(profile, "mustHaves") ?? [];
   const dealBreakers = fieldValue<string[]>(profile, "dealBreakers") ?? [];
   const financingStatus = fieldValue<string>(profile, "financingStatus");
+  const sqftMin = parseSqftMinFromProfile(profile);
+  const lowHoa = fieldValue<boolean>(profile, "lowHoa") === true;
 
   const features = {
     pool: fieldValue<boolean>(profile, "pool") === true,
@@ -132,6 +151,9 @@ export function extractBuyerMatchCriteria(profile: BuyerPreferenceProfile): Buye
     investmentIntent: fieldValue<boolean>(profile, "investmentIntent") === true,
   };
 
+  const hardRequirePool = features.pool || mustHaveRequiresPool(mustHaves);
+  const hardRequireWaterfront = features.waterfront || mustHaveRequiresWaterfront(mustHaves);
+
   const hasAnyCriteria =
     areas.length > 0 ||
     priceMin != null ||
@@ -142,6 +164,8 @@ export function extractBuyerMatchCriteria(profile: BuyerPreferenceProfile): Buye
     mustHaves.length > 0 ||
     dealBreakers.length > 0 ||
     financingStatus != null ||
+    sqftMin != null ||
+    lowHoa ||
     Object.values(features).some(Boolean);
 
   return {
@@ -155,6 +179,10 @@ export function extractBuyerMatchCriteria(profile: BuyerPreferenceProfile): Buye
     mustHaves,
     dealBreakers,
     financingStatus,
+    sqftMin,
+    lowHoa,
+    hardRequirePool,
+    hardRequireWaterfront,
     features,
   };
 }
@@ -172,6 +200,7 @@ function listingHaystack(listing: MatchListingInput): string {
     listing.zip,
     listing.description,
     listing.propertyType,
+    listing.propertySubtype,
     ...listingFeatureTerms(listing),
   ];
   return normalizeText(parts.filter(Boolean).join(" "));
@@ -187,8 +216,48 @@ function listingDealBreakerHaystack(listing: MatchListingInput): string {
     listing.zip,
     listing.description,
     listing.propertyType,
+    listing.propertySubtype,
   ];
   return normalizeText(parts.filter(Boolean).join(" "));
+}
+
+function listingHasPoolSignal(listing: MatchListingInput): boolean {
+  if (listing.listingDetails?.pool === true) return true;
+  if (listing.listingDetails?.pool === false) return false;
+  const hay = listingHaystack(listing);
+  if (/\bno\s+pool\b/i.test(hay) || /\bwithout\s+(?:a\s+)?pool\b/i.test(hay)) return false;
+  return /\bpool\b/.test(hay) || /\bswimming\b/.test(hay);
+}
+
+function listingHasWaterfrontSignal(listing: MatchListingInput): boolean {
+  if (listing.listingDetails?.waterfront === true) return true;
+  if (listing.listingDetails?.waterfront === false) return false;
+  const hay = listingHaystack(listing);
+  if (/\bnot\s+waterfront\b/i.test(hay)) return false;
+  return (
+    /\bwaterfront\b/.test(hay) ||
+    /\bwater view\b/.test(hay) ||
+    /\bocean\b/.test(hay) ||
+    /\bbay\b/.test(hay) ||
+    /\bcanal\b/.test(hay)
+  );
+}
+
+function passesHardGates(listing: MatchListingInput, criteria: BuyerMatchCriteria): boolean {
+  if (criteria.propertyTypes.length > 0) {
+    const lt = normalizeListingPropertyType(listing.propertyType, listing.propertySubtype);
+    if (!lt || !criteria.propertyTypes.includes(lt)) return false;
+  }
+
+  if (criteria.hardRequirePool && !listingHasPoolSignal(listing)) return false;
+  if (criteria.hardRequireWaterfront && !listingHasWaterfrontSignal(listing)) return false;
+
+  if (criteria.sqftMin != null) {
+    const sqft = listing.squareFeet;
+    if (sqft != null && sqft < criteria.sqftMin) return false;
+  }
+
+  return true;
 }
 
 function areaMatchScore(
@@ -248,7 +317,7 @@ function priceMatchScore(
     const underPct = (priceMin - price) / priceMin;
     if (underPct <= NEAR_PRICE_TOLERANCE) {
       reasons.push("Slightly below minimum");
-      return { points: 10, max, reasons };
+      return { points: 10, max, reasons: [] };
     }
     return { points: 0, max, reasons: [] };
   }
@@ -257,11 +326,11 @@ function priceMatchScore(
 }
 
 function propertyTypeScore(
-  listingType: string | null,
+  listing: MatchListingInput,
   wanted: string[],
 ): { points: number; max: number; reasons: string[] } {
   if (wanted.length === 0) return { points: 0, max: 0, reasons: [] };
-  const lt = normalizePropertyType(listingType);
+  const lt = normalizeListingPropertyType(listing.propertyType, listing.propertySubtype);
   if (!lt) return { points: 0, max: 15, reasons: [] };
   if (wanted.includes(lt)) {
     return { points: 15, max: 15, reasons: ["Matches property type"] };
@@ -293,6 +362,31 @@ function bedsBathsScore(
     }
   }
   return { points, max, reasons };
+}
+
+function sqftScore(
+  listing: MatchListingInput,
+  sqftMin: number | null,
+): { points: number; max: number; reasons: string[] } {
+  if (sqftMin == null) return { points: 0, max: 0, reasons: [] };
+  const sqft = listing.squareFeet;
+  if (sqft == null) return { points: 0, max: 8, reasons: [] };
+  if (sqft >= sqftMin) {
+    return { points: 8, max: 8, reasons: ["Meets minimum square footage"] };
+  }
+  return { points: 0, max: 8, reasons: [] };
+}
+
+function lowHoaScore(
+  listing: MatchListingInput,
+  lowHoa: boolean,
+): { points: number; max: number; reasons: string[] } {
+  if (!lowHoa) return { points: 0, max: 0, reasons: [] };
+  const max = 5;
+  const hoa = listing.hoaFeeCents;
+  if (hoa == null) return { points: 3, max, reasons: ["HOA not listed"] };
+  if (hoa <= 25000) return { points: 5, max, reasons: ["Low HOA"] };
+  return { points: 0, max, reasons: [] };
 }
 
 const FEATURE_KEYWORDS: Record<keyof BuyerMatchCriteria["features"], RegExp[]> = {
@@ -352,6 +446,16 @@ function featureAndMustHaveScore(
   if (activeFeatures.length > 0) {
     let matched = 0;
     for (const key of activeFeatures) {
+      if (key === "pool" && listingHasPoolSignal(listing)) {
+        matched += 1;
+        reasons.push(FEATURE_LABELS[key]);
+        continue;
+      }
+      if (key === "waterfront" && listingHasWaterfrontSignal(listing)) {
+        matched += 1;
+        reasons.push(FEATURE_LABELS[key]);
+        continue;
+      }
       const patterns = FEATURE_KEYWORDS[key];
       if (patterns.some((p) => p.test(hay))) {
         matched += 1;
@@ -365,7 +469,13 @@ function featureAndMustHaveScore(
     const term = normalizeText(raw);
     if (!term) continue;
     max += 3;
-    if (hay.includes(term)) {
+    if (term.includes("pool") && listingHasPoolSignal(listing)) {
+      points += 3;
+      reasons.push(mustHaveReason(raw));
+    } else if (term.includes("waterfront") && listingHasWaterfrontSignal(listing)) {
+      points += 3;
+      reasons.push(mustHaveReason(raw));
+    } else if (hay.includes(term)) {
       points += 3;
       reasons.push(mustHaveReason(raw));
     }
@@ -408,10 +518,14 @@ export function scoreListingAgainstCriteria(
   const breaker = hitsDealBreaker(listing, criteria.dealBreakers);
   if (breaker) return null;
 
+  if (!passesHardGates(listing, criteria)) return null;
+
   const area = areaMatchScore(listing, criteria.areas);
   const price = priceMatchScore(listing.priceCents, criteria.priceMin, criteria.priceMax);
-  const pType = propertyTypeScore(listing.propertyType, criteria.propertyTypes);
+  const pType = propertyTypeScore(listing, criteria.propertyTypes);
   const bedsBaths = bedsBathsScore(listing, criteria.bedsMin, criteria.bathsMin);
+  const sqft = sqftScore(listing, criteria.sqftMin);
+  const hoa = lowHoaScore(listing, criteria.lowHoa);
   const features = featureAndMustHaveScore(listing, criteria);
   const financing = financingBonus(criteria.financingStatus, price.points, criteria.priceMax ?? 0);
 
@@ -420,6 +534,8 @@ export function scoreListingAgainstCriteria(
     price.points +
     pType.points +
     bedsBaths.points +
+    sqft.points +
+    hoa.points +
     features.points +
     financing.points;
   const possible =
@@ -427,6 +543,8 @@ export function scoreListingAgainstCriteria(
     price.max +
     pType.max +
     bedsBaths.max +
+    sqft.max +
+    hoa.max +
     features.max +
     (financing.points > 0 ? 5 : criteria.financingStatus ? 5 : 0);
 
@@ -436,13 +554,15 @@ export function scoreListingAgainstCriteria(
   if (area.points >= 24 && price.points >= 20 && pType.points >= 15) {
     score = Math.min(100, score + 5);
   }
-  if (score <= 0) return null;
+  if (score < MIN_STRONG_MATCH_SCORE) return null;
 
   const reasons = [
     ...area.reasons,
     ...price.reasons,
     ...pType.reasons,
     ...bedsBaths.reasons,
+    ...sqft.reasons,
+    ...hoa.reasons,
     ...features.reasons,
     ...financing.reasons,
   ];
@@ -479,4 +599,16 @@ export function rankInventoryMatches(
   return [...byProviderId.values()]
     .sort((a, b) => b.score - a.score || (b.listing.priceCents ?? 0) - (a.listing.priceCents ?? 0))
     .slice(0, limit);
+}
+
+/** @internal Test helper — expose hard gate evaluation. */
+export function listingPassesHardGatesForCriteria(
+  listing: MatchListingInput,
+  criteria: BuyerMatchCriteria,
+): boolean {
+  return passesHardGates(listing, criteria);
+}
+
+export function listingHasPool(listing: MatchListingInput): boolean {
+  return listingHasPoolSignal(listing);
 }

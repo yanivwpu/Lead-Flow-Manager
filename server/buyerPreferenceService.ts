@@ -307,6 +307,20 @@ export async function mergeAndPersistBuyerPreferences(
   return merged;
 }
 
+/** Sync fast-path before suggest-reply so AI/Copilot see fresh criteria. */
+export async function ensureFastPathBuyerPreferences(
+  contact: Contact,
+  inboundText: string,
+  meta?: { conversationId?: string; messageId?: string },
+): Promise<BuyerPreferenceProfile> {
+  if (hasInventoryPreferenceSignals(inboundText)) {
+    await runFastPathHeuristicPreferenceUpdate(contact, inboundText, meta);
+    const fresh = await storage.getContact(contact.id);
+    if (fresh) return readBuyerPreferenceProfile(fresh);
+  }
+  return readBuyerPreferenceProfile(contact);
+}
+
 async function runFastPathHeuristicPreferenceUpdate(
   contact: Contact,
   inboundText: string,

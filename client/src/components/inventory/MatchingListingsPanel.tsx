@@ -292,7 +292,7 @@ export function MatchingListingsPanel({
     queryKey: [`/api/contacts/${contactId}/inventory-matches`],
     queryFn: () => fetchInventoryMatches(contactId),
     enabled,
-    staleTime: 30_000,
+    staleTime: 0,
   });
 
   useEffect(() => {

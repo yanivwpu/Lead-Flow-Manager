@@ -10570,32 +10570,57 @@ export async function registerRoutes(
             if (contactForPrefs) {
               const {
                 shouldRunBuyerPreferencePipeline,
-                readBuyerPreferenceProfile,
                 formatBuyerPreferenceSummaryForAi,
+                ensureFastPathBuyerPreferences,
               } = await import("./buyerPreferenceService");
-              const prefGate = await shouldRunBuyerPreferencePipeline(userId, contactForPrefs);
-              const contextPatch: Record<string, unknown> = { ...(contactContext || {}) };
-              if (prefGate.ok) {
-                const summary = formatBuyerPreferenceSummaryForAi(
-                  readBuyerPreferenceProfile(contactForPrefs),
-                );
-                if (summary) {
-                  contextPatch.buyerPreferences = summary;
-                }
-              }
-              const { getInventoryMatchSummaryForContact } = await import(
-                "./inventory/inventoryMatchingService"
-              );
-              const inventorySummary = await getInventoryMatchSummaryForContact(
-                convForPrefs.contactId,
-                userId,
-              );
-              if (inventorySummary) {
-                contextPatch.inventoryMatchSummary = inventorySummary;
-              }
               const historyTurns = conversationHistory as Array<{ role: string; content?: string }>;
               const lastUserInbound =
                 historyTurns.filter((m) => m.role === "user").pop()?.content?.trim() || "";
+
+              const prefGate = await shouldRunBuyerPreferencePipeline(userId, contactForPrefs);
+              const contextPatch: Record<string, unknown> = { ...(contactContext || {}) };
+              let profile = await ensureFastPathBuyerPreferences(
+                contactForPrefs,
+                lastUserInbound,
+                { conversationId: convForPrefs.id },
+              );
+
+              if (prefGate.ok) {
+                const {
+                  assessBuyerQualification,
+                  formatQualificationContextForAi,
+                } = await import("@shared/buyerQualification");
+                const cf = (contactForPrefs.customFields || {}) as Record<string, unknown>;
+                const qualification = assessBuyerQualification({
+                  profile,
+                  buyRentIntent:
+                    typeof contactContext?.intent === "string"
+                      ? contactContext.intent
+                      : typeof cf.intent === "string"
+                        ? cf.intent
+                        : null,
+                  leadType: typeof cf.leadType === "string" ? cf.leadType : null,
+                });
+                contextPatch.buyerQualificationContext =
+                  formatQualificationContextForAi(qualification);
+
+                const summary = formatBuyerPreferenceSummaryForAi(profile);
+                if (summary) {
+                  contextPatch.buyerPreferences = summary;
+                }
+
+                const { getInventoryMatchSummaryForContact } = await import(
+                  "./inventory/inventoryMatchingService"
+                );
+                const inventorySummary = await getInventoryMatchSummaryForContact(
+                  convForPrefs.contactId,
+                  userId,
+                  { qualificationLevel: qualification.level },
+                );
+                if (inventorySummary) {
+                  contextPatch.inventoryMatchSummary = inventorySummary;
+                }
+              }
               if (lastUserInbound) {
                 const { detectListingFollowUp } = await import(
                   "@shared/inventory/inventoryListingFollowUp"

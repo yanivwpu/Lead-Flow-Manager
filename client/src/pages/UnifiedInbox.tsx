@@ -449,6 +449,10 @@ export function UnifiedInbox() {
             queryClient.invalidateQueries({
               queryKey: [`/api/contacts/${contactId}/inventory-matches`],
             });
+            queryClient.refetchQueries({
+              queryKey: [`/api/contacts/${contactId}/inventory-matches`],
+              type: "active",
+            });
             queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId] });
           }
         } catch {}

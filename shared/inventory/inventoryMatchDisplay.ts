@@ -1,3 +1,5 @@
+import type { QualificationLevel } from "../buyerQualification";
+
 export type InventoryMatchAiSummaryInput = {
   matchCount: number;
   matches: Array<{
@@ -8,6 +10,7 @@ export type InventoryMatchAiSummaryInput = {
   }>;
   /** Fallback when matched listings lack city data */
   buyerAreas?: string[];
+  qualificationLevel?: QualificationLevel;
 };
 
 function titleCaseArea(s: string): string {
@@ -44,13 +47,23 @@ function formatLocationPhrase(
 
 /** Compact inventory context for AI Brain / suggest-reply prompts. */
 export function formatInventoryMatchSummaryForAi(input: InventoryMatchAiSummaryInput): string {
+  const level = input.qualificationLevel ?? "medium";
+
+  if (level !== "high") {
+    if (input.matchCount > 0) {
+      return `Matching inventory (internal — do NOT mention match counts to buyer yet):
+- Listings align with current criteria in ${formatLocationPhrase(input.matches, input.buyerAreas)} but buyer qualification is ${level.toUpperCase()}
+- Continue qualifying with ONE question before offering to send listings`;
+    }
+    return "";
+  }
+
   if (input.matchCount <= 0 || input.matches.length === 0) return "";
 
   const location = formatLocationPhrase(input.matches, input.buyerAreas);
-  const countLabel =
-    input.matchCount === 1 ? "1 property" : `${input.matchCount} properties`;
 
-  return `Matching inventory (verified in connected MLS feed — not yet sent to buyer):
-- ${countLabel} match this buyer's criteria in ${location}
-- Agent must review and approve before listings are sent — never paste addresses, URLs, or photos in chat`;
+  return `Matching inventory (internal — buyer qualification is HIGH):
+- A few homes in ${location} align with current criteria (do NOT state an exact number)
+- You may offer to send the best matches or schedule a review — never paste addresses or URLs
+- Use natural phrasing like "a few homes stand out" — not "I found X properties"`;
 }

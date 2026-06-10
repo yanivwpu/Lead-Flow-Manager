@@ -47,6 +47,17 @@ function parsePhotos(raw: unknown): MatchListingInput["photos"] {
     .filter(Boolean) as MatchListingInput["photos"];
 }
 
+function parseListingDetails(raw: unknown): MatchListingInput["listingDetails"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  const out: NonNullable<MatchListingInput["listingDetails"]> = {};
+  if (typeof o.parkingGarage === "string") out.parkingGarage = o.parkingGarage;
+  if (o.waterfront === true) out.waterfront = true;
+  if (o.pool === true) out.pool = true;
+  if (typeof o.view === "string") out.view = o.view;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export function inventoryListingToMatchInput(row: InventoryListing): MatchListingInput {
   return {
     id: row.id,
@@ -61,6 +72,11 @@ export function inventoryListingToMatchInput(row: InventoryListing): MatchListin
     beds: parseNumericField(row.beds),
     baths: parseNumericField(row.baths),
     propertyType: row.propertyType,
+    propertySubtype: row.propertySubtype ?? null,
+    squareFeet: row.squareFeet != null ? Number(row.squareFeet) : null,
+    yearBuilt: row.yearBuilt != null ? Number(row.yearBuilt) : null,
+    hoaFeeCents: row.hoaFeeCents != null ? Number(row.hoaFeeCents) : null,
+    listingDetails: parseListingDetails(row.listingDetails),
     description: row.description,
     features: parseFeatures(row.features),
     listingUrl: row.listingUrl,
@@ -222,21 +238,24 @@ export async function findMatchingListingsForContact(
 export async function getInventoryMatchSummaryForContact(
   contactId: string,
   userId: string,
+  options?: { qualificationLevel?: "low" | "medium" | "high" },
 ): Promise<string> {
   const result = await findMatchingListingsForContact(contactId, userId);
-  if (!result.eligible || result.matchCount <= 0 || result.matches.length === 0) {
-    return "";
-  }
+  if (!result.eligible) return "";
 
   const contact = await storage.getContact(contactId);
   const buyerAreas = contact
     ? extractBuyerMatchCriteria(readBuyerPreferenceProfile(contact)).areas
     : [];
 
+  const level = options?.qualificationLevel ?? "medium";
+  if (level !== "high" && result.matchCount <= 0) return "";
+
   return formatInventoryMatchSummaryForAi({
     matchCount: result.matchCount,
     matches: result.matches,
     buyerAreas,
+    qualificationLevel: level,
   });
 }
 
