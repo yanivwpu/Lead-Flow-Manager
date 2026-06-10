@@ -52,7 +52,8 @@ export type PublicListingFlyerInput = {
 };
 
 const WHACHATCRM_HOME_URL = "https://whachatcrm.com";
-const WHACHAT_GREEN = "#22c55e";
+/** Matches --color-brand-green in client/src/index.css */
+const WHACHAT_GREEN = "#059669";
 const WHACHAT_W_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect width="24" height="24" rx="5" fill="${WHACHAT_GREEN}"/><text x="12" y="16.5" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="13" font-weight="700" fill="#fff">W</text></svg>`;
 const SHARE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>`;
 const PRINT_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>`;
@@ -156,11 +157,6 @@ export function resolveDisplayHoaFee(listing: PublicListingFlyerListing): string
 function formatYearBuilt(year: number | null): string | null {
   if (year == null || year < 1600) return null;
   return String(year);
-}
-
-function formatYesNo(value: boolean | undefined): string | null {
-  if (value == null) return null;
-  return value ? "Yes" : "No";
 }
 
 function parsePhotos(raw: { url: string; order?: number }[]): { url: string; order: number }[] {
@@ -301,42 +297,23 @@ function buildMapSection(listing: PublicListingFlyerListing, qrDataUrl: string):
   const qr = qrDataUrl ? renderMapQr(qrDataUrl) : "";
   const lat = listing.latitude;
   const lng = listing.longitude;
+  let mapEmbed = "";
   if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
     const pad = 0.012;
     const bbox = `${lng - pad},${lat - pad},${lng + pad},${lat + pad}`;
     const embed = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat}%2C${lng}`;
-    return `<section class="map-section">
-      <h2>Location</h2>
-      <div class="map-page2">
-        <div class="map-main">
-          <div class="map-embed-wrap">
-            <iframe class="map-embed" title="Property location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="${escapeHtml(embed)}"></iframe>
-          </div>
-          ${mapsBtn}
-        </div>
-        ${qr}
-      </div>
-      <p class="print-disclaimer">All information deemed reliable but not guaranteed. Buyer to verify all information.</p>
-    </section>`;
+    mapEmbed = `<div class="map-embed-wrap">
+      <iframe class="map-embed" title="Property location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="${escapeHtml(embed)}"></iframe>
+    </div>`;
   }
-  const address = buildFullAddress(listing);
-  if (!address && !mapsBtn && !qr) return "";
+  if (!mapEmbed && !qr) return "";
   return `<section class="map-section">
-    <h2>Location</h2>
-    <div class="map-page2">
-      <div class="map-main">
-        ${address ? `<p class="map-address">${escapeHtml(address)}</p>` : ""}
-        ${mapsBtn}
-      </div>
+    <div class="map-qr-row">
+      ${mapEmbed}
       ${qr}
     </div>
-    <p class="print-disclaimer">All information deemed reliable but not guaranteed. Buyer to verify all information.</p>
+    ${mapsBtn}
   </section>`;
-}
-
-function renderDetailItem(label: string, value: string | null): string {
-  if (!value) return "";
-  return `<div class="detail-item"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
 }
 
 function renderFlyerHeader(listingLabel: "FOR SALE" | "FOR RENT"): string {
@@ -377,13 +354,6 @@ function renderKeyStats(
   if (yearBuilt) items.push(`<span class="key-stat">Built ${escapeHtml(yearBuilt)}</span>`);
   const body = items.join('<span class="key-stat-sep" aria-hidden="true">|</span>');
   return `<div class="key-stats">${body}</div>`;
-}
-
-function resolveDisplayPropertyType(
-  propertyType: string | null,
-  propertySubtype: string | null,
-): string | null {
-  return propertySubtype ? formatLabel(propertySubtype) : formatLabel(propertyType);
 }
 
 function renderCompanyLogo(companyLogoUrl: string | null): string {
@@ -585,24 +555,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   const sqft = resolveDisplaySquareFeet(listing);
   const hoa = resolveDisplayHoaFee(listing);
   const yearBuilt = formatYearBuilt(listing.yearBuilt);
-  const propertyType = resolveDisplayPropertyType(listing.propertyType, listing.propertySubtype);
-  const details = listing.listingDetails;
   const description = (listing.description || "").trim();
-  const parkingGarage = details.parkingGarage || null;
-  const waterfront = formatYesNo(details.waterfront);
-  const pool = formatYesNo(details.pool);
-  const view = details.view || null;
-
-  const detailGrid = [
-    renderDetailItem("Property Type", propertyType),
-    renderDetailItem("MLS / Listing ID", listing.providerListingId || null),
-    renderDetailItem("Parking", parkingGarage),
-    renderDetailItem("Waterfront", waterfront),
-    renderDetailItem("Pool", pool),
-    renderDetailItem("View", view),
-  ]
-    .filter(Boolean)
-    .join("");
 
   const descHtml = description
     ? `<section class="description-section">
@@ -610,6 +563,8 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       <p class="description">${escapeHtml(description)}</p>
     </section>`
     : "";
+
+  const mapHtml = buildMapSection(listing, qrDataUrl);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -743,10 +698,9 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     @media (min-width: 768px) {
       .headline h1 { font-size: 1.25rem; }
     }
-    .layout { display: flex; flex-direction: column; gap: 0; }
     .layout-page1 { display: grid; gap: 16px; align-items: start; margin-top: 12px; }
     @media (min-width: 768px) {
-      .layout-page1 { grid-template-columns: minmax(0, 1fr) minmax(200px, 26%); gap: 20px; }
+      .layout-page1 { grid-template-columns: minmax(0, 1fr) minmax(180px, 24%); gap: 20px; }
       .side-col { position: sticky; top: 12px; }
     }
     .key-stats {
@@ -754,8 +708,8 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       flex-wrap: wrap;
       align-items: center;
       gap: 0;
-      margin-bottom: 16px;
-      padding-bottom: 14px;
+      margin-bottom: 12px;
+      padding-bottom: 12px;
       border-bottom: 1px solid var(--border);
     }
     .key-stat { font-size: 0.875rem; font-weight: 500; color: #334155; white-space: nowrap; }
@@ -766,32 +720,19 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       .key-stat.key-price { font-size: 1.25rem; }
     }
     h2 { font-size: 0.75rem; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; }
-    .details-section { margin-bottom: 0; }
-    .details-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 10px 16px;
-      margin: 0;
-    }
-    @media (min-width: 768px) {
-      .details-grid { grid-template-columns: 1fr 1fr; }
-    }
-    .detail-item dt { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 2px; }
-    .detail-item dd { margin: 0; font-weight: 500; font-size: 0.9375rem; }
     .description { white-space: pre-wrap; margin: 0; color: #334155; font-size: 0.9375rem; line-height: 1.6; }
-    .description-section { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
-    .map-section { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
-    .map-page2 { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
-    .map-main { flex: 1 1 280px; min-width: 0; max-width: 100%; }
+    .description-section { margin-top: 0; padding-top: 0; }
+    .map-section { margin-top: 16px; }
+    .map-qr-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
     .map-embed-wrap {
       position: relative;
       width: 100%;
-      max-width: 640px;
+      max-width: 360px;
+      flex: 1 1 200px;
       aspect-ratio: 16 / 9;
       background: #e2e8f0;
-      border-radius: 10px;
+      border-radius: 8px;
       overflow: hidden;
-      margin-bottom: 10px;
     }
     .map-embed {
       position: absolute;
@@ -801,22 +742,20 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       border: 0;
       display: block;
     }
-    .map-address { margin: 0 0 10px; color: #334155; }
-    .map-btn { margin-top: 2px; }
+    .map-btn { margin-top: 8px; }
     .map-qr { flex: 0 0 auto; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
-    .map-qr img { display: block; width: 96px; height: 96px; }
-    .print-disclaimer { display: none; }
+    .map-qr img { display: block; width: 88px; height: 88px; }
     .agent-card {
       display: flex;
       flex-direction: column;
       align-items: center;
       text-align: center;
-      gap: 8px;
-      padding: 14px 12px;
+      gap: 6px;
+      padding: 12px 10px;
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 10px;
       background: #fff;
-      box-shadow: 0 1px 3px rgba(15,23,42,0.06);
+      box-shadow: 0 1px 2px rgba(15,23,42,0.05);
     }
     .agent-brand-row {
       display: none;
@@ -836,8 +775,8 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       object-fit: contain;
     }
     .agent-avatar {
-      width: 64px;
-      height: 64px;
+      width: 56px;
+      height: 56px;
       border-radius: 50%;
       object-fit: cover;
       flex-shrink: 0;
@@ -867,7 +806,6 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       padding: 6px 8px;
     }
     .agent-cta-secondary:hover { text-decoration: underline; background: transparent; }
-    .description-section { margin-bottom: 14px; }
     .site-footer {
       padding: 12px 20px 16px;
       border-top: 1px solid var(--border);
@@ -900,64 +838,48 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       z-index: 100;
     }
     .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+    @page { size: letter; margin: 0.35in; }
     @media print {
-      body { background: #fff; font-size: 10pt; }
+      html, body { background: #fff; font-size: 9pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .no-print { display: none !important; }
       .flyer { max-width: none; box-shadow: none; }
-      .flyer-header { padding: 10px 12px 8px; border-bottom: 1px solid #ddd; }
-      .listing-label { font-size: 2rem; }
-      .flyer-body { padding: 0 12px 8px; }
-      .gallery { margin: 0 0 8px; }
-      .hero-img { max-height: 200px; }
+      .flyer-header { padding: 4px 0 6px; border-bottom: none; }
+      .listing-label { font-size: 1.375rem; letter-spacing: 0.03em; }
+      .flyer-body { padding: 0; }
+      .gallery { margin: 0 0 6px; }
+      .hero-img { max-height: 130px; }
       .thumbs, .gallery-nav { display: none; }
-      .headline { padding: 6px 0 8px; }
-      .headline h1 { font-size: 1rem; }
+      .headline { padding: 0 0 6px; }
+      .headline h1 { font-size: 0.875rem; line-height: 1.25; }
       .layout-page1 {
         display: grid;
-        grid-template-columns: 1fr 150px;
-        gap: 8px 12px;
+        grid-template-columns: 1fr 115px;
+        gap: 6px 10px;
         align-items: start;
-        margin-top: 8px;
+        margin-top: 4px;
       }
-      .key-stats { margin-bottom: 8px; padding-bottom: 8px; flex-wrap: wrap; }
-      .key-stat.key-price { font-size: 1.0625rem; }
-      .key-stat { font-size: 0.75rem; }
-      .key-stat-sep { margin: 0 6px; }
-      .side-col { align-self: start; }
-      .agent-card { break-inside: avoid; page-break-inside: avoid; padding: 8px 6px; box-shadow: none; gap: 4px; }
-      .agent-avatar { width: 44px; height: 44px; font-size: 0.875rem; }
-      .agent-company-logo { max-height: 28px; max-width: 80px; }
-      .agent-name { font-size: 0.75rem; }
-      .agent-brokerage, .agent-contact { font-size: 0.625rem; }
-      .agent-actions { gap: 3px; margin-top: 4px; }
-      .agent-cta, .agent-cta-secondary { width: 100%; padding: 4px 5px; font-size: 0.5625rem; line-height: 1.2; }
-      .details-section > h2 { font-size: 0.625rem; }
-      .details-grid { grid-template-columns: 1fr 1fr; gap: 4px 8px; }
-      .detail-item dt { font-size: 0.5625rem; }
-      .detail-item dd { font-size: 0.6875rem; }
-      .description-section { margin-top: 10px; padding-top: 8px; page-break-inside: avoid; }
-      .description { font-size: 0.6875rem; line-height: 1.45; }
-      .map-section {
-        page-break-before: always;
-        break-before: page;
-        margin-top: 0;
-        padding-top: 10px;
-        border-top: none;
-      }
-      .map-page2 { flex-wrap: nowrap; align-items: stretch; }
-      .map-main { flex: 1 1 55%; max-width: 55%; }
-      .map-embed-wrap { max-width: none; aspect-ratio: 4 / 3; margin-bottom: 0; }
-      .map-address { display: none; }
-      .print-disclaimer {
-        display: block;
-        margin: 10px 0 0;
-        font-size: 0.5625rem;
-        color: #64748b;
-        line-height: 1.4;
-        text-align: right;
-      }
-      .map-qr { display: none; }
-      .site-footer { padding: 8px 12px; }
+      .key-stats { margin-bottom: 6px; padding-bottom: 6px; flex-wrap: wrap; border-bottom-color: #ddd; }
+      .key-stat.key-price { font-size: 0.9375rem; }
+      .key-stat { font-size: 0.6875rem; }
+      .key-stat-sep { margin: 0 5px; }
+      .description-section { margin-top: 0; page-break-inside: avoid; }
+      .description-section h2 { font-size: 0.5625rem; margin-bottom: 3px; }
+      .description { font-size: 0.625rem; line-height: 1.35; }
+      .map-section { margin-top: 6px; page-break-before: avoid; break-inside: avoid; }
+      .map-qr-row { gap: 6px; flex-wrap: nowrap; }
+      .map-embed-wrap { max-width: 130px; flex: 0 0 130px; aspect-ratio: 4 / 3; border-radius: 4px; }
+      .map-qr { display: block !important; padding: 3px; border-radius: 4px; }
+      .map-qr img { width: 56px; height: 56px; }
+      .agent-card { break-inside: avoid; page-break-inside: avoid; padding: 6px 4px; box-shadow: none; gap: 3px; border-radius: 6px; }
+      .agent-avatar { width: 36px; height: 36px; font-size: 0.75rem; }
+      .agent-company-logo { max-height: 22px; max-width: 70px; }
+      .agent-name { font-size: 0.625rem; }
+      .agent-brokerage, .agent-contact { font-size: 0.5625rem; }
+      .agent-actions { gap: 2px; margin-top: 3px; }
+      .agent-cta, .agent-cta-secondary { width: 100%; padding: 3px 4px; font-size: 0.5rem; line-height: 1.15; }
+      .agent-logo-footer { margin-top: 4px; padding-top: 4px; }
+      .site-footer { padding: 4px 0 0; border-top: 1px solid #e2e8f0; margin-top: 6px; }
+      .powered-by { font-size: 0.5625rem; }
       a { color: inherit; text-decoration: none; }
     }
     @media (max-width: 480px) {
@@ -975,21 +897,15 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       <div class="headline">
         <h1>${escapeHtml(headline)}</h1>
       </div>
-      <div class="layout">
-        <div class="layout-page1">
-          <div class="main-col">
-            ${renderKeyStats(price, listing.beds, listing.baths, sqft, hoa, yearBuilt)}
-            <section class="details-section">
-              <h2>Property Details</h2>
-              <dl class="details-grid">${detailGrid}</dl>
-            </section>
-          </div>
-          <div class="side-col">
-            ${renderAgentCard(agent, listing, companyLogoUrl)}
-          </div>
+      <div class="layout-page1">
+        <div class="main-col">
+          ${renderKeyStats(price, listing.beds, listing.baths, sqft, hoa, yearBuilt)}
+          ${descHtml}
+          ${mapHtml}
         </div>
-        ${descHtml}
-        ${buildMapSection(listing, qrDataUrl)}
+        <div class="side-col">
+          ${renderAgentCard(agent, listing, companyLogoUrl)}
+        </div>
       </div>
       ${renderPoweredByFooter()}
     </div>
