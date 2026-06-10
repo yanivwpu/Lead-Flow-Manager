@@ -41,6 +41,77 @@ function scoreBadgeClass(score: number): string {
   return "bg-gray-100 text-gray-700 border-gray-200";
 }
 
+const REASON_SHORT_LABELS: Record<string, string> = {
+  "Matches preferred area": "Area",
+  "Near preferred area": "Area",
+  "Within budget": "Budget",
+  "Slightly above budget": "Budget",
+  "Slightly below minimum": "Budget",
+  "Matches property type": "Type",
+  "Matches bedroom count": "Beds",
+  "Matches bathroom count": "Baths",
+  "Includes pool": "Pool",
+  "Waterfront": "Waterfront",
+  "Meets minimum square footage": "Sq ft",
+  "Low HOA": "HOA",
+  "HOA not listed": "HOA",
+  "East of Federal Hwy / US-1": "East Federal",
+};
+
+function shortMatchReason(reason: string): string {
+  if (REASON_SHORT_LABELS[reason]) return REASON_SHORT_LABELS[reason];
+  const lower = reason.toLowerCase();
+  if (lower.includes("pool")) return "Pool";
+  if (lower.includes("waterfront")) return "Waterfront";
+  if (lower.includes("budget") || lower.includes("price")) return "Budget";
+  if (lower.includes("area") || lower.includes("location")) return "Area";
+  if (lower.includes("bed")) return "Beds";
+  if (lower.includes("bath")) return "Baths";
+  if (lower.includes("type")) return "Type";
+  const first = reason.split(/\s+/)[0];
+  return first.length > 12 ? `${first.slice(0, 10)}…` : first;
+}
+
+function MatchReasonChips({ reasons }: { reasons: string[] }) {
+  const [expanded, setExpanded] = useState(false);
+  if (reasons.length === 0) return null;
+
+  const labels = [...new Set(reasons.map(shortMatchReason))];
+  const visible = expanded ? labels : labels.slice(0, 4);
+  const hiddenCount = labels.length - visible.length;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1 mt-1.5">
+      {visible.map((label) => (
+        <span
+          key={label}
+          className="inline-flex items-center rounded-full bg-violet-50 px-1.5 py-0.5 text-[9px] font-medium text-violet-800 ring-1 ring-violet-100/80"
+        >
+          {label}
+        </span>
+      ))}
+      {!expanded && hiddenCount > 0 && (
+        <button
+          type="button"
+          className="inline-flex items-center rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-medium text-gray-600 hover:bg-gray-200/80"
+          onClick={() => setExpanded(true)}
+        >
+          +{hiddenCount}
+        </button>
+      )}
+      {expanded && labels.length > 4 && (
+        <button
+          type="button"
+          className="text-[9px] font-medium text-gray-400 hover:text-gray-600"
+          onClick={() => setExpanded(false)}
+        >
+          Less
+        </button>
+      )}
+    </div>
+  );
+}
+
 async function fetchInventoryMatches(contactId: string): Promise<InventoryMatchesResponse> {
   const res = await fetch(`/api/contacts/${contactId}/inventory-matches`, {
     credentials: "include",
@@ -55,7 +126,7 @@ async function fetchInventoryMatches(contactId: string): Promise<InventoryMatche
   return res.json() as Promise<InventoryMatchesResponse>;
 }
 
-const SIDEBAR_PREVIEW_LIMIT = 3;
+const SIDEBAR_PREVIEW_LIMIT = 5;
 
 function MatchListingCard({
   contactId,
@@ -76,6 +147,8 @@ function MatchListingCard({
   const queryClient = useQueryClient();
   const cityLine = [match.listing.city, match.listing.state].filter(Boolean).join(", ");
   const bedsBaths = formatBedsBaths(match.listing.beds, match.listing.baths);
+  const titleLine =
+    match.listing.addressLine1?.trim() || cityLine || "Listing";
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -106,90 +179,98 @@ function MatchListingCard({
   return (
     <>
       <div
-        className="rounded-md border border-gray-200 bg-white p-2.5 shadow-sm"
+        className="rounded-lg border border-gray-200/90 bg-white overflow-hidden transition-colors hover:border-gray-300 hover:shadow-sm"
         data-testid={`inventory-match-${match.listingId}`}
       >
-        <div className="flex gap-2.5">
-          <div className="h-[4.5rem] w-16 shrink-0 overflow-hidden rounded-md bg-gray-100 flex items-center justify-center self-start">
+        <div className="flex gap-2.5 p-2 min-[1200px]:gap-3 min-[1200px]:p-2.5">
+          <button
+            type="button"
+            className="h-[72px] w-[96px] min-[1200px]:h-[100px] min-[1200px]:w-[140px] shrink-0 flex-shrink-0 overflow-hidden rounded-md bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+            onClick={viewListing}
+            aria-label="View listing"
+          >
             {match.listing.thumbnailUrl ? (
               <img
                 src={match.listing.thumbnailUrl}
                 alt=""
-                className="h-full w-full object-cover"
+                className="h-full w-full flex-shrink-0 object-cover object-center"
                 loading="lazy"
               />
             ) : (
-              <Home className="h-5 w-5 text-gray-300" aria-hidden />
+              <span className="flex h-full w-full items-center justify-center">
+                <Home className="h-6 w-6 text-gray-300" aria-hidden />
+              </span>
             )}
-          </div>
-          <div className="min-w-0 flex-1 self-start pr-1">
-            {cityLine && (
-              <p className="text-[11px] font-semibold text-gray-900 leading-snug truncate">
+          </button>
+
+          <div className="min-w-0 flex-1 flex flex-col">
+            <div className="flex items-start justify-between gap-2 min-w-0">
+              <p
+                className="text-[11px] font-semibold text-gray-900 leading-snug line-clamp-2 min-w-0 flex-1 min-[1200px]:text-xs"
+                title={titleLine}
+              >
+                {titleLine}
+              </p>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[10px] px-1.5 py-0 h-5 font-semibold tabular-nums shrink-0 flex-shrink-0 self-start",
+                  scoreBadgeClass(match.score),
+                )}
+              >
+                {match.score}
+              </Badge>
+            </div>
+
+            <p className="text-sm font-bold text-gray-900 leading-tight mt-1 tabular-nums">
+              {formatPrice(match.listing.priceCents)}
+              {bedsBaths && (
+                <span className="text-[11px] font-medium text-gray-600">
+                  {" · "}
+                  {bedsBaths}
+                </span>
+              )}
+            </p>
+
+            {match.listing.addressLine1 && cityLine && (
+              <p className="text-[10px] text-gray-500 truncate mt-0.5" title={cityLine}>
                 {cityLine}
               </p>
             )}
-            <p className="text-[11px] font-medium text-gray-800 leading-snug mt-0.5">
-              {formatPrice(match.listing.priceCents)}
-            </p>
-            {bedsBaths && (
-              <p className="text-[10px] text-gray-600 leading-snug mt-0.5">{bedsBaths}</p>
-            )}
-          </div>
-          <div className="flex shrink-0 flex-col items-center gap-1 self-start w-7">
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-[9px] px-1.5 py-0 h-5 font-semibold tabular-nums",
-                scoreBadgeClass(match.score),
-              )}
-            >
-              {match.score}
-            </Badge>
-            <button
-              type="button"
-              className="inline-flex h-5 w-5 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-              onClick={viewListing}
-              aria-label="View listing"
-              data-testid={`button-view-listing-${match.listingId}`}
-            >
-              <Eye className="h-3 w-3" />
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "inline-flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-gray-100",
-                saved ? "text-rose-500 hover:text-rose-600" : "text-gray-400 hover:text-gray-600",
-              )}
-              disabled={saveMutation.isPending}
-              onClick={() => saveMutation.mutate()}
-              aria-label="Save to buyer shortlist"
-              aria-pressed={saved}
-              data-testid={`button-save-match-${match.listingId}`}
-            >
-              {saveMutation.isPending ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Heart
-                  className={cn(
-                    "h-3 w-3",
-                    saved ? "fill-rose-500 text-rose-500" : "",
-                  )}
-                />
-              )}
-            </button>
+
+            <MatchReasonChips reasons={match.reasons} />
           </div>
         </div>
 
-        {match.reasons.length > 0 && (
-          <ul className="mt-2 space-y-0.5 pl-[4.5rem]">
-            {match.reasons.slice(0, 4).map((reason) => (
-              <li key={reason} className="text-[10px] text-violet-800/90 leading-snug flex gap-1">
-                <span className="text-violet-400 shrink-0">•</span>
-                <span>{reason}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="flex items-center justify-end gap-0.5 border-t border-gray-100 px-2 py-1 bg-gray-50/40">
+          <button
+            type="button"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-white hover:text-gray-800"
+            onClick={viewListing}
+            aria-label="View listing"
+            data-testid={`button-view-listing-${match.listingId}`}
+          >
+            <Eye className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-white",
+              saved ? "text-rose-500 hover:text-rose-600" : "text-gray-500 hover:text-gray-800",
+            )}
+            disabled={saveMutation.isPending}
+            onClick={() => saveMutation.mutate()}
+            aria-label="Save to buyer shortlist"
+            aria-pressed={saved}
+            data-testid={`button-save-match-${match.listingId}`}
+          >
+            {saveMutation.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Heart className={cn("h-3.5 w-3.5", saved && "fill-rose-500 text-rose-500")} />
+            )}
+          </button>
+        </div>
       </div>
 
       <ListingDetailDialog
@@ -229,7 +310,7 @@ function AllMatchesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
+      <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden">
         <DialogHeader className="px-4 pt-4 pb-2 text-left space-y-1">
           <DialogTitle className="text-base flex items-center gap-1.5">
             <Sparkles className="h-4 w-4 text-violet-500" aria-hidden />
@@ -239,8 +320,8 @@ function AllMatchesDialog({
             These matches are for your review only. Ranked by buyer preference fit.
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="max-h-[min(70vh,520px)] px-4 pb-4">
-          <div className="space-y-2.5 pr-3">
+        <ScrollArea className="max-h-[min(70vh,560px)] px-4 pb-4">
+          <div className="space-y-2 pr-3">
             {matches.map((match) => (
               <MatchListingCard
                 key={match.listingId}
@@ -330,21 +411,21 @@ export function MatchingListingsPanel({
       className={cn(compact ? "mt-0" : "mt-3")}
       data-testid="matching-listings-panel"
     >
-      <div className={cn(compact ? "mb-1" : "mb-2")}>
+      <div className={cn(compact ? "mb-1.5" : "mb-2")}>
         <span
           className={cn(
-            "font-semibold uppercase tracking-wide flex items-center gap-1 min-w-0",
-            compact ? "text-[9px] text-gray-500" : "text-xs text-gray-600",
+            "font-semibold uppercase tracking-wide flex items-center gap-1.5 min-w-0",
+            compact ? "text-[10px] text-gray-600" : "text-xs text-gray-600",
           )}
         >
-          <Sparkles className="h-3 w-3 text-violet-500 shrink-0" aria-hidden />
+          <Sparkles className="h-3.5 w-3.5 text-violet-500 shrink-0" aria-hidden />
           <span className="truncate">
-            Matching Listings{matchCount > 0 ? ` (${matchCount})` : ""}
+            Inventory Matches{matchCount > 0 ? ` (${matchCount})` : ""}
           </span>
         </span>
         {matches.length > 0 && (
           <p className="text-[10px] text-gray-400 leading-snug mt-0.5">
-            These matches are for your review only.
+            For your review — ranked by buyer fit.
           </p>
         )}
       </div>
@@ -396,7 +477,7 @@ export function MatchingListingsPanel({
 
       {previewMatches.length > 0 && (
         <div
-          className="space-y-2 mt-1"
+          className="space-y-1.5 mt-1"
           data-testid="matching-listings-cards"
           data-match-count={matches.length}
           data-rendered-count={previewMatches.length}
@@ -415,11 +496,11 @@ export function MatchingListingsPanel({
           {hasMoreMatches && (
             <button
               type="button"
-              className="text-[10px] font-medium text-violet-700 hover:text-violet-900 hover:underline w-full text-left py-0.5"
+              className="text-[11px] font-medium text-violet-700 hover:text-violet-900 hover:underline w-full text-left py-1"
               onClick={() => setAllMatchesOpen(true)}
               data-testid="button-view-all-matches"
             >
-              View all matches
+              View all matches ({matches.length})
             </button>
           )}
         </div>

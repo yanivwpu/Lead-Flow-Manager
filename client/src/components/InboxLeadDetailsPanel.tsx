@@ -1829,7 +1829,13 @@ export function InboxLeadDetailsPanel({
   }, [canSeeWorkflow, contextualNextActions, openCopilotPopover, openCampaignPicker, runComposerAction]);
 
   return (
-    <div className={panelClassName ?? "hidden lg:flex w-[260px] xl:w-[272px] flex-col border-l border-gray-100 bg-white overflow-y-auto flex-shrink-0"}>
+    <div
+      className={
+        panelClassName ??
+        "hidden lg:flex lg:w-[272px] lg:min-w-[272px] min-[1200px]:w-[400px] min-[1200px]:min-w-[400px] min-[1440px]:w-[440px] min-[1440px]:min-w-[440px] flex-col border-l border-gray-100 bg-white overflow-y-auto overflow-x-hidden flex-shrink-0"
+      }
+      data-testid="inbox-lead-details-panel"
+    >
 
       {/* ══ COPILOT — distinct assistant region ═════════════════════════════════ */}
       <div
@@ -2541,15 +2547,13 @@ export function InboxLeadDetailsPanel({
                   )}
 
                   {showCopilotInventoryPanels && inventoryConnected && (
-                    <div className="rounded-lg border border-gray-200 bg-white/80 px-2.5 py-2">
-                      <MatchingListingsPanel
-                        contactId={contact.id}
-                        contactFirstName={contact.name?.trim().split(/\s+/)[0]}
-                        compact
-                        isWorkspaceAdmin={isWorkspaceAdmin}
-                        onInsertComposerDraft={onInsertComposerDraft}
-                      />
-                    </div>
+                    <MatchingListingsPanel
+                      contactId={contact.id}
+                      contactFirstName={contact.name?.trim().split(/\s+/)[0]}
+                      compact
+                      isWorkspaceAdmin={isWorkspaceAdmin}
+                      onInsertComposerDraft={onInsertComposerDraft}
+                    />
                   )}
 
                   {/* D. Short narrative summary — action/context only; no duplicate criteria */}
