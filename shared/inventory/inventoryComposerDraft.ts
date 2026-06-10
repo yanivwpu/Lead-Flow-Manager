@@ -5,6 +5,7 @@ import {
 
 export type ListingComposerListing = {
   listingId: string;
+  publicSlug?: string | null;
   priceCents: number | null;
   beds: number | null;
   baths: number | null;
@@ -118,6 +119,7 @@ export function buildListingComposerMessage(input: BuildListingComposerMessageIn
 
   const viewUrl = resolveListingViewUrl({
     listingId: listing.listingId,
+    publicSlug: listing.publicSlug,
     listingUrl: listing.listingUrl,
     appOrigin: listing.appOrigin,
   });
@@ -159,6 +161,7 @@ export function listingComposerDraftIncludesRequiredDetails(
     !listing.city || message.toLowerCase().includes(listing.city.toLowerCase());
   const expectedUrl = resolveListingViewUrl({
     listingId: listing.listingId,
+    publicSlug: listing.publicSlug,
     listingUrl: listing.listingUrl,
     appOrigin: listing.appOrigin,
   });

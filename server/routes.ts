@@ -19,6 +19,7 @@ import { registerCampaignEnrollmentRoutes } from "./routes/campaignEnrollments";
 import { registerWebhookRoutes } from "./routes/webhooks";
 import { registerInventoryRoutes } from "./routes/inventory";
 import { registerPublicListingRoutes } from "./routes/publicListings";
+import { registerPublicListingSitemapRoutes } from "./routes/publicListingsSitemap";
 import { registerBusinessProfileRoutes } from "./routes/businessProfile";
 import {
   getWhatsAppAvailability,
@@ -10879,6 +10880,7 @@ export async function registerRoutes(
   registerWebhookRoutes(app);
   registerInventoryRoutes(app);
   registerPublicListingRoutes(app);
+  registerPublicListingSitemapRoutes(app);
   registerBusinessProfileRoutes(app);
 
   return httpServer;

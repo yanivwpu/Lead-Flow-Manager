@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import {
   inventoryListings,
   inventorySources,
@@ -16,6 +16,11 @@ import {
   type InventorySyncScope,
 } from "@shared/inventory/reso/resoSyncScope";
 import { providerSupportsListingSync } from "@shared/inventory/inventoryProviderSchema";
+import {
+  buildListingPublicSlug,
+  isListingShareUuid,
+} from "@shared/inventory/listingPublicSlug";
+import { buildListingCanonicalShareUrl } from "@shared/inventory/listingViewUrl";
 import {
   assertProductionDevSeedListingAllowed,
   isDevSeedProviderListingId,
@@ -346,6 +351,8 @@ export async function upsertInventoryListingWithPolicy(
       matchableCountCache.value += 1;
     }
 
+    await ensurePublicSlugForListing(inserted.id);
+
     return {
       outcome: "inserted",
       result: {
@@ -360,6 +367,7 @@ export async function upsertInventoryListingWithPolicy(
 
   const wasMatchable = isMatchableInventoryStatus(existing.status as NormalizedInventoryListing["status"]);
   const updateResult = await updateExistingInventoryListing(existing as typeof inventoryListings.$inferSelect, row, now);
+  await ensurePublicSlugForListing(updateResult.listingId);
   const nowMatchable = isMatchableInventoryStatus(normalized.status);
   if (!wasMatchable && nowMatchable) {
     matchableCountCache.value += 1;
@@ -403,6 +411,7 @@ export async function upsertInventoryListing(
         firstSeenAt: now,
       })
       .returning({ id: inventoryListings.id });
+    await ensurePublicSlugForListing(inserted.id);
     return {
       listingId: inserted.id,
       syncAlertStatus: "new",
@@ -413,6 +422,7 @@ export async function upsertInventoryListing(
   }
 
   const updateResult = await updateExistingInventoryListing(existing, row, now);
+  await ensurePublicSlugForListing(updateResult.listingId);
   return updateResult;
 }
 
@@ -483,6 +493,7 @@ const MATCHING_LISTING_SELECT = {
   syncAlertStatus: inventoryListings.syncAlertStatus,
   previousPriceCents: inventoryListings.previousPriceCents,
   lastPriceChangeAt: inventoryListings.lastPriceChangeAt,
+  publicSlug: inventoryListings.publicSlug,
   createdAt: inventoryListings.createdAt,
   updatedAt: inventoryListings.updatedAt,
 } as const;
@@ -690,6 +701,49 @@ function mapPublicShareListingRow(
   };
 }
 
+/** Assign public_slug once when address fields allow; never overwrite existing slug. */
+export async function ensurePublicSlugForListing(listingId: string): Promise<string | null> {
+  const [row] = await db
+    .select({
+      id: inventoryListings.id,
+      publicSlug: inventoryListings.publicSlug,
+      addressLine1: inventoryListings.addressLine1,
+      addressLine2: inventoryListings.addressLine2,
+      city: inventoryListings.city,
+      state: inventoryListings.state,
+      zip: inventoryListings.zip,
+    })
+    .from(inventoryListings)
+    .where(eq(inventoryListings.id, listingId))
+    .limit(1);
+
+  if (!row?.id || row.publicSlug) return row?.publicSlug ?? null;
+
+  const slug = buildListingPublicSlug({
+    id: row.id,
+    addressLine1: row.addressLine1,
+    addressLine2: row.addressLine2,
+    city: row.city,
+    state: row.state,
+    zip: row.zip,
+  });
+  if (!slug) return null;
+
+  const [updated] = await db
+    .update(inventoryListings)
+    .set({ publicSlug: slug, updatedAt: new Date() })
+    .where(and(eq(inventoryListings.id, listingId), isNull(inventoryListings.publicSlug)))
+    .returning({ publicSlug: inventoryListings.publicSlug });
+
+  return updated?.publicSlug ?? slug;
+}
+
+function isShareablePublicListingRow(row: { status: string; providerListingId: string }): boolean {
+  if (row.status !== "active" && row.status !== "coming_soon") return false;
+  if (isBlockedDevSeedListingRow(row as InventoryListing)) return false;
+  return true;
+}
+
 /** Public share page — active/coming_soon listings only. */
 export async function getPublicShareListing(listingId: string): Promise<InventoryListing | undefined> {
   try {
@@ -699,7 +753,7 @@ export async function getPublicShareListing(listingId: string): Promise<Inventor
       .where(eq(inventoryListings.id, listingId))
       .limit(1);
     if (!row || isBlockedDevSeedListingRow(row)) return undefined;
-    if (row.status !== "active" && row.status !== "coming_soon") return undefined;
+    if (!isShareablePublicListingRow(row)) return undefined;
     return mapPublicShareListingRow(row);
   } catch (error) {
     console.warn("[public-listing] combined share listing select failed; retrying without flyer columns", {
@@ -713,7 +767,7 @@ export async function getPublicShareListing(listingId: string): Promise<Inventor
         .where(eq(inventoryListings.id, listingId))
         .limit(1);
       if (!row || isBlockedDevSeedListingRow(row)) return undefined;
-      if (row.status !== "active" && row.status !== "coming_soon") return undefined;
+      if (!isShareablePublicListingRow(row)) return undefined;
 
       const extras = await tryLoadFlyerExtraFields(listingId);
       return { ...inventoryListingFromCoreRow(row), ...extras };
@@ -725,6 +779,90 @@ export async function getPublicShareListing(listingId: string): Promise<Inventor
       throw fallbackError;
     }
   }
+}
+
+/** Resolve public listing by UUID (first) or public_slug (second). */
+export async function resolvePublicShareListing(
+  identifier: string,
+): Promise<InventoryListing | undefined> {
+  const trimmed = identifier.trim();
+  if (!trimmed) return undefined;
+  if (isListingShareUuid(trimmed)) {
+    return getPublicShareListing(trimmed);
+  }
+  return getPublicShareListingBySlug(trimmed);
+}
+
+async function getPublicShareListingBySlug(slug: string): Promise<InventoryListing | undefined> {
+  const normalizedSlug = slug.trim().toLowerCase();
+  if (!normalizedSlug) return undefined;
+
+  try {
+    const [row] = await db
+      .select(PUBLIC_SHARE_LISTING_SELECT)
+      .from(inventoryListings)
+      .where(sql`lower(${inventoryListings.publicSlug}) = ${normalizedSlug}`)
+      .limit(1);
+    if (!row || isBlockedDevSeedListingRow(row)) return undefined;
+    if (!isShareablePublicListingRow(row)) return undefined;
+    return mapPublicShareListingRow(row);
+  } catch (error) {
+    console.warn("[public-listing] slug lookup failed", {
+      slug,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
+}
+
+export type PublicListingSitemapEntry = {
+  id: string;
+  publicSlug: string | null;
+  lastmod: Date;
+};
+
+function publicShareableListingConditions() {
+  const conditions = [
+    inArray(inventoryListings.status, [...MATCHABLE_INVENTORY_STATUSES]),
+  ];
+  const devSeedExclude = devSeedListingExcludeCondition();
+  if (devSeedExclude) conditions.push(devSeedExclude);
+  return conditions;
+}
+
+export async function countPublicShareableListings(): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(inventoryListings)
+    .where(and(...publicShareableListingConditions()));
+  return row?.count ?? 0;
+}
+
+export async function fetchPublicListingSitemapEntries(
+  offset: number,
+  limit: number,
+): Promise<PublicListingSitemapEntry[]> {
+  const rows = await db
+    .select({
+      id: inventoryListings.id,
+      publicSlug: inventoryListings.publicSlug,
+      lastmod: sql<Date>`GREATEST(
+        ${inventoryListings.updatedAt},
+        ${inventoryListings.syncedAt},
+        COALESCE(${inventoryListings.sourceUpdatedAt}, ${inventoryListings.syncedAt})
+      )`,
+    })
+    .from(inventoryListings)
+    .where(and(...publicShareableListingConditions()))
+    .orderBy(desc(inventoryListings.updatedAt))
+    .limit(limit)
+    .offset(offset);
+
+  return rows.map((row) => ({
+    id: row.id,
+    publicSlug: row.publicSlug ?? null,
+    lastmod: row.lastmod instanceof Date ? row.lastmod : new Date(row.lastmod),
+  }));
 }
 
 export type PublicListingAgentProfile = {
@@ -745,24 +883,33 @@ export type PublicListingFlyerData = {
 
 /** Listing + sanitized agent branding for public flyer (no CRM contact data). */
 export async function getPublicListingFlyerData(
-  listingId: string,
-  shareUrl: string,
+  identifier: string,
+  appOrigin: string,
 ): Promise<PublicListingFlyerData | undefined> {
   let listing: InventoryListing | undefined;
   try {
-    listing = await getPublicShareListing(listingId);
+    listing = await resolvePublicShareListing(identifier);
   } catch (error) {
-    console.error("[public-listing] getPublicShareListing failed", {
-      listingId,
-      shareUrl,
+    console.error("[public-listing] resolvePublicShareListing failed", {
+      identifier,
       error: error instanceof Error ? error.message : String(error),
     });
     throw error;
   }
   if (!listing) {
-    console.info("[public-listing] listing not found or not shareable", { listingId });
+    console.info("[public-listing] listing not found or not shareable", { identifier });
     return undefined;
   }
+
+  if (!listing.publicSlug) {
+    const slug = await ensurePublicSlugForListing(listing.id);
+    if (slug) listing = { ...listing, publicSlug: slug };
+  }
+
+  const shareUrl = buildListingCanonicalShareUrl(
+    { listingId: listing.id, publicSlug: listing.publicSlug },
+    appOrigin,
+  );
 
   try {
     const { resolvePublicListingAgent } = await import("../businessProfileService");
@@ -772,7 +919,8 @@ export async function getPublicListingFlyerData(
     return { listing, agent, companyLogoUrl, shareUrl };
   } catch (error) {
     console.error("[public-listing] failed to load agent profile for flyer", {
-      listingId,
+      listingId: listing.id,
+      identifier,
       userId: listing.userId,
       error: error instanceof Error ? error.message : String(error),
     });

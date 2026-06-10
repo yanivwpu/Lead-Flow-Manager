@@ -1633,6 +1633,7 @@ export const inventoryListings = pgTable(
     syncAlertStatus: text("sync_alert_status").notNull().default("existing"),
     previousPriceCents: bigint("previous_price_cents", { mode: "number" }),
     lastPriceChangeAt: timestamp("last_price_change_at"),
+    publicSlug: text("public_slug"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
@@ -1645,6 +1646,12 @@ export const inventoryListings = pgTable(
     userCityIdx: index("inventory_listings_user_city_idx").on(t.userId, t.city),
     sourceSyncedIdx: index("inventory_listings_source_synced_idx").on(t.sourceId, t.syncedAt),
     userSyncAlertIdx: index("inventory_listings_user_sync_alert_idx").on(t.userId, t.syncAlertStatus),
+    publicSlugUnique: uniqueIndex("inventory_listings_public_slug_unique")
+      .on(t.publicSlug)
+      .where(sql`${t.publicSlug} is not null`),
+    publicSlugLookupIdx: index("inventory_listings_public_slug_lookup_idx")
+      .on(t.publicSlug)
+      .where(sql`${t.publicSlug} is not null`),
   }),
 );
 

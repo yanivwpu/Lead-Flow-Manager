@@ -7,6 +7,7 @@ import {
   type InventoryListingDetails,
 } from "./inventoryListingSchema";
 import { pickPrimaryPhotoUrl } from "./listingViewUrl";
+import { resolveListingStreetForSlug } from "./listingPublicSlug";
 
 export type PublicListingFlyerAgent = {
   name: string | null;
@@ -252,38 +253,147 @@ export type ListingOpenGraphMeta = {
   keywords: string;
 };
 
-/** Build share-preview title, description, and image for social crawlers. */
-export function buildListingOpenGraphMeta(input: ListingOpenGraphInput): ListingOpenGraphMeta {
-  const { listing, agent, shareUrl } = input;
-  const address =
+function formatSeoBedBathCount(value: number | null, label: "Bed" | "Bath"): string | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  const rounded = value % 1 === 0 ? String(Math.round(value)) : String(value);
+  const plural = value === 1 ? label : `${label}s`;
+  return `${rounded} ${plural}`;
+}
+
+function buildSeoStreetAddress(listing: PublicListingFlyerListing): string {
+  const street = resolveListingStreetForSlug({
+    id: listing.id,
+    addressLine1: listing.addressLine1,
+    addressLine2: listing.addressLine2,
+    city: listing.city,
+    state: listing.state,
+    zip: listing.zip,
+  });
+  if (street) return street;
+  return buildStreetAddress(listing);
+}
+
+/** SEO page title and meta description for public listing share pages. */
+export function buildListingSeoMeta(input: ListingOpenGraphInput): Pick<
+  ListingOpenGraphMeta,
+  "title" | "description" | "keywords"
+> {
+  const { listing } = input;
+  const street =
+    buildSeoStreetAddress(listing) ||
     buildFullAddress(listing) ||
     [listing.city, listing.state].filter(Boolean).join(", ") ||
     "Property listing";
   const price = formatListingPriceForComposer(listing.priceCents);
-  const bedsBaths = formatBedsBathsForComposer(listing.beds, listing.baths);
-  const descSnippet = truncateMetaText((listing.description || "").trim(), 120);
+  const bedsLabel = formatSeoBedBathCount(listing.beds, "Bed");
+  const bathsLabel = formatSeoBedBathCount(listing.baths, "Bath");
+  const { sqft } = resolveFlyerSpecFields(listing);
 
-  const title = truncateMetaText(price ? `${price} · ${address}` : address, 95);
+  const titleParts: string[] = [street];
+  if (bedsLabel && bathsLabel) {
+    titleParts.push(`${bedsLabel} ${bathsLabel}`);
+  } else if (bedsLabel) {
+    titleParts.push(bedsLabel);
+  } else if (bathsLabel) {
+    titleParts.push(bathsLabel);
+  }
+  if (listing.city && listing.state) {
+    titleParts.push(`${listing.city}, ${listing.state} Real Estate`);
+  }
+  const title = truncateMetaText(titleParts.join(" | "), 120);
 
-  const descriptionParts: string[] = [];
-  if (price) descriptionParts.push(price);
-  if (address) descriptionParts.push(address);
-  if (bedsBaths) descriptionParts.push(bedsBaths);
-  if (descSnippet) descriptionParts.push(descSnippet);
-  if (agent.name) descriptionParts.push(`Listed by ${agent.name}`);
-  const description = truncateMetaText(
-    descriptionParts.length > 0 ? descriptionParts.join(" · ") : address,
-    200,
-  );
+  const descriptionParts: string[] = [`View ${street}.`];
+  const detailBits: string[] = [];
+  if (listing.beds != null) detailBits.push(`${listing.beds % 1 === 0 ? Math.round(listing.beds) : listing.beds} beds`);
+  if (listing.baths != null) {
+    detailBits.push(`${listing.baths % 1 === 0 ? Math.round(listing.baths) : listing.baths} baths`);
+  }
+  if (sqft) detailBits.push(`${sqft.replace(/\s*Sq Ft/i, "")} sq ft`);
+  if (price) detailBits.push(price);
+  if (detailBits.length > 0) {
+    descriptionParts.push(`${detailBits.join(", ")}.`);
+  }
+  descriptionParts.push("Schedule a showing or contact the agent.");
+  const description = truncateMetaText(descriptionParts.join(" "), 320);
 
-  const keywordParts = [address, listing.city, listing.state, price, bedsBaths, formatLabel(listing.propertyType)]
+  const keywordParts = [street, listing.city, listing.state, price, bedsLabel, bathsLabel, formatLabel(listing.propertyType)]
     .filter(Boolean)
     .map(String);
   const keywords = [...new Set(keywordParts)].join(", ");
 
+  return { title, description, keywords };
+}
+
+export function buildListingStructuredDataJson(input: ListingOpenGraphInput): string | null {
+  const { listing, agent, shareUrl } = input;
+  const street = buildSeoStreetAddress(listing) || buildStreetAddress(listing);
+  const imageUrl = pickPrimaryPhotoUrl(listing.photos);
+  const price = listing.priceCents != null ? listing.priceCents / 100 : null;
+
+  const payload: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": ["RealEstateListing", "Residence"],
+    name: street || buildFullAddress(listing) || "Property listing",
+    url: shareUrl,
+  };
+
+  if (imageUrl) payload.image = [imageUrl];
+
+  if (price != null && Number.isFinite(price)) {
+    payload.offers = {
+      "@type": "Offer",
+      price: String(price),
+      priceCurrency: "USD",
+    };
+  }
+
+  const address: Record<string, unknown> = { "@type": "PostalAddress" };
+  if (listing.addressLine1) address.streetAddress = listing.addressLine1;
+  if (listing.addressLine2) address.streetAddress = street || listing.addressLine1;
+  if (listing.city) address.addressLocality = listing.city;
+  if (listing.state) address.addressRegion = listing.state;
+  if (listing.zip) address.postalCode = listing.zip;
+  if (listing.country) address.addressCountry = listing.country;
+  if (Object.keys(address).length > 1) payload.address = address;
+
+  if (listing.beds != null) payload.numberOfRooms = listing.beds;
+  if (listing.baths != null) payload.numberOfBathroomsTotal = listing.baths;
+  if (listing.squareFeet != null && listing.squareFeet > 0) {
+    payload.floorSize = {
+      "@type": "QuantitativeValue",
+      value: listing.squareFeet,
+      unitCode: "FTK",
+    };
+  }
+  if (listing.yearBuilt != null && listing.yearBuilt >= 1600) {
+    payload.yearBuilt = listing.yearBuilt;
+  }
+
+  if (agent.name || agent.brokerageName || agent.phone || agent.email) {
+    const seller: Record<string, unknown> = { "@type": "RealEstateAgent" };
+    if (agent.name) seller.name = agent.name;
+    if (agent.brokerageName) seller.parentOrganization = { "@type": "Organization", name: agent.brokerageName };
+    if (agent.phone) seller.telephone = agent.phone;
+    if (agent.email) seller.email = agent.email;
+    payload.seller = seller;
+  }
+
+  return JSON.stringify(payload);
+}
+
+/** Build share-preview title, description, and image for social crawlers. */
+export function buildListingOpenGraphMeta(input: ListingOpenGraphInput): ListingOpenGraphMeta {
+  const { listing, shareUrl } = input;
+  const seo = buildListingSeoMeta(input);
   const imageUrl = pickPrimaryPhotoUrl(listing.photos);
 
-  return { title, description, imageUrl, shareUrl, keywords };
+  return {
+    title: seo.title,
+    description: seo.description,
+    imageUrl,
+    shareUrl,
+    keywords: seo.keywords,
+  };
 }
 
 export function renderListingOpenGraphTags(meta: ListingOpenGraphMeta): string {
@@ -733,6 +843,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   const { listing, agent, shareUrl, qrDataUrl, companyLogoUrl = null } = input;
   const photos = pickFlyerHeroPhotos(parsePhotos(listing.photos));
   const openGraph = buildListingOpenGraphMeta({ listing, agent, shareUrl });
+  const structuredDataJson = buildListingStructuredDataJson({ listing, agent, shareUrl });
   const listingLabel = resolveFlyerListingLabel(listing);
   const price = formatListingPriceForComposer(listing.priceCents) || "Price on request";
   const { sqft, hoa, yearBuilt } = resolveFlyerSpecFields(listing);
@@ -759,6 +870,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   <link rel="canonical" href="${escapeHtml(shareUrl)}" />
   <title>${escapeHtml(openGraph.title)}</title>
   ${renderListingOpenGraphTags(openGraph)}
+  ${structuredDataJson ? `<script type="application/ld+json">${structuredDataJson.replace(/<\//g, "<\\/")}</script>` : ""}
   <style>
     :root {
       --brand-green: ${WHACHAT_GREEN};

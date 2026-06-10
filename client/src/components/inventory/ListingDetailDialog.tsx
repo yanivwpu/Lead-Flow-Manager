@@ -127,7 +127,10 @@ export function ListingDetailDialog({
   const listingUrl = listing?.listingUrl ?? fallback?.listingUrl ?? null;
   const flyerUrl =
     listingId && typeof window !== "undefined"
-      ? buildListingShareUrl(listingId, window.location.origin)
+      ? buildListingShareUrl(
+          { listingId, publicSlug: listing?.publicSlug ?? null },
+          window.location.origin,
+        )
       : null;
   const propertyType = listing?.propertyType ?? fallback?.propertyType ?? null;
   const description = listing?.description ?? null;
@@ -146,6 +149,7 @@ export function ListingDetailDialog({
     const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
     const listingInput = {
       listingId,
+      publicSlug: listing?.publicSlug ?? null,
       priceCents,
       beds: beds ?? null,
       baths: baths ?? null,

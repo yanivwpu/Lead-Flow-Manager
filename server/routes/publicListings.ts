@@ -5,7 +5,6 @@ import {
   backfillFlyerColumnsForListingId,
   listingNeedsFlyerColumnBackfill,
 } from "../inventory/inventoryFlyerBackfill";
-import { buildListingShareUrl } from "@shared/inventory/listingViewUrl";
 import {
   buildPublicListingFlyerHtml,
   buildPublicListingLoadErrorHtml,
@@ -15,16 +14,16 @@ import {
 import { getRequestOrigin } from "../urlOrigins";
 
 export function registerPublicListingRoutes(app: Express): void {
-  app.get("/share/listings/:id", async (req: Request, res: Response) => {
-    const listingId = req.params.id;
-    const shareUrl = buildListingShareUrl(listingId, getRequestOrigin(req));
+  app.get("/share/listings/:identifier", async (req: Request, res: Response) => {
+    const identifier = req.params.identifier;
+    const appOrigin = getRequestOrigin(req);
 
     try {
-      let flyerData = await getPublicListingFlyerData(listingId, shareUrl);
+      let flyerData = await getPublicListingFlyerData(identifier, appOrigin);
       if (flyerData && listingNeedsFlyerColumnBackfill(flyerData.listing)) {
-        const repaired = await backfillFlyerColumnsForListingId(listingId);
+        const repaired = await backfillFlyerColumnsForListingId(flyerData.listing.id);
         if (repaired) {
-          flyerData = await getPublicListingFlyerData(listingId, shareUrl);
+          flyerData = await getPublicListingFlyerData(identifier, appOrigin);
         }
       }
       if (!flyerData) {
@@ -32,7 +31,7 @@ export function registerPublicListingRoutes(app: Express): void {
         return;
       }
 
-      const qrDataUrl = await QRCode.toDataURL(shareUrl, {
+      const qrDataUrl = await QRCode.toDataURL(flyerData.shareUrl, {
         margin: 1,
         width: 320,
         errorCorrectionLevel: "M",
@@ -49,8 +48,7 @@ export function registerPublicListingRoutes(app: Express): void {
       res.type("html").send(html);
     } catch (error) {
       console.error("[public-listing] share page failed", {
-        listingId,
-        shareUrl,
+        identifier,
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       });

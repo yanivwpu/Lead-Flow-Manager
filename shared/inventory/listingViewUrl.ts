@@ -1,13 +1,42 @@
 /** Public share path for listings without an external MLS URL. */
 export const LISTING_SHARE_PATH_PREFIX = "/share/listings/";
 
-export function buildListingSharePath(listingId: string): string {
-  return `${LISTING_SHARE_PATH_PREFIX}${listingId}`;
+export type ListingShareRef = {
+  listingId: string;
+  publicSlug?: string | null;
+};
+
+/** Prefer SEO slug segment when assigned; otherwise UUID. */
+export function resolveListingShareSegment(ref: ListingShareRef): string {
+  const slug = ref.publicSlug?.trim();
+  if (slug) return slug;
+  return ref.listingId;
 }
 
-export function buildListingShareUrl(listingId: string, appOrigin: string): string {
+export function buildListingSharePath(
+  listingIdOrRef: string | ListingShareRef,
+): string {
+  const segment =
+    typeof listingIdOrRef === "string"
+      ? listingIdOrRef
+      : resolveListingShareSegment(listingIdOrRef);
+  return `${LISTING_SHARE_PATH_PREFIX}${segment}`;
+}
+
+export function buildListingShareUrl(
+  listingIdOrRef: string | ListingShareRef,
+  appOrigin: string,
+): string {
   const base = appOrigin.replace(/\/+$/, "");
-  return `${base}${buildListingSharePath(listingId)}`;
+  return `${base}${buildListingSharePath(listingIdOrRef)}`;
+}
+
+/** Canonical public URL — slug when available, else UUID. */
+export function buildListingCanonicalShareUrl(
+  ref: ListingShareRef,
+  appOrigin: string,
+): string {
+  return buildListingShareUrl(ref, appOrigin);
 }
 
 export function extractListingIdFromShareUrl(url: string): string | null {
@@ -15,8 +44,14 @@ export function extractListingIdFromShareUrl(url: string): string | null {
   return match?.[1] ?? null;
 }
 
+export function extractListingShareSegmentFromUrl(url: string): string | null {
+  const match = url.match(/\/share\/listings\/([^/?#]+)/i);
+  return match?.[1]?.trim() ?? null;
+}
+
 export type ResolveListingViewUrlInput = {
   listingId: string;
+  publicSlug?: string | null;
   listingUrl?: string | null;
   appOrigin?: string | null;
 };
@@ -26,7 +61,10 @@ export function resolveListingViewUrl(input: ResolveListingViewUrlInput): string
   if (!input.listingId) return null;
   const origin = (input.appOrigin || "").trim();
   if (!origin) return null;
-  return buildListingShareUrl(input.listingId, origin);
+  return buildListingShareUrl(
+    { listingId: input.listingId, publicSlug: input.publicSlug },
+    origin,
+  );
 }
 
 export function pickPrimaryPhotoUrl(
