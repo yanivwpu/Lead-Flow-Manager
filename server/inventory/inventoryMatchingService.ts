@@ -81,6 +81,8 @@ export function inventoryListingToMatchInput(row: InventoryListing): MatchListin
     features: parseFeatures(row.features),
     listingUrl: row.listingUrl,
     photos: parsePhotos(row.photos),
+    latitude: row.latitude != null ? Number(row.latitude) : null,
+    longitude: row.longitude != null ? Number(row.longitude) : null,
   };
 }
 

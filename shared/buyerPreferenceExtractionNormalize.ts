@@ -8,7 +8,9 @@ import {
   preferenceSourceSchema,
   financingStatusSchema,
   timelinePreferenceSchema,
+  buyerGeoConstraintSchema,
 } from "./buyerPreferenceSchema";
+import { parseGeoConstraintsFromText } from "./inventory/buyerGeoConstraints";
 
 const PATCH_FIELD_KEYS = [
   "targetAreas",
@@ -32,6 +34,7 @@ const PATCH_FIELD_KEYS = [
   "financingStatus",
   "mustHaves",
   "dealBreakers",
+  "geoConstraints",
 ] as const;
 
 function nowIso(): string {
@@ -312,6 +315,21 @@ function normalizeFieldEntry(
     return toFieldObject(boolVal, { evidence: `${key} mentioned` });
   }
 
+  if (key === "geoConstraints") {
+    let items: unknown[] = [];
+    if (Array.isArray(raw)) items = raw;
+    else {
+      const fo = toFieldObject(raw);
+      if (fo && Array.isArray(fo.value)) items = fo.value as unknown[];
+    }
+    const parsed = items
+      .map((item) => buyerGeoConstraintSchema.safeParse(item))
+      .filter((r) => r.success)
+      .map((r) => r.data);
+    if (!parsed.length) return undefined;
+    return toFieldObject(parsed, { evidence: "geo constraint mentioned" });
+  }
+
   if (key === "mustHaves" || key === "dealBreakers") {
     let items: string[] = [];
     if (Array.isArray(raw)) items = raw.map(String);
@@ -418,7 +436,18 @@ export function heuristicPatchFromTranscript(
   });
   const patch: BuyerPreferenceExtractionPatch = {};
 
+  const geoHits = parseGeoConstraintsFromText(text);
+  if (geoHits.length) {
+    patch.geoConstraints = { value: geoHits, ...inf(0.9, "geo constraint in message") };
+  }
+
   const areaHits = extractAreasFromText(text, lower);
+  for (const g of geoHits) {
+    const city = g.cityContext?.trim();
+    if (city && !areaHits.some((a) => a.toLowerCase() === city.toLowerCase())) {
+      areaHits.push(city);
+    }
+  }
   if (areaHits.length) {
     patch.targetAreas = { value: areaHits, ...inf(0.8, "area in message") };
   }

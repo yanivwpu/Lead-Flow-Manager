@@ -1,6 +1,7 @@
-import type { BuyerPreferenceProfile } from "../buyerPreferenceSchema";
+import type { BuyerGeoConstraint, BuyerPreferenceProfile } from "../buyerPreferenceSchema";
 import type { InventoryListingDetails } from "./inventoryListingSchema";
 import { parseSqftMinFromProfile } from "../buyerQualification";
+import { geoConstraintsMatchScore } from "./buyerGeoConstraints";
 import { isMatchableInventoryStatus } from "./inventoryListingSchema";
 
 const MIN_CONFIDENCE = 0.5;
@@ -22,6 +23,7 @@ export type BuyerMatchCriteria = {
   lowHoa: boolean;
   hardRequirePool: boolean;
   hardRequireWaterfront: boolean;
+  geoConstraints: BuyerGeoConstraint[];
   features: {
     pool: boolean;
     waterfront: boolean;
@@ -57,6 +59,8 @@ export type MatchListingInput = {
   features: string[];
   listingUrl: string | null;
   photos: { url: string; order?: number }[];
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export type ScoredInventoryMatch = {
@@ -153,9 +157,11 @@ export function extractBuyerMatchCriteria(profile: BuyerPreferenceProfile): Buye
 
   const hardRequirePool = features.pool || mustHaveRequiresPool(mustHaves);
   const hardRequireWaterfront = features.waterfront || mustHaveRequiresWaterfront(mustHaves);
+  const geoConstraints = fieldValue<BuyerGeoConstraint[]>(profile, "geoConstraints") ?? [];
 
   const hasAnyCriteria =
     areas.length > 0 ||
+    geoConstraints.length > 0 ||
     priceMin != null ||
     priceMax != null ||
     bedsMin != null ||
@@ -183,6 +189,7 @@ export function extractBuyerMatchCriteria(profile: BuyerPreferenceProfile): Buye
     lowHoa,
     hardRequirePool,
     hardRequireWaterfront,
+    geoConstraints,
     features,
   };
 }
@@ -255,6 +262,11 @@ function passesHardGates(listing: MatchListingInput, criteria: BuyerMatchCriteri
   if (criteria.sqftMin != null) {
     const sqft = listing.squareFeet;
     if (sqft != null && sqft < criteria.sqftMin) return false;
+  }
+
+  if (criteria.geoConstraints.length > 0) {
+    const geo = geoConstraintsMatchScore(listing, criteria.geoConstraints);
+    if (geo.hardExclude) return false;
   }
 
   return true;
@@ -527,6 +539,7 @@ export function scoreListingAgainstCriteria(
   const sqft = sqftScore(listing, criteria.sqftMin);
   const hoa = lowHoaScore(listing, criteria.lowHoa);
   const features = featureAndMustHaveScore(listing, criteria);
+  const geo = geoConstraintsMatchScore(listing, criteria.geoConstraints);
   const financing = financingBonus(criteria.financingStatus, price.points, criteria.priceMax ?? 0);
 
   const earned =
@@ -537,6 +550,7 @@ export function scoreListingAgainstCriteria(
     sqft.points +
     hoa.points +
     features.points +
+    geo.points +
     financing.points;
   const possible =
     area.max +
@@ -546,6 +560,7 @@ export function scoreListingAgainstCriteria(
     sqft.max +
     hoa.max +
     features.max +
+    geo.max +
     (financing.points > 0 ? 5 : criteria.financingStatus ? 5 : 0);
 
   if (possible === 0) return null;
@@ -564,6 +579,7 @@ export function scoreListingAgainstCriteria(
     ...sqft.reasons,
     ...hoa.reasons,
     ...features.reasons,
+    ...geo.reasons,
     ...financing.reasons,
   ];
 

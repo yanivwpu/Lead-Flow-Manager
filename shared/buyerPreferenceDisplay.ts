@@ -1,5 +1,6 @@
 import type { BuyerPreferenceProfile, PreferenceField } from "./buyerPreferenceSchema";
 import { normalizeBuyerPreferenceProfile } from "./buyerPreferenceSchema";
+import { formatGeoConstraintLabel } from "./inventory/buyerGeoConstraints";
 
 export type BuyerPreferenceChip = {
   id: string;
@@ -137,6 +138,7 @@ const PROFILE_FIELD_KEYS = [
   "financingStatus",
   "mustHaves",
   "dealBreakers",
+  "geoConstraints",
   "pool",
   "waterfront",
   "modernStyle",
@@ -175,6 +177,17 @@ export function normalizeForDisplay(raw: unknown): BuyerPreferenceProfile {
 export function buildBuyerPreferenceChips(raw: unknown): BuyerPreferenceChip[] {
   const profile = normalizeForDisplay(raw);
   const chips: BuyerPreferenceChip[] = [];
+
+  if (profile.geoConstraints && profile.geoConstraints.confidence >= 0.45) {
+    for (const constraint of (profile.geoConstraints.value || []).slice(0, 4)) {
+      chips.push({
+        id: `geo:${constraint.referenceId}:${constraint.side}`,
+        label: "Location",
+        value: formatGeoConstraintLabel(constraint),
+        source: profile.geoConstraints.source,
+      });
+    }
+  }
 
   if (profile.targetAreas && profile.targetAreas.confidence >= 0.45) {
     const areas = (profile.targetAreas.value || []).map((s) => String(s).trim()).filter(Boolean);

@@ -1,4 +1,5 @@
 import type {
+  BuyerGeoConstraint,
   BuyerPreferenceExtractionPatch,
   BuyerPreferenceProfile,
   PreferenceField,
@@ -50,6 +51,15 @@ function replaceArrayField(incoming: PreferenceField<string[]>): PreferenceField
     ...incoming,
     value: [...new Set(values)],
   };
+}
+
+function replaceGeoConstraintsField(
+  incoming: PreferenceField<BuyerGeoConstraint[]>,
+): PreferenceField<BuyerGeoConstraint[]> {
+  const values = (incoming.value || []).filter(
+    (c) => c && typeof c.referenceId === "string" && c.referenceId.trim(),
+  );
+  return { ...incoming, value: values };
 }
 
 function mergeArrayField(
@@ -111,6 +121,13 @@ function applyPatchField<K extends keyof BuyerPreferenceExtractionPatch>(
   const incoming = patch[key];
   if (!incoming) return;
 
+  if (key === "geoConstraints") {
+    (profile as Record<string, unknown>)[key] = replaceGeoConstraintsField(
+      incoming as PreferenceField<BuyerGeoConstraint[]>,
+    );
+    return;
+  }
+
   if (key === "targetAreas" || key === "propertyTypes" || key === "mustHaves" || key === "dealBreakers") {
     const cur = profile[key] as PreferenceField<string[]> | undefined;
     const shouldReplace =
@@ -156,6 +173,7 @@ const PATCH_KEYS: (keyof BuyerPreferenceExtractionPatch)[] = [
   "financingStatus",
   "mustHaves",
   "dealBreakers",
+  "geoConstraints",
 ];
 
 export function mergeBuyerPreferenceProfile(

@@ -51,6 +51,14 @@ export const timelinePreferenceSchema = z.enum([
   "unknown",
 ]);
 
+export const buyerGeoConstraintSchema = z.object({
+  referenceId: z.string().min(1),
+  side: z.enum(["east", "west", "north", "south"]),
+  cityContext: z.string().optional(),
+});
+
+export type BuyerGeoConstraint = z.infer<typeof buyerGeoConstraintSchema>;
+
 export const buyerPreferenceProfileSchema = z
   .object({
     schemaVersion: z.literal(BUYER_PREFERENCE_SCHEMA_VERSION),
@@ -78,6 +86,7 @@ export const buyerPreferenceProfileSchema = z
     financingStatus: preferenceFieldSchema(financingStatusSchema).optional(),
     mustHaves: preferenceFieldSchema(z.array(z.string())).optional(),
     dealBreakers: preferenceFieldSchema(z.array(z.string())).optional(),
+    geoConstraints: preferenceFieldSchema(z.array(buyerGeoConstraintSchema)).optional(),
   })
   .strict();
 
