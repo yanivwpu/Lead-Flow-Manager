@@ -324,6 +324,23 @@ function buildGoogleMapsUrl(listing: PublicListingFlyerListing): string | null {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 }
 
+/** Static map image for print — avoids iframe controls, scrollbars, and attribution clutter. */
+export function buildStaticMapImageUrl(listing: PublicListingFlyerListing): string | null {
+  const lat = listing.latitude;
+  const lng = listing.longitude;
+  if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+  const params = new URLSearchParams({
+    center: `${lat},${lng}`,
+    zoom: "14",
+    size: "400x400",
+    maptype: "mapnik",
+    markers: `${lat},${lng},red`,
+  });
+  return `https://staticmap.openstreetmap.de/staticmap.php?${params.toString()}`;
+}
+
 function renderMapEmbed(listing: PublicListingFlyerListing): string {
   const lat = listing.latitude;
   const lng = listing.longitude;
@@ -333,9 +350,26 @@ function renderMapEmbed(listing: PublicListingFlyerListing): string {
   const pad = 0.012;
   const bbox = `${lng - pad},${lat - pad},${lng + pad},${lat + pad}`;
   const embed = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat}%2C${lng}`;
+  const staticMapUrl = buildStaticMapImageUrl(listing);
+  const staticMap = staticMapUrl
+    ? `<img class="map-print-static print-only" src="${escapeHtml(staticMapUrl)}" alt="" />`
+    : "";
   return `<div class="map-embed-wrap">
-      <iframe class="map-embed" title="Property location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="${escapeHtml(embed)}"></iframe>
+      <iframe class="map-embed map-embed-interactive" title="Property location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="${escapeHtml(embed)}"></iframe>
+      ${staticMap}
     </div>`;
+}
+
+function renderPrintPhotoStrip(photos: { url: string; order: number }[]): string {
+  const secondary = photos.slice(1, 4);
+  if (secondary.length === 0) return "";
+  const items = secondary
+    .map(
+      (p) =>
+        `<img class="print-photo-strip-img" src="${escapeHtml(p.url)}" alt="" />`,
+    )
+    .join("");
+  return `<div class="print-photo-strip print-only" aria-hidden="true">${items}</div>`;
 }
 
 function renderMapColumn(listing: PublicListingFlyerListing): string {
@@ -468,6 +502,7 @@ function renderGallery(photos: { url: string; order: number }[]): string {
       <img id="hero-img" class="hero-img" src="${escapeHtml(hero)}" alt="Property photo" />
       ${nav}
     </div>
+    ${renderPrintPhotoStrip(photos)}
     ${photos.length > 1 ? `<div class="thumbs" role="list">${thumbs}</div>` : ""}
     <script type="application/json" id="gallery-urls">${urlsJson.replace(/</g, "\\u003c")}</script>
   </section>`;
@@ -816,6 +851,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     }
     .thumb.active { border-color: var(--brand-green); }
     .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .print-only { display: none !important; }
     .property-header { padding: 4px 0 14px; border-bottom: 1px solid var(--border); }
     .property-street {
       margin: 0 0 4px;
@@ -1025,6 +1061,21 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
         min-height: 0;
       }
       .hero-img { max-height: none; }
+      .gallery:has(.print-photo-strip) .hero-wrap { height: 3.85in; }
+      .print-only.print-photo-strip {
+        display: flex !important;
+        gap: 4px;
+        margin-top: 4px;
+        overflow: hidden;
+      }
+      .print-photo-strip-img {
+        flex: 1 1 0;
+        min-width: 0;
+        height: 0.65in;
+        object-fit: cover;
+        border-radius: 2px;
+        display: block;
+      }
       .thumbs, .gallery-nav { display: none !important; }
       .property-header { padding: 0 0 6px; }
       .property-street { font-size: 14pt; margin-bottom: 2px; }
@@ -1038,7 +1089,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       .description { font-size: 10pt; line-height: 1.42; }
       .flyer-bottom-row {
         display: grid;
-        grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.05fr) minmax(0, 1.12fr);
+        grid-template-columns: minmax(0, 3fr) minmax(0, 3fr) minmax(0, 4fr);
         gap: 10px;
         margin-top: 8px;
         page-break-inside: avoid;
@@ -1046,10 +1097,22 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       }
       .bottom-col-empty { display: none !important; }
       .bottom-col-heading { font-size: 7pt; margin-bottom: 4px; }
+      .map-embed-interactive { display: none !important; }
+      .map-print-static.print-only {
+        display: block !important;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center;
+      }
       .map-embed-wrap {
-        aspect-ratio: 1;
-        max-height: 1.55in;
+        aspect-ratio: auto;
+        height: 1.65in;
+        min-height: 1.55in;
+        max-height: 1.75in;
         border-radius: 4px;
+        overflow: hidden;
+        position: relative;
       }
       .qr-block {
         padding: 4px;

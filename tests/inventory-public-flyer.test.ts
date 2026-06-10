@@ -86,6 +86,13 @@ assert(html.includes("qr-block"), "qr present");
 assert(html.includes("Scan To View Listing"), "qr headline");
 assert(html.includes("Open listing on your phone"), "qr helper text");
 assert(html.includes("hero-img"), "gallery hero");
+assert(html.includes("print-photo-strip"), "print-only secondary photo strip");
+assert(html.includes("cdn.example.com/b.jpg"), "secondary photo in print strip");
+assert(html.includes("map-print-static"), "print static map image");
+assert(html.includes("staticmap.openstreetmap.de"), "static map url for print");
+assert(html.includes("map-embed-interactive"), "interactive map for screen only");
+assert(html.includes("grid-template-columns: minmax(0, 3fr)"), "30/30/40 bottom grid");
+assert(html.includes("gallery:has(.print-photo-strip) .hero-wrap { height: 3.85in"), "hero trims when strip present");
 assert(html.includes("FOR SALE"), "for sale header label");
 assert(!html.includes("Active"), "no MLS status on flyer");
 assert(html.includes("Jane Agent"), "agent name");
@@ -164,6 +171,24 @@ const noPhotoHtml = buildPublicListingFlyerHtml({
 });
 assert(!noPhotoHtml.includes('class="gallery"'), "gallery hidden without photos");
 assert(noPhotoHtml.includes("qr-block"), "qr still shown without map coords");
+
+const onePhotoHtml = buildPublicListingFlyerHtml({
+  listing: { ...listing, photos: [{ url: "https://cdn.example.com/only.jpg", order: 0 }] },
+  agent: {
+    name: "Jane Agent",
+    email: "jane@broker.com",
+    phone: "+1 512-555-0100",
+    avatarUrl: null,
+    brokerageName: "Summit Realty",
+    bookingLink: null,
+  },
+  shareUrl: "https://app.whachatcrm.com/share/listings/x",
+  qrDataUrl: "data:image/png;base64,TEST",
+});
+assert(
+  !onePhotoHtml.includes('<div class="print-photo-strip print-only"'),
+  "no print strip with single photo",
+);
 
 const heroPhotos = pickFlyerHeroPhotos([
   { url: "https://cdn.example.com/a-watermark.jpg", order: 0 },
