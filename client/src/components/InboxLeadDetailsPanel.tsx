@@ -1832,7 +1832,7 @@ export function InboxLeadDetailsPanel({
     <div
       className={
         panelClassName ??
-        "hidden lg:flex lg:w-[272px] lg:min-w-[272px] min-[1200px]:w-[400px] min-[1200px]:min-w-[400px] min-[1440px]:w-[440px] min-[1440px]:min-w-[440px] flex-col border-l border-gray-100 bg-white overflow-y-auto overflow-x-hidden flex-shrink-0"
+        "hidden lg:flex lg:w-[272px] lg:min-w-[272px] min-[1200px]:w-[400px] min-[1200px]:min-w-[400px] flex-col border-l border-gray-100 bg-white overflow-y-auto overflow-x-hidden flex-shrink-0"
       }
       data-testid="inbox-lead-details-panel"
     >

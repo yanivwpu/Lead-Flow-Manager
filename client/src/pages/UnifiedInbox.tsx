@@ -1869,7 +1869,7 @@ export function UnifiedInbox() {
 
       {/* ── LEFT COLUMN: Conversation List ── */}
       <div className={cn(
-        "w-full md:w-72 lg:w-80 border-r flex flex-col flex-shrink-0 bg-gray-50",
+        "w-full md:w-72 md:min-w-[18rem] lg:w-80 lg:min-w-[20rem] border-r flex flex-col flex-shrink-0 bg-gray-50",
         selectedContactId ? "hidden md:flex" : "flex"
       )}>
         {/* Header */}
