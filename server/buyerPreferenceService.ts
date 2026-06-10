@@ -7,10 +7,17 @@ import {
   type BuyerPreferenceProfile,
 } from "@shared/buyerPreferenceSchema";
 import {
+  heuristicPatchFromInboundText,
   heuristicPatchFromTranscript,
   normalizeLlmExtractionPatch,
   patchFieldCount,
 } from "@shared/buyerPreferenceExtractionNormalize";
+import {
+  detectPreferenceArrayReplacements,
+  hasInventoryPreferenceSignals,
+  logBuyerPreferenceFastPath,
+  type PreferenceArrayReplaceKey,
+} from "@shared/buyerPreferenceInventorySignals";
 import { mergeBuyerPreferenceProfile } from "@shared/buyerPreferenceMerge";
 import { formatBuyerPreferenceSummaryForAi, normalizeForDisplay } from "@shared/buyerPreferenceDisplay";
 import { aiProvider } from "./aiProvider";
@@ -236,10 +243,26 @@ export async function persistBuyerPreferenceProfile(
   return updated;
 }
 
+function triggerInventoryMatchRefresh(userId: string, contactId: string): void {
+  logBuyerPreferenceFastPath("inventory_refresh_triggered", { contactId, userId });
+  void import("./presence").then(({ notifyUser }) =>
+    notifyUser(userId, {
+      type: "buyer_preferences_updated",
+      contactId,
+    }),
+  );
+}
+
 export async function mergeAndPersistBuyerPreferences(
   contact: Contact,
   patch: BuyerPreferenceExtractionPatch,
-  meta?: { conversationId?: string; messageId?: string; logActivity?: boolean },
+  meta?: {
+    conversationId?: string;
+    messageId?: string;
+    logActivity?: boolean;
+    replaceArrayFields?: PreferenceArrayReplaceKey[];
+    triggerInventoryRefresh?: boolean;
+  },
 ): Promise<BuyerPreferenceProfile> {
   const patchKeys = patchFieldCount(patch);
   if (patchKeys === 0) {
@@ -248,15 +271,24 @@ export async function mergeAndPersistBuyerPreferences(
   }
 
   const current = readBuyerPreferenceProfile(contact);
-  const merged = mergeBuyerPreferenceProfile(current, patch, {
-    lastExtractedAt: new Date().toISOString(),
-    lastInboundAt: new Date().toISOString(),
-  });
+  const mergeOptions = meta?.replaceArrayFields?.length
+    ? { replaceArrayFields: meta.replaceArrayFields }
+    : undefined;
+  const merged = mergeBuyerPreferenceProfile(
+    current,
+    patch,
+    {
+      lastExtractedAt: new Date().toISOString(),
+      lastInboundAt: new Date().toISOString(),
+    },
+    mergeOptions,
+  );
 
   logPersistence(contact.id, "merged_before_save", {
     patchKeys,
     patchFields: Object.keys(patch),
     mergedStatus: merged.profileStatus,
+    replaceArrayFields: meta?.replaceArrayFields ?? [],
     mergedFieldKeys: Object.keys(merged).filter(
       (k) => !["schemaVersion", "profileStatus", "lastExtractedAt", "lastInboundAt"].includes(k),
     ),
@@ -267,7 +299,49 @@ export async function mergeAndPersistBuyerPreferences(
     userId: contact.userId,
     conversationId: meta?.conversationId,
   });
+
+  if (meta?.triggerInventoryRefresh !== false) {
+    triggerInventoryMatchRefresh(contact.userId, contact.id);
+  }
+
   return merged;
+}
+
+async function runFastPathHeuristicPreferenceUpdate(
+  contact: Contact,
+  inboundText: string,
+  meta?: { conversationId?: string; messageId?: string },
+): Promise<boolean> {
+  if (!hasInventoryPreferenceSignals(inboundText)) return false;
+
+  const replaceArrayFields = detectPreferenceArrayReplacements(inboundText);
+  logBuyerPreferenceFastPath("preference_change_detected", {
+    contactId: contact.id,
+    userId: contact.userId,
+    textLen: inboundText.length,
+    replaceArrayFields,
+  });
+
+  const patch = heuristicPatchFromInboundText(inboundText);
+  if (patchFieldCount(patch) === 0) return false;
+
+  const merged = await mergeAndPersistBuyerPreferences(contact, patch, {
+    conversationId: meta?.conversationId,
+    messageId: meta?.messageId,
+    logActivity: false,
+    replaceArrayFields,
+    triggerInventoryRefresh: true,
+  });
+
+  logBuyerPreferenceFastPath("profile_updated", {
+    contactId: contact.id,
+    userId: contact.userId,
+    profileStatus: merged.profileStatus,
+    patchFields: Object.keys(patch),
+    replaceArrayFields,
+  });
+
+  return true;
 }
 
 async function loadConversationForExtraction(
@@ -467,10 +541,12 @@ export async function runBuyerPreferenceExtraction(
     }
 
     const fresh = (await storage.getContact(contactId)) || contact;
+    const replaceArrayFields = text ? detectPreferenceArrayReplacements(text) : [];
     const merged = await mergeAndPersistBuyerPreferences(fresh, patch, {
       conversationId: options?.conversationId,
       messageId: options?.messageId,
       logActivity: true,
+      replaceArrayFields,
     });
     logTrigger("extraction_completed", {
       contactId,
@@ -529,10 +605,11 @@ export function scheduleBuyerPreferenceExtraction(params: {
     return;
   }
 
+  const inventoryFastPath = hasInventoryPreferenceSignals(text);
   const now = Date.now();
   const last = lastExtractionByContact.get(contactId) || 0;
   const debounceRemainingMs = DEBOUNCE_MS - (now - last);
-  if (now - last < DEBOUNCE_MS) {
+  if (!inventoryFastPath && now - last < DEBOUNCE_MS) {
     logTrigger("extraction_skipped", {
       contactId,
       userId,
@@ -549,6 +626,7 @@ export function scheduleBuyerPreferenceExtraction(params: {
     userId,
     triggerSource,
     textLen: text.length,
+    inventoryFastPath,
     hasW2FieldUpdates: !!(w2FieldUpdates && Object.keys(w2FieldUpdates).length > 0),
     conversationId,
     messageId,
@@ -591,6 +669,13 @@ export function scheduleBuyerPreferenceExtraction(params: {
             logActivity: false,
           });
         }
+      }
+
+      if (inventoryFastPath && text) {
+        await runFastPathHeuristicPreferenceUpdate(contact, text, {
+          conversationId,
+          messageId,
+        });
       }
 
       await runBuyerPreferenceExtraction(userId, contactId, {

@@ -5,6 +5,7 @@ import type {
   PreferenceSource,
 } from "./buyerPreferenceSchema";
 import { deriveProfileStatus } from "./buyerPreferenceSchema";
+import type { PreferenceArrayReplaceKey } from "./buyerPreferenceInventorySignals";
 
 const CONTRADICTION_RE =
   /\b(actually|instead|no longer|don't need|do not need|not anymore|changed my mind|rather than)\b/i;
@@ -41,6 +42,14 @@ function mergeStringArrays(a: string[], b: string[]): string[] {
     out.push(t);
   }
   return out.slice(0, 30);
+}
+
+function replaceArrayField(incoming: PreferenceField<string[]>): PreferenceField<string[]> {
+  const values = (incoming.value || []).map((s) => s.trim()).filter(Boolean);
+  return {
+    ...incoming,
+    value: [...new Set(values)],
+  };
 }
 
 function mergeArrayField(
@@ -89,20 +98,27 @@ function mergePriceRange(
   }
 }
 
+export type BuyerPreferenceMergeOptions = {
+  replaceArrayFields?: PreferenceArrayReplaceKey[];
+};
+
 function applyPatchField<K extends keyof BuyerPreferenceExtractionPatch>(
   profile: BuyerPreferenceProfile,
   patch: BuyerPreferenceExtractionPatch,
   key: K,
+  mergeOptions?: BuyerPreferenceMergeOptions,
 ): void {
   const incoming = patch[key];
   if (!incoming) return;
 
   if (key === "targetAreas" || key === "propertyTypes" || key === "mustHaves" || key === "dealBreakers") {
     const cur = profile[key] as PreferenceField<string[]> | undefined;
-    (profile as Record<string, unknown>)[key] = mergeArrayField(
-      cur,
-      incoming as PreferenceField<string[]>,
-    );
+    const shouldReplace =
+      (key === "targetAreas" || key === "propertyTypes") &&
+      mergeOptions?.replaceArrayFields?.includes(key as PreferenceArrayReplaceKey);
+    (profile as Record<string, unknown>)[key] = shouldReplace
+      ? replaceArrayField(incoming as PreferenceField<string[]>)
+      : mergeArrayField(cur, incoming as PreferenceField<string[]>);
     return;
   }
 
@@ -146,6 +162,7 @@ export function mergeBuyerPreferenceProfile(
   current: BuyerPreferenceProfile,
   patch: BuyerPreferenceExtractionPatch,
   meta?: { lastInboundAt?: string; lastExtractedAt?: string },
+  mergeOptions?: BuyerPreferenceMergeOptions,
 ): BuyerPreferenceProfile {
   const profile: BuyerPreferenceProfile = {
     ...current,
@@ -153,7 +170,7 @@ export function mergeBuyerPreferenceProfile(
   };
 
   for (const key of PATCH_KEYS) {
-    applyPatchField(profile, patch, key);
+    applyPatchField(profile, patch, key, mergeOptions);
   }
 
   if (meta?.lastInboundAt) profile.lastInboundAt = meta.lastInboundAt;

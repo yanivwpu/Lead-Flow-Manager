@@ -441,6 +441,15 @@ export function UnifiedInbox() {
                   ? msg.title
                   : "A lead completed scheduling via Calendly.",
             });
+          } else if (msg.type === "buyer_preferences_updated" && typeof msg.contactId === "string") {
+            const contactId = msg.contactId;
+            queryClient.invalidateQueries({
+              queryKey: [`/api/contacts/${contactId}/buyer-preferences`],
+            });
+            queryClient.invalidateQueries({
+              queryKey: [`/api/contacts/${contactId}/inventory-matches`],
+            });
+            queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId] });
           }
         } catch {}
       };

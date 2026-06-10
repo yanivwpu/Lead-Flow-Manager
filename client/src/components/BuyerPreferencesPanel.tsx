@@ -171,6 +171,7 @@ export function BuyerPreferencesPanel({
     onSuccess: () => {
       setEditOpen(false);
       queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contactId}/buyer-preferences`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contactId}/inventory-matches`] });
       queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId] });
       onUpdated?.();
     },
@@ -189,6 +190,7 @@ export function BuyerPreferencesPanel({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contactId}/buyer-preferences`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contactId}/inventory-matches`] });
       queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId] });
       onUpdated?.();
     },

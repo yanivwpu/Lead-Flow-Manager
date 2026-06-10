@@ -78,17 +78,65 @@ function parseMoney(v: unknown): number | undefined {
   return Math.round(n);
 }
 
+/** Map SFH / single family labels to canonical `house`. */
+export function normalizePropertyTypeToken(
+  raw: string,
+): "condo" | "house" | "townhouse" | "multi_family" | "land" | null {
+  const s = raw.toLowerCase().replace(/\s+/g, " ").trim();
+  if (!s) return null;
+  if (/\b(sfh|single[\s-]?family(?:\s+home)?)\b/.test(s)) return "house";
+  if (s.includes("condo")) return "condo";
+  if (s.includes("town")) return "townhouse";
+  if (s.includes("multi")) return "multi_family";
+  if (s.includes("land")) return "land";
+  if (s.includes("house") || s.includes("home")) return "house";
+  return null;
+}
+
 function normalizePropertyTypes(values: string[]): Array<"condo" | "house" | "townhouse" | "multi_family" | "land"> {
   const out: Array<"condo" | "house" | "townhouse" | "multi_family" | "land"> = [];
   for (const raw of values) {
-    const s = raw.toLowerCase().replace(/\s+/g, "_");
-    if (s.includes("condo")) out.push("condo");
-    else if (s.includes("town")) out.push("townhouse");
-    else if (s.includes("multi")) out.push("multi_family");
-    else if (s.includes("land")) out.push("land");
-    else if (s.includes("house") || s.includes("home")) out.push("house");
+    const norm = normalizePropertyTypeToken(raw);
+    if (norm) out.push(norm);
   }
   return [...new Set(out)];
+}
+
+function extractPropertyTypesFromText(lower: string): Array<"condo" | "house" | "townhouse" | "multi_family" | "land"> {
+  const types: Array<"condo" | "house" | "townhouse" | "multi_family" | "land"> = [];
+  if (/\bcondo(?:minium)?s?\b/i.test(lower)) types.push("condo");
+  if (/\b(townhouse|town[\s-]?house)\b/i.test(lower)) types.push("townhouse");
+  if (/\b(sfh|single[\s-]?family(?:\s+home)?)\b/i.test(lower)) types.push("house");
+  else if (/\b(house|home)\b/i.test(lower)) types.push("house");
+  if (/\bmulti[\s-]?family\b/i.test(lower)) types.push("multi_family");
+  if (/\bland\b/i.test(lower)) types.push("land");
+  return [...new Set(types)];
+}
+
+function extractAreasFromText(text: string, lower: string): string[] {
+  const areaHits: string[] = [];
+
+  const geoM = text.match(
+    /\b((?:east|west|north|south)\s+of\s+(?:the\s+)?[^.?]+?(?:\s+in\s+[A-Za-z][A-Za-z\s]+)?)/i,
+  );
+  if (geoM?.[1]) {
+    areaHits.push(geoM[1].trim());
+  }
+
+  for (const m of text.matchAll(/\b(?:in|near|around)\s+([A-Za-z][A-Za-z\s]{1,40})/g)) {
+    const area = m[1]?.trim();
+    if (!area) continue;
+    if (!areaHits.some((a) => a.toLowerCase() === area.toLowerCase())) {
+      areaHits.push(area);
+    }
+  }
+
+  const brickell = lower.match(/\bbrickell\b/);
+  if (brickell && !areaHits.some((a) => a.toLowerCase() === "brickell")) {
+    areaHits.push("Brickell");
+  }
+
+  return areaHits.slice(0, 6);
 }
 
 function normalizeTimelineValue(v: unknown): "asap" | "30d" | "60_90d" | "browsing" | "unknown" | undefined {
@@ -341,9 +389,25 @@ export function normalizeLlmExtractionPatch(raw: unknown): BuyerPreferenceExtrac
   return loose;
 }
 
+/** Heuristic patch from the latest inbound message only (fast-path). */
+export function heuristicPatchFromInboundText(inboundText: string): BuyerPreferenceExtractionPatch {
+  return heuristicPatchFromTranscript(inboundText, { latestUserLineOnly: true });
+}
+
 /** Regex/heuristic fallback when LLM JSON does not validate. */
-export function heuristicPatchFromTranscript(transcript: string): BuyerPreferenceExtractionPatch {
-  const text = transcript || "";
+export function heuristicPatchFromTranscript(
+  transcript: string,
+  options?: { latestUserLineOnly?: boolean },
+): BuyerPreferenceExtractionPatch {
+  let text = transcript || "";
+  if (options?.latestUserLineOnly) {
+    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+    const userLines = lines.filter((l) => /^user\s*:/i.test(l));
+    if (userLines.length > 0) {
+      text = userLines[userLines.length - 1].replace(/^user\s*:\s*/i, "");
+    }
+  }
+
   const lower = text.toLowerCase();
   const now = nowIso();
   const inf = (confidence: number, evidence: string) => ({
@@ -354,24 +418,14 @@ export function heuristicPatchFromTranscript(transcript: string): BuyerPreferenc
   });
   const patch: BuyerPreferenceExtractionPatch = {};
 
-  const areaHits: string[] = [];
-  const brickell = lower.match(/\bbrickell\b/);
-  if (brickell) areaHits.push("Brickell");
-  for (const m of text.matchAll(/\b(?:in|near)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g)) {
-    if (m[1] && !areaHits.some((a) => a.toLowerCase() === m[1].toLowerCase())) {
-      areaHits.push(m[1]);
-    }
-  }
+  const areaHits = extractAreasFromText(text, lower);
   if (areaHits.length) {
-    patch.targetAreas = { value: areaHits.slice(0, 6), ...inf(0.75, "area in message") };
+    patch.targetAreas = { value: areaHits, ...inf(0.8, "area in message") };
   }
 
-  const types: Array<"condo" | "house" | "townhouse" | "multi_family" | "land"> = [];
-  if (/\bcondo\b/i.test(lower)) types.push("condo");
-  if (/\b(townhouse|town house)\b/i.test(lower)) types.push("townhouse");
-  if (/\b(house|home)\b/i.test(lower)) types.push("house");
+  const types = extractPropertyTypesFromText(lower);
   if (types.length) {
-    patch.propertyTypes = { value: types, ...inf(0.7, "property type in message") };
+    patch.propertyTypes = { value: types, ...inf(0.82, "property type in message") };
   }
 
   const bedM = lower.match(/(\d+)\s*[- ]?\s*bed/);
