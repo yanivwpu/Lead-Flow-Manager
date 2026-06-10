@@ -1,6 +1,10 @@
 import type { Express, Request, Response } from "express";
 import QRCode from "qrcode";
 import { getPublicListingFlyerData } from "../inventory/inventoryDb";
+import {
+  backfillFlyerColumnsForListingId,
+  listingNeedsFlyerColumnBackfill,
+} from "../inventory/inventoryFlyerBackfill";
 import { buildListingShareUrl } from "@shared/inventory/listingViewUrl";
 import {
   buildPublicListingFlyerHtml,
@@ -16,7 +20,13 @@ export function registerPublicListingRoutes(app: Express): void {
     const shareUrl = buildListingShareUrl(listingId, getRequestOrigin(req));
 
     try {
-      const flyerData = await getPublicListingFlyerData(listingId, shareUrl);
+      let flyerData = await getPublicListingFlyerData(listingId, shareUrl);
+      if (flyerData && listingNeedsFlyerColumnBackfill(flyerData.listing)) {
+        const repaired = await backfillFlyerColumnsForListingId(listingId);
+        if (repaired) {
+          flyerData = await getPublicListingFlyerData(listingId, shareUrl);
+        }
+      }
       if (!flyerData) {
         res.status(404).type("html").send(buildPublicListingNotFoundHtml());
         return;

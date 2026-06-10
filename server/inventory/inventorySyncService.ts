@@ -28,6 +28,7 @@ import {
 import { processInventoryOpportunitiesAfterSync } from "./inventoryOpportunityService";
 import { buildAdapterContext } from "./inventorySourceService";
 import { getInventoryProviderAdapter } from "./inventoryProviderRegistry";
+import { backfillMissingFlyerColumnsForSource } from "./inventoryFlyerBackfill";
 
 const runningSyncs = new Set<string>();
 /** No progress for this long → treat DB "running" as stale (safe for multi-instance). */
@@ -708,6 +709,18 @@ async function runInventorySyncJob(
       },
     });
 
+    let flyerBackfill: Awaited<ReturnType<typeof backfillMissingFlyerColumnsForSource>> | undefined;
+    if (finalStatus === "success") {
+      try {
+        flyerBackfill = await backfillMissingFlyerColumnsForSource(userId, sourceId);
+      } catch (backfillErr) {
+        console.warn("[inventory-sync] flyer column backfill failed", {
+          sourceId,
+          error: backfillErr instanceof Error ? backfillErr.message : String(backfillErr),
+        });
+      }
+    }
+
     console.log("[inventory-sync] complete", {
       sourceId,
       datasetId,
@@ -720,6 +733,7 @@ async function runInventorySyncJob(
       skippedDueToCap,
       skippedOutOfScope,
       matchableCount: matchableCountCache.value,
+      flyerBackfill,
       durationMs: Date.now() - startedAt,
     });
   } catch (err) {

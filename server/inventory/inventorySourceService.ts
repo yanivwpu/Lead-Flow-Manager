@@ -61,7 +61,7 @@ export function toPublicInventorySource(
   listingStats: SourceListingStats = { total: 0, matchable: 0 },
 ) {
   const creds = (source.credentialsEnc || {}) as Record<string, unknown>;
-  const hasCredentials = sourceHasStoredCredentials(source.provider as InventoryProvider, creds);
+  const hasCredentials = inventorySourceHasSyncCredentials(source.provider as InventoryProvider, creds);
   const rawConfig = (source.config || {}) as Record<string, unknown>;
   const config = { ...rawConfig };
   const configuredCap = readInventorySyncScope(rawConfig).maxListings;
@@ -98,7 +98,8 @@ export function toPublicInventorySource(
   };
 }
 
-function sourceHasStoredCredentials(
+/** Whether decrypted inventory_sources.credentialsEnc has the token(s) required for listing sync. */
+export function inventorySourceHasSyncCredentials(
   provider: InventoryProvider,
   creds: Record<string, unknown>,
 ): boolean {

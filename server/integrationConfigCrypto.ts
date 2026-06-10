@@ -3,6 +3,7 @@ import { decryptCredential, encryptCredential, isEncrypted } from "./userTwilio"
 /** Same key list as `server/routes.ts` native integration encrypt helpers. */
 export const INTEGRATION_SENSITIVE_CONFIG_KEYS = [
   "accessToken",
+  "serverToken",
   "secretKey",
   "privateKey",
   "clientSecret",
