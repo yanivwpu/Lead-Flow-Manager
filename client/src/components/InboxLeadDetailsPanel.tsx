@@ -2547,13 +2547,15 @@ export function InboxLeadDetailsPanel({
                   )}
 
                   {showCopilotInventoryPanels && inventoryConnected && (
-                    <MatchingListingsPanel
-                      contactId={contact.id}
-                      contactFirstName={contact.name?.trim().split(/\s+/)[0]}
-                      compact
-                      isWorkspaceAdmin={isWorkspaceAdmin}
-                      onInsertComposerDraft={onInsertComposerDraft}
-                    />
+                    <div className="-mx-4 min-w-0">
+                      <MatchingListingsPanel
+                        contactId={contact.id}
+                        contactFirstName={contact.name?.trim().split(/\s+/)[0]}
+                        compact
+                        isWorkspaceAdmin={isWorkspaceAdmin}
+                        onInsertComposerDraft={onInsertComposerDraft}
+                      />
+                    </div>
                   )}
 
                   {/* D. Short narrative summary — action/context only; no duplicate criteria */}

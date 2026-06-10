@@ -87,7 +87,7 @@ function MatchReasonChips({
   const hiddenCount = labels.length - visible.length;
 
   return (
-    <div className="flex flex-wrap items-center gap-1 mt-1.5">
+    <div className={cn("flex flex-wrap items-center gap-1", maxVisible <= 3 ? "mt-1" : "mt-1.5")}>
       {visible.map((label) => (
         <span
           key={label}
@@ -188,15 +188,10 @@ function MatchListingCard({
 
   const isSidebar = variant === "sidebar";
 
-  const listingPhoto = (
+  const modalListingPhoto = (
     <button
       type="button"
-      className={cn(
-        "shrink-0 flex-shrink-0 overflow-hidden rounded-md bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400",
-        isSidebar
-          ? "h-[82px] w-[110px] max-h-[84px] max-w-[120px]"
-          : "h-[72px] w-[96px] min-[1200px]:h-[100px] min-[1200px]:w-[140px]",
-      )}
+      className="h-[72px] w-[96px] min-[1200px]:h-[100px] min-[1200px]:w-[140px] shrink-0 flex-shrink-0 overflow-hidden rounded-md bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
       onClick={viewListing}
       aria-label="View listing"
     >
@@ -209,7 +204,7 @@ function MatchListingCard({
         />
       ) : (
         <span className="flex h-full w-full items-center justify-center">
-          <Home className={cn("text-gray-300", isSidebar ? "h-5 w-5" : "h-6 w-6")} aria-hidden />
+          <Home className="h-6 w-6 text-gray-300" aria-hidden />
         </span>
       )}
     </button>
@@ -228,34 +223,39 @@ function MatchListingCard({
   );
 
   const actionBar = (
-    <div className="flex items-center justify-end gap-0.5 border-t border-gray-100 px-2 py-1 bg-gray-50/40">
-          <button
-            type="button"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-white hover:text-gray-800"
-            onClick={viewListing}
-            aria-label="View listing"
-            data-testid={`button-view-listing-${match.listingId}`}
-          >
-            <Eye className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-white",
-              saved ? "text-rose-500 hover:text-rose-600" : "text-gray-500 hover:text-gray-800",
-            )}
-            disabled={saveMutation.isPending}
-            onClick={() => saveMutation.mutate()}
-            aria-label="Save to buyer shortlist"
-            aria-pressed={saved}
-            data-testid={`button-save-match-${match.listingId}`}
-          >
-            {saveMutation.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Heart className={cn("h-3.5 w-3.5", saved && "fill-rose-500 text-rose-500")} />
-            )}
-          </button>
+    <div
+      className={cn(
+        "flex items-center justify-end gap-0.5 border-t border-gray-100 bg-gray-50/40",
+        isSidebar ? "px-2 py-1" : "px-2 py-1",
+      )}
+    >
+      <button
+        type="button"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-white hover:text-gray-800"
+        onClick={viewListing}
+        aria-label="View listing"
+        data-testid={`button-view-listing-${match.listingId}`}
+      >
+        <Eye className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        className={cn(
+          "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-white",
+          saved ? "text-rose-500 hover:text-rose-600" : "text-gray-500 hover:text-gray-800",
+        )}
+        disabled={saveMutation.isPending}
+        onClick={() => saveMutation.mutate()}
+        aria-label="Save to buyer shortlist"
+        aria-pressed={saved}
+        data-testid={`button-save-match-${match.listingId}`}
+      >
+        {saveMutation.isPending ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Heart className={cn("h-3.5 w-3.5", saved && "fill-rose-500 text-rose-500")} />
+        )}
+      </button>
     </div>
   );
 
@@ -268,36 +268,56 @@ function MatchListingCard({
       >
         {isSidebar ? (
           <>
-            <div className="flex min-w-0 gap-2 p-2">
-              {listingPhoto}
-              <div className="min-w-0 flex-1 flex flex-col">
-                <div className="flex items-start justify-between gap-1.5 min-w-0">
-                  <p
-                    className="text-[11px] font-semibold text-gray-900 leading-snug line-clamp-2 min-w-0 flex-1"
-                    title={titleLine}
-                  >
-                    {titleLine}
-                  </p>
-                  {scoreBadge}
-                </div>
-                <p className="text-[13px] font-bold text-gray-900 leading-tight mt-0.5 tabular-nums truncate">
-                  {formatPrice(match.listing.priceCents)}
-                  {bedsBaths && (
-                    <span className="text-[10px] font-medium text-gray-600">
-                      {" · "}
-                      {bedsBaths}
-                    </span>
-                  )}
+            <button
+              type="button"
+              className="relative block w-full h-[142px] overflow-hidden bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-400"
+              onClick={viewListing}
+              aria-label="View listing"
+            >
+              {match.listing.thumbnailUrl ? (
+                <img
+                  src={match.listing.thumbnailUrl}
+                  alt=""
+                  className="h-full w-full object-cover object-center"
+                  loading="lazy"
+                />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center">
+                  <Home className="h-8 w-8 text-gray-300" aria-hidden />
+                </span>
+              )}
+            </button>
+
+            <div className="px-2.5 pt-2 pb-1 min-w-0">
+              <div className="flex items-start justify-between gap-2 min-w-0">
+                <p
+                  className="text-xs font-semibold text-gray-900 leading-snug line-clamp-2 min-w-0 flex-1"
+                  title={titleLine}
+                >
+                  {titleLine}
                 </p>
-                <MatchReasonChips reasons={match.reasons} maxVisible={3} />
+                {scoreBadge}
               </div>
+
+              <p className="text-sm font-bold text-gray-900 leading-snug mt-1 tabular-nums [overflow-wrap:anywhere]">
+                {formatPrice(match.listing.priceCents)}
+                {bedsBaths && (
+                  <span className="text-[11px] font-medium text-gray-600">
+                    {" · "}
+                    {bedsBaths}
+                  </span>
+                )}
+              </p>
+
+              <MatchReasonChips reasons={match.reasons} maxVisible={3} />
             </div>
+
             {actionBar}
           </>
         ) : (
           <>
             <div className="flex gap-2.5 p-2 min-[1200px]:gap-3 min-[1200px]:p-2.5">
-              {listingPhoto}
+              {modalListingPhoto}
               <div className="min-w-0 flex-1 flex flex-col">
                 <div className="flex items-start justify-between gap-2 min-w-0">
                   <p
@@ -468,10 +488,10 @@ export function MatchingListingsPanel({
 
   return (
     <div
-      className={cn(compact ? "mt-0" : "mt-3")}
+      className={cn(compact ? "mt-2 min-w-0" : "mt-3")}
       data-testid="matching-listings-panel"
     >
-      <div className={cn(compact ? "mb-1.5" : "mb-2")}>
+      <div className={cn(compact ? "mb-1 px-0.5" : "mb-2")}>
         <span
           className={cn(
             "font-semibold uppercase tracking-wide flex items-center gap-1.5 min-w-0",
@@ -483,7 +503,7 @@ export function MatchingListingsPanel({
             Inventory Matches{matchCount > 0 ? ` (${matchCount})` : ""}
           </span>
         </span>
-        {matches.length > 0 && (
+        {matches.length > 0 && !compact && (
           <p className="text-[10px] text-gray-400 leading-snug mt-0.5">
             For your review — ranked by buyer fit.
           </p>
@@ -537,7 +557,7 @@ export function MatchingListingsPanel({
 
       {previewMatches.length > 0 && (
         <div
-          className="space-y-1.5 mt-1"
+          className="space-y-2 min-w-0"
           data-testid="matching-listings-cards"
           data-match-count={matches.length}
           data-rendered-count={previewMatches.length}
