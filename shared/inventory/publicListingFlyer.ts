@@ -84,7 +84,7 @@ function formatSquareFeet(sqft: number | null): string | null {
 }
 
 function formatHoaFee(cents: number | null): string | null {
-  if (cents == null || cents <= 0) return null;
+  if (cents == null || !Number.isFinite(cents) || cents < 0) return null;
   return `HOA $${Math.round(cents / 100).toLocaleString("en-US")}/mo`;
 }
 
@@ -155,8 +155,27 @@ export function resolveDisplayHoaFee(listing: PublicListingFlyerListing): string
 }
 
 function formatYearBuilt(year: number | null): string | null {
-  if (year == null || year < 1600) return null;
-  return String(year);
+  if (year == null || !Number.isFinite(year) || year < 1600) return null;
+  return String(Math.round(year));
+}
+
+export type FlyerSpecFields = {
+  sqft: string | null;
+  hoa: string | null;
+  yearBuilt: string | null;
+};
+
+/** DB-first specs for flyer: Sq Ft / HOA / Built when columns exist; MLS text fallback for sqft/hoa only. */
+export function resolveFlyerSpecFields(listing: PublicListingFlyerListing): FlyerSpecFields {
+  const sqftFromDb = formatSquareFeet(listing.squareFeet);
+  const hoaFromDb = formatHoaFee(listing.hoaFeeCents);
+  const yearFromDb = formatYearBuilt(listing.yearBuilt);
+
+  return {
+    sqft: sqftFromDb ?? resolveDisplaySquareFeet(listing),
+    hoa: hoaFromDb ?? resolveDisplayHoaFee(listing),
+    yearBuilt: yearFromDb,
+  };
 }
 
 function parsePhotos(
@@ -324,21 +343,45 @@ function buildGoogleMapsUrl(listing: PublicListingFlyerListing): string | null {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 }
 
-/** Static map image for print — avoids iframe controls, scrollbars, and attribution clutter. */
-export function buildStaticMapImageUrl(listing: PublicListingFlyerListing): string | null {
+function lonToTileX(lon: number, zoom: number): number {
+  return Math.floor(((lon + 180) / 360) * 2 ** zoom);
+}
+
+function latToTileY(lat: number, zoom: number): number {
+  const rad = (lat * Math.PI) / 180;
+  return Math.floor(
+    ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * 2 ** zoom,
+  );
+}
+
+/** Print-safe static map URLs — tries providers in order; OSM tile is the final reliable fallback. */
+export function buildStaticMapImageUrls(listing: PublicListingFlyerListing): string[] {
   const lat = listing.latitude;
   const lng = listing.longitude;
   if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return null;
+    return [];
   }
-  const params = new URLSearchParams({
+  const zoom = 14;
+  const tileX = lonToTileX(lng, zoom);
+  const tileY = latToTileY(lat, zoom);
+  const osmStaticParams = new URLSearchParams({
     center: `${lat},${lng}`,
-    zoom: "14",
-    size: "400x400",
+    zoom: String(zoom),
+    size: "450x450",
     maptype: "mapnik",
     markers: `${lat},${lng},red`,
   });
-  return `https://staticmap.openstreetmap.de/staticmap.php?${params.toString()}`;
+
+  return [
+    `https://staticmap.openstreetmap.de/staticmap.php?${osmStaticParams.toString()}`,
+    `https://static-maps.yandex.ru/1.x/?lang=en_US&ll=${lng},${lat}&z=${zoom}&l=map&size=450,450&pt=${lng},${lat},pm2rdm`,
+    `https://tile.openstreetmap.org/${zoom}/${tileX}/${tileY}.png`,
+  ];
+}
+
+/** Primary static map URL for print (first candidate). */
+export function buildStaticMapImageUrl(listing: PublicListingFlyerListing): string | null {
+  return buildStaticMapImageUrls(listing)[0] ?? null;
 }
 
 function renderMapEmbed(listing: PublicListingFlyerListing): string {
@@ -350,9 +393,10 @@ function renderMapEmbed(listing: PublicListingFlyerListing): string {
   const pad = 0.012;
   const bbox = `${lng - pad},${lat - pad},${lng + pad},${lat + pad}`;
   const embed = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat}%2C${lng}`;
-  const staticMapUrl = buildStaticMapImageUrl(listing);
-  const staticMap = staticMapUrl
-    ? `<img class="map-print-static print-only" src="${escapeHtml(staticMapUrl)}" alt="" />`
+  const staticMapUrls = buildStaticMapImageUrls(listing);
+  const staticMap = staticMapUrls.length
+    ? `<img class="map-print-static print-only" src="${escapeHtml(staticMapUrls[0])}" data-map-fallbacks="${escapeHtml(JSON.stringify(staticMapUrls.slice(1)))}" alt="Property location map" />
+      <div class="map-print-placeholder print-only" aria-hidden="true">Map preview</div>`
     : "";
   return `<div class="map-embed-wrap">
       <iframe class="map-embed map-embed-interactive" title="Property location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="${escapeHtml(embed)}"></iframe>
@@ -691,9 +735,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   const openGraph = buildListingOpenGraphMeta({ listing, agent, shareUrl });
   const listingLabel = resolveFlyerListingLabel(listing);
   const price = formatListingPriceForComposer(listing.priceCents) || "Price on request";
-  const sqft = resolveDisplaySquareFeet(listing);
-  const hoa = resolveDisplayHoaFee(listing);
-  const yearBuilt = formatYearBuilt(listing.yearBuilt);
+  const { sqft, hoa, yearBuilt } = resolveFlyerSpecFields(listing);
   const description = truncateFlyerDescription((listing.description || "").trim());
 
   const descHtml = description
@@ -869,12 +911,21 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 0;
+      gap: 2px 0;
+      row-gap: 4px;
       margin: 0;
       padding: 0;
       border-bottom: none;
+      overflow: visible;
+      width: 100%;
     }
-    .key-stat { font-size: 0.875rem; font-weight: 500; color: #334155; white-space: nowrap; }
+    .key-stat {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #334155;
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
     .key-stat.key-price { font-size: 1.25rem; font-weight: 700; color: var(--brand-green); }
     .key-stat-sep { color: #cbd5e1; margin: 0 10px; font-weight: 300; user-select: none; }
     @media (min-width: 768px) {
@@ -928,6 +979,20 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       height: 100%;
       border: 0;
       display: block;
+    }
+    .map-print-placeholder {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      min-height: 120px;
+      background: linear-gradient(145deg, #e8f0ea 0%, #dce7e0 100%);
+      color: #475569;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
     }
     .map-btn { margin-top: 8px; align-self: flex-start; }
     .qr-block {
@@ -1080,10 +1145,10 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       .property-header { padding: 0 0 6px; }
       .property-street { font-size: 14pt; margin-bottom: 2px; }
       .property-location { font-size: 10pt; margin-bottom: 4px; }
-      .key-stats { flex-wrap: wrap; }
+      .key-stats { flex-wrap: wrap; overflow: visible; row-gap: 3px; }
       .key-stat.key-price { font-size: 12pt; }
-      .key-stat { font-size: 9pt; }
-      .key-stat-sep { margin: 0 6px; }
+      .key-stat { font-size: 9pt; flex: 0 0 auto; }
+      .key-stat-sep { margin: 0 5px; }
       .description-section { margin: 6px 0; page-break-inside: avoid; break-inside: avoid; }
       .description-section h2 { font-size: 8pt; margin-bottom: 3px; }
       .description { font-size: 10pt; line-height: 1.42; }
@@ -1104,6 +1169,12 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
         height: 100%;
         object-fit: cover;
         object-position: center;
+      }
+      .map-embed-wrap.map-failed .map-print-static { display: none !important; }
+      .map-embed-wrap.map-failed .map-print-placeholder {
+        display: flex !important;
+        position: absolute;
+        inset: 0;
       }
       .map-embed-wrap {
         aspect-ratio: auto;
@@ -1199,6 +1270,18 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
         toast.classList.add("show");
         setTimeout(function () { toast.classList.remove("show"); }, 2600);
       }
+      document.querySelectorAll(".map-print-static").forEach(function (img) {
+        var fallbacks = [];
+        try { fallbacks = JSON.parse(img.getAttribute("data-map-fallbacks") || "[]"); } catch (e) {}
+        var fallbackIndex = 0;
+        img.addEventListener("error", function () {
+          if (fallbackIndex < fallbacks.length) {
+            img.src = fallbacks[fallbackIndex++];
+            return;
+          }
+          img.closest(".map-embed-wrap")?.classList.add("map-failed");
+        });
+      });
       document.getElementById("btn-print")?.addEventListener("click", function () { window.print(); });
       document.getElementById("btn-share")?.addEventListener("click", async function () {
         var url = ${JSON.stringify(shareUrl)};

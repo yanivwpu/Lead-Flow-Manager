@@ -666,25 +666,64 @@ export async function getInventoryListing(
   return inventoryListingFromCoreRow(row);
 }
 
+/** Public share page listing select — includes flyer columns in one query when available. */
+const PUBLIC_SHARE_LISTING_SELECT = {
+  ...MATCHING_LISTING_SELECT,
+  propertySubtype: inventoryListings.propertySubtype,
+  squareFeet: inventoryListings.squareFeet,
+  yearBuilt: inventoryListings.yearBuilt,
+  hoaFeeCents: inventoryListings.hoaFeeCents,
+  listingDetails: inventoryListings.listingDetails,
+} as const;
+
+function mapPublicShareListingRow(
+  row: CoreInventoryListingRow & Partial<FlyerExtraListingFields>,
+): InventoryListing {
+  const core = inventoryListingFromCoreRow(row);
+  return {
+    ...core,
+    propertySubtype: row.propertySubtype ?? null,
+    squareFeet: row.squareFeet != null ? Number(row.squareFeet) : null,
+    yearBuilt: row.yearBuilt != null ? Number(row.yearBuilt) : null,
+    hoaFeeCents: row.hoaFeeCents != null ? Number(row.hoaFeeCents) : null,
+    listingDetails: row.listingDetails ?? {},
+  };
+}
+
 /** Public share page — active/coming_soon listings only. */
 export async function getPublicShareListing(listingId: string): Promise<InventoryListing | undefined> {
   try {
     const [row] = await db
-      .select(MATCHING_LISTING_SELECT)
+      .select(PUBLIC_SHARE_LISTING_SELECT)
       .from(inventoryListings)
       .where(eq(inventoryListings.id, listingId))
       .limit(1);
     if (!row || isBlockedDevSeedListingRow(row)) return undefined;
     if (row.status !== "active" && row.status !== "coming_soon") return undefined;
-
-    const extras = await tryLoadFlyerExtraFields(listingId);
-    return { ...inventoryListingFromCoreRow(row), ...extras };
+    return mapPublicShareListingRow(row);
   } catch (error) {
-    console.error("[public-listing] failed to load listing row", {
+    console.warn("[public-listing] combined share listing select failed; retrying without flyer columns", {
       listingId,
       error: error instanceof Error ? error.message : String(error),
     });
-    throw error;
+    try {
+      const [row] = await db
+        .select(MATCHING_LISTING_SELECT)
+        .from(inventoryListings)
+        .where(eq(inventoryListings.id, listingId))
+        .limit(1);
+      if (!row || isBlockedDevSeedListingRow(row)) return undefined;
+      if (row.status !== "active" && row.status !== "coming_soon") return undefined;
+
+      const extras = await tryLoadFlyerExtraFields(listingId);
+      return { ...inventoryListingFromCoreRow(row), ...extras };
+    } catch (fallbackError) {
+      console.error("[public-listing] failed to load listing row", {
+        listingId,
+        error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+      });
+      throw fallbackError;
+    }
   }
 }
 

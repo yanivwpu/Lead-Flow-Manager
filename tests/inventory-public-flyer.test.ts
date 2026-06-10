@@ -5,12 +5,14 @@
 import {
   buildListingOpenGraphMeta,
   buildPublicListingFlyerHtml,
+  buildStaticMapImageUrls,
   inventoryRowToFlyerListing,
   pickFlyerHeroPhotos,
   renderListingOpenGraphTags,
   resolveDisplayHoaFee,
   resolveDisplaySquareFeet,
   resolveFlyerListingLabel,
+  resolveFlyerSpecFields,
 } from "../shared/inventory/publicListingFlyer";
 
 function assert(cond: boolean, msg: string) {
@@ -89,7 +91,9 @@ assert(html.includes("hero-img"), "gallery hero");
 assert(html.includes("print-photo-strip"), "print-only secondary photo strip");
 assert(html.includes("cdn.example.com/b.jpg"), "secondary photo in print strip");
 assert(html.includes("map-print-static"), "print static map image");
+assert(html.includes("data-map-fallbacks"), "print map fallback chain");
 assert(html.includes("staticmap.openstreetmap.de"), "static map url for print");
+assert(html.includes("tile.openstreetmap.org"), "osm tile map fallback");
 assert(html.includes("map-embed-interactive"), "interactive map for screen only");
 assert(html.includes("grid-template-columns: minmax(0, 3fr)"), "30/30/40 bottom grid");
 assert(html.includes("gallery:has(.print-photo-strip) .hero-wrap { height: 3.85in"), "hero trims when strip present");
@@ -190,6 +194,15 @@ assert(
   "no print strip with single photo",
 );
 
+const specs = resolveFlyerSpecFields(listing);
+assert(specs.sqft === "1,800 Sq Ft", "db square feet in specs");
+assert(specs.hoa === "HOA $250/mo", "db hoa in specs");
+assert(specs.yearBuilt === "1998", "db year built in specs");
+
+const keyStatsMatch = html.match(/class="key-stats"[^>]*>([\s\S]*?)<\/div>/);
+const keyStatsBody = keyStatsMatch?.[1] ?? "";
+assert((keyStatsBody.match(/key-stat/g) ?? []).length >= 6, "all six specs when data exists");
+
 const heroPhotos = pickFlyerHeroPhotos([
   { url: "https://cdn.example.com/a-watermark.jpg", order: 0 },
   { url: "https://cdn.example.com/b-clean.jpg", order: 1 },
@@ -201,5 +214,8 @@ const onlyWatermarked = pickFlyerHeroPhotos([
   { url: "https://cdn.example.com/y-watermark.jpg", order: 1 },
 ]);
 assert(onlyWatermarked[0]?.url.includes("x-watermark"), "keep order when all watermarked");
+
+const mapUrls = buildStaticMapImageUrls(listing);
+assert(mapUrls.length >= 3, "multiple static map fallbacks");
 
 console.log("inventory-public-flyer.test.ts: OK");
