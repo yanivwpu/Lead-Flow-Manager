@@ -1,6 +1,7 @@
 import type { BuyerPreferenceProfile, PreferenceField } from "./buyerPreferenceSchema";
 import { normalizeBuyerPreferenceProfile } from "./buyerPreferenceSchema";
 import { formatGeoConstraintLabel } from "./inventory/buyerGeoConstraints";
+import { resolveMatchingBudgetBounds } from "./buyerPreferenceBudget";
 
 export type BuyerPreferenceChip = {
   id: string;
@@ -203,10 +204,7 @@ export function buildBuyerPreferenceChips(raw: unknown): BuyerPreferenceChip[] {
   }
 
   if (profile.priceMin || profile.priceMax) {
-    const min = profile.priceMin?.value;
-    const max = profile.priceMax?.value;
-    const minN = min != null ? Number(min) : null;
-    const maxN = max != null ? Number(max) : null;
+    const { priceMin: minN, priceMax: maxN } = resolveMatchingBudgetBounds(profile);
     const hasMax = maxN != null && maxN > 0;
     const hasMin = minN != null && minN > 0;
 
@@ -215,12 +213,9 @@ export function buildBuyerPreferenceChips(raw: unknown): BuyerPreferenceChip[] {
       if (hasMax && hasMin) {
         text = `${formatMoneyShort(minN!)}–${formatMoneyShort(maxN!)}`;
       } else if (hasMax) {
-        text =
-          minN === 0 || minN == null
-            ? `${formatMoneyShort(0)}–${formatMoneyShort(maxN!)}`
-            : formatMoneyShort(maxN!);
+        text = `Up to ${formatMoneyShort(maxN!)}`;
       } else {
-        text = formatMoneyShort(minN!);
+        text = `From ${formatMoneyShort(minN!)}`;
       }
       const src =
         profile.priceMax?.source === "explicit" || profile.priceMin?.source === "explicit"

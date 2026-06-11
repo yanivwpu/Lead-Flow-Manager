@@ -518,6 +518,29 @@ export function heuristicPatchFromTranscript(
     /\b([\d.]+)\s*(k|m|million|mil)\s+(?:to|-)\s+([\d.]+)\s*(k|m|million|mil)\b/i,
   );
 
+  const parseUpToBudgetFromText = (): number | null => {
+    const matches = [
+      ...lower.matchAll(/\bup\s+to\s+(\$?\s*[\d,.]+)\s*(k|m|million|mil)?/gi),
+    ];
+    for (const m of matches) {
+      const fragment = m[0];
+      const tail = lower.slice((m.index ?? 0) + fragment.length, (m.index ?? 0) + fragment.length + 16);
+      if (
+        /\b(?:sq\.?\s*ft|sqft|square\s*feet)\b/i.test(fragment) ||
+        /\b(?:sq\.?\s*ft|sqft|square\s*feet)\b/i.test(tail)
+      ) {
+        continue;
+      }
+      const amountMatch = fragment.match(/([\d,.]+)\s*(k|m|million|mil)?/i);
+      if (!amountMatch) continue;
+      const hasMoneyMarker = fragment.includes("$") || !!amountMatch[2];
+      if (!hasMoneyMarker) continue;
+      const amount = parseBudgetAmount(amountMatch[1], amountMatch[2]);
+      if (amount != null) return amount;
+    }
+    return null;
+  };
+
   const rangeMatch = betweenRangeM ?? dashRangeM ?? verbalRangeM ?? verbalToM;
   if (rangeMatch) {
     const minAmount = parseBudgetAmount(rangeMatch[1], rangeMatch[2]);
@@ -533,18 +556,34 @@ export function heuristicPatchFromTranscript(
       };
     }
   } else {
-    const upToBudgetM = lower.match(/\bup\s+to\s+\$?\s*([\d,.]+)\s*(k|m|million|mil)?/i);
+    const upToBudgetAmount = parseUpToBudgetFromText();
     const budgetM = normalizedForBudget.match(/(?:\$|budget\s*)([\d.]+)\s*(k|m|million|mil)?/i);
-    const budgetSource = upToBudgetM ?? budgetM;
-    if (budgetSource) {
-      const amount = parseBudgetAmount(budgetSource[1], budgetSource[2]);
+    if (upToBudgetAmount != null) {
+      patch.priceMax = {
+        value: upToBudgetAmount,
+        ...inf(0.9, "up to budget in message"),
+      };
+    } else if (budgetM) {
+      const amount = parseBudgetAmount(budgetM[1], budgetM[2]);
       if (amount != null) {
-        const isUpTo = !!upToBudgetM;
         patch.priceMax = {
           value: amount,
-          ...inf(isUpTo ? 0.9 : 0.78, isUpTo ? "up to budget in message" : "budget in message"),
+          ...inf(0.78, "budget in message"),
         };
       }
+    }
+  }
+
+  const upToSqftM = lower.match(
+    /\bup\s+to\s+(\d{1,3}(?:,\d{3})+|\d+)\s*(?:sq\.?\s*ft|sqft|square\s*feet)\b/i,
+  );
+  if (upToSqftM) {
+    const sqftMax = parseInt(upToSqftM[1].replace(/,/g, ""), 10);
+    if (Number.isFinite(sqftMax) && sqftMax > 0) {
+      patch.mustHaves = {
+        value: [`sqft_max:${sqftMax}`],
+        ...inf(0.9, "max sqft in message"),
+      };
     }
   }
 

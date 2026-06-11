@@ -1,4 +1,4 @@
-import type { InventoryMatchDiagnostics } from "./inventoryMatchTypes";
+import type { InventoryMatchDiagnostics, InventoryMatchExcludedListing } from "./inventoryMatchTypes";
 
 export function buildInventoryMatchDiagnostics(input: {
   activeInventoryCount: number;
@@ -6,6 +6,9 @@ export function buildInventoryMatchDiagnostics(input: {
   matchesReturned: number;
   lastMatchingError?: string | null;
   lastMatchRunAt?: string;
+  noMatchSummary?: string | null;
+  exclusionSummary?: string | null;
+  excludedSamples?: InventoryMatchExcludedListing[];
 }): InventoryMatchDiagnostics {
   return {
     activeInventoryCount: input.activeInventoryCount,
@@ -13,6 +16,9 @@ export function buildInventoryMatchDiagnostics(input: {
     matchesReturned: input.matchesReturned,
     lastMatchRunAt: input.lastMatchRunAt ?? new Date().toISOString(),
     lastMatchingError: input.lastMatchingError ?? null,
+    noMatchSummary: input.noMatchSummary ?? null,
+    exclusionSummary: input.exclusionSummary ?? null,
+    excludedSamples: input.excludedSamples,
   };
 }
 

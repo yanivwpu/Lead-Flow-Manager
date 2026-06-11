@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { InventoryMatchDiagnostics } from "@shared/inventory/inventoryMatchTypes";
 import { formatInventoryMatchRunTime } from "@shared/inventory/inventoryMatchDiagnostics";
+import { formatListingExclusionLine } from "@shared/inventory/inventoryMatchScoring";
 
 type InventoryHealthDiagnosticsPanelProps = {
   diagnostics?: InventoryMatchDiagnostics | null;
@@ -99,6 +100,27 @@ export function InventoryHealthDiagnosticsPanel({
         />
         {reason && (
           <DiagnosticRow label="API reason" value={reason} />
+        )}
+        {diagnostics?.exclusionSummary && (
+          <DiagnosticRow label="Top exclusions" value={diagnostics.exclusionSummary} />
+        )}
+        {diagnostics?.noMatchSummary && (
+          <p className="text-[10px] text-gray-600 leading-snug pt-1">{diagnostics.noMatchSummary}</p>
+        )}
+        {diagnostics?.excludedSamples && diagnostics.excludedSamples.length > 0 && (
+          <div className="pt-1 space-y-1">
+            <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400">
+              Excluded samples
+            </p>
+            {diagnostics.excludedSamples.slice(0, 5).map((sample) => (
+              <p
+                key={sample.listingId}
+                className="text-[10px] text-gray-600 leading-snug font-mono break-all"
+              >
+                {formatListingExclusionLine(sample)}
+              </p>
+            ))}
+          </div>
         )}
       </CollapsibleContent>
     </Collapsible>

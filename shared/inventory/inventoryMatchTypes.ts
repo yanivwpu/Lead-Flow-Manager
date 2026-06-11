@@ -27,12 +27,28 @@ export const inventoryMatchResultSchema = z.object({
 
 export type InventoryMatchResult = z.infer<typeof inventoryMatchResultSchema>;
 
+export const inventoryMatchExcludedListingSchema = z.object({
+  listingId: z.string(),
+  providerListingId: z.string(),
+  city: z.string().nullable(),
+  priceCents: z.number().nullable(),
+  beds: z.number().nullable(),
+  baths: z.number().nullable(),
+  squareFeet: z.number().nullable(),
+  reason: z.string(),
+});
+
+export type InventoryMatchExcludedListing = z.infer<typeof inventoryMatchExcludedListingSchema>;
+
 export const inventoryMatchDiagnosticsSchema = z.object({
   activeInventoryCount: z.number().int().nonnegative(),
   listingsScored: z.number().int().nonnegative(),
   matchesReturned: z.number().int().nonnegative(),
   lastMatchRunAt: z.string().datetime(),
   lastMatchingError: z.string().nullable(),
+  noMatchSummary: z.string().nullable().optional(),
+  exclusionSummary: z.string().nullable().optional(),
+  excludedSamples: z.array(inventoryMatchExcludedListingSchema).optional(),
 });
 
 export type InventoryMatchDiagnostics = z.infer<typeof inventoryMatchDiagnosticsSchema>;

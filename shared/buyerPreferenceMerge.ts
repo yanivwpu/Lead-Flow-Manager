@@ -96,6 +96,10 @@ function mergeScalarField<T>(
   return { ...incoming };
 }
 
+function isUpToBudgetEvidence(evidence: string | undefined): boolean {
+  return !!evidence && /\bup\s+to\b/i.test(evidence);
+}
+
 function isBudgetRangeEvidence(evidence: string | undefined): boolean {
   return !!evidence && /budget range|between|range in message/i.test(evidence);
 }
@@ -145,6 +149,21 @@ function mergePriceRange(
     profile.priceMax = shouldForceReplaceBudgetCap(profile.priceMax, incomingMax)
       ? { ...incomingMax }
       : mergeScalarField(profile.priceMax, incomingMax);
+  }
+
+  const upToOnly =
+    incomingMax &&
+    !incomingMin &&
+    isUpToBudgetEvidence(incomingMax.evidence);
+  const equalCap =
+    profile.priceMin?.value != null &&
+    profile.priceMax?.value != null &&
+    profile.priceMin.value === profile.priceMax.value &&
+    !isBudgetRangeEvidence(profile.priceMin.evidence) &&
+    !isBudgetRangeEvidence(profile.priceMax.evidence);
+
+  if (upToOnly || equalCap || isUpToBudgetEvidence(profile.priceMax?.evidence)) {
+    delete profile.priceMin;
   }
 }
 

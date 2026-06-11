@@ -57,4 +57,14 @@ assert(
   "AI summary includes budget from profile",
 );
 
+const mUpToMil =
+  "Show me 4/2 up to 2000 SqFt with pool and up to $1mil in Pompano Beach";
+const pUpToMil = heuristicPatchFromInboundText(mUpToMil);
+assert(pUpToMil.priceMax?.value === 1_000_000, "dual up-to: budget is $1M not 2000 sqft");
+assert(pUpToMil.priceMin == null, "dual up-to: no priceMin");
+assert(
+  pUpToMil.mustHaves?.value?.some((v) => String(v).startsWith("sqft_max:2000")),
+  "dual up-to: sqft max preserved",
+);
+
 console.log("budget-range-audit.test.ts: all passed");

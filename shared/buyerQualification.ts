@@ -3,6 +3,7 @@
  */
 import type { BuyerPreferenceProfile } from "./buyerPreferenceSchema";
 import { buildBuyerPreferenceChips } from "./buyerPreferenceDisplay";
+import { resolveMatchingBudgetBounds } from "./buyerPreferenceBudget";
 
 export type QualificationLevel = "low" | "medium" | "high";
 
@@ -50,16 +51,38 @@ function formatMoneyShort(n: number): string {
   return `$${n}`;
 }
 
-/** Parse minimum sq ft from must-haves or profile text patterns. */
+/** Parse minimum sq ft from must-haves (excludes "up to" / max tokens). */
 export function parseSqftMinFromProfile(profile: BuyerPreferenceProfile): number | null {
   const sources: string[] = [];
   if (fieldActive(profile.mustHaves, 0.45)) {
     sources.push(...(profile.mustHaves!.value || []).map(String));
   }
   for (const raw of sources) {
-    const m = raw.match(/(\d{1,3}(?:,\d{3})+|\d+)\s*(?:sq\.?\s*ft|sqft|square\s*feet)/i);
+    if (/^sqft_max:/i.test(raw) || /\bup\s+to\b/i.test(raw)) continue;
+    const m = raw.match(/(?:at least|minimum|min(?:imum)?)\s+(\d{1,3}(?:,\d{3})+|\d+)\s*(?:sq\.?\s*ft|sqft|square\s*feet)/i);
     if (m) {
       const n = parseInt(m[1].replace(/,/g, ""), 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
+  return null;
+}
+
+/** Parse maximum sq ft — "up to 2000 sqft" means exclude listings ABOVE this size. */
+export function parseSqftMaxFromProfile(profile: BuyerPreferenceProfile): number | null {
+  const sources: string[] = [];
+  if (fieldActive(profile.mustHaves, 0.45)) {
+    sources.push(...(profile.mustHaves!.value || []).map(String));
+  }
+  for (const raw of sources) {
+    const token = raw.match(/^sqft_max:(\d{1,3}(?:,\d{3})+|\d+)$/i);
+    if (token) {
+      const n = parseInt(token[1].replace(/,/g, ""), 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    const upTo = raw.match(/\bup\s+to\s+(\d{1,3}(?:,\d{3})+|\d+)\s*(?:sq\.?\s*ft|sqft|square\s*feet)?/i);
+    if (upTo) {
+      const n = parseInt(upTo[1].replace(/,/g, ""), 10);
       if (Number.isFinite(n) && n > 0) return n;
     }
   }
@@ -95,8 +118,7 @@ function buildKnownLabels(profile: BuyerPreferenceProfile): string[] {
 }
 
 function formatBudgetLabel(profile: BuyerPreferenceProfile): string | null {
-  const min = fieldActive(profile.priceMin) ? profile.priceMin!.value : null;
-  const max = fieldActive(profile.priceMax) ? profile.priceMax!.value : null;
+  const { priceMin: min, priceMax: max } = resolveMatchingBudgetBounds(profile);
   if (max != null && min != null) return `${formatMoneyShort(min)}–${formatMoneyShort(max)}`;
   if (max != null) return `up to ${formatMoneyShort(max)}`;
   if (min != null) return `from ${formatMoneyShort(min)}`;

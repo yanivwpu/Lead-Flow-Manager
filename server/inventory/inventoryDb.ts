@@ -502,16 +502,18 @@ type CoreInventoryListingRow = Omit<
   "propertySubtype" | "squareFeet" | "yearBuilt" | "hoaFeeCents" | "listingDetails"
 >;
 
-/** Map core DB row to InventoryListing (flyer-only columns null until migration 0038). */
-function inventoryListingFromCoreRow(row: CoreInventoryListingRow): InventoryListing {
+/** Map matching row (with optional flyer columns) to InventoryListing. */
+function inventoryListingFromMatchingRow(
+  row: CoreInventoryListingRow & Partial<FlyerExtraListingFields>,
+): InventoryListing {
   return {
     ...row,
     publicSlug: null,
-    propertySubtype: null,
-    squareFeet: null,
-    yearBuilt: null,
-    hoaFeeCents: null,
-    listingDetails: {},
+    propertySubtype: row.propertySubtype ?? null,
+    squareFeet: row.squareFeet ?? null,
+    yearBuilt: row.yearBuilt ?? null,
+    hoaFeeCents: row.hoaFeeCents ?? null,
+    listingDetails: row.listingDetails ?? {},
   };
 }
 
@@ -572,14 +574,26 @@ export async function fetchActiveListingsForMatching(
   const devSeedExclude = devSeedListingExcludeCondition();
   if (devSeedExclude) conditions.push(devSeedExclude);
 
-  const rows = await db
-    .select(MATCHING_LISTING_SELECT)
-    .from(inventoryListings)
-    .where(and(...conditions))
-    .orderBy(desc(inventoryListings.syncedAt))
-    .limit(limit);
-
-  return rows.map(inventoryListingFromCoreRow);
+  try {
+    const rows = await db
+      .select({ ...MATCHING_LISTING_SELECT, ...FLYER_EXTRA_LISTING_SELECT })
+      .from(inventoryListings)
+      .where(and(...conditions))
+      .orderBy(desc(inventoryListings.syncedAt))
+      .limit(limit);
+    return rows.map(inventoryListingFromMatchingRow);
+  } catch (error) {
+    console.warn("[inventory-matching] flyer columns unavailable; matching without sqft/listingDetails", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const rows = await db
+      .select(MATCHING_LISTING_SELECT)
+      .from(inventoryListings)
+      .where(and(...conditions))
+      .orderBy(desc(inventoryListings.syncedAt))
+      .limit(limit);
+    return rows.map((row) => inventoryListingFromMatchingRow(row));
+  }
 }
 
 export async function countActiveListingsForUser(userId: string): Promise<number> {

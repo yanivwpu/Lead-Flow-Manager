@@ -5,6 +5,8 @@ import { formatInventoryMatchSummaryForAi } from "@shared/inventory/inventoryMat
 import {
   extractBuyerMatchCriteria,
   rankInventoryMatches,
+  buildExcludedListingSamples,
+  summarizeExclusionReasons,
   type MatchListingInput,
 } from "@shared/inventory/inventoryMatchScoring";
 import { readBuyerPreferenceProfile, loadPersistedBuyerPreferenceProfile } from "../buyerPreferenceService";
@@ -222,6 +224,19 @@ export async function findMatchingListingsForContact(
   const ranked = rankInventoryMatches(inputs, criteria, 10);
   const matches = ranked.map(toPublicMatch);
 
+  const excludedSamples =
+    matches.length === 0 ? buildExcludedListingSamples(inputs, criteria, 8) : [];
+  const exclusionSummary =
+    excludedSamples.length > 0 ? summarizeExclusionReasons(excludedSamples) : null;
+  const noMatchSummary =
+    matches.length === 0 && inputs.length > 0
+      ? inventoryCount === 0
+        ? "No active listings in synced inventory for this workspace."
+        : `Scored ${inputs.length} active listing(s); none met buyer criteria. Top exclusions: ${exclusionSummary || "see diagnostics"}.`
+      : matches.length === 0
+        ? "No active listings in synced inventory."
+        : null;
+
   return {
     eligible: true,
     reason: matches.length > 0 ? "ok" : "no_matches",
@@ -234,6 +249,9 @@ export async function findMatchingListingsForContact(
       activeInventoryCount: inventoryCount,
       listingsScored: inputs.length,
       matchesReturned: matches.length,
+      noMatchSummary,
+      exclusionSummary,
+      excludedSamples,
     }),
   };
 }

@@ -246,7 +246,8 @@ export function MatchingListingsPanel({
             ? "Matches will appear once buyer preferences and inventory are available."
             : data?.reason === "no_active_inventory"
               ? "Matches will appear once buyer preferences and inventory are available."
-              : "No strong matches in active inventory yet."}
+              : data?.diagnostics?.noMatchSummary?.trim() ||
+                "No strong matches in active inventory yet."}
         </p>
       )}
 
