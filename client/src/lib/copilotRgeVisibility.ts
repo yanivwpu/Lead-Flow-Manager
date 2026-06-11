@@ -1,4 +1,6 @@
 import type { InventoryConnectorStatus } from "@/lib/inventoryApi";
+import { normalizeBuyerPreferenceProfile } from "@shared/buyerPreferenceSchema";
+import { extractBuyerMatchCriteria } from "@shared/inventory/inventoryMatchScoring";
 
 /** Aligns with server `isRealEstateIndustry` in buyerPreferenceService. */
 export function isRealEstateWorkspaceIndustry(industry: string | null | undefined): boolean {
@@ -38,19 +40,26 @@ export function shouldShowCopilotInventoryPanels(
   return inventoryStatus?.canUse === true;
 }
 
+/** True when saved buyer prefs include fields that can drive inventory matching. */
+export function contactHasInventoryMatchCriteria(buyerPreferenceProfile?: unknown): boolean {
+  const profile = normalizeBuyerPreferenceProfile(buyerPreferenceProfile);
+  if (profile.profileStatus === "empty") return false;
+  return extractBuyerMatchCriteria(profile).hasAnyCriteria;
+}
+
 /**
  * Per-contact inventory UI — workspace connector must be on AND the contact must
- * have buyer/inventory signals. Workspace RGE or industry alone is not enough
- * (avoids inventory health on unrelated automation leads).
+ * be a buyer lead or have inventory-relevant saved preferences (hasAnyCriteria).
+ * A non-empty profile alone is not enough (avoids health UI on automation leads).
  */
 export function shouldShowCopilotInventoryForContact(input: {
   inventoryStatus?: InventoryConnectorStatus | null;
   customFields?: Record<string, unknown> | null;
-  hasBuyerPreferences?: boolean;
+  buyerPreferenceProfile?: unknown;
 }): boolean {
   if (!shouldShowCopilotInventoryPanels(input.inventoryStatus)) return false;
-  if (input.hasBuyerPreferences) return true;
-  return isBuyerLeadContact(input.customFields);
+  if (isBuyerLeadContact(input.customFields)) return true;
+  return contactHasInventoryMatchCriteria(input.buyerPreferenceProfile);
 }
 
 /** Inventory match health panel — local dev or workspace owner/admin only. */

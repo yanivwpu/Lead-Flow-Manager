@@ -88,6 +88,8 @@ interface MatchingListingsPanelProps {
   contactFirstName?: string;
   compact?: boolean;
   isWorkspaceAdmin?: boolean;
+  /** When false, hide the entire panel (non-inventory contact). */
+  inventoryRelevant?: boolean;
   /** When false, hide inventory health diagnostics (non-inventory contact). */
   showHealthDiagnostics?: boolean;
   onInsertComposerDraft?: (draft: CopilotComposerInsert) => boolean;
@@ -98,7 +100,8 @@ export function MatchingListingsPanel({
   contactFirstName,
   compact = true,
   isWorkspaceAdmin = false,
-  showHealthDiagnostics: showHealthDiagnosticsProp = true,
+  inventoryRelevant = true,
+  showHealthDiagnostics: showHealthDiagnosticsProp = false,
   onInsertComposerDraft,
 }: MatchingListingsPanelProps) {
   const [allMatchesOpen, setAllMatchesOpen] = useState(false);
@@ -115,7 +118,7 @@ export function MatchingListingsPanel({
     staleTime: 60_000,
   });
 
-  const enabled = !!contactId && !!inventoryStatus?.canUse;
+  const enabled = inventoryRelevant && !!contactId && !!inventoryStatus?.canUse;
 
   const { data, isLoading, isFetched, isError, error, isFetching, refetch, isPlaceholderData } =
     useQuery({
@@ -141,6 +144,7 @@ export function MatchingListingsPanel({
     }
   }, [isFetched, isError, isPlaceholderData, contactId, data?.diagnostics?.lastMatchRunAt]);
 
+  if (!inventoryRelevant) return null;
   if (!inventoryStatus) return null;
   if (!inventoryStatus.canUse) return null;
   if (!contactId) return null;

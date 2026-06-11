@@ -13,7 +13,10 @@ import {
   shouldRetryInventoryMatches,
   inventoryMatchesRetryDelay,
 } from "../client/src/lib/inventoryMatchesQuery";
-import { shouldShowCopilotInventoryForContact } from "../client/src/lib/copilotRgeVisibility";
+import {
+  contactHasInventoryMatchCriteria,
+  shouldShowCopilotInventoryForContact,
+} from "../client/src/lib/copilotRgeVisibility";
 
 function assert(cond: boolean, msg: string) {
   if (!cond) throw new Error(msg);
@@ -87,12 +90,30 @@ assert(
   }),
   "no inventory for unrelated lead",
 );
+const pompanoPrefs = {
+  schemaVersion: 1,
+  profileStatus: "partial",
+  targetAreas: { value: ["Pompano Beach"], source: "explicit", confidence: 0.9, updatedAt: "2026-01-01" },
+} as const;
+
 assert(
   shouldShowCopilotInventoryForContact({
     inventoryStatus: { canUse: true, rgeInstalled: true } as any,
-    hasBuyerPreferences: true,
+    buyerPreferenceProfile: pompanoPrefs,
   }),
-  "inventory when prefs exist",
+  "inventory when prefs have match criteria",
 );
+assert(
+  !shouldShowCopilotInventoryForContact({
+    inventoryStatus: { canUse: true, rgeInstalled: true } as any,
+    buyerPreferenceProfile: { schemaVersion: 1, profileStatus: "partial" },
+  }),
+  "no inventory for partial prefs without criteria",
+);
+assert(
+  !contactHasInventoryMatchCriteria({ schemaVersion: 1, profileStatus: "partial" }),
+  "empty criteria profile",
+);
+assert(contactHasInventoryMatchCriteria(pompanoPrefs), "criteria from target areas");
 
 console.log("inventory-matches-refetch.test.ts: all passed");

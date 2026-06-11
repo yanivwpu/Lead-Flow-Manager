@@ -102,7 +102,6 @@ import {
   shouldShowCopilotBuyerPreferences,
   shouldShowCopilotInventoryForContact,
 } from "@/lib/copilotRgeVisibility";
-import { normalizeBuyerPreferenceProfile } from "@shared/buyerPreferenceSchema";
 import { isQualificationDowngrade, systemTagForQualification } from "@shared/leadQualification";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
@@ -1423,19 +1422,14 @@ export function InboxLeadDetailsPanel({
     [inventoryStatus, businessKnowledge?.industry, contact.customFields],
   );
 
-  const hasBuyerPreferences = useMemo(() => {
-    const profile = normalizeBuyerPreferenceProfile(contact.buyerPreferenceProfile);
-    return profile.profileStatus !== "empty";
-  }, [contact.buyerPreferenceProfile]);
-
   const showCopilotInventoryPanels = useMemo(
     () =>
       shouldShowCopilotInventoryForContact({
         inventoryStatus,
         customFields: contact.customFields,
-        hasBuyerPreferences,
+        buyerPreferenceProfile: contact.buyerPreferenceProfile,
       }),
-    [inventoryStatus, contact.customFields, hasBuyerPreferences],
+    [inventoryStatus, contact.customFields, contact.buyerPreferenceProfile],
   );
 
   const customerInsights = useMemo(
@@ -2568,6 +2562,8 @@ export function InboxLeadDetailsPanel({
                       contactFirstName={contact.name?.trim().split(/\s+/)[0]}
                       compact
                       isWorkspaceAdmin={isWorkspaceAdmin}
+                      inventoryRelevant={showCopilotInventoryPanels}
+                      showHealthDiagnostics={showCopilotInventoryPanels}
                       onInsertComposerDraft={onInsertComposerDraft}
                     />
                   )}
