@@ -2,6 +2,12 @@ import type { BuyerGeoConstraint, BuyerPreferenceProfile } from "../buyerPrefere
 import type { InventoryListingDetails } from "./inventoryListingSchema";
 import { parseSqftMinFromProfile, parseSqftMaxFromProfile } from "../buyerQualification";
 import { resolveMatchingBudgetBounds } from "../buyerPreferenceBudget";
+import {
+  listingIsLikelyMonthlyRentPrice,
+  listingIsRentalOrLease,
+  resolveBuyerTransactionIntent,
+  type BuyerTransactionIntent,
+} from "./listingTransactionIntent";
 import { geoConstraintsMatchScore } from "./buyerGeoConstraints";
 import { isMatchableInventoryStatus } from "./inventoryListingSchema";
 
@@ -15,8 +21,10 @@ export type BuyerMatchCriteria = {
   priceMin: number | null;
   priceMax: number | null;
   bedsMin: number | null;
+  bedsMax: number | null;
   bathsMin: number | null;
   propertyTypes: string[];
+  transactionIntent: BuyerTransactionIntent;
   mustHaves: string[];
   dealBreakers: string[];
   financingStatus: string | null;
@@ -136,6 +144,7 @@ export function extractBuyerMatchCriteria(profile: BuyerPreferenceProfile): Buye
   const priceMin = budget.priceMin;
   const priceMax = budget.priceMax;
   const bedsMin = fieldValue<number>(profile, "bedsMin");
+  const bedsMax = fieldValue<number>(profile, "bedsMax");
   const bathsMin = fieldValue<number>(profile, "bathsMin");
   const propertyTypes = (fieldValue<string[]>(profile, "propertyTypes") ?? []).map(
     (t) => normalizeListingPropertyType(t) ?? t,
@@ -146,6 +155,9 @@ export function extractBuyerMatchCriteria(profile: BuyerPreferenceProfile): Buye
   const sqftMin = parseSqftMinFromProfile(profile);
   const sqftMax = parseSqftMaxFromProfile(profile);
   const lowHoa = fieldValue<boolean>(profile, "lowHoa") === true;
+  const transactionIntent = resolveBuyerTransactionIntent(
+    fieldValue<BuyerTransactionIntent>(profile, "transactionIntent"),
+  );
 
   const features = {
     pool: fieldValue<boolean>(profile, "pool") === true,
@@ -169,6 +181,7 @@ export function extractBuyerMatchCriteria(profile: BuyerPreferenceProfile): Buye
     priceMin != null ||
     priceMax != null ||
     bedsMin != null ||
+    bedsMax != null ||
     bathsMin != null ||
     propertyTypes.length > 0 ||
     mustHaves.length > 0 ||
@@ -185,8 +198,10 @@ export function extractBuyerMatchCriteria(profile: BuyerPreferenceProfile): Buye
     priceMin,
     priceMax,
     bedsMin,
+    bedsMax,
     bathsMin,
     propertyTypes,
+    transactionIntent,
     mustHaves,
     dealBreakers,
     financingStatus,
@@ -265,6 +280,28 @@ function listingHasWaterfrontSignal(listing: MatchListingInput): boolean {
 }
 
 function passesHardGates(listing: MatchListingInput, criteria: BuyerMatchCriteria): boolean {
+  if (criteria.transactionIntent === "buy") {
+    if (listingIsRentalOrLease(listing)) return false;
+    if (
+      listingIsLikelyMonthlyRentPrice(listing.priceCents, {
+        transactionIntent: criteria.transactionIntent,
+        priceMax: criteria.priceMax,
+      })
+    ) {
+      return false;
+    }
+  } else if (criteria.transactionIntent === "rent") {
+    if (
+      !listingIsRentalOrLease(listing) &&
+      !listingIsLikelyMonthlyRentPrice(listing.priceCents, {
+        transactionIntent: "buy",
+        priceMax: criteria.priceMax,
+      })
+    ) {
+      return false;
+    }
+  }
+
   if (criteria.propertyTypes.length > 0) {
     const lt = normalizeListingPropertyType(listing.propertyType, listing.propertySubtype);
     if (!lt || !criteria.propertyTypes.includes(lt)) return false;
@@ -299,6 +336,10 @@ function passesHardGates(listing: MatchListingInput, criteria: BuyerMatchCriteri
   }
 
   if (criteria.bedsMin != null && listing.beds != null && listing.beds < criteria.bedsMin) {
+    return false;
+  }
+
+  if (criteria.bedsMax != null && listing.beds != null && listing.beds > criteria.bedsMax) {
     return false;
   }
 
@@ -390,17 +431,26 @@ function propertyTypeScore(
 function bedsBathsScore(
   listing: MatchListingInput,
   bedsMin: number | null,
+  bedsMax: number | null,
   bathsMin: number | null,
 ): { points: number; max: number; reasons: string[] } {
   let points = 0;
   let max = 0;
   const reasons: string[] = [];
 
-  if (bedsMin != null) {
+  if (bedsMin != null || bedsMax != null) {
     max += 10;
-    if (listing.beds != null && listing.beds >= bedsMin) {
-      points += 10;
-      reasons.push("Matches bedroom count");
+    if (listing.beds != null) {
+      const withinMin = bedsMin == null || listing.beds >= bedsMin;
+      const withinMax = bedsMax == null || listing.beds <= bedsMax;
+      if (withinMin && withinMax) {
+        points += 10;
+        reasons.push(
+          bedsMax != null && bedsMin === bedsMax
+            ? "Matches bedroom count"
+            : "Matches bedroom preference",
+        );
+      }
     }
   }
   if (bathsMin != null) {
@@ -580,7 +630,7 @@ export function scoreListingAgainstCriteria(
   const area = areaMatchScore(listing, criteria.areas);
   const price = priceMatchScore(listing.priceCents, criteria.priceMin, criteria.priceMax);
   const pType = propertyTypeScore(listing, criteria.propertyTypes);
-  const bedsBaths = bedsBathsScore(listing, criteria.bedsMin, criteria.bathsMin);
+  const bedsBaths = bedsBathsScore(listing, criteria.bedsMin, criteria.bedsMax, criteria.bathsMin);
   const sqft = sqftScore(listing, criteria.sqftMin, criteria.sqftMax);
   const hoa = lowHoaScore(listing, criteria.lowHoa);
   const features = featureAndMustHaveScore(listing, criteria);
@@ -700,6 +750,28 @@ export function getListingExclusionReason(
   const breaker = hitsDealBreaker(listing, criteria.dealBreakers);
   if (breaker) return `deal-breaker: ${breaker}`;
 
+  if (criteria.transactionIntent === "buy") {
+    if (listingIsRentalOrLease(listing)) return "rental/lease listing";
+    if (
+      listingIsLikelyMonthlyRentPrice(listing.priceCents, {
+        transactionIntent: criteria.transactionIntent,
+        priceMax: criteria.priceMax,
+      })
+    ) {
+      return "rental/lease listing";
+    }
+  } else if (criteria.transactionIntent === "rent") {
+    if (
+      !listingIsRentalOrLease(listing) &&
+      !listingIsLikelyMonthlyRentPrice(listing.priceCents, {
+        transactionIntent: "buy",
+        priceMax: criteria.priceMax,
+      })
+    ) {
+      return "not a rental/lease listing";
+    }
+  }
+
   if (criteria.propertyTypes.length > 0) {
     const lt = normalizeListingPropertyType(listing.propertyType, listing.propertySubtype);
     if (!lt || !criteria.propertyTypes.includes(lt)) return "wrong property type";
@@ -728,6 +800,10 @@ export function getListingExclusionReason(
   if (criteria.priceMin != null && listing.priceCents != null) {
     const price = listing.priceCents / 100;
     if (price < criteria.priceMin) return "under budget floor";
+  }
+
+  if (criteria.bedsMax != null && listing.beds != null && listing.beds > criteria.bedsMax) {
+    return "over bedroom max";
   }
 
   if (criteria.bedsMin != null && listing.beds != null && listing.beds < criteria.bedsMin) {

@@ -10,7 +10,9 @@ const LOCATION_SIGNAL_RE =
 
 const POOL_SIGNAL_RE = /\bpool\b/i;
 const WATERFRONT_SIGNAL_RE = /\bwaterfront\b/i;
-const BED_SIGNAL_RE = /\b\d+\s*[- ]?\s*bed/i;
+const BED_SIGNAL_RE = /\b\d+\s*[- ]?\s*bed|\b\d+\s*\/\s*\d+/i;
+const BED_CORRECTION_SIGNAL_RE =
+  /\b(too big|too many bed|instead|only|is better|show me\s+\d+\s*\/\s*\d+)/i;
 const BATH_SIGNAL_RE = /\b\d+(?:\.\d+)?\s*[- ]?\s*bath/i;
 const BUDGET_SIGNAL_RE = /\$\s*[\d,.]+|\bbudget\b/i;
 
@@ -24,6 +26,7 @@ export function hasInventoryPreferenceSignals(text: string): boolean {
     POOL_SIGNAL_RE.test(t) ||
     WATERFRONT_SIGNAL_RE.test(t) ||
     BED_SIGNAL_RE.test(t) ||
+    BED_CORRECTION_SIGNAL_RE.test(t) ||
     BATH_SIGNAL_RE.test(t) ||
     BUDGET_SIGNAL_RE.test(t)
   );

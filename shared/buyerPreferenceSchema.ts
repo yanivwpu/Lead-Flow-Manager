@@ -51,6 +51,8 @@ export const timelinePreferenceSchema = z.enum([
   "unknown",
 ]);
 
+export const transactionIntentSchema = z.enum(["buy", "rent", "unknown"]);
+
 export const buyerGeoConstraintSchema = z.object({
   referenceId: z.string().min(1),
   side: z.enum(["east", "west", "north", "south"]),
@@ -69,6 +71,7 @@ export const buyerPreferenceProfileSchema = z
     priceMin: preferenceFieldSchema(z.number()).optional(),
     priceMax: preferenceFieldSchema(z.number()).optional(),
     bedsMin: preferenceFieldSchema(z.number()).optional(),
+    bedsMax: preferenceFieldSchema(z.number()).optional(),
     bathsMin: preferenceFieldSchema(z.number()).optional(),
     propertyTypes: preferenceFieldSchema(z.array(propertyTypeSchema)).optional(),
     investmentIntent: preferenceFieldSchema(z.boolean()).optional(),
@@ -83,6 +86,7 @@ export const buyerPreferenceProfileSchema = z
     walkability: preferenceFieldSchema(z.boolean()).optional(),
     schoolPriority: preferenceFieldSchema(z.boolean()).optional(),
     timeline: preferenceFieldSchema(timelinePreferenceSchema).optional(),
+    transactionIntent: preferenceFieldSchema(transactionIntentSchema).optional(),
     financingStatus: preferenceFieldSchema(financingStatusSchema).optional(),
     mustHaves: preferenceFieldSchema(z.array(z.string())).optional(),
     dealBreakers: preferenceFieldSchema(z.array(z.string())).optional(),

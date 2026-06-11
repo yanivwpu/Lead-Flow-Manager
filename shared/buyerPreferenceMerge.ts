@@ -96,6 +96,10 @@ function mergeScalarField<T>(
   return { ...incoming };
 }
 
+function isBedBathCorrectionEvidence(evidence: string | undefined): boolean {
+  return !!evidence && /beds correction|beds too big correction/i.test(evidence);
+}
+
 function isUpToBudgetEvidence(evidence: string | undefined): boolean {
   return !!evidence && /\bup\s+to\b/i.test(evidence);
 }
@@ -203,6 +207,14 @@ function applyPatchField<K extends keyof BuyerPreferenceExtractionPatch>(
     return;
   }
 
+  if (key === "bedsMin" || key === "bedsMax" || key === "bathsMin") {
+    const incoming = patch[key];
+    if (incoming && isBedBathCorrectionEvidence(incoming.evidence)) {
+      (profile as Record<string, unknown>)[key] = { ...incoming };
+      return;
+    }
+  }
+
   const cur = profile[key] as PreferenceField<unknown> | undefined;
   (profile as Record<string, unknown>)[key] = mergeScalarField(
     cur,
@@ -215,6 +227,7 @@ const PATCH_KEYS: (keyof BuyerPreferenceExtractionPatch)[] = [
   "priceMin",
   "priceMax",
   "bedsMin",
+  "bedsMax",
   "bathsMin",
   "propertyTypes",
   "investmentIntent",
@@ -229,6 +242,7 @@ const PATCH_KEYS: (keyof BuyerPreferenceExtractionPatch)[] = [
   "walkability",
   "schoolPriority",
   "timeline",
+  "transactionIntent",
   "financingStatus",
   "mustHaves",
   "dealBreakers",

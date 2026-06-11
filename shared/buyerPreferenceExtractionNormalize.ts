@@ -17,6 +17,7 @@ const PATCH_FIELD_KEYS = [
   "priceMin",
   "priceMax",
   "bedsMin",
+  "bedsMax",
   "bathsMin",
   "propertyTypes",
   "investmentIntent",
@@ -31,6 +32,7 @@ const PATCH_FIELD_KEYS = [
   "walkability",
   "schoolPriority",
   "timeline",
+  "transactionIntent",
   "financingStatus",
   "mustHaves",
   "dealBreakers",
@@ -243,7 +245,7 @@ function normalizeFieldEntry(
     return undefined;
   }
 
-  if (key === "bedsMin" || key === "bathsMin") {
+  if (key === "bedsMin" || key === "bathsMin" || key === "bedsMax") {
     let n: number | undefined;
     if (typeof raw === "number") n = raw;
     else if (typeof raw === "string") {
@@ -282,6 +284,20 @@ function normalizeFieldEntry(
     const fo = toFieldObject(raw);
     if (fo) tv = fo.value;
     const norm = normalizeTimelineValue(tv);
+    if (!norm) return undefined;
+    const base = fo ?? toFieldObject(norm)!;
+    return { ...base, value: norm };
+  }
+
+  if (key === "transactionIntent") {
+    let tv: unknown = raw;
+    const fo = toFieldObject(raw);
+    if (fo) tv = fo.value;
+    const s = String(tv ?? "").toLowerCase();
+    let norm: "buy" | "rent" | "unknown" | undefined;
+    if (/\b(rent|lease|leasing|tenant)\b/.test(s)) norm = "rent";
+    else if (/\b(buy|purchase|sale)\b/.test(s)) norm = "buy";
+    else if (s === "unknown") norm = "unknown";
     if (!norm) return undefined;
     const base = fo ?? toFieldObject(norm)!;
     return { ...base, value: norm };
@@ -460,6 +476,10 @@ export function heuristicPatchFromTranscript(
   }
 
   const bedBathSlash = lower.match(/(\d+)\s*\/\s*(\d+(?:\.\d+)?)/);
+  const isBedBathCorrection =
+    /\b(too big|too many bed|instead|only|is better|better|rather than|too large)\b/i.test(lower);
+  const tooBigBedM = lower.match(/(\d+)\s*beds?\s+(?:is|are)\s+too\s+big/i);
+  const tooManyBeds = /\btoo many bed(?:room)?s?\b/i.test(lower);
 
   const types = extractPropertyTypesFromText(lower);
   if (
@@ -473,7 +493,37 @@ export function heuristicPatchFromTranscript(
   if (types.length) {
     patch.propertyTypes = { value: types, ...inf(0.82, "property type in message") };
   }
-  if (bedBathSlash) {
+
+  const applyBedBathCorrection = (beds: number, baths: number, evidence: string) => {
+    patch.bedsMin = { value: beds, ...inf(0.93, evidence) };
+    patch.bedsMax = { value: beds, ...inf(0.93, evidence) };
+    patch.bathsMin = { value: baths, ...inf(0.93, evidence) };
+  };
+
+  if (bedBathSlash && (isBedBathCorrection || tooBigBedM || tooManyBeds)) {
+    applyBedBathCorrection(
+      parseInt(bedBathSlash[1], 10),
+      parseFloat(bedBathSlash[2]),
+      "beds correction in message",
+    );
+  } else if (tooBigBedM) {
+    const rejected = parseInt(tooBigBedM[1], 10);
+    const maxBeds = Math.max(1, rejected - 1);
+    patch.bedsMax = { value: maxBeds, ...inf(0.9, "beds too big correction") };
+    patch.bedsMin = { value: maxBeds, ...inf(0.9, "beds too big correction") };
+    if (bedBathSlash) {
+      patch.bathsMin = {
+        value: parseFloat(bedBathSlash[2]),
+        ...inf(0.9, "beds too big correction"),
+      };
+    }
+  } else if (tooManyBeds && bedBathSlash) {
+    applyBedBathCorrection(
+      parseInt(bedBathSlash[1], 10),
+      parseFloat(bedBathSlash[2]),
+      "beds correction in message",
+    );
+  } else if (bedBathSlash) {
     patch.bedsMin = { value: parseInt(bedBathSlash[1], 10), ...inf(0.86, "beds in message") };
     patch.bathsMin = { value: parseFloat(bedBathSlash[2]), ...inf(0.86, "baths in message") };
   } else {
@@ -489,6 +539,13 @@ export function heuristicPatchFromTranscript(
 
   if (/\bpool\b/i.test(lower)) {
     patch.pool = { value: true, ...inf(0.7, "pool in message") };
+  }
+  if (/\b(rent|renting|lease|leasing|for rent|tenant)\b/i.test(lower)) {
+    patch.transactionIntent = { value: "rent", ...inf(0.88, "rent intent in message") };
+  } else if (
+    /\b(buy|buying|purchase|for sale|show me|looking to buy|looking for a home)\b/i.test(lower)
+  ) {
+    patch.transactionIntent = { value: "buy", ...inf(0.82, "buy intent in message") };
   }
   if (/\bmodern\b/i.test(lower)) {
     patch.modernStyle = { value: true, ...inf(0.68, "modern in message") };
