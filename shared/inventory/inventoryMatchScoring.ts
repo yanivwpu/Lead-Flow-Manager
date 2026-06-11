@@ -269,6 +269,24 @@ function passesHardGates(listing: MatchListingInput, criteria: BuyerMatchCriteri
     if (geo.hardExclude) return false;
   }
 
+  if (criteria.priceMax != null && listing.priceCents != null) {
+    const price = listing.priceCents / 100;
+    if (price > criteria.priceMax) return false;
+  }
+
+  if (criteria.priceMin != null && listing.priceCents != null) {
+    const price = listing.priceCents / 100;
+    if (price < criteria.priceMin) return false;
+  }
+
+  if (criteria.bedsMin != null && listing.beds != null && listing.beds < criteria.bedsMin) {
+    return false;
+  }
+
+  if (criteria.bathsMin != null && listing.baths != null && listing.baths < criteria.bathsMin) {
+    return false;
+  }
+
   return true;
 }
 

@@ -124,4 +124,32 @@ assert(
 
 assert(!hasInventoryPreferenceSignals("thanks"), "trivial thanks has no inventory signals");
 
+const budgetMessage =
+  "Can you show me 3/2 with pool up to $600k anywhere in Pompano Beach?";
+const budgetHeuristic = heuristicPatchFromInboundText(budgetMessage);
+assert(budgetHeuristic.bedsMin?.value === 3, "3/2 extracts bedsMin");
+assert(budgetHeuristic.bathsMin?.value === 2, "3/2 extracts bathsMin");
+assert(budgetHeuristic.pool?.value === true, "pool stays true");
+assert(budgetHeuristic.priceMax?.value === 600_000, "up to $600k extracts priceMax");
+assert(
+  (budgetHeuristic.targetAreas?.value?.length ?? 0) > 0,
+  "Pompano area extracted",
+);
+
+const narrowedBudget = mergeBuyerPreferenceProfile(
+  {
+    ...emptyBuyerPreferenceProfile(),
+    priceMax: {
+      value: 800_000,
+      source: "explicit",
+      confidence: 1,
+      updatedAt: new Date().toISOString(),
+    },
+  },
+  {
+    priceMax: budgetHeuristic.priceMax!,
+  },
+);
+assert(narrowedBudget.priceMax?.value === 600_000, "new up-to budget replaces higher priceMax");
+
 console.log("buyer-preference-fastpath.test.ts: OK");

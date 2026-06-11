@@ -106,4 +106,53 @@ const inland = base({ id: "w2", providerListingId: "W2", description: "inland lo
 const rankedWf = rankInventoryMatches([wfListing, inland], wfCriteria, 10);
 assert(rankedWf.length === 1, "non-waterfront excluded when waterfront required");
 
+const budgetCriteria = extractBuyerMatchCriteria({
+  ...emptyBuyerPreferenceProfile(),
+  targetAreas: inf(["Pompano Beach"]),
+  priceMax: inf(600_000),
+  bedsMin: inf(3),
+  bathsMin: inf(2),
+  pool: inf(true),
+});
+
+const underBudget = base({
+  id: "b1",
+  providerListingId: "B1",
+  priceCents: 575_000_00,
+  listingDetails: { pool: true },
+});
+const overBudget = base({
+  id: "b2",
+  providerListingId: "B2",
+  priceCents: 799_000_00,
+  listingDetails: { pool: true },
+});
+const nearOverBudget = base({
+  id: "b3",
+  providerListingId: "B3",
+  priceCents: 715_000_00,
+  listingDetails: { pool: true },
+});
+
+assert(
+  !listingPassesHardGatesForCriteria(overBudget, budgetCriteria),
+  "over-budget listing hard-excluded",
+);
+assert(
+  !listingPassesHardGatesForCriteria(nearOverBudget, budgetCriteria),
+  "$715k excluded when max is $600k",
+);
+assert(
+  listingPassesHardGatesForCriteria(underBudget, budgetCriteria),
+  "under-budget listing passes hard gates",
+);
+
+const rankedBudget = rankInventoryMatches(
+  [overBudget, nearOverBudget, underBudget],
+  budgetCriteria,
+  10,
+);
+assert(rankedBudget.length === 1, "only in-budget listing ranks");
+assert(rankedBudget[0].listingId === "b1", "top match is under budget");
+
 console.log("inventory-matching-hard-gates.test.ts: OK");

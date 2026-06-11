@@ -73,10 +73,13 @@ const inFlightRefetches = new Set<string>();
 export function scheduleInventoryMatchesRefetch(
   queryClient: QueryClient,
   contactId: string,
-  options?: { debounceMs?: number },
+  options?: { debounceMs?: number; clearCachedMatches?: boolean },
 ): void {
   if (!contactId) return;
   const debounceMs = options?.debounceMs ?? REFETCH_DEBOUNCE_MS;
+  if (options?.clearCachedMatches) {
+    queryClient.removeQueries({ queryKey: inventoryMatchesQueryKey(contactId) });
+  }
   const pending = pendingRefetchTimers.get(contactId);
   if (pending) clearTimeout(pending);
 

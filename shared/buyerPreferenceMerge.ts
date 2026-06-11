@@ -96,6 +96,20 @@ function mergeScalarField<T>(
   return { ...incoming };
 }
 
+function shouldForceReplaceBudgetCap(
+  existing: PreferenceField<number> | undefined,
+  incoming: PreferenceField<number>,
+): boolean {
+  if (!existing || typeof existing.value !== "number" || typeof incoming.value !== "number") {
+    return false;
+  }
+  const evidence = incoming.evidence || "";
+  if (!/budget/i.test(evidence)) return false;
+  if (incoming.value <= existing.value) return true;
+  if (/\bup\s+to\b/i.test(evidence) || evidence.includes("up to budget")) return true;
+  return false;
+}
+
 function mergePriceRange(
   profile: BuyerPreferenceProfile,
   patch: BuyerPreferenceExtractionPatch,
@@ -104,7 +118,10 @@ function mergePriceRange(
     profile.priceMin = mergeScalarField(profile.priceMin, patch.priceMin);
   }
   if (patch.priceMax) {
-    profile.priceMax = mergeScalarField(profile.priceMax, patch.priceMax);
+    const incoming = patch.priceMax;
+    profile.priceMax = shouldForceReplaceBudgetCap(profile.priceMax, incoming)
+      ? { ...incoming }
+      : mergeScalarField(profile.priceMax, incoming);
   }
 }
 

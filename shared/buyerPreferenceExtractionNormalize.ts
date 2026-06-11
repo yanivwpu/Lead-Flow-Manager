@@ -457,9 +457,19 @@ export function heuristicPatchFromTranscript(
     patch.propertyTypes = { value: types, ...inf(0.82, "property type in message") };
   }
 
-  const bedM = lower.match(/(\d+)\s*[- ]?\s*bed/);
-  if (bedM) {
-    patch.bedsMin = { value: parseInt(bedM[1], 10), ...inf(0.72, "beds in message") };
+  const bedBathSlash = lower.match(/(\d+)\s*\/\s*(\d+(?:\.\d+)?)/);
+  if (bedBathSlash) {
+    patch.bedsMin = { value: parseInt(bedBathSlash[1], 10), ...inf(0.86, "beds in message") };
+    patch.bathsMin = { value: parseFloat(bedBathSlash[2]), ...inf(0.86, "baths in message") };
+  } else {
+    const bedM = lower.match(/(\d+)\s*[- ]?\s*bed/);
+    if (bedM) {
+      patch.bedsMin = { value: parseInt(bedM[1], 10), ...inf(0.72, "beds in message") };
+    }
+    const bathM = lower.match(/(\d+(?:\.\d+)?)\s*[- ]?\s*bath/);
+    if (bathM) {
+      patch.bathsMin = { value: parseFloat(bathM[1]), ...inf(0.72, "baths in message") };
+    }
   }
 
   if (/\bpool\b/i.test(lower)) {
@@ -469,12 +479,27 @@ export function heuristicPatchFromTranscript(
     patch.modernStyle = { value: true, ...inf(0.68, "modern in message") };
   }
 
+  const parseBudgetAmount = (amount: string, suffix?: string): number | null => {
+    let n = parseFloat(amount);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    const s = (suffix || "").toLowerCase();
+    if (s === "k") n *= 1000;
+    if (s === "m" || s === "million") n *= 1_000_000;
+    return Math.round(n);
+  };
+
+  const upToBudgetM = lower.match(/\bup\s+to\s+\$?\s*([\d.]+)\s*(k|m|million)?/i);
   const budgetM = lower.match(/(?:\$|budget\s*)([\d.]+)\s*(k|m|million)?/i);
-  if (budgetM) {
-    let n = parseFloat(budgetM[1]);
-    if (budgetM[2] === "k") n *= 1000;
-    if (budgetM[2] === "m" || budgetM[2] === "million") n *= 1_000_000;
-    patch.priceMax = { value: Math.round(n), ...inf(0.78, "budget in message") };
+  const budgetSource = upToBudgetM ?? budgetM;
+  if (budgetSource) {
+    const amount = parseBudgetAmount(budgetSource[1], budgetSource[2]);
+    if (amount != null) {
+      const isUpTo = !!upToBudgetM;
+      patch.priceMax = {
+        value: amount,
+        ...inf(isUpTo ? 0.9 : 0.78, isUpTo ? "up to budget in message" : "budget in message"),
+      };
+    }
   }
 
   if (/\bpre[- ]?approved\b/i.test(lower)) {
