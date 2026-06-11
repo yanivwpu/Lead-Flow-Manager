@@ -27,7 +27,6 @@ const newLeadProfile = {
   ...emptyBuyerPreferenceProfile(),
   targetAreas: inf(["Pompano"]),
   propertyTypes: inf(["house"]),
-  pool: inf(true),
 } as BuyerPreferenceProfile;
 
 const newLeadQ = assessBuyerQualification({ profile: newLeadProfile });
@@ -74,6 +73,47 @@ const highQ = assessBuyerQualification({
 });
 assert(highQ.level === "high", "full profile reaches HIGH");
 assert(highQ.mayPresentMatches === true, "HIGH may present matches");
+assert(
+  !highQ.suggestedQuestion.toLowerCase().includes("widen") &&
+    !highQ.suggestedQuestion.toLowerCase().includes("broaden"),
+  "HIGH never suggests broaden/widen",
+);
+assert(
+  /strong fit|best matches|top options|several homes/i.test(highQ.suggestedQuestion),
+  "HIGH suggests inventory/showing CTA",
+);
+
+const pompanoHighProfile = {
+  ...emptyBuyerPreferenceProfile(),
+  targetAreas: inf(["Pompano Beach"]),
+  priceMin: inf(1_000_000),
+  priceMax: inf(1_500_000),
+  propertyTypes: inf(["house"]),
+  bedsMin: inf(5),
+  bathsMin: inf(4),
+  pool: inf(true),
+} as BuyerPreferenceProfile;
+
+const pompanoHighQ = assessBuyerQualification({
+  profile: pompanoHighProfile,
+  leadType: "buyer",
+  buyRentIntent: "buyer",
+});
+assert(pompanoHighQ.level === "high", "Pompano 5/4 pool $1M-$1.5M is HIGH");
+assert(
+  !pompanoHighQ.suggestedQuestion.toLowerCase().includes("widen") &&
+    !pompanoHighQ.suggestedQuestion.toLowerCase().includes("broaden"),
+  "HIGH with pool but no timeline does not ask to broaden",
+);
+assert(
+  /strong fit|best matches|top options|several homes/i.test(pompanoHighQ.suggestedQuestion),
+  "HIGH pool buyer gets inventory CTA",
+);
+const pompanoCtx = formatQualificationContextForAi(pompanoHighQ);
+assert(
+  pompanoCtx.includes("inventory/showing") || pompanoCtx.includes("HIGH"),
+  "HIGH AI context directs inventory/showing behavior",
+);
 
 const sanitized = sanitizeRoboticBuyerReply(
   "Let me check our listings — I found 10 properties waiting for approval.",

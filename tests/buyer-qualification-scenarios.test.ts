@@ -77,12 +77,24 @@ assert(
   "scenario 3 inline: SFH replaces condo",
 );
 assert(q2.confirmPriorFields === true, "scenario 2: confirms prior budget/beds/baths");
-assert(
-  q2.suggestedQuestion.toLowerCase().includes("budget") ||
-    q2.suggestedQuestion.toLowerCase().includes("widen") ||
-    q2.suggestedQuestion.toLowerCase().includes("broaden"),
-  "scenario 2: budget/beds confirmation question",
-);
+if (q2.level === "high") {
+  assert(
+    !q2.suggestedQuestion.toLowerCase().includes("widen") &&
+      !q2.suggestedQuestion.toLowerCase().includes("broaden"),
+    "scenario 2: HIGH after pool+area update uses inventory CTA not broaden",
+  );
+  assert(
+    /strong fit|best matches|top options|several homes/i.test(q2.suggestedQuestion),
+    "scenario 2: HIGH inventory/showing CTA",
+  );
+} else {
+  assert(
+    q2.suggestedQuestion.toLowerCase().includes("budget") ||
+      q2.suggestedQuestion.toLowerCase().includes("widen") ||
+      q2.suggestedQuestion.toLowerCase().includes("broaden"),
+    "scenario 2: MEDIUM budget/beds confirmation question",
+  );
+}
 
 // Scenario 3 — property type replacement
 assert(!profile2.propertyTypes?.value?.includes("condo"), "scenario 3: no condo in profile");

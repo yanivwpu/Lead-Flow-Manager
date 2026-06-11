@@ -103,6 +103,16 @@ function formatBedsBathsLabel(profile: BuyerPreferenceProfile): string | null {
   return parts.length > 0 ? parts.join("/") : null;
 }
 
+/** HIGH tier — inventory/showing CTA, never broaden/widen qualification. */
+function pickHighTierMatchQuestion(profile: BuyerPreferenceProfile): string {
+  const areas = fieldActive(profile.targetAreas) ? profile.targetAreas!.value || [] : [];
+  const areaHint = areas[0] ? String(areas[0]).trim() : "";
+  if (areaHint) {
+    return `A few homes in ${areaHint} look like a strong fit — want me to send the best matches?`;
+  }
+  return "I found several homes that match what you're looking for. Would you like me to send the top options?";
+}
+
 function pickSuggestedQuestion(
   profile: BuyerPreferenceProfile,
   missing: string[],
@@ -199,9 +209,11 @@ export function assessBuyerQualification(input: BuyerQualificationInput): BuyerQ
       (sqftMin != null ? 4 : 0),
   );
 
-  const useConfirmQuestion =
-    confirmPriorFields && (level === "medium" || (level === "high" && !hasTimeline && !hasFinancing));
-  const suggestedQuestion = pickSuggestedQuestion(profile, missing, useConfirmQuestion);
+  const useConfirmQuestion = confirmPriorFields && level === "medium";
+  const suggestedQuestion =
+    level === "high"
+      ? pickHighTierMatchQuestion(profile)
+      : pickSuggestedQuestion(profile, missing, useConfirmQuestion);
 
   return {
     level,
@@ -226,14 +238,19 @@ export function formatQualificationContextForAi(ctx: BuyerQualificationContext):
       ? "QUALIFICATION TIER: LOW — Do NOT claim matches or say you found homes. Ask exactly ONE question from suggestedQuestion. Sound like a local agent, not a bot."
       : ctx.level === "medium"
         ? "QUALIFICATION TIER: MEDIUM — Briefly acknowledge what you know in plain language. Ask exactly ONE follow-up from suggestedQuestion. Do NOT claim an exact match count or say you are compiling options."
-        : "QUALIFICATION TIER: HIGH — You may say a few homes look like a strong fit and offer to send the best matches or set up a showing. No exact counts. Never sound like a virtual assistant.";
+        : "QUALIFICATION TIER: HIGH — Core search criteria are set. Transition to inventory/showing behavior: offer to send the best matches or set up a showing. Do NOT ask to loosen or expand the search. No exact counts. Never sound like a virtual assistant.";
+
+  const actionLine =
+    ctx.level === "high"
+      ? `- Suggested reply direction (inventory/showing CTA — do NOT loosen criteria): "${ctx.suggestedQuestion}"`
+      : `- Suggested next question (ask ONLY this one): "${ctx.suggestedQuestion}"`;
 
   return `Buyer qualification assessment:
 - Tier: ${ctx.level.toUpperCase()}
 - Known criteria: ${knownLine}
 - Priority gap: ${ctx.missing.slice(0, 3).join(", ") || "none"}
-- Suggested next question (ask ONLY this one): "${ctx.suggestedQuestion}"
-${ctx.confirmPriorFields ? "- Prior budget/beds/baths on file — confirm keep vs widen; do not re-ask from scratch." : ""}
+${actionLine}
+${ctx.confirmPriorFields && ctx.level === "medium" ? "- Prior budget/beds/baths on file — confirm keep vs widen; do not re-ask from scratch." : ""}
 ${tierGuide}`;
 }
 
