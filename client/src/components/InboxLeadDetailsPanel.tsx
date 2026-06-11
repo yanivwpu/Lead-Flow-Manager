@@ -1832,7 +1832,7 @@ export function InboxLeadDetailsPanel({
     <div
       className={
         panelClassName ??
-        "hidden lg:flex lg:w-[272px] lg:min-w-[272px] min-[1200px]:w-[400px] min-[1200px]:min-w-[400px] flex-col border-l border-gray-100 bg-white overflow-y-auto overflow-x-hidden flex-shrink-0"
+        "hidden lg:flex lg:h-full lg:min-h-0 lg:w-[272px] lg:min-w-[272px] min-[1200px]:w-[400px] min-[1200px]:min-w-[400px] flex-col border-l border-gray-100 bg-white overflow-hidden flex-shrink-0"
       }
       data-testid="inbox-lead-details-panel"
     >
@@ -1840,14 +1840,15 @@ export function InboxLeadDetailsPanel({
       {/* ══ COPILOT — distinct assistant region ═════════════════════════════════ */}
       <div
         className={cn(
-          "mx-2 mt-2 mb-2 rounded-xl border border-gray-200 bg-white shadow-sm shadow-gray-900/[0.06]",
+          "mx-2 mt-2 mb-2 flex min-h-0 shrink-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm shadow-gray-900/[0.06]",
+          copilotExpanded && "max-h-[min(72vh,720px)]",
           !copilotExpanded && "mb-2",
         )}
       >
-      {/* ══ COPILOT STICKY HEADER ════════════════════════════════════════ */}
+      {/* ══ COPILOT FIXED HEADER ════════════════════════════════════════ */}
       <div
         className={cn(
-          "sticky top-0 z-10 transition-all duration-200 rounded-t-xl",
+          "z-10 shrink-0 rounded-t-xl transition-colors duration-200",
           copilotExpanded
             ? "bg-gray-50/90 border-b border-gray-200"
             : "bg-gray-50/70 border-b border-gray-200",
@@ -1929,7 +1930,7 @@ export function InboxLeadDetailsPanel({
 
       {/* Utilities (operational) — keep near top under header */}
       {copilotExpanded && (
-      <div className="px-3 py-2 border-b border-gray-200 bg-gray-50/60 animate-in fade-in duration-150">
+      <div className="shrink-0 border-b border-gray-200 bg-gray-50/60 px-3 py-2 animate-in fade-in duration-150">
         <div className="grid grid-cols-4 gap-1">
 
           {/* ── BOOK ── */}
@@ -2352,10 +2353,11 @@ export function InboxLeadDetailsPanel({
       )}
       {/* end Copilot header + quick actions tinted shell */}
 
-      {/* ══ Copilot expanded body (same width as header) ═══════════════════════ */}
+      {/* ══ Copilot scrollable body (header + utilities stay fixed above) ═ */}
       {copilotExpanded && (
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <div className="px-3 py-3 animate-in fade-in slide-in-from-top-1 duration-200">
-          <div className="px-1 pt-1 pb-2">
+          <div className="min-w-0 pt-1 pb-2">
 
               {!canSeeCopilot ? (
                 <AIUpgradePrompt
@@ -2547,15 +2549,13 @@ export function InboxLeadDetailsPanel({
                   )}
 
                   {showCopilotInventoryPanels && inventoryConnected && (
-                    <div className="-mx-4 min-w-0">
-                      <MatchingListingsPanel
-                        contactId={contact.id}
-                        contactFirstName={contact.name?.trim().split(/\s+/)[0]}
-                        compact
-                        isWorkspaceAdmin={isWorkspaceAdmin}
-                        onInsertComposerDraft={onInsertComposerDraft}
-                      />
-                    </div>
+                    <MatchingListingsPanel
+                      contactId={contact.id}
+                      contactFirstName={contact.name?.trim().split(/\s+/)[0]}
+                      compact
+                      isWorkspaceAdmin={isWorkspaceAdmin}
+                      onInsertComposerDraft={onInsertComposerDraft}
+                    />
                   )}
 
                   {/* D. Short narrative summary — action/context only; no duplicate criteria */}
@@ -2678,11 +2678,12 @@ export function InboxLeadDetailsPanel({
               )}
           </div>
         </div>
+        </div>
       )}
       </div>
 
       {/* ══ Body ════════════════════════════════════════════════════════════ */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         <div className="px-3 py-3 space-y-3">
 
           {/* ── CONTACT INFO ─────────────────────────────────────────── */}

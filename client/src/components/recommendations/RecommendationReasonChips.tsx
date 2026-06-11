@@ -20,7 +20,7 @@ export function RecommendationReasonChips({
   const hiddenCount = labels.length - visible.length;
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-1", maxVisible <= 3 ? "mt-1" : "mt-1.5")}>
+    <div className={cn("flex min-w-0 max-w-full flex-wrap items-center gap-1", maxVisible <= 3 ? "mt-1" : "mt-1.5")}>
       {visible.map((label) => (
         <span
           key={label}

@@ -93,7 +93,7 @@ export function RecommendationCard({
       <div
         className={cn(
           "flex items-center justify-end gap-0.5 border-t border-gray-100 bg-gray-50/40",
-          isSidebar ? "px-3 py-0.5" : "px-2 py-1",
+          isSidebar ? "px-5 py-0.5" : "px-2 py-1",
         )}
       >
         {actions.map((action) => (
@@ -142,7 +142,10 @@ export function RecommendationCard({
 
   return (
     <div
-      className="rounded-lg border border-gray-200/90 bg-white overflow-hidden transition-colors hover:border-gray-300 hover:shadow-sm"
+      className={cn(
+        "min-w-0 max-w-full overflow-hidden rounded-lg border border-gray-200/90 bg-white transition-colors hover:border-gray-300 hover:shadow-sm",
+        isSidebar && "w-full",
+      )}
       data-testid={testId}
       data-recommendation-card-layout={layout}
       data-match-card-variant={layout}
@@ -169,10 +172,10 @@ export function RecommendationCard({
             )}
           </button>
 
-          <div className="px-3 pt-1.5 pb-0.5 min-w-0">
-            <div className="flex items-start justify-between gap-2 min-w-0">
+          <div className="min-w-0 max-w-full overflow-hidden px-5 pt-1.5 pb-1">
+            <div className="flex min-w-0 items-start justify-between gap-2">
               <p
-                className="text-xs font-semibold text-gray-900 leading-snug line-clamp-2 min-w-0 flex-1"
+                className="min-w-0 flex-1 break-words text-xs font-semibold leading-snug text-gray-900 line-clamp-2 [overflow-wrap:anywhere]"
                 title={title}
               >
                 {title}
@@ -182,11 +185,13 @@ export function RecommendationCard({
 
             {primaryValueRow}
 
-            <RecommendationReasonChips
-              reasons={matchReasons}
-              maxVisible={visibleReasonLimit}
-              formatReason={formatMatchReason}
-            />
+            <div className="min-w-0 max-w-full">
+              <RecommendationReasonChips
+                reasons={matchReasons}
+                maxVisible={visibleReasonLimit}
+                formatReason={formatMatchReason}
+              />
+            </div>
           </div>
 
           {actionBar}

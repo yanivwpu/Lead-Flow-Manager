@@ -158,7 +158,7 @@ export function MatchingListingsPanel({
       className={cn(compact ? "mt-2 min-w-0" : "mt-3")}
       data-testid="matching-listings-panel"
     >
-      <div className={cn(compact ? "mb-1 px-0.5" : "mb-2")}>
+      <div className={cn(compact ? "mb-1.5" : "mb-2")}>
         <span
           className={cn(
             "font-semibold uppercase tracking-wide flex items-center gap-1.5 min-w-0",
@@ -246,7 +246,7 @@ export function MatchingListingsPanel({
           {hasMoreMatches && (
             <button
               type="button"
-              className="mt-2.5 block w-full text-left px-0.5 text-[11px] font-medium leading-snug text-violet-700 hover:text-violet-900 hover:underline"
+              className="mt-4 mb-3 block w-full text-left text-[11px] font-medium leading-snug text-violet-700 hover:text-violet-900 hover:underline"
               onClick={() => setAllMatchesOpen(true)}
               data-testid="button-view-all-matches"
             >
