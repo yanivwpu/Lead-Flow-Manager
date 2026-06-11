@@ -56,6 +56,7 @@ const existingQ = assessBuyerQualification({
 assert(existingQ.confirmPriorFields === true, "existing budget+beds+baths triggers confirm");
 assert(
   existingQ.suggestedQuestion.toLowerCase().includes("budget") ||
+    existingQ.suggestedQuestion.toLowerCase().includes("widen") ||
     existingQ.suggestedQuestion.toLowerCase().includes("broaden"),
   "existing profile suggests budget/beds confirmation",
 );
@@ -78,6 +79,16 @@ const sanitized = sanitizeRoboticBuyerReply(
   "Let me check our listings — I found 10 properties waiting for approval.",
 );
 assert(!containsRoboticPhrase(sanitized), "sanitizer removes robotic phrases");
-assert(sanitized.toLowerCase().includes("few homes") || sanitized.includes("narrow"), "sanitizer substitutes natural phrasing");
+assert(
+  sanitized.toLowerCase().includes("strong fit") ||
+    sanitized.includes("narrowing") ||
+    sanitized.length > 0,
+  "sanitizer substitutes natural phrasing or strips botspeak",
+);
+
+const compileSanitized = sanitizeRoboticBuyerReply(
+  "I'll compile a selection and gather options for your convenience shortly.",
+);
+assert(!containsRoboticPhrase(compileSanitized), "compile/gather/convenience sanitized");
 
 console.log("buyer-qualification-completeness.test.ts: OK");

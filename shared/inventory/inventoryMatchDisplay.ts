@@ -64,6 +64,6 @@ export function formatInventoryMatchSummaryForAi(input: InventoryMatchAiSummaryI
 
   return `Matching inventory (internal — buyer qualification is HIGH):
 - A few homes in ${location} align with current criteria (do NOT state an exact number)
-- You may offer to send the best matches or schedule a review — never paste addresses or URLs
-- Use natural phrasing like "a few homes stand out" — not "I found X properties"`;
+- You may offer to send the best matches or set up a showing — never paste addresses or URLs
+- Sound like a local agent: "a few homes look strong", "I've got a couple good options", "let me send the best matches" — never "compile a selection" or "for your convenience"`;
 }

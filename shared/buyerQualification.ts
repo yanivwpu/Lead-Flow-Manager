@@ -112,31 +112,31 @@ function pickSuggestedQuestion(
     const budget = formatBudgetLabel(profile);
     const bedsBaths = formatBedsBathsLabel(profile);
     if (budget && bedsBaths) {
-      return `Are we keeping the same budget (${budget}) and ${bedsBaths} minimum, or should I broaden the search?`;
+      return `Should I keep the search at ${budget} with ${bedsBaths} minimum, or widen it a bit?`;
     }
     if (budget) {
-      return `Are we keeping the same budget range (${budget}), or should I broaden it?`;
+      return `Should I keep you around ${budget}, or open the range a little?`;
     }
     if (bedsBaths) {
-      return `Are we keeping the same ${bedsBaths} minimum, or should I broaden the search?`;
+      return `Should I keep the ${bedsBaths} minimum, or widen beds/baths a bit?`;
     }
   }
 
   const priority: Array<{ key: string; question: string }> = [
-    { key: "buy_rent", question: "Are you looking to buy or rent?" },
-    { key: "budget", question: "What budget range should I stay within?" },
-    { key: "area", question: "Which city or area should I focus on?" },
-    { key: "property_type", question: "What type of home are you looking for — house, condo, or townhouse?" },
-    { key: "beds_baths", question: "How many bedrooms and bathrooms do you need at minimum?" },
-    { key: "timeline", question: "What kind of timeline are you working with?" },
-    { key: "financing", question: "Are you pre-approved, paying cash, or still exploring financing?" },
+    { key: "buy_rent", question: "Are you buying or renting?" },
+    { key: "budget", question: "What price range are you trying to stay in?" },
+    { key: "area", question: "Which city or neighborhood should I focus on?" },
+    { key: "property_type", question: "What type of home are you after — house, condo, or townhouse?" },
+    { key: "beds_baths", question: "How many beds and baths do you need at minimum?" },
+    { key: "timeline", question: "When are you hoping to move?" },
+    { key: "financing", question: "Are you pre-approved, paying cash, or still working on financing?" },
   ];
 
   for (const item of priority) {
     if (missing.includes(item.key)) return item.question;
   }
 
-  return "What matters most to you in this search — location, size, or specific features?";
+  return "What matters most right now — location, size, or specific features?";
 }
 
 export function assessBuyerQualification(input: BuyerQualificationInput): BuyerQualificationContext {
@@ -223,17 +223,17 @@ export function formatQualificationContextForAi(ctx: BuyerQualificationContext):
     ctx.known.length > 0 ? ctx.known.join(", ") : "not yet captured";
   const tierGuide =
     ctx.level === "low"
-      ? "QUALIFICATION TIER: LOW — Do NOT claim matches or say you found properties. Ask exactly ONE question from suggestedQuestion."
+      ? "QUALIFICATION TIER: LOW — Do NOT claim matches or say you found homes. Ask exactly ONE question from suggestedQuestion. Sound like a local agent, not a bot."
       : ctx.level === "medium"
-        ? "QUALIFICATION TIER: MEDIUM — Acknowledge known criteria briefly. Ask exactly ONE confirmation or gap question. Do NOT claim an exact match count."
-        : "QUALIFICATION TIER: HIGH — You may mention that a few homes stand out. Offer to send best matches or schedule a review. No exact counts.";
+        ? "QUALIFICATION TIER: MEDIUM — Briefly acknowledge what you know in plain language. Ask exactly ONE follow-up from suggestedQuestion. Do NOT claim an exact match count or say you are compiling options."
+        : "QUALIFICATION TIER: HIGH — You may say a few homes look like a strong fit and offer to send the best matches or set up a showing. No exact counts. Never sound like a virtual assistant.";
 
   return `Buyer qualification assessment:
 - Tier: ${ctx.level.toUpperCase()}
 - Known criteria: ${knownLine}
 - Priority gap: ${ctx.missing.slice(0, 3).join(", ") || "none"}
 - Suggested next question (ask ONLY this one): "${ctx.suggestedQuestion}"
-${ctx.confirmPriorFields ? "- Prior budget/beds/baths on file — confirm whether to keep or broaden, do not re-ask from scratch." : ""}
+${ctx.confirmPriorFields ? "- Prior budget/beds/baths on file — confirm keep vs widen; do not re-ask from scratch." : ""}
 ${tierGuide}`;
 }
 
@@ -243,23 +243,42 @@ export function sanitizeRoboticBuyerReply(text: string): string {
   if (!out) return out;
 
   const replacements: Array<[RegExp, string]> = [
-    [/\bI(?:'ve| have) found \d+ propert(?:y|ies)\b/gi, "A few homes stand out"],
-    [/\bI found \d+ propert(?:y|ies)\b/gi, "A few homes stand out"],
-    [/\blet me check(?: our listings)?\b/gi, "I can narrow this down"],
-    [/\blet me verify(?: what we have)?\b/gi, "I can narrow this down"],
-    [/\bI(?:'ll| will) get back to you shortly\b/gi, "I can follow up with options"],
+    [/\bI(?:'ve| have) found \d+ propert(?:y|ies)\b/gi, "A few homes look like a strong fit"],
+    [/\bI found \d+ propert(?:y|ies)\b/gi, "A few homes look like a strong fit"],
+    [/\bI(?:'ll| will) compile(?: a selection)?(?: of homes)?\b/gi, "I've got a few good options"],
+    [/\bcompile(?: a selection)?(?: of homes)?\b/gi, "a few good options"],
+    [/\bI(?:'ll| will) gather(?: a)? options\b/gi, "Let me send the best matches"],
+    [/\bgather(?: a)? options\b/gi, "send the best matches"],
+    [/\b(?:and )?send (?:the )?options shortly\b/gi, "let me send the best matches"],
+    [/\bI(?:'ll| will) send (?:the )?options shortly\b/gi, "Let me send the best matches"],
+    [/\bfor your convenience\b/gi, ""],
+    [/\ba selection of homes\b/gi, "a few good homes"],
+    [/\bselection of (?:homes|properties|listings)\b/gi, "a few good options"],
+    [/\b(?:I(?:'ll| will)|let me) check(?: our listings)?\b/gi, ""],
+    [/\blet me check(?: our listings)?\b/gi, ""],
+    [/\blet me verify(?: what we have)?\b/gi, ""],
+    [/\bI(?:'ll| will) get back to you shortly\b/gi, "I'll follow up with the best fits"],
+    [/\b(?:I(?:'ll| will)|we(?:'ll| will)) follow up shortly\b/gi, "I'll follow up with the best fits"],
     [/\bwaiting for approval\b/gi, ""],
     [/\bI(?:'m| am) waiting for approval\b/gi, ""],
-    [/\bI(?:'ll| will) check our listings\b/gi, "I can narrow this down"],
+    [/\bI(?:'ll| will) check our listings\b/gi, ""],
     [/\bI searched our listings\b/gi, ""],
-    [/\bsearch(?:ing)? (?:for|our) listings\b/gi, "narrow this down"],
+    [/\bsearch(?:ing)? (?:for|our) listings\b/gi, "narrowing this down"],
+    [/\bvirtual assistant\b/gi, ""],
+    [/\bI(?:'ll| will) review(?: this)? at your convenience\b/gi, "Happy to walk you through the best fits"],
+    [/\bshortly\b/gi, ""],
   ];
 
   for (const [pattern, replacement] of replacements) {
     out = out.replace(pattern, replacement);
   }
 
-  return out.replace(/\s{2,}/g, " ").replace(/\s+([,.!?])/g, "$1").trim();
+  return out
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.!?])/g, "$1")
+    .replace(/^\s*[,–—-]\s*/g, "")
+    .replace(/\s*[,–—-]\s*$/g, "")
+    .trim();
 }
 
 export const ROBOTIC_PHRASE_PATTERNS = [
@@ -270,6 +289,12 @@ export const ROBOTIC_PHRASE_PATTERNS = [
   /\bI found \d+ propert/i,
   /\bcheck our listings\b/i,
   /\bsearched our listings\b/i,
+  /\bcompile(?: a selection)?\b/i,
+  /\bgather options\b/i,
+  /\bfor your convenience\b/i,
+  /\bselection of homes\b/i,
+  /\bsend (?:the )?options shortly\b/i,
+  /\bvirtual assistant\b/i,
 ] as const;
 
 export function containsRoboticPhrase(text: string): boolean {

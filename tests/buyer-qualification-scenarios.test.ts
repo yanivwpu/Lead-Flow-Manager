@@ -79,6 +79,7 @@ assert(
 assert(q2.confirmPriorFields === true, "scenario 2: confirms prior budget/beds/baths");
 assert(
   q2.suggestedQuestion.toLowerCase().includes("budget") ||
+    q2.suggestedQuestion.toLowerCase().includes("widen") ||
     q2.suggestedQuestion.toLowerCase().includes("broaden"),
   "scenario 2: budget/beds confirmation question",
 );
@@ -139,5 +140,14 @@ assert(typeof wsPayload.contactId === "string", "scenario 5: contactId present f
 const bad = "Let me check — I found 10 properties. Waiting for approval to share details.";
 const cleaned = sanitizeRoboticBuyerReply(bad);
 assert(!containsRoboticPhrase(cleaned), "scenario 6: no robotic phrases after cleanup");
+
+const assistantLike =
+  "I'll compile a selection of homes for your convenience and send the options shortly.";
+const cleanedAssistant = sanitizeRoboticBuyerReply(assistantLike);
+assert(!containsRoboticPhrase(cleanedAssistant), "scenario 6b: assistant phrasing removed");
+assert(
+  /good options|best matches|strong fit/i.test(cleanedAssistant),
+  "scenario 6b: natural agent phrasing substituted",
+);
 
 console.log("buyer-qualification-scenarios.test.ts: OK");
