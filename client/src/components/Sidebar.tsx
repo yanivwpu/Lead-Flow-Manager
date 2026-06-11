@@ -119,7 +119,7 @@ export function Sidebar() {
         className={cn(
           "hidden md:flex h-full flex-col bg-gray-50 z-20 transition-all duration-200 ease-in-out flex-shrink-0 overflow-x-hidden",
           isRTL ? "border-is" : "border-ie",
-          collapsed ? "w-16 items-center" : "w-[200px] items-stretch"
+          collapsed ? "w-16 min-w-16 items-center" : "w-[200px] min-w-[200px] items-stretch"
         )}
         data-testid="sidebar"
       >

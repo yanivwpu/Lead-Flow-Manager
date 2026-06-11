@@ -92,8 +92,8 @@ export function RecommendationCard({
     actions.length > 0 ? (
       <div
         className={cn(
-          "flex items-center justify-end gap-0.5 border-t border-gray-100 bg-gray-50/40 px-2",
-          isSidebar ? "py-0.5" : "py-1",
+          "flex items-center justify-end gap-0.5 border-t border-gray-100 bg-gray-50/40",
+          isSidebar ? "px-3 py-0.5" : "px-2 py-1",
         )}
       >
         {actions.map((action) => (
@@ -169,7 +169,7 @@ export function RecommendationCard({
             )}
           </button>
 
-          <div className="px-2.5 pt-1.5 pb-0.5 min-w-0">
+          <div className="px-3 pt-1.5 pb-0.5 min-w-0">
             <div className="flex items-start justify-between gap-2 min-w-0">
               <p
                 className="text-xs font-semibold text-gray-900 leading-snug line-clamp-2 min-w-0 flex-1"

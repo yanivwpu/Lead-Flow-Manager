@@ -224,27 +224,29 @@ export function MatchingListingsPanel({
 
       {previewMatches.length > 0 && (
         <div
-          className="space-y-1.5 min-w-0"
+          className="min-w-0"
           data-testid="matching-listings-cards"
           data-match-count={matches.length}
           data-rendered-count={previewMatches.length}
         >
-          {previewMatches.map((match) => (
-            <InventoryMatchRecommendationCard
-              key={match.listingId}
-              contactId={contactId}
-              contactFirstName={contactFirstName}
-              match={match}
-              saved={savedSet.has(match.listingId)}
-              onSavedChange={() => void refetch()}
-              onInsertComposerDraft={onInsertComposerDraft}
-              layout="sidebar"
-            />
-          ))}
+          <div className="space-y-1.5">
+            {previewMatches.map((match) => (
+              <InventoryMatchRecommendationCard
+                key={match.listingId}
+                contactId={contactId}
+                contactFirstName={contactFirstName}
+                match={match}
+                saved={savedSet.has(match.listingId)}
+                onSavedChange={() => void refetch()}
+                onInsertComposerDraft={onInsertComposerDraft}
+                layout="sidebar"
+              />
+            ))}
+          </div>
           {hasMoreMatches && (
             <button
               type="button"
-              className="text-[11px] font-medium text-violet-700 hover:text-violet-900 hover:underline w-full text-left py-1"
+              className="mt-2.5 block w-full text-left px-0.5 text-[11px] font-medium leading-snug text-violet-700 hover:text-violet-900 hover:underline"
               onClick={() => setAllMatchesOpen(true)}
               data-testid="button-view-all-matches"
             >
