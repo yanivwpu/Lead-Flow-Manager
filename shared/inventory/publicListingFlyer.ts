@@ -576,17 +576,21 @@ function buildFlyerBottomRow(
   return `<section class="flyer-bottom-row">${mapCol}${qrCol}${agentCol}</section>`;
 }
 
+const PRINT_FLYER_HINT =
+  "For best print results, turn off browser Headers and footers.";
+
 function renderFlyerHeader(listingLabel: "FOR SALE" | "FOR RENT"): string {
   return `<header class="flyer-header">
-      <div class="header-actions no-print">
-        <p class="print-hint">For best print results, turn off browser Headers and footers.</p>
-        <div class="header-action-btns">
-          <button type="button" class="icon-btn" id="btn-share" aria-label="Share listing">${SHARE_ICON_SVG}</button>
-          <button type="button" class="icon-btn" id="btn-print" aria-label="Print flyer">${PRINT_ICON_SVG}</button>
-        </div>
-      </div>
       <div class="listing-banner" aria-label="${escapeHtml(listingLabel)}">${escapeHtml(listingLabel)}</div>
     </header>`;
+}
+
+/** Screen-only share/print — hidden from print layout via .no-print. */
+function renderFlyerFloatingActions(): string {
+  return `<div class="flyer-floating-actions no-print" aria-label="Page actions">
+      <button type="button" class="icon-btn" id="btn-share" aria-label="Share listing">${SHARE_ICON_SVG}</button>
+      <button type="button" class="icon-btn" id="btn-print" aria-label="Print flyer" title="${escapeHtml(PRINT_FLYER_HINT)}">${PRINT_ICON_SVG}</button>
+    </div>`;
 }
 
 function formatBedStat(beds: number | null): string | null {
@@ -892,14 +896,13 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     .flyer { max-width: 920px; margin: 0 auto; background: var(--surface); }
     .flyer-header {
       display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 12px 20px 0;
+      align-items: stretch;
+      justify-content: flex-end;
+      padding: 0;
       background: #fff;
     }
     .listing-banner {
-      margin: 0 0 0 auto;
+      margin: 0;
       padding: 10px 28px 10px 20px;
       font-size: 1.125rem;
       font-weight: 800;
@@ -908,23 +911,34 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       color: #fff;
       background: var(--brand-green);
       transform: skewX(-12deg);
+      transform-origin: top right;
       box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
     }
-    .header-actions {
+    .flyer-floating-actions {
+      position: fixed;
+      right: max(12px, env(safe-area-inset-right, 0px));
+      bottom: max(12px, env(safe-area-inset-bottom, 0px));
+      z-index: 50;
       display: flex;
-      flex-direction: column;
-      align-items: flex-start;
+      align-items: center;
       gap: 6px;
-      flex-shrink: 0;
-      max-width: min(240px, 52%);
+      padding: 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1);
+      backdrop-filter: blur(8px);
     }
-    .print-hint {
-      margin: 0;
-      font-size: 0.6875rem;
-      line-height: 1.35;
-      color: #94a3b8;
+    .flyer-floating-actions .icon-btn {
+      width: 34px;
+      height: 34px;
+      border-color: transparent;
+      background: transparent;
     }
-    .header-action-btns { display: flex; align-items: center; gap: 8px; }
+    .flyer-floating-actions .icon-btn:hover {
+      background: #f1f5f9;
+      border-color: var(--border);
+    }
     .icon-btn {
       display: inline-flex;
       align-items: center;
@@ -1334,8 +1348,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       .listing-banner { font-size: 0.9375rem; padding: 8px 20px 8px 14px; }
       .gallery-nav { width: 34px; height: 34px; }
       .key-stat-sep { margin: 0 6px; }
-      .header-actions { max-width: 100%; }
-      .print-hint { font-size: 0.625rem; }
+      .flyer-floating-actions { right: 10px; bottom: 10px; }
     }
   </style>
 </head>
@@ -1350,6 +1363,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       ${renderPoweredByFooter()}
     </div>
   </div>
+  ${renderFlyerFloatingActions()}
   <div id="toast" class="toast no-print" role="status" aria-live="polite">Listing link copied.</div>
   <script>
     (function () {
