@@ -471,6 +471,8 @@ TONE: ${toneDesc} — like a confident local agent texting a client: warm, direc
 LANGUAGE: ${langInstruction}
 TONE: Be ${toneDesc} — concise, human, and commercially sharp.`;
 
+    prompt += `
+
 YOUR GOAL: ${businessKnowledge?.salesGoals || "Move the lead forward toward qualification or a next action."}
 
 BUSINESS CONTEXT:
