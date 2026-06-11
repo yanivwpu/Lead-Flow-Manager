@@ -116,6 +116,13 @@ function extractPropertyTypesFromText(lower: string): Array<"condo" | "house" | 
   return [...new Set(types)];
 }
 
+function trimAreaLabel(area: string): string {
+  return area
+    .replace(/\s+(between|under|up to|around|from|max)\b.*$/i, "")
+    .replace(/\s+\$\s*.*$/i, "")
+    .trim();
+}
+
 function extractAreasFromText(text: string, lower: string): string[] {
   const areaHits: string[] = [];
 
@@ -123,11 +130,11 @@ function extractAreasFromText(text: string, lower: string): string[] {
     /\b((?:east|west|north|south)\s+of\s+(?:the\s+)?[^.?]+?(?:\s+in\s+[A-Za-z][A-Za-z\s]+)?)/i,
   );
   if (geoM?.[1]) {
-    areaHits.push(geoM[1].trim());
+    areaHits.push(trimAreaLabel(geoM[1]));
   }
 
   for (const m of text.matchAll(/\b(?:in|near|around)\s+([A-Za-z][A-Za-z\s]{1,40})/g)) {
-    const area = m[1]?.trim();
+    const area = trimAreaLabel(m[1]?.trim() || "");
     if (!area) continue;
     if (!areaHits.some((a) => a.toLowerCase() === area.toLowerCase())) {
       areaHits.push(area);
@@ -452,12 +459,20 @@ export function heuristicPatchFromTranscript(
     patch.targetAreas = { value: areaHits, ...inf(0.8, "area in message") };
   }
 
+  const bedBathSlash = lower.match(/(\d+)\s*\/\s*(\d+(?:\.\d+)?)/);
+
   const types = extractPropertyTypesFromText(lower);
+  if (
+    !types.length &&
+    bedBathSlash &&
+    /\bpool\b/i.test(lower) &&
+    (/\bshow me\b/i.test(lower) || /\blooking for\b/i.test(lower))
+  ) {
+    types.push("house");
+  }
   if (types.length) {
     patch.propertyTypes = { value: types, ...inf(0.82, "property type in message") };
   }
-
-  const bedBathSlash = lower.match(/(\d+)\s*\/\s*(\d+(?:\.\d+)?)/);
   if (bedBathSlash) {
     patch.bedsMin = { value: parseInt(bedBathSlash[1], 10), ...inf(0.86, "beds in message") };
     patch.bathsMin = { value: parseFloat(bedBathSlash[2]), ...inf(0.86, "baths in message") };

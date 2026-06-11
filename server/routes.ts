@@ -10594,9 +10594,17 @@ export async function registerRoutes(
                   assessBuyerQualification,
                   formatQualificationContextForAi,
                 } = await import("@shared/buyerQualification");
+                const { findMatchingListingsForContact, getInventoryMatchSummaryForContact } =
+                  await import("./inventory/inventoryMatchingService");
+                const matchResult = await findMatchingListingsForContact(
+                  convForPrefs.contactId,
+                  userId,
+                );
                 const cf = (contactForPrefs.customFields || {}) as Record<string, unknown>;
                 const qualification = assessBuyerQualification({
                   profile,
+                  inboundText: lastUserInbound,
+                  matchCount: matchResult.matchCount,
                   buyRentIntent:
                     typeof contactContext?.intent === "string"
                       ? contactContext.intent
@@ -10619,9 +10627,6 @@ export async function registerRoutes(
                 if (aiPrefCtx.financing) contextPatch.financing = aiPrefCtx.financing;
                 else delete contextPatch.financing;
 
-                const { getInventoryMatchSummaryForContact } = await import(
-                  "./inventory/inventoryMatchingService"
-                );
                 const inventorySummary = await getInventoryMatchSummaryForContact(
                   convForPrefs.contactId,
                   userId,

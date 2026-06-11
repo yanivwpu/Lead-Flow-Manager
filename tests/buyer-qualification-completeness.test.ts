@@ -7,6 +7,7 @@ import {
   formatQualificationContextForAi,
   sanitizeRoboticBuyerReply,
   containsRoboticPhrase,
+  containsWidenQualificationPhrase,
 } from "../shared/buyerQualification";
 import { emptyBuyerPreferenceProfile } from "../shared/buyerPreferenceSchema";
 import type { BuyerPreferenceProfile } from "../shared/buyerPreferenceSchema";
@@ -30,7 +31,7 @@ const newLeadProfile = {
 } as BuyerPreferenceProfile;
 
 const newLeadQ = assessBuyerQualification({ profile: newLeadProfile });
-assert(newLeadQ.level === "medium", "SFH+pool+Pompano without budget is MEDIUM");
+assert(newLeadQ.level === "medium", "SFH+Pompano without budget is MEDIUM");
 assert(
   newLeadQ.suggestedQuestion.includes("buy") || newLeadQ.suggestedQuestion.includes("rent"),
   "new lead asks buy/rent first",
@@ -52,16 +53,16 @@ const existingQ = assessBuyerQualification({
   profile: existingProfile,
   leadType: "buyer",
 });
-assert(existingQ.confirmPriorFields === true, "existing budget+beds+baths triggers confirm");
+assert(existingQ.confirmPriorFields === true, "existing budget+beds/baths on file");
 assert(
-  existingQ.suggestedQuestion.toLowerCase().includes("budget") ||
-    existingQ.suggestedQuestion.toLowerCase().includes("widen") ||
-    existingQ.suggestedQuestion.toLowerCase().includes("broaden"),
-  "existing profile suggests budget/beds confirmation",
+  !existingQ.suggestedQuestion.toLowerCase().includes("widen") &&
+    !existingQ.suggestedQuestion.toLowerCase().includes("broaden"),
+  "MEDIUM never suggests widen/broaden",
 );
 
 const highProfile = {
   ...existingProfile,
+  pool: inf(true),
   timeline: inf("asap"),
   financingStatus: inf("pre_approved"),
 } as BuyerPreferenceProfile;
@@ -100,6 +101,7 @@ const pompanoHighQ = assessBuyerQualification({
   buyRentIntent: "buyer",
 });
 assert(pompanoHighQ.level === "high", "Pompano 5/4 pool $1M-$1.5M is HIGH");
+assert(pompanoHighQ.inventoryMode, "complete criteria enters inventory mode");
 assert(
   !pompanoHighQ.suggestedQuestion.toLowerCase().includes("widen") &&
     !pompanoHighQ.suggestedQuestion.toLowerCase().includes("broaden"),
@@ -110,10 +112,7 @@ assert(
   "HIGH pool buyer gets inventory CTA",
 );
 const pompanoCtx = formatQualificationContextForAi(pompanoHighQ);
-assert(
-  pompanoCtx.includes("inventory/showing") || pompanoCtx.includes("HIGH"),
-  "HIGH AI context directs inventory/showing behavior",
-);
+assert(pompanoCtx.includes("INVENTORY MODE"), "HIGH AI context is inventory mode");
 
 const sanitized = sanitizeRoboticBuyerReply(
   "Let me check our listings — I found 10 properties waiting for approval.",
@@ -130,5 +129,10 @@ const compileSanitized = sanitizeRoboticBuyerReply(
   "I'll compile a selection and gather options for your convenience shortly.",
 );
 assert(!containsRoboticPhrase(compileSanitized), "compile/gather/convenience sanitized");
+
+const widenSanitized = sanitizeRoboticBuyerReply(
+  "Should I keep the search at $1M–$1.5M with these features, or would you like to widen it a bit?",
+);
+assert(!containsWidenQualificationPhrase(widenSanitized), "widen qualification sanitized");
 
 console.log("buyer-qualification-completeness.test.ts: OK");

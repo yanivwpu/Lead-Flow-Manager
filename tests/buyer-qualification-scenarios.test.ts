@@ -89,10 +89,9 @@ if (q2.level === "high") {
   );
 } else {
   assert(
-    q2.suggestedQuestion.toLowerCase().includes("budget") ||
-      q2.suggestedQuestion.toLowerCase().includes("widen") ||
-      q2.suggestedQuestion.toLowerCase().includes("broaden"),
-    "scenario 2: MEDIUM budget/beds confirmation question",
+    !q2.suggestedQuestion.toLowerCase().includes("widen") &&
+      !q2.suggestedQuestion.toLowerCase().includes("broaden"),
+    "scenario 2: MEDIUM uses gap question not widen",
   );
 }
 

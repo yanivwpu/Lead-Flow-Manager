@@ -13,17 +13,26 @@ export type BuyerQualificationContext = {
   missing: string[];
   suggestedQuestion: string;
   confirmPriorFields: boolean;
+  criteriaComplete: boolean;
+  /** Exit qualification — present inventory (matches exist or criteria fully set). */
+  inventoryMode: boolean;
   hasBuyRentIntent: boolean;
   hasBudget: boolean;
   hasArea: boolean;
   hasPropertyType: boolean;
+  hasPool: boolean;
   mayPresentMatches: boolean;
+  matchCount: number;
 };
 
 export type BuyerQualificationInput = {
   profile: BuyerPreferenceProfile;
   buyRentIntent?: string | null;
   leadType?: string | null;
+  /** Latest inbound line — used for buy/show intent. */
+  inboundText?: string | null;
+  /** Persisted inventory match count — unlocks inventory mode when > 0. */
+  matchCount?: number;
 };
 
 const MIN_CONFIDENCE = 0.5;
@@ -60,6 +69,8 @@ export function parseSqftMinFromProfile(profile: BuyerPreferenceProfile): number
 function resolveBuyRentIntent(input: BuyerQualificationInput): boolean {
   const lt = (input.leadType || "").toLowerCase();
   if (lt === "buyer" || lt === "renter" || lt === "tenant") return true;
+  const inbound = (input.inboundText || "").toLowerCase();
+  if (/\bshow me\b/.test(inbound) || /\blooking for\b/.test(inbound)) return true;
   const intent = (input.buyRentIntent || "").toLowerCase();
   if (!intent) return false;
   return (
@@ -103,35 +114,23 @@ function formatBedsBathsLabel(profile: BuyerPreferenceProfile): string | null {
   return parts.length > 0 ? parts.join("/") : null;
 }
 
-/** HIGH tier — inventory/showing CTA, never broaden/widen qualification. */
-function pickHighTierMatchQuestion(profile: BuyerPreferenceProfile): string {
+/** Inventory/showing CTA — never broaden/widen/reconfirm known criteria. */
+function pickInventoryModeReply(profile: BuyerPreferenceProfile, matchCount: number): string {
   const areas = fieldActive(profile.targetAreas) ? profile.targetAreas!.value || [] : [];
   const areaHint = areas[0] ? String(areas[0]).trim() : "";
-  if (areaHint) {
+  if (matchCount > 0 && areaHint) {
     return `A few homes in ${areaHint} look like a strong fit — want me to send the best matches?`;
   }
-  return "I found several homes that match what you're looking for. Would you like me to send the top options?";
+  if (matchCount > 0) {
+    return "I found several homes that match those criteria. Would you like me to send the top options?";
+  }
+  if (areaHint) {
+    return `I've got enough to start — want me to pull the best matches in ${areaHint}?`;
+  }
+  return "I've got enough to start narrowing this down — want me to send the top options?";
 }
 
-function pickSuggestedQuestion(
-  profile: BuyerPreferenceProfile,
-  missing: string[],
-  confirmPriorFields: boolean,
-): string {
-  if (confirmPriorFields) {
-    const budget = formatBudgetLabel(profile);
-    const bedsBaths = formatBedsBathsLabel(profile);
-    if (budget && bedsBaths) {
-      return `Should I keep the search at ${budget} with ${bedsBaths} minimum, or widen it a bit?`;
-    }
-    if (budget) {
-      return `Should I keep you around ${budget}, or open the range a little?`;
-    }
-    if (bedsBaths) {
-      return `Should I keep the ${bedsBaths} minimum, or widen beds/baths a bit?`;
-    }
-  }
-
+function pickGapQuestion(missing: string[]): string {
   const priority: Array<{ key: string; question: string }> = [
     { key: "buy_rent", question: "Are you buying or renting?" },
     { key: "budget", question: "What price range are you trying to stay in?" },
@@ -149,6 +148,27 @@ function pickSuggestedQuestion(
   return "What matters most right now — location, size, or specific features?";
 }
 
+/** Core search fields the agent needs before presenting inventory. */
+function isCriteriaComplete(input: {
+  hasBuyRentIntent: boolean;
+  hasArea: boolean;
+  hasBudget: boolean;
+  hasBeds: boolean;
+  hasBaths: boolean;
+  hasPropertyType: boolean;
+  hasPool: boolean;
+}): boolean {
+  return (
+    input.hasBuyRentIntent &&
+    input.hasArea &&
+    input.hasBudget &&
+    input.hasBeds &&
+    input.hasBaths &&
+    input.hasPropertyType &&
+    input.hasPool
+  );
+}
+
 export function assessBuyerQualification(input: BuyerQualificationInput): BuyerQualificationContext {
   const { profile } = input;
   const hasBuyRentIntent = resolveBuyRentIntent(input);
@@ -161,17 +181,21 @@ export function assessBuyerQualification(input: BuyerQualificationInput): BuyerQ
   const hasBeds = fieldActive(profile.bedsMin) && profile.bedsMin!.value > 0;
   const hasBaths = fieldActive(profile.bathsMin) && profile.bathsMin!.value > 0;
   const hasBedsBaths = hasBeds || hasBaths;
+  const hasPool = fieldActive(profile.pool) && profile.pool!.value === true;
   const hasTimeline = fieldActive(profile.timeline);
   const hasFinancing = fieldActive(profile.financingStatus);
   const strongMustHave = hasStrongMustHave(profile);
   const sqftMin = parseSqftMinFromProfile(profile);
+  const matchCount = Math.max(0, input.matchCount ?? 0);
 
   const missing: string[] = [];
   if (!hasBuyRentIntent) missing.push("buy_rent");
   if (!hasBudget) missing.push("budget");
   if (!hasArea) missing.push("area");
   if (!hasPropertyType) missing.push("property_type");
-  if (!hasBedsBaths) missing.push("beds_baths");
+  if (!hasBeds) missing.push("beds");
+  if (!hasBaths) missing.push("baths");
+  if (!hasPool && !strongMustHave) missing.push("pool");
   if (!hasTimeline) missing.push("timeline");
   if (!hasFinancing) missing.push("financing");
   if (sqftMin == null) missing.push("sqft");
@@ -179,21 +203,33 @@ export function assessBuyerQualification(input: BuyerQualificationInput): BuyerQ
   const known = buildKnownLabels(profile);
   const confirmPriorFields = hasBudget && hasBedsBaths;
 
+  const criteriaComplete = isCriteriaComplete({
+    hasBuyRentIntent,
+    hasArea,
+    hasBudget,
+    hasBeds,
+    hasBaths,
+    hasPropertyType,
+    hasPool: hasPool || strongMustHave,
+  });
+
   const majorCount = [hasBuyRentIntent, hasBudget, hasArea, hasPropertyType].filter(Boolean).length;
-  const searchReady = hasArea && hasPropertyType && (hasBudget || strongMustHave);
+  const inventoryReady =
+    hasBuyRentIntent &&
+    hasArea &&
+    hasBudget &&
+    hasBeds &&
+    hasBaths &&
+    (hasPropertyType || hasPool || strongMustHave);
+
+  const inventoryMode = criteriaComplete || (inventoryReady && matchCount > 0);
 
   let level: QualificationLevel;
-  if (!hasArea && !hasPropertyType) {
-    level = "low";
-  } else if (
-    searchReady &&
-    hasBuyRentIntent &&
-    hasBudget &&
-    hasBedsBaths &&
-    (hasTimeline || hasFinancing || (strongMustHave && hasArea && hasPropertyType))
-  ) {
+  if (inventoryMode) {
     level = "high";
-  } else if (searchReady || (hasArea && strongMustHave) || majorCount >= 2) {
+  } else if (!hasArea && !hasBudget && !hasBedsBaths) {
+    level = "low";
+  } else if (inventoryReady || (hasArea && strongMustHave) || majorCount >= 2) {
     level = "medium";
   } else {
     level = "low";
@@ -206,14 +242,15 @@ export function assessBuyerQualification(input: BuyerQualificationInput): BuyerQ
       (strongMustHave ? 10 : 0) +
       (hasTimeline ? 6 : 0) +
       (hasFinancing ? 6 : 0) +
-      (sqftMin != null ? 4 : 0),
+      (sqftMin != null ? 4 : 0) +
+      (matchCount > 0 ? 12 : 0),
   );
 
-  const useConfirmQuestion = confirmPriorFields && level === "medium";
-  const suggestedQuestion =
-    level === "high"
-      ? pickHighTierMatchQuestion(profile)
-      : pickSuggestedQuestion(profile, missing, useConfirmQuestion);
+  const suggestedQuestion = inventoryMode
+    ? pickInventoryModeReply(profile, matchCount)
+    : level === "high"
+      ? pickInventoryModeReply(profile, matchCount)
+      : pickGapQuestion(missing);
 
   return {
     level,
@@ -222,35 +259,53 @@ export function assessBuyerQualification(input: BuyerQualificationInput): BuyerQ
     missing,
     suggestedQuestion,
     confirmPriorFields,
+    criteriaComplete,
+    inventoryMode,
     hasBuyRentIntent,
     hasBudget,
     hasArea,
     hasPropertyType,
-    mayPresentMatches: level === "high",
+    hasPool: hasPool || strongMustHave,
+    mayPresentMatches: level === "high" || inventoryMode,
+    matchCount,
   };
 }
 
 export function formatQualificationContextForAi(ctx: BuyerQualificationContext): string {
   const knownLine =
     ctx.known.length > 0 ? ctx.known.join(", ") : "not yet captured";
+
+  if (ctx.inventoryMode) {
+    return `Buyer qualification assessment:
+- Tier: HIGH — INVENTORY MODE (exit qualification; do not ask qualifying questions)
+- Criteria complete: yes
+- Inventory matches: ${ctx.matchCount > 0 ? `${ctx.matchCount} strong match(es) on file` : "criteria set — present options"}
+- Known criteria (do NOT reconfirm): ${knownLine}
+- Reply direction: "${ctx.suggestedQuestion}"
+INVENTORY MODE RULES:
+- Behave like a buyer's agent ready to present homes — offer top matches, property details, a shortlist, or a showing
+- FORBIDDEN: widen/broaden search, reconfirm budget, reconfirm beds/baths, ask for criteria already listed above
+- Allowed: "A few homes look like a strong fit", "I found several homes that match", offer to send top options`;
+  }
+
   const tierGuide =
     ctx.level === "low"
       ? "QUALIFICATION TIER: LOW — Do NOT claim matches or say you found homes. Ask exactly ONE question from suggestedQuestion. Sound like a local agent, not a bot."
       : ctx.level === "medium"
-        ? "QUALIFICATION TIER: MEDIUM — Briefly acknowledge what you know in plain language. Ask exactly ONE follow-up from suggestedQuestion. Do NOT claim an exact match count or say you are compiling options."
-        : "QUALIFICATION TIER: HIGH — Core search criteria are set. Transition to inventory/showing behavior: offer to send the best matches or set up a showing. Do NOT ask to loosen or expand the search. No exact counts. Never sound like a virtual assistant.";
+        ? "QUALIFICATION TIER: MEDIUM — Briefly acknowledge what you know in plain language. Ask exactly ONE gap question from suggestedQuestion. Do NOT widen/broaden the search. Do NOT reconfirm budget or beds/baths already known. Do NOT claim an exact match count."
+        : "QUALIFICATION TIER: HIGH — Transition to inventory/showing. Offer to send best matches or set up a showing. Do NOT widen/broaden or reconfirm known criteria.";
 
   const actionLine =
     ctx.level === "high"
-      ? `- Suggested reply direction (inventory/showing CTA — do NOT loosen criteria): "${ctx.suggestedQuestion}"`
+      ? `- Suggested reply direction: "${ctx.suggestedQuestion}"`
       : `- Suggested next question (ask ONLY this one): "${ctx.suggestedQuestion}"`;
 
   return `Buyer qualification assessment:
 - Tier: ${ctx.level.toUpperCase()}
+- Criteria complete: ${ctx.criteriaComplete ? "yes" : "no"}
 - Known criteria: ${knownLine}
 - Priority gap: ${ctx.missing.slice(0, 3).join(", ") || "none"}
 ${actionLine}
-${ctx.confirmPriorFields && ctx.level === "medium" ? "- Prior budget/beds/baths on file — confirm keep vs widen; do not re-ask from scratch." : ""}
 ${tierGuide}`;
 }
 
@@ -259,7 +314,19 @@ export function sanitizeRoboticBuyerReply(text: string): string {
   let out = text.trim();
   if (!out) return out;
 
+  if (containsWidenQualificationPhrase(out)) {
+    return "A few homes look like a strong fit — want me to send the best matches?";
+  }
+
   const replacements: Array<[RegExp, string]> = [
+    [
+      /\bshould i keep (?:the search )?(?:at |around )?[^.?!]*(?:widen|broaden|open the range)[^.?!]*\??/gi,
+      "A few homes look like a strong fit — want me to send the best matches?",
+    ],
+    [
+      /\b(?:or )?(?:would you like to )?(?:widen|broaden)(?: it| the search)?(?: a bit)?\??/gi,
+      "want me to send the best matches?",
+    ],
     [/\bI(?:'ve| have) found \d+ propert(?:y|ies)\b/gi, "A few homes look like a strong fit"],
     [/\bI found \d+ propert(?:y|ies)\b/gi, "A few homes look like a strong fit"],
     [/\bI(?:'ll| will) compile(?: a selection)?(?: of homes)?\b/gi, "I've got a few good options"],
@@ -296,6 +363,18 @@ export function sanitizeRoboticBuyerReply(text: string): string {
     .replace(/^\s*[,–—-]\s*/g, "")
     .replace(/\s*[,–—-]\s*$/g, "")
     .trim();
+}
+
+export const WIDEN_QUALIFICATION_PATTERNS = [
+  /\bwiden it\b/i,
+  /\bwould you like to widen\b/i,
+  /\bbroaden\b/i,
+  /\bkeep the search at\b/i,
+  /\bopen the range\b/i,
+] as const;
+
+export function containsWidenQualificationPhrase(text: string): boolean {
+  return WIDEN_QUALIFICATION_PATTERNS.some((p) => p.test(text));
 }
 
 export const ROBOTIC_PHRASE_PATTERNS = [
