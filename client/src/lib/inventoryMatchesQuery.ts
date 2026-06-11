@@ -7,6 +7,24 @@ export function inventoryMatchesQueryKey(contactId: string) {
   return [`/api/contacts/${contactId}/inventory-matches`] as const;
 }
 
+export function inventoryMatchesQueryKeyContactId(queryKey: readonly unknown[]): string | null {
+  const key = queryKey[0];
+  if (typeof key !== "string") return null;
+  const match = key.match(/^\/api\/contacts\/([^/]+)\/inventory-matches$/);
+  return match?.[1] ?? null;
+}
+
+/** Keep cached matches only while refetching the same contact — never across contacts. */
+export function inventoryMatchesPlaceholderData(
+  contactId: string,
+  previousData: InventoryMatchesResponse | undefined,
+  previousQuery: { queryKey?: readonly unknown[] } | undefined,
+): InventoryMatchesResponse | undefined {
+  const prevContactId = inventoryMatchesQueryKeyContactId(previousQuery?.queryKey ?? []);
+  if (prevContactId && prevContactId === contactId) return previousData;
+  return undefined;
+}
+
 export class InventoryMatchesFetchError extends Error {
   readonly status: number;
 

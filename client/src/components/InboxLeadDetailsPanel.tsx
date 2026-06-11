@@ -100,8 +100,9 @@ import { fetchInventoryStatus, fetchInventorySources, isInventorySourceConnected
 import { CopilotInventoryEmptyState } from "@/components/inventory/CopilotInventoryEmptyState";
 import {
   shouldShowCopilotBuyerPreferences,
-  shouldShowCopilotInventoryPanels,
+  shouldShowCopilotInventoryForContact,
 } from "@/lib/copilotRgeVisibility";
+import { normalizeBuyerPreferenceProfile } from "@shared/buyerPreferenceSchema";
 import { isQualificationDowngrade, systemTagForQualification } from "@shared/leadQualification";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
@@ -1422,7 +1423,20 @@ export function InboxLeadDetailsPanel({
     [inventoryStatus, businessKnowledge?.industry, contact.customFields],
   );
 
-  const showCopilotInventoryPanels = shouldShowCopilotInventoryPanels(inventoryStatus);
+  const hasBuyerPreferences = useMemo(() => {
+    const profile = normalizeBuyerPreferenceProfile(contact.buyerPreferenceProfile);
+    return profile.profileStatus !== "empty";
+  }, [contact.buyerPreferenceProfile]);
+
+  const showCopilotInventoryPanels = useMemo(
+    () =>
+      shouldShowCopilotInventoryForContact({
+        inventoryStatus,
+        customFields: contact.customFields,
+        hasBuyerPreferences,
+      }),
+    [inventoryStatus, contact.customFields, hasBuyerPreferences],
+  );
 
   const customerInsights = useMemo(
     () =>

@@ -169,12 +169,17 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   const [autoSkippedWithDraft, setAutoSkippedWithDraft] = useState(false);
   const [autoSendBlockedMessage, setAutoSendBlockedMessage] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const prevIdRef = useRef<string | null>(null);
+  const prevScopeRef = useRef<{ conversationId: string | null; contactId: string | null }>({
+    conversationId: null,
+    contactId: null,
+  });
   const lastAutoReplyKeyRef = useRef<string>("");
   const lastSuggestDraftKeyRef = useRef<string>("");
   /** User chose Manual while workspace default is suggest — don't force Suggest back on settings sync. */
   const userLockedManualRef = useRef(false);
   const autoReplyInFlightRef = useRef(false);
+  const suggestGenerationRef = useRef(0);
+  const autoReplyGenerationRef = useRef(0);
 
   useImperativeHandle(ref, () => ({
     insertExternalDraft: (text: string, options?: { preserveAiMode?: boolean; primaryPhotoUrl?: string | null }) => {
@@ -226,22 +231,25 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     el.style.overflowY = next >= MAX_TEXTAREA_HEIGHT ? "auto" : "hidden";
   }, [value]);
 
-  // Reset when conversation changes
+  // Reset when active contact/conversation changes — clear parent draft and ignore in-flight AI.
   useEffect(() => {
-    if (conversationId !== prevIdRef.current) {
-      prevIdRef.current = conversationId;
-      setAiDraft(null);
-      setIsDrafting(false);
-      setAutoOverride(false);
-      setAutoPhase("idle");
-      setAutoSkippedWithDraft(false);
-      setAutoSendBlockedMessage(null);
-      lastAutoReplyKeyRef.current = "";
-      lastSuggestDraftKeyRef.current = "";
-      userLockedManualRef.current = false;
-      autoReplyInFlightRef.current = false;
-    }
-  }, [conversationId]);
+    const prev = prevScopeRef.current;
+    if (conversationId === prev.conversationId && contactId === prev.contactId) return;
+    prevScopeRef.current = { conversationId, contactId };
+    suggestGenerationRef.current += 1;
+    autoReplyGenerationRef.current += 1;
+    setAiDraft(null);
+    setIsDrafting(false);
+    setAutoOverride(false);
+    setAutoPhase("idle");
+    setAutoSkippedWithDraft(false);
+    setAutoSendBlockedMessage(null);
+    lastAutoReplyKeyRef.current = "";
+    lastSuggestDraftKeyRef.current = "";
+    userLockedManualRef.current = false;
+    autoReplyInFlightRef.current = false;
+    onChange("");
+  }, [conversationId, contactId, onChange]);
 
   // Sync composer mode from business settings (Full Auto only when business + plan allow).
   useEffect(() => {
@@ -271,6 +279,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   // ─── Auto-reply engine ───────────────────────────────────────────────────
   const executeAutoReply = useCallback(async (history: AIComposerMessage[]) => {
     if (!conversationId || !aiEnabled || autoReplyInFlightRef.current) return;
+    const generation = autoReplyGenerationRef.current;
     autoReplyInFlightRef.current = true;
     setAutoPhase("typing");
     setAutoSendBlockedMessage(null);
@@ -303,6 +312,10 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
 
     // Natural human-like delay before "typing"
     await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
+    if (generation !== autoReplyGenerationRef.current) {
+      autoReplyInFlightRef.current = false;
+      return;
+    }
 
     try {
       const res = await fetch("/api/ai/suggest-reply", {
@@ -318,6 +331,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       });
 
       if (res.ok) {
+        if (generation !== autoReplyGenerationRef.current) return;
         const data = await res.json();
         const suggestion: string = data.suggestion || "";
         const allowed = data.autoSendAllowed === true;
@@ -349,12 +363,14 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
         if (willSend && onAutoSend) {
           onAutoSend(suggestion);
           setAutoPhase("replied");
-          setTimeout(() => setAutoPhase("waiting"), 5000);
+          setTimeout(() => {
+            if (generation === autoReplyGenerationRef.current) setAutoPhase("waiting");
+          }, 5000);
         } else {
           // Stay in Auto; block only this send. Surface suggestion for manual review when available.
           if (trimmed.length > 0) {
             setAiDraft(trimmed);
-            onChange(trimmed);
+            if (generation === autoReplyGenerationRef.current) onChange(trimmed);
             setAutoSkippedWithDraft(true);
           } else {
             setAutoSkippedWithDraft(false);
@@ -399,9 +415,11 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       setAutoSendBlockedMessage(null);
       setAutoPhase("waiting");
     } finally {
-      autoReplyInFlightRef.current = false;
+      if (generation === autoReplyGenerationRef.current) {
+        autoReplyInFlightRef.current = false;
+      }
     }
-  }, [conversationId, aiEnabled, contactContext, contactId, handoffKeywords, onAutoSend]);
+  }, [conversationId, aiEnabled, contactContext, contactId, handoffKeywords, onAutoSend, onChange]);
 
   // Watch messages: when in auto mode and last message is from lead → auto-reply
   const lastMsg = messages[messages.length - 1];
@@ -445,11 +463,13 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   const loadSuggestDraftForInbound = useCallback(
     async (history: AIComposerMessage[]) => {
       if (!conversationId || !aiEnabled) return;
+      const generation = suggestGenerationRef.current;
       setIsDrafting(true);
       setAiDraft(null);
       onChange("");
       if (demoMode) {
         await new Promise((r) => setTimeout(r, 700 + Math.random() * 400));
+        if (generation !== suggestGenerationRef.current) return;
         const demo = DEMO_SUGGESTIONS[_demoCycleIdx % DEMO_SUGGESTIONS.length];
         _demoCycleIdx++;
         setAiDraft(demo);
@@ -468,6 +488,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
             ...(contactContext ? { contactContext } : {}),
           }),
         });
+        if (generation !== suggestGenerationRef.current) return;
         if (res.ok) {
           const data = await res.json();
           const suggestion = data.suggestion || null;
@@ -477,9 +498,9 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
           setAiDraft(null);
         }
       } catch {
-        setAiDraft(null);
+        if (generation === suggestGenerationRef.current) setAiDraft(null);
       } finally {
-        setIsDrafting(false);
+        if (generation === suggestGenerationRef.current) setIsDrafting(false);
       }
     },
     [conversationId, aiEnabled, demoMode, contactContext, onChange],
@@ -504,6 +525,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
 
   const fetchSuggestion = useCallback(async () => {
     if (!conversationId || !aiEnabled || aiCooldown) return;
+    const generation = suggestGenerationRef.current;
     setIsDrafting(true);
     setAiDraft(null);
     onChange("");
@@ -513,6 +535,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     // Demo mode: simulate a realistic reply without a real API call
     if (demoMode) {
       await new Promise(r => setTimeout(r, 900 + Math.random() * 600));
+      if (generation !== suggestGenerationRef.current) return;
       const demo = DEMO_SUGGESTIONS[_demoCycleIdx % DEMO_SUGGESTIONS.length];
       _demoCycleIdx++;
       setAiDraft(demo);
@@ -532,6 +555,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
           ...(contactContext ? { contactContext } : {}),
         }),
       });
+      if (generation !== suggestGenerationRef.current) return;
       if (res.ok) {
         const data = await res.json();
         const suggestion = data.suggestion || null;
@@ -541,9 +565,9 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
         setAiDraft(null);
       }
     } catch {
-      setAiDraft(null);
+      if (generation === suggestGenerationRef.current) setAiDraft(null);
     } finally {
-      setIsDrafting(false);
+      if (generation === suggestGenerationRef.current) setIsDrafting(false);
     }
   }, [conversationId, aiEnabled, demoMode, aiCooldown, messages, contactContext, onChange]);
 

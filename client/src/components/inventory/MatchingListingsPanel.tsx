@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -20,6 +20,7 @@ import {
   fetchInventoryMatches,
   INVENTORY_MATCHES_STALE_MS,
   inventoryMatchesHasDisplayableResults,
+  inventoryMatchesPlaceholderData,
   inventoryMatchesQueryKey,
   inventoryMatchesRetryDelay,
   isRateLimitedInventoryMatchesError,
@@ -87,6 +88,8 @@ interface MatchingListingsPanelProps {
   contactFirstName?: string;
   compact?: boolean;
   isWorkspaceAdmin?: boolean;
+  /** When false, hide inventory health diagnostics (non-inventory contact). */
+  showHealthDiagnostics?: boolean;
   onInsertComposerDraft?: (draft: CopilotComposerInsert) => boolean;
 }
 
@@ -95,14 +98,17 @@ export function MatchingListingsPanel({
   contactFirstName,
   compact = true,
   isWorkspaceAdmin = false,
+  showHealthDiagnostics: showHealthDiagnosticsProp = true,
   onInsertComposerDraft,
 }: MatchingListingsPanelProps) {
   const [allMatchesOpen, setAllMatchesOpen] = useState(false);
   const [lastClientFetchAt, setLastClientFetchAt] = useState<string | null>(null);
-  const showHealthDiagnostics = shouldShowInventoryHealthDiagnostics({
-    isDev: import.meta.env.DEV,
-    isWorkspaceAdmin,
-  });
+  const showHealthDiagnostics =
+    showHealthDiagnosticsProp &&
+    shouldShowInventoryHealthDiagnostics({
+      isDev: import.meta.env.DEV,
+      isWorkspaceAdmin,
+    });
   const { data: inventoryStatus } = useQuery({
     queryKey: ["/api/inventory/status"],
     queryFn: fetchInventoryStatus,
@@ -111,22 +117,29 @@ export function MatchingListingsPanel({
 
   const enabled = !!contactId && !!inventoryStatus?.canUse;
 
-  const { data, isLoading, isFetched, isError, error, isFetching, refetch } = useQuery({
-    queryKey: inventoryMatchesQueryKey(contactId),
-    queryFn: () => fetchInventoryMatches(contactId),
-    enabled,
-    staleTime: INVENTORY_MATCHES_STALE_MS,
-    placeholderData: keepPreviousData,
-    retry: shouldRetryInventoryMatches,
-    retryDelay: inventoryMatchesRetryDelay,
-  });
+  const { data, isLoading, isFetched, isError, error, isFetching, refetch, isPlaceholderData } =
+    useQuery({
+      queryKey: inventoryMatchesQueryKey(contactId),
+      queryFn: () => fetchInventoryMatches(contactId),
+      enabled,
+      staleTime: INVENTORY_MATCHES_STALE_MS,
+      placeholderData: (previousData, previousQuery) =>
+        inventoryMatchesPlaceholderData(contactId, previousData, previousQuery),
+      retry: shouldRetryInventoryMatches,
+      retryDelay: inventoryMatchesRetryDelay,
+    });
+
+  useEffect(() => {
+    setLastClientFetchAt(null);
+    setAllMatchesOpen(false);
+  }, [contactId]);
 
   useEffect(() => {
     if (!isFetched && !isError) return;
-    if (!isError) {
+    if (!isError && !isPlaceholderData) {
       setLastClientFetchAt(new Date().toISOString());
     }
-  }, [isFetched, isError, contactId, data?.diagnostics?.lastMatchRunAt]);
+  }, [isFetched, isError, isPlaceholderData, contactId, data?.diagnostics?.lastMatchRunAt]);
 
   if (!inventoryStatus) return null;
   if (!inventoryStatus.canUse) return null;

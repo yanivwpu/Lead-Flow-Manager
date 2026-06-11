@@ -38,6 +38,21 @@ export function shouldShowCopilotInventoryPanels(
   return inventoryStatus?.canUse === true;
 }
 
+/**
+ * Per-contact inventory UI — workspace connector must be on AND the contact must
+ * have buyer/inventory signals. Workspace RGE or industry alone is not enough
+ * (avoids inventory health on unrelated automation leads).
+ */
+export function shouldShowCopilotInventoryForContact(input: {
+  inventoryStatus?: InventoryConnectorStatus | null;
+  customFields?: Record<string, unknown> | null;
+  hasBuyerPreferences?: boolean;
+}): boolean {
+  if (!shouldShowCopilotInventoryPanels(input.inventoryStatus)) return false;
+  if (input.hasBuyerPreferences) return true;
+  return isBuyerLeadContact(input.customFields);
+}
+
 /** Inventory match health panel — local dev or workspace owner/admin only. */
 export function shouldShowInventoryHealthDiagnostics(input: {
   isDev?: boolean;

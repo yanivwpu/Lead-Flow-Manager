@@ -5,12 +5,15 @@
 import type { InventoryMatchesResponse } from "../shared/inventory/inventoryMatchTypes";
 import {
   inventoryMatchesQueryKey,
+  inventoryMatchesQueryKeyContactId,
+  inventoryMatchesPlaceholderData,
   isRateLimitedInventoryMatchesError,
   InventoryMatchesFetchError,
   inventoryMatchesHasDisplayableResults,
   shouldRetryInventoryMatches,
   inventoryMatchesRetryDelay,
 } from "../client/src/lib/inventoryMatchesQuery";
+import { shouldShowCopilotInventoryForContact } from "../client/src/lib/copilotRgeVisibility";
 
 function assert(cond: boolean, msg: string) {
   if (!cond) throw new Error(msg);
@@ -53,5 +56,43 @@ assert(shouldRetryInventoryMatches(2, new InventoryMatchesFetchError("x", 429)),
 assert(!shouldRetryInventoryMatches(3, new InventoryMatchesFetchError("x", 429)), "stop 429 fourth");
 
 assert(inventoryMatchesRetryDelay(1, new InventoryMatchesFetchError("x", 429)) === 4_000, "429 backoff");
+
+assert(
+  inventoryMatchesQueryKeyContactId(inventoryMatchesQueryKey("abc")) === "abc",
+  "parse contact id from key",
+);
+
+assert(
+  inventoryMatchesPlaceholderData("b", sampleResponse, { queryKey: inventoryMatchesQueryKey("b") }) ===
+    sampleResponse,
+  "placeholder same contact",
+);
+assert(
+  inventoryMatchesPlaceholderData("b", sampleResponse, { queryKey: inventoryMatchesQueryKey("a") }) ===
+    undefined,
+  "placeholder blocks cross-contact",
+);
+
+assert(
+  shouldShowCopilotInventoryForContact({
+    inventoryStatus: { canUse: true, rgeInstalled: true } as any,
+    customFields: { leadType: "buyer" },
+  }),
+  "inventory for buyer lead",
+);
+assert(
+  !shouldShowCopilotInventoryForContact({
+    inventoryStatus: { canUse: true, rgeInstalled: true } as any,
+    customFields: { leadType: "vendor" },
+  }),
+  "no inventory for unrelated lead",
+);
+assert(
+  shouldShowCopilotInventoryForContact({
+    inventoryStatus: { canUse: true, rgeInstalled: true } as any,
+    hasBuyerPreferences: true,
+  }),
+  "inventory when prefs exist",
+);
 
 console.log("inventory-matches-refetch.test.ts: all passed");

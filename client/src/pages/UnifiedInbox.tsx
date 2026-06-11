@@ -571,6 +571,11 @@ export function UnifiedInbox() {
 
   useEffect(() => {
     setFilePickerHint(null);
+    setMessageInput("");
+    setPendingFile((prev) => {
+      if (prev?.localPreview) URL.revokeObjectURL(prev.localPreview);
+      return null;
+    });
   }, [selectedContactId]);
 
   const insertComposerDraftFromCopilot = useCallback(
@@ -2907,6 +2912,7 @@ export function UnifiedInbox() {
 
             {/* Composer — Meta reply-window + AI notices merge into one chip bar inside AIComposer */}
             <AIComposer
+              key={selectedContactId ?? "no-contact"}
               ref={composerRef}
               value={messageInput}
               onChange={setMessageInput}
