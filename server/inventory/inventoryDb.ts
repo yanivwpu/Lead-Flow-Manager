@@ -688,7 +688,7 @@ export async function getInventoryListing(
     .where(and(eq(inventoryListings.id, listingId), eq(inventoryListings.userId, userId)))
     .limit(1);
   if (!row || isBlockedDevSeedListingRow(row)) return undefined;
-  return inventoryListingFromCoreRow(row);
+  return inventoryListingFromMatchingRow(row);
 }
 
 /** Public share page listing select — includes flyer columns in one query when available. */
@@ -704,7 +704,7 @@ const PUBLIC_SHARE_LISTING_SELECT = {
 function mapPublicShareListingRow(
   row: CoreInventoryListingRow & Partial<FlyerExtraListingFields>,
 ): InventoryListing {
-  const core = inventoryListingFromCoreRow(row);
+  const core = inventoryListingFromMatchingRow(row);
   return {
     ...core,
     propertySubtype: row.propertySubtype ?? null,
@@ -784,7 +784,7 @@ export async function getPublicShareListing(listingId: string): Promise<Inventor
       if (!isShareablePublicListingRow(row)) return undefined;
 
       const extras = await tryLoadFlyerExtraFields(listingId);
-      return { ...inventoryListingFromCoreRow(row), ...extras };
+      return { ...inventoryListingFromMatchingRow(row), ...extras };
     } catch (fallbackError) {
       console.error("[public-listing] failed to load listing row", {
         listingId,
