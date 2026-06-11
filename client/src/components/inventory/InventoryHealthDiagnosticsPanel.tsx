@@ -13,6 +13,7 @@ type InventoryHealthDiagnosticsPanelProps = {
   lastClientFetchAt?: string | null;
   reason?: string;
   compact?: boolean;
+  rateLimitWarning?: boolean;
 };
 
 function DiagnosticRow({ label, value }: { label: string; value: string | number }) {
@@ -30,8 +31,9 @@ export function InventoryHealthDiagnosticsPanel({
   lastClientFetchAt,
   reason,
   compact = true,
+  rateLimitWarning = false,
 }: InventoryHealthDiagnosticsPanelProps) {
-  const [open, setOpen] = useState(import.meta.env.DEV);
+  const [open, setOpen] = useState(import.meta.env.DEV || rateLimitWarning);
   const lastRun = diagnostics?.lastMatchRunAt ?? lastClientFetchAt;
   const lastError =
     diagnostics?.lastMatchingError ??
@@ -43,9 +45,10 @@ export function InventoryHealthDiagnosticsPanel({
   const returned = diagnostics?.matchesReturned;
 
   const hasAnomaly =
+    rateLimitWarning ||
     (typeof activeCount === "number" && activeCount > 0 && (scored ?? 0) === 0) ||
     (typeof scored === "number" && scored > 0 && (returned ?? 0) === 0 && reason === "listing_fetch_failed") ||
-    !!lastError;
+    (!!lastError && !rateLimitWarning);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="mt-2">
@@ -69,13 +72,20 @@ export function InventoryHealthDiagnosticsPanel({
           Inventory health
         </span>
         {hasAnomaly && (
-          <span className="ml-auto text-amber-700 font-medium normal-case">check</span>
+          <span className="ml-auto text-amber-700 font-medium normal-case">
+            {rateLimitWarning ? "rate limit" : "check"}
+          </span>
         )}
       </CollapsibleTrigger>
       <CollapsibleContent
         className="mt-1 rounded-md border border-slate-200 bg-slate-50/50 px-2 py-2 space-y-1"
         data-testid="inventory-health-diagnostics-panel"
       >
+        {rateLimitWarning && (
+          <p className="text-[10px] text-amber-800 leading-snug pb-1">
+            Refresh paused briefly — showing your last successful matches.
+          </p>
+        )}
         <DiagnosticRow
           label="Active inventory"
           value={activeCount ?? "—"}

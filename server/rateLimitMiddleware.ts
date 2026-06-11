@@ -28,8 +28,16 @@ function isIntegrationStartOrComplete(path: string): boolean {
   return last === "start" || last.startsWith("complete") || last === "start-redirect";
 }
 
+const INVENTORY_MATCHES_PATH = /^\/api\/contacts\/[^/]+\/inventory-matches$/;
+
 const RATE_LIMIT_RULES: RateLimitRule[] = [
   { id: "auth", match: (path) => path.startsWith("/api/auth"), limit: 30, windowMs: 15 * 60 * 1000 },
+  {
+    id: "inventory-matches-read",
+    match: (path, method) => method === "GET" && INVENTORY_MATCHES_PATH.test(path),
+    limit: 240,
+    windowMs: 15 * 60 * 1000,
+  },
   {
     id: "contact",
     match: (path) => path === "/api/contact" || path.startsWith("/api/contacts"),

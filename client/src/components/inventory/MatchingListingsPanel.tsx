@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -16,20 +16,15 @@ import { InventoryHealthDiagnosticsPanel } from "@/components/inventory/Inventor
 import { InventoryMatchRecommendationCard } from "@/components/inventory/InventoryMatchRecommendationCard";
 import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
 import { shouldShowInventoryHealthDiagnostics } from "@/lib/copilotRgeVisibility";
-
-async function fetchInventoryMatches(contactId: string): Promise<InventoryMatchesResponse> {
-  const res = await fetch(`/api/contacts/${contactId}/inventory-matches`, {
-    credentials: "include",
-    cache: "no-store",
-  });
-  if (res.status === 401) throw new Error("Unauthorized");
-  if (res.status === 404) throw new Error("Contact not found");
-  if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(err.error || "Failed to load matches");
-  }
-  return res.json() as Promise<InventoryMatchesResponse>;
-}
+import {
+  fetchInventoryMatches,
+  INVENTORY_MATCHES_STALE_MS,
+  inventoryMatchesHasDisplayableResults,
+  inventoryMatchesQueryKey,
+  inventoryMatchesRetryDelay,
+  isRateLimitedInventoryMatchesError,
+  shouldRetryInventoryMatches,
+} from "@/lib/inventoryMatchesQuery";
 
 const SIDEBAR_PREVIEW_LIMIT = 5;
 
@@ -116,16 +111,21 @@ export function MatchingListingsPanel({
 
   const enabled = !!contactId && !!inventoryStatus?.canUse;
 
-  const { data, isLoading, isFetched, isError, error, refetch } = useQuery({
-    queryKey: [`/api/contacts/${contactId}/inventory-matches`],
+  const { data, isLoading, isFetched, isError, error, isFetching, refetch } = useQuery({
+    queryKey: inventoryMatchesQueryKey(contactId),
     queryFn: () => fetchInventoryMatches(contactId),
     enabled,
-    staleTime: 0,
+    staleTime: INVENTORY_MATCHES_STALE_MS,
+    placeholderData: keepPreviousData,
+    retry: shouldRetryInventoryMatches,
+    retryDelay: inventoryMatchesRetryDelay,
   });
 
   useEffect(() => {
     if (!isFetched && !isError) return;
-    setLastClientFetchAt(new Date().toISOString());
+    if (!isError) {
+      setLastClientFetchAt(new Date().toISOString());
+    }
   }, [isFetched, isError, contactId, data?.diagnostics?.lastMatchRunAt]);
 
   if (!inventoryStatus) return null;
@@ -138,20 +138,33 @@ export function MatchingListingsPanel({
   const savedListingIds = data?.savedListingIds ?? [];
   const savedSet = new Set(savedListingIds);
   const hasMoreMatches = matches.length > SIDEBAR_PREVIEW_LIMIT;
+  const hasCachedMatches = inventoryMatchesHasDisplayableResults(data);
+  const isRateLimited = isError && isRateLimitedInventoryMatchesError(error);
+  const clientErrorMessage =
+    isError && error instanceof Error ? error.message : null;
+
   const showEmpty =
     isFetched &&
+    !isError &&
     data?.eligible &&
     matches.length === 0 &&
     (data.reason === "no_matches" ||
       data.reason === "no_buyer_preferences" ||
       data.reason === "no_active_inventory");
 
-  const showFetchError =
-    isError ||
-    (isFetched && data?.reason === "listing_fetch_failed");
+  const showBlockingFetchError =
+    isError &&
+    !hasCachedMatches &&
+    !isLoading;
+
+  const showListingFetchFailed =
+    !isError &&
+    isFetched &&
+    data?.reason === "listing_fetch_failed" &&
+    !hasCachedMatches;
 
   if (!enabled && !isLoading) return null;
-  if (isFetched && !data?.eligible && data?.reason === "feature_disabled") return null;
+  if (isFetched && !isError && data && !data.eligible && data.reason === "feature_disabled") return null;
 
   return (
     <div
@@ -169,6 +182,9 @@ export function MatchingListingsPanel({
           <span className="truncate">
             Inventory Matches{matchCount > 0 ? ` (${matchCount})` : ""}
           </span>
+          {isFetching && hasCachedMatches && (
+            <Loader2 className="h-3 w-3 shrink-0 animate-spin text-gray-400" aria-hidden />
+          )}
         </span>
         {matches.length > 0 && !compact && (
           <p className="text-[10px] text-gray-400 leading-snug mt-0.5">
@@ -177,14 +193,14 @@ export function MatchingListingsPanel({
         )}
       </div>
 
-      {isLoading && (
+      {isLoading && !hasCachedMatches && (
         <div className="flex items-center gap-1.5 py-2 text-[11px] text-gray-400">
           <Loader2 className="h-3 w-3 animate-spin" />
           Scoring inventory…
         </div>
       )}
 
-      {showFetchError && (
+      {(showBlockingFetchError || showListingFetchFailed) && (
         <p
           className="text-[11px] text-amber-700 leading-snug py-1"
           data-testid="matching-listings-fetch-error"
@@ -199,16 +215,11 @@ export function MatchingListingsPanel({
       {showHealthDiagnostics && (isFetched || isError) && (
         <InventoryHealthDiagnosticsPanel
           diagnostics={data?.diagnostics}
-          clientError={
-            isError
-              ? error instanceof Error
-                ? error.message
-                : "Request failed"
-              : data?.error ?? null
-          }
+          clientError={clientErrorMessage ?? data?.error ?? null}
           lastClientFetchAt={lastClientFetchAt}
           reason={data?.reason}
           compact={compact}
+          rateLimitWarning={isRateLimited}
         />
       )}
 

@@ -4,6 +4,7 @@ import { Eye, Heart, Home, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { InventoryMatchResult } from "@shared/inventory/inventoryMatchTypes";
 import { apiRequest } from "@/lib/queryClient";
+import { scheduleInventoryMatchesRefetch } from "@/lib/inventoryMatchesQuery";
 import { ListingDetailDialog } from "@/components/inventory/ListingDetailDialog";
 import {
   RecommendationCard,
@@ -56,7 +57,7 @@ export function InventoryMatchRecommendationCard({
       return { saved: true };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contactId}/inventory-matches`] });
+      scheduleInventoryMatchesRefetch(queryClient, contactId, { debounceMs: 400 });
       onSavedChange();
     },
   });

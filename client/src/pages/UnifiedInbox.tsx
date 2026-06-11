@@ -96,6 +96,7 @@ import {
   type CopilotComposerInsert,
   normalizeCopilotComposerInsert,
 } from "@/lib/copilotComposerInsert";
+import { scheduleInventoryMatchesRefetch } from "@/lib/inventoryMatchesQuery";
 import {
   isGenericOutboundSendFallbackMessage,
   isMetaReplyWindowExpiredError,
@@ -446,13 +447,7 @@ export function UnifiedInbox() {
             queryClient.invalidateQueries({
               queryKey: [`/api/contacts/${contactId}/buyer-preferences`],
             });
-            queryClient.invalidateQueries({
-              queryKey: [`/api/contacts/${contactId}/inventory-matches`],
-            });
-            queryClient.refetchQueries({
-              queryKey: [`/api/contacts/${contactId}/inventory-matches`],
-              type: "active",
-            });
+            scheduleInventoryMatchesRefetch(queryClient, contactId);
             queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId] });
           }
         } catch {}

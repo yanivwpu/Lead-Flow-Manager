@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Copy, ExternalLink, Home, Loader2, Sparkles } from "lucide-react";
+import { Home, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,7 +18,7 @@ import {
   buildListingComposerMessage,
   listingComposerDraftIncludesRequiredDetails,
 } from "@shared/inventory/inventoryComposerDraft";
-import { buildListingShareUrl, pickPrimaryPhotoUrl } from "@shared/inventory/listingViewUrl";
+import { pickPrimaryPhotoUrl } from "@shared/inventory/listingViewUrl";
 import type { InventoryMatchListingSummary } from "@shared/inventory/inventoryMatchTypes";
 
 function formatPrice(cents: number | null): string {
@@ -125,13 +125,6 @@ export function ListingDetailDialog({
   const beds = listing?.beds != null ? Number(listing.beds) : fallback?.beds;
   const baths = listing?.baths != null ? Number(listing.baths) : fallback?.baths;
   const listingUrl = listing?.listingUrl ?? fallback?.listingUrl ?? null;
-  const flyerUrl =
-    listingId && typeof window !== "undefined"
-      ? buildListingShareUrl(
-          { listingId, publicSlug: listing?.publicSlug ?? null },
-          window.location.origin,
-        )
-      : null;
   const propertyType = listing?.propertyType ?? fallback?.propertyType ?? null;
   const description = listing?.description ?? null;
 
@@ -202,17 +195,6 @@ export function ListingDetailDialog({
     contactFirstName,
     matchReasons,
   ]);
-
-  const handleCopyDraft = useCallback(async () => {
-    const draft = resolveComposerDraft();
-    if (!draft?.text) return;
-    try {
-      await navigator.clipboard.writeText(draft.text);
-      toast({ title: "Draft copied", duration: 2000 });
-    } catch {
-      toast({ title: "Copy failed", variant: "destructive", duration: 2500 });
-    }
-  }, [resolveComposerDraft, toast]);
 
   const handleInsertDraft = useCallback(() => {
     const draft = resolveComposerDraft();
@@ -306,14 +288,6 @@ export function ListingDetailDialog({
             {listing?.description && (
               <p className="text-xs text-gray-600 line-clamp-4 leading-relaxed">{listing.description}</p>
             )}
-            {flyerUrl && (
-              <Button asChild size="sm" variant="outline" className="w-full">
-                <a href={flyerUrl} target="_blank" rel="noreferrer">
-                  View Property Flyer
-                  <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
-                </a>
-              </Button>
-            )}
 
             {contactId && listingId && (
               <div
@@ -382,33 +356,16 @@ export function ListingDetailDialog({
                           Facebook. WhatsApp sends the photo with this text as the caption.
                         </p>
                       )}
-                      {composerPreview.viewUrl && (
-                        <p className="text-[10px] text-violet-700 mt-1 break-all leading-snug">
-                          View Property Flyer: {composerPreview.viewUrl}
-                        </p>
-                      )}
                     </div>
 
-                    <div className="flex flex-col gap-1.5 pt-0.5">
-                      <Button
-                        size="sm"
-                        className="h-8 text-xs w-full"
-                        onClick={handleInsertDraft}
-                        data-testid="button-insert-listing-draft"
-                      >
-                        Insert into Composer
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 text-xs w-full"
-                        onClick={() => void handleCopyDraft()}
-                        data-testid="button-copy-listing-draft"
-                      >
-                        <Copy className="h-3 w-3 mr-1.5" />
-                        Copy Draft
-                      </Button>
-                    </div>
+                    <Button
+                      size="sm"
+                      className="h-8 w-full text-xs"
+                      onClick={handleInsertDraft}
+                      data-testid="button-insert-listing-draft"
+                    >
+                      Insert into Composer
+                    </Button>
                   </>
                 )}
               </div>

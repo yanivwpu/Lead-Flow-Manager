@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { scheduleInventoryMatchesRefetch } from "@/lib/inventoryMatchesQuery";
 import { Pencil, RefreshCw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -171,7 +172,7 @@ export function BuyerPreferencesPanel({
     onSuccess: () => {
       setEditOpen(false);
       queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contactId}/buyer-preferences`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contactId}/inventory-matches`] });
+      scheduleInventoryMatchesRefetch(queryClient, contactId);
       queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId] });
       onUpdated?.();
     },
@@ -190,7 +191,7 @@ export function BuyerPreferencesPanel({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contactId}/buyer-preferences`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contactId}/inventory-matches`] });
+      scheduleInventoryMatchesRefetch(queryClient, contactId);
       queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId] });
       onUpdated?.();
     },
