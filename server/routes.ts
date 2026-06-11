@@ -10570,20 +10570,22 @@ export async function registerRoutes(
             if (contactForPrefs) {
               const {
                 shouldRunBuyerPreferencePipeline,
-                formatBuyerPreferenceSummaryForAi,
-                ensureFastPathBuyerPreferences,
+                syncBuyerPreferencesForInboundMessage,
               } = await import("./buyerPreferenceService");
+              const { buildBuyerPreferenceAiContext } = await import(
+                "@shared/buyerPreferenceDisplay"
+              );
               const historyTurns = conversationHistory as Array<{ role: string; content?: string }>;
               const lastUserInbound =
                 historyTurns.filter((m) => m.role === "user").pop()?.content?.trim() || "";
 
               const prefGate = await shouldRunBuyerPreferencePipeline(userId, contactForPrefs);
               const contextPatch: Record<string, unknown> = { ...(contactContext || {}) };
-              let profile = await ensureFastPathBuyerPreferences(
-                contactForPrefs,
-                lastUserInbound,
-                { conversationId: convForPrefs.id },
-              );
+              let profile = await syncBuyerPreferencesForInboundMessage({
+                contact: contactForPrefs,
+                inboundText: lastUserInbound,
+                conversationId: convForPrefs.id,
+              });
 
               if (prefGate.ok) {
                 const {
@@ -10604,10 +10606,16 @@ export async function registerRoutes(
                 contextPatch.buyerQualificationContext =
                   formatQualificationContextForAi(qualification);
 
-                const summary = formatBuyerPreferenceSummaryForAi(profile);
-                if (summary) {
-                  contextPatch.buyerPreferences = summary;
+                const aiPrefCtx = buildBuyerPreferenceAiContext(profile);
+                if (aiPrefCtx.buyerPreferences) {
+                  contextPatch.buyerPreferences = aiPrefCtx.buyerPreferences;
                 }
+                if (aiPrefCtx.budget) contextPatch.budget = aiPrefCtx.budget;
+                else delete contextPatch.budget;
+                if (aiPrefCtx.timeline) contextPatch.timeline = aiPrefCtx.timeline;
+                else delete contextPatch.timeline;
+                if (aiPrefCtx.financing) contextPatch.financing = aiPrefCtx.financing;
+                else delete contextPatch.financing;
 
                 const { getInventoryMatchSummaryForContact } = await import(
                   "./inventory/inventoryMatchingService"

@@ -480,25 +480,56 @@ export function heuristicPatchFromTranscript(
   }
 
   const parseBudgetAmount = (amount: string, suffix?: string): number | null => {
-    let n = parseFloat(amount);
+    const cleaned = amount.replace(/,/g, "");
+    let n = parseFloat(cleaned);
     if (!Number.isFinite(n) || n <= 0) return null;
     const s = (suffix || "").toLowerCase();
     if (s === "k") n *= 1000;
-    if (s === "m" || s === "million") n *= 1_000_000;
+    if (s === "m" || s === "million" || s === "mil") n *= 1_000_000;
     return Math.round(n);
   };
 
-  const upToBudgetM = lower.match(/\bup\s+to\s+\$?\s*([\d.]+)\s*(k|m|million)?/i);
-  const budgetM = lower.match(/(?:\$|budget\s*)([\d.]+)\s*(k|m|million)?/i);
-  const budgetSource = upToBudgetM ?? budgetM;
-  if (budgetSource) {
-    const amount = parseBudgetAmount(budgetSource[1], budgetSource[2]);
-    if (amount != null) {
-      const isUpTo = !!upToBudgetM;
-      patch.priceMax = {
-        value: amount,
-        ...inf(isUpTo ? 0.9 : 0.78, isUpTo ? "up to budget in message" : "budget in message"),
+  const normalizedForBudget = text.replace(/,/g, "");
+  const betweenRangeM = normalizedForBudget.match(
+    /\bbetween\s+\$?\s*([\d.]+)\s*(k|m|million|mil)?\s*(?:and|-|–|to)\s+\$?\s*([\d.]+)\s*(k|m|million|mil)?/i,
+  );
+  const dashRangeM = normalizedForBudget.match(
+    /\$\s*([\d.]+)\s*(k|m|million|mil)?\s*(?:-|–|to)\s*\$?\s*([\d.]+)\s*(k|m|million|mil)?/i,
+  );
+  const verbalRangeM = lower.match(
+    /\bbetween\s+([\d.]+)\s*(k|m|million|mil)\s+(?:and|to|-)\s+([\d.]+)\s*(k|m|million|mil)\b/i,
+  );
+  const verbalToM = lower.match(
+    /\b([\d.]+)\s*(k|m|million|mil)\s+(?:to|-)\s+([\d.]+)\s*(k|m|million|mil)\b/i,
+  );
+
+  const rangeMatch = betweenRangeM ?? dashRangeM ?? verbalRangeM ?? verbalToM;
+  if (rangeMatch) {
+    const minAmount = parseBudgetAmount(rangeMatch[1], rangeMatch[2]);
+    const maxAmount = parseBudgetAmount(rangeMatch[3], rangeMatch[4]);
+    if (minAmount != null && maxAmount != null && minAmount <= maxAmount) {
+      patch.priceMin = {
+        value: minAmount,
+        ...inf(0.92, "budget range in message"),
       };
+      patch.priceMax = {
+        value: maxAmount,
+        ...inf(0.92, "budget range in message"),
+      };
+    }
+  } else {
+    const upToBudgetM = lower.match(/\bup\s+to\s+\$?\s*([\d,.]+)\s*(k|m|million|mil)?/i);
+    const budgetM = normalizedForBudget.match(/(?:\$|budget\s*)([\d.]+)\s*(k|m|million|mil)?/i);
+    const budgetSource = upToBudgetM ?? budgetM;
+    if (budgetSource) {
+      const amount = parseBudgetAmount(budgetSource[1], budgetSource[2]);
+      if (amount != null) {
+        const isUpTo = !!upToBudgetM;
+        patch.priceMax = {
+          value: amount,
+          ...inf(isUpTo ? 0.9 : 0.78, isUpTo ? "up to budget in message" : "budget in message"),
+        };
+      }
     }
   }
 

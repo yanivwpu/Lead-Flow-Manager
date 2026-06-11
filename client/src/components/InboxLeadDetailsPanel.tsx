@@ -93,7 +93,7 @@ import { getStageSignals } from "@/lib/leadScoring";
 import { AIUpgradePrompt } from "./AIUpgradePrompt";
 import type { AICapabilities } from "@/lib/useAICapabilities";
 import { BuyerPreferencesPanel } from "@/components/BuyerPreferencesPanel";
-import { MatchingListingsPanel } from "@/components/inventory/MatchingListingsPanel";
+import { usePersistedBuyerPreferences } from "@/lib/buyerPreferencesQuery";
 import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
 import { buildBuyerPreferenceChips } from "@shared/buyerPreferenceDisplay";
 import { fetchInventoryStatus, fetchInventorySources, isInventorySourceConnected } from "@/lib/inventoryApi";
@@ -1412,6 +1412,9 @@ export function InboxLeadDetailsPanel({
     [inventorySources],
   );
 
+  const { profile: persistedBuyerProfile, chips: persistedBuyerChips } =
+    usePersistedBuyerPreferences(contact.id);
+
   const showCopilotBuyerPreferences = useMemo(
     () =>
       shouldShowCopilotBuyerPreferences({
@@ -1427,9 +1430,9 @@ export function InboxLeadDetailsPanel({
       shouldShowCopilotInventoryForContact({
         inventoryStatus,
         customFields: contact.customFields,
-        buyerPreferenceProfile: contact.buyerPreferenceProfile,
+        buyerPreferenceProfile: persistedBuyerProfile,
       }),
-    [inventoryStatus, contact.customFields, contact.buyerPreferenceProfile],
+    [inventoryStatus, contact.customFields, persistedBuyerProfile],
   );
 
   const customerInsights = useMemo(
@@ -1614,8 +1617,11 @@ export function InboxLeadDetailsPanel({
   );
 
   const buyerPrefChips = useMemo(
-    () => buildBuyerPreferenceChips(contact.buyerPreferenceProfile),
-    [contact.buyerPreferenceProfile],
+    () =>
+      persistedBuyerChips.length > 0
+        ? persistedBuyerChips
+        : buildBuyerPreferenceChips(persistedBuyerProfile),
+    [persistedBuyerChips, persistedBuyerProfile],
   );
   const buyerPrefsHasCriteria = buyerPrefChips.length > 0;
 
@@ -2544,7 +2550,7 @@ export function InboxLeadDetailsPanel({
                     <div className="rounded-lg border border-violet-100 bg-violet-50/40 px-2.5 py-2">
                       <BuyerPreferencesPanel
                         contactId={contact.id}
-                        initialProfile={contact.buyerPreferenceProfile}
+                        initialProfile={persistedBuyerProfile}
                         onUpdated={() => onUpdateContact({})}
                         compact
                         readOnly

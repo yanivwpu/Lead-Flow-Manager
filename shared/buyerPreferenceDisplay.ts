@@ -331,3 +331,31 @@ export function formatBuyerPreferenceSummaryForAi(profile: BuyerPreferenceProfil
   const lines = chips.map((c) => `- ${c.label}: ${c.value}${c.source === "inferred" ? " (inferred)" : ""}`);
   return `Buyer preferences (from conversation memory):\n${lines.join("\n")}`;
 }
+
+/** Budget label for CRM / suggest-reply context — same source as matching engine. */
+export function formatBuyerPreferenceBudgetLabel(profile: BuyerPreferenceProfile): string | null {
+  const chip = buildBuyerPreferenceChips(profile).find((c) => c.id === "budget");
+  return chip?.value ?? null;
+}
+
+export type BuyerPreferenceAiContextFields = {
+  buyerPreferences?: string;
+  budget?: string;
+  timeline?: string;
+  financing?: string;
+};
+
+/** CRM + AI fields derived from one persisted profile — keeps AI and matching aligned. */
+export function buildBuyerPreferenceAiContext(
+  profile: BuyerPreferenceProfile,
+): BuyerPreferenceAiContextFields {
+  const chips = buildBuyerPreferenceChips(profile);
+  const chip = (id: string) => chips.find((c) => c.id === id)?.value;
+  const summary = formatBuyerPreferenceSummaryForAi(profile);
+  return {
+    buyerPreferences: summary || undefined,
+    budget: chip("budget"),
+    timeline: chip("timeline"),
+    financing: chip("financing"),
+  };
+}

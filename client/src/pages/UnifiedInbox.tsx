@@ -88,9 +88,9 @@ import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 import { analyzeConversation } from "@/lib/conversationIntelligence";
 import { WHATSAPP_SETUP_INCOMPLETE_BANNER } from "@shared/whatsappSetupMessages";
 import {
-  formatBuyerPreferenceSummaryForAi,
+  buildBuyerPreferenceAiContext,
 } from "@shared/buyerPreferenceDisplay";
-import { normalizeBuyerPreferenceProfile } from "@shared/buyerPreferenceSchema";
+import { usePersistedBuyerPreferences } from "@/lib/buyerPreferencesQuery";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
 import {
   type CopilotComposerInsert,
@@ -447,6 +447,10 @@ export function UnifiedInbox() {
             queryClient.invalidateQueries({
               queryKey: [`/api/contacts/${contactId}/buyer-preferences`],
             });
+            void queryClient.refetchQueries({
+              queryKey: [`/api/contacts/${contactId}/buyer-preferences`],
+              type: "active",
+            });
             scheduleInventoryMatchesRefetch(queryClient, contactId, {
               debounceMs: 400,
               clearCachedMatches: true,
@@ -643,6 +647,8 @@ export function UnifiedInbox() {
     enabled: !!selectedContactId,
     placeholderData: keepPreviousData,
   });
+
+  const { profile: persistedBuyerProfile } = usePersistedBuyerPreferences(selectedContactId);
 
   const contactReachableChannels = useMemo(
     () =>
@@ -1835,25 +1841,26 @@ export function UnifiedInbox() {
       const isBuyer =
         String((contact.customFields as Record<string, unknown> | undefined)?.leadType || "").toLowerCase() ===
         "buyer";
-      if (!re && !isBuyer && !contact.buyerPreferenceProfile) return undefined;
-      const profile = normalizeBuyerPreferenceProfile(contact.buyerPreferenceProfile);
-      const summary = formatBuyerPreferenceSummaryForAi(profile);
-      return summary || undefined;
+      if (!re && !isBuyer && persistedBuyerProfile.profileStatus === "empty") return undefined;
+      const aiCtx = buildBuyerPreferenceAiContext(persistedBuyerProfile);
+      return aiCtx.buyerPreferences;
     })();
+
+    const aiPrefFields = buildBuyerPreferenceAiContext(persistedBuyerProfile);
 
     return {
       name:          contact.name,
       tag:           contact.tag || undefined,
       pipelineStage: contact.pipelineStage || undefined,
       notes:         contact.notes || undefined,
-      budget:        intel?.budget ?? undefined,
-      timeline:      intel?.timeline ?? undefined,
-      financing:     intel?.financing ?? undefined,
+      budget:        aiPrefFields.budget ?? undefined,
+      timeline:      aiPrefFields.timeline ?? undefined,
+      financing:     aiPrefFields.financing ?? undefined,
       intent:        intel?.intent,
       leadScore:     intel?.leadScore?.label,
       buyerPreferences: buyerPrefsSummary,
     };
-  }, [contact, messages, aiBusinessKnowledge?.industry]);
+  }, [contact, messages, aiBusinessKnowledge?.industry, persistedBuyerProfile]);
 
   const convStatus = primaryConversation?.status || 'open';
   const conversationStatusRow = getConversationStatusRow(convStatus);

@@ -96,6 +96,14 @@ function mergeScalarField<T>(
   return { ...incoming };
 }
 
+function isBudgetRangeEvidence(evidence: string | undefined): boolean {
+  return !!evidence && /budget range|between|range in message/i.test(evidence);
+}
+
+function isPlausibleBudgetAmount(n: number): boolean {
+  return Number.isFinite(n) && n >= 10_000;
+}
+
 function shouldForceReplaceBudgetCap(
   existing: PreferenceField<number> | undefined,
   incoming: PreferenceField<number>,
@@ -103,6 +111,7 @@ function shouldForceReplaceBudgetCap(
   if (!existing || typeof existing.value !== "number" || typeof incoming.value !== "number") {
     return false;
   }
+  if (!isPlausibleBudgetAmount(incoming.value)) return false;
   const evidence = incoming.evidence || "";
   if (!/budget/i.test(evidence)) return false;
   if (incoming.value <= existing.value) return true;
@@ -114,14 +123,28 @@ function mergePriceRange(
   profile: BuyerPreferenceProfile,
   patch: BuyerPreferenceExtractionPatch,
 ): void {
-  if (patch.priceMin) {
-    profile.priceMin = mergeScalarField(profile.priceMin, patch.priceMin);
+  const incomingMin = patch.priceMin;
+  const incomingMax = patch.priceMax;
+  const rangeReplace =
+    incomingMin &&
+    incomingMax &&
+    isPlausibleBudgetAmount(incomingMin.value) &&
+    isPlausibleBudgetAmount(incomingMax.value) &&
+    (isBudgetRangeEvidence(incomingMin.evidence) || isBudgetRangeEvidence(incomingMax.evidence));
+
+  if (rangeReplace) {
+    profile.priceMin = { ...incomingMin };
+    profile.priceMax = { ...incomingMax };
+    return;
   }
-  if (patch.priceMax) {
-    const incoming = patch.priceMax;
-    profile.priceMax = shouldForceReplaceBudgetCap(profile.priceMax, incoming)
-      ? { ...incoming }
-      : mergeScalarField(profile.priceMax, incoming);
+
+  if (incomingMin && isPlausibleBudgetAmount(incomingMin.value)) {
+    profile.priceMin = mergeScalarField(profile.priceMin, incomingMin);
+  }
+  if (incomingMax && isPlausibleBudgetAmount(incomingMax.value)) {
+    profile.priceMax = shouldForceReplaceBudgetCap(profile.priceMax, incomingMax)
+      ? { ...incomingMax }
+      : mergeScalarField(profile.priceMax, incomingMax);
   }
 }
 

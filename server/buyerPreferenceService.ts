@@ -122,6 +122,15 @@ export function readBuyerPreferenceProfileRaw(contact: Contact): unknown {
   return (contact as Contact & { buyerPreferenceProfile?: unknown }).buyerPreferenceProfile ?? {};
 }
 
+/** Reload normalized buyer profile from DB — canonical source of truth after persist. */
+export async function loadPersistedBuyerPreferenceProfile(
+  contactId: string,
+): Promise<BuyerPreferenceProfile | null> {
+  const contact = await storage.getContact(contactId);
+  if (!contact) return null;
+  return readBuyerPreferenceProfile(contact);
+}
+
 export { formatBuyerPreferenceSummaryForAi };
 
 function parseBudgetToNumber(raw: string): { min?: number; max?: number } {
@@ -267,10 +276,14 @@ export async function mergeAndPersistBuyerPreferences(
   const patchKeys = patchFieldCount(patch);
   if (patchKeys === 0) {
     debugBuyerPreferenceLog("llm_patch_empty", { contactId: contact.id, skipped: true });
-    return readBuyerPreferenceProfile(contact);
+    return (
+      (await loadPersistedBuyerPreferenceProfile(contact.id)) ??
+      readBuyerPreferenceProfile(contact)
+    );
   }
 
-  const current = readBuyerPreferenceProfile(contact);
+  const freshContact = (await storage.getContact(contact.id)) ?? contact;
+  const current = readBuyerPreferenceProfile(freshContact);
   const mergeOptions = meta?.replaceArrayFields?.length
     ? { replaceArrayFields: meta.replaceArrayFields }
     : undefined;
@@ -304,21 +317,45 @@ export async function mergeAndPersistBuyerPreferences(
     triggerInventoryMatchRefresh(contact.userId, contact.id);
   }
 
-  return merged;
+  return (
+    (await loadPersistedBuyerPreferenceProfile(contact.id)) ?? merged
+  );
 }
 
-/** Sync fast-path before suggest-reply so AI/Copilot see fresh criteria. */
+/**
+ * Fast-path extract → persist → reload from DB.
+ * Use before AI reply generation so suggest-reply and matching share persisted state.
+ */
+export async function syncBuyerPreferencesForInboundMessage(input: {
+  contact: Contact;
+  inboundText: string;
+  conversationId?: string;
+  messageId?: string;
+}): Promise<BuyerPreferenceProfile> {
+  if (hasInventoryPreferenceSignals(input.inboundText)) {
+    await runFastPathHeuristicPreferenceUpdate(input.contact, input.inboundText, {
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+    });
+  }
+  return (
+    (await loadPersistedBuyerPreferenceProfile(input.contact.id)) ??
+    readBuyerPreferenceProfile(input.contact)
+  );
+}
+
+/** @deprecated Alias — use syncBuyerPreferencesForInboundMessage. */
 export async function ensureFastPathBuyerPreferences(
   contact: Contact,
   inboundText: string,
   meta?: { conversationId?: string; messageId?: string },
 ): Promise<BuyerPreferenceProfile> {
-  if (hasInventoryPreferenceSignals(inboundText)) {
-    await runFastPathHeuristicPreferenceUpdate(contact, inboundText, meta);
-    const fresh = await storage.getContact(contact.id);
-    if (fresh) return readBuyerPreferenceProfile(fresh);
-  }
-  return readBuyerPreferenceProfile(contact);
+  return syncBuyerPreferencesForInboundMessage({
+    contact,
+    inboundText,
+    conversationId: meta?.conversationId,
+    messageId: meta?.messageId,
+  });
 }
 
 async function runFastPathHeuristicPreferenceUpdate(
@@ -339,7 +376,8 @@ async function runFastPathHeuristicPreferenceUpdate(
   const patch = heuristicPatchFromInboundText(inboundText);
   if (patchFieldCount(patch) === 0) return false;
 
-  const merged = await mergeAndPersistBuyerPreferences(contact, patch, {
+  const freshContact = (await storage.getContact(contact.id)) ?? contact;
+  const merged = await mergeAndPersistBuyerPreferences(freshContact, patch, {
     conversationId: meta?.conversationId,
     messageId: meta?.messageId,
     logActivity: false,

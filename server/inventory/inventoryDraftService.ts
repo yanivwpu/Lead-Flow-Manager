@@ -6,7 +6,7 @@ import {
   scoreListingAgainstCriteria,
 } from "@shared/inventory/inventoryMatchScoring";
 import { formatBuyerPreferenceSummaryForAi } from "@shared/buyerPreferenceDisplay";
-import { readBuyerPreferenceProfile } from "../buyerPreferenceService";
+import { readBuyerPreferenceProfile, loadPersistedBuyerPreferenceProfile } from "../buyerPreferenceService";
 import { aiProvider } from "../aiProvider";
 import { storage } from "../storage";
 import { getAppOrigin } from "../urlOrigins";
@@ -204,7 +204,9 @@ export async function generateInventoryMatchDraft(
   }
 
   const listing = inventoryListingToMatchInput(listingRow);
-  const profile = readBuyerPreferenceProfile(contact);
+  const profile =
+    (await loadPersistedBuyerPreferenceProfile(contactId)) ??
+    readBuyerPreferenceProfile(contact);
   const profileSummary = formatBuyerPreferenceSummaryForAi(profile);
   const criteria = extractBuyerMatchCriteria(profile);
 

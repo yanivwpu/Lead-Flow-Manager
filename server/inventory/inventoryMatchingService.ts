@@ -7,7 +7,7 @@ import {
   rankInventoryMatches,
   type MatchListingInput,
 } from "@shared/inventory/inventoryMatchScoring";
-import { readBuyerPreferenceProfile } from "../buyerPreferenceService";
+import { readBuyerPreferenceProfile, loadPersistedBuyerPreferenceProfile } from "../buyerPreferenceService";
 import { storage } from "../storage";
 import { canUseInventoryConnector } from "./inventoryGate";
 import { countActiveListingsForUser, fetchActiveListingsForMatching, resolveMatchingListingLimitForUser } from "./inventoryDb";
@@ -148,7 +148,9 @@ export async function findMatchingListingsForContact(
   }
 
   const savedListingIds = await listSavedListingIdsForContact(userId, contactId);
-  const profile = readBuyerPreferenceProfile(contact);
+  const profile =
+    (await loadPersistedBuyerPreferenceProfile(contactId)) ??
+    readBuyerPreferenceProfile(contact);
   const criteria = extractBuyerMatchCriteria(profile);
 
   if (!criteria.hasAnyCriteria) {
@@ -246,9 +248,12 @@ export async function getInventoryMatchSummaryForContact(
   if (!result.eligible) return "";
 
   const contact = await storage.getContact(contactId);
-  const buyerAreas = contact
-    ? extractBuyerMatchCriteria(readBuyerPreferenceProfile(contact)).areas
-    : [];
+  const persistedProfile = await loadPersistedBuyerPreferenceProfile(contactId);
+  const buyerAreas = persistedProfile
+    ? extractBuyerMatchCriteria(persistedProfile).areas
+    : contact
+      ? extractBuyerMatchCriteria(readBuyerPreferenceProfile(contact)).areas
+      : [];
 
   const level = options?.qualificationLevel ?? "medium";
   if (level !== "high" && result.matchCount <= 0) return "";
