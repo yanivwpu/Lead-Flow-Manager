@@ -4863,6 +4863,8 @@ export async function registerRoutes(
   }
 
   async function runBackfills() {
+    const { applyStartupSchemaPatches } = await import("./startupSchemaPatches");
+    await applyStartupSchemaPatches();
     await backfillFacebookInstagramChannelSettings();
     await backfillInstagramPageId();
   }

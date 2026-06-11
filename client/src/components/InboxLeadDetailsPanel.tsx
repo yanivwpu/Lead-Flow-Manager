@@ -98,6 +98,7 @@ import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
 import { buildBuyerPreferenceChips } from "@shared/buyerPreferenceDisplay";
 import { fetchInventoryStatus, fetchInventorySources, isInventorySourceConnected } from "@/lib/inventoryApi";
 import { CopilotInventoryEmptyState } from "@/components/inventory/CopilotInventoryEmptyState";
+import { MatchingListingsPanel } from "@/components/inventory/MatchingListingsPanel";
 import {
   shouldShowCopilotBuyerPreferences,
   shouldShowCopilotInventoryForContact,
