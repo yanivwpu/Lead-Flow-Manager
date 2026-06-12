@@ -54,8 +54,8 @@ function parseListingDetails(raw: unknown): MatchListingInput["listingDetails"] 
   const o = raw as Record<string, unknown>;
   const out: NonNullable<MatchListingInput["listingDetails"]> = {};
   if (typeof o.parkingGarage === "string") out.parkingGarage = o.parkingGarage;
-  if (o.waterfront === true) out.waterfront = true;
-  if (o.pool === true) out.pool = true;
+  if (typeof o.waterfront === "boolean") out.waterfront = o.waterfront;
+  if (typeof o.pool === "boolean") out.pool = o.pool;
   if (typeof o.view === "string") out.view = o.view;
   return Object.keys(out).length > 0 ? out : undefined;
 }

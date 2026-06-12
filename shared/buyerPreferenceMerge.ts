@@ -108,8 +108,29 @@ function isBudgetRangeEvidence(evidence: string | undefined): boolean {
   return !!evidence && /budget range|between|range in message/i.test(evidence);
 }
 
-function isPlausibleBudgetAmount(n: number): boolean {
+function isPlausibleSaleBudgetAmount(n: number): boolean {
   return Number.isFinite(n) && n >= 10_000;
+}
+
+function isPlausibleRentBudgetAmount(n: number): boolean {
+  return Number.isFinite(n) && n >= 400 && n <= 50_000;
+}
+
+function budgetPlausibilityMode(
+  profile: BuyerPreferenceProfile,
+  patch: BuyerPreferenceExtractionPatch,
+): "sale" | "rent" {
+  if (patch.transactionIntent?.value === "rent") return "rent";
+  if (profile.transactionIntent?.value === "rent") return "rent";
+  return "sale";
+}
+
+function isPlausibleBudgetAmount(n: number, mode: "sale" | "rent"): boolean {
+  return mode === "rent" ? isPlausibleRentBudgetAmount(n) : isPlausibleSaleBudgetAmount(n);
+}
+
+function isRentIntentEvidence(evidence: string | undefined): boolean {
+  return !!evidence && /rent intent|for rent|lease|rental/i.test(evidence);
 }
 
 function shouldForceReplaceBudgetCap(
@@ -119,7 +140,12 @@ function shouldForceReplaceBudgetCap(
   if (!existing || typeof existing.value !== "number" || typeof incoming.value !== "number") {
     return false;
   }
-  if (!isPlausibleBudgetAmount(incoming.value)) return false;
+  if (
+    !isPlausibleBudgetAmount(incoming.value, "sale") &&
+    !isPlausibleBudgetAmount(incoming.value, "rent")
+  ) {
+    return false;
+  }
   const evidence = incoming.evidence || "";
   if (!/budget/i.test(evidence)) return false;
   if (incoming.value <= existing.value) return true;
@@ -131,13 +157,15 @@ function mergePriceRange(
   profile: BuyerPreferenceProfile,
   patch: BuyerPreferenceExtractionPatch,
 ): void {
+  const mode = budgetPlausibilityMode(profile, patch);
+  const plausible = (n: number) => isPlausibleBudgetAmount(n, mode);
   const incomingMin = patch.priceMin;
   const incomingMax = patch.priceMax;
   const rangeReplace =
     incomingMin &&
     incomingMax &&
-    isPlausibleBudgetAmount(incomingMin.value) &&
-    isPlausibleBudgetAmount(incomingMax.value) &&
+    plausible(incomingMin.value) &&
+    plausible(incomingMax.value) &&
     (isBudgetRangeEvidence(incomingMin.evidence) || isBudgetRangeEvidence(incomingMax.evidence));
 
   if (rangeReplace) {
@@ -146,10 +174,10 @@ function mergePriceRange(
     return;
   }
 
-  if (incomingMin && isPlausibleBudgetAmount(incomingMin.value)) {
+  if (incomingMin && plausible(incomingMin.value)) {
     profile.priceMin = mergeScalarField(profile.priceMin, incomingMin);
   }
-  if (incomingMax && isPlausibleBudgetAmount(incomingMax.value)) {
+  if (incomingMax && plausible(incomingMax.value)) {
     profile.priceMax = shouldForceReplaceBudgetCap(profile.priceMax, incomingMax)
       ? { ...incomingMax }
       : mergeScalarField(profile.priceMax, incomingMax);
@@ -211,6 +239,21 @@ function applyPatchField<K extends keyof BuyerPreferenceExtractionPatch>(
     const incoming = patch[key];
     if (incoming && isBedBathCorrectionEvidence(incoming.evidence)) {
       (profile as Record<string, unknown>)[key] = { ...incoming };
+      return;
+    }
+  }
+
+  if (key === "transactionIntent") {
+    const incoming = patch.transactionIntent;
+    if (incoming?.value === "rent" && isRentIntentEvidence(incoming.evidence)) {
+      (profile as Record<string, unknown>)[key] = { ...incoming };
+      return;
+    }
+    if (
+      incoming?.value === "buy" &&
+      profile.transactionIntent?.value === "rent" &&
+      !CONTRADICTION_RE.test(incoming.evidence || "")
+    ) {
       return;
     }
   }

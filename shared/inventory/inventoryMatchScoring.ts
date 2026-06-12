@@ -4,12 +4,28 @@ import { parseSqftMinFromProfile, parseSqftMaxFromProfile } from "../buyerQualif
 import { resolveMatchingBudgetBounds } from "../buyerPreferenceBudget";
 import {
   listingIsLikelyMonthlyRentPrice,
+  listingIsLikelySalePrice,
   listingIsRentalOrLease,
+  listingMatchesRentIntent,
   resolveBuyerTransactionIntent,
   type BuyerTransactionIntent,
 } from "./listingTransactionIntent";
 import { geoConstraintsMatchScore } from "./buyerGeoConstraints";
 import { isMatchableInventoryStatus } from "./inventoryListingSchema";
+import {
+  VERIFIED_LISTING_REASON,
+  filterReasonsToVerifiedListingFacts,
+  listingHasPoolAttribute,
+  listingHasWaterfrontAttribute,
+  listingHasModernStyleAttribute,
+  listingHasGatedCommunityAttribute,
+  listingHasParkingAttribute,
+  listingHasPetFriendlyAttribute,
+  listingHasWalkabilityAttribute,
+  listingHasSchoolPriorityAttribute,
+  listingHasInvestmentAttribute,
+  verifiedMustHaveReason,
+} from "./listingVerifiedMatchReasons";
 
 const MIN_CONFIDENCE = 0.5;
 const NEAR_PRICE_TOLERANCE = 0.12;
@@ -250,28 +266,16 @@ function listingDealBreakerHaystack(listing: MatchListingInput): string {
 }
 
 function listingHasPoolSignal(listing: MatchListingInput): boolean {
-  if (listing.listingDetails?.pool === true) return true;
-  if (listing.listingDetails?.pool === false) return false;
-  for (const raw of listingFeatureTerms(listing)) {
-    const term = normalizeText(String(raw));
-    if (!term) continue;
-    if (/\b(no pool|without pool)\b/.test(term)) return false;
-    if (/\b(private pool|heated pool|pool|swimming pool|inground pool|community pool)\b/.test(term)) {
-      return true;
-    }
-  }
-  const hay = listingHaystack(listing);
-  if (/\bno\s+pool\b/i.test(hay) || /\bwithout\s+(?:a\s+)?pool\b/i.test(hay)) return false;
-  return /\bpool\b/.test(hay) || /\bswimming\b/.test(hay);
+  return listingHasPoolAttribute(listing);
 }
 
 function listingHasWaterfrontSignal(listing: MatchListingInput): boolean {
   if (listing.listingDetails?.waterfront === true) return true;
   if (listing.listingDetails?.waterfront === false) return false;
+  if (listingHasWaterfrontAttribute(listing)) return true;
   const hay = listingHaystack(listing);
   if (/\bnot\s+waterfront\b/i.test(hay)) return false;
   return (
-    /\bwaterfront\b/.test(hay) ||
     /\bwater view\b/.test(hay) ||
     /\bocean\b/.test(hay) ||
     /\bbay\b/.test(hay) ||
@@ -291,13 +295,8 @@ function passesHardGates(listing: MatchListingInput, criteria: BuyerMatchCriteri
       return false;
     }
   } else if (criteria.transactionIntent === "rent") {
-    if (
-      !listingIsRentalOrLease(listing) &&
-      !listingIsLikelyMonthlyRentPrice(listing.priceCents, {
-        transactionIntent: "buy",
-        priceMax: criteria.priceMax,
-      })
-    ) {
+    if (!listingMatchesRentIntent(listing)) return false;
+    if (listingIsLikelySalePrice(listing.priceCents) && !listingIsRentalOrLease(listing)) {
       return false;
     }
   }
@@ -496,96 +495,50 @@ function lowHoaScore(
   return { points: 0, max, reasons: [] };
 }
 
-const FEATURE_KEYWORDS: Record<keyof BuyerMatchCriteria["features"], RegExp[]> = {
-  pool: [/\bpool\b/, /\bswimming\b/],
-  waterfront: [/\bwaterfront\b/, /\bwater view\b/, /\bocean\b/, /\bbay\b/, /\bcanal\b/],
-  modernStyle: [/\bmodern\b/, /\bcontemporary\b/, /\brenovated\b/, /\bupdated\b/],
-  gatedCommunity: [/\bgated\b/, /\bsecurity\b/],
-  parking: [/\bparking\b/, /\bgarage\b/, /\bcovered parking\b/],
-  petFriendly: [/\bpet friendly\b/, /\bpet-friendly\b/, /\bno pet restrictions\b/],
-  walkability: [/\bwalkable\b/, /\bwalkability\b/, /\bpedestrian\b/],
-  schoolPriority: [/\bschool\b/, /\bzone\b/],
-  investmentIntent: [/\binvestment\b/, /\brental\b/, /\bcap rate\b/, /\btenant\b/],
-};
-
-const FEATURE_LABELS: Record<keyof BuyerMatchCriteria["features"], string> = {
-  pool: "Includes pool",
-  waterfront: "Waterfront",
-  modernStyle: "Modern style",
-  gatedCommunity: "Gated community",
-  parking: "Parking",
-  petFriendly: "Pet friendly",
-  walkability: "Walkable area",
-  schoolPriority: "Schools nearby",
-  investmentIntent: "Investment potential",
-};
-
-const MUST_HAVE_REASON_LABELS: Record<string, string> = {
-  pool: "Includes pool",
-  pools: "Includes pool",
-  modern: "Modern style",
-  waterfront: "Waterfront",
-  garage: "Garage parking",
-  parking: "Garage parking",
-  gated: "Gated community",
-  "pet friendly": "Pet friendly",
-  "pet-friendly": "Pet friendly",
-};
-
-function mustHaveReason(raw: string): string {
-  const term = normalizeText(raw);
-  return MUST_HAVE_REASON_LABELS[term] ?? `Includes ${titleCaseArea(raw)}`;
-}
+const FEATURE_PREFERENCE_CHECKS: {
+  key: keyof BuyerMatchCriteria["features"];
+  check: (listing: MatchListingInput) => boolean;
+  reason: string;
+}[] = [
+  { key: "pool", check: listingHasPoolAttribute, reason: VERIFIED_LISTING_REASON.pool },
+  { key: "waterfront", check: listingHasWaterfrontAttribute, reason: VERIFIED_LISTING_REASON.waterfront },
+  { key: "modernStyle", check: listingHasModernStyleAttribute, reason: VERIFIED_LISTING_REASON.modernStyle },
+  { key: "gatedCommunity", check: listingHasGatedCommunityAttribute, reason: VERIFIED_LISTING_REASON.gatedCommunity },
+  { key: "parking", check: listingHasParkingAttribute, reason: VERIFIED_LISTING_REASON.parking },
+  { key: "petFriendly", check: listingHasPetFriendlyAttribute, reason: VERIFIED_LISTING_REASON.petFriendly },
+  { key: "walkability", check: listingHasWalkabilityAttribute, reason: VERIFIED_LISTING_REASON.walkability },
+  { key: "schoolPriority", check: listingHasSchoolPriorityAttribute, reason: VERIFIED_LISTING_REASON.schoolPriority },
+  { key: "investmentIntent", check: listingHasInvestmentAttribute, reason: VERIFIED_LISTING_REASON.investmentIntent },
+];
 
 function featureAndMustHaveScore(
   listing: MatchListingInput,
   criteria: BuyerMatchCriteria,
 ): { points: number; max: number; reasons: string[] } {
-  const hay = listingHaystack(listing);
   let points = 0;
   let max = 0;
   const reasons: string[] = [];
 
-  const featureKeys = Object.keys(criteria.features) as (keyof BuyerMatchCriteria["features"])[];
-  const activeFeatures = featureKeys.filter((k) => criteria.features[k]);
+  const activeFeatures = FEATURE_PREFERENCE_CHECKS.filter(({ key }) => criteria.features[key]);
   max += activeFeatures.length > 0 ? 15 : 0;
 
   if (activeFeatures.length > 0) {
     let matched = 0;
-    for (const key of activeFeatures) {
-      if (key === "pool" && listingHasPoolSignal(listing)) {
+    for (const { check, reason } of activeFeatures) {
+      if (check(listing)) {
         matched += 1;
-        reasons.push(FEATURE_LABELS[key]);
-        continue;
-      }
-      if (key === "waterfront" && listingHasWaterfrontSignal(listing)) {
-        matched += 1;
-        reasons.push(FEATURE_LABELS[key]);
-        continue;
-      }
-      const patterns = FEATURE_KEYWORDS[key];
-      if (patterns.some((p) => p.test(hay))) {
-        matched += 1;
-        reasons.push(FEATURE_LABELS[key]);
+        reasons.push(reason);
       }
     }
     points += Math.round((matched / activeFeatures.length) * 15);
   }
 
   for (const raw of criteria.mustHaves) {
-    const term = normalizeText(raw);
-    if (!term) continue;
+    const reason = verifiedMustHaveReason(raw, listing);
+    if (!reason) continue;
     max += 3;
-    if (term.includes("pool") && listingHasPoolSignal(listing)) {
-      points += 3;
-      reasons.push(mustHaveReason(raw));
-    } else if (term.includes("waterfront") && listingHasWaterfrontSignal(listing)) {
-      points += 3;
-      reasons.push(mustHaveReason(raw));
-    } else if (hay.includes(term)) {
-      points += 3;
-      reasons.push(mustHaveReason(raw));
-    }
+    points += 3;
+    reasons.push(reason);
   }
 
   return { points, max, reasons };
@@ -666,17 +619,20 @@ export function scoreListingAgainstCriteria(
   }
   if (score < MIN_STRONG_MATCH_SCORE) return null;
 
-  const reasons = [
-    ...area.reasons,
-    ...price.reasons,
-    ...pType.reasons,
-    ...bedsBaths.reasons,
-    ...sqft.reasons,
-    ...hoa.reasons,
-    ...features.reasons,
-    ...geo.reasons,
-    ...financing.reasons,
-  ];
+  const reasons = filterReasonsToVerifiedListingFacts(
+    [
+      ...area.reasons,
+      ...price.reasons,
+      ...pType.reasons,
+      ...bedsBaths.reasons,
+      ...sqft.reasons,
+      ...hoa.reasons,
+      ...features.reasons,
+      ...geo.reasons,
+      ...financing.reasons,
+    ],
+    listing,
+  );
 
   const uniqueReasons = [...new Set(reasons)].slice(0, 5);
 
@@ -761,14 +717,9 @@ export function getListingExclusionReason(
       return "rental/lease listing";
     }
   } else if (criteria.transactionIntent === "rent") {
-    if (
-      !listingIsRentalOrLease(listing) &&
-      !listingIsLikelyMonthlyRentPrice(listing.priceCents, {
-        transactionIntent: "buy",
-        priceMax: criteria.priceMax,
-      })
-    ) {
-      return "not a rental/lease listing";
+    if (!listingMatchesRentIntent(listing)) return "not a rental/lease listing";
+    if (listingIsLikelySalePrice(listing.priceCents) && !listingIsRentalOrLease(listing)) {
+      return "for-sale listing";
     }
   }
 

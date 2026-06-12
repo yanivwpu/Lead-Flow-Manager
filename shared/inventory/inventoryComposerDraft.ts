@@ -2,6 +2,9 @@ import {
   pickPrimaryPhotoUrl,
   resolveListingViewUrl,
 } from "./listingViewUrl";
+import type { InventoryListingDetails } from "./inventoryListingSchema";
+import { pickVerifiedListingFeaturePhrase } from "./listingVerifiedMatchReasons";
+import type { MatchListingInput } from "./inventoryMatchScoring";
 
 export type ListingComposerListing = {
   listingId: string;
@@ -16,6 +19,8 @@ export type ListingComposerListing = {
   description?: string | null;
   photos?: { url: string; order?: number }[];
   thumbnailUrl?: string | null;
+  features?: string[];
+  listingDetails?: InventoryListingDetails;
   /** App origin for internal share URL fallback, e.g. https://app.example.com */
   appOrigin?: string | null;
 };
@@ -67,9 +72,31 @@ function normalizeIntroAndClosing(introDraft: string): { intro: string; closing:
   return { intro: text, closing };
 }
 
-function pickFeatureLine(featureHints: string[], description?: string | null): string | null {
-  const hint = featureHints.map((h) => h.trim()).find(Boolean);
-  if (hint) return hint;
+function listingComposerToMatchInput(listing: ListingComposerListing): MatchListingInput {
+  return {
+    id: listing.listingId,
+    providerListingId: listing.listingId,
+    status: "active",
+    priceCents: listing.priceCents,
+    city: listing.city,
+    state: listing.state,
+    addressLine1: null,
+    addressLine2: null,
+    zip: null,
+    beds: listing.beds,
+    baths: listing.baths,
+    propertyType: listing.propertyType,
+    listingDetails: listing.listingDetails,
+    description: listing.description ?? null,
+    features: listing.features ?? [],
+    listingUrl: listing.listingUrl,
+    photos: listing.photos ?? [],
+  };
+}
+
+function pickFeatureLine(listing: ListingComposerListing, description?: string | null): string | null {
+  const verified = pickVerifiedListingFeaturePhrase(listingComposerToMatchInput(listing));
+  if (verified) return verified;
   return truncateText(description, 120);
 }
 
@@ -114,7 +141,7 @@ export function buildListingComposerMessage(input: BuildListingComposerMessageIn
   const location = [listing.city, listing.state].filter(Boolean).join(", ");
   if (location) detailLines.push(location);
 
-  const feature = pickFeatureLine(featureHints, listing.description);
+  const feature = pickFeatureLine(listing, listing.description);
   if (feature) detailLines.push(feature);
 
   const viewUrl = resolveListingViewUrl({

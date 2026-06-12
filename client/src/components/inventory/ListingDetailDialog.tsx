@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Home, Loader2, Sparkles } from "lucide-react";
+import { ExternalLink, Home, Link2, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,15 +18,22 @@ import {
   buildListingComposerMessage,
   listingComposerDraftIncludesRequiredDetails,
 } from "@shared/inventory/inventoryComposerDraft";
-import { pickPrimaryPhotoUrl } from "@shared/inventory/listingViewUrl";
+import { pickPrimaryPhotoUrl, resolveListingViewUrl } from "@shared/inventory/listingViewUrl";
+import { formatListingPriceDisplay } from "@shared/inventory/listingTransactionIntent";
 import type { InventoryMatchListingSummary } from "@shared/inventory/inventoryMatchTypes";
 
-function formatPrice(cents: number | null): string {
-  if (cents == null) return "Price on request";
-  const dollars = cents / 100;
-  if (dollars >= 1_000_000) return `$${(dollars / 1_000_000).toFixed(2).replace(/\.00$/, "")}M`;
-  if (dollars >= 1_000) return `$${Math.round(dollars / 1_000).toLocaleString()}k`;
-  return `$${Math.round(dollars).toLocaleString()}`;
+function formatPrice(cents: number | null, listing?: InventoryMatchListingSummary | null): string {
+  return formatListingPriceDisplay(
+    cents,
+    listing
+      ? {
+          propertyType: listing.propertyType,
+          description: null,
+          features: [],
+          priceCents: listing.priceCents,
+        }
+      : null,
+  );
 }
 
 function formatBedsBaths(beds: number | null, baths: number | null): string | null {
@@ -48,6 +55,7 @@ type ListingDetail = {
     propertyType: string | null;
     description: string | null;
     listingUrl: string | null;
+    publicSlug?: string | null;
     photos: { url: string; order?: number }[];
     status: string;
   };
@@ -246,6 +254,38 @@ export function ListingDetailDialog({
     }
   }, [resolveComposerDraft, listingId, contactId, priceCents, beds, baths, city, state, listingUrl, onInsertComposerDraft, onOpenChange, toast]);
 
+  const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
+
+  const shareUrl = useMemo(() => {
+    if (draftData?.viewUrl) return draftData.viewUrl;
+    if (!listingId || !appOrigin) return null;
+    return resolveListingViewUrl({
+      listingId,
+      publicSlug: listing?.publicSlug ?? null,
+      appOrigin,
+    });
+  }, [draftData?.viewUrl, listingId, listing?.publicSlug, appOrigin]);
+
+  const handlePreviewFlyer = useCallback(() => {
+    if (!shareUrl) return;
+    window.open(shareUrl, "_blank", "noopener,noreferrer");
+  }, [shareUrl]);
+
+  const handleCopyShareLink = useCallback(async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast({ title: "Link copied", duration: 2000 });
+    } catch {
+      toast({
+        title: "Could not copy link",
+        description: "Try Preview Flyer and copy from your browser.",
+        variant: "destructive",
+        duration: 2500,
+      });
+    }
+  }, [shareUrl, toast]);
+
   const composerPreview = resolveComposerDraft();
   const matchBullets = draftData?.matchBullets ?? matchReasons;
   const showDraftContent = !draftLoading && !!composerPreview?.text;
@@ -271,7 +311,7 @@ export function ListingDetailDialog({
                 {[city, state].filter(Boolean).join(", ") || "Listing"}
               </DialogTitle>
               <DialogDescription className="text-sm font-medium text-gray-900">
-                {formatPrice(priceCents)}
+                {formatPrice(priceCents, listing ?? fallback)}
               </DialogDescription>
             </DialogHeader>
             {formatBedsBaths(beds ?? null, baths ?? null) && (
@@ -287,6 +327,33 @@ export function ListingDetailDialog({
             )}
             {listing?.description && (
               <p className="text-xs text-gray-600 line-clamp-4 leading-relaxed">{listing.description}</p>
+            )}
+
+            {listingId && shareUrl && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-[11px] font-medium text-gray-600 hover:text-gray-900"
+                  onClick={handlePreviewFlyer}
+                  data-testid="button-preview-flyer"
+                >
+                  <ExternalLink className="mr-1 h-3 w-3" aria-hidden />
+                  Preview Flyer
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-[11px] font-medium text-gray-600 hover:text-gray-900"
+                  onClick={() => void handleCopyShareLink()}
+                  data-testid="button-copy-flyer-link"
+                >
+                  <Link2 className="mr-1 h-3 w-3" aria-hidden />
+                  Copy Link
+                </Button>
+              </div>
             )}
 
             {contactId && listingId && (

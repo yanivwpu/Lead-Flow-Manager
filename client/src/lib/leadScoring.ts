@@ -311,19 +311,35 @@ function inferIsRealEstate(businessKnowledge?: BusinessKnowledgeForScoring, opti
 function extractRealEstateSignals(inbound: string) {
   const hasBudget =
     /\$\s*[\d,]+(?:\.\d+)?(?:\s*(?:k|m|million|thousand))?/i.test(inbound) ||
-    /\b(budget|price range|afford|spend)\b/i.test(inbound);
+    /\b(budget|price range|afford|spend|between\s+\$?\s*[\d,.]+)\b/i.test(inbound);
   const hasTimeline =
     /\b(asap|urgent|immediately|this week|next week|next month|within \d+ (?:day|week|month|year)s?)\b/i.test(inbound) ||
     /\b(in|within|around)\s+\d+\s+(day|week|month|year)s?\b/i.test(inbound);
   const hasFinancing = /\b(pre-?approved|cash|mortgage|loan|financing)\b/i.test(inbound);
   const viewingIntent = /\b(viewing|showing|tour|see (?:the|it)|visit|open house)\b/i.test(inbound);
 
-  const buyer = /\blooking to buy|buying\b/i.test(inbound);
+  const renter =
+    /\b(for\s+rent|rental|lease|leasing|renting|looking\s+to\s+rent|need\s+to\s+rent|want\s+to\s+rent)\b/i.test(
+      inbound,
+    );
+  const buyer = !renter && /\b(looking to buy|buying)\b/i.test(inbound);
   const seller = /\b(sell|selling|list|listing)\b/i.test(inbound);
   const investor = /\b(invest|investment|roi|cap rate|rental income)\b/i.test(inbound);
-  const intent = investor ? "investor" : seller ? "seller" : buyer ? "buyer" : null;
+  const intent = investor ? "investor" : seller ? "seller" : renter ? "renter" : buyer ? "buyer" : null;
 
-  return { hasBudget, hasTimeline, hasFinancing, viewingIntent, intent };
+  const specificRentalSearch =
+    renter &&
+    /\d+\s*\/\s*\d+|\d+\s*[- ]?\s*bed/i.test(inbound) &&
+    hasBudget &&
+    /\b(?:in|near|around)\s+[a-z]|\b(pompano|miami|fort\s+lauderdale|boca|delray|hollywood)\b/i.test(inbound);
+
+  return { hasBudget, hasTimeline, hasFinancing, viewingIntent, intent, specificRentalSearch, renter };
+}
+
+function computeSpecificRentalSearchBoost(inbound: string): { boost: number; detected: string[] } {
+  const re = extractRealEstateSignals(inbound);
+  if (!re.specificRentalSearch) return { boost: 0, detected: [] };
+  return { boost: 16, detected: ["re:specific_rental_criteria"] };
 }
 
 /** Property management / ops — complaints and urgent maintenance. */
@@ -388,6 +404,10 @@ function computeIndustryLayer(
   if (re.intent) {
     bonus += 4;
     detected.push(`re:intent_${re.intent}`);
+  }
+  if (re.specificRentalSearch) {
+    bonus += 10;
+    detected.push("re:specific_rental_search");
   }
   bonus = Math.min(MAX_INDUSTRY_BONUS, bonus);
   if (bonus <= 0) return { bonus: 0, layer: "real_estate", detected: [] };
@@ -597,17 +617,26 @@ export function scoreLead(
     /\b(price|pricing|cost|how much|rate|fees?)\b/i.test(inbound) &&
     (/\b(buy|purchase|bought|buying|order)\b/i.test(inbound) ||
       /\b(want|need|looking|hoping)\s+to\s+buy\b/i.test(inbound));
+  const comboPricingAndRent =
+    /\b(price|pricing|cost|how much|rate|fees?|between)\b/i.test(inbound) &&
+    /\b(rent|rental|lease|for\s+rent)\b/i.test(inbound);
   const comboHumanAndCommercial =
     decision.detected.includes("decision:human_request") &&
     (/\b(price|pricing|cost|how much|buy|purchase|appointment|book)\b/i.test(inbound) ||
       interest.detected.some((d) => d === "interest:pricing" || d === "interest:booking"));
   let comboBoost = 0;
-  if (comboPricingAndBuy || comboHumanAndCommercial) {
+  if (comboPricingAndBuy || comboPricingAndRent || comboHumanAndCommercial) {
     comboBoost = 12;
     score += comboBoost;
   }
 
+  const rentalCriteriaBoost = computeSpecificRentalSearchBoost(inbound);
+  if (rentalCriteriaBoost.boost > 0) {
+    score += rentalCriteriaBoost.boost;
+  }
+
   const dealReadyIntent = !mediaOnly && detectDealReadyIntent(inbound);
+  const specificRentalSearch = isRealEstate && extractRealEstateSignals(inbound).specificRentalSearch;
 
   let decisionOverride = false;
   let dealReadyOverride = false;
@@ -616,6 +645,9 @@ export function scoreLead(
     dealReadyOverride = true;
     decisionOverride = true;
     score = Math.max(score, 90);
+  } else if (specificRentalSearch) {
+    decisionOverride = true;
+    score = Math.max(score, 75);
   } else if (core.decisionScore >= DECISION_HOT_THRESHOLD) {
     decisionOverride = true;
     score = Math.max(score, 75);
@@ -640,6 +672,9 @@ export function scoreLead(
       ...softNeg.detected,
       ...(industry?.detected ?? []),
       ...(comboBoost > 0 ? ["combo:pricing_and_buy_intent"] : []),
+      ...(comboPricingAndRent ? ["combo:pricing_and_rent_intent"] : []),
+      ...(rentalCriteriaBoost.detected),
+      ...(specificRentalSearch ? ["re:specific_rental_criteria"] : []),
       ...(dealReadyIntent ? ["decision:deal_ready"] : []),
     ]),
   );
@@ -647,8 +682,11 @@ export function scoreLead(
   const reasons: string[] = [];
   if (dealReadyIntent) {
     reasons.push("Customer appears ready to move forward");
+  } else if (specificRentalSearch) {
+    reasons.push("Customer shared specific rental search criteria");
   }
-  if (comboBoost > 0) reasons.push("Customer asked about pricing and buying");
+  if (comboBoost > 0 && comboPricingAndBuy) reasons.push("Customer asked about pricing and buying");
+  if (comboBoost > 0 && comboPricingAndRent) reasons.push("Customer shared rental budget and criteria");
   const genuineActivity = hasGenuineConversationActivity(stats, inbound);
   if (genuineActivity && engagement.value >= 12) reasons.push("Customer is highly engaged");
   else if (genuineActivity && engagement.value >= 6) reasons.push("Customer is engaged");
@@ -668,7 +706,7 @@ export function scoreLead(
     realEstateSignals: reSignalsForQual,
     qualifyingQuestions: businessKnowledge?.qualifyingQuestions,
   });
-  if (missingRequired.length > 0 && !dealReadyIntent) {
+  if (missingRequired.length > 0 && !dealReadyIntent && !specificRentalSearch) {
     reasons.push("A few details are still missing");
   }
 

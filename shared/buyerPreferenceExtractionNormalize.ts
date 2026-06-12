@@ -295,7 +295,7 @@ function normalizeFieldEntry(
     if (fo) tv = fo.value;
     const s = String(tv ?? "").toLowerCase();
     let norm: "buy" | "rent" | "unknown" | undefined;
-    if (/\b(rent|lease|leasing|tenant)\b/.test(s)) norm = "rent";
+    if (/\b(rent|rental|lease|leasing|for\s+rent|tenant)\b/.test(s)) norm = "rent";
     else if (/\b(buy|purchase|sale)\b/.test(s)) norm = "buy";
     else if (s === "unknown") norm = "unknown";
     if (!norm) return undefined;
@@ -540,7 +540,7 @@ export function heuristicPatchFromTranscript(
   if (/\bpool\b/i.test(lower)) {
     patch.pool = { value: true, ...inf(0.7, "pool in message") };
   }
-  if (/\b(rent|renting|lease|leasing|for rent|tenant)\b/i.test(lower)) {
+  if (/\b(rent|rental|renting|lease|leasing|for\s+rent|tenant)\b/i.test(lower)) {
     patch.transactionIntent = { value: "rent", ...inf(0.88, "rent intent in message") };
   } else if (
     /\b(buy|buying|purchase|for sale|show me|looking to buy|looking for a home)\b/i.test(lower)

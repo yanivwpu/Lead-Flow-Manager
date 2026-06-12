@@ -1,11 +1,23 @@
 import type { InventoryMatchResult } from "@shared/inventory/inventoryMatchTypes";
+import { formatListingPriceDisplay } from "@shared/inventory/listingTransactionIntent";
 
-export function formatInventoryPrice(cents: number | null): string {
-  if (cents == null) return "Price on request";
-  const dollars = cents / 100;
-  if (dollars >= 1_000_000) return `$${(dollars / 1_000_000).toFixed(2).replace(/\.00$/, "")}M`;
-  if (dollars >= 1_000) return `$${Math.round(dollars / 1_000).toLocaleString()}k`;
-  return `$${Math.round(dollars).toLocaleString()}`;
+export function formatInventoryPrice(
+  cents: number | null,
+  listing?: InventoryMatchResult["listing"],
+  transactionIntent?: "buy" | "rent" | "unknown",
+): string {
+  return formatListingPriceDisplay(
+    cents,
+    listing
+      ? {
+          propertyType: listing.propertyType,
+          description: null,
+          features: [],
+          priceCents: listing.priceCents,
+        }
+      : null,
+    { transactionIntent },
+  );
 }
 
 export function formatInventoryBedsBaths(beds: number | null, baths: number | null): string | null {
@@ -55,7 +67,7 @@ export function mapInventoryMatchToRecommendation(match: InventoryMatchResult) {
   return {
     title,
     subtitle,
-    primaryValue: formatInventoryPrice(match.listing.priceCents),
+    primaryValue: formatInventoryPrice(match.listing.priceCents, match.listing),
     attributes: formatInventoryBedsBaths(match.listing.beds, match.listing.baths),
     score: match.score,
     matchReasons: match.reasons,

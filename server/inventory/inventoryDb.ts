@@ -493,6 +493,7 @@ const MATCHING_LISTING_SELECT = {
   syncAlertStatus: inventoryListings.syncAlertStatus,
   previousPriceCents: inventoryListings.previousPriceCents,
   lastPriceChangeAt: inventoryListings.lastPriceChangeAt,
+  publicSlug: inventoryListings.publicSlug,
   createdAt: inventoryListings.createdAt,
   updatedAt: inventoryListings.updatedAt,
 } as const;
@@ -508,7 +509,7 @@ function inventoryListingFromMatchingRow(
 ): InventoryListing {
   return {
     ...row,
-    publicSlug: null,
+    publicSlug: row.publicSlug ?? null,
     propertySubtype: row.propertySubtype ?? null,
     squareFeet: row.squareFeet ?? null,
     yearBuilt: row.yearBuilt ?? null,

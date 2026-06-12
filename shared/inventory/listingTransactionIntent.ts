@@ -54,5 +54,50 @@ export function resolveBuyerTransactionIntent(
   raw: BuyerTransactionIntent | null | undefined,
 ): BuyerTransactionIntent {
   if (raw === "rent" || raw === "buy") return raw;
-  return "buy";
+  return "unknown";
+}
+
+/** Sale list prices are typically six figures+; monthly rent is usually under $50k. */
+export function listingIsLikelySalePrice(priceCents: number | null): boolean {
+  if (priceCents == null) return false;
+  return priceCents / 100 >= 100_000;
+}
+
+export function listingPriceLooksLikeMonthlyRent(priceCents: number | null): boolean {
+  if (priceCents == null) return false;
+  const dollars = priceCents / 100;
+  return dollars >= 400 && dollars <= 50_000;
+}
+
+export function listingMatchesRentIntent(listing: ListingTransactionInput): boolean {
+  if (listingIsRentalOrLease(listing)) return true;
+  return listingPriceLooksLikeMonthlyRent(listing.priceCents);
+}
+
+export function formatListingPriceDisplay(
+  priceCents: number | null,
+  listing?: ListingTransactionInput | null,
+  options?: { transactionIntent?: BuyerTransactionIntent },
+): string {
+  if (priceCents == null) return "Price on request";
+  const dollars = priceCents / 100;
+  const intent = options?.transactionIntent ?? "unknown";
+  const rentalListing =
+    (listing && listingIsRentalOrLease(listing)) ||
+    intent === "rent" ||
+    (intent === "unknown" && listingPriceLooksLikeMonthlyRent(priceCents) && !listingIsLikelySalePrice(priceCents));
+
+  if (rentalListing && dollars < 100_000) {
+    if (dollars >= 1_000) {
+      const rounded = Math.round(dollars);
+      return `$${rounded.toLocaleString("en-US")}/mo`;
+    }
+    return `$${Math.round(dollars).toLocaleString("en-US")}/mo`;
+  }
+
+  if (dollars >= 1_000_000) {
+    return `$${(dollars / 1_000_000).toFixed(2).replace(/\.00$/, "")}M`;
+  }
+  if (dollars >= 1_000) return `$${Math.round(dollars / 1_000).toLocaleString()}k`;
+  return `$${Math.round(dollars).toLocaleString()}`;
 }

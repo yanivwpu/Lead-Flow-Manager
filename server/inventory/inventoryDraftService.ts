@@ -6,6 +6,10 @@ import {
   scoreListingAgainstCriteria,
 } from "@shared/inventory/inventoryMatchScoring";
 import { formatBuyerPreferenceSummaryForAi } from "@shared/buyerPreferenceDisplay";
+import {
+  buildListingVerifiedFactsSummary,
+  filterReasonsToVerifiedListingFacts,
+} from "@shared/inventory/listingVerifiedMatchReasons";
 import { readBuyerPreferenceProfile, loadPersistedBuyerPreferenceProfile } from "../buyerPreferenceService";
 import { aiProvider } from "../aiProvider";
 import { storage } from "../storage";
@@ -43,11 +47,19 @@ function bedsLabel(beds: number | null): string | null {
   return `${n} bedroom${beds === 1 ? "" : "s"}`;
 }
 
-function featurePhraseFromReasons(reasons: string[]): string | null {
-  const pool = reasons.find((r) => /pool/i.test(r));
+function featurePhraseFromReasons(
+  reasons: string[],
+  listing: ReturnType<typeof inventoryListingToMatchInput>,
+): string | null {
+  const verified = filterReasonsToVerifiedListingFacts(reasons, listing);
+  const pool = verified.find((r) => /pool/i.test(r));
   if (pool) return "pool";
-  const waterfront = reasons.find((r) => /waterfront/i.test(r));
+  const waterfront = verified.find((r) => /waterfront/i.test(r));
   if (waterfront) return "waterfront access";
+  const oceanView = verified.find((r) => /ocean view/i.test(r));
+  if (oceanView) return "ocean view";
+  const modern = verified.find((r) => /modern/i.test(r));
+  if (modern) return "modern";
   return null;
 }
 
@@ -73,7 +85,7 @@ function buildTemplateDraft(input: {
   const { firstName, listing, reasons, hasListingUrl, opportunityType, priceReductionLabel } = input;
   const label = propertyLabel(listing);
   const beds = bedsLabel(listing.beds);
-  const feature = featurePhraseFromReasons(reasons);
+  const feature = featurePhraseFromReasons(reasons, listing);
   const budget = formatBudget(listing.priceCents);
 
   const parts: string[] = [];
@@ -120,33 +132,24 @@ async function generateAiDraft(input: {
     input.opportunityType,
     input.priceReductionLabel,
   );
-
-  const listingContext = {
-    city: input.listing.city,
-    state: input.listing.state,
-    propertyType: input.listing.propertyType,
-    price: formatBudget(input.listing.priceCents),
-    beds: input.listing.beds,
-    baths: input.listing.baths,
-    hasListingUrl: input.hasListingUrl,
-    opportunityType: input.opportunityType ?? null,
-    priceReductionLabel: input.priceReductionLabel ?? null,
-  };
+  const verifiedFacts = buildListingVerifiedFactsSummary(input.listing, formatBudget);
 
   const system = `You help a realtor draft a short, warm buyer outreach message about a listing match.
 Return JSON only: { "draft": string, "matchBullets": string[] }
 Rules:
 - draft: 2-3 sentences, conversational, first name greeting
 - matchBullets: 3-6 short bullet phrases explaining why this is a strong match (reuse provided reasons when accurate)
+- ONLY describe listing amenities that appear in Listing verifiedFacts (pool, waterfront, oceanView, modernStyle, etc.)
+- NEVER mention buyer preferences as if they are listing facts (e.g. do not say "ocean view" unless verifiedFacts.oceanView is true)
 - NEVER invent or include listing URLs or links
 - If no listing URL is available, say "I found a listing that matches…" not a specific address
 - Do not promise automatic sending — the realtor sends manually
 - No markdown in draft`;
 
   const user = `Buyer first name: ${input.firstName}
-Buyer preferences: ${input.profileSummary || "Not fully captured yet"}
-Match reasons: ${matchBullets.join("; ")}
-Listing: ${JSON.stringify(listingContext)}
+Buyer preferences (for match context only — do NOT quote as listing facts): ${input.profileSummary || "Not fully captured yet"}
+Match reasons (listing-grounded only): ${matchBullets.join("; ")}
+Listing verifiedFacts: ${JSON.stringify(verifiedFacts)}
 ${input.opportunityType === "price_reduced" ? "Highlight the price reduction naturally." : ""}`;
 
   try {
@@ -161,10 +164,12 @@ ${input.opportunityType === "price_reduced" ? "Highlight the price reduction nat
     const parsed = JSON.parse(raw || "{}") as { draft?: string; matchBullets?: string[] };
     const draft = typeof parsed.draft === "string" ? parsed.draft.trim() : "";
     if (!draft) return null;
-    const bullets =
+    const bullets = filterReasonsToVerifiedListingFacts(
       Array.isArray(parsed.matchBullets) && parsed.matchBullets.length > 0
         ? parsed.matchBullets.filter((b) => typeof b === "string").slice(0, 6)
-        : matchBullets;
+        : matchBullets,
+      input.listing,
+    );
     if (!input.hasListingUrl && /https?:\/\//i.test(draft)) {
       return null;
     }
@@ -215,6 +220,7 @@ export async function generateInventoryMatchDraft(
     const scored = scoreListingAgainstCriteria(listing, criteria);
     reasons = scored?.reasons ?? [];
   }
+  reasons = filterReasonsToVerifiedListingFacts(reasons, listing);
 
   const matchBullets = normalizeBullets(
     reasons,
@@ -260,6 +266,8 @@ export async function generateInventoryMatchDraft(
       listingUrl: listing.listingUrl,
       description: listing.description,
       photos: listing.photos,
+      features: listing.features,
+      listingDetails: listing.listingDetails,
       appOrigin: getAppOrigin(),
     },
     contactFirstName: firstName,
