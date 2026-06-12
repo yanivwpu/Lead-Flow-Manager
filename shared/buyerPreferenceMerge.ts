@@ -124,6 +124,7 @@ function budgetPlausibilityMode(
   profile: BuyerPreferenceProfile,
   patch: BuyerPreferenceExtractionPatch,
 ): "sale" | "rent" {
+  if (patch.transactionIntent?.value === "buy") return "sale";
   if (patch.transactionIntent?.value === "rent") return "rent";
   if (profile.transactionIntent?.value === "rent") return "rent";
   return "sale";
@@ -135,6 +136,34 @@ function isPlausibleBudgetAmount(n: number, mode: "sale" | "rent"): boolean {
 
 function isRentIntentEvidence(evidence: string | undefined): boolean {
   return !!evidence && /rent intent|for rent|lease|rental/i.test(evidence);
+}
+
+function isBuyIntentEvidence(evidence: string | undefined): boolean {
+  return !!evidence && /buy intent|for sale|homes?\s+for\s+sale|purchase/i.test(evidence);
+}
+
+function isMonthlyRentBudgetAmount(n: number): boolean {
+  return Number.isFinite(n) && n >= 400 && n <= 50_000;
+}
+
+/** Clear monthly rent caps when buyer pivots to a for-sale search. */
+function clearMonthlyRentBudgetFields(profile: BuyerPreferenceProfile): void {
+  if (typeof profile.priceMin?.value === "number" && isMonthlyRentBudgetAmount(profile.priceMin.value)) {
+    delete profile.priceMin;
+  }
+  if (typeof profile.priceMax?.value === "number" && isMonthlyRentBudgetAmount(profile.priceMax.value)) {
+    delete profile.priceMax;
+  }
+}
+
+const RENT_ONLY_PREFERENCE_KEYS = ["shortTermRentalAllowed", "petFriendly"] as const;
+
+/** Rental search replaces conflicting purchase prefs — mirror for rent → buy pivot. */
+export function stripConflictingRentPreferences(profile: BuyerPreferenceProfile): void {
+  for (const key of RENT_ONLY_PREFERENCE_KEYS) {
+    delete (profile as Record<string, unknown>)[key];
+  }
+  clearMonthlyRentBudgetFields(profile);
 }
 
 const PURCHASE_FEATURE_KEYS = [
@@ -314,11 +343,8 @@ function applyPatchField<K extends keyof BuyerPreferenceExtractionPatch>(
       (profile as Record<string, unknown>)[key] = { ...incoming };
       return;
     }
-    if (
-      incoming?.value === "buy" &&
-      profile.transactionIntent?.value === "rent" &&
-      !CONTRADICTION_RE.test(incoming.evidence || "")
-    ) {
+    if (incoming?.value === "buy" && isBuyIntentEvidence(incoming.evidence)) {
+      (profile as Record<string, unknown>)[key] = { ...incoming };
       return;
     }
   }
@@ -331,6 +357,7 @@ function applyPatchField<K extends keyof BuyerPreferenceExtractionPatch>(
 }
 
 const PATCH_KEYS: (keyof BuyerPreferenceExtractionPatch)[] = [
+  "transactionIntent",
   "targetAreas",
   "priceMin",
   "priceMax",
@@ -350,7 +377,6 @@ const PATCH_KEYS: (keyof BuyerPreferenceExtractionPatch)[] = [
   "walkability",
   "schoolPriority",
   "timeline",
-  "transactionIntent",
   "financingStatus",
   "mustHaves",
   "dealBreakers",
@@ -370,6 +396,14 @@ export function mergeBuyerPreferenceProfile(
 
   const switchingToRent =
     patch.transactionIntent?.value === "rent" && isRentIntentEvidence(patch.transactionIntent.evidence);
+  const switchingToBuy =
+    patch.transactionIntent?.value === "buy" &&
+    isBuyIntentEvidence(patch.transactionIntent.evidence) &&
+    profile.transactionIntent?.value === "rent";
+
+  if (switchingToBuy) {
+    stripConflictingRentPreferences(profile);
+  }
 
   for (const key of PATCH_KEYS) {
     applyPatchField(profile, patch, key, mergeOptions);
@@ -378,6 +412,10 @@ export function mergeBuyerPreferenceProfile(
   if (switchingToRent || profile.transactionIntent?.value === "rent") {
     stripConflictingSalePreferences(profile);
     normalizeRentBudgetFields(profile);
+  }
+
+  if (profile.transactionIntent?.value === "buy") {
+    clearMonthlyRentBudgetFields(profile);
   }
 
   if (isShowMeAllPropertyRelaxEvidence(patch.propertyTypes?.evidence)) {

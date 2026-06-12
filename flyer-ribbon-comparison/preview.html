@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Flyer ribbon preview</title>
+  <style>
+    body { margin: 0; padding: 24px; background: #e2e8f0; }
+    .preview-flyer .flyer { margin: 0 auto; }
+    .preview-flyer .flyer-floating-actions,
+    .preview-flyer #toast,
+    .preview-flyer script { display: none !important; }
+    
+    :root {
+      --brand-green: #059669;
+      --brand-green-dark: #047857;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --surface: #ffffff;
+      --bg: #f8fafc;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.5;
+    }
+    .flyer { max-width: 920px; margin: 0 auto; background: var(--surface); }
+    .gallery-banner-anchor {
+      display: flex;
+      justify-content: flex-end;
+      margin: 0 0 -28px;
+      padding: 0;
+      position: relative;
+      z-index: 2;
+      pointer-events: none;
+      background: transparent;
+    }
+    .gallery-banner-anchor .listing-banner { pointer-events: auto; }
+    .listing-banner-fallback {
+      display: flex;
+      justify-content: flex-end;
+      margin: 0 0 12px;
+      padding: 0 20px;
+    }
+    .listing-banner {
+      margin: 0;
+      padding: 10px 28px 10px 20px;
+      font-size: 1.125rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #fff;
+      background: var(--brand-green);
+      transform: skewX(-12deg);
+      transform-origin: top right;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+    }
+    .flyer-floating-actions {
+      position: fixed;
+      right: max(12px, env(safe-area-inset-right, 0px));
+      bottom: max(12px, env(safe-area-inset-bottom, 0px));
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1);
+      backdrop-filter: blur(8px);
+    }
+    .flyer-floating-actions .icon-btn {
+      width: 34px;
+      height: 34px;
+      border-color: transparent;
+      background: transparent;
+    }
+    .flyer-floating-actions .icon-btn:hover {
+      background: #f1f5f9;
+      border-color: var(--border);
+    }
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .icon-btn:hover { color: var(--ink); border-color: #cbd5e1; background: #f8fafc; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+    .btn-primary { background: var(--brand-green); border-color: var(--brand-green); color: #fff; }
+    .btn-primary:hover { background: var(--brand-green-dark); border-color: var(--brand-green-dark); }
+    .btn-outline { background: #fff; border-color: var(--border); color: var(--ink); }
+    .btn-outline:hover { border-color: #cbd5e1; background: #f8fafc; }
+    .flyer-body { padding: 0 20px 20px; }
+    .gallery { margin: 0 -20px 16px; }
+    .hero-wrap {
+      position: relative;
+      background: #e2e8f0;
+      height: min(42vw, 380px);
+      min-height: 220px;
+      overflow: hidden;
+    }
+    .hero-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .gallery-nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.92);
+      color: var(--ink);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(15,23,42,0.12);
+    }
+    .gallery-nav:hover { background: #fff; }
+    .gallery-prev { left: 12px; }
+    .gallery-next { right: 12px; }
+    .thumbs {
+      display: flex;
+      gap: 8px;
+      padding: 12px 20px;
+      overflow-x: auto;
+      background: #f8fafc;
+      border-top: 1px solid var(--border);
+    }
+    .thumb {
+      flex: 0 0 auto;
+      width: 72px;
+      height: 54px;
+      padding: 0;
+      border: 2px solid transparent;
+      border-radius: 6px;
+      overflow: hidden;
+      cursor: pointer;
+      background: #e2e8f0;
+    }
+    .thumb.active { border-color: var(--brand-green); }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .print-only { display: none !important; }
+    .property-header { padding: 4px 0 14px; border-bottom: 1px solid var(--border); }
+    .property-street {
+      margin: 0 0 4px;
+      font-size: 1.375rem;
+      line-height: 1.25;
+      font-weight: 700;
+    }
+    .property-location {
+      margin: 0 0 12px;
+      font-size: 0.9375rem;
+      line-height: 1.35;
+      color: var(--muted);
+    }
+    .key-stats {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 2px 0;
+      row-gap: 4px;
+      margin: 0;
+      padding: 0;
+      border-bottom: none;
+      overflow: visible;
+      width: 100%;
+    }
+    .key-stat {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #334155;
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
+    .key-stat.key-price { font-size: 1.25rem; font-weight: 700; color: var(--brand-green); }
+    .key-stat-sep { color: #cbd5e1; margin: 0 10px; font-weight: 300; user-select: none; }
+    @media (min-width: 768px) {
+      .property-street { font-size: 1.5rem; }
+      .key-stat { font-size: 0.9375rem; }
+      .key-stat.key-price { font-size: 1.375rem; }
+    }
+    h2, .bottom-col-heading {
+      font-size: 0.6875rem;
+      margin: 0 0 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--brand-green);
+      font-weight: 700;
+    }
+    .description-section { margin: 16px 0; padding: 0; }
+    .description {
+      white-space: pre-wrap;
+      margin: 0;
+      color: #334155;
+      font-size: 0.9375rem;
+      line-height: 1.55;
+    }
+    .flyer-bottom-row {
+      display: grid;
+      gap: 16px;
+      margin-top: 16px;
+      align-items: stretch;
+    }
+    @media (min-width: 640px) {
+      .flyer-bottom-row {
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.05fr) minmax(0, 1.15fr);
+        gap: 14px;
+      }
+    }
+    .bottom-col { display: flex; flex-direction: column; min-width: 0; }
+    .bottom-col-empty { display: none; }
+    .map-embed-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1;
+      background: #e2e8f0;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .map-embed {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
+    .map-print-placeholder {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      min-height: 120px;
+      background: linear-gradient(145deg, #e8f0ea 0%, #dce7e0 100%);
+      color: #475569;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .map-btn { margin-top: 8px; align-self: flex-start; }
+    .qr-block {
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      align-self: center;
+      width: 100%;
+      max-width: 180px;
+    }
+    .qr-block img { display: block; width: 100%; height: auto; aspect-ratio: 1; }
+    .qr-helper {
+      margin: 8px 0 0;
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-align: center;
+    }
+    .bottom-col-qr { align-items: center; }
+    .bottom-col-qr .bottom-col-heading { text-align: center; width: 100%; }
+    .agent-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 8px;
+      height: 100%;
+      padding: 16px 14px;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+    }
+    .agent-logo-footer {
+      margin-top: auto;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+      width: 100%;
+      display: flex;
+      justify-content: center;
+    }
+    .agent-company-logo {
+      max-height: 44px;
+      max-width: 120px;
+      width: auto;
+      object-fit: contain;
+    }
+    .agent-avatar {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      object-fit: cover;
+      flex-shrink: 0;
+      border: 2px solid #f1f5f9;
+    }
+    .agent-avatar.placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #e2e8f0;
+      color: #475569;
+      font-weight: 700;
+      font-size: 1.375rem;
+    }
+    .agent-name { margin: 0 0 2px; font-weight: 700; font-size: 1rem; }
+    .agent-brokerage { margin: 0 0 6px; color: var(--muted); font-size: 0.8125rem; }
+    .agent-contact { margin: 0 0 3px; font-size: 0.8125rem; }
+    .agent-contact a { color: var(--ink); text-decoration: none; }
+    .agent-contact a:hover { text-decoration: underline; }
+    .agent-body { width: 100%; }
+    .agent-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; width: 100%; }
+    .agent-cta, .agent-cta-secondary { width: 100%; text-align: center; font-size: 0.8125rem; padding: 8px 12px; }
+    .agent-cta-secondary {
+      background: #fff;
+      border-color: var(--border);
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .agent-cta-secondary:hover { border-color: #cbd5e1; background: #f8fafc; }
+    .site-footer {
+      padding: 12px 20px 16px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      background: #fafbfc;
+    }
+    .powered-by {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      color: #94a3b8;
+      text-decoration: none;
+    }
+    .powered-by:hover { color: var(--muted); }
+    .powered-logo { display: flex; align-items: center; line-height: 0; }
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--ink);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      opacity: 0;
+      transition: transform 0.25s ease, opacity 0.25s ease;
+      pointer-events: none;
+      z-index: 100;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+    @page { size: letter; margin: 0.35in; }
+    @media print {
+      html, body {
+        background: #fff;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .no-print { display: none !important; }
+      .flyer { max-width: none; box-shadow: none; }
+      .gallery-banner-anchor {
+        justify-content: flex-end !important;
+        margin-bottom: 4px;
+      }
+      .listing-banner {
+        font-size: 11pt;
+        padding: 5px 20px 5px 14px;
+        margin-right: 0;
+        transform-origin: top right !important;
+      }
+      .flyer-body { padding: 0; }
+      .gallery { margin: 0 0 6px; }
+      .hero-wrap {
+        height: 4.1in;
+        min-height: 0;
+      }
+      .hero-img { max-height: none; }
+      .gallery:has(.print-photo-strip) .hero-wrap { height: 3.85in; }
+      .print-only.print-photo-strip {
+        display: flex !important;
+        gap: 4px;
+        margin-top: 4px;
+        overflow: hidden;
+      }
+      .print-photo-strip-img {
+        flex: 1 1 0;
+        min-width: 0;
+        height: 0.65in;
+        object-fit: cover;
+        border-radius: 2px;
+        display: block;
+      }
+      .thumbs, .gallery-nav { display: none !important; }
+      .property-header { padding: 0 0 6px; }
+      .property-street { font-size: 14pt; margin-bottom: 2px; }
+      .property-location { font-size: 10pt; margin-bottom: 4px; }
+      .key-stats { flex-wrap: wrap; overflow: visible; row-gap: 3px; }
+      .key-stat.key-price { font-size: 12pt; }
+      .key-stat { font-size: 9pt; flex: 0 0 auto; }
+      .key-stat-sep { margin: 0 5px; }
+      .description-section { margin: 6px 0; page-break-inside: avoid; break-inside: avoid; }
+      .description-section h2 { font-size: 8pt; margin-bottom: 3px; }
+      .description { font-size: 10pt; line-height: 1.42; }
+      .flyer-bottom-row {
+        display: grid;
+        grid-template-columns: minmax(0, 3fr) minmax(0, 3fr) minmax(0, 4fr);
+        gap: 10px;
+        margin-top: 8px;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      .bottom-col-empty { display: none !important; }
+      .bottom-col-heading { font-size: 7pt; margin-bottom: 4px; }
+      .map-embed-interactive { display: none !important; }
+      .map-print-static.print-only {
+        display: block !important;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center;
+      }
+      .map-embed-wrap.map-failed .map-print-static { display: none !important; }
+      .map-embed-wrap.map-failed .map-print-placeholder {
+        display: flex !important;
+        position: absolute;
+        inset: 0;
+      }
+      .map-embed-wrap {
+        aspect-ratio: auto;
+        height: 1.65in;
+        min-height: 1.55in;
+        max-height: 1.75in;
+        border-radius: 4px;
+        overflow: hidden;
+        position: relative;
+      }
+      .qr-block {
+        padding: 4px;
+        border-radius: 4px;
+        max-width: none;
+        width: 100%;
+      }
+      .qr-block img {
+        width: 100%;
+        max-width: 1.7in;
+        margin: 0 auto;
+      }
+      .qr-helper { font-size: 7pt; margin-top: 4px; }
+      .agent-card {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        padding: 10px 8px;
+        box-shadow: none;
+        gap: 5px;
+        border-radius: 8px;
+        border-width: 1.5pt;
+        border-color: #94a3b8;
+      }
+      .agent-avatar { width: 54px; height: 54px; font-size: 1.05rem; border-width: 1.5pt; }
+      .agent-company-logo { max-height: 28px; max-width: 90px; }
+      .agent-name { font-size: 10pt; }
+      .agent-brokerage, .agent-contact { font-size: 8pt; }
+      .agent-actions { gap: 4px; margin-top: 6px; }
+      .agent-cta, .agent-cta-secondary { padding: 5px 8px; font-size: 7.5pt; line-height: 1.2; }
+      .agent-logo-footer { margin-top: auto; padding-top: 6px; }
+      .site-footer { padding: 4px 0 0; border-top: 1px solid #e2e8f0; margin-top: 6px; background: #fff; }
+      .powered-by { font-size: 7pt; }
+      a { color: inherit; text-decoration: none; }
+    }
+    @media (max-width: 480px) {
+      .listing-banner { font-size: 0.9375rem; padding: 8px 20px 8px 14px; }
+      .gallery-nav { width: 34px; height: 34px; }
+      .key-stat-sep { margin: 0 6px; }
+      .flyer-floating-actions { right: 10px; bottom: 10px; }
+    }
+  
+  </style>
+</head>
+<body>
+  <div class="preview-flyer">
+  <div class="flyer">
+    <div class="flyer-body">
+      <section class="gallery">
+    <div class="gallery-banner-anchor"><div class="listing-banner" aria-label="FOR SALE">FOR SALE</div></div>
+    <div class="hero-wrap">
+      <img id="hero-img" class="hero-img" src="https://dvvjkgh94f2v6.cloudfront.net/523fa3e6/475213068/83dcefb7.jpeg" alt="Property photo" />
+      <button type="button" class="gallery-nav gallery-prev" id="gallery-prev" aria-label="Previous photo"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
+         <button type="button" class="gallery-nav gallery-next" id="gallery-next" aria-label="Next photo"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+    </div>
+    <div class="print-photo-strip print-only" aria-hidden="true"><img class="print-photo-strip-img" src="https://dvvjkgh94f2v6.cloudfront.net/523fa3e6/475213068/83dcefb7.jpeg" alt="" /></div>
+    <div class="thumbs" role="list"><button type="button" class="thumb active" data-index="0" data-url="https://dvvjkgh94f2v6.cloudfront.net/523fa3e6/475213068/83dcefb7.jpeg" aria-label="Photo 1">
+          <img src="https://dvvjkgh94f2v6.cloudfront.net/523fa3e6/475213068/83dcefb7.jpeg" alt="" loading="lazy" />
+        </button><button type="button" class="thumb" data-index="1" data-url="https://dvvjkgh94f2v6.cloudfront.net/523fa3e6/475213068/83dcefb7.jpeg" aria-label="Photo 2">
+          <img src="https://dvvjkgh94f2v6.cloudfront.net/523fa3e6/475213068/83dcefb7.jpeg" alt="" loading="lazy" />
+        </button></div>
+    <script type="application/json" id="gallery-urls">["https://dvvjkgh94f2v6.cloudfront.net/523fa3e6/475213068/83dcefb7.jpeg","https://dvvjkgh94f2v6.cloudfront.net/523fa3e6/475213068/83dcefb7.jpeg"]</script>
+  </section>
+      <section class="property-header">
+    <p class="property-street">1881 NW 5th Ter, # 1881</p>
+    <p class="property-location">Pompano Beach, FL, 33060</p>
+    <div class="key-stats"><span class="key-stat key-price">$3,400</span><span class="key-stat-sep" aria-hidden="true">|</span><span class="key-stat">3 Beds</span><span class="key-stat-sep" aria-hidden="true">|</span><span class="key-stat">2 Baths</span><span class="key-stat-sep" aria-hidden="true">|</span><span class="key-stat">1,152 Sq Ft</span><span class="key-stat-sep" aria-hidden="true">|</span><span class="key-stat">Built 1961</span></div>
+  </section>
+      <section class="description-section">
+      <h2>Description</h2>
+      <p class="description">Charming home in Pompano Beach.</p>
+    </section>
+      <section class="flyer-bottom-row"><div class="bottom-col bottom-col-map">
+    <h3 class="bottom-col-heading">Location</h3>
+    <div class="map-embed-wrap">
+      <iframe class="map-embed map-embed-interactive" title="Property location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.openstreetmap.org/export/embed.html?bbox=-80.132%2C26.218%2C-80.108%2C26.242&amp;layer=mapnik&amp;marker=26.23%2C-80.12"></iframe>
+      <img class="map-print-static print-only" src="https://staticmap.openstreetmap.de/staticmap.php?center=26.23%2C-80.12&amp;zoom=14&amp;size=450x450&amp;maptype=mapnik&amp;markers=26.23%2C-80.12%2Cred" data-map-fallbacks="[&quot;https://static-maps.yandex.ru/1.x/?lang=en_US&amp;ll=-80.12,26.23&amp;z=14&amp;l=map&amp;size=450,450&amp;pt=-80.12,26.23,pm2rdm&quot;,&quot;https://tile.openstreetmap.org/14/4545/6954.png&quot;]" alt="Property location map" />
+      <div class="map-print-placeholder print-only" aria-hidden="true">Map preview</div>
+    </div>
+    <a class="btn btn-outline map-btn no-print" href="https://www.google.com/maps/search/?api=1&amp;query=26.23,-80.12" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>
+  </div><div class="bottom-col bottom-col-qr">
+    <h3 class="bottom-col-heading">Scan To View Listing</h3>
+    <div class="qr-block">
+      <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22120%22%20height%3D%22120%22%3E%3Crect%20width%3D%22100%25%22%20height%3D%22100%25%22%20fill%3D%22%23e2e8f0%22%2F%3E%3C%2Fsvg%3E" alt="QR code to view listing" width="160" height="160" />
+    </div>
+    <p class="qr-helper">Open listing on your phone</p>
+  </div><div class="bottom-col bottom-col-agent"><div class="agent-card">
+    <div class="agent-avatar placeholder" aria-hidden="true">YH</div>
+    <div class="agent-body">
+      <p class="agent-name">Yaniv Haramatiy</p><p class="agent-brokerage">Canvas Real Estate</p><p class="agent-contact"><a href="tel:9545138408">954.513.8408</a></p><p class="agent-contact"><a href="mailto:yanivharamaty@gmail.com">yanivharamaty@gmail.com</a></p>
+      <div class="agent-actions"><a class="btn btn-primary agent-cta" href="https://calendly.com/yaniv-whachatcrm" target="_blank" rel="noopener noreferrer">Schedule Showing</a><a class="btn agent-cta-secondary" href="mailto:yanivharamaty%40gmail.com?subject=Inquiry%20about%201881%20NW%205th%20Ter%2C%20%23%201881%2C%20Pompano%20Beach%2C%20FL%2C%2033060">Contact Agent</a></div>
+    </div>
+    
+  </div></div></section>
+      <footer class="site-footer">
+    <a class="powered-by" href="https://whachatcrm.com" target="_blank" rel="noopener noreferrer">
+      <span class="powered-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect width="24" height="24" rx="5" fill="#059669"/><text x="12" y="16.5" text-anchor="middle" font-family="Segoe UI,system-ui,sans-serif" font-size="13" font-weight="700" fill="#fff">W</text></svg></span>
+      <span>Powered by WhachatCRM</span>
+    </a>
+  </footer>
+    </div>
+  </div>
+  <div class="flyer-floating-actions no-print" aria-label="Page actions">
+      <button type="button" class="icon-btn" id="btn-share" aria-label="Share listing"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></button>
+      <button type="button" class="icon-btn" id="btn-print" aria-label="Print flyer" title="For best print results, turn off browser Headers and footers."><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>
+    </div>
+  <div id="toast" class="toast no-print" role="status" aria-live="polite">Listing link copied.</div>
+  <script>
+    (function () {
+      var hero = document.getElementById("hero-img");
+      var urlsEl = document.getElementById("gallery-urls");
+      var urls = [];
+      try { urls = urlsEl ? JSON.parse(urlsEl.textContent || "[]") : []; } catch (e) {}
+      var index = 0;
+      function setPhoto(i) {
+        if (!hero || !urls.length) return;
+        index = (i + urls.length) % urls.length;
+        hero.src = urls[index];
+        document.querySelectorAll(".thumb").forEach(function (t, ti) {
+          t.classList.toggle("active", ti === index);
+        });
+      }
+      document.getElementById("gallery-prev")?.addEventListener("click", function () { setPhoto(index - 1); });
+      document.getElementById("gallery-next")?.addEventListener("click", function () { setPhoto(index + 1); });
+      document.querySelectorAll(".thumb").forEach(function (btn, i) {
+        btn.addEventListener("click", function () { setPhoto(i); });
+      });
+      document.addEventListener("keydown", function (e) {
+        if (!urls.length || urls.length < 2) return;
+        if (e.key === "ArrowLeft") setPhoto(index - 1);
+        if (e.key === "ArrowRight") setPhoto(index + 1);
+      });
+      var toast = document.getElementById("toast");
+      function showToast() {
+        if (!toast) return;
+        toast.classList.add("show");
+        setTimeout(function () { toast.classList.remove("show"); }, 2600);
+      }
+      document.querySelectorAll(".map-print-static").forEach(function (img) {
+        var fallbacks = [];
+        try { fallbacks = JSON.parse(img.getAttribute("data-map-fallbacks") || "[]"); } catch (e) {}
+        var fallbackIndex = 0;
+        img.addEventListener("error", function () {
+          if (fallbackIndex < fallbacks.length) {
+            img.src = fallbacks[fallbackIndex++];
+            return;
+          }
+          img.closest(".map-embed-wrap")?.classList.add("map-failed");
+        });
+      });
+      document.getElementById("btn-print")?.addEventListener("click", function () { window.print(); });
+      document.getElementById("btn-share")?.addEventListener("click", async function () {
+        var url = "https://app.whachatcrm.com/share/listings/1881-nw-5th-ter-1881-pompano-beach-fl-33060-b6aa87ce";
+        var title = document.title;
+        if (navigator.share) {
+          try { await navigator.share({ title: title, url: url }); return; } catch (e) {}
+        }
+        try {
+          await navigator.clipboard.writeText(url);
+          showToast();
+        } catch (e) {
+          prompt("Copy this listing link:", url);
+        }
+      });
+    })();
+  </script>
+</div>
+</body>
+</html>

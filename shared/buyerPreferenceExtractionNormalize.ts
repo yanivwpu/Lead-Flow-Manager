@@ -154,6 +154,13 @@ function extractAreasFromText(text: string, lower: string): string[] {
     areaHits.push("Brickell");
   }
 
+  if (/\b(?:close to|near|walking distance to)\s+(?:the\s+)?beach\b/i.test(lower)) {
+    const label = "Close to beach";
+    if (!areaHits.some((a) => a.toLowerCase() === label.toLowerCase())) {
+      areaHits.push(label);
+    }
+  }
+
   return areaHits.slice(0, 6);
 }
 
@@ -302,7 +309,7 @@ function normalizeFieldEntry(
     const s = String(tv ?? "").toLowerCase();
     let norm: "buy" | "rent" | "unknown" | undefined;
     if (/\b(rent|rental|lease|leasing|for\s+rent|tenant)\b/.test(s)) norm = "rent";
-    else if (/\b(buy|purchase|sale)\b/.test(s)) norm = "buy";
+    else if (/\b(buy|purchase|for\s+sale|homes?\s+for\s+sale)\b/.test(s)) norm = "buy";
     else if (s === "unknown") norm = "unknown";
     if (!norm) return undefined;
     const base = fo ?? toFieldObject(norm)!;
@@ -557,12 +564,12 @@ export function heuristicPatchFromTranscript(
   if (/\b(rent|rental|renting|lease|leasing|for\s+rent|tenant)\b/i.test(lower)) {
     patch.transactionIntent = { value: "rent", ...inf(0.88, "rent intent in message") };
   } else if (
-    /\b(buy|buying|purchase|for sale|looking to buy|looking for a home)\b/i.test(lower) ||
+    /\b(homes?\s+for\s+sale|for\s+sale|buy|buying|purchase|looking to buy|looking for a home)\b/i.test(lower) ||
     (/\bshow me\b/i.test(lower) &&
       !relaxPropertyTypes &&
       /(?:\$\s*[\d,.]+(?:\s*(?:k|m|million|mil))?|\b[\d,.]+\s*(?:million|mil)\b)/i.test(lower))
   ) {
-    patch.transactionIntent = { value: "buy", ...inf(0.82, "buy intent in message") };
+    patch.transactionIntent = { value: "buy", ...inf(0.88, "buy intent in message") };
   }
   if (/\bmodern\b/i.test(lower)) {
     patch.modernStyle = { value: true, ...inf(0.68, "modern in message") };
