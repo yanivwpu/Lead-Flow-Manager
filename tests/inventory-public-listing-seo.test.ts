@@ -7,7 +7,12 @@ import {
   buildListingSeoMeta,
   buildListingStructuredDataJson,
   buildPublicListingFlyerHtml,
+  buildPublicListingLoadErrorHtml,
+  buildPublicListingNotFoundHtml,
   inventoryRowToFlyerListing,
+  LISTING_OG_IMAGE_HEIGHT,
+  LISTING_OG_IMAGE_WIDTH,
+  renderListingOpenGraphTags,
 } from "../shared/inventory/publicListingFlyer";
 import { renderUrlset, sitemapLocForEntry } from "../server/routes/publicListingsSitemap";
 
@@ -81,8 +86,44 @@ const html = buildPublicListingFlyerHtml({
 assert(html.includes(`<link rel="canonical" href="${canonicalUrl}"`), "canonical tag");
 assert(html.includes('property="og:url"'), "og url tag");
 assert(html.includes('name="twitter:card" content="summary_large_image"'), "twitter card");
+assert(
+  html.includes(`property="og:image:width" content="${LISTING_OG_IMAGE_WIDTH}"`),
+  "og image width",
+);
+assert(
+  html.includes(`property="og:image:height" content="${LISTING_OG_IMAGE_HEIGHT}"`),
+  "og image height",
+);
 assert(html.includes("application/ld+json"), "json-ld script");
 assert(html.includes("3503 Oaks Way #308 | 2 Beds 2 Baths"), "document title");
+
+const ogTags = renderListingOpenGraphTags(og);
+assert(ogTags.includes('property="og:image:width"'), "renderListingOpenGraphTags width");
+assert(ogTags.includes('property="og:image:height"'), "renderListingOpenGraphTags height");
+
+const notFoundHtml = buildPublicListingNotFoundHtml();
+assert(
+  notFoundHtml.includes('property="og:title" content="Listing not available | WhachatCRM"'),
+  "404 og title",
+);
+assert(
+  notFoundHtml.includes(
+    'property="og:description" content="This listing may be unavailable or expired."',
+  ),
+  "404 og description",
+);
+
+const loadErrorHtml = buildPublicListingLoadErrorHtml();
+assert(
+  loadErrorHtml.includes('property="og:title" content="Listing not available | WhachatCRM"'),
+  "500 og title",
+);
+assert(
+  loadErrorHtml.includes(
+    'property="og:description" content="This listing may be unavailable or expired."',
+  ),
+  "500 og description",
+);
 
 const urlset = renderUrlset(
   [{ id: listingId, publicSlug, lastmod: new Date("2026-06-01") }],

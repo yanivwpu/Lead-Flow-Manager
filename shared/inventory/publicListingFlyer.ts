@@ -253,6 +253,16 @@ export type ListingOpenGraphMeta = {
   keywords: string;
 };
 
+/** Default OG image dimensions for listing hero photos (social preview cards). */
+export const LISTING_OG_IMAGE_WIDTH = 1200;
+export const LISTING_OG_IMAGE_HEIGHT = 630;
+
+const LISTING_ERROR_OG_TITLE = "Listing not available | WhachatCRM";
+const LISTING_ERROR_OG_DESCRIPTION = "This listing may be unavailable or expired.";
+
+/** Overlap of status ribbon into hero image (screen layout). */
+const LISTING_BANNER_HERO_OVERLAP_PX = 16;
+
 function formatSeoBedBathCount(value: number | null, label: "Bed" | "Bath"): string | null {
   if (value == null || !Number.isFinite(value)) return null;
   const rounded = value % 1 === 0 ? String(Math.round(value)) : String(value);
@@ -410,6 +420,8 @@ export function renderListingOpenGraphTags(meta: ListingOpenGraphMeta): string {
   if (meta.imageUrl) {
     tags.push(`<meta property="og:image" content="${escapeHtml(meta.imageUrl)}" />`);
     tags.push(`<meta property="og:image:secure_url" content="${escapeHtml(meta.imageUrl)}" />`);
+    tags.push(`<meta property="og:image:width" content="${LISTING_OG_IMAGE_WIDTH}" />`);
+    tags.push(`<meta property="og:image:height" content="${LISTING_OG_IMAGE_HEIGHT}" />`);
     tags.push(`<meta property="og:image:alt" content="${escapeHtml(meta.title)}" />`);
     tags.push(`<meta name="twitter:card" content="summary_large_image" />`);
     tags.push(`<meta name="twitter:image" content="${escapeHtml(meta.imageUrl)}" />`);
@@ -418,6 +430,20 @@ export function renderListingOpenGraphTags(meta: ListingOpenGraphMeta): string {
   }
 
   return tags.join("\n  ");
+}
+
+export function renderListingErrorOpenGraphTags(): string {
+  const title = LISTING_ERROR_OG_TITLE;
+  const description = LISTING_ERROR_OG_DESCRIPTION;
+  return [
+    `<meta property="og:type" content="website" />`,
+    `<meta property="og:title" content="${escapeHtml(title)}" />`,
+    `<meta property="og:description" content="${escapeHtml(description)}" />`,
+    `<meta property="og:site_name" content="WhachatCRM" />`,
+    `<meta name="twitter:card" content="summary" />`,
+    `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
+    `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
+  ].join("\n  ");
 }
 
 function isValidBookingLink(link: string | null | undefined): link is string {
@@ -579,10 +605,12 @@ function buildFlyerBottomRow(
 const PRINT_FLYER_HINT =
   "For best print results, turn off browser Headers and footers.";
 
-function renderFlyerHeader(listingLabel: "FOR SALE" | "FOR RENT"): string {
-  return `<header class="flyer-header">
-      <div class="listing-banner" aria-label="${escapeHtml(listingLabel)}">${escapeHtml(listingLabel)}</div>
-    </header>`;
+function renderListingBanner(listingLabel: "FOR SALE" | "FOR RENT"): string {
+  return `<div class="listing-banner" aria-label="${escapeHtml(listingLabel)}">${escapeHtml(listingLabel)}</div>`;
+}
+
+function renderListingBannerHeroOverlap(listingLabel: "FOR SALE" | "FOR RENT"): string {
+  return `<div class="gallery-banner-anchor">${renderListingBanner(listingLabel)}</div>`;
 }
 
 /** Screen-only share/print — hidden from print layout via .no-print. */
@@ -638,7 +666,10 @@ function renderCompanyLogo(companyLogoUrl: string | null): string {
   return `<img class="agent-company-logo" src="${escapeHtml(companyLogoUrl)}" alt="" />`;
 }
 
-function renderGallery(photos: { url: string; order: number }[]): string {
+function renderGallery(
+  photos: { url: string; order: number }[],
+  listingLabel: "FOR SALE" | "FOR RENT",
+): string {
   if (photos.length === 0) return "";
   const hero = photos[0].url;
   const urlsJson = JSON.stringify(photos.map((p) => p.url));
@@ -656,6 +687,7 @@ function renderGallery(photos: { url: string; order: number }[]): string {
          <button type="button" class="gallery-nav gallery-next" id="gallery-next" aria-label="Next photo">${CHEVRON_RIGHT}</button>`
       : "";
   return `<section class="gallery">
+    ${renderListingBannerHeroOverlap(listingLabel)}
     <div class="hero-wrap">
       <img id="hero-img" class="hero-img" src="${escapeHtml(hero)}" alt="Property photo" />
       ${nav}
@@ -894,12 +926,22 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       line-height: 1.5;
     }
     .flyer { max-width: 920px; margin: 0 auto; background: var(--surface); }
-    .flyer-header {
+    .gallery-banner-anchor {
       display: flex;
-      align-items: stretch;
       justify-content: flex-end;
+      margin: 0 0 -${LISTING_BANNER_HERO_OVERLAP_PX}px;
       padding: 0;
-      background: #fff;
+      position: relative;
+      z-index: 2;
+      pointer-events: none;
+      background: transparent;
+    }
+    .gallery-banner-anchor .listing-banner { pointer-events: auto; }
+    .listing-banner-fallback {
+      display: flex;
+      justify-content: flex-end;
+      margin: 0 0 12px;
+      padding: 0 20px;
     }
     .listing-banner {
       margin: 0;
@@ -1239,7 +1281,9 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       }
       .no-print { display: none !important; }
       .flyer { max-width: none; box-shadow: none; }
-      .flyer-header { padding: 0 0 4px; justify-content: flex-end; }
+      .gallery-banner-anchor {
+        margin-bottom: 4px;
+      }
       .listing-banner {
         font-size: 11pt;
         padding: 5px 20px 5px 14px;
@@ -1354,9 +1398,8 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
 </head>
 <body>
   <div class="flyer">
-    ${renderFlyerHeader(listingLabel)}
     <div class="flyer-body">
-      ${renderGallery(photos)}
+      ${photos.length === 0 ? `<div class="listing-banner-fallback">${renderListingBanner(listingLabel)}</div>` : renderGallery(photos, listingLabel)}
       ${propertyHeaderHtml}
       ${descHtml}
       ${bottomRowHtml}
@@ -1434,7 +1477,9 @@ function publicListingErrorPageShell(title: string, message: string, hint?: stri
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="${escapeHtml(LISTING_ERROR_OG_DESCRIPTION)}" />
   <title>${escapeHtml(title)}</title>
+  ${renderListingErrorOpenGraphTags()}
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
     .wrap { max-width: 28rem; margin: 4rem auto; padding: 2rem; text-align: center; }

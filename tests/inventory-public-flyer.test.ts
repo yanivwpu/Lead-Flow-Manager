@@ -103,6 +103,9 @@ assert(html.includes("Jane Agent"), "agent name");
 assert(html.includes("Contact Agent"), "agent CTA");
 assert(html.includes("Powered by WhachatCRM"), "powered-by footer");
 assert(html.includes("listing-banner"), "for sale banner");
+assert(html.includes("gallery-banner-anchor"), "banner overlaps hero gallery");
+assert(html.includes("margin: 0 0 -16px"), "banner hero overlap offset");
+assert(!html.includes('class="flyer-header"'), "no separate white header bar");
 assert(html.includes("property-street"), "split address street line");
 assert(html.includes("height: 4.1in"), "print hero height ~40% page");
 assert(html.includes("flyer-floating-actions"), "floating share/print actions");
@@ -178,6 +181,8 @@ const noPhotoHtml = buildPublicListingFlyerHtml({
   qrDataUrl: "data:image/png;base64,TEST",
 });
 assert(!noPhotoHtml.includes('class="gallery"'), "gallery hidden without photos");
+assert(noPhotoHtml.includes("listing-banner-fallback"), "banner fallback without photos");
+assert(noPhotoHtml.includes("FOR SALE"), "status label without photos");
 assert(noPhotoHtml.includes("qr-block"), "qr still shown without map coords");
 
 const onePhotoHtml = buildPublicListingFlyerHtml({
