@@ -295,10 +295,10 @@ function passesHardGates(listing: MatchListingInput, criteria: BuyerMatchCriteri
       return false;
     }
   } else if (criteria.transactionIntent === "rent") {
-    if (!listingMatchesRentIntent(listing)) return false;
     if (listingIsLikelySalePrice(listing.priceCents) && !listingIsRentalOrLease(listing)) {
       return false;
     }
+    if (!listingMatchesRentIntent(listing)) return false;
   }
 
   if (criteria.propertyTypes.length > 0) {
@@ -717,10 +717,10 @@ export function getListingExclusionReason(
       return "rental/lease listing";
     }
   } else if (criteria.transactionIntent === "rent") {
-    if (!listingMatchesRentIntent(listing)) return "not a rental/lease listing";
     if (listingIsLikelySalePrice(listing.priceCents) && !listingIsRentalOrLease(listing)) {
       return "for-sale listing";
     }
+    if (!listingMatchesRentIntent(listing)) return "not a rental/lease listing";
   }
 
   if (criteria.propertyTypes.length > 0) {
@@ -776,16 +776,67 @@ export function getListingExclusionReason(
   return null;
 }
 
+/** Human-readable labels for Inventory Health exclusion breakdown. */
+export const EXCLUSION_REASON_LABELS: Record<string, string> = {
+  "over budget": "Over budget",
+  "under budget floor": "Under budget",
+  "missing pool": "Missing pool",
+  "missing waterfront": "Missing ocean view / waterfront",
+  "not a rental/lease listing": "Wrong transaction type (not rental)",
+  "for-sale listing": "Wrong transaction type (for sale)",
+  "rental/lease listing": "Wrong transaction type (rental)",
+  "wrong property type": "Wrong property type",
+  "over max sqft": "Over sq ft max",
+  "under min sqft": "Under min sq ft",
+  "under beds": "Under beds",
+  "under baths": "Under baths",
+  "over bedroom max": "Over bedroom max",
+  "outside area": "Outside area",
+  "low match score": "Low match score",
+  "outside geo constraint": "Outside geo constraint",
+  "inactive or unmatchable status": "Inactive listing",
+};
+
+export function labelExclusionReason(reason: string): string {
+  if (EXCLUSION_REASON_LABELS[reason]) return EXCLUSION_REASON_LABELS[reason];
+  if (reason.startsWith("deal-breaker:")) return `Deal-breaker: ${reason.slice("deal-breaker:".length)}`;
+  return reason;
+}
+
+export function countExclusionReasons(
+  listings: MatchListingInput[],
+  criteria: BuyerMatchCriteria,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const listing of listings) {
+    const reason = getListingExclusionReason(listing, criteria);
+    if (!reason) continue;
+    counts.set(reason, (counts.get(reason) ?? 0) + 1);
+  }
+  return counts;
+}
+
+export function summarizeExclusionCounts(counts: Map<string, number>): string {
+  if (counts.size === 0) return "";
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason, count]) => `${labelExclusionReason(reason)} (${count})`)
+    .join(", ");
+}
+
 export function buildExcludedListingSamples(
   listings: MatchListingInput[],
   criteria: BuyerMatchCriteria,
   limit = 8,
 ): ListingExclusionSample[] {
   const samples: ListingExclusionSample[] = [];
+  const seenReasons = new Set<string>();
 
   for (const listing of listings) {
     const reason = getListingExclusionReason(listing, criteria);
     if (!reason) continue;
+    if (seenReasons.has(reason) && samples.length >= Math.min(5, limit)) continue;
+    seenReasons.add(reason);
     samples.push({
       listingId: listing.id,
       providerListingId: listing.providerListingId,
@@ -794,9 +845,28 @@ export function buildExcludedListingSamples(
       beds: listing.beds,
       baths: listing.baths,
       squareFeet: listing.squareFeet ?? null,
-      reason,
+      reason: labelExclusionReason(reason),
     });
     if (samples.length >= limit) break;
+  }
+
+  if (samples.length < limit) {
+    for (const listing of listings) {
+      if (samples.length >= limit) break;
+      const reason = getListingExclusionReason(listing, criteria);
+      if (!reason) continue;
+      if (samples.some((s) => s.listingId === listing.id)) continue;
+      samples.push({
+        listingId: listing.id,
+        providerListingId: listing.providerListingId,
+        city: listing.city,
+        priceCents: listing.priceCents,
+        beds: listing.beds,
+        baths: listing.baths,
+        squareFeet: listing.squareFeet ?? null,
+        reason: labelExclusionReason(reason),
+      });
+    }
   }
 
   return samples;
@@ -812,6 +882,22 @@ export function summarizeExclusionReasons(samples: ListingExclusionSample[]): st
     .sort((a, b) => b[1] - a[1])
     .map(([reason, count]) => `${reason} (${count})`)
     .join(", ");
+}
+
+export function buildMatchFunnelSummary(
+  listingsScored: number,
+  matchesReturned: number,
+  exclusionCounts: Map<string, number>,
+): string | null {
+  if (listingsScored <= 0) return null;
+  const excluded = [...exclusionCounts.values()].reduce((a, b) => a + b, 0);
+  const exclusionLine = summarizeExclusionCounts(exclusionCounts);
+  if (matchesReturned > 0) {
+    const base = `${matchesReturned} of ${listingsScored} listings matched strong criteria`;
+    return exclusionLine ? `${base}. Excluded: ${exclusionLine}` : base;
+  }
+  if (excluded <= 0) return `Scored ${listingsScored} listing(s); none met buyer criteria.`;
+  return `Scored ${listingsScored} listing(s); none met buyer criteria. Top exclusions: ${exclusionLine}`;
 }
 
 export function formatListingExclusionLine(sample: ListingExclusionSample): string {

@@ -133,6 +133,55 @@ function isRentIntentEvidence(evidence: string | undefined): boolean {
   return !!evidence && /rent intent|for rent|lease|rental/i.test(evidence);
 }
 
+const PURCHASE_FEATURE_KEYS = [
+  "pool",
+  "waterfront",
+  "modernStyle",
+  "gatedCommunity",
+  "investmentIntent",
+  "lowHoa",
+  "walkability",
+  "schoolPriority",
+] as const;
+
+/** Rental search replaces conflicting purchase-only preferences instead of stacking them. */
+export function stripConflictingSalePreferences(profile: BuyerPreferenceProfile): void {
+  for (const key of PURCHASE_FEATURE_KEYS) {
+    delete (profile as Record<string, unknown>)[key];
+  }
+  delete profile.financingStatus;
+
+  if (profile.mustHaves?.value?.length) {
+    const filtered = profile.mustHaves.value
+      .map(String)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .filter((raw) => {
+        const lower = raw.toLowerCase();
+        if (/^sqft_max:/i.test(lower)) return false;
+        if (/\b(ocean|waterfront|pool|modern|gated|luxury|invest|water view)\b/i.test(lower)) {
+          return false;
+        }
+        return true;
+      });
+    if (filtered.length > 0) {
+      profile.mustHaves = { ...profile.mustHaves, value: filtered };
+    } else {
+      delete profile.mustHaves;
+    }
+  }
+}
+
+function normalizeRentBudgetFields(profile: BuyerPreferenceProfile): void {
+  if (profile.transactionIntent?.value !== "rent") return;
+  if (typeof profile.priceMax?.value === "number" && profile.priceMax.value > 50_000) {
+    delete profile.priceMax;
+  }
+  if (typeof profile.priceMin?.value === "number" && profile.priceMin.value > 50_000) {
+    delete profile.priceMin;
+  }
+}
+
 function shouldForceReplaceBudgetCap(
   existing: PreferenceField<number> | undefined,
   incoming: PreferenceField<number>,
@@ -303,8 +352,16 @@ export function mergeBuyerPreferenceProfile(
     schemaVersion: 1,
   };
 
+  const switchingToRent =
+    patch.transactionIntent?.value === "rent" && isRentIntentEvidence(patch.transactionIntent.evidence);
+
   for (const key of PATCH_KEYS) {
     applyPatchField(profile, patch, key, mergeOptions);
+  }
+
+  if (switchingToRent || profile.transactionIntent?.value === "rent") {
+    stripConflictingSalePreferences(profile);
+    normalizeRentBudgetFields(profile);
   }
 
   if (meta?.lastInboundAt) profile.lastInboundAt = meta.lastInboundAt;

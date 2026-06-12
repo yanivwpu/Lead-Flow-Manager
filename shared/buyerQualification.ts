@@ -90,9 +90,14 @@ export function parseSqftMaxFromProfile(profile: BuyerPreferenceProfile): number
 }
 
 function resolveBuyRentIntent(input: BuyerQualificationInput): boolean {
+  const profileIntent = input.profile.transactionIntent;
+  if (fieldActive(profileIntent) && (profileIntent!.value === "rent" || profileIntent!.value === "buy")) {
+    return true;
+  }
   const lt = (input.leadType || "").toLowerCase();
   if (lt === "buyer" || lt === "renter" || lt === "tenant") return true;
   const inbound = (input.inboundText || "").toLowerCase();
+  if (/\b(for\s+rent|rental|lease|renting)\b/.test(inbound)) return true;
   if (/\bshow me\b/.test(inbound) || /\blooking for\b/.test(inbound)) return true;
   const intent = (input.buyRentIntent || "").toLowerCase();
   if (!intent) return false;
@@ -101,6 +106,10 @@ function resolveBuyRentIntent(input: BuyerQualificationInput): boolean {
     /\brent(?:er|ing|al)?\b/.test(intent) ||
     /\binvest/.test(intent)
   );
+}
+
+function isRentSearchProfile(profile: BuyerPreferenceProfile): boolean {
+  return fieldActive(profile.transactionIntent) && profile.transactionIntent!.value === "rent";
 }
 
 function hasStrongMustHave(profile: BuyerPreferenceProfile): boolean {
@@ -193,6 +202,7 @@ function isCriteriaComplete(input: {
 
 export function assessBuyerQualification(input: BuyerQualificationInput): BuyerQualificationContext {
   const { profile } = input;
+  const rentSearch = isRentSearchProfile(profile);
   const hasBuyRentIntent = resolveBuyRentIntent(input);
   const hasBudget =
     fieldActive(profile.priceMin) || fieldActive(profile.priceMax);
@@ -217,23 +227,25 @@ export function assessBuyerQualification(input: BuyerQualificationInput): BuyerQ
   if (!hasPropertyType) missing.push("property_type");
   if (!hasBeds) missing.push("beds");
   if (!hasBaths) missing.push("baths");
-  if (!hasPool && !strongMustHave) missing.push("pool");
-  if (!hasTimeline) missing.push("timeline");
-  if (!hasFinancing) missing.push("financing");
-  if (sqftMin == null) missing.push("sqft");
+  if (!rentSearch && !hasPool && !strongMustHave) missing.push("pool");
+  if (!rentSearch && !hasTimeline) missing.push("timeline");
+  if (!rentSearch && !hasFinancing) missing.push("financing");
+  if (!rentSearch && sqftMin == null) missing.push("sqft");
 
   const known = buildKnownLabels(profile);
   const confirmPriorFields = hasBudget && hasBedsBaths;
 
-  const criteriaComplete = isCriteriaComplete({
-    hasBuyRentIntent,
-    hasArea,
-    hasBudget,
-    hasBeds,
-    hasBaths,
-    hasPropertyType,
-    hasPool: hasPool || strongMustHave,
-  });
+  const criteriaComplete = rentSearch
+    ? hasBuyRentIntent && hasArea && hasBudget && hasBeds && hasBaths && hasPropertyType
+    : isCriteriaComplete({
+        hasBuyRentIntent,
+        hasArea,
+        hasBudget,
+        hasBeds,
+        hasBaths,
+        hasPropertyType,
+        hasPool: hasPool || strongMustHave,
+      });
 
   const majorCount = [hasBuyRentIntent, hasBudget, hasArea, hasPropertyType].filter(Boolean).length;
   const inventoryReady =
@@ -242,7 +254,7 @@ export function assessBuyerQualification(input: BuyerQualificationInput): BuyerQ
     hasBudget &&
     hasBeds &&
     hasBaths &&
-    (hasPropertyType || hasPool || strongMustHave);
+    (rentSearch || hasPropertyType || hasPool || strongMustHave);
 
   const inventoryMode = criteriaComplete || (inventoryReady && matchCount > 0);
 

@@ -45,10 +45,18 @@ export function InventoryHealthDiagnosticsPanel({
   const scored = diagnostics?.listingsScored;
   const returned = diagnostics?.matchesReturned;
 
+  const sparseMatches =
+    typeof scored === "number" &&
+    scored >= 20 &&
+    typeof returned === "number" &&
+    returned > 0 &&
+    returned <= 2;
+
   const hasAnomaly =
     rateLimitWarning ||
     (typeof activeCount === "number" && activeCount > 0 && (scored ?? 0) === 0) ||
-    (typeof scored === "number" && scored > 0 && (returned ?? 0) === 0 && reason === "listing_fetch_failed") ||
+    (typeof scored === "number" && scored > 0 && (returned ?? 0) === 0) ||
+    sparseMatches ||
     (!!lastError && !rateLimitWarning);
 
   return (
@@ -74,7 +82,7 @@ export function InventoryHealthDiagnosticsPanel({
         </span>
         {hasAnomaly && (
           <span className="ml-auto text-amber-700 font-medium normal-case">
-            {rateLimitWarning ? "rate limit" : "check"}
+            {rateLimitWarning ? "rate limit" : sparseMatches ? "few matches" : "check"}
           </span>
         )}
       </CollapsibleTrigger>
@@ -101,11 +109,11 @@ export function InventoryHealthDiagnosticsPanel({
         {reason && (
           <DiagnosticRow label="API reason" value={reason} />
         )}
-        {diagnostics?.exclusionSummary && (
-          <DiagnosticRow label="Top exclusions" value={diagnostics.exclusionSummary} />
-        )}
         {diagnostics?.noMatchSummary && (
           <p className="text-[10px] text-gray-600 leading-snug pt-1">{diagnostics.noMatchSummary}</p>
+        )}
+        {diagnostics?.exclusionSummary && (
+          <DiagnosticRow label="Exclusion breakdown" value={diagnostics.exclusionSummary} />
         )}
         {diagnostics?.excludedSamples && diagnostics.excludedSamples.length > 0 && (
           <div className="pt-1 space-y-1">
