@@ -10656,6 +10656,7 @@ export async function registerRoutes(
                     const composer = buildListingComposerMessage({
                       listing: {
                         listingId: listingRow.id,
+                        publicSlug: listingRow.publicSlug,
                         priceCents: listing.priceCents,
                         beds: listing.beds,
                         baths: listing.baths,

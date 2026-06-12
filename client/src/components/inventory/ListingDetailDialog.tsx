@@ -18,7 +18,25 @@ import {
   buildListingComposerMessage,
   listingComposerDraftIncludesRequiredDetails,
 } from "@shared/inventory/inventoryComposerDraft";
-import { pickPrimaryPhotoUrl, resolveListingViewUrl } from "@shared/inventory/listingViewUrl";
+import {
+  pickPrimaryPhotoUrl,
+  resolveListingViewUrl,
+} from "@shared/inventory/listingViewUrl";
+
+/** Replace stale UUID share links in API draft text when a slug is available. */
+function rewriteComposerDraftListingShareUrl(
+  text: string,
+  listingId: string,
+  publicSlug: string | null | undefined,
+  slugViewUrl: string,
+): string {
+  if (!publicSlug?.trim()) return text;
+  const uuidSharePattern = new RegExp(
+    `https?://[^\\s]*/share/listings/${listingId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=[/?#\\s]|$)`,
+    "gi",
+  );
+  return text.replace(uuidSharePattern, slugViewUrl);
+}
 import { formatListingPriceDisplay } from "@shared/inventory/listingTransactionIntent";
 import type { InventoryMatchListingSummary } from "@shared/inventory/inventoryMatchTypes";
 
@@ -163,11 +181,20 @@ export function ListingDetailDialog({
       thumbnailUrl: fallback?.thumbnailUrl ?? null,
       appOrigin,
     };
+    const viewUrl = resolveListingViewUrl({
+      listingId,
+      publicSlug: listing?.publicSlug ?? null,
+      appOrigin,
+    });
     const fromApi = draftData?.composerDraft?.trim();
     if (fromApi) {
+      const text =
+        viewUrl && listing?.publicSlug?.trim()
+          ? rewriteComposerDraftListingShareUrl(fromApi, listingId, listing.publicSlug, viewUrl)
+          : fromApi;
       return {
-        text: fromApi,
-        viewUrl: draftData?.viewUrl ?? null,
+        text,
+        viewUrl,
         primaryPhotoUrl,
       };
     }
@@ -195,8 +222,8 @@ export function ListingDetailDialog({
     description,
     listingPhotos,
     fallback?.thumbnailUrl,
+    listing?.publicSlug,
     draftData?.composerDraft,
-    draftData?.viewUrl,
     draftData?.draft,
     draftData?.matchBullets,
     primaryPhotoUrl,
@@ -211,6 +238,7 @@ export function ListingDetailDialog({
     const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
     const includesRequired = listingComposerDraftIncludesRequiredDetails(draft.text, {
       listingId,
+      publicSlug: listing?.publicSlug ?? null,
       priceCents,
       beds: beds ?? null,
       baths: baths ?? null,
@@ -252,19 +280,18 @@ export function ListingDetailDialog({
         duration: 3000,
       });
     }
-  }, [resolveComposerDraft, listingId, contactId, priceCents, beds, baths, city, state, listingUrl, onInsertComposerDraft, onOpenChange, toast]);
+  }, [resolveComposerDraft, listingId, contactId, listing?.publicSlug, priceCents, beds, baths, city, state, listingUrl, onInsertComposerDraft, onOpenChange, toast]);
 
   const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
 
   const shareUrl = useMemo(() => {
-    if (draftData?.viewUrl) return draftData.viewUrl;
     if (!listingId || !appOrigin) return null;
     return resolveListingViewUrl({
       listingId,
       publicSlug: listing?.publicSlug ?? null,
       appOrigin,
     });
-  }, [draftData?.viewUrl, listingId, listing?.publicSlug, appOrigin]);
+  }, [listingId, listing?.publicSlug, appOrigin]);
 
   const handlePreviewFlyer = useCallback(() => {
     if (!shareUrl) return;

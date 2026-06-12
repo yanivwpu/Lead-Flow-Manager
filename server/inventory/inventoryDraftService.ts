@@ -257,6 +257,7 @@ export async function generateInventoryMatchDraft(
   const composer = buildListingComposerMessage({
     listing: {
       listingId,
+      publicSlug: listingRow.publicSlug,
       priceCents: listing.priceCents,
       beds: listing.beds,
       baths: listing.baths,
