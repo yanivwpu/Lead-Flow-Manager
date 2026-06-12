@@ -10,6 +10,11 @@ import {
   timelinePreferenceSchema,
   buyerGeoConstraintSchema,
 } from "./buyerPreferenceSchema";
+import {
+  detectShowMeAllPropertyTypeRelaxation,
+  RESIDENTIAL_RENTAL_PROPERTY_TYPES,
+  SHOW_ME_ALL_PROPERTY_RELAX_EVIDENCE,
+} from "./buyerPreferencePropertyTypeRelax";
 import { parseGeoConstraintsFromText } from "./inventory/buyerGeoConstraints";
 
 const PATCH_FIELD_KEYS = [
@@ -91,6 +96,7 @@ export function normalizePropertyTypeToken(
   if (!s) return null;
   if (/\b(sfh|single[\s-]?family(?:\s+home)?)\b/.test(s)) return "house";
   if (s.includes("condo")) return "condo";
+  if (s.includes("apartment")) return "condo";
   if (s.includes("town")) return "townhouse";
   if (s.includes("multi")) return "multi_family";
   if (s.includes("land")) return "land";
@@ -482,16 +488,24 @@ export function heuristicPatchFromTranscript(
   const tooManyBeds = /\btoo many bed(?:room)?s?\b/i.test(lower);
 
   const types = extractPropertyTypesFromText(lower);
-  if (
-    !types.length &&
-    bedBathSlash &&
-    /\bpool\b/i.test(lower) &&
-    (/\bshow me\b/i.test(lower) || /\blooking for\b/i.test(lower))
-  ) {
-    types.push("house");
-  }
-  if (types.length) {
-    patch.propertyTypes = { value: types, ...inf(0.82, "property type in message") };
+  const relaxPropertyTypes = detectShowMeAllPropertyTypeRelaxation(text);
+  if (relaxPropertyTypes) {
+    patch.propertyTypes = {
+      value: [...RESIDENTIAL_RENTAL_PROPERTY_TYPES],
+      ...inf(0.9, SHOW_ME_ALL_PROPERTY_RELAX_EVIDENCE),
+    };
+  } else {
+    if (
+      !types.length &&
+      bedBathSlash &&
+      /\bpool\b/i.test(lower) &&
+      (/\bshow me\b/i.test(lower) || /\blooking for\b/i.test(lower))
+    ) {
+      types.push("house");
+    }
+    if (types.length) {
+      patch.propertyTypes = { value: types, ...inf(0.82, "property type in message") };
+    }
   }
 
   const applyBedBathCorrection = (beds: number, baths: number, evidence: string) => {
@@ -543,7 +557,10 @@ export function heuristicPatchFromTranscript(
   if (/\b(rent|rental|renting|lease|leasing|for\s+rent|tenant)\b/i.test(lower)) {
     patch.transactionIntent = { value: "rent", ...inf(0.88, "rent intent in message") };
   } else if (
-    /\b(buy|buying|purchase|for sale|show me|looking to buy|looking for a home)\b/i.test(lower)
+    /\b(buy|buying|purchase|for sale|looking to buy|looking for a home)\b/i.test(lower) ||
+    (/\bshow me\b/i.test(lower) &&
+      !relaxPropertyTypes &&
+      /(?:\$\s*[\d,.]+(?:\s*(?:k|m|million|mil))?|\b[\d,.]+\s*(?:million|mil)\b)/i.test(lower))
   ) {
     patch.transactionIntent = { value: "buy", ...inf(0.82, "buy intent in message") };
   }

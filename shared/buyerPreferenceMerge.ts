@@ -7,6 +7,10 @@ import type {
 } from "./buyerPreferenceSchema";
 import { deriveProfileStatus } from "./buyerPreferenceSchema";
 import type { PreferenceArrayReplaceKey } from "./buyerPreferenceInventorySignals";
+import {
+  isShowMeAllPropertyRelaxEvidence,
+  stripSfhFromMustHaves,
+} from "./buyerPreferencePropertyTypeRelax";
 
 const CONTRADICTION_RE =
   /\b(actually|instead|no longer|don't need|do not need|not anymore|changed my mind|rather than)\b/i;
@@ -272,7 +276,9 @@ function applyPatchField<K extends keyof BuyerPreferenceExtractionPatch>(
     const cur = profile[key] as PreferenceField<string[]> | undefined;
     const shouldReplace =
       (key === "targetAreas" || key === "propertyTypes") &&
-      mergeOptions?.replaceArrayFields?.includes(key as PreferenceArrayReplaceKey);
+      (mergeOptions?.replaceArrayFields?.includes(key as PreferenceArrayReplaceKey) ||
+        (key === "propertyTypes" &&
+          isShowMeAllPropertyRelaxEvidence((incoming as PreferenceField<string[]>).evidence)));
     (profile as Record<string, unknown>)[key] = shouldReplace
       ? replaceArrayField(incoming as PreferenceField<string[]>)
       : mergeArrayField(cur, incoming as PreferenceField<string[]>);
@@ -362,6 +368,10 @@ export function mergeBuyerPreferenceProfile(
   if (switchingToRent || profile.transactionIntent?.value === "rent") {
     stripConflictingSalePreferences(profile);
     normalizeRentBudgetFields(profile);
+  }
+
+  if (isShowMeAllPropertyRelaxEvidence(patch.propertyTypes?.evidence)) {
+    stripSfhFromMustHaves(profile);
   }
 
   if (meta?.lastInboundAt) profile.lastInboundAt = meta.lastInboundAt;

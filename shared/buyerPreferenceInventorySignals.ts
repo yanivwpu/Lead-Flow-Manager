@@ -2,6 +2,8 @@
  * Inventory-related buyer message signals — fast-path extraction (Phase A).
  */
 
+import { detectShowMeAllPropertyTypeRelaxation } from "./buyerPreferencePropertyTypeRelax";
+
 const PROPERTY_TYPE_SIGNAL_RE =
   /\b(sfh|single[\s-]?family(?:\s+home)?|condo(?:minium)?s?|townhouse|town[\s-]?house|multi[\s-]?family|houses?|homes?|land)\b/i;
 
@@ -40,8 +42,9 @@ export function detectPreferenceArrayReplacements(text: string): PreferenceArray
   if (!t) return [];
   const out: PreferenceArrayReplaceKey[] = [];
   if (PROPERTY_TYPE_SIGNAL_RE.test(t)) out.push("propertyTypes");
+  if (detectShowMeAllPropertyTypeRelaxation(t)) out.push("propertyTypes");
   if (LOCATION_SIGNAL_RE.test(t)) out.push("targetAreas");
-  return out;
+  return [...new Set(out)];
 }
 
 export function logBuyerPreferenceFastPath(

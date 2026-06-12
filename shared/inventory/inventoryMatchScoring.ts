@@ -29,7 +29,7 @@ import {
 
 const MIN_CONFIDENCE = 0.5;
 const NEAR_PRICE_TOLERANCE = 0.12;
-const MIN_STRONG_MATCH_SCORE = 35;
+export const MIN_STRONG_MATCH_SCORE = 35;
 
 export type BuyerMatchCriteria = {
   hasAnyCriteria: boolean;
@@ -120,6 +120,7 @@ export function normalizeListingPropertyType(
   const s = normalizeText(combined).replace(/-/g, "_");
   if (/\b(sfh|single[\s_]?family)\b/.test(s)) return "house";
   if (s.includes("condo")) return "condo";
+  if (s.includes("apartment")) return "condo";
   if (s.includes("townhouse") || s.includes("town house")) return "townhouse";
   if (s.includes("multi")) return "multi_family";
   if (s.includes("land")) return "land";
@@ -882,6 +883,192 @@ export function summarizeExclusionReasons(samples: ListingExclusionSample[]): st
     .sort((a, b) => b[1] - a[1])
     .map(([reason, count]) => `${reason} (${count})`)
     .join(", ");
+}
+
+export type MatchFunnelCandidate = {
+  listingId: string;
+  providerListingId: string;
+  city: string | null;
+  priceCents: number | null;
+  beds: number | null;
+  baths: number | null;
+  propertyType: string | null;
+  score: number | null;
+  exclusionReason: string | null;
+  matched: boolean;
+  inRawShape: boolean;
+};
+
+export type MatchFunnelAudit = {
+  totalActive: number;
+  rawShapeMatches: number;
+  passHardGates: number;
+  passScoreThreshold: number;
+  apiRankLimit: number;
+  apiReturned: number;
+  uiSidebarPreviewLimit: number;
+  hardGateExcluded: number;
+  scoreThresholdExcluded: number;
+  /** Raw-shape listings excluded by profile gates (pool, type, area, etc.) before score. */
+  preferenceExcludedFromRawShape: number;
+  /** Raw-shape listings that pass gates but fail MIN_STRONG_MATCH_SCORE. */
+  scoreExcludedFromRawShape: number;
+  bedsRule: "exact" | "minimum" | "range" | "none";
+  exclusionByReason: Record<string, number>;
+  criteria: BuyerMatchCriteria;
+  topCandidates: MatchFunnelCandidate[];
+};
+
+/** Simplified rent search shape — before scoring and legacy preference gates. */
+export function passesRawRentalSearchShape(
+  listing: MatchListingInput,
+  shape: {
+    areas: string[];
+    bedsMin: number;
+    bathsMin: number;
+    priceMin: number;
+    priceMax: number;
+  },
+): boolean {
+  if (!isMatchableInventoryStatus(listing.status)) return false;
+  if (listingIsLikelySalePrice(listing.priceCents) && !listingIsRentalOrLease(listing)) {
+    return false;
+  }
+  if (!listingMatchesRentIntent(listing)) return false;
+
+  const cityNorm = normalizeText(listing.city ?? "");
+  const areaOk = shape.areas.some((area) => {
+    const a = normalizeText(area);
+    return a && (cityNorm === a || cityNorm.includes(a) || a.includes(cityNorm));
+  });
+  if (!areaOk) return false;
+
+  if (listing.beds != null && listing.beds < shape.bedsMin) return false;
+  if (listing.baths != null && listing.baths < shape.bathsMin) return false;
+
+  if (listing.priceCents != null) {
+    const price = listing.priceCents / 100;
+    if (price < shape.priceMin || price > shape.priceMax) return false;
+  }
+
+  return true;
+}
+
+export function auditInventoryMatchFunnel(
+  listings: MatchListingInput[],
+  criteria: BuyerMatchCriteria,
+  options?: {
+    candidateLimit?: number;
+    rankLimit?: number;
+    uiPreviewLimit?: number;
+    rawShape?: {
+      areas: string[];
+      bedsMin: number;
+      bathsMin: number;
+      priceMin: number;
+      priceMax: number;
+    };
+  },
+): MatchFunnelAudit {
+  const rankLimit = options?.rankLimit ?? 10;
+  const uiPreviewLimit = options?.uiPreviewLimit ?? 5;
+  const candidateLimit = options?.candidateLimit ?? 20;
+
+  let rawShapeMatches = 0;
+  let passHardGates = 0;
+  let passScoreThreshold = 0;
+  let hardGateExcluded = 0;
+  let scoreThresholdExcluded = 0;
+  let preferenceExcludedFromRawShape = 0;
+  let scoreExcludedFromRawShape = 0;
+  const exclusionByReason: Record<string, number> = {};
+  const candidates: MatchFunnelCandidate[] = [];
+
+  for (const listing of listings) {
+    const inRawShape = options?.rawShape
+      ? passesRawRentalSearchShape(listing, options.rawShape)
+      : false;
+    if (inRawShape) rawShapeMatches += 1;
+
+    const hardOk = listingPassesHardGatesForCriteria(listing, criteria);
+    const scored = scoreListingAgainstCriteria(listing, criteria);
+    const exclusionReason = getListingExclusionReason(listing, criteria);
+    const labeledReason = exclusionReason ? labelExclusionReason(exclusionReason) : null;
+
+    if (hardOk) {
+      passHardGates += 1;
+      if (scored) {
+        passScoreThreshold += 1;
+      } else {
+        scoreThresholdExcluded += 1;
+      }
+    } else {
+      hardGateExcluded += 1;
+    }
+
+    if (labeledReason) {
+      exclusionByReason[labeledReason] = (exclusionByReason[labeledReason] ?? 0) + 1;
+    }
+
+    if (inRawShape) {
+      if (scored) {
+        // counted in passScoreThreshold
+      } else if (exclusionReason === "low match score") {
+        scoreExcludedFromRawShape += 1;
+      } else if (exclusionReason) {
+        preferenceExcludedFromRawShape += 1;
+      }
+    }
+
+    candidates.push({
+      listingId: listing.id,
+      providerListingId: listing.providerListingId,
+      city: listing.city,
+      priceCents: listing.priceCents,
+      beds: listing.beds,
+      baths: listing.baths,
+      propertyType: listing.propertyType,
+      score: scored?.score ?? null,
+      exclusionReason: scored ? null : labeledReason,
+      matched: !!scored,
+      inRawShape,
+    });
+  }
+
+  const ranked = rankInventoryMatches(listings, criteria, rankLimit);
+
+  const bedsRule: MatchFunnelAudit["bedsRule"] =
+    criteria.bedsMin != null && criteria.bedsMax != null && criteria.bedsMin === criteria.bedsMax
+      ? "exact"
+      : criteria.bedsMin != null
+        ? "minimum"
+        : criteria.bedsMax != null
+          ? "range"
+          : "none";
+
+  const matchedCandidates = candidates
+    .filter((c) => c.matched)
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const rawShapeNearMisses = candidates.filter((c) => c.inRawShape && !c.matched);
+  const topCandidates = [...matchedCandidates, ...rawShapeNearMisses].slice(0, candidateLimit);
+
+  return {
+    totalActive: listings.length,
+    rawShapeMatches,
+    passHardGates,
+    passScoreThreshold,
+    apiRankLimit: rankLimit,
+    apiReturned: ranked.length,
+    uiSidebarPreviewLimit: uiPreviewLimit,
+    hardGateExcluded,
+    scoreThresholdExcluded,
+    preferenceExcludedFromRawShape,
+    scoreExcludedFromRawShape,
+    bedsRule,
+    exclusionByReason,
+    criteria,
+    topCandidates,
+  };
 }
 
 export function buildMatchFunnelSummary(
