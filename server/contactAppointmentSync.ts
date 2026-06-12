@@ -1,5 +1,5 @@
 import { storage } from "./storage";
-import { APPOINTMENT_SCHEDULED_TAG } from "@shared/activeAppointment";
+import { APPOINTMENT_SCHEDULED_TAG, isActiveFutureAppointment } from "@shared/activeAppointment";
 
 /**
  * Removes legacy "Appointment Scheduled" from contacts.tag (CRM field only).
@@ -21,4 +21,52 @@ export async function clearStaleAppointmentScheduledTag(
   );
 
   return { changed: true };
+}
+
+/** Delete all active upcoming appointment rows for a contact. */
+export async function clearActiveAppointmentsForContact(
+  userId: string,
+  contactId: string
+): Promise<string[]> {
+  const appts = await storage.getAppointmentsByContact(userId, contactId);
+  const clearedIds: string[] = [];
+  for (const appt of appts) {
+    if (!isActiveFutureAppointment(appt)) continue;
+    const ok = await storage.deleteAppointment(appt.id);
+    if (ok) clearedIds.push(appt.id);
+  }
+  await clearStaleAppointmentScheduledTag(contactId);
+  return clearedIds;
+}
+
+export async function contactHasActiveUpcomingAppointment(
+  userId: string,
+  contactId: string
+): Promise<boolean> {
+  const rows = await storage.getAppointmentsByContact(userId, contactId);
+  return rows.some(isActiveFutureAppointment);
+}
+
+/**
+ * When no active upcoming appointments remain, clear appointment-linked followUp fields.
+ * CRM tag is never modified.
+ */
+export async function syncContactFollowUpAfterAppointmentChange(
+  userId: string,
+  contactId: string
+): Promise<{ followUpCleared: boolean }> {
+  const contact = await storage.getContact(contactId);
+  if (!contact) return { followUpCleared: false };
+
+  const hasActive = await contactHasActiveUpcomingAppointment(userId, contactId);
+  if (hasActive || (!contact.followUpDate && !contact.followUp)) {
+    return { followUpCleared: false };
+  }
+
+  await storage.updateContact(
+    contactId,
+    { followUp: null, followUpDate: null },
+    { skipAutomationHooks: true }
+  );
+  return { followUpCleared: true };
 }

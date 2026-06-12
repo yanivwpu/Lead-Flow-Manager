@@ -740,6 +740,8 @@ export function FollowUps() {
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/inbox'] });
     queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
   };
 
   const clearFollowUpMutation = useMutation({

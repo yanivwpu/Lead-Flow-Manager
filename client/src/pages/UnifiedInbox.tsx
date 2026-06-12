@@ -1434,6 +1434,14 @@ export function UnifiedInbox() {
       );
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      if (
+        variables.followUpDate === null ||
+        variables.followUp === null ||
+        variables.followUp === ""
+      ) {
+        queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
+        queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contactId}/appointments`] });
+      }
       setShowEditContact(false);
     },
   });
@@ -2143,6 +2151,7 @@ export function UnifiedInbox() {
               const isOverdue = fuStatus === 'overdue';
               const bookedAppt = nextAppointmentByContact.get(item.contact.id);
               const crmTag = isCrmDisplayTag(item.contact.tag) ? item.contact.tag : null;
+              const showFollowUpBadge = fuStatus && !bookedAppt;
               return (
               <div
                 key={item.contact.id}
@@ -2151,7 +2160,7 @@ export function UnifiedInbox() {
                   "p-3 border-b cursor-pointer transition-colors bg-transparent hover:bg-gray-100/70",
                   selectedContactId === item.contact.id &&
                     "bg-white shadow-sm ring-1 ring-gray-200 hover:bg-white border-l-2 border-l-gray-300",
-                  isOverdue && "border-l-2 border-l-red-400"
+                  isOverdue && !bookedAppt && "border-l-2 border-l-red-400"
                 )}
                 data-testid={`inbox-item-${item.contact.id}`}
               >
@@ -2165,17 +2174,6 @@ export function UnifiedInbox() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1 mb-0.5">
                       <span className={cn("font-medium text-sm truncate flex-1 min-w-0", needsReply && "font-semibold")}>{item.contact.name}</span>
-                      {bookedAppt && (
-                        <span
-                          className="flex-shrink-0 inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-700"
-                          title={`Booked · ${format(new Date(bookedAppt.appointmentDate), "MMM d 'at' h:mm a")}`}
-                          data-testid={`badge-booked-${item.contact.id}`}
-                        >
-                          <CalendarCheck className="w-3 h-3" aria-hidden />
-                          <span className="hidden sm:inline">Booked</span>
-                        </span>
-                      )}
-                      <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatTime(item.lastMessageAt)}</span>
                       {item.unreadCount > 0 && (
                         <Badge className="ml-0.5 text-[10px] px-1.5 py-0 h-4 flex-shrink-0 bg-gray-200 text-gray-800">{item.unreadCount}</Badge>
                       )}
@@ -2188,15 +2186,15 @@ export function UnifiedInbox() {
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold border bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-0.5" data-testid={`badge-needs-reply-${item.contact.id}`}>
                           <Zap className="w-2.5 h-2.5" />Needs Reply
                         </span>
-                      ) : fuStatus === 'overdue' ? (
+                      ) : showFollowUpBadge && fuStatus === 'overdue' ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold border bg-red-50 text-red-600 border-red-200" data-testid={`badge-overdue-${item.contact.id}`}>
                           ⏰ Overdue
                         </span>
-                      ) : fuStatus === 'today' ? (
+                      ) : showFollowUpBadge && fuStatus === 'today' ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium border bg-amber-50 text-amber-600 border-amber-200" data-testid={`badge-today-${item.contact.id}`}>
                           ⏰ Today
                         </span>
-                      ) : fuStatus === 'upcoming' ? (
+                      ) : showFollowUpBadge && fuStatus === 'upcoming' ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium border bg-slate-50 text-slate-500 border-slate-200" data-testid={`badge-upcoming-${item.contact.id}`}>
                           ⏰ {item.contact.followUp}
                         </span>
@@ -2207,6 +2205,19 @@ export function UnifiedInbox() {
                         </span>
                       )}
                     </div>
+                  </div>
+                  <div className="flex-shrink-0 flex flex-col items-end gap-0.5 pt-0.5">
+                    <span className="text-[10px] text-muted-foreground leading-none">{formatTime(item.lastMessageAt)}</span>
+                    {bookedAppt && (
+                      <span
+                        className="inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-700 leading-none"
+                        title={`Booked · ${format(new Date(bookedAppt.appointmentDate), "MMM d 'at' h:mm a")}`}
+                        data-testid={`badge-booked-${item.contact.id}`}
+                      >
+                        <CalendarCheck className="w-3 h-3" aria-hidden />
+                        Booked
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

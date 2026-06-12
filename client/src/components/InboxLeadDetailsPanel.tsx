@@ -903,6 +903,23 @@ export function InboxLeadDetailsPanel({
 
   const queryClient = useQueryClient();
 
+  const invalidateAppointmentQueries = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contact.id}/appointments`] });
+    void queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
+    void queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+    void queryClient.invalidateQueries({ queryKey: ["/api/contacts", contact.id] });
+  }, [contact.id, queryClient]);
+
+  const deleteContactAppointment = useCallback(async (appointmentId: string) => {
+    const res = await fetch(`/api/appointments/${appointmentId}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (!res.ok) throw new Error("Failed to delete appointment");
+    invalidateAppointmentQueries();
+    onUpdateContact({ followUp: null, followUpDate: null });
+  }, [invalidateAppointmentQueries, onUpdateContact]);
+
   const [campaignPickerOpen, setCampaignPickerOpen] = useState(false);
   const [pickedCampaignId, setPickedCampaignId] = useState<string>("");
   const [showCampaignHistory, setShowCampaignHistory] = useState(false);
@@ -1245,6 +1262,7 @@ export function InboxLeadDetailsPanel({
 
   const clearFollowUp = () => {
     onUpdateContact({ followUp: null, followUpDate: null });
+    invalidateAppointmentQueries();
     setFollowOpen(false);
   };
 
@@ -1978,11 +1996,9 @@ export function InboxLeadDetailsPanel({
                             <span className="truncate">{format(new Date(a.appointmentDate), 'MMM d · h:mm a')}</span>
                           </div>
                           <button
-                            onClick={async () => {
-                              await fetch(`/api/appointments/${a.id}`, { method: 'DELETE', credentials: 'include' });
-                              queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contact.id}/appointments`] });
-                              queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
-                            }}
+                            onClick={() => void deleteContactAppointment(a.id).catch(() => {
+                              toast({ title: "Failed to remove appointment", variant: "destructive" });
+                            })}
                             className="shrink-0 text-gray-300 hover:text-red-400 transition-colors ml-1"
                             title="Delete appointment"
                           >
@@ -2012,11 +2028,11 @@ export function InboxLeadDetailsPanel({
                             <span className="truncate">{format(new Date(a.appointmentDate), 'MMM d, h:mm a')}</span>
                           </div>
                           <button
-                            onClick={async (e) => {
+                            onClick={(e) => {
                               e.stopPropagation();
-                              await fetch(`/api/appointments/${a.id}`, { method: 'DELETE', credentials: 'include' });
-                              queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contact.id}/appointments`] });
-                              queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
+                              void deleteContactAppointment(a.id).catch(() => {
+                                toast({ title: "Failed to remove appointment", variant: "destructive" });
+                              });
                             }}
                             className="shrink-0 text-gray-300 hover:text-red-400 transition-colors ml-1"
                             title="Delete appointment"

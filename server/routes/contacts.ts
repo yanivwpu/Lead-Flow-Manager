@@ -13,7 +13,11 @@ import {
 } from "@shared/leadQualification";
 import OpenAI from "openai";
 import { isActiveFutureAppointment } from "@shared/activeAppointment";
-import { clearStaleAppointmentScheduledTag } from "../contactAppointmentSync";
+import {
+  clearStaleAppointmentScheduledTag,
+  clearActiveAppointmentsForContact,
+  syncContactFollowUpAfterAppointmentChange,
+} from "../contactAppointmentSync";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -387,6 +391,18 @@ export function registerContactRoutes(app: Express): void {
       if (body.followUpDate !== undefined) {
         body.followUpDate = body.followUpDate ? new Date(body.followUpDate) : null;
       }
+
+      const clearingFollowUp =
+        ("followUpDate" in body && body.followUpDate === null && contact.followUpDate != null) ||
+        ("followUp" in body &&
+          (body.followUp === null || body.followUp === "") &&
+          contact.followUp != null &&
+          contact.followUp !== "");
+
+      if (clearingFollowUp) {
+        await clearActiveAppointmentsForContact(req.user.id, req.params.id);
+      }
+
       const updated = await storage.updateContact(req.params.id, body);
 
       // Phase 1 + Phase 5: Diff-checked outbound sync to GHL.
@@ -1020,8 +1036,9 @@ export function registerContactRoutes(app: Express): void {
       const contactId = existing[0]?.contactId;
       if (contactId) {
         await clearStaleAppointmentScheduledTag(contactId);
+        await syncContactFollowUpAfterAppointmentChange(req.user.id, contactId);
       }
-      res.json({ success: true });
+      res.json({ success: true, contactId: contactId ?? null });
     } catch (err) {
       console.error("Error deleting appointment:", err);
       res.status(500).json({ error: "Failed to delete appointment" });
