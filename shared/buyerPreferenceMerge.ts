@@ -274,6 +274,16 @@ function applyPatchField<K extends keyof BuyerPreferenceExtractionPatch>(
 
   if (key === "targetAreas" || key === "propertyTypes" || key === "mustHaves" || key === "dealBreakers") {
     const cur = profile[key] as PreferenceField<string[]> | undefined;
+    const incomingField = incoming as PreferenceField<string[]>;
+    if (
+      key === "propertyTypes" &&
+      cur &&
+      isShowMeAllPropertyRelaxEvidence(cur.evidence) &&
+      !isShowMeAllPropertyRelaxEvidence(incomingField.evidence) &&
+      (incomingField.value?.length ?? 0) < (cur.value?.length ?? 0)
+    ) {
+      return;
+    }
     const shouldReplace =
       (key === "targetAreas" || key === "propertyTypes") &&
       (mergeOptions?.replaceArrayFields?.includes(key as PreferenceArrayReplaceKey) ||

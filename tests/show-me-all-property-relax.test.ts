@@ -146,4 +146,33 @@ assert(
   "show me all condos does not broaden to every type",
 );
 
+// LLM async extraction often returns house-only from earlier SFH context — override must win.
+import { applyShowMeAllInboundOverride } from "../shared/buyerPreferencePropertyTypeRelax";
+const llmPatch = {
+  propertyTypes: {
+    value: ["house"] as const,
+    source: "inferred" as const,
+    confidence: 0.65,
+    updatedAt: now,
+    evidence: "property type mentioned",
+  },
+};
+applyShowMeAllInboundOverride(llmPatch, relaxMsg);
+assert(llmPatch.propertyTypes?.value?.includes("condo"), "LLM override restores condo");
+assert(
+  llmPatch.propertyTypes?.value?.length === 4,
+  "LLM override restores all residential types",
+);
+
+import { buildBuyerPreferenceChips } from "../shared/buyerPreferenceDisplay";
+const budgetChips = buildBuyerPreferenceChips(
+  mergeBuyerPreferenceProfile(emptyBuyerPreferenceProfile(), {
+    transactionIntent: inf("rent", "rent intent in message"),
+    priceMin: inf(3000, "budget range in message"),
+    priceMax: inf(3400, "budget range in message"),
+  }),
+);
+const budgetChip = budgetChips.find((c) => c.id === "budget");
+assert(budgetChip?.value === "$3k–$3.4k", `budget chip shows range, got ${budgetChip?.value}`);
+
 console.log("show-me-all-property-relax.test.ts: OK");

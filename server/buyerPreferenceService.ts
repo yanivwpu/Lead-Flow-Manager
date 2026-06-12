@@ -18,6 +18,7 @@ import {
   logBuyerPreferenceFastPath,
   type PreferenceArrayReplaceKey,
 } from "@shared/buyerPreferenceInventorySignals";
+import { applyShowMeAllInboundOverride } from "@shared/buyerPreferencePropertyTypeRelax";
 import { mergeBuyerPreferenceProfile } from "@shared/buyerPreferenceMerge";
 import { formatBuyerPreferenceSummaryForAi, normalizeForDisplay } from "@shared/buyerPreferenceDisplay";
 import { aiProvider } from "./aiProvider";
@@ -580,7 +581,10 @@ export async function runBuyerPreferenceExtraction(
 
   try {
     const existing = readBuyerPreferenceProfile(contact);
-    const patch = await extractPreferencesWithLlm(contact, history, existing);
+    let patch = await extractPreferencesWithLlm(contact, history, existing);
+    if (text) {
+      applyShowMeAllInboundOverride(patch, text);
+    }
     if (patchFieldCount(patch) === 0) {
       logTrigger("extraction_completed", {
         contactId,

@@ -59,7 +59,10 @@ function formatFinancing(raw: string): string {
 
 function formatMoneyShort(n: number): string {
   if (n >= 1_000_000) return `$${Math.round(n / 100_000) / 10}M`;
-  if (n >= 1_000) return `$${Math.round(n / 1_000)}k`;
+  if (n >= 1_000) {
+    const k = n / 1_000;
+    return k % 1 === 0 ? `$${k}k` : `$${k.toFixed(1).replace(/\.0$/, "")}k`;
+  }
   return `$${n}`;
 }
 
