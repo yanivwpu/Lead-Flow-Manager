@@ -16,6 +16,7 @@ import { isActiveFutureAppointment } from "@shared/activeAppointment";
 import {
   clearStaleAppointmentScheduledTag,
   clearActiveAppointmentsForContact,
+  clearBookedMeetingsForContact,
   syncContactFollowUpAfterAppointmentChange,
 } from "../contactAppointmentSync";
 
@@ -995,6 +996,22 @@ export function registerContactRoutes(app: Express): void {
     } catch (err) {
       console.error("Error fetching contact appointments:", err);
       res.status(500).json({ error: "Failed to fetch appointments" });
+    }
+  });
+
+  app.post("/api/contacts/:id/clear-booked-meetings", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const contact = await storage.getContact(req.params.id);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      if (contact.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+
+      const result = await clearBookedMeetingsForContact(req.user.id, req.params.id);
+      const updated = await storage.getContact(req.params.id);
+      res.json({ ...result, contact: updated });
+    } catch (err) {
+      console.error("Error clearing booked meetings:", err);
+      res.status(500).json({ error: "Failed to clear booked meetings" });
     }
   });
 

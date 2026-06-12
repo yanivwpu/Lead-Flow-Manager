@@ -39,6 +39,28 @@ export async function clearActiveAppointmentsForContact(
   return clearedIds;
 }
 
+/**
+ * Remove all active booked meetings and appointment-linked followUp fields for a contact.
+ * CRM tag is never modified.
+ */
+export async function clearBookedMeetingsForContact(
+  userId: string,
+  contactId: string
+): Promise<{ clearedAppointmentIds: string[]; followUpCleared: boolean }> {
+  const clearedAppointmentIds = await clearActiveAppointmentsForContact(userId, contactId);
+  const contact = await storage.getContact(contactId);
+  let followUpCleared = false;
+  if (contact && (contact.followUpDate || contact.followUp)) {
+    await storage.updateContact(
+      contactId,
+      { followUp: null, followUpDate: null },
+      { skipAutomationHooks: true }
+    );
+    followUpCleared = true;
+  }
+  return { clearedAppointmentIds, followUpCleared };
+}
+
 export async function contactHasActiveUpcomingAppointment(
   userId: string,
   contactId: string

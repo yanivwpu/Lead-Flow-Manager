@@ -910,6 +910,16 @@ export function InboxLeadDetailsPanel({
     void queryClient.invalidateQueries({ queryKey: ["/api/contacts", contact.id] });
   }, [contact.id, queryClient]);
 
+  const clearBookedMeetings = useCallback(async () => {
+    const res = await fetch(`/api/contacts/${contact.id}/clear-booked-meetings`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!res.ok) throw new Error("Failed to clear booked meetings");
+    invalidateAppointmentQueries();
+    onUpdateContact({ followUp: null, followUpDate: null });
+  }, [contact.id, invalidateAppointmentQueries, onUpdateContact]);
+
   const deleteContactAppointment = useCallback(async (appointmentId: string) => {
     const res = await fetch(`/api/appointments/${appointmentId}`, {
       method: "DELETE",
@@ -1261,9 +1271,11 @@ export function InboxLeadDetailsPanel({
   };
 
   const clearFollowUp = () => {
-    onUpdateContact({ followUp: null, followUpDate: null });
-    invalidateAppointmentQueries();
-    setFollowOpen(false);
+    void clearBookedMeetings()
+      .catch(() => {
+        toast({ title: "Failed to clear booked meeting", variant: "destructive" });
+      })
+      .finally(() => setFollowOpen(false));
   };
 
   const convStatus = primaryConversation?.status || 'open';
@@ -2876,6 +2888,17 @@ export function InboxLeadDetailsPanel({
                           {a.status ? ` · ${a.status}` : ""}
                         </p>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => void deleteContactAppointment(a.id).catch(() => {
+                          toast({ title: "Failed to remove appointment", variant: "destructive" });
+                        })}
+                        className="shrink-0 text-emerald-300 hover:text-red-500 transition-colors"
+                        title="Remove booked meeting"
+                        data-testid={`booked-meeting-clear-${a.id}`}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
                     </div>
                   </div>
                 ))}

@@ -2174,6 +2174,7 @@ export function UnifiedInbox() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1 mb-0.5">
                       <span className={cn("font-medium text-sm truncate flex-1 min-w-0", needsReply && "font-semibold")}>{item.contact.name}</span>
+                      <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatTime(item.lastMessageAt)}</span>
                       {item.unreadCount > 0 && (
                         <Badge className="ml-0.5 text-[10px] px-1.5 py-0 h-4 flex-shrink-0 bg-gray-200 text-gray-800">{item.unreadCount}</Badge>
                       )}
@@ -2204,20 +2205,17 @@ export function UnifiedInbox() {
                           {crmTag}
                         </span>
                       )}
+                      {bookedAppt && (
+                        <span
+                          className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium border bg-emerald-50 text-emerald-700 border-emerald-200"
+                          title={`Booked · ${format(new Date(bookedAppt.appointmentDate), "MMM d 'at' h:mm a")}`}
+                          data-testid={`badge-booked-${item.contact.id}`}
+                        >
+                          <CalendarCheck className="w-3 h-3" aria-hidden />
+                          Booked
+                        </span>
+                      )}
                     </div>
-                  </div>
-                  <div className="flex-shrink-0 flex flex-col items-end gap-0.5 pt-0.5">
-                    <span className="text-[10px] text-muted-foreground leading-none">{formatTime(item.lastMessageAt)}</span>
-                    {bookedAppt && (
-                      <span
-                        className="inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-700 leading-none"
-                        title={`Booked · ${format(new Date(bookedAppt.appointmentDate), "MMM d 'at' h:mm a")}`}
-                        data-testid={`badge-booked-${item.contact.id}`}
-                      >
-                        <CalendarCheck className="w-3 h-3" aria-hidden />
-                        Booked
-                      </span>
-                    )}
                   </div>
                 </div>
               </div>
