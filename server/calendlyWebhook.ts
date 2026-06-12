@@ -11,11 +11,16 @@ import {
   type WhatsAppMessage,
 } from "./userTwilio";
 import { storage } from "./storage";
+import { syncContactAppointmentFlags } from "./contactAppointmentSync";
 import { dispatchInboundMessagingAutomation } from "./automationEventDispatcher";
 import { subscriptionService } from "./subscriptionService";
 import { notifyUser } from "./presence";
 import { calendlyGetWebhookSubscription } from "./calendlyApi";
 import { encryptIntegrationConfig } from "./integrationConfigCrypto";
+import {
+  APPOINTMENT_SCHEDULED_TAG,
+  ACTIVE_APPOINTMENT_STATUSES,
+} from "@shared/activeAppointment";
 
 const DECRYPT_KEYS = [
   "accessToken",
@@ -406,8 +411,6 @@ const PIPELINE_BEFORE_APPOINTMENT_SET = new Set([
   "Appointment Requested",
 ]);
 
-const ACTIVE_APPOINTMENT_STATUSES = ["scheduled"] as const;
-
 function logCalendlyLifecycle(data: Record<string, unknown>): void {
   console.log(JSON.stringify({ tag: "[CalendlyLifecycle]", ...data }));
 }
@@ -549,8 +552,8 @@ async function applyCalendlyConfirmedBookingCrmEffects(params: {
   if ((!contact.name || contact.name === "Unknown") && inviteeName) {
     patch.name = inviteeName;
   }
-  if (contact.tag !== "Appointment Scheduled") {
-    patch.tag = "Appointment Scheduled";
+  if (contact.tag !== APPOINTMENT_SCHEDULED_TAG) {
+    patch.tag = APPOINTMENT_SCHEDULED_TAG;
   }
   if (PIPELINE_BEFORE_APPOINTMENT_SET.has(contact.pipelineStage || "")) {
     patch.pipelineStage = "Appointment Set";
@@ -1121,6 +1124,9 @@ async function handleInviteeCanceled(userId: string, body: Record<string, unknow
     };
   }
   await storage.updateContact(contact.id, patch as any, { skipAutomationHooks: true });
+  if (!parsed.isRescheduleCancellation) {
+    await syncContactAppointmentFlags(contact.id);
+  }
   const { channelService } = await import("./channelService");
   await channelService.logActivity(userId, contact.id, written.conversationId, "calendly_booking_canceled", {
     email: parsed.email,

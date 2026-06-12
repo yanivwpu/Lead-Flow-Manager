@@ -82,6 +82,7 @@ async function checkFollowUps() {
         if (!user) continue;
         await notify(user, contact.name, contact.followUp || '', `/contacts/${contact.id}`, contact.notes || '');
         await storage.updateContact(contact.id, { followUp: null, followUpDate: null });
+        await syncContactAppointmentFlags(contact.id);
       }
     }
   } catch (error) {

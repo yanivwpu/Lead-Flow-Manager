@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { sql, eq } from "drizzle-orm";
-import { CHANNELS, contactNotes } from "@shared/schema";
+import { CHANNELS, contactNotes, appointments } from "@shared/schema";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
 import { channelService } from "../channelService";
@@ -12,19 +12,13 @@ import {
   systemTagForQualification,
 } from "@shared/leadQualification";
 import OpenAI from "openai";
+import { isActiveFutureAppointment } from "@shared/activeAppointment";
+import { syncContactAppointmentFlags } from "../contactAppointmentSync";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
-
-const ACTIVE_APPOINTMENT_STATUSES = new Set(["scheduled"]);
-
-function isActiveFutureAppointment(appt: { status?: string | null; appointmentDate?: Date | string | null }): boolean {
-  if (!ACTIVE_APPOINTMENT_STATUSES.has(appt.status || "")) return false;
-  const when = appt.appointmentDate ? new Date(appt.appointmentDate).getTime() : 0;
-  return Number.isFinite(when) && when >= Date.now() - 60 * 1000;
-}
 
 async function resolveEntityForNotes(id: string): Promise<{ userId: string } | null> {
   const contact = await storage.getContact(id);
@@ -1016,8 +1010,17 @@ export function registerContactRoutes(app: Express): void {
   app.delete("/api/appointments/:id", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const existing = await db
+        .select({ contactId: appointments.contactId })
+        .from(appointments)
+        .where(eq(appointments.id, req.params.id))
+        .limit(1);
       const ok = await storage.deleteAppointment(req.params.id);
       if (!ok) return res.status(404).json({ error: "Appointment not found" });
+      const contactId = existing[0]?.contactId;
+      if (contactId) {
+        await syncContactAppointmentFlags(contactId);
+      }
       res.json({ success: true });
     } catch (err) {
       console.error("Error deleting appointment:", err);
