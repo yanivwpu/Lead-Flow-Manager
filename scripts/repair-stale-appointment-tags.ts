@@ -1,5 +1,5 @@
 /**
- * Clear stale contact.tag = "Appointment Scheduled" when no active upcoming appointment exists.
+ * Clear legacy contact.tag = "Appointment Scheduled" (appointment state belongs in appointments table).
  *
  * Usage:
  *   npx tsx scripts/repair-stale-appointment-tags.ts [--dry-run] [--limit N]
@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import { contacts } from "../shared/schema";
 import { APPOINTMENT_SCHEDULED_TAG } from "../shared/activeAppointment";
-import { syncContactAppointmentFlags } from "../server/contactAppointmentSync";
+import { clearStaleAppointmentScheduledTag } from "../server/contactAppointmentSync";
 
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
@@ -18,7 +18,7 @@ const limit = Number.parseInt(limitArg?.split("=")[1] ?? "5000", 10);
 
 async function main() {
   const staleCandidates = await db
-    .select({ id: contacts.id, name: contacts.name, userId: contacts.userId })
+    .select({ id: contacts.id, name: contacts.name })
     .from(contacts)
     .where(eq(contacts.tag, APPOINTMENT_SCHEDULED_TAG))
     .limit(limit);
@@ -26,36 +26,22 @@ async function main() {
   console.log(`Found ${staleCandidates.length} contact(s) tagged "${APPOINTMENT_SCHEDULED_TAG}" (limit ${limit})`);
 
   let cleared = 0;
-  let kept = 0;
 
   for (const row of staleCandidates) {
     if (dryRun) {
-      const { contactHasActiveUpcomingAppointment } = await import("../server/contactAppointmentSync");
-      const hasActive = await contactHasActiveUpcomingAppointment(row.userId, row.id);
-      if (hasActive) {
-        kept++;
-        console.log(`[keep] ${row.id} ${row.name}`);
-      } else {
-        cleared++;
-        console.log(`[would-clear] ${row.id} ${row.name}`);
-      }
+      console.log(`[would-clear] ${row.id} ${row.name}`);
+      cleared++;
       continue;
     }
 
-    const result = await syncContactAppointmentFlags(row.id);
-    if (result.clearedTag) {
+    const result = await clearStaleAppointmentScheduledTag(row.id);
+    if (result.changed) {
       cleared++;
       console.log(`[cleared] ${row.id} ${row.name}`);
-    } else {
-      kept++;
     }
   }
 
-  console.log(
-    dryRun
-      ? `Dry run complete: would clear ${cleared}, keep ${kept}`
-      : `Repair complete: cleared ${cleared}, kept ${kept}`
-  );
+  console.log(dryRun ? `Dry run complete: would clear ${cleared}` : `Repair complete: cleared ${cleared}`);
 }
 
 main().catch((err) => {

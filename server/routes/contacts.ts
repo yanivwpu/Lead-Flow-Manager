@@ -13,7 +13,7 @@ import {
 } from "@shared/leadQualification";
 import OpenAI from "openai";
 import { isActiveFutureAppointment } from "@shared/activeAppointment";
-import { syncContactAppointmentFlags } from "../contactAppointmentSync";
+import { clearStaleAppointmentScheduledTag } from "../contactAppointmentSync";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -1019,7 +1019,7 @@ export function registerContactRoutes(app: Express): void {
       if (!ok) return res.status(404).json({ error: "Appointment not found" });
       const contactId = existing[0]?.contactId;
       if (contactId) {
-        await syncContactAppointmentFlags(contactId);
+        await clearStaleAppointmentScheduledTag(contactId);
       }
       res.json({ success: true });
     } catch (err) {

@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import {
   Search, UserPlus, MessageCircle, Instagram, Facebook, Smartphone, Globe, Send,
   ChevronUp, ChevronDown, ChevronsUpDown, X, Users, Phone, Mail, ShoppingCart,
-  ArrowUpRight, RefreshCw, Download, StickyNote, Sparkles, Loader2,
+  ArrowUpRight, RefreshCw, Download, StickyNote, Sparkles, Loader2, CalendarCheck,
 } from "lucide-react";
 import {
   getContactDisplayChannel,
@@ -22,6 +22,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { TAG_COLORS } from "@/lib/data";
+import { isCrmDisplayTag, nextActiveAppointmentByContact } from "@shared/activeAppointment";
 
 type Channel = "whatsapp" | "instagram" | "facebook" | "sms" | "webchat" | "telegram" | "shopify" | "woocommerce";
 
@@ -74,6 +75,14 @@ function channelUiConfig(channelKey: string) {
 
 function getTagColor(tag: string) {
   return TAG_COLORS[tag] || "bg-gray-100 text-gray-600 border-gray-200";
+}
+
+function displayCrmTag(tag: string | undefined): string | null {
+  return isCrmDisplayTag(tag) ? tag : null;
+}
+
+function formatBookedAt(iso: string): string {
+  return format(new Date(iso), "MMM d 'at' h:mm a");
 }
 
 function ChannelIcon({ channel, size = "w-3.5 h-3.5" }: { channel: string; size?: string }) {
@@ -210,6 +219,22 @@ export function Contacts() {
     },
   });
 
+  const { data: contactAppointments = [] } = useQuery<Array<{
+    id: string;
+    contactId: string;
+    appointmentDate: string;
+    title?: string;
+    appointmentType?: string;
+  }>>({
+    queryKey: ["/api/appointments"],
+    staleTime: 30_000,
+  });
+
+  const nextAppointmentByContact = useMemo(
+    () => nextActiveAppointmentByContact(contactAppointments),
+    [contactAppointments]
+  );
+
   const addMutation = useMutation({
     mutationFn: async (data: { name: string; phone: string; email: string }) => {
       const res = await fetch("/api/contacts", {
@@ -236,7 +261,10 @@ export function Contacts() {
 
   const allTags = useMemo(() => {
     const s = new Set<string>();
-    contacts.forEach((c) => { if (c.tag) s.add(c.tag); });
+    contacts.forEach((c) => {
+      const tag = displayCrmTag(c.tag);
+      if (tag) s.add(tag);
+    });
     return Array.from(s).sort();
   }, [contacts]);
 
@@ -320,12 +348,20 @@ export function Contacts() {
 
   function handleExport() {
     const rows = [
-      ["Name", "Phone", "Email", "Tag", "Pipeline Stage", "Channel", "Created"],
-      ...filtered.map((c) => [
-        c.name, c.phone || "", c.email || "", c.tag, c.pipelineStage,
-        getContactDisplayChannelLabel(getContactDisplayChannel(c)),
-        c.createdAt ? format(new Date(c.createdAt), "yyyy-MM-dd") : "",
-      ]),
+      ["Name", "Phone", "Email", "Tag", "Appointment", "Pipeline Stage", "Channel", "Created"],
+      ...filtered.map((c) => {
+        const appt = nextAppointmentByContact.get(c.id);
+        return [
+          c.name,
+          c.phone || "",
+          c.email || "",
+          displayCrmTag(c.tag) || "",
+          appt ? formatBookedAt(appt.appointmentDate) : "",
+          c.pipelineStage,
+          getContactDisplayChannelLabel(getContactDisplayChannel(c)),
+          c.createdAt ? format(new Date(c.createdAt), "yyyy-MM-dd") : "",
+        ];
+      }),
     ];
     const csv = rows.map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -524,6 +560,8 @@ export function Contacts() {
                 {filtered.map((contact) => {
                   const ch = contactDisplayChannelKey(contact);
                   const cfg = channelUiConfig(ch);
+                  const crmTag = displayCrmTag(contact.tag);
+                  const bookedAppt = nextAppointmentByContact.get(contact.id);
                   return (
                     <div
                       key={contact.id}
@@ -566,12 +604,12 @@ export function Contacts() {
                             {cfg.label}
                           </span>
                           {/* Tag badge */}
-                          {contact.tag && (
+                          {crmTag && (
                             <span className={cn(
                               "inline-flex items-center px-1.5 py-0 rounded-full text-[11px] font-medium border",
-                              getTagColor(contact.tag),
+                              getTagColor(crmTag),
                             )} data-testid={`badge-tag-${contact.id}`}>
-                              {contact.tag}
+                              {crmTag}
                             </span>
                           )}
                           {/* Stage */}
@@ -595,8 +633,17 @@ export function Contacts() {
                         ) : null}
                       </div>
 
-                      {/* Right: timestamp + arrow */}
+                      {/* Right: appointment + timestamp + arrow */}
                       <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                        {bookedAppt ? (
+                          <span
+                            className="inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-700"
+                            data-testid={`text-appointment-${contact.id}`}
+                          >
+                            <CalendarCheck className="w-3 h-3 shrink-0" aria-hidden />
+                            {formatBookedAt(bookedAppt.appointmentDate)}
+                          </span>
+                        ) : null}
                         <span className="text-[10px] text-gray-400" data-testid={`text-created-${contact.id}`}>
                           {contact.createdAt
                             ? formatDistanceToNow(new Date(contact.createdAt), { addSuffix: true })
@@ -614,9 +661,12 @@ export function Contacts() {
           {/* ── DESKTOP table (md+) ── */}
           <div className="hidden md:block bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             {/* Table header */}
-            <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-4 py-2.5 border-b border-gray-100 bg-gray-50">
+            <div className="grid grid-cols-[2fr_1fr_1.2fr_1fr_1fr_1fr] gap-4 px-4 py-2.5 border-b border-gray-100 bg-gray-50">
               <SortHeader label={t("contacts.colName", "Contact")} field="name" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
               <SortHeader label={t("contacts.colTag", "Tag")} field="tag" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                {t("contacts.colAppointment", "Appointment")}
+              </span>
               <SortHeader label={t("contacts.colStage", "Stage")} field="pipelineStage" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
               <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 {t("contacts.colChannel", "Channel")}
@@ -653,11 +703,13 @@ export function Contacts() {
                 {filtered.map((contact) => {
                   const ch = contactDisplayChannelKey(contact);
                   const cfg = channelUiConfig(ch);
+                  const crmTag = displayCrmTag(contact.tag);
+                  const bookedAppt = nextAppointmentByContact.get(contact.id);
                   return (
                     <div
                       key={contact.id}
                       onClick={() => navigate(`/app/inbox/${contact.id}`)}
-                      className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-4 py-3 items-center hover:bg-gray-50 cursor-pointer transition-colors group"
+                      className="grid grid-cols-[2fr_1fr_1.2fr_1fr_1fr_1fr] gap-4 px-4 py-3 items-center hover:bg-gray-50 cursor-pointer transition-colors group"
                       data-testid={`row-contact-${contact.id}`}
                     >
                       {/* Name + phone */}
@@ -705,12 +757,27 @@ export function Contacts() {
 
                       {/* Tag */}
                       <div>
-                        {contact.tag ? (
+                        {crmTag ? (
                           <span className={cn(
                             "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border",
-                            getTagColor(contact.tag),
+                            getTagColor(crmTag),
                           )} data-testid={`badge-tag-${contact.id}`}>
-                            {contact.tag}
+                            {crmTag}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300 text-xs">—</span>
+                        )}
+                      </div>
+
+                      {/* Appointment */}
+                      <div>
+                        {bookedAppt ? (
+                          <span
+                            className="inline-flex items-center gap-1 text-xs text-emerald-700 font-medium"
+                            data-testid={`text-appointment-${contact.id}`}
+                          >
+                            <CalendarCheck className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                            {formatBookedAt(bookedAppt.appointmentDate)}
                           </span>
                         ) : (
                           <span className="text-gray-300 text-xs">—</span>

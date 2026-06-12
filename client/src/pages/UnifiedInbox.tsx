@@ -46,6 +46,7 @@ import {
   LayoutTemplate,
   ImageOff,
   Calendar,
+  CalendarCheck,
   ShoppingCart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -79,6 +80,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ChatAvatar } from "@/components/ChatAvatar";
 import { TAG_COLORS } from "@/lib/data";
+import { isCrmDisplayTag, nextActiveAppointmentByContact } from "@shared/activeAppointment";
 import { getConversationStatusRow } from "@/lib/conversationStatusUi";
 import { useToast } from "@/hooks/use-toast";
 import { InboxLeadDetailsPanel } from "@/components/InboxLeadDetailsPanel";
@@ -641,6 +643,23 @@ export function UnifiedInbox() {
   });
 
   const inbox: InboxItem[] = useMemo(() => inboxData || [], [inboxData]);
+
+  const { data: inboxAppointments = [] } = useQuery<Array<{
+    id: string;
+    contactId: string;
+    appointmentDate: string;
+    title?: string;
+    appointmentType?: string;
+    status?: string;
+  }>>({
+    queryKey: ["/api/appointments"],
+    staleTime: 30_000,
+  });
+
+  const nextAppointmentByContact = useMemo(
+    () => nextActiveAppointmentByContact(inboxAppointments),
+    [inboxAppointments]
+  );
 
   const { data: contactData } = useQuery<{ contact: Contact; conversations: Conversation[] }>({
     queryKey: ["/api/contacts", selectedContactId],
@@ -2122,6 +2141,8 @@ export function UnifiedInbox() {
               const fuStatus = getFollowUpStatus(item.contact.followUpDate);
               const needsReply = item.conversation?.lastMessageDirection === 'inbound' && item.unreadCount > 0;
               const isOverdue = fuStatus === 'overdue';
+              const bookedAppt = nextAppointmentByContact.get(item.contact.id);
+              const crmTag = isCrmDisplayTag(item.contact.tag) ? item.contact.tag : null;
               return (
               <div
                 key={item.contact.id}
@@ -2143,7 +2164,17 @@ export function UnifiedInbox() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1 mb-0.5">
-                      <span className={cn("font-medium text-sm truncate flex-1", needsReply && "font-semibold")}>{item.contact.name}</span>
+                      <span className={cn("font-medium text-sm truncate flex-1 min-w-0", needsReply && "font-semibold")}>{item.contact.name}</span>
+                      {bookedAppt && (
+                        <span
+                          className="flex-shrink-0 inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-700"
+                          title={`Booked · ${format(new Date(bookedAppt.appointmentDate), "MMM d 'at' h:mm a")}`}
+                          data-testid={`badge-booked-${item.contact.id}`}
+                        >
+                          <CalendarCheck className="w-3 h-3" aria-hidden />
+                          <span className="hidden sm:inline">Booked</span>
+                        </span>
+                      )}
                       <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatTime(item.lastMessageAt)}</span>
                       {item.unreadCount > 0 && (
                         <Badge className="ml-0.5 text-[10px] px-1.5 py-0 h-4 flex-shrink-0 bg-gray-200 text-gray-800">{item.unreadCount}</Badge>
@@ -2152,7 +2183,7 @@ export function UnifiedInbox() {
                     <p className={cn("text-xs truncate mb-1", needsReply ? "text-gray-700 font-medium" : "text-muted-foreground")}>
                       {item.lastMessage || "No messages yet"}
                     </p>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 flex-wrap">
                       {needsReply ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold border bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-0.5" data-testid={`badge-needs-reply-${item.contact.id}`}>
                           <Zap className="w-2.5 h-2.5" />Needs Reply
@@ -2169,11 +2200,12 @@ export function UnifiedInbox() {
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium border bg-slate-50 text-slate-500 border-slate-200" data-testid={`badge-upcoming-${item.contact.id}`}>
                           ⏰ {item.contact.followUp}
                         </span>
-                      ) : item.contact.tag ? (
-                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium border", TAG_COLORS[item.contact.tag] || 'bg-blue-100 text-blue-700 border-blue-200')}>
-                          {item.contact.tag}
-                        </span>
                       ) : null}
+                      {crmTag && (
+                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium border", TAG_COLORS[crmTag] || 'bg-blue-100 text-blue-700 border-blue-200')} data-testid={`badge-tag-${item.contact.id}`}>
+                          {crmTag}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
