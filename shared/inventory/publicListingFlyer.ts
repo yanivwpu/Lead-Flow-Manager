@@ -260,8 +260,11 @@ export const LISTING_OG_IMAGE_HEIGHT = 630;
 const LISTING_ERROR_OG_TITLE = "Listing not available | WhachatCRM";
 const LISTING_ERROR_OG_DESCRIPTION = "This listing may be unavailable or expired.";
 
-/** Overlap of status ribbon into hero image (screen layout). */
-const LISTING_BANNER_HERO_OVERLAP_PX = 16;
+/**
+ * Screen ribbon overlap into hero (top-right). ~28px ≈ 65–70% of ribbon height on the photo.
+ * Tuned so the badge reads as sitting on the property image, not page chrome.
+ */
+const LISTING_BANNER_HERO_OVERLAP_PX = 28;
 
 function formatSeoBedBathCount(value: number | null, label: "Bed" | "Bath"): string | null {
   if (value == null || !Number.isFinite(value)) return null;
@@ -1282,12 +1285,14 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       .no-print { display: none !important; }
       .flyer { max-width: none; box-shadow: none; }
       .gallery-banner-anchor {
+        justify-content: flex-end !important;
         margin-bottom: 4px;
       }
       .listing-banner {
         font-size: 11pt;
         padding: 5px 20px 5px 14px;
         margin-right: 0;
+        transform-origin: top right !important;
       }
       .flyer-body { padding: 0; }
       .gallery { margin: 0 0 6px; }
