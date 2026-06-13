@@ -2,6 +2,7 @@ import type { InventoryListing } from "@shared/schema";
 import type { InventoryMatchesResponse, InventoryMatchResult } from "@shared/inventory/inventoryMatchTypes";
 import { buildInventoryMatchDiagnostics } from "@shared/inventory/inventoryMatchDiagnostics";
 import { formatInventoryMatchSummaryForAi } from "@shared/inventory/inventoryMatchDisplay";
+import { describeActiveSearchFilters } from "@shared/buyerSearchCommandDebug";
 import {
   extractBuyerMatchCriteria,
   rankInventoryMatches,
@@ -156,6 +157,7 @@ export async function findMatchingListingsForContact(
     (await loadPersistedBuyerPreferenceProfile(contactId)) ??
     readBuyerPreferenceProfile(contact);
   const criteria = extractBuyerMatchCriteria(profile);
+  const activeFilterSummary = describeActiveSearchFilters(profile, criteria);
 
   if (!criteria.hasAnyCriteria) {
     const inventoryCount = await countActiveListingsForUser(userId);
@@ -253,6 +255,7 @@ export async function findMatchingListingsForContact(
       noMatchSummary,
       exclusionSummary,
       excludedSamples,
+      activeFilterSummary,
     }),
   };
 }

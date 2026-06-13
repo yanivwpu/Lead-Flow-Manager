@@ -1,5 +1,5 @@
 import type { BuyerPreferenceExtractionPatch, BuyerPreferenceProfile } from "./buyerPreferenceSchema";
-import { heuristicPatchFromInboundText } from "./buyerPreferenceExtractionNormalize";
+import { applyInboundSearchCommandOverrides } from "./buyerSearchCommand";
 
 /** Residential rental types — excludes land and commercial. */
 export const RESIDENTIAL_RENTAL_PROPERTY_TYPES = [
@@ -72,43 +72,12 @@ export function applyShowMeAllInboundOverride(
   patch: BuyerPreferenceExtractionPatch,
   inboundText: string,
 ): void {
-  if (!inboundText.trim() || !detectShowMeAllPropertyTypeRelaxation(inboundText)) return;
-
-  const heuristic = heuristicPatchFromInboundText(inboundText);
-  if (heuristic.propertyTypes) {
-    patch.propertyTypes = heuristic.propertyTypes;
-  }
-  if (heuristic.priceMin && heuristic.priceMax) {
-    patch.priceMin = heuristic.priceMin;
-    patch.priceMax = heuristic.priceMax;
-  }
-  if (heuristic.bedsMin) patch.bedsMin = heuristic.bedsMin;
-  if (heuristic.bathsMin) patch.bathsMin = heuristic.bathsMin;
-  if (heuristic.targetAreas) patch.targetAreas = heuristic.targetAreas;
+  applyInboundSearchCommandOverrides(patch, inboundText);
 }
 
-/**
- * When inbound names a specific property type (e.g. SFH), re-apply heuristic so async LLM
- * cannot keep a prior "show me all" broad propertyTypes list.
- */
 export function applyExplicitPropertyTypeInboundOverride(
   patch: BuyerPreferenceExtractionPatch,
   inboundText: string,
 ): void {
-  if (!inboundText.trim() || !hasExplicitPropertyTypeConstraint(inboundText)) return;
-
-  const heuristic = heuristicPatchFromInboundText(inboundText);
-  if (heuristic.propertyTypes) {
-    patch.propertyTypes = heuristic.propertyTypes;
-  }
-  if (heuristic.transactionIntent) {
-    patch.transactionIntent = heuristic.transactionIntent;
-  }
-  if (heuristic.priceMax && /\bup\s+to\b/i.test(heuristic.priceMax.evidence || "")) {
-    patch.priceMax = heuristic.priceMax;
-    delete patch.priceMin;
-  }
-  if (heuristic.targetAreas) {
-    patch.targetAreas = heuristic.targetAreas;
-  }
+  applyInboundSearchCommandOverrides(patch, inboundText);
 }

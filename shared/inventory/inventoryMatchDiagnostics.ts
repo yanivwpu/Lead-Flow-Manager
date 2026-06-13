@@ -9,6 +9,7 @@ export function buildInventoryMatchDiagnostics(input: {
   noMatchSummary?: string | null;
   exclusionSummary?: string | null;
   excludedSamples?: InventoryMatchExcludedListing[];
+  activeFilterSummary?: string | null;
 }): InventoryMatchDiagnostics {
   return {
     activeInventoryCount: input.activeInventoryCount,
@@ -19,6 +20,7 @@ export function buildInventoryMatchDiagnostics(input: {
     noMatchSummary: input.noMatchSummary ?? null,
     exclusionSummary: input.exclusionSummary ?? null,
     excludedSamples: input.excludedSamples,
+    activeFilterSummary: input.activeFilterSummary ?? null,
   };
 }
 

@@ -116,6 +116,7 @@ function normalizePropertyTypes(values: string[]): Array<"condo" | "house" | "to
 function extractPropertyTypesFromText(lower: string): Array<"condo" | "house" | "townhouse" | "multi_family" | "land"> {
   const types: Array<"condo" | "house" | "townhouse" | "multi_family" | "land"> = [];
   if (/\bcondo(?:minium)?s?\b/i.test(lower)) types.push("condo");
+  if (/\bapartments?\b/i.test(lower)) types.push("condo");
   if (/\b(townhouse|town[\s-]?house)\b/i.test(lower)) types.push("townhouse");
   if (/\b(sfh|single[\s-]?family(?:\s+home)?)\b/i.test(lower)) types.push("house");
   else if (/\b(house|home)\b/i.test(lower)) types.push("house");
@@ -561,7 +562,7 @@ export function heuristicPatchFromTranscript(
   if (/\bpool\b/i.test(lower)) {
     patch.pool = { value: true, ...inf(0.7, "pool in message") };
   }
-  if (/\b(rent|rental|renting|lease|leasing|for\s+rent|tenant)\b/i.test(lower)) {
+  if (/\b(rent|rentals?|renting|lease|leasing|for\s+rent|tenant)\b/i.test(lower)) {
     patch.transactionIntent = { value: "rent", ...inf(0.88, "rent intent in message") };
   } else if (
     /\b(homes?\s+for\s+sale|for\s+sale|buy|buying|purchase|looking to buy|looking for a home)\b/i.test(lower) ||

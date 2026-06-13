@@ -49,6 +49,7 @@ export const inventoryMatchDiagnosticsSchema = z.object({
   noMatchSummary: z.string().nullable().optional(),
   exclusionSummary: z.string().nullable().optional(),
   excludedSamples: z.array(inventoryMatchExcludedListingSchema).optional(),
+  activeFilterSummary: z.string().nullable().optional(),
 });
 
 export type InventoryMatchDiagnostics = z.infer<typeof inventoryMatchDiagnosticsSchema>;
