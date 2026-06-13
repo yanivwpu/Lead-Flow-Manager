@@ -164,4 +164,33 @@ assert(ranked.every((m) => m.score >= 35), "scores above min threshold");
 const counts = countExclusionReasons(pool, criteria);
 assert((counts.get("wrong property type") ?? 0) >= 2, "exclusion counts track property type");
 
+const poolOptionalMsg =
+  "I'm a cash buyer I can buy a home up to $899. Looking for SFH in Pompano with or without pool at least 3 bedrooms";
+const poolOptPatch = heuristicPatchFromInboundText(poolOptionalMsg);
+assert(poolOptPatch.pool?.value === false, "with or without pool -> pool optional");
+assert(poolOptPatch.bedsMin?.value === 3, "relaxed message -> 3 beds min");
+
+let strictProfile = mergeBuyerPreferenceProfile(emptyBuyerPreferenceProfile(), patch, undefined, {
+  replaceArrayFields: parseBuyerSearchCommand(msg, emptyBuyerPreferenceProfile()).replaceArrayFields,
+});
+strictProfile = mergeBuyerPreferenceProfile(strictProfile, poolOptPatch, undefined, {
+  replaceArrayFields: parseBuyerSearchCommand(poolOptionalMsg, emptyBuyerPreferenceProfile()).replaceArrayFields,
+});
+assert(strictProfile.pool == null, "pool optional clears prior pool=true");
+
+const relaxedProfile = mergeBuyerPreferenceProfile(emptyBuyerPreferenceProfile(), poolOptPatch, undefined, {
+  replaceArrayFields: parseBuyerSearchCommand(poolOptionalMsg, emptyBuyerPreferenceProfile()).replaceArrayFields,
+});
+const relaxedCriteria = extractBuyerMatchCriteria(relaxedProfile);
+assert(relaxedCriteria.hardRequirePool === false, "relaxed search no pool gate");
+assert(relaxedCriteria.bedsMin === 3, "relaxed beds min 3");
+assert(getListingExclusionReason(noPool, relaxedCriteria) == null, "no pool allowed when optional");
+
+const relaxedRanked = rankInventoryMatches(pool, relaxedCriteria, 10);
+assert(relaxedRanked.length >= 2, `relaxed pool matches include no-pool SFH (got ${relaxedRanked.length})`);
+assert(
+  relaxedRanked.some((m) => m.listingId === "no-pool"),
+  "no-pool listing included when pool optional",
+);
+
 console.log("pompano-sfh-cash-buyer-matching.test.ts: OK");

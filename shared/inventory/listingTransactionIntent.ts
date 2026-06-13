@@ -1,13 +1,28 @@
+import type { InventoryListingDetails } from "./inventoryListingSchema";
+import type { MatchListingInput } from "./inventoryMatchScoring";
+import {
+  mapResoPropertyType,
+  type ResoListingTransactionType,
+} from "./reso/resoListingClassification";
+
 export type ListingTransactionInput = {
   propertyType: string | null;
   propertySubtype?: string | null;
   description: string | null;
   features: string[];
   priceCents: number | null;
+  listingDetails?: InventoryListingDetails | null;
 };
 
 export const RENTAL_LISTING_HINT_PATTERN =
   /\b(rent|rental|lease|leased|leasing|for\s+rent|rent\s+only|residential\s+lease|commercial\s+lease|lease\s+only)\b/i;
+
+function storedListingTransactionType(
+  listing: ListingTransactionInput,
+): ResoListingTransactionType | null {
+  const t = listing.listingDetails?.listingTransactionType;
+  return t === "sale" || t === "rent" ? t : null;
+}
 
 /** RESO / MLS text signals that a listing is for rent or lease — not a for-sale purchase. */
 export function listingHaystackForTransaction(listing: ListingTransactionInput): string {
@@ -24,6 +39,10 @@ export function listingHaystackForTransaction(listing: ListingTransactionInput):
 }
 
 export function listingIsRentalOrLease(listing: ListingTransactionInput): boolean {
+  const stored = storedListingTransactionType(listing);
+  if (stored === "sale") return false;
+  if (stored === "rent") return true;
+
   const hay = listingHaystackForTransaction(listing);
   if (RENTAL_LISTING_HINT_PATTERN.test(hay)) return true;
   if (/\bresidential\s+lease\b/.test(hay)) return true;
@@ -36,14 +55,21 @@ export function listingIsRentalOrLease(listing: ListingTransactionInput): boolea
  */
 export function listingIsLikelyMonthlyRentPrice(
   priceCents: number | null,
-  options: { transactionIntent: "buy" | "rent" | "unknown"; priceMax: number | null },
+  options: {
+    transactionIntent: "buy" | "rent" | "unknown";
+    priceMax: number | null;
+    listing?: ListingTransactionInput | null;
+  },
 ): boolean {
   if (options.transactionIntent === "rent") return false;
+  const stored = options.listing ? storedListingTransactionType(options.listing) : null;
+  if (stored === "sale") return false;
+  if (stored === "rent") return true;
+
   if (priceCents == null) return false;
   const price = priceCents / 100;
   const saleCap = options.priceMax;
   if (saleCap == null || saleCap < 150_000) return false;
-  // Sale homes in this market are not $8k total; that is almost always monthly rent.
   if (price > 0 && price < 50_000) return true;
   return false;
 }
@@ -72,6 +98,12 @@ export function listingPriceLooksLikeMonthlyRent(priceCents: number | null): boo
 export function listingMatchesRentIntent(listing: ListingTransactionInput): boolean {
   if (listingIsRentalOrLease(listing)) return true;
   return listingPriceLooksLikeMonthlyRent(listing.priceCents);
+}
+
+/** Prefer stored normalized property type; fall back to RESO mapper. */
+export function resolveStoredListingPropertyType(listing: ListingTransactionInput): string | null {
+  const mapped = mapResoPropertyType(listing.propertyType, listing.propertySubtype ?? null);
+  return mapped ?? listing.propertyType;
 }
 
 export function formatListingPriceDisplay(

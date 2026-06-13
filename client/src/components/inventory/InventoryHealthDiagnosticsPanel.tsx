@@ -1,16 +1,17 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Stethoscope } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { InventoryMatchDiagnostics } from "@shared/inventory/inventoryMatchTypes";
-import { formatInventoryMatchRunTime } from "@shared/inventory/inventoryMatchDiagnostics";
+import {
+  formatFunnelExcludedSampleLine,
+  formatInventoryMatchRunTime,
+} from "@shared/inventory/inventoryMatchDiagnostics";
 import { formatListingExclusionLine } from "@shared/inventory/inventoryMatchScoring";
 
 type InventoryHealthDiagnosticsPanelProps = {
   diagnostics?: InventoryMatchDiagnostics | null;
-  /** When the matches query failed before server diagnostics were returned */
   clientError?: string | null;
-  /** Client-side fetch completion time when API diagnostics omit lastMatchRunAt */
   lastClientFetchAt?: string | null;
   reason?: string;
   compact?: boolean;
@@ -34,30 +35,40 @@ export function InventoryHealthDiagnosticsPanel({
   compact = true,
   rateLimitWarning = false,
 }: InventoryHealthDiagnosticsPanelProps) {
-  const [open, setOpen] = useState(import.meta.env.DEV || rateLimitWarning);
   const lastRun = diagnostics?.lastMatchRunAt ?? lastClientFetchAt;
-  const lastError =
-    diagnostics?.lastMatchingError ??
-    clientError ??
-    null;
+  const lastError = diagnostics?.lastMatchingError ?? clientError ?? null;
 
   const activeCount = diagnostics?.activeInventoryCount;
   const scored = diagnostics?.listingsScored;
   const returned = diagnostics?.matchesReturned;
+  const totalQualifying = diagnostics?.totalQualifyingMatches;
+  const capTruncated = diagnostics?.inventoryCapTruncated;
 
-  const sparseMatches =
-    typeof scored === "number" &&
-    scored >= 20 &&
-    typeof returned === "number" &&
-    returned > 0 &&
-    returned <= 2;
+  const hasAnomaly = useMemo(
+    () =>
+      rateLimitWarning ||
+      capTruncated === true ||
+      (typeof activeCount === "number" && activeCount > 0 && (scored ?? 0) === 0) ||
+      (typeof scored === "number" &&
+        scored > 0 &&
+        (totalQualifying ?? returned ?? 0) === 0) ||
+      (typeof totalQualifying === "number" &&
+        totalQualifying >= 10 &&
+        typeof returned === "number" &&
+        totalQualifying > returned) ||
+      (!!lastError && !rateLimitWarning),
+    [rateLimitWarning, capTruncated, activeCount, scored, returned, totalQualifying, lastError],
+  );
 
-  const hasAnomaly =
-    rateLimitWarning ||
-    (typeof activeCount === "number" && activeCount > 0 && (scored ?? 0) === 0) ||
-    (typeof scored === "number" && scored > 0 && (returned ?? 0) === 0) ||
-    sparseMatches ||
-    (!!lastError && !rateLimitWarning);
+  const [open, setOpen] = useState(import.meta.env.DEV || rateLimitWarning || hasAnomaly);
+
+  useEffect(() => {
+    if (hasAnomaly) setOpen(true);
+  }, [hasAnomaly]);
+
+  const profile = diagnostics?.persistedProfileSnapshot;
+  const richSamples = diagnostics?.funnelExcludedSamples ?? [];
+  const legacySamples = diagnostics?.excludedSamples ?? [];
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="mt-2">
@@ -78,11 +89,11 @@ export function InventoryHealthDiagnosticsPanel({
         />
         <Stethoscope className="h-3 w-3 shrink-0 text-slate-500" aria-hidden />
         <span className="font-semibold uppercase tracking-wide text-slate-600">
-          Inventory health
+          Inventory health (live DB)
         </span>
         {hasAnomaly && (
           <span className="ml-auto text-amber-700 font-medium normal-case">
-            {rateLimitWarning ? "rate limit" : sparseMatches ? "few matches" : "check"}
+            {rateLimitWarning ? "rate limit" : capTruncated ? "cap hit" : "review funnel"}
           </span>
         )}
       </CollapsibleTrigger>
@@ -95,32 +106,109 @@ export function InventoryHealthDiagnosticsPanel({
             Refresh paused briefly — showing your last successful matches.
           </p>
         )}
-        <DiagnosticRow
-          label="Active inventory"
-          value={activeCount ?? "—"}
-        />
-        <DiagnosticRow label="Listings scored" value={scored ?? "—"} />
-        <DiagnosticRow label="Matches returned" value={returned ?? "—"} />
-        <DiagnosticRow label="Last match run" value={formatInventoryMatchRunTime(lastRun)} />
-        <DiagnosticRow
-          label="Last matching error"
-          value={lastError?.trim() || "—"}
-        />
-        {reason && (
-          <DiagnosticRow label="API reason" value={reason} />
+        {capTruncated && (
+          <p className="text-[10px] text-amber-800 leading-snug pb-1">
+            Matching cap reached — only {scored} of {activeCount} active listings were scored.
+            Increase matching limit or sync may be incomplete.
+          </p>
         )}
+        <DiagnosticRow label="Active inventory (DB)" value={activeCount ?? "—"} />
+        <DiagnosticRow label="Rows loaded for scoring" value={scored ?? "—"} />
+        <DiagnosticRow
+          label="Fetch limit"
+          value={diagnostics?.matchingFetchLimit ?? "—"}
+        />
+        <DiagnosticRow
+          label="Qualifying matches (DB funnel)"
+          value={totalQualifying ?? returned ?? "—"}
+        />
+        <DiagnosticRow label="Returned (top 10)" value={returned ?? "—"} />
+        <DiagnosticRow label="Last match run" value={formatInventoryMatchRunTime(lastRun)} />
+        <DiagnosticRow label="Last matching error" value={lastError?.trim() || "—"} />
+        {reason && <DiagnosticRow label="API reason" value={reason} />}
+        {diagnostics?.activeFilterSummary && (
+          <DiagnosticRow label="Active filters" value={diagnostics.activeFilterSummary} />
+        )}
+        {profile && (
+          <div className="pt-1 space-y-0.5">
+            <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400">
+              Persisted profile (source of truth)
+            </p>
+            <DiagnosticRow label="priceMax" value={profile.priceMax ?? "—"} />
+            <DiagnosticRow label="bedsMin" value={profile.bedsMin ?? "—"} />
+            <DiagnosticRow
+              label="pool"
+              value={profile.pool == null ? "(none)" : profile.pool ? "required" : "optional"}
+            />
+            <DiagnosticRow
+              label="hardRequirePool"
+              value={profile.hardRequirePool ? "yes" : "no"}
+            />
+            <DiagnosticRow label="propertyTypes" value={profile.propertyTypes.join(", ") || "—"} />
+            <DiagnosticRow label="areas" value={profile.areas.join(", ") || "—"} />
+          </div>
+        )}
+        {diagnostics?.funnelSteps && diagnostics.funnelSteps.length > 0 && (
+          <div className="pt-1 space-y-0.5">
+            <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400">
+              DB match funnel
+            </p>
+            {diagnostics.funnelSteps.map((step) => (
+              <DiagnosticRow key={step.label} label={step.label} value={step.count} />
+            ))}
+          </div>
+        )}
+        {diagnostics?.dataQuality && Object.keys(diagnostics.dataQuality).length > 0 && (
+          <div className="pt-1 space-y-0.5">
+            <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400">
+              Data quality (loaded rows)
+            </p>
+            {Object.entries(diagnostics.dataQuality).map(([key, value]) => (
+              <DiagnosticRow key={key} label={key} value={value} />
+            ))}
+          </div>
+        )}
+        {diagnostics?.exclusionByReason &&
+          Object.keys(diagnostics.exclusionByReason).length > 0 && (
+            <div className="pt-1 space-y-0.5">
+              <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400">
+                Exclusion counts (full DB scan)
+              </p>
+              {Object.entries(diagnostics.exclusionByReason)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10)
+                .map(([label, count]) => (
+                  <DiagnosticRow key={label} label={label} value={count} />
+                ))}
+            </div>
+          )}
         {diagnostics?.noMatchSummary && (
           <p className="text-[10px] text-gray-600 leading-snug pt-1">{diagnostics.noMatchSummary}</p>
         )}
         {diagnostics?.exclusionSummary && (
-          <DiagnosticRow label="Exclusion breakdown" value={diagnostics.exclusionSummary} />
+          <DiagnosticRow label="Exclusion summary" value={diagnostics.exclusionSummary} />
         )}
-        {diagnostics?.excludedSamples && diagnostics.excludedSamples.length > 0 && (
+        {richSamples.length > 0 && (
+          <div className="pt-1 space-y-1">
+            <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400">
+              Excluded samples (DB, up to 20)
+            </p>
+            {richSamples.slice(0, 20).map((sample) => (
+              <p
+                key={sample.listingId}
+                className="text-[10px] text-gray-600 leading-snug font-mono break-all"
+              >
+                {formatFunnelExcludedSampleLine(sample)}
+              </p>
+            ))}
+          </div>
+        )}
+        {richSamples.length === 0 && legacySamples.length > 0 && (
           <div className="pt-1 space-y-1">
             <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400">
               Excluded samples
             </p>
-            {diagnostics.excludedSamples.slice(0, 5).map((sample) => (
+            {legacySamples.slice(0, 20).map((sample) => (
               <p
                 key={sample.listingId}
                 className="text-[10px] text-gray-600 leading-snug font-mono break-all"

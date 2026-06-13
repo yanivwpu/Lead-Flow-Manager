@@ -15,7 +15,6 @@ import { fetchInventoryStatus } from "@/lib/inventoryApi";
 import { InventoryHealthDiagnosticsPanel } from "@/components/inventory/InventoryHealthDiagnosticsPanel";
 import { InventoryMatchRecommendationCard } from "@/components/inventory/InventoryMatchRecommendationCard";
 import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
-import { shouldShowInventoryHealthDiagnostics } from "@/lib/copilotRgeVisibility";
 import {
   fetchInventoryMatches,
   INVENTORY_MATCHES_STALE_MS,
@@ -106,12 +105,7 @@ export function MatchingListingsPanel({
 }: MatchingListingsPanelProps) {
   const [allMatchesOpen, setAllMatchesOpen] = useState(false);
   const [lastClientFetchAt, setLastClientFetchAt] = useState<string | null>(null);
-  const showHealthDiagnostics =
-    showHealthDiagnosticsProp &&
-    shouldShowInventoryHealthDiagnostics({
-      isDev: import.meta.env.DEV,
-      isWorkspaceAdmin,
-    });
+  const showHealthDiagnostics = showHealthDiagnosticsProp;
   const { data: inventoryStatus } = useQuery({
     queryKey: ["/api/inventory/status"],
     queryFn: fetchInventoryStatus,
@@ -151,6 +145,11 @@ export function MatchingListingsPanel({
 
   const matches = data?.matches ?? [];
   const matchCount = data?.matchCount ?? matches.length;
+  const qualifyingCount = data?.diagnostics?.totalQualifyingMatches;
+  const matchCountLabel =
+    qualifyingCount != null && qualifyingCount !== matches.length
+      ? `${qualifyingCount} (${matches.length} shown)`
+      : String(matchCount);
   const previewMatches = matches.slice(0, SIDEBAR_PREVIEW_LIMIT);
   const savedListingIds = data?.savedListingIds ?? [];
   const savedSet = new Set(savedListingIds);
@@ -197,7 +196,7 @@ export function MatchingListingsPanel({
         >
           <Sparkles className="h-3.5 w-3.5 text-violet-500 shrink-0" aria-hidden />
           <span className="truncate">
-            Inventory Matches{matchCount > 0 ? ` (${matchCount})` : ""}
+            Inventory Matches{matchCount > 0 ? ` (${matchCountLabel})` : ""}
           </span>
           {isFetching && hasCachedMatches && (
             <Loader2 className="h-3 w-3 shrink-0 animate-spin text-gray-400" aria-hidden />

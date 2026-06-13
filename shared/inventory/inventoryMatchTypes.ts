@@ -40,10 +40,57 @@ export const inventoryMatchExcludedListingSchema = z.object({
 
 export type InventoryMatchExcludedListing = z.infer<typeof inventoryMatchExcludedListingSchema>;
 
+export const inventoryMatchProfileSnapshotSchema = z.object({
+  priceMax: z.number().nullable(),
+  priceMin: z.number().nullable(),
+  pool: z.boolean().nullable(),
+  bedsMin: z.number().nullable(),
+  propertyTypes: z.array(z.string()),
+  areas: z.array(z.string()),
+  hardRequirePool: z.boolean(),
+  transactionIntent: z.string(),
+});
+
+export type InventoryMatchProfileSnapshot = z.infer<typeof inventoryMatchProfileSnapshotSchema>;
+
+export const inventoryMatchFunnelExcludedSampleSchema = z.object({
+  listingId: z.string(),
+  providerListingId: z.string(),
+  address: z.string().nullable(),
+  city: z.string().nullable(),
+  priceCents: z.number().nullable(),
+  beds: z.number().nullable(),
+  propertyType: z.string().nullable(),
+  resolvedType: z.string().nullable(),
+  poolDetected: z.boolean(),
+  exclusionReason: z.string().nullable(),
+  matched: z.boolean(),
+  score: z.number().nullable(),
+});
+
+export type InventoryMatchFunnelExcludedSample = z.infer<
+  typeof inventoryMatchFunnelExcludedSampleSchema
+>;
+
+export const inventoryMatchFunnelStepSchema = z.object({
+  label: z.string(),
+  count: z.number().int().nonnegative(),
+});
+
+export type InventoryMatchFunnelStep = z.infer<typeof inventoryMatchFunnelStepSchema>;
+
 export const inventoryMatchDiagnosticsSchema = z.object({
   activeInventoryCount: z.number().int().nonnegative(),
   listingsScored: z.number().int().nonnegative(),
   matchesReturned: z.number().int().nonnegative(),
+  totalQualifyingMatches: z.number().int().nonnegative().optional(),
+  matchingFetchLimit: z.number().int().nonnegative().optional(),
+  inventoryCapTruncated: z.boolean().optional(),
+  funnelSteps: z.array(inventoryMatchFunnelStepSchema).optional(),
+  dataQuality: z.record(z.string(), z.number().int().nonnegative()).optional(),
+  exclusionByReason: z.record(z.string(), z.number().int().nonnegative()).optional(),
+  persistedProfileSnapshot: inventoryMatchProfileSnapshotSchema.optional(),
+  funnelExcludedSamples: z.array(inventoryMatchFunnelExcludedSampleSchema).optional(),
   lastMatchRunAt: z.string().datetime(),
   lastMatchingError: z.string().nullable(),
   noMatchSummary: z.string().nullable().optional(),

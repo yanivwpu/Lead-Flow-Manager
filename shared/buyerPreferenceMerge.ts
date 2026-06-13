@@ -91,6 +91,10 @@ function mergeArrayField(
   };
 }
 
+function isPoolOptionalEvidence(evidence: string | undefined): boolean {
+  return !!evidence && /pool optional in message/i.test(evidence);
+}
+
 function mergeScalarField<T>(
   existing: PreferenceField<T> | undefined,
   incoming: PreferenceField<T>,
@@ -334,6 +338,14 @@ function applyPatchField<K extends keyof BuyerPreferenceExtractionPatch>(
   if (key === "priceMin" || key === "priceMax") {
     mergePriceRange(profile, patch);
     return;
+  }
+
+  if (key === "pool") {
+    const incoming = patch.pool;
+    if (incoming && incoming.value === false && isPoolOptionalEvidence(incoming.evidence)) {
+      delete (profile as Record<string, unknown>).pool;
+      return;
+    }
   }
 
   if (key === "bedsMin" || key === "bedsMax" || key === "bathsMin") {

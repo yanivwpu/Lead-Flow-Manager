@@ -5,6 +5,19 @@ import {
   type InventoryListingStatus,
   type NormalizedInventoryListing,
 } from "../inventoryListingSchema";
+import {
+  extractResoStringList,
+  extractResoPoolFlag,
+  mapResoPropertyType,
+  resolveResoListingTransactionType,
+} from "./resoListingClassification";
+
+export {
+  extractResoStringList,
+  extractResoPoolFlag,
+  mapResoPropertyType,
+  resolveResoListingTransactionType,
+} from "./resoListingClassification";
 
 /** Provider implements status + listing id resolution; shared layer maps RESO fields. */
 export interface ResoPropertyNormalizerContract {
@@ -34,16 +47,6 @@ export function mapResoStandardStatus(raw: unknown): InventoryListingStatus {
   }
   if (lower === "inactive" || lower === "delete") return "inactive";
   return "inactive";
-}
-
-export function mapResoPropertyType(raw: unknown, subType: unknown): string | null {
-  const combined = `${String(raw ?? "")} ${String(subType ?? "")}`.toLowerCase();
-  if (combined.includes("condo")) return "condo";
-  if (combined.includes("townhouse") || combined.includes("town house")) return "townhouse";
-  if (combined.includes("multi")) return "multi_family";
-  if (combined.includes("land")) return "land";
-  if (combined.includes("house") || combined.includes("single")) return "house";
-  return raw ? String(raw).toLowerCase().replace(/\s+/g, "_") : null;
 }
 
 export function resoListPriceToCents(listPrice: unknown): number | null {
@@ -109,19 +112,6 @@ function resoYesNo(value: unknown): boolean | null {
   if (s === "y" || s === "yes" || s === "true") return true;
   if (s === "n" || s === "no" || s === "false") return false;
   return null;
-}
-
-function extractResoStringList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.map((item) => String(item).trim()).filter(Boolean);
-  }
-  if (typeof value === "string") {
-    return value
-      .split(/[,;|]/)
-      .map((part) => part.trim())
-      .filter(Boolean);
-  }
-  return [];
 }
 
 /** RESO amenity / feature fields merged into a deduplicated list. */
@@ -215,13 +205,12 @@ export function extractResoListingDetails(row: Record<string, unknown>): Invento
           : null
         : null;
 
-  const pool =
-    resoYesNo(row.PoolPrivateYN) ??
-    (extractResoStringList(row.PoolFeatures).length > 0 ? true : null);
-
+  const publicRemarks = row.PublicRemarks != null ? String(row.PublicRemarks) : undefined;
+  const pool = extractResoPoolFlag(row, { publicRemarks });
   const waterfront = resoYesNo(row.WaterfrontYN);
+  const listingTransactionType = resolveResoListingTransactionType(row);
 
-  const details: InventoryListingDetails = {};
+  const details: InventoryListingDetails = { listingTransactionType };
   if (parkingParts.length > 0) details.parkingGarage = parkingParts.join(" · ");
   if (waterfront != null) details.waterfront = waterfront;
   if (pool != null) details.pool = pool;

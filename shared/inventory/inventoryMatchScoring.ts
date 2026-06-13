@@ -7,9 +7,11 @@ import {
   listingIsLikelySalePrice,
   listingIsRentalOrLease,
   listingMatchesRentIntent,
+  listingPriceLooksLikeMonthlyRent,
   resolveBuyerTransactionIntent,
   type BuyerTransactionIntent,
 } from "./listingTransactionIntent";
+import { mapResoPropertyType } from "./reso/resoListingClassification";
 import { geoConstraintsMatchScore } from "./buyerGeoConstraints";
 import { isMatchableInventoryStatus } from "./inventoryListingSchema";
 import {
@@ -114,20 +116,39 @@ function normalizeText(s: string): string {
 export function normalizeListingPropertyType(
   propertyType: string | null | undefined,
   propertySubtype?: string | null,
+  textHint?: string | null,
 ): string | null {
+  const mapped = mapResoPropertyType(propertyType, propertySubtype);
+  if (mapped === "house" || mapped === "condo" || mapped === "townhouse" || mapped === "villa" || mapped === "multi_family" || mapped === "land") {
+    return mapped;
+  }
+
   const combined = [propertyType, propertySubtype].filter(Boolean).join(" ");
-  if (!combined) return null;
-  const s = normalizeText(combined).replace(/-/g, "_");
-  if (/\b(sfh|single[\s_]?family)\b/.test(s) && !/\btown\b/.test(s)) return "house";
-  if (/\bcondo\b/.test(s)) return "condo";
-  if (/\bapartment\b/.test(s)) return "condo";
-  if (/\btownhouse\b|\btown[\s_]?house\b|\btownhome\b|\btown[\s_]?home\b/.test(s)) return "townhouse";
-  if (/\bvilla\b/.test(s)) return "villa";
-  if (/\bmulti[\s_]?family\b/.test(s)) return "multi_family";
-  if (/\bland\b/.test(s)) return "land";
-  if (/\b(house|home)\b/.test(s) && !/\btown\b/.test(s)) return "house";
-  if (/\bresidence\b/.test(s) && !/\btown\b/.test(s)) return "house";
-  return s;
+  if (combined) {
+    const s = normalizeText(combined).replace(/-/g, "_");
+    if (/\b(townhouse|town[\s_]?house|townhome|town[\s_]?home)\b/.test(s)) return "townhouse";
+    if (/\bvilla\b/.test(s)) return "villa";
+    if (/\b(condo|condominium|apartment)\b/.test(s)) return "condo";
+    if (/\bmulti[\s_]?family\b/.test(s)) return "multi_family";
+    if (/\bland\b/.test(s)) return "land";
+  }
+
+  if (textHint) {
+    const d = normalizeText(textHint);
+    if (/\btownhouse\b|\btown[\s_]?home\b|\btownhome\b/.test(d)) return "townhouse";
+    if (/\bcondo\b|\bapartment\b/.test(d)) return "condo";
+    if (/\bvilla\b/.test(d)) return "villa";
+    if (/\b(sfh|single[\s_]?family|single family home)\b/.test(d)) return "house";
+    if (/\bduplex\b|\btriplex\b|\bfourplex\b/.test(d)) return "multi_family";
+  }
+
+  return mapped ?? (combined ? normalizeText(combined).replace(/-/g, "_") : null);
+}
+
+/** Property type for matching — RESO fields first, then description/features. */
+export function resolveListingPropertyType(listing: MatchListingInput): string | null {
+  const hint = [listing.description, ...(listing.features ?? [])].filter(Boolean).join(" ");
+  return normalizeListingPropertyType(listing.propertyType, listing.propertySubtype, hint || null);
 }
 
 function titleCaseArea(s: string): string {
@@ -293,6 +314,7 @@ function passesHardGates(listing: MatchListingInput, criteria: BuyerMatchCriteri
       listingIsLikelyMonthlyRentPrice(listing.priceCents, {
         transactionIntent: criteria.transactionIntent,
         priceMax: criteria.priceMax,
+        listing,
       })
     ) {
       return false;
@@ -305,7 +327,7 @@ function passesHardGates(listing: MatchListingInput, criteria: BuyerMatchCriteri
   }
 
   if (criteria.propertyTypes.length > 0) {
-    const lt = normalizeListingPropertyType(listing.propertyType, listing.propertySubtype);
+    const lt = resolveListingPropertyType(listing);
     if (!lt || !criteria.propertyTypes.includes(lt)) return false;
   }
 
@@ -427,7 +449,7 @@ function propertyTypeScore(
   wanted: string[],
 ): { points: number; max: number; reasons: string[] } {
   if (wanted.length === 0) return { points: 0, max: 0, reasons: [] };
-  const lt = normalizeListingPropertyType(listing.propertyType, listing.propertySubtype);
+  const lt = resolveListingPropertyType(listing);
   if (!lt) return { points: 0, max: 15, reasons: [] };
   if (wanted.includes(lt)) {
     return { points: 15, max: 15, reasons: ["Matches property type"] };
@@ -653,6 +675,20 @@ export function scoreListingAgainstCriteria(
   };
 }
 
+export function countQualifyingInventoryMatches(
+  listings: MatchListingInput[],
+  criteria: BuyerMatchCriteria,
+): number {
+  if (!criteria.hasAnyCriteria) return 0;
+  const seen = new Set<string>();
+  for (const listing of listings) {
+    const scored = scoreListingAgainstCriteria(listing, criteria);
+    if (!scored) continue;
+    seen.add(scored.providerListingId);
+  }
+  return seen.size;
+}
+
 export function rankInventoryMatches(
   listings: MatchListingInput[],
   criteria: BuyerMatchCriteria,
@@ -720,6 +756,7 @@ export function getListingExclusionReason(
       listingIsLikelyMonthlyRentPrice(listing.priceCents, {
         transactionIntent: criteria.transactionIntent,
         priceMax: criteria.priceMax,
+        listing,
       })
     ) {
       return "rental/lease listing";
@@ -732,7 +769,7 @@ export function getListingExclusionReason(
   }
 
   if (criteria.propertyTypes.length > 0) {
-    const lt = normalizeListingPropertyType(listing.propertyType, listing.propertySubtype);
+    const lt = resolveListingPropertyType(listing);
     if (!lt || !criteria.propertyTypes.includes(lt)) return "wrong property type";
   }
 
@@ -1085,4 +1122,213 @@ export function formatListingExclusionLine(sample: ListingExclusionSample): stri
     sample.reason,
   ].filter(Boolean);
   return parts.join(" · ");
+}
+
+export type BuyInventoryFunnelStep = {
+  label: string;
+  count: number;
+};
+
+export type BuyInventoryFunnelAudit = {
+  steps: BuyInventoryFunnelStep[];
+  dataQuality: Record<string, number>;
+  exclusionByReason: Record<string, number>;
+  excludedSamples: Array<{
+    listingId: string;
+    providerListingId: string;
+    address: string | null;
+    city: string | null;
+    priceCents: number | null;
+    beds: number | null;
+    propertyType: string | null;
+    resolvedType: string | null;
+    poolDetected: boolean;
+    exclusionReason: string | null;
+    matched: boolean;
+    score: number | null;
+  }>;
+  criteria: BuyerMatchCriteria;
+  rankedCount: number;
+};
+
+function passesAreaGate(listing: MatchListingInput, areas: string[]): boolean {
+  if (areas.length === 0) return true;
+  return areaMatchScore(listing, areas).points > 0;
+}
+
+function passesPropertyTypeGate(listing: MatchListingInput, types: string[]): boolean {
+  if (types.length === 0) return true;
+  const lt = resolveListingPropertyType(listing);
+  return !!lt && types.includes(lt);
+}
+
+function isSaleListingForCriteria(
+  listing: MatchListingInput,
+  criteria: BuyerMatchCriteria,
+): boolean {
+  if (listingIsRentalOrLease(listing)) return false;
+  if (
+    listingIsLikelyMonthlyRentPrice(listing.priceCents, {
+      transactionIntent: criteria.transactionIntent,
+      priceMax: criteria.priceMax,
+      listing,
+    })
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function isRentListingForCriteria(listing: MatchListingInput): boolean {
+  return listingIsRentalOrLease(listing) || listingPriceLooksLikeMonthlyRent(listing.priceCents);
+}
+
+/** Step-by-step buy-search funnel for live DB diagnostics and Inventory Health. */
+export function auditBuySearchMatchFunnel(
+  listings: MatchListingInput[],
+  criteria: BuyerMatchCriteria,
+  options?: { rankLimit?: number; sampleLimit?: number },
+): BuyInventoryFunnelAudit {
+  const rankLimit = options?.rankLimit ?? 10;
+  const sampleLimit = options?.sampleLimit ?? 20;
+  const priceMax = criteria.priceMax;
+  const bedsMin = criteria.bedsMin;
+  const areaLabel =
+    criteria.areas.length > 0 ? criteria.areas.join(" / ") : "any area";
+  const typeLabel =
+    criteria.propertyTypes.length > 0 ? criteria.propertyTypes.join(", ") : "any type";
+
+  let nStatus = 0;
+  let nTransaction = 0;
+  let nArea = 0;
+  let nType = 0;
+  let nPrice = 0;
+  let nBeds = 0;
+  let nPool = 0;
+  let nHardGates = 0;
+  let nScored = 0;
+
+  const dq = {
+    nullCity: 0,
+    nullPrice: 0,
+    nullBeds: 0,
+    nullPropertyType: 0,
+    nullPoolField: 0,
+  };
+
+  const exclusionByReason: Record<string, number> = {};
+  const samples: BuyInventoryFunnelAudit["excludedSamples"] = [];
+
+  for (const listing of listings) {
+    if (listing.city == null || listing.city.trim() === "") dq.nullCity += 1;
+    if (listing.priceCents == null) dq.nullPrice += 1;
+    if (listing.beds == null) dq.nullBeds += 1;
+    if (!listing.propertyType && !listing.propertySubtype) dq.nullPropertyType += 1;
+    if (listing.listingDetails?.pool == null && !listingHasPoolSignal(listing)) dq.nullPoolField += 1;
+
+    if (!isMatchableInventoryStatus(listing.status)) continue;
+    nStatus += 1;
+
+    const passesTxn =
+      criteria.transactionIntent === "rent"
+        ? isRentListingForCriteria(listing)
+        : criteria.transactionIntent === "buy"
+          ? isSaleListingForCriteria(listing, criteria)
+          : true;
+    if (!passesTxn) continue;
+    nTransaction += 1;
+
+    if (!passesAreaGate(listing, criteria.areas)) continue;
+    nArea += 1;
+
+    if (!passesPropertyTypeGate(listing, criteria.propertyTypes)) continue;
+    nType += 1;
+
+    if (priceMax != null && listing.priceCents != null && listing.priceCents / 100 > priceMax) continue;
+    nPrice += 1;
+
+    if (bedsMin != null && listing.beds != null && listing.beds < bedsMin) continue;
+    nBeds += 1;
+
+    if (criteria.hardRequirePool && !listingHasPoolSignal(listing)) continue;
+    nPool += 1;
+
+    if (listingPassesHardGatesForCriteria(listing, criteria)) nHardGates += 1;
+    if (scoreListingAgainstCriteria(listing, criteria)) nScored += 1;
+  }
+
+  for (const listing of listings) {
+    const scored = scoreListingAgainstCriteria(listing, criteria);
+    const exclusionReason = getListingExclusionReason(listing, criteria);
+    const labeled = exclusionReason ? labelExclusionReason(exclusionReason) : null;
+    if (labeled) exclusionByReason[labeled] = (exclusionByReason[labeled] ?? 0) + 1;
+
+    if (samples.length >= sampleLimit) continue;
+    if (scored && !labeled) continue;
+
+    samples.push({
+      listingId: listing.id,
+      providerListingId: listing.providerListingId,
+      address: listing.addressLine1,
+      city: listing.city,
+      priceCents: listing.priceCents,
+      beds: listing.beds,
+      propertyType: listing.propertyType,
+      resolvedType: resolveListingPropertyType(listing),
+      poolDetected: listingHasPoolSignal(listing),
+      exclusionReason: labeled,
+      matched: !!scored,
+      score: scored?.score ?? null,
+    });
+  }
+
+  const ranked = rankInventoryMatches(listings, criteria, rankLimit);
+  const totalMatches = countQualifyingInventoryMatches(listings, criteria);
+
+  const steps: BuyInventoryFunnelStep[] = [
+    { label: "Total loaded for matching", count: listings.length },
+    { label: "active/coming_soon", count: nStatus },
+    {
+      label:
+        criteria.transactionIntent === "rent"
+          ? "rental/lease only"
+          : criteria.transactionIntent === "buy"
+            ? "sale only (not rental/lease)"
+            : "transaction intent pass",
+      count: nTransaction,
+    },
+    { label: `area: ${areaLabel}`, count: nArea },
+    { label: `property type: ${typeLabel}`, count: nType },
+    ...(priceMax != null
+      ? [{ label: `price <= $${priceMax.toLocaleString()}`, count: nPrice }]
+      : [{ label: "price cap (none)", count: nPrice }]),
+    ...(bedsMin != null
+      ? [{ label: `beds >= ${bedsMin} (or unknown)`, count: nBeds }]
+      : [{ label: "beds min (none)", count: nBeds }]),
+    ...(criteria.hardRequirePool
+      ? [{ label: "verified pool", count: nPool }]
+      : [{ label: "pool optional (no pool gate)", count: nBeds }]),
+    { label: "pass all profile hard gates", count: nHardGates },
+    { label: `pass score threshold (>=${MIN_STRONG_MATCH_SCORE})`, count: nScored },
+    { label: `total qualifying matches`, count: totalMatches },
+    { label: `returned matches (limit ${rankLimit})`, count: ranked.length },
+  ];
+
+  return {
+    steps,
+    dataQuality: dq,
+    exclusionByReason,
+    excludedSamples: samples,
+    criteria,
+    rankedCount: totalMatches,
+  };
+}
+
+/** @deprecated Use auditBuySearchMatchFunnel */
+export function auditBuyInventoryFunnel(
+  listings: MatchListingInput[],
+  criteria: BuyerMatchCriteria,
+  options?: { rankLimit?: number; sampleLimit?: number },
+): BuyInventoryFunnelAudit {
+  return auditBuySearchMatchFunnel(listings, criteria, options);
 }

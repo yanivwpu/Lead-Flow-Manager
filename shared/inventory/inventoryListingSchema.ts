@@ -34,6 +34,8 @@ export const inventoryListingDetailsSchema = z.object({
   waterfront: z.boolean().optional(),
   pool: z.boolean().optional(),
   view: z.string().optional(),
+  /** Normalized sale vs rent — set at RESO sync / backfill. */
+  listingTransactionType: z.enum(["sale", "rent"]).optional(),
 });
 
 export type InventoryListingDetails = z.infer<typeof inventoryListingDetailsSchema>;

@@ -1,14 +1,21 @@
 import type { InventoryListing } from "@shared/schema";
 import type { InventoryMatchesResponse, InventoryMatchResult } from "@shared/inventory/inventoryMatchTypes";
-import { buildInventoryMatchDiagnostics } from "@shared/inventory/inventoryMatchDiagnostics";
+import {
+  buildDbInventoryMatchDiagnostics,
+  buildInventoryMatchDiagnostics,
+} from "@shared/inventory/inventoryMatchDiagnostics";
 import { formatInventoryMatchSummaryForAi } from "@shared/inventory/inventoryMatchDisplay";
-import { describeActiveSearchFilters } from "@shared/buyerSearchCommandDebug";
+import {
+  buildPersistedProfileSnapshotForDiagnostics,
+  describeActiveSearchFilters,
+} from "@shared/buyerSearchCommandDebug";
 import {
   extractBuyerMatchCriteria,
   rankInventoryMatches,
-  buildExcludedListingSamples,
   buildMatchFunnelSummary,
   countExclusionReasons,
+  countQualifyingInventoryMatches,
+  auditBuySearchMatchFunnel,
   summarizeExclusionCounts,
   type MatchListingInput,
 } from "@shared/inventory/inventoryMatchScoring";
@@ -59,7 +66,10 @@ function parseListingDetails(raw: unknown): MatchListingInput["listingDetails"] 
   if (typeof o.parkingGarage === "string") out.parkingGarage = o.parkingGarage;
   if (typeof o.waterfront === "boolean") out.waterfront = o.waterfront;
   if (typeof o.pool === "boolean") out.pool = o.pool;
-  if (typeof o.view === "string") out.view = o.view;
+  if (o.view === "string") out.view = o.view;
+  if (o.listingTransactionType === "sale" || o.listingTransactionType === "rent") {
+    out.listingTransactionType = o.listingTransactionType;
+  }
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -173,6 +183,8 @@ export async function findMatchingListingsForContact(
         activeInventoryCount: inventoryCount,
         listingsScored: 0,
         matchesReturned: 0,
+        persistedProfileSnapshot: buildPersistedProfileSnapshotForDiagnostics(profile, criteria),
+        activeFilterSummary,
       }),
     };
   }
@@ -195,9 +207,10 @@ export async function findMatchingListingsForContact(
     };
   }
 
+  let matchingLimit = 1000;
   let rows;
   try {
-    const matchingLimit = await resolveMatchingListingLimitForUser(userId);
+    matchingLimit = await resolveMatchingListingLimitForUser(userId);
     rows = await fetchActiveListingsForMatching(userId, matchingLimit);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -225,38 +238,59 @@ export async function findMatchingListingsForContact(
   }
 
   const inputs = rows.map(inventoryListingToMatchInput);
+  const totalMatchCount = countQualifyingInventoryMatches(inputs, criteria);
   const ranked = rankInventoryMatches(inputs, criteria, 10);
   const matches = ranked.map(toPublicMatch);
+  const funnel = auditBuySearchMatchFunnel(inputs, criteria, { rankLimit: 10, sampleLimit: 20 });
+  const profileSnapshot = buildPersistedProfileSnapshotForDiagnostics(profile, criteria);
 
   const exclusionCounts = inputs.length > 0 ? countExclusionReasons(inputs, criteria) : new Map();
-  const excludedSamples =
-    inputs.length > 0 ? buildExcludedListingSamples(inputs, criteria, 20) : [];
   const exclusionSummary =
     exclusionCounts.size > 0 ? summarizeExclusionCounts(exclusionCounts) : null;
   const noMatchSummary =
     inputs.length > 0
-      ? buildMatchFunnelSummary(inputs.length, matches.length, exclusionCounts)
+      ? buildMatchFunnelSummary(inputs.length, totalMatchCount, exclusionCounts)
       : inventoryCount === 0
         ? "No active listings in synced inventory."
         : null;
+
+  const diagnostics = buildDbInventoryMatchDiagnostics({
+    activeInventoryCount: inventoryCount,
+    rowsLoadedForScoring: inputs.length,
+    matchesReturned: matches.length,
+    totalQualifyingMatches: totalMatchCount,
+    matchingFetchLimit: matchingLimit,
+    funnel,
+    persistedProfileSnapshot: profileSnapshot,
+    activeFilterSummary,
+    exclusionSummary,
+    noMatchSummary,
+  });
+
+  console.info("[inventory-match-funnel]", {
+    contactId,
+    userId,
+    matchCount: totalMatchCount,
+    returned: matches.length,
+    rowsLoaded: inputs.length,
+    activeInventory: inventoryCount,
+    matchingLimit,
+    profileSnapshot,
+    funnelSteps: funnel.steps,
+    topExclusions: Object.entries(funnel.exclusionByReason)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5),
+  });
 
   return {
     eligible: true,
     reason: matches.length > 0 ? "ok" : "no_matches",
     profileStatus: profile.profileStatus,
     inventoryCount,
-    matchCount: matches.length,
+    matchCount: totalMatchCount,
     matches,
     savedListingIds,
-    diagnostics: buildInventoryMatchDiagnostics({
-      activeInventoryCount: inventoryCount,
-      listingsScored: inputs.length,
-      matchesReturned: matches.length,
-      noMatchSummary,
-      exclusionSummary,
-      excludedSamples,
-      activeFilterSummary,
-    }),
+    diagnostics,
   };
 }
 

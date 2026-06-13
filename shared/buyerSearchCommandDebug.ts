@@ -60,3 +60,31 @@ export function describeActiveSearchFilters(
 export function formatSearchCommandLog(command: BuyerSearchCommand): string {
   return `[${command.kind}] ${command.explanation}`;
 }
+
+/** Persisted profile fields used by live DB matching — for funnel diagnostics. */
+export function buildPersistedProfileSnapshotForDiagnostics(
+  profile: BuyerPreferenceProfile,
+  criteria?: BuyerMatchCriteria,
+): {
+  priceMax: number | null;
+  priceMin: number | null;
+  pool: boolean | null;
+  bedsMin: number | null;
+  propertyTypes: string[];
+  areas: string[];
+  hardRequirePool: boolean;
+  transactionIntent: string;
+} {
+  const c = criteria ?? extractBuyerMatchCriteria(profile);
+  const budget = resolveMatchingBudgetBounds(profile);
+  return {
+    priceMax: budget.priceMax ?? null,
+    priceMin: budget.priceMin ?? null,
+    pool: profile.pool?.value ?? null,
+    bedsMin: c.bedsMin ?? null,
+    propertyTypes: c.propertyTypes,
+    areas: c.areas,
+    hardRequirePool: c.hardRequirePool,
+    transactionIntent: c.transactionIntent,
+  };
+}

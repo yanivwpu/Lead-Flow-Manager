@@ -624,8 +624,9 @@ export async function runBuyerPreferenceExtraction(
   });
 
   try {
-    const existing = readBuyerPreferenceProfile(contact);
-    let patch = await extractPreferencesWithLlm(contact, history, existing);
+    const freshForExisting = (await storage.getContact(contactId)) || contact;
+    const existing = readBuyerPreferenceProfile(freshForExisting);
+    let patch = await extractPreferencesWithLlm(freshForExisting, history, existing);
     if (text) {
       const command = applyInboundSearchCommandOverrides(patch, text, existing);
       debugBuyerPreferenceLog("search_command_applied", {

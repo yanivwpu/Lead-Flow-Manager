@@ -1,9 +1,23 @@
-import type { InventoryMatchDiagnostics, InventoryMatchExcludedListing } from "./inventoryMatchTypes";
+import type {
+  InventoryMatchDiagnostics,
+  InventoryMatchExcludedListing,
+  InventoryMatchFunnelExcludedSample,
+  InventoryMatchProfileSnapshot,
+} from "./inventoryMatchTypes";
+import type { BuyInventoryFunnelAudit } from "./inventoryMatchScoring";
 
 export function buildInventoryMatchDiagnostics(input: {
   activeInventoryCount: number;
   listingsScored: number;
   matchesReturned: number;
+  totalQualifyingMatches?: number;
+  matchingFetchLimit?: number;
+  inventoryCapTruncated?: boolean;
+  funnelSteps?: Array<{ label: string; count: number }>;
+  dataQuality?: Record<string, number>;
+  exclusionByReason?: Record<string, number>;
+  persistedProfileSnapshot?: InventoryMatchProfileSnapshot;
+  funnelExcludedSamples?: InventoryMatchFunnelExcludedSample[];
   lastMatchingError?: string | null;
   lastMatchRunAt?: string;
   noMatchSummary?: string | null;
@@ -15,6 +29,14 @@ export function buildInventoryMatchDiagnostics(input: {
     activeInventoryCount: input.activeInventoryCount,
     listingsScored: input.listingsScored,
     matchesReturned: input.matchesReturned,
+    totalQualifyingMatches: input.totalQualifyingMatches,
+    matchingFetchLimit: input.matchingFetchLimit,
+    inventoryCapTruncated: input.inventoryCapTruncated,
+    funnelSteps: input.funnelSteps,
+    dataQuality: input.dataQuality,
+    exclusionByReason: input.exclusionByReason,
+    persistedProfileSnapshot: input.persistedProfileSnapshot,
+    funnelExcludedSamples: input.funnelExcludedSamples,
     lastMatchRunAt: input.lastMatchRunAt ?? new Date().toISOString(),
     lastMatchingError: input.lastMatchingError ?? null,
     noMatchSummary: input.noMatchSummary ?? null,
@@ -22,6 +44,84 @@ export function buildInventoryMatchDiagnostics(input: {
     excludedSamples: input.excludedSamples,
     activeFilterSummary: input.activeFilterSummary ?? null,
   };
+}
+
+/** Map live DB funnel audit into API diagnostics (same rows as findMatchingListingsForContact). */
+export function buildDbInventoryMatchDiagnostics(input: {
+  activeInventoryCount: number;
+  rowsLoadedForScoring: number;
+  matchesReturned: number;
+  totalQualifyingMatches: number;
+  matchingFetchLimit: number;
+  funnel: BuyInventoryFunnelAudit;
+  persistedProfileSnapshot: InventoryMatchProfileSnapshot;
+  activeFilterSummary?: string | null;
+  exclusionSummary?: string | null;
+  noMatchSummary?: string | null;
+  lastMatchingError?: string | null;
+}): InventoryMatchDiagnostics {
+  const inventoryCapTruncated =
+    input.rowsLoadedForScoring < input.activeInventoryCount &&
+    input.rowsLoadedForScoring >= input.matchingFetchLimit;
+
+  const funnelExcludedSamples: InventoryMatchFunnelExcludedSample[] =
+    input.funnel.excludedSamples.map((s) => ({
+      listingId: s.listingId,
+      providerListingId: s.providerListingId,
+      address: s.address,
+      city: s.city,
+      priceCents: s.priceCents,
+      beds: s.beds,
+      propertyType: s.propertyType,
+      resolvedType: s.resolvedType,
+      poolDetected: s.poolDetected,
+      exclusionReason: s.exclusionReason,
+      matched: s.matched,
+      score: s.score,
+    }));
+
+  const excludedSamples: InventoryMatchExcludedListing[] = funnelExcludedSamples
+    .filter((s) => !s.matched && s.exclusionReason)
+    .map((s) => ({
+      listingId: s.listingId,
+      providerListingId: s.providerListingId,
+      city: s.city,
+      priceCents: s.priceCents,
+      beds: s.beds,
+      baths: null,
+      squareFeet: null,
+      reason: s.exclusionReason ?? "excluded",
+    }));
+
+  return buildInventoryMatchDiagnostics({
+    activeInventoryCount: input.activeInventoryCount,
+    listingsScored: input.rowsLoadedForScoring,
+    matchesReturned: input.matchesReturned,
+    totalQualifyingMatches: input.totalQualifyingMatches,
+    matchingFetchLimit: input.matchingFetchLimit,
+    inventoryCapTruncated,
+    funnelSteps: input.funnel.steps,
+    dataQuality: input.funnel.dataQuality,
+    exclusionByReason: input.funnel.exclusionByReason,
+    persistedProfileSnapshot: input.persistedProfileSnapshot,
+    funnelExcludedSamples,
+    excludedSamples,
+    activeFilterSummary: input.activeFilterSummary,
+    exclusionSummary: input.exclusionSummary,
+    noMatchSummary: input.noMatchSummary,
+    lastMatchingError: input.lastMatchingError,
+  });
+}
+
+export function formatFunnelExcludedSampleLine(sample: InventoryMatchFunnelExcludedSample): string {
+  const price =
+    sample.priceCents != null
+      ? `$${Math.round(sample.priceCents / 100).toLocaleString("en-US")}`
+      : "—";
+  const type = sample.resolvedType ?? sample.propertyType ?? "—";
+  const reason =
+    sample.exclusionReason ?? (sample.matched ? `MATCH score=${sample.score}` : "unknown");
+  return `${sample.providerListingId} · ${sample.address ?? sample.city ?? "—"} · ${price} · ${sample.beds ?? "?"}bd · ${type} · pool=${sample.poolDetected ? "yes" : "no"} · ${reason}`;
 }
 
 export function formatInventoryMatchRunTime(iso: string | null | undefined): string {

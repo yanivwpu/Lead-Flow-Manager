@@ -594,7 +594,23 @@ export function heuristicPatchFromTranscript(
   }
 
   if (/\bpool\b/i.test(lower)) {
-    patch.pool = { value: true, ...inf(0.7, "pool in message") };
+    const poolOptional =
+      /\b(with or without pool|pool optional|don'?t need (?:a )?pool|no pool required|pool not required)\b/i.test(
+        lower,
+      );
+    if (poolOptional) {
+      patch.pool = {
+        value: false,
+        source: "explicit",
+        confidence: 0.92,
+        updatedAt: now,
+        evidence: "pool optional in message",
+      };
+    } else if (
+      /\b(with pool|must have pool|pool required|needs pool|need(?:s)? a pool)\b/i.test(lower)
+    ) {
+      patch.pool = { value: true, ...inf(0.85, "pool required in message") };
+    }
   }
   if (/\b(rent|rentals?|renting|lease|leasing|for\s+rent|tenant)\b/i.test(lower)) {
     patch.transactionIntent = { value: "rent", ...inf(0.88, "rent intent in message") };
