@@ -288,7 +288,49 @@ function mergePriceRange(
 
 export type BuyerPreferenceMergeOptions = {
   replaceArrayFields?: PreferenceArrayReplaceKey[];
+  /** Replacement search — drop pool/beds/waterfront not present in incoming patch. */
+  clearUnmentionedHardGates?: boolean;
 };
+
+const HARD_GATE_SCALAR_KEYS = [
+  "bedsMin",
+  "bedsMax",
+  "bathsMin",
+  "pool",
+  "waterfront",
+  "modernStyle",
+  "gatedCommunity",
+  "investmentIntent",
+  "lowHoa",
+  "walkability",
+  "schoolPriority",
+  "parking",
+  "petFriendly",
+] as const;
+
+/** Drop stale hard gates when buyer sends a full replacement search. */
+export function clearUnmentionedHardGates(
+  profile: BuyerPreferenceProfile,
+  patch: BuyerPreferenceExtractionPatch,
+): void {
+  for (const key of HARD_GATE_SCALAR_KEYS) {
+    if (patch[key] !== undefined) continue;
+    delete (profile as Record<string, unknown>)[key];
+  }
+
+  if (!patch.mustHaves && profile.mustHaves?.value?.length) {
+    const filtered = profile.mustHaves.value
+      .map(String)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .filter((raw) => !/\b(pool|waterfront|ocean view)\b/i.test(raw));
+    if (filtered.length) {
+      profile.mustHaves = { ...profile.mustHaves, value: filtered };
+    } else {
+      delete profile.mustHaves;
+    }
+  }
+}
 
 function applyPatchField<K extends keyof BuyerPreferenceExtractionPatch>(
   profile: BuyerPreferenceProfile,
@@ -422,6 +464,10 @@ export function mergeBuyerPreferenceProfile(
 
   if (switchingToBuy) {
     stripConflictingRentPreferences(profile);
+  }
+
+  if (mergeOptions?.clearUnmentionedHardGates) {
+    clearUnmentionedHardGates(profile, patch);
   }
 
   for (const key of PATCH_KEYS) {

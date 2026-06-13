@@ -21,7 +21,10 @@ import {
   parseBuyerSearchCommand,
 } from "@shared/buyerSearchCommand";
 import { formatSearchCommandLog } from "@shared/buyerSearchCommandDebug";
-import { mergeBuyerPreferenceProfile } from "@shared/buyerPreferenceMerge";
+import {
+  mergeBuyerPreferenceProfile,
+  type BuyerPreferenceMergeOptions,
+} from "@shared/buyerPreferenceMerge";
 import { formatBuyerPreferenceSummaryForAi, normalizeForDisplay } from "@shared/buyerPreferenceDisplay";
 import { aiProvider } from "./aiProvider";
 import { storage } from "./storage";
@@ -273,6 +276,7 @@ export async function mergeAndPersistBuyerPreferences(
     messageId?: string;
     logActivity?: boolean;
     replaceArrayFields?: PreferenceArrayReplaceKey[];
+    clearUnmentionedHardGates?: boolean;
     triggerInventoryRefresh?: boolean;
   },
 ): Promise<BuyerPreferenceProfile> {
@@ -287,9 +291,13 @@ export async function mergeAndPersistBuyerPreferences(
 
   const freshContact = (await storage.getContact(contact.id)) ?? contact;
   const current = readBuyerPreferenceProfile(freshContact);
-  const mergeOptions = meta?.replaceArrayFields?.length
-    ? { replaceArrayFields: meta.replaceArrayFields }
-    : undefined;
+  const mergeOptions: BuyerPreferenceMergeOptions | undefined =
+    meta?.replaceArrayFields?.length || meta?.clearUnmentionedHardGates
+      ? {
+          replaceArrayFields: meta.replaceArrayFields,
+          clearUnmentionedHardGates: meta.clearUnmentionedHardGates,
+        }
+      : undefined;
   const merged = mergeBuyerPreferenceProfile(
     current,
     patch,
@@ -413,6 +421,7 @@ async function runFastPathHeuristicPreferenceUpdate(
     messageId: meta?.messageId,
     logActivity: false,
     replaceArrayFields: command.replaceArrayFields,
+    clearUnmentionedHardGates: command.clearUnmentionedHardGates,
     triggerInventoryRefresh: true,
   });
 
@@ -648,14 +657,16 @@ export async function runBuyerPreferenceExtraction(
     }
 
     const fresh = (await storage.getContact(contactId)) || contact;
-    const replaceArrayFields = text
-      ? parseBuyerSearchCommand(text, readBuyerPreferenceProfile(fresh)).replaceArrayFields
-      : [];
+    const searchCommand = text
+      ? parseBuyerSearchCommand(text, readBuyerPreferenceProfile(fresh))
+      : null;
+    const replaceArrayFields = searchCommand?.replaceArrayFields ?? [];
     const merged = await mergeAndPersistBuyerPreferences(fresh, patch, {
       conversationId: options?.conversationId,
       messageId: options?.messageId,
       logActivity: true,
       replaceArrayFields,
+      clearUnmentionedHardGates: searchCommand?.clearUnmentionedHardGates,
     });
     logTrigger("extraction_completed", {
       contactId,

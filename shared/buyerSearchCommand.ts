@@ -42,9 +42,21 @@ export type BuyerSearchCommand = {
   lockedFields: (keyof BuyerPreferenceExtractionPatch)[];
   /** When true, do not mutate BuyerPreferenceProfile (e.g. "any other listings?"). */
   skipProfileUpdate: boolean;
+  /** Clear pool/beds/waterfront etc. not mentioned in this message (replacement search). */
+  clearUnmentionedHardGates?: boolean;
   /** Human-readable summary for matching debug / logs. */
   explanation: string;
 };
+
+/** Refinement phrases — keep prior hard gates like pool or beds. */
+const REFINEMENT_CARRYOVER_RE =
+  /\b(?:also|add(?:itional)?|plus|keep|still|and also|as well as|same area|including|include|must have|need(?:s)? a|need(?:s)? at least|minimum|min(?:imum)?\s+\d+\s*bed)\b/i;
+
+const EXPLICIT_POOL_REQUIRED_RE =
+  /\b(?:with pool|must have pool|pool required|needs pool|need(?:s)? a pool)\b/i;
+
+const POOL_OPTIONAL_RE =
+  /\b(with or without pool|pool optional|don'?t need (?:a )?pool|no pool required|pool not required)\b/i;
 
 const FOLLOWUP_REQUEST_RE =
   /\b(?:any\s+other\s+listings?|other\s+listings?|more\s+listings?|what\s+else|send\s+more|anything\s+else|show\s+me\s+more|do\s+you\s+have\s+(?:any\s+)?other|got\s+anything\s+else|any\s+more\s+(?:options|homes|places|rentals|houses))\b/i;
@@ -54,7 +66,53 @@ const CORRECTION_RE =
 
 const RENT_INTENT_RE = /\b(rent|rentals?|renting|lease|leasing|for\s+rent|\/mo|per\s+month)\b/i;
 const BUY_INTENT_RE =
-  /\b(homes?\s+for\s+sale|for\s+sale|buy|buying|purchase|looking to buy)\b/i;
+  /\b(homes?\s+for\s+sale|for\s+sale|buy|buying|purchase|looking to buy|show\s+(?:me\s+)?(?:sfh|homes?|houses?|listings?))\b/i;
+
+function mentionsPoolOptional(text: string): boolean {
+  return POOL_OPTIONAL_RE.test(text);
+}
+
+function isRefinementCarryoverMessage(text: string): boolean {
+  if (mentionsPoolOptional(text)) return false;
+  if (EXPLICIT_POOL_REQUIRED_RE.test(text)) return true;
+  return REFINEMENT_CARRYOVER_RE.test(text);
+}
+
+/**
+ * Full replacement search: explicit area + property type + budget without refinement carryover.
+ * Clears stale pool/beds/waterfront from a prior query.
+ */
+export function isFullReplacementSearch(
+  text: string,
+  patch: BuyerPreferenceExtractionPatch,
+  current?: BuyerPreferenceProfile,
+): boolean {
+  if (!current || !profileHasCriteria(current)) return false;
+  if (isRefinementCarryoverMessage(text)) return false;
+  if (isCorrectionMessage(text)) return false;
+  if (isFollowupRequestMessage(text)) return false;
+  if (detectShowMeAllPropertyTypeRelaxation(text)) return false;
+
+  const hasArea = (patch.targetAreas?.value?.length ?? 0) > 0;
+  const hasType =
+    (patch.propertyTypes?.value?.length ?? 0) > 0 || hasExplicitPropertyTypeConstraint(text);
+  const hasBudget = patch.priceMax?.value != null || patch.priceMin?.value != null;
+
+  if (!hasArea || !hasType || !hasBudget) return false;
+
+  if (isNarrowSearch(text, patch, current)) {
+    const buySide =
+      patch.transactionIntent?.value === "buy" ||
+      (patch.transactionIntent?.value !== "rent" && current?.transactionIntent?.value === "buy") ||
+      /\b(for\s+sale|homes?\s+for\s+sale|buy(?:ing)?|purchase|cash buyer)\b/i.test(text);
+    const showStyleReset = /\b(show(?:\s+me)?(?:\s+(?:sfh|homes?|houses?|listings?))?|looking for|find(?:\s+me)?)\b/i.test(
+      text,
+    );
+    if (!buySide || !showStyleReset) return false;
+  }
+
+  return true;
+}
 
 function profileHasCriteria(profile: BuyerPreferenceProfile | undefined): boolean {
   if (!profile) return false;
@@ -164,6 +222,7 @@ function classifyKind(
   if (isFollowupRequestMessage(text)) return "followup_request";
   if (detectShowMeAllPropertyTypeRelaxation(text)) return "broaden_search";
   if (detectTransactionPivot(text, patch, current)) return "transaction_pivot";
+  if (isFullReplacementSearch(text, patch, current)) return "new_search";
   if (isCorrectionMessage(text)) return "correction";
   if (isNarrowSearch(text, patch, current)) return "narrow_search";
   if (!profileHasCriteria(current) && patchFieldCount(patch) > 0) return "new_search";
@@ -176,7 +235,7 @@ function buildExplanation(kind: BuyerSearchCommandKind, signals: string[]): stri
     case "followup_request":
       return "Follow-up request — reuse existing search profile, show more matches.";
     case "new_search":
-      return `New search: ${tag}.`;
+      return `New search (replacement) — ${tag}. Unmentioned hard gates cleared.`;
     case "broaden_search":
       return `Broaden search (relax property types): ${tag}.`;
     case "narrow_search":
@@ -205,8 +264,20 @@ function lockedFieldsFromPatch(
 function replaceArrayFieldsForCommand(
   text: string,
   kind: BuyerSearchCommandKind,
+  patch: BuyerPreferenceExtractionPatch,
 ): PreferenceArrayReplaceKey[] {
   const detected = detectPreferenceArrayReplacements(text);
+  if (kind === "new_search") {
+    if ((patch.targetAreas?.value?.length ?? 0) > 0 && !detected.includes("targetAreas")) {
+      detected.push("targetAreas");
+    }
+    if (
+      ((patch.propertyTypes?.value?.length ?? 0) > 0 || hasExplicitPropertyTypeConstraint(text)) &&
+      !detected.includes("propertyTypes")
+    ) {
+      detected.push("propertyTypes");
+    }
+  }
   if (kind === "broaden_search" || kind === "narrow_search") {
     if (!detected.includes("propertyTypes")) detected.push("propertyTypes");
   }
@@ -237,7 +308,8 @@ export function parseBuyerSearchCommand(
   const patch = hasInventoryPreferenceSignals(text) ? heuristicPatchFromInboundText(text) : {};
   const signals = collectSignals(text, patch);
   const kind = classifyKind(text, patch, currentProfile);
-  const replaceArrayFields = replaceArrayFieldsForCommand(text, kind);
+  const fullReplacement = isFullReplacementSearch(text, patch, currentProfile);
+  const replaceArrayFields = replaceArrayFieldsForCommand(text, kind, patch);
   const lockedFields = lockedFieldsFromPatch(patch, kind);
 
   return {
@@ -247,6 +319,7 @@ export function parseBuyerSearchCommand(
     replaceArrayFields,
     lockedFields,
     skipProfileUpdate: false,
+    clearUnmentionedHardGates: fullReplacement,
     explanation: buildExplanation(kind, signals),
   };
 }

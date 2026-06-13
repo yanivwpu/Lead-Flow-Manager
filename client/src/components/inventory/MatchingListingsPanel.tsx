@@ -15,6 +15,7 @@ import { fetchInventoryStatus } from "@/lib/inventoryApi";
 import { InventoryHealthDiagnosticsPanel } from "@/components/inventory/InventoryHealthDiagnosticsPanel";
 import { InventoryMatchRecommendationCard } from "@/components/inventory/InventoryMatchRecommendationCard";
 import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
+import { shouldShowInventoryHealthDiagnostics } from "@/lib/copilotRgeVisibility";
 import {
   fetchInventoryMatches,
   INVENTORY_MATCHES_STALE_MS,
@@ -105,7 +106,12 @@ export function MatchingListingsPanel({
 }: MatchingListingsPanelProps) {
   const [allMatchesOpen, setAllMatchesOpen] = useState(false);
   const [lastClientFetchAt, setLastClientFetchAt] = useState<string | null>(null);
-  const showHealthDiagnostics = showHealthDiagnosticsProp;
+  const showHealthDiagnostics =
+    showHealthDiagnosticsProp &&
+    shouldShowInventoryHealthDiagnostics({
+      isDev: import.meta.env.DEV,
+      isWorkspaceAdmin,
+    });
   const { data: inventoryStatus } = useQuery({
     queryKey: ["/api/inventory/status"],
     queryFn: fetchInventoryStatus,
