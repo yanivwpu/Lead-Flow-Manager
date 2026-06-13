@@ -16,6 +16,19 @@ export const SHOW_ME_ALL_PROPERTY_RELAX_EVIDENCE = "show me all — relax proper
 const EXPLICIT_PROPERTY_TYPE_RE =
   /\b(sfh|single[\s-]?family(?:\s+home)?|condo(?:minium)?s?|townhouse|town[\s-]?house|multi[\s-]?family|land|apartments?)\b/i;
 
+export { EXPLICIT_PROPERTY_TYPE_RE };
+
+export function isExplicitPropertyTypeEvidence(evidence: string | undefined): boolean {
+  return !!evidence && /property type in message/i.test(evidence);
+}
+
+export function hasExplicitPropertyTypeConstraint(text: string): boolean {
+  const t = (text || "").trim();
+  if (!t) return false;
+  if (detectShowMeAllPropertyTypeRelaxation(t)) return false;
+  return EXPLICIT_PROPERTY_TYPE_RE.test(t);
+}
+
 const SHOW_ME_ALL_RELAX_RE =
   /\b(?:show\s*(?:me\s+)?all|see\s+all|all\s+the\s+\d)\b/i;
 
@@ -72,4 +85,30 @@ export function applyShowMeAllInboundOverride(
   if (heuristic.bedsMin) patch.bedsMin = heuristic.bedsMin;
   if (heuristic.bathsMin) patch.bathsMin = heuristic.bathsMin;
   if (heuristic.targetAreas) patch.targetAreas = heuristic.targetAreas;
+}
+
+/**
+ * When inbound names a specific property type (e.g. SFH), re-apply heuristic so async LLM
+ * cannot keep a prior "show me all" broad propertyTypes list.
+ */
+export function applyExplicitPropertyTypeInboundOverride(
+  patch: BuyerPreferenceExtractionPatch,
+  inboundText: string,
+): void {
+  if (!inboundText.trim() || !hasExplicitPropertyTypeConstraint(inboundText)) return;
+
+  const heuristic = heuristicPatchFromInboundText(inboundText);
+  if (heuristic.propertyTypes) {
+    patch.propertyTypes = heuristic.propertyTypes;
+  }
+  if (heuristic.transactionIntent) {
+    patch.transactionIntent = heuristic.transactionIntent;
+  }
+  if (heuristic.priceMax && /\bup\s+to\b/i.test(heuristic.priceMax.evidence || "")) {
+    patch.priceMax = heuristic.priceMax;
+    delete patch.priceMin;
+  }
+  if (heuristic.targetAreas) {
+    patch.targetAreas = heuristic.targetAreas;
+  }
 }

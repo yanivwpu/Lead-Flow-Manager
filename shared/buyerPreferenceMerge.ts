@@ -9,6 +9,7 @@ import { deriveProfileStatus } from "./buyerPreferenceSchema";
 import type { PreferenceArrayReplaceKey } from "./buyerPreferenceInventorySignals";
 import {
   isShowMeAllPropertyRelaxEvidence,
+  isExplicitPropertyTypeEvidence,
   stripSfhFromMustHaves,
 } from "./buyerPreferencePropertyTypeRelax";
 
@@ -304,12 +305,17 @@ function applyPatchField<K extends keyof BuyerPreferenceExtractionPatch>(
   if (key === "targetAreas" || key === "propertyTypes" || key === "mustHaves" || key === "dealBreakers") {
     const cur = profile[key] as PreferenceField<string[]> | undefined;
     const incomingField = incoming as PreferenceField<string[]>;
+    const explicitIncomingPropertyType =
+      key === "propertyTypes" && isExplicitPropertyTypeEvidence(incomingField.evidence);
+    const replacePropertyTypes =
+      mergeOptions?.replaceArrayFields?.includes("propertyTypes") || explicitIncomingPropertyType;
     if (
       key === "propertyTypes" &&
       cur &&
       isShowMeAllPropertyRelaxEvidence(cur.evidence) &&
       !isShowMeAllPropertyRelaxEvidence(incomingField.evidence) &&
-      (incomingField.value?.length ?? 0) < (cur.value?.length ?? 0)
+      (incomingField.value?.length ?? 0) < (cur.value?.length ?? 0) &&
+      !replacePropertyTypes
     ) {
       return;
     }
@@ -317,7 +323,8 @@ function applyPatchField<K extends keyof BuyerPreferenceExtractionPatch>(
       (key === "targetAreas" || key === "propertyTypes") &&
       (mergeOptions?.replaceArrayFields?.includes(key as PreferenceArrayReplaceKey) ||
         (key === "propertyTypes" &&
-          isShowMeAllPropertyRelaxEvidence((incoming as PreferenceField<string[]>).evidence)));
+          (isShowMeAllPropertyRelaxEvidence((incoming as PreferenceField<string[]>).evidence) ||
+            explicitIncomingPropertyType)));
     (profile as Record<string, unknown>)[key] = shouldReplace
       ? replaceArrayField(incoming as PreferenceField<string[]>)
       : mergeArrayField(cur, incoming as PreferenceField<string[]>);

@@ -746,7 +746,9 @@ export function getListingExclusionReason(
 
   if (criteria.priceMax != null && listing.priceCents != null) {
     const price = listing.priceCents / 100;
-    if (price > criteria.priceMax) return "over budget";
+    if (price > criteria.priceMax) {
+      return criteria.transactionIntent === "rent" ? "over rent budget" : "over budget";
+    }
   }
 
   if (criteria.priceMin != null && listing.priceCents != null) {
@@ -780,6 +782,7 @@ export function getListingExclusionReason(
 /** Human-readable labels for Inventory Health exclusion breakdown. */
 export const EXCLUSION_REASON_LABELS: Record<string, string> = {
   "over budget": "Over budget",
+  "over rent budget": "Over rent budget",
   "under budget floor": "Under budget",
   "missing pool": "Missing pool",
   "missing waterfront": "Missing ocean view / waterfront",
