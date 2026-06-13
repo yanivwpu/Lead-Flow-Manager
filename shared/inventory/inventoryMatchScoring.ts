@@ -118,13 +118,15 @@ export function normalizeListingPropertyType(
   const combined = [propertyType, propertySubtype].filter(Boolean).join(" ");
   if (!combined) return null;
   const s = normalizeText(combined).replace(/-/g, "_");
-  if (/\b(sfh|single[\s_]?family)\b/.test(s)) return "house";
-  if (s.includes("condo")) return "condo";
-  if (s.includes("apartment")) return "condo";
-  if (s.includes("townhouse") || s.includes("town house")) return "townhouse";
-  if (s.includes("multi")) return "multi_family";
-  if (s.includes("land")) return "land";
-  if (s.includes("house") || s.includes("single") || s.includes("residence")) return "house";
+  if (/\b(sfh|single[\s_]?family)\b/.test(s) && !/\btown\b/.test(s)) return "house";
+  if (/\bcondo\b/.test(s)) return "condo";
+  if (/\bapartment\b/.test(s)) return "condo";
+  if (/\btownhouse\b|\btown[\s_]?house\b|\btownhome\b|\btown[\s_]?home\b/.test(s)) return "townhouse";
+  if (/\bvilla\b/.test(s)) return "villa";
+  if (/\bmulti[\s_]?family\b/.test(s)) return "multi_family";
+  if (/\bland\b/.test(s)) return "land";
+  if (/\b(house|home)\b/.test(s) && !/\btown\b/.test(s)) return "house";
+  if (/\bresidence\b/.test(s) && !/\btown\b/.test(s)) return "house";
   return s;
 }
 
@@ -345,6 +347,11 @@ function passesHardGates(listing: MatchListingInput, criteria: BuyerMatchCriteri
 
   if (criteria.bathsMin != null && listing.baths != null && listing.baths < criteria.bathsMin) {
     return false;
+  }
+
+  if (criteria.areas.length > 0) {
+    const area = areaMatchScore(listing, criteria.areas);
+    if (area.points === 0) return false;
   }
 
   return true;
@@ -834,13 +841,11 @@ export function buildExcludedListingSamples(
   limit = 8,
 ): ListingExclusionSample[] {
   const samples: ListingExclusionSample[] = [];
-  const seenReasons = new Set<string>();
 
   for (const listing of listings) {
+    if (samples.length >= limit) break;
     const reason = getListingExclusionReason(listing, criteria);
     if (!reason) continue;
-    if (seenReasons.has(reason) && samples.length >= Math.min(5, limit)) continue;
-    seenReasons.add(reason);
     samples.push({
       listingId: listing.id,
       providerListingId: listing.providerListingId,
@@ -851,26 +856,6 @@ export function buildExcludedListingSamples(
       squareFeet: listing.squareFeet ?? null,
       reason: labelExclusionReason(reason),
     });
-    if (samples.length >= limit) break;
-  }
-
-  if (samples.length < limit) {
-    for (const listing of listings) {
-      if (samples.length >= limit) break;
-      const reason = getListingExclusionReason(listing, criteria);
-      if (!reason) continue;
-      if (samples.some((s) => s.listingId === listing.id)) continue;
-      samples.push({
-        listingId: listing.id,
-        providerListingId: listing.providerListingId,
-        city: listing.city,
-        priceCents: listing.priceCents,
-        beds: listing.beds,
-        baths: listing.baths,
-        squareFeet: listing.squareFeet ?? null,
-        reason: labelExclusionReason(reason),
-      });
-    }
   }
 
   return samples;

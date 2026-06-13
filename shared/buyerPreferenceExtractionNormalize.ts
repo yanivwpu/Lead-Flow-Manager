@@ -117,9 +117,9 @@ function extractPropertyTypesFromText(lower: string): Array<"condo" | "house" | 
   const types: Array<"condo" | "house" | "townhouse" | "multi_family" | "land"> = [];
   if (/\bcondo(?:minium)?s?\b/i.test(lower)) types.push("condo");
   if (/\bapartments?\b/i.test(lower)) types.push("condo");
-  if (/\b(townhouse|town[\s-]?house)\b/i.test(lower)) types.push("townhouse");
+  if (/\btownhouse|town[\s-]?house\b/i.test(lower)) types.push("townhouse");
   if (/\b(sfh|single[\s-]?family(?:\s+home)?)\b/i.test(lower)) types.push("house");
-  else if (/\b(house|home)\b/i.test(lower)) types.push("house");
+  else if (/\b(house|home)\b/i.test(lower) && !/\btown[\s-]?house\b/i.test(lower)) types.push("house");
   if (/\bmulti[\s-]?family\b/i.test(lower)) types.push("multi_family");
   if (/\bland\b/i.test(lower)) types.push("land");
   return [...new Set(types)];
@@ -127,26 +127,51 @@ function extractPropertyTypesFromText(lower: string): Array<"condo" | "house" | 
 
 function trimAreaLabel(area: string): string {
   return area
+    .replace(/\s+(with|and|between|under|up to|around|from|max|at least|at east|who|that|which|for|near)\b.*$/i, "")
     .replace(/\s+(between|under|up to|around|from|max)\b.*$/i, "")
     .replace(/\s+\$\s*.*$/i, "")
     .trim();
 }
 
+/** Known South Florida city tokens — prefer over greedy "in …" capture. */
+const KNOWN_AREA_CITY_RE =
+  /\b(?:in|near|around)\s+(pompano(?:\s+beach)?|boca(?:\s+raton)?|fort\s+lauderdale|hollywood|deerfield(?:\s+beach)?|coral\s+springs|miami(?:\s+beach)?|delray(?:\s+beach)?)\b/i;
+
 function extractAreasFromText(text: string, lower: string): string[] {
   const areaHits: string[] = [];
+
+  const knownCity = text.match(KNOWN_AREA_CITY_RE);
+  if (knownCity?.[1]) {
+    const raw = knownCity[1].replace(/\s+/g, " ").trim();
+    const label =
+      raw.toLowerCase() === "pompano"
+        ? "Pompano Beach"
+        : raw
+            .split(/\s+/)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+            .join(" ");
+    if (label && !areaHits.some((a) => a.toLowerCase() === label.toLowerCase())) {
+      areaHits.push(label);
+    }
+  }
 
   const geoM = text.match(
     /\b((?:east|west|north|south)\s+of\s+(?:the\s+)?[^.?]+?(?:\s+in\s+[A-Za-z][A-Za-z\s]+)?)/i,
   );
   if (geoM?.[1]) {
-    areaHits.push(trimAreaLabel(geoM[1]));
+    const geo = trimAreaLabel(geoM[1]);
+    if (geo && !areaHits.some((a) => a.toLowerCase() === geo.toLowerCase())) {
+      areaHits.push(geo);
+    }
   }
 
-  for (const m of text.matchAll(/\b(?:in|near|around)\s+([A-Za-z][A-Za-z\s]{1,40})/g)) {
-    const area = trimAreaLabel(m[1]?.trim() || "");
-    if (!area) continue;
-    if (!areaHits.some((a) => a.toLowerCase() === area.toLowerCase())) {
-      areaHits.push(area);
+  if (areaHits.length === 0) {
+    for (const m of text.matchAll(/\b(?:in|near|around)\s+([A-Za-z][A-Za-z\s]{0,28}?)(?=\s+(?:with|and|between|up to|who|that|which|,|\.|$))/g)) {
+      const area = trimAreaLabel(m[1]?.trim() || "");
+      if (!area) continue;
+      if (!areaHits.some((a) => a.toLowerCase() === area.toLowerCase())) {
+        areaHits.push(area);
+      }
     }
   }
 
@@ -549,7 +574,16 @@ export function heuristicPatchFromTranscript(
     patch.bedsMin = { value: parseInt(bedBathSlash[1], 10), ...inf(0.86, "beds in message") };
     patch.bathsMin = { value: parseFloat(bedBathSlash[2]), ...inf(0.86, "baths in message") };
   } else {
-    const bedM = lower.match(/(\d+)\s*[- ]?\s*bed/);
+    const atLeastBedM =
+      lower.match(/\b(?:at\s+least|at\s+east|minimum|min)\s+(\d+)\s*[- ]?\s*bed/) ??
+      lower.match(/\b(?:at\s+least|at\s+east|minimum|min)\s+(\d+)\s+bedrooms?\b/);
+    if (atLeastBedM) {
+      patch.bedsMin = {
+        value: parseInt(atLeastBedM[1], 10),
+        ...inf(0.88, "at least beds in message"),
+      };
+    }
+    const bedM = !atLeastBedM ? lower.match(/(\d+)\s*[- ]?\s*bed/) : null;
     if (bedM) {
       patch.bedsMin = { value: parseInt(bedM[1], 10), ...inf(0.72, "beds in message") };
     }
@@ -565,7 +599,9 @@ export function heuristicPatchFromTranscript(
   if (/\b(rent|rentals?|renting|lease|leasing|for\s+rent|tenant)\b/i.test(lower)) {
     patch.transactionIntent = { value: "rent", ...inf(0.88, "rent intent in message") };
   } else if (
-    /\b(homes?\s+for\s+sale|for\s+sale|buy|buying|purchase|looking to buy|looking for a home)\b/i.test(lower) ||
+    /\b(homes?\s+for\s+sale|for\s+sale|buy|buying|purchase|looking to buy|looking for a home|cash buyer|can buy)\b/i.test(
+      lower,
+    ) ||
     (/\bshow me\b/i.test(lower) &&
       !relaxPropertyTypes &&
       /(?:\$\s*[\d,.]+(?:\s*(?:k|m|million|mil))?|\b[\d,.]+\s*(?:million|mil)\b)/i.test(lower))
@@ -576,6 +612,11 @@ export function heuristicPatchFromTranscript(
     patch.modernStyle = { value: true, ...inf(0.68, "modern in message") };
   }
 
+  const isBuyHomeContext =
+    /\b(cash buyer|buy(?:er|ing)?|purchase|for sale|sfh|single[\s-]?family|home(?:s)?\s+for\s+sale|looking for a home)\b/i.test(
+      lower,
+    ) && !/\b(for\s+rent|rentals?|rental|lease|renting)\b/i.test(lower);
+
   const parseBudgetAmount = (amount: string, suffix?: string): number | null => {
     const cleaned = amount.replace(/,/g, "");
     let n = parseFloat(cleaned);
@@ -583,6 +624,9 @@ export function heuristicPatchFromTranscript(
     const s = (suffix || "").toLowerCase();
     if (s === "k") n *= 1000;
     if (s === "m" || s === "million" || s === "mil") n *= 1_000_000;
+    if (!suffix && isBuyHomeContext && n >= 100 && n <= 2_500) {
+      n *= 1000;
+    }
     return Math.round(n);
   };
 

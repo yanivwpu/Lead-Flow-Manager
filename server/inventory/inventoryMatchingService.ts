@@ -230,7 +230,7 @@ export async function findMatchingListingsForContact(
 
   const exclusionCounts = inputs.length > 0 ? countExclusionReasons(inputs, criteria) : new Map();
   const excludedSamples =
-    inputs.length > 0 ? buildExcludedListingSamples(inputs, criteria, 8) : [];
+    inputs.length > 0 ? buildExcludedListingSamples(inputs, criteria, 20) : [];
   const exclusionSummary =
     exclusionCounts.size > 0 ? summarizeExclusionCounts(exclusionCounts) : null;
   const noMatchSummary =

@@ -34,8 +34,17 @@ export function resolveMatchingBudgetBounds(profile: BuyerPreferenceProfile): {
   priceMax: number | null;
 } {
   const normalized = normalizeCapOnlyBudgetProfile(profile);
-  const min = normalized.priceMin?.value ?? null;
-  const max = normalized.priceMax?.value ?? null;
+  let min = normalized.priceMin?.value ?? null;
+  let max = normalized.priceMax?.value ?? null;
+
+  const isBuy = normalized.transactionIntent?.value === "buy";
+  if (isBuy && typeof max === "number" && max >= 100 && max <= 2_500) {
+    max = max * 1000;
+  }
+  if (isBuy && typeof min === "number" && min >= 100 && min <= 2_500 && min === max) {
+    min = min * 1000;
+  }
+
   if (min != null && max != null && min === max && !isBudgetRangeEvidence(normalized.priceMin?.evidence)) {
     return { priceMin: null, priceMax: max };
   }
