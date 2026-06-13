@@ -237,6 +237,23 @@ function extractIntent(messages: ConversationMessage[], opts?: { isRealEstate?: 
   // Universal CRM default: do not apply real-estate intent taxonomy unless explicitly enabled.
   if (!opts?.isRealEstate) return 'Inquiry';
 
+  const latestInbound = [...messages]
+    .reverse()
+    .find((m) => m.direction === "inbound")?.content || "";
+
+  // Latest-message pivot: explicit buy/sale in the most recent inbound beats stale rent language.
+  if (
+    /\b(homes?\s+for\s+sale|houses?\s+for\s+sale|for\s+sale)\b/i.test(latestInbound) ||
+    (/\b(show me|looking for|find)\b/i.test(latestInbound) &&
+      /\b(homes?|houses?|properties|listings?)\b/i.test(latestInbound) &&
+      !/\b(for\s+rent|rentals?|rental)\b/i.test(latestInbound))
+  ) {
+    return 'Buyer';
+  }
+  if (/\b(for\s+rent|rentals?|rental|lease\s+a)\b/i.test(latestInbound)) {
+    return 'Renter';
+  }
+
   // Investor check first — explicit investment intent only
   if (/\b(?:investor|invest(?:ing|ment)|multi.?family|multifamily|rental\s+income|cap\s+rate|roi\b|cash\s+flow|property\s+management|income.?producing|income\s+property|investment\s+prop)/gi.test(src))
     return 'Investor';
@@ -250,8 +267,8 @@ function extractIntent(messages: ConversationMessage[], opts?: { isRealEstate?: 
   if (/(?:looking\s+to\s+rent|want\s+to\s+rent|need\s+to\s+rent|renting|for\s+rent|rental\s+(?:unit|apartment|home|house)|lease\s+a)/gi.test(src))
     return 'Renter';
 
-  // Buyer (most common)
-  if (/(?:buy(?:ing)?\s+a|looking\s+to\s+buy|want\s+to\s+(?:buy|own|purchase)|purchas(?:e|ing)\s+a|first.?time\s+(?:home|buyer)|forever\s+home|new\s+home)/gi.test(src))
+  // Buyer — includes active "show me homes for sale" inventory searches
+  if (/(?:buy(?:ing)?\s+a|looking\s+to\s+buy|want\s+to\s+(?:buy|own|purchase)|purchas(?:e|ing)\s+a|first.?time\s+(?:home|buyer)|forever\s+home|new\s+home|(?:homes?|houses?)\s+for\s+sale)/gi.test(src))
     return 'Buyer';
 
   // Listing inquiry / generic interest → Browsing (NOT Seller)
@@ -407,10 +424,10 @@ export function analyzeConversation(
   let scoreSource: "crm" | "conversation" = "conversation";
 
   if (crmScore != null && !conversationDisqualifies) {
-    const crmBucket = bucketFromNumericScore(crmScore);
-    displayBucket = crmBucket;
-    displayScore = crmScore;
-    scoreSource = "crm";
+    const mergedScore = Math.max(crmScore, scoring.score);
+    displayBucket = bucketFromNumericScore(mergedScore);
+    displayScore = mergedScore;
+    scoreSource = mergedScore === crmScore ? "crm" : "conversation";
     if (displayBucket === "hot" && displayScore < MIN_HOT_TAG_SCORE) {
       displayBucket = "unqualified";
     }

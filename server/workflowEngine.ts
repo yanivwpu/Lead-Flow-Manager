@@ -1037,7 +1037,12 @@ function tagForLeadScore(score: number): string | null {
 
 const SHOWING_REQUEST_RE =
   /\b(see|view|visit|tour|walk through|walkthrough)\s+(the|a|this|your|that|my)?\s*(house|home|property|place|listing|unit|condo|townhouse|apt|apartment)\b/i;
+const SHOW_ME_INVENTORY_RE =
+  /\bshow\s+me\b[^.?!]{0,100}\b(homes?|houses?|properties|listings?|condos?|townhouses?|sfh)\b/i;
 const SHOWING_INTENT_RE = /\b(i'?d like|i would like|want|love|like) to (see|view|visit|tour)\b/i;
+const ACTIVE_BUY_SEARCH_RE =
+  /\b(show\s+me|looking\s+for|find\s+me)\b[^.?!]{0,100}\b(homes?|houses?|properties|listings?)\b/i;
+const BUY_SALE_MSG_RE = /\b(homes?\s+for\s+sale|houses?\s+for\s+sale|for\s+sale)\b/i;
 const SPECIFIC_DATE_RE =
   /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|tonight|next week|this week|this weekend)\b|\bon\s+(mon|tues?|wed|thur?s?|fri|sat|sun)/i;
 
@@ -1173,9 +1178,16 @@ export async function runW2QualificationEngine(
 
   // Booking / showing / high-intent scheduling
   const keywordBookingIntent = matchesAny(msgLower, bookingKw);
-  const showingRequest = SHOWING_REQUEST_RE.test(message) || SHOWING_INTENT_RE.test(message);
+  const showingRequest =
+    SHOWING_REQUEST_RE.test(message) ||
+    SHOWING_INTENT_RE.test(message) ||
+    SHOW_ME_INVENTORY_RE.test(message);
   const hasBookingIntent = keywordBookingIntent || showingRequest;
   const hasSpecificDate = SPECIFIC_DATE_RE.test(message);
+  const activeBuySearch =
+    ACTIVE_BUY_SEARCH_RE.test(message) &&
+    BUY_SALE_MSG_RE.test(message) &&
+    !!budgetMatch;
 
   if (hasBookingIntent) {
     signals.push(showingRequest ? "SHOWING_REQUEST" : "BOOKING_INTENT");
@@ -1213,8 +1225,20 @@ export async function runW2QualificationEngine(
     });
   }
 
+  if (activeBuySearch) {
+    signals.push("ACTIVE_BUY_SEARCH");
+    score += 25;
+    fieldUpdates.leadType = fieldUpdates.leadType || "Buyer";
+    logLeadScore("signal_detected", {
+      userId,
+      contactId: contact?.id,
+      signal: "ACTIVE_BUY_SEARCH",
+      messagePreview: message.slice(0, 120),
+    });
+  }
+
   const bookingHeavy = signals.some((s) =>
-    ["SHOWING_REQUEST", "BOOKING_INTENT", "SPECIFIC_DATE_INTENT"].includes(s),
+    ["SHOWING_REQUEST", "BOOKING_INTENT", "SPECIFIC_DATE_INTENT", "ACTIVE_BUY_SEARCH"].includes(s),
   );
   score = Math.min(score, bookingHeavy ? 75 : 60);
 
@@ -1285,6 +1309,10 @@ export async function runW2QualificationEngine(
         const prevLead =
           typeof fresh.leadScore === "number" && Number.isFinite(fresh.leadScore) ? fresh.leadScore : 0;
         let nextLead = Math.min(100, Math.max(0, prevLead + score));
+
+        if (activeBuySearch && !isBrowsing) {
+          nextLead = Math.max(nextLead, 80);
+        }
 
         if (bookingHeavy && !isBrowsing && nextLead < 60) {
           nextLead = 60;

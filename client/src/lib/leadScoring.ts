@@ -96,7 +96,19 @@ const DEAL_READY_INTENT_PATTERNS: RegExp[] = [
   /\bbuy\s+(it|now|today)\b/i,
   /\bbuy\s+now\b/i,
   /\b(place|put|pay)\s+(a\s+)?deposit\b/i,
+  /\bshow\s+me\b[^.?!]{0,80}\b(homes?|houses?|properties|listings?)\b/i,
+  /\b(homes?|houses?)\s+for\s+sale\b/i,
 ];
+
+/** Active inventory search — explicit criteria + show/find language (buy or rent). */
+const ACTIVE_INVENTORY_SEARCH_RE =
+  /\b(show\s+me|looking\s+for|find\s+me|send\s+me|need\s+a|want\s+a)\b[^.?!]{0,100}\b(homes?|houses?|properties|listings?|condos?|townhouses?|sfh|apartments?)\b/i;
+
+const BUY_SALE_INTENT_RE =
+  /\b(homes?\s+for\s+sale|houses?\s+for\s+sale|for\s+sale|to\s+buy|buying|purchase)\b/i;
+
+const RENT_INTENT_INBOUND_RE =
+  /\b(for\s+rent|rentals?|rental|lease|leasing|renting|looking\s+to\s+rent|need\s+to\s+rent|want\s+to\s+rent)\b/i;
 
 const MAX_INDUSTRY_BONUS = 20;
 const MAX_PM_BONUS = 16;
@@ -176,6 +188,15 @@ function normalize(text: string): string {
 
 function inboundText(messages: ConversationMessage[]): string {
   return normalize(messages.filter((m) => m.direction === "inbound").map((m) => m.content).join(" "));
+}
+
+function latestInboundText(messages: ConversationMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].direction === "inbound") {
+      return normalize(messages[i].content || "");
+    }
+  }
+  return "";
 }
 
 function messageStats(messages: ConversationMessage[]) {
@@ -308,38 +329,81 @@ function inferIsRealEstate(businessKnowledge?: BusinessKnowledgeForScoring, opti
 }
 
 /** RE-specific layer: budget, timeline, financing, viewing, role intent. */
-function extractRealEstateSignals(inbound: string) {
+function extractRealEstateSignals(fullInbound: string, latestInbound?: string) {
+  const latest = latestInbound ?? fullInbound;
   const hasBudget =
-    /\$\s*[\d,]+(?:\.\d+)?(?:\s*(?:k|m|million|thousand))?/i.test(inbound) ||
-    /\b(budget|price range|afford|spend|between\s+\$?\s*[\d,.]+)\b/i.test(inbound);
+    /\$\s*[\d,]+(?:\.\d+)?(?:\s*(?:k|m|million|thousand))?/i.test(fullInbound) ||
+    /\b(budget|price range|afford|spend|between\s+\$?\s*[\d,.]+)\b/i.test(fullInbound);
   const hasTimeline =
-    /\b(asap|urgent|immediately|this week|next week|next month|within \d+ (?:day|week|month|year)s?)\b/i.test(inbound) ||
-    /\b(in|within|around)\s+\d+\s+(day|week|month|year)s?\b/i.test(inbound);
-  const hasFinancing = /\b(pre-?approved|cash|mortgage|loan|financing)\b/i.test(inbound);
-  const viewingIntent = /\b(viewing|showing|tour|see (?:the|it)|visit|open house)\b/i.test(inbound);
+    /\b(asap|urgent|immediately|this week|next week|next month|within \d+ (?:day|week|month|year)s?)\b/i.test(fullInbound) ||
+    /\b(in|within|around)\s+\d+\s+(day|week|month|year)s?\b/i.test(fullInbound);
+  const hasFinancing = /\b(pre-?approved|cash|mortgage|loan|financing)\b/i.test(fullInbound);
+  const viewingIntent = /\b(viewing|showing|tour|see (?:the|it)|visit|open house)\b/i.test(fullInbound);
 
-  const renter =
-    /\b(for\s+rent|rental|lease|leasing|renting|looking\s+to\s+rent|need\s+to\s+rent|want\s+to\s+rent)\b/i.test(
-      inbound,
-    );
-  const buyer = !renter && /\b(looking to buy|buying)\b/i.test(inbound);
-  const seller = /\b(sell|selling|list|listing)\b/i.test(inbound);
-  const investor = /\b(invest|investment|roi|cap rate|rental income)\b/i.test(inbound);
+  const latestBuy =
+    BUY_SALE_INTENT_RE.test(latest) ||
+    (ACTIVE_INVENTORY_SEARCH_RE.test(latest) && !RENT_INTENT_INBOUND_RE.test(latest));
+  const latestRent = RENT_INTENT_INBOUND_RE.test(latest);
+  const threadRent = RENT_INTENT_INBOUND_RE.test(fullInbound);
+  const threadBuy =
+    !threadRent &&
+    /\b(looking to buy|buying)\b/i.test(fullInbound);
+
+  const renter = latestRent || (!latestBuy && threadRent);
+  const buyer = latestBuy || (!renter && threadBuy);
+  const seller = /\b(sell|selling|list|listing)\b/i.test(fullInbound);
+  const investor = /\b(invest|investment|roi|cap rate|rental income)\b/i.test(fullInbound);
   const intent = investor ? "investor" : seller ? "seller" : renter ? "renter" : buyer ? "buyer" : null;
+
+  const hasAreaInText = (text: string) =>
+    /\b(?:in|near|around)\s+[a-z]|\b(pompano|miami|fort\s+lauderdale|boca|delray|hollywood)\b/i.test(text);
 
   const specificRentalSearch =
     renter &&
-    /\d+\s*\/\s*\d+|\d+\s*[- ]?\s*bed/i.test(inbound) &&
+    !latestBuy &&
+    /\d+\s*\/\s*\d+|\d+\s*[- ]?\s*bed/i.test(fullInbound) &&
     hasBudget &&
-    /\b(?:in|near|around)\s+[a-z]|\b(pompano|miami|fort\s+lauderdale|boca|delray|hollywood)\b/i.test(inbound);
+    hasAreaInText(fullInbound);
 
-  return { hasBudget, hasTimeline, hasFinancing, viewingIntent, intent, specificRentalSearch, renter };
+  const hasMustHaveFeature =
+    /\bpool\b/i.test(latest) ||
+    /\bwaterfront\b/i.test(latest) ||
+    /\bbeach\b/i.test(latest);
+
+  const specificActiveBuySearch =
+    buyer &&
+    !latestRent &&
+    ACTIVE_INVENTORY_SEARCH_RE.test(latest) &&
+    hasBudget &&
+    hasAreaInText(latest) &&
+    (BUY_SALE_INTENT_RE.test(latest) || hasMustHaveFeature || /\bup\s+to\b/i.test(latest));
+
+  return {
+    hasBudget,
+    hasTimeline,
+    hasFinancing,
+    viewingIntent,
+    intent,
+    specificRentalSearch,
+    specificActiveBuySearch,
+    renter,
+    buyer,
+  };
 }
 
-function computeSpecificRentalSearchBoost(inbound: string): { boost: number; detected: string[] } {
-  const re = extractRealEstateSignals(inbound);
+function computeSpecificRentalSearchBoost(inbound: string, latestInbound?: string): { boost: number; detected: string[] } {
+  const re = extractRealEstateSignals(inbound, latestInbound);
   if (!re.specificRentalSearch) return { boost: 0, detected: [] };
   return { boost: 16, detected: ["re:specific_rental_criteria"] };
+}
+
+function computeSpecificActiveBuySearchBoost(
+  inbound: string,
+  latestInbound?: string,
+): { boost: number; detected: string[] } {
+  const re = extractRealEstateSignals(inbound, latestInbound);
+  if (!re.specificActiveBuySearch) return { boost: 0, detected: [] };
+  return { boost: 18, detected: ["re:specific_buy_search"] };
 }
 
 /** Property management / ops — complaints and urgent maintenance. */
@@ -509,9 +573,10 @@ export function scoreLead(
   options?: ScoreOptions,
 ): LeadScoreResult {
   const inbound = inboundText(messages);
+  const latestInbound = latestInboundText(messages);
   const stats = messageStats(messages);
   const isRealEstate = inferIsRealEstate(businessKnowledge, options);
-  const reSignalsForQual = isRealEstate ? extractRealEstateSignals(inbound) : null;
+  const reSignalsForQual = isRealEstate ? extractRealEstateSignals(inbound, latestInbound) : null;
   const mediaOnly = isInboundMediaOnlyMessages(messages);
 
   if (mediaOnly && !hasSubstantiveInboundText(inbound)) {
@@ -616,6 +681,7 @@ export function scoreLead(
   const comboPricingAndBuy =
     /\b(price|pricing|cost|how much|rate|fees?)\b/i.test(inbound) &&
     (/\b(buy|purchase|bought|buying|order)\b/i.test(inbound) ||
+      /\b(for\s+sale|homes?\s+for\s+sale|houses?\s+for\s+sale)\b/i.test(inbound) ||
       /\b(want|need|looking|hoping)\s+to\s+buy\b/i.test(inbound));
   const comboPricingAndRent =
     /\b(price|pricing|cost|how much|rate|fees?|between)\b/i.test(inbound) &&
@@ -630,13 +696,20 @@ export function scoreLead(
     score += comboBoost;
   }
 
-  const rentalCriteriaBoost = computeSpecificRentalSearchBoost(inbound);
+  const rentalCriteriaBoost = computeSpecificRentalSearchBoost(inbound, latestInbound);
   if (rentalCriteriaBoost.boost > 0) {
     score += rentalCriteriaBoost.boost;
   }
 
+  const buySearchBoost = computeSpecificActiveBuySearchBoost(inbound, latestInbound);
+  if (buySearchBoost.boost > 0) {
+    score += buySearchBoost.boost;
+  }
+
   const dealReadyIntent = !mediaOnly && detectDealReadyIntent(inbound);
-  const specificRentalSearch = isRealEstate && extractRealEstateSignals(inbound).specificRentalSearch;
+  const reSignals = isRealEstate ? extractRealEstateSignals(inbound, latestInbound) : null;
+  const specificRentalSearch = isRealEstate && !!reSignals?.specificRentalSearch;
+  const specificActiveBuySearch = isRealEstate && !!reSignals?.specificActiveBuySearch;
 
   let decisionOverride = false;
   let dealReadyOverride = false;
@@ -645,6 +718,9 @@ export function scoreLead(
     dealReadyOverride = true;
     decisionOverride = true;
     score = Math.max(score, 90);
+  } else if (specificActiveBuySearch) {
+    decisionOverride = true;
+    score = Math.max(score, 82);
   } else if (specificRentalSearch) {
     decisionOverride = true;
     score = Math.max(score, 75);
@@ -674,7 +750,9 @@ export function scoreLead(
       ...(comboBoost > 0 ? ["combo:pricing_and_buy_intent"] : []),
       ...(comboPricingAndRent ? ["combo:pricing_and_rent_intent"] : []),
       ...(rentalCriteriaBoost.detected),
+      ...(buySearchBoost.detected),
       ...(specificRentalSearch ? ["re:specific_rental_criteria"] : []),
+      ...(specificActiveBuySearch ? ["re:specific_buy_search"] : []),
       ...(dealReadyIntent ? ["decision:deal_ready"] : []),
     ]),
   );
@@ -682,6 +760,8 @@ export function scoreLead(
   const reasons: string[] = [];
   if (dealReadyIntent) {
     reasons.push("Customer appears ready to move forward");
+  } else if (specificActiveBuySearch) {
+    reasons.push("Customer shared specific home search criteria (buy)");
   } else if (specificRentalSearch) {
     reasons.push("Customer shared specific rental search criteria");
   }
@@ -706,7 +786,7 @@ export function scoreLead(
     realEstateSignals: reSignalsForQual,
     qualifyingQuestions: businessKnowledge?.qualifyingQuestions,
   });
-  if (missingRequired.length > 0 && !dealReadyIntent && !specificRentalSearch) {
+  if (missingRequired.length > 0 && !dealReadyIntent && !specificRentalSearch && !specificActiveBuySearch) {
     reasons.push("A few details are still missing");
   }
 
