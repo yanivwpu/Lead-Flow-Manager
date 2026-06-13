@@ -126,6 +126,9 @@ export function InventoryHealthDiagnosticsPanel({
         <DiagnosticRow label="Last match run" value={formatInventoryMatchRunTime(lastRun)} />
         <DiagnosticRow label="Last matching error" value={lastError?.trim() || "—"} />
         {reason && <DiagnosticRow label="API reason" value={reason} />}
+        {diagnostics?.debugBuildMarker && (
+          <DiagnosticRow label="debugBuildMarker" value={diagnostics.debugBuildMarker} />
+        )}
         {diagnostics?.activeFilterSummary && (
           <DiagnosticRow label="Active filters" value={diagnostics.activeFilterSummary} />
         )}

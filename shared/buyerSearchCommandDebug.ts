@@ -88,3 +88,30 @@ export function buildPersistedProfileSnapshotForDiagnostics(
     transactionIntent: c.transactionIntent,
   };
 }
+
+/** Compact profile snapshot for replacement-search E2E tracing. */
+export function snapshotProfileTraceFields(profile: BuyerPreferenceProfile) {
+  const c = extractBuyerMatchCriteria(profile);
+  const budget = resolveMatchingBudgetBounds(profile);
+  return {
+    priceMax: budget.priceMax ?? null,
+    priceMin: budget.priceMin ?? null,
+    bedsMin: c.bedsMin ?? null,
+    pool: profile.pool?.value ?? null,
+    hardRequirePool: c.hardRequirePool,
+    propertyTypes: c.propertyTypes,
+    areas: c.areas,
+    transactionIntent: c.transactionIntent,
+  };
+}
+
+/** Compact extraction patch snapshot for replacement-search E2E tracing. */
+export function snapshotPatchTraceFields(patch: import("./buyerPreferenceSchema").BuyerPreferenceExtractionPatch) {
+  const out: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(patch)) {
+    if (field && typeof field === "object" && "value" in field) {
+      out[key] = (field as { value: unknown }).value;
+    }
+  }
+  return out;
+}

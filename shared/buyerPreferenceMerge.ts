@@ -290,6 +290,8 @@ export type BuyerPreferenceMergeOptions = {
   replaceArrayFields?: PreferenceArrayReplaceKey[];
   /** Replacement search — drop pool/beds/waterfront not present in incoming patch. */
   clearUnmentionedHardGates?: boolean;
+  /** Heuristic patch from the current inbound message (authoritative for gate clearing). */
+  currentMessagePatch?: BuyerPreferenceExtractionPatch;
 };
 
 const HARD_GATE_SCALAR_KEYS = [
@@ -308,6 +310,19 @@ const HARD_GATE_SCALAR_KEYS = [
   "petFriendly",
 ] as const;
 
+function filterPoolWaterfrontMustHaves(
+  mustHaves: PreferenceField<string[]> | undefined,
+): PreferenceField<string[]> | undefined {
+  if (!mustHaves?.value?.length) return mustHaves;
+  const filtered = mustHaves.value
+    .map(String)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((raw) => !/\b(pool|waterfront|ocean view)\b/i.test(raw));
+  if (filtered.length) return { ...mustHaves, value: filtered };
+  return undefined;
+}
+
 /** Drop stale hard gates when buyer sends a full replacement search. */
 export function clearUnmentionedHardGates(
   profile: BuyerPreferenceProfile,
@@ -319,16 +334,30 @@ export function clearUnmentionedHardGates(
   }
 
   if (!patch.mustHaves && profile.mustHaves?.value?.length) {
-    const filtered = profile.mustHaves.value
-      .map(String)
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .filter((raw) => !/\b(pool|waterfront|ocean view)\b/i.test(raw));
-    if (filtered.length) {
-      profile.mustHaves = { ...profile.mustHaves, value: filtered };
-    } else {
-      delete profile.mustHaves;
+    const filtered = filterPoolWaterfrontMustHaves(profile.mustHaves);
+    if (filtered) profile.mustHaves = filtered;
+    else delete profile.mustHaves;
+  }
+}
+
+/**
+ * Remove history-derived hard gates from LLM patch when current message did not mention them.
+ * Prevents conversation-history extraction from re-applying pool/beds after a replacement search.
+ */
+export function stripStaleHardGatesFromPatch(
+  patch: BuyerPreferenceExtractionPatch,
+  currentMessagePatch: BuyerPreferenceExtractionPatch,
+): void {
+  for (const key of HARD_GATE_SCALAR_KEYS) {
+    if (currentMessagePatch[key] === undefined) {
+      delete (patch as Record<string, unknown>)[key];
     }
+  }
+
+  if (!currentMessagePatch.mustHaves && patch.mustHaves?.value?.length) {
+    const filtered = filterPoolWaterfrontMustHaves(patch.mustHaves);
+    if (filtered) patch.mustHaves = filtered;
+    else delete patch.mustHaves;
   }
 }
 
@@ -467,7 +496,9 @@ export function mergeBuyerPreferenceProfile(
   }
 
   if (mergeOptions?.clearUnmentionedHardGates) {
-    clearUnmentionedHardGates(profile, patch);
+    const authoritative = mergeOptions.currentMessagePatch ?? patch;
+    stripStaleHardGatesFromPatch(patch, authoritative);
+    clearUnmentionedHardGates(profile, authoritative);
   }
 
   for (const key of PATCH_KEYS) {

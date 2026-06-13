@@ -97,6 +97,8 @@ export const inventoryMatchDiagnosticsSchema = z.object({
   exclusionSummary: z.string().nullable().optional(),
   excludedSamples: z.array(inventoryMatchExcludedListingSchema).optional(),
   activeFilterSummary: z.string().nullable().optional(),
+  /** Temporary build marker — confirms deployed diagnostics code version. */
+  debugBuildMarker: z.string().optional(),
 });
 
 export type InventoryMatchDiagnostics = z.infer<typeof inventoryMatchDiagnosticsSchema>;

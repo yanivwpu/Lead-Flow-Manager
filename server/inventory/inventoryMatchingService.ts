@@ -276,11 +276,24 @@ export async function findMatchingListingsForContact(
     activeInventory: inventoryCount,
     matchingLimit,
     profileSnapshot,
+    debugBuildMarker: diagnostics.debugBuildMarker,
     funnelSteps: funnel.steps,
     topExclusions: Object.entries(funnel.exclusionByReason)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5),
   });
+
+  console.log(
+    JSON.stringify({
+      tag: "[ReplacementSearchTrace]",
+      step: "inventory_matching_profile",
+      ts: new Date().toISOString(),
+      contactId,
+      userId,
+      profileForMatching: profileSnapshot,
+      debugBuildMarker: diagnostics.debugBuildMarker,
+    }),
+  );
 
   return {
     eligible: true,

@@ -5,6 +5,7 @@ import type {
   InventoryMatchProfileSnapshot,
 } from "./inventoryMatchTypes";
 import type { BuyInventoryFunnelAudit } from "./inventoryMatchScoring";
+import { INVENTORY_DIAGNOSTICS_BUILD_MARKER } from "./inventoryDiagnosticsBuild";
 
 export function buildInventoryMatchDiagnostics(input: {
   activeInventoryCount: number;
@@ -24,6 +25,7 @@ export function buildInventoryMatchDiagnostics(input: {
   exclusionSummary?: string | null;
   excludedSamples?: InventoryMatchExcludedListing[];
   activeFilterSummary?: string | null;
+  debugBuildMarker?: string;
 }): InventoryMatchDiagnostics {
   return {
     activeInventoryCount: input.activeInventoryCount,
@@ -43,6 +45,7 @@ export function buildInventoryMatchDiagnostics(input: {
     exclusionSummary: input.exclusionSummary ?? null,
     excludedSamples: input.excludedSamples,
     activeFilterSummary: input.activeFilterSummary ?? null,
+    debugBuildMarker: input.debugBuildMarker ?? INVENTORY_DIAGNOSTICS_BUILD_MARKER,
   };
 }
 

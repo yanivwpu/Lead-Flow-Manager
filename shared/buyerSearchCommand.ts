@@ -20,6 +20,7 @@ import {
   hasExplicitPropertyTypeConstraint,
   isShowMeAllPropertyRelaxEvidence,
 } from "./buyerPreferencePropertyTypeRelax";
+import { stripStaleHardGatesFromPatch } from "./buyerPreferenceMerge";
 
 export type BuyerSearchCommandKind =
   | "new_search"
@@ -340,6 +341,10 @@ export function applyBuyerSearchCommandToPatch(
     } else {
       delete (llmPatch as Record<string, unknown>)[key];
     }
+  }
+
+  if (command.clearUnmentionedHardGates) {
+    stripStaleHardGatesFromPatch(llmPatch, command.patch);
   }
 
   if (command.patch.priceMax && !command.patch.priceMin) {

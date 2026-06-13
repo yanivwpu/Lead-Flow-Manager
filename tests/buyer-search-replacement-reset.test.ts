@@ -8,6 +8,7 @@ import { emptyBuyerPreferenceProfile } from "../shared/buyerPreferenceSchema";
 import {
   isFullReplacementSearch,
   parseBuyerSearchCommand,
+  applyBuyerSearchCommandToPatch,
 } from "../shared/buyerSearchCommand";
 import { extractBuyerMatchCriteria } from "../shared/inventory/inventoryMatchScoring";
 
@@ -83,5 +84,15 @@ assert(
 const patch600 = heuristicPatchFromInboundText(msg600);
 assert(patch600.pool == null, "600k message patch has no pool");
 assert(patch600.bedsMin == null, "600k message patch has no bedsMin");
+
+// LLM history patch must be stripped before merge on replacement search.
+const llmHistoryPatch = {
+  ...patch600,
+  pool: priorProfile.pool,
+  bedsMin: priorProfile.bedsMin,
+};
+applyBuyerSearchCommandToPatch(llmHistoryPatch, cmd600);
+assert(llmHistoryPatch.pool == null, "strip pool from LLM history patch");
+assert(llmHistoryPatch.bedsMin == null, "strip bedsMin from LLM history patch");
 
 console.log("buyer-search-replacement-reset.test.ts: OK");

@@ -18,9 +18,14 @@ import {
 } from "@shared/buyerPreferenceInventorySignals";
 import {
   applyInboundSearchCommandOverrides,
+  isFullReplacementSearch,
   parseBuyerSearchCommand,
 } from "@shared/buyerSearchCommand";
-import { formatSearchCommandLog } from "@shared/buyerSearchCommandDebug";
+import {
+  formatSearchCommandLog,
+  snapshotPatchTraceFields,
+  snapshotProfileTraceFields,
+} from "@shared/buyerSearchCommandDebug";
 import {
   mergeBuyerPreferenceProfile,
   type BuyerPreferenceMergeOptions,
@@ -40,6 +45,32 @@ const lastExtractionByContact = new Map<string, number>();
 function debugBuyerPreferenceLog(event: string, payload: Record<string, unknown>): void {
   if (process.env.DEBUG_BUYER_PREFS !== "1") return;
   console.log(JSON.stringify({ tag: "[BuyerPreference]", event, ...payload }));
+}
+
+/** Temporary structured trace for replacement-search E2E debugging (grep ReplacementSearchTrace). */
+function logReplacementSearchTrace(
+  step: string,
+  payload: Record<string, unknown>,
+): void {
+  const alwaysLog =
+    payload.clearUnmentionedHardGates === true ||
+    payload.isFullReplacementSearch === true ||
+    payload.commandKind === "new_search";
+  if (
+    !alwaysLog &&
+    process.env.DEBUG_REPLACEMENT_SEARCH !== "1" &&
+    process.env.DEBUG_BUYER_PREFS !== "1"
+  ) {
+    return;
+  }
+  console.log(
+    JSON.stringify({
+      tag: "[ReplacementSearchTrace]",
+      step,
+      ts: new Date().toISOString(),
+      ...payload,
+    }),
+  );
 }
 
 /** @internal Re-export for channel/workflow skip logging. */
@@ -277,6 +308,7 @@ export async function mergeAndPersistBuyerPreferences(
     logActivity?: boolean;
     replaceArrayFields?: PreferenceArrayReplaceKey[];
     clearUnmentionedHardGates?: boolean;
+    currentMessagePatch?: BuyerPreferenceExtractionPatch;
     triggerInventoryRefresh?: boolean;
   },
 ): Promise<BuyerPreferenceProfile> {
@@ -292,10 +324,13 @@ export async function mergeAndPersistBuyerPreferences(
   const freshContact = (await storage.getContact(contact.id)) ?? contact;
   const current = readBuyerPreferenceProfile(freshContact);
   const mergeOptions: BuyerPreferenceMergeOptions | undefined =
-    meta?.replaceArrayFields?.length || meta?.clearUnmentionedHardGates
+    meta?.replaceArrayFields?.length ||
+    meta?.clearUnmentionedHardGates ||
+    meta?.currentMessagePatch
       ? {
           replaceArrayFields: meta.replaceArrayFields,
           clearUnmentionedHardGates: meta.clearUnmentionedHardGates,
+          currentMessagePatch: meta.currentMessagePatch,
         }
       : undefined;
   const merged = mergeBuyerPreferenceProfile(
@@ -307,6 +342,17 @@ export async function mergeAndPersistBuyerPreferences(
     },
     mergeOptions,
   );
+
+  if (meta?.clearUnmentionedHardGates) {
+    logReplacementSearchTrace("merged_before_save", {
+      contactId: contact.id,
+      clearUnmentionedHardGates: true,
+      previousProfile: snapshotProfileTraceFields(current),
+      extractedPatch: snapshotPatchTraceFields(meta.currentMessagePatch ?? patch),
+      mergePatch: snapshotPatchTraceFields(patch),
+      mergedProfile: snapshotProfileTraceFields(merged),
+    });
+  }
 
   logPersistence(contact.id, "merged_before_save", {
     patchKeys,
@@ -328,9 +374,17 @@ export async function mergeAndPersistBuyerPreferences(
     triggerInventoryMatchRefresh(contact.userId, contact.id);
   }
 
-  return (
-    (await loadPersistedBuyerPreferenceProfile(contact.id)) ?? merged
-  );
+  const reloaded =
+    (await loadPersistedBuyerPreferenceProfile(contact.id)) ?? merged;
+
+  if (meta?.clearUnmentionedHardGates) {
+    logReplacementSearchTrace("saved_profile_after_db_write", {
+      contactId: contact.id,
+      savedProfile: snapshotProfileTraceFields(reloaded),
+    });
+  }
+
+  return reloaded;
 }
 
 /**
@@ -343,10 +397,25 @@ export async function syncBuyerPreferencesForInboundMessage(input: {
   conversationId?: string;
   messageId?: string;
 }): Promise<BuyerPreferenceProfile> {
-  const command = parseBuyerSearchCommand(
+  const freshContact = (await storage.getContact(input.contact.id)) ?? input.contact;
+  const priorProfile = readBuyerPreferenceProfile(freshContact);
+  const command = parseBuyerSearchCommand(input.inboundText, priorProfile);
+  const fullReplacement = isFullReplacementSearch(
     input.inboundText,
-    readBuyerPreferenceProfile(input.contact),
+    command.patch,
+    priorProfile,
   );
+
+  logReplacementSearchTrace("inbound_received", {
+    contactId: input.contact.id,
+    inboundText: input.inboundText,
+    commandKind: command.kind,
+    isFullReplacementSearch: fullReplacement,
+    clearUnmentionedHardGates: command.clearUnmentionedHardGates ?? false,
+    extractedFields: snapshotPatchTraceFields(command.patch),
+    previousProfile: snapshotProfileTraceFields(priorProfile),
+  });
+
   if (command.skipProfileUpdate) {
     debugBuyerPreferenceLog("search_command_followup_skip", {
       contactId: input.contact.id,
@@ -354,19 +423,25 @@ export async function syncBuyerPreferencesForInboundMessage(input: {
     });
     return (
       (await loadPersistedBuyerPreferenceProfile(input.contact.id)) ??
-      readBuyerPreferenceProfile(input.contact)
+      priorProfile
     );
   }
   if (hasInventoryPreferenceSignals(input.inboundText)) {
-    await runFastPathHeuristicPreferenceUpdate(input.contact, input.inboundText, {
+    await runFastPathHeuristicPreferenceUpdate(freshContact, input.inboundText, {
       conversationId: input.conversationId,
       messageId: input.messageId,
     });
   }
-  return (
+  const profile =
     (await loadPersistedBuyerPreferenceProfile(input.contact.id)) ??
-    readBuyerPreferenceProfile(input.contact)
-  );
+    readBuyerPreferenceProfile(freshContact);
+
+  logReplacementSearchTrace("sync_complete", {
+    contactId: input.contact.id,
+    profileAfterSync: snapshotProfileTraceFields(profile),
+  });
+
+  return profile;
 }
 
 /** @deprecated Alias — use syncBuyerPreferencesForInboundMessage. */
@@ -422,6 +497,7 @@ async function runFastPathHeuristicPreferenceUpdate(
     logActivity: false,
     replaceArrayFields: command.replaceArrayFields,
     clearUnmentionedHardGates: command.clearUnmentionedHardGates,
+    currentMessagePatch: command.clearUnmentionedHardGates ? command.patch : undefined,
     triggerInventoryRefresh: true,
   });
 
@@ -644,6 +720,17 @@ export async function runBuyerPreferenceExtraction(
         lockedFields: command.lockedFields,
         explanation: command.explanation,
       });
+      if (command.clearUnmentionedHardGates) {
+        logReplacementSearchTrace("llm_patch_after_command_override", {
+          contactId,
+          commandKind: command.kind,
+          clearUnmentionedHardGates: true,
+          isFullReplacementSearch: isFullReplacementSearch(text, command.patch, existing),
+          extractedFields: snapshotPatchTraceFields(command.patch),
+          llmPatchAfterStrip: snapshotPatchTraceFields(patch),
+          previousProfile: snapshotProfileTraceFields(existing),
+        });
+      }
     }
     if (patchFieldCount(patch) === 0) {
       logTrigger("extraction_completed", {
@@ -667,6 +754,8 @@ export async function runBuyerPreferenceExtraction(
       logActivity: true,
       replaceArrayFields,
       clearUnmentionedHardGates: searchCommand?.clearUnmentionedHardGates,
+      currentMessagePatch:
+        searchCommand?.clearUnmentionedHardGates ? searchCommand.patch : undefined,
     });
     logTrigger("extraction_completed", {
       contactId,
@@ -792,10 +881,26 @@ export function scheduleBuyerPreferenceExtraction(params: {
       }
 
       if (inventoryFastPath && text) {
-        await runFastPathHeuristicPreferenceUpdate(contact, text, {
+        const fastPathHandled = await runFastPathHeuristicPreferenceUpdate(contact, text, {
           conversationId,
           messageId,
         });
+        if (fastPathHandled) {
+          const reloaded =
+            (await loadPersistedBuyerPreferenceProfile(contactId)) ??
+            readBuyerPreferenceProfile(contact);
+          const postFastPathCommand = parseBuyerSearchCommand(text, reloaded);
+          if (postFastPathCommand.clearUnmentionedHardGates) {
+            logTrigger("extraction_skipped", {
+              contactId,
+              userId,
+              triggerSource,
+              reason: "full_replacement_fast_path_complete",
+              commandKind: postFastPathCommand.kind,
+            });
+            return;
+          }
+        }
       }
 
       await runBuyerPreferenceExtraction(userId, contactId, {
