@@ -45,11 +45,85 @@ const SFH_SUBTYPE_RE =
 
 const SFH_TYPE_RE = /\b(single[\s_]?family|detached|sfr)\b/;
 
+const ATTACHED_STRUCTURE_RE =
+  /\b(attached|row[\s_]?house|rowhouse|cluster[\s_]?home|half[\s_]?duplex|zero[\s_]?lot[\s_]?line|patio[\s_]?home)\b/;
+
+export type ResoPropertyClassificationContext = {
+  structureType?: unknown;
+  architecturalStyle?: unknown;
+  unitNumber?: unknown;
+  addressLine1?: unknown;
+  addressLine2?: unknown;
+};
+
+/** Unit / attached address signals — row units (#0) are not detached SFH. */
+export function addressIndicatesUnitNumber(
+  addressLine1?: unknown,
+  addressLine2?: unknown,
+  unitNumber?: unknown,
+): boolean {
+  const parts = [addressLine1, addressLine2, unitNumber]
+    .filter((v) => v != null && String(v).trim() !== "")
+    .map(String);
+  const hay = normalizeText(parts.join(" "));
+  if (!hay) return false;
+  return (
+    /#\s*\d+\b/.test(hay) ||
+    /\bunit\s+[a-z0-9]+\b/.test(hay) ||
+    /\bapt\.?\s*\w+/i.test(hay) ||
+    /\b(?:lot|unit)\s*#\s*\d+/i.test(hay)
+  );
+}
+
+function attachedStructureSignal(
+  combined: string,
+  context?: ResoPropertyClassificationContext,
+): boolean {
+  const extra = [context?.structureType, context?.architecturalStyle]
+    .filter(Boolean)
+    .map(String)
+    .join(" ");
+  const hay = `${combined} ${normalizeText(extra)}`.replace(/-/g, "_");
+  return ATTACHED_STRUCTURE_RE.test(hay);
+}
+
+function hasClearDetachedSfhSignal(
+  combined: string,
+  context?: ResoPropertyClassificationContext,
+): boolean {
+  const extra = [context?.structureType, context?.architecturalStyle]
+    .filter(Boolean)
+    .map(String)
+    .join(" ");
+  const hay = `${combined} ${normalizeText(extra)}`.replace(/-/g, "_");
+  return SFH_SUBTYPE_RE.test(hay) && /\bdetached\b/.test(hay);
+}
+
+function unitBlocksDetachedHouse(
+  combined: string,
+  context?: ResoPropertyClassificationContext,
+): boolean {
+  if (
+    !addressIndicatesUnitNumber(
+      context?.addressLine1,
+      context?.addressLine2,
+      context?.unitNumber,
+    )
+  ) {
+    return false;
+  }
+  return !hasClearDetachedSfhSignal(combined, context);
+}
+
 /**
  * Map RESO PropertyType + PropertySubType to coarse inventory buckets.
  * Townhouse/villa/condo are never collapsed into house.
  */
-export function mapResoPropertyType(raw: unknown, subType: unknown): string | null {
+export function mapResoPropertyType(
+  raw: unknown,
+  subType: unknown,
+  context?: ResoPropertyClassificationContext,
+): string | null {
   const sub = normalizeText(String(subType ?? "")).replace(/-/g, "_");
   const type = normalizeText(String(raw ?? "")).replace(/-/g, " ");
   const combined = `${type} ${sub}`.trim();
@@ -59,21 +133,63 @@ export function mapResoPropertyType(raw: unknown, subType: unknown): string | nu
   if (/\b(townhouse|town[\s_]?house|townhome|town[\s_]?home)\b/.test(combined)) return "townhouse";
   if (/\bvilla\b/.test(combined)) return "villa";
   if (/\b(condo|condominium|apartment)\b/.test(combined)) return "condo";
-  if (/\b(duplex|triplex|fourplex|multi[\s_]?family|multi[\s_]?family)\b/.test(combined)) return "multi_family";
-  if (/\b(commercial[\s_]?sale|commercial[\s_]?lease|commercial)\b/.test(combined)) return "commercial";
+  if (/\b(duplex|triplex|fourplex|multi[\s_]?family|multi[\s_]?family)\b/.test(combined)) {
+    return "multi_family";
+  }
+  if (/\b(commercial[\s_]?sale|commercial[\s_]?lease|commercial)\b/.test(combined)) {
+    return "commercial";
+  }
   if (/\bbusiness[\s_]?opportunity\b/.test(combined)) return "business_opportunity";
-  if (/\b(land|lot)\b/.test(combined) && !/\b(single|house|residence)\b/.test(combined)) return "land";
-  if (/\b(residential[\s_]?lease|lease[\s_]?only|rental)\b/.test(combined)) return "residential_lease";
+  if (/\b(land|lot)\b/.test(combined) && !/\b(single|house|residence)\b/.test(combined)) {
+    return "land";
+  }
 
-  if (SFH_SUBTYPE_RE.test(sub) || SFH_TYPE_RE.test(type)) return "house";
-  if (/\bresidence\b/.test(sub) && !/\btown\b/.test(sub)) return "house";
-  if (/\b(house|home)\b/.test(sub) && !/\btown\b/.test(sub)) return "house";
+  if (attachedStructureSignal(combined, context)) return "townhouse";
+
+  const isResidentialLease = /\b(residential[\s_]?lease|lease[\s_]?only|rental)\b/.test(combined);
+  if (isResidentialLease) {
+    if (unitBlocksDetachedHouse(combined, context)) return "townhouse";
+    return "residential_lease";
+  }
+
+  if (SFH_SUBTYPE_RE.test(sub) || SFH_TYPE_RE.test(type)) {
+    if (unitBlocksDetachedHouse(combined, context)) return "townhouse";
+    if (attachedStructureSignal(combined, context) && !/\bdetached\b/.test(combined)) {
+      return "townhouse";
+    }
+    return "house";
+  }
+
+  if (/\b(house|home)\b/.test(sub) && !/\btown\b/.test(sub) && /\bdetached\b/.test(combined)) {
+    return "house";
+  }
 
   if (/\bresidential\b/.test(type) && !NON_SFH_TYPE_RE.test(combined)) {
-    if (SFH_SUBTYPE_RE.test(sub)) return "house";
+    if (SFH_SUBTYPE_RE.test(sub)) {
+      if (unitBlocksDetachedHouse(combined, context)) return "townhouse";
+      if (attachedStructureSignal(combined, context)) return "townhouse";
+      return "house";
+    }
+    return null;
   }
 
   return raw ? normalizeText(String(raw)).replace(/\s+/g, "_") : null;
+}
+
+export function buildResoPropertyClassificationContext(
+  row: Record<string, unknown>,
+): ResoPropertyClassificationContext {
+  const unit = row.UnitNumber != null ? String(row.UnitNumber).trim() : "";
+  const line2 = unit ? (unit.startsWith("#") ? unit : `#${unit}`) : undefined;
+  const parts = [row.StreetNumber, row.StreetName, row.StreetSuffix].filter(Boolean).map(String);
+  const line1 = String(row.UnparsedAddress ?? "").trim() || parts.join(" ").trim() || undefined;
+  return {
+    structureType: row.StructureType,
+    architecturalStyle: row.ArchitecturalStyle,
+    unitNumber: row.UnitNumber,
+    addressLine1: line1,
+    addressLine2: line2,
+  };
 }
 
 const RENT_PROPERTY_TYPE_RE =
@@ -180,6 +296,8 @@ export type StoredListingRenormalizeInput = {
   priceCents: number | null;
   description: string | null;
   features: string[];
+  addressLine1?: string | null;
+  addressLine2?: string | null;
   listingDetails?: { pool?: boolean; listingTransactionType?: ResoListingTransactionType } | null;
 };
 
@@ -189,7 +307,10 @@ export function renormalizeStoredListingFields(input: StoredListingRenormalizeIn
   listingTransactionType: ResoListingTransactionType;
   pool: boolean | null;
 } {
-  const propertyType = mapResoPropertyType(input.propertyType, input.propertySubtype);
+  const propertyType = mapResoPropertyType(input.propertyType, input.propertySubtype, {
+    addressLine1: input.addressLine1,
+    addressLine2: input.addressLine2,
+  });
 
   const hay = normalizeText(
     [

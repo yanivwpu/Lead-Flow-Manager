@@ -9,6 +9,7 @@ import {
   extractResoStringList,
   extractResoPoolFlag,
   mapResoPropertyType,
+  buildResoPropertyClassificationContext,
   resolveResoListingTransactionType,
 } from "./resoListingClassification";
 
@@ -16,6 +17,7 @@ export {
   extractResoStringList,
   extractResoPoolFlag,
   mapResoPropertyType,
+  buildResoPropertyClassificationContext,
   resolveResoListingTransactionType,
 } from "./resoListingClassification";
 
@@ -76,9 +78,11 @@ export function normalizeResoMediaItems(media: unknown): NormalizedInventoryList
 export function buildResoAddress(row: Record<string, unknown>): NormalizedInventoryListing["address"] {
   const parts = [row.StreetNumber, row.StreetName, row.StreetSuffix].filter(Boolean).map(String);
   const line1 = String(row.UnparsedAddress ?? "").trim() || parts.join(" ").trim() || undefined;
+  const unit = row.UnitNumber != null ? String(row.UnitNumber).trim() : "";
+  const line2 = unit ? (unit.startsWith("#") ? unit : `#${unit}`) : undefined;
   return {
     line1: line1 || undefined,
-    line2: undefined,
+    line2,
     city: row.City != null ? String(row.City) : undefined,
     state: row.StateOrProvince != null ? String(row.StateOrProvince) : undefined,
     zip: row.PostalCode != null ? String(row.PostalCode) : undefined,
@@ -269,7 +273,11 @@ export function normalizeResoPropertyRow(
     baths:
       resoOptionalNumber(row.BathroomsTotalInteger) ??
       resoOptionalNumber(row.BathroomsFull),
-    propertyType: mapResoPropertyType(row.PropertyType, row.PropertySubType),
+    propertyType: mapResoPropertyType(
+      row.PropertyType,
+      row.PropertySubType,
+      buildResoPropertyClassificationContext(row),
+    ),
     propertySubtype: extractResoPropertySubtype(row),
     squareFeet: extractResoSquareFeet(row),
     yearBuilt: extractResoYearBuilt(row),
@@ -320,7 +328,11 @@ export function describeResoNormalizationFailure(
     beds: resoOptionalNumber(row.BedroomsTotal),
     baths:
       resoOptionalNumber(row.BathroomsTotalInteger) ?? resoOptionalNumber(row.BathroomsFull),
-    propertyType: mapResoPropertyType(row.PropertyType, row.PropertySubType),
+    propertyType: mapResoPropertyType(
+      row.PropertyType,
+      row.PropertySubType,
+      buildResoPropertyClassificationContext(row),
+    ),
     propertySubtype: extractResoPropertySubtype(row),
     squareFeet: extractResoSquareFeet(row),
     yearBuilt: extractResoYearBuilt(row),

@@ -76,7 +76,9 @@ export function buildDbInventoryMatchDiagnostics(input: {
       priceCents: s.priceCents,
       beds: s.beds,
       propertyType: s.propertyType,
+      propertySubtype: s.propertySubtype ?? null,
       resolvedType: s.resolvedType,
+      listingTransactionType: s.listingTransactionType ?? null,
       poolDetected: s.poolDetected,
       exclusionReason: s.exclusionReason,
       matched: s.matched,
@@ -122,9 +124,12 @@ export function formatFunnelExcludedSampleLine(sample: InventoryMatchFunnelExclu
       ? `$${Math.round(sample.priceCents / 100).toLocaleString("en-US")}`
       : "—";
   const type = sample.resolvedType ?? sample.propertyType ?? "—";
+  const rawSub = sample.propertySubtype ?? "—";
+  const txn = sample.listingTransactionType ?? "—";
   const reason =
     sample.exclusionReason ?? (sample.matched ? `MATCH score=${sample.score}` : "unknown");
-  return `${sample.providerListingId} · ${sample.address ?? sample.city ?? "—"} · ${price} · ${sample.beds ?? "?"}bd · ${type} · pool=${sample.poolDetected ? "yes" : "no"} · ${reason}`;
+  const tag = sample.matched ? "MATCH" : "EXCL";
+  return `${tag} ${sample.providerListingId} · ${sample.address ?? sample.city ?? "—"} · ${price} · ${sample.beds ?? "?"}bd · resolved=${type} rawSub=${rawSub} txn=${txn} · pool=${sample.poolDetected ? "yes" : "no"} · ${reason}`;
 }
 
 export function formatInventoryMatchRunTime(iso: string | null | undefined): string {

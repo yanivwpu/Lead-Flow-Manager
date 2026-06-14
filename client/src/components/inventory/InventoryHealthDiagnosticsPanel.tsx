@@ -199,7 +199,7 @@ export function InventoryHealthDiagnosticsPanel({
         {richSamples.length > 0 && (
           <div className="pt-1 space-y-1">
             <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400">
-              Excluded samples (DB, up to 20)
+              Match / exclusion samples (DB, up to 20)
             </p>
             {richSamples.slice(0, 20).map((sample) => (
               <p

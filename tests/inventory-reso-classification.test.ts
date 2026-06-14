@@ -3,6 +3,7 @@
  * Run: npx tsx tests/inventory-reso-classification.test.ts
  */
 import {
+  buildResoPropertyClassificationContext,
   extractResoPoolFlag,
   mapResoPropertyType,
   renormalizeStoredListingFields,
@@ -29,6 +30,30 @@ assert(mapResoPropertyType("Residential", "Condominium") === "condo", "Condo sta
 assert(
   mapResoPropertyType("Residential", "Single Family Residence") !== "townhouse",
   "SFR not townhouse",
+);
+
+const attachedLeaseCtx = buildResoPropertyClassificationContext({
+  PropertyType: "Residential Lease",
+  PropertySubType: "Townhouse",
+  StructureType: "Attached",
+  UnitNumber: "0",
+  UnparsedAddress: "111 SE 7th Ave #0",
+});
+assert(
+  mapResoPropertyType("Residential Lease", "Townhouse", attachedLeaseCtx) === "townhouse",
+  "residential lease townhome -> townhouse",
+);
+assert(
+  mapResoPropertyType("Residential Lease", "", attachedLeaseCtx) === "townhouse",
+  "residential lease + unit #0 + attached -> townhouse",
+);
+assert(
+  mapResoPropertyType("Residential", "", attachedLeaseCtx) === "townhouse",
+  "generic residential + unit #0 + attached -> townhouse not house",
+);
+assert(
+  mapResoPropertyType("Residential Lease", "Single Family Residence", attachedLeaseCtx) === "townhouse",
+  "unit #0 blocks SFR subtype from house",
 );
 
 assert(

@@ -106,6 +106,8 @@ export async function backfillStoredListingNormalizationForUser(
         priceCents: row.priceCents,
         description: row.description,
         features,
+        addressLine1: row.addressLine1,
+        addressLine2: row.addressLine2,
         listingDetails: existingDetails,
       });
 

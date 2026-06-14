@@ -11,7 +11,7 @@ import {
   resolveBuyerTransactionIntent,
   type BuyerTransactionIntent,
 } from "./listingTransactionIntent";
-import { mapResoPropertyType } from "./reso/resoListingClassification";
+import { mapResoPropertyType, addressIndicatesUnitNumber } from "./reso/resoListingClassification";
 import { geoConstraintsMatchScore } from "./buyerGeoConstraints";
 import { isMatchableInventoryStatus } from "./inventoryListingSchema";
 import {
@@ -113,15 +113,28 @@ function normalizeText(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+export type ListingPropertyTypeInput = {
+  propertyType?: string | null;
+  propertySubtype?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  textHint?: string | null;
+};
+
 export function normalizeListingPropertyType(
   propertyType: string | null | undefined,
   propertySubtype?: string | null,
   textHint?: string | null,
+  addressLine1?: string | null,
+  addressLine2?: string | null,
 ): string | null {
-  const mapped = mapResoPropertyType(propertyType, propertySubtype);
-  if (mapped === "house" || mapped === "condo" || mapped === "townhouse" || mapped === "villa" || mapped === "multi_family" || mapped === "land") {
-    return mapped;
-  }
+  const mapped = mapResoPropertyType(propertyType, propertySubtype, {
+    addressLine1,
+    addressLine2,
+  });
+  const canonical = new Set(["house", "condo", "townhouse", "villa", "multi_family", "land"]);
+  if (mapped && canonical.has(mapped)) return mapped;
+  if (mapped === "residential_lease") return mapped;
 
   const combined = [propertyType, propertySubtype].filter(Boolean).join(" ");
   if (combined) {
@@ -133,7 +146,8 @@ export function normalizeListingPropertyType(
     if (/\bland\b/.test(s)) return "land";
   }
 
-  if (textHint) {
+  const hasUnit = addressIndicatesUnitNumber(addressLine1, addressLine2);
+  if (textHint && !hasUnit) {
     const d = normalizeText(textHint);
     if (/\btownhouse\b|\btown[\s_]?home\b|\btownhome\b/.test(d)) return "townhouse";
     if (/\bcondo\b|\bapartment\b/.test(d)) return "condo";
@@ -145,10 +159,24 @@ export function normalizeListingPropertyType(
   return mapped ?? (combined ? normalizeText(combined).replace(/-/g, "_") : null);
 }
 
-/** Property type for matching — RESO fields first, then description/features. */
+/** Property type for matching — RESO fields first; description never upgrades attached/unit rows to house. */
 export function resolveListingPropertyType(listing: MatchListingInput): string | null {
   const hint = [listing.description, ...(listing.features ?? [])].filter(Boolean).join(" ");
-  return normalizeListingPropertyType(listing.propertyType, listing.propertySubtype, hint || null);
+  return normalizeListingPropertyType(
+    listing.propertyType,
+    listing.propertySubtype,
+    hint || null,
+    listing.addressLine1,
+    listing.addressLine2,
+  );
+}
+
+export function formatListingPropertyTypePassReason(listing: MatchListingInput): string {
+  const resolved = resolveListingPropertyType(listing);
+  const rawSub = listing.propertySubtype ?? "—";
+  const rawType = listing.propertyType ?? "—";
+  const txn = listing.listingDetails?.listingTransactionType ?? "unknown";
+  return `PASS resolved=${resolved ?? "—"} rawType=${rawType} rawSub=${rawSub} txn=${txn}`;
 }
 
 function titleCaseArea(s: string): string {
@@ -1141,7 +1169,9 @@ export type BuyInventoryFunnelAudit = {
     priceCents: number | null;
     beds: number | null;
     propertyType: string | null;
+    propertySubtype: string | null;
     resolvedType: string | null;
+    listingTransactionType: string | null;
     poolDetected: boolean;
     exclusionReason: string | null;
     matched: boolean;
@@ -1257,14 +1287,20 @@ export function auditBuySearchMatchFunnel(
     if (scoreListingAgainstCriteria(listing, criteria)) nScored += 1;
   }
 
+  const ranked = rankInventoryMatches(listings, criteria, rankLimit);
+  const totalMatches = countQualifyingInventoryMatches(listings, criteria);
+  let matchedSamplesAdded = 0;
+
   for (const listing of listings) {
     const scored = scoreListingAgainstCriteria(listing, criteria);
     const exclusionReason = getListingExclusionReason(listing, criteria);
     const labeled = exclusionReason ? labelExclusionReason(exclusionReason) : null;
     if (labeled) exclusionByReason[labeled] = (exclusionByReason[labeled] ?? 0) + 1;
 
+    const isMatch = !!scored && !exclusionReason;
     if (samples.length >= sampleLimit) continue;
-    if (scored && !labeled) continue;
+    if (!isMatch && !labeled) continue;
+    if (isMatch && matchedSamplesAdded >= 5) continue;
 
     samples.push({
       listingId: listing.id,
@@ -1274,16 +1310,16 @@ export function auditBuySearchMatchFunnel(
       priceCents: listing.priceCents,
       beds: listing.beds,
       propertyType: listing.propertyType,
+      propertySubtype: listing.propertySubtype ?? null,
       resolvedType: resolveListingPropertyType(listing),
+      listingTransactionType: listing.listingDetails?.listingTransactionType ?? null,
       poolDetected: listingHasPoolSignal(listing),
-      exclusionReason: labeled,
-      matched: !!scored,
+      exclusionReason: isMatch ? formatListingPropertyTypePassReason(listing) : labeled,
+      matched: isMatch,
       score: scored?.score ?? null,
     });
+    if (isMatch) matchedSamplesAdded += 1;
   }
-
-  const ranked = rankInventoryMatches(listings, criteria, rankLimit);
-  const totalMatches = countQualifyingInventoryMatches(listings, criteria);
 
   const steps: BuyInventoryFunnelStep[] = [
     { label: "Total loaded for matching", count: listings.length },

@@ -693,10 +693,13 @@ export function heuristicPatchFromTranscript(
       }
       const amountMatch = fragment.match(/([\d,.]+)\s*(k|m|million|mil)?/i);
       if (!amountMatch) continue;
-      const hasMoneyMarker = fragment.includes("$") || !!amountMatch[2];
-      if (!hasMoneyMarker) continue;
       const amount = parseBudgetAmount(amountMatch[1], amountMatch[2]);
-      if (amount != null) return amount;
+      if (amount == null) continue;
+      const hasMoneyMarker = fragment.includes("$") || !!amountMatch[2];
+      const hasRentContext = /\b(rent|rental|rentals|lease|for\s+rent|for\s+lease)\b/i.test(lower);
+      const looksLikeRentCap = hasRentContext && amount >= 500 && amount <= 50_000;
+      if (!hasMoneyMarker && !looksLikeRentCap) continue;
+      return amount;
     }
     return null;
   };
