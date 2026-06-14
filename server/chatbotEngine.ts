@@ -174,6 +174,8 @@ export type InboundChatbotArbitration = {
   reason: string;
 };
 
+import { detectHighConfidenceBookingIntent } from "@shared/bookingIntent";
+
 /**
  * Read-only: whether an active chatbot flow would own this inbound (same rules as
  * `triggerChatbotFlows` for keyword / new-chat / pending-button / cooldown), without executing flows.
@@ -182,6 +184,9 @@ export type InboundChatbotArbitration = {
 export async function evaluateChatbotInboundArbitration(
   ctx: TriggerContext
 ): Promise<InboundChatbotArbitration> {
+  if (detectHighConfidenceBookingIntent(ctx.message)) {
+    return { flowMatched: false, reason: "booking_fast_path_priority" };
+  }
   try {
     const dry = dryRunPendingButton(ctx);
     if (dry === "consume") {

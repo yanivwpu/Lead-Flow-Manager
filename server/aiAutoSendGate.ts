@@ -90,6 +90,14 @@ export function detectStrongAutoIntent(joinedInbound: string, lastInbound: strin
   if (!text) return false;
   const t = text.toLowerCase();
 
+  if (/\b(schedule|book)\b[^.?!]{0,80}\b(showing|viewing|tour|appointment|call|time)\b/i.test(t)) {
+    return true;
+  }
+  if (/\b(showing|viewing|tour)\b[^.?!]{0,80}\b(on|for)\b[^.?!]{0,40}\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow)\b/i.test(t)) {
+    return true;
+  }
+  if (/\blet'?s\s+(schedule|book)\b/i.test(t)) return true;
+
   // Urgency + concrete action (e.g. "send papers asap", "deposit today")
   const hasUrgency = /\b(asap|as\s*a\.?\s*s\.?\s*a\.?\s*p|urgent|urgently|right away|eod|end of day|immediately|today)\b/i.test(
     t,

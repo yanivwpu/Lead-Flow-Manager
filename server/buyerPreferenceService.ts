@@ -803,6 +803,17 @@ export function scheduleBuyerPreferenceExtraction(params: {
   } = params;
   const text = (inboundText || "").trim();
 
+  if (text.length > 0 && detectHighConfidenceBookingIntent(text)) {
+    logTrigger("extraction_skipped", {
+      contactId,
+      userId,
+      triggerSource,
+      reason: "booking_intent_fast_path",
+      textLen: text.length,
+    });
+    return;
+  }
+
   if (text.length > 0 && text.length < 12 && TRIVIAL_INBOUND_RE.test(text)) {
     logTrigger("extraction_skipped", {
       contactId,

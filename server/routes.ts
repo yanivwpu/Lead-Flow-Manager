@@ -120,6 +120,7 @@ import {
   routingShouldTriggerHandoff,
   stripSchedulingUrlsFromReply,
 } from "@shared/aiRouting";
+import { detectHighConfidenceBookingIntent } from "@shared/bookingIntent";
 import {
   scrapeGuidedWebsiteKnowledgePages,
   combineScrapedText,
@@ -2513,14 +2514,16 @@ export async function registerRoutes(
       // Trigger workflow automations (Pro feature) — centralized dispatcher
       const updatedChat = await storage.getChat(chat.id);
       if (updatedChat) {
+        const inboundBody = parsed.body || "";
+        const bookingIntent = detectHighConfidenceBookingIntent(inboundBody);
         dispatchInboundMessagingAutomation({
           userId,
           isNewChat,
           updatedChat,
-          messageBody: parsed.body || "",
+          messageBody: inboundBody,
           contact: inboxContact,
           conversationId: inboxConversation.id,
-          skipKeywordWorkflows: inboxChatbotWillFire,
+          skipKeywordWorkflows: inboxChatbotWillFire && !bookingIntent,
         }).catch((err) => console.error("[AutomationDispatcher] inbound workflows:", err));
         // W2 Financial Qualification Engine (Realtor Growth Engine)
         // chatbotWillFire was determined once inside processIncomingMessage —
@@ -3349,14 +3352,18 @@ export async function registerRoutes(
             await markMessageAsRead(user.id, incomingMessage.messageId);
 
             if (messages.length === 1 || incomingMessage.text) {
+              const metaInboundText = incomingMessage.text || "";
+              const metaBookingIntent = detectHighConfidenceBookingIntent(metaInboundText);
               dispatchInboundMessagingAutomation({
                 userId: user.id,
                 isNewChat: messages.length === 1,
                 updatedChat: chat,
-                messageBody: incomingMessage.text || "",
+                messageBody: metaInboundText,
                 contact: metaInboxContact ?? undefined,
                 conversationId: metaInboxConversationId ?? "",
-                skipKeywordWorkflows: (metaInboxResult as { chatbotWillFire: boolean } | null)?.chatbotWillFire ?? false,
+                skipKeywordWorkflows:
+                  ((metaInboxResult as { chatbotWillFire: boolean } | null)?.chatbotWillFire ?? false) &&
+                  !metaBookingIntent,
               }).catch((err) => console.error("[AutomationDispatcher] Meta inbound workflows:", err));
             }
 
@@ -10573,6 +10580,7 @@ export async function registerRoutes(
               const {
                 shouldRunBuyerPreferencePipeline,
                 syncBuyerPreferencesForInboundMessage,
+                readBuyerPreferenceProfile,
               } = await import("./buyerPreferenceService");
               const { buildBuyerPreferenceAiContext } = await import(
                 "@shared/buyerPreferenceDisplay"
@@ -10580,16 +10588,20 @@ export async function registerRoutes(
               const historyTurns = conversationHistory as Array<{ role: string; content?: string }>;
               const lastUserInbound =
                 historyTurns.filter((m) => m.role === "user").pop()?.content?.trim() || "";
+              const isBookingSuggestRoute =
+                aiRouting.decision === "BOOK_APPOINTMENT" && !aiRouting.needsRoutingClarification;
 
               const prefGate = await shouldRunBuyerPreferencePipeline(userId, contactForPrefs);
               const contextPatch: Record<string, unknown> = { ...(contactContext || {}) };
-              let profile = await syncBuyerPreferencesForInboundMessage({
-                contact: contactForPrefs,
-                inboundText: lastUserInbound,
-                conversationId: convForPrefs.id,
-              });
+              let profile = isBookingSuggestRoute
+                ? readBuyerPreferenceProfile(contactForPrefs)
+                : await syncBuyerPreferencesForInboundMessage({
+                    contact: contactForPrefs,
+                    inboundText: lastUserInbound,
+                    conversationId: convForPrefs.id,
+                  });
 
-              if (prefGate.ok) {
+              if (prefGate.ok && !isBookingSuggestRoute) {
                 const {
                   assessBuyerQualification,
                   formatQualificationContextForAi,

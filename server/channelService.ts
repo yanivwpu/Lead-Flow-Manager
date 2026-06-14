@@ -11,6 +11,7 @@ import {
   isConversationHandoffActive,
 } from "@shared/handoffActivity";
 import { matchesHandoffKeyword } from "@shared/aiRouting";
+import { detectHighConfidenceBookingIntent } from "@shared/bookingIntent";
 import { db } from "../drizzle/db";
 import { messages as messagesTbl } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
@@ -1301,15 +1302,32 @@ class ChannelService {
       message: content,
       isNewConversation,
     });
-    const chatbotWillFire = chatbotArb.flowMatched;
+    const bookingIntent = detectHighConfidenceBookingIntent(content);
+    const chatbotWillFire = chatbotArb.flowMatched && !bookingIntent;
     console.info("[INBOUND_AUTOMATION]", {
       tag: "channel_inbound",
       conversationId: conversation.id,
       contactId: contact.id,
       flowMatched: chatbotArb.flowMatched,
-      aiAutoSuppressed: chatbotArb.flowMatched,
-      reason: chatbotArb.reason,
+      bookingIntent,
+      chatbotWillFire,
+      aiAutoSuppressed: chatbotWillFire,
+      reason: bookingIntent ? "booking_fast_path_priority" : chatbotArb.reason,
     });
+
+    if (bookingIntent) {
+      void import("./bookingFastPath").then(({ queueBookingFastPathReply }) =>
+        queueBookingFastPathReply({
+          userId,
+          contact,
+          conversation,
+          inboundText: content,
+          messageId: message.id,
+          messageAt: message.createdAt ?? new Date(),
+          channel,
+        }),
+      );
+    }
 
     // Trigger chatbot flows asynchronously (does not block webhook response)
     triggerChatbotFlows({
