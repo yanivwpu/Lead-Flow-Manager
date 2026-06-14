@@ -12,6 +12,10 @@ import {
   isExplicitPropertyTypeEvidence,
   stripSfhFromMustHaves,
 } from "./buyerPreferencePropertyTypeRelax";
+import {
+  isPlausibleSaleBudgetAmount,
+  isRentIntentEvidence,
+} from "./buyerRentIntent";
 
 const CONTRADICTION_RE =
   /\b(actually|instead|no longer|don't need|do not need|not anymore|changed my mind|rather than)\b/i;
@@ -117,8 +121,8 @@ function isBudgetRangeEvidence(evidence: string | undefined): boolean {
   return !!evidence && /budget range|between|range in message/i.test(evidence);
 }
 
-function isPlausibleSaleBudgetAmount(n: number): boolean {
-  return Number.isFinite(n) && n >= 10_000;
+function isPlausibleSaleBudgetAmountLocal(n: number): boolean {
+  return isPlausibleSaleBudgetAmount(n);
 }
 
 function isPlausibleRentBudgetAmount(n: number): boolean {
@@ -136,11 +140,7 @@ function budgetPlausibilityMode(
 }
 
 function isPlausibleBudgetAmount(n: number, mode: "sale" | "rent"): boolean {
-  return mode === "rent" ? isPlausibleRentBudgetAmount(n) : isPlausibleSaleBudgetAmount(n);
-}
-
-function isRentIntentEvidence(evidence: string | undefined): boolean {
-  return !!evidence && /rent intent|for rent|lease|rental/i.test(evidence);
+  return mode === "rent" ? isPlausibleRentBudgetAmount(n) : isPlausibleSaleBudgetAmountLocal(n);
 }
 
 function isBuyIntentEvidence(evidence: string | undefined): boolean {
@@ -184,6 +184,13 @@ const PURCHASE_FEATURE_KEYS = [
 
 /** Rental search replaces conflicting purchase-only preferences instead of stacking them. */
 export function stripConflictingSalePreferences(profile: BuyerPreferenceProfile): void {
+  if (typeof profile.priceMin?.value === "number" && isPlausibleSaleBudgetAmount(profile.priceMin.value)) {
+    delete profile.priceMin;
+  }
+  if (typeof profile.priceMax?.value === "number" && isPlausibleSaleBudgetAmount(profile.priceMax.value)) {
+    delete profile.priceMax;
+  }
+
   for (const key of PURCHASE_FEATURE_KEYS) {
     delete (profile as Record<string, unknown>)[key];
   }

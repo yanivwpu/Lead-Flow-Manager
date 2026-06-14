@@ -208,17 +208,19 @@ export function buildBuyerPreferenceChips(raw: unknown): BuyerPreferenceChip[] {
 
   if (profile.priceMin || profile.priceMax) {
     const { priceMin: minN, priceMax: maxN } = resolveMatchingBudgetBounds(profile);
+    const isRent = profile.transactionIntent?.value === "rent";
+    const rentSuffix = isRent ? "/mo" : "";
     const hasMax = maxN != null && maxN > 0;
     const hasMin = minN != null && minN > 0;
 
     if (hasMax || hasMin) {
       let text: string;
       if (hasMax && hasMin) {
-        text = `${formatMoneyShort(minN!)}–${formatMoneyShort(maxN!)}`;
+        text = `${formatMoneyShort(minN!)}–${formatMoneyShort(maxN!)}${rentSuffix}`;
       } else if (hasMax) {
-        text = `Up to ${formatMoneyShort(maxN!)}`;
+        text = `Up to ${formatMoneyShort(maxN!)}${rentSuffix}`;
       } else {
-        text = `From ${formatMoneyShort(minN!)}`;
+        text = `From ${formatMoneyShort(minN!)}${rentSuffix}`;
       }
       const src =
         profile.priceMax?.source === "explicit" || profile.priceMin?.source === "explicit"

@@ -5,7 +5,7 @@
 import { detectShowMeAllPropertyTypeRelaxation } from "./buyerPreferencePropertyTypeRelax";
 
 const PROPERTY_TYPE_SIGNAL_RE =
-  /\b(sfh|single[\s-]?family(?:\s+home)?|condo(?:minium)?s?|townhouse|town[\s-]?house|multi[\s-]?family|houses?|homes?|land)\b/i;
+  /\b(sfh|single[\s-]?family(?:\s+home)?|condo(?:minium)?s?|apartments?|townhouse|town[\s-]?house|multi[\s-]?family|houses?|homes?|land)\b/i;
 
 const LOCATION_SIGNAL_RE =
   /\b(?:in|near|around)\s+[a-z][a-z\s]{1,40}\b|\b(?:east|west|north|south)\s+of\b|\b(?:federal|us\s*1|highway|hwy|boulevard|blvd)\b/i;
@@ -16,7 +16,8 @@ const BED_SIGNAL_RE = /\b\d+\s*[- ]?\s*bed|\b\d+\s*\/\s*\d+/i;
 const BED_CORRECTION_SIGNAL_RE =
   /\b(too big|too many bed|instead|only|is better|show me\s+\d+\s*\/\s*\d+)/i;
 const BATH_SIGNAL_RE = /\b\d+(?:\.\d+)?\s*[- ]?\s*bath/i;
-const BUDGET_SIGNAL_RE = /\$\s*[\d,.]+|\bbudget\b/i;
+const BUDGET_SIGNAL_RE =
+  /\$\s*[\d,.]+|\bbudget\b|\bbetween\s+\d|\d+\s*-\s*\d+\s+dollars?|\d+\s+dollars?\b/i;
 
 /** True when inbound text looks like a listing search / criteria change. */
 export function hasInventoryPreferenceSignals(text: string): boolean {
@@ -44,6 +45,7 @@ export function detectPreferenceArrayReplacements(text: string): PreferenceArray
   if (PROPERTY_TYPE_SIGNAL_RE.test(t)) out.push("propertyTypes");
   if (detectShowMeAllPropertyTypeRelaxation(t)) out.push("propertyTypes");
   if (LOCATION_SIGNAL_RE.test(t)) out.push("targetAreas");
+  if (/\banywhere\b/i.test(t)) out.push("targetAreas");
   return [...new Set(out)];
 }
 

@@ -16,6 +16,7 @@ import {
   SHOW_ME_ALL_PROPERTY_RELAX_EVIDENCE,
 } from "./buyerPreferencePropertyTypeRelax";
 import { parseGeoConstraintsFromText } from "./inventory/buyerGeoConstraints";
+import { inferRentIntentFromMessage, messageClearsAreaFilters } from "./buyerRentIntent";
 
 const PATCH_FIELD_KEYS = [
   "targetAreas",
@@ -648,7 +649,7 @@ export function heuristicPatchFromTranscript(
 
   const normalizedForBudget = text.replace(/,/g, "");
   const betweenRangeM = normalizedForBudget.match(
-    /\bbetween\s+\$?\s*([\d.]+)\s*(k|m|million|mil)?\s*(?:and|-|–|to)\s+\$?\s*([\d.]+)\s*(k|m|million|mil)?/i,
+    /\bbetween\s+\$?\s*([\d.]+)\s*(k|m|million|mil)?\s*(?:and\s+|[-–]|to\s+)\$?\s*([\d.]+)\s*(k|m|million|mil)?(?:\s+dollars?)?/i,
   );
   const dashRangeM = normalizedForBudget.match(
     /\$\s*([\d.]+)\s*(k|m|million|mil)?\s*(?:-|–|to)\s*\$?\s*([\d.]+)\s*(k|m|million|mil)?/i,
@@ -714,6 +715,23 @@ export function heuristicPatchFromTranscript(
         };
       }
     }
+  }
+
+  if (!patch.transactionIntent && inferRentIntentFromMessage(text, patch)) {
+    patch.transactionIntent = {
+      value: "rent",
+      ...inf(0.9, "rent intent inferred from apartment and monthly budget"),
+    };
+  }
+
+  if (messageClearsAreaFilters(lower)) {
+    patch.targetAreas = {
+      value: [],
+      source: "explicit",
+      confidence: 0.95,
+      updatedAt: now,
+      evidence: "anywhere clears area in message",
+    };
   }
 
   const upToSqftM = lower.match(

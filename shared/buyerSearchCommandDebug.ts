@@ -33,13 +33,17 @@ export function describeActiveSearchFilters(
   }
 
   const budgetLabel = formatBuyerPreferenceBudgetLabel(profile);
+  const isRent = c.transactionIntent === "rent";
+  const rentSuffix = isRent ? "/mo" : "";
   if (budgetLabel) {
-    parts.push(`Budget: ${budgetLabel}`);
+    parts.push(`Budget: ${budgetLabel}${rentSuffix && !budgetLabel.includes("/mo") ? rentSuffix : ""}`);
   } else if (budget.priceMax != null || budget.priceMin != null) {
     if (budget.priceMin != null && budget.priceMax != null) {
-      parts.push(`Budget: $${budget.priceMin.toLocaleString()}–$${budget.priceMax.toLocaleString()}`);
+      parts.push(
+        `Budget: $${budget.priceMin.toLocaleString()}–$${budget.priceMax.toLocaleString()}${rentSuffix}`,
+      );
     } else if (budget.priceMax != null) {
-      parts.push(`Budget: up to $${budget.priceMax.toLocaleString()}`);
+      parts.push(`Budget: up to $${budget.priceMax.toLocaleString()}${rentSuffix}`);
     }
   }
 

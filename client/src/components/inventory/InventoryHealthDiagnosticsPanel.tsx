@@ -137,6 +137,11 @@ export function InventoryHealthDiagnosticsPanel({
             <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400">
               Persisted profile (source of truth)
             </p>
+            <DiagnosticRow
+              label="transactionType"
+              value={profile.transactionIntent === "rent" ? "rent" : profile.transactionIntent === "buy" ? "buy" : profile.transactionIntent ?? "—"}
+            />
+            <DiagnosticRow label="priceMin" value={profile.priceMin ?? "—"} />
             <DiagnosticRow label="priceMax" value={profile.priceMax ?? "—"} />
             <DiagnosticRow label="bedsMin" value={profile.bedsMin ?? "—"} />
             <DiagnosticRow

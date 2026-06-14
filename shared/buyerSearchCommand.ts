@@ -21,6 +21,12 @@ import {
   isShowMeAllPropertyRelaxEvidence,
 } from "./buyerPreferencePropertyTypeRelax";
 import { stripStaleHardGatesFromPatch } from "./buyerPreferenceMerge";
+import {
+  inferRentIntentFromMessage,
+  isBuyToRentPivot,
+  isBuyToRentPivotReplacement,
+  messageClearsAreaFilters,
+} from "./buyerRentIntent";
 
 export type BuyerSearchCommandKind =
   | "new_search"
@@ -73,7 +79,12 @@ function mentionsPoolOptional(text: string): boolean {
   return POOL_OPTIONAL_RE.test(text);
 }
 
-function isRefinementCarryoverMessage(text: string): boolean {
+function isRefinementCarryoverMessage(
+  text: string,
+  patch?: BuyerPreferenceExtractionPatch,
+  current?: BuyerPreferenceProfile,
+): boolean {
+  if (patch && current && isBuyToRentPivot(current, patch, text)) return false;
   if (mentionsPoolOptional(text)) return false;
   if (EXPLICIT_POOL_REQUIRED_RE.test(text)) return true;
   return REFINEMENT_CARRYOVER_RE.test(text);
@@ -89,7 +100,7 @@ export function isFullReplacementSearch(
   current?: BuyerPreferenceProfile,
 ): boolean {
   if (!current || !profileHasCriteria(current)) return false;
-  if (isRefinementCarryoverMessage(text)) return false;
+  if (isRefinementCarryoverMessage(text, patch, current)) return false;
   if (isCorrectionMessage(text)) return false;
   if (isFollowupRequestMessage(text)) return false;
   if (detectShowMeAllPropertyTypeRelaxation(text)) return false;
@@ -148,11 +159,16 @@ function detectTransactionPivot(
   current: BuyerPreferenceProfile | undefined,
 ): boolean {
   const incoming = patch.transactionIntent?.value;
-  if (!incoming || !current?.transactionIntent?.value) return false;
+  if (!incoming || !current?.transactionIntent?.value) {
+    if (incoming === "rent" && isBuyToRentPivot(current, patch, text)) return true;
+    return false;
+  }
   if (incoming === current.transactionIntent.value) return false;
   const lower = text.toLowerCase();
   if (incoming === "buy" && BUY_INTENT_RE.test(lower)) return true;
-  if (incoming === "rent" && RENT_INTENT_RE.test(lower)) return true;
+  if (incoming === "rent" && (RENT_INTENT_RE.test(lower) || inferRentIntentFromMessage(text, patch))) {
+    return true;
+  }
   return false;
 }
 
@@ -272,6 +288,9 @@ function replaceArrayFieldsForCommand(
     if ((patch.targetAreas?.value?.length ?? 0) > 0 && !detected.includes("targetAreas")) {
       detected.push("targetAreas");
     }
+    if (messageClearsAreaFilters(text) && !detected.includes("targetAreas")) {
+      detected.push("targetAreas");
+    }
     if (
       ((patch.propertyTypes?.value?.length ?? 0) > 0 || hasExplicitPropertyTypeConstraint(text)) &&
       !detected.includes("propertyTypes")
@@ -281,6 +300,14 @@ function replaceArrayFieldsForCommand(
   }
   if (kind === "broaden_search" || kind === "narrow_search") {
     if (!detected.includes("propertyTypes")) detected.push("propertyTypes");
+  }
+  if (kind === "transaction_pivot") {
+    if (!detected.includes("propertyTypes") && (patch.propertyTypes?.value?.length ?? 0) > 0) {
+      detected.push("propertyTypes");
+    }
+    if (messageClearsAreaFilters(text) && !detected.includes("targetAreas")) {
+      detected.push("targetAreas");
+    }
   }
   return [...new Set(detected)];
 }
@@ -309,7 +336,9 @@ export function parseBuyerSearchCommand(
   const patch = hasInventoryPreferenceSignals(text) ? heuristicPatchFromInboundText(text) : {};
   const signals = collectSignals(text, patch);
   const kind = classifyKind(text, patch, currentProfile);
-  const fullReplacement = isFullReplacementSearch(text, patch, currentProfile);
+  const buyToRentPivot = isBuyToRentPivotReplacement(text, patch, currentProfile);
+  const fullReplacement =
+    isFullReplacementSearch(text, patch, currentProfile) || buyToRentPivot;
   const replaceArrayFields = replaceArrayFieldsForCommand(text, kind, patch);
   const lockedFields = lockedFieldsFromPatch(patch, kind);
 
