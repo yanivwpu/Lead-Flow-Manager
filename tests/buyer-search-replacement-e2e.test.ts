@@ -34,11 +34,14 @@ async function main() {
     return;
   }
 
+  let userId: string | undefined;
+  try {
   const user = await storage.createUser({
     email: `replacement-e2e-${Date.now()}@test.com`,
     password: "test123",
     name: "Replacement E2E",
   });
+  userId = user.id;
 
   const contact = await storage.createContact({
     userId: user.id,
@@ -221,6 +224,21 @@ async function main() {
   assert(afterLlmCriteria.hardRequirePool === false, "after simulated LLM: hardRequirePool false");
 
   console.log("buyer-search-replacement-e2e.test.ts: OK");
+  } finally {
+    if (userId) await teardown(userId);
+  }
+}
+
+async function teardown(userId: string) {
+  try {
+    const { db } = await import("../drizzle/db");
+    const { users } = await import("@shared/schema");
+    const { eq } = await import("drizzle-orm");
+    await db.delete(users).where(eq(users.id, userId));
+    console.log("[Teardown] Test user deleted");
+  } catch (err) {
+    console.warn("[Teardown] Cleanup failed (non-fatal):", err);
+  }
 }
 
 main().catch((err) => {
