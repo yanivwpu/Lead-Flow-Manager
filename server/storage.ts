@@ -348,6 +348,12 @@ export interface IStorage {
     profile: Record<string, unknown>,
     options?: UpdateContactOptions,
   ): Promise<Contact | undefined>;
+  /** Explicit jsonb write for seller_preference_profile. */
+  updateContactSellerPreferenceProfile(
+    contactId: string,
+    profile: Record<string, unknown>,
+    options?: UpdateContactOptions,
+  ): Promise<Contact | undefined>;
   deleteContact(id: string): Promise<void>;
   mergeContacts(targetId: string, sourceId: string): Promise<Contact>;
   searchContacts(userId: string, query: string, limit?: number): Promise<Contact[]>;
@@ -2430,6 +2436,23 @@ export class DbStorage implements IStorage {
     }
 
     return after;
+  }
+
+  async updateContactSellerPreferenceProfile(
+    contactId: string,
+    profile: Record<string, unknown>,
+    _options?: UpdateContactOptions,
+  ): Promise<Contact | undefined> {
+    const profileJson = JSON.parse(JSON.stringify(profile)) as Record<string, unknown>;
+    const result = await db
+      .update(contacts)
+      .set({
+        sellerPreferenceProfile: profileJson,
+        updatedAt: new Date(),
+      })
+      .where(eq(contacts.id, contactId))
+      .returning();
+    return result[0];
   }
 
   async updateContact(

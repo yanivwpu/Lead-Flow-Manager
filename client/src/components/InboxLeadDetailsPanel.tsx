@@ -43,6 +43,7 @@ import {
   type NextBestActionBehavior,
 } from "@shared/customerInsights";
 import { resolveAiRouting } from "@shared/aiRouting";
+import { classifySellerIntent } from "@shared/sellerIntent";
 import {
   evaluatePresetCampaignEnrollability,
   formatCampaignEnrollmentSubtitle,
@@ -1711,6 +1712,11 @@ export function InboxLeadDetailsPanel({
     const hasDelayLaterSignal =
       /\blater\b|\bnot now\b|\bnext week\b|\bnext month\b|\bbusy\b|\bmaybe later\b/.test(lastMsgText);
 
+    const sellerIntent = classifySellerIntent({
+      inboundText: lastMsgText || inboundText,
+      hasSellerProfile: Boolean((contact as { sellerPreferenceProfile?: unknown }).sellerPreferenceProfile),
+    });
+
     return buildContextualNextActions({
       handoffActive,
       hasShowingIntent: hasBookingIntent,
@@ -1732,6 +1738,7 @@ export function InboxLeadDetailsPanel({
       aiRoutingDecision: aiRouting.decision,
       needsRoutingClarification: aiRouting.needsRoutingClarification,
       enrollableCampaignCount,
+      sellerIntent,
     });
   }, [
     handoffActive,

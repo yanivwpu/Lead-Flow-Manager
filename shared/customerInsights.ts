@@ -14,6 +14,8 @@ import {
   MIN_HOT_TAG_SCORE,
 } from "./leadQualification";
 import { resolveAiRouting, type AiRoutingDecision } from "./aiRouting";
+import type { SellerIntentClass } from "./sellerIntent";
+import { isPureSellerIntent } from "./sellerIntent";
 
 export type CustomerInsightContext = {
   reasons?: string[];
@@ -182,6 +184,8 @@ export type ContextualActionContext = {
   needsRoutingClarification?: boolean;
   /** Count of active preset campaigns this contact can enroll in from the current channel */
   enrollableCampaignCount?: number;
+  /** Seller Lead Engine — intent class from latest inbound */
+  sellerIntent?: SellerIntentClass | null;
 };
 
 type ActionCandidate = { label: string; rank: number; group: string };
@@ -189,6 +193,28 @@ type ActionCandidate = { label: string; rank: number; group: string };
 function collectContextualActionCandidates(ctx: ContextualActionContext): ActionCandidate[] {
   const actions: ActionCandidate[] = [];
   const timing = ctx.showingTimingPhrase?.trim();
+  const sellerIntent = ctx.sellerIntent ?? null;
+  const pureSeller = isPureSellerIntent(sellerIntent);
+
+  if (pureSeller) {
+    if (sellerIntent === "seller_valuation") {
+      actions.push({ label: "Request CMA Information", rank: 97, group: "seller_cma" });
+      actions.push({ label: "Request Property Address", rank: 95, group: "seller_address" });
+    } else if (sellerIntent === "seller_listing_consultation" || sellerIntent === "seller_new") {
+      actions.push({ label: "Book Listing Consultation", rank: 98, group: "seller_consult" });
+      actions.push({ label: "Request Property Address", rank: 94, group: "seller_address" });
+    } else {
+      actions.push({ label: "Book Listing Consultation", rank: 92, group: "seller_consult" });
+    }
+    actions.push({ label: "Assign Listing Agent", rank: 88, group: "seller_assign" });
+    actions.push({ label: "Follow Up", rank: 50, group: "seller_followup" });
+    return dedupeActionCandidates(actions).slice(0, 3);
+  }
+
+  if (sellerIntent === "seller_and_buyer") {
+    actions.push({ label: "Book Listing Consultation", rank: 90, group: "seller_consult" });
+    actions.push({ label: "Request Property Address", rank: 86, group: "seller_address" });
+  }
 
   const routing =
     ctx.inboundText?.trim()
@@ -313,8 +339,10 @@ export type ContextualNextAction = {
 export function behaviorForActionGroup(group: string): NextBestActionBehavior {
   switch (group) {
     case "showing":
+    case "seller_consult":
       return "book";
     case "followup":
+    case "seller_followup":
       return "follow";
     case "campaign":
       return "campaign";
@@ -323,6 +351,9 @@ export function behaviorForActionGroup(group: string): NextBestActionBehavior {
     case "showing_times":
     case "financing":
     case "contact":
+    case "seller_cma":
+    case "seller_address":
+    case "seller_assign":
       return "composer";
     default:
       return "composer";

@@ -12,6 +12,7 @@ import {
 } from "@shared/handoffActivity";
 import { matchesHandoffKeyword } from "@shared/aiRouting";
 import { detectHighConfidenceBookingIntent } from "@shared/bookingIntent";
+import { detectSellerConsultationBookingIntent, classifySellerIntent, isPureSellerIntent } from "@shared/sellerIntent";
 import { db } from "../drizzle/db";
 import { messages as messagesTbl } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
@@ -1195,16 +1196,39 @@ class ChannelService {
           }),
         );
       } else {
-        void import("./buyerPreferenceService").then(({ scheduleBuyerPreferenceExtraction }) =>
-          scheduleBuyerPreferenceExtraction({
-            userId,
-            contactId: contact.id,
-            conversationId: conversation.id,
-            messageId: message.id,
-            inboundText: content,
-            triggerSource,
-          }),
-        );
+        void import("./sellerPreferenceService").then(async ({ resolveSellerIntentForContact, shouldSkipBuyerPipelineForSellerLead }) => {
+          const sellerIntent = resolveSellerIntentForContact(contact, inboundTrimmed);
+          const skipBuyer = shouldSkipBuyerPipelineForSellerLead(sellerIntent);
+          if (skipBuyer) {
+            const { syncSellerPreferencesForInboundMessage } = await import("./sellerPreferenceService");
+            await syncSellerPreferencesForInboundMessage({
+              contact,
+              inboundText: inboundTrimmed,
+              conversationId: conversation.id,
+              sellerIntent,
+            }).catch(() => {});
+            return;
+          }
+          void import("./buyerPreferenceService").then(({ scheduleBuyerPreferenceExtraction }) =>
+            scheduleBuyerPreferenceExtraction({
+              userId,
+              contactId: contact.id,
+              conversationId: conversation.id,
+              messageId: message.id,
+              inboundText: content,
+              triggerSource,
+            }),
+          );
+          if (sellerIntent === "seller_and_buyer") {
+            const { syncSellerPreferencesForInboundMessage } = await import("./sellerPreferenceService");
+            await syncSellerPreferencesForInboundMessage({
+              contact,
+              inboundText: inboundTrimmed,
+              conversationId: conversation.id,
+              sellerIntent,
+            }).catch(() => {});
+          }
+        });
       }
     }
 
@@ -1302,7 +1326,8 @@ class ChannelService {
       message: content,
       isNewConversation,
     });
-    const bookingIntent = detectHighConfidenceBookingIntent(content);
+    const bookingIntent =
+      detectHighConfidenceBookingIntent(content) || detectSellerConsultationBookingIntent(content);
     const chatbotWillFire = chatbotArb.flowMatched && !bookingIntent;
     console.info("[INBOUND_AUTOMATION]", {
       tag: "channel_inbound",

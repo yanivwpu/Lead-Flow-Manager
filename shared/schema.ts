@@ -1001,6 +1001,8 @@ export const contacts = pgTable("contacts", {
   leadScore: integer("lead_score"),
   /** RGE buyer preference memory (Inventory Intelligence Phase 1) */
   buyerPreferenceProfile: jsonb("buyer_preference_profile").notNull().default(sql`'{}'::jsonb`),
+  /** Seller Lead Engine Phase 1 — listing intake separate from buyer preferences */
+  sellerPreferenceProfile: jsonb("seller_preference_profile").notNull().default(sql`'{}'::jsonb`),
   notes: text("notes").default(""),
   
   // Follow-up

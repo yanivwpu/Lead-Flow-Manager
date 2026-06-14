@@ -1,5 +1,6 @@
 import type { Contact, Conversation } from "@shared/schema";
 import { detectHighConfidenceBookingIntent, bookingIntentRouteLabel } from "@shared/bookingIntent";
+import { detectSellerConsultationBookingIntent } from "@shared/sellerIntent";
 import { storage } from "./storage";
 import { channelService } from "./channelService";
 import {
@@ -96,7 +97,7 @@ export async function tryBookingFastPathReply(params: BookingFastPathParams): Pr
     route: bookingIntentRouteLabel(),
   });
 
-  if (!detectHighConfidenceBookingIntent(inboundText)) {
+  if (!detectHighConfidenceBookingIntent(inboundText) && !detectSellerConsultationBookingIntent(inboundText)) {
     logBookingReplyTrace({
       stage: "skipped",
       userId,

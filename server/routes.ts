@@ -10591,17 +10591,59 @@ export async function registerRoutes(
               const isBookingSuggestRoute =
                 aiRouting.decision === "BOOK_APPOINTMENT" && !aiRouting.needsRoutingClarification;
 
+              const {
+                shouldRunSellerPreferencePipeline,
+                syncSellerPreferencesForInboundMessage,
+                buildSellerPreferenceAiContext,
+                shouldSkipBuyerPipelineForSellerLead,
+                readSellerPreferenceProfile,
+              } = await import("./sellerPreferenceService");
+              const sellerGate = await shouldRunSellerPreferencePipeline(
+                userId,
+                contactForPrefs,
+                lastUserInbound,
+              );
+              const skipBuyerForSeller = shouldSkipBuyerPipelineForSellerLead(sellerGate.sellerIntent);
+
               const prefGate = await shouldRunBuyerPreferencePipeline(userId, contactForPrefs);
               const contextPatch: Record<string, unknown> = { ...(contactContext || {}) };
+
+              if (sellerGate.ok && lastUserInbound) {
+                const sellerProfile = isBookingSuggestRoute
+                  ? readSellerPreferenceProfile(contactForPrefs)
+                  : await syncSellerPreferencesForInboundMessage({
+                      contact: contactForPrefs,
+                      inboundText: lastUserInbound,
+                      conversationId: convForPrefs.id,
+                      sellerIntent: sellerGate.sellerIntent,
+                    });
+                const { assessSellerQualification, formatSellerQualificationContextForAi } =
+                  await import("@shared/sellerQualification");
+                const sellerQualification = assessSellerQualification({
+                  profile: sellerProfile,
+                  inboundText: lastUserInbound,
+                  sellerIntent: sellerGate.sellerIntent,
+                });
+                contextPatch.sellerQualificationContext =
+                  formatSellerQualificationContextForAi(sellerQualification);
+                contextPatch.sellerIntent = sellerGate.sellerIntent;
+                const sellerAiCtx = buildSellerPreferenceAiContext(sellerProfile);
+                if (sellerAiCtx.sellerPreferences) {
+                  contextPatch.sellerPreferences = sellerAiCtx.sellerPreferences;
+                }
+              }
+
               let profile = isBookingSuggestRoute
                 ? readBuyerPreferenceProfile(contactForPrefs)
-                : await syncBuyerPreferencesForInboundMessage({
-                    contact: contactForPrefs,
-                    inboundText: lastUserInbound,
-                    conversationId: convForPrefs.id,
-                  });
+                : skipBuyerForSeller
+                  ? readBuyerPreferenceProfile(contactForPrefs)
+                  : await syncBuyerPreferencesForInboundMessage({
+                      contact: contactForPrefs,
+                      inboundText: lastUserInbound,
+                      conversationId: convForPrefs.id,
+                    });
 
-              if (prefGate.ok && !isBookingSuggestRoute) {
+              if (prefGate.ok && !isBookingSuggestRoute && !skipBuyerForSeller) {
                 const {
                   assessBuyerQualification,
                   formatQualificationContextForAi,
