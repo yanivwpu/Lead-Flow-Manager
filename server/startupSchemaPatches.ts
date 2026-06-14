@@ -11,6 +11,10 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
     sql: `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS buyer_preference_profile jsonb NOT NULL DEFAULT '{}'::jsonb`,
   },
   {
+    tag: "0042_contacts_seller_preference_profile",
+    sql: `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS seller_preference_profile jsonb NOT NULL DEFAULT '{}'::jsonb`,
+  },
+  {
     tag: "0038_inventory_listing_flyer_fields",
     sql: [
       `ALTER TABLE inventory_listings ADD COLUMN IF NOT EXISTS square_feet integer`,
