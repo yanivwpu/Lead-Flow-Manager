@@ -14,6 +14,7 @@ import {
   isCanceledCalendlyStatus,
   normalizeCalendlyStatus,
 } from "@shared/calendlyAppointmentDedup";
+import {
   calendlySyncModeConfigPatch,
   resolveCalendlySyncModeFromConfig,
   type CalendlySyncMode,
