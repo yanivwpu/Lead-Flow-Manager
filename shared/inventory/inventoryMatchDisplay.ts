@@ -58,7 +58,15 @@ export function formatInventoryMatchSummaryForAi(input: InventoryMatchAiSummaryI
     return "";
   }
 
-  if (input.matchCount <= 0 || input.matches.length === 0) return "";
+  if (input.matchCount <= 0 || input.matches.length === 0) {
+    if (level === "high") {
+      return `Matching inventory (internal — buyer qualification is HIGH, ZERO MATCHES):
+- No listings currently match the active search criteria
+- Do NOT ask financing, pre-approval, or timeline questions
+- Suggest relaxing area, budget, or property type per reply direction in buyerQualificationContext`;
+    }
+    return "";
+  }
 
   const location = formatLocationPhrase(input.matches, input.buyerAreas);
 

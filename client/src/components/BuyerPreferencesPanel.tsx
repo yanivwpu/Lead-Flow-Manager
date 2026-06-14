@@ -4,7 +4,7 @@ import { scheduleInventoryMatchesRefetch } from "@/lib/inventoryMatchesQuery";
 import { Pencil, RefreshCw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  buildBuyerPreferenceChips,
+  buildBuyerPreferenceSearchChips,
   type BuyerPreferenceChip,
 } from "@shared/buyerPreferenceDisplay";
 import {
@@ -45,7 +45,7 @@ type BuyerPreferencesApiResponse = {
 };
 
 function chipsFromRaw(raw: unknown): BuyerPreferenceChip[] {
-  return buildBuyerPreferenceChips(raw);
+  return buildBuyerPreferenceSearchChips(raw);
 }
 
 function ChipBadge({ chip, valueOnly }: { chip: BuyerPreferenceChip; valueOnly?: boolean }) {

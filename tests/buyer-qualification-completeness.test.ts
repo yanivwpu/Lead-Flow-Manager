@@ -71,9 +71,11 @@ const highQ = assessBuyerQualification({
   profile: highProfile,
   leadType: "buyer",
   buyRentIntent: "buyer",
+  matchCount: 5,
 });
 assert(highQ.level === "high", "full profile reaches HIGH");
 assert(highQ.mayPresentMatches === true, "HIGH may present matches");
+assert(highQ.inventoryMode === true, "HIGH with matches enters inventory mode");
 assert(
   !highQ.suggestedQuestion.toLowerCase().includes("widen") &&
     !highQ.suggestedQuestion.toLowerCase().includes("broaden"),
@@ -99,9 +101,10 @@ const pompanoHighQ = assessBuyerQualification({
   profile: pompanoHighProfile,
   leadType: "buyer",
   buyRentIntent: "buyer",
+  matchCount: 12,
 });
 assert(pompanoHighQ.level === "high", "Pompano 5/4 pool $1M-$1.5M is HIGH");
-assert(pompanoHighQ.inventoryMode, "complete criteria enters inventory mode");
+assert(pompanoHighQ.inventoryMode, "complete criteria with matches enters inventory mode");
 assert(
   !pompanoHighQ.suggestedQuestion.toLowerCase().includes("widen") &&
     !pompanoHighQ.suggestedQuestion.toLowerCase().includes("broaden"),

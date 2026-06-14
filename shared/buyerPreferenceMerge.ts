@@ -16,6 +16,11 @@ import {
   isPlausibleSaleBudgetAmount,
   isRentIntentEvidence,
 } from "./buyerRentIntent";
+import {
+  clearStaleSoftAreas,
+  filterSoftMustHaves,
+  HARD_SEARCH_FILTER_KEYS,
+} from "./buyerPreferenceFieldClassification";
 
 const CONTRADICTION_RE =
   /\b(actually|instead|no longer|don't need|do not need|not anymore|changed my mind|rather than)\b/i;
@@ -310,21 +315,7 @@ export type BuyerPreferenceMergeOptions = {
   currentMessagePatch?: BuyerPreferenceExtractionPatch;
 };
 
-const HARD_GATE_SCALAR_KEYS = [
-  "bedsMin",
-  "bedsMax",
-  "bathsMin",
-  "pool",
-  "waterfront",
-  "modernStyle",
-  "gatedCommunity",
-  "investmentIntent",
-  "lowHoa",
-  "walkability",
-  "schoolPriority",
-  "parking",
-  "petFriendly",
-] as const;
+const HARD_GATE_SCALAR_KEYS = HARD_SEARCH_FILTER_KEYS;
 
 function filterPoolWaterfrontMustHaves(
   mustHaves: PreferenceField<string[]> | undefined,
@@ -339,6 +330,16 @@ function filterPoolWaterfrontMustHaves(
   return undefined;
 }
 
+function filterStaleMustHavesOnReplacement(
+  mustHaves: PreferenceField<string[]> | undefined,
+): PreferenceField<string[]> | undefined {
+  const afterPool = filterPoolWaterfrontMustHaves(mustHaves);
+  if (!afterPool?.value?.length) return undefined;
+  const softFiltered = filterSoftMustHaves(afterPool);
+  if (!softFiltered?.length) return undefined;
+  return { ...afterPool, value: softFiltered };
+}
+
 /** Drop stale hard gates when buyer sends a full replacement search. */
 export function clearUnmentionedHardGates(
   profile: BuyerPreferenceProfile,
@@ -349,8 +350,18 @@ export function clearUnmentionedHardGates(
     delete (profile as Record<string, unknown>)[key];
   }
 
+  if (patch.geoConstraints === undefined) {
+    delete profile.geoConstraints;
+  }
+
+  if (patch.dealBreakers === undefined) {
+    delete profile.dealBreakers;
+  }
+
+  clearStaleSoftAreas(profile, patch);
+
   if (!patch.mustHaves && profile.mustHaves?.value?.length) {
-    const filtered = filterPoolWaterfrontMustHaves(profile.mustHaves);
+    const filtered = filterStaleMustHavesOnReplacement(profile.mustHaves);
     if (filtered) profile.mustHaves = filtered;
     else delete profile.mustHaves;
   }
@@ -371,9 +382,31 @@ export function stripStaleHardGatesFromPatch(
   }
 
   if (!currentMessagePatch.mustHaves && patch.mustHaves?.value?.length) {
-    const filtered = filterPoolWaterfrontMustHaves(patch.mustHaves);
+    const filtered = filterStaleMustHavesOnReplacement(patch.mustHaves);
     if (filtered) patch.mustHaves = filtered;
     else delete patch.mustHaves;
+  }
+
+  if (currentMessagePatch.geoConstraints === undefined) {
+    delete patch.geoConstraints;
+  }
+
+  if (currentMessagePatch.dealBreakers === undefined) {
+    delete patch.dealBreakers;
+  }
+
+  if (currentMessagePatch.targetAreas?.value?.length) {
+    const incoming = currentMessagePatch.targetAreas.value;
+    if (patch.targetAreas?.value?.length) {
+      patch.targetAreas = {
+        ...patch.targetAreas,
+        value: patch.targetAreas.value.filter((a) => {
+          const s = String(a).trim();
+          return incoming.some((inc) => inc.toLowerCase() === s.toLowerCase()) || incoming.length === 0;
+        }),
+      };
+      if (!patch.targetAreas.value.length) delete patch.targetAreas;
+    }
   }
 }
 

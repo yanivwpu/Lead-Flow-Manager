@@ -2,6 +2,7 @@ import type { BuyerPreferenceProfile, PreferenceField } from "./buyerPreferenceS
 import { normalizeBuyerPreferenceProfile } from "./buyerPreferenceSchema";
 import { formatGeoConstraintLabel } from "./inventory/buyerGeoConstraints";
 import { resolveMatchingBudgetBounds } from "./buyerPreferenceBudget";
+import { isAreaSpecificSoftArea } from "./buyerPreferenceFieldClassification";
 
 export type BuyerPreferenceChip = {
   id: string;
@@ -178,7 +179,16 @@ export function normalizeForDisplay(raw: unknown): BuyerPreferenceProfile {
   return normalizeBuyerPreferenceProfile(stripped);
 }
 
-export function buildBuyerPreferenceChips(raw: unknown): BuyerPreferenceChip[] {
+export type BuyerPreferenceChipScope = "search" | "metadata" | "all";
+
+export function buildBuyerPreferenceChips(
+  raw: unknown,
+  scope: BuyerPreferenceChipScope = "all",
+): BuyerPreferenceChip[] {
+  if (scope === "metadata") {
+    return buildBuyerPreferenceMetadataChips(raw);
+  }
+
   const profile = normalizeForDisplay(raw);
   const chips: BuyerPreferenceChip[] = [];
 
@@ -194,7 +204,10 @@ export function buildBuyerPreferenceChips(raw: unknown): BuyerPreferenceChip[] {
   }
 
   if (profile.targetAreas && profile.targetAreas.confidence >= 0.45) {
-    const areas = (profile.targetAreas.value || []).map((s) => String(s).trim()).filter(Boolean);
+    const areas = (profile.targetAreas.value || [])
+      .map((s) => String(s).trim())
+      .filter(Boolean)
+      .filter((area) => !isAreaSpecificSoftArea(area));
     for (const area of areas.slice(0, 6)) {
       const formatted = formatArea(area);
       chips.push({
@@ -268,30 +281,6 @@ export function buildBuyerPreferenceChips(raw: unknown): BuyerPreferenceChip[] {
     });
   }
 
-  if (profile.timeline && profile.timeline.confidence >= 0.45) {
-    const text = formatTimeline(String(profile.timeline.value));
-    if (text) {
-      chips.push({
-        id: "timeline",
-        label: "Timeline",
-        value: text,
-        source: profile.timeline.source,
-      });
-    }
-  }
-
-  if (profile.financingStatus && profile.financingStatus.confidence >= 0.45) {
-    const text = formatFinancing(String(profile.financingStatus.value));
-    if (text) {
-      chips.push({
-        id: "financing",
-        label: "Financing",
-        value: text,
-        source: profile.financingStatus.source,
-      });
-    }
-  }
-
   const feature = (id: string, display: string, f?: PreferenceField<boolean>) => {
     if (!f?.value || f.confidence < 0.5) return;
     chips.push({ id, label: display, value: display, source: f.source });
@@ -322,11 +311,51 @@ export function buildBuyerPreferenceChips(raw: unknown): BuyerPreferenceChip[] {
     }
   }
 
+  if (scope === "all") {
+    chips.push(...buildBuyerPreferenceMetadataChips(profile));
+  }
+
+  return dedupeChips(chips);
+}
+
+/** Active search criteria only — excludes buyer metadata chips (timeline, financing). */
+export function buildBuyerPreferenceSearchChips(raw: unknown): BuyerPreferenceChip[] {
+  return buildBuyerPreferenceChips(raw, "search");
+}
+
+export function buildBuyerPreferenceMetadataChips(raw: unknown): BuyerPreferenceChip[] {
+  const profile = normalizeForDisplay(raw);
+  const chips: BuyerPreferenceChip[] = [];
+
+  if (profile.timeline && profile.timeline.confidence >= 0.45) {
+    const text = formatTimeline(String(profile.timeline.value));
+    if (text) {
+      chips.push({
+        id: "timeline",
+        label: "Timeline",
+        value: text,
+        source: profile.timeline.source,
+      });
+    }
+  }
+
+  if (profile.financingStatus && profile.financingStatus.confidence >= 0.45) {
+    const text = formatFinancing(String(profile.financingStatus.value));
+    if (text) {
+      chips.push({
+        id: "financing",
+        label: "Financing",
+        value: text,
+        source: profile.financingStatus.source,
+      });
+    }
+  }
+
   return dedupeChips(chips);
 }
 
 export function formatBuyerPreferenceSummaryForAi(profile: BuyerPreferenceProfile): string {
-  const chips = buildBuyerPreferenceChips(profile);
+  const chips = buildBuyerPreferenceSearchChips(profile);
   if (!chips.length) return "";
   const lines = chips.map((c) => `- ${c.label}: ${c.value}${c.source === "inferred" ? " (inferred)" : ""}`);
   return `Buyer preferences (from conversation memory):\n${lines.join("\n")}`;
@@ -349,13 +378,14 @@ export type BuyerPreferenceAiContextFields = {
 export function buildBuyerPreferenceAiContext(
   profile: BuyerPreferenceProfile,
 ): BuyerPreferenceAiContextFields {
-  const chips = buildBuyerPreferenceChips(profile);
-  const chip = (id: string) => chips.find((c) => c.id === id)?.value;
+  const searchChips = buildBuyerPreferenceSearchChips(profile);
+  const metadataChips = buildBuyerPreferenceMetadataChips(profile);
+  const chip = (chips: BuyerPreferenceChip[], id: string) => chips.find((c) => c.id === id)?.value;
   const summary = formatBuyerPreferenceSummaryForAi(profile);
   return {
     buyerPreferences: summary || undefined,
-    budget: chip("budget"),
-    timeline: chip("timeline"),
-    financing: chip("financing"),
+    budget: chip(searchChips, "budget"),
+    timeline: chip(metadataChips, "timeline"),
+    financing: chip(metadataChips, "financing"),
   };
 }

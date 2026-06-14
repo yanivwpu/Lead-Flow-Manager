@@ -71,7 +71,7 @@ const patch2 = heuristicPatchFromInboundText(msg2);
 const profile2 = mergeBuyerPreferenceProfile(existing, patch2, undefined, {
   replaceArrayFields: ["propertyTypes", "targetAreas"],
 });
-const q2 = assessBuyerQualification({ profile: profile2, leadType: "buyer" });
+const q2 = assessBuyerQualification({ profile: profile2, leadType: "buyer", matchCount: 5 });
 assert(
   profile2.propertyTypes?.value?.join() === "house",
   "scenario 3 inline: SFH replaces condo",
@@ -84,7 +84,7 @@ if (q2.level === "high") {
     "scenario 2: HIGH after pool+area update uses inventory CTA not broaden",
   );
   assert(
-    /strong fit|best matches|top options|several homes/i.test(q2.suggestedQuestion),
+    /strong fit|best matches|top options|several homes|single-family homes/i.test(q2.suggestedQuestion),
     "scenario 2: HIGH inventory/showing CTA",
   );
 } else {

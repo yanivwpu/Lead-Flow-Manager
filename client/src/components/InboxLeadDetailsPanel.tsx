@@ -95,7 +95,7 @@ import type { AICapabilities } from "@/lib/useAICapabilities";
 import { BuyerPreferencesPanel } from "@/components/BuyerPreferencesPanel";
 import { usePersistedBuyerPreferences } from "@/lib/buyerPreferencesQuery";
 import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
-import { buildBuyerPreferenceChips } from "@shared/buyerPreferenceDisplay";
+import { buildBuyerPreferenceSearchChips } from "@shared/buyerPreferenceDisplay";
 import { fetchInventoryStatus, fetchInventorySources, isInventorySourceConnected } from "@/lib/inventoryApi";
 import { CopilotInventoryEmptyState } from "@/components/inventory/CopilotInventoryEmptyState";
 import { MatchingListingsPanel } from "@/components/inventory/MatchingListingsPanel";
@@ -1651,7 +1651,7 @@ export function InboxLeadDetailsPanel({
     () =>
       persistedBuyerChips.length > 0
         ? persistedBuyerChips
-        : buildBuyerPreferenceChips(persistedBuyerProfile),
+        : buildBuyerPreferenceSearchChips(persistedBuyerProfile),
     [persistedBuyerChips, persistedBuyerProfile],
   );
   const buyerPrefsHasCriteria = buyerPrefChips.length > 0;

@@ -2,10 +2,16 @@
  * Buyer qualification completeness — drives AI reply tiering (Phase 2B/2C).
  */
 import type { BuyerPreferenceProfile } from "./buyerPreferenceSchema";
-import { buildBuyerPreferenceChips } from "./buyerPreferenceDisplay";
+import { buildBuyerPreferenceSearchChips } from "./buyerPreferenceDisplay";
 import { resolveMatchingBudgetBounds } from "./buyerPreferenceBudget";
 
 export type QualificationLevel = "low" | "medium" | "high";
+
+export type CopilotDecisionReason =
+  | "inventory_available"
+  | "zero_matches_relax_criteria"
+  | "low_profile_qualify"
+  | "followup_needed";
 
 export type BuyerQualificationContext = {
   level: QualificationLevel;
@@ -15,8 +21,11 @@ export type BuyerQualificationContext = {
   suggestedQuestion: string;
   confirmPriorFields: boolean;
   criteriaComplete: boolean;
-  /** Exit qualification — present inventory (matches exist or criteria fully set). */
+  /** Exit qualification — present inventory (matches exist). */
   inventoryMode: boolean;
+  /** Criteria set but zero listings — suggest relaxing search, not financing. */
+  zeroMatchMode: boolean;
+  copilotDecisionReason: CopilotDecisionReason;
   hasBuyRentIntent: boolean;
   hasBudget: boolean;
   hasArea: boolean;
@@ -120,7 +129,7 @@ function hasStrongMustHave(profile: BuyerPreferenceProfile): boolean {
 }
 
 function buildKnownLabels(profile: BuyerPreferenceProfile): string[] {
-  return buildBuyerPreferenceChips(profile).map((c) => {
+  return buildBuyerPreferenceSearchChips(profile).map((c) => {
     if (c.id === "propertyTypes") return c.value.toLowerCase().includes("house") ? "single-family home" : c.value;
     return c.value;
   });
@@ -145,20 +154,49 @@ function formatBedsBathsLabel(profile: BuyerPreferenceProfile): string | null {
   return parts.length > 0 ? parts.join("/") : null;
 }
 
-/** Inventory/showing CTA — never broaden/widen/reconfirm known criteria. */
+function formatPropertyTypeHint(profile: BuyerPreferenceProfile): string {
+  const types = profile.propertyTypes?.value ?? [];
+  if (types.includes("house")) return "single-family homes";
+  if (types.includes("condo")) return "condos";
+  if (types.includes("townhouse")) return "townhomes";
+  if (types.length === 1) return String(types[0]).replace(/_/g, " ");
+  if (types.length > 1) return "homes";
+  return "homes";
+}
+
+/** Inventory/showing CTA when matches exist. */
 function pickInventoryModeReply(profile: BuyerPreferenceProfile, matchCount: number): string {
   const areas = fieldActive(profile.targetAreas) ? profile.targetAreas!.value || [] : [];
   const areaHint = areas[0] ? String(areas[0]).trim() : "";
+  const typeHint = formatPropertyTypeHint(profile);
+  const budget = formatBudgetLabel(profile);
+
+  if (matchCount > 20 && areaHint) {
+    return `I've got several ${typeHint} in ${areaHint} that fit — want me to send the best matches?`;
+  }
+  if (matchCount > 20) {
+    return `I've got several ${typeHint} that match — want me to send the top options?`;
+  }
   if (matchCount > 0 && areaHint) {
-    return `A few homes in ${areaHint} look like a strong fit — want me to send the best matches?`;
+    return `A few ${typeHint} in ${areaHint} look like a strong fit — want me to send the best matches?`;
   }
   if (matchCount > 0) {
-    return "I found several homes that match those criteria. Would you like me to send the top options?";
+    return `I found several ${typeHint} that match those criteria. Would you like me to send the top options?`;
   }
   if (areaHint) {
     return `I've got enough to start — want me to pull the best matches in ${areaHint}?`;
   }
   return "I've got enough to start narrowing this down — want me to send the top options?";
+}
+
+/** Zero inventory — suggest relaxing criteria; never ask financing. */
+function pickZeroMatchRelaxationReply(profile: BuyerPreferenceProfile): string {
+  const areas = fieldActive(profile.targetAreas) ? profile.targetAreas!.value || [] : [];
+  const areaHint = areas[0] ? String(areas[0]).trim() : "that area";
+  const typeHint = formatPropertyTypeHint(profile);
+  const budget = formatBudgetLabel(profile);
+  const budgetPart = budget ? ` ${budget}` : "";
+  return `I couldn't find ${typeHint} in ${areaHint}${budgetPart} matching that search. Want me to expand nearby areas, raise the budget, or include condos/townhomes?`;
 }
 
 function pickGapQuestion(missing: string[]): string {
@@ -256,10 +294,20 @@ export function assessBuyerQualification(input: BuyerQualificationInput): BuyerQ
     hasBaths &&
     (rentSearch || hasPropertyType || hasPool || strongMustHave);
 
-  const inventoryMode = criteriaComplete || (inventoryReady && matchCount > 0);
+  const canRunInventorySearch =
+    hasBuyRentIntent &&
+    hasArea &&
+    hasBudget &&
+    (rentSearch ? hasPropertyType : hasPropertyType || hasPool || strongMustHave);
+
+  const searchCriteriaSufficient = criteriaComplete || canRunInventorySearch;
+  const zeroMatchMode = searchCriteriaSufficient && matchCount === 0;
+  const inventoryMode = searchCriteriaSufficient && matchCount > 0;
 
   let level: QualificationLevel;
   if (inventoryMode) {
+    level = "high";
+  } else if (zeroMatchMode) {
     level = "high";
   } else if (!hasArea && !hasBudget && !hasBedsBaths) {
     level = "low";
@@ -280,11 +328,32 @@ export function assessBuyerQualification(input: BuyerQualificationInput): BuyerQ
       (matchCount > 0 ? 12 : 0),
   );
 
-  const suggestedQuestion = inventoryMode
-    ? pickInventoryModeReply(profile, matchCount)
-    : level === "high"
-      ? pickInventoryModeReply(profile, matchCount)
-      : pickGapQuestion(missing);
+  let copilotDecisionReason: CopilotDecisionReason;
+  let suggestedQuestion: string;
+
+  const inbound = (input.inboundText || "").trim();
+  const isFollowup =
+    /\b(any more|more options|what else|send more|other listings|anything else)\b/i.test(inbound);
+
+  if (isFollowup) {
+    copilotDecisionReason = "followup_needed";
+    suggestedQuestion =
+      matchCount > 0
+        ? pickInventoryModeReply(profile, matchCount)
+        : pickZeroMatchRelaxationReply(profile);
+  } else if (zeroMatchMode) {
+    copilotDecisionReason = "zero_matches_relax_criteria";
+    suggestedQuestion = pickZeroMatchRelaxationReply(profile);
+  } else if (inventoryMode) {
+    copilotDecisionReason = "inventory_available";
+    suggestedQuestion = pickInventoryModeReply(profile, matchCount);
+  } else if (level === "high") {
+    copilotDecisionReason = "inventory_available";
+    suggestedQuestion = pickInventoryModeReply(profile, matchCount);
+  } else {
+    copilotDecisionReason = "low_profile_qualify";
+    suggestedQuestion = pickGapQuestion(missing);
+  }
 
   return {
     level,
@@ -295,6 +364,8 @@ export function assessBuyerQualification(input: BuyerQualificationInput): BuyerQ
     confirmPriorFields,
     criteriaComplete,
     inventoryMode,
+    zeroMatchMode,
+    copilotDecisionReason,
     hasBuyRentIntent,
     hasBudget,
     hasArea,
@@ -309,17 +380,33 @@ export function formatQualificationContextForAi(ctx: BuyerQualificationContext):
   const knownLine =
     ctx.known.length > 0 ? ctx.known.join(", ") : "not yet captured";
 
+  if (ctx.zeroMatchMode) {
+    return `Buyer qualification assessment:
+- Tier: HIGH — ZERO MATCH MODE (do NOT ask qualifying or financing questions)
+- Criteria complete: yes
+- Inventory matches: 0 — no listings match the active search
+- Known criteria (do NOT reconfirm): ${knownLine}
+- Copilot decision: ${ctx.copilotDecisionReason}
+- Reply direction: "${ctx.suggestedQuestion}"
+ZERO MATCH RULES:
+- Acknowledge no matches for the stated search criteria
+- Suggest relaxing area, budget, or property type — use the reply direction above
+- FORBIDDEN: financing, pre-approval, timeline, or any qualifying questions
+- FORBIDDEN: claim matches exist or offer to send listings that are not available`;
+  }
+
   if (ctx.inventoryMode) {
     return `Buyer qualification assessment:
 - Tier: HIGH — INVENTORY MODE (exit qualification; do not ask qualifying questions)
 - Criteria complete: yes
-- Inventory matches: ${ctx.matchCount > 0 ? `${ctx.matchCount} strong match(es) on file` : "criteria set — present options"}
+- Inventory matches: ${ctx.matchCount > 20 ? "many strong matches" : `${ctx.matchCount} strong match(es) on file`}
 - Known criteria (do NOT reconfirm): ${knownLine}
+- Copilot decision: ${ctx.copilotDecisionReason}
 - Reply direction: "${ctx.suggestedQuestion}"
 INVENTORY MODE RULES:
 - Behave like a buyer's agent ready to present homes — offer top matches, property details, a shortlist, or a showing
-- FORBIDDEN: widen/broaden search, reconfirm budget, reconfirm beds/baths, ask for criteria already listed above
-- Allowed: "A few homes look like a strong fit", "I found several homes that match", offer to send top options`;
+- FORBIDDEN: widen/broaden search, reconfirm budget, reconfirm beds/baths, ask financing/pre-approval
+- Allowed: present matches naturally — never state an exact count to the buyer`;
   }
 
   const tierGuide =

@@ -10615,6 +10615,7 @@ export async function registerRoutes(
                 });
                 contextPatch.buyerQualificationContext =
                   formatQualificationContextForAi(qualification);
+                contextPatch.copilotDecisionReason = qualification.copilotDecisionReason;
 
                 const aiPrefCtx = buildBuyerPreferenceAiContext(profile);
                 if (aiPrefCtx.buyerPreferences) {
@@ -10802,6 +10803,10 @@ export async function registerRoutes(
         shouldDowngradeToSuggestOnly: fairUse.shouldDowngradeToSuggestOnly,
         autoSendAllowed,
         autoSendReason,
+        copilotDecisionReason:
+          typeof enrichedContactContext?.copilotDecisionReason === "string"
+            ? enrichedContactContext.copilotDecisionReason
+            : undefined,
         flowMatched: chatbotArb.flowMatched,
         aiRouting: {
           decision: aiRouting.decision,

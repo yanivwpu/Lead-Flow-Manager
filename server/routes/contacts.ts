@@ -102,12 +102,12 @@ export function registerContactRoutes(app: Express): void {
         readBuyerPreferenceProfileRaw,
         shouldRunBuyerPreferencePipeline,
       } = await import("../buyerPreferenceService");
-      const { buildBuyerPreferenceChips } = await import("@shared/buyerPreferenceDisplay");
+      const { buildBuyerPreferenceSearchChips } = await import("@shared/buyerPreferenceDisplay");
 
       const rawProfile = readBuyerPreferenceProfileRaw(contact);
       const profile = readBuyerPreferenceProfile(contact);
       const gate = await shouldRunBuyerPreferencePipeline(req.user.id, contact);
-      const chips = buildBuyerPreferenceChips(rawProfile);
+      const chips = buildBuyerPreferenceSearchChips(rawProfile);
 
       res.json({
         eligible: gate.ok,
@@ -152,13 +152,13 @@ export function registerContactRoutes(app: Express): void {
       const { readBuyerPreferenceProfileRaw, readBuyerPreferenceProfile } = await import(
         "../buyerPreferenceService"
       );
-      const { buildBuyerPreferenceChips } = await import("@shared/buyerPreferenceDisplay");
+      const { buildBuyerPreferenceSearchChips } = await import("@shared/buyerPreferenceDisplay");
       const rawProfile = refreshed ? readBuyerPreferenceProfileRaw(refreshed) : profile;
       const normalized = refreshed ? readBuyerPreferenceProfile(refreshed) : profile;
       res.json({
         profile: normalized,
         rawProfile,
-        chips: buildBuyerPreferenceChips(rawProfile),
+        chips: buildBuyerPreferenceSearchChips(rawProfile),
       });
     } catch (error) {
       console.error("Error updating buyer preferences:", error);
@@ -179,7 +179,7 @@ export function registerContactRoutes(app: Express): void {
         readBuyerPreferenceProfile,
         readBuyerPreferenceProfileRaw,
       } = await import("../buyerPreferenceService");
-      const { buildBuyerPreferenceChips } = await import("@shared/buyerPreferenceDisplay");
+      const { buildBuyerPreferenceSearchChips } = await import("@shared/buyerPreferenceDisplay");
 
       const gate = await shouldRunBuyerPreferencePipeline(req.user.id, contact);
       if (!gate.ok) {
@@ -196,7 +196,7 @@ export function registerContactRoutes(app: Express): void {
       res.json({
         profile,
         rawProfile,
-        chips: buildBuyerPreferenceChips(rawProfile),
+        chips: buildBuyerPreferenceSearchChips(rawProfile),
       });
     } catch (error) {
       console.error("Error extracting buyer preferences:", error);
