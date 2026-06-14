@@ -5,12 +5,13 @@
  * Default is dry-run (list only). Pass --delete to remove.
  *
  * Usage:
- *   npx tsx scripts/cleanup-test-users.ts
- *   npx tsx scripts/cleanup-test-users.ts --delete
- *
- * Requires DATABASE_URL (same as dev — NOT production unless you pointed .env there).
+ *   ALLOW_DB_TEST_WRITES=1 npx tsx scripts/cleanup-test-users.ts
+ *   ALLOW_DB_TEST_WRITES=1 npx tsx scripts/cleanup-test-users.ts --delete
  */
-import "dotenv/config";
+import { prepareDbTestEnvironment } from "../tests/helpers/dbTestGuard.js";
+
+prepareDbTestEnvironment("cleanup-test-users.ts");
+
 import { db } from "../drizzle/db";
 import { users, contacts } from "../shared/schema";
 import { eq, sql, or, like, inArray } from "drizzle-orm";
@@ -82,11 +83,6 @@ async function countContactsForUser(userId: string): Promise<number> {
 }
 
 async function main() {
-  if (!process.env.DATABASE_URL) {
-    console.error("DATABASE_URL is not set.");
-    process.exit(1);
-  }
-
   const deleteMode = process.argv.includes("--delete");
   const host = dbHostLabel();
 

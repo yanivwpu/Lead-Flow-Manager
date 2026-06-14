@@ -14,7 +14,7 @@ export type ResidentialRentalPropertyType = (typeof RESIDENTIAL_RENTAL_PROPERTY_
 export const SHOW_ME_ALL_PROPERTY_RELAX_EVIDENCE = "show me all — relax property type";
 
 const EXPLICIT_PROPERTY_TYPE_RE =
-  /\b(sfh|single[\s-]?family(?:\s+home)?|condo(?:minium)?s?|townhouse|town[\s-]?house|multi[\s-]?family|land|apartments?)\b/i;
+  /\b(sfh|single[\s-]?family(?:\s+home)?|condo(?:minium)?s?|townhouse|town[\s-]?house|multi[\s-]?family|land|apartments?|homes?\s+for\s+sale)\b/i;
 
 export { EXPLICIT_PROPERTY_TYPE_RE };
 

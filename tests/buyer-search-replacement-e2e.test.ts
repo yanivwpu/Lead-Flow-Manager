@@ -1,8 +1,12 @@
 /**
  * E2E replacement search — persist to DB, reload, inventory matching profile.
- * Run: npx tsx tests/buyer-search-replacement-e2e.test.ts
+ * Run: ALLOW_DB_TEST_WRITES=1 npx tsx tests/buyer-search-replacement-e2e.test.ts
+ *      (or set TEST_DATABASE_URL)
  */
-import "dotenv/config";
+import { prepareDbTestEnvironment, teardownTestUser } from "./helpers/dbTestGuard.js";
+
+prepareDbTestEnvironment("buyer-search-replacement-e2e.test.ts");
+
 import { mergeBuyerPreferenceProfile } from "../shared/buyerPreferenceMerge";
 import { emptyBuyerPreferenceProfile } from "../shared/buyerPreferenceSchema";
 import {
@@ -13,14 +17,15 @@ import { extractBuyerMatchCriteria } from "../shared/inventory/inventoryMatchSco
 import { INVENTORY_DIAGNOSTICS_BUILD_MARKER } from "../shared/inventory/inventoryDiagnosticsBuild";
 import { buildInventoryMatchDiagnostics } from "../shared/inventory/inventoryMatchDiagnostics";
 import { buildPersistedProfileSnapshotForDiagnostics } from "../shared/buyerSearchCommandDebug";
-import { storage } from "../server/storage";
-import {
+
+const { storage } = await import("../server/storage");
+const {
   loadPersistedBuyerPreferenceProfile,
   mergeAndPersistBuyerPreferences,
   persistBuyerPreferenceProfile,
   syncBuyerPreferencesForInboundMessage,
-} from "../server/buyerPreferenceService";
-import { findMatchingListingsForContact } from "../server/inventory/inventoryMatchingService";
+} = await import("../server/buyerPreferenceService");
+const { findMatchingListingsForContact } = await import("../server/inventory/inventoryMatchingService");
 
 function assert(cond: boolean, msg: string) {
   if (!cond) throw new Error(msg);
@@ -29,11 +34,6 @@ function assert(cond: boolean, msg: string) {
 const MSG = "Show SFH for sale in pompano up to $600k";
 
 async function main() {
-  if (!process.env.DATABASE_URL) {
-    console.log("buyer-search-replacement-e2e.test.ts: SKIP (no DATABASE_URL)");
-    return;
-  }
-
   let userId: string | undefined;
   try {
   const user = await storage.createUser({
@@ -225,19 +225,7 @@ async function main() {
 
   console.log("buyer-search-replacement-e2e.test.ts: OK");
   } finally {
-    if (userId) await teardown(userId);
-  }
-}
-
-async function teardown(userId: string) {
-  try {
-    const { db } = await import("../drizzle/db");
-    const { users } = await import("@shared/schema");
-    const { eq } = await import("drizzle-orm");
-    await db.delete(users).where(eq(users.id, userId));
-    console.log("[Teardown] Test user deleted");
-  } catch (err) {
-    console.warn("[Teardown] Cleanup failed (non-fatal):", err);
+    await teardownTestUser(userId, "buyer-search-replacement-e2e.test.ts");
   }
 }
 

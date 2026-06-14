@@ -10,11 +10,16 @@
  *   T4 — Outbound reply uses conversation.channelAccountId as Twilio from-number
  *   T5 — Legacy NULL conversation is backfilled, not duplicated
  *
- * Run: npx tsx tests/multi-number-whatsapp.test.ts
+ * Run: ALLOW_DB_TEST_WRITES=1 npx tsx tests/multi-number-whatsapp.test.ts
+ *      (or set TEST_DATABASE_URL)
  */
 
-import { storage } from "../server/storage";
-import { findUserByTwilioCredentials } from "../server/userTwilio";
+import { prepareDbTestEnvironment, teardownTestUser } from "./helpers/dbTestGuard.js";
+
+prepareDbTestEnvironment("multi-number-whatsapp.test.ts");
+
+const { storage } = await import("../server/storage");
+const { findUserByTwilioCredentials } = await import("../server/userTwilio");
 
 const REPORT: { test: string; status: "PASS" | "FAIL"; details: string }[] = [];
 
@@ -403,16 +408,7 @@ async function t5_nullBackfillNoDuplicates() {
 
 // ── Teardown ─────────────────────────────────────────────────────────────────
 async function teardown() {
-  // The user cascade-deletes all its data (contacts, conversations, registered_phones)
-  try {
-    const { db } = await import("../drizzle/db");
-    const { users } = await import("@shared/schema");
-    const { eq } = await import("drizzle-orm");
-    await db.delete(users).where(eq(users.id, userId));
-    console.log("\n[Teardown] Test user and all related data deleted ✓");
-  } catch (err) {
-    console.warn("[Teardown] Cleanup failed (non-fatal):", err);
-  }
+  await teardownTestUser(userId, "multi-number-whatsapp.test.ts");
 }
 
 // ── Runner ───────────────────────────────────────────────────────────────────

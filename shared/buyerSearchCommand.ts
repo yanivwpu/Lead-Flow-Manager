@@ -90,10 +90,23 @@ function isRefinementCarryoverMessage(
   return REFINEMENT_CARRYOVER_RE.test(text);
 }
 
-/**
- * Full replacement search: explicit area + property type + budget without refinement carryover.
- * Clears stale pool/beds/waterfront from a prior query.
- */
+function hasSalePropertyTypeSignal(text: string): boolean {
+  const lower = (text || "").toLowerCase();
+  if (/\b(for\s+sale|homes?\s+for\s+sale)\b/i.test(lower)) return true;
+  return /\b(houses?|homes?|sfh|properties|listings?)\b/i.test(lower) && /\bfor\s+sale\b/i.test(lower);
+}
+
+function hasDistinctReplacementArea(
+  patch: BuyerPreferenceExtractionPatch,
+  current?: BuyerPreferenceProfile,
+): boolean {
+  const incoming = patch.targetAreas?.value ?? [];
+  const currentAreas = current?.targetAreas?.value ?? [];
+  if (incoming.length === 0 || currentAreas.length === 0) return false;
+  return incoming.some(
+    (a) => !currentAreas.some((c) => c.toLowerCase() === a.toLowerCase()),
+  );
+}
 export function isFullReplacementSearch(
   text: string,
   patch: BuyerPreferenceExtractionPatch,
@@ -107,7 +120,9 @@ export function isFullReplacementSearch(
 
   const hasArea = (patch.targetAreas?.value?.length ?? 0) > 0;
   const hasType =
-    (patch.propertyTypes?.value?.length ?? 0) > 0 || hasExplicitPropertyTypeConstraint(text);
+    (patch.propertyTypes?.value?.length ?? 0) > 0 ||
+    hasExplicitPropertyTypeConstraint(text) ||
+    hasSalePropertyTypeSignal(text);
   const hasBudget = patch.priceMax?.value != null || patch.priceMin?.value != null;
 
   if (!hasArea || !hasType || !hasBudget) return false;
@@ -177,6 +192,14 @@ function isNarrowSearch(
   patch: BuyerPreferenceExtractionPatch,
   current: BuyerPreferenceProfile | undefined,
 ): boolean {
+  if (hasDistinctReplacementArea(patch, current)) {
+    const hasBudget = patch.priceMax?.value != null || patch.priceMin?.value != null;
+    const saleSide =
+      patch.transactionIntent?.value === "buy" ||
+      /\b(for\s+sale|homes?\s+for\s+sale|buy(?:ing)?|purchase)\b/i.test(text);
+    if (hasBudget && saleSide && hasSalePropertyTypeSignal(text)) return false;
+  }
+
   if (hasExplicitPropertyTypeConstraint(text)) {
     const incomingTypes = patch.propertyTypes?.value ?? [];
     const currentTypes = current?.propertyTypes?.value ?? [];
@@ -266,14 +289,20 @@ function buildExplanation(kind: BuyerSearchCommandKind, signals: string[]): stri
   }
 }
 
+const CHEAPER_BUDGET_RE = /\b(too expensive|cheaper|lower budget|less expensive)\b/i;
+
 function lockedFieldsFromPatch(
   patch: BuyerPreferenceExtractionPatch,
   kind: BuyerSearchCommandKind,
+  text?: string,
 ): (keyof BuyerPreferenceExtractionPatch)[] {
   if (kind === "followup_request") return [];
   const keys = Object.keys(patch) as (keyof BuyerPreferenceExtractionPatch)[];
   if (kind === "correction") {
     return keys.filter((k) => k === "bedsMin" || k === "bedsMax" || k === "bathsMin");
+  }
+  if (kind === "refine_search" && text && CHEAPER_BUDGET_RE.test(text)) {
+    return keys.filter((k) => k !== "targetAreas" && k !== "propertyTypes");
   }
   return keys;
 }
@@ -340,7 +369,7 @@ export function parseBuyerSearchCommand(
   const fullReplacement =
     isFullReplacementSearch(text, patch, currentProfile) || buyToRentPivot;
   const replaceArrayFields = replaceArrayFieldsForCommand(text, kind, patch);
-  const lockedFields = lockedFieldsFromPatch(patch, kind);
+  const lockedFields = lockedFieldsFromPatch(patch, kind, text);
 
   return {
     kind,

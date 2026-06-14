@@ -1,10 +1,13 @@
 /**
- * Live DB inventory normalization regression — requires DATABASE_URL.
- * Run: npx tsx tests/inventory-normalization-live.test.ts
+ * Live DB inventory normalization regression — mutates listing rows (backfill).
+ * Run: ALLOW_DB_TEST_WRITES=1 npx tsx tests/inventory-normalization-live.test.ts
+ *      (or set TEST_DATABASE_URL)
  */
-import "dotenv/config";
+import { prepareDbTestEnvironment } from "./helpers/dbTestGuard.js";
+
+prepareDbTestEnvironment("inventory-normalization-live.test.ts");
+
 import { sql, eq, and, inArray } from "drizzle-orm";
-import { db } from "../drizzle/db";
 import { inventoryListings } from "../shared/schema";
 import { MATCHABLE_INVENTORY_STATUSES } from "../shared/inventory/inventoryListingSchema";
 import { heuristicPatchFromInboundText } from "../shared/buyerPreferenceExtractionNormalize";
@@ -27,6 +30,8 @@ import {
   countListingNormalizationSummary,
 } from "../server/inventory/inventoryNormalizationBackfill";
 
+const { db } = await import("../drizzle/db");
+
 function assert(cond: boolean, msg: string) {
   if (!cond) throw new Error(msg);
 }
@@ -35,11 +40,6 @@ const MSG_RELAXED =
   "I'm a cash buyer I can buy a home up to $899. Looking for SFH in Pompano with or without pool at least 3 bedrooms";
 
 async function main() {
-  if (!process.env.DATABASE_URL) {
-    console.log("inventory-normalization-live.test.ts: SKIP (no DATABASE_URL)");
-    return;
-  }
-
   const [topUser] = await db
     .select({ userId: inventoryListings.userId, count: sql<number>`count(*)::int` })
     .from(inventoryListings)

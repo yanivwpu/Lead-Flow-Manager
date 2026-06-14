@@ -118,9 +118,11 @@ function extractPropertyTypesFromText(lower: string): Array<"condo" | "house" | 
   const types: Array<"condo" | "house" | "townhouse" | "multi_family" | "land"> = [];
   if (/\bcondo(?:minium)?s?\b/i.test(lower)) types.push("condo");
   if (/\bapartments?\b/i.test(lower)) types.push("condo");
-  if (/\btownhouse|town[\s-]?house\b/i.test(lower)) types.push("townhouse");
+  if (/\btownhouse|town[\s-]?house|townhome\b/i.test(lower)) types.push("townhouse");
   if (/\b(sfh|single[\s-]?family(?:\s+home)?)\b/i.test(lower)) types.push("house");
-  else if (/\b(house|home)\b/i.test(lower) && !/\btown[\s-]?house\b/i.test(lower)) types.push("house");
+  else if (/\b(houses?|homes?)\b/i.test(lower) && !/\btown[\s-]?(house|home)\b/i.test(lower)) {
+    types.push("house");
+  }
   if (/\bmulti[\s-]?family\b/i.test(lower)) types.push("multi_family");
   if (/\bland\b/i.test(lower)) types.push("land");
   return [...new Set(types)];
@@ -134,58 +136,73 @@ function trimAreaLabel(area: string): string {
     .trim();
 }
 
-/** Known South Florida city tokens — prefer over greedy "in …" capture. */
-const KNOWN_AREA_CITY_RE =
-  /\b(?:in|near|around)\s+(pompano(?:\s+beach)?|boca(?:\s+raton)?|fort\s+lauderdale|hollywood|deerfield(?:\s+beach)?|coral\s+springs|miami(?:\s+beach)?|delray(?:\s+beach)?)\b/i;
+/** Known South Florida cities → canonical display labels. */
+const KNOWN_SOUTH_FLORIDA_AREAS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /\bpompano(?:\s+beach)?\b/i, label: "Pompano Beach" },
+  { pattern: /\bboca(?:\s+raton)?\b/i, label: "Boca Raton" },
+  { pattern: /\bfort\s+lauderdale\b/i, label: "Fort Lauderdale" },
+  { pattern: /\bhollywood\b/i, label: "Hollywood" },
+  { pattern: /\bdeerfield(?:\s+beach)?\b/i, label: "Deerfield Beach" },
+  { pattern: /\bcoral\s+springs\b/i, label: "Coral Springs" },
+  { pattern: /\bmiami(?:\s+beach)?\b/i, label: "Miami Beach" },
+  { pattern: /\bdelray(?:\s+beach)?\b/i, label: "Delray Beach" },
+  { pattern: /\bweston\b/i, label: "Weston" },
+  { pattern: /\bparkland\b/i, label: "Parkland" },
+  { pattern: /\boakland\s+park\b/i, label: "Oakland Park" },
+  { pattern: /\blighthouse\s+point\b/i, label: "Lighthouse Point" },
+  { pattern: /\blauderdale[\s-]by[\s-]the[\s-]sea\b/i, label: "Lauderdale-by-the-Sea" },
+  { pattern: /\bwilton\s+manors\b/i, label: "Wilton Manors" },
+  { pattern: /\bcoconut\s+creek\b/i, label: "Coconut Creek" },
+];
+
+function canonicalKnownAreaLabel(raw: string): string | null {
+  const normalized = raw.replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+  for (const { pattern, label } of KNOWN_SOUTH_FLORIDA_AREAS) {
+    if (pattern.test(normalized)) return label;
+  }
+  return null;
+}
 
 function extractAreasFromText(text: string, lower: string): string[] {
   const areaHits: string[] = [];
-
-  const knownCity = text.match(KNOWN_AREA_CITY_RE);
-  if (knownCity?.[1]) {
-    const raw = knownCity[1].replace(/\s+/g, " ").trim();
-    const label =
-      raw.toLowerCase() === "pompano"
-        ? "Pompano Beach"
-        : raw
-            .split(/\s+/)
-            .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-            .join(" ");
-    if (label && !areaHits.some((a) => a.toLowerCase() === label.toLowerCase())) {
-      areaHits.push(label);
+  const addArea = (label: string) => {
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    if (!areaHits.some((a) => a.toLowerCase() === trimmed.toLowerCase())) {
+      areaHits.push(trimmed);
     }
+  };
+
+  for (const { pattern, label } of KNOWN_SOUTH_FLORIDA_AREAS) {
+    const inContext = new RegExp(`\\b(?:in|near|around)\\s+(?:${pattern.source})\\b`, "i").test(text);
+    if (inContext) addArea(label);
   }
 
   const geoM = text.match(
-    /\b((?:east|west|north|south)\s+of\s+(?:the\s+)?[^.?]+?(?:\s+in\s+[A-Za-z][A-Za-z\s]+)?)/i,
+    /\b((?:east|west|north|south)\s+of\s+(?:the\s+)?[^.?]+?(?:\s+in\s+[A-Za-z][A-Za-z\s-]+)?)/i,
   );
   if (geoM?.[1]) {
     const geo = trimAreaLabel(geoM[1]);
-    if (geo && !areaHits.some((a) => a.toLowerCase() === geo.toLowerCase())) {
-      areaHits.push(geo);
-    }
+    if (geo) addArea(geo);
   }
 
   if (areaHits.length === 0) {
-    for (const m of text.matchAll(/\b(?:in|near|around)\s+([A-Za-z][A-Za-z\s]{0,28}?)(?=\s+(?:with|and|between|up to|who|that|which|,|\.|$))/g)) {
-      const area = trimAreaLabel(m[1]?.trim() || "");
-      if (!area) continue;
-      if (!areaHits.some((a) => a.toLowerCase() === area.toLowerCase())) {
-        areaHits.push(area);
-      }
+    for (const m of text.matchAll(
+      /\b(?:in|near|around)\s+([A-Za-z][A-Za-z\s-]{0,40}?)(?=\s+(?:with|and|between|up to|under|max|who|that|which|for|,|\.|$)|$)/gi,
+    )) {
+      const raw = m[1]?.trim() || "";
+      const known = canonicalKnownAreaLabel(raw);
+      const area = known ?? trimAreaLabel(raw);
+      if (area) addArea(area);
     }
   }
 
   const brickell = lower.match(/\bbrickell\b/);
-  if (brickell && !areaHits.some((a) => a.toLowerCase() === "brickell")) {
-    areaHits.push("Brickell");
-  }
+  if (brickell) addArea("Brickell");
 
   if (/\b(?:close to|near|walking distance to)\s+(?:the\s+)?beach\b/i.test(lower)) {
-    const label = "Close to beach";
-    if (!areaHits.some((a) => a.toLowerCase() === label.toLowerCase())) {
-      areaHits.push(label);
-    }
+    addArea("Close to beach");
   }
 
   return areaHits.slice(0, 6);
@@ -663,7 +680,7 @@ export function heuristicPatchFromTranscript(
 
   const parseUpToBudgetFromText = (): number | null => {
     const matches = [
-      ...lower.matchAll(/\bup\s+to\s+(\$?\s*[\d,.]+)\s*(k|m|million|mil)?/gi),
+      ...lower.matchAll(/\b(?:up\s+to|under)\s+(\$?\s*[\d,.]+)\s*(k|m|million|mil)?/gi),
     ];
     for (const m of matches) {
       const fragment = m[0];
@@ -704,7 +721,7 @@ export function heuristicPatchFromTranscript(
     if (upToBudgetAmount != null) {
       patch.priceMax = {
         value: upToBudgetAmount,
-        ...inf(0.9, "up to budget in message"),
+        ...inf(0.9, /\bunder\b/i.test(lower) ? "under budget in message" : "up to budget in message"),
       };
     } else if (budgetM) {
       const amount = parseBudgetAmount(budgetM[1], budgetM[2]);

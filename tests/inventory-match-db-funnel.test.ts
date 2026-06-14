@@ -136,7 +136,9 @@ assert(
 );
 
 async function runLiveDbCheck() {
-  if (!process.argv.includes("--live") || !process.env.DATABASE_URL) return;
+  if (!process.argv.includes("--live")) return;
+  const { prepareDbTestEnvironment } = await import("./helpers/dbTestGuard.js");
+  prepareDbTestEnvironment("inventory-match-db-funnel.test.ts --live");
   const { db } = await import("../drizzle/db");
   const { inventoryListings } = await import("../shared/schema");
   const { sql } = await import("drizzle-orm");

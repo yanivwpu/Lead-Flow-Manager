@@ -183,7 +183,10 @@ const PURCHASE_FEATURE_KEYS = [
 ] as const;
 
 /** Rental search replaces conflicting purchase-only preferences instead of stacking them. */
-export function stripConflictingSalePreferences(profile: BuyerPreferenceProfile): void {
+export function stripConflictingSalePreferences(
+  profile: BuyerPreferenceProfile,
+  incomingPatch?: BuyerPreferenceExtractionPatch,
+): void {
   if (typeof profile.priceMin?.value === "number" && isPlausibleSaleBudgetAmount(profile.priceMin.value)) {
     delete profile.priceMin;
   }
@@ -191,7 +194,12 @@ export function stripConflictingSalePreferences(profile: BuyerPreferenceProfile)
     delete profile.priceMax;
   }
 
+  const explicitRentalPool =
+    incomingPatch?.pool?.value === true ||
+    (incomingPatch?.pool?.value === false && isPoolOptionalEvidence(incomingPatch.pool.evidence));
+
   for (const key of PURCHASE_FEATURE_KEYS) {
+    if (key === "pool" && explicitRentalPool) continue;
     delete (profile as Record<string, unknown>)[key];
   }
   delete profile.financingStatus;
@@ -244,6 +252,7 @@ function shouldForceReplaceBudgetCap(
   if (!/budget/i.test(evidence)) return false;
   if (incoming.value <= existing.value) return true;
   if (/\bup\s+to\b/i.test(evidence) || evidence.includes("up to budget")) return true;
+  if (/\bunder\b/i.test(evidence) || evidence.includes("under budget")) return true;
   return false;
 }
 
@@ -513,7 +522,7 @@ export function mergeBuyerPreferenceProfile(
   }
 
   if (switchingToRent || profile.transactionIntent?.value === "rent") {
-    stripConflictingSalePreferences(profile);
+    stripConflictingSalePreferences(profile, patch);
     normalizeRentBudgetFields(profile);
   }
 

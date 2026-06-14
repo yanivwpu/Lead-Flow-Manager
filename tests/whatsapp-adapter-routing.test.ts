@@ -1,4 +1,8 @@
-import { storage } from "../server/storage";
+import { prepareDbTestEnvironment, teardownTestUser } from "./helpers/dbTestGuard.js";
+
+prepareDbTestEnvironment("whatsapp-adapter-routing.test.ts");
+
+const { storage } = await import("../server/storage");
 
 const TEST_REPORT: { test: string; status: "PASS" | "FAIL"; details: string }[] = [];
 let testUserId: string;
@@ -437,6 +441,8 @@ async function runAllTests() {
   } catch (error) {
     console.error("Test suite error:", error);
     process.exit(1);
+  } finally {
+    await teardownTestUser(testUserId, "whatsapp-adapter-routing.test.ts");
   }
 }
 
