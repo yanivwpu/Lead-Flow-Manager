@@ -5,6 +5,7 @@ import { storage } from "./storage";
 import {
   buildCalendlyBookingMessageExternalId,
   calendlyStartTimesMatch,
+  isCalendlyBookingCanceledPayload,
   normalizeCalendlyUri,
   primaryCalendlyDedupeUri,
   type CalendlyAppointmentIdentity,
@@ -12,7 +13,7 @@ import {
 import { ACTIVE_APPOINTMENT_STATUSES } from "@shared/activeAppointment";
 import type { Appointment } from "@shared/schema";
 
-export type AppointmentDedupAction = "created" | "updated" | "skipped_duplicate";
+export type AppointmentDedupAction = "created" | "updated" | "skipped_duplicate" | "ignored_canceled_event" | "canceled";
 
 export type AppointmentDedupTrace = {
   source: string;
@@ -142,7 +143,14 @@ export async function evaluateCalendlyBookingIngest(params: {
   let reason: string | undefined;
 
   if (params.eventType === "invitee.created") {
-    if (existingAppointment?.status === "scheduled" && existingMessage) {
+    if (
+      existingAppointment &&
+      (existingAppointment.status === "cancelled" || existingAppointment.status === "rescheduled")
+    ) {
+      action = "ignored_canceled_event";
+      skipEntireIngest = true;
+      reason = "appointment_already_cancelled_for_event";
+    } else if (existingAppointment?.status === "scheduled" && existingMessage) {
       action = "skipped_duplicate";
       skipEntireIngest = true;
       reason = "appointment_and_message_exist";
@@ -158,6 +166,13 @@ export async function evaluateCalendlyBookingIngest(params: {
       action = "skipped_duplicate";
       skipEntireIngest = true;
       reason = "already_cancelled";
+    } else if (existingAppointment) {
+      action = "canceled";
+      reason = "cancel_existing_appointment";
+    } else {
+      action = "ignored_canceled_event";
+      skipEntireIngest = true;
+      reason = "no_appointment_to_cancel";
     }
   }
 
@@ -191,7 +206,11 @@ export async function shouldSkipCalendlyPollIngest(params: {
   inviteeUri?: string;
   contactId?: string;
   startTimeIso?: string;
+  body?: Record<string, unknown>;
 }): Promise<boolean> {
+  if (params.body && params.eventType === "invitee.created" && isCalendlyBookingCanceledPayload(params.body)) {
+    return false;
+  }
   const evaluation = await evaluateCalendlyBookingIngest({
     source: "calendly_poll",
     userId: params.userId,

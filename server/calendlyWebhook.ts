@@ -11,19 +11,20 @@ import {
   type WhatsAppMessage,
 } from "./userTwilio";
 import { storage } from "./storage";
-import { clearStaleAppointmentScheduledTag } from "./contactAppointmentSync";
+import { clearStaleAppointmentScheduledTag, contactHasActiveUpcomingAppointment, syncContactFollowUpAfterAppointmentChange } from "./contactAppointmentSync";
 import { dispatchInboundMessagingAutomation } from "./automationEventDispatcher";
 import { subscriptionService } from "./subscriptionService";
 import { notifyUser } from "./presence";
 import { calendlyGetWebhookSubscription } from "./calendlyApi";
 import { encryptIntegrationConfig } from "./integrationConfigCrypto";
 import { ACTIVE_APPOINTMENT_STATUSES } from "@shared/activeAppointment";
-import { buildCalendlyBookingMessageExternalId } from "@shared/calendlyAppointmentDedup";
+import { buildCalendlyBookingMessageExternalId, isCalendlyBookingCanceledPayload } from "@shared/calendlyAppointmentDedup";
 import {
   evaluateCalendlyBookingIngest,
   findExistingCalendlyAppointment,
   logAppointmentDedupTrace,
 } from "./appointmentDedup";
+import { logCalendlyLifecycleTrace } from "./calendlyLifecycleTrace";
 
 const DECRYPT_KEYS = [
   "accessToken",
@@ -787,6 +788,19 @@ async function handleInviteeCreated(
   body: Record<string, unknown>,
   ingestSource = "calendly_webhook",
 ): Promise<void> {
+  if (isCalendlyBookingCanceledPayload(body)) {
+    logCalendlyLifecycleTrace({
+      eventType: String(body.event || "invitee.created"),
+      canceled: true,
+      action: "ignored_canceled_event",
+      outboundMessageSent: false,
+      source: ingestSource,
+      reason: "canceled_payload_routed_to_cancel_handler",
+    });
+    await handleInviteeCanceled(userId, body, ingestSource);
+    return;
+  }
+
   const parsed = extractCalendlyBookingPayload(body);
   if (!parsed) {
     console.warn("[Calendly] invitee.created — missing email in payload");
@@ -874,7 +888,8 @@ async function handleInviteeCreated(
     if (
       bookingMatch?.contactId &&
       bookingMatch.conversationId &&
-      dedup.existingAppointment.contactId !== bookingMatch.contactId
+      dedup.existingAppointment.contactId !== bookingMatch.contactId &&
+      dedup.existingAppointment.status === "scheduled"
     ) {
       await db
         .update(appointments)
@@ -892,6 +907,37 @@ async function handleInviteeCreated(
         conversationId: bookingMatch.conversationId,
       });
     }
+    logCalendlyLifecycleTrace({
+      eventType: "invitee.created",
+      status: dedup.existingAppointment?.status ?? null,
+      canceled: dedup.action === "ignored_canceled_event",
+      scheduledEventUri: scheduledEventUri || dedup.primaryUri,
+      contactId: preferredContactId,
+      existingAppointmentId: dedup.existingAppointment?.id ?? null,
+      action: dedup.action === "ignored_canceled_event" ? "ignored_canceled_event" : "skipped_duplicate",
+      outboundMessageSent: false,
+      source: ingestSource,
+      reason: dedup.action,
+    });
+    return;
+  }
+
+  if (
+    dedup.existingAppointment &&
+    (dedup.existingAppointment.status === "cancelled" || dedup.existingAppointment.status === "rescheduled")
+  ) {
+    logCalendlyLifecycleTrace({
+      eventType: "invitee.created",
+      status: dedup.existingAppointment.status,
+      canceled: true,
+      scheduledEventUri: scheduledEventUri || dedup.primaryUri,
+      contactId: preferredContactId,
+      existingAppointmentId: dedup.existingAppointment.id,
+      action: "ignored_canceled_event",
+      outboundMessageSent: false,
+      source: ingestSource,
+      reason: "appointment_already_cancelled_for_event",
+    });
     return;
   }
 
@@ -1089,10 +1135,37 @@ async function handleInviteeCreated(
         skipKeywordWorkflows: chatbotWillFire,
       }).catch((err) => console.error("[Calendly] workflow dispatch error:", err));
     }
+    logCalendlyLifecycleTrace({
+      eventType: "invitee.created",
+      status: "scheduled",
+      canceled: false,
+      scheduledEventUri: scheduledEventKey || scheduledEventUri,
+      contactId: contact.id,
+      existingAppointmentId: appointmentId,
+      action: "created",
+      outboundMessageSent: Boolean(updatedChat),
+      source: ingestSource,
+    });
+  } else {
+    logCalendlyLifecycleTrace({
+      eventType: "invitee.created",
+      status: "scheduled",
+      canceled: false,
+      scheduledEventUri: scheduledEventKey || scheduledEventUri,
+      contactId: contact.id,
+      existingAppointmentId: appointmentId,
+      action: "updated",
+      outboundMessageSent: false,
+      source: ingestSource,
+    });
   }
 }
 
-async function handleInviteeCanceled(userId: string, body: Record<string, unknown>): Promise<void> {
+async function handleInviteeCanceled(
+  userId: string,
+  body: Record<string, unknown>,
+  ingestSource = "calendly_webhook",
+): Promise<void> {
   const parsed = extractCalendlyBookingPayload(body);
   if (!parsed) {
     logCalendlyWebhook("invitee_canceled_unparsed", { userId });
@@ -1104,6 +1177,7 @@ async function handleInviteeCanceled(userId: string, body: Record<string, unknow
     name: parsed.name,
     eventTypeName: parsed.eventTypeName,
     startTime: parsed.startTime || null,
+    ingestSource,
   });
   const preferredContactId = await resolvePreferredCalendlyContactId(userId, parsed.email, parsed.utmContactId);
   const contact =
@@ -1111,8 +1185,55 @@ async function handleInviteeCanceled(userId: string, body: Record<string, unknow
     (await storage.getContactByChannelId(userId, "calendly", parsed.email));
   if (!contact) {
     console.log(`[Calendly] cancel — no contact for ${parsed.email}`);
+    logCalendlyLifecycleTrace({
+      eventType: String(body.event || "invitee.canceled"),
+      canceled: true,
+      scheduledEventUri: parsed.scheduledEventUri,
+      action: "ignored_canceled_event",
+      outboundMessageSent: false,
+      source: ingestSource,
+      reason: "contact_not_found",
+    });
     return;
   }
+
+  const appointment = await findCalendlyAppointmentForLifecycle({
+    userId,
+    contactId: contact.id,
+    scheduledEventUri: parsed.scheduledEventUri,
+    inviteeUri: parsed.inviteeUri,
+    oldScheduledEventUri: parsed.oldScheduledEventUri,
+    oldInviteeUri: parsed.oldInviteeUri,
+  });
+
+  const cancelDedup = await evaluateCalendlyBookingIngest({
+    source: ingestSource,
+    userId,
+    identity: {
+      scheduledEventUri: parsed.scheduledEventUri,
+      inviteeUri: parsed.inviteeUri,
+      contactId: contact.id,
+      startTimeIso: parsed.startTime,
+    },
+    eventType: "invitee.canceled",
+  });
+
+  if (cancelDedup.skipEntireIngest) {
+    logCalendlyLifecycleTrace({
+      eventType: String(body.event || "invitee.canceled"),
+      status: appointment?.status ?? cancelDedup.existingAppointment?.status ?? null,
+      canceled: true,
+      scheduledEventUri: parsed.scheduledEventUri,
+      contactId: contact.id,
+      existingAppointmentId: appointment?.id ?? cancelDedup.existingAppointment?.id ?? null,
+      action: "skipped_duplicate",
+      outboundMessageSent: false,
+      source: ingestSource,
+      reason: "already_cancelled",
+    });
+    return;
+  }
+
   const timeZone = await getUserTimezone(userId);
   const timeLabel = formatBookingTime(parsed.startTime, timeZone);
   const bookingEvent = buildCalendlyConversationEvent({
@@ -1127,6 +1248,10 @@ async function handleInviteeCanceled(userId: string, body: Record<string, unknow
     inviteeEmail: parsed.email,
     isRescheduleCancellation: parsed.isRescheduleCancellation,
   });
+  const cancelMessageExternalId = `calendly-canceled:${buildCalendlyBookingMessageExternalId({
+    scheduledEventUri: parsed.scheduledEventUri,
+    inviteeUri: parsed.inviteeUri,
+  }) || parsed.externalMessageId}`;
   const written = await writeCalendlyConversationActivity({
     userId,
     email: parsed.email,
@@ -1134,23 +1259,19 @@ async function handleInviteeCanceled(userId: string, body: Record<string, unknow
     content: bookingEvent.content,
     preview: bookingEvent.preview,
     contentType: "calendly_event",
-    externalMessageId: `calendly-canceled:${parsed.externalMessageId}`,
+    externalMessageId: cancelMessageExternalId,
     preferredContactId: contact.id,
+    preferredConversationId: appointment?.conversationId || parsed.utmConversationId,
   });
-  const appointment = await findCalendlyAppointmentForLifecycle({
-    userId,
-    contactId: contact.id,
-    scheduledEventUri: parsed.scheduledEventUri,
-    inviteeUri: parsed.inviteeUri,
-    oldScheduledEventUri: parsed.oldScheduledEventUri,
-    oldInviteeUri: parsed.oldInviteeUri,
-  });
-  if (appointment) {
+
+  const targetAppointment = appointment ?? cancelDedup.existingAppointment;
+  if (targetAppointment) {
     await db
       .update(appointments)
       .set({ status: parsed.isRescheduleCancellation ? "rescheduled" : "cancelled" })
-      .where(eq(appointments.id, appointment.id));
+      .where(eq(appointments.id, targetAppointment.id));
   }
+
   const line = parsed.isRescheduleCancellation
     ? `Booking rescheduled from ${timeLabel} (${parsed.eventTypeName})`
     : `Booking canceled: ${parsed.eventTypeName} at ${timeLabel}`;
@@ -1159,7 +1280,7 @@ async function handleInviteeCanceled(userId: string, body: Record<string, unknow
     ? (prevCf.calendlyLastBooking as Record<string, unknown>)
     : null;
   const patch: Record<string, unknown> = { notes: appendContactNote(contact.notes, line) };
-  if (!parsed.isRescheduleCancellation && (!lastBooking || !appointment || lastBooking.appointmentId === appointment.id)) {
+  if (!parsed.isRescheduleCancellation && (!lastBooking || !targetAppointment || lastBooking.appointmentId === targetAppointment.id)) {
     patch.followUp = "";
     patch.followUpDate = null;
     patch.customFields = {
@@ -1169,64 +1290,61 @@ async function handleInviteeCanceled(userId: string, body: Record<string, unknow
         : { status: "cancelled", eventTypeName: parsed.eventTypeName, cancelledAt: new Date().toISOString() },
     };
   }
+
+  const hasActive = await contactHasActiveUpcomingAppointment(userId, contact.id);
+  if (!hasActive && contact.pipelineStage === "Appointment Set") {
+    patch.pipelineStage = "Appointment Requested";
+  }
+
   await storage.updateContact(contact.id, patch as any, { skipAutomationHooks: true });
   if (!parsed.isRescheduleCancellation) {
     await clearStaleAppointmentScheduledTag(contact.id);
+    await syncContactFollowUpAfterAppointmentChange(userId, contact.id);
   }
+
   const { channelService } = await import("./channelService");
   await channelService.logActivity(userId, contact.id, written.conversationId, "calendly_booking_canceled", {
     email: parsed.email,
     eventType: parsed.eventTypeName,
     startTime: parsed.startTime || null,
     meetingLink: parsed.meetingLink || null,
-    appointmentId: appointment?.id || null,
+    appointmentId: targetAppointment?.id || null,
   });
-  if (appointment) {
-    notifyUser(userId, {
-      type: "calendly_booking_confirmed",
-      contactId: contact.id,
-      conversationId: written.conversationId,
-      appointmentId: appointment.id,
-      title: appointment.title,
-      startTime: appointment.appointmentDate.toISOString(),
-      eventTypeName: parsed.eventTypeName,
-      source: "calendly",
-    });
+
+  if (targetAppointment) {
     logCalendlyLifecycle({
       event: parsed.isRescheduleCancellation ? "reschedule_cancel_leg_applied" : "cancel_applied",
       userId,
       contactId: contact.id,
       conversationId: written.conversationId,
-      oldAppointmentId: appointment.id,
+      oldAppointmentId: targetAppointment.id,
       newAppointmentId: null,
-      statusTransition: `${appointment.status}->${parsed.isRescheduleCancellation ? "rescheduled" : "cancelled"}`,
+      statusTransition: `${targetAppointment.status}->${parsed.isRescheduleCancellation ? "rescheduled" : "cancelled"}`,
       followUpUpdated: !parsed.isRescheduleCancellation,
       copilotUpdated: true,
     });
   }
+
+  logCalendlyLifecycleTrace({
+    eventType: String(body.event || "invitee.canceled"),
+    status: parsed.isRescheduleCancellation ? "rescheduled" : "cancelled",
+    canceled: true,
+    scheduledEventUri: parsed.scheduledEventUri,
+    contactId: contact.id,
+    existingAppointmentId: targetAppointment?.id ?? null,
+    action: targetAppointment ? "canceled" : "ignored_canceled_event",
+    outboundMessageSent: false,
+    source: ingestSource,
+    reason: targetAppointment ? "appointment_marked_cancelled" : "no_appointment_to_cancel",
+  });
+
   logCalendlyWebhook("invitee_canceled_activity_created", {
     userId,
     email: parsed.email,
     contactId: contact.id,
     conversationId: written.conversationId,
+    appointmentId: targetAppointment?.id || null,
   });
-  const chatKey = legacyCalendlyChatStorageKey(parsed.email);
-  const chatRows = await db
-    .select()
-    .from(chats)
-    .where(and(eq(chats.userId, userId), eq(chats.whatsappPhone, chatKey)))
-    .limit(1);
-  const chat = chatRows[0];
-  if (chat) {
-    dispatchInboundMessagingAutomation({
-      userId,
-      isNewChat: false,
-      updatedChat: chat,
-      messageBody: "Booking canceled",
-      contact,
-      conversationId: undefined,
-    }).catch(() => {});
-  }
 }
 
 async function handleInviteeRescheduled(userId: string, body: Record<string, unknown>): Promise<void> {
@@ -1518,7 +1636,7 @@ async function processCalendlyPayload(
       await handleInviteeCreated(userId, body, ingestSource);
       break;
     case "invitee.canceled":
-      await handleInviteeCanceled(userId, body);
+      await handleInviteeCanceled(userId, body, ingestSource);
       break;
     case "invitee.rescheduled":
       await handleInviteeRescheduled(userId, body);

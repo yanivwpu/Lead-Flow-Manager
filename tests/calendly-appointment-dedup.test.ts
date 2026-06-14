@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import {
   buildCalendlyBookingMessageExternalId,
   calendlyStartTimesMatch,
+  isCalendlyBookingCanceledPayload,
   primaryCalendlyDedupeUri,
 } from "../shared/calendlyAppointmentDedup";
 
@@ -22,6 +23,38 @@ function assertPureDedupHelpers() {
   assert.equal(calendlyStartTimesMatch(start, new Date(start)), true);
   assert.equal(calendlyStartTimesMatch(start, new Date("2026-06-15T14:00:30.000Z")), true);
   assert.equal(calendlyStartTimesMatch(start, new Date("2026-06-15T15:00:00.000Z")), false);
+
+  const cancelEventUri = "https://api.calendly.com/scheduled_events/cancel-test";
+  assert.equal(
+    isCalendlyBookingCanceledPayload({ event: "invitee.canceled", payload: { email: "a@b.com" } }),
+    true,
+  );
+  assert.equal(
+    isCalendlyBookingCanceledPayload({
+      event: "invitee.created",
+      payload: {
+        email: "a@b.com",
+        uri: `${cancelEventUri}/invitees/x`,
+        scheduled_event: { uri: cancelEventUri, status: "canceled", start_time: start },
+      },
+    }),
+    true,
+  );
+  assert.equal(
+    isCalendlyBookingCanceledPayload({
+      event: "invitee.created",
+      payload: {
+        email: "a@b.com",
+        uri: `${cancelEventUri}/invitees/x`,
+        scheduled_event: { uri: cancelEventUri, status: "active", start_time: start },
+        cancellation: { rescheduled: true },
+        rescheduled: true,
+      },
+    }),
+    false,
+    "reschedule cancellation leg is not treated as deleted booking",
+  );
+
   console.log("  pure dedup helpers: OK");
 }
 
@@ -48,6 +81,40 @@ function buildCalendlyInviteeCreatedBody(params: {
         start_time: startTime,
         end_time: endTime,
       },
+      tracking: {
+        utm_content: params.contactId,
+        utm_campaign: params.conversationId,
+      },
+    },
+  };
+}
+
+function buildCalendlyInviteeCanceledBody(params: {
+  email: string;
+  contactId: string;
+  conversationId: string;
+  scheduledEventUri: string;
+  inviteeUri: string;
+  startTime?: string;
+  endTime?: string;
+}) {
+  const startTime = params.startTime ?? "2026-06-15T14:00:00.000000Z";
+  const endTime = params.endTime ?? "2026-06-15T14:30:00.000000Z";
+  return {
+    event: "invitee.canceled",
+    payload: {
+      email: params.email,
+      name: "Dedup Test Lead",
+      uri: params.inviteeUri,
+      status: "canceled",
+      scheduled_event: {
+        uri: params.scheduledEventUri,
+        name: "Property Showing",
+        status: "canceled",
+        start_time: startTime,
+        end_time: endTime,
+      },
+      cancellation: { canceled_by: "host", reason: "Deleted by host" },
       tracking: {
         utm_content: params.contactId,
         utm_campaign: params.conversationId,
@@ -140,7 +207,55 @@ async function runDbIntegration() {
     );
     assert.equal(outboundAfterSecond.length, 0, "no duplicate outbound confirmation after poll re-ingest");
 
-    console.log("  DB integration (webhook → poll): OK");
+    assert.equal(outboundAfterSecond.length, 0, "no duplicate outbound confirmation after poll re-ingest");
+
+    const cancelBody = buildCalendlyInviteeCanceledBody({
+      email: "dedup-lead@example.com",
+      contactId: contact.id,
+      conversationId: conversation.id,
+      scheduledEventUri,
+      inviteeUri,
+    });
+    await ingestCalendlyEvent(user.id, cancelBody, { source: "calendly_webhook" });
+
+    const apptsAfterCancel = await storage.getAppointmentsByContact(user.id, contact.id);
+    const calendlyApptsAfterCancel = apptsAfterCancel.filter((a) => a.source === "calendly");
+    assert.equal(calendlyApptsAfterCancel.length, 1, "cancel must not create a new appointment row");
+    assert.equal(calendlyApptsAfterCancel[0]?.status, "cancelled", "appointment marked cancelled");
+    assert.equal(calendlyApptsAfterCancel[0]?.id, calendlyApptsAfterFirst[0]?.id, "same appointment row after cancel");
+
+    const msgsAfterCancel = await storage.getMessages(conversation.id, 200);
+    const bookingMsgsAfterCancel = msgsAfterCancel.filter((m) => m.contentType === "calendly_event");
+    assert.equal(bookingMsgsAfterCancel.length, 2, "booked + canceled timeline cards");
+    const outboundAfterCancel = msgsAfterCancel.filter(
+      (m) => m.direction === "outbound" && /great|scheduled|booked/i.test(m.content || ""),
+    );
+    assert.equal(outboundAfterCancel.length, 0, "cancel must not send scheduled confirmation");
+
+    const refreshedContact = await storage.getContact(contact.id);
+    assert.notEqual(refreshedContact?.pipelineStage, "Appointment Set", "pipeline reverts when no active appointment");
+
+    await ingestCalendlyEvent(user.id, body, { source: "calendly_poll" });
+    await ingestCalendlyEvent(user.id, cancelBody, { source: "calendly_poll" });
+
+    const apptsAfterCancelPoll = await storage.getAppointmentsByContact(user.id, contact.id);
+    assert.equal(
+      apptsAfterCancelPoll.filter((a) => a.source === "calendly").length,
+      1,
+      "post-cancel poll must not recreate appointment",
+    );
+    const msgsAfterCancelPoll = await storage.getMessages(conversation.id, 200);
+    assert.equal(
+      msgsAfterCancelPoll.filter((m) => m.contentType === "calendly_event").length,
+      2,
+      "post-cancel poll must not add duplicate booking card",
+    );
+    const outboundAfterCancelPoll = msgsAfterCancelPoll.filter(
+      (m) => m.direction === "outbound" && /great|scheduled|booked/i.test(m.content || ""),
+    );
+    assert.equal(outboundAfterCancelPoll.length, 0, "post-cancel poll must not send confirmation");
+
+    console.log("  DB integration (webhook → poll → cancel → poll): OK");
   } finally {
     await teardownTestUser(userId, "calendly-appointment-dedup.test.ts");
   }

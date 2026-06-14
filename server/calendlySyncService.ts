@@ -10,6 +10,10 @@ import {
 import { ingestCalendlyEvent } from "./calendlyWebhook";
 import { shouldSkipCalendlyPollIngest } from "./appointmentDedup";
 import {
+  isCalendlyBookingCanceledPayload,
+  isCanceledCalendlyStatus,
+  normalizeCalendlyStatus,
+} from "@shared/calendlyAppointmentDedup";
   calendlySyncModeConfigPatch,
   resolveCalendlySyncModeFromConfig,
   type CalendlySyncMode,
@@ -91,10 +95,18 @@ function resolvePollEventType(
   scheduledEvent: CalendlyScheduledEventResource,
   invitee: CalendlyEventInviteeResource,
 ): "invitee.created" | "invitee.canceled" | null {
-  const inviteeStatus = String(invitee.status || "").toLowerCase();
-  const eventStatus = String(scheduledEvent.status || "").toLowerCase();
-  if (inviteeStatus === "canceled" || eventStatus === "canceled") {
+  const inviteeStatus = normalizeCalendlyStatus(invitee.status);
+  const eventStatus = normalizeCalendlyStatus(scheduledEvent.status);
+  if (isCanceledCalendlyStatus(inviteeStatus) || isCanceledCalendlyStatus(eventStatus)) {
     return "invitee.canceled";
+  }
+  if (invitee.cancellation) {
+    const rescheduled =
+      invitee.cancellation.rescheduled === true ||
+      String(invitee.cancellation.reason || "")
+        .toLowerCase()
+        .includes("reschedul");
+    if (!rescheduled) return "invitee.canceled";
   }
   if (inviteeStatus === "active" || eventStatus === "active" || !inviteeStatus) {
     return "invitee.created";
@@ -109,6 +121,7 @@ async function shouldSkipPollIngest(params: {
   inviteeUri?: string;
   email?: string;
   startTimeIso?: string;
+  body?: Record<string, unknown>;
 }): Promise<boolean> {
   return shouldSkipCalendlyPollIngest({
     userId: params.userId,
@@ -116,6 +129,7 @@ async function shouldSkipPollIngest(params: {
     scheduledEventUri: params.scheduledEventUri,
     inviteeUri: params.inviteeUri,
     startTimeIso: params.startTimeIso,
+    body: params.body,
   });
 }
 
@@ -252,7 +266,7 @@ export async function pollCalendlyBookingsForUser(
       result.inviteesScanned += invitees.length;
 
       for (const invitee of invitees) {
-        const eventType = resolvePollEventType(event, invitee);
+        let eventType = resolvePollEventType(event, invitee);
         if (!eventType) {
           result.skipped++;
           continue;
@@ -260,6 +274,12 @@ export async function pollCalendlyBookingsForUser(
 
         const scheduledEventUri = event.uri;
         const inviteeUri = invitee.uri;
+        let body = buildPollIngestBody(event, invitee, eventType);
+
+        if (eventType === "invitee.created" && isCalendlyBookingCanceledPayload(body)) {
+          eventType = "invitee.canceled";
+          body = { ...body, event: "invitee.canceled" };
+        }
 
         if (
           await shouldSkipPollIngest({
@@ -268,13 +288,13 @@ export async function pollCalendlyBookingsForUser(
             scheduledEventUri,
             inviteeUri,
             startTimeIso: event.start_time,
+            body,
           })
         ) {
           result.skipped++;
           continue;
         }
 
-        const body = buildPollIngestBody(event, invitee, eventType);
         try {
           await ingestCalendlyEvent(userId, body, { source: "calendly_poll" });
           if (eventType === "invitee.created") result.imported++;
