@@ -74,6 +74,7 @@ export function buildPersistedProfileSnapshotForDiagnostics(
   priceMin: number | null;
   pool: boolean | null;
   bedsMin: number | null;
+  bedsMax: number | null;
   propertyTypes: string[];
   areas: string[];
   hardRequirePool: boolean;
@@ -86,6 +87,7 @@ export function buildPersistedProfileSnapshotForDiagnostics(
     priceMin: budget.priceMin ?? null,
     pool: profile.pool?.value ?? null,
     bedsMin: c.bedsMin ?? null,
+    bedsMax: c.bedsMax ?? null,
     propertyTypes: c.propertyTypes,
     areas: c.areas,
     hardRequirePool: c.hardRequirePool,

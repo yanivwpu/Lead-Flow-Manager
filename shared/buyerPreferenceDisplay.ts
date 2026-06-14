@@ -264,10 +264,17 @@ export function buildBuyerPreferenceChips(
   }
 
   if (profile.bedsMin && profile.bedsMin.confidence >= 0.45 && profile.bedsMin.value > 0) {
+    const bedLabel =
+      profile.bedsMax &&
+      profile.bedsMax.confidence >= 0.45 &&
+      profile.bedsMax.value > 0 &&
+      profile.bedsMax.value !== profile.bedsMin.value
+        ? `${profile.bedsMin.value}–${profile.bedsMax.value} bed`
+        : `${profile.bedsMin.value} bed`;
     chips.push({
       id: "beds",
       label: "Beds",
-      value: `${profile.bedsMin.value} bed`,
+      value: bedLabel,
       source: profile.bedsMin.source,
     });
   }

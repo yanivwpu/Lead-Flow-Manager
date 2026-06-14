@@ -487,6 +487,29 @@ export function normalizeLlmExtractionPatch(raw: unknown): BuyerPreferenceExtrac
   return loose;
 }
 
+/** Parse bedroom ranges like "3-5 bedrooms", "3 to 5 bed", "between 3 and 5 bedrooms". */
+export function parseBedroomRangeFromText(text: string): { min: number; max: number } | null {
+  const lower = text.toLowerCase();
+  const betweenM = lower.match(/\bbetween\s+(\d+)\s+and\s+(\d+)\s*bed(?:room)?s?\b/);
+  if (betweenM) {
+    const min = parseInt(betweenM[1], 10);
+    const max = parseInt(betweenM[2], 10);
+    if (Number.isFinite(min) && Number.isFinite(max) && min > 0 && max > 0 && min <= max) {
+      return { min, max };
+    }
+    return null;
+  }
+  const rangeM = lower.match(/\b(\d+)\s*(?:-|–|—|\s+to\s+)\s*(\d+)\s*bed(?:room)?s?\b/);
+  if (rangeM) {
+    const min = parseInt(rangeM[1], 10);
+    const max = parseInt(rangeM[2], 10);
+    if (Number.isFinite(min) && Number.isFinite(max) && min > 0 && max > 0 && min <= max) {
+      return { min, max };
+    }
+  }
+  return null;
+}
+
 /** Heuristic patch from the latest inbound message only (fast-path). */
 export function heuristicPatchFromInboundText(inboundText: string): BuyerPreferenceExtractionPatch {
   return heuristicPatchFromTranscript(inboundText, { latestUserLineOnly: true });
@@ -565,6 +588,12 @@ export function heuristicPatchFromTranscript(
     patch.bathsMin = { value: baths, ...inf(0.93, evidence) };
   };
 
+  const bedRange = parseBedroomRangeFromText(lower);
+  if (bedRange) {
+    patch.bedsMin = { value: bedRange.min, ...inf(0.9, "bedroom range in message") };
+    patch.bedsMax = { value: bedRange.max, ...inf(0.9, "bedroom range in message") };
+  }
+
   if (bedBathSlash && (isBedBathCorrection || tooBigBedM || tooManyBeds)) {
     applyBedBathCorrection(
       parseInt(bedBathSlash[1], 10),
@@ -589,9 +618,11 @@ export function heuristicPatchFromTranscript(
       "beds correction in message",
     );
   } else if (bedBathSlash) {
-    patch.bedsMin = { value: parseInt(bedBathSlash[1], 10), ...inf(0.86, "beds in message") };
+    if (!bedRange) {
+      patch.bedsMin = { value: parseInt(bedBathSlash[1], 10), ...inf(0.86, "beds in message") };
+    }
     patch.bathsMin = { value: parseFloat(bedBathSlash[2]), ...inf(0.86, "baths in message") };
-  } else {
+  } else if (!bedRange) {
     const atLeastBedM =
       lower.match(/\b(?:at\s+least|at\s+east|minimum|min)\s+(\d+)\s*[- ]?\s*bed/) ??
       lower.match(/\b(?:at\s+least|at\s+east|minimum|min)\s+(\d+)\s+bedrooms?\b/);
@@ -601,12 +632,22 @@ export function heuristicPatchFromTranscript(
         ...inf(0.88, "at least beds in message"),
       };
     }
-    const bedM = !atLeastBedM ? lower.match(/(\d+)\s*[- ]?\s*bed/) : null;
+    const bedM =
+      !atLeastBedM && !bedRange
+        ? lower.match(/\b(\d+)\s*[- ]?\s*bed(?:room)?s?\b/)
+        : null;
     if (bedM) {
       patch.bedsMin = { value: parseInt(bedM[1], 10), ...inf(0.72, "beds in message") };
     }
     const bathM = lower.match(/(\d+(?:\.\d+)?)\s*[- ]?\s*bath/);
     if (bathM) {
+      patch.bathsMin = { value: parseFloat(bathM[1]), ...inf(0.72, "baths in message") };
+    }
+  }
+
+  if (bedRange) {
+    const bathM = lower.match(/(\d+(?:\.\d+)?)\s*[- ]?\s*bath/);
+    if (bathM && !patch.bathsMin) {
       patch.bathsMin = { value: parseFloat(bathM[1]), ...inf(0.72, "baths in message") };
     }
   }

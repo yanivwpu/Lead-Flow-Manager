@@ -1223,6 +1223,15 @@ export function auditBuySearchMatchFunnel(
   const sampleLimit = options?.sampleLimit ?? 20;
   const priceMax = criteria.priceMax;
   const bedsMin = criteria.bedsMin;
+  const bedsMax = criteria.bedsMax;
+  const bedsFunnelLabel =
+    bedsMin != null && bedsMax != null && bedsMax !== bedsMin
+      ? `Beds: ${bedsMin}–${bedsMax} (or unknown)`
+      : bedsMin != null
+        ? `beds >= ${bedsMin} (or unknown)`
+        : bedsMax != null
+          ? `beds <= ${bedsMax} (or unknown)`
+          : "beds (none)";
   const areaLabel =
     criteria.areas.length > 0 ? criteria.areas.join(" / ") : "any area";
   const typeLabel =
@@ -1278,6 +1287,7 @@ export function auditBuySearchMatchFunnel(
     nPrice += 1;
 
     if (bedsMin != null && listing.beds != null && listing.beds < bedsMin) continue;
+    if (bedsMax != null && listing.beds != null && listing.beds > bedsMax) continue;
     nBeds += 1;
 
     if (criteria.hardRequirePool && !listingHasPoolSignal(listing)) continue;
@@ -1338,9 +1348,9 @@ export function auditBuySearchMatchFunnel(
     ...(priceMax != null
       ? [{ label: `price <= $${priceMax.toLocaleString()}`, count: nPrice }]
       : [{ label: "price cap (none)", count: nPrice }]),
-    ...(bedsMin != null
-      ? [{ label: `beds >= ${bedsMin} (or unknown)`, count: nBeds }]
-      : [{ label: "beds min (none)", count: nBeds }]),
+    ...(bedsMin != null || bedsMax != null
+      ? [{ label: bedsFunnelLabel, count: nBeds }]
+      : [{ label: "beds (none)", count: nBeds }]),
     ...(criteria.hardRequirePool
       ? [{ label: "verified pool", count: nPool }]
       : [{ label: "pool optional (no pool gate)", count: nBeds }]),

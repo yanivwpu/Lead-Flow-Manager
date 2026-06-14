@@ -45,6 +45,7 @@ export const inventoryMatchProfileSnapshotSchema = z.object({
   priceMin: z.number().nullable(),
   pool: z.boolean().nullable(),
   bedsMin: z.number().nullable(),
+  bedsMax: z.number().nullable().optional(),
   propertyTypes: z.array(z.string()),
   areas: z.array(z.string()),
   hardRequirePool: z.boolean(),

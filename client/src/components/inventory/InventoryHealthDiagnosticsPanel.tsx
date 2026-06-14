@@ -144,6 +144,7 @@ export function InventoryHealthDiagnosticsPanel({
             <DiagnosticRow label="priceMin" value={profile.priceMin ?? "—"} />
             <DiagnosticRow label="priceMax" value={profile.priceMax ?? "—"} />
             <DiagnosticRow label="bedsMin" value={profile.bedsMin ?? "—"} />
+            <DiagnosticRow label="bedsMax" value={profile.bedsMax ?? "—"} />
             <DiagnosticRow
               label="pool"
               value={profile.pool == null ? "(none)" : profile.pool ? "required" : "optional"}
