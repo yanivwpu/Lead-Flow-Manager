@@ -8,6 +8,7 @@ import {
   type CalendlyScheduledEventResource,
 } from "./calendlyApi";
 import { ingestCalendlyEvent } from "./calendlyWebhook";
+import { shouldSkipCalendlyPollIngest } from "./appointmentDedup";
 import {
   calendlySyncModeConfigPatch,
   resolveCalendlySyncModeFromConfig,
@@ -106,18 +107,16 @@ async function shouldSkipPollIngest(params: {
   eventType: "invitee.created" | "invitee.canceled";
   scheduledEventUri?: string;
   inviteeUri?: string;
+  email?: string;
+  startTimeIso?: string;
 }): Promise<boolean> {
-  const key = (params.scheduledEventUri || params.inviteeUri || "").trim();
-  if (!key) return false;
-
-  const existing = await storage.getAppointmentByCalendlyScheduledEventUri(params.userId, key);
-  if (!existing) return false;
-
-  if (params.eventType === "invitee.created") {
-    return existing.status === "scheduled";
-  }
-
-  return existing.status === "cancelled" || existing.status === "rescheduled";
+  return shouldSkipCalendlyPollIngest({
+    userId: params.userId,
+    eventType: params.eventType,
+    scheduledEventUri: params.scheduledEventUri,
+    inviteeUri: params.inviteeUri,
+    startTimeIso: params.startTimeIso,
+  });
 }
 
 async function fetchAllScheduledEvents(
@@ -268,6 +267,7 @@ export async function pollCalendlyBookingsForUser(
             eventType,
             scheduledEventUri,
             inviteeUri,
+            startTimeIso: event.start_time,
           })
         ) {
           result.skipped++;
@@ -276,7 +276,7 @@ export async function pollCalendlyBookingsForUser(
 
         const body = buildPollIngestBody(event, invitee, eventType);
         try {
-          await ingestCalendlyEvent(userId, body);
+          await ingestCalendlyEvent(userId, body, { source: "calendly_poll" });
           if (eventType === "invitee.created") result.imported++;
           else result.canceled++;
           logPoll("invitee_ingested", {
