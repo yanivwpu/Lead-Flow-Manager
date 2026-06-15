@@ -7,6 +7,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import { demoBookings } from "@shared/schema";
 import { storage } from "./storage";
+import { isDemoBookingsSchemaMismatchError } from "./demoBookingRows";
 
 type DemoEligibleSalesperson = {
   id: string;
@@ -104,6 +105,8 @@ export async function reassignDemoBookingToPool(
 }
 
 /** Reassign demos that were not accepted within 24 hours. */
+let demoAssignmentSchemaMismatchLogged = false;
+
 export async function processExpiredDemoAcceptances(): Promise<number> {
   const cutoff = new Date(Date.now() - DEMO_ACCEPTANCE_TIMEOUT_HOURS * 60 * 60 * 1000);
   let reassigned = 0;
@@ -128,6 +131,15 @@ export async function processExpiredDemoAcceptances(): Promise<number> {
       if (result.reassigned) reassigned++;
     }
   } catch (err) {
+    if (isDemoBookingsSchemaMismatchError(err)) {
+      if (!demoAssignmentSchemaMismatchLogged) {
+        demoAssignmentSchemaMismatchLogged = true;
+        console.warn(
+          "[DemoAssignment] demo_bookings assignment columns missing — skipping expired acceptance sweep until startup schema patch applies",
+        );
+      }
+      return 0;
+    }
     console.error("[DemoAssignment] processExpiredDemoAcceptances error:", err);
   }
 

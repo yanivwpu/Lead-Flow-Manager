@@ -36,6 +36,20 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
     ].join(";\n"),
   },
   {
+    tag: "0036_demo_bookings_sales_portal_assignment",
+    sql: [
+      `ALTER TABLE demo_bookings ADD COLUMN IF NOT EXISTS assigned_at timestamp`,
+      `ALTER TABLE demo_bookings ADD COLUMN IF NOT EXISTS accepted_at timestamp`,
+      `ALTER TABLE demo_bookings ADD COLUMN IF NOT EXISTS decline_reason text`,
+      `ALTER TABLE demo_bookings ADD COLUMN IF NOT EXISTS declined_by_salesperson_id varchar`,
+      `ALTER TABLE demo_bookings ADD COLUMN IF NOT EXISTS declined_at timestamp`,
+      `ALTER TABLE demo_bookings ADD COLUMN IF NOT EXISTS source text DEFAULT 'web'`,
+      `ALTER TABLE demo_bookings ALTER COLUMN salesperson_id DROP NOT NULL`,
+      `UPDATE demo_bookings SET status = 'pending_acceptance' WHERE status = 'pending'`,
+      `UPDATE demo_bookings SET assigned_at = COALESCE(assigned_at, created_at) WHERE status IN ('pending_acceptance', 'accepted') AND assigned_at IS NULL`,
+    ].join(";\n"),
+  },
+  {
     tag: "0043_calendly_canceled_event_tombstones",
     sql: [
       `CREATE TABLE IF NOT EXISTS calendly_canceled_event_tombstones (
