@@ -10,6 +10,12 @@ import {
   describeActiveSearchFilters,
 } from "@shared/buyerSearchCommandDebug";
 import {
+  logReplacementSearchTraceAlias,
+  summarizeListingsForTrace,
+  traceBuyerMatchingInventoryResult,
+} from "@shared/buyerMatchingTrace";
+import { resolveBuyerMatchingTraceId } from "../buyerMatchingTraceRegistry";
+import {
   extractBuyerMatchCriteria,
   rankInventoryMatches,
   buildMatchFunnelSummary,
@@ -131,7 +137,11 @@ function toPublicMatch(scored: ReturnType<typeof rankInventoryMatches>[number]):
 export async function findMatchingListingsForContact(
   contactId: string,
   userId: string,
-): Promise<InventoryMatchesResponse & { httpStatus?: number }> {
+  options?: { traceId?: string },
+): Promise<InventoryMatchesResponse & { httpStatus?: number; buyerMatchingTraceId?: string }> {
+  const buyerMatchingTraceId =
+    options?.traceId ?? resolveBuyerMatchingTraceId(contactId);
+
   const contact = await storage.getContact(contactId);
   if (!contact) {
     return {
@@ -267,6 +277,17 @@ export async function findMatchingListingsForContact(
     noMatchSummary,
   });
 
+  traceBuyerMatchingInventoryResult({
+    traceId: buyerMatchingTraceId,
+    contactId,
+    userId,
+    source: "findMatchingListingsForContact",
+    profile,
+    matches: summarizeListingsForTrace(matches),
+    matchCount: totalMatchCount,
+    activeFilterSummary,
+  });
+
   console.info("[inventory-match-funnel]", {
     contactId,
     userId,
@@ -283,17 +304,13 @@ export async function findMatchingListingsForContact(
       .slice(0, 5),
   });
 
-  console.log(
-    JSON.stringify({
-      tag: "[ReplacementSearchTrace]",
-      step: "inventory_matching_profile",
-      ts: new Date().toISOString(),
-      contactId,
-      userId,
-      profileForMatching: profileSnapshot,
-      debugBuildMarker: diagnostics.debugBuildMarker,
-    }),
-  );
+  logReplacementSearchTraceAlias("inventory_matching_profile", {
+    contactId,
+    userId,
+    traceId: buyerMatchingTraceId,
+    profileForMatching: profileSnapshot,
+    debugBuildMarker: diagnostics.debugBuildMarker,
+  });
 
   return {
     eligible: true,
@@ -304,6 +321,7 @@ export async function findMatchingListingsForContact(
     matches,
     savedListingIds,
     diagnostics,
+    buyerMatchingTraceId,
   };
 }
 

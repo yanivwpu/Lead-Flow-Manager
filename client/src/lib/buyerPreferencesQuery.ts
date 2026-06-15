@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { BuyerPreferenceProfile } from "@shared/buyerPreferenceSchema";
 import type { BuyerPreferenceChip } from "@shared/buyerPreferenceDisplay";
 import { normalizeBuyerPreferenceProfile } from "@shared/buyerPreferenceSchema";
+import { setBuyerMatchingTraceId } from "./buyerMatchingTraceStore";
 
 export type BuyerPreferencesApiResponse = {
   eligible: boolean;
@@ -9,6 +10,7 @@ export type BuyerPreferencesApiResponse = {
   profile: BuyerPreferenceProfile;
   rawProfile?: unknown;
   chips: BuyerPreferenceChip[];
+  buyerMatchingTraceId?: string;
 };
 
 export function buyerPreferencesQueryKey(contactId: string) {
@@ -20,7 +22,9 @@ async function fetchBuyerPreferences(contactId: string): Promise<BuyerPreference
     credentials: "include",
   });
   if (!res.ok) throw new Error("Failed to load buyer preferences");
-  return res.json() as Promise<BuyerPreferencesApiResponse>;
+  const body = (await res.json()) as BuyerPreferencesApiResponse;
+  setBuyerMatchingTraceId(contactId, body.buyerMatchingTraceId);
+  return body;
 }
 
 /**
@@ -44,6 +48,7 @@ export function usePersistedBuyerPreferences(contactId: string | null | undefine
     profile,
     chips: data?.chips ?? [],
     eligible: data?.eligible ?? false,
+    buyerMatchingTraceId: data?.buyerMatchingTraceId,
     isLoading,
     isFetched,
     refetch,

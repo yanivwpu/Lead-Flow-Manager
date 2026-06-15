@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { InventoryMatchesResponse } from "@shared/inventory/inventoryMatchTypes";
+import { setBuyerMatchingTraceId } from "./buyerMatchingTraceStore";
 
 export const INVENTORY_MATCHES_STALE_MS = 20_000;
 
@@ -46,7 +47,9 @@ export async function fetchInventoryMatches(contactId: string): Promise<Inventor
     const err = (await res.json().catch(() => ({}))) as { error?: string };
     throw new InventoryMatchesFetchError(err.error || "Failed to load matches", res.status);
   }
-  return res.json() as Promise<InventoryMatchesResponse>;
+  const body = (await res.json()) as InventoryMatchesResponse;
+  setBuyerMatchingTraceId(contactId, body.buyerMatchingTraceId);
+  return body;
 }
 
 export function isRateLimitedInventoryMatchesError(error: unknown): boolean {

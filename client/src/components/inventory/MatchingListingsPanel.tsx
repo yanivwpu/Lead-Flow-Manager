@@ -26,6 +26,11 @@ import {
   isRateLimitedInventoryMatchesError,
   shouldRetryInventoryMatches,
 } from "@/lib/inventoryMatchesQuery";
+import {
+  logBuyerMatchingTraceClient,
+  summarizeListingsForTrace,
+} from "@/lib/buyerMatchingTraceClient";
+import { resolveClientBuyerMatchingTraceId } from "@/lib/buyerMatchingTraceStore";
 
 const SIDEBAR_PREVIEW_LIMIT = 5;
 
@@ -143,6 +148,23 @@ export function MatchingListingsPanel({
       setLastClientFetchAt(new Date().toISOString());
     }
   }, [isFetched, isError, isPlaceholderData, contactId, data?.diagnostics?.lastMatchRunAt]);
+
+  useEffect(() => {
+    if (!contactId || !data || isPlaceholderData) return;
+    if (!isFetched || isError) return;
+    logBuyerMatchingTraceClient({
+      step: "displayed_cards",
+      traceId:
+        data.buyerMatchingTraceId ?? resolveClientBuyerMatchingTraceId(contactId),
+      contactId,
+      source: "MatchingListingsPanel",
+      layer: "ui",
+      inventoryFilters: data.diagnostics?.activeFilterSummary ?? null,
+      matchCount: data.matchCount ?? data.matches?.length ?? 0,
+      returnedListings: summarizeListingsForTrace(data.matches ?? []),
+      displayedCardCount: (data.matches ?? []).slice(0, SIDEBAR_PREVIEW_LIMIT).length,
+    });
+  }, [contactId, data, isFetched, isError, isPlaceholderData]);
 
   if (!inventoryRelevant) return null;
   if (!inventoryStatus) return null;

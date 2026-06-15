@@ -102,6 +102,7 @@ export const inventoryMatchDiagnosticsSchema = z.object({
   activeFilterSummary: z.string().nullable().optional(),
   /** Temporary build marker — confirms deployed diagnostics code version. */
   debugBuildMarker: z.string().optional(),
+  buyerMatchingTraceId: z.string().optional(),
 });
 
 export type InventoryMatchDiagnostics = z.infer<typeof inventoryMatchDiagnosticsSchema>;
@@ -116,6 +117,7 @@ export const inventoryMatchesResponseSchema = z.object({
   savedListingIds: z.array(z.string()).optional(),
   diagnostics: inventoryMatchDiagnosticsSchema.optional(),
   error: z.string().optional(),
+  buyerMatchingTraceId: z.string().optional(),
 });
 
 export type InventoryMatchesResponse = z.infer<typeof inventoryMatchesResponseSchema>;

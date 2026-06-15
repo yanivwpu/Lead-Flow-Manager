@@ -29,6 +29,7 @@ import {
   type ComposerDraftMeta,
   type ComposerDraftSource,
 } from "@/lib/composerDraftScope";
+import { captureBuyerMatchingTraceFromApi } from "@/lib/buyerMatchingTraceStore";
 
 type AIMode = "manual" | "suggest" | "auto";
 type AutoPhase = "idle" | "typing" | "replied" | "waiting";
@@ -378,6 +379,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       if (res.ok) {
         if (generation !== autoReplyGenerationRef.current) return;
         const data = await res.json();
+        captureBuyerMatchingTraceFromApi(contactId, data);
         const responseContactId =
           typeof data.contactId === "string" ? data.contactId : contactId ?? null;
         const responseConversationId =
@@ -561,6 +563,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
         if (generation !== suggestGenerationRef.current) return;
         if (res.ok) {
           const data = await res.json();
+          captureBuyerMatchingTraceFromApi(contactId, data);
           const responseContactId =
             typeof data.contactId === "string" ? data.contactId : contactId ?? null;
           const responseConversationId =
@@ -651,6 +654,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       if (generation !== suggestGenerationRef.current) return;
       if (res.ok) {
         const data = await res.json();
+        captureBuyerMatchingTraceFromApi(contactId, data);
         const responseContactId =
           typeof data.contactId === "string" ? data.contactId : contactId ?? null;
         const responseConversationId =

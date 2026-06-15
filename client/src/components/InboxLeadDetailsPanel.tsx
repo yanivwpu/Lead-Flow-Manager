@@ -96,7 +96,13 @@ import type { AICapabilities } from "@/lib/useAICapabilities";
 import { BuyerPreferencesPanel } from "@/components/BuyerPreferencesPanel";
 import { usePersistedBuyerPreferences } from "@/lib/buyerPreferencesQuery";
 import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
-import { buildBuyerPreferenceSearchChips } from "@shared/buyerPreferenceDisplay";
+import { buildBuyerPreferenceSearchChips, normalizeForDisplay } from "@shared/buyerPreferenceDisplay";
+import {
+  detectChipProfileMismatches,
+  logBuyerMatchingTraceClient,
+  snapshotProfileTraceFields,
+} from "@/lib/buyerMatchingTraceClient";
+import { resolveClientBuyerMatchingTraceId } from "@/lib/buyerMatchingTraceStore";
 import { fetchInventoryStatus, fetchInventorySources, isInventorySourceConnected } from "@/lib/inventoryApi";
 import { CopilotInventoryEmptyState } from "@/components/inventory/CopilotInventoryEmptyState";
 import { MatchingListingsPanel } from "@/components/inventory/MatchingListingsPanel";
@@ -1466,7 +1472,7 @@ export function InboxLeadDetailsPanel({
     [inventorySources],
   );
 
-  const { profile: persistedBuyerProfile, chips: persistedBuyerChips } =
+  const { profile: persistedBuyerProfile, chips: persistedBuyerChips, buyerMatchingTraceId } =
     usePersistedBuyerPreferences(contact.id);
 
   const showCopilotBuyerPreferences = useMemo(
@@ -1678,6 +1684,22 @@ export function InboxLeadDetailsPanel({
     [persistedBuyerChips, persistedBuyerProfile],
   );
   const buyerPrefsHasCriteria = buyerPrefChips.length > 0;
+
+  useEffect(() => {
+    if (!contact.id || persistedBuyerProfile == null) return;
+    const profile = normalizeForDisplay(persistedBuyerProfile);
+    const mismatches = detectChipProfileMismatches(profile, buyerPrefChips);
+    logBuyerMatchingTraceClient({
+      step: "displayed_chips",
+      traceId: buyerMatchingTraceId ?? resolveClientBuyerMatchingTraceId(contact.id),
+      contactId: contact.id,
+      source: "InboxLeadDetailsPanel",
+      layer: "ui",
+      savedProfile: snapshotProfileTraceFields(profile),
+      displayedChips: buyerPrefChips.map((c) => ({ id: c.id, label: c.label, value: c.value })),
+      mismatches,
+    });
+  }, [contact.id, persistedBuyerProfile, buyerPrefChips, buyerMatchingTraceId]);
 
   const customerSummaryBullets = useMemo(
     () =>

@@ -27,6 +27,12 @@ import {
   snapshotProfileTraceFields,
 } from "@shared/buyerSearchCommandDebug";
 import {
+  logBuyerMatchingTrace,
+  logReplacementSearchTraceAlias,
+  traceBuyerMatchingPipeline,
+} from "@shared/buyerMatchingTrace";
+import { resolveBuyerMatchingTraceId } from "./buyerMatchingTraceRegistry";
+import {
   mergeBuyerPreferenceProfile,
   type BuyerPreferenceMergeOptions,
 } from "@shared/buyerPreferenceMerge";
@@ -47,30 +53,9 @@ function debugBuyerPreferenceLog(event: string, payload: Record<string, unknown>
   console.log(JSON.stringify({ tag: "[BuyerPreference]", event, ...payload }));
 }
 
-/** Temporary structured trace for replacement-search E2E debugging (grep ReplacementSearchTrace). */
-function logReplacementSearchTrace(
-  step: string,
-  payload: Record<string, unknown>,
-): void {
-  const alwaysLog =
-    payload.clearUnmentionedHardGates === true ||
-    payload.isFullReplacementSearch === true ||
-    payload.commandKind === "new_search";
-  if (
-    !alwaysLog &&
-    process.env.DEBUG_REPLACEMENT_SEARCH !== "1" &&
-    process.env.DEBUG_BUYER_PREFS !== "1"
-  ) {
-    return;
-  }
-  console.log(
-    JSON.stringify({
-      tag: "[ReplacementSearchTrace]",
-      step,
-      ts: new Date().toISOString(),
-      ...payload,
-    }),
-  );
+/** @deprecated Alias — routes to [BuyerMatchingTrace] in verbose mode. */
+function logReplacementSearchTrace(step: string, payload: Record<string, unknown>): void {
+  logReplacementSearchTraceAlias(step, payload);
 }
 
 /** @internal Re-export for channel/workflow skip logging. */
@@ -289,12 +274,18 @@ export async function persistBuyerPreferenceProfile(
   return updated;
 }
 
-function triggerInventoryMatchRefresh(userId: string, contactId: string): void {
-  logBuyerPreferenceFastPath("inventory_refresh_triggered", { contactId, userId });
+function triggerInventoryMatchRefresh(
+  userId: string,
+  contactId: string,
+  messageId?: string | null,
+): void {
+  const traceId = resolveBuyerMatchingTraceId(contactId, messageId ?? undefined);
+  logBuyerPreferenceFastPath("inventory_refresh_triggered", { contactId, userId, traceId });
   void import("./presence").then(({ notifyUser }) =>
     notifyUser(userId, {
       type: "buyer_preferences_updated",
       contactId,
+      buyerMatchingTraceId: traceId,
     }),
   );
 }
@@ -343,6 +334,8 @@ export async function mergeAndPersistBuyerPreferences(
     mergeOptions,
   );
 
+  const traceId = resolveBuyerMatchingTraceId(contact.id, meta?.messageId, meta?.conversationId);
+
   if (meta?.clearUnmentionedHardGates) {
     logReplacementSearchTrace("merged_before_save", {
       contactId: contact.id,
@@ -353,6 +346,20 @@ export async function mergeAndPersistBuyerPreferences(
       mergedProfile: snapshotProfileTraceFields(merged),
     });
   }
+
+  logBuyerMatchingTrace({
+    step: "merged_profile",
+    traceId,
+    contactId: contact.id,
+    userId: contact.userId,
+    messageId: meta?.messageId ?? null,
+    conversationId: meta?.conversationId ?? null,
+    source: "mergeAndPersistBuyerPreferences",
+    layer: "merge",
+    previousProfile: snapshotProfileTraceFields(current),
+    parsedPatch: snapshotPatchTraceFields(meta?.currentMessagePatch ?? patch),
+    mergedProfile: snapshotProfileTraceFields(merged),
+  });
 
   logPersistence(contact.id, "merged_before_save", {
     patchKeys,
@@ -371,11 +378,37 @@ export async function mergeAndPersistBuyerPreferences(
   });
 
   if (meta?.triggerInventoryRefresh !== false) {
-    triggerInventoryMatchRefresh(contact.userId, contact.id);
+    triggerInventoryMatchRefresh(contact.userId, contact.id, meta?.messageId);
   }
 
   const reloaded =
     (await loadPersistedBuyerPreferenceProfile(contact.id)) ?? merged;
+
+  logBuyerMatchingTrace({
+    step: "saved_profile",
+    traceId,
+    contactId: contact.id,
+    userId: contact.userId,
+    messageId: meta?.messageId ?? null,
+    conversationId: meta?.conversationId ?? null,
+    source: "mergeAndPersistBuyerPreferences",
+    layer: "persist",
+    mergedProfile: snapshotProfileTraceFields(merged),
+    savedProfile: snapshotProfileTraceFields(reloaded),
+  });
+
+  traceBuyerMatchingPipeline({
+    traceId,
+    contactId: contact.id,
+    userId: contact.userId,
+    messageId: meta?.messageId ?? null,
+    conversationId: meta?.conversationId ?? null,
+    source: "mergeAndPersistBuyerPreferences",
+    previousProfile: current,
+    parsedPatch: meta?.currentMessagePatch ?? patch,
+    mergedProfile: merged,
+    savedProfile: reloaded,
+  });
 
   if (meta?.clearUnmentionedHardGates) {
     logReplacementSearchTrace("saved_profile_after_db_write", {
@@ -405,6 +438,26 @@ export async function syncBuyerPreferencesForInboundMessage(input: {
     command.patch,
     priorProfile,
   );
+  const traceId = resolveBuyerMatchingTraceId(
+    input.contact.id,
+    input.messageId,
+    input.conversationId,
+  );
+
+  logBuyerMatchingTrace({
+    step: "message_received",
+    traceId,
+    contactId: input.contact.id,
+    userId: input.contact.userId,
+    messageId: input.messageId ?? null,
+    conversationId: input.conversationId ?? null,
+    source: "syncBuyerPreferencesForInboundMessage",
+    layer: "parse",
+    message: input.inboundText,
+    commandKind: command.kind,
+    previousProfile: snapshotProfileTraceFields(priorProfile),
+    parsedPatch: snapshotPatchTraceFields(command.patch),
+  });
 
   logReplacementSearchTrace("inbound_received", {
     contactId: input.contact.id,
@@ -435,6 +488,20 @@ export async function syncBuyerPreferencesForInboundMessage(input: {
   const profile =
     (await loadPersistedBuyerPreferenceProfile(input.contact.id)) ??
     readBuyerPreferenceProfile(freshContact);
+
+  traceBuyerMatchingPipeline({
+    traceId,
+    contactId: input.contact.id,
+    userId: input.contact.userId,
+    messageId: input.messageId ?? null,
+    conversationId: input.conversationId ?? null,
+    source: "syncBuyerPreferencesForInboundMessage",
+    message: input.inboundText,
+    commandKind: command.kind,
+    previousProfile: priorProfile,
+    parsedPatch: command.patch,
+    savedProfile: profile,
+  });
 
   logReplacementSearchTrace("sync_complete", {
     contactId: input.contact.id,
@@ -850,6 +917,7 @@ export function scheduleBuyerPreferenceExtraction(params: {
     hasW2FieldUpdates: !!(w2FieldUpdates && Object.keys(w2FieldUpdates).length > 0),
     conversationId,
     messageId,
+    traceId: resolveBuyerMatchingTraceId(contactId, messageId, conversationId),
   });
 
   setImmediate(() => {

@@ -114,6 +114,9 @@ export function registerContactRoutes(app: Express): void {
         profile,
         rawProfile,
         chips,
+        buyerMatchingTraceId: (await import("../buyerMatchingTraceRegistry")).resolveBuyerMatchingTraceId(
+          req.params.id,
+        ),
       });
     } catch (error) {
       console.error("Error fetching buyer preferences:", error);
@@ -158,6 +161,9 @@ export function registerContactRoutes(app: Express): void {
         profile: normalized,
         rawProfile,
         chips: buildBuyerPreferenceSearchChips(rawProfile),
+        buyerMatchingTraceId: (await import("../buyerMatchingTraceRegistry")).resolveBuyerMatchingTraceId(
+          contact.id,
+        ),
       });
     } catch (error) {
       console.error("Error updating buyer preferences:", error);
@@ -196,6 +202,9 @@ export function registerContactRoutes(app: Express): void {
         profile,
         rawProfile,
         chips: buildBuyerPreferenceSearchChips(rawProfile),
+        buyerMatchingTraceId: (await import("../buyerMatchingTraceRegistry")).resolveBuyerMatchingTraceId(
+          contact.id,
+        ),
       });
     } catch (error) {
       console.error("Error extracting buyer preferences:", error);
@@ -208,7 +217,9 @@ export function registerContactRoutes(app: Express): void {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const { findMatchingListingsForContact } = await import("../inventory/inventoryMatchingService");
-      const result = await findMatchingListingsForContact(req.params.id, req.user.id);
+      const { resolveBuyerMatchingTraceId } = await import("../buyerMatchingTraceRegistry");
+      const traceId = resolveBuyerMatchingTraceId(req.params.id);
+      const result = await findMatchingListingsForContact(req.params.id, req.user.id, { traceId });
       if (result.httpStatus === 404) {
         return res.status(404).json({ error: "Contact not found" });
       }
@@ -216,7 +227,7 @@ export function registerContactRoutes(app: Express): void {
         return res.status(403).json({ error: "Forbidden" });
       }
       const { httpStatus: _h, ...body } = result;
-      res.json(body);
+      res.json({ ...body, buyerMatchingTraceId: result.buyerMatchingTraceId ?? traceId });
     } catch (error) {
       console.error("Error fetching inventory matches:", error);
       res.status(500).json({ error: "Failed to fetch inventory matches" });

@@ -10391,6 +10391,18 @@ export async function registerRoutes(
       const resolvedConversationId =
         typeof chatId === "string" && chatId.trim() ? chatId.trim() : null;
 
+      let buyerMatchingTraceId: string | null = null;
+      let copilotTraceProfile: Awaited<
+        ReturnType<
+          typeof import("./buyerPreferenceService").readBuyerPreferenceProfile
+        >
+      > | null = null;
+      let copilotMatchListings: import("@shared/buyerMatchingTrace").BuyerMatchingListingSummary[] =
+        [];
+      let copilotMatchCount = 0;
+      let copilotQualification: import("@shared/buyerQualification").BuyerQualificationContext | null =
+        null;
+
       // Check access and plan eligibility (pass mode to enforce Auto=Pro-only)
       const access = await checkAiBrainAccess(userId, requestedMode === 'auto' ? 'auto' : 'suggest');
       if (!access.hasAccess) {
@@ -10593,6 +10605,21 @@ export async function registerRoutes(
           if (convForPrefs?.contactId) {
             const contactForPrefs = await storage.getContact(convForPrefs.contactId);
             if (contactForPrefs) {
+              const { resolveBuyerMatchingTraceId } = await import("./buyerMatchingTraceRegistry");
+              let lastInboundMessageId: string | null = null;
+              if (convForPrefs.id) {
+                const recentMessages = await storage.getMessages(convForPrefs.id, 40);
+                const lastInbound = [...recentMessages]
+                  .reverse()
+                  .find((m) => m.direction === "inbound");
+                lastInboundMessageId = lastInbound?.id ?? null;
+              }
+              buyerMatchingTraceId = resolveBuyerMatchingTraceId(
+                convForPrefs.contactId,
+                lastInboundMessageId,
+                convForPrefs.id,
+              );
+
               const {
                 shouldRunBuyerPreferencePipeline,
                 syncBuyerPreferencesForInboundMessage,
@@ -10657,19 +10684,31 @@ export async function registerRoutes(
                       contact: contactForPrefs,
                       inboundText: lastUserInbound,
                       conversationId: convForPrefs.id,
+                      messageId: lastInboundMessageId ?? undefined,
                     });
+
+              copilotTraceProfile = profile;
 
               if (prefGate.ok && !isBookingSuggestRoute && !skipBuyerForSeller) {
                 const {
                   assessBuyerQualification,
                   formatQualificationContextForAi,
                 } = await import("@shared/buyerQualification");
-                const { findMatchingListingsForContact, getInventoryMatchSummaryForContact } =
-                  await import("./inventory/inventoryMatchingService");
+                const {
+                  findMatchingListingsForContact,
+                  getInventoryMatchSummaryForContact,
+                } = await import("./inventory/inventoryMatchingService");
+                const {
+                  summarizeListingsForTrace,
+                  traceBuyerMatchingCopilotDecision,
+                } = await import("@shared/buyerMatchingTrace");
                 const matchResult = await findMatchingListingsForContact(
                   convForPrefs.contactId,
                   userId,
+                  { traceId: buyerMatchingTraceId ?? undefined },
                 );
+                copilotMatchListings = summarizeListingsForTrace(matchResult.matches ?? []);
+                copilotMatchCount = matchResult.matchCount;
                 const cf = (contactForPrefs.customFields || {}) as Record<string, unknown>;
                 const qualification = assessBuyerQualification({
                   profile,
@@ -10686,6 +10725,22 @@ export async function registerRoutes(
                 contextPatch.buyerQualificationContext =
                   formatQualificationContextForAi(qualification);
                 contextPatch.copilotDecisionReason = qualification.copilotDecisionReason;
+                copilotQualification = qualification;
+
+                if (buyerMatchingTraceId) {
+                  traceBuyerMatchingCopilotDecision({
+                    traceId: buyerMatchingTraceId,
+                    contactId: convForPrefs.contactId,
+                    userId,
+                    source: "suggest-reply:pre_ai",
+                    profile,
+                    listings: copilotMatchListings,
+                    matchCount: copilotMatchCount,
+                    copilotDecisionReason: qualification.copilotDecisionReason,
+                    primaryRecommendation: qualification.suggestedQuestion,
+                    qualificationState: qualification.level,
+                  });
+                }
 
                 const aiPrefCtx = buildBuyerPreferenceAiContext(profile);
                 if (aiPrefCtx.buyerPreferences) {
@@ -10867,6 +10922,31 @@ export async function registerRoutes(
       // Track usage
       await storage.incrementAiUsage(userId, "repliesSuggested");
 
+      if (
+        buyerMatchingTraceId &&
+        copilotTraceProfile &&
+        (suggestion.suggestion || "").trim()
+      ) {
+        const { traceBuyerMatchingCopilotDecision } = await import("@shared/buyerMatchingTrace");
+        traceBuyerMatchingCopilotDecision({
+          traceId: buyerMatchingTraceId,
+          contactId: resolvedContactId ?? "unknown",
+          userId,
+          source: "suggest-reply:post_ai",
+          profile: copilotTraceProfile,
+          listings: copilotMatchListings,
+          matchCount: copilotMatchCount,
+          copilotDecisionReason:
+            copilotQualification?.copilotDecisionReason ??
+            (typeof enrichedContactContext?.copilotDecisionReason === "string"
+              ? enrichedContactContext.copilotDecisionReason
+              : "unknown"),
+          primaryRecommendation: copilotQualification?.suggestedQuestion ?? null,
+          qualificationState: copilotQualification?.level ?? null,
+          aiSuggestion: suggestion.suggestion,
+        });
+      }
+
       res.json({
         ...suggestion,
         status: fairUse.status,
@@ -10875,6 +10955,7 @@ export async function registerRoutes(
         autoSendReason,
         contactId: resolvedContactId,
         conversationId: resolvedConversationId,
+        buyerMatchingTraceId: buyerMatchingTraceId ?? undefined,
         copilotDecisionReason:
           typeof enrichedContactContext?.copilotDecisionReason === "string"
             ? enrichedContactContext.copilotDecisionReason

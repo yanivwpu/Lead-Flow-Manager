@@ -455,6 +455,11 @@ export function UnifiedInbox() {
             });
           } else if (msg.type === "buyer_preferences_updated" && typeof msg.contactId === "string") {
             const contactId = msg.contactId;
+            if (typeof msg.buyerMatchingTraceId === "string") {
+              void import("@/lib/buyerMatchingTraceStore").then(({ setBuyerMatchingTraceId }) => {
+                setBuyerMatchingTraceId(contactId, msg.buyerMatchingTraceId);
+              });
+            }
             queryClient.invalidateQueries({
               queryKey: [`/api/contacts/${contactId}/buyer-preferences`],
             });
