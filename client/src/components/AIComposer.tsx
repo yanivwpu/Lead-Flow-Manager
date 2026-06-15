@@ -23,6 +23,12 @@ import type { AICapabilities } from "@/lib/useAICapabilities";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { LucideIcon } from "lucide-react";
 import { resolveAiRouting, routingShouldTriggerHandoff } from "@shared/aiRouting";
+import {
+  logComposerDraftTrace,
+  shouldApplyComposerDraft,
+  type ComposerDraftMeta,
+  type ComposerDraftSource,
+} from "@/lib/composerDraftScope";
 
 type AIMode = "manual" | "suggest" | "auto";
 type AutoPhase = "idle" | "typing" | "replied" | "waiting";
@@ -49,7 +55,7 @@ export interface ContactContext {
 
 export interface AIComposerProps {
   value: string;
-  onChange: (val: string) => void;
+  onChange: (val: string, meta?: ComposerDraftMeta) => void;
   onSend: () => void;
   /** Direct send callback for Auto mode — bypasses controlled state */
   onAutoSend?: (message: string) => void;
@@ -180,6 +186,44 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   const autoReplyInFlightRef = useRef(false);
   const suggestGenerationRef = useRef(0);
   const autoReplyGenerationRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const applyComposerText = useCallback(
+    (text: string, source: ComposerDraftSource, draftConversationId?: string | null) => {
+      const draftContactId = contactId ?? null;
+      if (
+        !shouldApplyComposerDraft({
+          activeContactId: contactId,
+          activeConversationId: conversationId,
+          draftContactId,
+          draftConversationId: draftConversationId ?? conversationId,
+        })
+      ) {
+        logComposerDraftTrace({
+          event: "ignore_stale",
+          activeContactId: contactId,
+          draftContactId,
+          source,
+          conversationId: draftConversationId ?? conversationId,
+        });
+        return false;
+      }
+      onChange(text, { contactId, conversationId: draftConversationId ?? conversationId, source });
+      return true;
+    },
+    [contactId, conversationId, onChange],
+  );
+
+  useEffect(() => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
+    return () => {
+      suggestGenerationRef.current += 1;
+      autoReplyGenerationRef.current += 1;
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+    };
+  }, [conversationId, contactId]);
 
   useImperativeHandle(ref, () => ({
     insertExternalDraft: (text: string, options?: { preserveAiMode?: boolean; primaryPhotoUrl?: string | null }) => {
@@ -194,7 +238,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       setIsDrafting(false);
       setAutoSkippedWithDraft(false);
       setAutoSendBlockedMessage(null);
-      onChange(draft);
+      applyComposerText(draft, "copilot");
       const photoUrl = options?.primaryPhotoUrl?.trim();
       if (photoUrl && /^https?:\/\//i.test(photoUrl) && onAttachPendingMedia) {
         onAttachPendingMedia({
@@ -217,7 +261,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       });
       return true;
     },
-  }), [onChange, onAttachPendingMedia]);
+  }), [applyComposerText, onAttachPendingMedia]);
 
   // Auto-resize textarea — avoid height-auto jump on mobile by reading scrollHeight before reset
   useEffect(() => {
@@ -231,7 +275,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     el.style.overflowY = next >= MAX_TEXTAREA_HEIGHT ? "auto" : "hidden";
   }, [value]);
 
-  // Reset when active contact/conversation changes — clear parent draft and ignore in-flight AI.
+  // Reset internal AI state when active contact/conversation changes — parent owns draft text.
   useEffect(() => {
     const prev = prevScopeRef.current;
     if (conversationId === prev.conversationId && contactId === prev.contactId) return;
@@ -248,8 +292,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     lastSuggestDraftKeyRef.current = "";
     userLockedManualRef.current = false;
     autoReplyInFlightRef.current = false;
-    onChange("");
-  }, [conversationId, contactId, onChange]);
+  }, [conversationId, contactId]);
 
   // Sync composer mode from business settings (Full Auto only when business + plan allow).
   useEffect(() => {
@@ -322,8 +365,10 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+        signal: abortControllerRef.current?.signal,
         body: JSON.stringify({
           chatId: conversationId,
+          contactId: contactId || undefined,
           conversationHistory: history.slice(-12),
           aiMode: 'auto',
           ...(contactContext ? { contactContext } : {}),
@@ -333,6 +378,27 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       if (res.ok) {
         if (generation !== autoReplyGenerationRef.current) return;
         const data = await res.json();
+        const responseContactId =
+          typeof data.contactId === "string" ? data.contactId : contactId ?? null;
+        const responseConversationId =
+          typeof data.conversationId === "string" ? data.conversationId : conversationId;
+        if (
+          !shouldApplyComposerDraft({
+            activeContactId: contactId,
+            activeConversationId: conversationId,
+            draftContactId: responseContactId,
+            draftConversationId: responseConversationId,
+          })
+        ) {
+          logComposerDraftTrace({
+            event: "ignore_stale",
+            activeContactId: contactId,
+            draftContactId: responseContactId,
+            source: "auto_ai",
+            conversationId: responseConversationId,
+          });
+          return;
+        }
         const suggestion: string = data.suggestion || "";
         const allowed = data.autoSendAllowed === true;
         const reason = typeof data.autoSendReason === "string" ? data.autoSendReason : "unknown";
@@ -370,7 +436,9 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
           // Stay in Auto; block only this send. Surface suggestion for manual review when available.
           if (trimmed.length > 0) {
             setAiDraft(trimmed);
-            if (generation === autoReplyGenerationRef.current) onChange(trimmed);
+            if (generation === autoReplyGenerationRef.current) {
+              applyComposerText(trimmed, "auto_ai", responseConversationId);
+            }
             setAutoSkippedWithDraft(true);
           } else {
             setAutoSkippedWithDraft(false);
@@ -419,7 +487,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
         autoReplyInFlightRef.current = false;
       }
     }
-  }, [conversationId, aiEnabled, contactContext, contactId, handoffKeywords, onAutoSend, onChange]);
+  }, [conversationId, aiEnabled, contactContext, contactId, handoffKeywords, onAutoSend, applyComposerText]);
 
   // Watch messages: when in auto mode and last message is from lead → auto-reply
   const lastMsg = messages[messages.length - 1];
@@ -466,14 +534,14 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       const generation = suggestGenerationRef.current;
       setIsDrafting(true);
       setAiDraft(null);
-      onChange("");
+      applyComposerText("", "suggest_reply");
       if (demoMode) {
         await new Promise((r) => setTimeout(r, 700 + Math.random() * 400));
         if (generation !== suggestGenerationRef.current) return;
         const demo = DEMO_SUGGESTIONS[_demoCycleIdx % DEMO_SUGGESTIONS.length];
         _demoCycleIdx++;
         setAiDraft(demo);
-        onChange(demo);
+        applyComposerText(demo, "suggest_reply");
         setIsDrafting(false);
         return;
       }
@@ -482,8 +550,10 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
+          signal: abortControllerRef.current?.signal,
           body: JSON.stringify({
             chatId: conversationId,
+            contactId: contactId || undefined,
             conversationHistory: history.slice(-12),
             ...(contactContext ? { contactContext } : {}),
           }),
@@ -491,9 +561,30 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
         if (generation !== suggestGenerationRef.current) return;
         if (res.ok) {
           const data = await res.json();
+          const responseContactId =
+            typeof data.contactId === "string" ? data.contactId : contactId ?? null;
+          const responseConversationId =
+            typeof data.conversationId === "string" ? data.conversationId : conversationId;
+          if (
+            !shouldApplyComposerDraft({
+              activeContactId: contactId,
+              activeConversationId: conversationId,
+              draftContactId: responseContactId,
+              draftConversationId: responseConversationId,
+            })
+          ) {
+            logComposerDraftTrace({
+              event: "ignore_stale",
+              activeContactId: contactId,
+              draftContactId: responseContactId,
+              source: "suggest_reply",
+              conversationId: responseConversationId,
+            });
+            return;
+          }
           const suggestion = data.suggestion || null;
           setAiDraft(suggestion);
-          if (suggestion) onChange(suggestion);
+          if (suggestion) applyComposerText(suggestion, "suggest_reply", responseConversationId);
         } else {
           setAiDraft(null);
         }
@@ -503,7 +594,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
         if (generation === suggestGenerationRef.current) setIsDrafting(false);
       }
     },
-    [conversationId, aiEnabled, demoMode, contactContext, onChange],
+    [conversationId, aiEnabled, demoMode, contactContext, contactId, applyComposerText],
   );
 
   useEffect(() => {
@@ -528,7 +619,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     const generation = suggestGenerationRef.current;
     setIsDrafting(true);
     setAiDraft(null);
-    onChange("");
+    applyComposerText("", "suggest_reply");
     setAiCooldown(true);
     setTimeout(() => setAiCooldown(false), 3000);
 
@@ -539,7 +630,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       const demo = DEMO_SUGGESTIONS[_demoCycleIdx % DEMO_SUGGESTIONS.length];
       _demoCycleIdx++;
       setAiDraft(demo);
-      onChange(demo);
+      applyComposerText(demo, "suggest_reply");
       setIsDrafting(false);
       return;
     }
@@ -549,8 +640,10 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+        signal: abortControllerRef.current?.signal,
         body: JSON.stringify({
           chatId: conversationId,
+          contactId: contactId || undefined,
           conversationHistory: messages.slice(-12),
           ...(contactContext ? { contactContext } : {}),
         }),
@@ -558,9 +651,30 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       if (generation !== suggestGenerationRef.current) return;
       if (res.ok) {
         const data = await res.json();
+        const responseContactId =
+          typeof data.contactId === "string" ? data.contactId : contactId ?? null;
+        const responseConversationId =
+          typeof data.conversationId === "string" ? data.conversationId : conversationId;
+        if (
+          !shouldApplyComposerDraft({
+            activeContactId: contactId,
+            activeConversationId: conversationId,
+            draftContactId: responseContactId,
+            draftConversationId: responseConversationId,
+          })
+        ) {
+          logComposerDraftTrace({
+            event: "ignore_stale",
+            activeContactId: contactId,
+            draftContactId: responseContactId,
+            source: "suggest_reply",
+            conversationId: responseConversationId,
+          });
+          return;
+        }
         const suggestion = data.suggestion || null;
         setAiDraft(suggestion);
-        if (suggestion) onChange(suggestion);
+        if (suggestion) applyComposerText(suggestion, "suggest_reply", responseConversationId);
       } else {
         setAiDraft(null);
       }
@@ -569,7 +683,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     } finally {
       if (generation === suggestGenerationRef.current) setIsDrafting(false);
     }
-  }, [conversationId, aiEnabled, demoMode, aiCooldown, messages, contactContext, onChange]);
+  }, [conversationId, aiEnabled, demoMode, aiCooldown, messages, contactContext, contactId, applyComposerText]);
 
   const handleModeChange = (mode: AIMode) => {
     setAiMode(mode);
@@ -580,7 +694,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     setAutoOverride(false);
     setAutoSkippedWithDraft(false);
     setAutoSendBlockedMessage(null);
-    onChange("");
+    applyComposerText("", "manual");
 
     if (mode === "suggest" && aiEnabled) {
       lastSuggestDraftKeyRef.current = "";
@@ -598,7 +712,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const v = e.target.value;
     if (aiMode === "suggest" && aiEnabled && !v.trim()) setAiDraft(null);
-    onChange(v);
+    onChange(v, { contactId, conversationId, source: "manual" });
     if (setTyping) {
       setTyping(true);
       if (typingTimeoutRef?.current) clearTimeout(typingTimeoutRef.current);
@@ -839,7 +953,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
               <PopoverContent className="w-auto p-0 border-0" align="start" side="top">
                 <EmojiPicker
                   onEmojiClick={(d) => {
-                    onChange(value + d.emoji);
+                    onChange(value + d.emoji, { contactId, conversationId, source: "manual" });
                     setEmojiPickerOpen(false);
                   }}
                 />

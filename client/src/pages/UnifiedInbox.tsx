@@ -98,6 +98,15 @@ import {
   type CopilotComposerInsert,
   normalizeCopilotComposerInsert,
 } from "@/lib/copilotComposerInsert";
+import {
+  buildComposerDraftScopeKey,
+  clearComposerDraft,
+  loadComposerDraft,
+  logComposerDraftTrace,
+  saveComposerDraft,
+  shouldApplyComposerDraft,
+  type ComposerDraftMeta,
+} from "@/lib/composerDraftScope";
 import { scheduleInventoryMatchesRefetch } from "@/lib/inventoryMatchesQuery";
 import {
   isGenericOutboundSendFallbackMessage,
@@ -518,6 +527,9 @@ export function UnifiedInbox() {
   const allChannels: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok', 'calendly', 'shopify', 'woocommerce'];
   const [selectedChannels, setSelectedChannels] = useState<Set<Channel>>(new Set(allChannels));
   const [messageInput, setMessageInput] = useState("");
+  const messageInputRef = useRef(messageInput);
+  messageInputRef.current = messageInput;
+  const prevComposerScopeRef = useRef<string | null>(null);
   const isMobile = useIsMobile();
   const [showEditContact, setShowEditContact] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
@@ -580,7 +592,6 @@ export function UnifiedInbox() {
 
   useEffect(() => {
     setFilePickerHint(null);
-    setMessageInput("");
     setPendingFile((prev) => {
       if (prev?.localPreview) URL.revokeObjectURL(prev.localPreview);
       return null;
@@ -760,6 +771,81 @@ export function UnifiedInbox() {
   const primaryConversation =
     contactData?.conversations?.find((c) => c.channel === effectiveChannel) ||
     contactData?.conversations?.[0];
+
+  const composerScopeKey = useMemo(() => {
+    if (!selectedContactId) return null;
+    return buildComposerDraftScopeKey(
+      selectedContactId,
+      primaryConversation?.channelAccountId ?? null,
+      primaryConversation?.channel ?? effectiveChannel ?? null,
+    );
+  }, [
+    selectedContactId,
+    primaryConversation?.channelAccountId,
+    primaryConversation?.channel,
+    effectiveChannel,
+  ]);
+
+  const handleComposerChange = useCallback(
+    (val: string, meta?: ComposerDraftMeta) => {
+      if (
+        meta?.contactId &&
+        !shouldApplyComposerDraft({
+          activeContactId: selectedContactId,
+          activeConversationId: primaryConversation?.id ?? null,
+          draftContactId: meta.contactId,
+          draftConversationId: meta.conversationId,
+        })
+      ) {
+        logComposerDraftTrace({
+          event: "ignore_stale",
+          activeContactId: selectedContactId,
+          draftContactId: meta.contactId,
+          source: meta.source,
+          conversationId: meta.conversationId ?? null,
+        });
+        return;
+      }
+      setMessageInput(val);
+      if (composerScopeKey) {
+        if (val.trim()) {
+          saveComposerDraft(composerScopeKey, val, meta?.source ?? "manual");
+        } else {
+          clearComposerDraft(composerScopeKey, meta?.source ?? "manual");
+        }
+      }
+    },
+    [selectedContactId, primaryConversation?.id, composerScopeKey],
+  );
+
+  useEffect(() => {
+    const prevScope = prevComposerScopeRef.current;
+    if (prevScope && prevScope !== composerScopeKey) {
+      saveComposerDraft(prevScope, messageInputRef.current, "manual");
+    }
+    prevComposerScopeRef.current = composerScopeKey;
+
+    if (!composerScopeKey || !selectedContactId) {
+      setMessageInput("");
+      logComposerDraftTrace({
+        event: "clear",
+        activeContactId: selectedContactId,
+        draftContactId: null,
+        source: "manual",
+      });
+      return;
+    }
+
+    const loaded = loadComposerDraft(composerScopeKey);
+    setMessageInput(loaded);
+    logComposerDraftTrace({
+      event: "load",
+      activeContactId: selectedContactId,
+      draftContactId: selectedContactId,
+      source: "local_storage",
+      conversationId: primaryConversation?.id ?? null,
+    });
+  }, [composerScopeKey, selectedContactId, primaryConversation?.id]);
 
   /** Immediate UI selection for outbound sends while PATCH /channel refetches; cleared when server state matches. */
   const [sendChannelUi, setSendChannelUi] = useState<Channel | null>(null);
@@ -1222,6 +1308,7 @@ export function UnifiedInbox() {
       });
 
       setMessageInput("");
+      if (composerScopeKey) clearComposerDraft(composerScopeKey, "manual");
       setPendingFile(null);
 
       // Flag that a send just happened — forces scroll even if user somehow
@@ -1258,7 +1345,9 @@ export function UnifiedInbox() {
         if (context.previousInbox !== undefined) {
           queryClient.setQueryData(["/api/inbox"], context.previousInbox);
         }
-        setMessageInput(data.content);
+        if (data.contactId === selectedContactId) {
+          handleComposerChange(data.content, { contactId: data.contactId, source: "manual" });
+        }
         void queryClient.invalidateQueries({ queryKey: messagesKey });
         setTimeout(() => {
           justSentRef.current = true;
@@ -1295,7 +1384,9 @@ export function UnifiedInbox() {
         if (context.previousInbox !== undefined) {
           queryClient.setQueryData(["/api/inbox"], context.previousInbox);
         }
-        setMessageInput(data.content);
+        if (data.contactId === selectedContactId) {
+          handleComposerChange(data.content, { contactId: data.contactId, source: "manual" });
+        }
         if (data.mediaUrl && data.mediaType) {
           setPendingFile({
             localPreview: data.mediaUrl,
@@ -1339,7 +1430,9 @@ export function UnifiedInbox() {
         if (context.previousInbox !== undefined) {
           queryClient.setQueryData(["/api/inbox"], context.previousInbox);
         }
-        setMessageInput(data.content);
+        if (data.contactId === selectedContactId) {
+          handleComposerChange(data.content, { contactId: data.contactId, source: "manual" });
+        }
         setTimeout(() => {
           justSentRef.current = true;
           shouldPinRef.current = true;
@@ -2963,10 +3056,10 @@ export function UnifiedInbox() {
 
             {/* Composer — Meta reply-window + AI notices merge into one chip bar inside AIComposer */}
             <AIComposer
-              key={selectedContactId ?? "no-contact"}
+              key={composerScopeKey ?? "no-contact"}
               ref={composerRef}
               value={messageInput}
-              onChange={setMessageInput}
+              onChange={handleComposerChange}
               onSend={handleSendMessage}
               onAutoSend={handleAutoSend}
               aiEnabled={aiEnabled}
@@ -2976,7 +3069,7 @@ export function UnifiedInbox() {
               handoffKeywords={handoffKeywords}
               contactId={selectedContactId}
               contactContext={contactContext}
-              conversationId={primaryConversation?.id ?? selectedContactId}
+              conversationId={primaryConversation?.id ?? null}
               messages={messages.map((m) => ({
                 role: m.direction === "inbound" ? "user" : "assistant",
                 direction: m.direction,

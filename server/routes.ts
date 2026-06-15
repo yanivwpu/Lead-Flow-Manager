@@ -10375,7 +10375,21 @@ export async function registerRoutes(
       }
       const userId = req.user.id;
 
-      const { chatId, conversationHistory, tone, aiMode: requestedMode, contactContext } = req.body;
+      const { chatId, conversationHistory, tone, aiMode: requestedMode, contactContext, contactId: bodyContactId } =
+        req.body;
+
+      let resolvedContactId: string | null =
+        typeof bodyContactId === "string" && bodyContactId.trim() ? bodyContactId.trim() : null;
+      if (!resolvedContactId && typeof chatId === "string" && chatId.trim()) {
+        try {
+          const conv = await storage.getConversation(chatId.trim());
+          resolvedContactId = conv?.contactId ?? null;
+        } catch {
+          resolvedContactId = null;
+        }
+      }
+      const resolvedConversationId =
+        typeof chatId === "string" && chatId.trim() ? chatId.trim() : null;
 
       // Check access and plan eligibility (pass mode to enforce Auto=Pro-only)
       const access = await checkAiBrainAccess(userId, requestedMode === 'auto' ? 'auto' : 'suggest');
@@ -10479,6 +10493,8 @@ export async function registerRoutes(
                 status: "handoff",
                 autoSendAllowed: false,
                 autoSendReason: "handoff_triggered",
+                contactId: resolvedContactId,
+                conversationId: resolvedConversationId,
               });
             }
           }
@@ -10857,6 +10873,8 @@ export async function registerRoutes(
         shouldDowngradeToSuggestOnly: fairUse.shouldDowngradeToSuggestOnly,
         autoSendAllowed,
         autoSendReason,
+        contactId: resolvedContactId,
+        conversationId: resolvedConversationId,
         copilotDecisionReason:
           typeof enrichedContactContext?.copilotDecisionReason === "string"
             ? enrichedContactContext.copilotDecisionReason

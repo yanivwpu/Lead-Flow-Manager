@@ -64,6 +64,15 @@ import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { ChatAvatar } from "@/components/ChatAvatar";
 import { AIComposer } from "@/components/AIComposer";
+import {
+  buildComposerDraftScopeKey,
+  clearComposerDraft,
+  loadComposerDraft,
+  logComposerDraftTrace,
+  saveComposerDraft,
+  shouldApplyComposerDraft,
+  type ComposerDraftMeta,
+} from "@/lib/composerDraftScope";
 
 interface TeamMember {
   id: string;
@@ -359,6 +368,80 @@ export function Chats() {
   };
 
   const [newMessage, setNewMessage] = useState("");
+  const newMessageRef = useRef(newMessage);
+  newMessageRef.current = newMessage;
+  const prevComposerScopeRef = useRef<string | null>(null);
+
+  const composerScopeKey = useMemo(() => {
+    if (!selectedChatId) return null;
+    return buildComposerDraftScopeKey(
+      selectedChatId,
+      null,
+      selectedChat?.channel ?? "whatsapp",
+    );
+  }, [selectedChatId, selectedChat?.channel]);
+
+  const handleComposerChange = useCallback(
+    (val: string, meta?: ComposerDraftMeta) => {
+      if (
+        meta?.contactId &&
+        !shouldApplyComposerDraft({
+          activeContactId: selectedChatId,
+          activeConversationId: selectedChatId,
+          draftContactId: meta.contactId,
+          draftConversationId: meta.conversationId,
+        })
+      ) {
+        logComposerDraftTrace({
+          event: "ignore_stale",
+          activeContactId: selectedChatId,
+          draftContactId: meta.contactId,
+          source: meta.source,
+          conversationId: meta.conversationId ?? null,
+        });
+        return;
+      }
+      setNewMessage(val);
+      if (composerScopeKey) {
+        if (val.trim()) {
+          saveComposerDraft(composerScopeKey, val, meta?.source ?? "manual");
+        } else {
+          clearComposerDraft(composerScopeKey, meta?.source ?? "manual");
+        }
+      }
+    },
+    [selectedChatId, composerScopeKey],
+  );
+
+  useEffect(() => {
+    const prevScope = prevComposerScopeRef.current;
+    if (prevScope && prevScope !== composerScopeKey) {
+      saveComposerDraft(prevScope, newMessageRef.current, "manual");
+    }
+    prevComposerScopeRef.current = composerScopeKey;
+
+    if (!composerScopeKey || !selectedChatId) {
+      setNewMessage("");
+      logComposerDraftTrace({
+        event: "clear",
+        activeContactId: selectedChatId,
+        draftContactId: null,
+        source: "manual",
+      });
+      return;
+    }
+
+    const loaded = loadComposerDraft(composerScopeKey);
+    setNewMessage(loaded);
+    logComposerDraftTrace({
+      event: "load",
+      activeContactId: selectedChatId,
+      draftContactId: selectedChatId,
+      source: "local_storage",
+      conversationId: selectedChatId,
+    });
+  }, [composerScopeKey, selectedChatId]);
+
   const [localNotes, setLocalNotes] = useState("");
   const [mobileCalendarOpen, setMobileCalendarOpen] = useState(false);
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
@@ -522,6 +605,7 @@ export function Chats() {
           : chat
       ));
       setNewMessage("");
+      if (composerScopeKey) clearComposerDraft(composerScopeKey, "manual");
       toast({
         title: "Demo Mode",
         description: "Message simulated. Connect a WhatsApp provider to send real messages.",
@@ -592,6 +676,7 @@ export function Chats() {
       queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
       queryClient.invalidateQueries({ queryKey: ['/api/subscription'] });
       setNewMessage("");
+      if (composerScopeKey) clearComposerDraft(composerScopeKey, "manual");
     } catch (error: any) {
       const msg = error?.message || "Failed to send message";
       if (isMetaReplyWindowExpiredError(msg)) {
@@ -634,6 +719,7 @@ export function Chats() {
         )
       );
       setNewMessage("");
+      if (composerScopeKey) clearComposerDraft(composerScopeKey, "manual");
       return;
     }
 
@@ -700,6 +786,7 @@ export function Chats() {
       queryClient.invalidateQueries({ queryKey: ["/api/chats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
       setNewMessage("");
+      if (composerScopeKey) clearComposerDraft(composerScopeKey, "manual");
     } catch (error: any) {
       const msg = error?.message || "Failed to send message";
       if (isMetaReplyWindowExpiredError(msg)) {
@@ -725,6 +812,7 @@ export function Chats() {
     subscription?.subscription?.currentPeriodEnd,
     queryClient,
     toast,
+    composerScopeKey,
   ]);
 
   if (isLoading || isProviderStatusLoading) {
@@ -1216,8 +1304,9 @@ export function Chats() {
               )}
 
               <AIComposer
+                key={composerScopeKey ?? "no-contact"}
                 value={newMessage}
-                onChange={setNewMessage}
+                onChange={handleComposerChange}
                 onSend={handleSendMessage}
                 onAutoSend={handleAutoSend}
                 setTyping={setTyping}
@@ -1225,6 +1314,7 @@ export function Chats() {
                 aiEnabled={aiEnabled}
                 hasFullAIBrain={hasFullAIBrain}
                 businessAiMode={businessAiMode}
+                contactId={selectedChatId}
                 conversationId={selectedChat?.id ?? null}
                 messages={(selectedChat?.messages ?? []).map((m: any) => ({
                   role: m.direction === "incoming" ? "user" : "assistant",
