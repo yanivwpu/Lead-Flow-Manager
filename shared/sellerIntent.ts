@@ -1,6 +1,7 @@
 /**
  * Seller lead intent classification — separate from buyer inventory matching.
  */
+import { hasInventoryPreferenceSignals } from "./buyerPreferenceInventorySignals";
 
 export type SellerIntentClass =
   | "seller_new"
@@ -67,6 +68,7 @@ export function classifySellerIntent(input: ClassifySellerIntentInput): SellerIn
   if (SELLER_GENERAL_RE.test(t)) {
     return input.hasSellerProfile || input.priorSellerIntent ? "seller_followup" : "seller_new";
   }
+  if (hasInventoryPreferenceSignals(t)) return null;
   if (input.hasSellerProfile || input.priorSellerIntent) return "seller_followup";
   return null;
 }

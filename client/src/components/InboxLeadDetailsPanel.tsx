@@ -1643,7 +1643,11 @@ export function InboxLeadDetailsPanel({
   const qualifyAction     = canSeeWorkflow ? workflow.actions.find(a => a.type === 'qualify' && !completedActions.has('qualify')) : undefined;
   const activeChipActions = canSeeWorkflow
     ? workflow.actions.filter(
-        (a) => a.type !== "qualify" && a.type !== "follow" && !completedActions.has(a.type),
+        (a) =>
+          a.type !== "qualify" &&
+          a.type !== "follow" &&
+          a.type !== "assign" &&
+          !completedActions.has(a.type),
       )
     : [];
   const hasTagSuggestion  = canSeeWorkflow && !!workflow.tagSuggestion && !workflow.tagAutoApply && !completedActions.has('tag');
@@ -1728,7 +1732,9 @@ export function InboxLeadDetailsPanel({
 
   const contextualNextActions = useMemo(() => {
     const intentText = `${intel.intent ?? ""}`.toLowerCase();
-    const lastMsgText = `${messages[messages.length - 1]?.content ?? ""}`.toLowerCase();
+    const lastMsg = messages[messages.length - 1];
+    const lastMsgText =
+      lastMsg?.direction === "inbound" ? `${lastMsg.content ?? ""}`.toLowerCase() : "";
     const hay = `${inboundText} ${intentText}`.toLowerCase();
     const aiRouting = resolveAiRouting({
       inbound: lastMsgText || inboundText,
@@ -1757,9 +1763,14 @@ export function InboxLeadDetailsPanel({
     const hasDelayLaterSignal =
       /\blater\b|\bnot now\b|\bnext week\b|\bnext month\b|\bbusy\b|\bmaybe later\b/.test(lastMsgText);
 
+    const sellerProfile = (contact as { sellerPreferenceProfile?: { lastSellerIntent?: string } })
+      .sellerPreferenceProfile;
     const sellerIntent = classifySellerIntent({
       inboundText: lastMsgText || inboundText,
-      hasSellerProfile: Boolean((contact as { sellerPreferenceProfile?: unknown }).sellerPreferenceProfile),
+      hasSellerProfile: Boolean(sellerProfile),
+      priorSellerIntent:
+        (sellerProfile?.lastSellerIntent as import("@shared/sellerIntent").SellerIntentClass | undefined) ??
+        null,
     });
 
     return buildContextualNextActions({
@@ -1777,6 +1788,7 @@ export function InboxLeadDetailsPanel({
       hasDelayLater: hasDelayLaterSignal,
       lastOutbound: messages.length > 0 && messages[messages.length - 1].direction === "outbound",
       inboundText,
+      latestInboundText: lastMsgText || undefined,
       showingTimingPhrase: extractShowingTimingPhrase(inboundText),
       mentionedDeposit,
       schedulingLinkSent,

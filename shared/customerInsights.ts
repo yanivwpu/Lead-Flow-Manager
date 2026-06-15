@@ -14,6 +14,7 @@ import {
   MIN_HOT_TAG_SCORE,
 } from "./leadQualification";
 import { resolveAiRouting, type AiRoutingDecision } from "./aiRouting";
+import { resolveCopilotDominantIntent } from "./copilotIntent";
 import type { SellerIntentClass } from "./sellerIntent";
 import { isPureSellerIntent } from "./sellerIntent";
 
@@ -186,17 +187,44 @@ export type ContextualActionContext = {
   enrollableCampaignCount?: number;
   /** Seller Lead Engine — intent class from latest inbound */
   sellerIntent?: SellerIntentClass | null;
+  /** Latest inbound line — preferred for dominant intent when set */
+  latestInboundText?: string;
 };
 
 type ActionCandidate = { label: string; rank: number; group: string };
+
+function collectBuyerInventoryActions(ctx: ContextualActionContext): ActionCandidate[] {
+  const timing = ctx.showingTimingPhrase?.trim();
+  const actions: ActionCandidate[] = [
+    { label: "Share matching listings", rank: 98, group: "buyer_inventory" },
+  ];
+
+  if (ctx.hasShowingIntent) {
+    actions.push({
+      label: timing ? `Confirm ${timing} availability` : "Confirm showing availability",
+      rank: 100,
+      group: "showing",
+    });
+    actions.push({ label: "Schedule showing", rank: 94, group: "showing" });
+  } else {
+    actions.push({ label: "Schedule showing", rank: 92, group: "showing" });
+  }
+
+  actions.push({ label: "Send more matches", rank: 86, group: "buyer_inventory" });
+  return actions;
+}
 
 function collectContextualActionCandidates(ctx: ContextualActionContext): ActionCandidate[] {
   const actions: ActionCandidate[] = [];
   const timing = ctx.showingTimingPhrase?.trim();
   const sellerIntent = ctx.sellerIntent ?? null;
-  const pureSeller = isPureSellerIntent(sellerIntent);
+  const intentText = ctx.latestInboundText ?? ctx.inboundText;
+  const dominantIntent = resolveCopilotDominantIntent({
+    inboundText: intentText,
+    sellerIntent,
+  });
 
-  if (pureSeller) {
+  if (dominantIntent === "seller") {
     if (sellerIntent === "seller_valuation") {
       actions.push({ label: "Request CMA Information", rank: 97, group: "seller_cma" });
       actions.push({ label: "Request Property Address", rank: 95, group: "seller_address" });
@@ -211,9 +239,13 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
     return dedupeActionCandidates(actions).slice(0, 3);
   }
 
-  if (sellerIntent === "seller_and_buyer") {
+  if (dominantIntent === "mixed") {
     actions.push({ label: "Book Listing Consultation", rank: 90, group: "seller_consult" });
     actions.push({ label: "Request Property Address", rank: 86, group: "seller_address" });
+  }
+
+  if (dominantIntent === "buyer") {
+    actions.push(...collectBuyerInventoryActions(ctx));
   }
 
   const routing =
@@ -354,6 +386,7 @@ export function behaviorForActionGroup(group: string): NextBestActionBehavior {
     case "seller_cma":
     case "seller_address":
     case "seller_assign":
+    case "buyer_inventory":
       return "composer";
     default:
       return "composer";

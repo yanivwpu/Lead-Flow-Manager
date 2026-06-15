@@ -41,4 +41,14 @@ assert.equal(detectPureSellerSignals("hello there"), false);
 assert.equal(detectPureSellerSignals("I want to sell my home"), true);
 assert.equal(classifySellerIntent({ inboundText: "Show me 3 bed homes in Miami" }), null, "buyer search not seller");
 
+assert.equal(
+  classifySellerIntent({
+    inboundText: "show me 3/2 apartment for sale up to 1 mil",
+    hasSellerProfile: true,
+    priorSellerIntent: "seller_new",
+  }),
+  null,
+  "buyer search overrides stale seller profile",
+);
+
 console.log("seller-intent-detection.test.ts: OK");

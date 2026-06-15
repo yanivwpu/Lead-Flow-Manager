@@ -10,10 +10,7 @@ import { InventoryHealthDiagnosticsPanel } from "@/components/inventory/Inventor
 import { InventoryMatchRecommendationCard } from "@/components/inventory/InventoryMatchRecommendationCard";
 import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
 import { shouldShowInventoryHealthDiagnostics } from "@/lib/copilotRgeVisibility";
-import {
-  buildInventoryRefineComposerPrompt,
-  INVENTORY_MATCH_PAGE_SIZE,
-} from "@/lib/inventoryMatchUi";
+import { INVENTORY_MATCH_PAGE_SIZE } from "@/lib/inventoryMatchUi";
 import {
   fetchInventoryMatches,
   INVENTORY_MATCHES_STALE_MS,
@@ -55,7 +52,6 @@ export function MatchingListingsPanel({
   onInsertComposerDraft,
 }: MatchingListingsPanelProps) {
   const [matchOffset, setMatchOffset] = useState(0);
-  const [shuffleSeed, setShuffleSeed] = useState<number | undefined>(undefined);
   const [lastClientFetchAt, setLastClientFetchAt] = useState<string | null>(null);
 
   const showHealthDiagnostics = shouldShowInventoryHealthDiagnostics({
@@ -69,10 +65,9 @@ export function MatchingListingsPanel({
     () => ({
       offset: matchOffset,
       limit: INVENTORY_MATCH_PAGE_SIZE,
-      shuffleSeed,
       includeDiagnostics: showHealthDiagnostics,
     }),
-    [matchOffset, shuffleSeed, showHealthDiagnostics],
+    [matchOffset, showHealthDiagnostics],
   );
 
   const { data: inventoryStatus } = useQuery({
@@ -97,7 +92,6 @@ export function MatchingListingsPanel({
 
   useEffect(() => {
     setMatchOffset(0);
-    setShuffleSeed(undefined);
     setLastClientFetchAt(null);
   }, [contactId]);
 
@@ -141,7 +135,6 @@ export function MatchingListingsPanel({
     isError && error instanceof Error ? error.message : null;
 
   const canViewMore = totalFound > matchOffset + showingCount;
-  const canShuffle = totalFound > INVENTORY_MATCH_PAGE_SIZE;
 
   const showEmpty =
     isFetched &&
@@ -168,17 +161,6 @@ export function MatchingListingsPanel({
 
   const handleViewMore = () => {
     setMatchOffset((prev) => prev + INVENTORY_MATCH_PAGE_SIZE);
-  };
-
-  const handleShuffle = () => {
-    setShuffleSeed(Date.now());
-    setMatchOffset(0);
-  };
-
-  const handleRefine = () => {
-    if (!buyerProfile || !onInsertComposerDraft) return;
-    const prompt = buildInventoryRefineComposerPrompt(buyerProfile, totalFound);
-    onInsertComposerDraft(prompt);
   };
 
   return (
@@ -291,31 +273,6 @@ export function MatchingListingsPanel({
                 data-testid="button-view-more-matches"
               >
                 View more
-              </Button>
-            )}
-            {canShuffle && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 text-[10px] px-2.5"
-                onClick={handleShuffle}
-                disabled={isFetching}
-                data-testid="button-shuffle-matches"
-              >
-                Shuffle
-              </Button>
-            )}
-            {buyerProfile && onInsertComposerDraft && (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="h-7 text-[10px] px-2.5 bg-violet-50 text-violet-800 hover:bg-violet-100"
-                onClick={handleRefine}
-                data-testid="button-refine-matches"
-              >
-                Refine
               </Button>
             )}
           </div>
