@@ -17,7 +17,7 @@ import {
 import { resolveBuyerMatchingTraceId } from "../buyerMatchingTraceRegistry";
 import {
   extractBuyerMatchCriteria,
-  rankInventoryMatches,
+  rankInventoryMatchesPage,
   buildMatchFunnelSummary,
   countExclusionReasons,
   countQualifyingInventoryMatches,
@@ -137,7 +137,13 @@ function toPublicMatch(scored: ReturnType<typeof rankInventoryMatches>[number]):
 export async function findMatchingListingsForContact(
   contactId: string,
   userId: string,
-  options?: { traceId?: string },
+  options?: {
+    traceId?: string;
+    offset?: number;
+    limit?: number;
+    shuffleSeed?: number;
+    includeDiagnostics?: boolean;
+  },
 ): Promise<InventoryMatchesResponse & { httpStatus?: number; buyerMatchingTraceId?: string }> {
   const buyerMatchingTraceId =
     options?.traceId ?? resolveBuyerMatchingTraceId(contactId);
@@ -249,9 +255,15 @@ export async function findMatchingListingsForContact(
 
   const inputs = rows.map(inventoryListingToMatchInput);
   const totalMatchCount = countQualifyingInventoryMatches(inputs, criteria);
-  const ranked = rankInventoryMatches(inputs, criteria, 10);
+  const pageLimit = Math.max(1, Math.min(options?.limit ?? 10, 50));
+  const pageOffset = Math.max(0, options?.offset ?? 0);
+  const ranked = rankInventoryMatchesPage(inputs, criteria, {
+    offset: pageOffset,
+    limit: pageLimit,
+    shuffleSeed: options?.shuffleSeed,
+  });
   const matches = ranked.map(toPublicMatch);
-  const funnel = auditBuySearchMatchFunnel(inputs, criteria, { rankLimit: 10, sampleLimit: 20 });
+  const funnel = auditBuySearchMatchFunnel(inputs, criteria, { rankLimit: pageLimit, sampleLimit: 20 });
   const profileSnapshot = buildPersistedProfileSnapshotForDiagnostics(profile, criteria);
 
   const exclusionCounts = inputs.length > 0 ? countExclusionReasons(inputs, criteria) : new Map();
@@ -276,6 +288,8 @@ export async function findMatchingListingsForContact(
     exclusionSummary,
     noMatchSummary,
   });
+
+  const includeDiagnostics = options?.includeDiagnostics === true;
 
   traceBuyerMatchingInventoryResult({
     traceId: buyerMatchingTraceId,
@@ -320,8 +334,8 @@ export async function findMatchingListingsForContact(
     matchCount: totalMatchCount,
     matches,
     savedListingIds,
-    diagnostics,
-    buyerMatchingTraceId,
+    diagnostics: includeDiagnostics ? diagnostics : undefined,
+    buyerMatchingTraceId: includeDiagnostics ? buyerMatchingTraceId : undefined,
   };
 }
 

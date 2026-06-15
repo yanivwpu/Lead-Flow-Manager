@@ -1,6 +1,10 @@
 import type { InventoryConnectorStatus } from "@/lib/inventoryApi";
 import { normalizeBuyerPreferenceProfile } from "@shared/buyerPreferenceSchema";
 import { extractBuyerMatchCriteria } from "@shared/inventory/inventoryMatchScoring";
+import {
+  isInventoryOwnerDebugEnabled,
+  isInventorySupportDebugEnabled,
+} from "@/lib/inventoryMatchUi";
 
 /** Aligns with server `isRealEstateIndustry` in buyerPreferenceService. */
 export function isRealEstateWorkspaceIndustry(industry: string | null | undefined): boolean {
@@ -62,10 +66,20 @@ export function shouldShowCopilotInventoryForContact(input: {
   return contactHasInventoryMatchCriteria(input.buyerPreferenceProfile);
 }
 
-/** Inventory match health panel — local dev or workspace owner/admin only. */
+/**
+ * Inventory Health diagnostics — QA only (not shown to normal agents).
+ * Visible when: local dev, platform admin, support debug mode, or workspace owner with debug flag.
+ */
 export function shouldShowInventoryHealthDiagnostics(input: {
   isDev?: boolean;
+  isPlatformAdmin?: boolean;
+  isWorkspaceOwner?: boolean;
   isWorkspaceAdmin?: boolean;
 }): boolean {
-  return !!input.isDev || !!input.isWorkspaceAdmin;
+  if (input.isDev) return true;
+  if (input.isPlatformAdmin) return true;
+  if (isInventorySupportDebugEnabled()) return true;
+  const isOwner = input.isWorkspaceOwner ?? input.isWorkspaceAdmin;
+  if (isOwner && isInventoryOwnerDebugEnabled()) return true;
+  return false;
 }

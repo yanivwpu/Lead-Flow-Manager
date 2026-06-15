@@ -717,10 +717,15 @@ export function countQualifyingInventoryMatches(
   return seen.size;
 }
 
-export function rankInventoryMatches(
+function sortRankedMatches(matches: ScoredInventoryMatch[]): ScoredInventoryMatch[] {
+  return [...matches].sort(
+    (a, b) => b.score - a.score || (b.listing.priceCents ?? 0) - (a.listing.priceCents ?? 0),
+  );
+}
+
+function collectScoredMatches(
   listings: MatchListingInput[],
   criteria: BuyerMatchCriteria,
-  limit = 10,
 ): ScoredInventoryMatch[] {
   if (!criteria.hasAnyCriteria) return [];
 
@@ -735,9 +740,48 @@ export function rankInventoryMatches(
     }
   }
 
-  return [...byProviderId.values()]
-    .sort((a, b) => b.score - a.score || (b.listing.priceCents ?? 0) - (a.listing.priceCents ?? 0))
-    .slice(0, limit);
+  return sortRankedMatches([...byProviderId.values()]);
+}
+
+/** All qualifying matches ranked (no API cap). */
+export function getAllRankedInventoryMatches(
+  listings: MatchListingInput[],
+  criteria: BuyerMatchCriteria,
+): ScoredInventoryMatch[] {
+  return collectScoredMatches(listings, criteria);
+}
+
+function seededShuffle<T>(items: T[], seed: number): T[] {
+  const out = [...items];
+  let state = seed >>> 0;
+  for (let i = out.length - 1; i > 0; i--) {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    const j = state % (i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+export function rankInventoryMatchesPage(
+  listings: MatchListingInput[],
+  criteria: BuyerMatchCriteria,
+  options?: { offset?: number; limit?: number; shuffleSeed?: number },
+): ScoredInventoryMatch[] {
+  const offset = Math.max(0, options?.offset ?? 0);
+  const limit = Math.max(1, Math.min(options?.limit ?? 10, 50));
+  let ranked = collectScoredMatches(listings, criteria);
+  if (options?.shuffleSeed != null && Number.isFinite(options.shuffleSeed)) {
+    ranked = seededShuffle(ranked, options.shuffleSeed);
+  }
+  return ranked.slice(offset, offset + limit);
+}
+
+export function rankInventoryMatches(
+  listings: MatchListingInput[],
+  criteria: BuyerMatchCriteria,
+  limit = 10,
+): ScoredInventoryMatch[] {
+  return rankInventoryMatchesPage(listings, criteria, { offset: 0, limit });
 }
 
 /** @internal Test helper — expose hard gate evaluation. */

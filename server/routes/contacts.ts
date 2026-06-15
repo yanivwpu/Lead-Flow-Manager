@@ -219,7 +219,21 @@ export function registerContactRoutes(app: Express): void {
       const { findMatchingListingsForContact } = await import("../inventory/inventoryMatchingService");
       const { resolveBuyerMatchingTraceId } = await import("../buyerMatchingTraceRegistry");
       const traceId = resolveBuyerMatchingTraceId(req.params.id);
-      const result = await findMatchingListingsForContact(req.params.id, req.user.id, { traceId });
+      const offset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
+      const limit = Math.max(1, Math.min(parseInt(String(req.query.limit ?? "10"), 10) || 10, 50));
+      const shuffleRaw = req.query.shuffleSeed;
+      const shuffleSeed =
+        shuffleRaw != null && String(shuffleRaw).trim() !== ""
+          ? parseInt(String(shuffleRaw), 10)
+          : undefined;
+      const includeDiagnostics = req.query.includeDiagnostics === "1";
+      const result = await findMatchingListingsForContact(req.params.id, req.user.id, {
+        traceId,
+        offset,
+        limit,
+        shuffleSeed: Number.isFinite(shuffleSeed) ? shuffleSeed : undefined,
+        includeDiagnostics,
+      });
       if (result.httpStatus === 404) {
         return res.status(404).json({ error: "Contact not found" });
       }

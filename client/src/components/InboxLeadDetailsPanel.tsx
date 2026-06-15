@@ -1412,6 +1412,7 @@ export function InboxLeadDetailsPanel({
   const currentWorkspaceMember = teamMembers.find(
     (m) => (m.memberId || m.id) === currentUserId,
   );
+  const isWorkspaceOwner = currentWorkspaceMember?.role === "owner";
   const isWorkspaceAdmin =
     currentWorkspaceMember?.role === "owner" ||
     currentWorkspaceMember?.role === "admin";
@@ -2648,8 +2649,9 @@ export function InboxLeadDetailsPanel({
                       contactFirstName={contact.name?.trim().split(/\s+/)[0]}
                       compact
                       isWorkspaceAdmin={isWorkspaceAdmin}
+                      isWorkspaceOwner={isWorkspaceOwner}
+                      buyerProfile={persistedBuyerProfile}
                       inventoryRelevant={showCopilotInventoryPanels}
-                      showHealthDiagnostics={showCopilotInventoryPanels}
                       onInsertComposerDraft={onInsertComposerDraft}
                     />
                   )}

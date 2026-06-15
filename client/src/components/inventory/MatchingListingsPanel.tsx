@@ -1,21 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import type { InventoryMatchResult, InventoryMatchesResponse } from "@shared/inventory/inventoryMatchTypes";
+import { Button } from "@/components/ui/button";
+import type { InventoryMatchResult } from "@shared/inventory/inventoryMatchTypes";
+import type { BuyerPreferenceProfile } from "@shared/buyerPreferenceSchema";
 import { fetchInventoryStatus } from "@/lib/inventoryApi";
 import { InventoryHealthDiagnosticsPanel } from "@/components/inventory/InventoryHealthDiagnosticsPanel";
 import { InventoryMatchRecommendationCard } from "@/components/inventory/InventoryMatchRecommendationCard";
 import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
 import { shouldShowInventoryHealthDiagnostics } from "@/lib/copilotRgeVisibility";
+import {
+  buildInventoryRefineComposerPrompt,
+  INVENTORY_MATCH_PAGE_SIZE,
+} from "@/lib/inventoryMatchUi";
 import {
   fetchInventoryMatches,
   INVENTORY_MATCHES_STALE_MS,
@@ -32,71 +30,16 @@ import {
 } from "@/lib/buyerMatchingTraceClient";
 import { resolveClientBuyerMatchingTraceId } from "@/lib/buyerMatchingTraceStore";
 
-const SIDEBAR_PREVIEW_LIMIT = 5;
-
-function AllMatchesDialog({
-  contactId,
-  contactFirstName,
-  matches,
-  savedListingIds,
-  open,
-  onOpenChange,
-  onSavedChange,
-  onInsertComposerDraft,
-}: {
-  contactId: string;
-  contactFirstName?: string;
-  matches: InventoryMatchResult[];
-  savedListingIds: string[];
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSavedChange: () => void;
-  onInsertComposerDraft?: (draft: CopilotComposerInsert) => boolean;
-}) {
-  const savedSet = new Set(savedListingIds);
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden">
-        <DialogHeader className="px-4 pt-4 pb-2 text-left space-y-1">
-          <DialogTitle className="text-base flex items-center gap-1.5">
-            <Sparkles className="h-4 w-4 text-violet-500" aria-hidden />
-            Matching Listings ({matches.length})
-          </DialogTitle>
-          <DialogDescription className="text-xs text-gray-500">
-            These matches are for your review only. Ranked by buyer preference fit.
-          </DialogDescription>
-        </DialogHeader>
-        <ScrollArea className="max-h-[min(70vh,560px)] px-4 pb-4">
-          <div className="space-y-2 pr-3">
-            {matches.map((match) => (
-              <InventoryMatchRecommendationCard
-                key={match.listingId}
-                contactId={contactId}
-                contactFirstName={contactFirstName}
-                match={match}
-                saved={savedSet.has(match.listingId)}
-                onSavedChange={onSavedChange}
-                onInsertComposerDraft={onInsertComposerDraft}
-                layout="modal"
-              />
-            ))}
-          </div>
-        </ScrollArea>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 interface MatchingListingsPanelProps {
   contactId: string;
   contactFirstName?: string;
   compact?: boolean;
   isWorkspaceAdmin?: boolean;
+  isWorkspaceOwner?: boolean;
+  isPlatformAdmin?: boolean;
+  buyerProfile?: BuyerPreferenceProfile | null;
   /** When false, hide the entire panel (non-inventory contact). */
   inventoryRelevant?: boolean;
-  /** When false, hide inventory health diagnostics (non-inventory contact). */
-  showHealthDiagnostics?: boolean;
   onInsertComposerDraft?: (draft: CopilotComposerInsert) => boolean;
 }
 
@@ -105,18 +48,33 @@ export function MatchingListingsPanel({
   contactFirstName,
   compact = true,
   isWorkspaceAdmin = false,
+  isWorkspaceOwner = false,
+  isPlatformAdmin = false,
+  buyerProfile = null,
   inventoryRelevant = true,
-  showHealthDiagnostics: showHealthDiagnosticsProp = false,
   onInsertComposerDraft,
 }: MatchingListingsPanelProps) {
-  const [allMatchesOpen, setAllMatchesOpen] = useState(false);
+  const [matchOffset, setMatchOffset] = useState(0);
+  const [shuffleSeed, setShuffleSeed] = useState<number | undefined>(undefined);
   const [lastClientFetchAt, setLastClientFetchAt] = useState<string | null>(null);
-  const showHealthDiagnostics =
-    showHealthDiagnosticsProp &&
-    shouldShowInventoryHealthDiagnostics({
-      isDev: import.meta.env.DEV,
-      isWorkspaceAdmin,
-    });
+
+  const showHealthDiagnostics = shouldShowInventoryHealthDiagnostics({
+    isDev: import.meta.env.DEV,
+    isWorkspaceAdmin,
+    isWorkspaceOwner,
+    isPlatformAdmin,
+  });
+
+  const fetchOptions = useMemo(
+    () => ({
+      offset: matchOffset,
+      limit: INVENTORY_MATCH_PAGE_SIZE,
+      shuffleSeed,
+      includeDiagnostics: showHealthDiagnostics,
+    }),
+    [matchOffset, shuffleSeed, showHealthDiagnostics],
+  );
+
   const { data: inventoryStatus } = useQuery({
     queryKey: ["/api/inventory/status"],
     queryFn: fetchInventoryStatus,
@@ -127,8 +85,8 @@ export function MatchingListingsPanel({
 
   const { data, isLoading, isFetched, isError, error, isFetching, refetch, isPlaceholderData } =
     useQuery({
-      queryKey: inventoryMatchesQueryKey(contactId),
-      queryFn: () => fetchInventoryMatches(contactId),
+      queryKey: inventoryMatchesQueryKey(contactId, fetchOptions),
+      queryFn: () => fetchInventoryMatches(contactId, fetchOptions),
       enabled,
       staleTime: INVENTORY_MATCHES_STALE_MS,
       placeholderData: (previousData, previousQuery) =>
@@ -138,8 +96,9 @@ export function MatchingListingsPanel({
     });
 
   useEffect(() => {
+    setMatchOffset(0);
+    setShuffleSeed(undefined);
     setLastClientFetchAt(null);
-    setAllMatchesOpen(false);
   }, [contactId]);
 
   useEffect(() => {
@@ -147,7 +106,7 @@ export function MatchingListingsPanel({
     if (!isError && !isPlaceholderData) {
       setLastClientFetchAt(new Date().toISOString());
     }
-  }, [isFetched, isError, isPlaceholderData, contactId, data?.diagnostics?.lastMatchRunAt]);
+  }, [isFetched, isError, isPlaceholderData, contactId, data?.matchCount]);
 
   useEffect(() => {
     if (!contactId || !data || isPlaceholderData) return;
@@ -159,12 +118,12 @@ export function MatchingListingsPanel({
       contactId,
       source: "MatchingListingsPanel",
       layer: "ui",
-      inventoryFilters: data.diagnostics?.activeFilterSummary ?? null,
+      inventoryFilters: showHealthDiagnostics ? data.diagnostics?.activeFilterSummary ?? null : null,
       matchCount: data.matchCount ?? data.matches?.length ?? 0,
       returnedListings: summarizeListingsForTrace(data.matches ?? []),
-      displayedCardCount: (data.matches ?? []).slice(0, SIDEBAR_PREVIEW_LIMIT).length,
+      displayedCardCount: (data.matches ?? []).length,
     });
-  }, [contactId, data, isFetched, isError, isPlaceholderData]);
+  }, [contactId, data, isFetched, isError, isPlaceholderData, showHealthDiagnostics]);
 
   if (!inventoryRelevant) return null;
   if (!inventoryStatus) return null;
@@ -172,20 +131,17 @@ export function MatchingListingsPanel({
   if (!contactId) return null;
 
   const matches = data?.matches ?? [];
-  const matchCount = data?.matchCount ?? matches.length;
-  const qualifyingCount = data?.diagnostics?.totalQualifyingMatches;
-  const matchCountLabel =
-    qualifyingCount != null && qualifyingCount !== matches.length
-      ? `${qualifyingCount} (${matches.length} shown)`
-      : String(matchCount);
-  const previewMatches = matches.slice(0, SIDEBAR_PREVIEW_LIMIT);
+  const totalFound = data?.matchCount ?? matches.length;
+  const showingCount = matches.length;
   const savedListingIds = data?.savedListingIds ?? [];
   const savedSet = new Set(savedListingIds);
-  const hasMoreMatches = matches.length > SIDEBAR_PREVIEW_LIMIT;
   const hasCachedMatches = inventoryMatchesHasDisplayableResults(data);
   const isRateLimited = isError && isRateLimitedInventoryMatchesError(error);
   const clientErrorMessage =
     isError && error instanceof Error ? error.message : null;
+
+  const canViewMore = totalFound > matchOffset + showingCount;
+  const canShuffle = totalFound > INVENTORY_MATCH_PAGE_SIZE;
 
   const showEmpty =
     isFetched &&
@@ -197,9 +153,7 @@ export function MatchingListingsPanel({
       data.reason === "no_active_inventory");
 
   const showBlockingFetchError =
-    isError &&
-    !hasCachedMatches &&
-    !isLoading;
+    isError && !hasCachedMatches && !isLoading;
 
   const showListingFetchFailed =
     !isError &&
@@ -208,39 +162,64 @@ export function MatchingListingsPanel({
     !hasCachedMatches;
 
   if (!enabled && !isLoading) return null;
-  if (isFetched && !isError && data && !data.eligible && data.reason === "feature_disabled") return null;
+  if (isFetched && !isError && data && !data.eligible && data.reason === "feature_disabled") {
+    return null;
+  }
+
+  const handleViewMore = () => {
+    setMatchOffset((prev) => prev + INVENTORY_MATCH_PAGE_SIZE);
+  };
+
+  const handleShuffle = () => {
+    setShuffleSeed(Date.now());
+    setMatchOffset(0);
+  };
+
+  const handleRefine = () => {
+    if (!buyerProfile || !onInsertComposerDraft) return;
+    const prompt = buildInventoryRefineComposerPrompt(buyerProfile, totalFound);
+    onInsertComposerDraft(prompt);
+  };
 
   return (
     <div
       className={cn(compact ? "mt-2 min-w-0" : "mt-3")}
       data-testid="matching-listings-panel"
     >
-      <div className={cn(compact ? "mb-1.5" : "mb-2")}>
-        <span
-          className={cn(
-            "font-semibold uppercase tracking-wide flex items-center gap-1.5 min-w-0",
-            compact ? "text-[10px] text-gray-600" : "text-xs text-gray-600",
-          )}
-        >
-          <Sparkles className="h-3.5 w-3.5 text-violet-500 shrink-0" aria-hidden />
-          <span className="truncate">
-            Inventory Matches{matchCount > 0 ? ` (${matchCountLabel})` : ""}
-          </span>
-          {isFetching && hasCachedMatches && (
-            <Loader2 className="h-3 w-3 shrink-0 animate-spin text-gray-400" aria-hidden />
-          )}
-        </span>
-        {matches.length > 0 && !compact && (
-          <p className="text-[10px] text-gray-400 leading-snug mt-0.5">
-            For your review — ranked by buyer fit.
-          </p>
-        )}
+      <div className={cn(compact ? "mb-2" : "mb-2.5")}>
+        <div className="flex items-start gap-1.5 min-w-0">
+          <Sparkles className="h-3.5 w-3.5 text-violet-500 shrink-0 mt-0.5" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p
+              className={cn(
+                "font-semibold text-gray-800",
+                compact ? "text-[11px]" : "text-xs",
+              )}
+            >
+              Inventory matches
+              {isFetching && hasCachedMatches && (
+                <Loader2 className="inline-block ml-1.5 h-3 w-3 animate-spin text-gray-400" aria-hidden />
+              )}
+            </p>
+            {totalFound > 0 && (
+              <p className="text-[10px] text-gray-500 leading-snug mt-0.5">
+                <span className="font-medium text-gray-700">{totalFound} found</span>
+                {showingCount > 0 && (
+                  <>
+                    <span className="text-gray-300 mx-1">·</span>
+                    <span>Showing {showingCount}</span>
+                  </>
+                )}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
       {isLoading && !hasCachedMatches && (
         <div className="flex items-center gap-1.5 py-2 text-[11px] text-gray-400">
           <Loader2 className="h-3 w-3 animate-spin" />
-          Scoring inventory…
+          Finding matches…
         </div>
       )}
 
@@ -249,10 +228,8 @@ export function MatchingListingsPanel({
           className="text-[11px] text-amber-700 leading-snug py-1"
           data-testid="matching-listings-fetch-error"
         >
-          Unable to load matching listings
-          {data?.diagnostics
-            ? ` (${data.diagnostics.matchesReturned} of ${data.diagnostics.activeInventoryCount} scored).`
-            : "."}
+          Unable to load matching listings right now.
+          {isRateLimited ? " Please wait a moment and try again." : ""}
         </p>
       )}
 
@@ -269,24 +246,23 @@ export function MatchingListingsPanel({
 
       {showEmpty && (
         <p className="text-[11px] text-gray-500 leading-snug py-1">
-          {data?.reason === "no_buyer_preferences"
+          {data?.reason === "no_buyer_preferences" || data?.reason === "no_active_inventory"
             ? "Matches will appear once buyer preferences and inventory are available."
-            : data?.reason === "no_active_inventory"
-              ? "Matches will appear once buyer preferences and inventory are available."
-              : data?.diagnostics?.noMatchSummary?.trim() ||
-                "No strong matches in active inventory yet."}
+            : showHealthDiagnostics && data?.diagnostics?.noMatchSummary?.trim()
+              ? data.diagnostics.noMatchSummary.trim()
+              : "No strong matches in active inventory yet."}
         </p>
       )}
 
-      {previewMatches.length > 0 && (
+      {matches.length > 0 && (
         <div
           className="min-w-0"
           data-testid="matching-listings-cards"
-          data-match-count={matches.length}
-          data-rendered-count={previewMatches.length}
+          data-match-count={totalFound}
+          data-rendered-count={showingCount}
         >
           <div className="space-y-1.5">
-            {previewMatches.map((match) => (
+            {matches.map((match: InventoryMatchResult) => (
               <InventoryMatchRecommendationCard
                 key={match.listingId}
                 contactId={contactId}
@@ -299,29 +275,52 @@ export function MatchingListingsPanel({
               />
             ))}
           </div>
-          {hasMoreMatches && (
-            <button
-              type="button"
-              className="mt-4 mb-3 block w-full text-left text-[11px] font-medium leading-snug text-violet-700 hover:text-violet-900 hover:underline"
-              onClick={() => setAllMatchesOpen(true)}
-              data-testid="button-view-all-matches"
-            >
-              View all matches ({matches.length})
-            </button>
-          )}
+
+          <div
+            className="mt-3 flex flex-wrap gap-1.5"
+            data-testid="inventory-match-controls"
+          >
+            {canViewMore && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-[10px] px-2.5"
+                onClick={handleViewMore}
+                disabled={isFetching}
+                data-testid="button-view-more-matches"
+              >
+                View more
+              </Button>
+            )}
+            {canShuffle && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-[10px] px-2.5"
+                onClick={handleShuffle}
+                disabled={isFetching}
+                data-testid="button-shuffle-matches"
+              >
+                Shuffle
+              </Button>
+            )}
+            {buyerProfile && onInsertComposerDraft && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-7 text-[10px] px-2.5 bg-violet-50 text-violet-800 hover:bg-violet-100"
+                onClick={handleRefine}
+                data-testid="button-refine-matches"
+              >
+                Refine
+              </Button>
+            )}
+          </div>
         </div>
       )}
-
-      <AllMatchesDialog
-        contactId={contactId}
-        contactFirstName={contactFirstName}
-        matches={matches}
-        savedListingIds={savedListingIds}
-        open={allMatchesOpen}
-        onOpenChange={setAllMatchesOpen}
-        onSavedChange={() => void refetch()}
-        onInsertComposerDraft={onInsertComposerDraft}
-      />
     </div>
   );
 }
