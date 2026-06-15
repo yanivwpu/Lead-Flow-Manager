@@ -714,6 +714,13 @@ function formatContactActivity(event: ContactActivityEvent): { title: string; de
       tone: "amber",
     };
   }
+  if (event.eventType === "appointment_deleted") {
+    return {
+      title: "Appointment removed",
+      detail: when ? `Was scheduled for ${when}` : title || "Meeting removed from calendar",
+      tone: "amber",
+    };
+  }
   if (event.eventType === "calendly_rescheduled") {
     return {
       title: "Appointment rescheduled",
@@ -927,8 +934,23 @@ export function InboxLeadDetailsPanel({
       credentials: "include",
     });
     if (!res.ok) throw new Error("Failed to delete appointment");
+    const data = (await res.json()) as {
+      contact?: {
+        followUp?: string | null;
+        followUpDate?: string | null;
+        pipelineStage?: string | null;
+      };
+    };
     invalidateAppointmentQueries();
-    onUpdateContact({ followUp: null, followUpDate: null });
+    if (data.contact) {
+      onUpdateContact({
+        followUp: data.contact.followUp ?? null,
+        followUpDate: data.contact.followUpDate ?? null,
+        pipelineStage: data.contact.pipelineStage ?? undefined,
+      });
+    } else {
+      onUpdateContact({ followUp: null, followUpDate: null });
+    }
   }, [invalidateAppointmentQueries, onUpdateContact]);
 
   const [campaignPickerOpen, setCampaignPickerOpen] = useState(false);

@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { sql, eq } from "drizzle-orm";
-import { CHANNELS, contactNotes, appointments } from "@shared/schema";
+import { CHANNELS, contactNotes } from "@shared/schema";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
 import { channelService } from "../channelService";
@@ -14,10 +14,9 @@ import {
 import OpenAI from "openai";
 import { isActiveFutureAppointment } from "@shared/activeAppointment";
 import {
-  clearStaleAppointmentScheduledTag,
   clearActiveAppointmentsForContact,
   clearBookedMeetingsForContact,
-  syncContactFollowUpAfterAppointmentChange,
+  deleteAppointmentWithContactCleanup,
 } from "../contactAppointmentSync";
 
 const openai = new OpenAI({
@@ -1043,19 +1042,17 @@ export function registerContactRoutes(app: Express): void {
   app.delete("/api/appointments/:id", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      const existing = await db
-        .select({ contactId: appointments.contactId })
-        .from(appointments)
-        .where(eq(appointments.id, req.params.id))
-        .limit(1);
-      const ok = await storage.deleteAppointment(req.params.id);
-      if (!ok) return res.status(404).json({ error: "Appointment not found" });
-      const contactId = existing[0]?.contactId;
-      if (contactId) {
-        await clearStaleAppointmentScheduledTag(contactId);
-        await syncContactFollowUpAfterAppointmentChange(req.user.id, contactId);
-      }
-      res.json({ success: true, contactId: contactId ?? null });
+      const result = await deleteAppointmentWithContactCleanup(req.user.id, req.params.id);
+      if (!result.success) return res.status(404).json({ error: "Appointment not found" });
+      const updated = result.contactId ? await storage.getContact(result.contactId) : null;
+      res.json({
+        success: true,
+        contactId: result.contactId ?? null,
+        tombstoned: result.tombstoned,
+        followUpCleared: result.followUpCleared,
+        pipelineReverted: result.pipelineReverted,
+        contact: updated,
+      });
     } catch (err) {
       console.error("Error deleting appointment:", err);
       res.status(500).json({ error: "Failed to delete appointment" });
