@@ -1196,39 +1196,45 @@ class ChannelService {
           }),
         );
       } else {
-        void import("./sellerPreferenceService").then(async ({ resolveSellerIntentForContact, shouldSkipBuyerPipelineForSellerLead }) => {
-          const sellerIntent = resolveSellerIntentForContact(contact, inboundTrimmed);
-          const skipBuyer = shouldSkipBuyerPipelineForSellerLead(sellerIntent);
-          if (skipBuyer) {
-            const { syncSellerPreferencesForInboundMessage } = await import("./sellerPreferenceService");
-            await syncSellerPreferencesForInboundMessage({
-              contact,
-              inboundText: inboundTrimmed,
-              conversationId: conversation.id,
-              sellerIntent,
-            }).catch(() => {});
-            return;
-          }
-          void import("./buyerPreferenceService").then(({ scheduleBuyerPreferenceExtraction }) =>
-            scheduleBuyerPreferenceExtraction({
-              userId,
+        const { resolveSellerIntentForContact, shouldSkipBuyerPipelineForSellerLead } = await import(
+          "./sellerPreferenceService"
+        );
+        const sellerIntent = resolveSellerIntentForContact(contact, inboundTrimmed);
+        const skipBuyer = shouldSkipBuyerPipelineForSellerLead(sellerIntent);
+        if (skipBuyer) {
+          const { syncSellerPreferencesForInboundMessage } = await import("./sellerPreferenceService");
+          await syncSellerPreferencesForInboundMessage({
+            contact,
+            inboundText: inboundTrimmed,
+            conversationId: conversation.id,
+            sellerIntent,
+          }).catch(() => {});
+        } else {
+          const { processInboundBuyerPreferencesOnMessage } = await import("./buyerPreferenceService");
+          await processInboundBuyerPreferencesOnMessage({
+            userId,
+            contact,
+            conversationId: conversation.id,
+            messageId: message.id,
+            inboundText: content,
+            triggerSource,
+          }).catch((err) => {
+            console.warn("[BuyerPreference] inbound sync failed", {
               contactId: contact.id,
-              conversationId: conversation.id,
               messageId: message.id,
-              inboundText: content,
-              triggerSource,
-            }),
-          );
-          if (sellerIntent === "seller_and_buyer") {
-            const { syncSellerPreferencesForInboundMessage } = await import("./sellerPreferenceService");
-            await syncSellerPreferencesForInboundMessage({
-              contact,
-              inboundText: inboundTrimmed,
-              conversationId: conversation.id,
-              sellerIntent,
-            }).catch(() => {});
-          }
-        });
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
+        }
+        if (!skipBuyer && sellerIntent === "seller_and_buyer") {
+          const { syncSellerPreferencesForInboundMessage } = await import("./sellerPreferenceService");
+          await syncSellerPreferencesForInboundMessage({
+            contact,
+            inboundText: inboundTrimmed,
+            conversationId: conversation.id,
+            sellerIntent,
+          }).catch(() => {});
+        }
       }
     }
 

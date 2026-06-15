@@ -1,6 +1,7 @@
 /**
  * RGE Inventory Intelligence — buyer preference memory (Phase 1).
  */
+import { detectHighConfidenceBookingIntent } from "@shared/bookingIntent";
 import type { Contact } from "@shared/schema";
 import {
   type BuyerPreferenceExtractionPatch,
@@ -13,6 +14,7 @@ import {
 } from "@shared/buyerPreferenceExtractionNormalize";
 import {
   hasInventoryPreferenceSignals,
+  hasStrongStructuredSearchSignals,
   logBuyerPreferenceFastPath,
   type PreferenceArrayReplaceKey,
 } from "@shared/buyerPreferenceInventorySignals";
@@ -28,6 +30,7 @@ import {
 } from "@shared/buyerSearchCommandDebug";
 import {
   logBuyerMatchingTrace,
+  logBuyerProfileSyncLate,
   logReplacementSearchTraceAlias,
   traceBuyerMatchingPipeline,
 } from "@shared/buyerMatchingTrace";
@@ -67,10 +70,63 @@ export function debugLogBuyerPreference(
 }
 
 function logTrigger(
-  event: "extraction_triggered" | "extraction_skipped" | "extraction_started" | "extraction_completed",
+  event:
+    | "extraction_triggered"
+    | "extraction_skipped"
+    | "extraction_started"
+    | "extraction_completed"
+    | "strong_sync_started"
+    | "strong_sync_completed",
   payload: Record<string, unknown>,
 ): void {
   debugBuyerPreferenceLog(event, payload);
+}
+
+function verifyStrongSearchPersisted(params: {
+  contactId: string;
+  messageId?: string | null;
+  conversationId?: string | null;
+  source: string;
+  command: ReturnType<typeof parseBuyerSearchCommand>;
+  savedProfile: BuyerPreferenceProfile;
+}): void {
+  if (params.command.skipProfileUpdate || patchFieldCount(params.command.patch) === 0) return;
+
+  const traceId = resolveBuyerMatchingTraceId(
+    params.contactId,
+    params.messageId ?? undefined,
+    params.conversationId ?? undefined,
+  );
+  const saved = snapshotProfileTraceFields(params.savedProfile);
+  const patch = snapshotPatchTraceFields(params.command.patch);
+
+  if (
+    patch.transactionIntent != null &&
+    saved.transactionIntent !== patch.transactionIntent
+  ) {
+    logBuyerProfileSyncLate({
+      traceId,
+      contactId: params.contactId,
+      messageId: params.messageId,
+      source: params.source,
+      field: "transactionIntent",
+      expected: patch.transactionIntent,
+      actual: saved.transactionIntent,
+      hint: "strong search command persisted with stale transactionIntent",
+    });
+  }
+  if (patch.priceMax != null && saved.priceMax !== patch.priceMax) {
+    logBuyerProfileSyncLate({
+      traceId,
+      contactId: params.contactId,
+      messageId: params.messageId,
+      source: params.source,
+      field: "priceMax",
+      expected: patch.priceMax,
+      actual: saved.priceMax,
+      hint: "strong search command persisted with stale priceMax",
+    });
+  }
 }
 
 function logPersistence(contactId: string, step: string, data: Record<string, unknown>): void {
@@ -479,8 +535,10 @@ export async function syncBuyerPreferencesForInboundMessage(input: {
       priorProfile
     );
   }
+
+  let mergedProfile: BuyerPreferenceProfile | null = null;
   if (hasInventoryPreferenceSignals(input.inboundText)) {
-    await runFastPathHeuristicPreferenceUpdate(freshContact, input.inboundText, {
+    mergedProfile = await runFastPathHeuristicPreferenceUpdate(freshContact, input.inboundText, {
       conversationId: input.conversationId,
       messageId: input.messageId,
     });
@@ -488,6 +546,17 @@ export async function syncBuyerPreferencesForInboundMessage(input: {
   const profile =
     (await loadPersistedBuyerPreferenceProfile(input.contact.id)) ??
     readBuyerPreferenceProfile(freshContact);
+
+  if (hasStrongStructuredSearchSignals(input.inboundText)) {
+    verifyStrongSearchPersisted({
+      contactId: input.contact.id,
+      messageId: input.messageId,
+      conversationId: input.conversationId,
+      source: "syncBuyerPreferencesForInboundMessage",
+      command,
+      savedProfile: profile,
+    });
+  }
 
   traceBuyerMatchingPipeline({
     traceId,
@@ -500,6 +569,7 @@ export async function syncBuyerPreferencesForInboundMessage(input: {
     commandKind: command.kind,
     previousProfile: priorProfile,
     parsedPatch: command.patch,
+    mergedProfile: mergedProfile ?? profile,
     savedProfile: profile,
   });
 
@@ -529,8 +599,8 @@ async function runFastPathHeuristicPreferenceUpdate(
   contact: Contact,
   inboundText: string,
   meta?: { conversationId?: string; messageId?: string },
-): Promise<boolean> {
-  if (!hasInventoryPreferenceSignals(inboundText)) return false;
+): Promise<BuyerPreferenceProfile | null> {
+  if (!hasInventoryPreferenceSignals(inboundText)) return null;
 
   const freshContact = (await storage.getContact(contact.id)) ?? contact;
   const current = readBuyerPreferenceProfile(freshContact);
@@ -543,10 +613,10 @@ async function runFastPathHeuristicPreferenceUpdate(
       kind: command.kind,
       explanation: command.explanation,
     });
-    return false;
+    return null;
   }
 
-  if (patchFieldCount(command.patch) === 0) return false;
+  if (patchFieldCount(command.patch) === 0) return null;
 
   logBuyerPreferenceFastPath("preference_change_detected", {
     contactId: contact.id,
@@ -577,7 +647,110 @@ async function runFastPathHeuristicPreferenceUpdate(
     replaceArrayFields: command.replaceArrayFields,
   });
 
-  return true;
+  return merged;
+}
+
+/**
+ * Inbound entry — strong structured search commands sync before auto-reply/matching;
+ * weak/ambiguous messages keep async LLM extraction.
+ */
+export async function processInboundBuyerPreferencesOnMessage(params: {
+  userId: string;
+  contact: Contact;
+  conversationId?: string;
+  messageId?: string;
+  inboundText: string;
+  triggerSource?: string;
+}): Promise<BuyerPreferenceProfile | null> {
+  const {
+    userId,
+    contact,
+    conversationId,
+    messageId,
+    inboundText,
+    triggerSource = "channelService",
+  } = params;
+  const text = (inboundText || "").trim();
+
+  if (text.length > 0 && detectHighConfidenceBookingIntent(text)) {
+    logTrigger("extraction_skipped", {
+      contactId: contact.id,
+      userId,
+      triggerSource,
+      reason: "booking_intent_fast_path",
+      textLen: text.length,
+    });
+    return null;
+  }
+
+  if (text.length > 0 && text.length < 12 && TRIVIAL_INBOUND_RE.test(text)) {
+    logTrigger("extraction_skipped", {
+      contactId: contact.id,
+      userId,
+      triggerSource,
+      reason: "trivial_inbound_text",
+      textLen: text.length,
+    });
+    return null;
+  }
+
+  const gate = await shouldRunBuyerPreferencePipeline(userId, contact);
+  if (!gate.ok) {
+    logTrigger("extraction_skipped", {
+      contactId: contact.id,
+      userId,
+      triggerSource,
+      reason: gate.reason,
+      ...gate.debug,
+    });
+    return null;
+  }
+
+  if (hasStrongStructuredSearchSignals(text)) {
+    logTrigger("strong_sync_started", {
+      contactId: contact.id,
+      userId,
+      triggerSource,
+      messageId,
+      conversationId,
+      textLen: text.length,
+      traceId: resolveBuyerMatchingTraceId(contact.id, messageId, conversationId),
+    });
+
+    const profile = await syncBuyerPreferencesForInboundMessage({
+      contact,
+      inboundText: text,
+      conversationId,
+      messageId,
+    });
+
+    lastExtractionByContact.set(contact.id, Date.now());
+    logTrigger("strong_sync_completed", {
+      contactId: contact.id,
+      userId,
+      triggerSource,
+      profileStatus: profile.profileStatus,
+      transactionIntent: profile.transactionIntent?.value ?? null,
+      priceMax: profile.priceMax?.value ?? null,
+    });
+    logTrigger("extraction_skipped", {
+      contactId: contact.id,
+      userId,
+      triggerSource,
+      reason: "strong_structured_sync_complete",
+    });
+    return profile;
+  }
+
+  scheduleBuyerPreferenceExtraction({
+    userId,
+    contactId: contact.id,
+    conversationId,
+    messageId,
+    inboundText: text,
+    triggerSource,
+  });
+  return null;
 }
 
 async function loadConversationForExtraction(
@@ -893,6 +1066,7 @@ export function scheduleBuyerPreferenceExtraction(params: {
   }
 
   const inventoryFastPath = hasInventoryPreferenceSignals(text);
+  const strongStructured = hasStrongStructuredSearchSignals(text);
   const now = Date.now();
   const last = lastExtractionByContact.get(contactId) || 0;
   const debounceRemainingMs = DEBOUNCE_MS - (now - last);
@@ -945,6 +1119,16 @@ export function scheduleBuyerPreferenceExtraction(params: {
         return;
       }
 
+      if (strongStructured) {
+        logTrigger("extraction_skipped", {
+          contactId,
+          userId,
+          triggerSource,
+          reason: "strong_structured_deferred_to_sync",
+        });
+        return;
+      }
+
       // Only arm debounce once we know extraction will run (gate passed).
       lastExtractionByContact.set(contactId, Date.now());
 
@@ -960,11 +1144,11 @@ export function scheduleBuyerPreferenceExtraction(params: {
       }
 
       if (inventoryFastPath && text) {
-        const fastPathHandled = await runFastPathHeuristicPreferenceUpdate(contact, text, {
+        const fastPathMerged = await runFastPathHeuristicPreferenceUpdate(contact, text, {
           conversationId,
           messageId,
         });
-        if (fastPathHandled) {
+        if (fastPathMerged) {
           const reloaded =
             (await loadPersistedBuyerPreferenceProfile(contactId)) ??
             readBuyerPreferenceProfile(contact);

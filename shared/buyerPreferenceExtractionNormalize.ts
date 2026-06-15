@@ -118,6 +118,12 @@ function extractPropertyTypesFromText(lower: string): Array<"condo" | "house" | 
   const types: Array<"condo" | "house" | "townhouse" | "multi_family" | "land"> = [];
   if (/\bcondo(?:minium)?s?\b/i.test(lower)) types.push("condo");
   if (/\bapartments?\b/i.test(lower)) types.push("condo");
+  if (
+    /\bapparent\b/i.test(lower) &&
+    /\b(for\s+sale|for\s+rent|show\s+me|looking\s+for|find\s+me|\d+\s*\/\s*\d+)/i.test(lower)
+  ) {
+    types.push("condo");
+  }
   if (/\btownhouse|town[\s-]?house|townhome\b/i.test(lower)) types.push("townhouse");
   if (/\b(sfh|single[\s-]?family(?:\s+home)?)\b/i.test(lower)) types.push("house");
   else if (/\b(houses?|homes?)\b/i.test(lower) && !/\btown[\s-]?(house|home)\b/i.test(lower)) {

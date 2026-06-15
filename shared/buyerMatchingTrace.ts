@@ -27,6 +27,7 @@ import {
 
 export const BUYER_MATCHING_TRACE_TAG = "[BuyerMatchingTrace]";
 export const AI_RESPONSE_MISMATCH_FIELD = "AI_RESPONSE_MISMATCH";
+export const BUYER_PROFILE_SYNC_LATE_FIELD = "BUYER_PROFILE_SYNC_LATE";
 
 export type BuyerMatchingTraceStep =
   | "message_received"
@@ -794,6 +795,79 @@ export function traceBuyerMatchingCopilotDecision(input: {
   });
 
   return mismatches;
+}
+
+/** Always warn when strong search sync did not persist expected profile fields before reply/match. */
+export function logBuyerProfileSyncLate(payload: {
+  traceId: string;
+  contactId: string;
+  messageId?: string | null;
+  source: string;
+  field: string;
+  expected: unknown;
+  actual: unknown;
+  hint: string;
+}): void {
+  console.warn(
+    JSON.stringify({
+      tag: BUYER_MATCHING_TRACE_TAG,
+      event: "warning",
+      step: "pipeline_complete",
+      field: BUYER_PROFILE_SYNC_LATE_FIELD,
+      traceId: payload.traceId,
+      contactId: payload.contactId,
+      messageId: payload.messageId ?? null,
+      source: payload.source,
+      mismatches: [
+        {
+          fromLayer: "persist",
+          toLayer: "persist",
+          field: BUYER_PROFILE_SYNC_LATE_FIELD,
+          expected: payload.expected,
+          actual: payload.actual,
+          hint: payload.hint,
+        },
+      ],
+      loggedAt: new Date().toISOString(),
+    }),
+  );
+}
+
+type ProfileTraceSnapshot = ReturnType<typeof snapshotProfileTraceFields>;
+type MatchingTraceSnapshot = ReturnType<typeof buildPersistedProfileSnapshotForDiagnostics>;
+
+/** Test helper — assert key search fields agree across trace layers. */
+export function assertBuyerSearchProfileLayersAgree(params: {
+  parsedPatch: ProfileTraceSnapshot | Record<string, unknown>;
+  mergedProfile: ProfileTraceSnapshot;
+  savedProfile: ProfileTraceSnapshot;
+  matchingProfile: MatchingTraceSnapshot;
+  expected: { transactionIntent: string; priceMax: number };
+}): string[] {
+  const errors: string[] = [];
+  const layers: Array<[string, ProfileTraceSnapshot | MatchingTraceSnapshot]> = [
+    ["parsedPatch", params.parsedPatch as ProfileTraceSnapshot],
+    ["mergedProfile", params.mergedProfile],
+    ["savedProfile", params.savedProfile],
+    ["matchingProfile", params.matchingProfile],
+  ];
+  for (const [name, layer] of layers) {
+    if (layer.transactionIntent !== params.expected.transactionIntent) {
+      errors.push(`${name}.transactionIntent expected ${params.expected.transactionIntent}, got ${layer.transactionIntent}`);
+    }
+    if (layer.priceMax !== params.expected.priceMax) {
+      errors.push(`${name}.priceMax expected ${params.expected.priceMax}, got ${layer.priceMax}`);
+    }
+  }
+  const patchIntent = (params.parsedPatch as Record<string, unknown>).transactionIntent;
+  if (patchIntent != null && patchIntent !== params.expected.transactionIntent) {
+    errors.push(`parsedPatch.transactionIntent expected ${params.expected.transactionIntent}, got ${patchIntent}`);
+  }
+  const patchMax = (params.parsedPatch as Record<string, unknown>).priceMax;
+  if (patchMax != null && patchMax !== params.expected.priceMax) {
+    errors.push(`parsedPatch.priceMax expected ${params.expected.priceMax}, got ${patchMax}`);
+  }
+  return errors;
 }
 
 export {
