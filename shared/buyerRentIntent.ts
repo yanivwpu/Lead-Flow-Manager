@@ -95,6 +95,45 @@ export function isBuyToRentPivotReplacement(
   );
 }
 
+export function hasSaleBudgetInPatch(patch: BuyerPreferenceExtractionPatch): boolean {
+  const min = patch.priceMin?.value;
+  const max = patch.priceMax?.value;
+  if (typeof min === "number" && isPlausibleSaleBudgetAmount(min)) return true;
+  if (typeof max === "number" && isPlausibleSaleBudgetAmount(max)) return true;
+  return false;
+}
+
+/** Prior rental profile → incoming purchase search (SFH + $1M, homes for sale, etc.). */
+export function isRentToBuyPivot(
+  current: BuyerPreferenceProfile | undefined,
+  patch: BuyerPreferenceExtractionPatch,
+  text: string,
+): boolean {
+  if (!current || current.transactionIntent?.value !== "rent") return false;
+  if (patch.transactionIntent?.value === "rent" || inferRentIntentFromMessage(text, patch)) {
+    return false;
+  }
+  const buyIncoming =
+    patch.transactionIntent?.value === "buy" ||
+    hasSaleBudgetInPatch(patch) ||
+    /\b(homes?\s+for\s+sale|for\s+sale|buy(?:ing)?|purchase|cash buyer)\b/i.test(text);
+  return buyIncoming;
+}
+
+export function isRentToBuyPivotReplacement(
+  text: string,
+  patch: BuyerPreferenceExtractionPatch,
+  current?: BuyerPreferenceProfile,
+): boolean {
+  if (!current || !isRentToBuyPivot(current, patch, text)) return false;
+  return (
+    hasSaleBudgetInPatch(patch) ||
+    (patch.propertyTypes?.value?.length ?? 0) > 0 ||
+    (patch.targetAreas?.value?.length ?? 0) > 0 ||
+    /\b(show\s+me|looking\s+for)\b/i.test(text)
+  );
+}
+
 export function messageClearsAreaFilters(text: string): boolean {
   return /\banywhere\b/i.test(text);
 }

@@ -99,6 +99,16 @@ const relaxedRent = profile({
   priceMax: inf(3400, "budget range in message"),
 });
 
+const rentPompanoSfh = profile({
+  transactionIntent: inf("rent", "rent intent in message"),
+  priceMax: inf(4000, "monthly budget in message"),
+  bedsMin: inf(3, "beds in message"),
+  bedsMax: inf(5, "beds in message"),
+  bathsMin: inf(2, "baths in message"),
+  propertyTypes: inf(["house"], "sfh"),
+  targetAreas: inf(["Pompano Beach"], "area in message"),
+});
+
 const rent850kBuy = profile({
   transactionIntent: inf("buy", "buy intent in message"),
   priceMax: inf(850_000, "up to budget in message"),
@@ -307,6 +317,33 @@ const scenarios: Scenario[] = [
   { name: "pivot-rent-to-buy-purchase-sfh", phrase: "I want to purchase now SFH in Pompano up to $750k", prior: relaxedRent, expect: { commandKind: "transaction_pivot", transactionType: "buy", priceMax: 750_000, propertyTypes: ["house"], areasPresent: true } },
   { name: "pivot-rent-to-buy-cash-boca", phrase: "Cash buyer looking for house in Boca up to $900k", prior: relaxedRent, expect: { commandKind: "new_search", clearUnmentionedHardGates: true, transactionType: "buy", priceMax: 900_000, propertyTypes: ["house"], areasPresent: true } },
   { name: "pivot-rent-to-buy-condo-brickell", phrase: "For sale condo in Brickell under $450k", prior: relaxedRent, expect: { commandKind: "transaction_pivot", transactionType: "buy", priceMax: 450_000, propertyTypes: ["condo"], areasPresent: true } },
+  {
+    name: "pivot-rent-to-buy-sfh-1mil-pool-pompano",
+    phrase: "Show me SFH up to $1 mil with pool in pompano",
+    prior: rentPompanoSfh,
+    expect: {
+      commandKind: "transaction_pivot",
+      clearUnmentionedHardGates: true,
+      transactionType: "buy",
+      priceMax: 1_000_000,
+      priceMin: null,
+      bedsMin: null,
+      bedsMax: null,
+      bathsMin: null,
+      propertyTypes: ["house"],
+      areasPresent: true,
+      pool: true,
+      hardRequirePool: true,
+      staleBedsCleared: true,
+      custom: (c) => {
+        if (c.budget.priceMax !== 1_000_000) throw new Error("matching budget must be $1M sale cap");
+        if (c.criteria.transactionIntent !== "buy") throw new Error("matching must use buy intent");
+        if (c.criteria.bedsMin != null || c.criteria.bathsMin != null) {
+          throw new Error("matching must not inherit rental bed/bath gates");
+        }
+      },
+    },
+  },
 
   // ── Replacement searches ───────────────────────────────────────────────────
   { name: "replacement-pool-optional-600k", phrase: "Show SFH for sale in pompano with or without pool up to $600k", prior: buyPoolPompano, expect: { commandKind: "new_search", clearUnmentionedHardGates: true, transactionType: "buy", priceMax: 600_000, pool: null, hardRequirePool: false, bedsMin: null, stalePoolCleared: true, staleBedsCleared: true } },

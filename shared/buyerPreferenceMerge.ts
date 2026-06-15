@@ -168,12 +168,15 @@ function clearMonthlyRentBudgetFields(profile: BuyerPreferenceProfile): void {
 
 const RENT_ONLY_PREFERENCE_KEYS = ["shortTermRentalAllowed", "petFriendly"] as const;
 
-/** Rental search replaces conflicting purchase prefs — mirror for rent → buy pivot. */
+/** Clear monthly rent caps and rental bedroom gates when buyer pivots to a purchase search. */
 export function stripConflictingRentPreferences(profile: BuyerPreferenceProfile): void {
   for (const key of RENT_ONLY_PREFERENCE_KEYS) {
     delete (profile as Record<string, unknown>)[key];
   }
   clearMonthlyRentBudgetFields(profile);
+  delete profile.bedsMin;
+  delete profile.bedsMax;
+  delete profile.bathsMin;
 }
 
 const PURCHASE_FEATURE_KEYS = [
@@ -536,9 +539,7 @@ export function mergeBuyerPreferenceProfile(
   const switchingToRent =
     patch.transactionIntent?.value === "rent" && isRentIntentEvidence(patch.transactionIntent.evidence);
   const switchingToBuy =
-    patch.transactionIntent?.value === "buy" &&
-    isBuyIntentEvidence(patch.transactionIntent.evidence) &&
-    profile.transactionIntent?.value === "rent";
+    patch.transactionIntent?.value === "buy" && profile.transactionIntent?.value === "rent";
 
   if (switchingToBuy) {
     stripConflictingRentPreferences(profile);

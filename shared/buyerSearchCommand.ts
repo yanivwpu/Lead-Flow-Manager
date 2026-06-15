@@ -25,6 +25,8 @@ import {
   inferRentIntentFromMessage,
   isBuyToRentPivot,
   isBuyToRentPivotReplacement,
+  isRentToBuyPivotReplacement,
+  hasSaleBudgetInPatch,
   messageClearsAreaFilters,
 } from "./buyerRentIntent";
 
@@ -79,12 +81,30 @@ function mentionsPoolOptional(text: string): boolean {
   return POOL_OPTIONAL_RE.test(text);
 }
 
+function isSaleReplacementSearchMessage(
+  text: string,
+  patch: BuyerPreferenceExtractionPatch,
+): boolean {
+  const lower = (text || "").toLowerCase();
+  const hasShowStyle = /\b(show\s+me|looking\s+for|find\s+me)\b/i.test(lower);
+  const hasSaleBudget =
+    hasSaleBudgetInPatch(patch) ||
+    /\b(?:\$|up\s+to\s+).*(?:\bmil\b|million|\d{3,}\s*k)\b/i.test(lower);
+  const hasType =
+    (patch.propertyTypes?.value?.length ?? 0) > 0 ||
+    hasExplicitPropertyTypeConstraint(text) ||
+    /\b(sfh|single[\s-]?family|houses?|homes?)\b/i.test(lower);
+  return hasShowStyle && hasSaleBudget && hasType && !RENT_INTENT_RE.test(lower);
+}
+
 function isRefinementCarryoverMessage(
   text: string,
   patch?: BuyerPreferenceExtractionPatch,
   current?: BuyerPreferenceProfile,
 ): boolean {
   if (patch && current && isBuyToRentPivot(current, patch, text)) return false;
+  if (patch && current && isRentToBuyPivotReplacement(text, patch, current)) return false;
+  if (patch && isSaleReplacementSearchMessage(text, patch)) return false;
   if (mentionsPoolOptional(text)) return false;
   if (EXPLICIT_POOL_REQUIRED_RE.test(text)) return true;
   return REFINEMENT_CARRYOVER_RE.test(text);
@@ -122,7 +142,8 @@ export function isFullReplacementSearch(
   const hasType =
     (patch.propertyTypes?.value?.length ?? 0) > 0 ||
     hasExplicitPropertyTypeConstraint(text) ||
-    hasSalePropertyTypeSignal(text);
+    hasSalePropertyTypeSignal(text) ||
+    (/\b(sfh|single[\s-]?family)\b/i.test(text) && !RENT_INTENT_RE.test(text));
   const hasBudget = patch.priceMax?.value != null || patch.priceMin?.value != null;
 
   if (!hasArea || !hasType || !hasBudget) return false;
@@ -131,6 +152,7 @@ export function isFullReplacementSearch(
     const buySide =
       patch.transactionIntent?.value === "buy" ||
       (patch.transactionIntent?.value !== "rent" && current?.transactionIntent?.value === "buy") ||
+      hasSaleBudgetInPatch(patch) ||
       /\b(for\s+sale|homes?\s+for\s+sale|buy(?:ing)?|purchase|cash buyer)\b/i.test(text);
     const showStyleReset = /\b(show(?:\s+me)?(?:\s+(?:sfh|homes?|houses?|listings?))?|looking for|find(?:\s+me)?)\b/i.test(
       text,
@@ -366,8 +388,9 @@ export function parseBuyerSearchCommand(
   const signals = collectSignals(text, patch);
   const kind = classifyKind(text, patch, currentProfile);
   const buyToRentPivot = isBuyToRentPivotReplacement(text, patch, currentProfile);
+  const rentToBuyPivot = isRentToBuyPivotReplacement(text, patch, currentProfile);
   const fullReplacement =
-    isFullReplacementSearch(text, patch, currentProfile) || buyToRentPivot;
+    isFullReplacementSearch(text, patch, currentProfile) || buyToRentPivot || rentToBuyPivot;
   const replaceArrayFields = replaceArrayFieldsForCommand(text, kind, patch);
   const lockedFields = lockedFieldsFromPatch(patch, kind, text);
 
