@@ -1801,6 +1801,33 @@ export const insertGhlEventDedupSchema = createInsertSchema(ghlEventDedup).omit(
 export type GhlEventDedup = typeof ghlEventDedup.$inferSelect;
 export type InsertGhlEventDedup = z.infer<typeof insertGhlEventDedupSchema>;
 
+/** Canceled/deleted Calendly event URIs — block poll/webhook/replay from resurrecting bookings. */
+export const calendlyCanceledEventTombstones = pgTable(
+  "calendly_canceled_event_tombstones",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    scheduledEventUri: text("scheduled_event_uri").notNull(),
+    inviteeUri: text("invitee_uri"),
+    contactId: varchar("contact_id"),
+    canceledAt: timestamp("canceled_at").defaultNow(),
+    cancelReason: text("cancel_reason"),
+    source: text("source").notNull().default("unknown"),
+  },
+  (table) => ({
+    userEventUriKey: uniqueIndex("calendly_canceled_tombstones_user_event_uri").on(
+      table.userId,
+      table.scheduledEventUri,
+    ),
+  }),
+);
+
+export const insertCalendlyCanceledEventTombstoneSchema = createInsertSchema(
+  calendlyCanceledEventTombstones,
+).omit({ id: true, canceledAt: true });
+export type CalendlyCanceledEventTombstone = typeof calendlyCanceledEventTombstones.$inferSelect;
+export type InsertCalendlyCanceledEventTombstone = z.infer<typeof insertCalendlyCanceledEventTombstoneSchema>;
+
 // ─── Appointments (multiple per contact) ──────────────────────────────────────
 export const appointments = pgTable("appointments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

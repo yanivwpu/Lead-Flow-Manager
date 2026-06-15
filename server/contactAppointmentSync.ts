@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { APPOINTMENT_SCHEDULED_TAG, isActiveFutureAppointment } from "@shared/activeAppointment";
+import { recordCalendlyCanceledEventTombstone } from "./calendlyBookingLifecycleGate";
 
 /**
  * Removes legacy "Appointment Scheduled" from contacts.tag (CRM field only).
@@ -32,6 +33,18 @@ export async function clearActiveAppointmentsForContact(
   const clearedIds: string[] = [];
   for (const appt of appts) {
     if (!isActiveFutureAppointment(appt)) continue;
+    if (appt.source === "calendly" && appt.calendlyScheduledEventUri?.trim()) {
+      await recordCalendlyCanceledEventTombstone({
+        userId,
+        identity: {
+          scheduledEventUri: appt.calendlyScheduledEventUri,
+          inviteeUri: appt.calendlyInviteeUri,
+        },
+        contactId,
+        cancelReason: "manual_clear_active_appointments",
+        source: "contactAppointmentSync",
+      });
+    }
     const ok = await storage.deleteAppointment(appt.id);
     if (ok) clearedIds.push(appt.id);
   }

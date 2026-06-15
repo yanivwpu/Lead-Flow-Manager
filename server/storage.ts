@@ -44,6 +44,7 @@ import {
   type UserTemplateData, type InsertUserTemplateData,
   type ContactNote, type InsertContactNote,
   type Appointment, type InsertAppointment,
+  type CalendlyCanceledEventTombstone, type InsertCalendlyCanceledEventTombstone,
   type GhlEventDedup, type InsertGhlEventDedup,
   type GhlSyncFailure, type InsertGhlSyncFailure, ghlSyncFailures,
   type FlowJob, type InsertFlowJob,
@@ -52,7 +53,7 @@ import {
   aiSettings, aiBusinessKnowledge, aiUsage, aiLeadScores,
   userAutomationTemplates, presetCampaigns, campaignEnrollments, campaignStepEvents, templateUsageAnalytics,
   templates as templatesTable, templateEntitlements, realtorOnboardingSubmissions,
-  templateInstalls, templateAssets, userTemplateData, ghlEventDedup
+  templateInstalls, templateAssets, userTemplateData, ghlEventDedup, calendlyCanceledEventTombstones
 } from "@shared/schema";
 import { computeConversationReplyWindowStatus } from "@shared/conversationReplyWindow";
 import type { RetargetEligibleContactRow } from "@shared/retargetEligibleContact";
@@ -67,7 +68,7 @@ import {
   type ConversationReEngagement,
 } from "@shared/reEngagement";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, campaignEnrollments, type InsertConversationWindow, type ConversationWindow, growthEngineSetupTasks } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, campaignEnrollments, calendlyCanceledEventTombstones, type InsertConversationWindow, type ConversationWindow, growthEngineSetupTasks } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray, lt, count } from "drizzle-orm";
 import { getEffectiveTaskPayoutDollars, type TaskPayoutFields } from "./salespersonTaskPayout";
 import {
@@ -369,6 +370,9 @@ export interface IStorage {
     userId: string,
     calendlyScheduledEventUri: string
   ): Promise<Appointment | undefined>;
+  recordCalendlyCanceledEventTombstone(
+    data: InsertCalendlyCanceledEventTombstone,
+  ): Promise<boolean>;
   deleteAppointment(id: string): Promise<boolean>;
   
   // Conversation methods
@@ -2649,6 +2653,25 @@ export class DbStorage implements IStorage {
       .where(and(eq(appointments.userId, userId), eq(appointments.calendlyScheduledEventUri, uri)))
       .limit(1);
     return r[0];
+  }
+
+  async recordCalendlyCanceledEventTombstone(
+    data: InsertCalendlyCanceledEventTombstone,
+  ): Promise<boolean> {
+    const scheduledEventUri = String(data.scheduledEventUri || "").trim();
+    if (!scheduledEventUri) return false;
+    const rows = await db
+      .insert(calendlyCanceledEventTombstones)
+      .values({
+        ...data,
+        scheduledEventUri,
+        inviteeUri: data.inviteeUri ? String(data.inviteeUri).trim() : null,
+      })
+      .onConflictDoNothing({
+        target: [calendlyCanceledEventTombstones.userId, calendlyCanceledEventTombstones.scheduledEventUri],
+      })
+      .returning({ id: calendlyCanceledEventTombstones.id });
+    return rows.length > 0;
   }
 
   async deleteAppointment(id: string): Promise<boolean> {

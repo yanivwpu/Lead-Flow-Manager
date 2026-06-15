@@ -12,6 +12,7 @@ import {
 } from "@shared/calendlyAppointmentDedup";
 import { ACTIVE_APPOINTMENT_STATUSES } from "@shared/activeAppointment";
 import type { Appointment } from "@shared/schema";
+import { isCalendlyEventUriTombstoned } from "./calendlyBookingLifecycleGate";
 
 export type AppointmentDedupAction = "created" | "updated" | "skipped_duplicate" | "ignored_canceled_event" | "canceled";
 
@@ -80,7 +81,12 @@ export async function findExistingCalendlyAppointment(
             eq(appointments.userId, userId),
             eq(appointments.contactId, contactId),
             eq(appointments.source, "calendly"),
-            inArray(appointments.status, [...ACTIVE_APPOINTMENT_STATUSES, "scheduled"]),
+            inArray(appointments.status, [
+              ...ACTIVE_APPOINTMENT_STATUSES,
+              "scheduled",
+              "cancelled",
+              "rescheduled",
+            ]),
           ),
         )
         .orderBy(desc(appointments.appointmentDate), desc(appointments.createdAt))
@@ -143,7 +149,18 @@ export async function evaluateCalendlyBookingIngest(params: {
   let reason: string | undefined;
 
   if (params.eventType === "invitee.created") {
-    if (
+    const tombstoned = await isCalendlyEventUriTombstoned(params.userId, [
+      params.identity.scheduledEventUri,
+      params.identity.inviteeUri,
+      params.identity.externalMessageId,
+      primaryUri,
+      messageExternalId,
+    ]);
+    if (tombstoned) {
+      action = "ignored_canceled_event";
+      skipEntireIngest = true;
+      reason = "tombstoned_canceled_event_uri";
+    } else if (
       existingAppointment &&
       (existingAppointment.status === "cancelled" || existingAppointment.status === "rescheduled")
     ) {

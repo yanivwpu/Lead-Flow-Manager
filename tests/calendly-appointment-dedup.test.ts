@@ -130,6 +130,8 @@ async function runDbIntegration() {
   const { storage } = await import("../server/storage");
   const { ingestCalendlyEvent } = await import("../server/calendlyWebhook");
   const { shouldSkipCalendlyPollIngest } = await import("../server/appointmentDedup");
+  const { applyStartupSchemaPatches } = await import("../server/startupSchemaPatches");
+  await applyStartupSchemaPatches();
 
   let userId: string | undefined;
   try {
@@ -244,6 +246,11 @@ async function runDbIntegration() {
       1,
       "post-cancel poll must not recreate appointment",
     );
+    assert.equal(
+      apptsAfterCancelPoll.filter((a) => a.source === "calendly")[0]?.status,
+      "cancelled",
+      "appointment remains cancelled after post-cancel poll",
+    );
     const msgsAfterCancelPoll = await storage.getMessages(conversation.id, 200);
     assert.equal(
       msgsAfterCancelPoll.filter((m) => m.contentType === "calendly_event").length,
@@ -255,7 +262,59 @@ async function runDbIntegration() {
     );
     assert.equal(outboundAfterCancelPoll.length, 0, "post-cancel poll must not send confirmation");
 
-    console.log("  DB integration (webhook → poll → cancel → poll): OK");
+    const { isCalendlyEventUriTombstoned } = await import("../server/calendlyBookingLifecycleGate");
+    assert.equal(
+      await isCalendlyEventUriTombstoned(user.id, [scheduledEventUri, inviteeUri]),
+      true,
+      "cancel must record tombstone for event URI",
+    );
+
+    await storage.deleteAppointment(calendlyApptsAfterCancel[0]!.id);
+    const apptsAfterRowDelete = await storage.getAppointmentsByContact(user.id, contact.id);
+    assert.equal(
+      apptsAfterRowDelete.filter((a) => a.source === "calendly").length,
+      0,
+      "appointment row deleted (manual/repair simulation)",
+    );
+
+    await ingestCalendlyEvent(user.id, body, { source: "calendly_webhook" });
+    await ingestCalendlyEvent(user.id, body, { source: "calendly_poll" });
+
+    const apptsAfterTombstoneReplay = await storage.getAppointmentsByContact(user.id, contact.id);
+    assert.equal(
+      apptsAfterTombstoneReplay.filter((a) => a.source === "calendly").length,
+      0,
+      "tombstone must block resurrection after appointment row deleted",
+    );
+    const msgsAfterTombstoneReplay = await storage.getMessages(conversation.id, 200);
+    assert.equal(
+      msgsAfterTombstoneReplay.filter((m) => m.contentType === "calendly_event").length,
+      2,
+      "tombstone replay must not add booking card",
+    );
+    const outboundAfterTombstoneReplay = msgsAfterTombstoneReplay.filter(
+      (m) => m.direction === "outbound" && /great|scheduled|booked/i.test(m.content || ""),
+    );
+    assert.equal(outboundAfterTombstoneReplay.length, 0, "tombstone replay must not send confirmation");
+
+    const refreshedAfterTombstone = await storage.getContact(contact.id);
+    assert.notEqual(
+      refreshedAfterTombstone?.pipelineStage,
+      "Appointment Set",
+      "tombstone replay must not set Appointment Set",
+    );
+
+    const { backfillCalendlyCanceledTombstonesFromAppointments } = await import(
+      "../server/calendlyBookingLifecycleGate"
+    );
+    await backfillCalendlyCanceledTombstonesFromAppointments(user.id);
+    assert.equal(
+      await isCalendlyEventUriTombstoned(user.id, [scheduledEventUri]),
+      true,
+      "startup backfill preserves tombstone",
+    );
+
+    console.log("  DB integration (webhook → poll → cancel → poll → tombstone replay): OK");
   } finally {
     await teardownTestUser(userId, "calendly-appointment-dedup.test.ts");
   }

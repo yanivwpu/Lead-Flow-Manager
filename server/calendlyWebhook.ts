@@ -24,6 +24,13 @@ import {
   findExistingCalendlyAppointment,
   logAppointmentDedupTrace,
 } from "./appointmentDedup";
+import {
+  assertCalendlyBookingMayProceed,
+  isTerminalCalendlyAppointmentStatus,
+  recordCalendlyCanceledEventTombstone,
+  isCalendlyEventUriTombstoned,
+} from "./calendlyBookingLifecycleGate";
+import { logBookingResurrectionTrace } from "./calendlyBookingResurrectionTrace";
 import { logCalendlyLifecycleTrace } from "./calendlyLifecycleTrace";
 
 const DECRYPT_KEYS = [
@@ -552,6 +559,52 @@ async function applyCalendlyConfirmedBookingCrmEffects(params: {
 
   const prevCf = ((contact.customFields as Record<string, unknown> | null) || {}) as Record<string, unknown>;
   const lastBooking = prevCf.calendlyLastBooking as Record<string, unknown> | undefined;
+
+  const [apptRow] = await db
+    .select({ status: appointments.status })
+    .from(appointments)
+    .where(eq(appointments.id, appointmentId))
+    .limit(1);
+  if (apptRow && apptRow.status !== "scheduled") {
+    logBookingResurrectionTrace({
+      source: "calendly_webhook",
+      functionName: "applyCalendlyConfirmedBookingCrmEffects",
+      scheduledEventUri,
+      status: apptRow.status,
+      existingAppointmentStatus: apptRow.status,
+      action: "blocked_cancelled_appointment",
+      outboundMessageSent: false,
+      reason: "appointment_not_scheduled",
+    });
+    return;
+  }
+
+  if (await isCalendlyEventUriTombstoned(userId, [scheduledEventUri])) {
+    logBookingResurrectionTrace({
+      source: "calendly_webhook",
+      functionName: "applyCalendlyConfirmedBookingCrmEffects",
+      scheduledEventUri,
+      existingAppointmentStatus: apptRow?.status ?? null,
+      action: "blocked_tombstone",
+      outboundMessageSent: false,
+      reason: "tombstoned_event_uri",
+    });
+    return;
+  }
+
+  if (lastBooking?.status === "cancelled") {
+    logBookingResurrectionTrace({
+      source: "calendly_webhook",
+      functionName: "applyCalendlyConfirmedBookingCrmEffects",
+      scheduledEventUri,
+      existingAppointmentStatus: apptRow?.status ?? null,
+      action: "blocked_cancelled_appointment",
+      outboundMessageSent: false,
+      reason: "calendly_last_booking_cancelled",
+    });
+    return;
+  }
+
   if (
     skipIfAlreadyConfirmed &&
     lastBooking &&
@@ -879,17 +932,48 @@ async function handleInviteeCreated(
     },
     eventType: "invitee.created",
   });
+  const lifecycleGate = await assertCalendlyBookingMayProceed({
+    source: ingestSource,
+    functionName: "handleInviteeCreated",
+    userId,
+    eventType: "invitee.created",
+    identity: {
+      scheduledEventUri,
+      inviteeUri,
+      contactId: preferredContactId,
+      startTimeIso: startTime,
+    },
+    existingAppointment: dedup.existingAppointment,
+    body,
+  });
+  if (lifecycleGate.blocked || dedup.action === "ignored_canceled_event") {
+    logCalendlyLifecycleTrace({
+      eventType: "invitee.created",
+      status: dedup.existingAppointment?.status ?? null,
+      canceled: true,
+      scheduledEventUri: scheduledEventUri || dedup.primaryUri,
+      contactId: preferredContactId,
+      existingAppointmentId: dedup.existingAppointment?.id ?? null,
+      action: "ignored_canceled_event",
+      outboundMessageSent: false,
+      source: ingestSource,
+      reason: lifecycleGate.reason || dedup.action,
+    });
+    return;
+  }
+
   const messageExternalId =
     dedup.messageExternalId || buildCalendlyBookingMessageExternalId({ scheduledEventUri, inviteeUri }) ||
     String(externalMessageId).slice(0, 500);
   const scheduledEventKey = (scheduledEventUri || dedup.primaryUri || inviteeUri || "").trim();
 
-  if (dedup.skipEntireIngest && dedup.existingAppointment) {
+  if (dedup.skipEntireIngest) {
     if (
+      dedup.existingAppointment &&
+      dedup.existingAppointment.status === "scheduled" &&
       bookingMatch?.contactId &&
       bookingMatch.conversationId &&
-      dedup.existingAppointment.contactId !== bookingMatch.contactId &&
-      dedup.existingAppointment.status === "scheduled"
+      dedup.existingAppointment.contactId !== bookingMatch.contactId
     ) {
       await db
         .update(appointments)
@@ -907,6 +991,18 @@ async function handleInviteeCreated(
         conversationId: bookingMatch.conversationId,
       });
     }
+    logBookingResurrectionTrace({
+      source: ingestSource,
+      functionName: "handleInviteeCreated",
+      scheduledEventUri: scheduledEventKey || scheduledEventUri,
+      inviteeUri,
+      status: "invitee.created",
+      existingAppointmentStatus: dedup.existingAppointment?.status ?? null,
+      action: "blocked_skip_entire_ingest",
+      outboundMessageSent: false,
+      reason: dedup.action,
+      eventType: "invitee.created",
+    });
     logCalendlyLifecycleTrace({
       eventType: "invitee.created",
       status: dedup.existingAppointment?.status ?? null,
@@ -924,8 +1020,20 @@ async function handleInviteeCreated(
 
   if (
     dedup.existingAppointment &&
-    (dedup.existingAppointment.status === "cancelled" || dedup.existingAppointment.status === "rescheduled")
+    isTerminalCalendlyAppointmentStatus(dedup.existingAppointment.status)
   ) {
+    logBookingResurrectionTrace({
+      source: ingestSource,
+      functionName: "handleInviteeCreated",
+      scheduledEventUri: scheduledEventKey || scheduledEventUri,
+      inviteeUri,
+      status: "invitee.created",
+      existingAppointmentStatus: dedup.existingAppointment.status,
+      action: "blocked_cancelled_appointment",
+      outboundMessageSent: false,
+      reason: "appointment_already_cancelled_for_event",
+      eventType: "invitee.created",
+    });
     logCalendlyLifecycleTrace({
       eventType: "invitee.created",
       status: dedup.existingAppointment.status,
@@ -1001,6 +1109,20 @@ async function handleInviteeCreated(
 
   let appointmentId: string;
   if (dedup.existingAppointment) {
+    if (isTerminalCalendlyAppointmentStatus(dedup.existingAppointment.status)) {
+      logBookingResurrectionTrace({
+        source: ingestSource,
+        functionName: "handleInviteeCreated",
+        scheduledEventUri: scheduledEventKey || scheduledEventUri,
+        inviteeUri,
+        existingAppointmentStatus: dedup.existingAppointment.status,
+        action: "blocked_cancelled_appointment",
+        outboundMessageSent: false,
+        reason: "refuse_reactivate_cancelled_appointment",
+        eventType: "invitee.created",
+      });
+      return;
+    }
     appointmentId = dedup.existingAppointment.id;
     await db
       .update(appointments)
@@ -1179,6 +1301,30 @@ async function handleInviteeCanceled(
     startTime: parsed.startTime || null,
     ingestSource,
   });
+
+  await recordCalendlyCanceledEventTombstone({
+    userId,
+    identity: {
+      scheduledEventUri: parsed.scheduledEventUri,
+      inviteeUri: parsed.inviteeUri,
+      externalMessageId: parsed.externalMessageId,
+    },
+    contactId: parsed.utmContactId,
+    cancelReason: parsed.isRescheduleCancellation ? "reschedule_cancel_leg" : "calendly_cancel",
+    source: ingestSource,
+  });
+  if (parsed.oldScheduledEventUri || parsed.oldInviteeUri) {
+    await recordCalendlyCanceledEventTombstone({
+      userId,
+      identity: {
+        scheduledEventUri: parsed.oldScheduledEventUri,
+        inviteeUri: parsed.oldInviteeUri,
+      },
+      cancelReason: "reschedule_old_event",
+      source: ingestSource,
+    });
+  }
+
   const preferredContactId = await resolvePreferredCalendlyContactId(userId, parsed.email, parsed.utmContactId);
   const contact =
     (preferredContactId ? await storage.getContact(preferredContactId) : undefined) ??
@@ -1364,6 +1510,21 @@ async function handleInviteeRescheduled(userId: string, body: Record<string, unk
     oldScheduledEventUri: parsed.oldScheduledEventUri || null,
     oldInviteeUri: parsed.oldInviteeUri || null,
   });
+  const rescheduleGate = await assertCalendlyBookingMayProceed({
+    source: "calendly_webhook",
+    functionName: "handleInviteeRescheduled",
+    userId,
+    eventType: "invitee.rescheduled",
+    identity: {
+      scheduledEventUri: parsed.scheduledEventUri,
+      inviteeUri: parsed.inviteeUri,
+      externalMessageId: parsed.externalMessageId,
+    },
+    body,
+  });
+  if (rescheduleGate.blocked) {
+    return;
+  }
   const bookingMatch = await resolveCalendlyBookingMatch({
     userId,
     inviteeEmail: parsed.email,
@@ -1442,6 +1603,20 @@ async function handleInviteeRescheduled(userId: string, body: Record<string, unk
         .returning();
       activeAppointment = updated || existingNewAppointment;
     } else if (oldAppointment) {
+      if (isTerminalCalendlyAppointmentStatus(oldAppointment.status)) {
+        logBookingResurrectionTrace({
+          source: "calendly_webhook",
+          functionName: "handleInviteeRescheduled",
+          scheduledEventUri: stableDedupeKey,
+          inviteeUri: parsed.inviteeUri,
+          existingAppointmentStatus: oldAppointment.status,
+          action: "blocked_cancelled_appointment",
+          outboundMessageSent: false,
+          reason: "refuse_reactivate_cancelled_on_reschedule",
+          eventType: "invitee.rescheduled",
+        });
+        return;
+      }
       const [updated] = await db
         .update(appointments)
         .set({
