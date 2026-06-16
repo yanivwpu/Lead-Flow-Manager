@@ -10,6 +10,7 @@ import {
   type PublicListingSitemapEntry,
 } from "../inventory/inventoryDb";
 import { getAppOrigin } from "../urlOrigins";
+import { requirePublicListingSchemaReady } from "../middleware/requirePublicListingSchemaReady";
 
 const SITEMAP_URLS_PER_FILE = 45_000;
 
@@ -53,16 +54,18 @@ function renderSitemapIndex(appOrigin: string, pageCount: number): string {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</sitemapindex>\n`;
 }
 
-function appRobotsTxt(appOrigin: string): string {
-  return [
+function appRobotsTxt(appOrigin: string, includeSitemap: boolean): string {
+  const lines = [
     "User-agent: *",
     "Allow: /share/",
     "Disallow: /api/",
     "Disallow: /app/",
     "",
-    `Sitemap: ${appOrigin}/public-listings-sitemap.xml`,
-    "",
-  ].join("\n");
+  ];
+  if (includeSitemap) {
+    lines.push(`Sitemap: ${appOrigin}/public-listings-sitemap.xml`, "");
+  }
+  return lines.join("\n");
 }
 
 function isAppHost(req: Request): boolean {
@@ -72,12 +75,14 @@ function isAppHost(req: Request): boolean {
 }
 
 export function registerPublicListingSitemapRoutes(app: Express): void {
-  app.get("/robots.txt", (req: Request, res: Response, next) => {
+  app.get("/robots.txt", requirePublicListingSchemaReady, async (req: Request, res: Response, next) => {
     if (!isAppHost(req)) return next();
-    res.type("text/plain").send(appRobotsTxt(getAppOrigin()));
+    const appOrigin = getAppOrigin();
+    const publishedCount = await countPublicShareableListings();
+    res.type("text/plain").send(appRobotsTxt(appOrigin, publishedCount > 0));
   });
 
-  app.get("/public-listings-sitemap.xml", async (_req: Request, res: Response) => {
+  app.get("/public-listings-sitemap.xml", requirePublicListingSchemaReady, async (_req: Request, res: Response) => {
     try {
       const appOrigin = getAppOrigin();
       const total = await countPublicShareableListings();
@@ -103,7 +108,7 @@ export function registerPublicListingSitemapRoutes(app: Express): void {
     }
   });
 
-  app.get("/public-listings-sitemap-:page.xml", async (req: Request, res: Response) => {
+  app.get("/public-listings-sitemap-:page.xml", requirePublicListingSchemaReady, async (req: Request, res: Response) => {
     try {
       const page = Number.parseInt(req.params.page, 10);
       if (!Number.isFinite(page) || page < 1) {

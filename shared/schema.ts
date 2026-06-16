@@ -1313,6 +1313,17 @@ export const aiBusinessKnowledge = pgTable("ai_business_knowledge", {
   websiteKnowledgeSourceUrls: jsonb("website_knowledge_source_urls").default(sql`'[]'::jsonb`),
   /** When website knowledge summary was last saved. */
   websiteKnowledgeUpdatedAt: timestamp("website_knowledge_updated_at"),
+  /** Workspace master switch for public MLS listing share pages. */
+  publishListingsPublicly: boolean("publish_listings_publicly").notNull().default(false),
+  /** Public agent marketing page enabled. */
+  agentPageEnabled: boolean("agent_page_enabled").notNull().default(false),
+  agentPageSlug: text("agent_page_slug"),
+  agentPageDisplayName: text("agent_page_display_name"),
+  agentPageBio: text("agent_page_bio"),
+  agentPageMarketArea: text("agent_page_market_area"),
+  agentPagePreferredLeadCapture: text("agent_page_preferred_lead_capture").notNull().default("webchat"),
+  agentPageShowHomeValueCta: boolean("agent_page_show_home_value_cta").notNull().default(true),
+  agentPageAnalytics: jsonb("agent_page_analytics").notNull().default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1636,6 +1647,9 @@ export const inventoryListings = pgTable(
     previousPriceCents: bigint("previous_price_cents", { mode: "number" }),
     lastPriceChangeAt: timestamp("last_price_change_at"),
     publicSlug: text("public_slug"),
+    listingCompliance: jsonb("listing_compliance").notNull().default(sql`'{}'::jsonb`),
+    publishPublicly: boolean("publish_publicly").notNull().default(false),
+    publishedAt: timestamp("published_at"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },

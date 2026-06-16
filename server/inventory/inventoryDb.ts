@@ -3,6 +3,7 @@ import {
   inventoryListings,
   inventorySources,
   users,
+  aiBusinessKnowledge,
   type InventoryListing,
   type InventorySource,
 } from "@shared/schema";
@@ -21,6 +22,9 @@ import {
   isListingShareUuid,
 } from "@shared/inventory/listingPublicSlug";
 import { buildListingCanonicalShareUrl } from "@shared/inventory/listingViewUrl";
+import { normalizeListingCompliance } from "@shared/inventory/inventoryListingCompliance";
+import { canResolvePublicShareListing, getPublicListingPublishRejectionReason } from "@shared/inventory/publicListingPublication";
+import { publicListingMlsGateSql } from "@shared/inventory/publicListingMlsGateSql";
 import {
   assertProductionDevSeedListingAllowed,
   isDevSeedProviderListingId,
@@ -146,6 +150,7 @@ function listingRowFromNormalized(
     features: normalized.features,
     photos: normalized.photos,
     listingUrl: normalized.listingUrl ?? null,
+    listingCompliance: normalized.listingCompliance ?? {},
     sourceUpdatedAt,
     syncedAt: new Date(),
     updatedAt: new Date(),
@@ -351,8 +356,6 @@ export async function upsertInventoryListingWithPolicy(
       matchableCountCache.value += 1;
     }
 
-    await ensurePublicSlugForListing(inserted.id);
-
     return {
       outcome: "inserted",
       result: {
@@ -367,7 +370,6 @@ export async function upsertInventoryListingWithPolicy(
 
   const wasMatchable = isMatchableInventoryStatus(existing.status as NormalizedInventoryListing["status"]);
   const updateResult = await updateExistingInventoryListing(existing as typeof inventoryListings.$inferSelect, row, now);
-  await ensurePublicSlugForListing(updateResult.listingId);
   const nowMatchable = isMatchableInventoryStatus(normalized.status);
   if (!wasMatchable && nowMatchable) {
     matchableCountCache.value += 1;
@@ -411,7 +413,6 @@ export async function upsertInventoryListing(
         firstSeenAt: now,
       })
       .returning({ id: inventoryListings.id });
-    await ensurePublicSlugForListing(inserted.id);
     return {
       listingId: inserted.id,
       syncAlertStatus: "new",
@@ -422,7 +423,6 @@ export async function upsertInventoryListing(
   }
 
   const updateResult = await updateExistingInventoryListing(existing, row, now);
-  await ensurePublicSlugForListing(updateResult.listingId);
   return updateResult;
 }
 
@@ -494,6 +494,9 @@ const MATCHING_LISTING_SELECT = {
   previousPriceCents: inventoryListings.previousPriceCents,
   lastPriceChangeAt: inventoryListings.lastPriceChangeAt,
   publicSlug: inventoryListings.publicSlug,
+  listingCompliance: inventoryListings.listingCompliance,
+  publishPublicly: inventoryListings.publishPublicly,
+  publishedAt: inventoryListings.publishedAt,
   createdAt: inventoryListings.createdAt,
   updatedAt: inventoryListings.updatedAt,
 } as const;
@@ -515,21 +518,29 @@ function inventoryListingFromMatchingRow(
     yearBuilt: row.yearBuilt ?? null,
     hoaFeeCents: row.hoaFeeCents ?? null,
     listingDetails: row.listingDetails ?? {},
+    listingCompliance: normalizeListingCompliance(row.listingCompliance),
+    publishPublicly: row.publishPublicly ?? false,
+    publishedAt: row.publishedAt ?? null,
   };
 }
 
-/** Flyer-only columns from migration 0038 — loaded separately so share page works without migration. */
 const FLYER_EXTRA_LISTING_SELECT = {
   propertySubtype: inventoryListings.propertySubtype,
   squareFeet: inventoryListings.squareFeet,
   yearBuilt: inventoryListings.yearBuilt,
   hoaFeeCents: inventoryListings.hoaFeeCents,
   listingDetails: inventoryListings.listingDetails,
+  listingCompliance: inventoryListings.listingCompliance,
 } as const;
 
 type FlyerExtraListingFields = Pick<
   InventoryListing,
-  "propertySubtype" | "squareFeet" | "yearBuilt" | "hoaFeeCents" | "listingDetails"
+  | "propertySubtype"
+  | "squareFeet"
+  | "yearBuilt"
+  | "hoaFeeCents"
+  | "listingDetails"
+  | "listingCompliance"
 >;
 
 const EMPTY_FLYER_EXTRA_FIELDS: FlyerExtraListingFields = {
@@ -538,6 +549,7 @@ const EMPTY_FLYER_EXTRA_FIELDS: FlyerExtraListingFields = {
   yearBuilt: null,
   hoaFeeCents: null,
   listingDetails: {},
+  listingCompliance: {},
 };
 
 async function tryLoadFlyerExtraFields(listingId: string): Promise<FlyerExtraListingFields> {
@@ -554,6 +566,7 @@ async function tryLoadFlyerExtraFields(listingId: string): Promise<FlyerExtraLis
       yearBuilt: row.yearBuilt ?? null,
       hoaFeeCents: row.hoaFeeCents ?? null,
       listingDetails: row.listingDetails ?? {},
+      listingCompliance: normalizeListingCompliance(row.listingCompliance),
     };
   } catch (error) {
     console.warn("[public-listing] flyer columns unavailable (apply migration 0038 for extended details)", {
@@ -700,6 +713,7 @@ const PUBLIC_SHARE_LISTING_SELECT = {
   yearBuilt: inventoryListings.yearBuilt,
   hoaFeeCents: inventoryListings.hoaFeeCents,
   listingDetails: inventoryListings.listingDetails,
+  listingCompliance: inventoryListings.listingCompliance,
 } as const;
 
 function mapPublicShareListingRow(
@@ -713,6 +727,7 @@ function mapPublicShareListingRow(
     yearBuilt: row.yearBuilt != null ? Number(row.yearBuilt) : null,
     hoaFeeCents: row.hoaFeeCents != null ? Number(row.hoaFeeCents) : null,
     listingDetails: row.listingDetails ?? {},
+    listingCompliance: normalizeListingCompliance(row.listingCompliance),
   };
 }
 
@@ -753,6 +768,84 @@ export async function ensurePublicSlugForListing(listingId: string): Promise<str
   return updated?.publicSlug ?? slug;
 }
 
+export async function getWorkspacePublishListingsPublicly(userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ publishListingsPublicly: aiBusinessKnowledge.publishListingsPublicly })
+    .from(aiBusinessKnowledge)
+    .where(eq(aiBusinessKnowledge.userId, userId))
+    .limit(1);
+  return row?.publishListingsPublicly === true;
+}
+
+export async function setWorkspacePublishListingsPublicly(
+  userId: string,
+  enabled: boolean,
+): Promise<void> {
+  await db
+    .insert(aiBusinessKnowledge)
+    .values({ userId, publishListingsPublicly: enabled })
+    .onConflictDoUpdate({
+      target: aiBusinessKnowledge.userId,
+      set: { publishListingsPublicly: enabled, updatedAt: new Date() },
+    });
+}
+
+export async function setListingPublication(
+  userId: string,
+  listingId: string,
+  publishPublicly: boolean,
+): Promise<InventoryListing | undefined> {
+  const listing = await getInventoryListing(userId, listingId);
+  if (!listing) return undefined;
+
+  const now = new Date();
+  const patch: Partial<typeof inventoryListings.$inferInsert> = {
+    publishPublicly,
+    publishedAt: publishPublicly ? now : null,
+    updatedAt: now,
+  };
+
+  if (publishPublicly) {
+    const workspaceOn = await getWorkspacePublishListingsPublicly(userId);
+    if (!workspaceOn) {
+      throw new Error("Enable workspace public listing publishing in Business Profile first");
+    }
+    const rejection = getPublicListingPublishRejectionReason({
+      status: listing.status,
+      listingCompliance: listing.listingCompliance,
+    });
+    if (rejection) {
+      throw new Error(rejection);
+    }
+    await ensurePublicSlugForListing(listingId);
+  }
+
+  await db
+    .update(inventoryListings)
+    .set(patch)
+    .where(and(eq(inventoryListings.id, listingId), eq(inventoryListings.userId, userId)));
+
+  return getInventoryListing(userId, listingId);
+}
+
+async function applyPublishedShareGate(
+  listing: InventoryListing | undefined,
+): Promise<InventoryListing | undefined> {
+  if (!listing) return undefined;
+  const workspaceOn = await getWorkspacePublishListingsPublicly(listing.userId);
+  if (
+    !canResolvePublicShareListing({
+      workspacePublishListingsPublicly: workspaceOn,
+      listingPublishPublicly: listing.publishPublicly,
+      status: listing.status,
+      listingCompliance: listing.listingCompliance,
+    })
+  ) {
+    return undefined;
+  }
+  return listing;
+}
+
 function isShareablePublicListingRow(row: { status: string; providerListingId: string }): boolean {
   if (row.status !== "active" && row.status !== "coming_soon") return false;
   if (isBlockedDevSeedListingRow(row as InventoryListing)) return false;
@@ -769,7 +862,7 @@ export async function getPublicShareListing(listingId: string): Promise<Inventor
       .limit(1);
     if (!row || isBlockedDevSeedListingRow(row)) return undefined;
     if (!isShareablePublicListingRow(row)) return undefined;
-    return mapPublicShareListingRow(row);
+    return applyPublishedShareGate(mapPublicShareListingRow(row));
   } catch (error) {
     console.warn("[public-listing] combined share listing select failed; retrying without flyer columns", {
       listingId,
@@ -785,7 +878,7 @@ export async function getPublicShareListing(listingId: string): Promise<Inventor
       if (!isShareablePublicListingRow(row)) return undefined;
 
       const extras = await tryLoadFlyerExtraFields(listingId);
-      return { ...inventoryListingFromMatchingRow(row), ...extras };
+      return applyPublishedShareGate({ ...inventoryListingFromMatchingRow(row), ...extras });
     } catch (fallbackError) {
       console.error("[public-listing] failed to load listing row", {
         listingId,
@@ -820,7 +913,7 @@ async function getPublicShareListingBySlug(slug: string): Promise<InventoryListi
       .limit(1);
     if (!row || isBlockedDevSeedListingRow(row)) return undefined;
     if (!isShareablePublicListingRow(row)) return undefined;
-    return mapPublicShareListingRow(row);
+    return applyPublishedShareGate(mapPublicShareListingRow(row));
   } catch (error) {
     console.warn("[public-listing] slug lookup failed", {
       slug,
@@ -845,11 +938,26 @@ function publicShareableListingConditions() {
   return conditions;
 }
 
+function publishedSitemapListingConditions() {
+  const conditions = [
+    ...publicShareableListingConditions(),
+    eq(inventoryListings.publishPublicly, true),
+    publicListingMlsGateSql(),
+  ];
+  return conditions;
+}
+
 export async function countPublicShareableListings(): Promise<number> {
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(inventoryListings)
-    .where(and(...publicShareableListingConditions()));
+    .innerJoin(aiBusinessKnowledge, eq(inventoryListings.userId, aiBusinessKnowledge.userId))
+    .where(
+      and(
+        ...publishedSitemapListingConditions(),
+        eq(aiBusinessKnowledge.publishListingsPublicly, true),
+      ),
+    );
   return row?.count ?? 0;
 }
 
@@ -868,7 +976,13 @@ export async function fetchPublicListingSitemapEntries(
       )`,
     })
     .from(inventoryListings)
-    .where(and(...publicShareableListingConditions()))
+    .innerJoin(aiBusinessKnowledge, eq(inventoryListings.userId, aiBusinessKnowledge.userId))
+    .where(
+      and(
+        ...publishedSitemapListingConditions(),
+        eq(aiBusinessKnowledge.publishListingsPublicly, true),
+      ),
+    )
     .orderBy(desc(inventoryListings.updatedAt))
     .limit(limit)
     .offset(offset);
@@ -914,11 +1028,6 @@ export async function getPublicListingFlyerData(
   if (!listing) {
     console.info("[public-listing] listing not found or not shareable", { identifier });
     return undefined;
-  }
-
-  if (!listing.publicSlug) {
-    const slug = await ensurePublicSlugForListing(listing.id);
-    if (slug) listing = { ...listing, publicSlug: slug };
   }
 
   const shareUrl = buildListingCanonicalShareUrl(

@@ -23,6 +23,7 @@ export const businessProfilePatchSchema = z.object({
   publicEmail: z.string().email().max(200).optional().nullable().or(z.literal("")),
   publicWebsite: z.string().url().max(500).optional().nullable().or(z.literal("")),
   aboutText: z.string().max(2000).optional().nullable(),
+  publishListingsPublicly: z.boolean().optional(),
 });
 
 export type BusinessProfilePatch = z.infer<typeof businessProfilePatchSchema>;
@@ -39,4 +40,5 @@ export type BusinessProfileResponse = {
   calendlyConnected: boolean;
   calendlyEventTypeName: string;
   calendlySchedulingUrl: string;
+  publishListingsPublicly: boolean;
 };

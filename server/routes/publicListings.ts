@@ -13,13 +13,16 @@ import {
 } from "@shared/inventory/publicListingFlyer";
 import { isListingShareUuid } from "@shared/inventory/listingPublicSlug";
 import { getRequestOrigin } from "../urlOrigins";
+import { requirePublicListingSchemaReady } from "../middleware/requirePublicListingSchemaReady";
 
 function logPublicListingShare(event: string, payload: Record<string, unknown>): void {
   console.info(JSON.stringify({ tag: "[public-listing:share]", event, ...payload }));
 }
 
+// Public listing URLs are publication-gated. Previously shared /share/listings links
+// return 404 until workspace + listing are explicitly republished.
 export function registerPublicListingRoutes(app: Express): void {
-  app.get("/share/listings/:identifier", async (req: Request, res: Response) => {
+  app.get("/share/listings/:identifier", requirePublicListingSchemaReady, async (req: Request, res: Response) => {
     const identifier = req.params.identifier?.trim() ?? "";
     const appOrigin = getRequestOrigin(req);
     const startedAt = Date.now();

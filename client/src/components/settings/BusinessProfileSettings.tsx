@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, CheckCircle2, ExternalLink, Loader2, Upload } from "lucide-react";
+import { Building2, CheckCircle2, ExternalLink, Globe, Loader2, Upload } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
@@ -50,6 +51,7 @@ export function BusinessProfileSettings() {
   const [aboutText, setAboutText] = useState("");
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [publishListingsPublicly, setPublishListingsPublicly] = useState(false);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["/api/business-profile"],
@@ -70,6 +72,7 @@ export function BusinessProfileSettings() {
     setAboutText(profile.aboutText || "");
     setCompanyLogo(profile.companyLogo);
     setAvatarPreview(profile.avatarUrl);
+    setPublishListingsPublicly(profile.publishListingsPublicly === true);
   }, [profile]);
 
   const updateAvatarMutation = useMutation({
@@ -110,6 +113,7 @@ export function BusinessProfileSettings() {
           publicWebsite: publicWebsite.trim() || null,
           aboutText: aboutText.trim() || null,
           companyLogo,
+          publishListingsPublicly,
         }),
       });
       if (!res.ok) {
@@ -269,6 +273,26 @@ export function BusinessProfileSettings() {
                 onChange={(e) => setAboutText(e.target.value)}
                 placeholder="Optional about me / about us blurb"
                 rows={3}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-4 space-y-3" data-testid="publish-listings-publicly-toggle">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                  <Globe className="h-4 w-4 text-indigo-600" />
+                  Publish listings publicly
+                </div>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Master switch for public /share listing pages. Each listing must also be published individually
+                  and pass MLS internet-display rules before a share URL is live.
+                </p>
+              </div>
+              <Switch
+                checked={publishListingsPublicly}
+                onCheckedChange={setPublishListingsPublicly}
+                aria-label="Publish listings publicly"
               />
             </div>
           </div>

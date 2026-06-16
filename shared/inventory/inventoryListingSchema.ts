@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { inventoryProviderSchema } from "./inventoryProviderSchema";
 import { inventorySyncScopeFieldsSchema } from "./reso/resoSyncScope";
+import { inventoryListingComplianceSchema } from "./inventoryListingCompliance";
 
 export const inventoryListingStatusSchema = z.enum([
   "active",
@@ -69,6 +70,7 @@ export const normalizedInventoryListingSchema = z.object({
   photos: z.array(inventoryPhotoSchema),
   listingUrl: z.string().url().nullable().optional(),
   sourceUpdatedAt: z.string().datetime().optional(),
+  listingCompliance: inventoryListingComplianceSchema.optional(),
 });
 
 export type NormalizedInventoryListing = z.infer<typeof normalizedInventoryListingSchema>;

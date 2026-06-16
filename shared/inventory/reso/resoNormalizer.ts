@@ -1,5 +1,8 @@
 import type { InventoryProvider } from "../inventoryProviderSchema";
 import {
+  extractResoListingCompliance,
+} from "../inventoryListingCompliance";
+import {
   normalizedInventoryListingSchema,
   type InventoryListingDetails,
   type InventoryListingStatus,
@@ -251,6 +254,8 @@ export function normalizeResoPropertyRow(
   options?: {
     modificationTimestampField?: string;
     descriptionMaxLength?: number;
+    /** Fallback MLS / originating system label when row omits OriginatingSystemName. */
+    sourceMlsName?: string | null;
   },
 ): NormalizedInventoryListing | null {
   if (!raw || typeof raw !== "object") return null;
@@ -291,6 +296,11 @@ export function normalizeResoPropertyRow(
     photos: contract.extractPhotos?.(row) ?? normalizeResoMediaItems(row.Media),
     listingUrl: contract.extractListingUrl?.(row) ?? null,
     sourceUpdatedAt: normalizeResoTimestamp(row[modField]),
+    listingCompliance: extractResoListingCompliance(row, {
+      provider: contract.provider,
+      providerListingId,
+      sourceMlsName: options?.sourceMlsName,
+    }),
   };
 
   const parsed = normalizedInventoryListingSchema.safeParse(candidate);

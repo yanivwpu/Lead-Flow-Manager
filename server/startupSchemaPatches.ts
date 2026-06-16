@@ -1,5 +1,9 @@
 import { sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
+import {
+  REQUIRED_PUBLIC_LISTING_PATCH_TAGS,
+  setPublicListingSchemaReady,
+} from "./publicListingSchemaReady";
 
 /**
  * Idempotent ADD COLUMN patches for production DBs that lag behind shared/schema.
@@ -80,17 +84,97 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
     tag: "0041_inventory_listing_public_slug",
     sql: `ALTER TABLE inventory_listings ADD COLUMN IF NOT EXISTS public_slug text`,
   },
+  {
+    tag: "0045_inventory_listing_compliance",
+    sql: `ALTER TABLE inventory_listings ADD COLUMN IF NOT EXISTS listing_compliance jsonb NOT NULL DEFAULT '{}'::jsonb`,
+  },
+  {
+    tag: "0046_inventory_publication_controls",
+    sql: [
+      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS publish_listings_publicly boolean NOT NULL DEFAULT false`,
+      `ALTER TABLE inventory_listings ADD COLUMN IF NOT EXISTS publish_publicly boolean NOT NULL DEFAULT false`,
+      `ALTER TABLE inventory_listings ADD COLUMN IF NOT EXISTS published_at timestamptz`,
+    ].join(";\n"),
+  },
+  {
+    tag: "0047_agent_page",
+    sql: [
+      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS agent_page_enabled boolean NOT NULL DEFAULT false`,
+      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS agent_page_slug text`,
+      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS agent_page_display_name text`,
+      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS agent_page_bio text`,
+      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS agent_page_market_area text`,
+      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS agent_page_preferred_lead_capture text NOT NULL DEFAULT 'webchat'`,
+      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS agent_page_show_home_value_cta boolean NOT NULL DEFAULT true`,
+      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS agent_page_analytics jsonb NOT NULL DEFAULT '{}'::jsonb`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS ai_business_knowledge_agent_page_slug_lower ON ai_business_knowledge (lower(agent_page_slug)) WHERE agent_page_slug IS NOT NULL`,
+    ].join(";\n"),
+  },
 ];
 
-export async function applyStartupSchemaPatches(): Promise<void> {
+async function probePublicListingSchemaColumns(): Promise<boolean> {
+  try {
+    await db.execute(sql`
+      SELECT
+        l.listing_compliance,
+        l.publish_publicly,
+        l.published_at,
+        w.publish_listings_publicly,
+        w.agent_page_enabled,
+        w.agent_page_slug
+      FROM inventory_listings l
+      INNER JOIN ai_business_knowledge w ON w.user_id = l.user_id
+      LIMIT 0
+    `);
+    return true;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[StartupSchema] FATAL: public listing schema probe failed", { message });
+    return false;
+  }
+}
+
+export async function applyStartupSchemaPatches(): Promise<{ publicListingSchemaReady: boolean }> {
+  const patchResults = new Map<string, boolean>();
+
   for (const patch of STARTUP_COLUMN_PATCHES) {
     try {
       await db.execute(sql.raw(patch.sql));
       console.log(`[StartupSchema] OK ${patch.tag}`);
+      patchResults.set(patch.tag, true);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const code = (err as { code?: string })?.code;
-      console.error(`[StartupSchema] FAILED ${patch.tag}`, { code, message });
+      patchResults.set(patch.tag, false);
+      if (REQUIRED_PUBLIC_LISTING_PATCH_TAGS.has(patch.tag)) {
+        console.error(
+          `[StartupSchema] FATAL: required public listing patch failed: ${patch.tag}`,
+          { code, message },
+        );
+      } else {
+        console.error(`[StartupSchema] FAILED ${patch.tag}`, { code, message });
+      }
     }
   }
+
+  const requiredPatchesOk = [...REQUIRED_PUBLIC_LISTING_PATCH_TAGS].every(
+    (tag) => patchResults.get(tag) === true,
+  );
+
+  let ready = false;
+  if (requiredPatchesOk) {
+    ready = await probePublicListingSchemaColumns();
+    if (!ready) {
+      console.error(
+        "[StartupSchema] FATAL: public listing routes must not serve until schema 0045–0047 is ready",
+      );
+    }
+  } else {
+    console.error(
+      "[StartupSchema] FATAL: public listing / agent page routes blocked — required patches 0045, 0046, 0047 failed",
+    );
+  }
+
+  setPublicListingSchemaReady(ready);
+  return { publicListingSchemaReady: ready };
 }

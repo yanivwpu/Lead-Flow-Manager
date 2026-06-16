@@ -41,7 +41,7 @@ import {
   Users, Calendar, DollarSign, Plus, Edit2, Trash2, 
   LogOut, Loader2, CheckCircle, XCircle, Lock, UserCircle,
   AlertCircle, MessageCircle, ArrowUpDown, Link2, Percent,
-  Eye, EyeOff, ClipboardList
+  Eye, EyeOff, ClipboardList, Home,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -207,6 +207,18 @@ interface Partner {
   totalReferrals: number;
   totalEarnings: string;
   createdAt: string;
+}
+
+interface InventoryComplianceDiagnostics {
+  totalListings: number;
+  matchableListings: number;
+  complianceEligible: number;
+  publishedListings: number;
+  publishedWithWorkspaceEnabled: number;
+  missingAttribution: number;
+  missingDisplayPermissions: number;
+  withComplianceSnapshot: number;
+  workspacesWithPublishEnabled: number;
 }
 
 const ADMIN_DEFAULT_TASK_PAYOUT = 50;
@@ -512,6 +524,31 @@ export function Admin() {
     queryKey: ['/api/admin/ghl-integrations'],
     queryFn: adminQueryFn('/api/admin/ghl-integrations'),
     enabled: isLoggedIn,
+  });
+
+  const {
+    data: inventoryCompliance,
+    isLoading: inventoryComplianceLoading,
+    refetch: refetchInventoryCompliance,
+  } = useQuery<InventoryComplianceDiagnostics>({
+    queryKey: ['/api/admin/inventory/compliance-diagnostics'],
+    queryFn: adminQueryFn('/api/admin/inventory/compliance-diagnostics'),
+    enabled: isLoggedIn,
+  });
+
+  const resyncInventoryMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch('/api/admin/inventory/resync-all', { method: 'POST' });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json() as Promise<{ sources: number; started: number; skipped: number }>;
+    },
+    onSuccess: (data) => {
+      refetchInventoryCompliance();
+      alert(`Inventory resync queued: ${data.started} started, ${data.skipped} skipped (${data.sources} sources).`);
+    },
+    onError: (error: Error) => {
+      alert(`Resync failed: ${error.message}`);
+    },
   });
 
   const [userSort, setUserSort] = useState<'date' | 'support' | 'plan'>('support');
@@ -960,6 +997,11 @@ export function Admin() {
                     {ghlIntegrations.length}
                   </Badge>
                 )}
+              </TabsTrigger>
+              <TabsTrigger value="inventory" className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4" data-testid="tab-inventory-compliance">
+                <Home className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">Inventory MLS</span>
+                <span className="sm:hidden">MLS</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -2006,6 +2048,77 @@ export function Admin() {
                     )}
                   </TableBody>
                 </Table>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="inventory">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                  <h2 className="font-semibold text-gray-900">MLS Listing Compliance</h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Publication is opt-in per workspace and per listing. Sitemap includes only published listings.
+                  </p>
+                  <p className="text-sm text-amber-700 mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    Public listing URLs are now publication-gated. Previously shared links will remain unavailable until republished.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-[44px]"
+                  disabled={resyncInventoryMutation.isPending}
+                  onClick={() => resyncInventoryMutation.mutate()}
+                  data-testid="button-resync-all-inventory"
+                >
+                  {resyncInventoryMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Resyncing…
+                    </>
+                  ) : (
+                    "Re-sync all sources"
+                  )}
+                </Button>
+              </div>
+              <div className="p-4">
+                {inventoryComplianceLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-500 py-8 justify-center">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading compliance diagnostics…
+                  </div>
+                ) : inventoryCompliance ? (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <AdminKpiStripItem label="Total listings" value={inventoryCompliance.totalListings} />
+                    <AdminKpiStripItem label="Compliance eligible" value={inventoryCompliance.complianceEligible} />
+                    <AdminKpiStripItem label="Published (listing flag)" value={inventoryCompliance.publishedListings} />
+                    <AdminKpiStripItem
+                      label="Live public (workspace + listing)"
+                      value={inventoryCompliance.publishedWithWorkspaceEnabled}
+                      valueClassName="text-emerald-700"
+                    />
+                    <AdminKpiStripItem
+                      label="Missing attribution"
+                      value={inventoryCompliance.missingAttribution}
+                      valueClassName="text-amber-700"
+                    />
+                    <AdminKpiStripItem
+                      label="Missing display permissions"
+                      value={inventoryCompliance.missingDisplayPermissions}
+                      valueClassName="text-amber-700"
+                    />
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 py-6 text-center">Could not load compliance diagnostics.</p>
+                )}
+                {inventoryCompliance && (
+                  <div className="mt-4 pt-4 border-t border-gray-100 grid gap-2 sm:grid-cols-3 text-xs text-gray-500">
+                    <p>Matchable (active / coming soon): <span className="font-medium text-gray-800">{inventoryCompliance.matchableListings}</span></p>
+                    <p>With compliance snapshot: <span className="font-medium text-gray-800">{inventoryCompliance.withComplianceSnapshot}</span></p>
+                    <p>Workspaces publish enabled: <span className="font-medium text-gray-800">{inventoryCompliance.workspacesWithPublishEnabled}</span></p>
+                  </div>
+                )}
               </div>
             </div>
           </TabsContent>

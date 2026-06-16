@@ -52,6 +52,7 @@ export async function getBusinessProfileForUser(userId: string): Promise<Busines
     calendlyConnected,
     calendlyEventTypeName,
     calendlySchedulingUrl,
+    publishListingsPublicly: knowledge?.publishListingsPublicly === true,
   };
 }
 
@@ -80,6 +81,7 @@ export function businessProfileKnowledgePatch(
     publicEmail: string | null;
     publicWebsite: string | null;
     aboutText: string | null;
+    publishListingsPublicly: boolean;
   }>,
 ): Partial<AiBusinessKnowledge> {
   const out: Partial<AiBusinessKnowledge> = {};
@@ -90,5 +92,8 @@ export function businessProfileKnowledgePatch(
   if (patch.publicEmail !== undefined) out.publicEmail = patch.publicEmail || null;
   if (patch.publicWebsite !== undefined) out.publicWebsite = patch.publicWebsite || null;
   if (patch.aboutText !== undefined) out.aboutText = patch.aboutText;
+  if (patch.publishListingsPublicly !== undefined) {
+    out.publishListingsPublicly = patch.publishListingsPublicly;
+  }
   return out;
 }

@@ -6,6 +6,13 @@ import {
   inventoryListingDetailsSchema,
   type InventoryListingDetails,
 } from "./inventoryListingSchema";
+import {
+  buildPublicListingAttributionLines,
+  canRenderPublicListingAttribution,
+  normalizeListingCompliance,
+  type InventoryListingCompliance,
+} from "./inventoryListingCompliance";
+import { canShowPublicStreetAddress } from "./publicListingPublication";
 import { pickPrimaryPhotoUrl } from "./listingViewUrl";
 import { resolveListingStreetForSlug } from "./listingPublicSlug";
 
@@ -41,6 +48,7 @@ export type PublicListingFlyerListing = {
   status: string;
   providerListingId: string;
   listingDetails: InventoryListingDetails;
+  listingCompliance?: InventoryListingCompliance;
 };
 
 export type PublicListingFlyerInput = {
@@ -50,6 +58,10 @@ export type PublicListingFlyerInput = {
   qrDataUrl: string;
   /** Company/agency logo from Business Profile; W logo fallback when absent. */
   companyLogoUrl?: string | null;
+  /** When false, street address and map are withheld per MLS display rules. */
+  allowStreetAddress?: boolean;
+  /** When false, page should not be indexed (address display restricted). */
+  allowSearchIndexing?: boolean;
 };
 
 const WHACHATCRM_HOME_URL = "https://whachatcrm.com";
@@ -237,6 +249,27 @@ function buildStreetAddress(listing: PublicListingFlyerListing): string {
 
 function buildCityStateZip(listing: PublicListingFlyerListing): string {
   return [listing.city, listing.state, listing.zip].filter(Boolean).join(", ");
+}
+
+/** Mask street address and coordinates when MLS rules disallow address display. */
+export function applyPublicDisplayPermissions(
+  listing: PublicListingFlyerListing,
+): { listing: PublicListingFlyerListing; allowStreetAddress: boolean; allowSearchIndexing: boolean } {
+  const allowStreetAddress = canShowPublicStreetAddress(listing.listingCompliance);
+  if (allowStreetAddress) {
+    return { listing, allowStreetAddress: true, allowSearchIndexing: true };
+  }
+  return {
+    listing: {
+      ...listing,
+      addressLine1: null,
+      addressLine2: null,
+      latitude: null,
+      longitude: null,
+    },
+    allowStreetAddress: false,
+    allowSearchIndexing: false,
+  };
 }
 
 export type ListingOpenGraphInput = {
@@ -589,15 +622,16 @@ function buildFlyerBottomRow(
   qrDataUrl: string,
   agent: PublicListingFlyerAgent,
   companyLogoUrl: string | null,
+  allowStreetAddress: boolean,
 ): string {
-  const mapCol = renderMapColumn(listing);
+  const mapCol = allowStreetAddress ? renderMapColumn(listing) : `<div class="bottom-col bottom-col-map bottom-col-empty" aria-hidden="true"></div>`;
   const qrCol = renderQrColumn(qrDataUrl);
   const agentCard = renderAgentCard(agent, listing, companyLogoUrl);
   const agentCol = agentCard
     ? `<div class="bottom-col bottom-col-agent">${agentCard}</div>`
     : `<div class="bottom-col bottom-col-agent bottom-col-empty" aria-hidden="true"></div>`;
 
-  const hasMap = listing.latitude != null && listing.longitude != null;
+  const hasMap = allowStreetAddress && listing.latitude != null && listing.longitude != null;
   const hasQr = Boolean(qrDataUrl);
   const hasAgent = Boolean(agentCard);
   if (!hasMap && !hasQr && !hasAgent) return "";
@@ -821,6 +855,22 @@ function renderPoweredByFooter(): string {
   </footer>`;
 }
 
+function renderListingComplianceAttribution(
+  compliance: InventoryListingCompliance | null | undefined,
+  presentingBrokerageName: string | null | undefined,
+): string {
+  const normalized = normalizeListingCompliance(compliance);
+  if (!canRenderPublicListingAttribution(normalized)) return "";
+  const lines = buildPublicListingAttributionLines({
+    compliance: normalized,
+    presentingBrokerageName,
+  });
+  if (lines.length === 0) return "";
+  return `<section class="listing-compliance-attribution" data-testid="listing-compliance-attribution">
+    ${lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
+  </section>`;
+}
+
 export function inventoryRowToFlyerListing(row: {
   id: string;
   priceCents: number | null;
@@ -844,6 +894,7 @@ export function inventoryRowToFlyerListing(row: {
   status: string;
   providerListingId: string;
   listingDetails: unknown;
+  listingCompliance?: unknown;
 }): PublicListingFlyerListing {
   const features = Array.isArray(row.features)
     ? row.features.map((f) => String(f).trim()).filter(Boolean)
@@ -875,11 +926,24 @@ export function inventoryRowToFlyerListing(row: {
     status: row.status,
     providerListingId: row.providerListingId,
     listingDetails: detailsParsed.success ? detailsParsed.data : {},
+    listingCompliance: normalizeListingCompliance(row.listingCompliance),
   };
 }
 
 export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): string {
-  const { listing, agent, shareUrl, qrDataUrl, companyLogoUrl = null } = input;
+  const {
+    listing: rawListing,
+    agent,
+    shareUrl,
+    qrDataUrl,
+    companyLogoUrl = null,
+    allowStreetAddress: allowStreetOverride,
+    allowSearchIndexing: allowIndexOverride,
+  } = input;
+  const display = applyPublicDisplayPermissions(rawListing);
+  const listing = display.listing;
+  const allowStreetAddress = allowStreetOverride ?? display.allowStreetAddress;
+  const allowSearchIndexing = allowIndexOverride ?? display.allowSearchIndexing;
   const photos = pickFlyerHeroPhotos(parsePhotos(listing.photos));
   const openGraph = buildListingOpenGraphMeta({ listing, agent, shareUrl });
   const structuredDataJson = buildListingStructuredDataJson({ listing, agent, shareUrl });
@@ -887,6 +951,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   const price = formatListingPriceForComposer(listing.priceCents) || "Price on request";
   const { sqft, hoa, yearBuilt } = resolveFlyerSpecFields(listing);
   const description = truncateFlyerDescription((listing.description || "").trim());
+  const robotsMeta = allowSearchIndexing ? "index, follow" : "noindex, nofollow";
 
   const descHtml = description
     ? `<section class="description-section">
@@ -896,7 +961,11 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     : "";
 
   const propertyHeaderHtml = renderPropertyHeader(listing, price, sqft, hoa, yearBuilt);
-  const bottomRowHtml = buildFlyerBottomRow(listing, qrDataUrl, agent, companyLogoUrl);
+  const bottomRowHtml = buildFlyerBottomRow(listing, qrDataUrl, agent, companyLogoUrl, allowStreetAddress);
+  const complianceAttributionHtml = renderListingComplianceAttribution(
+    listing.listingCompliance,
+    agent.brokerageName,
+  );
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -905,7 +974,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="${escapeHtml(openGraph.description)}" />
   <meta name="keywords" content="${escapeHtml(openGraph.keywords)}" />
-  <meta name="robots" content="index, follow" />
+  <meta name="robots" content="${robotsMeta}" />
   <link rel="canonical" href="${escapeHtml(shareUrl)}" />
   <title>${escapeHtml(openGraph.title)}</title>
   ${renderListingOpenGraphTags(openGraph)}
@@ -1243,6 +1312,16 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       font-weight: 600;
     }
     .agent-cta-secondary:hover { border-color: #cbd5e1; background: #f8fafc; }
+    .listing-compliance-attribution {
+      margin: 0 20px 8px;
+      padding: 10px 12px;
+      border-top: 1px solid var(--border);
+      font-size: 0.6875rem;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+    .listing-compliance-attribution p { margin: 0 0 4px; }
+    .listing-compliance-attribution p:last-child { margin-bottom: 0; }
     .site-footer {
       padding: 12px 20px 16px;
       border-top: 1px solid var(--border);
@@ -1408,6 +1487,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       ${propertyHeaderHtml}
       ${descHtml}
       ${bottomRowHtml}
+      ${complianceAttributionHtml}
       ${renderPoweredByFooter()}
     </div>
   </div>

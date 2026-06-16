@@ -35,6 +35,7 @@ export function registerBusinessProfileRoutes(app: Express): void {
         publicEmail: patch.publicEmail === "" ? null : patch.publicEmail ?? undefined,
         publicWebsite: patch.publicWebsite === "" ? null : patch.publicWebsite ?? undefined,
         aboutText: patch.aboutText ?? undefined,
+        publishListingsPublicly: patch.publishListingsPublicly,
       });
 
       if (Object.keys(knowledgeUpdates).length > 0) {

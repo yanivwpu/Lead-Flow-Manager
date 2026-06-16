@@ -52,9 +52,10 @@ const bridgePropertyNormalizer: ResoPropertyNormalizerContract = {
   extractListingUrl: defaultResoListingUrl,
 };
 
-export function normalizeBridgeInteractiveProperty(raw: unknown) {
+export function normalizeBridgeInteractiveProperty(raw: unknown, sourceMlsName?: string) {
   return normalizeResoPropertyRow(raw, bridgePropertyNormalizer, {
     modificationTimestampField: BRIDGE_MODIFICATION_FIELD,
+    sourceMlsName,
   });
 }
 
@@ -131,7 +132,7 @@ export function createBridgeInteractiveResoProvider(
       return defaultResoListingId(raw as Record<string, unknown>);
     },
     normalizeProperty(raw) {
-      return normalizeBridgeInteractiveProperty(raw);
+      return normalizeBridgeInteractiveProperty(raw, cfg.datasetId);
     },
   };
 }

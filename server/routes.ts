@@ -19,6 +19,8 @@ import { registerCampaignEnrollmentRoutes } from "./routes/campaignEnrollments";
 import { registerWebhookRoutes } from "./routes/webhooks";
 import { registerInventoryRoutes } from "./routes/inventory";
 import { registerPublicListingRoutes } from "./routes/publicListings";
+import { registerPublicAgentPageRoutes } from "./routes/publicAgentPage";
+import { registerAgentPageSettingsRoutes } from "./routes/agentPageSettings";
 import { registerPublicListingSitemapRoutes } from "./routes/publicListingsSitemap";
 import { registerBusinessProfileRoutes } from "./routes/businessProfile";
 import {
@@ -4871,7 +4873,12 @@ export async function registerRoutes(
 
   async function runBackfills() {
     const { applyStartupSchemaPatches } = await import("./startupSchemaPatches");
-    await applyStartupSchemaPatches();
+    const { publicListingSchemaReady } = await applyStartupSchemaPatches();
+    if (!publicListingSchemaReady) {
+      console.error(
+        "[Startup] Public listing and agent page routes will return 503 until schema patches 0045–0047 succeed",
+      );
+    }
     await backfillFacebookInstagramChannelSettings();
     await backfillInstagramPageId();
   }
@@ -8078,6 +8085,51 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/inventory/compliance-diagnostics", requireAdmin, async (_req, res) => {
+    try {
+      const { getInventoryComplianceDiagnostics } = await import("./inventory/inventoryComplianceDiagnostics");
+      const diagnostics = await getInventoryComplianceDiagnostics();
+      res.json(diagnostics);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("[admin] inventory compliance diagnostics failed", msg);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  app.post("/api/admin/inventory/resync-all", requireAdmin, async (_req, res) => {
+    try {
+      const { listAllConnectedInventorySourceIds } = await import("./inventory/inventoryComplianceDiagnostics");
+      const { startInventorySourceSync } = await import("./inventory/inventorySyncService");
+      const sources = await listAllConnectedInventorySourceIds();
+      let started = 0;
+      let skipped = 0;
+      const details: { id: string; provider: string; started: boolean; reason?: string }[] = [];
+
+      for (const source of sources) {
+        const outcome = await startInventorySourceSync(source.userId, source.id);
+        if (outcome.started) {
+          started += 1;
+          details.push({ id: source.id, provider: source.provider, started: true });
+        } else {
+          skipped += 1;
+          details.push({
+            id: source.id,
+            provider: source.provider,
+            started: false,
+            reason: outcome.reason,
+          });
+        }
+      }
+
+      res.json({ sources: sources.length, started, skipped, details });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("[admin] inventory resync-all failed", msg);
+      res.status(500).json({ error: msg });
+    }
+  });
+
   // Admin: Get all salespeople
   app.get("/api/admin/salespeople", requireAdmin, async (req, res) => {
     try {
@@ -11079,6 +11131,8 @@ export async function registerRoutes(
   registerWebhookRoutes(app);
   registerInventoryRoutes(app);
   registerPublicListingRoutes(app);
+  registerPublicAgentPageRoutes(app);
+  registerAgentPageSettingsRoutes(app);
   registerPublicListingSitemapRoutes(app);
   registerBusinessProfileRoutes(app);
 

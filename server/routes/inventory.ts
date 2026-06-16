@@ -4,7 +4,7 @@ import { DEV_SEED_PRODUCTION_BLOCK_MESSAGE } from "@shared/inventory/inventoryDe
 import { inventoryListingStatusSchema } from "@shared/inventory/inventoryListingSchema";
 import { canUseInventoryConnector, isInventoryConnectorEnabled } from "../inventory/inventoryGate";
 import { isRgeInstalledForUser } from "../buyerPreferenceService";
-import { getInventoryListing, listInventoryListings } from "../inventory/inventoryDb";
+import { getInventoryListing, listInventoryListings, setListingPublication } from "../inventory/inventoryDb";
 import {
   createInventorySourceBodySchema,
   createSourceForUser,
@@ -39,6 +39,10 @@ const listingsQuerySchema = z.object({
   city: z.string().max(120).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(25),
+});
+
+const listingPublicationBodySchema = z.object({
+  publishPublicly: z.boolean(),
 });
 
 export function registerInventoryRoutes(app: Express): void {
@@ -258,6 +262,35 @@ export function registerInventoryRoutes(app: Express): void {
     } catch (error) {
       console.error("[inventory] get listing", error);
       res.status(500).json({ error: "Failed to fetch listing" });
+    }
+  });
+
+  app.patch("/api/inventory/listings/:id/publication", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const gate = await requireInventoryAccess(req.user.id);
+      if (!gate.ok) return res.status(gate.status).json(gate.body);
+
+      const parsed = listingPublicationBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
+      }
+
+      try {
+        const listing = await setListingPublication(
+          req.user.id,
+          req.params.id,
+          parsed.data.publishPublicly,
+        );
+        if (!listing) return res.status(404).json({ error: "Listing not found" });
+        res.json({ listing });
+      } catch (pubError) {
+        const message = pubError instanceof Error ? pubError.message : "Publication update failed";
+        return res.status(400).json({ error: message, code: "publication_rejected" });
+      }
+    } catch (error) {
+      console.error("[inventory] patch listing publication", error);
+      res.status(500).json({ error: "Failed to update listing publication" });
     }
   });
 }

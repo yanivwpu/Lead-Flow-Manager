@@ -48,8 +48,8 @@ const mlsGridPropertyNormalizer: ResoPropertyNormalizerContract = {
   },
 };
 
-export function normalizeMlsGridProperty(raw: unknown) {
-  return normalizeResoPropertyRow(raw, mlsGridPropertyNormalizer);
+export function normalizeMlsGridProperty(raw: unknown, sourceMlsName?: string) {
+  return normalizeResoPropertyRow(raw, mlsGridPropertyNormalizer, { sourceMlsName });
 }
 
 function buildMlsGridPropertyFilter(
@@ -122,7 +122,7 @@ export function createMlsGridResoProvider(ctx: InventoryAdapterContext): ResoRep
       return defaultResoListingId(raw as Record<string, unknown>);
     },
     normalizeProperty(raw) {
-      return normalizeMlsGridProperty(raw);
+      return normalizeMlsGridProperty(raw, cfg.originatingSystemName);
     },
   };
 }

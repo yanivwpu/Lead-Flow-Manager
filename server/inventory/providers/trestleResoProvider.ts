@@ -49,8 +49,8 @@ const trestlePropertyNormalizer: ResoPropertyNormalizerContract = {
   },
 };
 
-export function normalizeTrestleProperty(raw: unknown) {
-  return normalizeResoPropertyRow(raw, trestlePropertyNormalizer);
+export function normalizeTrestleProperty(raw: unknown, sourceMlsName?: string) {
+  return normalizeResoPropertyRow(raw, trestlePropertyNormalizer, { sourceMlsName });
 }
 
 function buildTrestlePropertyFilter(
@@ -120,7 +120,7 @@ export function createTrestleResoProvider(
       return defaultResoListingId(raw as Record<string, unknown>);
     },
     normalizeProperty(raw) {
-      return normalizeTrestleProperty(raw);
+      return normalizeTrestleProperty(raw, cfg.originatingSystemName);
     },
   };
 }
