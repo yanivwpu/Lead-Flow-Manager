@@ -773,6 +773,31 @@ function mapPublicShareListingRow(
   };
 }
 
+/** Authenticated listing fetch including flyer spec columns (sqft, HOA, year built). */
+export async function getInventoryListingWithFlyerFields(
+  userId: string,
+  listingId: string,
+): Promise<InventoryListing | undefined> {
+  try {
+    const [row] = await db
+      .select(PUBLIC_SHARE_LISTING_SELECT)
+      .from(inventoryListings)
+      .where(and(eq(inventoryListings.id, listingId), eq(inventoryListings.userId, userId)))
+      .limit(1);
+    if (!row || isBlockedDevSeedListingRow(row)) return undefined;
+    return mapPublicShareListingRow(row);
+  } catch (error) {
+    console.warn("[inventory] flyer column select failed; loading core listing + extras", {
+      listingId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const listing = await getInventoryListing(userId, listingId);
+    if (!listing) return undefined;
+    const extras = await tryLoadFlyerExtraFields(listingId);
+    return { ...listing, ...extras };
+  }
+}
+
 /** Assign public_slug once when address fields allow; never overwrite existing slug. */
 export async function ensurePublicSlugForListing(listingId: string): Promise<string | null> {
   const [row] = await db
@@ -1113,7 +1138,7 @@ export async function getAuthenticatedListingFlyerPreviewData(
   listingId: string,
   appOrigin: string,
 ): Promise<PublicListingFlyerData | undefined> {
-  const listing = await getInventoryListing(userId, listingId);
+  const listing = await getInventoryListingWithFlyerFields(userId, listingId);
   if (!listing || isBlockedDevSeedListingRow(listing)) return undefined;
 
   const shareUrl = buildListingCanonicalShareUrl(

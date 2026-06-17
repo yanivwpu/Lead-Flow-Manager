@@ -284,11 +284,11 @@ export async function generateInventoryMatchDraft(
       photos: listing.photos,
       features: listing.features,
       listingDetails: listing.listingDetails,
-      appOrigin: getAppOrigin(),
     },
     contactFirstName: firstName,
     introDraft: draft,
     featureHints: bullets,
+    viewUrl,
   });
 
   return {

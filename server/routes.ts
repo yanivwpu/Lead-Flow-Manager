@@ -10821,16 +10821,30 @@ export async function registerRoutes(
                 const { buildListingComposerMessage } = await import(
                   "@shared/inventory/inventoryComposerDraft"
                 );
-                const { getInventoryListing } = await import("./inventory/inventoryDb");
+                const {
+                  getInventoryListingWithFlyerFields,
+                  createDirectShareLinkForUserListing,
+                } = await import("./inventory/inventoryDb");
                 const { inventoryListingToMatchInput } = await import(
                   "./inventory/inventoryMatchingService"
                 );
                 const { getAppOrigin } = await import("./urlOrigins");
                 const followUp = detectListingFollowUp(historyTurns, lastUserInbound);
                 if (followUp.active && followUp.listingId) {
-                  const listingRow = await getInventoryListing(userId, followUp.listingId);
+                  const listingRow = await getInventoryListingWithFlyerFields(userId, followUp.listingId);
                   if (listingRow) {
                     const listing = inventoryListingToMatchInput(listingRow);
+                    let followUpViewUrl: string | null = null;
+                    try {
+                      const share = await createDirectShareLinkForUserListing(
+                        userId,
+                        followUp.listingId,
+                        getAppOrigin(),
+                      );
+                      followUpViewUrl = share.shareUrl;
+                    } catch {
+                      followUpViewUrl = null;
+                    }
                     const composer = buildListingComposerMessage({
                       listing: {
                         listingId: listingRow.id,
@@ -10844,10 +10858,10 @@ export async function registerRoutes(
                         listingUrl: listing.listingUrl,
                         description: listing.description,
                         photos: listing.photos,
-                        appOrigin: getAppOrigin(),
                       },
                       contactFirstName: (contactForPrefs.name || "").trim().split(/\s+/)[0],
                       featureHints: [],
+                      viewUrl: followUpViewUrl,
                     });
                     contextPatch.listingFollowUp = `Listing already recommended in thread:\n${composer.text}`;
                   }

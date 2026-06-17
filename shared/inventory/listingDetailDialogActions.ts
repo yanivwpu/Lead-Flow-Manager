@@ -12,26 +12,14 @@ export type ShareListingButtonState = {
   enabled: boolean;
 };
 
-/** Share is shown once meta loads; disabled quietly when direct-share gate blocks link creation. */
+/** Share button only when direct-share gate passes — hidden entirely when blocked. */
 export function getShareListingButtonState(input: {
   listingId: string | null | undefined;
   directShare: ListingDirectShareMeta | null | undefined;
   directShareLoaded: boolean;
 }): ShareListingButtonState {
-  if (!input.listingId || !input.directShareLoaded) {
+  if (!input.listingId || !input.directShareLoaded || input.directShare?.allowed !== true) {
     return { show: false, enabled: false };
   }
-  return {
-    show: true,
-    enabled: input.directShare?.allowed === true,
-  };
-}
-
-/** Composer drafts only include a public share URL when direct-share link creation would succeed. */
-export function resolveComposerShareOrigin(input: {
-  appOrigin: string;
-  directShareAllowed: boolean | undefined;
-}): string | null {
-  if (!input.directShareAllowed) return null;
-  return input.appOrigin.trim() || null;
+  return { show: true, enabled: true };
 }

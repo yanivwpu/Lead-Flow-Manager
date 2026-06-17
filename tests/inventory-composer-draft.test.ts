@@ -4,9 +4,11 @@
  */
 import {
   buildListingComposerMessage,
+  composerDraftHasShareListingUrl,
   formatBedsBathsForComposer,
   formatListingPriceForComposer,
   listingComposerDraftIncludesRequiredDetails,
+  stripListingShareUrlsFromComposerText,
 } from "../shared/inventory/inventoryComposerDraft";
 import { buildListingShareUrl } from "../shared/inventory/listingViewUrl";
 
@@ -29,7 +31,6 @@ const listing = {
   listingUrl: "https://example.com/listing/123",
   description: "Modern condo with ocean and golf views",
   photos: [{ url: "https://example.com/photo.jpg", order: 0 }],
-  appOrigin,
 };
 
 assert(formatListingPriceForComposer(26_900_000) === "$269,000", "price format");
@@ -41,18 +42,19 @@ const withUrl = buildListingComposerMessage({
   introDraft:
     "Hi Susu, I found a listing that matches your preferences. Would you like me to send you the details?",
   featureHints: ["Modern condo with ocean/golf view features"],
+  viewUrl: shareUrl,
 });
 
 assert(withUrl.text.includes("Hi Susu"), "includes greeting");
 assert(withUrl.text.includes("$269,000"), "includes price");
 assert(withUrl.text.includes("2 bed / 2 bath"), "includes beds/baths");
 assert(withUrl.text.includes("Pompano Beach, FL"), "includes location");
-assert(withUrl.text.includes(`View Property Flyer: ${shareUrl}`), "always uses share URL");
-assert(withUrl.viewUrl === shareUrl, "viewUrl is share URL");
+assert(withUrl.text.includes(`View Property Flyer: ${shareUrl}`), "includes server share URL");
+assert(withUrl.viewUrl === shareUrl, "viewUrl is server share URL");
 assert(!withUrl.text.includes("example.com/listing/123"), "no external MLS URL");
 assert(withUrl.primaryPhotoUrl === "https://example.com/photo.jpg", "primary photo");
 assert(
-  listingComposerDraftIncludesRequiredDetails(withUrl.text, listing),
+  listingComposerDraftIncludesRequiredDetails(withUrl.text, listing, { viewUrl: shareUrl }),
   "trace helper passes for full draft",
 );
 
@@ -60,12 +62,17 @@ const withoutUrl = buildListingComposerMessage({
   listing: { ...listing, listingUrl: null },
   contactFirstName: "Susu",
   featureHints: ["Pool and updated kitchen"],
+  viewUrl: null,
 });
 
-assert(withoutUrl.text.includes(`View Property Flyer: ${shareUrl}`), "share URL");
+assert(!withoutUrl.text.includes("/share/listings/"), "no share URL without server viewUrl");
 assert(
   listingComposerDraftIncludesRequiredDetails(withoutUrl.text, { ...listing, listingUrl: null }),
-  "trace helper passes with share URL",
+  "trace helper passes without share URL",
 );
+
+const staleApiDraft = `Hi Susu:\n\n$269,000\n\nView Property Flyer: ${shareUrl}\n\nWould you like more details?`;
+const stripped = stripListingShareUrlsFromComposerText(staleApiDraft);
+assert(!composerDraftHasShareListingUrl(stripped), "strip removes stale share links");
 
 console.log("inventory-composer-draft.test.ts: all passed");

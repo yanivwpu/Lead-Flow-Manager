@@ -1,7 +1,4 @@
-import {
-  pickPrimaryPhotoUrl,
-  resolveListingViewUrl,
-} from "./listingViewUrl";
+import { pickPrimaryPhotoUrl } from "./listingViewUrl";
 import type { InventoryListingDetails } from "./inventoryListingSchema";
 import { pickVerifiedListingFeaturePhrase } from "./listingVerifiedMatchReasons";
 import type { MatchListingInput } from "./inventoryMatchScoring";
@@ -21,8 +18,6 @@ export type ListingComposerListing = {
   thumbnailUrl?: string | null;
   features?: string[];
   listingDetails?: InventoryListingDetails;
-  /** App origin for internal share URL fallback, e.g. https://app.example.com */
-  appOrigin?: string | null;
 };
 
 export function formatListingPriceForComposer(cents: number | null): string | null {
@@ -106,6 +101,8 @@ export type BuildListingComposerMessageInput = {
   /** Short AI/template intro without listing details */
   introDraft?: string;
   featureHints?: string[];
+  /** Server-issued share URL only — never build /share/listings client-side. */
+  viewUrl?: string | null;
 };
 
 export type ListingComposerMessageResult = {
@@ -144,12 +141,7 @@ export function buildListingComposerMessage(input: BuildListingComposerMessageIn
   const feature = pickFeatureLine(listing, listing.description);
   if (feature) detailLines.push(feature);
 
-  const viewUrl = resolveListingViewUrl({
-    listingId: listing.listingId,
-    publicSlug: listing.publicSlug,
-    listingUrl: listing.listingUrl,
-    appOrigin: listing.appOrigin,
-  });
+  const viewUrl = input.viewUrl?.trim() || null;
   const primaryPhotoUrl = pickPrimaryPhotoUrl(listing.photos, listing.thumbnailUrl);
 
   const parts: string[] = [intro, "", ...detailLines];
@@ -167,13 +159,33 @@ export function buildListingComposerMessage(input: BuildListingComposerMessageIn
   };
 }
 
+const LISTING_SHARE_URL_IN_TEXT = /\/share\/listings\/[^/?#\s]+/i;
+const VIEW_PROPERTY_FLYER_SHARE_LINE =
+  /^\s*View Property Flyer:\s*https?:\/\/\S*\/share\/listings\/\S+\s*$/gim;
+
+/** True when composer text contains a public listing share path. */
+export function composerDraftHasShareListingUrl(text: string): boolean {
+  return LISTING_SHARE_URL_IN_TEXT.test(text);
+}
+
+/** Remove stale /share/listings links from API drafts when share is unavailable. */
+export function stripListingShareUrlsFromComposerText(text: string): string {
+  const withoutFlyerLine = text.replace(VIEW_PROPERTY_FLYER_SHARE_LINE, "");
+  const withoutUrls = withoutFlyerLine.replace(
+    /https?:\/\/\S*\/share\/listings\/\S+/gi,
+    "",
+  );
+  return withoutUrls.replace(/\n{3,}/g, "\n\n").trim();
+}
+
 /** Test/trace helper — verifies composer text includes core listing facts and a view link when expected. */
 export function listingComposerDraftIncludesRequiredDetails(
   message: string,
   listing: Pick<
     ListingComposerListing,
-    "priceCents" | "beds" | "baths" | "city" | "listingUrl" | "listingId" | "appOrigin"
+    "priceCents" | "beds" | "baths" | "city" | "listingUrl" | "listingId"
   >,
+  options?: { viewUrl?: string | null },
 ): boolean {
   const price = formatListingPriceForComposer(listing.priceCents);
   const bedsBaths = formatBedsBathsForComposer(listing.beds, listing.baths);
@@ -186,12 +198,7 @@ export function listingComposerDraftIncludesRequiredDetails(
   const hasBedsBaths = !bedsBaths || (hasBeds && hasBaths);
   const hasLocation =
     !listing.city || message.toLowerCase().includes(listing.city.toLowerCase());
-  const expectedUrl = resolveListingViewUrl({
-    listingId: listing.listingId,
-    publicSlug: listing.publicSlug,
-    listingUrl: listing.listingUrl,
-    appOrigin: listing.appOrigin,
-  });
+  const expectedUrl = options?.viewUrl?.trim() || null;
   const hasViewLink = !expectedUrl || message.includes(expectedUrl);
   return hasPrice && hasBedsBaths && hasLocation && hasViewLink;
 }

@@ -3,8 +3,11 @@
  * Run: npx tsx tests/listing-detail-dialog-actions.test.ts
  */
 import {
+  buildListingComposerMessage,
+  composerDraftHasShareListingUrl,
+} from "../shared/inventory/inventoryComposerDraft";
+import {
   getShareListingButtonState,
-  resolveComposerShareOrigin,
   shouldShowPreviewFlyerButton,
 } from "../shared/inventory/listingDetailDialogActions";
 
@@ -22,14 +25,14 @@ const allowedShare = getShareListingButtonState({
   directShare: { allowed: true, blockedReason: null },
   directShareLoaded: true,
 });
-assert(allowedShare.show && allowedShare.enabled, "share listing enabled when allowed");
+assert(allowedShare.show && allowedShare.enabled, "share listing shown when allowed");
 
 const blockedShare = getShareListingButtonState({
   listingId,
   directShare: { allowed: false, blockedReason: "missing attribution" },
   directShareLoaded: true,
 });
-assert(blockedShare.show && !blockedShare.enabled, "share listing shown but disabled when blocked");
+assert(!blockedShare.show && !blockedShare.enabled, "share listing hidden when blocked");
 
 const loadingShare = getShareListingButtonState({
   listingId,
@@ -38,15 +41,23 @@ const loadingShare = getShareListingButtonState({
 });
 assert(!loadingShare.show, "share button hidden until direct-share meta loads");
 
+const nonShareableDraft = buildListingComposerMessage({
+  listing: {
+    listingId,
+    priceCents: 550_000_00,
+    beds: 3,
+    baths: 2,
+    city: "Pompano Beach",
+    state: "FL",
+    propertyType: "house",
+    listingUrl: null,
+  },
+  contactFirstName: "Sam",
+  viewUrl: null,
+});
 assert(
-  resolveComposerShareOrigin({ appOrigin: "https://app.example.com", directShareAllowed: true }) ===
-    "https://app.example.com",
-  "composer may include share URL when direct-share allowed",
-);
-assert(
-  resolveComposerShareOrigin({ appOrigin: "https://app.example.com", directShareAllowed: false }) ===
-    null,
-  "composer omits share URL when direct-share blocked",
+  !composerDraftHasShareListingUrl(nonShareableDraft.text),
+  "non-shareable listing composer never includes /share/listings link",
 );
 
 console.log("listing-detail-dialog-actions.test.ts: all passed");

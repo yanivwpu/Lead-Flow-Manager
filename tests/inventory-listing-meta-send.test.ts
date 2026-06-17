@@ -18,6 +18,7 @@ function assert(cond: boolean, msg: string) {
 
 const listingId = "33333333-3333-4333-8333-333333333333";
 const appOrigin = "https://app.whachatcrm.com";
+const shareUrl = buildListingShareUrl(listingId, appOrigin);
 
 const composer = buildListingComposerMessage({
   listing: {
@@ -30,14 +31,13 @@ const composer = buildListingComposerMessage({
     propertyType: "condo",
     listingUrl: null,
     photos: [{ url: "https://cdn.example.com/listing.jpg", order: 0 }],
-    appOrigin,
   },
   contactFirstName: "Susu",
   introDraft: "Hi Susu, I found a condo in Pompano Beach that matches what you're looking for:",
   featureHints: ["Modern condo with ocean/golf view features"],
+  viewUrl: shareUrl,
 });
 
-const shareUrl = buildListingShareUrl(listingId, appOrigin);
 assert(composer.text.includes("$269,000"), "composer price");
 assert(composer.text.includes("2 bed / 2 bath"), "composer beds/baths");
 assert(composer.text.includes(`View Property Flyer: ${shareUrl}`), "composer share URL");
@@ -50,8 +50,7 @@ assert(
     baths: 2,
     city: "Pompano Beach",
     listingUrl: null,
-    appOrigin,
-  }),
+  }, { viewUrl: shareUrl }),
   "required listing details in text",
 );
 

@@ -113,11 +113,11 @@ const composer = buildListingComposerMessage({
     description: listing.description,
     features: listing.features,
     listingDetails: listing.listingDetails,
-    appOrigin: "https://app.example.com",
   },
   contactFirstName: "Alex",
   introDraft: "Hi Alex, I found a listing that may work for you:",
   featureHints: ["Offers ocean view", "Modern style"],
+  viewUrl: null,
 });
 assert(!composer.text.toLowerCase().includes("ocean view"), "composer must not leak buyer ocean view hint");
 assert(!composer.text.includes("Offers ocean view"), "composer must not echo buyer hint text");

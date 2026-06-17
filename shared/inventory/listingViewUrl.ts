@@ -57,6 +57,7 @@ export type ResolveListingViewUrlInput = {
 };
 
 /** Always use the WhachatCRM public flyer — never external MLS / PropertyPanorama URLs. */
+/** @deprecated Use server-issued viewUrl — do not build share links client-side. */
 export function resolveListingViewUrl(input: ResolveListingViewUrlInput): string | null {
   if (!input.listingId) return null;
   const origin = (input.appOrigin || "").trim();

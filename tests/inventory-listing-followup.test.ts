@@ -19,6 +19,7 @@ function assert(cond: boolean, msg: string) {
 
 const listingId = "11111111-1111-4111-8111-111111111111";
 const appOrigin = "https://app.example.com";
+const shareUrl = buildListingShareUrl(listingId, appOrigin);
 const agentListingMessage = buildListingComposerMessage({
   listing: {
     listingId,
@@ -30,17 +31,17 @@ const agentListingMessage = buildListingComposerMessage({
     propertyType: "condo",
     listingUrl: null,
     description: "Modern condo with ocean/golf views",
-    appOrigin,
   },
   contactFirstName: "Susu",
   introDraft: "Hi Susu, I found a condo in Pompano Beach that matches what you're looking for:",
   featureHints: ["Within budget", "2 bed / 2 bath"],
+  viewUrl: shareUrl,
 }).text;
 
 assert(agentListingMessage.includes("$269,000"), "agent message includes price");
 assert(
-  agentListingMessage.includes(buildListingShareUrl(listingId, appOrigin)),
-  "agent message includes share URL fallback",
+  agentListingMessage.includes(shareUrl),
+  "agent message includes server share URL",
 );
 assert(
   listingComposerDraftIncludesRequiredDetails(agentListingMessage, {
@@ -50,8 +51,7 @@ assert(
     baths: 2,
     city: "Pompano Beach",
     listingUrl: null,
-    appOrigin,
-  }),
+  }, { viewUrl: shareUrl }),
   "composer includes required details + view link",
 );
 

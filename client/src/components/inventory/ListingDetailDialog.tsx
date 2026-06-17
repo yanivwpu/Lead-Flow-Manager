@@ -17,6 +17,7 @@ import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
 import {
   buildListingComposerMessage,
   listingComposerDraftIncludesRequiredDetails,
+  stripListingShareUrlsFromComposerText,
 } from "@shared/inventory/inventoryComposerDraft";
 import {
   extractListingShareSegmentFromUrl,
@@ -24,7 +25,6 @@ import {
 } from "@shared/inventory/listingViewUrl";
 import {
   getShareListingButtonState,
-  resolveComposerShareOrigin,
   shouldShowPreviewFlyerButton,
 } from "@shared/inventory/listingDetailDialogActions";
 import { formatListingPriceDisplay } from "@shared/inventory/listingTransactionIntent";
@@ -175,16 +175,11 @@ export function ListingDetailDialog({
     primaryPhotoUrl: string | null;
   } | null => {
     if (!listingId) return null;
-    const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
-    const shareOrigin = resolveComposerShareOrigin({
-      appOrigin,
-      directShareAllowed: directShare?.allowed,
-    });
-    const apiViewUrl =
+    const serverViewUrl =
       directShare?.allowed && draftData?.viewUrl?.trim() ? draftData.viewUrl.trim() : null;
     const shareSlug =
       listing?.publicSlug?.trim() ||
-      (apiViewUrl ? extractListingShareSegmentFromUrl(apiViewUrl) : null);
+      (serverViewUrl ? extractListingShareSegmentFromUrl(serverViewUrl) : null);
     const listingInput = {
       listingId,
       publicSlug: shareSlug,
@@ -198,17 +193,19 @@ export function ListingDetailDialog({
       description,
       photos: listingPhotos ?? undefined,
       thumbnailUrl: fallback?.thumbnailUrl ?? null,
-      appOrigin: shareOrigin,
     };
     const fromApi = draftData?.composerDraft?.trim();
     if (fromApi) {
-      const text =
-        apiViewUrl && shareSlug
-          ? rewriteComposerDraftListingShareUrl(fromApi, listingId, shareSlug, apiViewUrl)
+      let text =
+        serverViewUrl && shareSlug
+          ? rewriteComposerDraftListingShareUrl(fromApi, listingId, shareSlug, serverViewUrl)
           : fromApi;
+      if (!serverViewUrl) {
+        text = stripListingShareUrlsFromComposerText(text);
+      }
       return {
         text,
-        viewUrl: apiViewUrl,
+        viewUrl: serverViewUrl,
         primaryPhotoUrl,
       };
     }
@@ -218,6 +215,7 @@ export function ListingDetailDialog({
       contactFirstName,
       introDraft: intro,
       featureHints: draftData?.matchBullets ?? matchReasons,
+      viewUrl: serverViewUrl,
     });
     return {
       text: built.text,
@@ -251,11 +249,6 @@ export function ListingDetailDialog({
     const draft = resolveComposerDraft();
     if (!draft?.text || !listingId) return;
 
-    const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
-    const shareOrigin = resolveComposerShareOrigin({
-      appOrigin,
-      directShareAllowed: directShare?.allowed,
-    });
     const includesRequired = listingComposerDraftIncludesRequiredDetails(draft.text, {
       listingId,
       publicSlug: listing?.publicSlug ?? null,
@@ -264,8 +257,7 @@ export function ListingDetailDialog({
       baths: baths ?? null,
       city: city ?? null,
       listingUrl,
-      appOrigin: shareOrigin,
-    });
+    }, { viewUrl: draft.viewUrl });
     console.info(
       "[ListingComposerDraft]",
       JSON.stringify({
@@ -300,7 +292,7 @@ export function ListingDetailDialog({
         duration: 3000,
       });
     }
-  }, [resolveComposerDraft, listingId, contactId, listing?.publicSlug, directShare?.allowed, priceCents, beds, baths, city, state, listingUrl, onInsertComposerDraft, onOpenChange, toast]);
+  }, [resolveComposerDraft, listingId, contactId, listing?.publicSlug, priceCents, beds, baths, city, state, listingUrl, onInsertComposerDraft, onOpenChange, toast]);
 
   const showPreviewFlyer = shouldShowPreviewFlyerButton(listingId);
   const shareButton = getShareListingButtonState({
@@ -397,9 +389,8 @@ export function ListingDetailDialog({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-7 px-2 text-[11px] font-medium text-gray-600 hover:text-gray-900 disabled:opacity-40"
+                    className="h-7 px-2 text-[11px] font-medium text-gray-600 hover:text-gray-900"
                     onClick={() => void handleShareListing()}
-                    disabled={!shareButton.enabled}
                     data-testid="button-share-listing"
                   >
                     <Link2 className="mr-1 h-3 w-3" aria-hidden />
