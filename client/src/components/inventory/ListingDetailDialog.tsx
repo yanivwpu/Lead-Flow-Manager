@@ -287,9 +287,8 @@ export function ListingDetailDialog({
     }
   }, [resolveComposerDraft, listingId, contactId, listing?.publicSlug, priceCents, beds, baths, city, state, listingUrl, onInsertComposerDraft, onOpenChange, toast]);
 
-  const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
-
   const previewFlyerUrl = listingId ? `/api/inventory/listings/${listingId}/flyer-preview` : null;
+  const canDirectShare = !!listingId && directShare?.allowed === true;
 
   const handlePreviewFlyer = useCallback(() => {
     if (!previewFlyerUrl) return;
@@ -359,7 +358,7 @@ export function ListingDetailDialog({
               <p className="text-xs text-gray-600 line-clamp-4 leading-relaxed">{listing.description}</p>
             )}
 
-            {listingId && shareUrl && (
+            {canDirectShare && (
               <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                 <Button
                   type="button"
@@ -377,7 +376,7 @@ export function ListingDetailDialog({
                   variant="ghost"
                   size="sm"
                   className="h-7 px-2 text-[11px] font-medium text-gray-600 hover:text-gray-900"
-                  onClick={() => void handleCopyShareLink()}
+                  onClick={() => void handleShareListing()}
                   data-testid="button-copy-flyer-link"
                 >
                   <Link2 className="mr-1 h-3 w-3" aria-hidden />
