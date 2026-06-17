@@ -20,8 +20,12 @@ import { providerSupportsListingSync } from "@shared/inventory/inventoryProvider
 import {
   buildListingPublicSlug,
   isListingShareUuid,
+  normalizeListingSlugAddressInput,
 } from "@shared/inventory/listingPublicSlug";
-import { buildListingCanonicalShareUrl } from "@shared/inventory/listingViewUrl";
+import {
+  buildListingCanonicalShareUrl,
+  coalesceListingShareRef,
+} from "@shared/inventory/listingViewUrl";
 import { normalizeListingCompliance } from "@shared/inventory/inventoryListingCompliance";
 import {
   canDirectShareListing,
@@ -800,6 +804,17 @@ export async function getInventoryListingWithFlyerFields(
   }
 }
 
+function buildInventoryListingShareUrl(
+  listing: { id: string; publicSlug?: string | null },
+  ensuredSlug: string | null,
+  appOrigin: string,
+): string {
+  return buildListingCanonicalShareUrl(
+    coalesceListingShareRef(listing.id, listing.publicSlug, ensuredSlug),
+    appOrigin,
+  );
+}
+
 /** Assign public_slug once when address fields allow; never overwrite existing slug. */
 export async function ensurePublicSlugForListing(listingId: string): Promise<string | null> {
   const [row] = await db
@@ -816,9 +831,12 @@ export async function ensurePublicSlugForListing(listingId: string): Promise<str
     .where(eq(inventoryListings.id, listingId))
     .limit(1);
 
-  if (!row?.id || row.publicSlug) return row?.publicSlug ?? null;
+  if (!row?.id) return null;
 
-  const slug = buildListingPublicSlug({
+  const existingSlug = row.publicSlug?.trim();
+  if (existingSlug) return existingSlug;
+
+  const slugInput = normalizeListingSlugAddressInput({
     id: row.id,
     addressLine1: row.addressLine1,
     addressLine2: row.addressLine2,
@@ -826,15 +844,40 @@ export async function ensurePublicSlugForListing(listingId: string): Promise<str
     state: row.state,
     zip: row.zip,
   });
-  if (!slug) return null;
 
-  const [updated] = await db
-    .update(inventoryListings)
-    .set({ publicSlug: slug, updatedAt: new Date() })
-    .where(and(eq(inventoryListings.id, listingId), isNull(inventoryListings.publicSlug)))
-    .returning({ publicSlug: inventoryListings.publicSlug });
+  const slug = buildListingPublicSlug(slugInput);
+  if (!slug) {
+    console.info("[inventory] public_slug not generated — insufficient address fields", {
+      listingId,
+      hasLine1: Boolean(slugInput.addressLine1?.trim()),
+      hasCity: Boolean(slugInput.city?.trim()),
+      hasState: Boolean(slugInput.state?.trim()),
+      hasZip: Boolean(slugInput.zip?.trim()),
+    });
+    return null;
+  }
 
-  return updated?.publicSlug ?? slug;
+  try {
+    const [updated] = await db
+      .update(inventoryListings)
+      .set({ publicSlug: slug, updatedAt: new Date() })
+      .where(and(eq(inventoryListings.id, listingId), isNull(inventoryListings.publicSlug)))
+      .returning({ publicSlug: inventoryListings.publicSlug });
+
+    return updated?.publicSlug?.trim() ?? slug;
+  } catch (error) {
+    console.warn("[inventory] public_slug persist failed", {
+      listingId,
+      slug,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const [existing] = await db
+      .select({ publicSlug: inventoryListings.publicSlug })
+      .from(inventoryListings)
+      .where(eq(inventoryListings.id, listingId))
+      .limit(1);
+    return existing?.publicSlug?.trim() ?? null;
+  }
 }
 
 export async function getWorkspacePublishListingsPublicly(userId: string): Promise<boolean> {
@@ -1114,14 +1157,12 @@ export async function createDirectShareLinkForUserListing(
     listingCompliance: refreshed.listingCompliance,
   });
 
-  const shareUrl = buildListingCanonicalShareUrl(
-    { listingId: refreshed.id, publicSlug: refreshed.publicSlug ?? publicSlug },
-    appOrigin,
-  );
+  const resolvedSlug = refreshed.publicSlug?.trim() || publicSlug?.trim() || null;
+  const shareUrl = buildInventoryListingShareUrl(refreshed, resolvedSlug, appOrigin);
 
   return {
     shareUrl,
-    publicSlug: refreshed.publicSlug ?? publicSlug,
+    publicSlug: resolvedSlug,
     indexedPublicListing,
   };
 }
@@ -1144,17 +1185,15 @@ export async function getAuthenticatedListingFlyerPreviewData(
   if (!listing || isBlockedDevSeedListingRow(listing)) return undefined;
 
   const publicSlug = await ensurePublicSlugForListing(listingId);
-  const shareUrl = buildListingCanonicalShareUrl(
-    { listingId: listing.id, publicSlug: listing.publicSlug ?? publicSlug },
-    appOrigin,
-  );
+  const resolvedSlug = listing.publicSlug?.trim() || publicSlug?.trim() || null;
+  const shareUrl = buildInventoryListingShareUrl(listing, resolvedSlug, appOrigin);
 
   const { resolvePublicListingAgent } = await import("../businessProfileService");
   const resolved = await resolvePublicListingAgent(listing.userId);
   const { companyLogoUrl, ...agent } = resolved;
 
   return {
-    listing,
+    listing: resolvedSlug ? { ...listing, publicSlug: resolvedSlug } : listing,
     agent,
     companyLogoUrl,
     shareUrl,
@@ -1183,10 +1222,8 @@ export async function getPublicListingFlyerData(
   }
 
   const publicSlug = await ensurePublicSlugForListing(listing.id);
-  const shareUrl = buildListingCanonicalShareUrl(
-    { listingId: listing.id, publicSlug: listing.publicSlug ?? publicSlug },
-    appOrigin,
-  );
+  const resolvedSlug = listing.publicSlug?.trim() || publicSlug?.trim() || null;
+  const shareUrl = buildInventoryListingShareUrl(listing, resolvedSlug, appOrigin);
 
   try {
     const { resolvePublicListingAgent } = await import("../businessProfileService");
@@ -1200,7 +1237,13 @@ export async function getPublicListingFlyerData(
       listingCompliance: listing.listingCompliance,
     });
 
-    return { listing, agent, companyLogoUrl, shareUrl, indexedPublicListing };
+    return {
+      listing: resolvedSlug ? { ...listing, publicSlug: resolvedSlug } : listing,
+      agent,
+      companyLogoUrl,
+      shareUrl,
+      indexedPublicListing,
+    };
   } catch (error) {
     console.error("[public-listing] failed to load agent profile for flyer", {
       listingId: listing.id,

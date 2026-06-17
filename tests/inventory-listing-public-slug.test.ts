@@ -7,12 +7,14 @@ import {
   isListingShareUuid,
   listingHasPublicSlugAddress,
   listingPublicSlugSuffix,
+  normalizeListingSlugAddressInput,
   slugifyListingText,
 } from "../shared/inventory/listingPublicSlug";
 import {
   buildListingCanonicalShareUrl,
   buildListingSharePath,
   buildListingShareUrl,
+  coalesceListingShareRef,
   resolveListingShareSegment,
 } from "../shared/inventory/listingViewUrl";
 
@@ -85,5 +87,48 @@ assert(
   "canonical uses slug",
 );
 assert(buildListingSharePath(listingId) === `/share/listings/${listingId}`, "uuid path preserved");
+
+const loxahatcheeId = "854a6079-9465-4648-9a6b-dc4d3021edb1";
+const loxahatcheeSlug = buildListingPublicSlug({
+  id: loxahatcheeId,
+  addressLine1: "17146 79th Court N",
+  addressLine2: null,
+  city: "Loxahatchee",
+  state: "FL",
+  zip: "33470",
+});
+assert(
+  loxahatcheeSlug === "17146-79th-court-n-loxahatchee-fl-33470-854a6079",
+  `loxahatchee slug, got ${loxahatcheeSlug}`,
+);
+
+const unparsedOnly = normalizeListingSlugAddressInput({
+  id: loxahatcheeId,
+  addressLine1: "17146 79th Court N Loxahatchee FL 33470",
+  addressLine2: null,
+  city: null,
+  state: null,
+  zip: null,
+});
+assert(unparsedOnly.city === "Loxahatchee", "infer city from unparsed line1");
+assert(unparsedOnly.state === "FL", "infer state from unparsed line1");
+assert(unparsedOnly.zip === "33470", "infer zip from unparsed line1");
+assert(
+  buildListingPublicSlug(unparsedOnly) === loxahatcheeSlug,
+  "slug from unparsed-only address",
+);
+
+const slugShareUrl = buildListingCanonicalShareUrl(
+  coalesceListingShareRef(loxahatcheeId, null, loxahatcheeSlug),
+  origin,
+);
+assert(slugShareUrl.endsWith(`/share/listings/${loxahatcheeSlug}`), "canonical slug share url");
+assert(!slugShareUrl.includes(loxahatcheeId), "slug url excludes uuid");
+
+const uuidShareUrl = buildListingCanonicalShareUrl(
+  coalesceListingShareRef(loxahatcheeId, null, null),
+  origin,
+);
+assert(uuidShareUrl.endsWith(`/share/listings/${loxahatcheeId}`), "uuid fallback when no slug");
 
 console.log("inventory-listing-public-slug.test.ts: OK");

@@ -6,11 +6,29 @@ export type ListingShareRef = {
   publicSlug?: string | null;
 };
 
+/** Pick the first non-empty slug candidate; UUID is implied when all are empty. */
+export function coalesceListingShareRef(
+  listingId: string,
+  ...slugCandidates: (string | null | undefined)[]
+): ListingShareRef {
+  for (const candidate of slugCandidates) {
+    const slug = candidate?.trim();
+    if (slug) return { listingId, publicSlug: slug };
+  }
+  return { listingId, publicSlug: null };
+}
+
 /** Prefer SEO slug segment when assigned; otherwise UUID. */
 export function resolveListingShareSegment(ref: ListingShareRef): string {
   const slug = ref.publicSlug?.trim();
-  if (slug) return slug;
+  if (slug && !isListingShareUuidSegment(slug, ref.listingId)) return slug;
   return ref.listingId;
+}
+
+/** Slug candidates that equal the listing UUID are not treated as SEO slugs. */
+function isListingShareUuidSegment(segment: string, listingId: string): boolean {
+  if (segment.toLowerCase() === listingId.toLowerCase()) return true;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(segment);
 }
 
 export function buildListingSharePath(

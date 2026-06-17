@@ -12,6 +12,7 @@ import {
   inventoryRowToFlyerListing,
 } from "@shared/inventory/publicListingFlyer";
 import { isListingShareUuid } from "@shared/inventory/listingPublicSlug";
+import { extractListingShareSegmentFromUrl } from "@shared/inventory/listingViewUrl";
 import { getRequestOrigin } from "../urlOrigins";
 import { requirePublicListingSchemaReady } from "../middleware/requirePublicListingSchemaReady";
 
@@ -62,6 +63,19 @@ export function registerPublicListingRoutes(app: Express): void {
         });
         res.status(404).type("html").send(buildPublicListingNotFoundHtml());
         return;
+      }
+
+      if (isListingShareUuid(identifier)) {
+        const canonicalSegment = extractListingShareSegmentFromUrl(flyerData.shareUrl);
+        if (canonicalSegment && !isListingShareUuid(canonicalSegment) && canonicalSegment !== identifier) {
+          logPublicListingShare("redirect_uuid_to_slug", {
+            identifier,
+            listingId: flyerData.listing.id,
+            canonicalSegment,
+          });
+          res.redirect(301, flyerData.shareUrl);
+          return;
+        }
       }
 
       const qrDataUrl = await QRCode.toDataURL(flyerData.shareUrl, {

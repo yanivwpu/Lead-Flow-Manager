@@ -14,7 +14,7 @@ import {
   buildPublicListingFlyerHtml,
   inventoryRowToFlyerListing,
 } from "../shared/inventory/publicListingFlyer";
-import { buildListingCanonicalShareUrl, resolveListingShareSegment } from "../shared/inventory/listingViewUrl";
+import { buildListingCanonicalShareUrl, coalesceListingShareRef, resolveListingShareSegment } from "../shared/inventory/listingViewUrl";
 import { buildListingPublicSlug } from "../shared/inventory/listingPublicSlug";
 import {
   buildListingComposerMessage,
@@ -260,6 +260,38 @@ function testCopilotAgentShareAlias() {
   console.log("  copilot agent-share alias: OK");
 }
 
+function testShareUrlSlugPreference() {
+  const listingId = "854a6079-9465-4648-9a6b-dc4d3021edb1";
+  const slug = buildListingPublicSlug({
+    id: listingId,
+    addressLine1: "17146 79th Court N",
+    city: "Loxahatchee",
+    state: "FL",
+    zip: "33470",
+  });
+  assert(slug != null, "slug generated for loxahatchee listing");
+  const origin = "https://app.example.com";
+
+  const slugUrl = buildListingCanonicalShareUrl(
+    coalesceListingShareRef(listingId, null, slug),
+    origin,
+  );
+  assert(slugUrl === `${origin}/share/listings/${slug}`, "listing with slug returns slug URL");
+  assert(!slugUrl.includes(listingId), "slug URL excludes UUID");
+
+  const uuidUrl = buildListingCanonicalShareUrl(
+    coalesceListingShareRef(listingId, null, null),
+    origin,
+  );
+  assert(uuidUrl === `${origin}/share/listings/${listingId}`, "UUID only when no slug exists");
+
+  assert(
+    resolveListingShareSegment(coalesceListingShareRef(listingId, slug, null)) === slug,
+    "coalesce prefers stored slug",
+  );
+  console.log("  share URL slug preference: OK");
+}
+
 function testCopilotComposerRequiresVerifiedShareUrl() {
   const listingId = "2e059e00-0846-4f23-a606-cf0812b57bff";
   const origin = "https://app.example.com";
@@ -294,6 +326,7 @@ function main() {
   testNonCompliantRejectionReasons();
   testListingDirectShareMeta();
   testDirectShareSlugUrlResolves();
+  testShareUrlSlugPreference();
   testCopilotAgentShareAlias();
   testCopilotComposerRequiresVerifiedShareUrl();
   console.log("\nAll tests passed.");
