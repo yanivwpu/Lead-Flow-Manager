@@ -6,6 +6,7 @@ import {
   canDirectShareListing,
   canResolveIndexedPublicListing,
   getDirectShareRejectionReason,
+  isCopilotAgentShareListing,
   isSearchIndexablePublicListing,
   PUBLIC_LISTING_ATTRIBUTION_PUBLISH_ERROR,
 } from "../shared/inventory/publicListingPublication";
@@ -226,6 +227,21 @@ function testDirectShareSlugUrlResolves() {
   console.log("  direct share slug URL resolves with flyer: OK");
 }
 
+function testCopilotAgentShareAlias() {
+  assert(
+    isCopilotAgentShareListing({ status: "active", listingCompliance: COMPLIANT }),
+    "copilot alias matches direct-share gate",
+  );
+  assert(
+    !isCopilotAgentShareListing({
+      status: "pending",
+      listingCompliance: COMPLIANT,
+    }),
+    "inactive listings excluded from copilot pool",
+  );
+  console.log("  copilot agent-share alias: OK");
+}
+
 function main() {
   console.log("listing-direct-share tests");
   testUnpublishedCompliantDirectShare();
@@ -235,6 +251,7 @@ function main() {
   testNonCompliantRejectionReasons();
   testListingDirectShareMeta();
   testDirectShareSlugUrlResolves();
+  testCopilotAgentShareAlias();
   console.log("\nAll tests passed.");
 }
 

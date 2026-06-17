@@ -41,3 +41,29 @@ export function publicListingMissingAttributionSql(): SQL {
     or coalesce(${lc}->>'mlsListingId', '') = ''
   )`;
 }
+
+const MATCHABLE_STATUS_SQL = sql`${inventoryListings.status} in ('active', 'coming_soon')`;
+
+const INTERNET_DISPLAY_OK_SQL = sql`
+  coalesce(${lc}->>'mlgCanView', '') != 'false'
+  and coalesce(${lc}->>'internetEntireListingDisplay', '') != 'false'
+  and coalesce(${lc}->>'internetDisplay', '') != 'false'
+  and (
+    (${lc}->>'internetEntireListingDisplay')::text = 'true'
+    or (${lc}->>'internetDisplay')::text = 'true'
+    or (
+      (${lc}->>'provider') = 'mls_grid'
+      and (${lc}->>'mlgCanView')::text = 'true'
+    )
+  )
+`;
+
+/** Matchable rows blocked by MLS internet display rules (attribution bucket is separate). */
+export function agentShareExcludedMissingInternetDisplaySql(): SQL {
+  return sql`${MATCHABLE_STATUS_SQL} and not (${INTERNET_DISPLAY_OK_SQL})`;
+}
+
+/** Matchable rows with display OK but missing MLS attribution fields. */
+export function agentShareExcludedMissingAttributionSql(): SQL {
+  return sql`${MATCHABLE_STATUS_SQL} and (${INTERNET_DISPLAY_OK_SQL}) and ${publicListingMissingAttributionSql()}`;
+}

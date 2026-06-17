@@ -44,11 +44,13 @@ export function InventoryHealthDiagnosticsPanel({
   const totalQualifying = diagnostics?.totalQualifyingMatches;
   const capTruncated = diagnostics?.inventoryCapTruncated;
 
+  const agentShareEligible = diagnostics?.agentShareEligibleCount ?? activeCount;
+
   const hasAnomaly = useMemo(
     () =>
       rateLimitWarning ||
       capTruncated === true ||
-      (typeof activeCount === "number" && activeCount > 0 && (scored ?? 0) === 0) ||
+      (typeof agentShareEligible === "number" && agentShareEligible > 0 && (scored ?? 0) === 0) ||
       (typeof scored === "number" &&
         scored > 0 &&
         (totalQualifying ?? returned ?? 0) === 0) ||
@@ -57,7 +59,7 @@ export function InventoryHealthDiagnosticsPanel({
         typeof returned === "number" &&
         totalQualifying > returned) ||
       (!!lastError && !rateLimitWarning),
-    [rateLimitWarning, capTruncated, activeCount, scored, returned, totalQualifying, lastError],
+    [rateLimitWarning, capTruncated, agentShareEligible, scored, returned, totalQualifying, lastError],
   );
 
   const [open, setOpen] = useState(import.meta.env.DEV || rateLimitWarning || hasAnomaly);
@@ -108,11 +110,31 @@ export function InventoryHealthDiagnosticsPanel({
         )}
         {capTruncated && (
           <p className="text-[10px] text-amber-800 leading-snug pb-1">
-            Matching cap reached — only {scored} of {activeCount} active listings were scored.
-            Increase matching limit or sync may be incomplete.
+            Matching cap reached — only {scored} of {diagnostics?.agentShareEligibleCount ?? activeCount}{" "}
+            agent-share listings were scored. Increase matching limit or sync may be incomplete.
           </p>
         )}
         <DiagnosticRow label="Active inventory (DB)" value={activeCount ?? "—"} />
+        <DiagnosticRow
+          label="Agent-share eligible (Copilot pool)"
+          value={diagnostics?.agentShareEligibleCount ?? "—"}
+        />
+        {diagnostics?.agentShareExclusions && (
+          <div className="pt-0.5 space-y-0.5">
+            <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400">
+              Excluded from agent-share results
+            </p>
+            <DiagnosticRow label="Inactive" value={diagnostics.agentShareExclusions.inactive} />
+            <DiagnosticRow
+              label="Missing internet display"
+              value={diagnostics.agentShareExclusions.missingInternetDisplay}
+            />
+            <DiagnosticRow
+              label="Missing attribution"
+              value={diagnostics.agentShareExclusions.missingAttribution}
+            />
+          </div>
+        )}
         <DiagnosticRow label="Rows loaded for scoring" value={scored ?? "—"} />
         <DiagnosticRow
           label="Fetch limit"

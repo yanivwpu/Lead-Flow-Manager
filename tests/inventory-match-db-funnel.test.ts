@@ -115,6 +115,12 @@ assert(
 const snapshot = buildPersistedProfileSnapshotForDiagnostics(relaxedProfile, relaxedCriteria);
 const diagnostics = buildDbInventoryMatchDiagnostics({
   activeInventoryCount: 613,
+  agentShareEligibleCount: listings.length,
+  agentShareExclusions: {
+    inactive: 0,
+    missingInternetDisplay: 0,
+    missingAttribution: 0,
+  },
   rowsLoadedForScoring: listings.length,
   matchesReturned: 2,
   totalQualifyingMatches: relaxedFunnel.rankedCount,

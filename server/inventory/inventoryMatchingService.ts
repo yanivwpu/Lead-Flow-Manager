@@ -28,7 +28,7 @@ import {
 import { readBuyerPreferenceProfile, loadPersistedBuyerPreferenceProfile } from "../buyerPreferenceService";
 import { storage } from "../storage";
 import { canUseInventoryConnector } from "./inventoryGate";
-import { countActiveListingsForUser, fetchActiveListingsForMatching, resolveMatchingListingLimitForUser } from "./inventoryDb";
+import { countActiveListingsForUser, fetchActiveListingsForMatching, getAgentShareExclusionCountsForUser, resolveMatchingListingLimitForUser } from "./inventoryDb";
 import { listSavedListingIdsForContact } from "./inventorySavedMatchDb";
 
 function parseNumericField(raw: string | number | null | undefined): number | null {
@@ -206,19 +206,35 @@ export async function findMatchingListingsForContact(
   }
 
   const inventoryCount = await countActiveListingsForUser(userId);
-  if (inventoryCount === 0) {
+  const agentShareCounts = await getAgentShareExclusionCountsForUser(userId);
+  const agentShareExclusions = {
+    inactive: agentShareCounts.excludedInactive,
+    missingInternetDisplay: agentShareCounts.excludedMissingInternetDisplay,
+    missingAttribution: agentShareCounts.excludedMissingAttribution,
+  };
+  const agentShareEligibleCount = agentShareCounts.agentShareEligible;
+
+  if (agentShareEligibleCount === 0) {
     return {
       eligible: true,
-      reason: "no_active_inventory",
+      reason: inventoryCount === 0 ? "no_active_inventory" : "no_agent_share_inventory",
       profileStatus: profile.profileStatus,
-      inventoryCount: 0,
+      inventoryCount,
       matchCount: 0,
       matches: [],
       savedListingIds,
       diagnostics: buildInventoryMatchDiagnostics({
-        activeInventoryCount: 0,
+        activeInventoryCount: inventoryCount,
+        agentShareEligibleCount,
+        agentShareExclusions,
         listingsScored: 0,
         matchesReturned: 0,
+        persistedProfileSnapshot: buildPersistedProfileSnapshotForDiagnostics(profile, criteria),
+        activeFilterSummary,
+        noMatchSummary:
+          inventoryCount === 0
+            ? "No active listings in synced inventory."
+            : "No listings are eligible for agent preview/share in Copilot.",
       }),
     };
   }
@@ -246,6 +262,8 @@ export async function findMatchingListingsForContact(
       error: message,
       diagnostics: buildInventoryMatchDiagnostics({
         activeInventoryCount: inventoryCount,
+        agentShareEligibleCount,
+        agentShareExclusions,
         listingsScored: 0,
         matchesReturned: 0,
         lastMatchingError: message,
@@ -278,6 +296,8 @@ export async function findMatchingListingsForContact(
 
   const diagnostics = buildDbInventoryMatchDiagnostics({
     activeInventoryCount: inventoryCount,
+    agentShareEligibleCount,
+    agentShareExclusions,
     rowsLoadedForScoring: inputs.length,
     matchesReturned: matches.length,
     totalQualifyingMatches: totalMatchCount,

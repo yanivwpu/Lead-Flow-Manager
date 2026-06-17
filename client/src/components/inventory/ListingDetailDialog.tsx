@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Home, Link2, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,17 +22,9 @@ import {
   extractListingShareSegmentFromUrl,
   pickPrimaryPhotoUrl,
 } from "@shared/inventory/listingViewUrl";
-import {
-  getShareListingButtonState,
-  resolveComposerShareOrigin,
-  shouldShowPreviewFlyerButton,
-} from "@shared/inventory/listingDetailDialogActions";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { shouldShowCopilotListingActions } from "@shared/inventory/listingDetailDialogActions";
+import { formatListingPriceDisplay } from "@shared/inventory/listingTransactionIntent";
+import type { InventoryMatchListingSummary } from "@shared/inventory/inventoryMatchTypes";
 
 /** Replace stale UUID share links in API draft text when a slug is available. */
 function rewriteComposerDraftListingShareUrl(
@@ -48,8 +40,6 @@ function rewriteComposerDraftListingShareUrl(
   );
   return text.replace(uuidSharePattern, slugViewUrl);
 }
-import { formatListingPriceDisplay } from "@shared/inventory/listingTransactionIntent";
-import type { InventoryMatchListingSummary } from "@shared/inventory/inventoryMatchTypes";
 
 function formatPrice(cents: number | null, listing?: InventoryMatchListingSummary | null): string {
   return formatListingPriceDisplay(
@@ -87,10 +77,6 @@ type ListingDetail = {
     publicSlug?: string | null;
     photos: { url: string; order?: number }[];
     status: string;
-  };
-  directShare?: {
-    allowed: boolean;
-    blockedReason: string | null;
   };
 };
 
@@ -159,7 +145,6 @@ export function ListingDetailDialog({
   });
 
   const listing = listingData?.listing;
-  const directShare = listingData?.directShare;
   const photo = listing?.photos?.[0]?.url ?? fallback?.thumbnailUrl ?? null;
   const city = listing?.city ?? fallback?.city;
   const state = listing?.state ?? fallback?.state;
@@ -182,10 +167,6 @@ export function ListingDetailDialog({
   } | null => {
     if (!listingId) return null;
     const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
-    const shareOrigin = resolveComposerShareOrigin({
-      appOrigin,
-      directShareAllowed: directShare?.allowed,
-    });
     const apiViewUrl = draftData?.viewUrl?.trim() || null;
     const shareSlug =
       listing?.publicSlug?.trim() ||
@@ -203,7 +184,7 @@ export function ListingDetailDialog({
       description,
       photos: listingPhotos ?? undefined,
       thumbnailUrl: fallback?.thumbnailUrl ?? null,
-      appOrigin: shareOrigin,
+      appOrigin,
     };
     const fromApi = draftData?.composerDraft?.trim();
     if (fromApi) {
@@ -242,7 +223,6 @@ export function ListingDetailDialog({
     listingPhotos,
     fallback?.thumbnailUrl,
     listing?.publicSlug,
-    directShare?.allowed,
     draftData?.composerDraft,
     draftData?.viewUrl,
     draftData?.draft,
@@ -257,10 +237,6 @@ export function ListingDetailDialog({
     if (!draft?.text || !listingId) return;
 
     const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
-    const shareOrigin = resolveComposerShareOrigin({
-      appOrigin,
-      directShareAllowed: directShare?.allowed,
-    });
     const includesRequired = listingComposerDraftIncludesRequiredDetails(draft.text, {
       listingId,
       publicSlug: listing?.publicSlug ?? null,
@@ -269,7 +245,7 @@ export function ListingDetailDialog({
       baths: baths ?? null,
       city: city ?? null,
       listingUrl,
-      appOrigin: shareOrigin,
+      appOrigin,
     });
     console.info(
       "[ListingComposerDraft]",
@@ -305,15 +281,10 @@ export function ListingDetailDialog({
         duration: 3000,
       });
     }
-  }, [resolveComposerDraft, listingId, contactId, listing?.publicSlug, directShare?.allowed, priceCents, beds, baths, city, state, listingUrl, onInsertComposerDraft, onOpenChange, toast]);
+  }, [resolveComposerDraft, listingId, contactId, listing?.publicSlug, priceCents, beds, baths, city, state, listingUrl, onInsertComposerDraft, onOpenChange, toast]);
 
   const previewFlyerUrl = listingId ? `/api/inventory/listings/${listingId}/flyer-preview` : null;
-  const showPreviewFlyer = shouldShowPreviewFlyerButton(listingId);
-  const shareButton = getShareListingButtonState({
-    listingId,
-    directShare,
-    directShareLoaded: !listingLoading || !!listingData,
-  });
+  const showListingActions = shouldShowCopilotListingActions(listingId);
 
   const handlePreviewFlyer = useCallback(() => {
     if (!previewFlyerUrl) return;
@@ -332,8 +303,8 @@ export function ListingDetailDialog({
       toast({ title: "Share link copied", duration: 2000 });
     } catch (error) {
       toast({
-        title: "Cannot share listing",
-        description: error instanceof Error ? error.message : "Check MLS compliance and try again.",
+        title: "Could not copy share link",
+        description: error instanceof Error ? error.message : "Try again in a moment.",
         variant: "destructive",
         duration: 4000,
       });
@@ -383,48 +354,30 @@ export function ListingDetailDialog({
               <p className="text-xs text-gray-600 line-clamp-4 leading-relaxed">{listing.description}</p>
             )}
 
-            {(showPreviewFlyer || shareButton.show) && (
+            {showListingActions && (
               <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                {showPreviewFlyer && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-[11px] font-medium text-gray-600 hover:text-gray-900"
-                    onClick={handlePreviewFlyer}
-                    data-testid="button-preview-flyer"
-                  >
-                    <ExternalLink className="mr-1 h-3 w-3" aria-hidden />
-                    Preview Flyer
-                  </Button>
-                )}
-                {shareButton.show && (
-                  <TooltipProvider delayDuration={200}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="inline-flex">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-[11px] font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50"
-                            onClick={() => void handleShareListing()}
-                            disabled={!shareButton.enabled}
-                            data-testid="button-share-listing"
-                          >
-                            <Link2 className="mr-1 h-3 w-3" aria-hidden />
-                            Share Listing
-                          </Button>
-                        </span>
-                      </TooltipTrigger>
-                      {!shareButton.enabled && shareButton.blockedReason ? (
-                        <TooltipContent side="top" className="max-w-xs text-xs">
-                          {shareButton.blockedReason}
-                        </TooltipContent>
-                      ) : null}
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-[11px] font-medium text-gray-600 hover:text-gray-900"
+                  onClick={handlePreviewFlyer}
+                  data-testid="button-preview-flyer"
+                >
+                  <ExternalLink className="mr-1 h-3 w-3" aria-hidden />
+                  Preview Flyer
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-[11px] font-medium text-gray-600 hover:text-gray-900"
+                  onClick={() => void handleShareListing()}
+                  data-testid="button-share-listing"
+                >
+                  <Link2 className="mr-1 h-3 w-3" aria-hidden />
+                  Share Listing
+                </Button>
               </div>
             )}
 

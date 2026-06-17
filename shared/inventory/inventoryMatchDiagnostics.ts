@@ -1,4 +1,5 @@
 import type {
+  InventoryAgentShareExclusionCounts,
   InventoryMatchDiagnostics,
   InventoryMatchExcludedListing,
   InventoryMatchFunnelExcludedSample,
@@ -9,6 +10,8 @@ import { INVENTORY_DIAGNOSTICS_BUILD_MARKER } from "./inventoryDiagnosticsBuild"
 
 export function buildInventoryMatchDiagnostics(input: {
   activeInventoryCount: number;
+  agentShareEligibleCount?: number;
+  agentShareExclusions?: InventoryAgentShareExclusionCounts;
   listingsScored: number;
   matchesReturned: number;
   totalQualifyingMatches?: number;
@@ -29,6 +32,8 @@ export function buildInventoryMatchDiagnostics(input: {
 }): InventoryMatchDiagnostics {
   return {
     activeInventoryCount: input.activeInventoryCount,
+    agentShareEligibleCount: input.agentShareEligibleCount,
+    agentShareExclusions: input.agentShareExclusions,
     listingsScored: input.listingsScored,
     matchesReturned: input.matchesReturned,
     totalQualifyingMatches: input.totalQualifyingMatches,
@@ -52,6 +57,8 @@ export function buildInventoryMatchDiagnostics(input: {
 /** Map live DB funnel audit into API diagnostics (same rows as findMatchingListingsForContact). */
 export function buildDbInventoryMatchDiagnostics(input: {
   activeInventoryCount: number;
+  agentShareEligibleCount: number;
+  agentShareExclusions: InventoryAgentShareExclusionCounts;
   rowsLoadedForScoring: number;
   matchesReturned: number;
   totalQualifyingMatches: number;
@@ -64,7 +71,7 @@ export function buildDbInventoryMatchDiagnostics(input: {
   lastMatchingError?: string | null;
 }): InventoryMatchDiagnostics {
   const inventoryCapTruncated =
-    input.rowsLoadedForScoring < input.activeInventoryCount &&
+    input.rowsLoadedForScoring < input.agentShareEligibleCount &&
     input.rowsLoadedForScoring >= input.matchingFetchLimit;
 
   const funnelExcludedSamples: InventoryMatchFunnelExcludedSample[] =
@@ -100,6 +107,8 @@ export function buildDbInventoryMatchDiagnostics(input: {
 
   return buildInventoryMatchDiagnostics({
     activeInventoryCount: input.activeInventoryCount,
+    agentShareEligibleCount: input.agentShareEligibleCount,
+    agentShareExclusions: input.agentShareExclusions,
     listingsScored: input.rowsLoadedForScoring,
     matchesReturned: input.matchesReturned,
     totalQualifyingMatches: input.totalQualifyingMatches,

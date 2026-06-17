@@ -70,7 +70,13 @@ const criteria = extractBuyerMatchCriteria({
 const funnel = auditBuySearchMatchFunnel(listings, criteria, { rankLimit: 10, sampleLimit: 20 });
 const dbDiag = buildDbInventoryMatchDiagnostics({
   activeInventoryCount: 933,
-  rowsLoadedForScoring: 933,
+  agentShareEligibleCount: 900,
+  agentShareExclusions: {
+    inactive: 10,
+    missingInternetDisplay: 15,
+    missingAttribution: 8,
+  },
+  rowsLoadedForScoring: 900,
   matchesReturned: 1,
   totalQualifyingMatches: 1,
   matchingFetchLimit: 1000,

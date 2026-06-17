@@ -82,8 +82,21 @@ export const inventoryMatchFunnelStepSchema = z.object({
 
 export type InventoryMatchFunnelStep = z.infer<typeof inventoryMatchFunnelStepSchema>;
 
+export const inventoryAgentShareExclusionCountsSchema = z.object({
+  inactive: z.number().int().nonnegative(),
+  missingInternetDisplay: z.number().int().nonnegative(),
+  missingAttribution: z.number().int().nonnegative(),
+});
+
+export type InventoryAgentShareExclusionCounts = z.infer<
+  typeof inventoryAgentShareExclusionCountsSchema
+>;
+
 export const inventoryMatchDiagnosticsSchema = z.object({
   activeInventoryCount: z.number().int().nonnegative(),
+  /** Active/coming_soon rows that pass the MLS direct-share gate (Copilot pool). */
+  agentShareEligibleCount: z.number().int().nonnegative().optional(),
+  agentShareExclusions: inventoryAgentShareExclusionCountsSchema.optional(),
   listingsScored: z.number().int().nonnegative(),
   matchesReturned: z.number().int().nonnegative(),
   totalQualifyingMatches: z.number().int().nonnegative().optional(),

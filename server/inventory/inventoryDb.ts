@@ -29,7 +29,11 @@ import {
   getDirectShareRejectionReason,
   getPublicListingPublishRejectionReason,
 } from "@shared/inventory/publicListingPublication";
-import { publicListingMlsGateSql } from "@shared/inventory/publicListingMlsGateSql";
+import {
+  agentShareExcludedMissingAttributionSql,
+  agentShareExcludedMissingInternetDisplaySql,
+  publicListingMlsGateSql,
+} from "@shared/inventory/publicListingMlsGateSql";
 import {
   assertProductionDevSeedListingAllowed,
   isDevSeedProviderListingId,
@@ -589,6 +593,7 @@ export async function fetchActiveListingsForMatching(
   const conditions = [
     eq(inventoryListings.userId, userId),
     inArray(inventoryListings.status, [...MATCHABLE_INVENTORY_STATUSES]),
+    publicListingMlsGateSql(),
   ];
   const devSeedExclude = devSeedListingExcludeCondition();
   if (devSeedExclude) conditions.push(devSeedExclude);
@@ -628,6 +633,39 @@ export async function countActiveListingsForUser(userId: string): Promise<number
     .from(inventoryListings)
     .where(and(...conditions));
   return row?.count ?? 0;
+}
+
+export type AgentShareExclusionCounts = {
+  agentShareEligible: number;
+  excludedInactive: number;
+  excludedMissingInternetDisplay: number;
+  excludedMissingAttribution: number;
+};
+
+/** Per-workspace counts for Inventory Health — why rows are excluded from Copilot matching. */
+export async function getAgentShareExclusionCountsForUser(
+  userId: string,
+): Promise<AgentShareExclusionCounts> {
+  const conditions = [eq(inventoryListings.userId, userId)];
+  const devSeedExclude = devSeedListingExcludeCondition();
+  if (devSeedExclude) conditions.push(devSeedExclude);
+
+  const [row] = await db
+    .select({
+      agentShareEligible: sql<number>`count(*) filter (where ${publicListingMlsGateSql()})::int`,
+      excludedInactive: sql<number>`count(*) filter (where ${inventoryListings.status} not in ('active', 'coming_soon'))::int`,
+      excludedMissingInternetDisplay: sql<number>`count(*) filter (where ${agentShareExcludedMissingInternetDisplaySql()})::int`,
+      excludedMissingAttribution: sql<number>`count(*) filter (where ${agentShareExcludedMissingAttributionSql()})::int`,
+    })
+    .from(inventoryListings)
+    .where(and(...conditions));
+
+  return {
+    agentShareEligible: row?.agentShareEligible ?? 0,
+    excludedInactive: row?.excludedInactive ?? 0,
+    excludedMissingInternetDisplay: row?.excludedMissingInternetDisplay ?? 0,
+    excludedMissingAttribution: row?.excludedMissingAttribution ?? 0,
+  };
 }
 
 export async function countInventorySourcesForUser(userId: string): Promise<number> {
@@ -1167,6 +1205,7 @@ export async function fetchActiveListingsWithOpportunityAlerts(
   const conditions = [
     eq(inventoryListings.userId, userId),
     inArray(inventoryListings.status, [...MATCHABLE_INVENTORY_STATUSES]),
+    publicListingMlsGateSql(),
     or(
       eq(inventoryListings.syncAlertStatus, "new"),
       and(
