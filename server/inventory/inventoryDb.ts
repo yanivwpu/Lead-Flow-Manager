@@ -1143,8 +1143,9 @@ export async function getAuthenticatedListingFlyerPreviewData(
   const listing = await getInventoryListingWithFlyerFields(userId, listingId);
   if (!listing || isBlockedDevSeedListingRow(listing)) return undefined;
 
+  const publicSlug = await ensurePublicSlugForListing(listingId);
   const shareUrl = buildListingCanonicalShareUrl(
-    { listingId: listing.id, publicSlug: listing.publicSlug },
+    { listingId: listing.id, publicSlug: listing.publicSlug ?? publicSlug },
     appOrigin,
   );
 
@@ -1181,8 +1182,9 @@ export async function getPublicListingFlyerData(
     return undefined;
   }
 
+  const publicSlug = await ensurePublicSlugForListing(listing.id);
   const shareUrl = buildListingCanonicalShareUrl(
-    { listingId: listing.id, publicSlug: listing.publicSlug },
+    { listingId: listing.id, publicSlug: listing.publicSlug ?? publicSlug },
     appOrigin,
   );
 

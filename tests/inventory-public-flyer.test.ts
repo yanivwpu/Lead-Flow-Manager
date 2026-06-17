@@ -3,6 +3,7 @@
  * Run: npx tsx tests/inventory-public-flyer.test.ts
  */
 import {
+  buildGoogleMapsEmbedUrl,
   buildListingOpenGraphMeta,
   buildPublicListingFlyerHtml,
   buildStaticMapImageUrls,
@@ -15,6 +16,8 @@ import {
   resolveFlyerListingLabel,
   resolveFlyerSpecFields,
 } from "../shared/inventory/publicListingFlyer";
+import { buildListingCanonicalShareUrl } from "../shared/inventory/listingViewUrl";
+import { buildListingPublicSlug } from "../shared/inventory/listingPublicSlug";
 
 function assert(cond: boolean, msg: string) {
   if (!cond) throw new Error(msg);
@@ -139,7 +142,13 @@ assert(html.includes('fill="#059669"'), "brand green W logo");
 assert(!html.includes('fill="#22c55e"'), "no incorrect bright green");
 assert(html.includes("@page"), "print page rules");
 assert(!html.includes("page-break-before: always"), "single-page print layout");
-assert(html.includes("openstreetmap.org"), "map embed");
+assert(html.includes("maps.google.com/maps"), "google maps embed");
+assert(html.includes("map-static"), "static map image for print when coords exist");
+assert(html.includes("Listed By: Premier Realty"), "attribution listed by office");
+assert(html.includes("MLS#: A1234567 · Data Source: mfrmls"), "attribution mls line");
+assert(html.includes('class="listing-attribution-office"'), "attribution office line class");
+assert(html.includes('class="listing-attribution-mls"'), "attribution mls line class");
+assert(html.includes("<footer class=\"listing-compliance-attribution\""), "attribution as footer");
 
 const bookingHtml = buildPublicListingFlyerHtml({
   listing,
@@ -223,7 +232,14 @@ const addressOnlyHtml = buildPublicListingFlyerHtml({
 });
 assert(addressOnlyHtml.includes("bottom-col-map"), "map column for address-only listing");
 assert(addressOnlyHtml.includes("Open in Google Maps"), "google maps for address-only");
-assert(addressOnlyHtml.includes("map-address-only"), "address-only map placeholder");
+assert(addressOnlyHtml.includes("map-embed-interactive"), "address-only map embed iframe");
+assert(addressOnlyHtml.includes("maps.google.com/maps"), "address-only google embed url");
+assert(!addressOnlyHtml.includes('class="map-embed-wrap map-failed"'), "address-only map not pre-marked failed");
+const addressEmbedUrl = buildGoogleMapsEmbedUrl(addressOnlyListing);
+assert(addressEmbedUrl?.includes("123%20Main%20St"), "embed url encodes address");
+
+const coordsEmbedUrl = buildGoogleMapsEmbedUrl(listing);
+assert(coordsEmbedUrl?.includes("30.2672"), "embed url uses lat/lng");
 
 const previewOverrideHtml = buildPublicListingFlyerHtml({
   listing: {
@@ -297,5 +313,18 @@ assert(onlyWatermarked[0]?.url.includes("x-watermark"), "keep order when all wat
 
 const mapUrls = buildStaticMapImageUrls(listing);
 assert(mapUrls.length >= 3, "multiple static map fallbacks");
+
+const listingId = "11111111-1111-1111-1111-111111111111";
+const publicSlug = buildListingPublicSlug({
+  id: listingId,
+  addressLine1: "123 Main St",
+  city: "Austin",
+  state: "TX",
+  zip: "78701",
+});
+assert(publicSlug != null, "slug generated from address");
+const slugShareUrl = buildListingCanonicalShareUrl({ listingId, publicSlug }, "https://app.whachatcrm.com");
+assert(slugShareUrl.includes(`/share/listings/${publicSlug}`), "share url uses slug");
+assert(!slugShareUrl.includes(listingId), "share url avoids uuid when slug exists");
 
 console.log("inventory-public-flyer.test.ts: OK");

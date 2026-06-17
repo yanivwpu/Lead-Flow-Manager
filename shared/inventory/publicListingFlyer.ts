@@ -7,7 +7,6 @@ import {
   type InventoryListingDetails,
 } from "./inventoryListingSchema";
 import {
-  buildPublicListingAttributionLines,
   canRenderPublicListingAttribution,
   normalizeListingCompliance,
   type InventoryListingCompliance,
@@ -527,6 +526,18 @@ function buildGoogleMapsUrl(listing: PublicListingFlyerListing): string | null {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 }
 
+/** Google Maps embed — works with coordinates or a full street address (no API key). */
+export function buildGoogleMapsEmbedUrl(listing: PublicListingFlyerListing): string | null {
+  const lat = normalizeFlyerCoordinate(listing.latitude);
+  const lng = normalizeFlyerCoordinate(listing.longitude);
+  if (lat != null && lng != null) {
+    return `https://maps.google.com/maps?q=${lat},${lng}&hl=en&z=14&output=embed`;
+  }
+  const address = buildFullAddress(listing);
+  if (!address) return null;
+  return `https://maps.google.com/maps?q=${encodeURIComponent(address)}&hl=en&z=14&output=embed`;
+}
+
 function lonToTileX(lon: number, zoom: number): number {
   return Math.floor(((lon + 180) / 360) * 2 ** zoom);
 }
@@ -573,24 +584,23 @@ function renderMapFallbackPlaceholder(label = "Map preview"): string {
 }
 
 function renderMapEmbed(listing: PublicListingFlyerListing): string {
+  const embedUrl = buildGoogleMapsEmbedUrl(listing);
+  if (!embedUrl) return "";
+
   const lat = normalizeFlyerCoordinate(listing.latitude);
   const lng = normalizeFlyerCoordinate(listing.longitude);
   const hasCoords = lat != null && lng != null;
-  if (!hasCoords) {
-    if (!buildFullAddress(listing)) return "";
-    return `<div class="map-embed-wrap map-address-only">${renderMapFallbackPlaceholder("Location map")}</div>`;
-  }
-  const pad = 0.012;
-  const bbox = `${lng - pad},${lat - pad},${lng + pad},${lat + pad}`;
-  const embed = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat}%2C${lng}`;
-  const staticMapUrls = buildStaticMapImageUrls(listing);
+  const staticMapUrls = hasCoords ? buildStaticMapImageUrls(listing) : [];
   const staticMap = staticMapUrls.length
     ? `<img class="map-static" src="${escapeHtml(staticMapUrls[0])}" data-map-fallbacks="${escapeHtml(JSON.stringify(staticMapUrls.slice(1)))}" alt="Property location map" />`
     : "";
-  return `<div class="map-embed-wrap">
+  const iframePrintClass = staticMapUrls.length ? "no-print" : "";
+  const wrapClass = hasCoords ? "map-embed-wrap" : "map-embed-wrap map-address-only";
+
+  return `<div class="${wrapClass}">
       ${staticMap}
-      <iframe class="map-embed map-embed-interactive no-print" title="Property location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="${escapeHtml(embed)}"></iframe>
-      ${renderMapFallbackPlaceholder()}
+      <iframe class="map-embed map-embed-interactive ${iframePrintClass}" title="Property location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="${escapeHtml(embedUrl)}"></iframe>
+      ${renderMapFallbackPlaceholder(hasCoords ? "Map preview" : "Location map")}
     </div>`;
 }
 
@@ -879,14 +889,17 @@ function renderListingComplianceAttribution(
 ): string {
   const normalized = normalizeListingCompliance(compliance);
   if (!canRenderPublicListingAttribution(normalized)) return "";
-  const lines = buildPublicListingAttributionLines({
-    compliance: normalized,
-    presentingBrokerageName,
-  });
-  if (lines.length === 0) return "";
-  return `<section class="listing-compliance-attribution" data-testid="listing-compliance-attribution">
-    ${lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
-  </section>`;
+
+  const office = normalized.listOfficeName?.trim();
+  const mlsId = normalized.mlsListingId?.trim();
+  const mlsSource = normalized.mlsSourceName?.trim();
+  if (!office || !mlsId || !mlsSource) return "";
+
+  const mlsLine = `MLS#: ${escapeHtml(mlsId)} · Data Source: ${escapeHtml(mlsSource)}`;
+  return `<footer class="listing-compliance-attribution" data-testid="listing-compliance-attribution">
+    <p class="listing-attribution-office">Listed By: ${escapeHtml(office)}</p>
+    <p class="listing-attribution-mls">${mlsLine}</p>
+  </footer>`;
 }
 
 export function inventoryRowToFlyerListing(row: {
@@ -1264,7 +1277,6 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       text-align: center;
       padding: 12px;
     }
-    .map-embed-wrap.map-address-only .map-fallback-placeholder,
     .map-embed-wrap.map-failed .map-fallback-placeholder {
       display: flex;
       position: absolute;
@@ -1354,15 +1366,16 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     }
     .agent-cta-secondary:hover { border-color: #cbd5e1; background: #f8fafc; }
     .listing-compliance-attribution {
-      margin: 0 20px 8px;
-      padding: 10px 12px;
+      margin: 20px 20px 0;
+      padding: 12px 0 0;
       border-top: 1px solid var(--border);
       font-size: 0.6875rem;
-      line-height: 1.45;
-      color: var(--muted);
+      line-height: 1.5;
+      color: #94a3b8;
+      text-align: center;
     }
-    .listing-compliance-attribution p { margin: 0 0 4px; }
-    .listing-compliance-attribution p:last-child { margin-bottom: 0; }
+    .listing-compliance-attribution p { margin: 0; }
+    .listing-compliance-attribution .listing-attribution-office { margin-bottom: 2px; }
     .site-footer {
       padding: 12px 20px 16px;
       border-top: 1px solid var(--border);
@@ -1458,6 +1471,13 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       .bottom-col-empty { display: none !important; }
       .bottom-col-heading { font-size: 7pt; margin-bottom: 4px; }
       .map-embed-interactive { display: none !important; }
+      .map-embed-wrap.map-address-only .map-embed-interactive {
+        display: block !important;
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
       .map-static {
         display: block !important;
         width: 100%;
@@ -1509,6 +1529,13 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       .agent-actions { gap: 4px; margin-top: 6px; }
       .agent-cta, .agent-cta-secondary { padding: 5px 8px; font-size: 7.5pt; line-height: 1.2; }
       .agent-logo-footer { margin-top: auto; padding-top: 6px; }
+      .listing-compliance-attribution {
+        margin: 8px 0 0;
+        padding: 6px 0 0;
+        font-size: 6.5pt;
+        color: #64748b;
+        border-top: 1px solid #e2e8f0;
+      }
       .site-footer { padding: 4px 0 0; border-top: 1px solid #e2e8f0; margin-top: 6px; background: #fff; }
       .powered-by { font-size: 7pt; }
       a { color: inherit; text-decoration: none; }
@@ -1574,7 +1601,11 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
             img.src = fallbacks[fallbackIndex++];
             return;
           }
-          img.closest(".map-embed-wrap")?.classList.add("map-failed");
+          img.style.display = "none";
+          var wrap = img.closest(".map-embed-wrap");
+          if (!wrap || !wrap.querySelector(".map-embed-interactive")) {
+            wrap?.classList.add("map-failed");
+          }
         });
       });
       document.querySelectorAll(".map-embed-interactive").forEach(function (frame) {

@@ -14,7 +14,8 @@ import {
   buildPublicListingFlyerHtml,
   inventoryRowToFlyerListing,
 } from "../shared/inventory/publicListingFlyer";
-import { buildListingCanonicalShareUrl } from "../shared/inventory/listingViewUrl";
+import { buildListingCanonicalShareUrl, resolveListingShareSegment } from "../shared/inventory/listingViewUrl";
+import { buildListingPublicSlug } from "../shared/inventory/listingPublicSlug";
 import {
   buildListingComposerMessage,
   composerDraftHasShareListingUrl,
@@ -190,6 +191,17 @@ function testDirectShareSlugUrlResolves() {
   const origin = "https://app.example.com";
   const shareUrl = buildListingCanonicalShareUrl({ listingId, publicSlug: slug }, origin);
 
+  assert(resolveListingShareSegment({ listingId, publicSlug: slug }) === slug, "slug segment preferred");
+  assert(resolveListingShareSegment({ listingId, publicSlug: null }) === listingId, "uuid fallback segment");
+  const generatedSlug = buildListingPublicSlug({
+    id: listingId,
+    addressLine1: "1 Main St",
+    city: "Tampa",
+    state: "FL",
+    zip: "33602",
+  });
+  assert(generatedSlug === slug, "slug builder matches expected pattern");
+
   assert(
     canDirectShareListing({ status: "active", listingCompliance: COMPLIANT }),
     "unpublished compliant listing passes direct-share MLS gate",
@@ -225,9 +237,11 @@ function testDirectShareSlugUrlResolves() {
   });
 
   assert(shareUrl === `${origin}/share/listings/${slug}`, "share-link returns slug URL");
+  assert(!shareUrl.includes(listingId), "share URL avoids UUID when slug assigned");
   assert(html.includes('content="noindex, nofollow"'), "direct-share public page is noindex");
   assert(html.includes("Bright home."), "flyer content is visible");
   assert(html.includes("Listed By: Premier Realty"), "MLS attribution visible on flyer");
+  assert(html.includes("MLS#: A1234567 · Data Source: mfrmls"), "MLS attribution compact footer");
   console.log("  direct share slug URL resolves with flyer: OK");
 }
 
@@ -266,6 +280,7 @@ function testCopilotComposerRequiresVerifiedShareUrl() {
   });
   assert(draft.text.includes("View Property Flyer:"), "Copilot draft has flyer line");
   assert(draft.text.includes(shareUrl), "Copilot draft has verified shareUrl");
+  assert(!draft.text.includes(listingId), "composer draft avoids UUID when slug URL issued");
   assert(composerDraftHasShareListingUrl(draft.text), "share URL is canonical server URL");
   console.log("  copilot composer verified shareUrl: OK");
 }
