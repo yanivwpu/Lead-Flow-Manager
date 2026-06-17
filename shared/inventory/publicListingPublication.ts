@@ -78,7 +78,7 @@ export function passesPublicListingMlsGate(input: {
   return isComplianceEligibleForPublicPublish(input.listingCompliance);
 }
 
-/** Human-readable rejection for PATCH publication when MLS gate fails. */
+/** Human-readable rejection when MLS gate blocks share or publish. */
 export function getPublicListingPublishRejectionReason(input: {
   status: string;
   listingCompliance: InventoryListingCompliance | null | undefined;
@@ -95,18 +95,37 @@ export function getPublicListingPublishRejectionReason(input: {
   return null;
 }
 
-export type PublicShareGateInput = {
-  workspacePublishListingsPublicly: boolean;
-  listingPublishPublicly: boolean;
+/** Alias — direct agent share uses the same MLS gate as publish compliance. */
+export const getDirectShareRejectionReason = getPublicListingPublishRejectionReason;
+
+export type DirectShareGateInput = {
   status: string;
   listingCompliance: InventoryListingCompliance | null | undefined;
 };
 
-/** Whether /share/listings/:id may resolve (publication + MLS gate). */
-export function canResolvePublicShareListing(input: PublicShareGateInput): boolean {
+/** Agent may direct-share /share/listings/:slug when MLS compliance passes (no publish toggle). */
+export function canDirectShareListing(input: DirectShareGateInput): boolean {
+  return passesPublicListingMlsGate(input);
+}
+
+export type PublicShareGateInput = DirectShareGateInput & {
+  workspacePublishListingsPublicly: boolean;
+  listingPublishPublicly: boolean;
+};
+
+/** Whether listing may appear on Agent Page, sitemap, and search indexing. */
+export function canResolveIndexedPublicListing(input: PublicShareGateInput): boolean {
   if (!input.workspacePublishListingsPublicly || !input.listingPublishPublicly) return false;
   return passesPublicListingMlsGate({
     status: input.status,
     listingCompliance: input.listingCompliance,
   });
+}
+
+/** @deprecated Use canResolveIndexedPublicListing — kept for existing imports. */
+export const canResolvePublicShareListing = canResolveIndexedPublicListing;
+
+/** Search engines may index only explicitly published listings that pass the MLS gate. */
+export function isSearchIndexablePublicListing(input: PublicShareGateInput): boolean {
+  return canResolveIndexedPublicListing(input);
 }

@@ -19,8 +19,7 @@ function logPublicListingShare(event: string, payload: Record<string, unknown>):
   console.info(JSON.stringify({ tag: "[public-listing:share]", event, ...payload }));
 }
 
-// Public listing URLs are publication-gated. Previously shared /share/listings links
-// return 404 until workspace + listing are explicitly republished.
+// Direct-share URLs resolve when MLS compliance passes; indexing requires explicit publish.
 export function registerPublicListingRoutes(app: Express): void {
   app.get("/share/listings/:identifier", requirePublicListingSchemaReady, async (req: Request, res: Response) => {
     const identifier = req.params.identifier?.trim() ?? "";
@@ -77,6 +76,7 @@ export function registerPublicListingRoutes(app: Express): void {
         shareUrl: flyerData.shareUrl,
         qrDataUrl,
         companyLogoUrl: flyerData.companyLogoUrl,
+        allowSearchIndexing: flyerData.indexedPublicListing,
       });
 
       logPublicListingShare("render_ok", {

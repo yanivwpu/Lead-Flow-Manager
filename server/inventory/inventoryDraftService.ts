@@ -15,7 +15,7 @@ import { aiProvider } from "../aiProvider";
 import { storage } from "../storage";
 import { getAppOrigin } from "../urlOrigins";
 import { canUseInventoryConnector } from "./inventoryGate";
-import { getInventoryListing } from "./inventoryDb";
+import { getInventoryListing, createDirectShareLinkForUserListing } from "./inventoryDb";
 import { inventoryListingToMatchInput } from "./inventoryMatchingService";
 
 function contactFirstName(contact: Contact): string {
@@ -228,7 +228,21 @@ export async function generateInventoryMatchDraft(
     options?.priceReductionLabel,
   );
 
-  const hasListingUrl = true;
+  let viewUrl: string | null = null;
+  let publicSlug = listingRow.publicSlug;
+  try {
+    const share = await createDirectShareLinkForUserListing(
+      userId,
+      listingId,
+      getAppOrigin(),
+    );
+    viewUrl = share.shareUrl;
+    publicSlug = share.publicSlug;
+  } catch {
+    viewUrl = null;
+  }
+
+  const hasListingUrl = !!viewUrl;
   const firstName = contactFirstName(contact);
 
   const aiResult = await generateAiDraft({
@@ -254,10 +268,11 @@ export async function generateInventoryMatchDraft(
     });
 
   const bullets = aiResult?.matchBullets ?? matchBullets;
+
   const composer = buildListingComposerMessage({
     listing: {
       listingId,
-      publicSlug: listingRow.publicSlug,
+      publicSlug,
       priceCents: listing.priceCents,
       beds: listing.beds,
       baths: listing.baths,

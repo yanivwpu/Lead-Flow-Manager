@@ -23,7 +23,12 @@ import {
 } from "@shared/inventory/listingPublicSlug";
 import { buildListingCanonicalShareUrl } from "@shared/inventory/listingViewUrl";
 import { normalizeListingCompliance } from "@shared/inventory/inventoryListingCompliance";
-import { canResolvePublicShareListing, getPublicListingPublishRejectionReason } from "@shared/inventory/publicListingPublication";
+import {
+  canDirectShareListing,
+  canResolveIndexedPublicListing,
+  getDirectShareRejectionReason,
+  getPublicListingPublishRejectionReason,
+} from "@shared/inventory/publicListingPublication";
 import { publicListingMlsGateSql } from "@shared/inventory/publicListingMlsGateSql";
 import {
   assertProductionDevSeedListingAllowed,
@@ -828,15 +833,12 @@ export async function setListingPublication(
   return getInventoryListing(userId, listingId);
 }
 
-async function applyPublishedShareGate(
+async function applyDirectShareMlsGate(
   listing: InventoryListing | undefined,
 ): Promise<InventoryListing | undefined> {
   if (!listing) return undefined;
-  const workspaceOn = await getWorkspacePublishListingsPublicly(listing.userId);
   if (
-    !canResolvePublicShareListing({
-      workspacePublishListingsPublicly: workspaceOn,
-      listingPublishPublicly: listing.publishPublicly,
+    !canDirectShareListing({
       status: listing.status,
       listingCompliance: listing.listingCompliance,
     })
@@ -862,7 +864,7 @@ export async function getPublicShareListing(listingId: string): Promise<Inventor
       .limit(1);
     if (!row || isBlockedDevSeedListingRow(row)) return undefined;
     if (!isShareablePublicListingRow(row)) return undefined;
-    return applyPublishedShareGate(mapPublicShareListingRow(row));
+    return applyDirectShareMlsGate(mapPublicShareListingRow(row));
   } catch (error) {
     console.warn("[public-listing] combined share listing select failed; retrying without flyer columns", {
       listingId,
@@ -878,7 +880,7 @@ export async function getPublicShareListing(listingId: string): Promise<Inventor
       if (!isShareablePublicListingRow(row)) return undefined;
 
       const extras = await tryLoadFlyerExtraFields(listingId);
-      return applyPublishedShareGate({ ...inventoryListingFromMatchingRow(row), ...extras });
+      return applyDirectShareMlsGate({ ...inventoryListingFromMatchingRow(row), ...extras });
     } catch (fallbackError) {
       console.error("[public-listing] failed to load listing row", {
         listingId,
@@ -913,7 +915,7 @@ async function getPublicShareListingBySlug(slug: string): Promise<InventoryListi
       .limit(1);
     if (!row || isBlockedDevSeedListingRow(row)) return undefined;
     if (!isShareablePublicListingRow(row)) return undefined;
-    return applyPublishedShareGate(mapPublicShareListingRow(row));
+    return applyDirectShareMlsGate(mapPublicShareListingRow(row));
   } catch (error) {
     console.warn("[public-listing] slug lookup failed", {
       slug,
@@ -1003,12 +1005,97 @@ export type PublicListingAgentProfile = {
   bookingLink: string | null;
 };
 
+export type ListingDirectShareMeta = {
+  allowed: boolean;
+  blockedReason: string | null;
+};
+
+export function getListingDirectShareMeta(listing: InventoryListing): ListingDirectShareMeta {
+  const blockedReason = getDirectShareRejectionReason({
+    status: listing.status,
+    listingCompliance: listing.listingCompliance,
+  });
+  return {
+    allowed: blockedReason == null,
+    blockedReason,
+  };
+}
+
+/** Create or reuse slug and return a direct-share URL (does not set publishPublicly). */
+export async function createDirectShareLinkForUserListing(
+  userId: string,
+  listingId: string,
+  appOrigin: string,
+): Promise<{ shareUrl: string; publicSlug: string | null; indexedPublicListing: boolean }> {
+  const listing = await getInventoryListing(userId, listingId);
+  if (!listing) {
+    throw new Error("Listing not found");
+  }
+
+  const rejection = getDirectShareRejectionReason({
+    status: listing.status,
+    listingCompliance: listing.listingCompliance,
+  });
+  if (rejection) {
+    throw new Error(rejection);
+  }
+
+  const publicSlug = await ensurePublicSlugForListing(listingId);
+  const refreshed = (await getInventoryListing(userId, listingId)) ?? listing;
+  const workspaceOn = await getWorkspacePublishListingsPublicly(userId);
+  const indexedPublicListing = canResolveIndexedPublicListing({
+    workspacePublishListingsPublicly: workspaceOn,
+    listingPublishPublicly: refreshed.publishPublicly,
+    status: refreshed.status,
+    listingCompliance: refreshed.listingCompliance,
+  });
+
+  const shareUrl = buildListingCanonicalShareUrl(
+    { listingId: refreshed.id, publicSlug: refreshed.publicSlug ?? publicSlug },
+    appOrigin,
+  );
+
+  return {
+    shareUrl,
+    publicSlug: refreshed.publicSlug ?? publicSlug,
+    indexedPublicListing,
+  };
+}
+
 export type PublicListingFlyerData = {
   listing: InventoryListing;
   agent: PublicListingAgentProfile;
   companyLogoUrl: string | null;
   shareUrl: string;
+  indexedPublicListing: boolean;
 };
+
+/** Authenticated agent preview — no MLS publish gate; not for public discovery. */
+export async function getAuthenticatedListingFlyerPreviewData(
+  userId: string,
+  listingId: string,
+  appOrigin: string,
+): Promise<PublicListingFlyerData | undefined> {
+  const listing = await getInventoryListing(userId, listingId);
+  if (!listing || isBlockedDevSeedListingRow(listing)) return undefined;
+
+  const shareUrl = buildListingCanonicalShareUrl(
+    { listingId: listing.id, publicSlug: listing.publicSlug },
+    appOrigin,
+  );
+
+  const { resolvePublicListingAgent } = await import("../businessProfileService");
+  const resolved = await resolvePublicListingAgent(listing.userId);
+  const { companyLogoUrl, ...agent } = resolved;
+
+  return {
+    listing,
+    agent,
+    companyLogoUrl,
+    shareUrl,
+    indexedPublicListing: false,
+  };
+}
 
 /** Listing + sanitized agent branding for public flyer (no CRM contact data). */
 export async function getPublicListingFlyerData(
@@ -1039,8 +1126,15 @@ export async function getPublicListingFlyerData(
     const { resolvePublicListingAgent } = await import("../businessProfileService");
     const resolved = await resolvePublicListingAgent(listing.userId);
     const { companyLogoUrl, ...agent } = resolved;
+    const workspaceOn = await getWorkspacePublishListingsPublicly(listing.userId);
+    const indexedPublicListing = canResolveIndexedPublicListing({
+      workspacePublishListingsPublicly: workspaceOn,
+      listingPublishPublicly: listing.publishPublicly,
+      status: listing.status,
+      listingCompliance: listing.listingCompliance,
+    });
 
-    return { listing, agent, companyLogoUrl, shareUrl };
+    return { listing, agent, companyLogoUrl, shareUrl, indexedPublicListing };
   } catch (error) {
     console.error("[public-listing] failed to load agent profile for flyer", {
       listingId: listing.id,

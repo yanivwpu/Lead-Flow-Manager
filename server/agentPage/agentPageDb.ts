@@ -11,7 +11,7 @@ import {
 } from "@shared/schema";
 import { MATCHABLE_INVENTORY_STATUSES } from "@shared/inventory/inventoryListingSchema";
 import { normalizeListingCompliance } from "@shared/inventory/inventoryListingCompliance";
-import { canResolvePublicShareListing } from "@shared/inventory/publicListingPublication";
+import { canResolveIndexedPublicListing } from "@shared/inventory/publicListingPublication";
 import { isProductionDevSeedGuardEnabled } from "@shared/inventory/inventoryDevSeedGuard";
 import {
   EMPTY_AGENT_PAGE_ANALYTICS,
@@ -223,7 +223,7 @@ export async function fetchPublishedListingsForAgentPage(
       listingCompliance: normalizeListingCompliance(row.listingCompliance),
     }))
     .filter((listing) =>
-      canResolvePublicShareListing({
+      canResolveIndexedPublicListing({
         workspacePublishListingsPublicly: true,
         listingPublishPublicly: true,
         status: listing.status,

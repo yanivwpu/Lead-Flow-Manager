@@ -1,10 +1,10 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { z } from "zod";
 import { DEV_SEED_PRODUCTION_BLOCK_MESSAGE } from "@shared/inventory/inventoryDevSeedGuard";
 import { inventoryListingStatusSchema } from "@shared/inventory/inventoryListingSchema";
 import { canUseInventoryConnector, isInventoryConnectorEnabled } from "../inventory/inventoryGate";
 import { isRgeInstalledForUser } from "../buyerPreferenceService";
-import { getInventoryListing, listInventoryListings, setListingPublication } from "../inventory/inventoryDb";
+import { getInventoryListing, listInventoryListings, setListingPublication, getListingDirectShareMeta, createDirectShareLinkForUserListing, getAuthenticatedListingFlyerPreviewData, getInventorySource } from "../inventory/inventoryDb";
 import {
   createInventorySourceBodySchema,
   createSourceForUser,
@@ -17,7 +17,12 @@ import {
   validateSourceConnection,
 } from "../inventory/inventorySourceService";
 import { startInventorySourceSync } from "../inventory/inventorySyncService";
-import { getInventorySource } from "../inventory/inventoryDb";
+import { getRequestOrigin } from "../urlOrigins";
+import {
+  buildPublicListingFlyerHtml,
+  inventoryRowToFlyerListing,
+} from "@shared/inventory/publicListingFlyer";
+import QRCode from "qrcode";
 
 async function requireInventoryAccess(
   userId: string,
@@ -258,10 +263,70 @@ export function registerInventoryRoutes(app: Express): void {
 
       const listing = await getInventoryListing(req.user.id, req.params.id);
       if (!listing) return res.status(404).json({ error: "Listing not found" });
-      res.json({ listing });
+      res.json({ listing, directShare: getListingDirectShareMeta(listing) });
     } catch (error) {
       console.error("[inventory] get listing", error);
       res.status(500).json({ error: "Failed to fetch listing" });
+    }
+  });
+
+  app.get("/api/inventory/listings/:id/flyer-preview", async (req: Request, res: Response) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const gate = await requireInventoryAccess(req.user.id);
+      if (!gate.ok) return res.status(gate.status).json(gate.body);
+
+      const appOrigin = getRequestOrigin(req);
+      const flyerData = await getAuthenticatedListingFlyerPreviewData(
+        req.user.id,
+        req.params.id,
+        appOrigin,
+      );
+      if (!flyerData) return res.status(404).type("text/plain").send("Listing not found");
+
+      const qrDataUrl = await QRCode.toDataURL(flyerData.shareUrl, {
+        margin: 1,
+        width: 320,
+        errorCorrectionLevel: "M",
+      });
+
+      const html = buildPublicListingFlyerHtml({
+        listing: inventoryRowToFlyerListing(flyerData.listing),
+        agent: flyerData.agent,
+        shareUrl: flyerData.shareUrl,
+        qrDataUrl,
+        companyLogoUrl: flyerData.companyLogoUrl,
+        allowStreetAddress: true,
+        allowSearchIndexing: false,
+      });
+      res.type("html").send(html);
+    } catch (error) {
+      console.error("[inventory] flyer preview", error);
+      res.status(500).type("text/plain").send("Preview unavailable");
+    }
+  });
+
+  app.post("/api/inventory/listings/:id/share-link", async (req: Request, res: Response) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const gate = await requireInventoryAccess(req.user.id);
+      if (!gate.ok) return res.status(gate.status).json(gate.body);
+
+      const appOrigin = getRequestOrigin(req);
+      try {
+        const result = await createDirectShareLinkForUserListing(
+          req.user.id,
+          req.params.id,
+          appOrigin,
+        );
+        res.json(result);
+      } catch (shareError) {
+        const message = shareError instanceof Error ? shareError.message : "Share link unavailable";
+        return res.status(400).json({ error: message, code: "direct_share_rejected" });
+      }
+    } catch (error) {
+      console.error("[inventory] share link", error);
+      res.status(500).json({ error: "Failed to create share link" });
     }
   });
 

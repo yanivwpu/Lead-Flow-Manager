@@ -254,10 +254,10 @@ function buildCityStateZip(listing: PublicListingFlyerListing): string {
 /** Mask street address and coordinates when MLS rules disallow address display. */
 export function applyPublicDisplayPermissions(
   listing: PublicListingFlyerListing,
-): { listing: PublicListingFlyerListing; allowStreetAddress: boolean; allowSearchIndexing: boolean } {
+): { listing: PublicListingFlyerListing; allowStreetAddress: boolean } {
   const allowStreetAddress = canShowPublicStreetAddress(listing.listingCompliance);
   if (allowStreetAddress) {
-    return { listing, allowStreetAddress: true, allowSearchIndexing: true };
+    return { listing, allowStreetAddress: true };
   }
   return {
     listing: {
@@ -268,7 +268,6 @@ export function applyPublicDisplayPermissions(
       longitude: null,
     },
     allowStreetAddress: false,
-    allowSearchIndexing: false,
   };
 }
 
@@ -943,7 +942,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   const display = applyPublicDisplayPermissions(rawListing);
   const listing = display.listing;
   const allowStreetAddress = allowStreetOverride ?? display.allowStreetAddress;
-  const allowSearchIndexing = allowIndexOverride ?? display.allowSearchIndexing;
+  const allowSearchIndexing = allowIndexOverride === true;
   const photos = pickFlyerHeroPhotos(parsePhotos(listing.photos));
   const openGraph = buildListingOpenGraphMeta({ listing, agent, shareUrl });
   const structuredDataJson = buildListingStructuredDataJson({ listing, agent, shareUrl });
