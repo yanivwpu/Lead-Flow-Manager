@@ -7,6 +7,7 @@ import {
   buildPublicListingFlyerHtml,
   buildStaticMapImageUrls,
   inventoryRowToFlyerListing,
+  listingHasFlyerMapLocation,
   pickFlyerHeroPhotos,
   renderListingOpenGraphTags,
   resolveDisplayHoaFee,
@@ -18,6 +19,19 @@ import {
 function assert(cond: boolean, msg: string) {
   if (!cond) throw new Error(msg);
 }
+
+const COMPLIANT_MLS = {
+  mlgCanView: true,
+  internetEntireListingDisplay: true,
+  internetDisplay: true,
+  internetAddressDisplay: true,
+  listOfficeName: "Premier Realty",
+  listAgentName: "Pat Seller",
+  mlsSourceName: "mfrmls",
+  mlsListingId: "A1234567",
+  provider: "mls_grid" as const,
+  extractedAt: "2026-01-01T00:00:00.000Z",
+};
 
 const listing = inventoryRowToFlyerListing({
   id: "11111111-1111-1111-1111-111111111111",
@@ -45,6 +59,7 @@ const listing = inventoryRowToFlyerListing({
   status: "active",
   providerListingId: "MLS-12345",
   listingDetails: { pool: true, waterfront: false, view: "City", parkingGarage: "Garage (2)" },
+  listingCompliance: COMPLIANT_MLS,
 });
 
 const html = buildPublicListingFlyerHtml({
@@ -82,7 +97,7 @@ assert(html.includes(">Description<"), "description heading");
 assert(!html.includes("Property Details"), "no property details section");
 assert(!html.includes("Features &amp; amenities"), "no features section");
 assert(!html.includes("Hardwood floors"), "features list removed");
-assert(!html.includes("map-address"), "no duplicate address in map block");
+assert(!html.includes('class="map-address"'), "no duplicate address in map block");
 assert(html.includes("flyer-bottom-row"), "three-column bottom row");
 assert(html.includes("qr-block"), "qr present");
 assert(html.includes("Scan To View Listing"), "qr headline");
@@ -90,11 +105,13 @@ assert(html.includes("Open listing on your phone"), "qr helper text");
 assert(html.includes("hero-img"), "gallery hero");
 assert(html.includes("print-photo-strip"), "print-only secondary photo strip");
 assert(html.includes("cdn.example.com/b.jpg"), "secondary photo in print strip");
-assert(html.includes("map-print-static"), "print static map image");
+assert(html.includes("map-static"), "static map image for screen and print");
 assert(html.includes("data-map-fallbacks"), "print map fallback chain");
 assert(html.includes("staticmap.openstreetmap.de"), "static map url for print");
 assert(html.includes("tile.openstreetmap.org"), "osm tile map fallback");
-assert(html.includes("map-embed-interactive"), "interactive map for screen only");
+assert(html.includes("map-embed-interactive"), "interactive map overlay for screen");
+assert(html.includes("Open in Google Maps"), "google maps link");
+assert(html.includes("map-fallback-placeholder"), "map fallback placeholder");
 assert(html.includes("grid-template-columns: minmax(0, 3fr)"), "30/30/40 bottom grid");
 assert(html.includes("gallery:has(.print-photo-strip) .hero-wrap { height: 3.85in"), "hero trims when strip present");
 assert(html.includes("FOR SALE"), "for sale header label");
@@ -187,6 +204,57 @@ assert(!noPhotoHtml.includes('class="gallery"'), "gallery hidden without photos"
 assert(noPhotoHtml.includes("listing-banner-fallback"), "banner fallback without photos");
 assert(noPhotoHtml.includes("FOR SALE"), "status label without photos");
 assert(noPhotoHtml.includes("qr-block"), "qr still shown without map coords");
+assert(noPhotoHtml.includes("bottom-col-map"), "map column still shown when address exists without coords");
+
+const addressOnlyListing = { ...listing, latitude: null, longitude: null };
+assert(listingHasFlyerMapLocation(addressOnlyListing), "address-only listing has map location");
+const addressOnlyHtml = buildPublicListingFlyerHtml({
+  listing: addressOnlyListing,
+  agent: {
+    name: "Jane Agent",
+    email: "jane@broker.com",
+    phone: "+1 512-555-0100",
+    avatarUrl: null,
+    brokerageName: "Summit Realty",
+    bookingLink: null,
+  },
+  shareUrl: "https://app.example.com/share/listings/x",
+  qrDataUrl: "data:image/png;base64,TEST",
+});
+assert(addressOnlyHtml.includes("bottom-col-map"), "map column for address-only listing");
+assert(addressOnlyHtml.includes("Open in Google Maps"), "google maps for address-only");
+assert(addressOnlyHtml.includes("map-address-only"), "address-only map placeholder");
+
+const previewOverrideHtml = buildPublicListingFlyerHtml({
+  listing: {
+    ...listing,
+    listingCompliance: {
+      mlgCanView: true,
+      internetEntireListingDisplay: true,
+      internetDisplay: true,
+      internetAddressDisplay: false,
+      listOfficeName: "Premier Realty",
+      listAgentName: "Pat Seller",
+      mlsSourceName: "mfrmls",
+      mlsListingId: "A1234567",
+      provider: "mls_grid",
+      extractedAt: "2026-01-01T00:00:00.000Z",
+    },
+  },
+  agent: {
+    name: "Jane Agent",
+    email: null,
+    phone: null,
+    avatarUrl: null,
+    brokerageName: null,
+    bookingLink: null,
+  },
+  shareUrl: "https://app.example.com/share/listings/x",
+  qrDataUrl: "data:image/png;base64,TEST",
+  allowStreetAddress: true,
+});
+assert(previewOverrideHtml.includes("map-static"), "preview override keeps map coords");
+assert(previewOverrideHtml.includes("123 Main St"), "preview override keeps street address");
 
 const onePhotoHtml = buildPublicListingFlyerHtml({
   listing: { ...listing, photos: [{ url: "https://cdn.example.com/only.jpg", order: 0 }] },

@@ -230,6 +230,19 @@ function buildFullAddress(listing: PublicListingFlyerListing): string {
   return [street, cityStateZip].filter(Boolean).join(", ");
 }
 
+function normalizeFlyerCoordinate(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function listingHasFlyerMapLocation(listing: PublicListingFlyerListing): boolean {
+  const lat = normalizeFlyerCoordinate(listing.latitude);
+  const lng = normalizeFlyerCoordinate(listing.longitude);
+  if (lat != null && lng != null) return true;
+  return Boolean(buildFullAddress(listing));
+}
+
 function truncateMetaText(value: string, maxLen: number): string {
   const trimmed = value.trim().replace(/\s+/g, " ");
   if (trimmed.length <= maxLen) return trimmed;
@@ -504,9 +517,9 @@ function buildAgentContactHref(
 }
 
 function buildGoogleMapsUrl(listing: PublicListingFlyerListing): string | null {
-  const lat = listing.latitude;
-  const lng = listing.longitude;
-  if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
+  const lat = normalizeFlyerCoordinate(listing.latitude);
+  const lng = normalizeFlyerCoordinate(listing.longitude);
+  if (lat != null && lng != null) {
     return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
   }
   const address = buildFullAddress(listing);
@@ -527,9 +540,9 @@ function latToTileY(lat: number, zoom: number): number {
 
 /** Print-safe static map URLs — tries providers in order; OSM tile is the final reliable fallback. */
 export function buildStaticMapImageUrls(listing: PublicListingFlyerListing): string[] {
-  const lat = listing.latitude;
-  const lng = listing.longitude;
-  if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+  const lat = normalizeFlyerCoordinate(listing.latitude);
+  const lng = normalizeFlyerCoordinate(listing.longitude);
+  if (lat == null || lng == null) {
     return [];
   }
   const zoom = 14;
@@ -555,23 +568,29 @@ export function buildStaticMapImageUrl(listing: PublicListingFlyerListing): stri
   return buildStaticMapImageUrls(listing)[0] ?? null;
 }
 
+function renderMapFallbackPlaceholder(label = "Map preview"): string {
+  return `<div class="map-fallback-placeholder" aria-hidden="true">${escapeHtml(label)}</div>`;
+}
+
 function renderMapEmbed(listing: PublicListingFlyerListing): string {
-  const lat = listing.latitude;
-  const lng = listing.longitude;
-  if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return "";
+  const lat = normalizeFlyerCoordinate(listing.latitude);
+  const lng = normalizeFlyerCoordinate(listing.longitude);
+  const hasCoords = lat != null && lng != null;
+  if (!hasCoords) {
+    if (!buildFullAddress(listing)) return "";
+    return `<div class="map-embed-wrap map-address-only">${renderMapFallbackPlaceholder("Location map")}</div>`;
   }
   const pad = 0.012;
   const bbox = `${lng - pad},${lat - pad},${lng + pad},${lat + pad}`;
   const embed = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat}%2C${lng}`;
   const staticMapUrls = buildStaticMapImageUrls(listing);
   const staticMap = staticMapUrls.length
-    ? `<img class="map-print-static print-only" src="${escapeHtml(staticMapUrls[0])}" data-map-fallbacks="${escapeHtml(JSON.stringify(staticMapUrls.slice(1)))}" alt="Property location map" />
-      <div class="map-print-placeholder print-only" aria-hidden="true">Map preview</div>`
+    ? `<img class="map-static" src="${escapeHtml(staticMapUrls[0])}" data-map-fallbacks="${escapeHtml(JSON.stringify(staticMapUrls.slice(1)))}" alt="Property location map" />`
     : "";
   return `<div class="map-embed-wrap">
-      <iframe class="map-embed map-embed-interactive" title="Property location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="${escapeHtml(embed)}"></iframe>
       ${staticMap}
+      <iframe class="map-embed map-embed-interactive no-print" title="Property location map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="${escapeHtml(embed)}"></iframe>
+      ${renderMapFallbackPlaceholder()}
     </div>`;
 }
 
@@ -593,7 +612,7 @@ function renderMapColumn(listing: PublicListingFlyerListing): string {
   const mapsBtn = googleUrl
     ? `<a class="btn btn-outline map-btn no-print" href="${escapeHtml(googleUrl)}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>`
     : "";
-  if (!mapEmbed) {
+  if (!mapEmbed && !googleUrl) {
     return `<div class="bottom-col bottom-col-map bottom-col-empty" aria-hidden="true"></div>`;
   }
   return `<div class="bottom-col bottom-col-map">
@@ -630,7 +649,7 @@ function buildFlyerBottomRow(
     ? `<div class="bottom-col bottom-col-agent">${agentCard}</div>`
     : `<div class="bottom-col bottom-col-agent bottom-col-empty" aria-hidden="true"></div>`;
 
-  const hasMap = allowStreetAddress && listing.latitude != null && listing.longitude != null;
+  const hasMap = allowStreetAddress && listingHasFlyerMapLocation(listing);
   const hasQr = Boolean(qrDataUrl);
   const hasAgent = Boolean(agentCard);
   if (!hasMap && !hasQr && !hasAgent) return "";
@@ -920,8 +939,8 @@ export function inventoryRowToFlyerListing(row: {
     city: row.city,
     state: row.state,
     zip: row.zip,
-    latitude: row.latitude,
-    longitude: row.longitude,
+    latitude: normalizeFlyerCoordinate(row.latitude),
+    longitude: normalizeFlyerCoordinate(row.longitude),
     status: row.status,
     providerListingId: row.providerListingId,
     listingDetails: detailsParsed.success ? detailsParsed.data : {},
@@ -939,9 +958,9 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     allowStreetAddress: allowStreetOverride,
     allowSearchIndexing: allowIndexOverride,
   } = input;
-  const display = applyPublicDisplayPermissions(rawListing);
-  const listing = display.listing;
-  const allowStreetAddress = allowStreetOverride ?? display.allowStreetAddress;
+  const mlsDisplay = applyPublicDisplayPermissions(rawListing);
+  const allowStreetAddress = allowStreetOverride ?? mlsDisplay.allowStreetAddress;
+  const listing = allowStreetAddress ? rawListing : mlsDisplay.listing;
   const allowSearchIndexing = allowIndexOverride === true;
   const photos = pickFlyerHeroPhotos(parsePhotos(listing.photos));
   const openGraph = buildListingOpenGraphMeta({ listing, agent, shareUrl });
@@ -1211,6 +1230,15 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       overflow: hidden;
       border: 1px solid var(--border);
     }
+    .map-static {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      display: block;
+    }
     .map-embed {
       position: absolute;
       inset: 0;
@@ -1218,8 +1246,9 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       height: 100%;
       border: 0;
       display: block;
+      z-index: 2;
     }
-    .map-print-placeholder {
+    .map-fallback-placeholder {
       display: none;
       align-items: center;
       justify-content: center;
@@ -1232,6 +1261,19 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.06em;
+      text-align: center;
+      padding: 12px;
+    }
+    .map-embed-wrap.map-address-only .map-fallback-placeholder,
+    .map-embed-wrap.map-failed .map-fallback-placeholder {
+      display: flex;
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }
+    .map-embed-wrap.map-failed .map-static,
+    .map-embed-wrap.map-failed .map-embed-interactive {
+      display: none !important;
     }
     .map-btn { margin-top: 8px; align-self: flex-start; }
     .qr-block {
@@ -1416,15 +1458,15 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
       .bottom-col-empty { display: none !important; }
       .bottom-col-heading { font-size: 7pt; margin-bottom: 4px; }
       .map-embed-interactive { display: none !important; }
-      .map-print-static.print-only {
+      .map-static {
         display: block !important;
         width: 100%;
         height: 100%;
         object-fit: cover;
         object-position: center;
       }
-      .map-embed-wrap.map-failed .map-print-static { display: none !important; }
-      .map-embed-wrap.map-failed .map-print-placeholder {
+      .map-embed-wrap.map-failed .map-static { display: none !important; }
+      .map-embed-wrap.map-failed .map-fallback-placeholder {
         display: flex !important;
         position: absolute;
         inset: 0;
@@ -1523,7 +1565,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
         toast.classList.add("show");
         setTimeout(function () { toast.classList.remove("show"); }, 2600);
       }
-      document.querySelectorAll(".map-print-static").forEach(function (img) {
+      document.querySelectorAll(".map-static").forEach(function (img) {
         var fallbacks = [];
         try { fallbacks = JSON.parse(img.getAttribute("data-map-fallbacks") || "[]"); } catch (e) {}
         var fallbackIndex = 0;
@@ -1533,6 +1575,11 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
             return;
           }
           img.closest(".map-embed-wrap")?.classList.add("map-failed");
+        });
+      });
+      document.querySelectorAll(".map-embed-interactive").forEach(function (frame) {
+        frame.addEventListener("error", function () {
+          frame.closest(".map-embed-wrap")?.classList.add("map-failed");
         });
       });
       document.getElementById("btn-print")?.addEventListener("click", function () { window.print(); });
