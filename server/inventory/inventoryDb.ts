@@ -593,7 +593,6 @@ export async function fetchActiveListingsForMatching(
   const conditions = [
     eq(inventoryListings.userId, userId),
     inArray(inventoryListings.status, [...MATCHABLE_INVENTORY_STATUSES]),
-    publicListingMlsGateSql(),
   ];
   const devSeedExclude = devSeedListingExcludeCondition();
   if (devSeedExclude) conditions.push(devSeedExclude);
@@ -642,7 +641,7 @@ export type AgentShareExclusionCounts = {
   excludedMissingAttribution: number;
 };
 
-/** Per-workspace counts for Inventory Health — why rows are excluded from Copilot matching. */
+/** Per-workspace direct-share diagnostics — informational only; matching is not filtered by this gate. */
 export async function getAgentShareExclusionCountsForUser(
   userId: string,
 ): Promise<AgentShareExclusionCounts> {
@@ -1205,7 +1204,6 @@ export async function fetchActiveListingsWithOpportunityAlerts(
   const conditions = [
     eq(inventoryListings.userId, userId),
     inArray(inventoryListings.status, [...MATCHABLE_INVENTORY_STATUSES]),
-    publicListingMlsGateSql(),
     or(
       eq(inventoryListings.syncAlertStatus, "new"),
       and(

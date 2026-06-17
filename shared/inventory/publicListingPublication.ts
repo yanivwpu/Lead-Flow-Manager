@@ -108,7 +108,7 @@ export function canDirectShareListing(input: DirectShareGateInput): boolean {
   return passesPublicListingMlsGate(input);
 }
 
-/** Copilot matching/cards only surface listings agents can preview and direct-share. */
+/** @deprecated Matching is not filtered by this gate — use canDirectShareListing for share links only. */
 export function isCopilotAgentShareListing(input: DirectShareGateInput): boolean {
   return canDirectShareListing(input);
 }

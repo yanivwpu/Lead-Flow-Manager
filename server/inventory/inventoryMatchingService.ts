@@ -29,6 +29,8 @@ import { readBuyerPreferenceProfile, loadPersistedBuyerPreferenceProfile } from 
 import { storage } from "../storage";
 import { canUseInventoryConnector } from "./inventoryGate";
 import { countActiveListingsForUser, fetchActiveListingsForMatching, getAgentShareExclusionCountsForUser, resolveMatchingListingLimitForUser } from "./inventoryDb";
+import { normalizeListingCompliance } from "@shared/inventory/inventoryListingCompliance";
+import { canDirectShareListing } from "@shared/inventory/publicListingPublication";
 import { listSavedListingIdsForContact } from "./inventorySavedMatchDb";
 
 function parseNumericField(raw: string | number | null | undefined): number | null {
@@ -214,31 +216,6 @@ export async function findMatchingListingsForContact(
   };
   const agentShareEligibleCount = agentShareCounts.agentShareEligible;
 
-  if (agentShareEligibleCount === 0) {
-    return {
-      eligible: true,
-      reason: inventoryCount === 0 ? "no_active_inventory" : "no_agent_share_inventory",
-      profileStatus: profile.profileStatus,
-      inventoryCount,
-      matchCount: 0,
-      matches: [],
-      savedListingIds,
-      diagnostics: buildInventoryMatchDiagnostics({
-        activeInventoryCount: inventoryCount,
-        agentShareEligibleCount,
-        agentShareExclusions,
-        listingsScored: 0,
-        matchesReturned: 0,
-        persistedProfileSnapshot: buildPersistedProfileSnapshotForDiagnostics(profile, criteria),
-        activeFilterSummary,
-        noMatchSummary:
-          inventoryCount === 0
-            ? "No active listings in synced inventory."
-            : "No listings are eligible for agent preview/share in Copilot.",
-      }),
-    };
-  }
-
   let matchingLimit = 1000;
   let rows;
   try {
@@ -272,6 +249,15 @@ export async function findMatchingListingsForContact(
   }
 
   const inputs = rows.map(inventoryListingToMatchInput);
+  const directShareByListingId = new Map(
+    rows.map((row) => [
+      row.id,
+      canDirectShareListing({
+        status: row.status,
+        listingCompliance: normalizeListingCompliance(row.listingCompliance),
+      }),
+    ]),
+  );
   const totalMatchCount = countQualifyingInventoryMatches(inputs, criteria);
   const pageLimit = Math.max(1, Math.min(options?.limit ?? 10, 50));
   const pageOffset = Math.max(0, options?.offset ?? 0);
@@ -298,6 +284,7 @@ export async function findMatchingListingsForContact(
     activeInventoryCount: inventoryCount,
     agentShareEligibleCount,
     agentShareExclusions,
+    directShareByListingId,
     rowsLoadedForScoring: inputs.length,
     matchesReturned: matches.length,
     totalQualifyingMatches: totalMatchCount,

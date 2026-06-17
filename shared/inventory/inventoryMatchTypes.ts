@@ -66,6 +66,7 @@ export const inventoryMatchFunnelExcludedSampleSchema = z.object({
   resolvedType: z.string().nullable(),
   listingTransactionType: z.string().nullable().optional(),
   poolDetected: z.boolean(),
+  directShareAllowed: z.boolean().optional(),
   exclusionReason: z.string().nullable(),
   matched: z.boolean(),
   score: z.number().nullable(),

@@ -59,6 +59,7 @@ export function buildDbInventoryMatchDiagnostics(input: {
   activeInventoryCount: number;
   agentShareEligibleCount: number;
   agentShareExclusions: InventoryAgentShareExclusionCounts;
+  directShareByListingId?: Map<string, boolean>;
   rowsLoadedForScoring: number;
   matchesReturned: number;
   totalQualifyingMatches: number;
@@ -71,7 +72,7 @@ export function buildDbInventoryMatchDiagnostics(input: {
   lastMatchingError?: string | null;
 }): InventoryMatchDiagnostics {
   const inventoryCapTruncated =
-    input.rowsLoadedForScoring < input.agentShareEligibleCount &&
+    input.rowsLoadedForScoring < input.activeInventoryCount &&
     input.rowsLoadedForScoring >= input.matchingFetchLimit;
 
   const funnelExcludedSamples: InventoryMatchFunnelExcludedSample[] =
@@ -87,6 +88,7 @@ export function buildDbInventoryMatchDiagnostics(input: {
       resolvedType: s.resolvedType,
       listingTransactionType: s.listingTransactionType ?? null,
       poolDetected: s.poolDetected,
+      directShareAllowed: input.directShareByListingId?.get(s.listingId),
       exclusionReason: s.exclusionReason,
       matched: s.matched,
       score: s.score,
@@ -137,8 +139,14 @@ export function formatFunnelExcludedSampleLine(sample: InventoryMatchFunnelExclu
   const txn = sample.listingTransactionType ?? "—";
   const reason =
     sample.exclusionReason ?? (sample.matched ? `MATCH score=${sample.score}` : "unknown");
+  const share =
+    sample.directShareAllowed == null
+      ? "share=?"
+      : sample.directShareAllowed
+        ? "share=yes"
+        : "share=no";
   const tag = sample.matched ? "MATCH" : "EXCL";
-  return `${tag} ${sample.providerListingId} · ${sample.address ?? sample.city ?? "—"} · ${price} · ${sample.beds ?? "?"}bd · resolved=${type} rawSub=${rawSub} txn=${txn} · pool=${sample.poolDetected ? "yes" : "no"} · ${reason}`;
+  return `${tag} ${sample.providerListingId} · ${sample.address ?? sample.city ?? "—"} · ${price} · ${sample.beds ?? "?"}bd · resolved=${type} rawSub=${rawSub} txn=${txn} · pool=${sample.poolDetected ? "yes" : "no"} · ${share} · ${reason}`;
 }
 
 export function formatInventoryMatchRunTime(iso: string | null | undefined): string {
