@@ -299,6 +299,7 @@ async function updateExistingInventoryListing(
       features: row.features,
       photos: row.photos,
       listingUrl: row.listingUrl,
+      listingCompliance: row.listingCompliance,
       sourceUpdatedAt: row.sourceUpdatedAt,
       syncAlertStatus,
       previousPriceCents: syncAlertStatus === "price_changed" ? previousPriceCents : existing.previousPriceCents,
@@ -593,6 +594,7 @@ export async function fetchActiveListingsForMatching(
   const conditions = [
     eq(inventoryListings.userId, userId),
     inArray(inventoryListings.status, [...MATCHABLE_INVENTORY_STATUSES]),
+    publicListingMlsGateSql(),
   ];
   const devSeedExclude = devSeedListingExcludeCondition();
   if (devSeedExclude) conditions.push(devSeedExclude);
@@ -641,7 +643,7 @@ export type AgentShareExclusionCounts = {
   excludedMissingAttribution: number;
 };
 
-/** Per-workspace direct-share diagnostics — informational only; matching is not filtered by this gate. */
+/** Per-workspace Copilot pool diagnostics — rows that pass the MLS direct-share gate. */
 export async function getAgentShareExclusionCountsForUser(
   userId: string,
 ): Promise<AgentShareExclusionCounts> {
@@ -1246,6 +1248,6 @@ export async function fetchActiveListingsWithOpportunityAlerts(
   return db
     .select()
     .from(inventoryListings)
-    .where(and(...conditions))
+    .where(and(...conditions, publicListingMlsGateSql()))
     .orderBy(desc(inventoryListings.syncedAt));
 }

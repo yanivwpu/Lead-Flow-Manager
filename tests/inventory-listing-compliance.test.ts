@@ -101,9 +101,18 @@ function testExtraction() {
   const sparse = extractResoListingCompliance(SPARSE_ROW, {
     provider: "bridge_interactive",
     providerListingId: "X1",
+    sourceMlsName: "beaches_mls",
   });
   assert(sparse.listOfficeName == null, "sparse no office");
-  assert(!canRenderPublicListingAttribution(sparse), "sparse blocks attribution");
+  assert(sparse.mlsListingId === "X1", "sparse has listing id fallback");
+  assert(sparse.mlsSourceName === "beaches_mls", "sparse has dataset fallback");
+  assert(!canRenderPublicListingAttribution(sparse), "sparse blocks without list office");
+
+  const officeOnly = extractResoListingCompliance(
+    { ...SPARSE_ROW, ListOfficeName: "Beaches MLS Office" },
+    { provider: "bridge_interactive", providerListingId: "X1", sourceMlsName: "beaches_mls" },
+  );
+  assert(canRenderPublicListingAttribution(officeOnly), "office + mls id + source passes without agent");
   console.log("  extraction: OK");
 }
 
@@ -127,10 +136,10 @@ function testAttributionLines() {
     }),
     presentingBrokerageName: "Summit Realty",
   });
-  assert(lines.some((l) => /Listing courtesy of Premier Realty Group/.test(l)), "courtesy line");
-  assert(lines.some((l) => /MLS# A1234567/.test(l)), "mls id");
-  assert(lines.some((l) => /Data courtesy of mfrmls/.test(l)), "mls source");
-  assert(lines.some((l) => /Presented by Summit Realty/.test(l)), "presenting brokerage");
+  assert(lines.some((l) => l === "Listed By: Premier Realty Group"), "listed by office");
+  assert(lines.some((l) => l === "MLS#: A1234567"), "mls id line");
+  assert(lines.some((l) => /Data Source: mfrmls/.test(l)), "data source line");
+  assert(!lines.some((l) => /Pat Seller/.test(l)), "no agent attribution");
   console.log("  attribution lines: OK");
 }
 
@@ -188,7 +197,9 @@ function testFlyerGating() {
     qrDataUrl: "data:image/png;base64,TEST",
   });
   assert(withData.includes('data-testid="listing-compliance-attribution"'), "attribution rendered when complete");
-  assert(withData.includes("MLS# A1234567"), "mls id on flyer");
+  assert(withData.includes("Listed By: Premier Realty Group"), "listed by on flyer");
+  assert(withData.includes("MLS#: A1234567"), "mls id on flyer");
+  assert(withData.includes("Data Source: mfrmls"), "data source on flyer");
   console.log("  flyer gating: OK");
 }
 

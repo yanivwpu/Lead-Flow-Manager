@@ -67,7 +67,7 @@ export function isListingMissingDisplayPermission(
 }
 
 export const PUBLIC_LISTING_ATTRIBUTION_PUBLISH_ERROR =
-  "Listing cannot be published until MLS attribution data is available. Re-sync inventory or check MLS feed permissions.";
+  "Listing cannot be published until list office, MLS#, and data source are available. Re-sync inventory or check MLS feed permissions.";
 
 /** MLS internet display + attribution + matchable status — shared runtime gate. */
 export function passesPublicListingMlsGate(input: {
@@ -108,7 +108,7 @@ export function canDirectShareListing(input: DirectShareGateInput): boolean {
   return passesPublicListingMlsGate(input);
 }
 
-/** @deprecated Matching is not filtered by this gate — use canDirectShareListing for share links only. */
+/** Copilot matching only surfaces listings agents can direct-share. */
 export function isCopilotAgentShareListing(input: DirectShareGateInput): boolean {
   return canDirectShareListing(input);
 }

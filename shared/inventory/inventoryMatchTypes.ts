@@ -23,6 +23,9 @@ export const inventoryMatchResultSchema = z.object({
   score: z.number().min(0).max(100),
   reasons: z.array(z.string()),
   listing: inventoryMatchListingSummarySchema,
+  /** Verified direct-share URL — present on every Copilot match. */
+  shareUrl: z.string().url().optional(),
+  directShareAllowed: z.boolean().optional(),
 });
 
 export type InventoryMatchResult = z.infer<typeof inventoryMatchResultSchema>;

@@ -228,7 +228,7 @@ export async function generateInventoryMatchDraft(
     options?.priceReductionLabel,
   );
 
-  let viewUrl: string | null = null;
+  let viewUrl: string;
   let publicSlug = listingRow.publicSlug;
   try {
     const share = await createDirectShareLinkForUserListing(
@@ -238,11 +238,12 @@ export async function generateInventoryMatchDraft(
     );
     viewUrl = share.shareUrl;
     publicSlug = share.publicSlug;
-  } catch {
-    viewUrl = null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Share link unavailable";
+    return { error: message, httpStatus: 400 };
   }
 
-  const hasListingUrl = !!viewUrl;
+  const hasListingUrl = true;
   const firstName = contactFirstName(contact);
 
   const aiResult = await generateAiDraft({

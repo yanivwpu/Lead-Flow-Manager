@@ -15,6 +15,10 @@ import {
   inventoryRowToFlyerListing,
 } from "../shared/inventory/publicListingFlyer";
 import { buildListingCanonicalShareUrl } from "../shared/inventory/listingViewUrl";
+import {
+  buildListingComposerMessage,
+  composerDraftHasShareListingUrl,
+} from "../shared/inventory/inventoryComposerDraft";
 import { getListingDirectShareMeta } from "../server/inventory/inventoryDb";
 
 function assert(cond: boolean, msg: string) {
@@ -223,7 +227,7 @@ function testDirectShareSlugUrlResolves() {
   assert(shareUrl === `${origin}/share/listings/${slug}`, "share-link returns slug URL");
   assert(html.includes('content="noindex, nofollow"'), "direct-share public page is noindex");
   assert(html.includes("Bright home."), "flyer content is visible");
-  assert(html.includes("Premier Realty"), "MLS attribution visible on flyer");
+  assert(html.includes("Listed By: Premier Realty"), "MLS attribution visible on flyer");
   console.log("  direct share slug URL resolves with flyer: OK");
 }
 
@@ -242,6 +246,30 @@ function testCopilotAgentShareAlias() {
   console.log("  copilot agent-share alias: OK");
 }
 
+function testCopilotComposerRequiresVerifiedShareUrl() {
+  const listingId = "2e059e00-0846-4f23-a606-cf0812b57bff";
+  const origin = "https://app.example.com";
+  const shareUrl = buildListingCanonicalShareUrl({ listingId, publicSlug: "slug-1" }, origin);
+  const draft = buildListingComposerMessage({
+    listing: {
+      listingId,
+      priceCents: 500_000_00,
+      beds: 3,
+      baths: 2,
+      city: "Pompano Beach",
+      state: "FL",
+      propertyType: "house",
+      listingUrl: null,
+    },
+    contactFirstName: "Susu",
+    viewUrl: shareUrl,
+  });
+  assert(draft.text.includes("View Property Flyer:"), "Copilot draft has flyer line");
+  assert(draft.text.includes(shareUrl), "Copilot draft has verified shareUrl");
+  assert(composerDraftHasShareListingUrl(draft.text), "share URL is canonical server URL");
+  console.log("  copilot composer verified shareUrl: OK");
+}
+
 function main() {
   console.log("listing-direct-share tests");
   testUnpublishedCompliantDirectShare();
@@ -252,6 +280,7 @@ function main() {
   testListingDirectShareMeta();
   testDirectShareSlugUrlResolves();
   testCopilotAgentShareAlias();
+  testCopilotComposerRequiresVerifiedShareUrl();
   console.log("\nAll tests passed.");
 }
 

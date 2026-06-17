@@ -202,17 +202,15 @@ export function normalizeListingCompliance(
   return parsed.success ? parsed.data : {};
 }
 
-/** Minimum data required before showing MLS attribution on public share pages. */
+/** Minimum IDX-style attribution: list office + MLS# + data source (no agent name required). */
 export function canRenderPublicListingAttribution(
   compliance: InventoryListingCompliance | null | undefined,
 ): boolean {
   if (!compliance) return false;
-  const courtesy =
-    (compliance.listOfficeName?.trim().length ?? 0) > 0 ||
-    (compliance.listAgentName?.trim().length ?? 0) > 0;
+  const office = (compliance.listOfficeName?.trim().length ?? 0) > 0;
   const mls = (compliance.mlsSourceName?.trim().length ?? 0) > 0;
   const id = (compliance.mlsListingId?.trim().length ?? 0) > 0;
-  return courtesy && mls && id;
+  return office && mls && id;
 }
 
 export type PublicListingAttributionInput = {
@@ -224,33 +222,16 @@ export type PublicListingAttributionInput = {
 export function buildPublicListingAttributionLines(
   input: PublicListingAttributionInput,
 ): string[] {
-  const { compliance, presentingBrokerageName } = input;
+  const { compliance } = input;
   const lines: string[] = [];
 
   const office = compliance.listOfficeName?.trim();
-  const agent = compliance.listAgentName?.trim();
-  if (office && agent) {
-    lines.push(`Listing courtesy of ${office} — ${agent}`);
-  } else if (office) {
-    lines.push(`Listing courtesy of ${office}`);
-  } else if (agent) {
-    lines.push(`Listing courtesy of ${agent}`);
-  }
-
-  const mls = compliance.mlsSourceName?.trim();
   const mlsId = compliance.mlsListingId?.trim();
-  if (mls && mlsId) {
-    lines.push(`MLS# ${mlsId} — Data courtesy of ${mls}`);
-  } else if (mlsId) {
-    lines.push(`MLS# ${mlsId}`);
-  } else if (mls) {
-    lines.push(`Data courtesy of ${mls}`);
-  }
+  const mls = compliance.mlsSourceName?.trim();
 
-  const brokerage = presentingBrokerageName?.trim();
-  if (brokerage && brokerage !== office) {
-    lines.push(`Presented by ${brokerage}`);
-  }
+  if (office) lines.push(`Listed By: ${office}`);
+  if (mlsId) lines.push(`MLS#: ${mlsId}`);
+  if (mls) lines.push(`Data Source: ${mls}`);
 
   return lines;
 }

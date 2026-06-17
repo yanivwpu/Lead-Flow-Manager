@@ -72,7 +72,7 @@ export function buildDbInventoryMatchDiagnostics(input: {
   lastMatchingError?: string | null;
 }): InventoryMatchDiagnostics {
   const inventoryCapTruncated =
-    input.rowsLoadedForScoring < input.activeInventoryCount &&
+    input.rowsLoadedForScoring < input.agentShareEligibleCount &&
     input.rowsLoadedForScoring >= input.matchingFetchLimit;
 
   const funnelExcludedSamples: InventoryMatchFunnelExcludedSample[] =

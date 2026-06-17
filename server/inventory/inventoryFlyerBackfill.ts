@@ -72,7 +72,7 @@ function devSeedListingExcludeCondition() {
   return sql`${inventoryListings.providerListingId} not like 'dev-seed-%'`;
 }
 
-function canBackfillInventorySource(source: InventorySource, ctx: InventoryAdapterContext): {
+export function canBackfillInventorySource(source: InventorySource, ctx: InventoryAdapterContext): {
   ok: boolean;
   reason?: string;
 } {
@@ -120,7 +120,7 @@ async function resolveResoProvider(
   }
 }
 
-async function fetchResoPropertiesByListingIds(
+export async function fetchResoPropertiesByListingIds(
   ctx: InventoryAdapterContext,
   providerListingIds: string[],
 ): Promise<unknown[]> {

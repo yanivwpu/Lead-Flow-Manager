@@ -17,7 +17,6 @@ import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
 import {
   buildListingComposerMessage,
   listingComposerDraftIncludesRequiredDetails,
-  stripListingShareUrlsFromComposerText,
 } from "@shared/inventory/inventoryComposerDraft";
 import {
   extractListingShareSegmentFromUrl,
@@ -175,8 +174,7 @@ export function ListingDetailDialog({
     primaryPhotoUrl: string | null;
   } | null => {
     if (!listingId) return null;
-    const serverViewUrl =
-      directShare?.allowed && draftData?.viewUrl?.trim() ? draftData.viewUrl.trim() : null;
+    const serverViewUrl = draftData?.viewUrl?.trim() || null;
     const shareSlug =
       listing?.publicSlug?.trim() ||
       (serverViewUrl ? extractListingShareSegmentFromUrl(serverViewUrl) : null);
@@ -196,13 +194,10 @@ export function ListingDetailDialog({
     };
     const fromApi = draftData?.composerDraft?.trim();
     if (fromApi) {
-      let text =
+      const text =
         serverViewUrl && shareSlug
           ? rewriteComposerDraftListingShareUrl(fromApi, listingId, shareSlug, serverViewUrl)
           : fromApi;
-      if (!serverViewUrl) {
-        text = stripListingShareUrlsFromComposerText(text);
-      }
       return {
         text,
         viewUrl: serverViewUrl,
@@ -235,7 +230,6 @@ export function ListingDetailDialog({
     listingPhotos,
     fallback?.thumbnailUrl,
     listing?.publicSlug,
-    directShare?.allowed,
     draftData?.composerDraft,
     draftData?.viewUrl,
     draftData?.draft,

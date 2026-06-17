@@ -28,9 +28,10 @@ import {
 import { readBuyerPreferenceProfile, loadPersistedBuyerPreferenceProfile } from "../buyerPreferenceService";
 import { storage } from "../storage";
 import { canUseInventoryConnector } from "./inventoryGate";
-import { countActiveListingsForUser, fetchActiveListingsForMatching, getAgentShareExclusionCountsForUser, resolveMatchingListingLimitForUser } from "./inventoryDb";
+import { countActiveListingsForUser, createDirectShareLinkForUserListing, fetchActiveListingsForMatching, getAgentShareExclusionCountsForUser, resolveMatchingListingLimitForUser } from "./inventoryDb";
 import { normalizeListingCompliance } from "@shared/inventory/inventoryListingCompliance";
-import { canDirectShareListing } from "@shared/inventory/publicListingPublication";
+import { canDirectShareListing, isCopilotAgentShareListing } from "@shared/inventory/publicListingPublication";
+import { getAppOrigin } from "../urlOrigins";
 import { listSavedListingIdsForContact } from "./inventorySavedMatchDb";
 
 function parseNumericField(raw: string | number | null | undefined): number | null {
@@ -109,7 +110,9 @@ export function inventoryListingToMatchInput(row: InventoryListing): MatchListin
   };
 }
 
-function toPublicMatch(scored: ReturnType<typeof rankInventoryMatches>[number]): InventoryMatchResult {
+function toPublicMatch(
+  scored: Awaited<ReturnType<typeof rankInventoryMatchesPage>>[number],
+): InventoryMatchResult {
   const listing = scored.listing;
   const sortedPhotos = [...listing.photos].sort(
     (a, b) => (a.order ?? 0) - (b.order ?? 0),
@@ -216,6 +219,29 @@ export async function findMatchingListingsForContact(
   };
   const agentShareEligibleCount = agentShareCounts.agentShareEligible;
 
+  if (agentShareEligibleCount === 0) {
+    const profileSnapshot = buildPersistedProfileSnapshotForDiagnostics(profile, criteria);
+    return {
+      eligible: true,
+      reason: "no_shareable_inventory",
+      profileStatus: profile.profileStatus,
+      inventoryCount,
+      matchCount: 0,
+      matches: [],
+      savedListingIds,
+      diagnostics: buildInventoryMatchDiagnostics({
+        activeInventoryCount: inventoryCount,
+        agentShareEligibleCount,
+        agentShareExclusions,
+        listingsScored: 0,
+        matchesReturned: 0,
+        persistedProfileSnapshot: profileSnapshot,
+        activeFilterSummary,
+        noMatchSummary: "No Copilot-shareable listings in synced inventory (MLS compliance).",
+      }),
+    };
+  }
+
   let matchingLimit = 1000;
   let rows;
   try {
@@ -248,7 +274,14 @@ export async function findMatchingListingsForContact(
     };
   }
 
-  const inputs = rows.map(inventoryListingToMatchInput);
+  const inputs = rows
+    .filter((row) =>
+      isCopilotAgentShareListing({
+        status: row.status,
+        listingCompliance: normalizeListingCompliance(row.listingCompliance),
+      }),
+    )
+    .map(inventoryListingToMatchInput);
   const directShareByListingId = new Map(
     rows.map((row) => [
       row.id,
@@ -266,7 +299,32 @@ export async function findMatchingListingsForContact(
     limit: pageLimit,
     shuffleSeed: options?.shuffleSeed,
   });
-  const matches = ranked.map(toPublicMatch);
+  const appOrigin = getAppOrigin();
+  const matches = (
+    await Promise.all(
+      ranked.map(async (scored) => {
+        const base = toPublicMatch(scored);
+        try {
+          const share = await createDirectShareLinkForUserListing(
+            userId,
+            base.listingId,
+            appOrigin,
+          );
+          return {
+            ...base,
+            shareUrl: share.shareUrl,
+            directShareAllowed: true,
+          };
+        } catch (error) {
+          console.warn("[inventory-matches] dropping match without verified share URL", {
+            listingId: base.listingId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return null;
+        }
+      }),
+    )
+  ).filter((m): m is InventoryMatchResult => m != null);
   const funnel = auditBuySearchMatchFunnel(inputs, criteria, { rankLimit: pageLimit, sampleLimit: 20 });
   const profileSnapshot = buildPersistedProfileSnapshotForDiagnostics(profile, criteria);
 

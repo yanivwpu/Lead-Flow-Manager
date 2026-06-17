@@ -21,22 +21,16 @@ export function publicListingMlsGateSql(): SQL {
         and (${lc}->>'mlgCanView')::text = 'true'
       )
     )
-    and (
-      coalesce(${lc}->>'listOfficeName', '') != ''
-      or coalesce(${lc}->>'listAgentName', '') != ''
-    )
+    and coalesce(${lc}->>'listOfficeName', '') != ''
     and coalesce(${lc}->>'mlsSourceName', '') != ''
     and coalesce(${lc}->>'mlsListingId', '') != ''
   `;
 }
 
-/** Listings missing office/agent, MLS source name, or MLS listing id. */
+/** Listings missing list office, MLS source name, or MLS listing id. */
 export function publicListingMissingAttributionSql(): SQL {
   return sql`(
-    (
-      coalesce(${lc}->>'listOfficeName', '') = ''
-      and coalesce(${lc}->>'listAgentName', '') = ''
-    )
+    coalesce(${lc}->>'listOfficeName', '') = ''
     or coalesce(${lc}->>'mlsSourceName', '') = ''
     or coalesce(${lc}->>'mlsListingId', '') = ''
   )`;
