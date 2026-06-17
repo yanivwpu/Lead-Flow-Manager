@@ -8,6 +8,8 @@ import {
   listingIsRentalOrLease,
   listingMatchesRentIntent,
   listingPriceLooksLikeMonthlyRent,
+  listingStoredRentConflictsWithSalePrice,
+  RENT_PRICE_SCALE_MISMATCH,
   resolveBuyerTransactionIntent,
   type BuyerTransactionIntent,
 } from "./listingTransactionIntent";
@@ -834,6 +836,9 @@ export function getListingExclusionReason(
       return "rental/lease listing";
     }
   } else if (criteria.transactionIntent === "rent") {
+    if (listingStoredRentConflictsWithSalePrice(listing)) {
+      return RENT_PRICE_SCALE_MISMATCH;
+    }
     if (listingIsLikelySalePrice(listing.priceCents) && !listingIsRentalOrLease(listing)) {
       return "for-sale listing";
     }

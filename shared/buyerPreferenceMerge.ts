@@ -13,8 +13,10 @@ import {
   stripSfhFromMustHaves,
 } from "./buyerPreferencePropertyTypeRelax";
 import {
+  isPlausibleRentBudgetAmount,
   isPlausibleSaleBudgetAmount,
   isRentIntentEvidence,
+  isSaleScaleBudgetAmount,
 } from "./buyerRentIntent";
 import {
   clearStaleSoftAreas,
@@ -195,10 +197,18 @@ export function stripConflictingSalePreferences(
   profile: BuyerPreferenceProfile,
   incomingPatch?: BuyerPreferenceExtractionPatch,
 ): void {
-  if (typeof profile.priceMin?.value === "number" && isPlausibleSaleBudgetAmount(profile.priceMin.value)) {
+  if (
+    typeof profile.priceMin?.value === "number" &&
+    isSaleScaleBudgetAmount(profile.priceMin.value) &&
+    !isPlausibleRentBudgetAmount(profile.priceMin.value)
+  ) {
     delete profile.priceMin;
   }
-  if (typeof profile.priceMax?.value === "number" && isPlausibleSaleBudgetAmount(profile.priceMax.value)) {
+  if (
+    typeof profile.priceMax?.value === "number" &&
+    isSaleScaleBudgetAmount(profile.priceMax.value) &&
+    !isPlausibleRentBudgetAmount(profile.priceMax.value)
+  ) {
     delete profile.priceMax;
   }
 

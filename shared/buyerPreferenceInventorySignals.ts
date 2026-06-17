@@ -77,6 +77,9 @@ export function hasStrongStructuredSearchSignals(text: string): boolean {
   if (hasIntent && criteriaCount >= 1) return true;
   if (hasBudget && (hasBeds || hasType)) return true;
   if (criteriaCount >= 2 && (hasBeds || hasBudget)) return true;
+  if (hasBudget && /\b(?:can you find|find (?:me )?|up\s+to|under)\b/i.test(t)) {
+    return true;
+  }
   return false;
 }
 

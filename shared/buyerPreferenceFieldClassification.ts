@@ -69,20 +69,22 @@ export function filterSoftMustHaves(
 
 /**
  * On full replacement, drop stale soft areas from profile when new cities are specified.
+ * Cities from the incoming patch are preserved; soft proximity prefs live in mustHaves.
  */
 export function clearStaleSoftAreas(
   profile: BuyerPreferenceProfile,
   patch: BuyerPreferenceExtractionPatch,
 ): void {
-  const incomingAreas = patch.targetAreas?.value ?? [];
-  const hasIncomingCity = incomingAreas.some((a) => !isAreaSpecificSoftArea(String(a)));
+  const incomingAreas = (patch.targetAreas?.value ?? []).filter(
+    (a) => !isAreaSpecificSoftArea(String(a)),
+  );
+  const hasIncomingCity = incomingAreas.length > 0;
   if (!hasIncomingCity) return;
 
   if (profile.targetAreas?.value?.length) {
     const kept = profile.targetAreas.value.filter((a) => {
       const s = String(a).trim();
-      if (!s) return false;
-      if (isAreaSpecificSoftArea(s)) return false;
+      if (!s || isAreaSpecificSoftArea(s)) return false;
       return incomingAreas.some((inc) => inc.toLowerCase() === s.toLowerCase());
     });
     if (kept.length > 0) {
@@ -92,7 +94,7 @@ export function clearStaleSoftAreas(
     }
   }
 
-  if (patch.geoConstraints === undefined && profile.geoConstraints) {
+  if (patch.geoConstraints === undefined && patch.mustHaves === undefined && profile.geoConstraints) {
     delete profile.geoConstraints;
   }
 }

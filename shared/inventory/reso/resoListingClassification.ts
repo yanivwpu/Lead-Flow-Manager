@@ -338,6 +338,14 @@ export function renormalizeStoredListingFields(input: StoredListingRenormalizeIn
     else if (/\bfor[\s_]?sale\b/.test(hay)) listingTransactionType = "sale";
   }
 
+  if (
+    listingTransactionType === "rent" &&
+    input.priceCents != null &&
+    input.priceCents / 100 >= 100_000
+  ) {
+    listingTransactionType = "sale";
+  }
+
   let pool: boolean | null = input.listingDetails?.pool ?? null;
   if (pool == null) {
     for (const raw of input.features ?? []) {

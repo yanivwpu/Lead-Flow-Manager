@@ -66,15 +66,15 @@ assert(!budgetLabel?.includes("3,400"), "chip does not show old rent cap");
 const beachPatch = heuristicPatchFromInboundText("Close to the beach");
 assert(beachPatch.transactionIntent == null, "beach follow-up does not set intent");
 assert(
-  beachPatch.targetAreas?.value?.some((a) => /close to beach/i.test(a)),
-  "beach proximity captured as area",
+  beachPatch.mustHaves?.value?.some((a) => /close to beach/i.test(a)),
+  "beach proximity captured as soft preference",
 );
 
 const afterBeach = mergeBuyerPreferenceProfile(buyProfile, beachPatch);
 assert(afterBeach.transactionIntent?.value === "buy", "buy intent preserved after beach");
 assert(
-  afterBeach.targetAreas?.value?.some((a) => /close to beach/i.test(a)),
-  "beach area merged",
+  afterBeach.mustHaves?.value?.some((a) => /close to beach/i.test(a)),
+  "beach soft preference merged",
 );
 
 const criteria = extractBuyerMatchCriteria(afterBeach);

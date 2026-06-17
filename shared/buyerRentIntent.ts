@@ -11,6 +11,11 @@ export function isPlausibleSaleBudgetAmount(n: number): boolean {
   return Number.isFinite(n) && n >= 10_000;
 }
 
+/** Six-figure+ caps — sale list prices, not monthly rent refinements like $10k/mo. */
+export function isSaleScaleBudgetAmount(n: number): boolean {
+  return Number.isFinite(n) && n >= 100_000;
+}
+
 export function hasRentBudgetInPatch(patch: BuyerPreferenceExtractionPatch): boolean {
   const min = patch.priceMin?.value;
   const max = patch.priceMax?.value;
@@ -54,10 +59,10 @@ export function isRentIntentEvidence(evidence: string | undefined): boolean {
 
 export function profileLooksLikeBuySearch(profile: BuyerPreferenceProfile): boolean {
   if (profile.transactionIntent?.value === "buy") return true;
-  if (typeof profile.priceMax?.value === "number" && isPlausibleSaleBudgetAmount(profile.priceMax.value)) {
+  if (typeof profile.priceMax?.value === "number" && isSaleScaleBudgetAmount(profile.priceMax.value)) {
     return true;
   }
-  if (typeof profile.priceMin?.value === "number" && isPlausibleSaleBudgetAmount(profile.priceMin.value)) {
+  if (typeof profile.priceMin?.value === "number" && isSaleScaleBudgetAmount(profile.priceMin.value)) {
     return true;
   }
   return false;
@@ -98,8 +103,8 @@ export function isBuyToRentPivotReplacement(
 export function hasSaleBudgetInPatch(patch: BuyerPreferenceExtractionPatch): boolean {
   const min = patch.priceMin?.value;
   const max = patch.priceMax?.value;
-  if (typeof min === "number" && isPlausibleSaleBudgetAmount(min)) return true;
-  if (typeof max === "number" && isPlausibleSaleBudgetAmount(max)) return true;
+  if (typeof min === "number" && isSaleScaleBudgetAmount(min)) return true;
+  if (typeof max === "number" && isSaleScaleBudgetAmount(max)) return true;
   return false;
 }
 
@@ -113,6 +118,13 @@ export function isRentToBuyPivot(
   if (patch.transactionIntent?.value === "rent" || inferRentIntentFromMessage(text, patch)) {
     return false;
   }
+  const lower = text.toLowerCase();
+  const rentBudgetRefine =
+    hasRentBudgetInPatch(patch) &&
+    !hasSaleBudgetInPatch(patch) &&
+    /\b(?:up\s+to|under|max)\b/i.test(lower) &&
+    !/\b(homes?\s+for\s+sale|for\s+sale|buy(?:ing)?|purchase|cash buyer)\b/i.test(lower);
+  if (rentBudgetRefine) return false;
   const buyIncoming =
     patch.transactionIntent?.value === "buy" ||
     hasSaleBudgetInPatch(patch) ||

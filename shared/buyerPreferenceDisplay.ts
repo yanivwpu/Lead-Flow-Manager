@@ -133,10 +133,12 @@ function dedupeChips(chips: BuyerPreferenceChip[]): BuyerPreferenceChip[] {
 }
 
 const PROFILE_FIELD_KEYS = [
+  "transactionIntent",
   "targetAreas",
   "priceMin",
   "priceMax",
   "bedsMin",
+  "bedsMax",
   "bathsMin",
   "propertyTypes",
   "timeline",
@@ -192,6 +194,19 @@ export function buildBuyerPreferenceChips(
   const profile = normalizeForDisplay(raw);
   const chips: BuyerPreferenceChip[] = [];
 
+  if (
+    profile.transactionIntent &&
+    profile.transactionIntent.confidence >= 0.45 &&
+    (profile.transactionIntent.value === "rent" || profile.transactionIntent.value === "buy")
+  ) {
+    chips.push({
+      id: "transactionIntent",
+      label: "Intent",
+      value: profile.transactionIntent.value === "rent" ? "Rent" : "Buy",
+      source: profile.transactionIntent.source,
+    });
+  }
+
   if (profile.geoConstraints && profile.geoConstraints.confidence >= 0.45) {
     for (const constraint of (profile.geoConstraints.value || []).slice(0, 4)) {
       chips.push({
@@ -215,6 +230,19 @@ export function buildBuyerPreferenceChips(
         label: "Area",
         value: formatted,
         source: profile.targetAreas.source,
+      });
+    }
+  }
+
+  if (profile.mustHaves && profile.mustHaves.confidence >= 0.45) {
+    for (const raw of (profile.mustHaves.value || []).map(String).map((s) => s.trim()).filter(Boolean)) {
+      if (!isAreaSpecificSoftArea(raw)) continue;
+      const formatted = formatArea(raw);
+      chips.push({
+        id: `soft-area:${formatted.toLowerCase()}`,
+        label: "Area",
+        value: formatted,
+        source: profile.mustHaves.source,
       });
     }
   }

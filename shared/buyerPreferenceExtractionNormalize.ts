@@ -17,6 +17,7 @@ import {
 } from "./buyerPreferencePropertyTypeRelax";
 import { parseGeoConstraintsFromText } from "./inventory/buyerGeoConstraints";
 import { inferRentIntentFromMessage, messageClearsAreaFilters } from "./buyerRentIntent";
+import { isAreaSpecificSoftArea } from "./buyerPreferenceFieldClassification";
 
 const PATCH_FIELD_KEYS = [
   "targetAreas",
@@ -207,11 +208,24 @@ function extractAreasFromText(text: string, lower: string): string[] {
   const brickell = lower.match(/\bbrickell\b/);
   if (brickell) addArea("Brickell");
 
-  if (/\b(?:close to|near|walking distance to)\s+(?:the\s+)?beach\b/i.test(lower)) {
-    addArea("Close to beach");
-  }
+  return areaHits.filter((a) => !isAreaSpecificSoftArea(a)).slice(0, 6);
+}
 
-  return areaHits.slice(0, 6);
+/** Proximity / lifestyle area phrases — soft prefs, not city search footprints. */
+export function extractSoftAreaPreferencesFromText(lower: string): string[] {
+  const out: string[] = [];
+  const add = (label: string) => {
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    if (!out.some((a) => a.toLowerCase() === trimmed.toLowerCase())) out.push(trimmed);
+  };
+
+  if (/\b(?:close to|near|walking distance to)\s+(?:the\s+)?beach\b/i.test(lower)) {
+    add("Close to beach");
+  }
+  if (/\bold\s+pompano\b/i.test(lower)) add("Old Pompano");
+
+  return out;
 }
 
 function normalizeTimelineValue(v: unknown): "asap" | "30d" | "60_90d" | "browsing" | "unknown" | undefined {
@@ -559,6 +573,13 @@ export function heuristicPatchFromTranscript(
   }
   if (areaHits.length) {
     patch.targetAreas = { value: areaHits, ...inf(0.8, "area in message") };
+  }
+
+  const softAreaPrefs = extractSoftAreaPreferencesFromText(lower);
+  if (softAreaPrefs.length) {
+    const priorMustHaves = patch.mustHaves?.value ?? [];
+    const mergedMustHaves = [...new Set([...priorMustHaves, ...softAreaPrefs])];
+    patch.mustHaves = { value: mergedMustHaves, ...inf(0.85, "soft area preference in message") };
   }
 
   const bedBathSlash = lower.match(/(\d+)\s*\/\s*(\d+(?:\.\d+)?)/);

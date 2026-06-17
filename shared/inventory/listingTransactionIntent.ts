@@ -38,7 +38,44 @@ export function listingHaystackForTransaction(listing: ListingTransactionInput):
     .toLowerCase();
 }
 
+export const RENT_PRICE_SCALE_MISMATCH = "RENT_PRICE_SCALE_MISMATCH";
+
+/** Max plausible monthly rent in dollars — above this without lease fields is sale-scale. */
+export const REASONABLE_MAX_MONTHLY_RENT_DOLLARS = 50_000;
+
+function listingDetailsRecord(
+  listing: ListingTransactionInput,
+): Record<string, unknown> | null {
+  const details = listing.listingDetails;
+  if (!details || typeof details !== "object") return null;
+  return details as Record<string, unknown>;
+}
+
+/** Explicit lease/rent amount on listing details (not list-price alone). */
+export function listingHasExplicitRentAmount(listing: ListingTransactionInput): boolean {
+  const details = listingDetailsRecord(listing);
+  if (!details) return false;
+  for (const key of ["leaseAmount", "rentAmount", "monthlyRent", "totalActualRent"]) {
+    const v = details[key];
+    if (typeof v === "number" && Number.isFinite(v) && v > 0 && v <= REASONABLE_MAX_MONTHLY_RENT_DOLLARS) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Stored rent classification conflicts with sale-scale list price and no lease/rent amount.
+ * Used to exclude misclassified MLS rows from rental matching.
+ */
+export function listingStoredRentConflictsWithSalePrice(listing: ListingTransactionInput): boolean {
+  if (storedListingTransactionType(listing) !== "rent") return false;
+  if (listingHasExplicitRentAmount(listing)) return false;
+  return listingIsLikelySalePrice(listing.priceCents);
+}
+
 export function listingIsRentalOrLease(listing: ListingTransactionInput): boolean {
+  if (listingStoredRentConflictsWithSalePrice(listing)) return false;
   const stored = storedListingTransactionType(listing);
   if (stored === "sale") return false;
   if (stored === "rent") return true;
