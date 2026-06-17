@@ -28,6 +28,9 @@ export function describeActiveSearchFilters(
   if (c.areas.length) {
     parts.push(`Areas: ${c.areas.slice(0, 3).join("; ")}`);
   }
+  if (c.softGeoPreferences.length) {
+    parts.push(`Geo prefs: ${c.softGeoPreferences.slice(0, 2).join("; ")}`);
+  }
   if (c.geoConstraints.length) {
     parts.push(`Geo: ${c.geoConstraints.length} constraint(s)`);
   }
@@ -77,6 +80,7 @@ export function buildPersistedProfileSnapshotForDiagnostics(
   bedsMax: number | null;
   propertyTypes: string[];
   areas: string[];
+  geoPreferences: string[];
   hardRequirePool: boolean;
   transactionIntent: string;
 } {
@@ -90,6 +94,7 @@ export function buildPersistedProfileSnapshotForDiagnostics(
     bedsMax: c.bedsMax ?? null,
     propertyTypes: c.propertyTypes,
     areas: c.areas,
+    geoPreferences: c.softGeoPreferences,
     hardRequirePool: c.hardRequirePool,
     transactionIntent: c.transactionIntent,
   };
@@ -107,6 +112,7 @@ export function snapshotProfileTraceFields(profile: BuyerPreferenceProfile) {
     hardRequirePool: c.hardRequirePool,
     propertyTypes: c.propertyTypes,
     areas: c.areas,
+    geoPreferences: c.softGeoPreferences,
     transactionIntent: c.transactionIntent,
   };
 }

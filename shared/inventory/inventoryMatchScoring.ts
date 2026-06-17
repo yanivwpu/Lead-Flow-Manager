@@ -1,4 +1,5 @@
 import type { BuyerGeoConstraint, BuyerPreferenceProfile } from "../buyerPreferenceSchema";
+import { isAreaSpecificSoftArea } from "../buyerPreferenceFieldClassification";
 import type { InventoryListingDetails } from "./inventoryListingSchema";
 import { parseSqftMinFromProfile, parseSqftMaxFromProfile } from "../buyerQualification";
 import { resolveMatchingBudgetBounds } from "../buyerPreferenceBudget";
@@ -46,6 +47,7 @@ export type BuyerMatchCriteria = {
   propertyTypes: string[];
   transactionIntent: BuyerTransactionIntent;
   mustHaves: string[];
+  softGeoPreferences: string[];
   dealBreakers: string[];
   financingStatus: string | null;
   sqftMin: number | null;
@@ -219,7 +221,16 @@ export function extractBuyerMatchCriteria(profile: BuyerPreferenceProfile): Buye
   const propertyTypes = (fieldValue<string[]>(profile, "propertyTypes") ?? []).map(
     (t) => normalizeListingPropertyType(t) ?? t,
   );
-  const mustHaves = fieldValue<string[]>(profile, "mustHaves") ?? [];
+  const rawMustHaves = fieldValue<string[]>(profile, "mustHaves") ?? [];
+  const geoPreferences = fieldValue<string[]>(profile, "geoPreferences") ?? [];
+  const softGeoPreferences = [
+    ...geoPreferences,
+    ...rawMustHaves.filter((m) => isAreaSpecificSoftArea(String(m))),
+  ]
+    .map((s) => String(s).trim())
+    .filter(Boolean)
+    .filter((v, i, arr) => arr.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i);
+  const mustHaves = rawMustHaves.filter((m) => !isAreaSpecificSoftArea(String(m)));
   const dealBreakers = fieldValue<string[]>(profile, "dealBreakers") ?? [];
   const financingStatus = fieldValue<string>(profile, "financingStatus");
   const sqftMin = parseSqftMinFromProfile(profile);
@@ -255,6 +266,7 @@ export function extractBuyerMatchCriteria(profile: BuyerPreferenceProfile): Buye
     bathsMin != null ||
     propertyTypes.length > 0 ||
     mustHaves.length > 0 ||
+    softGeoPreferences.length > 0 ||
     dealBreakers.length > 0 ||
     financingStatus != null ||
     sqftMin != null ||
@@ -273,6 +285,7 @@ export function extractBuyerMatchCriteria(profile: BuyerPreferenceProfile): Buye
     propertyTypes,
     transactionIntent,
     mustHaves,
+    softGeoPreferences,
     dealBreakers,
     financingStatus,
     sqftMin,
@@ -431,6 +444,32 @@ function areaMatchScore(
     }
   }
   return { points: 0, max: 30, reasons: [] };
+}
+
+/** Boost listings that match proximity prefs (beach, etc.) — never a hard gate. */
+function softGeoPreferenceScore(
+  listing: MatchListingInput,
+  prefs: string[],
+): { points: number; max: number; reasons: string[] } {
+  if (prefs.length === 0) return { points: 0, max: 0, reasons: [] };
+  const hay = listingHaystack(listing);
+  const max = 10;
+  for (const pref of prefs) {
+    const p = normalizeText(pref);
+    if (!p) continue;
+    if (/\b(close to beach|near beach|beach)\b/.test(p)) {
+      if (/\bbeach(?:front)?\b/.test(hay) || /\bocean\b/.test(hay) || /\bwaterfront\b/.test(hay)) {
+        return { points: 8, max, reasons: ["Close to beach preference"] };
+      }
+      if (/\bbeach\b/.test(normalizeText(listing.city ?? ""))) {
+        return { points: 5, max, reasons: ["Beach city preference"] };
+      }
+    }
+    if (hay.includes(p)) {
+      return { points: 6, max, reasons: ["Matches geo preference"] };
+    }
+  }
+  return { points: 0, max, reasons: [] };
 }
 
 function priceMatchScore(
@@ -641,6 +680,7 @@ export function scoreListingAgainstCriteria(
   if (!passesHardGates(listing, criteria)) return null;
 
   const area = areaMatchScore(listing, criteria.areas);
+  const softGeo = softGeoPreferenceScore(listing, criteria.softGeoPreferences);
   const price = priceMatchScore(listing.priceCents, criteria.priceMin, criteria.priceMax);
   const pType = propertyTypeScore(listing, criteria.propertyTypes);
   const bedsBaths = bedsBathsScore(listing, criteria.bedsMin, criteria.bedsMax, criteria.bathsMin);
@@ -652,6 +692,7 @@ export function scoreListingAgainstCriteria(
 
   const earned =
     area.points +
+    softGeo.points +
     price.points +
     pType.points +
     bedsBaths.points +
@@ -662,6 +703,7 @@ export function scoreListingAgainstCriteria(
     financing.points;
   const possible =
     area.max +
+    softGeo.max +
     price.max +
     pType.max +
     bedsBaths.max +
@@ -682,6 +724,7 @@ export function scoreListingAgainstCriteria(
   const reasons = filterReasonsToVerifiedListingFacts(
     [
       ...area.reasons,
+      ...softGeo.reasons,
       ...price.reasons,
       ...pType.reasons,
       ...bedsBaths.reasons,

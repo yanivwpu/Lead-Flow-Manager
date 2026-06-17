@@ -44,6 +44,7 @@ const PATCH_FIELD_KEYS = [
   "mustHaves",
   "dealBreakers",
   "geoConstraints",
+  "geoPreferences",
 ] as const;
 
 function nowIso(): string {
@@ -182,7 +183,10 @@ function extractAreasFromText(text: string, lower: string): string[] {
   };
 
   for (const { pattern, label } of KNOWN_SOUTH_FLORIDA_AREAS) {
-    const inContext = new RegExp(`\\b(?:in|near|around)\\s+(?:${pattern.source})\\b`, "i").test(text);
+    const inContext = new RegExp(
+      `\\b(?:in|near|around)\\s+(?:the\\s+)?(?:${pattern.source})(?:\\s+area)?\\b`,
+      "i",
+    ).test(text);
     if (inContext) addArea(label);
   }
 
@@ -196,7 +200,7 @@ function extractAreasFromText(text: string, lower: string): string[] {
 
   if (areaHits.length === 0) {
     for (const m of text.matchAll(
-      /\b(?:in|near|around)\s+([A-Za-z][A-Za-z\s-]{0,40}?)(?=\s+(?:with|and|between|up to|under|max|who|that|which|for|,|\.|$)|$)/gi,
+      /\b(?:in|near|around)\s+(?:the\s+)?([A-Za-z][A-Za-z\s-]{0,40}?)(?=\s+(?:with|and|between|up to|under|max|who|that|which|for|,|\.|$)|$)/gi,
     )) {
       const raw = m[1]?.trim() || "";
       const known = canonicalKnownAreaLabel(raw);
@@ -207,6 +211,12 @@ function extractAreasFromText(text: string, lower: string): string[] {
 
   const brickell = lower.match(/\bbrickell\b/);
   if (brickell) addArea("Brickell");
+
+  for (const { pattern, label } of KNOWN_SOUTH_FLORIDA_AREAS) {
+    if (pattern.test(text) && !areaHits.some((a) => a.toLowerCase() === label.toLowerCase())) {
+      addArea(label);
+    }
+  }
 
   return areaHits.filter((a) => !isAreaSpecificSoftArea(a)).slice(0, 6);
 }
@@ -430,7 +440,7 @@ function normalizeFieldEntry(
     return toFieldObject(parsed, { evidence: "geo constraint mentioned" });
   }
 
-  if (key === "mustHaves" || key === "dealBreakers") {
+  if (key === "mustHaves" || key === "dealBreakers" || key === "geoPreferences") {
     let items: string[] = [];
     if (Array.isArray(raw)) items = raw.map(String);
     else if (typeof raw === "string") items = raw.split(/[,;]/).map((s) => s.trim());
@@ -577,9 +587,7 @@ export function heuristicPatchFromTranscript(
 
   const softAreaPrefs = extractSoftAreaPreferencesFromText(lower);
   if (softAreaPrefs.length) {
-    const priorMustHaves = patch.mustHaves?.value ?? [];
-    const mergedMustHaves = [...new Set([...priorMustHaves, ...softAreaPrefs])];
-    patch.mustHaves = { value: mergedMustHaves, ...inf(0.85, "soft area preference in message") };
+    patch.geoPreferences = { value: softAreaPrefs, ...inf(0.85, "geo preference in message") };
   }
 
   const bedBathSlash = lower.match(/(\d+)\s*\/\s*(\d+(?:\.\d+)?)/);

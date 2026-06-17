@@ -404,6 +404,10 @@ export function stripStaleHardGatesFromPatch(
     delete patch.geoConstraints;
   }
 
+  if (currentMessagePatch.geoPreferences === undefined) {
+    delete patch.geoPreferences;
+  }
+
   if (currentMessagePatch.dealBreakers === undefined) {
     delete patch.dealBreakers;
   }
@@ -439,7 +443,7 @@ function applyPatchField<K extends keyof BuyerPreferenceExtractionPatch>(
     return;
   }
 
-  if (key === "targetAreas" || key === "propertyTypes" || key === "mustHaves" || key === "dealBreakers") {
+  if (key === "targetAreas" || key === "propertyTypes" || key === "mustHaves" || key === "dealBreakers" || key === "geoPreferences") {
     const cur = profile[key] as PreferenceField<string[]> | undefined;
     const incomingField = incoming as PreferenceField<string[]>;
     const explicitIncomingPropertyType =
@@ -533,6 +537,7 @@ const PATCH_KEYS: (keyof BuyerPreferenceExtractionPatch)[] = [
   "mustHaves",
   "dealBreakers",
   "geoConstraints",
+  "geoPreferences",
 ];
 
 export function mergeBuyerPreferenceProfile(

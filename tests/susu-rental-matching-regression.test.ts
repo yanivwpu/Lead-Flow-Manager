@@ -88,8 +88,8 @@ async function main() {
     "city in targetAreas",
   );
   assert(
-    patch1.mustHaves?.value?.some((a) => /close to beach/i.test(a)),
-    "close to beach in soft mustHaves",
+    patch1.geoPreferences?.value?.some((a) => /close to beach/i.test(a)),
+    "close to beach in geoPreferences",
   );
   assert(
     !patch1.targetAreas?.value?.some((a) => /close to beach/i.test(a)),
@@ -135,8 +135,8 @@ async function main() {
       `saved areas include Pompano (got ${db1!.targetAreas?.value?.join()})`,
     );
     assert(
-      db1!.mustHaves?.value?.some((a) => /close to beach/i.test(a)),
-      "saved soft pref close to beach",
+      db1!.geoPreferences?.value?.some((a) => /close to beach/i.test(a)),
+      "saved geo preference close to beach",
     );
 
     const chips1 = buildBuyerPreferenceSearchChips(db1!);
@@ -166,7 +166,7 @@ async function main() {
     assert.equal(db2!.bathsMin?.value, 2);
     assert(db2!.propertyTypes?.value?.includes("house"));
     assert(db2!.targetAreas?.value?.some((a) => /pompano beach/i.test(a)));
-    assert(db2!.mustHaves?.value?.some((a) => /close to beach/i.test(a)));
+    assert(db2!.geoPreferences?.value?.some((a) => /close to beach/i.test(a)));
 
     const command2 = parseBuyerSearchCommand(MSG2, db1!);
     const merged2 = mergeBuyerPreferenceProfile(db1!, command2.patch, {

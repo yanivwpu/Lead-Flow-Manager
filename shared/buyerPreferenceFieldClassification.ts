@@ -94,7 +94,11 @@ export function clearStaleSoftAreas(
     }
   }
 
-  if (patch.geoConstraints === undefined && patch.mustHaves === undefined && profile.geoConstraints) {
+  if (patch.geoConstraints === undefined && patch.mustHaves === undefined && patch.geoPreferences === undefined && profile.geoConstraints) {
     delete profile.geoConstraints;
+  }
+
+  if (patch.geoPreferences === undefined && profile.geoPreferences?.value?.length) {
+    delete profile.geoPreferences;
   }
 }

@@ -92,6 +92,7 @@ function chipSemanticKey(chip: BuyerPreferenceChip): string | null {
   if (!v) return null;
 
   if (chip.id.startsWith("area:")) return `area:${v}`;
+  if (chip.id.startsWith("geo-pref:") || chip.id.startsWith("soft-area:")) return `geo-pref:${v}`;
   if (chip.id === "budget") return "budget";
   if (chip.id === "propertyTypes") return `type:${v}`;
   if (chip.id === "beds") return `beds:${v.replace(/\s+/g, "")}`;
@@ -146,6 +147,7 @@ const PROFILE_FIELD_KEYS = [
   "mustHaves",
   "dealBreakers",
   "geoConstraints",
+  "geoPreferences",
   "pool",
   "waterfront",
   "modernStyle",
@@ -234,12 +236,22 @@ export function buildBuyerPreferenceChips(
     }
   }
 
-  if (profile.mustHaves && profile.mustHaves.confidence >= 0.45) {
+  if (profile.geoPreferences && profile.geoPreferences.confidence >= 0.45) {
+    for (const raw of (profile.geoPreferences.value || []).map(String).map((s) => s.trim()).filter(Boolean)) {
+      const formatted = formatArea(raw);
+      chips.push({
+        id: `geo-pref:${formatted.toLowerCase()}`,
+        label: "Area",
+        value: formatted,
+        source: profile.geoPreferences.source,
+      });
+    }
+  } else if (profile.mustHaves && profile.mustHaves.confidence >= 0.45) {
     for (const raw of (profile.mustHaves.value || []).map(String).map((s) => s.trim()).filter(Boolean)) {
       if (!isAreaSpecificSoftArea(raw)) continue;
       const formatted = formatArea(raw);
       chips.push({
-        id: `soft-area:${formatted.toLowerCase()}`,
+        id: `geo-pref:${formatted.toLowerCase()}`,
         label: "Area",
         value: formatted,
         source: profile.mustHaves.source,
@@ -337,6 +349,7 @@ export function buildBuyerPreferenceChips(
     for (const item of items.slice(0, 8)) {
       const lower = item.toLowerCase();
       if (MUST_HAVE_FEATURE_ALIASES[lower]) continue;
+      if (isAreaSpecificSoftArea(item)) continue;
       chips.push({
         id: `mh:${lower}`,
         label: "Must-have",

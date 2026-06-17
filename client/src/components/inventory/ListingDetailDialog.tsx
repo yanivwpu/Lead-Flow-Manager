@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Home, Link2, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
 } from "@shared/inventory/inventoryComposerDraft";
 import {
   pickPrimaryPhotoUrl,
+  resolveListingViewUrl,
 } from "@shared/inventory/listingViewUrl";
 
 /** Replace stale UUID share links in API draft text when a slug is available. */
@@ -109,7 +110,6 @@ export function ListingDetailDialog({
 }: ListingDetailDialogProps) {
   const { toast } = useToast();
   const [draftKey, setDraftKey] = useState("");
-  const [sharing, setSharing] = useState(false);
 
   const { data: listingData, isLoading: listingLoading } = useQuery({
     queryKey: ["/api/inventory/listings", listingId],
@@ -186,7 +186,11 @@ export function ListingDetailDialog({
       thumbnailUrl: fallback?.thumbnailUrl ?? null,
       appOrigin,
     };
-    const viewUrl = draftData?.viewUrl ?? null;
+    const viewUrl = resolveListingViewUrl({
+      listingId,
+      publicSlug: listing?.publicSlug ?? null,
+      appOrigin,
+    });
     const fromApi = draftData?.composerDraft?.trim();
     if (fromApi) {
       const text =
@@ -208,7 +212,7 @@ export function ListingDetailDialog({
     });
     return {
       text: built.text,
-      viewUrl: viewUrl ?? built.viewUrl,
+      viewUrl: built.viewUrl,
       primaryPhotoUrl: built.primaryPhotoUrl ?? primaryPhotoUrl,
     };
   }, [
@@ -224,7 +228,6 @@ export function ListingDetailDialog({
     listingPhotos,
     fallback?.thumbnailUrl,
     listing?.publicSlug,
-    draftData?.viewUrl,
     draftData?.composerDraft,
     draftData?.draft,
     draftData?.matchBullets,
@@ -284,6 +287,8 @@ export function ListingDetailDialog({
     }
   }, [resolveComposerDraft, listingId, contactId, listing?.publicSlug, priceCents, beds, baths, city, state, listingUrl, onInsertComposerDraft, onOpenChange, toast]);
 
+  const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
+
   const previewFlyerUrl = listingId ? `/api/inventory/listings/${listingId}/flyer-preview` : null;
 
   const handlePreviewFlyer = useCallback(() => {
@@ -292,13 +297,12 @@ export function ListingDetailDialog({
   }, [previewFlyerUrl]);
 
   const handleShareListing = useCallback(async () => {
-    if (!listingId || sharing) return;
-    setSharing(true);
+    if (!listingId) return;
     try {
       const res = await apiRequest("POST", `/api/inventory/listings/${listingId}/share-link`);
       const data = (await res.json()) as { shareUrl?: string; error?: string };
       if (!res.ok || !data.shareUrl) {
-        throw new Error(data.error ?? directShare?.blockedReason ?? "Share link unavailable");
+        throw new Error(data.error ?? "Share link unavailable");
       }
       await navigator.clipboard.writeText(data.shareUrl);
       toast({ title: "Share link copied", duration: 2000 });
@@ -307,12 +311,10 @@ export function ListingDetailDialog({
         title: "Cannot share listing",
         description: error instanceof Error ? error.message : "Check MLS compliance and try again.",
         variant: "destructive",
-        duration: 5000,
+        duration: 4000,
       });
-    } finally {
-      setSharing(false);
     }
-  }, [listingId, sharing, directShare?.blockedReason, toast]);
+  }, [listingId, toast]);
 
   const composerPreview = resolveComposerDraft();
   const matchBullets = draftData?.matchBullets ?? matchReasons;
@@ -357,7 +359,7 @@ export function ListingDetailDialog({
               <p className="text-xs text-gray-600 line-clamp-4 leading-relaxed">{listing.description}</p>
             )}
 
-            {listingId && previewFlyerUrl && (
+            {listingId && shareUrl && (
               <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                 <Button
                   type="button"
@@ -375,21 +377,13 @@ export function ListingDetailDialog({
                   variant="ghost"
                   size="sm"
                   className="h-7 px-2 text-[11px] font-medium text-gray-600 hover:text-gray-900"
-                  disabled={sharing || directShare?.allowed === false}
-                  onClick={() => void handleShareListing()}
-                  data-testid="button-share-listing"
+                  onClick={() => void handleCopyShareLink()}
+                  data-testid="button-copy-flyer-link"
                 >
-                  {sharing ? (
-                    <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden />
-                  ) : (
-                    <Link2 className="mr-1 h-3 w-3" aria-hidden />
-                  )}
-                  Share Listing
+                  <Link2 className="mr-1 h-3 w-3" aria-hidden />
+                  Copy Link
                 </Button>
               </div>
-            )}
-            {directShare?.allowed === false && directShare.blockedReason && (
-              <p className="text-[11px] text-amber-700 leading-snug">{directShare.blockedReason}</p>
             )}
 
             {contactId && listingId && (

@@ -91,6 +91,8 @@ export const buyerPreferenceProfileSchema = z
     mustHaves: preferenceFieldSchema(z.array(z.string())).optional(),
     dealBreakers: preferenceFieldSchema(z.array(z.string())).optional(),
     geoConstraints: preferenceFieldSchema(z.array(buyerGeoConstraintSchema)).optional(),
+    /** Proximity / lifestyle area prefs (e.g. close to beach) — boost matching, not city footprint. */
+    geoPreferences: preferenceFieldSchema(z.array(z.string())).optional(),
   })
   .strict();
 
