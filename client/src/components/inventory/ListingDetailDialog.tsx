@@ -19,9 +19,20 @@ import {
   listingComposerDraftIncludesRequiredDetails,
 } from "@shared/inventory/inventoryComposerDraft";
 import {
+  extractListingShareSegmentFromUrl,
   pickPrimaryPhotoUrl,
-  resolveListingViewUrl,
 } from "@shared/inventory/listingViewUrl";
+import {
+  getShareListingButtonState,
+  resolveComposerShareOrigin,
+  shouldShowPreviewFlyerButton,
+} from "@shared/inventory/listingDetailDialogActions";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 /** Replace stale UUID share links in API draft text when a slug is available. */
 function rewriteComposerDraftListingShareUrl(
@@ -171,9 +182,17 @@ export function ListingDetailDialog({
   } | null => {
     if (!listingId) return null;
     const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
+    const shareOrigin = resolveComposerShareOrigin({
+      appOrigin,
+      directShareAllowed: directShare?.allowed,
+    });
+    const apiViewUrl = draftData?.viewUrl?.trim() || null;
+    const shareSlug =
+      listing?.publicSlug?.trim() ||
+      (apiViewUrl ? extractListingShareSegmentFromUrl(apiViewUrl) : null);
     const listingInput = {
       listingId,
-      publicSlug: listing?.publicSlug ?? null,
+      publicSlug: shareSlug,
       priceCents,
       beds: beds ?? null,
       baths: baths ?? null,
@@ -184,22 +203,17 @@ export function ListingDetailDialog({
       description,
       photos: listingPhotos ?? undefined,
       thumbnailUrl: fallback?.thumbnailUrl ?? null,
-      appOrigin,
+      appOrigin: shareOrigin,
     };
-    const viewUrl = resolveListingViewUrl({
-      listingId,
-      publicSlug: listing?.publicSlug ?? null,
-      appOrigin,
-    });
     const fromApi = draftData?.composerDraft?.trim();
     if (fromApi) {
       const text =
-        viewUrl && listing?.publicSlug?.trim()
-          ? rewriteComposerDraftListingShareUrl(fromApi, listingId, listing.publicSlug, viewUrl)
+        apiViewUrl && shareSlug
+          ? rewriteComposerDraftListingShareUrl(fromApi, listingId, shareSlug, apiViewUrl)
           : fromApi;
       return {
         text,
-        viewUrl,
+        viewUrl: apiViewUrl,
         primaryPhotoUrl,
       };
     }
@@ -228,7 +242,9 @@ export function ListingDetailDialog({
     listingPhotos,
     fallback?.thumbnailUrl,
     listing?.publicSlug,
+    directShare?.allowed,
     draftData?.composerDraft,
+    draftData?.viewUrl,
     draftData?.draft,
     draftData?.matchBullets,
     primaryPhotoUrl,
@@ -241,6 +257,10 @@ export function ListingDetailDialog({
     if (!draft?.text || !listingId) return;
 
     const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
+    const shareOrigin = resolveComposerShareOrigin({
+      appOrigin,
+      directShareAllowed: directShare?.allowed,
+    });
     const includesRequired = listingComposerDraftIncludesRequiredDetails(draft.text, {
       listingId,
       publicSlug: listing?.publicSlug ?? null,
@@ -249,7 +269,7 @@ export function ListingDetailDialog({
       baths: baths ?? null,
       city: city ?? null,
       listingUrl,
-      appOrigin,
+      appOrigin: shareOrigin,
     });
     console.info(
       "[ListingComposerDraft]",
@@ -285,10 +305,15 @@ export function ListingDetailDialog({
         duration: 3000,
       });
     }
-  }, [resolveComposerDraft, listingId, contactId, listing?.publicSlug, priceCents, beds, baths, city, state, listingUrl, onInsertComposerDraft, onOpenChange, toast]);
+  }, [resolveComposerDraft, listingId, contactId, listing?.publicSlug, directShare?.allowed, priceCents, beds, baths, city, state, listingUrl, onInsertComposerDraft, onOpenChange, toast]);
 
   const previewFlyerUrl = listingId ? `/api/inventory/listings/${listingId}/flyer-preview` : null;
-  const canDirectShare = !!listingId && directShare?.allowed === true;
+  const showPreviewFlyer = shouldShowPreviewFlyerButton(listingId);
+  const shareButton = getShareListingButtonState({
+    listingId,
+    directShare,
+    directShareLoaded: !listingLoading || !!listingData,
+  });
 
   const handlePreviewFlyer = useCallback(() => {
     if (!previewFlyerUrl) return;
@@ -358,30 +383,48 @@ export function ListingDetailDialog({
               <p className="text-xs text-gray-600 line-clamp-4 leading-relaxed">{listing.description}</p>
             )}
 
-            {canDirectShare && (
+            {(showPreviewFlyer || shareButton.show) && (
               <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-[11px] font-medium text-gray-600 hover:text-gray-900"
-                  onClick={handlePreviewFlyer}
-                  data-testid="button-preview-flyer"
-                >
-                  <ExternalLink className="mr-1 h-3 w-3" aria-hidden />
-                  Preview Flyer
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-[11px] font-medium text-gray-600 hover:text-gray-900"
-                  onClick={() => void handleShareListing()}
-                  data-testid="button-copy-flyer-link"
-                >
-                  <Link2 className="mr-1 h-3 w-3" aria-hidden />
-                  Copy Link
-                </Button>
+                {showPreviewFlyer && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-[11px] font-medium text-gray-600 hover:text-gray-900"
+                    onClick={handlePreviewFlyer}
+                    data-testid="button-preview-flyer"
+                  >
+                    <ExternalLink className="mr-1 h-3 w-3" aria-hidden />
+                    Preview Flyer
+                  </Button>
+                )}
+                {shareButton.show && (
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-[11px] font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50"
+                            onClick={() => void handleShareListing()}
+                            disabled={!shareButton.enabled}
+                            data-testid="button-share-listing"
+                          >
+                            <Link2 className="mr-1 h-3 w-3" aria-hidden />
+                            Share Listing
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      {!shareButton.enabled && shareButton.blockedReason ? (
+                        <TooltipContent side="top" className="max-w-xs text-xs">
+                          {shareButton.blockedReason}
+                        </TooltipContent>
+                      ) : null}
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
               </div>
             )}
 

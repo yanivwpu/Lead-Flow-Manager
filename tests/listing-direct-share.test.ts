@@ -13,6 +13,7 @@ import {
   buildPublicListingFlyerHtml,
   inventoryRowToFlyerListing,
 } from "../shared/inventory/publicListingFlyer";
+import { buildListingCanonicalShareUrl } from "../shared/inventory/listingViewUrl";
 import { getListingDirectShareMeta } from "../server/inventory/inventoryDb";
 
 function assert(cond: boolean, msg: string) {
@@ -178,6 +179,53 @@ function testListingDirectShareMeta() {
   console.log("  listing direct share meta: OK");
 }
 
+function testDirectShareSlugUrlResolves() {
+  const listingId = "2e059e00-0846-4f23-a606-cf0812b57bff";
+  const slug = "1-main-st-tampa-fl-33602-2e059e00";
+  const origin = "https://app.example.com";
+  const shareUrl = buildListingCanonicalShareUrl({ listingId, publicSlug: slug }, origin);
+
+  assert(
+    canDirectShareListing({ status: "active", listingCompliance: COMPLIANT }),
+    "unpublished compliant listing passes direct-share MLS gate",
+  );
+  assert(
+    !isSearchIndexablePublicListing({
+      workspacePublishListingsPublicly: true,
+      listingPublishPublicly: false,
+      status: "active",
+      listingCompliance: COMPLIANT,
+    }),
+    "unpublished listing is not search-indexable",
+  );
+
+  const html = buildPublicListingFlyerHtml({
+    listing: inventoryRowToFlyerListing({
+      ...FLYER_ROW,
+      id: listingId,
+      publicSlug: slug,
+      publishPublicly: false,
+    }),
+    agent: {
+      name: "Agent",
+      email: null,
+      phone: null,
+      avatarUrl: null,
+      brokerageName: null,
+      bookingLink: null,
+    },
+    shareUrl,
+    qrDataUrl: "",
+    allowSearchIndexing: false,
+  });
+
+  assert(shareUrl === `${origin}/share/listings/${slug}`, "share-link returns slug URL");
+  assert(html.includes('content="noindex, nofollow"'), "direct-share public page is noindex");
+  assert(html.includes("Bright home."), "flyer content is visible");
+  assert(html.includes("Premier Realty"), "MLS attribution visible on flyer");
+  console.log("  direct share slug URL resolves with flyer: OK");
+}
+
 function main() {
   console.log("listing-direct-share tests");
   testUnpublishedCompliantDirectShare();
@@ -186,6 +234,7 @@ function main() {
   testNotOnAgentPageOrSitemap();
   testNonCompliantRejectionReasons();
   testListingDirectShareMeta();
+  testDirectShareSlugUrlResolves();
   console.log("\nAll tests passed.");
 }
 
