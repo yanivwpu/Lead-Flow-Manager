@@ -106,7 +106,32 @@ function testInboxDoesNotLinkBareTemplateRoute() {
     inbox.includes("isWorkspaceInventoryConnected"),
     "Inbox uses workspace inventory connected helper",
   );
+  assert.ok(
+    inbox.includes("inventorySourcesError"),
+    "Inbox tracks inventory sources query errors",
+  );
+  assert.ok(
+    inbox.includes("CopilotInventorySourcesUnavailable"),
+    "Inbox shows unavailable state when sources query fails",
+  );
+  assert.ok(
+    !inbox.includes("data: inventorySources = []"),
+    "Inbox does not default failed sources query to empty array",
+  );
   console.log("  inbox route wiring: OK");
+}
+
+function testInventoryDbImportsDb() {
+  const inventoryDb = readFileSync(
+    join(process.cwd(), "server", "inventory", "inventoryDb.ts"),
+    "utf8",
+  );
+  assert.ok(
+    inventoryDb.includes('from "../../drizzle/db"') ||
+      inventoryDb.includes('from "../../drizzle/db";'),
+    "inventoryDb imports db from drizzle",
+  );
+  console.log("  inventoryDb db import: OK");
 }
 
 function main() {
@@ -117,6 +142,7 @@ function main() {
   testZeroMatchesIsStillConnected();
   testInventorySettingsRoute();
   testInboxDoesNotLinkBareTemplateRoute();
+  testInventoryDbImportsDb();
   console.log("\nAll tests passed.");
 }
 

@@ -105,6 +105,7 @@ import {
 import { resolveClientBuyerMatchingTraceId } from "@/lib/buyerMatchingTraceStore";
 import { fetchInventoryStatus, fetchInventorySources, isWorkspaceInventoryConnected } from "@/lib/inventoryApi";
 import { CopilotInventoryEmptyState } from "@/components/inventory/CopilotInventoryEmptyState";
+import { CopilotInventorySourcesUnavailable } from "@/components/inventory/CopilotInventorySourcesUnavailable";
 import { MatchingListingsPanel } from "@/components/inventory/MatchingListingsPanel";
 import {
   shouldShowCopilotBuyerPreferences,
@@ -1462,9 +1463,11 @@ export function InboxLeadDetailsPanel({
   });
 
   const {
-    data: inventorySources = [],
+    data: inventorySources,
     isFetched: inventorySourcesFetched,
     isLoading: inventorySourcesLoading,
+    isError: inventorySourcesError,
+    refetch: refetchInventorySources,
   } = useQuery({
     queryKey: ["/api/inventory/sources"],
     queryFn: fetchInventorySources,
@@ -1473,7 +1476,8 @@ export function InboxLeadDetailsPanel({
   });
 
   const inventoryConnected = useMemo(
-    () => isWorkspaceInventoryConnected(inventorySources),
+    () =>
+      inventorySources != null ? isWorkspaceInventoryConnected(inventorySources) : false,
     [inventorySources],
   );
 
@@ -2655,12 +2659,21 @@ export function InboxLeadDetailsPanel({
                     </div>
                   )}
 
+                  {showCopilotInventoryPanels && inventorySourcesError && (
+                    <CopilotInventorySourcesUnavailable
+                      compact
+                      onRetry={() => void refetchInventorySources()}
+                    />
+                  )}
+
                   {showCopilotInventoryPanels &&
+                    !inventorySourcesError &&
                     inventorySourcesFetched &&
                     !inventorySourcesLoading &&
                     !inventoryConnected && <CopilotInventoryEmptyState compact />}
 
                   {showCopilotInventoryPanels &&
+                    !inventorySourcesError &&
                     (inventoryConnected || inventorySourcesLoading || !inventorySourcesFetched) && (
                     <MatchingListingsPanel
                       contactId={contact.id}

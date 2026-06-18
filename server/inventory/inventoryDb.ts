@@ -49,6 +49,7 @@ import {
   refineMatchingPoolCandidates,
 } from "@shared/inventory/inventoryMatchingPoolFilters";
 import type { BuyerMatchCriteria } from "@shared/inventory/inventoryMatchScoring";
+import { db } from "../../drizzle/db";
 import { decryptIntegrationConfig, encryptIntegrationConfig } from "../integrationConfigCrypto";
 
 function devSeedListingExcludeCondition() {
