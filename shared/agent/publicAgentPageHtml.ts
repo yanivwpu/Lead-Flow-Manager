@@ -79,7 +79,7 @@ function listingCardHtml(card: AgentPageListingCard, index: number): string {
     : `<div class="card-img-placeholder">No photo</div>`;
   const propertyType = normalizePropertyTypeForFilter(card.propertyType);
 
-  return `<article class="listing-card" data-id="${escapeHtml(card.id)}" data-label="${escapeHtml(card.listingLabel)}" data-status="${escapeHtml(card.status)}" data-sort-index="${index}" data-price-cents="${card.priceCents ?? ""}" data-beds="${card.bedsNum ?? ""}" data-baths="${card.bathsNum ?? ""}" data-sqft="${card.sqftNum ?? ""}" data-property-type="${escapeHtml(propertyType)}">
+  return `<article class="listing-card" data-id="${escapeHtml(card.id)}" data-label="${escapeHtml(card.listingLabel)}" data-status="${escapeHtml(card.status)}" data-city-state="${escapeHtml(card.cityState)}" data-sort-index="${index}" data-price-cents="${card.priceCents ?? ""}" data-beds="${card.bedsNum ?? ""}" data-baths="${card.bathsNum ?? ""}" data-sqft="${card.sqftNum ?? ""}" data-property-type="${escapeHtml(propertyType)}">
     <a class="card-img-link" href="${escapeHtml(card.shareUrl)}" data-action="listing_view">${img}</a>
     <div class="card-body">
       <div class="card-top">
@@ -147,7 +147,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     * { box-sizing: border-box; }
     body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.5; }
     .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
-    .agent-header { display: grid; gap: 20px; background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
+    .agent-header { display: grid; gap: 20px; background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 10px; }
     @media (min-width: 640px) { .agent-header { grid-template-columns: auto 1fr; align-items: start; gap: 24px; } }
     .agent-profile-col { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
     @media (min-width: 640px) { .agent-profile-col { align-items: flex-start; text-align: left; } }
@@ -174,37 +174,37 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .btn-outline:hover { border-color: #cbd5e1; background: #f8fafc; }
     .btn-ghost { background: transparent; border-color: transparent; color: var(--muted); padding: 6px 10px; }
     .btn-sm { padding: 7px 12px; font-size: 0.8125rem; }
-    .section-title { margin: 0 0 12px; font-size: 1.25rem; font-weight: 700; }
     .chip { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border); background: #fff; font-size: 0.8125rem; font-weight: 600; cursor: pointer; color: #475569; }
     .chip.active { background: var(--brand); border-color: var(--brand); color: #fff; }
-    .browse-wrap { margin-bottom: 12px; }
-    .browse-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
-    .listing-type-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1; min-width: 0; }
-    .listing-type-row > span { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-right: 2px; }
+    .listings-section { margin-top: 0; }
+    .browse-wrap { margin-bottom: 8px; }
+    .browse-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .listing-type-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex: 1; min-width: 0; }
     .browse-toggle-btn { flex-shrink: 0; }
     .browse-toggle-btn .toggle-label-mobile { display: none; }
-    .browse-basic-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-bottom: 0; }
-    .browse-basic-row label { display: flex; flex-direction: column; gap: 4px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); min-width: 120px; flex: 1; max-width: 180px; }
-    .browse-basic-row input { padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 0.8125rem; color: var(--ink); background: #fff; min-width: 0; width: 100%; }
     .browse-panel-backdrop { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.4); z-index: 85; }
     .browse-panel-backdrop.open { display: block; }
-    .browse-panel { margin-bottom: 12px; padding: 12px; background: #fff; border: 1px solid var(--border); border-radius: 12px; }
+    .browse-panel { margin-bottom: 8px; padding: 12px; background: #fff; border: 1px solid var(--border); border-radius: 12px; }
     .browse-panel[hidden] { display: none !important; }
-    .browse-panel-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
-    .browse-panel-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    .browse-panel-grid { display: grid; gap: 8px; grid-template-columns: 1fr; }
+    .browse-panel-grid label { display: flex; flex-direction: column; gap: 3px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
     .browse-panel-grid input, .browse-panel-grid select { padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 0.8125rem; color: var(--ink); background: #fff; min-width: 0; width: 100%; }
-    .browse-panel-mobile-prices { display: none; }
-    .browse-panel-actions { display: none; margin-top: 12px; justify-content: flex-end; gap: 8px; }
-    .browse-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 0.875rem; display: none; margin-bottom: 12px; }
+    .browse-panel-grid .filter-span-full { grid-column: 1 / -1; }
+    .browse-panel-actions { display: none; margin-top: 10px; justify-content: flex-end; gap: 8px; }
+    .browse-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 0.875rem; display: none; margin-bottom: 8px; }
     .browse-empty.show { display: block; }
+    @media (min-width: 480px) {
+      .browse-panel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (min-width: 768px) {
+      .browse-panel-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
     @media (max-width: 639px) {
-      .browse-basic-row { display: none; }
       .browse-toggle-btn .toggle-label-desktop { display: none; }
       .browse-toggle-btn .toggle-label-mobile { display: inline; }
-      .browse-panel-mobile-prices { display: contents; }
-      .browse-panel { position: fixed; left: 0; right: 0; bottom: 0; z-index: 90; max-height: min(85vh, 520px); overflow-y: auto; margin: 0; border-radius: 16px 16px 0 0; box-shadow: 0 -8px 32px rgba(15,23,42,0.12); padding: 16px 16px 20px; }
+      .browse-panel { position: fixed; left: 0; right: 0; bottom: 0; z-index: 90; max-height: min(85vh, 560px); overflow-y: auto; margin: 0; border-radius: 16px 16px 0 0; box-shadow: 0 -8px 32px rgba(15,23,42,0.12); padding: 16px 16px 20px; }
       .browse-panel-actions { display: flex; }
-      .browse-panel-title { display: block; font-size: 1rem; font-weight: 700; margin: 0 0 12px; }
+      .browse-panel-title { display: block; font-size: 1rem; font-weight: 700; margin: 0 0 10px; }
     }
     @media (min-width: 640px) {
       .browse-panel-title { display: none; }
@@ -264,12 +264,10 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       </div>
     </header>
 
-    <section>
-      <h2 class="section-title">Listings</h2>
+    <section class="listings-section">
       <div class="browse-wrap" id="browse-wrap">
         <div class="browse-head">
           <div class="listing-type-row">
-            <span>Type</span>
             <button type="button" class="chip active" data-filter="all">All</button>
             <button type="button" class="chip" data-filter="sale">For Sale</button>
             <button type="button" class="chip" data-filter="rent">For Rent</button>
@@ -280,27 +278,20 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
             <span class="toggle-label-mobile">Filters</span>
           </button>
         </div>
-        <div class="browse-basic-row">
-          <label>Min price
-            <input type="number" id="filter-min-price" min="0" step="1000" placeholder="Any" inputmode="numeric" data-sync="filter-min-price-m" />
-          </label>
-          <label>Max price
-            <input type="number" id="filter-max-price" min="0" step="1000" placeholder="Any" inputmode="numeric" data-sync="filter-max-price-m" />
-          </label>
-        </div>
       </div>
       <div class="browse-panel-backdrop" id="browse-panel-backdrop" aria-hidden="true"></div>
       <div class="browse-panel" id="browse-panel" hidden>
         <p class="browse-panel-title">Filters</p>
         <div class="browse-panel-grid">
-          <div class="browse-panel-mobile-prices">
-            <label>Min price
-              <input type="number" id="filter-min-price-m" min="0" step="1000" placeholder="Any" inputmode="numeric" data-sync="filter-min-price" />
-            </label>
-            <label>Max price
-              <input type="number" id="filter-max-price-m" min="0" step="1000" placeholder="Any" inputmode="numeric" data-sync="filter-max-price" />
-            </label>
-          </div>
+          <label class="filter-span-full">Location
+            <input type="text" id="filter-location" placeholder="City, state, or ZIP" autocomplete="off" />
+          </label>
+          <label>Min price
+            <input type="number" id="filter-min-price" min="0" step="1000" placeholder="Any" inputmode="numeric" />
+          </label>
+          <label>Max price
+            <input type="number" id="filter-max-price" min="0" step="1000" placeholder="Any" inputmode="numeric" />
+          </label>
           <label>Beds
             <select id="filter-beds">
               <option value="">Any</option>
@@ -500,19 +491,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         return window.matchMedia("(max-width: 639px)").matches;
       }
 
-      function syncPricePair(fromId, toId) {
-        var from = document.getElementById(fromId);
-        var to = document.getElementById(toId);
-        if (from && to) to.value = from.value;
-      }
-
-      function syncAllPriceFields() {
-        syncPricePair("filter-min-price", "filter-min-price-m");
-        syncPricePair("filter-max-price", "filter-max-price-m");
-      }
-
       function openFilterPanel() {
-        syncAllPriceFields();
         if (filterPanel) filterPanel.hidden = false;
         if (toggleFiltersBtn) toggleFiltersBtn.setAttribute("aria-expanded", "true");
         if (filterBackdrop && isMobileFilters()) filterBackdrop.classList.add("open");
@@ -533,20 +512,9 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       if (toggleFiltersBtn) toggleFiltersBtn.addEventListener("click", toggleFilterPanel);
       if (filterBackdrop) filterBackdrop.addEventListener("click", closeFilterPanel);
 
-      document.querySelectorAll("[data-sync]").forEach(function (el) {
-        function syncPartner() {
-          var partnerId = el.getAttribute("data-sync");
-          var partner = partnerId ? document.getElementById(partnerId) : null;
-          if (partner) partner.value = el.value;
-        }
-        el.addEventListener("input", syncPartner);
-        el.addEventListener("change", syncPartner);
-      });
-
       var applyFiltersBtn = document.getElementById("btn-filters-apply");
       if (applyFiltersBtn) {
         applyFiltersBtn.addEventListener("click", function () {
-          syncAllPriceFields();
           applyBrowseFilters();
           closeFilterPanel();
         });
@@ -555,7 +523,9 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       var clearFiltersBtn = document.getElementById("btn-filters-clear");
       if (clearFiltersBtn) {
         clearFiltersBtn.addEventListener("click", function () {
-          ["filter-min-price", "filter-min-price-m", "filter-max-price", "filter-max-price-m", "filter-min-sqft"].forEach(function (id) {
+          var locationEl = document.getElementById("filter-location");
+          if (locationEl) locationEl.value = "";
+          ["filter-min-price", "filter-max-price", "filter-min-sqft"].forEach(function (id) {
             var el = document.getElementById(id);
             if (el) el.value = "";
           });
@@ -574,6 +544,12 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         return isFinite(n) ? n : null;
       }
 
+      function textVal(id) {
+        var el = document.getElementById(id);
+        if (!el) return "";
+        return String(el.value || "").trim().toLowerCase();
+      }
+
       function cardMatches(card) {
         var label = card.getAttribute("data-label");
         var status = card.getAttribute("data-status");
@@ -582,6 +558,12 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           || (listingType === "rent" && label === "FOR RENT" && status !== "Coming Soon")
           || (listingType === "sale" && label === "FOR SALE" && status !== "Coming Soon");
         if (!showType) return false;
+
+        var locationQuery = textVal("filter-location");
+        if (locationQuery) {
+          var cityState = (card.getAttribute("data-city-state") || "").toLowerCase();
+          if (cityState.indexOf(locationQuery) === -1) return false;
+        }
 
         var price = card.getAttribute("data-price-cents");
         var priceNum = price ? Number(price) : null;
@@ -649,15 +631,23 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         });
       });
 
-      ["filter-min-price", "filter-max-price", "filter-min-price-m", "filter-max-price-m", "filter-beds", "filter-baths", "filter-min-sqft", "filter-property-type", "filter-sort"].forEach(function (id) {
+      var advancedFilterIds = [
+        "filter-location",
+        "filter-min-price",
+        "filter-max-price",
+        "filter-beds",
+        "filter-baths",
+        "filter-min-sqft",
+        "filter-property-type",
+        "filter-sort",
+      ];
+      advancedFilterIds.forEach(function (id) {
         var el = document.getElementById(id);
         if (!el) return;
         el.addEventListener("change", function () {
-          syncAllPriceFields();
           if (!isMobileFilters() || !filterPanel || filterPanel.hidden) applyBrowseFilters();
         });
         el.addEventListener("input", function () {
-          syncAllPriceFields();
           if (!isMobileFilters()) applyBrowseFilters();
         });
       });

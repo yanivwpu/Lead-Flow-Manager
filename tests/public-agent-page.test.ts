@@ -330,6 +330,7 @@ function testBrowseFilters() {
   const base = {
     status: "Active",
     listingLabel: "FOR SALE" as const,
+    cityState: "Tampa, FL",
     priceCents: 450_000_00,
     beds: 3,
     baths: 2,
@@ -340,6 +341,7 @@ function testBrowseFilters() {
   assert(
     listingMatchesAgentPageBrowseFilters(base, {
       listingType: "sale",
+      location: "tampa",
       minPrice: 400_000_00,
       maxPrice: 500_000_00,
       minBeds: 3,
@@ -352,7 +354,22 @@ function testBrowseFilters() {
   );
   assert(
     !listingMatchesAgentPageBrowseFilters(base, {
+      listingType: "sale",
+      location: "orlando",
+      minPrice: null,
+      maxPrice: null,
+      minBeds: null,
+      minBaths: null,
+      minSqft: null,
+      propertyType: null,
+      sort: "newest",
+    }),
+    "location filter excludes non-matching city",
+  );
+  assert(
+    !listingMatchesAgentPageBrowseFilters(base, {
       listingType: "rent",
+      location: null,
       minPrice: null,
       maxPrice: null,
       minBeds: null,
@@ -471,10 +488,16 @@ function testHtml() {
   assert(html.includes("Open chat"), "web chat primary button label");
   assert(html.includes("chat-backdrop"), "embedded chat modal");
   assert(html.includes("widget-frame"), "widget iframe embed");
-  assert(html.includes("filter-min-price"), "price filters");
+  assert(html.includes("filter-min-price"), "price filters in panel");
+  assert(!html.includes("browse-basic-row"), "no always-visible price row");
+  assert(!html.includes("section-title"), "no listings heading");
+  assert(!html.includes(">Listings<"), "listings title removed");
+  assert(html.includes("filter-location"), "location filter");
+  assert(html.includes("listings-section"), "listings section wrapper");
   assert(html.includes("btn-toggle-filters"), "collapsible filters toggle");
   assert(html.includes("More Filters"), "desktop more filters label");
   assert(html.includes("browse-panel"), "advanced filters panel");
+  assert(html.includes('browse-panel" id="browse-panel" hidden'), "filters panel hidden by default");
   assert(html.includes("filter-sort"), "sort control");
   assert(html.includes("data-filter=\"sale\""), "listing type filters");
   assert(html.includes("What's My Home Worth?"), "home worth cta");
