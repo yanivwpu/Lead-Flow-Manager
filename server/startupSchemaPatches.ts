@@ -117,6 +117,15 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
       `UPDATE ai_business_knowledge SET agent_page_use_custom_bio = true WHERE agent_page_bio IS NOT NULL AND trim(agent_page_bio) <> ''`,
     ].join(";\n"),
   },
+  {
+    tag: "0049_business_profile_social_links",
+    sql: [
+      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS facebook_url text`,
+      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS instagram_url text`,
+      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS linkedin_url text`,
+      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS youtube_url text`,
+    ].join(";\n"),
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {

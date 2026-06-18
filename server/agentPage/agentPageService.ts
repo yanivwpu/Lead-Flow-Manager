@@ -2,6 +2,7 @@ import type { AgentPageSettingsResponse } from "@shared/agent/agentPageSchema";
 import type { AgentPageListingCard, PublicAgentPageRenderInput } from "@shared/agent/agentPageTypes";
 import { buildAgentPageUrl } from "@shared/agent/agentPageSlug";
 import { resolveAgentPageBio, resolveAgentPageDisplayName } from "@shared/agent/agentPageProfile";
+import { resolveAgentPageSocialUrls } from "@shared/agent/agentPageSocialUrls";
 import { buildListingCanonicalShareUrl, pickPrimaryPhotoUrl } from "@shared/inventory/listingViewUrl";
 import { formatListingPriceForComposer } from "@shared/inventory/inventoryComposerDraft";
 import { canShowPublicStreetAddress } from "@shared/inventory/publicListingPublication";
@@ -56,6 +57,7 @@ export async function buildAgentPageSettingsResponse(
   const businessProfileDisplayName = resolveAgentPageDisplayName(row, user?.name);
   const businessProfileAbout = str(row.aboutText);
   const resolvedBio = resolveAgentPageBio(row);
+  const socialLinks = resolveAgentPageSocialUrls(row);
 
   return {
     agentPageEnabled: row.agentPageEnabled,
@@ -78,6 +80,11 @@ export async function buildAgentPageSettingsResponse(
     resolvedAvatarUrl: str(row.avatarUrl) || null,
     resolvedCompanyLogo: str(row.companyLogo) || null,
     resolvedBrokerageName: str(row.businessName),
+    publicWebsite: socialLinks.websiteUrl,
+    facebookUrl: socialLinks.facebookUrl,
+    instagramUrl: socialLinks.instagramUrl,
+    linkedinUrl: socialLinks.linkedinUrl,
+    youtubeUrl: socialLinks.youtubeUrl,
     schedulingUrl,
     widgetEnabled,
   };
@@ -185,6 +192,7 @@ export async function getPublicAgentPageData(
 
   const displayName = resolveAgentPageDisplayName(agent, user?.name);
   const bio = resolveAgentPageBio(agent);
+  const socialLinks = resolveAgentPageSocialUrls(agent);
 
   await incrementAgentPageAnalytics(agent.userId, "page_view");
 
@@ -199,6 +207,7 @@ export async function getPublicAgentPageData(
     brokerageName: str(agent.businessName),
     avatarUrl: str(agent.avatarUrl) || null,
     companyLogo: str(agent.companyLogo) || null,
+    socialLinks,
     publicEmail: str(agent.publicEmail),
     publicPhone: str(agent.publicPhone),
     schedulingUrl: calendly || scheduling.url || "",

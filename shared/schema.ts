@@ -1300,6 +1300,10 @@ export const aiBusinessKnowledge = pgTable("ai_business_knowledge", {
   publicPhone: text("public_phone"),
   publicEmail: text("public_email"),
   publicWebsite: text("public_website"),
+  facebookUrl: text("facebook_url"),
+  instagramUrl: text("instagram_url"),
+  linkedinUrl: text("linkedin_url"),
+  youtubeUrl: text("youtube_url"),
   aboutText: text("about_text"),
   faqs: jsonb("faqs").default(sql`'[]'::jsonb`), // Array of {question, answer}
   salesGoals: text("sales_goals"), // book_call, get_phone, collect_deposit, etc.

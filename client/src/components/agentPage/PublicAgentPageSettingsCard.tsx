@@ -51,6 +51,11 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
   const [slugError, setSlugError] = useState<string | null>(null);
   const [customBioDraft, setCustomBioDraft] = useState("");
   const [customBioError, setCustomBioError] = useState<string | null>(null);
+  const [facebookUrlDraft, setFacebookUrlDraft] = useState("");
+  const [instagramUrlDraft, setInstagramUrlDraft] = useState("");
+  const [linkedinUrlDraft, setLinkedinUrlDraft] = useState("");
+  const [youtubeUrlDraft, setYoutubeUrlDraft] = useState("");
+  const [publicWebsiteDraft, setPublicWebsiteDraft] = useState("");
 
   useEffect(() => {
     if (!data) return;
@@ -58,7 +63,21 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
     setSlugError(null);
     setCustomBioDraft(data.agentPageBio || "");
     setCustomBioError(null);
-  }, [data?.agentPageSlug, data?.agentPageBio, data?.agentPageUseCustomBio]);
+    setPublicWebsiteDraft(data.publicWebsite || "");
+    setFacebookUrlDraft(data.facebookUrl || "");
+    setInstagramUrlDraft(data.instagramUrl || "");
+    setLinkedinUrlDraft(data.linkedinUrl || "");
+    setYoutubeUrlDraft(data.youtubeUrl || "");
+  }, [
+    data?.agentPageSlug,
+    data?.agentPageBio,
+    data?.agentPageUseCustomBio,
+    data?.publicWebsite,
+    data?.facebookUrl,
+    data?.instagramUrl,
+    data?.linkedinUrl,
+    data?.youtubeUrl,
+  ]);
 
   const saveMutation = useMutation({
     mutationFn: async (body: Record<string, unknown>) => {
@@ -118,6 +137,26 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
       saveMutation.mutate({ agentPageSlug: validated.slug });
     },
     [data?.agentPageSlug, saveMutation],
+  );
+
+  const saveProfileLink = useCallback(
+    (
+      field: "publicWebsite" | "facebookUrl" | "instagramUrl" | "linkedinUrl" | "youtubeUrl",
+      draft: string,
+    ) => {
+      const trimmed = draft.trim();
+      const current = (data?.[field] || "").trim();
+      if (trimmed === current) return;
+      saveMutation.mutate({ [field]: trimmed || null });
+    },
+    [
+      data?.publicWebsite,
+      data?.facebookUrl,
+      data?.instagramUrl,
+      data?.linkedinUrl,
+      data?.youtubeUrl,
+      saveMutation,
+    ],
   );
 
   const pageIsPublic = Boolean(
@@ -444,6 +483,80 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                   }
                 }}
               />
+            </div>
+
+            <div className="space-y-3 pt-1 border-t border-gray-100" data-testid="agent-page-social-links">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-gray-800">Profile links</p>
+                <p className="text-xs text-muted-foreground leading-snug">
+                  Optional. Icons appear on your public page when a link is set.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="agent-page-website">Website URL</Label>
+                <Input
+                  id="agent-page-website"
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://yourwebsite.com"
+                  value={publicWebsiteDraft}
+                  disabled={saveMutation.isPending}
+                  onChange={(e) => setPublicWebsiteDraft(e.target.value)}
+                  onBlur={() => saveProfileLink("publicWebsite", publicWebsiteDraft)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="agent-page-facebook">Facebook URL</Label>
+                <Input
+                  id="agent-page-facebook"
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://facebook.com/..."
+                  value={facebookUrlDraft}
+                  disabled={saveMutation.isPending}
+                  onChange={(e) => setFacebookUrlDraft(e.target.value)}
+                  onBlur={() => saveProfileLink("facebookUrl", facebookUrlDraft)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="agent-page-instagram">Instagram URL</Label>
+                <Input
+                  id="agent-page-instagram"
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://instagram.com/..."
+                  value={instagramUrlDraft}
+                  disabled={saveMutation.isPending}
+                  onChange={(e) => setInstagramUrlDraft(e.target.value)}
+                  onBlur={() => saveProfileLink("instagramUrl", instagramUrlDraft)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="agent-page-linkedin">LinkedIn URL</Label>
+                <Input
+                  id="agent-page-linkedin"
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://linkedin.com/in/..."
+                  value={linkedinUrlDraft}
+                  disabled={saveMutation.isPending}
+                  onChange={(e) => setLinkedinUrlDraft(e.target.value)}
+                  onBlur={() => saveProfileLink("linkedinUrl", linkedinUrlDraft)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="agent-page-youtube">YouTube URL</Label>
+                <Input
+                  id="agent-page-youtube"
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://youtube.com/@..."
+                  value={youtubeUrlDraft}
+                  disabled={saveMutation.isPending}
+                  onChange={(e) => setYoutubeUrlDraft(e.target.value)}
+                  onBlur={() => saveProfileLink("youtubeUrl", youtubeUrlDraft)}
+                />
+              </div>
             </div>
           </div>
         </div>

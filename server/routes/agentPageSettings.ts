@@ -48,6 +48,11 @@ export function registerAgentPageSettingsRoutes(app: Express): void {
         agentPageMarketArea: patch.agentPageMarketArea,
         agentPagePreferredLeadCapture: patch.agentPagePreferredLeadCapture,
         agentPageShowHomeValueCta: patch.agentPageShowHomeValueCta,
+        publicWebsite: patch.publicWebsite,
+        facebookUrl: patch.facebookUrl,
+        instagramUrl: patch.instagramUrl,
+        linkedinUrl: patch.linkedinUrl,
+        youtubeUrl: patch.youtubeUrl,
       });
 
       const settings = await buildAgentPageSettingsResponse(req.user.id, appOrigin);

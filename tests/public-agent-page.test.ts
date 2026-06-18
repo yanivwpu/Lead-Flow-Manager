@@ -129,6 +129,11 @@ function mockSettings(overrides: Partial<AgentPageSettingsResponse>): AgentPageS
     resolvedAvatarUrl: null,
     resolvedCompanyLogo: null,
     resolvedBrokerageName: "Premier Realty",
+    publicWebsite: "",
+    facebookUrl: "",
+    instagramUrl: "",
+    linkedinUrl: "",
+    youtubeUrl: "",
     schedulingUrl: "",
     widgetEnabled: true,
     ...overrides,
@@ -274,6 +279,12 @@ function testAgentPageDbSavePath() {
     card.includes("Web chat and forms create CRM leads in your Inbox"),
     "primary contact helper text",
   );
+  assert(card.includes("agent-page-social-links"), "social links settings block");
+  assert(card.includes("Website URL"), "website url field");
+  assert(card.includes("Facebook URL"), "facebook url field");
+  assert(card.includes("Instagram URL"), "instagram url field");
+  assert(card.includes("LinkedIn URL"), "linkedin url field");
+  assert(card.includes("YouTube URL"), "youtube url field");
 
   const rge = readFileSync(
     join(process.cwd(), "client", "src", "pages", "RealtorGrowthEngine.tsx"),
@@ -363,6 +374,19 @@ function testBrowseFilters() {
   console.log("  browse filters: OK");
 }
 
+function testSocialUrlPatch() {
+  const parsed = agentPageSettingsPatchSchema.safeParse({
+    publicWebsite: "https://example.com",
+    facebookUrl: "https://facebook.com/agent",
+    instagramUrl: "",
+    linkedinUrl: null,
+  });
+  assert(parsed.success, "social url patch validates");
+  const bad = agentPageSettingsPatchSchema.safeParse({ facebookUrl: "not-a-url" });
+  assert(!bad.success, "invalid social url rejected");
+  console.log("  social url patch: OK");
+}
+
 function testHtml() {
   const html = buildPublicAgentPageHtml({
     userId: "u1",
@@ -373,6 +397,13 @@ function testHtml() {
     brokerageName: "Premier Realty",
     avatarUrl: null,
     companyLogo: null,
+    socialLinks: {
+      websiteUrl: "https://example.com",
+      facebookUrl: "https://facebook.com/testagent",
+      instagramUrl: "",
+      linkedinUrl: "https://linkedin.com/in/testagent",
+      youtubeUrl: "",
+    },
     publicEmail: "agent@example.com",
     publicPhone: "+15550100",
     schedulingUrl: "https://calendly.com/test",
@@ -399,6 +430,44 @@ function testHtml() {
     }],
   });
   assert(html.includes("Test Agent"), "name in html");
+  assert(html.includes("agent-profile-col"), "profile column layout");
+  assert(html.includes("agent-brokerage-block"), "brokerage under avatar");
+  assert(html.includes("Premier Realty"), "brokerage name under avatar");
+  assert(!html.includes('class="agent-brokerage"'), "brokerage not duplicated in info column");
+  assert(html.includes("agent-social"), "social links row");
+  assert(html.includes('aria-label="Website"'), "website icon first when url set");
+  assert(html.includes('aria-label="Facebook"'), "facebook icon when url set");
+  assert(html.includes('aria-label="LinkedIn"'), "linkedin icon when url set");
+  assert(!html.includes('aria-label="Instagram"'), "instagram hidden without url");
+  assert(!html.includes('aria-label="YouTube"'), "youtube hidden without url");
+
+  const emptyLinksHtml = buildPublicAgentPageHtml({
+    userId: "u2",
+    agentPageSlug: "empty-links",
+    displayName: "Empty Links Agent",
+    bio: "",
+    marketArea: "",
+    brokerageName: "",
+    avatarUrl: null,
+    companyLogo: null,
+    socialLinks: {
+      websiteUrl: "",
+      facebookUrl: "",
+      instagramUrl: "",
+      linkedinUrl: "",
+      youtubeUrl: "",
+    },
+    publicEmail: "",
+    publicPhone: "",
+    schedulingUrl: "",
+    widgetEnabled: false,
+    preferredLeadCapture: "webchat",
+    showHomeValueCta: false,
+    listings: [],
+  });
+  assert(!emptyLinksHtml.includes('class="agent-social"'), "no social row when all links empty");
+  assert(!emptyLinksHtml.includes('class="agent-social-link"'), "no social icon anchors when all links empty");
+  assert(html.includes("width: 120px"), "larger desktop avatar");
   assert(html.includes("Open chat"), "web chat primary button label");
   assert(html.includes("chat-backdrop"), "embedded chat modal");
   assert(html.includes("widget-frame"), "widget iframe embed");
@@ -422,6 +491,7 @@ async function main() {
   testMarketAreaChips();
   testAgentPageDbSavePath();
   testBrowseFilters();
+  testSocialUrlPatch();
   testHtml();
   console.log("\nAll tests passed.");
 }

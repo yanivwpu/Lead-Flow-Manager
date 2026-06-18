@@ -25,6 +25,50 @@ function renderLogo(data: PublicAgentPageRenderInput): string {
   return `<img class="agent-logo" src="${escapeHtml(data.companyLogo)}" alt="" />`;
 }
 
+const SOCIAL_ICON_SVG = {
+  website:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18"/></svg>',
+  facebook:
+    '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13.5 22v-8h2.7l.4-3.1h-3.1V9.1c0-.9.2-1.5 1.5-1.5H17V4.8c-.3 0-1.2-.1-2.3-.1-2.3 0-3.9 1.4-3.9 4v2.2H8.2v3.1h2.6v8h2.7z"/></svg>',
+  instagram:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>',
+  linkedin:
+    '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.5 8.5h3v11h-3v-11zm1.5-5a1.75 1.75 0 110 3.5 1.75 1.75 0 010-3.5zM10 8.5h2.9v1.5h.1c.4-.8 1.4-1.7 2.9-1.7 3.1 0 3.7 2 3.7 4.6V19.5h-3v-5.2c0-1.2 0-2.8-1.7-2.8-1.7 0-2 1.3-2 2.7v5.3h-3V8.5z"/></svg>',
+  youtube:
+    '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.6 7.2a2.5 2.5 0 00-1.8-1.8C18 5 12 5 12 5s-6 0-7.8.4A2.5 2.5 0 002.4 7.2 26 26 0 002 12a26 26 0 00.4 4.8 2.5 2.5 0 001.8 1.8C6 19 12 19 12 19s6 0 7.8-.4a2.5 2.5 0 001.8-1.8A26 26 0 0022 12a26 26 0 00-.4-4.8zM10 15.5v-7l6 3.5-6 3.5z"/></svg>',
+} as const;
+
+function renderBrokerageBlock(data: PublicAgentPageRenderInput): string {
+  const logo = renderLogo(data);
+  const name = data.brokerageName
+    ? `<p class="agent-brokerage-name">${escapeHtml(data.brokerageName)}</p>`
+    : "";
+  if (!logo && !name) return "";
+  return `<div class="agent-brokerage-block">${logo}${name}</div>`;
+}
+
+function renderSocialLinks(data: PublicAgentPageRenderInput): string {
+  const { socialLinks } = data;
+  const items: string[] = [];
+  const add = (url: string, label: string, icon: keyof typeof SOCIAL_ICON_SVG) => {
+    if (!url) return;
+    items.push(
+      `<a class="agent-social-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" aria-label="${escapeHtml(label)}">${SOCIAL_ICON_SVG[icon]}</a>`,
+    );
+  };
+  add(socialLinks.websiteUrl, "Website", "website");
+  add(socialLinks.facebookUrl, "Facebook", "facebook");
+  add(socialLinks.instagramUrl, "Instagram", "instagram");
+  add(socialLinks.linkedinUrl, "LinkedIn", "linkedin");
+  add(socialLinks.youtubeUrl, "YouTube", "youtube");
+  if (items.length === 0) return "";
+  return `<div class="agent-social">${items.join("")}</div>`;
+}
+
+function renderProfileColumn(data: PublicAgentPageRenderInput): string {
+  return `<div class="agent-profile-col">${renderAvatar(data)}${renderBrokerageBlock(data)}${renderSocialLinks(data)}</div>`;
+}
+
 function listingCardHtml(card: AgentPageListingCard, index: number): string {
   const addressLine = card.street
     ? `<p class="card-address">${escapeHtml(card.street)}</p>`
@@ -104,12 +148,23 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.5; }
     .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
     .agent-header { display: grid; gap: 20px; background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
-    @media (min-width: 640px) { .agent-header { grid-template-columns: auto 1fr; align-items: start; } }
-    .agent-avatar { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #f1f5f9; }
+    @media (min-width: 640px) { .agent-header { grid-template-columns: auto 1fr; align-items: start; gap: 24px; } }
+    .agent-profile-col { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+    @media (min-width: 640px) { .agent-profile-col { align-items: flex-start; text-align: left; } }
+    .agent-avatar { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #f1f5f9; flex-shrink: 0; }
+    @media (min-width: 640px) { .agent-avatar { width: 120px; height: 120px; } }
     .agent-avatar.placeholder { display: flex; align-items: center; justify-content: center; background: #e2e8f0; font-size: 2rem; font-weight: 700; color: #475569; }
-    .agent-logo { max-height: 40px; max-width: 140px; object-fit: contain; margin-top: 8px; }
+    @media (min-width: 640px) { .agent-avatar.placeholder { font-size: 2.25rem; } }
+    .agent-brokerage-block { display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 140px; }
+    @media (min-width: 640px) { .agent-brokerage-block { align-items: flex-start; } }
+    .agent-logo { max-height: 36px; max-width: 120px; object-fit: contain; }
+    .agent-brokerage-name { margin: 0; color: var(--muted); font-size: 0.8125rem; font-weight: 600; line-height: 1.3; }
+    .agent-social { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 2px; }
+    @media (min-width: 640px) { .agent-social { justify-content: flex-start; } }
+    .agent-social-link { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); background: #fff; text-decoration: none; transition: border-color 0.15s, color 0.15s; }
+    .agent-social-link:hover { border-color: #cbd5e1; color: var(--brand); }
+    .agent-social-link svg { width: 16px; height: 16px; display: block; }
     .agent-name { margin: 0 0 4px; font-size: 1.75rem; font-weight: 800; }
-    .agent-brokerage { margin: 0 0 12px; color: var(--muted); font-size: 1rem; }
     .agent-bio, .agent-market { margin: 0 0 10px; color: #334155; font-size: 0.9375rem; }
     .cta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
     .btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 16px; border-radius: 8px; font-size: 0.875rem; font-weight: 600; text-decoration: none; cursor: pointer; border: 1px solid transparent; background: #fff; color: var(--ink); }
@@ -196,10 +251,9 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
 <body>
   <div class="wrap">
     <header class="agent-header">
-      <div>${renderAvatar(data)}${renderLogo(data)}</div>
-      <div>
+      ${renderProfileColumn(data)}
+      <div class="agent-info-col">
         <h1 class="agent-name">${escapeHtml(data.displayName)}</h1>
-        ${data.brokerageName ? `<p class="agent-brokerage">${escapeHtml(data.brokerageName)}</p>` : ""}
         ${bioHtml}
         ${marketHtml}
         <div class="cta-row">

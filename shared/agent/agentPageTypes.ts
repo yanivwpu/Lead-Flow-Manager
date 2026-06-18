@@ -17,6 +17,14 @@ export type AgentPageListingCard = {
   listingLabel: "FOR SALE" | "FOR RENT";
 };
 
+export type PublicAgentPageSocialLinks = {
+  websiteUrl: string;
+  facebookUrl: string;
+  instagramUrl: string;
+  linkedinUrl: string;
+  youtubeUrl: string;
+};
+
 export type PublicAgentPageRenderInput = {
   userId: string;
   displayName: string;
@@ -25,6 +33,7 @@ export type PublicAgentPageRenderInput = {
   brokerageName: string;
   avatarUrl: string | null;
   companyLogo: string | null;
+  socialLinks: PublicAgentPageSocialLinks;
   publicEmail: string;
   publicPhone: string;
   schedulingUrl: string;

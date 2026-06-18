@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentPageSocialUrlsPatchSchema } from "./agentPageSocialUrls";
 
 export const agentPageLeadCaptureSchema = z.enum(["webchat", "email", "phone"]);
 
@@ -27,15 +28,17 @@ export function normalizeAgentPageAnalytics(raw: unknown): AgentPageAnalytics {
   return parsed.success ? parsed.data : { ...EMPTY_AGENT_PAGE_ANALYTICS };
 }
 
-export const agentPageSettingsPatchSchema = z.object({
-  agentPageEnabled: z.boolean().optional(),
-  agentPageSlug: z.string().max(80).optional().nullable(),
-  agentPageUseCustomBio: z.boolean().optional(),
-  agentPageBio: z.string().max(4000).optional().nullable(),
-  agentPageMarketArea: z.string().max(500).optional().nullable(),
-  agentPagePreferredLeadCapture: agentPageLeadCaptureSchema.optional(),
-  agentPageShowHomeValueCta: z.boolean().optional(),
-});
+export const agentPageSettingsPatchSchema = z
+  .object({
+    agentPageEnabled: z.boolean().optional(),
+    agentPageSlug: z.string().max(80).optional().nullable(),
+    agentPageUseCustomBio: z.boolean().optional(),
+    agentPageBio: z.string().max(4000).optional().nullable(),
+    agentPageMarketArea: z.string().max(500).optional().nullable(),
+    agentPagePreferredLeadCapture: agentPageLeadCaptureSchema.optional(),
+    agentPageShowHomeValueCta: z.boolean().optional(),
+  })
+  .merge(agentPageSocialUrlsPatchSchema);
 
 export type AgentPageSettingsPatch = z.infer<typeof agentPageSettingsPatchSchema>;
 
@@ -60,6 +63,11 @@ export type AgentPageSettingsResponse = {
   resolvedAvatarUrl: string | null;
   resolvedCompanyLogo: string | null;
   resolvedBrokerageName: string;
+  publicWebsite: string;
+  facebookUrl: string;
+  instagramUrl: string;
+  linkedinUrl: string;
+  youtubeUrl: string;
   schedulingUrl: string;
   widgetEnabled: boolean;
 };

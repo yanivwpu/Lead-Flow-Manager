@@ -43,6 +43,11 @@ export type AgentPageKnowledgeRow = {
   companyLogo: string | null;
   publicPhone: string | null;
   publicEmail: string | null;
+  publicWebsite: string | null;
+  facebookUrl: string | null;
+  instagramUrl: string | null;
+  linkedinUrl: string | null;
+  youtubeUrl: string | null;
   aboutText: string | null;
   avatarUrl: string | null;
 };
@@ -65,6 +70,11 @@ export async function getAgentPageSettingsRow(userId: string): Promise<AgentPage
       companyLogo: aiBusinessKnowledge.companyLogo,
       publicPhone: aiBusinessKnowledge.publicPhone,
       publicEmail: aiBusinessKnowledge.publicEmail,
+      publicWebsite: aiBusinessKnowledge.publicWebsite,
+      facebookUrl: aiBusinessKnowledge.facebookUrl,
+      instagramUrl: aiBusinessKnowledge.instagramUrl,
+      linkedinUrl: aiBusinessKnowledge.linkedinUrl,
+      youtubeUrl: aiBusinessKnowledge.youtubeUrl,
       aboutText: aiBusinessKnowledge.aboutText,
       avatarUrl: users.avatarUrl,
     })
@@ -101,6 +111,11 @@ export async function resolveAgentPageBySlug(slug: string): Promise<AgentPageKno
       companyLogo: aiBusinessKnowledge.companyLogo,
       publicPhone: aiBusinessKnowledge.publicPhone,
       publicEmail: aiBusinessKnowledge.publicEmail,
+      publicWebsite: aiBusinessKnowledge.publicWebsite,
+      facebookUrl: aiBusinessKnowledge.facebookUrl,
+      instagramUrl: aiBusinessKnowledge.instagramUrl,
+      linkedinUrl: aiBusinessKnowledge.linkedinUrl,
+      youtubeUrl: aiBusinessKnowledge.youtubeUrl,
       aboutText: aiBusinessKnowledge.aboutText,
       avatarUrl: users.avatarUrl,
     })
@@ -128,6 +143,11 @@ export async function patchAgentPageSettings(
     agentPageMarketArea?: string | null;
     agentPagePreferredLeadCapture?: AgentPageLeadCapture;
     agentPageShowHomeValueCta?: boolean;
+    publicWebsite?: string | null;
+    facebookUrl?: string | null;
+    instagramUrl?: string | null;
+    linkedinUrl?: string | null;
+    youtubeUrl?: string | null;
   },
 ): Promise<AgentPageKnowledgeRow | undefined> {
   const set: Partial<typeof aiBusinessKnowledge.$inferInsert> = {
@@ -149,6 +169,21 @@ export async function patchAgentPageSettings(
   }
   if (patch.agentPageShowHomeValueCta !== undefined) {
     set.agentPageShowHomeValueCta = patch.agentPageShowHomeValueCta;
+  }
+  if (patch.publicWebsite !== undefined) {
+    set.publicWebsite = patch.publicWebsite ? patch.publicWebsite.trim() || null : null;
+  }
+  if (patch.facebookUrl !== undefined) {
+    set.facebookUrl = patch.facebookUrl ? patch.facebookUrl.trim() || null : null;
+  }
+  if (patch.instagramUrl !== undefined) {
+    set.instagramUrl = patch.instagramUrl ? patch.instagramUrl.trim() || null : null;
+  }
+  if (patch.linkedinUrl !== undefined) {
+    set.linkedinUrl = patch.linkedinUrl ? patch.linkedinUrl.trim() || null : null;
+  }
+  if (patch.youtubeUrl !== undefined) {
+    set.youtubeUrl = patch.youtubeUrl ? patch.youtubeUrl.trim() || null : null;
   }
 
   const updated = await db
