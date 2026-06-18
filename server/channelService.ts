@@ -900,6 +900,8 @@ class ChannelService {
     preferredContactId?: string;
     /** Commerce mirror on existing messaging threads — skips chatbot, keyword workflows, AI handoff, auto-reply. */
     inboundMode?: "commerce";
+    /** Public webchat attribution — e.g. agent page embed sets `agent_page`. */
+    webchatLeadSource?: "agent_page" | "website";
   }): Promise<InboundProcessingResult> {
     const {
       userId,
@@ -915,6 +917,7 @@ class ChannelService {
       attachmentType,
       preferredContactId,
       inboundMode,
+      webchatLeadSource,
     } = params;
     const isCommerceInbound = inboundMode === "commerce";
     let { channelContactId, contactName } = params;
@@ -994,6 +997,17 @@ class ChannelService {
         channel === "calendly"
           ? { email: channelContactId }
           : { [channelIdField]: channelContactId as string };
+      const webchatCustomFields =
+        channel === "webchat"
+          ? (await import("@shared/agent/webchatLeadContext")).buildWebchatLeadCustomFields(
+              webchatLeadSource,
+              channelContactId,
+            )
+          : undefined;
+      const webchatSourceDetails =
+        channel === "webchat" && webchatLeadSource === "agent_page"
+          ? { leadSource: "Agent Page" }
+          : undefined;
       contact = await storage.createContact({
         userId,
         name: contactName || channelContactId,
@@ -1003,6 +1017,8 @@ class ChannelService {
         lastIncomingChannel: channel,
         lastIncomingAt: new Date(),
         source: channel,
+        ...(webchatCustomFields ? { customFields: webchatCustomFields } : {}),
+        ...(webchatSourceDetails ? { sourceDetails: webchatSourceDetails } : {}),
       });
       contactCreated = true;
       console.log(`[Inbox Worker] Contact created — contactId: ${contact.id}, name: "${contact.name}"`);
@@ -1020,6 +1036,20 @@ class ChannelService {
           ? {}
           : { primaryChannel: channel }),
       };
+      if (channel === "webchat") {
+        const { buildWebchatLeadCustomFields } = await import("@shared/agent/webchatLeadContext");
+        contactUpdates.customFields = buildWebchatLeadCustomFields(
+          webchatLeadSource,
+          channelContactId,
+          (contact.customFields as Record<string, unknown> | undefined) || {},
+        );
+        if (webchatLeadSource === "agent_page") {
+          contactUpdates.sourceDetails = {
+            ...((contact.sourceDetails as Record<string, unknown> | undefined) || {}),
+            leadSource: "Agent Page",
+          };
+        }
+      }
       // If this contact was matched via the phone fallback (whatsappId was null),
       // backfill the whatsappId now so subsequent inbound lookups hit the fast path.
       if (channel === 'whatsapp' && !contact.whatsappId) {
@@ -1145,6 +1175,17 @@ class ChannelService {
     }
 
     console.log(`[Inbound] DB write success — messageId: ${message.id}, conversationId: ${conversation.id}, contactId: ${contact.id}, preview: "${content.substring(0, 80)}"`);
+
+    if (channel === "webchat" && (content || "").trim()) {
+      const { syncWebchatContactIdentity } = await import("./webchatLeadService");
+      contact = await syncWebchatContactIdentity({
+        userId,
+        contact,
+        inboundText: content,
+        channelContactId,
+        leadSource: webchatLeadSource,
+      });
+    }
 
     await storage.updateConversation(conversation.id, {
       lastMessageAt: new Date(),
@@ -1458,7 +1499,23 @@ class ChannelService {
         }
       }
 
-      // 2. Always-on auto-reply — greeting-aware when inbound looks like a simple greeting
+      // 2. Anonymous webchat — ask for name + contact info on first message
+      if (
+        !shouldReply &&
+        channel === "webchat" &&
+        priorMessageCount === 0
+      ) {
+        const { contactNeedsWebchatIdentity, WEBCHAT_IDENTITY_PROMPT } = await import(
+          "@shared/agent/webchatLeadContext"
+        );
+        if (contactNeedsWebchatIdentity(contact)) {
+          shouldReply = true;
+          replyText = WEBCHAT_IDENTITY_PROMPT;
+          source = "auto_reply";
+        }
+      }
+
+      // 3. Always-on auto-reply — greeting-aware when inbound looks like a simple greeting
       if (!shouldReply && user.autoReplyEnabled) {
         const trimmed = (inboundContent || "").trim();
         const gKind = classifyGreetingInbound(trimmed);

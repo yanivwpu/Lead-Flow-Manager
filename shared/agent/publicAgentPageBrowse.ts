@@ -5,6 +5,7 @@ export type AgentPageListingSort = "newest" | "price_desc" | "price_asc";
 export type AgentPageListingBrowseInput = {
   status: string;
   listingLabel: "FOR SALE" | "FOR RENT";
+  cityState: string;
   priceCents: number | null;
   beds: number | null;
   baths: number | null;
@@ -15,6 +16,7 @@ export type AgentPageListingBrowseInput = {
 
 export type AgentPageListingBrowseFilters = {
   listingType: AgentPageListingFilter;
+  location: string | null;
   minPrice: number | null;
   maxPrice: number | null;
   minBeds: number | null;
@@ -56,6 +58,12 @@ export function listingMatchesAgentPageBrowseFilters(
     })
   ) {
     return false;
+  }
+
+  const locationQuery = (filters.location ?? "").trim().toLowerCase();
+  if (locationQuery) {
+    const haystack = (listing.cityState ?? "").trim().toLowerCase();
+    if (!haystack.includes(locationQuery)) return false;
   }
 
   const price = listing.priceCents;

@@ -489,8 +489,11 @@ function testHtml() {
   assert(!emptyLinksHtml.includes('class="agent-social-link"'), "no social icon anchors when all links empty");
   assert(html.includes("width: 120px"), "larger desktop avatar");
   assert(html.includes("Open chat"), "web chat primary button label");
-  assert(html.includes("chat-backdrop"), "embedded chat modal");
+  assert(html.includes("chat-widget"), "docked chat widget");
+  assert(html.includes("chat-bubble"), "minimized chat bubble");
+  assert(html.includes("chat-minimize"), "chat minimize button");
   assert(html.includes("widget-frame"), "widget iframe embed");
+  assert(html.includes("source=agent_page"), "agent page webchat source param");
   assert(html.includes("filter-min-price"), "price filters in panel");
   assert(!html.includes("browse-basic-row"), "no always-visible price row");
   assert(!html.includes("section-title"), "no listings heading");

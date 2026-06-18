@@ -50,6 +50,13 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       return null;
     }
   }, [searchString]);
+  const urlLeadSource = useMemo(() => {
+    try {
+      return new URLSearchParams(searchString).get("source");
+    } catch {
+      return null;
+    }
+  }, [searchString]);
 
   /** Parent page URL passed by script embed so page rules can match the host site, not the iframe path. */
   const parentUrlForRules = useMemo(() => {
@@ -166,13 +173,17 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     setInputText("");
 
     try {
+      const visitorLabel =
+        urlLeadSource === "agent_page" ? "Agent Page Visitor" : "Website Visitor";
       await fetch(`/api/webchat/${userId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           visitorId,
           message: text,
-          name: "Website Visitor",
+          name: visitorLabel,
+          source: urlLeadSource || undefined,
+          parentUrl: parentUrlForRules || undefined,
         }),
       });
       // Re-fetch to get server-confirmed messages + any bot replies
@@ -184,7 +195,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       setIsSending(false);
       inputRef.current?.focus();
     }
-  }, [userId, visitorId, isSending, fetchMessages]);
+  }, [userId, visitorId, isSending, fetchMessages, urlLeadSource, parentUrlForRules]);
 
   const handleButtonClick = useCallback(async (msgId: string, btn: ButtonOption) => {
     // Prevent duplicate clicks

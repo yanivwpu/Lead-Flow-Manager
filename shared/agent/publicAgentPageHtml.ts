@@ -247,13 +247,27 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .modal input, .modal textarea, .modal select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
     .modal textarea { min-height: 80px; resize: vertical; }
     .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
-    .chat-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.45); display: none; align-items: center; justify-content: center; z-index: 110; padding: 16px; }
-    .chat-backdrop.open { display: flex; }
-    .chat-panel { background: #fff; border-radius: 12px; width: 100%; max-width: 420px; height: min(620px, calc(100vh - 32px)); box-shadow: 0 8px 32px rgba(15,23,42,0.15); display: flex; flex-direction: column; overflow: hidden; }
-    .chat-panel-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 0.9375rem; }
-    .chat-panel-close { border: none; background: transparent; font-size: 1.25rem; line-height: 1; cursor: pointer; color: var(--muted); padding: 4px 8px; border-radius: 6px; }
-    .chat-panel-close:hover { background: #f1f5f9; color: var(--ink); }
-    .chat-panel iframe { flex: 1; width: 100%; border: none; min-height: 0; }
+    .chat-widget { position: fixed; inset: 0; z-index: 110; pointer-events: none; }
+    .chat-widget.open { pointer-events: none; }
+    .chat-widget-scrim { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.08); pointer-events: auto; }
+    .chat-widget.open:not(.minimized) .chat-panel { pointer-events: auto; }
+    .chat-widget.minimized .chat-bubble { pointer-events: auto; }
+    .chat-panel { position: fixed; bottom: 24px; right: 24px; z-index: 112; background: #fff; border-radius: 12px; width: min(400px, calc(100vw - 48px)); height: min(560px, calc(100vh - 48px)); max-height: 600px; box-shadow: 0 12px 40px rgba(15,23,42,0.18); border: 1px solid var(--border); display: none; flex-direction: column; overflow: hidden; }
+    .chat-widget.open:not(.minimized) .chat-panel { display: flex; }
+    .chat-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 0.9375rem; background: #fff; flex-shrink: 0; }
+    .chat-panel-header-actions { display: flex; align-items: center; gap: 2px; }
+    .chat-panel-btn { border: none; background: transparent; font-size: 1.125rem; line-height: 1; cursor: pointer; color: var(--muted); padding: 6px 8px; border-radius: 6px; min-width: 32px; }
+    .chat-panel-btn:hover { background: #f1f5f9; color: var(--ink); }
+    .chat-panel iframe { flex: 1; width: 100%; border: none; min-height: 0; display: block; }
+    .chat-bubble { position: fixed; bottom: 24px; right: 24px; z-index: 112; width: 56px; height: 56px; border-radius: 999px; border: none; background: var(--brand); color: #fff; cursor: pointer; display: none; align-items: center; justify-content: center; box-shadow: 0 6px 20px rgba(5,150,105,0.35); transition: transform 0.15s, box-shadow 0.15s; }
+    .chat-bubble:hover { transform: scale(1.04); box-shadow: 0 8px 24px rgba(5,150,105,0.4); }
+    .chat-bubble svg { width: 26px; height: 26px; display: block; }
+    .chat-widget.minimized .chat-bubble { display: flex; }
+    @media (max-width: 639px) {
+      .chat-widget.open:not(.minimized) .chat-widget-scrim { display: block; }
+      .chat-widget.open:not(.minimized) .chat-panel { bottom: 0; right: 0; left: 0; width: 100%; max-width: none; height: min(92vh, 600px); max-height: none; border-radius: 16px 16px 0 0; border-bottom: none; }
+      .chat-bubble { bottom: 20px; right: 20px; }
+    }
     .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 0.875rem; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 200; }
     .toast.show { opacity: 1; }
     .site-footer { margin-top: 32px; text-align: center; font-size: 0.75rem; color: #94a3b8; }
@@ -383,11 +397,18 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       </form>
     </div>
   </div>
-  <div class="chat-backdrop" id="chat-backdrop" aria-hidden="true">
-    <div class="chat-panel" role="dialog" aria-modal="true" aria-label="Web chat">
+  <div class="chat-widget" id="chat-widget" aria-hidden="true">
+    <div class="chat-widget-scrim" id="chat-widget-scrim" aria-hidden="true"></div>
+    <button type="button" class="chat-bubble" id="chat-bubble" aria-label="Open chat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+    </button>
+    <div class="chat-panel" id="chat-panel" role="dialog" aria-modal="false" aria-label="Web chat">
       <div class="chat-panel-header">
         <span>Chat</span>
-        <button type="button" class="chat-panel-close" id="chat-close" aria-label="Close chat">×</button>
+        <div class="chat-panel-header-actions">
+          <button type="button" class="chat-panel-btn" id="chat-minimize" aria-label="Minimize chat">−</button>
+          <button type="button" class="chat-panel-btn" id="chat-close" aria-label="Close chat">×</button>
+        </div>
       </div>
       <iframe id="chat-iframe" title="Web chat"></iframe>
     </div>
@@ -435,36 +456,64 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       document.getElementById("modal-cancel").addEventListener("click", closeModal);
       backdrop.addEventListener("click", function (e) { if (e.target === backdrop) closeModal(); });
 
-      var chatBackdrop = document.getElementById("chat-backdrop");
+      var chatWidget = document.getElementById("chat-widget");
       var chatIframe = document.getElementById("chat-iframe");
-      function openChatModal() {
-        if (!chatBackdrop || !chatIframe || !config.userId) {
+      var chatScrim = document.getElementById("chat-widget-scrim");
+      var chatBubble = document.getElementById("chat-bubble");
+
+      function ensureChatIframeSrc() {
+        if (!chatIframe || !config.userId) return false;
+        var current = chatIframe.getAttribute("src") || "";
+        if (!current || current === "about:blank") {
+          var prefill = encodeURIComponent(config.chatPrefill || "");
+          var parentUrl = encodeURIComponent(window.location.href);
+          chatIframe.src = "/widget-frame/" + encodeURIComponent(config.userId)
+            + "?prefill=" + prefill + "&parentUrl=" + parentUrl + "&source=agent_page";
+        }
+        return true;
+      }
+
+      function openChatWidget() {
+        if (!chatWidget || !chatIframe || !config.userId) {
           openModal("message");
           return;
         }
-        var prefill = encodeURIComponent(config.chatPrefill || "");
-        var parentUrl = encodeURIComponent(window.location.href);
-        chatIframe.src = "/widget-frame/" + encodeURIComponent(config.userId)
-          + "?prefill=" + prefill + "&parentUrl=" + parentUrl;
-        chatBackdrop.classList.add("open");
+        if (!ensureChatIframeSrc()) {
+          openModal("message");
+          return;
+        }
+        chatWidget.classList.add("open");
+        chatWidget.classList.remove("minimized");
+        chatWidget.setAttribute("aria-hidden", "false");
       }
-      function closeChatModal() {
-        if (!chatBackdrop || !chatIframe) return;
-        chatBackdrop.classList.remove("open");
+
+      function minimizeChatWidget() {
+        if (!chatWidget) return;
+        chatWidget.classList.add("open", "minimized");
+      }
+
+      function closeChatWidget() {
+        if (!chatWidget || !chatIframe) return;
+        chatWidget.classList.remove("open", "minimized");
+        chatWidget.setAttribute("aria-hidden", "true");
         chatIframe.src = "about:blank";
       }
+
+      var chatMinimize = document.getElementById("chat-minimize");
+      if (chatMinimize) chatMinimize.addEventListener("click", minimizeChatWidget);
       var chatClose = document.getElementById("chat-close");
-      if (chatClose) chatClose.addEventListener("click", closeChatModal);
-      if (chatBackdrop) {
-        chatBackdrop.addEventListener("click", function (e) {
-          if (e.target === chatBackdrop) closeChatModal();
+      if (chatClose) chatClose.addEventListener("click", closeChatWidget);
+      if (chatBubble) chatBubble.addEventListener("click", openChatWidget);
+      if (chatScrim) {
+        chatScrim.addEventListener("click", function () {
+          if (window.matchMedia("(max-width: 639px)").matches) minimizeChatWidget();
         });
       }
 
       document.getElementById("btn-message").addEventListener("click", function () {
         if (config.preferredLeadCapture === "webchat") {
           if (config.widgetEnabled) {
-            openChatModal();
+            openChatWidget();
             return;
           }
           openModal("message");

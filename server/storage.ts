@@ -2315,6 +2315,28 @@ export class DbStorage implements IStorage {
           .limit(1);
         return r[0];
       }
+      case 'webchat': {
+        const byPhone = await db
+          .select()
+          .from(contacts)
+          .where(and(eq(contacts.userId, userId), eq(contacts.phone, channelId)))
+          .orderBy(asc(contacts.createdAt))
+          .limit(1);
+        if (byPhone[0]) return byPhone[0];
+
+        const byVisitor = await db
+          .select()
+          .from(contacts)
+          .where(
+            and(
+              eq(contacts.userId, userId),
+              sql`${contacts.customFields}->>'webchatVisitorId' = ${channelId}`,
+            ),
+          )
+          .orderBy(asc(contacts.createdAt))
+          .limit(1);
+        return byVisitor[0];
+      }
       default:
         whereClause = and(eq(contacts.userId, userId), eq(contacts.phone, channelId));
     }

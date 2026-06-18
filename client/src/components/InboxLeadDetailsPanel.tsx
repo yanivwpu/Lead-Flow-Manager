@@ -155,9 +155,22 @@ interface TeamMember {
 
 const SOURCE_LABELS: Record<string, string> = {
   manual: 'Manual', whatsapp: 'WhatsApp', instagram: 'Instagram',
-  facebook: 'Facebook', webchat: 'Widget', import: 'CSV Import',
+  facebook: 'Facebook', webchat: 'Web Chat', import: 'CSV Import',
   api: 'API', tiktok: 'TikTok', sms: 'SMS', telegram: 'Telegram',
 };
+
+function resolveContactSourceLabel(contact: {
+  source?: string | null;
+  customFields?: Record<string, unknown> | null;
+}): string | null {
+  const cf = contact.customFields || {};
+  if (typeof cf.leadSource === 'string' && cf.leadSource.trim()) {
+    return cf.leadSource.trim();
+  }
+  if (cf.sourcePage === 'agent_page') return 'Agent Page';
+  if (contact.source) return SOURCE_LABELS[contact.source] || contact.source;
+  return null;
+}
 
 const TIME_SLOTS = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'];
 
@@ -2843,10 +2856,10 @@ export function InboxLeadDetailsPanel({
               {!contact.phone && !contact.email && (
                 <span className="text-[11px] text-gray-400 italic">No contact info</span>
               )}
-              {contact.source && (
+              {resolveContactSourceLabel(contact) && (
                 <div className="flex items-center gap-1.5 text-[11px] text-gray-400" data-testid="text-source">
                   <TrendingUp className="w-3 h-3 shrink-0" />
-                  via {SOURCE_LABELS[contact.source] || contact.source}
+                  via {resolveContactSourceLabel(contact)}
                 </div>
               )}
             </div>

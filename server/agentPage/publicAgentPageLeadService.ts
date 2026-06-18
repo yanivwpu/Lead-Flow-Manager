@@ -68,10 +68,11 @@ export async function processPublicAgentPageLead(
     userId,
     channel: "webchat",
     channelContactId: contactIdKey,
-    contactName: body.name?.trim() || "Website Visitor",
+    contactName: body.name?.trim() || "Agent Page Visitor",
     content: message,
     contentType: "text",
     externalMessageId,
+    webchatLeadSource: "agent_page",
   });
 
   if (!result.contact?.id) {
@@ -82,6 +83,7 @@ export async function processPublicAgentPageLead(
   const customFields: Record<string, unknown> = {
     ...(result.contact.customFields as Record<string, unknown> | undefined),
     sourcePage: "agent_page",
+    leadSource: "Agent Page",
     leadType: body.intent === "home_worth" ? "Seller" : "Buyer",
   };
   if (body.listingId) {

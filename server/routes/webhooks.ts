@@ -163,7 +163,7 @@ export function registerWebhookRoutes(app: Express): void {
   app.post("/api/webchat/:userId", async (req, res) => {
     try {
       const { userId } = req.params;
-      const { visitorId, name, message } = req.body;
+      const { visitorId, name, message, source, parentUrl } = req.body;
 
       if (!message) {
         return res.status(400).json({ error: "Message required" });
@@ -171,8 +171,15 @@ export function registerWebhookRoutes(app: Express): void {
 
       const webchatExternalId = `webchat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const webchatVisitorId = visitorId || `visitor_${Date.now()}`;
+      const { resolveWebchatLeadSource, resolveWebchatVisitorDisplayName } = await import(
+        "@shared/agent/webchatLeadContext"
+      );
+      const webchatLeadSource = resolveWebchatLeadSource({ source, parentUrl });
+      const contactName =
+        (typeof name === "string" && name.trim()) ||
+        resolveWebchatVisitorDisplayName(webchatLeadSource);
 
-      console.log(`[Inbound] Webhook received — channel: webchat, userId: ${userId}, visitorId: ${webchatVisitorId}`);
+      console.log(`[Inbound] Webhook received — channel: webchat, userId: ${userId}, visitorId: ${webchatVisitorId}, leadSource: ${webchatLeadSource || "website"}`);
       console.log(`[Inbound] Channel identified: webchat — starting processIncomingMessage`);
 
       const { channelService } = await import("../channelService");
@@ -180,10 +187,11 @@ export function registerWebhookRoutes(app: Express): void {
         userId,
         channel: 'webchat',
         channelContactId: webchatVisitorId,
-        contactName: name || "Website Visitor",
+        contactName,
         content: message,
         contentType: 'text',
         externalMessageId: webchatExternalId,
+        webchatLeadSource,
       });
 
       console.log(`[Inbound] Webhook returned 200 — channel: webchat, userId: ${userId}`);
