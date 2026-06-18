@@ -158,35 +158,49 @@ export function normalizeListingSlugAddressInput(
   return { ...input, addressLine1: line1, city: city || input.city, state: state || input.state, zip: zip || input.zip };
 }
 
-/** True when address fields are sufficient to build a public slug. */
-export function listingHasPublicSlugAddress(input: ListingPublicSlugInput): boolean {
+/** Minimum fields required for any SEO slug (street + state + zip). */
+export function listingHasMinimalPublicSlugAddress(input: ListingPublicSlugInput): boolean {
   const normalized = normalizeListingSlugAddressInput(input);
   return Boolean(
     normalized.addressLine1?.trim() &&
-      normalized.city?.trim() &&
       normalized.state?.trim() &&
       normalized.zip?.trim() &&
       normalized.id?.trim(),
   );
 }
 
+/** True when address fields are sufficient to build a public slug. City is optional. */
+export function listingHasPublicSlugAddress(input: ListingPublicSlugInput): boolean {
+  return listingHasMinimalPublicSlugAddress(input);
+}
+
+function buildListingPublicSlugSegments(normalized: ListingPublicSlugInput): string[] | null {
+  const street = resolveListingStreetForSlug(normalized);
+  if (!street) return null;
+
+  const city = normalized.city?.trim();
+  const state = normalized.state?.trim();
+  const zip = normalized.zip?.trim();
+  if (!state || !zip) return null;
+
+  const segments = [street];
+  if (city) segments.push(city);
+  segments.push(state, zip);
+  return segments;
+}
+
 /**
- * Build SEO slug: address + city + state + zip + stable id suffix.
- * Example: 3503-oaks-way-308-pompano-beach-fl-33069-2e059e00
+ * Build SEO slug: street [+ city when present] + state + zip + stable id suffix.
+ * Examples:
+ * - 3503-oaks-way-308-pompano-beach-fl-33069-2e059e00
+ * - 915-n-e-street-fl-33460-f174940e (city missing)
  */
 export function buildListingPublicSlug(input: ListingPublicSlugInput): string | null {
   const normalized = normalizeListingSlugAddressInput(input);
   if (!listingHasPublicSlugAddress(normalized)) return null;
 
-  const street = resolveListingStreetForSlug(normalized);
-  if (!street) return null;
-
-  const segments = [
-    street,
-    normalized.city!.trim(),
-    normalized.state!.trim(),
-    normalized.zip!.trim(),
-  ];
+  const segments = buildListingPublicSlugSegments(normalized);
+  if (!segments) return null;
 
   let base = slugifyListingText(segments.join(" "));
   if (!base) return null;

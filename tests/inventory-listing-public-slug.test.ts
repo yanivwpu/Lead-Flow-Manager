@@ -131,4 +131,38 @@ const uuidShareUrl = buildListingCanonicalShareUrl(
 );
 assert(uuidShareUrl.endsWith(`/share/listings/${loxahatcheeId}`), "uuid fallback when no slug");
 
+const cityNullId = "f174940e-448d-4371-a602-1b4273506a88";
+const cityNullSlug = buildListingPublicSlug({
+  id: cityNullId,
+  addressLine1: "915 N E Street, FL 33460",
+  addressLine2: null,
+  city: null,
+  state: "FL",
+  zip: "33460",
+});
+assert(
+  cityNullSlug === "915-n-e-street-fl-33460-f174940e",
+  `city-null slug, got ${cityNullSlug}`,
+);
+assert(
+  listingHasPublicSlugAddress({
+    id: cityNullId,
+    addressLine1: "915 N E Street, FL 33460",
+    city: null,
+    state: "FL",
+    zip: "33460",
+  }),
+  "city-null address sufficient for slug",
+);
+assert(
+  buildListingPublicSlug({
+    id: cityNullId,
+    addressLine1: null,
+    city: null,
+    state: "FL",
+    zip: "33460",
+  }) === null,
+  "uuid fallback when no street line",
+);
+
 console.log("inventory-listing-public-slug.test.ts: OK");
