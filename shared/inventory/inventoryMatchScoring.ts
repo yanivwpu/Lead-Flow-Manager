@@ -350,6 +350,14 @@ function listingHasWaterfrontSignal(listing: MatchListingInput): boolean {
   );
 }
 
+/** Hard gates for matching pool — exported for DB pool refinement and tests. */
+export function passesMatchingPoolHardGates(
+  listing: MatchListingInput,
+  criteria: BuyerMatchCriteria,
+): boolean {
+  return passesHardGates(listing, criteria);
+}
+
 function passesHardGates(listing: MatchListingInput, criteria: BuyerMatchCriteria): boolean {
   if (criteria.transactionIntent === "buy") {
     if (listingIsRentalOrLease(listing)) return false;

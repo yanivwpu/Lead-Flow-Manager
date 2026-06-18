@@ -16,7 +16,9 @@ export function buildInventoryMatchDiagnostics(input: {
   matchesReturned: number;
   totalQualifyingMatches?: number;
   matchingFetchLimit?: number;
+  dbCandidatesAfterHardFilters?: number;
   inventoryCapTruncated?: boolean;
+  cappedAfterHardFilters?: boolean;
   funnelSteps?: Array<{ label: string; count: number }>;
   dataQuality?: Record<string, number>;
   exclusionByReason?: Record<string, number>;
@@ -38,7 +40,9 @@ export function buildInventoryMatchDiagnostics(input: {
     matchesReturned: input.matchesReturned,
     totalQualifyingMatches: input.totalQualifyingMatches,
     matchingFetchLimit: input.matchingFetchLimit,
+    dbCandidatesAfterHardFilters: input.dbCandidatesAfterHardFilters,
     inventoryCapTruncated: input.inventoryCapTruncated,
+    cappedAfterHardFilters: input.cappedAfterHardFilters,
     funnelSteps: input.funnelSteps,
     dataQuality: input.dataQuality,
     exclusionByReason: input.exclusionByReason,
@@ -60,10 +64,12 @@ export function buildDbInventoryMatchDiagnostics(input: {
   agentShareEligibleCount: number;
   agentShareExclusions: InventoryAgentShareExclusionCounts;
   directShareByListingId?: Map<string, boolean>;
+  dbCandidatesAfterHardFilters: number;
   rowsLoadedForScoring: number;
   matchesReturned: number;
   totalQualifyingMatches: number;
   matchingFetchLimit: number;
+  cappedAfterHardFilters?: boolean;
   funnel: BuyInventoryFunnelAudit;
   persistedProfileSnapshot: InventoryMatchProfileSnapshot;
   activeFilterSummary?: string | null;
@@ -71,9 +77,12 @@ export function buildDbInventoryMatchDiagnostics(input: {
   noMatchSummary?: string | null;
   lastMatchingError?: string | null;
 }): InventoryMatchDiagnostics {
-  const inventoryCapTruncated =
-    input.rowsLoadedForScoring < input.agentShareEligibleCount &&
-    input.rowsLoadedForScoring >= input.matchingFetchLimit;
+  const cappedAfterHardFilters =
+    input.cappedAfterHardFilters ??
+    (input.dbCandidatesAfterHardFilters > input.matchingFetchLimit &&
+      input.rowsLoadedForScoring >= input.matchingFetchLimit);
+
+  const inventoryCapTruncated = cappedAfterHardFilters;
 
   const funnelExcludedSamples: InventoryMatchFunnelExcludedSample[] =
     input.funnel.excludedSamples.map((s) => ({
@@ -115,7 +124,9 @@ export function buildDbInventoryMatchDiagnostics(input: {
     matchesReturned: input.matchesReturned,
     totalQualifyingMatches: input.totalQualifyingMatches,
     matchingFetchLimit: input.matchingFetchLimit,
+    dbCandidatesAfterHardFilters: input.dbCandidatesAfterHardFilters,
     inventoryCapTruncated,
+    cappedAfterHardFilters,
     funnelSteps: input.funnel.steps,
     dataQuality: input.funnel.dataQuality,
     exclusionByReason: input.funnel.exclusionByReason,

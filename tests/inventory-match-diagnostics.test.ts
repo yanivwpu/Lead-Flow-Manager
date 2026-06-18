@@ -76,6 +76,7 @@ const dbDiag = buildDbInventoryMatchDiagnostics({
     missingInternetDisplay: 15,
     missingAttribution: 8,
   },
+  dbCandidatesAfterHardFilters: 900,
   rowsLoadedForScoring: 900,
   matchesReturned: 1,
   totalQualifyingMatches: 1,

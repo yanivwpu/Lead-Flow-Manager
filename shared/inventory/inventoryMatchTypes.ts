@@ -105,7 +105,11 @@ export const inventoryMatchDiagnosticsSchema = z.object({
   matchesReturned: z.number().int().nonnegative(),
   totalQualifyingMatches: z.number().int().nonnegative().optional(),
   matchingFetchLimit: z.number().int().nonnegative().optional(),
+  /** Rows matching profile hard filters in DB before synced_at cap. */
+  dbCandidatesAfterHardFilters: z.number().int().nonnegative().optional(),
   inventoryCapTruncated: z.boolean().optional(),
+  /** True when hard-filtered DB candidates exceed matchingFetchLimit. */
+  cappedAfterHardFilters: z.boolean().optional(),
   funnelSteps: z.array(inventoryMatchFunnelStepSchema).optional(),
   dataQuality: z.record(z.string(), z.number().int().nonnegative()).optional(),
   exclusionByReason: z.record(z.string(), z.number().int().nonnegative()).optional(),

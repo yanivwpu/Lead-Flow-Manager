@@ -28,7 +28,7 @@ import {
 import { readBuyerPreferenceProfile, loadPersistedBuyerPreferenceProfile } from "../buyerPreferenceService";
 import { storage } from "../storage";
 import { canUseInventoryConnector } from "./inventoryGate";
-import { countActiveListingsForUser, createDirectShareLinkForUserListing, fetchActiveListingsForMatching, getAgentShareExclusionCountsForUser, resolveMatchingListingLimitForUser } from "./inventoryDb";
+import { countActiveListingsForUser, createDirectShareLinkForUserListing, fetchMatchingPoolListings, getAgentShareExclusionCountsForUser, resolveMatchingListingLimitForUser } from "./inventoryDb";
 import { normalizeListingCompliance } from "@shared/inventory/inventoryListingCompliance";
 import { canDirectShareListing, isCopilotAgentShareListing } from "@shared/inventory/publicListingPublication";
 import { getAppOrigin } from "../urlOrigins";
@@ -243,10 +243,10 @@ export async function findMatchingListingsForContact(
   }
 
   let matchingLimit = 1000;
-  let rows;
+  let poolFetch;
   try {
     matchingLimit = await resolveMatchingListingLimitForUser(userId);
-    rows = await fetchActiveListingsForMatching(userId, matchingLimit);
+    poolFetch = await fetchMatchingPoolListings(userId, { limit: matchingLimit, criteria });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[inventory-matches] fetchActiveListingsForMatching failed", {
@@ -273,6 +273,10 @@ export async function findMatchingListingsForContact(
       }),
     };
   }
+
+  const rows = poolFetch.listings;
+  const dbCandidatesAfterHardFilters = poolFetch.dbCandidatesAfterHardFilters;
+  const cappedAfterHardFilters = poolFetch.cappedAfterHardFilters;
 
   const inputs = rows
     .filter((row) =>
@@ -343,10 +347,12 @@ export async function findMatchingListingsForContact(
     agentShareEligibleCount,
     agentShareExclusions,
     directShareByListingId,
+    dbCandidatesAfterHardFilters,
     rowsLoadedForScoring: inputs.length,
     matchesReturned: matches.length,
     totalQualifyingMatches: totalMatchCount,
     matchingFetchLimit: matchingLimit,
+    cappedAfterHardFilters,
     funnel,
     persistedProfileSnapshot: profileSnapshot,
     activeFilterSummary,
@@ -373,6 +379,8 @@ export async function findMatchingListingsForContact(
     matchCount: totalMatchCount,
     returned: matches.length,
     rowsLoaded: inputs.length,
+    dbCandidatesAfterHardFilters,
+    cappedAfterHardFilters,
     activeInventory: inventoryCount,
     matchingLimit,
     profileSnapshot,

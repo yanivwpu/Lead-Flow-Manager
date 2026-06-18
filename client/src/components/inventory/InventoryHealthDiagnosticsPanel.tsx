@@ -39,10 +39,12 @@ export function InventoryHealthDiagnosticsPanel({
   const lastError = diagnostics?.lastMatchingError ?? clientError ?? null;
 
   const activeCount = diagnostics?.activeInventoryCount;
+  const dbCandidates = diagnostics?.dbCandidatesAfterHardFilters;
   const scored = diagnostics?.listingsScored;
   const returned = diagnostics?.matchesReturned;
   const totalQualifying = diagnostics?.totalQualifyingMatches;
   const capTruncated = diagnostics?.inventoryCapTruncated;
+  const cappedAfterHardFilters = diagnostics?.cappedAfterHardFilters;
 
   const agentShareEligible = diagnostics?.agentShareEligibleCount ?? activeCount;
 
@@ -50,6 +52,11 @@ export function InventoryHealthDiagnosticsPanel({
     () =>
       rateLimitWarning ||
       capTruncated === true ||
+      cappedAfterHardFilters === true ||
+      (typeof dbCandidates === "number" &&
+        dbCandidates > 0 &&
+        (scored ?? 0) === 0 &&
+        (returned ?? 0) === 0) ||
       (typeof agentShareEligible === "number" && agentShareEligible > 0 && (scored ?? 0) === 0) ||
       (typeof scored === "number" &&
         scored > 0 &&
@@ -59,7 +66,7 @@ export function InventoryHealthDiagnosticsPanel({
         typeof returned === "number" &&
         totalQualifying > returned) ||
       (!!lastError && !rateLimitWarning),
-    [rateLimitWarning, capTruncated, agentShareEligible, scored, returned, totalQualifying, lastError],
+    [rateLimitWarning, capTruncated, cappedAfterHardFilters, dbCandidates, agentShareEligible, scored, returned, totalQualifying, lastError],
   );
 
   const [open, setOpen] = useState(import.meta.env.DEV || rateLimitWarning || hasAnomaly);
@@ -95,7 +102,7 @@ export function InventoryHealthDiagnosticsPanel({
         </span>
         {hasAnomaly && (
           <span className="ml-auto text-amber-700 font-medium normal-case">
-            {rateLimitWarning ? "rate limit" : capTruncated ? "cap hit" : "review funnel"}
+            {rateLimitWarning ? "rate limit" : capTruncated || cappedAfterHardFilters ? "cap hit" : "review funnel"}
           </span>
         )}
       </CollapsibleTrigger>
@@ -108,13 +115,19 @@ export function InventoryHealthDiagnosticsPanel({
             Refresh paused briefly — showing your last successful matches.
           </p>
         )}
-        {capTruncated && (
+        {(capTruncated || cappedAfterHardFilters) && (
           <p className="text-[10px] text-amber-800 leading-snug pb-1">
-            Matching cap reached — only {scored} of {agentShareEligible} Copilot-shareable listings
-            were scored. Increase matching limit or sync may be incomplete.
+            Matching cap reached after hard filters — {scored ?? "—"} of {dbCandidates ?? "—"}{" "}
+            DB candidates were scored (limit {diagnostics?.matchingFetchLimit ?? "—"}).
           </p>
         )}
-        <DiagnosticRow label="Active inventory (DB)" value={activeCount ?? "—"} />
+        <DiagnosticRow label="Total workspace listings" value={activeCount ?? "—"} />
+        <DiagnosticRow
+          label="DB candidates (hard filters)"
+          value={dbCandidates ?? "—"}
+        />
+        <DiagnosticRow label="Scored candidates" value={scored ?? "—"} />
+        <DiagnosticRow label="Returned matches" value={returned ?? "—"} />
         <DiagnosticRow
           label="Copilot-shareable pool"
           value={diagnostics?.agentShareEligibleCount ?? "—"}
@@ -135,16 +148,11 @@ export function InventoryHealthDiagnosticsPanel({
             />
           </div>
         )}
-        <DiagnosticRow label="Rows loaded for scoring" value={scored ?? "—"} />
-        <DiagnosticRow
-          label="Fetch limit"
-          value={diagnostics?.matchingFetchLimit ?? "—"}
-        />
         <DiagnosticRow
           label="Qualifying matches (DB funnel)"
-          value={totalQualifying ?? returned ?? "—"}
+          value={totalQualifying ?? "—"}
         />
-        <DiagnosticRow label="Returned (top 10)" value={returned ?? "—"} />
+        <DiagnosticRow label="Fetch limit" value={diagnostics?.matchingFetchLimit ?? "—"} />
         <DiagnosticRow label="Last match run" value={formatInventoryMatchRunTime(lastRun)} />
         <DiagnosticRow label="Last matching error" value={lastError?.trim() || "—"} />
         {reason && <DiagnosticRow label="API reason" value={reason} />}

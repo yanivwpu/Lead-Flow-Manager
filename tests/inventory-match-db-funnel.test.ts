@@ -121,6 +121,7 @@ const diagnostics = buildDbInventoryMatchDiagnostics({
     missingInternetDisplay: 0,
     missingAttribution: 0,
   },
+  dbCandidatesAfterHardFilters: listings.length,
   rowsLoadedForScoring: listings.length,
   matchesReturned: 2,
   totalQualifyingMatches: relaxedFunnel.rankedCount,

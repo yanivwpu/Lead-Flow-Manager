@@ -43,7 +43,12 @@ import {
   isDevSeedProviderListingId,
   isProductionDevSeedGuardEnabled,
 } from "@shared/inventory/inventoryDevSeedGuard";
-import { db } from "../../drizzle/db";
+import { buildMatchingPoolProfileSqlConditions } from "@shared/inventory/inventoryMatchingPoolSql";
+import {
+  profileHasDbPoolHardFilters,
+  refineMatchingPoolCandidates,
+} from "@shared/inventory/inventoryMatchingPoolFilters";
+import type { BuyerMatchCriteria } from "@shared/inventory/inventoryMatchScoring";
 import { decryptIntegrationConfig, encryptIntegrationConfig } from "../integrationConfigCrypto";
 
 function devSeedListingExcludeCondition() {
@@ -591,10 +596,18 @@ async function tryLoadFlyerExtraFields(listingId: string): Promise<FlyerExtraLis
   }
 }
 
-export async function fetchActiveListingsForMatching(
-  userId: string,
-  limit = 2500,
-): Promise<InventoryListing[]> {
+export type MatchingPoolFetchOptions = {
+  limit?: number;
+  criteria?: BuyerMatchCriteria;
+};
+
+export type MatchingPoolFetchResult = {
+  listings: InventoryListing[];
+  dbCandidatesAfterHardFilters: number;
+  cappedAfterHardFilters: boolean;
+};
+
+function matchingPoolBaseConditions(userId: string) {
   const conditions = [
     eq(inventoryListings.userId, userId),
     inArray(inventoryListings.status, [...MATCHABLE_INVENTORY_STATUSES]),
@@ -602,27 +615,86 @@ export async function fetchActiveListingsForMatching(
   ];
   const devSeedExclude = devSeedListingExcludeCondition();
   if (devSeedExclude) conditions.push(devSeedExclude);
+  return conditions;
+}
 
-  try {
+async function countMatchingPoolCandidates(
+  userId: string,
+  criteria?: BuyerMatchCriteria,
+): Promise<number> {
+  const conditions = matchingPoolBaseConditions(userId);
+  if (criteria && profileHasDbPoolHardFilters(criteria)) {
+    conditions.push(...buildMatchingPoolProfileSqlConditions(criteria));
+  }
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(inventoryListings)
+    .where(and(...conditions));
+  return row?.count ?? 0;
+}
+
+async function selectMatchingPoolRows(
+  userId: string,
+  limit: number,
+  criteria?: BuyerMatchCriteria,
+): Promise<InventoryListing[]> {
+  const conditions = matchingPoolBaseConditions(userId);
+  if (criteria && profileHasDbPoolHardFilters(criteria)) {
+    conditions.push(...buildMatchingPoolProfileSqlConditions(criteria));
+  }
+
+  const runSelect = async (withFlyer: boolean) => {
     const rows = await db
-      .select({ ...MATCHING_LISTING_SELECT, ...FLYER_EXTRA_LISTING_SELECT })
-      .from(inventoryListings)
-      .where(and(...conditions))
-      .orderBy(desc(inventoryListings.syncedAt))
-      .limit(limit);
-    return rows.map(inventoryListingFromMatchingRow);
-  } catch (error) {
-    console.warn("[inventory-matching] flyer columns unavailable; matching without sqft/listingDetails", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    const rows = await db
-      .select(MATCHING_LISTING_SELECT)
+      .select(
+        withFlyer
+          ? { ...MATCHING_LISTING_SELECT, ...FLYER_EXTRA_LISTING_SELECT }
+          : MATCHING_LISTING_SELECT,
+      )
       .from(inventoryListings)
       .where(and(...conditions))
       .orderBy(desc(inventoryListings.syncedAt))
       .limit(limit);
     return rows.map((row) => inventoryListingFromMatchingRow(row));
+  };
+
+  try {
+    return await runSelect(true);
+  } catch (error) {
+    console.warn("[inventory-matching] flyer columns unavailable; matching without sqft/listingDetails", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return runSelect(false);
   }
+}
+
+/** Load shareable listings for scoring — profile hard filters at SQL before synced_at cap. */
+export async function fetchMatchingPoolListings(
+  userId: string,
+  options: MatchingPoolFetchOptions = {},
+): Promise<MatchingPoolFetchResult> {
+  const limit = options.limit ?? 2500;
+  const criteria = options.criteria;
+  const dbCandidatesAfterHardFilters = await countMatchingPoolCandidates(userId, criteria);
+  const cappedAfterHardFilters = dbCandidatesAfterHardFilters > limit;
+
+  let listings = await selectMatchingPoolRows(userId, limit, criteria);
+  if (criteria && profileHasDbPoolHardFilters(criteria)) {
+    listings = refineMatchingPoolCandidates(listings, criteria);
+  }
+
+  return {
+    listings,
+    dbCandidatesAfterHardFilters,
+    cappedAfterHardFilters,
+  };
+}
+
+export async function fetchActiveListingsForMatching(
+  userId: string,
+  limit = 2500,
+): Promise<InventoryListing[]> {
+  const result = await fetchMatchingPoolListings(userId, { limit });
+  return result.listings;
 }
 
 export async function countActiveListingsForUser(userId: string): Promise<number> {
