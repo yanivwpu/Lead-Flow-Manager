@@ -266,6 +266,14 @@ function testAgentPageDbSavePath() {
   assert(card.includes("AgentPageMarketAreaChips"), "market area chips component");
   assert(card.includes("agent-page-future-analytics"), "future analytics placeholder");
   assert(card.includes("agent-page-url-block"), "agent url block");
+  assert(card.includes("Primary contact button"), "primary contact button label");
+  assert(card.includes("agent-page-primary-contact-button"), "primary contact button test id");
+  assert(card.includes("Email link"), "email link option label");
+  assert(card.includes("Phone call"), "phone call option label");
+  assert(
+    card.includes("Web chat and forms create CRM leads in your Inbox"),
+    "primary contact helper text",
+  );
 
   const rge = readFileSync(
     join(process.cwd(), "client", "src", "pages", "RealtorGrowthEngine.tsx"),
@@ -391,7 +399,13 @@ function testHtml() {
     }],
   });
   assert(html.includes("Test Agent"), "name in html");
+  assert(html.includes("Open chat"), "web chat primary button label");
+  assert(html.includes("chat-backdrop"), "embedded chat modal");
+  assert(html.includes("widget-frame"), "widget iframe embed");
   assert(html.includes("filter-min-price"), "price filters");
+  assert(html.includes("btn-toggle-filters"), "collapsible filters toggle");
+  assert(html.includes("More Filters"), "desktop more filters label");
+  assert(html.includes("browse-panel"), "advanced filters panel");
   assert(html.includes("filter-sort"), "sort control");
   assert(html.includes("data-filter=\"sale\""), "listing type filters");
   assert(html.includes("What's My Home Worth?"), "home worth cta");

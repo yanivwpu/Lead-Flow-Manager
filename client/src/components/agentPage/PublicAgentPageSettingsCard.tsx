@@ -291,8 +291,8 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label>Preferred lead capture</Label>
+            <div className="space-y-2" data-testid="agent-page-primary-contact-button">
+              <Label>Primary contact button</Label>
               <Select
                 value={data.agentPagePreferredLeadCapture}
                 onValueChange={(v) => saveMutation.mutate({ agentPagePreferredLeadCapture: v })}
@@ -301,11 +301,15 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="webchat">Web chat widget</SelectItem>
-                  <SelectItem value="email">Email</SelectItem>
-                  <SelectItem value="phone">Phone</SelectItem>
+                  <SelectItem value="webchat">Web chat</SelectItem>
+                  <SelectItem value="email">Email link</SelectItem>
+                  <SelectItem value="phone">Phone call</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground leading-snug">
+                Web chat and forms create CRM leads in your Inbox. Email and phone open the visitor&apos;s email
+                app or dialer and may not be tracked.
+              </p>
             </div>
 
             <div className="flex items-center justify-between gap-3">

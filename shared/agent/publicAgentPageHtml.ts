@@ -80,6 +80,15 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     ? `<button type="button" class="btn btn-outline" id="btn-home-worth">What's My Home Worth?</button>`
     : "";
 
+  const primaryContactLabel =
+    data.preferredLeadCapture === "email"
+      ? "Email agent"
+      : data.preferredLeadCapture === "phone"
+        ? "Call agent"
+        : data.widgetEnabled
+          ? "Open chat"
+          : "Send a message";
+
   const cards = data.listings.map((listing, index) => listingCardHtml(listing, index)).join("");
 
   return `<!DOCTYPE html>
@@ -111,16 +120,41 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .btn-ghost { background: transparent; border-color: transparent; color: var(--muted); padding: 6px 10px; }
     .btn-sm { padding: 7px 12px; font-size: 0.8125rem; }
     .section-title { margin: 0 0 12px; font-size: 1.25rem; font-weight: 700; }
-    .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
     .chip { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border); background: #fff; font-size: 0.8125rem; font-weight: 600; cursor: pointer; color: #475569; }
     .chip.active { background: var(--brand); border-color: var(--brand); color: #fff; }
-    .browse-filters { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); margin-bottom: 16px; padding: 14px; background: #fff; border: 1px solid var(--border); border-radius: 12px; }
-    .browse-filters label { display: flex; flex-direction: column; gap: 4px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
-    .browse-filters input, .browse-filters select { padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 0.8125rem; color: var(--ink); background: #fff; min-width: 0; }
-    .browse-filters .listing-type-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .browse-filters .listing-type-row > span { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-right: 4px; }
-    .browse-empty { grid-column: 1 / -1; padding: 24px; text-align: center; color: var(--muted); font-size: 0.875rem; display: none; }
+    .browse-wrap { margin-bottom: 12px; }
+    .browse-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
+    .listing-type-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1; min-width: 0; }
+    .listing-type-row > span { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-right: 2px; }
+    .browse-toggle-btn { flex-shrink: 0; }
+    .browse-toggle-btn .toggle-label-mobile { display: none; }
+    .browse-basic-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-bottom: 0; }
+    .browse-basic-row label { display: flex; flex-direction: column; gap: 4px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); min-width: 120px; flex: 1; max-width: 180px; }
+    .browse-basic-row input { padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 0.8125rem; color: var(--ink); background: #fff; min-width: 0; width: 100%; }
+    .browse-panel-backdrop { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.4); z-index: 85; }
+    .browse-panel-backdrop.open { display: block; }
+    .browse-panel { margin-bottom: 12px; padding: 12px; background: #fff; border: 1px solid var(--border); border-radius: 12px; }
+    .browse-panel[hidden] { display: none !important; }
+    .browse-panel-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+    .browse-panel-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    .browse-panel-grid input, .browse-panel-grid select { padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 0.8125rem; color: var(--ink); background: #fff; min-width: 0; width: 100%; }
+    .browse-panel-mobile-prices { display: none; }
+    .browse-panel-actions { display: none; margin-top: 12px; justify-content: flex-end; gap: 8px; }
+    .browse-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 0.875rem; display: none; margin-bottom: 12px; }
     .browse-empty.show { display: block; }
+    @media (max-width: 639px) {
+      .browse-basic-row { display: none; }
+      .browse-toggle-btn .toggle-label-desktop { display: none; }
+      .browse-toggle-btn .toggle-label-mobile { display: inline; }
+      .browse-panel-mobile-prices { display: contents; }
+      .browse-panel { position: fixed; left: 0; right: 0; bottom: 0; z-index: 90; max-height: min(85vh, 520px); overflow-y: auto; margin: 0; border-radius: 16px 16px 0 0; box-shadow: 0 -8px 32px rgba(15,23,42,0.12); padding: 16px 16px 20px; }
+      .browse-panel-actions { display: flex; }
+      .browse-panel-title { display: block; font-size: 1rem; font-weight: 700; margin: 0 0 12px; }
+    }
+    @media (min-width: 640px) {
+      .browse-panel-title { display: none; }
+      .browse-panel-backdrop { display: none !important; }
+    }
     .listings-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
     .listing-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
     .listing-card[hidden] { display: none !important; }
@@ -147,6 +181,13 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .modal input, .modal textarea, .modal select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
     .modal textarea { min-height: 80px; resize: vertical; }
     .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+    .chat-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.45); display: none; align-items: center; justify-content: center; z-index: 110; padding: 16px; }
+    .chat-backdrop.open { display: flex; }
+    .chat-panel { background: #fff; border-radius: 12px; width: 100%; max-width: 420px; height: min(620px, calc(100vh - 32px)); box-shadow: 0 8px 32px rgba(15,23,42,0.15); display: flex; flex-direction: column; overflow: hidden; }
+    .chat-panel-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 0.9375rem; }
+    .chat-panel-close { border: none; background: transparent; font-size: 1.25rem; line-height: 1; cursor: pointer; color: var(--muted); padding: 4px 8px; border-radius: 6px; }
+    .chat-panel-close:hover { background: #f1f5f9; color: var(--ink); }
+    .chat-panel iframe { flex: 1; width: 100%; border: none; min-height: 0; }
     .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 0.875rem; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 200; }
     .toast.show { opacity: 1; }
     .site-footer { margin-top: 32px; text-align: center; font-size: 0.75rem; color: #94a3b8; }
@@ -162,7 +203,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         ${bioHtml}
         ${marketHtml}
         <div class="cta-row">
-          <button type="button" class="btn btn-primary" id="btn-message">Message Me</button>
+          <button type="button" class="btn btn-primary" id="btn-message">${escapeHtml(primaryContactLabel)}</button>
           ${data.schedulingUrl ? `<a class="btn btn-outline" id="btn-schedule-header" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">Schedule Showing</a>` : `<button type="button" class="btn btn-outline" id="btn-schedule-header">Schedule Showing</button>`}
           ${homeWorthBtn}
         </div>
@@ -171,60 +212,86 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
 
     <section>
       <h2 class="section-title">Listings</h2>
-      <div class="browse-filters" id="browse-filters">
-        <div class="listing-type-row">
-          <span>Type</span>
-          <button type="button" class="chip active" data-filter="all">All</button>
-          <button type="button" class="chip" data-filter="sale">For Sale</button>
-          <button type="button" class="chip" data-filter="rent">For Rent</button>
-          <button type="button" class="chip" data-filter="coming_soon">Coming Soon</button>
+      <div class="browse-wrap" id="browse-wrap">
+        <div class="browse-head">
+          <div class="listing-type-row">
+            <span>Type</span>
+            <button type="button" class="chip active" data-filter="all">All</button>
+            <button type="button" class="chip" data-filter="sale">For Sale</button>
+            <button type="button" class="chip" data-filter="rent">For Rent</button>
+            <button type="button" class="chip" data-filter="coming_soon">Coming Soon</button>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline browse-toggle-btn" id="btn-toggle-filters" aria-expanded="false" aria-controls="browse-panel">
+            <span class="toggle-label-desktop">More Filters</span>
+            <span class="toggle-label-mobile">Filters</span>
+          </button>
         </div>
-        <label>Min price
-          <input type="number" id="filter-min-price" min="0" step="1000" placeholder="Any" inputmode="numeric" />
-        </label>
-        <label>Max price
-          <input type="number" id="filter-max-price" min="0" step="1000" placeholder="Any" inputmode="numeric" />
-        </label>
-        <label>Beds
-          <select id="filter-beds">
-            <option value="">Any</option>
-            <option value="1">1+</option>
-            <option value="2">2+</option>
-            <option value="3">3+</option>
-            <option value="4">4+</option>
-            <option value="5">5+</option>
-          </select>
-        </label>
-        <label>Baths
-          <select id="filter-baths">
-            <option value="">Any</option>
-            <option value="1">1+</option>
-            <option value="2">2+</option>
-            <option value="3">3+</option>
-            <option value="4">4+</option>
-          </select>
-        </label>
-        <label>Property type
-          <select id="filter-property-type">
-            <option value="">All types</option>
-            <option value="house">House</option>
-            <option value="condo">Condo</option>
-            <option value="townhouse">Townhouse</option>
-            <option value="multi_family">Multi-family</option>
-            <option value="land">Land</option>
-            <option value="other">Other</option>
-          </select>
-        </label>
-        <label>Min sq ft
-          <input type="number" id="filter-min-sqft" min="0" step="100" placeholder="Any" inputmode="numeric" />
-        </label>
-        <label>Sort
-          <select id="filter-sort">
-            <option value="newest">Newest</option>
-            <option value="price_desc">Price: high to low</option>
-            <option value="price_asc">Price: low to high</option>
-          </select>
-        </label>
+        <div class="browse-basic-row">
+          <label>Min price
+            <input type="number" id="filter-min-price" min="0" step="1000" placeholder="Any" inputmode="numeric" data-sync="filter-min-price-m" />
+          </label>
+          <label>Max price
+            <input type="number" id="filter-max-price" min="0" step="1000" placeholder="Any" inputmode="numeric" data-sync="filter-max-price-m" />
+          </label>
+        </div>
+      </div>
+      <div class="browse-panel-backdrop" id="browse-panel-backdrop" aria-hidden="true"></div>
+      <div class="browse-panel" id="browse-panel" hidden>
+        <p class="browse-panel-title">Filters</p>
+        <div class="browse-panel-grid">
+          <div class="browse-panel-mobile-prices">
+            <label>Min price
+              <input type="number" id="filter-min-price-m" min="0" step="1000" placeholder="Any" inputmode="numeric" data-sync="filter-min-price" />
+            </label>
+            <label>Max price
+              <input type="number" id="filter-max-price-m" min="0" step="1000" placeholder="Any" inputmode="numeric" data-sync="filter-max-price" />
+            </label>
+          </div>
+          <label>Beds
+            <select id="filter-beds">
+              <option value="">Any</option>
+              <option value="1">1+</option>
+              <option value="2">2+</option>
+              <option value="3">3+</option>
+              <option value="4">4+</option>
+              <option value="5">5+</option>
+            </select>
+          </label>
+          <label>Baths
+            <select id="filter-baths">
+              <option value="">Any</option>
+              <option value="1">1+</option>
+              <option value="2">2+</option>
+              <option value="3">3+</option>
+              <option value="4">4+</option>
+            </select>
+          </label>
+          <label>Property type
+            <select id="filter-property-type">
+              <option value="">All types</option>
+              <option value="house">House</option>
+              <option value="condo">Condo</option>
+              <option value="townhouse">Townhouse</option>
+              <option value="multi_family">Multi-family</option>
+              <option value="land">Land</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label>Min sq ft
+            <input type="number" id="filter-min-sqft" min="0" step="100" placeholder="Any" inputmode="numeric" />
+          </label>
+          <label>Sort
+            <select id="filter-sort">
+              <option value="newest">Newest</option>
+              <option value="price_desc">Price: high to low</option>
+              <option value="price_asc">Price: low to high</option>
+            </select>
+          </label>
+        </div>
+        <div class="browse-panel-actions">
+          <button type="button" class="btn btn-sm btn-outline" id="btn-filters-clear">Clear</button>
+          <button type="button" class="btn btn-sm btn-primary" id="btn-filters-apply">Apply</button>
+        </div>
       </div>
       <div class="browse-empty" id="browse-empty">No listings match your filters.</div>
       <div class="listings-grid" id="listings-grid">
@@ -256,6 +323,15 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       </form>
     </div>
   </div>
+  <div class="chat-backdrop" id="chat-backdrop" aria-hidden="true">
+    <div class="chat-panel" role="dialog" aria-modal="true" aria-label="Web chat">
+      <div class="chat-panel-header">
+        <span>Chat</span>
+        <button type="button" class="chat-panel-close" id="chat-close" aria-label="Close chat">×</button>
+      </div>
+      <iframe id="chat-iframe" title="Web chat"></iframe>
+    </div>
+  </div>
   <div class="toast" id="toast" role="status"></div>
 
   <script type="application/json" id="page-config">${JSON.stringify({
@@ -266,7 +342,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     preferredLeadCapture: data.preferredLeadCapture,
     publicEmail: data.publicEmail,
     publicPhone: data.publicPhone,
-    chatUrl: `/chat/${data.userId}?prefill=${encodeURIComponent("Hi, I'd like to connect with you about real estate.")}`,
+    chatPrefill: "Hi, I'd like to connect with you about real estate.",
   }).replace(/</g, "\\u003c")}</script>
   <script>
     (function () {
@@ -299,13 +375,43 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       document.getElementById("modal-cancel").addEventListener("click", closeModal);
       backdrop.addEventListener("click", function (e) { if (e.target === backdrop) closeModal(); });
 
+      var chatBackdrop = document.getElementById("chat-backdrop");
+      var chatIframe = document.getElementById("chat-iframe");
+      function openChatModal() {
+        if (!chatBackdrop || !chatIframe || !config.userId) {
+          openModal("message");
+          return;
+        }
+        var prefill = encodeURIComponent(config.chatPrefill || "");
+        var parentUrl = encodeURIComponent(window.location.href);
+        chatIframe.src = "/widget-frame/" + encodeURIComponent(config.userId)
+          + "?prefill=" + prefill + "&parentUrl=" + parentUrl;
+        chatBackdrop.classList.add("open");
+      }
+      function closeChatModal() {
+        if (!chatBackdrop || !chatIframe) return;
+        chatBackdrop.classList.remove("open");
+        chatIframe.src = "about:blank";
+      }
+      var chatClose = document.getElementById("chat-close");
+      if (chatClose) chatClose.addEventListener("click", closeChatModal);
+      if (chatBackdrop) {
+        chatBackdrop.addEventListener("click", function (e) {
+          if (e.target === chatBackdrop) closeChatModal();
+        });
+      }
+
       document.getElementById("btn-message").addEventListener("click", function () {
-        if (config.widgetEnabled) {
-          window.open(config.chatUrl, "_blank", "noopener");
+        if (config.preferredLeadCapture === "webchat") {
+          if (config.widgetEnabled) {
+            openChatModal();
+            return;
+          }
+          openModal("message");
           return;
         }
         if (config.preferredLeadCapture === "email" && config.publicEmail) {
-          window.location.href = "mailto:" + encodeURIComponent(config.publicEmail);
+          window.location.href = "mailto:" + config.publicEmail;
           return;
         }
         if (config.preferredLeadCapture === "phone" && config.publicPhone) {
@@ -332,6 +438,80 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       var listingType = "all";
       var grid = document.getElementById("listings-grid");
       var emptyMsg = document.getElementById("browse-empty");
+      var filterPanel = document.getElementById("browse-panel");
+      var filterBackdrop = document.getElementById("browse-panel-backdrop");
+      var toggleFiltersBtn = document.getElementById("btn-toggle-filters");
+
+      function isMobileFilters() {
+        return window.matchMedia("(max-width: 639px)").matches;
+      }
+
+      function syncPricePair(fromId, toId) {
+        var from = document.getElementById(fromId);
+        var to = document.getElementById(toId);
+        if (from && to) to.value = from.value;
+      }
+
+      function syncAllPriceFields() {
+        syncPricePair("filter-min-price", "filter-min-price-m");
+        syncPricePair("filter-max-price", "filter-max-price-m");
+      }
+
+      function openFilterPanel() {
+        syncAllPriceFields();
+        if (filterPanel) filterPanel.hidden = false;
+        if (toggleFiltersBtn) toggleFiltersBtn.setAttribute("aria-expanded", "true");
+        if (filterBackdrop && isMobileFilters()) filterBackdrop.classList.add("open");
+      }
+
+      function closeFilterPanel() {
+        if (filterPanel) filterPanel.hidden = true;
+        if (toggleFiltersBtn) toggleFiltersBtn.setAttribute("aria-expanded", "false");
+        if (filterBackdrop) filterBackdrop.classList.remove("open");
+      }
+
+      function toggleFilterPanel() {
+        if (!filterPanel) return;
+        if (filterPanel.hidden) openFilterPanel();
+        else closeFilterPanel();
+      }
+
+      if (toggleFiltersBtn) toggleFiltersBtn.addEventListener("click", toggleFilterPanel);
+      if (filterBackdrop) filterBackdrop.addEventListener("click", closeFilterPanel);
+
+      document.querySelectorAll("[data-sync]").forEach(function (el) {
+        function syncPartner() {
+          var partnerId = el.getAttribute("data-sync");
+          var partner = partnerId ? document.getElementById(partnerId) : null;
+          if (partner) partner.value = el.value;
+        }
+        el.addEventListener("input", syncPartner);
+        el.addEventListener("change", syncPartner);
+      });
+
+      var applyFiltersBtn = document.getElementById("btn-filters-apply");
+      if (applyFiltersBtn) {
+        applyFiltersBtn.addEventListener("click", function () {
+          syncAllPriceFields();
+          applyBrowseFilters();
+          closeFilterPanel();
+        });
+      }
+
+      var clearFiltersBtn = document.getElementById("btn-filters-clear");
+      if (clearFiltersBtn) {
+        clearFiltersBtn.addEventListener("click", function () {
+          ["filter-min-price", "filter-min-price-m", "filter-max-price", "filter-max-price-m", "filter-min-sqft"].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.value = "";
+          });
+          ["filter-beds", "filter-baths", "filter-property-type", "filter-sort"].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.value = id === "filter-sort" ? "newest" : "";
+          });
+          applyBrowseFilters();
+        });
+      }
 
       function numVal(id) {
         var el = document.getElementById(id);
@@ -415,11 +595,17 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         });
       });
 
-      ["filter-min-price", "filter-max-price", "filter-beds", "filter-baths", "filter-min-sqft", "filter-property-type", "filter-sort"].forEach(function (id) {
+      ["filter-min-price", "filter-max-price", "filter-min-price-m", "filter-max-price-m", "filter-beds", "filter-baths", "filter-min-sqft", "filter-property-type", "filter-sort"].forEach(function (id) {
         var el = document.getElementById(id);
         if (!el) return;
-        el.addEventListener("change", applyBrowseFilters);
-        el.addEventListener("input", applyBrowseFilters);
+        el.addEventListener("change", function () {
+          syncAllPriceFields();
+          if (!isMobileFilters() || !filterPanel || filterPanel.hidden) applyBrowseFilters();
+        });
+        el.addEventListener("input", function () {
+          syncAllPriceFields();
+          if (!isMobileFilters()) applyBrowseFilters();
+        });
       });
 
       document.getElementById("listings-grid").addEventListener("click", function (e) {
