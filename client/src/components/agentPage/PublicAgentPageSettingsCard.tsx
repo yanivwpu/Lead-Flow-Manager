@@ -256,7 +256,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
           </Label>
           <Switch
             id="agent-page-custom-bio"
-            checked={data.agentPageUseCustomBio}
+            checked={data.agentPageUseCustomBio ?? false}
             disabled={saveMutation.isPending}
             onCheckedChange={(checked) => {
               if (!checked) {

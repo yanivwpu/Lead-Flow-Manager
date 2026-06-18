@@ -60,7 +60,7 @@ export async function buildAgentPageSettingsResponse(
   return {
     agentPageEnabled: row.agentPageEnabled,
     agentPageSlug: row.agentPageSlug,
-    agentPageUseCustomBio: row.agentPageUseCustomBio,
+    agentPageUseCustomBio: row.agentPageUseCustomBio ?? false,
     agentPageBio: row.agentPageBio,
     agentPageMarketArea: row.agentPageMarketArea,
     agentPagePreferredLeadCapture: (row.agentPagePreferredLeadCapture as "webchat" | "email" | "phone") || "webchat",

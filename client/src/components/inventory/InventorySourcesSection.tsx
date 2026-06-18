@@ -56,6 +56,7 @@ import type { InventoryProvider } from "@shared/inventory/inventoryProviderSchem
 import { providerSupportsListingSync } from "@shared/inventory/inventoryProviderSchema";
 import { Home, RefreshCw, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2, XCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { INVENTORY_MAX_LISTINGS_OPTIONS, DEFAULT_MAX_LISTINGS } from "@shared/inventory/reso/resoSyncScope";
+import { RGE_INVENTORY_SETTINGS_HASH, RGE_INVENTORY_SETTINGS_PATH } from "@shared/rgePaths";
 
 type Props = {
   variant?: "section" | "compact";
@@ -427,7 +428,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
           <AlertTitle className="text-amber-950">Realtor Growth Engine required</AlertTitle>
           <AlertDescription className="text-amber-900/90 text-sm">
             Install the Realtor Growth Engine to connect an inventory source.{" "}
-            <Link href={RGE_TEMPLATE_DETAIL_PATH} className="font-medium underline underline-offset-2">
+            <Link href={RGE_INVENTORY_SETTINGS_PATH} className="font-medium underline underline-offset-2">
               Open Growth Engine
             </Link>
           </AlertDescription>
@@ -1088,7 +1089,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   if (isCompact) {
     return (
       <>
-        <Card className={cn("border-gray-200", className)} data-testid="card-inventory-sources-compact">
+        <Card
+          id={RGE_INVENTORY_SETTINGS_HASH}
+          className={cn("border-gray-200 scroll-mt-24", className)}
+          data-testid="card-inventory-sources-compact"
+        >
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Home className="h-4 w-4 text-brand-green" />
@@ -1105,7 +1110,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
 
   return (
     <>
-      <section className={cn("space-y-4", className)} data-testid="section-inventory-sources">
+      <section
+        id={RGE_INVENTORY_SETTINGS_HASH}
+        className={cn("space-y-4 scroll-mt-24", className)}
+        data-testid="section-inventory-sources"
+      >
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Inventory Source</h2>
           <p className="mt-1 text-sm text-gray-600">

@@ -8,9 +8,12 @@ import {
 } from "@shared/inventory/reso/resoSyncScope";
 
 import {
-  friendlyInventoryErrorMessage,
   formatInventorySyncStatRows,
+  friendlyInventoryErrorMessage,
+  getInventoryStatusHighlights,
+  formatInventorySourceStatusRows,
 } from "@shared/inventory/inventoryProviderDisplay";
+import { isWorkspaceInventoryConnected } from "@shared/inventory/inventoryWorkspaceConnected";
 
 export type InventoryConnectorStatus = {
   featureEnabled: boolean;
@@ -240,12 +243,12 @@ export function formatInventoryConnectionStatus(status: string | null | undefine
   }
 }
 
-/** True when an active listing-sync source has passed validation or sync. */
+/** @deprecated Use isWorkspaceInventoryConnected — kept for non-Copilot callers. */
 export function isInventorySourceConnected(sources: PublicInventorySource[]): boolean {
-  return sources.some(
-    (s) => s.isActive && s.listingSyncSupported && s.connectionStatus === "connected",
-  );
+  return isWorkspaceInventoryConnected(sources);
 }
+
+export { isWorkspaceInventoryConnected };
 
 export { formatInventorySyncStatRows, friendlyInventoryErrorMessage, getInventoryStatusHighlights, formatInventorySourceStatusRows };
 export { deriveInventorySourcePhase, inventorySourcePhaseBadgeClass } from "@shared/inventory/inventorySourcePhase";

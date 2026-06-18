@@ -6,7 +6,8 @@ export const RGE_TEMPLATE_DETAIL_PATH = "/app/templates/realtor-growth-engine";
 export const RGE_TEMPLATE_ONBOARDING_PATH = "/app/templates/realtor-growth-engine/onboarding";
 
 /** RGE dashboard — inventory source configuration (MLS Grid, Trestle, Bridge, etc.). */
-export const RGE_INVENTORY_SETTINGS_PATH = RGE_TEMPLATE_DETAIL_PATH;
+export const RGE_INVENTORY_SETTINGS_HASH = "inventory-sources";
+export const RGE_INVENTORY_SETTINGS_PATH = `${RGE_TEMPLATE_DETAIL_PATH}#${RGE_INVENTORY_SETTINGS_HASH}`;
 /** @deprecated Use RGE_INVENTORY_SETTINGS_PATH — inventory is not configured on Integrations. */
 export const INTEGRATIONS_INVENTORY_SETTINGS_PATH = RGE_INVENTORY_SETTINGS_PATH;
 

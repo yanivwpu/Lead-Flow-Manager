@@ -27,10 +27,10 @@ export function CopilotInventoryEmptyState({ compact = true }: Props) {
         </span>
       </div>
       <p className={compact ? "text-[11px] font-medium text-gray-800" : "text-sm font-medium text-gray-900"}>
-        Inventory not connected.
+        Connect inventory to enable matching listings and price reduction alerts.
       </p>
       <p className={compact ? "text-[11px] text-gray-600 leading-snug" : "text-sm text-gray-600"}>
-        Connect an inventory source to enable:
+        Set up an MLS or RESO feed in your Growth Engine:
       </p>
       <ul
         className={

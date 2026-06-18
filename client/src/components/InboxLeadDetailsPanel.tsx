@@ -103,7 +103,7 @@ import {
   snapshotProfileTraceFields,
 } from "@/lib/buyerMatchingTraceClient";
 import { resolveClientBuyerMatchingTraceId } from "@/lib/buyerMatchingTraceStore";
-import { fetchInventoryStatus, fetchInventorySources, isInventorySourceConnected } from "@/lib/inventoryApi";
+import { fetchInventoryStatus, fetchInventorySources, isWorkspaceInventoryConnected } from "@/lib/inventoryApi";
 import { CopilotInventoryEmptyState } from "@/components/inventory/CopilotInventoryEmptyState";
 import { MatchingListingsPanel } from "@/components/inventory/MatchingListingsPanel";
 import {
@@ -1461,7 +1461,11 @@ export function InboxLeadDetailsPanel({
     staleTime: 60_000,
   });
 
-  const { data: inventorySources = [] } = useQuery({
+  const {
+    data: inventorySources = [],
+    isFetched: inventorySourcesFetched,
+    isLoading: inventorySourcesLoading,
+  } = useQuery({
     queryKey: ["/api/inventory/sources"],
     queryFn: fetchInventorySources,
     enabled: !!inventoryStatus?.canUse,
@@ -1469,7 +1473,7 @@ export function InboxLeadDetailsPanel({
   });
 
   const inventoryConnected = useMemo(
-    () => isInventorySourceConnected(inventorySources),
+    () => isWorkspaceInventoryConnected(inventorySources),
     [inventorySources],
   );
 
@@ -2651,11 +2655,13 @@ export function InboxLeadDetailsPanel({
                     </div>
                   )}
 
-                  {showCopilotInventoryPanels && !inventoryConnected && (
-                    <CopilotInventoryEmptyState compact />
-                  )}
+                  {showCopilotInventoryPanels &&
+                    inventorySourcesFetched &&
+                    !inventorySourcesLoading &&
+                    !inventoryConnected && <CopilotInventoryEmptyState compact />}
 
-                  {showCopilotInventoryPanels && inventoryConnected && (
+                  {showCopilotInventoryPanels &&
+                    (inventoryConnected || inventorySourcesLoading || !inventorySourcesFetched) && (
                     <MatchingListingsPanel
                       contactId={contact.id}
                       contactFirstName={contact.name?.trim().split(/\s+/)[0]}

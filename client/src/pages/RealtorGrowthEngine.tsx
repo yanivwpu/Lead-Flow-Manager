@@ -69,6 +69,8 @@ import {
   getRgeDetailCtaLabel,
   isRgeOnboardingComplete,
   isRgePurchased,
+  RGE_INVENTORY_SETTINGS_HASH,
+  RGE_INVENTORY_SETTINGS_PATH,
   RGE_TEMPLATE_DETAIL_PATH,
   RGE_TEMPLATE_ONBOARDING_PATH,
 } from "@shared/rgePaths";
@@ -1245,6 +1247,19 @@ export function RealtorGrowthEngine() {
       });
     }
   }, [subscriptionActive]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.hash !== `#${RGE_INVENTORY_SETTINGS_HASH}`) return;
+    if (!(onboardingComplete && status === "installed")) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(RGE_INVENTORY_SETTINGS_HASH)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [location, onboardingComplete, status]);
 
   if (isLoading) {
     return (
