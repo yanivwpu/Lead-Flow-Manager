@@ -449,8 +449,11 @@ function testHtml() {
   assert(html.includes("Test Agent"), "name in html");
   assert(html.includes("agent-profile-col"), "profile column layout");
   assert(html.includes("agent-brokerage-block"), "brokerage under avatar");
-  assert(html.includes("Premier Realty"), "brokerage name under avatar");
+  assert(!html.includes("agent-brokerage-name"), "brokerage name not shown under avatar");
   assert(!html.includes('class="agent-brokerage"'), "brokerage not duplicated in info column");
+  assert(html.includes("agent-market-chips"), "market area chips");
+  assert(html.includes("market-chip"), "market area chip spacing");
+  assert(html.includes("browse-panel-advanced"), "advanced filters single row");
   assert(html.includes("agent-social"), "social links row");
   assert(html.includes('aria-label="Website"'), "website icon first when url set");
   assert(html.includes('aria-label="Facebook"'), "facebook icon when url set");

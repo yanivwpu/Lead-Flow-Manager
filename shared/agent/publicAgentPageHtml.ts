@@ -40,11 +40,8 @@ const SOCIAL_ICON_SVG = {
 
 function renderBrokerageBlock(data: PublicAgentPageRenderInput): string {
   const logo = renderLogo(data);
-  const name = data.brokerageName
-    ? `<p class="agent-brokerage-name">${escapeHtml(data.brokerageName)}</p>`
-    : "";
-  if (!logo && !name) return "";
-  return `<div class="agent-brokerage-block">${logo}${name}</div>`;
+  if (!logo) return "";
+  return `<div class="agent-brokerage-block">${logo}</div>`;
 }
 
 function renderSocialLinks(data: PublicAgentPageRenderInput): string {
@@ -67,6 +64,19 @@ function renderSocialLinks(data: PublicAgentPageRenderInput): string {
 
 function renderProfileColumn(data: PublicAgentPageRenderInput): string {
   return `<div class="agent-profile-col">${renderAvatar(data)}${renderBrokerageBlock(data)}${renderSocialLinks(data)}</div>`;
+}
+
+function renderMarketArea(data: PublicAgentPageRenderInput): string {
+  if (!data.marketArea?.trim()) return "";
+  const areas = data.marketArea
+    .split(/[,;]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (areas.length === 0) return "";
+  const chips = areas
+    .map((area) => `<span class="market-chip">${escapeHtml(area)}</span>`)
+    .join("");
+  return `<div class="agent-market"><span class="agent-market-label">Market area</span><div class="agent-market-chips">${chips}</div></div>`;
 }
 
 function listingCardHtml(card: AgentPageListingCard, index: number): string {
@@ -117,9 +127,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   const bioHtml = data.bio
     ? `<p class="agent-bio">${escapeHtml(data.bio)}</p>`
     : "";
-  const marketHtml = data.marketArea
-    ? `<p class="agent-market"><strong>Market area:</strong> ${escapeHtml(data.marketArea)}</p>`
-    : "";
+  const marketHtml = renderMarketArea(data);
   const homeWorthBtn = data.showHomeValueCta
     ? `<button type="button" class="btn btn-outline" id="btn-home-worth">What's My Home Worth?</button>`
     : "";
@@ -158,14 +166,17 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .agent-brokerage-block { display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 140px; }
     @media (min-width: 640px) { .agent-brokerage-block { align-items: flex-start; } }
     .agent-logo { max-height: 36px; max-width: 120px; object-fit: contain; }
-    .agent-brokerage-name { margin: 0; color: var(--muted); font-size: 0.8125rem; font-weight: 600; line-height: 1.3; }
+    .agent-name { margin: 0 0 4px; font-size: 1.75rem; font-weight: 800; }
+    .agent-bio { margin: 0 0 10px; color: #334155; font-size: 0.9375rem; }
+    .agent-market { margin: 4px 0 12px; display: flex; flex-direction: column; gap: 8px; padding-left: 4px; }
+    .agent-market-label { font-size: 0.8125rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .agent-market-chips { display: flex; flex-wrap: wrap; gap: 6px 8px; padding-left: 2px; }
+    .market-chip { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; background: #f1f5f9; border: 1px solid var(--border); font-size: 0.8125rem; color: #334155; line-height: 1.3; }
     .agent-social { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 2px; }
     @media (min-width: 640px) { .agent-social { justify-content: flex-start; } }
     .agent-social-link { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); background: #fff; text-decoration: none; transition: border-color 0.15s, color 0.15s; }
     .agent-social-link:hover { border-color: #cbd5e1; color: var(--brand); }
     .agent-social-link svg { width: 16px; height: 16px; display: block; }
-    .agent-name { margin: 0 0 4px; font-size: 1.75rem; font-weight: 800; }
-    .agent-bio, .agent-market { margin: 0 0 10px; color: #334155; font-size: 0.9375rem; }
     .cta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
     .btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 16px; border-radius: 8px; font-size: 0.875rem; font-weight: 600; text-decoration: none; cursor: pointer; border: 1px solid transparent; background: #fff; color: var(--ink); }
     .btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; }
@@ -186,23 +197,23 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .browse-panel-backdrop.open { display: block; }
     .browse-panel { margin-bottom: 8px; padding: 12px; background: #fff; border: 1px solid var(--border); border-radius: 12px; }
     .browse-panel[hidden] { display: none !important; }
-    .browse-panel-grid { display: grid; gap: 8px; grid-template-columns: 1fr; }
-    .browse-panel-grid label { display: flex; flex-direction: column; gap: 3px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
-    .browse-panel-grid input, .browse-panel-grid select { padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 0.8125rem; color: var(--ink); background: #fff; min-width: 0; width: 100%; }
-    .browse-panel-grid .filter-span-full { grid-column: 1 / -1; }
+    .browse-panel-body { display: flex; flex-direction: column; gap: 8px; }
+    .browse-panel-location label { display: flex; flex-direction: column; gap: 3px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    .browse-panel-location input { padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 0.8125rem; color: var(--ink); background: #fff; width: 100%; }
+    .browse-panel-advanced { display: grid; gap: 8px; grid-template-columns: repeat(7, minmax(0, 1fr)); align-items: end; }
+    .browse-panel-advanced label { display: flex; flex-direction: column; gap: 3px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); min-width: 0; }
+    .browse-panel-advanced input, .browse-panel-advanced select { padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 0.8125rem; color: var(--ink); background: #fff; min-width: 0; width: 100%; }
     .browse-panel-actions { display: none; margin-top: 10px; justify-content: flex-end; gap: 8px; }
     .browse-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 0.875rem; display: none; margin-bottom: 8px; }
     .browse-empty.show { display: block; }
-    @media (min-width: 480px) {
-      .browse-panel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
-    @media (min-width: 768px) {
-      .browse-panel-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    @media (max-width: 1023px) {
+      .browse-panel-advanced { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     }
     @media (max-width: 639px) {
       .browse-toggle-btn .toggle-label-desktop { display: none; }
       .browse-toggle-btn .toggle-label-mobile { display: inline; }
       .browse-panel { position: fixed; left: 0; right: 0; bottom: 0; z-index: 90; max-height: min(85vh, 560px); overflow-y: auto; margin: 0; border-radius: 16px 16px 0 0; box-shadow: 0 -8px 32px rgba(15,23,42,0.12); padding: 16px 16px 20px; }
+      .browse-panel-advanced { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .browse-panel-actions { display: flex; }
       .browse-panel-title { display: block; font-size: 1rem; font-weight: 700; margin: 0 0 10px; }
     }
@@ -282,56 +293,60 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       <div class="browse-panel-backdrop" id="browse-panel-backdrop" aria-hidden="true"></div>
       <div class="browse-panel" id="browse-panel" hidden>
         <p class="browse-panel-title">Filters</p>
-        <div class="browse-panel-grid">
-          <label class="filter-span-full">Location
-            <input type="text" id="filter-location" placeholder="City, state, or ZIP" autocomplete="off" />
-          </label>
-          <label>Min price
-            <input type="number" id="filter-min-price" min="0" step="1000" placeholder="Any" inputmode="numeric" />
-          </label>
-          <label>Max price
-            <input type="number" id="filter-max-price" min="0" step="1000" placeholder="Any" inputmode="numeric" />
-          </label>
-          <label>Beds
-            <select id="filter-beds">
-              <option value="">Any</option>
-              <option value="1">1+</option>
-              <option value="2">2+</option>
-              <option value="3">3+</option>
-              <option value="4">4+</option>
-              <option value="5">5+</option>
-            </select>
-          </label>
-          <label>Baths
-            <select id="filter-baths">
-              <option value="">Any</option>
-              <option value="1">1+</option>
-              <option value="2">2+</option>
-              <option value="3">3+</option>
-              <option value="4">4+</option>
-            </select>
-          </label>
-          <label>Property type
-            <select id="filter-property-type">
-              <option value="">All types</option>
-              <option value="house">House</option>
-              <option value="condo">Condo</option>
-              <option value="townhouse">Townhouse</option>
-              <option value="multi_family">Multi-family</option>
-              <option value="land">Land</option>
-              <option value="other">Other</option>
-            </select>
-          </label>
-          <label>Min sq ft
-            <input type="number" id="filter-min-sqft" min="0" step="100" placeholder="Any" inputmode="numeric" />
-          </label>
-          <label>Sort
-            <select id="filter-sort">
-              <option value="newest">Newest</option>
-              <option value="price_desc">Price: high to low</option>
-              <option value="price_asc">Price: low to high</option>
-            </select>
-          </label>
+        <div class="browse-panel-body">
+          <div class="browse-panel-location">
+            <label>Location
+              <input type="text" id="filter-location" placeholder="City, state, or ZIP" autocomplete="off" />
+            </label>
+          </div>
+          <div class="browse-panel-advanced">
+            <label>Min price
+              <input type="number" id="filter-min-price" min="0" step="1000" placeholder="Any" inputmode="numeric" />
+            </label>
+            <label>Max price
+              <input type="number" id="filter-max-price" min="0" step="1000" placeholder="Any" inputmode="numeric" />
+            </label>
+            <label>Beds
+              <select id="filter-beds">
+                <option value="">Any</option>
+                <option value="1">1+</option>
+                <option value="2">2+</option>
+                <option value="3">3+</option>
+                <option value="4">4+</option>
+                <option value="5">5+</option>
+              </select>
+            </label>
+            <label>Baths
+              <select id="filter-baths">
+                <option value="">Any</option>
+                <option value="1">1+</option>
+                <option value="2">2+</option>
+                <option value="3">3+</option>
+                <option value="4">4+</option>
+              </select>
+            </label>
+            <label>Property type
+              <select id="filter-property-type">
+                <option value="">All types</option>
+                <option value="house">House</option>
+                <option value="condo">Condo</option>
+                <option value="townhouse">Townhouse</option>
+                <option value="multi_family">Multi-family</option>
+                <option value="land">Land</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label>Min sq ft
+              <input type="number" id="filter-min-sqft" min="0" step="100" placeholder="Any" inputmode="numeric" />
+            </label>
+            <label>Sort
+              <select id="filter-sort">
+                <option value="newest">Newest</option>
+                <option value="price_desc">Price: high to low</option>
+                <option value="price_asc">Price: low to high</option>
+              </select>
+            </label>
+          </div>
         </div>
         <div class="browse-panel-actions">
           <button type="button" class="btn btn-sm btn-outline" id="btn-filters-clear">Clear</button>
