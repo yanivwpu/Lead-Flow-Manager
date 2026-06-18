@@ -1,10 +1,13 @@
 import type { Express } from "express";
-import { z } from "zod";
 import { agentPageSettingsPatchSchema } from "@shared/agent/agentPageSchema";
 import { buildAgentPageSlug } from "@shared/agent/agentPageSlug";
 import { getRequestOrigin } from "../urlOrigins";
 import { buildAgentPageSettingsResponse } from "../agentPage/agentPageService";
 import { patchAgentPageSettings } from "../agentPage/agentPageDb";
+import {
+  isAgentPageSlugConflictError,
+  prepareAgentPageSettingsPatch,
+} from "../agentPage/agentPageSettingsPatch";
 
 export function registerAgentPageSettingsRoutes(app: Express): void {
   app.get("/api/agent-page", async (req, res) => {
@@ -23,67 +26,55 @@ export function registerAgentPageSettingsRoutes(app: Express): void {
   app.patch("/api/agent-page", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      const parsed = agentPageSettingsPatchSchema.safeParse(req.body ?? {});
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.flatten() });
+
+      const appOrigin = getRequestOrigin(req);
+      const prepared = await prepareAgentPageSettingsPatch(
+        req.user.id,
+        req.body,
+        (body) => agentPageSettingsPatchSchema.safeParse(body),
+        () => buildAgentPageSettingsResponse(req.user.id, appOrigin),
+      );
+
+      if (!prepared.ok) {
+        return res.status(prepared.status).json({ error: prepared.error, code: prepared.code });
       }
 
-      const patch = parsed.data;
-      let slug = patch.agentPageSlug;
-      if (slug === undefined && patch.agentPageEnabled === true) {
-        const current = await buildAgentPageSettingsResponse(req.user.id, getRequestOrigin(req));
-        if (current && !current.agentPageSlug) {
-          const auto = buildAgentPageSlug(current.resolvedDisplayName, req.user.id);
-          if (auto) slug = auto;
-        }
-      }
-
-      if (patch.agentPageEnabled === true) {
-        const current = await buildAgentPageSettingsResponse(req.user.id, getRequestOrigin(req));
-        if (!current?.publishListingsPublicly) {
-          return res.status(400).json({
-            error: "Enable workspace public listing publishing in Business Profile first",
-            code: "publish_listings_required",
-          });
-        }
-      }
-
+      const patch = prepared.patch;
       await patchAgentPageSettings(req.user.id, {
         agentPageEnabled: patch.agentPageEnabled,
-        agentPageSlug: slug !== undefined ? slug : patch.agentPageSlug,
-        agentPageDisplayName: patch.agentPageDisplayName,
+        agentPageSlug: patch.agentPageSlug,
+        agentPageUseCustomBio: patch.agentPageUseCustomBio,
         agentPageBio: patch.agentPageBio,
         agentPageMarketArea: patch.agentPageMarketArea,
         agentPagePreferredLeadCapture: patch.agentPagePreferredLeadCapture,
         agentPageShowHomeValueCta: patch.agentPageShowHomeValueCta,
       });
 
-      const settings = await buildAgentPageSettingsResponse(req.user.id, getRequestOrigin(req));
+      const settings = await buildAgentPageSettingsResponse(req.user.id, appOrigin);
       res.json(settings);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes("unique") || message.includes("duplicate")) {
+      if (isAgentPageSlugConflictError(error)) {
         return res.status(409).json({ error: "That agent slug is already taken", code: "slug_taken" });
       }
+      const message = error instanceof Error ? error.message : String(error);
       console.error("[agent-page] PATCH failed", error);
-      res.status(500).json({ error: "Failed to update agent page settings" });
+      res.status(500).json({ error: message || "Failed to update agent page settings" });
     }
   });
 
   app.post("/api/agent-page/suggest-slug", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      const body = z.object({ displayName: z.string().max(120).optional() }).safeParse(req.body ?? {});
       const settings = await buildAgentPageSettingsResponse(req.user.id, getRequestOrigin(req));
-      const name = body.success ? body.data.displayName : undefined;
       const slug = buildAgentPageSlug(
-        name || settings?.resolvedDisplayName || "agent",
+        settings?.businessProfileDisplayName || "agent",
         req.user.id,
       );
       res.json({ slug });
     } catch (error) {
       console.error("[agent-page] suggest-slug failed", error);
-      res.status(500).json({ error: "Failed to suggest slug" });
+      const message = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: message || "Failed to suggest slug" });
     }
   });
 }

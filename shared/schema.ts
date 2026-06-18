@@ -1320,6 +1320,7 @@ export const aiBusinessKnowledge = pgTable("ai_business_knowledge", {
   agentPageSlug: text("agent_page_slug"),
   agentPageDisplayName: text("agent_page_display_name"),
   agentPageBio: text("agent_page_bio"),
+  agentPageUseCustomBio: boolean("agent_page_use_custom_bio").notNull().default(false),
   agentPageMarketArea: text("agent_page_market_area"),
   agentPagePreferredLeadCapture: text("agent_page_preferred_lead_capture").notNull().default("webchat"),
   agentPageShowHomeValueCta: boolean("agent_page_show_home_value_cta").notNull().default(true),

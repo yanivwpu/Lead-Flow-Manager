@@ -30,7 +30,7 @@ export function normalizeAgentPageAnalytics(raw: unknown): AgentPageAnalytics {
 export const agentPageSettingsPatchSchema = z.object({
   agentPageEnabled: z.boolean().optional(),
   agentPageSlug: z.string().max(80).optional().nullable(),
-  agentPageDisplayName: z.string().max(120).optional().nullable(),
+  agentPageUseCustomBio: z.boolean().optional(),
   agentPageBio: z.string().max(4000).optional().nullable(),
   agentPageMarketArea: z.string().max(500).optional().nullable(),
   agentPagePreferredLeadCapture: agentPageLeadCaptureSchema.optional(),
@@ -42,7 +42,7 @@ export type AgentPageSettingsPatch = z.infer<typeof agentPageSettingsPatchSchema
 export type AgentPageSettingsResponse = {
   agentPageEnabled: boolean;
   agentPageSlug: string | null;
-  agentPageDisplayName: string | null;
+  agentPageUseCustomBio: boolean;
   agentPageBio: string | null;
   agentPageMarketArea: string | null;
   agentPagePreferredLeadCapture: AgentPageLeadCapture;
@@ -50,7 +50,11 @@ export type AgentPageSettingsResponse = {
   publishListingsPublicly: boolean;
   publicPageUrl: string | null;
   analytics: AgentPageAnalytics;
-  /** Resolved display fields from profile when page fields empty */
+  /** From Business Profile — source of truth for public display name */
+  businessProfileDisplayName: string;
+  /** From Business Profile aboutText */
+  businessProfileAbout: string;
+  /** Resolved for public page render */
   resolvedDisplayName: string;
   resolvedBio: string;
   resolvedAvatarUrl: string | null;

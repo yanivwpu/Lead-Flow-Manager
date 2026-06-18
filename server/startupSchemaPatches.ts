@@ -110,6 +110,13 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
       `CREATE UNIQUE INDEX IF NOT EXISTS ai_business_knowledge_agent_page_slug_lower ON ai_business_knowledge (lower(agent_page_slug)) WHERE agent_page_slug IS NOT NULL`,
     ].join(";\n"),
   },
+  {
+    tag: "0048_agent_page_custom_bio",
+    sql: [
+      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS agent_page_use_custom_bio boolean NOT NULL DEFAULT false`,
+      `UPDATE ai_business_knowledge SET agent_page_use_custom_bio = true WHERE agent_page_bio IS NOT NULL AND trim(agent_page_bio) <> ''`,
+    ].join(";\n"),
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {

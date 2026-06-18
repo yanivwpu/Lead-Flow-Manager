@@ -32,7 +32,7 @@ export type AgentPageKnowledgeRow = {
   publishListingsPublicly: boolean;
   agentPageEnabled: boolean;
   agentPageSlug: string | null;
-  agentPageDisplayName: string | null;
+  agentPageUseCustomBio: boolean;
   agentPageBio: string | null;
   agentPageMarketArea: string | null;
   agentPagePreferredLeadCapture: string;
@@ -54,7 +54,7 @@ export async function getAgentPageSettingsRow(userId: string): Promise<AgentPage
       publishListingsPublicly: aiBusinessKnowledge.publishListingsPublicly,
       agentPageEnabled: aiBusinessKnowledge.agentPageEnabled,
       agentPageSlug: aiBusinessKnowledge.agentPageSlug,
-      agentPageDisplayName: aiBusinessKnowledge.agentPageDisplayName,
+      agentPageUseCustomBio: aiBusinessKnowledge.agentPageUseCustomBio,
       agentPageBio: aiBusinessKnowledge.agentPageBio,
       agentPageMarketArea: aiBusinessKnowledge.agentPageMarketArea,
       agentPagePreferredLeadCapture: aiBusinessKnowledge.agentPagePreferredLeadCapture,
@@ -90,7 +90,7 @@ export async function resolveAgentPageBySlug(slug: string): Promise<AgentPageKno
       publishListingsPublicly: aiBusinessKnowledge.publishListingsPublicly,
       agentPageEnabled: aiBusinessKnowledge.agentPageEnabled,
       agentPageSlug: aiBusinessKnowledge.agentPageSlug,
-      agentPageDisplayName: aiBusinessKnowledge.agentPageDisplayName,
+      agentPageUseCustomBio: aiBusinessKnowledge.agentPageUseCustomBio,
       agentPageBio: aiBusinessKnowledge.agentPageBio,
       agentPageMarketArea: aiBusinessKnowledge.agentPageMarketArea,
       agentPagePreferredLeadCapture: aiBusinessKnowledge.agentPagePreferredLeadCapture,
@@ -123,7 +123,7 @@ export async function patchAgentPageSettings(
   patch: {
     agentPageEnabled?: boolean;
     agentPageSlug?: string | null;
-    agentPageDisplayName?: string | null;
+    agentPageUseCustomBio?: boolean;
     agentPageBio?: string | null;
     agentPageMarketArea?: string | null;
     agentPagePreferredLeadCapture?: AgentPageLeadCapture;
@@ -137,7 +137,7 @@ export async function patchAgentPageSettings(
       ? normalizeAgentPageSlug(patch.agentPageSlug)
       : null;
   }
-  if (patch.agentPageDisplayName !== undefined) values.agentPageDisplayName = patch.agentPageDisplayName;
+  if (patch.agentPageUseCustomBio !== undefined) values.agentPageUseCustomBio = patch.agentPageUseCustomBio;
   if (patch.agentPageBio !== undefined) values.agentPageBio = patch.agentPageBio;
   if (patch.agentPageMarketArea !== undefined) values.agentPageMarketArea = patch.agentPageMarketArea;
   if (patch.agentPagePreferredLeadCapture !== undefined) {

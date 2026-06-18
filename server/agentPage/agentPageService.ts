@@ -1,6 +1,7 @@
 import type { AgentPageSettingsResponse } from "@shared/agent/agentPageSchema";
 import type { AgentPageListingCard, PublicAgentPageRenderInput } from "@shared/agent/agentPageTypes";
 import { buildAgentPageUrl } from "@shared/agent/agentPageSlug";
+import { resolveAgentPageBio, resolveAgentPageDisplayName } from "@shared/agent/agentPageProfile";
 import { buildListingCanonicalShareUrl, pickPrimaryPhotoUrl } from "@shared/inventory/listingViewUrl";
 import { formatListingPriceForComposer } from "@shared/inventory/inventoryComposerDraft";
 import { canShowPublicStreetAddress } from "@shared/inventory/publicListingPublication";
@@ -52,14 +53,14 @@ export async function buildAgentPageSettingsResponse(
   const user = await storage.getUser(userId);
   const widgetEnabled = mergeWidgetEnabled(user?.widgetSettings);
 
-  const resolvedDisplayName =
-    str(row.agentPageDisplayName) || str(row.displayName) || str(user?.name) || "Agent";
-  const resolvedBio = str(row.agentPageBio) || str(row.aboutText);
+  const businessProfileDisplayName = resolveAgentPageDisplayName(row, user?.name);
+  const businessProfileAbout = str(row.aboutText);
+  const resolvedBio = resolveAgentPageBio(row);
 
   return {
     agentPageEnabled: row.agentPageEnabled,
     agentPageSlug: row.agentPageSlug,
-    agentPageDisplayName: row.agentPageDisplayName,
+    agentPageUseCustomBio: row.agentPageUseCustomBio,
     agentPageBio: row.agentPageBio,
     agentPageMarketArea: row.agentPageMarketArea,
     agentPagePreferredLeadCapture: (row.agentPagePreferredLeadCapture as "webchat" | "email" | "phone") || "webchat",
@@ -70,7 +71,9 @@ export async function buildAgentPageSettingsResponse(
         ? buildAgentPageUrl(row.agentPageSlug, appOrigin)
         : null,
     analytics: row.agentPageAnalytics,
-    resolvedDisplayName,
+    businessProfileDisplayName,
+    businessProfileAbout,
+    resolvedDisplayName: businessProfileDisplayName,
     resolvedBio,
     resolvedAvatarUrl: str(row.avatarUrl) || null,
     resolvedCompanyLogo: str(row.companyLogo) || null,
@@ -171,8 +174,8 @@ export async function getPublicAgentPageData(
   const listingsRaw = await fetchPublishedListingsForAgentPage(agent.userId);
   const listings = listingsRaw.map((l) => listingToCard(l, appOrigin));
 
-  const displayName = str(agent.agentPageDisplayName) || str(agent.displayName) || str(user?.name) || "Agent";
-  const bio = str(agent.agentPageBio) || str(agent.aboutText);
+  const displayName = resolveAgentPageDisplayName(agent, user?.name);
+  const bio = resolveAgentPageBio(agent);
 
   await incrementAgentPageAnalytics(agent.userId, "page_view");
 

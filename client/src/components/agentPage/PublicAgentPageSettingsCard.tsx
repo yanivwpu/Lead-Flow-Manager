@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, ExternalLink, Globe, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,12 +15,33 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import type { AgentPageSettingsResponse } from "@shared/agent/agentPageSchema";
+import { validateAgentPageSlugInput } from "@shared/agent/agentPageSlug";
 
 async function fetchAgentPageSettings(): Promise<AgentPageSettingsResponse> {
   const res = await fetch("/api/agent-page", { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to load agent page settings");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(parseAgentPageApiError(body));
+  }
   return res.json();
+}
+
+function parseAgentPageApiError(body: unknown): string {
+  if (!body || typeof body !== "object") return "Request failed";
+  const record = body as { error?: unknown; message?: unknown };
+  if (typeof record.error === "string" && record.error.trim()) return record.error;
+  if (typeof record.message === "string" && record.message.trim()) return record.message;
+  if (record.error && typeof record.error === "object") {
+    const flat = record.error as { formErrors?: string[]; fieldErrors?: Record<string, string[]> };
+    const parts = [
+      ...(flat.formErrors ?? []),
+      ...Object.values(flat.fieldErrors ?? {}).flat(),
+    ].filter(Boolean);
+    if (parts.length > 0) return parts.join("; ");
+  }
+  return "Request failed";
 }
 
 type Props = {
@@ -33,6 +55,17 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
     queryFn: fetchAgentPageSettings,
   });
 
+  const [slugDraft, setSlugDraft] = useState("");
+  const [slugError, setSlugError] = useState<string | null>(null);
+  const [customBioDraft, setCustomBioDraft] = useState("");
+
+  useEffect(() => {
+    if (!data) return;
+    setSlugDraft(data.agentPageSlug || "");
+    setSlugError(null);
+    setCustomBioDraft(data.agentPageBio || "");
+  }, [data?.agentPageSlug, data?.agentPageBio, data?.agentPageUseCustomBio]);
+
   const saveMutation = useMutation({
     mutationFn: async (body: Record<string, unknown>) => {
       const res = await fetch("/api/agent-page", {
@@ -41,11 +74,11 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
         credentials: "include",
         body: JSON.stringify(body),
       });
+      const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(typeof err.error === "string" ? err.error : "Save failed");
+        throw new Error(parseAgentPageApiError(payload));
       }
-      return res.json() as Promise<AgentPageSettingsResponse>;
+      return payload as AgentPageSettingsResponse;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/agent-page"] });
@@ -62,12 +95,36 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ displayName: data?.agentPageDisplayName || data?.resolvedDisplayName }),
+        body: JSON.stringify({}),
       });
-      if (!res.ok) throw new Error("Could not suggest slug");
-      return res.json() as Promise<{ slug: string | null }>;
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(parseAgentPageApiError(payload));
+      return payload as { slug: string | null };
     },
   });
+
+  const saveSlug = useCallback(
+    (raw: string) => {
+      const trimmed = raw.trim();
+      if (trimmed === (data?.agentPageSlug || "")) {
+        setSlugError(null);
+        return;
+      }
+      if (!trimmed) {
+        setSlugError(null);
+        saveMutation.mutate({ agentPageSlug: null });
+        return;
+      }
+      const validated = validateAgentPageSlugInput(trimmed);
+      if (!validated.ok) {
+        setSlugError(validated.error);
+        return;
+      }
+      setSlugError(null);
+      saveMutation.mutate({ agentPageSlug: validated.slug });
+    },
+    [data?.agentPageSlug, saveMutation],
+  );
 
   if (isLoading || !data) {
     return (
@@ -80,11 +137,11 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
     );
   }
 
-  const canEnable = data.publishListingsPublicly;
   const pageUrl = data.publicPageUrl;
+  const pageIsPublic = Boolean(data.publishListingsPublicly && data.agentPageEnabled && data.agentPageSlug);
 
   return (
-    <Card className={className} data-testid="public-agent-page-settings">
+    <Card className={cn(className, "pb-safe")} data-testid="public-agent-page-settings">
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <Globe className="w-4 h-4 text-brand-green" />
@@ -94,10 +151,16 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
           Marketing page with your published MLS listings and lead capture.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {!canEnable && (
+      <CardContent className="space-y-4 pb-24 sm:pb-6">
+        {!data.publishListingsPublicly && (
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-            Enable &quot;Publish listings publicly&quot; in Business Profile before turning on your agent page.
+            Workspace publishing is off — you can still configure your agent page, but it will not be
+            public until you enable &quot;Publish listings publicly&quot; in Business Profile.
+          </p>
+        )}
+        {data.publishListingsPublicly && data.agentPageEnabled && !data.agentPageSlug && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+            Add an agent slug to get your public URL.
           </p>
         )}
 
@@ -108,73 +171,124 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
           <Switch
             id="agent-page-enabled"
             checked={data.agentPageEnabled}
-            disabled={!canEnable || saveMutation.isPending}
+            disabled={saveMutation.isPending}
             onCheckedChange={(checked) => saveMutation.mutate({ agentPageEnabled: checked })}
           />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="agent-page-slug">Agent slug</Label>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <Input
               id="agent-page-slug"
-              defaultValue={data.agentPageSlug || ""}
+              value={slugDraft}
               placeholder="jane-smith-a1b2c3d4"
-              onBlur={(e) => {
-                const v = e.target.value.trim();
-                if (v !== (data.agentPageSlug || "")) saveMutation.mutate({ agentPageSlug: v || null });
+              aria-invalid={slugError ? true : undefined}
+              className={cn(slugError && "border-destructive focus-visible:ring-destructive")}
+              onChange={(e) => {
+                setSlugDraft(e.target.value);
+                if (slugError) setSlugError(null);
               }}
+              onBlur={() => saveSlug(slugDraft)}
             />
             <Button
               type="button"
               variant="outline"
               size="sm"
-              disabled={suggestSlugMutation.isPending}
+              className="shrink-0"
+              disabled={suggestSlugMutation.isPending || saveMutation.isPending}
               onClick={async () => {
                 try {
                   const result = await suggestSlugMutation.mutateAsync();
-                  if (result.slug) saveMutation.mutate({ agentPageSlug: result.slug });
-                } catch {
-                  toast({ title: "Could not generate slug", variant: "destructive" });
+                  if (result.slug) {
+                    setSlugDraft(result.slug);
+                    setSlugError(null);
+                    saveMutation.mutate({ agentPageSlug: result.slug });
+                  }
+                } catch (e) {
+                  toast({
+                    title: "Could not generate slug",
+                    description: e instanceof Error ? e.message : undefined,
+                    variant: "destructive",
+                  });
                 }
               }}
             >
               Suggest
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">/agents/your-slug</p>
+          {slugError ? (
+            <p className="text-xs text-destructive" role="alert">
+              {slugError}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">/agents/your-slug</p>
+          )}
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="agent-page-display-name">Display name</Label>
-          <Input
-            id="agent-page-display-name"
-            defaultValue={data.agentPageDisplayName || data.resolvedDisplayName}
-            placeholder={data.resolvedDisplayName}
-            onBlur={(e) => {
-              const v = e.target.value.trim();
-              if (v !== (data.agentPageDisplayName || data.resolvedDisplayName)) {
-                saveMutation.mutate({ agentPageDisplayName: v || null });
+        <div className="rounded-md border border-slate-200 bg-slate-50/80 px-3 py-2.5 space-y-2">
+          <p className="text-[10px] uppercase tracking-wide font-medium text-slate-500">
+            From Business Profile
+          </p>
+          <div className="space-y-1">
+            <p className="text-xs text-slate-500">Display name</p>
+            <p className="text-sm font-medium text-slate-900" data-testid="agent-page-inherited-name">
+              {data.businessProfileDisplayName}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs text-slate-500">About</p>
+            <p
+              className="text-sm text-slate-700 whitespace-pre-wrap"
+              data-testid="agent-page-inherited-about"
+            >
+              {data.businessProfileAbout || "—"}
+            </p>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Edit name, contact, and about in Business Profile settings.
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="agent-page-custom-bio" className="text-sm font-medium">
+            Use custom Agent Page bio
+          </Label>
+          <Switch
+            id="agent-page-custom-bio"
+            checked={data.agentPageUseCustomBio}
+            disabled={saveMutation.isPending}
+            onCheckedChange={(checked) => {
+              if (!checked) {
+                saveMutation.mutate({ agentPageUseCustomBio: false, agentPageBio: null });
+                return;
               }
+              saveMutation.mutate({
+                agentPageUseCustomBio: true,
+                agentPageBio: customBioDraft.trim() || data.businessProfileAbout || "",
+              });
             }}
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="agent-page-bio">Bio</Label>
-          <Textarea
-            id="agent-page-bio"
-            rows={3}
-            defaultValue={data.agentPageBio || data.resolvedBio}
-            placeholder={data.resolvedBio || "Tell visitors about your experience…"}
-            onBlur={(e) => {
-              const v = e.target.value.trim();
-              if (v !== (data.agentPageBio || data.resolvedBio)) {
-                saveMutation.mutate({ agentPageBio: v || null });
-              }
-            }}
-          />
-        </div>
+        {data.agentPageUseCustomBio && (
+          <div className="space-y-2">
+            <Label htmlFor="agent-page-bio">Custom bio</Label>
+            <Textarea
+              id="agent-page-bio"
+              rows={3}
+              value={customBioDraft}
+              placeholder="Optional override for your public agent page…"
+              onChange={(e) => setCustomBioDraft(e.target.value)}
+              onBlur={() => {
+                const v = customBioDraft.trim();
+                if (v !== (data.agentPageBio || "")) {
+                  saveMutation.mutate({ agentPageUseCustomBio: true, agentPageBio: v || null });
+                }
+              }}
+            />
+          </div>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="agent-page-market">Market area</Label>
@@ -219,7 +333,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
         </div>
 
         <div className="flex flex-wrap gap-2 pt-2 border-t">
-          {pageUrl ? (
+          {pageUrl && pageIsPublic ? (
             <>
               <Button asChild variant="outline" size="sm">
                 <a href={pageUrl} target="_blank" rel="noopener noreferrer">
@@ -241,7 +355,11 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
               </Button>
             </>
           ) : (
-            <p className="text-xs text-muted-foreground">Save slug and enable page to get your public URL.</p>
+            <p className="text-xs text-muted-foreground">
+              {data.agentPageEnabled
+                ? "Public URL appears when workspace publishing is on and slug is saved."
+                : "Enable the page and save a slug to get your public URL."}
+            </p>
           )}
         </div>
 
