@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, ExternalLink, Globe, Loader2 } from "lucide-react";
+import { CheckCircle2, Circle, Copy, ExternalLink, Globe, Loader2 } from "lucide-react";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -17,36 +17,28 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { AgentPageSettingsResponse } from "@shared/agent/agentPageSchema";
-import { validateAgentPageSlugInput } from "@shared/agent/agentPageSlug";
+import { buildAgentPageUrl, validateAgentPageSlugInput } from "@shared/agent/agentPageSlug";
+import { fetchAgentPageSettings, parseAgentPageApiError } from "@/lib/agentPageApi";
+import { AgentPageMarketAreaChips } from "@/components/agentPage/AgentPageMarketAreaChips";
 
-async function fetchAgentPageSettings(): Promise<AgentPageSettingsResponse> {
-  const res = await fetch("/api/agent-page", { credentials: "include" });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(parseAgentPageApiError(body));
-  }
-  return res.json();
-}
-
-function parseAgentPageApiError(body: unknown): string {
-  if (!body || typeof body !== "object") return "Request failed";
-  const record = body as { error?: unknown; message?: unknown };
-  if (typeof record.error === "string" && record.error.trim()) return record.error;
-  if (typeof record.message === "string" && record.message.trim()) return record.message;
-  if (record.error && typeof record.error === "object") {
-    const flat = record.error as { formErrors?: string[]; fieldErrors?: Record<string, string[]> };
-    const parts = [
-      ...(flat.formErrors ?? []),
-      ...Object.values(flat.fieldErrors ?? {}).flat(),
-    ].filter(Boolean);
-    if (parts.length > 0) return parts.join("; ");
-  }
-  return "Request failed";
-}
+const BUSINESS_PROFILE_SETTINGS_PATH = "/app/settings";
 
 type Props = {
   className?: string;
 };
+
+function resolveDisplayAgentUrl(
+  slug: string | null,
+  publicPageUrl: string | null,
+  enabled: boolean,
+): string | null {
+  if (!enabled || !slug) return null;
+  if (publicPageUrl) return publicPageUrl;
+  if (typeof window !== "undefined") {
+    return buildAgentPageUrl(slug, window.location.origin);
+  }
+  return null;
+}
 
 export function PublicAgentPageSettingsCard({ className }: Props) {
   const queryClient = useQueryClient();
@@ -128,19 +120,33 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
     [data?.agentPageSlug, saveMutation],
   );
 
+  const pageIsPublic = Boolean(
+    data?.publishListingsPublicly && data?.agentPageEnabled && data?.agentPageSlug,
+  );
+
+  const agentDisplayUrl = useMemo(
+    () =>
+        resolveDisplayAgentUrl(
+          data?.agentPageSlug ?? (slugDraft || null),
+        data?.publicPageUrl ?? null,
+        Boolean(data?.agentPageEnabled),
+      ),
+    [data?.agentPageSlug, data?.publicPageUrl, data?.agentPageEnabled, slugDraft],
+  );
+
   if (isLoading || !data) {
     return (
-      <Card className={className} data-testid="public-agent-page-settings">
-        <CardContent className="py-8 flex justify-center text-sm text-muted-foreground">
+      <div
+        className={cn("rounded-xl border border-gray-200 bg-white px-4 py-8", className)}
+        data-testid="public-agent-page-settings"
+      >
+        <div className="flex justify-center text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin mr-2" />
           Loading agent page…
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
-
-  const pageUrl = data.publicPageUrl;
-  const pageIsPublic = Boolean(data.publishListingsPublicly && data.agentPageEnabled && data.agentPageSlug);
 
   const publishStatusLabel = !data.agentPageEnabled
     ? "Page disabled"
@@ -150,7 +156,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
         ? "Slug required"
         : pageIsPublic
           ? "Live"
-          : "Not public";
+          : "Not public yet";
 
   const publishStatusClass = pageIsPublic
     ? "bg-emerald-50 text-emerald-800 border-emerald-200"
@@ -159,20 +165,40 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
       : "bg-slate-50 text-slate-600 border-slate-200";
 
   return (
-    <Card className={cn(className)} data-testid="public-agent-page-settings">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Globe className="w-4 h-4 text-brand-green" />
-          Public Agent Page
-        </CardTitle>
-        <CardDescription>
-          Marketing page with your published MLS listings and lead capture. Display name and default
-          about text come from Business Profile.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-          {/* Left: page controls */}
+    <section
+      className={cn("rounded-xl border border-gray-200 bg-white", className)}
+      data-testid="public-agent-page-settings"
+    >
+      <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-gray-100 space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1 min-w-0">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Globe className="w-4 h-4 text-brand-green shrink-0" />
+              Public Agent Page
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Create a public profile page to capture seller and buyer leads.
+            </p>
+          </div>
+          <div
+            className={cn(
+              "inline-flex items-center gap-2 text-sm font-medium shrink-0",
+              data.agentPageEnabled ? "text-emerald-700" : "text-gray-500",
+            )}
+            data-testid="agent-page-active-status"
+          >
+            {data.agentPageEnabled ? (
+              <CheckCircle2 className="h-4 w-4" aria-hidden />
+            ) : (
+              <Circle className="h-4 w-4" aria-hidden />
+            )}
+            {data.agentPageEnabled ? "Agent Page Active" : "Agent Page Disabled"}
+          </div>
+        </div>
+      </div>
+
+      <div className="px-4 py-4 sm:px-6 sm:py-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
           <div className="space-y-4 min-w-0" data-testid="agent-page-controls-column">
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="agent-page-enabled" className="text-sm font-medium">
@@ -186,8 +212,37 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="agent-page-slug">Agent slug</Label>
+            <div className="space-y-2" data-testid="agent-page-url-block">
+              <Label htmlFor="agent-page-slug">Agent URL</Label>
+              {data.agentPageEnabled && (slugDraft || data.agentPageSlug) && agentDisplayUrl ? (
+                <div className="rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2.5 space-y-2">
+                  <p className="text-sm text-gray-900 break-all font-mono">{agentDisplayUrl}</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(agentDisplayUrl);
+                        toast({ title: "Link copied" });
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5 mr-1.5" />
+                      Copy
+                    </Button>
+                    <Button asChild variant="outline" size="sm">
+                      <a href={agentDisplayUrl} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                        Open
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Enable the page and set a slug to get your public URL.
+                </p>
+              )}
               <div className="flex flex-col sm:flex-row gap-2">
                 <Input
                   id="agent-page-slug"
@@ -224,7 +279,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                     }
                   }}
                 >
-                  Suggest
+                  Suggest slug
                 </Button>
               </div>
               {slugError ? (
@@ -232,7 +287,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                   {slugError}
                 </p>
               ) : (
-                <p className="text-xs text-muted-foreground">/agents/your-slug</p>
+                <p className="text-xs text-muted-foreground">URL path: /agents/your-slug</p>
               )}
             </div>
 
@@ -265,9 +320,9 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
               />
             </div>
 
-            <div className="rounded-md border px-3 py-2.5 space-y-2" data-testid="agent-page-publish-status">
+            <div className="space-y-2 pt-1" data-testid="agent-page-publish-status">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-medium text-slate-700">Publish status</p>
+                <p className="text-sm font-medium text-gray-800">Page visibility</p>
                 <span
                   className={cn(
                     "text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border",
@@ -279,75 +334,43 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
               </div>
               {!data.publishListingsPublicly && (
                 <p className="text-xs text-amber-700 leading-snug">
-                  Enable &quot;Publish listings publicly&quot; in Business Profile for a live public URL.
+                  Turn on &quot;Publish listings publicly&quot; in Business Profile for a live public page.
                 </p>
               )}
               {data.publishListingsPublicly && data.agentPageEnabled && !data.agentPageSlug && (
-                <p className="text-xs text-amber-700 leading-snug">
-                  Add an agent slug to get your public URL.
-                </p>
-              )}
-              {pageUrl && pageIsPublic ? (
-                <div className="space-y-2 pt-1">
-                  <p className="text-xs text-muted-foreground break-all">{pageUrl}</p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button asChild variant="outline" size="sm">
-                      <a href={pageUrl} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-                        Open Page
-                      </a>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        navigator.clipboard.writeText(pageUrl);
-                        toast({ title: "Link copied" });
-                      }}
-                    >
-                      <Copy className="h-3.5 w-3.5 mr-1.5" />
-                      Copy Link
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground leading-snug">
-                  {data.agentPageEnabled
-                    ? "Public URL appears when workspace publishing is on and slug is saved."
-                    : "Enable the page and save a slug to get your public URL."}
-                </p>
+                <p className="text-xs text-amber-700 leading-snug">Add a slug to publish your agent page.</p>
               )}
             </div>
           </div>
 
-          {/* Right: profile content */}
           <div className="space-y-4 min-w-0" data-testid="agent-page-profile-column">
-            <div className="rounded-md border border-slate-200 bg-slate-50/80 px-3 py-2.5 space-y-2">
-              <p className="text-[10px] uppercase tracking-wide font-medium text-slate-500">
-                From Business Profile
-              </p>
+            <div className="space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Managed in Business Profile
+                </p>
+                <Button asChild variant="outline" size="sm" className="h-8 w-fit">
+                  <Link href={BUSINESS_PROFILE_SETTINGS_PATH}>Edit Business Profile</Link>
+                </Button>
+              </div>
               <div className="space-y-1">
-                <p className="text-xs text-slate-500">Display name</p>
-                <p className="text-sm font-medium text-slate-900" data-testid="agent-page-inherited-name">
+                <p className="text-xs text-muted-foreground">Display name</p>
+                <p className="text-sm font-medium text-gray-900" data-testid="agent-page-inherited-name">
                   {data.businessProfileDisplayName}
                 </p>
               </div>
               <div className="space-y-1">
-                <p className="text-xs text-slate-500">About</p>
+                <p className="text-xs text-muted-foreground">Default about</p>
                 <p
-                  className="text-sm text-slate-700 whitespace-pre-wrap"
+                  className="text-sm text-gray-700 whitespace-pre-wrap"
                   data-testid="agent-page-inherited-about"
                 >
                   {data.businessProfileAbout || "—"}
                 </p>
               </div>
-              <p className="text-[10px] text-muted-foreground">
-                Edit name, contact, and about in Business Profile settings.
-              </p>
             </div>
 
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3 pt-1 border-t border-gray-100">
               <Label htmlFor="agent-page-custom-bio" className="text-sm font-medium">
                 Use custom Agent Page bio
               </Label>
@@ -408,14 +431,12 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
 
             <div className="space-y-2">
               <Label htmlFor="agent-page-market">Market / service area</Label>
-              <Input
-                id="agent-page-market"
-                defaultValue={data.agentPageMarketArea || ""}
-                placeholder="e.g. Tampa Bay, FL"
-                onBlur={(e) => {
-                  const v = e.target.value.trim();
-                  if (v !== (data.agentPageMarketArea || "")) {
-                    saveMutation.mutate({ agentPageMarketArea: v || null });
+              <AgentPageMarketAreaChips
+                value={data.agentPageMarketArea}
+                disabled={saveMutation.isPending}
+                onSave={(serialized) => {
+                  if (serialized !== (data.agentPageMarketArea || null)) {
+                    saveMutation.mutate({ agentPageMarketArea: serialized });
                   }
                 }}
               />
@@ -423,14 +444,23 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
           </div>
         </div>
 
-        <div className="text-xs text-muted-foreground grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 pt-2 border-t">
-          <span>Views: {data.analytics.pageViews}</span>
-          <span>Listing views: {data.analytics.listingViews}</span>
-          <span>Ask About: {data.analytics.askAboutClicks}</span>
-          <span>Showings: {data.analytics.scheduleShowingClicks}</span>
-          <span>Home Value: {data.analytics.homeValueClicks}</span>
+        <div
+          className="mt-6 pt-4 border-t border-dashed border-gray-200"
+          data-testid="agent-page-future-analytics"
+        >
+          <p className="text-xs font-medium text-gray-500 mb-3">Coming soon</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            {["Lead capture analytics", "Page views", "QR code", "Share links"].map((label) => (
+              <div
+                key={label}
+                className="rounded-md border border-dashed border-gray-200 bg-gray-50/50 px-3 py-4 text-center text-xs text-muted-foreground"
+              >
+                {label}
+              </div>
+            ))}
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }

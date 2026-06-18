@@ -61,6 +61,7 @@ import { useQuery, useMutation, type UseMutationResult } from "@tanstack/react-q
 import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 import { InventorySourcesSection } from "@/components/inventory/InventorySourcesSection";
 import { PublicAgentPageSettingsCard } from "@/components/agentPage/PublicAgentPageSettingsCard";
+import { AgentPageSidebarSummary } from "@/components/agentPage/AgentPageSidebarSummary";
 import type { ActivationStatusPayload } from "@/lib/activationStatus";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
@@ -2991,7 +2992,16 @@ export function RealtorGrowthEngine() {
               </CardContent>
             </Card>
 
-            <PublicAgentPageSettingsCard />
+            <AgentPageSidebarSummary />
+          </div>
+        </div>
+
+        <div id="agent-page-settings" className="space-y-4 mt-6">
+          <PublicAgentPageSettingsCard />
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground px-0.5">
+              Listings available on your public Agent Page come from connected inventory sources.
+            </p>
             <InventorySourcesSection variant="compact" />
           </div>
         </div>

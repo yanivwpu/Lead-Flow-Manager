@@ -18,6 +18,10 @@ import {
 import { buildPublicAgentPageHtml } from "../shared/agent/publicAgentPageHtml";
 import { prepareAgentPageSettingsPatch } from "../server/agentPage/agentPageSettingsPatch";
 import type { AgentPageSettingsResponse } from "../shared/agent/agentPageSchema";
+import {
+  parseAgentPageMarketAreas,
+  serializeAgentPageMarketAreas,
+} from "../client/src/components/agentPage/AgentPageMarketAreaChips";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -206,6 +210,17 @@ async function testPatchPolicy() {
   console.log("  patch policy: OK");
 }
 
+function testMarketAreaChips() {
+  const areas = parseAgentPageMarketAreas("Fort Lauderdale, Pompano Beach; Boca Raton");
+  assert(areas.length === 3, "parses comma/semicolon market areas");
+  assert(
+    serializeAgentPageMarketAreas(["Miami", "Miami", "Fort Lauderdale"]) ===
+      "Miami, Fort Lauderdale",
+    "serializes unique market areas",
+  );
+  console.log("  market area chips: OK");
+}
+
 function testAgentPageDbSavePath() {
   const source = readFileSync(
     join(process.cwd(), "server", "agentPage", "agentPageDb.ts"),
@@ -240,19 +255,30 @@ function testAgentPageDbSavePath() {
     card.includes("Add an about blurb in Business Profile"),
     "inline validation when custom bio cannot be seeded",
   );
-  assert(card.includes("agent-page-controls-column"), "controls column layout");
-  assert(card.includes("agent-page-profile-column"), "profile column layout");
-  assert(card.includes("agent-page-publish-status"), "publish status block");
+  assert(card.includes("Create a public profile page to capture seller and buyer leads"), "header description");
+  assert(card.includes("Agent Page Active"), "active status label");
+  assert(card.includes("Edit Business Profile"), "business profile link");
+  assert(card.includes("Managed in Business Profile"), "business profile managed label");
+  assert(card.includes("AgentPageMarketAreaChips"), "market area chips component");
+  assert(card.includes("agent-page-future-analytics"), "future analytics placeholder");
+  assert(card.includes("agent-page-url-block"), "agent url block");
 
   const rge = readFileSync(
     join(process.cwd(), "client", "src", "pages", "RealtorGrowthEngine.tsx"),
     "utf8",
   );
-  const agentIdx = rge.indexOf("<PublicAgentPageSettingsCard");
-  const inventoryIdx = rge.indexOf("<InventorySourcesSection");
-  const leftColIdx = rge.indexOf('className="md:col-span-2 space-y-6"');
-  assert(leftColIdx >= 0 && agentIdx > leftColIdx, "agent page in main left column");
-  assert(inventoryIdx > agentIdx, "inventory section below agent page settings");
+  assert(
+    rge.includes("Listings available on your public Agent Page come from connected inventory sources"),
+    "inventory helper text below agent page",
+  );
+  assert(rge.includes("AgentPageSidebarSummary"), "sidebar shows compact agent page summary only");
+  const settingsBlock = rge.slice(rge.indexOf('id="agent-page-settings"'));
+  assert(
+    settingsBlock.includes("<PublicAgentPageSettingsCard") &&
+      settingsBlock.indexOf("<PublicAgentPageSettingsCard") <
+        settingsBlock.indexOf("<InventorySourcesSection"),
+    "inventory directly below agent page in main content",
+  );
 
   console.log("  save path wiring: OK");
 }
@@ -300,6 +326,7 @@ async function main() {
   testSlug();
   testProfileInheritance();
   await testPatchPolicy();
+  testMarketAreaChips();
   testAgentPageDbSavePath();
   testHtml();
   console.log("\nAll tests passed.");
