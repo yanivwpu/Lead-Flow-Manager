@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Globe, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { fetchAgentPageSettings } from "@/lib/agentPageApi";
@@ -53,23 +54,24 @@ export function AgentPageSidebarSummary() {
                 {statusLabel}
               </span>
             </div>
-            {pageIsPublic && data.publicPageUrl ? (
-              <a
-                href={data.publicPageUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-brand-green hover:underline"
-              >
-                <ExternalLink className="h-3 w-3" />
-                Open public page
-              </a>
+            {data.agentPageSlug ? (
+              <p className="text-xs text-gray-700 truncate font-mono" title={data.agentPageSlug}>
+                /agents/{data.agentPageSlug}
+              </p>
             ) : null}
-            <a
-              href="#agent-page-settings"
-              className="block text-xs text-muted-foreground hover:text-foreground"
-            >
-              Agent page settings below ↓
-            </a>
+            <div className="flex flex-col gap-2 pt-1">
+              {pageIsPublic && data.publicPageUrl ? (
+                <Button asChild variant="outline" size="sm" className="h-8 w-full text-xs">
+                  <a href={data.publicPageUrl} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="h-3 w-3 mr-1.5" />
+                    Open public page
+                  </a>
+                </Button>
+              ) : null}
+              <Button asChild variant="outline" size="sm" className="h-8 w-full text-xs">
+                <a href="#agent-page-settings">Open agent page settings</a>
+              </Button>
+            </div>
           </>
         )}
       </CardContent>

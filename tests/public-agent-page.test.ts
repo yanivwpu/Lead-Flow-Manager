@@ -272,13 +272,33 @@ function testAgentPageDbSavePath() {
     "inventory helper text below agent page",
   );
   assert(rge.includes("AgentPageSidebarSummary"), "sidebar shows compact agent page summary only");
-  const settingsBlock = rge.slice(rge.indexOf('id="agent-page-settings"'));
+  assert(rge.includes("InventorySidebarSummary"), "sidebar shows compact inventory summary only");
+  assert(rge.includes('data-testid="rge-dashboard-top-grid"'), "top grid wrapper");
+  assert(rge.includes('data-testid="rge-dashboard-main"'), "main column stacks automations and agent page");
+  assert(rge.includes('data-testid="rge-dashboard-sidebar"'), "sidebar aside wrapper");
+  assert(rge.includes('data-testid="rge-agent-page-section"'), "agent page section in main column");
+  assert(rge.includes('data-testid="rge-inventory-section"'), "full-width inventory section");
+
+  const sidebarBlock = rge.slice(rge.indexOf('data-testid="rge-dashboard-sidebar"'));
+  const sidebarEnd = sidebarBlock.indexOf("</aside>");
+  assert(sidebarEnd > 0, "sidebar aside closes");
+  const sidebarOnly = sidebarBlock.slice(0, sidebarEnd);
+  assert(!sidebarOnly.includes("<PublicAgentPageSettingsCard"), "agent page settings not inside sidebar");
+  assert(!sidebarOnly.includes("<InventorySourcesSection"), "inventory settings not inside sidebar");
+
+  const mainBlock = rge.slice(rge.indexOf('data-testid="rge-dashboard-main"'));
+  const mainEnd = mainBlock.indexOf('data-testid="rge-dashboard-sidebar"');
+  assert(mainEnd > 0, "main column before sidebar");
+  const mainOnly = mainBlock.slice(0, mainEnd);
+  assert(mainOnly.includes("Active Automations"), "automations in main column");
+  assert(mainOnly.includes("<PublicAgentPageSettingsCard"), "agent page under automations in main column");
   assert(
-    settingsBlock.includes("<PublicAgentPageSettingsCard") &&
-      settingsBlock.indexOf("<PublicAgentPageSettingsCard") <
-        settingsBlock.indexOf("<InventorySourcesSection"),
-    "inventory directly below agent page in main content",
+    mainOnly.indexOf("Active Automations") < mainOnly.indexOf("<PublicAgentPageSettingsCard"),
+    "agent page below automations",
   );
+
+  const inventorySection = rge.slice(rge.indexOf('data-testid="rge-inventory-section"'));
+  assert(inventorySection.includes("<InventorySourcesSection"), "inventory in full-width section below grid");
 
   console.log("  save path wiring: OK");
 }

@@ -60,6 +60,7 @@ import { useLocation, Link } from "wouter";
 import { useQuery, useMutation, type UseMutationResult } from "@tanstack/react-query";
 import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 import { InventorySourcesSection } from "@/components/inventory/InventorySourcesSection";
+import { InventorySidebarSummary } from "@/components/inventory/InventorySidebarSummary";
 import { PublicAgentPageSettingsCard } from "@/components/agentPage/PublicAgentPageSettingsCard";
 import { AgentPageSidebarSummary } from "@/components/agentPage/AgentPageSidebarSummary";
 import type { ActivationStatusPayload } from "@/lib/activationStatus";
@@ -2891,7 +2892,7 @@ export function RealtorGrowthEngine() {
     };
 
     return (
-      <div className="max-w-5xl mx-auto px-4 py-8">
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
             <Badge className="mb-2 bg-brand-green/10 text-brand-green border-brand-green/20">Active Engine</Badge>
@@ -2900,52 +2901,65 @@ export function RealtorGrowthEngine() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="md:col-span-2">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Zap className="w-5 h-5 text-brand-green" />
-                Active Automations
-              </CardTitle>
-              <CardDescription>Click any workflow to preview or customize its settings.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="max-h-[520px]">
-                <div className="space-y-2 pr-2">
-                  {workflows.length > 0 ? workflows.map((wf: any, i: number) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between p-3 border rounded-lg bg-gray-50/50 cursor-pointer hover:bg-gray-100/80 hover:border-brand-green/30 transition-colors group"
-                      onClick={() => openModal(wf)}
-                      data-testid={`workflow-row-${wf.key}`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono text-muted-foreground bg-gray-200 px-1.5 py-0.5 rounded">{wf.key}</span>
-                          <p className="font-medium text-sm text-gray-900 truncate">{wf.name}</p>
+        <div
+          className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] gap-6 items-start"
+          data-testid="rge-dashboard-top-grid"
+        >
+          <div className="space-y-6 min-w-0" data-testid="rge-dashboard-main">
+            <Card className="min-w-0">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-brand-green" />
+                  Active Automations
+                </CardTitle>
+                <CardDescription>Click any workflow to preview or customize its settings.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="max-h-[520px]">
+                  <div className="space-y-2 pr-2">
+                    {workflows.length > 0 ? workflows.map((wf: any, i: number) => (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between p-3 border rounded-lg bg-gray-50/50 cursor-pointer hover:bg-gray-100/80 hover:border-brand-green/30 transition-colors group"
+                        onClick={() => openModal(wf)}
+                        data-testid={`workflow-row-${wf.key}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono text-muted-foreground bg-gray-200 px-1.5 py-0.5 rounded">{wf.key}</span>
+                            <p className="font-medium text-sm text-gray-900 truncate">{wf.name}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-3 shrink-0">
+                          <Badge variant="outline" className={cn("text-[10px]", wf.enabledByDefault !== false ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-500 border-gray-200")}>
+                            {wf.enabledByDefault !== false ? "Running" : "Disabled"}
+                          </Badge>
+                          <Settings className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 ml-3 shrink-0">
-                        <Badge variant="outline" className={cn("text-[10px]", wf.enabledByDefault !== false ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-500 border-gray-200")}>
-                          {wf.enabledByDefault !== false ? "Running" : "Disabled"}
-                        </Badge>
-                        <Settings className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )) : (
+                      <div className="text-center py-6 text-muted-foreground text-sm">
+                        Loading automation details...
                       </div>
-                    </div>
-                  )) : (
-                    <div className="text-center py-6 text-muted-foreground text-sm">
-                      Loading automation details...
-                    </div>
-                  )}
-                </div>
-              </ScrollArea>
-              <p className="text-[11px] text-center text-muted-foreground mt-3">
-                {workflows.length} workflows active — click to customize
-              </p>
-            </CardContent>
-          </Card>
+                    )}
+                  </div>
+                </ScrollArea>
+                <p className="text-[11px] text-center text-muted-foreground mt-3">
+                  {workflows.length} workflows active — click to customize
+                </p>
+              </CardContent>
+            </Card>
 
-          <div className="space-y-6">
+            <section
+              id="agent-page-settings"
+              className="w-full scroll-mt-24"
+              data-testid="rge-agent-page-section"
+            >
+              <PublicAgentPageSettingsCard className="w-full" />
+            </section>
+          </div>
+
+          <aside className="space-y-6 min-w-0 lg:sticky lg:top-6 lg:self-start" data-testid="rge-dashboard-sidebar">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -2993,18 +3007,16 @@ export function RealtorGrowthEngine() {
             </Card>
 
             <AgentPageSidebarSummary />
-          </div>
+            <InventorySidebarSummary />
+          </aside>
         </div>
 
-        <div id="agent-page-settings" className="space-y-4 mt-6">
-          <PublicAgentPageSettingsCard />
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground px-0.5">
-              Listings available on your public Agent Page come from connected inventory sources.
-            </p>
-            <InventorySourcesSection variant="compact" />
-          </div>
-        </div>
+        <section className="mt-8 w-full scroll-mt-24 space-y-3" data-testid="rge-inventory-section">
+          <p className="text-sm text-muted-foreground">
+            Listings available on your public Agent Page come from connected inventory sources.
+          </p>
+          <InventorySourcesSection variant="compact" className="w-full" />
+        </section>
 
         <Dialog open={!!selectedWf} onOpenChange={(open) => { if (!open) setSelectedWf(null); }}>
           <DialogContent className="max-w-2xl p-0 flex flex-col" style={{ maxHeight: 'calc(100vh - 4rem)' }}>
