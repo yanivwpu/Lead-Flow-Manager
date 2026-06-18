@@ -28,13 +28,16 @@ import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
   buildInventorySourcePayload,
-  fetchInventorySources,
+  bulkPublishEligibleListings,
+  bulkUnpublishAllListings,
+  fetchInventorySourcesBundle,
   fetchInventoryStatus,
   friendlyInventoryErrorMessage,
   formatInventorySyncStatRows,
   formatInventoryConnectionStatus,
   readSyncScopeFromConfig,
   type InventorySourceForm,
+  type ListingPublicationStats,
   type PublicInventorySource,
 } from "@/lib/inventoryApi";
 import {
@@ -130,7 +133,9 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const [fieldErrors, setFieldErrors] = useState<InventoryFormFieldErrors>({});
   const [formBannerError, setFormBannerError] = useState<string | null>(null);
   const [removeSourceConfirmOpen, setRemoveSourceConfirmOpen] = useState(false);
-  const [showStatusDetails, setShowStatusDetails] = useState(false);
+  const [bulkPublishConfirmOpen, setBulkPublishConfirmOpen] = useState(false);
+  const [bulkUnpublishConfirmOpen, setBulkUnpublishConfirmOpen] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const providerInitialized = useRef(false);
 
   const clearFieldError = (field: InventoryFormField) => {
@@ -156,20 +161,23 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const sourcesEnabled = !!status?.canUse;
 
   const {
-    data: sources = [],
+    data: sourcesBundle,
     isLoading: sourcesLoading,
     refetch: refetchSources,
   } = useQuery({
     queryKey: ["/api/inventory/sources"],
-    queryFn: fetchInventorySources,
+    queryFn: fetchInventorySourcesBundle,
     enabled: sourcesEnabled,
     staleTime: 5_000,
     refetchInterval: (query) => {
-      const list = query.state.data as PublicInventorySource[] | undefined;
+      const list = query.state.data?.sources;
       const hasRunning = list?.some((s) => s.lastSyncStatus === "running");
       return hasRunning ? 3_000 : false;
     },
   });
+
+  const sources = sourcesBundle?.sources ?? [];
+  const publicationStats: ListingPublicationStats | undefined = sourcesBundle?.publicationStats;
 
   useEffect(() => {
     if (sourcesLoading || providerInitialized.current) return;
@@ -344,6 +352,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     onSuccess: () => {
       setRemoveSourceConfirmOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent-page"] });
       setForm(EMPTY_FORM);
       toast({ title: "Inventory source removed" });
     },
@@ -353,6 +362,38 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
         description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
         variant: "destructive",
       });
+    },
+  });
+
+  const bulkPublishMutation = useMutation({
+    mutationFn: bulkPublishEligibleListings,
+    onSuccess: (result) => {
+      setBulkPublishConfirmOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent-page"] });
+      toast({
+        title: "Listings published",
+        description: `${result.published.toLocaleString()} listing${result.published === 1 ? "" : "s"} now appear on your Agent Page.`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Bulk publish failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const bulkUnpublishMutation = useMutation({
+    mutationFn: bulkUnpublishAllListings,
+    onSuccess: (result) => {
+      setBulkUnpublishConfirmOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent-page"] });
+      toast({
+        title: "Listings unpublished",
+        description: `${result.unpublished.toLocaleString()} listing${result.unpublished === 1 ? "" : "s"} removed from your Agent Page.`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Bulk unpublish failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -388,12 +429,26 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const connectionStatusLabel = syncRunning
     ? "Syncing"
     : formatInventoryConnectionStatus(activeSource?.connectionStatus);
-  const technicalDetailRows = syncStatRows.filter(
-    (row) =>
-      row.label !== "Last sync upserted" &&
-      row.label !== "Last sync fetched" &&
-      row.label !== "Dataset",
-  );
+  const technicalDetailRows = syncStatRows;
+  const pagesProcessed =
+    typeof activeSource?.lastSyncStats?.pagesFetched === "number"
+      ? activeSource.lastSyncStats.pagesFetched
+      : null;
+  const apiRequests =
+    typeof activeSource?.lastSyncStats?.requestsMade === "number"
+      ? activeSource.lastSyncStats.requestsMade
+      : null;
+  const lastFailedSyncAt = (() => {
+    const fromStats = activeSource?.lastSyncStats?.lastFailedSyncAt;
+    if (typeof fromStats === "string" && fromStats.trim()) {
+      return new Date(fromStats).toLocaleString();
+    }
+    const fromConfig = activeSource?.config?.lastFailedSyncAt;
+    if (typeof fromConfig === "string" && fromConfig.trim()) {
+      return new Date(fromConfig).toLocaleString();
+    }
+    return null;
+  })();
   const lastSyncUpserted =
     typeof activeSource?.lastSyncStats?.listingsUpserted === "number"
       ? activeSource.lastSyncStats.listingsUpserted
@@ -851,45 +906,21 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-muted-foreground">Active for matching</dt>
-                      <dd className="font-medium tabular-nums" data-testid="inventory-active-for-matching">
-                        {(inventoryStats?.activeForMatching ?? 0).toLocaleString()}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">Configured cap</dt>
-                      <dd className="font-medium tabular-nums" data-testid="inventory-configured-cap">
-                        {(inventoryStats?.configuredCap ?? form.maxListings).toLocaleString()}
-                      </dd>
-                    </div>
-                    <div>
                       <dt className="text-muted-foreground">Total synced</dt>
                       <dd className="font-medium tabular-nums" data-testid="inventory-total-synced">
                         {(inventoryStats?.totalSynced ?? activeSource.listingCount).toLocaleString()}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-muted-foreground">Inactive / off-market</dt>
-                      <dd className="font-medium tabular-nums" data-testid="inventory-inactive-off-market">
-                        {(inventoryStats?.inactiveOffMarket ?? 0).toLocaleString()}
+                      <dt className="text-muted-foreground">Active listings available</dt>
+                      <dd className="font-medium tabular-nums" data-testid="inventory-active-for-matching">
+                        {(inventoryStats?.activeForMatching ?? 0).toLocaleString()}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-muted-foreground">Last sync fetched</dt>
-                      <dd className="font-medium tabular-nums">
-                        {lastSyncFetched != null ? lastSyncFetched.toLocaleString() : "—"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">Last sync upserted</dt>
-                      <dd className="font-medium tabular-nums">
-                        {lastSyncUpserted != null ? lastSyncUpserted.toLocaleString() : "—"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">Skipped due to cap</dt>
-                      <dd className="font-medium tabular-nums" data-testid="inventory-skipped-cap">
-                        {lastSyncSkippedCap != null ? lastSyncSkippedCap.toLocaleString() : "—"}
+                      <dt className="text-muted-foreground">Listing cap</dt>
+                      <dd className="font-medium tabular-nums" data-testid="inventory-configured-cap">
+                        {(inventoryStats?.configuredCap ?? form.maxListings).toLocaleString()}
                       </dd>
                     </div>
                     <div>
@@ -903,25 +934,34 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                     variant="ghost"
                     size="sm"
                     className="h-8 px-2 text-xs text-muted-foreground"
-                    onClick={() => setShowStatusDetails((open) => !open)}
-                    data-testid="button-inventory-show-details"
+                    onClick={() => setShowDiagnostics((open) => !open)}
+                    data-testid="button-inventory-show-diagnostics"
                   >
-                    {showStatusDetails ? (
+                    {showDiagnostics ? (
                       <>
                         <ChevronUp className="h-3.5 w-3.5 mr-1" />
-                        Hide details
+                        Hide diagnostics
                       </>
                     ) : (
                       <>
                         <ChevronDown className="h-3.5 w-3.5 mr-1" />
-                        Show details
+                        Show diagnostics
                       </>
                     )}
                   </Button>
 
-                  {showStatusDetails && (
-                    <div className="rounded-md border border-gray-200 bg-white/80 p-3 space-y-3">
+                  {showDiagnostics && (
+                    <div
+                      className="rounded-md border border-gray-200 bg-white/80 p-3 space-y-3"
+                      data-testid="inventory-source-diagnostics"
+                    >
                       <dl className="grid gap-2 sm:grid-cols-2 text-xs">
+                        <div>
+                          <dt className="text-muted-foreground">Inactive / off-market</dt>
+                          <dd className="font-medium tabular-nums" data-testid="inventory-inactive-off-market">
+                            {(inventoryStats?.inactiveOffMarket ?? 0).toLocaleString()}
+                          </dd>
+                        </div>
                         {datasetId && (
                           <div>
                             <dt className="text-muted-foreground">Dataset ID</dt>
@@ -932,6 +972,42 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                           <div>
                             <dt className="text-muted-foreground">Originating system</dt>
                             <dd className="font-medium font-mono">{originatingSystem}</dd>
+                          </div>
+                        )}
+                        {pagesProcessed != null && (
+                          <div>
+                            <dt className="text-muted-foreground">Pages processed</dt>
+                            <dd className="font-medium tabular-nums">{pagesProcessed.toLocaleString()}</dd>
+                          </div>
+                        )}
+                        {apiRequests != null && apiRequests > 0 && (
+                          <div>
+                            <dt className="text-muted-foreground">API requests</dt>
+                            <dd className="font-medium tabular-nums">{apiRequests.toLocaleString()}</dd>
+                          </div>
+                        )}
+                        <div>
+                          <dt className="text-muted-foreground">Last sync fetched</dt>
+                          <dd className="font-medium tabular-nums">
+                            {lastSyncFetched != null ? lastSyncFetched.toLocaleString() : "—"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">Last sync upserted</dt>
+                          <dd className="font-medium tabular-nums">
+                            {lastSyncUpserted != null ? lastSyncUpserted.toLocaleString() : "—"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">Skipped due to cap</dt>
+                          <dd className="font-medium tabular-nums" data-testid="inventory-skipped-cap">
+                            {lastSyncSkippedCap != null ? lastSyncSkippedCap.toLocaleString() : "—"}
+                          </dd>
+                        </div>
+                        {syncFailed && lastFailedSyncAt && (
+                          <div>
+                            <dt className="text-muted-foreground">Failed sync</dt>
+                            <dd className="font-medium">{lastFailedSyncAt}</dd>
                           </div>
                         )}
                         {technicalDetailRows.map((row) => (
@@ -965,7 +1041,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       <AlertTitle className="text-sm text-emerald-950">Import complete</AlertTitle>
                       <AlertDescription className="text-xs text-emerald-900/90">
                         {(inventoryStats?.totalSynced ?? activeSource.listingCount) > 0
-                          ? `${(inventoryStats?.totalSynced ?? activeSource.listingCount).toLocaleString()} listings synced (${(inventoryStats?.activeForMatching ?? 0).toLocaleString()} active for matching).`
+                          ? `${(inventoryStats?.totalSynced ?? activeSource.listingCount).toLocaleString()} listings synced (${(inventoryStats?.activeForMatching ?? 0).toLocaleString()} active listings available).`
                           : "Sync finished. No listings were imported — verify your dataset ID and token with Bridge Data Output."}
                       </AlertDescription>
                     </Alert>
@@ -994,6 +1070,91 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         {friendlyInventoryErrorMessage(activeSource.lastSyncError)}
                       </AlertDescription>
                     </Alert>
+                  )}
+
+                  {publicationStats && (
+                    <div
+                      className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-4 space-y-3"
+                      data-testid="inventory-agent-page-publication"
+                    >
+                      <p className="font-medium text-gray-900">Agent Page listings</p>
+                      <dl className="grid gap-3 sm:grid-cols-2 text-xs sm:text-sm">
+                        <div>
+                          <dt className="text-muted-foreground">Synced listings</dt>
+                          <dd className="font-medium tabular-nums" data-testid="publication-total-synced">
+                            {publicationStats.totalSynced.toLocaleString()}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">MLS eligible</dt>
+                          <dd className="font-medium tabular-nums" data-testid="publication-mls-eligible">
+                            {publicationStats.mlsEligible.toLocaleString()}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">Published to Agent Page</dt>
+                          <dd className="font-medium tabular-nums" data-testid="publication-published">
+                            {publicationStats.publishedOnAgentPage.toLocaleString()}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">Hidden / unpublished</dt>
+                          <dd className="font-medium tabular-nums" data-testid="publication-hidden">
+                            {publicationStats.hiddenUnpublished.toLocaleString()}
+                          </dd>
+                        </div>
+                      </dl>
+
+                      {!publicationStats.workspacePublishEnabled && (
+                        <p className="text-xs text-amber-700 leading-snug">
+                          Turn on &quot;Publish listings publicly&quot; in Business Profile before publishing to your
+                          Agent Page.
+                        </p>
+                      )}
+
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="sm"
+                          disabled={
+                            bulkPublishMutation.isPending ||
+                            !publicationStats.workspacePublishEnabled ||
+                            publicationStats.eligibleToPublish === 0
+                          }
+                          onClick={() => setBulkPublishConfirmOpen(true)}
+                          data-testid="button-bulk-publish-agent-page"
+                        >
+                          {bulkPublishMutation.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Publishing…
+                            </>
+                          ) : (
+                            "Publish eligible listings to Agent Page"
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={
+                            bulkUnpublishMutation.isPending || publicationStats.publishedOnAgentPage === 0
+                          }
+                          onClick={() => setBulkUnpublishConfirmOpen(true)}
+                          data-testid="button-bulk-unpublish-agent-page"
+                        >
+                          {bulkUnpublishMutation.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Unpublishing…
+                            </>
+                          ) : (
+                            "Unpublish all from Agent Page"
+                          )}
+                        </Button>
+                      </div>
+                    </div>
                   )}
 
                   <div className="border-t border-gray-200 pt-3">
@@ -1040,7 +1201,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                   This source currently has {(inventoryStats?.totalSynced ?? activeSource.listingCount).toLocaleString()} synced listing
                   {(inventoryStats?.totalSynced ?? activeSource.listingCount) === 1 ? "" : "s"}
                   {inventoryStats
-                    ? ` (${inventoryStats.activeForMatching.toLocaleString()} active for matching, cap ${inventoryStats.configuredCap.toLocaleString()}).`
+                    ? ` (${inventoryStats.activeForMatching.toLocaleString()} active listings available, cap ${inventoryStats.configuredCap.toLocaleString()}).`
                     : "."}
                 </p>
               )}
@@ -1068,6 +1229,85 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     </AlertDialog>
   );
 
+  const bulkPublishDialog = (
+    <AlertDialog open={bulkPublishConfirmOpen} onOpenChange={setBulkPublishConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Publish listings to Agent Page?</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p>
+                This will publish{" "}
+                <span className="font-medium text-gray-900 tabular-nums">
+                  {(publicationStats?.eligibleToPublish ?? 0).toLocaleString()}
+                </span>{" "}
+                MLS-eligible active/coming soon listings to your Agent Page.
+              </p>
+              <p>
+                Only listings that pass MLS compliance will be published. Sold, expired, and off-market listings are
+                excluded.
+              </p>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={bulkPublishMutation.isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={bulkPublishMutation.isPending}
+            onClick={() => bulkPublishMutation.mutate()}
+          >
+            {bulkPublishMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Publishing…
+              </>
+            ) : (
+              "Publish listings"
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
+  const bulkUnpublishDialog = (
+    <AlertDialog open={bulkUnpublishConfirmOpen} onOpenChange={setBulkUnpublishConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Unpublish all from Agent Page?</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p>
+                This will unpublish{" "}
+                <span className="font-medium text-gray-900 tabular-nums">
+                  {(publicationStats?.publishedOnAgentPage ?? 0).toLocaleString()}
+                </span>{" "}
+                listings from your Agent Page. Inventory data stays synced — nothing is deleted.
+              </p>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={bulkUnpublishMutation.isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            disabled={bulkUnpublishMutation.isPending}
+            onClick={() => bulkUnpublishMutation.mutate()}
+          >
+            {bulkUnpublishMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Unpublishing…
+              </>
+            ) : (
+              "Unpublish all"
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
   if (isCompact) {
     return (
       <>
@@ -1086,6 +1326,8 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
           <CardContent>{inner}</CardContent>
         </Card>
         {removeSourceDialog}
+        {bulkPublishDialog}
+        {bulkUnpublishDialog}
       </>
     );
   }
@@ -1118,6 +1360,8 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
         </Card>
       </section>
       {removeSourceDialog}
+      {bulkPublishDialog}
+      {bulkUnpublishDialog}
     </>
   );
 }

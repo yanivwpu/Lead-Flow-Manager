@@ -70,6 +70,12 @@ export type AgentPageSettingsResponse = {
   youtubeUrl: string;
   schedulingUrl: string;
   widgetEnabled: boolean;
+  publishedOnAgentPage: number;
+  eligibleToPublish: number;
+  totalSynced: number;
+  mlsEligible: number;
+  hiddenUnpublished: number;
+  workspacePublishEnabled: boolean;
 };
 
 export const publicAgentLeadBodySchema = z.object({

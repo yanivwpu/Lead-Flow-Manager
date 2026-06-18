@@ -14,6 +14,7 @@ import {
 import { getCalendlyPublicSchedulingUrl, isUserCalendlyBookingConnected } from "../calendlyBookingConnected";
 import { resolveRgeCustomerSchedulingUrl } from "../rgeCustomerSchedulingUrl";
 import { storage } from "../storage";
+import { getListingPublicationStats } from "../inventory/inventoryDb";
 import {
   fetchPublishedListingsForAgentPage,
   getAgentPageSettingsRow,
@@ -53,6 +54,7 @@ export async function buildAgentPageSettingsResponse(
   const schedulingUrl = calendly || scheduling.url || "";
   const user = await storage.getUser(userId);
   const widgetEnabled = mergeWidgetEnabled(user?.widgetSettings);
+  const publicationStats = await getListingPublicationStats(userId);
 
   const businessProfileDisplayName = resolveAgentPageDisplayName(row, user?.name);
   const businessProfileAbout = str(row.aboutText);
@@ -87,6 +89,12 @@ export async function buildAgentPageSettingsResponse(
     youtubeUrl: socialLinks.youtubeUrl,
     schedulingUrl,
     widgetEnabled,
+    publishedOnAgentPage: publicationStats.publishedOnAgentPage,
+    eligibleToPublish: publicationStats.eligibleToPublish,
+    totalSynced: publicationStats.totalSynced,
+    mlsEligible: publicationStats.mlsEligible,
+    hiddenUnpublished: publicationStats.hiddenUnpublished,
+    workspacePublishEnabled: publicationStats.workspacePublishEnabled,
   };
 }
 

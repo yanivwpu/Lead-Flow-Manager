@@ -136,6 +136,12 @@ function mockSettings(overrides: Partial<AgentPageSettingsResponse>): AgentPageS
     youtubeUrl: "",
     schedulingUrl: "",
     widgetEnabled: true,
+    publishedOnAgentPage: 0,
+    eligibleToPublish: 0,
+    totalSynced: 0,
+    mlsEligible: 0,
+    hiddenUnpublished: 0,
+    workspacePublishEnabled: false,
     ...overrides,
   };
 }

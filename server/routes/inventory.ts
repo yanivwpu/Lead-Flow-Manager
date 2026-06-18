@@ -4,7 +4,7 @@ import { DEV_SEED_PRODUCTION_BLOCK_MESSAGE } from "@shared/inventory/inventoryDe
 import { inventoryListingStatusSchema } from "@shared/inventory/inventoryListingSchema";
 import { canUseInventoryConnector, isInventoryConnectorEnabled } from "../inventory/inventoryGate";
 import { isRgeInstalledForUser } from "../buyerPreferenceService";
-import { getInventoryListing, listInventoryListings, setListingPublication, getListingDirectShareMeta, createDirectShareLinkForUserListing, getAuthenticatedListingFlyerPreviewData, getInventorySource } from "../inventory/inventoryDb";
+import { getInventoryListing, listInventoryListings, setListingPublication, getListingDirectShareMeta, createDirectShareLinkForUserListing, getAuthenticatedListingFlyerPreviewData, getInventorySource, getListingPublicationStats, bulkPublishEligibleListings, bulkUnpublishAllListings } from "../inventory/inventoryDb";
 import {
   createInventorySourceBodySchema,
   createSourceForUser,
@@ -80,7 +80,8 @@ export function registerInventoryRoutes(app: Express): void {
       if (!gate.ok) return res.status(gate.status).json(gate.body);
 
       const sources = await listSourcesForUser(req.user.id);
-      res.json({ sources });
+      const publicationStats = await getListingPublicationStats(req.user.id);
+      res.json({ sources, publicationStats });
     } catch (error) {
       console.error("[inventory] list sources", error);
       res.status(500).json({ error: "Failed to list inventory sources" });
@@ -356,6 +357,53 @@ export function registerInventoryRoutes(app: Express): void {
     } catch (error) {
       console.error("[inventory] patch listing publication", error);
       res.status(500).json({ error: "Failed to update listing publication" });
+    }
+  });
+
+  app.post("/api/inventory/listings/bulk-publish", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const gate = await requireInventoryAccess(req.user.id);
+      if (!gate.ok) return res.status(gate.status).json(gate.body);
+
+      try {
+        const result = await bulkPublishEligibleListings(req.user.id);
+        res.json(result);
+      } catch (pubError) {
+        const message = pubError instanceof Error ? pubError.message : "Bulk publish failed";
+        return res.status(400).json({ error: message, code: "bulk_publish_rejected" });
+      }
+    } catch (error) {
+      console.error("[inventory] bulk publish listings", error);
+      res.status(500).json({ error: "Failed to bulk publish listings" });
+    }
+  });
+
+  app.post("/api/inventory/listings/bulk-unpublish", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const gate = await requireInventoryAccess(req.user.id);
+      if (!gate.ok) return res.status(gate.status).json(gate.body);
+
+      const result = await bulkUnpublishAllListings(req.user.id);
+      res.json(result);
+    } catch (error) {
+      console.error("[inventory] bulk unpublish listings", error);
+      res.status(500).json({ error: "Failed to bulk unpublish listings" });
+    }
+  });
+
+  app.get("/api/inventory/listings/publication-stats", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const gate = await requireInventoryAccess(req.user.id);
+      if (!gate.ok) return res.status(gate.status).json(gate.body);
+
+      const publicationStats = await getListingPublicationStats(req.user.id);
+      res.json(publicationStats);
+    } catch (error) {
+      console.error("[inventory] publication stats", error);
+      res.status(500).json({ error: "Failed to load publication stats" });
     }
   });
 }

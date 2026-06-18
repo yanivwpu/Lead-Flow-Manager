@@ -1013,6 +1013,140 @@ export async function setListingPublication(
   return getInventoryListing(userId, listingId);
 }
 
+export type ListingPublicationStats = {
+  totalSynced: number;
+  mlsEligible: number;
+  publishedOnAgentPage: number;
+  hiddenUnpublished: number;
+  /** MLS-eligible listings not yet published (same as hiddenUnpublished). */
+  eligibleToPublish: number;
+  workspacePublishEnabled: boolean;
+};
+
+function listingCountConditions(userId: string) {
+  const conditions = [eq(inventoryListings.userId, userId)];
+  const devSeedExclude = devSeedListingExcludeCondition();
+  if (devSeedExclude) conditions.push(devSeedExclude);
+  return conditions;
+}
+
+export async function getListingPublicationStats(userId: string): Promise<ListingPublicationStats> {
+  const workspaceOn = await getWorkspacePublishListingsPublicly(userId);
+  const base = listingCountConditions(userId);
+  const eligible = eligiblePublicationConditions(userId);
+
+  const [totalRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(inventoryListings)
+    .where(and(...base));
+
+  const [mlsRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(inventoryListings)
+    .where(and(...eligible));
+
+  const [publishedRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(inventoryListings)
+    .where(and(...eligible, eq(inventoryListings.publishPublicly, true)));
+
+  const [hiddenRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(inventoryListings)
+    .where(and(...eligible, eq(inventoryListings.publishPublicly, false)));
+
+  const mlsEligible = mlsRow?.count ?? 0;
+  const publishedOnAgentPage = workspaceOn ? (publishedRow?.count ?? 0) : 0;
+  const hiddenUnpublished = hiddenRow?.count ?? 0;
+
+  return {
+    totalSynced: totalRow?.count ?? 0,
+    mlsEligible,
+    publishedOnAgentPage,
+    hiddenUnpublished,
+    eligibleToPublish: hiddenUnpublished,
+    workspacePublishEnabled: workspaceOn,
+  };
+}
+
+export type BulkPublishEligibleListingsResult = {
+  published: number;
+  eligibleBefore: number;
+};
+
+export async function bulkPublishEligibleListings(
+  userId: string,
+): Promise<BulkPublishEligibleListingsResult> {
+  const workspaceOn = await getWorkspacePublishListingsPublicly(userId);
+  if (!workspaceOn) {
+    throw new Error("Enable workspace public listing publishing in Business Profile first");
+  }
+
+  const rows = await db
+    .select({
+      id: inventoryListings.id,
+      status: inventoryListings.status,
+      listingCompliance: inventoryListings.listingCompliance,
+    })
+    .from(inventoryListings)
+    .where(and(...eligiblePublicationConditions(userId), eq(inventoryListings.publishPublicly, false)));
+
+  const eligibleBefore = rows.length;
+  const now = new Date();
+  let published = 0;
+
+  for (const row of rows) {
+    const rejection = getPublicListingPublishRejectionReason({
+      status: row.status,
+      listingCompliance: normalizeListingCompliance(row.listingCompliance),
+    });
+    if (rejection) continue;
+
+    await ensurePublicSlugForListing(row.id);
+    await db
+      .update(inventoryListings)
+      .set({
+        publishPublicly: true,
+        publishedAt: now,
+        updatedAt: now,
+      })
+      .where(and(eq(inventoryListings.id, row.id), eq(inventoryListings.userId, userId)));
+    published += 1;
+  }
+
+  return { published, eligibleBefore };
+}
+
+export type BulkUnpublishListingsResult = {
+  unpublished: number;
+};
+
+export async function bulkUnpublishAllListings(userId: string): Promise<BulkUnpublishListingsResult> {
+  const now = new Date();
+  const updated = await db
+    .update(inventoryListings)
+    .set({
+      publishPublicly: false,
+      publishedAt: null,
+      updatedAt: now,
+    })
+    .where(and(eq(inventoryListings.userId, userId), eq(inventoryListings.publishPublicly, true)))
+    .returning({ id: inventoryListings.id });
+
+  return { unpublished: updated.length };
+}
+
+function eligiblePublicationConditions(userId: string) {
+  const conditions = [
+    eq(inventoryListings.userId, userId),
+    inArray(inventoryListings.status, [...MATCHABLE_INVENTORY_STATUSES]),
+    publicListingMlsGateSql(),
+  ];
+  const devSeedExclude = devSeedListingExcludeCondition();
+  if (devSeedExclude) conditions.push(devSeedExclude);
+  return conditions;
+}
+
 async function applyDirectShareMlsGate(
   listing: InventoryListing | undefined,
 ): Promise<InventoryListing | undefined> {

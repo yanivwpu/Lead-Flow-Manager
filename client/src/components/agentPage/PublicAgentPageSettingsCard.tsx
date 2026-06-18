@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import type { AgentPageSettingsResponse } from "@shared/agent/agentPageSchema";
 import { buildAgentPageUrl, validateAgentPageSlugInput } from "@shared/agent/agentPageSlug";
 import { fetchAgentPageSettings, parseAgentPageApiError } from "@/lib/agentPageApi";
+import { bulkPublishEligibleListings } from "@/lib/inventoryApi";
 import { AgentPageMarketAreaChips } from "@/components/agentPage/AgentPageMarketAreaChips";
 
 const BUSINESS_PROFILE_SETTINGS_PATH = "/app/settings";
@@ -113,6 +114,20 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(parseAgentPageApiError(payload));
       return payload as { slug: string | null };
+    },
+  });
+
+  const bulkPublishMutation = useMutation({
+    mutationFn: bulkPublishEligibleListings,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/agent-page"] });
+      toast({
+        title: "Listings published",
+        description: `${result.published.toLocaleString()} listing${result.published === 1 ? "" : "s"} now appear on your Agent Page.`,
+      });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Bulk publish failed", description: e.message, variant: "destructive" });
     },
   });
 
@@ -382,6 +397,49 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
               )}
               {data.publishListingsPublicly && data.agentPageEnabled && !data.agentPageSlug && (
                 <p className="text-xs text-amber-700 leading-snug">Add a slug to publish your agent page.</p>
+              )}
+              {data.publishListingsPublicly && data.agentPageEnabled && data.agentPageSlug && (
+                <div className="space-y-2 pt-1" data-testid="agent-page-listing-publish">
+                  <p className="text-xs text-muted-foreground leading-snug">
+                    <span className="font-medium text-gray-800 tabular-nums">
+                      {data.publishedOnAgentPage.toLocaleString()}
+                    </span>{" "}
+                    listings on your Agent Page
+                    {data.eligibleToPublish > 0 ? (
+                      <>
+                        {" "}
+                        ·{" "}
+                        <span className="tabular-nums">{data.eligibleToPublish.toLocaleString()}</span> eligible
+                        to publish
+                      </>
+                    ) : null}
+                  </p>
+                  {data.publishedOnAgentPage === 0 && data.eligibleToPublish > 0 && (
+                    <p className="text-xs text-amber-700 leading-snug">
+                      Synced listings are not shown on your Agent Page until they are published.
+                    </p>
+                  )}
+                  {data.eligibleToPublish > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8"
+                      disabled={bulkPublishMutation.isPending}
+                      onClick={() => bulkPublishMutation.mutate()}
+                      data-testid="button-bulk-publish-listings"
+                    >
+                      {bulkPublishMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Publishing…
+                        </>
+                      ) : (
+                        `Publish ${data.eligibleToPublish.toLocaleString()} eligible listings`
+                      )}
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           </div>

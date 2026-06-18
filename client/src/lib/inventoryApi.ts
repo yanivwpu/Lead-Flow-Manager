@@ -64,10 +64,47 @@ export async function fetchInventoryStatus(): Promise<InventoryConnectorStatus> 
   return res.json() as Promise<InventoryConnectorStatus>;
 }
 
-export async function fetchInventorySources(): Promise<PublicInventorySource[]> {
+export type ListingPublicationStats = {
+  totalSynced: number;
+  mlsEligible: number;
+  publishedOnAgentPage: number;
+  hiddenUnpublished: number;
+  eligibleToPublish: number;
+  workspacePublishEnabled: boolean;
+};
+
+export const EMPTY_LISTING_PUBLICATION_STATS: ListingPublicationStats = {
+  totalSynced: 0,
+  mlsEligible: 0,
+  publishedOnAgentPage: 0,
+  hiddenUnpublished: 0,
+  eligibleToPublish: 0,
+  workspacePublishEnabled: false,
+};
+
+export async function fetchInventorySourcesBundle(): Promise<{
+  sources: PublicInventorySource[];
+  publicationStats: ListingPublicationStats;
+}> {
   const res = await apiRequest("GET", "/api/inventory/sources");
-  const data = (await res.json()) as { sources: PublicInventorySource[] };
-  return data.sources ?? [];
+  const data = (await res.json()) as {
+    sources?: PublicInventorySource[];
+    publicationStats?: ListingPublicationStats;
+  };
+  return {
+    sources: data.sources ?? [],
+    publicationStats: data.publicationStats ?? EMPTY_LISTING_PUBLICATION_STATS,
+  };
+}
+
+export async function fetchInventorySources(): Promise<PublicInventorySource[]> {
+  const bundle = await fetchInventorySourcesBundle();
+  return bundle.sources;
+}
+
+export async function fetchListingPublicationStats(): Promise<ListingPublicationStats> {
+  const res = await apiRequest("GET", "/api/inventory/listings/publication-stats");
+  return res.json() as Promise<ListingPublicationStats>;
 }
 
 export type MlsInventorySourceForm = {
@@ -225,6 +262,35 @@ export function formatInventorySyncStatus(status: string | null | undefined): st
     default:
       return status.replace(/_/g, " ");
   }
+}
+
+export async function bulkPublishEligibleListings(): Promise<{
+  published: number;
+  eligibleBefore: number;
+}> {
+  const res = await apiRequest("POST", "/api/inventory/listings/bulk-publish");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const message =
+      typeof (body as { error?: string }).error === "string"
+        ? (body as { error: string }).error
+        : "Bulk publish failed";
+    throw new Error(message);
+  }
+  return res.json() as Promise<{ published: number; eligibleBefore: number }>;
+}
+
+export async function bulkUnpublishAllListings(): Promise<{ unpublished: number }> {
+  const res = await apiRequest("POST", "/api/inventory/listings/bulk-unpublish");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const message =
+      typeof (body as { error?: string }).error === "string"
+        ? (body as { error: string }).error
+        : "Bulk unpublish failed";
+    throw new Error(message);
+  }
+  return res.json() as Promise<{ unpublished: number }>;
 }
 
 export function formatInventoryConnectionStatus(status: string | null | undefined): string {
