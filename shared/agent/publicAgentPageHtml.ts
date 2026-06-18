@@ -1,4 +1,5 @@
 import type { PublicAgentPageRenderInput, AgentPageListingCard } from "./agentPageTypes";
+import { normalizePropertyTypeForFilter } from "./publicAgentPageBrowse";
 
 const BRAND_GREEN = "#059669";
 const BRAND_GREEN_DARK = "#047857";
@@ -24,7 +25,7 @@ function renderLogo(data: PublicAgentPageRenderInput): string {
   return `<img class="agent-logo" src="${escapeHtml(data.companyLogo)}" alt="" />`;
 }
 
-function listingCardHtml(card: AgentPageListingCard): string {
+function listingCardHtml(card: AgentPageListingCard, index: number): string {
   const addressLine = card.street
     ? `<p class="card-address">${escapeHtml(card.street)}</p>`
     : "";
@@ -32,8 +33,9 @@ function listingCardHtml(card: AgentPageListingCard): string {
   const img = card.imageUrl
     ? `<img src="${escapeHtml(card.imageUrl)}" alt="" loading="lazy" />`
     : `<div class="card-img-placeholder">No photo</div>`;
+  const propertyType = normalizePropertyTypeForFilter(card.propertyType);
 
-  return `<article class="listing-card" data-id="${escapeHtml(card.id)}" data-label="${escapeHtml(card.listingLabel)}" data-status="${escapeHtml(card.status)}">
+  return `<article class="listing-card" data-id="${escapeHtml(card.id)}" data-label="${escapeHtml(card.listingLabel)}" data-status="${escapeHtml(card.status)}" data-sort-index="${index}" data-price-cents="${card.priceCents ?? ""}" data-beds="${card.bedsNum ?? ""}" data-baths="${card.bathsNum ?? ""}" data-sqft="${card.sqftNum ?? ""}" data-property-type="${escapeHtml(propertyType)}">
     <a class="card-img-link" href="${escapeHtml(card.shareUrl)}" data-action="listing_view">${img}</a>
     <div class="card-body">
       <div class="card-top">
@@ -78,7 +80,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     ? `<button type="button" class="btn btn-outline" id="btn-home-worth">What's My Home Worth?</button>`
     : "";
 
-  const cards = data.listings.map(listingCardHtml).join("");
+  const cards = data.listings.map((listing, index) => listingCardHtml(listing, index)).join("");
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -109,9 +111,16 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .btn-ghost { background: transparent; border-color: transparent; color: var(--muted); padding: 6px 10px; }
     .btn-sm { padding: 7px 12px; font-size: 0.8125rem; }
     .section-title { margin: 0 0 12px; font-size: 1.25rem; font-weight: 700; }
-    .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
     .chip { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border); background: #fff; font-size: 0.8125rem; font-weight: 600; cursor: pointer; color: #475569; }
     .chip.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+    .browse-filters { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); margin-bottom: 16px; padding: 14px; background: #fff; border: 1px solid var(--border); border-radius: 12px; }
+    .browse-filters label { display: flex; flex-direction: column; gap: 4px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    .browse-filters input, .browse-filters select { padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 0.8125rem; color: var(--ink); background: #fff; min-width: 0; }
+    .browse-filters .listing-type-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .browse-filters .listing-type-row > span { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-right: 4px; }
+    .browse-empty { grid-column: 1 / -1; padding: 24px; text-align: center; color: var(--muted); font-size: 0.875rem; display: none; }
+    .browse-empty.show { display: block; }
     .listings-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
     .listing-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
     .listing-card[hidden] { display: none !important; }
@@ -162,12 +171,62 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
 
     <section>
       <h2 class="section-title">Listings</h2>
-      <div class="filters" role="tablist">
-        <button type="button" class="chip active" data-filter="all">All</button>
-        <button type="button" class="chip" data-filter="sale">For Sale</button>
-        <button type="button" class="chip" data-filter="rent">For Rent</button>
-        <button type="button" class="chip" data-filter="coming_soon">Coming Soon</button>
+      <div class="browse-filters" id="browse-filters">
+        <div class="listing-type-row">
+          <span>Type</span>
+          <button type="button" class="chip active" data-filter="all">All</button>
+          <button type="button" class="chip" data-filter="sale">For Sale</button>
+          <button type="button" class="chip" data-filter="rent">For Rent</button>
+          <button type="button" class="chip" data-filter="coming_soon">Coming Soon</button>
+        </div>
+        <label>Min price
+          <input type="number" id="filter-min-price" min="0" step="1000" placeholder="Any" inputmode="numeric" />
+        </label>
+        <label>Max price
+          <input type="number" id="filter-max-price" min="0" step="1000" placeholder="Any" inputmode="numeric" />
+        </label>
+        <label>Beds
+          <select id="filter-beds">
+            <option value="">Any</option>
+            <option value="1">1+</option>
+            <option value="2">2+</option>
+            <option value="3">3+</option>
+            <option value="4">4+</option>
+            <option value="5">5+</option>
+          </select>
+        </label>
+        <label>Baths
+          <select id="filter-baths">
+            <option value="">Any</option>
+            <option value="1">1+</option>
+            <option value="2">2+</option>
+            <option value="3">3+</option>
+            <option value="4">4+</option>
+          </select>
+        </label>
+        <label>Property type
+          <select id="filter-property-type">
+            <option value="">All types</option>
+            <option value="house">House</option>
+            <option value="condo">Condo</option>
+            <option value="townhouse">Townhouse</option>
+            <option value="multi_family">Multi-family</option>
+            <option value="land">Land</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+        <label>Min sq ft
+          <input type="number" id="filter-min-sqft" min="0" step="100" placeholder="Any" inputmode="numeric" />
+        </label>
+        <label>Sort
+          <select id="filter-sort">
+            <option value="newest">Newest</option>
+            <option value="price_desc">Price: high to low</option>
+            <option value="price_asc">Price: low to high</option>
+          </select>
+        </label>
       </div>
+      <div class="browse-empty" id="browse-empty">No listings match your filters.</div>
       <div class="listings-grid" id="listings-grid">
         ${cards || '<div class="empty-listings">No published listings yet.</div>'}
       </div>
@@ -270,21 +329,97 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       var homeWorth = document.getElementById("btn-home-worth");
       if (homeWorth) homeWorth.addEventListener("click", function () { track("home_value"); openModal("home_worth"); });
 
-      document.querySelectorAll(".chip").forEach(function (chip) {
-        chip.addEventListener("click", function () {
-          document.querySelectorAll(".chip").forEach(function (c) { c.classList.remove("active"); });
-          chip.classList.add("active");
-          var f = chip.getAttribute("data-filter");
-          document.querySelectorAll(".listing-card").forEach(function (card) {
-            var label = card.getAttribute("data-label");
-            var status = card.getAttribute("data-status");
-            var show = f === "all"
-              || (f === "coming_soon" && status === "Coming Soon")
-              || (f === "rent" && label === "FOR RENT" && status !== "Coming Soon")
-              || (f === "sale" && label === "FOR SALE" && status !== "Coming Soon");
-            card.hidden = !show;
-          });
+      var listingType = "all";
+      var grid = document.getElementById("listings-grid");
+      var emptyMsg = document.getElementById("browse-empty");
+
+      function numVal(id) {
+        var el = document.getElementById(id);
+        if (!el || !el.value) return null;
+        var n = Number(el.value);
+        return isFinite(n) ? n : null;
+      }
+
+      function cardMatches(card) {
+        var label = card.getAttribute("data-label");
+        var status = card.getAttribute("data-status");
+        var showType = listingType === "all"
+          || (listingType === "coming_soon" && status === "Coming Soon")
+          || (listingType === "rent" && label === "FOR RENT" && status !== "Coming Soon")
+          || (listingType === "sale" && label === "FOR SALE" && status !== "Coming Soon");
+        if (!showType) return false;
+
+        var price = card.getAttribute("data-price-cents");
+        var priceNum = price ? Number(price) : null;
+        var minPrice = numVal("filter-min-price");
+        var maxPrice = numVal("filter-max-price");
+        if (minPrice != null && (priceNum == null || priceNum < minPrice)) return false;
+        if (maxPrice != null && (priceNum == null || priceNum > maxPrice)) return false;
+
+        var beds = card.getAttribute("data-beds");
+        var bedsNum = beds ? Number(beds) : null;
+        var minBeds = numVal("filter-beds");
+        if (minBeds != null && (bedsNum == null || bedsNum < minBeds)) return false;
+
+        var baths = card.getAttribute("data-baths");
+        var bathsNum = baths ? Number(baths) : null;
+        var minBaths = numVal("filter-baths");
+        if (minBaths != null && (bathsNum == null || bathsNum < minBaths)) return false;
+
+        var sqft = card.getAttribute("data-sqft");
+        var sqftNum = sqft ? Number(sqft) : null;
+        var minSqft = numVal("filter-min-sqft");
+        if (minSqft != null && (sqftNum == null || sqftNum < minSqft)) return false;
+
+        var propType = document.getElementById("filter-property-type");
+        var wantedType = propType && propType.value ? propType.value : "";
+        if (wantedType && card.getAttribute("data-property-type") !== wantedType) return false;
+
+        return true;
+      }
+
+      function sortCards(cards) {
+        var sortEl = document.getElementById("filter-sort");
+        var sort = sortEl ? sortEl.value : "newest";
+        return cards.sort(function (a, b) {
+          if (sort === "newest") {
+            return Number(a.getAttribute("data-sort-index")) - Number(b.getAttribute("data-sort-index"));
+          }
+          var pa = Number(a.getAttribute("data-price-cents")) || -1;
+          var pb = Number(b.getAttribute("data-price-cents")) || -1;
+          return sort === "price_desc" ? pb - pa : pa - pb;
         });
+      }
+
+      function applyBrowseFilters() {
+        if (!grid) return;
+        var cards = Array.prototype.slice.call(grid.querySelectorAll(".listing-card"));
+        var visible = 0;
+        cards.forEach(function (card) {
+          var show = cardMatches(card);
+          card.hidden = !show;
+          if (show) visible += 1;
+        });
+        sortCards(cards.filter(function (c) { return !c.hidden; })).forEach(function (card) {
+          grid.appendChild(card);
+        });
+        if (emptyMsg) emptyMsg.classList.toggle("show", cards.length > 0 && visible === 0);
+      }
+
+      document.querySelectorAll(".chip[data-filter]").forEach(function (chip) {
+        chip.addEventListener("click", function () {
+          document.querySelectorAll(".chip[data-filter]").forEach(function (c) { c.classList.remove("active"); });
+          chip.classList.add("active");
+          listingType = chip.getAttribute("data-filter") || "all";
+          applyBrowseFilters();
+        });
+      });
+
+      ["filter-min-price", "filter-max-price", "filter-beds", "filter-baths", "filter-min-sqft", "filter-property-type", "filter-sort"].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener("change", applyBrowseFilters);
+        el.addEventListener("input", applyBrowseFilters);
       });
 
       document.getElementById("listings-grid").addEventListener("click", function (e) {

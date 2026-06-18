@@ -16,6 +16,10 @@ import {
   validateAgentPageSlugInput,
 } from "../shared/agent/agentPageSlug";
 import { buildPublicAgentPageHtml } from "../shared/agent/publicAgentPageHtml";
+import {
+  compareAgentPageListings,
+  listingMatchesAgentPageBrowseFilters,
+} from "../shared/agent/publicAgentPageBrowse";
 import { prepareAgentPageSettingsPatch } from "../server/agentPage/agentPageSettingsPatch";
 import type { AgentPageSettingsResponse } from "../shared/agent/agentPageSchema";
 import {
@@ -303,6 +307,54 @@ function testAgentPageDbSavePath() {
   console.log("  save path wiring: OK");
 }
 
+function testBrowseFilters() {
+  const base = {
+    status: "Active",
+    listingLabel: "FOR SALE" as const,
+    priceCents: 450_000_00,
+    beds: 3,
+    baths: 2,
+    sqft: 1800,
+    propertyType: "house",
+    sortIndex: 0,
+  };
+  assert(
+    listingMatchesAgentPageBrowseFilters(base, {
+      listingType: "sale",
+      minPrice: 400_000_00,
+      maxPrice: 500_000_00,
+      minBeds: 3,
+      minBaths: 2,
+      minSqft: 1500,
+      propertyType: "house",
+      sort: "newest",
+    }),
+    "matches browse filters",
+  );
+  assert(
+    !listingMatchesAgentPageBrowseFilters(base, {
+      listingType: "rent",
+      minPrice: null,
+      maxPrice: null,
+      minBeds: null,
+      minBaths: null,
+      minSqft: null,
+      propertyType: null,
+      sort: "newest",
+    }),
+    "sale listing excluded from rent filter",
+  );
+  assert(
+    compareAgentPageListings(
+      { ...base, priceCents: 100, sortIndex: 1 },
+      { ...base, priceCents: 200, sortIndex: 0 },
+      "price_desc",
+    ) > 0,
+    "price desc sort",
+  );
+  console.log("  browse filters: OK");
+}
+
 function testHtml() {
   const html = buildPublicAgentPageHtml({
     userId: "u1",
@@ -326,15 +378,22 @@ function testHtml() {
       street: "1 Main St",
       cityState: "Tampa, FL",
       price: "$500,000",
+      priceCents: 50000000,
       beds: "3 bed",
       baths: "2 bath",
       sqft: "1,800 Sq Ft",
+      bedsNum: 3,
+      bathsNum: 2,
+      sqftNum: 1800,
+      propertyType: "house",
       status: "Active",
       listingLabel: "FOR SALE",
     }],
   });
   assert(html.includes("Test Agent"), "name in html");
-  assert(html.includes("For Sale") || html.includes("FOR SALE") || html.includes("data-filter=\"sale\""), "filters");
+  assert(html.includes("filter-min-price"), "price filters");
+  assert(html.includes("filter-sort"), "sort control");
+  assert(html.includes("data-filter=\"sale\""), "listing type filters");
   assert(html.includes("What's My Home Worth?"), "home worth cta");
   assert(html.includes('content="noindex, nofollow"'), "noindex");
   console.log("  html: OK");
@@ -348,6 +407,7 @@ async function main() {
   await testPatchPolicy();
   testMarketAreaChips();
   testAgentPageDbSavePath();
+  testBrowseFilters();
   testHtml();
   console.log("\nAll tests passed.");
 }

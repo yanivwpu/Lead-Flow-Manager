@@ -450,7 +450,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
           ) : (
             <>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2 sm:col-span-2 sm:max-w-md">
+                <div className="space-y-2">
                   <Label htmlFor="inventory-provider">Provider</Label>
                   <Select
                     value={selectedProvider}
@@ -476,9 +476,6 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-[11px] text-muted-foreground">
-                    Choose the service that supplies your listing inventory.
-                  </p>
                   {!providerAvailable && (
                     <p className="text-[11px] text-muted-foreground">
                       {providerOption?.helper ?? "Coming soon"} — listing sync is not available for this provider
@@ -501,7 +498,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         {formBannerError}
                       </div>
                     )}
-                    <div className="space-y-2 sm:col-span-2 sm:max-w-md">
+                    <div className="space-y-2">
                       <Label htmlFor="inventory-display-name">Display name</Label>
                       <Input
                         id="inventory-display-name"
@@ -511,36 +508,35 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         data-testid="input-inventory-display-name"
                       />
                     </div>
-                    <div className="space-y-4 sm:col-span-2 rounded-md border border-border/60 bg-muted/20 p-4">
-                      <p className="text-sm font-medium">Market scope</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Sync only active and coming soon listings in your market. Use cities or ZIP codes
-                        to avoid importing the full MLS.
-                      </p>
+                    <div className="space-y-3 sm:col-span-2 rounded-md border border-border/60 bg-muted/20 p-4">
+                      <div>
+                        <p className="text-sm font-medium">Market scope</p>
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Limit sync to your market with cities or ZIP codes.
+                        </p>
+                      </div>
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2 sm:col-span-2">
+                        <div className="space-y-2">
                           <Label htmlFor="inventory-sync-cities">Cities</Label>
                           <Input
                             id="inventory-sync-cities"
                             value={form.syncCities}
                             onChange={(e) => setForm((f) => ({ ...f, syncCities: e.target.value }))}
-                            placeholder="Fort Lauderdale, Miami, Hollywood"
+                            placeholder="Fort Lauderdale, Miami"
                             autoComplete="off"
                             data-testid="input-inventory-sync-cities"
                           />
-                          <p className="text-[11px] text-muted-foreground">Comma-separated city names.</p>
                         </div>
-                        <div className="space-y-2 sm:col-span-2">
+                        <div className="space-y-2">
                           <Label htmlFor="inventory-sync-zips">ZIP codes</Label>
                           <Input
                             id="inventory-sync-zips"
                             value={form.syncZipCodes}
                             onChange={(e) => setForm((f) => ({ ...f, syncZipCodes: e.target.value }))}
-                            placeholder="33301, 33304, 33139"
+                            placeholder="33301, 33304"
                             autoComplete="off"
                             data-testid="input-inventory-sync-zips"
                           />
-                          <p className="text-[11px] text-muted-foreground">Comma-separated postal codes.</p>
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="inventory-max-listings">Max listings</Label>
@@ -564,72 +560,58 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               ))}
                             </SelectContent>
                           </Select>
-                          <p className="text-[11px] text-muted-foreground">
-                            Max active listings available for buyer matching per source.
-                          </p>
                         </div>
+                        {isBridge ? (
+                          <div className="space-y-2">
+                            <Label htmlFor="inventory-dataset-id">Dataset ID</Label>
+                            <Input
+                              id="inventory-dataset-id"
+                              value={form.datasetId}
+                              onChange={(e) => {
+                                setForm((f) => ({ ...f, datasetId: e.target.value }));
+                                clearFieldError("datasetId");
+                              }}
+                              placeholder={datasetIdPlaceholder()}
+                              autoComplete="off"
+                              aria-invalid={inventoryFieldHasError(fieldErrors, "datasetId")}
+                              className={inventoryInputClass(inventoryFieldHasError(fieldErrors, "datasetId"))}
+                              data-testid="input-inventory-dataset-id"
+                            />
+                            {fieldErrors.datasetId ? (
+                              <p className="text-xs text-red-600" role="alert">
+                                {fieldErrors.datasetId}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : (isMlsGrid || isTrestle) ? (
+                          <div className="space-y-2">
+                            <Label htmlFor="inventory-originating-system">Originating system name</Label>
+                            <Input
+                              id="inventory-originating-system"
+                              value={form.originatingSystemName}
+                              onChange={(e) => {
+                                setForm((f) => ({ ...f, originatingSystemName: e.target.value }));
+                                clearFieldError("originatingSystemName");
+                              }}
+                              placeholder={originatingSystemPlaceholder(selectedProvider)}
+                              autoComplete="off"
+                              aria-invalid={inventoryFieldHasError(fieldErrors, "originatingSystemName")}
+                              className={inventoryInputClass(
+                                inventoryFieldHasError(fieldErrors, "originatingSystemName"),
+                              )}
+                              data-testid="input-inventory-originating-system"
+                            />
+                            {fieldErrors.originatingSystemName ? (
+                              <p className="text-xs text-red-600" role="alert">
+                                {fieldErrors.originatingSystemName}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
-                    {(isMlsGrid || isTrestle) && (
-                      <div className="space-y-2">
-                        <Label htmlFor="inventory-originating-system">Originating system name</Label>
-                        <Input
-                          id="inventory-originating-system"
-                          value={form.originatingSystemName}
-                          onChange={(e) => {
-                            setForm((f) => ({ ...f, originatingSystemName: e.target.value }));
-                            clearFieldError("originatingSystemName");
-                          }}
-                          placeholder={originatingSystemPlaceholder(selectedProvider)}
-                          autoComplete="off"
-                          aria-invalid={inventoryFieldHasError(fieldErrors, "originatingSystemName")}
-                          className={inventoryInputClass(
-                            inventoryFieldHasError(fieldErrors, "originatingSystemName"),
-                          )}
-                          data-testid="input-inventory-originating-system"
-                        />
-                        {fieldErrors.originatingSystemName ? (
-                          <p className="text-xs text-red-600" role="alert">
-                            {fieldErrors.originatingSystemName}
-                          </p>
-                        ) : (
-                          <p className="text-[11px] text-muted-foreground">
-                            {isTrestle
-                              ? "Use the originating system name from your Trestle feed configuration."
-                              : "Use the originating system name and access token provided by your MLS data provider."}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    {isBridge && (
-                      <div className="space-y-2">
-                        <Label htmlFor="inventory-dataset-id">Dataset ID</Label>
-                        <Input
-                          id="inventory-dataset-id"
-                          value={form.datasetId}
-                          onChange={(e) => {
-                            setForm((f) => ({ ...f, datasetId: e.target.value }));
-                            clearFieldError("datasetId");
-                          }}
-                          placeholder={datasetIdPlaceholder()}
-                          autoComplete="off"
-                          aria-invalid={inventoryFieldHasError(fieldErrors, "datasetId")}
-                          className={inventoryInputClass(inventoryFieldHasError(fieldErrors, "datasetId"))}
-                          data-testid="input-inventory-dataset-id"
-                        />
-                        {fieldErrors.datasetId ? (
-                          <p className="text-xs text-red-600" role="alert">
-                            {fieldErrors.datasetId}
-                          </p>
-                        ) : (
-                          <p className="text-[11px] text-muted-foreground">
-                            Use the dataset ID from your Bridge Data Output account (e.g. your MLS dataset key).
-                          </p>
-                        )}
-                      </div>
-                    )}
                     {isMlsGrid && (
-                      <div className="space-y-2">
+                      <div className="space-y-2 sm:col-span-2">
                         <Label htmlFor="inventory-access-token">Access token</Label>
                         <div className="relative">
                           <Input
@@ -677,7 +659,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       </div>
                     )}
                     {isBridge && (
-                      <div className="space-y-2">
+                      <div className="space-y-2 sm:col-span-2">
                         <Label htmlFor="inventory-server-token">Server token</Label>
                         <div className="relative">
                           <Input

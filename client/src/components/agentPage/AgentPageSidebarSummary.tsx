@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, Globe, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Globe, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { fetchAgentPageSettings } from "@/lib/agentPageApi";
@@ -55,23 +54,12 @@ export function AgentPageSidebarSummary() {
               </span>
             </div>
             {data.agentPageSlug ? (
-              <p className="text-xs text-gray-700 truncate font-mono" title={data.agentPageSlug}>
+              <p className="text-xs text-gray-700 break-all font-mono" title={data.agentPageSlug}>
                 /agents/{data.agentPageSlug}
               </p>
-            ) : null}
-            <div className="flex flex-col gap-2 pt-1">
-              {pageIsPublic && data.publicPageUrl ? (
-                <Button asChild variant="outline" size="sm" className="h-8 w-full text-xs">
-                  <a href={data.publicPageUrl} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="h-3 w-3 mr-1.5" />
-                    Open public page
-                  </a>
-                </Button>
-              ) : null}
-              <Button asChild variant="outline" size="sm" className="h-8 w-full text-xs">
-                <a href="#agent-page-settings">Open agent page settings</a>
-              </Button>
-            </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">No slug yet</p>
+            )}
           </>
         )}
       </CardContent>

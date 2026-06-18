@@ -1,11 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Home, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { fetchInventorySources, fetchInventoryStatus } from "@/lib/inventoryApi";
 import { isWorkspaceInventoryConnected } from "@shared/inventory/inventoryWorkspaceConnected";
-import { RGE_INVENTORY_SETTINGS_HASH } from "@shared/rgePaths";
 
 export function InventorySidebarSummary() {
   const { data: status, isLoading: statusLoading } = useQuery({
@@ -23,9 +21,6 @@ export function InventorySidebarSummary() {
 
   const isLoading = statusLoading || (status?.canUse && sourcesLoading);
   const connected = isWorkspaceInventoryConnected(sources);
-  const connectedSources = sources.filter((s) => s.connectionStatus === "connected");
-  const primary = connectedSources[0] ?? sources[0];
-  const listingCount = primary?.inventoryStats?.totalSynced ?? primary?.listingCount ?? 0;
 
   const statusLabel = !status?.canUse
     ? "Unavailable"
@@ -41,6 +36,12 @@ export function InventorySidebarSummary() {
       ? "bg-amber-50 text-amber-800 border-amber-200"
       : "bg-slate-50 text-slate-600 border-slate-200";
 
+  const summaryLine = !status?.canUse
+    ? "Inventory unavailable"
+    : connected
+      ? `${sources.filter((s) => s.connectionStatus === "connected").length || sources.length} source${sources.length === 1 ? "" : "s"} connected`
+      : "No source connected";
+
   return (
     <Card data-testid="inventory-sidebar-summary">
       <CardHeader className="pb-2">
@@ -49,7 +50,7 @@ export function InventorySidebarSummary() {
           Inventory Sources
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3 text-sm">
+      <CardContent className="space-y-2 text-sm">
         {isLoading ? (
           <div className="flex items-center text-muted-foreground text-xs">
             <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
@@ -68,17 +69,7 @@ export function InventorySidebarSummary() {
                 {statusLabel}
               </span>
             </div>
-            {primary ? (
-              <p className="text-xs text-gray-700 truncate" title={primary.displayName}>
-                {primary.displayName}
-                {connected && listingCount > 0 ? ` · ${listingCount.toLocaleString()} listings` : ""}
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">No inventory source connected</p>
-            )}
-            <Button asChild variant="outline" size="sm" className="h-8 w-full text-xs">
-              <a href={`#${RGE_INVENTORY_SETTINGS_HASH}`}>Open inventory settings</a>
-            </Button>
+            <p className="text-xs text-muted-foreground">{summaryLine}</p>
           </>
         )}
       </CardContent>

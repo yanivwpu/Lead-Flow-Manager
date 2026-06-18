@@ -139,6 +139,10 @@ function listingToCard(
       ? `${listing.baths % 1 === 0 ? Math.round(Number(listing.baths)) : listing.baths} bath`
       : null;
 
+  const bedsNum = listing.beds != null ? Number(listing.beds) : null;
+  const bathsNum = listing.baths != null ? Number(listing.baths) : null;
+  const sqftNum = listing.squareFeet ?? null;
+
   return {
     id: listing.id,
     shareUrl: buildListingCanonicalShareUrl(
@@ -149,9 +153,14 @@ function listingToCard(
     street,
     cityState,
     price: formatListingPriceForComposer(listing.priceCents) || "Price on request",
+    priceCents: listing.priceCents ?? null,
     beds,
     baths,
     sqft,
+    bedsNum: Number.isFinite(bedsNum) ? bedsNum : null,
+    bathsNum: Number.isFinite(bathsNum) ? bathsNum : null,
+    sqftNum,
+    propertyType: listing.propertyType ?? null,
     status: listing.status === "coming_soon" ? "Coming Soon" : "Active",
     listingLabel: resolveFlyerListingLabel(flyerListing),
   };
