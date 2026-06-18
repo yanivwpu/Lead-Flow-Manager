@@ -56,6 +56,15 @@ export async function prepareAgentPageSettingsPatch(
 
   if (patch.agentPageUseCustomBio === false) {
     patch.agentPageBio = null;
+  } else if (patch.agentPageUseCustomBio === true) {
+    const bio = patch.agentPageBio != null ? String(patch.agentPageBio).trim() : "";
+    if (!bio) {
+      const current = await loadCurrent();
+      const inherited = current?.businessProfileAbout?.trim() ?? "";
+      if (inherited) {
+        patch.agentPageBio = inherited;
+      }
+    }
   }
 
   return {

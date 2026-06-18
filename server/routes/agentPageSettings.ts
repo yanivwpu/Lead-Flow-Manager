@@ -56,9 +56,8 @@ export function registerAgentPageSettingsRoutes(app: Express): void {
       if (isAgentPageSlugConflictError(error)) {
         return res.status(409).json({ error: "That agent slug is already taken", code: "slug_taken" });
       }
-      const message = error instanceof Error ? error.message : String(error);
       console.error("[agent-page] PATCH failed", error);
-      res.status(500).json({ error: message || "Failed to update agent page settings" });
+      res.status(500).json({ error: "Failed to update agent page settings" });
     }
   });
 
@@ -73,8 +72,7 @@ export function registerAgentPageSettingsRoutes(app: Express): void {
       res.json({ slug });
     } catch (error) {
       console.error("[agent-page] suggest-slug failed", error);
-      const message = error instanceof Error ? error.message : String(error);
-      res.status(500).json({ error: message || "Failed to suggest slug" });
+      res.status(500).json({ error: "Failed to suggest slug" });
     }
   });
 }

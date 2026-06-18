@@ -18,6 +18,8 @@ import {
 import { buildPublicAgentPageHtml } from "../shared/agent/publicAgentPageHtml";
 import { prepareAgentPageSettingsPatch } from "../server/agentPage/agentPageSettingsPatch";
 import type { AgentPageSettingsResponse } from "../shared/agent/agentPageSchema";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 function assert(cond: boolean, msg: string) {
   if (!cond) throw new Error(msg);
@@ -158,7 +160,101 @@ async function testPatchPolicy() {
     assert(badSlug.error.length > 0, "invalid slug returns clear error");
   }
 
+  const enablePage = await prepareAgentPageSettingsPatch(
+    userId,
+    { agentPageEnabled: true },
+    (body) => agentPageSettingsPatchSchema.safeParse(body),
+    async () => mockSettings({ agentPageSlug: null, businessProfileDisplayName: "Jane Broker" }),
+  );
+  assert(enablePage.ok, "enable page patch prepares");
+  if (enablePage.ok) {
+    assert(enablePage.patch.agentPageEnabled === true, "enable flag preserved");
+    assert(Boolean(enablePage.patch.agentPageSlug), "auto slug when enabling page");
+  }
+
+  const customBioSeed = await prepareAgentPageSettingsPatch(
+    userId,
+    { agentPageUseCustomBio: true },
+    (body) => agentPageSettingsPatchSchema.safeParse(body),
+    async () =>
+      mockSettings({
+        businessProfileAbout: "Helping buyers since 2010.",
+        agentPageBio: null,
+      }),
+  );
+  assert(customBioSeed.ok, "custom bio toggle prepares");
+  if (customBioSeed.ok) {
+    assert(customBioSeed.patch.agentPageUseCustomBio === true, "custom bio flag on");
+    assert(
+      customBioSeed.patch.agentPageBio === "Helping buyers since 2010.",
+      "empty custom bio seeds from Business Profile about",
+    );
+  }
+
+  const customBioOff = await prepareAgentPageSettingsPatch(
+    userId,
+    { agentPageUseCustomBio: false, agentPageBio: "ignored" },
+    (body) => agentPageSettingsPatchSchema.safeParse(body),
+    async () => current,
+  );
+  assert(customBioOff.ok, "disable custom bio patch prepares");
+  if (customBioOff.ok) {
+    assert(customBioOff.patch.agentPageUseCustomBio === false, "custom bio flag off");
+    assert(customBioOff.patch.agentPageBio === null, "custom bio cleared when disabled");
+  }
+
   console.log("  patch policy: OK");
+}
+
+function testAgentPageDbSavePath() {
+  const source = readFileSync(
+    join(process.cwd(), "server", "agentPage", "agentPageDb.ts"),
+    "utf8",
+  );
+  assert(!source.includes("onConflictDoUpdate"), "agent page save must not use invalid ON CONFLICT");
+  assert(source.includes(".update(aiBusinessKnowledge)"), "agent page save updates existing row");
+  assert(source.includes("agentPageUseCustomBio"), "custom bio column wired");
+  assert(source.includes("agentPageBio"), "bio column wired");
+  assert(source.includes("agentPageEnabled"), "enabled column wired");
+
+  const routes = readFileSync(
+    join(process.cwd(), "server", "routes", "agentPageSettings.ts"),
+    "utf8",
+  );
+  assert(
+    routes.includes('error: "Failed to update agent page settings"'),
+    "PATCH route returns generic error message",
+  );
+  assert(
+    !routes.includes("error: message ||"),
+    "PATCH route must not leak raw SQL error message",
+  );
+
+  const card = readFileSync(
+    join(process.cwd(), "client", "src", "components", "agentPage", "PublicAgentPageSettingsCard.tsx"),
+    "utf8",
+  );
+  assert(card.includes("agentPageEnabled: checked"), "enable page toggle saves");
+  assert(card.includes("agentPageUseCustomBio: true"), "custom bio toggle saves");
+  assert(
+    card.includes("Add an about blurb in Business Profile"),
+    "inline validation when custom bio cannot be seeded",
+  );
+  assert(card.includes("agent-page-controls-column"), "controls column layout");
+  assert(card.includes("agent-page-profile-column"), "profile column layout");
+  assert(card.includes("agent-page-publish-status"), "publish status block");
+
+  const rge = readFileSync(
+    join(process.cwd(), "client", "src", "pages", "RealtorGrowthEngine.tsx"),
+    "utf8",
+  );
+  const agentIdx = rge.indexOf("<PublicAgentPageSettingsCard");
+  const inventoryIdx = rge.indexOf("<InventorySourcesSection");
+  const leftColIdx = rge.indexOf('className="md:col-span-2 space-y-6"');
+  assert(leftColIdx >= 0 && agentIdx > leftColIdx, "agent page in main left column");
+  assert(inventoryIdx > agentIdx, "inventory section below agent page settings");
+
+  console.log("  save path wiring: OK");
 }
 
 function testHtml() {
@@ -204,6 +300,7 @@ async function main() {
   testSlug();
   testProfileInheritance();
   await testPatchPolicy();
+  testAgentPageDbSavePath();
   testHtml();
   console.log("\nAll tests passed.");
 }

@@ -130,30 +130,36 @@ export async function patchAgentPageSettings(
     agentPageShowHomeValueCta?: boolean;
   },
 ): Promise<AgentPageKnowledgeRow | undefined> {
-  const values: Record<string, unknown> = { updatedAt: new Date() };
-  if (patch.agentPageEnabled !== undefined) values.agentPageEnabled = patch.agentPageEnabled;
+  const set: Partial<typeof aiBusinessKnowledge.$inferInsert> = {
+    updatedAt: new Date(),
+  };
+  if (patch.agentPageEnabled !== undefined) set.agentPageEnabled = patch.agentPageEnabled;
   if (patch.agentPageSlug !== undefined) {
-    values.agentPageSlug = patch.agentPageSlug
+    set.agentPageSlug = patch.agentPageSlug
       ? normalizeAgentPageSlug(patch.agentPageSlug)
       : null;
   }
-  if (patch.agentPageUseCustomBio !== undefined) values.agentPageUseCustomBio = patch.agentPageUseCustomBio;
-  if (patch.agentPageBio !== undefined) values.agentPageBio = patch.agentPageBio;
-  if (patch.agentPageMarketArea !== undefined) values.agentPageMarketArea = patch.agentPageMarketArea;
+  if (patch.agentPageUseCustomBio !== undefined) {
+    set.agentPageUseCustomBio = patch.agentPageUseCustomBio;
+  }
+  if (patch.agentPageBio !== undefined) set.agentPageBio = patch.agentPageBio;
+  if (patch.agentPageMarketArea !== undefined) set.agentPageMarketArea = patch.agentPageMarketArea;
   if (patch.agentPagePreferredLeadCapture !== undefined) {
-    values.agentPagePreferredLeadCapture = patch.agentPagePreferredLeadCapture;
+    set.agentPagePreferredLeadCapture = patch.agentPagePreferredLeadCapture;
   }
   if (patch.agentPageShowHomeValueCta !== undefined) {
-    values.agentPageShowHomeValueCta = patch.agentPageShowHomeValueCta;
+    set.agentPageShowHomeValueCta = patch.agentPageShowHomeValueCta;
   }
 
-  await db
-    .insert(aiBusinessKnowledge)
-    .values({ userId, ...values })
-    .onConflictDoUpdate({
-      target: aiBusinessKnowledge.userId,
-      set: values,
-    });
+  const updated = await db
+    .update(aiBusinessKnowledge)
+    .set(set)
+    .where(eq(aiBusinessKnowledge.userId, userId))
+    .returning({ userId: aiBusinessKnowledge.userId });
+
+  if (updated.length === 0) {
+    await db.insert(aiBusinessKnowledge).values({ userId, ...set });
+  }
 
   return getAgentPageSettingsRow(userId);
 }
