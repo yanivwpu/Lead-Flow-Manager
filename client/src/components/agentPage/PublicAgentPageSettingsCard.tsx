@@ -16,13 +16,20 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import type { AgentPageSettingsResponse } from "@shared/agent/agentPageSchema";
+import type { AgentPageLeadCapture, AgentPageSettingsResponse } from "@shared/agent/agentPageSchema";
+import { agentPageLeadCaptureSchema } from "@shared/agent/agentPageSchema";
 import { buildAgentPageUrl, validateAgentPageSlugInput } from "@shared/agent/agentPageSlug";
 import { fetchAgentPageSettings, parseAgentPageApiError } from "@/lib/agentPageApi";
 import { bulkPublishEligibleListings } from "@/lib/inventoryApi";
 import { AgentPageMarketAreaChips } from "@/components/agentPage/AgentPageMarketAreaChips";
 
 const BUSINESS_PROFILE_SETTINGS_PATH = "/app/settings";
+const DEFAULT_LEAD_CAPTURE: AgentPageLeadCapture = "webchat";
+
+function normalizeLeadCapture(value: unknown): AgentPageLeadCapture {
+  const parsed = agentPageLeadCaptureSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_LEAD_CAPTURE;
+}
 
 type Props = {
   className?: string;
@@ -57,6 +64,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
   const [linkedinUrlDraft, setLinkedinUrlDraft] = useState("");
   const [youtubeUrlDraft, setYoutubeUrlDraft] = useState("");
   const [publicWebsiteDraft, setPublicWebsiteDraft] = useState("");
+  const [leadCaptureDraft, setLeadCaptureDraft] = useState<AgentPageLeadCapture>(DEFAULT_LEAD_CAPTURE);
 
   useEffect(() => {
     if (!data) return;
@@ -69,10 +77,12 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
     setInstagramUrlDraft(data.instagramUrl || "");
     setLinkedinUrlDraft(data.linkedinUrl || "");
     setYoutubeUrlDraft(data.youtubeUrl || "");
+    setLeadCaptureDraft(normalizeLeadCapture(data.agentPagePreferredLeadCapture));
   }, [
     data?.agentPageSlug,
     data?.agentPageBio,
     data?.agentPageUseCustomBio,
+    data?.agentPagePreferredLeadCapture,
     data?.publicWebsite,
     data?.facebookUrl,
     data?.instagramUrl,
@@ -94,8 +104,9 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
       }
       return payload as AgentPageSettingsResponse;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/agent-page"] });
+    onSuccess: (payload) => {
+      queryClient.setQueryData(["/api/agent-page"], payload);
+      setLeadCaptureDraft(normalizeLeadCapture(payload.agentPagePreferredLeadCapture));
       toast({ title: "Agent page settings saved" });
     },
     onError: (e: Error) => {
@@ -117,10 +128,35 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
     },
   });
 
+  const handleLeadCaptureChange = useCallback(
+    (value: string) => {
+      const next = normalizeLeadCapture(value);
+      if (next === leadCaptureDraft) return;
+      if (next === normalizeLeadCapture(data?.agentPagePreferredLeadCapture)) {
+        setLeadCaptureDraft(next);
+        return;
+      }
+      setLeadCaptureDraft(next);
+      saveMutation.mutate({ agentPagePreferredLeadCapture: next });
+    },
+    [data?.agentPagePreferredLeadCapture, leadCaptureDraft, saveMutation],
+  );
+
   const bulkPublishMutation = useMutation({
     mutationFn: bulkPublishEligibleListings,
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/agent-page"] });
+      queryClient.setQueryData(
+        ["/api/agent-page"],
+        (prev: AgentPageSettingsResponse | undefined) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            publishedOnAgentPage: prev.publishedOnAgentPage + result.published,
+            eligibleToPublish: Math.max(0, prev.eligibleToPublish - result.published),
+            hiddenUnpublished: Math.max(0, prev.hiddenUnpublished - result.published),
+          };
+        },
+      );
       toast({
         title: "Listings published",
         description: `${result.published.toLocaleString()} listing${result.published === 1 ? "" : "s"} now appear on your Agent Page.`,
@@ -262,7 +298,10 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                 id="agent-page-enabled"
                 checked={data.agentPageEnabled}
                 disabled={saveMutation.isPending}
-                onCheckedChange={(checked) => saveMutation.mutate({ agentPageEnabled: checked })}
+                onCheckedChange={(checked) => {
+                  if (checked === data.agentPageEnabled) return;
+                  saveMutation.mutate({ agentPageEnabled: checked });
+                }}
               />
             </div>
 
@@ -348,8 +387,8 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
             <div className="space-y-2" data-testid="agent-page-primary-contact-button">
               <Label>Primary contact button</Label>
               <Select
-                value={data.agentPagePreferredLeadCapture}
-                onValueChange={(v) => saveMutation.mutate({ agentPagePreferredLeadCapture: v })}
+                value={leadCaptureDraft}
+                onValueChange={handleLeadCaptureChange}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -374,7 +413,10 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                 id="agent-page-home-worth"
                 checked={data.agentPageShowHomeValueCta}
                 disabled={saveMutation.isPending}
-                onCheckedChange={(checked) => saveMutation.mutate({ agentPageShowHomeValueCta: checked })}
+                onCheckedChange={(checked) => {
+                  if (checked === data.agentPageShowHomeValueCta) return;
+                  saveMutation.mutate({ agentPageShowHomeValueCta: checked });
+                }}
               />
             </div>
 

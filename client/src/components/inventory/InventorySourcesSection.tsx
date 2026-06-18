@@ -370,7 +370,6 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     onSuccess: (result) => {
       setBulkPublishConfirmOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/agent-page"] });
       toast({
         title: "Listings published",
         description: `${result.published.toLocaleString()} listing${result.published === 1 ? "" : "s"} now appear on your Agent Page.`,
@@ -386,7 +385,6 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     onSuccess: (result) => {
       setBulkUnpublishConfirmOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/agent-page"] });
       toast({
         title: "Listings unpublished",
         description: `${result.unpublished.toLocaleString()} listing${result.unpublished === 1 ? "" : "s"} removed from your Agent Page.`,
@@ -596,13 +594,15 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         <div className="space-y-2">
                           <Label htmlFor="inventory-max-listings">Max listings</Label>
                           <Select
-                            value={String(form.maxListings)}
-                            onValueChange={(value) =>
+                            value={String(form.maxListings ?? DEFAULT_MAX_LISTINGS)}
+                            onValueChange={(value) => {
+                              const next = Number(value) as InventorySourceForm["maxListings"];
+                              if (next === form.maxListings) return;
                               setForm((f) => ({
                                 ...f,
-                                maxListings: Number(value) as InventorySourceForm["maxListings"],
-                              }))
-                            }
+                                maxListings: next,
+                              }));
+                            }}
                           >
                             <SelectTrigger id="inventory-max-listings" data-testid="select-inventory-max-listings">
                               <SelectValue />

@@ -141,21 +141,16 @@ function listingToCard(
     : null;
   const cityState = [listing.city, listing.state].filter(Boolean).join(", ");
   const { sqft } = resolveFlyerSpecFields(flyerListing);
-  const bedsBaths = formatBedsBathsForComposer(
-    listing.beds != null ? Number(listing.beds) : null,
-    listing.baths != null ? Number(listing.baths) : null,
-  );
-  const beds =
-    listing.beds != null
-      ? `${listing.beds % 1 === 0 ? Math.round(Number(listing.beds)) : listing.beds} bed`
-      : null;
-  const baths =
-    listing.baths != null
-      ? `${listing.baths % 1 === 0 ? Math.round(Number(listing.baths)) : listing.baths} bath`
-      : null;
-
   const bedsNum = listing.beds != null ? Number(listing.beds) : null;
   const bathsNum = listing.baths != null ? Number(listing.baths) : null;
+  const beds =
+    bedsNum != null && Number.isFinite(bedsNum)
+      ? `${bedsNum % 1 === 0 ? Math.round(bedsNum) : bedsNum} bed`
+      : null;
+  const baths =
+    bathsNum != null && Number.isFinite(bathsNum)
+      ? `${bathsNum % 1 === 0 ? Math.round(bathsNum) : bathsNum} bath`
+      : null;
   const sqftNum = listing.squareFeet ?? null;
 
   return {
