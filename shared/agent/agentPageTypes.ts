@@ -3,6 +3,10 @@ export type AgentPageListingCard = {
   shareUrl: string;
   imageUrl: string | null;
   street: string | null;
+  /** Street + city, state, zip for lead context and modal display */
+  fullAddress: string;
+  /** Price + beds + baths + sqft, e.g. "$2,300/mo • 2 bed • 2 bath • 1,008 sq ft" */
+  metaSummary: string;
   cityState: string;
   price: string;
   priceCents: number | null;

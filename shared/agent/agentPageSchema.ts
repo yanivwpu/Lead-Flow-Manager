@@ -86,6 +86,8 @@ export const publicAgentLeadBodySchema = z.object({
   message: z.string().max(4000).optional(),
   listingId: z.string().uuid().optional(),
   propertyAddress: z.string().max(500).optional(),
+  listingUrl: z.string().url().max(500).optional(),
+  source: z.string().max(120).optional(),
   timeline: z.string().max(120).optional(),
   reasonForSelling: z.string().max(1000).optional(),
 });

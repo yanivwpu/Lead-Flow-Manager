@@ -3,6 +3,10 @@ import type { AgentPageListingCard, PublicAgentPageRenderInput } from "@shared/a
 import { buildAgentPageUrl } from "@shared/agent/agentPageSlug";
 import { resolveAgentPageBio, resolveAgentPageDisplayName } from "@shared/agent/agentPageProfile";
 import { resolveAgentPageSocialUrls } from "@shared/agent/agentPageSocialUrls";
+import {
+  buildAgentPageListingFullAddress,
+  buildAgentPageListingMetaSummary,
+} from "@shared/agent/agentPageListingDisplay";
 import { buildListingCanonicalShareUrl, pickPrimaryPhotoUrl } from "@shared/inventory/listingViewUrl";
 import { formatListingPriceForComposer } from "@shared/inventory/inventoryComposerDraft";
 import { canShowPublicStreetAddress } from "@shared/inventory/publicListingPublication";
@@ -152,6 +156,14 @@ function listingToCard(
       ? `${bathsNum % 1 === 0 ? Math.round(bathsNum) : bathsNum} bath`
       : null;
   const sqftNum = listing.squareFeet ?? null;
+  const price = formatListingPriceForComposer(listing.priceCents) || "Price on request";
+  const fullAddress = buildAgentPageListingFullAddress({
+    street,
+    city: listing.city,
+    state: listing.state,
+    zip: listing.zip,
+  });
+  const metaSummary = buildAgentPageListingMetaSummary({ price, beds, baths, sqft });
 
   return {
     id: listing.id,
@@ -161,8 +173,10 @@ function listingToCard(
     ),
     imageUrl: pickPrimaryPhotoUrl(flyerListing.photos),
     street,
+    fullAddress,
+    metaSummary,
     cityState,
-    price: formatListingPriceForComposer(listing.priceCents) || "Price on request",
+    price,
     priceCents: listing.priceCents ?? null,
     beds,
     baths,

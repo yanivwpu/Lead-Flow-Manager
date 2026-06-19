@@ -90,8 +90,8 @@ function listingCardHtml(card: AgentPageListingCard, index: number): string {
     : `<div class="card-img-placeholder">No photo</div>`;
   const propertyType = normalizePropertyTypeForFilter(card.propertyType);
 
-  return `<article class="listing-card" data-id="${escapeHtml(card.id)}" data-label="${escapeHtml(card.listingLabel)}" data-status="${escapeHtml(card.status)}" data-city-state="${escapeHtml(card.cityState)}" data-sort-index="${index}" data-price-cents="${card.priceCents ?? ""}" data-beds="${card.bedsNum ?? ""}" data-baths="${card.bathsNum ?? ""}" data-sqft="${card.sqftNum ?? ""}" data-property-type="${escapeHtml(propertyType)}">
-    <a class="card-img-link" href="${escapeHtml(card.shareUrl)}" data-action="listing_view">${img}</a>
+  return `<article class="listing-card" data-id="${escapeHtml(card.id)}" data-label="${escapeHtml(card.listingLabel)}" data-status="${escapeHtml(card.status)}" data-city-state="${escapeHtml(card.cityState)}" data-sort-index="${index}" data-price-cents="${card.priceCents ?? ""}" data-beds="${card.bedsNum ?? ""}" data-baths="${card.bathsNum ?? ""}" data-sqft="${card.sqftNum ?? ""}" data-property-type="${escapeHtml(propertyType)}" data-share-url="${escapeHtml(card.shareUrl)}" data-full-address="${escapeHtml(card.fullAddress)}" data-meta-summary="${escapeHtml(card.metaSummary)}">
+    <a class="card-img-link" href="${escapeHtml(card.shareUrl)}" target="_blank" rel="noopener noreferrer" data-action="listing_view" data-listing-id="${escapeHtml(card.id)}">${img}</a>
     <div class="card-body">
       <div class="card-top">
         <span class="card-price">${escapeHtml(card.price)}</span>
@@ -101,18 +101,10 @@ function listingCardHtml(card: AgentPageListingCard, index: number): string {
       <p class="card-city">${escapeHtml(card.cityState)}</p>
       ${meta ? `<p class="card-meta">${escapeHtml(meta)}</p>` : ""}
       <div class="card-actions">
-        <a class="btn btn-sm btn-primary" href="${escapeHtml(card.shareUrl)}" data-action="listing_view">View Listing</a>
+        <a class="btn btn-sm btn-primary" href="${escapeHtml(card.shareUrl)}" target="_blank" rel="noopener noreferrer" data-action="listing_view" data-listing-id="${escapeHtml(card.id)}">View Listing</a>
         <button type="button" class="btn btn-sm btn-outline" data-action="ask_about" data-listing-id="${escapeHtml(card.id)}">Ask About This</button>
         <button type="button" class="btn btn-sm btn-outline" data-action="schedule" data-listing-id="${escapeHtml(card.id)}">Schedule Showing</button>
-        <div class="share-wrap">
-          <button type="button" class="btn btn-sm btn-ghost" data-action="share-toggle">Share ▾</button>
-          <div class="share-menu" hidden>
-            <button type="button" data-share="copy" data-url="${escapeHtml(card.shareUrl)}">Copy Link</button>
-            <a data-share="whatsapp" href="https://wa.me/?text=${encodeURIComponent(card.shareUrl)}" target="_blank" rel="noopener">WhatsApp</a>
-            <a data-share="email" href="mailto:?subject=${encodeURIComponent("Listing")}&body=${encodeURIComponent(card.shareUrl)}">Email</a>
-            <a data-share="flyer" href="${escapeHtml(card.shareUrl)}" target="_blank" rel="noopener">QR / Flyer</a>
-          </div>
-        </div>
+        <button type="button" class="btn btn-sm btn-ghost" data-action="share" data-share-url="${escapeHtml(card.shareUrl)}">Share</button>
       </div>
     </div>
   </article>`;
@@ -164,7 +156,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       : data.preferredLeadCapture === "phone"
         ? "Call agent"
         : data.widgetEnabled
-          ? "Open chat"
+          ? "Let's Chat"
           : "Send a message";
 
   const cards = data.listings.map((listing, index) => listingCardHtml(listing, index)).join("");
@@ -261,10 +253,10 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .card-address { margin: 0; font-weight: 600; font-size: 0.9375rem; }
     .card-city, .card-meta { margin: 0; font-size: 0.8125rem; color: var(--muted); }
     .card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 10px; }
-    .share-wrap { position: relative; }
-    .share-menu { position: absolute; right: 0; top: 100%; z-index: 10; background: #fff; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 16px rgba(15,23,42,0.1); min-width: 140px; padding: 4px; display: flex; flex-direction: column; }
-    .share-menu button, .share-menu a { display: block; padding: 8px 12px; text-align: left; font-size: 0.8125rem; color: var(--ink); text-decoration: none; border: none; background: none; cursor: pointer; border-radius: 6px; }
-    .share-menu button:hover, .share-menu a:hover { background: #f1f5f9; }
+    .modal-listing-context { margin: 0 0 14px; padding: 12px 14px; background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; }
+    .modal-listing-label { margin: 0 0 4px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    .modal-listing-address { margin: 0; font-size: 0.9375rem; font-weight: 600; color: var(--ink); }
+    .modal-listing-meta { margin: 6px 0 0; font-size: 0.8125rem; color: var(--muted); }
     .empty-listings { padding: 32px; text-align: center; color: var(--muted); background: #fff; border: 1px dashed var(--border); border-radius: 12px; }
     .modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.45); display: none; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
     .modal-backdrop.open { display: flex; }
@@ -406,15 +398,23 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   <div class="modal-backdrop" id="modal-backdrop" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true">
       <h2 id="modal-title">Contact</h2>
+      <div id="modal-listing-context" class="modal-listing-context" hidden>
+        <p class="modal-listing-label">Property</p>
+        <p class="modal-listing-address" id="modal-listing-address"></p>
+        <p class="modal-listing-meta" id="modal-listing-meta"></p>
+      </div>
       <form id="lead-form">
         <input type="hidden" name="intent" id="form-intent" value="message" />
         <input type="hidden" name="listingId" id="form-listing-id" value="" />
+        <input type="hidden" name="listingUrl" id="form-listing-url" value="" disabled />
+        <input type="hidden" name="source" id="form-source" value="" disabled />
+        <input type="hidden" name="propertyAddress" id="form-listing-property-address" value="" disabled />
         <label>Name<input name="name" required /></label>
         <label>Email<input name="email" type="email" /></label>
         <label>Phone<input name="phone" type="tel" /></label>
         <div id="message-field"><label>Message<textarea name="message"></textarea></label></div>
         <div id="home-worth-fields" hidden>
-          <label>Property address<input name="propertyAddress" /></label>
+          <label>Property address<input name="propertyAddress" id="home-worth-property-address" disabled /></label>
           <label>Timeline<input name="timeline" placeholder="e.g. 30–60 days" /></label>
           <label>Reason for selling<textarea name="reasonForSelling"></textarea></label>
         </div>
@@ -427,7 +427,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   </div>
   <div class="chat-widget" id="chat-widget" aria-hidden="true">
     <div class="chat-widget-scrim" id="chat-widget-scrim" aria-hidden="true"></div>
-    <button type="button" class="chat-bubble" id="chat-bubble" aria-label="Open chat">
+    <button type="button" class="chat-bubble" id="chat-bubble" aria-label="Let's Chat">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
     </button>
     <div class="chat-panel" id="chat-panel" role="dialog" aria-modal="false" aria-label="Web chat">
@@ -472,6 +472,51 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           body: JSON.stringify({ event: event, listingId: listingId || undefined }),
         }).catch(function () {});
       }
+      var listingContextEl = document.getElementById("modal-listing-context");
+      var listingAddressEl = document.getElementById("modal-listing-address");
+      var listingMetaEl = document.getElementById("modal-listing-meta");
+      var listingUrlField = document.getElementById("form-listing-url");
+      var sourceField = document.getElementById("form-source");
+      var listingPropertyAddressField = document.getElementById("form-listing-property-address");
+      var homeWorthPropertyAddressField = document.getElementById("home-worth-property-address");
+      var messageTextarea = form.querySelector('textarea[name="message"]');
+      var LISTING_LEAD_SOURCE = "Agent Page listing card";
+
+      function findListingCard(listingId) {
+        if (!listingId) return null;
+        var listingsGrid = document.getElementById("listings-grid");
+        if (!listingsGrid) return null;
+        return listingsGrid.querySelector('.listing-card[data-id="' + listingId + '"]');
+      }
+
+      function listingContextFromCard(card) {
+        if (!card) return null;
+        return {
+          address: card.getAttribute("data-full-address") || "",
+          meta: card.getAttribute("data-meta-summary") || "",
+          shareUrl: card.getAttribute("data-share-url") || "",
+        };
+      }
+
+      function setNamedFieldEnabled(field, enabled) {
+        if (!field) return;
+        field.disabled = !enabled;
+        if (!enabled) field.value = "";
+      }
+
+      function applyListingLeadFields(ctx) {
+        if (!ctx) return;
+        if (listingPropertyAddressField) listingPropertyAddressField.value = ctx.address;
+        if (listingUrlField) listingUrlField.value = ctx.shareUrl;
+        if (sourceField) sourceField.value = LISTING_LEAD_SOURCE;
+      }
+
+      function clearListingLeadFields() {
+        setNamedFieldEnabled(listingPropertyAddressField, false);
+        setNamedFieldEnabled(listingUrlField, false);
+        setNamedFieldEnabled(sourceField, false);
+      }
+
       function openModal(intent, listingId) {
         document.getElementById("form-intent").value = intent;
         document.getElementById("form-listing-id").value = listingId || "";
@@ -479,9 +524,45 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         document.getElementById("modal-title").textContent = title[intent] || "Contact";
         document.getElementById("message-field").hidden = intent === "home_worth";
         document.getElementById("home-worth-fields").hidden = intent !== "home_worth";
+
+        clearListingLeadFields();
+        setNamedFieldEnabled(homeWorthPropertyAddressField, intent === "home_worth");
+
+        var card = listingId ? findListingCard(listingId) : null;
+        var ctx = listingContextFromCard(card);
+        var showListingContext = !!ctx && (intent === "ask_about" || intent === "schedule_showing");
+
+        if (listingContextEl) listingContextEl.hidden = !showListingContext;
+        if (showListingContext) {
+          if (listingAddressEl) listingAddressEl.textContent = ctx.address;
+          if (listingMetaEl) {
+            listingMetaEl.textContent = ctx.meta;
+            listingMetaEl.hidden = !ctx.meta;
+          }
+          setNamedFieldEnabled(listingPropertyAddressField, true);
+          setNamedFieldEnabled(listingUrlField, true);
+          setNamedFieldEnabled(sourceField, true);
+          applyListingLeadFields(ctx);
+          if (messageTextarea) {
+            if (intent === "ask_about") {
+              messageTextarea.value = "Hi, I'm interested in " + ctx.address + ".";
+            } else if (intent === "schedule_showing") {
+              messageTextarea.value = "Hi, I'd like to schedule a showing for " + ctx.address + ".";
+            }
+          }
+        } else if (messageTextarea && intent !== "home_worth") {
+          messageTextarea.value = "";
+        }
+
         backdrop.classList.add("open");
       }
-      function closeModal() { backdrop.classList.remove("open"); form.reset(); }
+      function closeModal() {
+        backdrop.classList.remove("open");
+        form.reset();
+        if (listingContextEl) listingContextEl.hidden = true;
+        clearListingLeadFields();
+        setNamedFieldEnabled(homeWorthPropertyAddressField, false);
+      }
       document.getElementById("modal-cancel").addEventListener("click", closeModal);
       backdrop.addEventListener("click", function (e) { if (e.target === backdrop) closeModal(); });
 
@@ -886,6 +967,31 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         });
       });
 
+      function copyListingUrl(url) {
+        navigator.clipboard.writeText(url).then(function () {
+          showToast("Link copied");
+        }).catch(function () {
+          showToast("Could not copy link");
+        });
+      }
+
+      function shareListing(url) {
+        if (!url) {
+          showToast("No link to share");
+          return;
+        }
+        if (navigator.share) {
+          navigator.share({ url: url, title: "Property listing" }).then(function () {
+            showToast("Shared");
+          }).catch(function (err) {
+            if (err && err.name === "AbortError") return;
+            copyListingUrl(url);
+          });
+        } else {
+          copyListingUrl(url);
+        }
+      }
+
       document.getElementById("listings-grid").addEventListener("click", function (e) {
         var t = e.target.closest("[data-action]");
         if (!t) return;
@@ -895,18 +1001,11 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         if (action === "ask_about") { track("ask_about", listingId); openModal("ask_about", listingId); e.preventDefault(); }
         if (action === "schedule") {
           track("schedule_showing", listingId);
-          if (config.schedulingUrl) window.open(config.schedulingUrl, "_blank", "noopener");
-          else openModal("schedule_showing", listingId);
+          openModal("schedule_showing", listingId);
           e.preventDefault();
         }
-        if (action === "share-toggle") {
-          var menu = t.parentElement.querySelector(".share-menu");
-          if (menu) menu.hidden = !menu.hidden;
-          e.preventDefault();
-        }
-        if (t.getAttribute("data-share") === "copy") {
-          var url = t.getAttribute("data-url");
-          navigator.clipboard.writeText(url).then(function () { showToast("Link copied"); });
+        if (action === "share") {
+          shareListing(t.getAttribute("data-share-url"));
           e.preventDefault();
         }
       });
@@ -922,6 +1021,8 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           message: fd.get("message") || undefined,
           listingId: fd.get("listingId") || undefined,
           propertyAddress: fd.get("propertyAddress") || undefined,
+          listingUrl: fd.get("listingUrl") || undefined,
+          source: fd.get("source") || undefined,
           timeline: fd.get("timeline") || undefined,
           reasonForSelling: fd.get("reasonForSelling") || undefined,
         };

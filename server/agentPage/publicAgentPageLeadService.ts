@@ -18,16 +18,29 @@ function channelContactId(body: PublicAgentLeadBody): string {
 
 function buildLeadMessage(intent: PublicAgentLeadBody["intent"], body: PublicAgentLeadBody, listingLabel?: string): string {
   const name = body.name?.trim() || "Visitor";
+  const propertyLine = body.propertyAddress?.trim()
+    ? `Property: ${body.propertyAddress.trim()}`
+    : listingLabel
+      ? `Property: ${listingLabel}`
+      : null;
+  const listingUrlLine = body.listingUrl?.trim() ? `Listing: ${body.listingUrl.trim()}` : null;
+  const sourceLine = body.source?.trim() ? `Source: ${body.source.trim()}` : null;
+  const contextLines = [propertyLine, listingUrlLine, sourceLine].filter(Boolean);
+
   switch (intent) {
     case "message":
       return body.message?.trim() || `${name} reached out via agent page.`;
     case "ask_about":
-      return (
-        body.message?.trim() ||
-        `${name} is interested in ${listingLabel || "a listing"} (agent page).`
-      );
+      return [body.message?.trim(), ...contextLines]
+        .filter(Boolean)
+        .join("\n") || `${name} is interested in ${listingLabel || "a listing"} (agent page).`;
     case "schedule_showing":
-      return `${name} requested a showing${listingLabel ? ` for ${listingLabel}` : ""} via agent page.`;
+      return [
+        body.message?.trim() || `${name} requested a showing via agent page.`,
+        ...contextLines,
+      ]
+        .filter(Boolean)
+        .join("\n");
     case "home_worth":
       return [
         `${name} requested a home valuation via agent page.`,
@@ -88,8 +101,11 @@ export async function processPublicAgentPageLead(
   };
   if (body.listingId) {
     customFields.agentPageListingId = body.listingId;
-    customFields.listingReference = listingLabel || body.listingId;
+    customFields.listingReference = body.propertyAddress?.trim() || listingLabel || body.listingId;
   }
+  if (body.listingUrl?.trim()) customFields.agentPageListingUrl = body.listingUrl.trim();
+  if (body.propertyAddress?.trim()) customFields.propertyAddress = body.propertyAddress.trim();
+  if (body.source?.trim()) customFields.leadSourceDetail = body.source.trim();
   if (body.intent === "home_worth") {
     customFields.sellerIntent = "seller_valuation";
   }

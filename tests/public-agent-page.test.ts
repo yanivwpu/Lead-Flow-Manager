@@ -21,6 +21,10 @@ import {
   listingMatchesAgentPageBrowseFilters,
 } from "../shared/agent/publicAgentPageBrowse";
 import { computeAgentPageBrowseFilterFunnel } from "../shared/agent/agentPageBrowseDebug";
+import {
+  buildAgentPageListingFullAddress,
+  buildAgentPageListingMetaSummary,
+} from "../shared/agent/agentPageListingDisplay";
 import { prepareAgentPageSettingsPatch } from "../server/agentPage/agentPageSettingsPatch";
 import type { AgentPageSettingsResponse } from "../shared/agent/agentPageSchema";
 import {
@@ -446,6 +450,8 @@ function testBrowseFilterFunnel() {
       shareUrl: "https://example.com/l/sale1",
       imageUrl: null,
       street: null,
+      fullAddress: "Tampa, FL",
+      metaSummary: "$450,000 • 3 bed • 2 bath • 1,800 Sq Ft",
       cityState: "Tampa, FL",
       price: "$450,000",
       priceCents: 45_000_000,
@@ -464,6 +470,8 @@ function testBrowseFilterFunnel() {
       shareUrl: "https://example.com/l/rent1",
       imageUrl: null,
       street: null,
+      fullAddress: "Miami, FL",
+      metaSummary: "$3,500/mo • 2 bed • 1 bath • 900 Sq Ft",
       cityState: "Miami, FL",
       price: "$3,500/mo",
       priceCents: 350_000,
@@ -482,6 +490,8 @@ function testBrowseFilterFunnel() {
       shareUrl: "https://example.com/l/rent2",
       imageUrl: null,
       street: null,
+      fullAddress: "Orlando, FL",
+      metaSummary: "$8,500/mo • 4 bed • 3 bath • 2,200 Sq Ft",
       cityState: "Orlando, FL",
       price: "$8,500/mo",
       priceCents: 850_000,
@@ -515,6 +525,28 @@ function testBrowseFilterFunnel() {
   assert(funnel.afterMaxPrice === 1, "funnel after max $7000 excludes $8500 rent");
   assert(funnel.finalCount === 1, "funnel final rent under $7000");
   console.log("  browse filter funnel: OK");
+}
+
+function testListingDisplayHelpers() {
+  assert(
+    buildAgentPageListingFullAddress({
+      street: "2747 NE 15th Street #2747",
+      city: "Pompano Beach",
+      state: "FL",
+      zip: "33062",
+    }) === "2747 NE 15th Street #2747, Pompano Beach, FL 33062",
+    "full address with street and zip",
+  );
+  assert(
+    buildAgentPageListingMetaSummary({
+      price: "$2,300/mo",
+      beds: "2 bed",
+      baths: "2 bath",
+      sqft: "1,008 Sq Ft",
+    }) === "$2,300/mo • 2 bed • 2 bath • 1,008 Sq Ft",
+    "meta summary joins price and specs",
+  );
+  console.log("  listing display helpers: OK");
 }
 
 function testSocialUrlPatch() {
@@ -558,6 +590,8 @@ function testHtml() {
       shareUrl: "https://example.com/share/listings/l1",
       imageUrl: null,
       street: "1 Main St",
+      fullAddress: "1 Main St, Tampa, FL",
+      metaSummary: "$500,000 • 3 bed • 2 bath • 1,800 Sq Ft",
       cityState: "Tampa, FL",
       price: "$500,000",
       priceCents: 50000000,
@@ -618,7 +652,11 @@ function testHtml() {
   assert(!emptyLinksHtml.includes('class="agent-social"'), "no social row when all links empty");
   assert(!emptyLinksHtml.includes('class="agent-social-link"'), "no social icon anchors when all links empty");
   assert(html.includes("width: 120px"), "larger desktop avatar");
-  assert(html.includes("Open chat"), "web chat primary button label");
+  assert(html.includes('target="_blank" rel="noopener noreferrer"'), "listing links open in new tab");
+  assert(html.includes('data-action="share"'), "share button on listing card");
+  assert(html.includes("shareListing"), "web share with clipboard fallback");
+  assert(html.includes("modal-listing-context"), "listing context in lead modal");
+  assert(html.includes("Let's Chat"), "web chat primary button label");
   assert(html.includes("chat-widget"), "docked chat widget");
   assert(html.includes("chat-bubble"), "minimized chat bubble");
   assert(html.includes("chat-minimize"), "chat minimize button");
@@ -651,6 +689,7 @@ async function main() {
   testAgentPageDbSavePath();
   testBrowseFilters();
   testBrowseFilterFunnel();
+  testListingDisplayHelpers();
   testSocialUrlPatch();
   testHtml();
   console.log("\nAll tests passed.");
