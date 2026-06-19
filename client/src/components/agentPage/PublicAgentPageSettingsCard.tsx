@@ -688,23 +688,6 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
             </div>
           </div>
         </div>
-
-        <div
-          className="mt-6 pt-4 border-t border-dashed border-gray-200"
-          data-testid="agent-page-future-analytics"
-        >
-          <p className="text-xs font-medium text-gray-500 mb-3">Coming soon</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            {["Lead capture analytics", "Page views", "QR code", "Share links"].map((label) => (
-              <div
-                key={label}
-                className="rounded-md border border-dashed border-gray-200 bg-gray-50/50 px-3 py-4 text-center text-xs text-muted-foreground"
-              >
-                {label}
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </section>
   );

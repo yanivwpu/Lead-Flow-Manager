@@ -282,7 +282,8 @@ function testAgentPageDbSavePath() {
   assert(card.includes("Edit Business Profile"), "business profile link");
   assert(card.includes("Managed in Business Profile"), "business profile managed label");
   assert(card.includes("AgentPageMarketAreaChips"), "market area chips component");
-  assert(card.includes("agent-page-future-analytics"), "future analytics placeholder");
+  assert(!card.includes("agent-page-future-analytics"), "no future analytics placeholder");
+  assert(!card.includes("Lead capture analytics"), "no analytics placeholder cards");
   assert(card.includes("agent-page-url-block"), "agent url block");
   assert(card.includes("Primary contact button"), "primary contact button label");
   assert(card.includes("agent-page-primary-contact-button"), "primary contact button test id");

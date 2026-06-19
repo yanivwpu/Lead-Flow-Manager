@@ -3050,7 +3050,7 @@ export function RealtorGrowthEngine() {
           </aside>
         </div>
 
-        <section className="mt-8 w-full scroll-mt-24 space-y-3" data-testid="rge-inventory-section">
+        <section className="mt-6 w-full scroll-mt-24 space-y-3" data-testid="rge-inventory-section">
           <p className="text-sm text-muted-foreground">
             Listings available on your public Agent Page come from connected inventory sources.
           </p>
