@@ -614,8 +614,9 @@ function testHtml() {
   assert(html.includes("agent-market-chips"), "market area chips");
   assert(html.includes("market-chip"), "market area chip spacing");
   assert(html.includes("browse-panel-advanced"), "advanced filters single row");
-  assert(html.includes('id="browse-debug"'), "browse debug seed json");
-  assert(html.includes("browse-filter-debug"), "browse debug panel");
+  assert(!html.includes("browse-filter-debug"), "no browse debug panel on public page");
+  assert(!html.includes("[REMOVEME]"), "no REMOVEME debug blocks");
+  assert(!html.includes('id="browse-debug"'), "no SSR browse debug json");
   assert(html.includes("filterDollarsToCents"), "client converts filter dollars to cents");
   assert(html.includes("Max price ($)"), "max price labeled in dollars");
   assert(html.includes("agent-social"), "social links row");
