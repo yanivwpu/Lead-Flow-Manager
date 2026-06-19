@@ -270,7 +270,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .chat-widget.open { pointer-events: none; }
     .chat-widget-scrim { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.08); pointer-events: auto; }
     .chat-widget.open:not(.minimized) .chat-panel { pointer-events: auto; }
-    .chat-widget.enabled.minimized .chat-bubble { pointer-events: auto; }
+    .chat-widget.enabled .chat-bubble { pointer-events: auto; }
     .chat-panel { position: fixed; bottom: 24px; right: 24px; z-index: 112; background: #fff; border-radius: 12px; width: min(400px, calc(100vw - 48px)); height: min(560px, calc(100vh - 48px)); max-height: 600px; box-shadow: 0 12px 40px rgba(15,23,42,0.18); border: 1px solid var(--border); display: none; flex-direction: column; overflow: hidden; }
     .chat-widget.open:not(.minimized) .chat-panel { display: flex; }
     .chat-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 0.9375rem; background: #fff; flex-shrink: 0; }
@@ -401,7 +401,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       </div>
     </section>
     <footer class="site-footer">
-      <span class="site-footer-brand">${renderWhachatLogoMark()}<span>Powered by WhachatCRM</span></span>
+      <span class="site-footer-brand"><span>Powered by</span>${renderWhachatLogoMark()}<span>WhachatCRM</span></span>
     </footer>
   </div>
 

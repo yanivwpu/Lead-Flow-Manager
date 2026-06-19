@@ -710,7 +710,9 @@ function testHtml() {
   assert(html.includes("browse-remaining-count"), "remaining count element");
   assert(html.includes("whachat-logo-mark"), "footer WhachatCRM logo mark");
   assert(html.includes("site-footer-brand"), "footer branding row");
-  assert(html.includes("Powered by WhachatCRM"), "footer powered by text");
+  assert(html.includes(">Powered by</span>"), "footer powered by prefix");
+  assert(html.includes(">WhachatCRM</span>"), "footer WhachatCRM name after logo");
+  assert(html.includes(".chat-widget.enabled .chat-bubble { pointer-events: auto; }"), "floating chat bubble clickable");
   assert(html.includes("/listings?"), "browse listings API path");
   assert(html.includes("Max price ($)"), "max price labeled in dollars");
   assert(html.includes("agent-social"), "social links row");
