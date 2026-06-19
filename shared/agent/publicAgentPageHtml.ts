@@ -1,5 +1,6 @@
 import type { PublicAgentPageRenderInput, AgentPageListingCard } from "./agentPageTypes";
 import { normalizePropertyTypeForFilter } from "./publicAgentPageBrowse";
+import { computeAgentPageBrowseFilterFunnel } from "./agentPageBrowseDebug";
 
 const BRAND_GREEN = "#059669";
 const BRAND_GREEN_DARK = "#047857";
@@ -122,7 +123,32 @@ export function buildPublicAgentPageNotFoundHtml(): string {
 }
 
 export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): string {
-  const listingsJson = JSON.stringify(data.listings).replace(/</g, "\\u003c");
+  const browseDebugBaseline = computeAgentPageBrowseFilterFunnel(data.listings, {
+    listingType: "all",
+    location: null,
+    minPrice: null,
+    maxPrice: null,
+    minBeds: null,
+    minBaths: null,
+    minSqft: null,
+    propertyType: null,
+    sort: "newest",
+  });
+  const rentMax7kFunnel = computeAgentPageBrowseFilterFunnel(data.listings, {
+    listingType: "rent",
+    location: null,
+    minPrice: null,
+    maxPrice: 7000,
+    minBeds: null,
+    minBaths: null,
+    minSqft: null,
+    propertyType: null,
+    sort: "newest",
+  });
+  const browseDebugJson = JSON.stringify({
+    baseline: browseDebugBaseline,
+    rentMaxPrice7000: rentMax7kFunnel,
+  }).replace(/</g, "\\u003c");
   const slug = data.agentPageSlug || "";
   const bioHtml = data.bio
     ? `<p class="agent-bio">${escapeHtml(data.bio)}</p>`
@@ -206,6 +232,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .browse-panel-actions { display: none; margin-top: 10px; justify-content: flex-end; gap: 8px; }
     .browse-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 0.875rem; display: none; margin-bottom: 8px; }
     .browse-empty.show { display: block; }
+    .browse-filter-debug { margin: 8px 0 12px; padding: 10px 12px; background: #fffbeb; border: 1px dashed #f59e0b; border-radius: 8px; font-family: ui-monospace, monospace; font-size: 0.7rem; line-height: 1.45; color: #78350f; white-space: pre-wrap; word-break: break-word; }
     @media (max-width: 1023px) {
       .browse-panel-advanced { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     }
@@ -314,10 +341,10 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
             </label>
           </div>
           <div class="browse-panel-advanced">
-            <label>Min price
+            <label>Min price ($)
               <input type="number" id="filter-min-price" min="0" step="1000" placeholder="Any" inputmode="numeric" />
             </label>
-            <label>Max price
+            <label>Max price ($)
               <input type="number" id="filter-max-price" min="0" step="1000" placeholder="Any" inputmode="numeric" />
             </label>
             <label>Beds
@@ -367,6 +394,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           <button type="button" class="btn btn-sm btn-primary" id="btn-filters-apply">Apply</button>
         </div>
       </div>
+      <div class="browse-filter-debug" id="browse-filter-debug" data-removme="agent-page-browse-debug"></div>
       <div class="browse-empty" id="browse-empty">No listings match your filters.</div>
       <div class="listings-grid" id="listings-grid">
         ${cards || '<div class="empty-listings">No published listings yet.</div>'}
@@ -415,6 +443,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   </div>
   <div class="toast" id="toast" role="status"></div>
 
+  <script type="application/json" id="browse-debug">${browseDebugJson}</script>
   <script type="application/json" id="page-config">${JSON.stringify({
     slug,
     userId: data.userId,
@@ -614,6 +643,10 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         return String(el.value || "").trim().toLowerCase();
       }
 
+      function filterDollarsToCents(dollars) {
+        return Math.round(dollars * 100);
+      }
+
       function cardMatches(card) {
         var label = card.getAttribute("data-label");
         var status = card.getAttribute("data-status");
@@ -633,8 +666,8 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         var priceNum = price ? Number(price) : null;
         var minPrice = numVal("filter-min-price");
         var maxPrice = numVal("filter-max-price");
-        if (minPrice != null && (priceNum == null || priceNum < minPrice)) return false;
-        if (maxPrice != null && (priceNum == null || priceNum > maxPrice)) return false;
+        if (minPrice != null && (priceNum == null || priceNum < filterDollarsToCents(minPrice))) return false;
+        if (maxPrice != null && (priceNum == null || priceNum > filterDollarsToCents(maxPrice))) return false;
 
         var beds = card.getAttribute("data-beds");
         var bedsNum = beds ? Number(beds) : null;
@@ -671,6 +704,138 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         });
       }
 
+      function computeBrowseFunnel(cards, filters) {
+        var publishedCount = cards.length;
+        var rentalCount = 0;
+        cards.forEach(function (card) {
+          if (card.getAttribute("data-label") === "FOR RENT") rentalCount += 1;
+        });
+
+        function passesListingType(card) {
+          var label = card.getAttribute("data-label");
+          var status = card.getAttribute("data-status");
+          if (filters.listingType === "all") return true;
+          if (filters.listingType === "coming_soon") return status === "Coming Soon";
+          if (filters.listingType === "rent") return label === "FOR RENT" && status !== "Coming Soon";
+          if (filters.listingType === "sale") return label === "FOR SALE" && status !== "Coming Soon";
+          return true;
+        }
+
+        function passesLocation(card) {
+          if (!filters.location) return true;
+          var cityState = (card.getAttribute("data-city-state") || "").toLowerCase();
+          return cityState.indexOf(filters.location) !== -1;
+        }
+
+        function priceCents(card) {
+          var raw = card.getAttribute("data-price-cents");
+          return raw ? Number(raw) : null;
+        }
+
+        function passesMinPrice(card) {
+          if (filters.minPrice == null) return true;
+          var price = priceCents(card);
+          return price != null && price >= filterDollarsToCents(filters.minPrice);
+        }
+
+        function passesMaxPrice(card) {
+          if (filters.maxPrice == null) return true;
+          var price = priceCents(card);
+          return price != null && price <= filterDollarsToCents(filters.maxPrice);
+        }
+
+        function numAttr(card, name) {
+          var raw = card.getAttribute(name);
+          return raw ? Number(raw) : null;
+        }
+
+        var afterListingType = cards.filter(passesListingType);
+        var afterLocation = afterListingType.filter(passesLocation);
+        var afterMinPrice = afterLocation.filter(passesMinPrice);
+        var afterMaxPrice = afterMinPrice.filter(passesMaxPrice);
+        var afterBeds = afterMaxPrice.filter(function (card) {
+          if (filters.minBeds == null) return true;
+          var beds = numAttr(card, "data-beds");
+          return beds != null && beds >= filters.minBeds;
+        });
+        var afterBaths = afterBeds.filter(function (card) {
+          if (filters.minBaths == null) return true;
+          var baths = numAttr(card, "data-baths");
+          return baths != null && baths >= filters.minBaths;
+        });
+        var afterSqft = afterBaths.filter(function (card) {
+          if (filters.minSqft == null) return true;
+          var sqft = numAttr(card, "data-sqft");
+          return sqft != null && sqft >= filters.minSqft;
+        });
+        var afterPropertyType = afterSqft.filter(function (card) {
+          if (!filters.propertyType) return true;
+          return card.getAttribute("data-property-type") === filters.propertyType;
+        });
+
+        return {
+          publishedCount: publishedCount,
+          rentalCount: rentalCount,
+          afterListingType: afterListingType.length,
+          afterLocation: afterLocation.length,
+          afterMinPrice: afterMinPrice.length,
+          afterMaxPrice: afterMaxPrice.length,
+          afterBeds: afterBeds.length,
+          afterBaths: afterBaths.length,
+          afterSqft: afterSqft.length,
+          afterPropertyType: afterPropertyType.length,
+          finalCount: afterPropertyType.length,
+        };
+      }
+
+      function getBrowseFilters() {
+        var locationEl = document.getElementById("filter-location");
+        var propTypeEl = document.getElementById("filter-property-type");
+        return {
+          listingType: listingType,
+          location: locationEl && locationEl.value ? String(locationEl.value).trim().toLowerCase() : null,
+          minPrice: numVal("filter-min-price"),
+          maxPrice: numVal("filter-max-price"),
+          minBeds: numVal("filter-beds"),
+          minBaths: numVal("filter-baths"),
+          minSqft: numVal("filter-min-sqft"),
+          propertyType: propTypeEl && propTypeEl.value ? propTypeEl.value : null,
+        };
+      }
+
+      var browseDebugEl = document.getElementById("browse-filter-debug");
+      var browseDebugSeed = {};
+      try {
+        browseDebugSeed = JSON.parse(document.getElementById("browse-debug").textContent || "{}");
+      } catch (e) {
+        browseDebugSeed = {};
+      }
+
+      function renderBrowseDebug(funnel, visible) {
+        var sample = (browseDebugSeed.baseline && browseDebugSeed.baseline.sampleRentalPrices) || [];
+        var lines = [
+          "[REMOVEME] Agent Page browse filter debug",
+          "published: " + funnel.publishedCount,
+          "rentals: " + funnel.rentalCount,
+          "after listingType: " + funnel.afterListingType,
+          "after location: " + funnel.afterLocation,
+          "after minPrice: " + funnel.afterMinPrice,
+          "after maxPrice: " + funnel.afterMaxPrice,
+          "after beds: " + funnel.afterBeds,
+          "after baths: " + funnel.afterBaths,
+          "after sqft: " + funnel.afterSqft,
+          "after propertyType: " + funnel.afterPropertyType,
+          "final (DOM visible): " + visible,
+          "sample rental prices: " + JSON.stringify(sample),
+        ];
+        if (browseDebugSeed.rentMaxPrice7000) {
+          lines.push("SSR rent+max7000 final: " + browseDebugSeed.rentMaxPrice7000.finalCount);
+        }
+        var text = lines.join("\\n");
+        if (browseDebugEl) browseDebugEl.textContent = text;
+        console.log("[Agent Page browse debug]", funnel, { sampleRentalPrices: sample, visible: visible });
+      }
+
       function applyBrowseFilters() {
         if (!grid) return;
         var cards = Array.prototype.slice.call(grid.querySelectorAll(".listing-card"));
@@ -684,6 +849,11 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           grid.appendChild(card);
         });
         if (emptyMsg) emptyMsg.classList.toggle("show", cards.length > 0 && visible === 0);
+        renderBrowseDebug(computeBrowseFunnel(cards, getBrowseFilters()), visible);
+      }
+
+      if (browseDebugSeed.baseline) {
+        renderBrowseDebug(browseDebugSeed.baseline, browseDebugSeed.baseline.finalCount);
       }
 
       document.querySelectorAll(".chip[data-filter]").forEach(function (chip) {

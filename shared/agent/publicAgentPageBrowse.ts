@@ -1,4 +1,5 @@
 import { listingMatchesAgentPageFilter, type AgentPageListingFilter } from "./publicAgentPage";
+import { agentPageBrowseFilterDollarsToCents } from "./agentPageBrowsePrice";
 
 export type AgentPageListingSort = "newest" | "price_desc" | "price_asc";
 
@@ -67,8 +68,12 @@ export function listingMatchesAgentPageBrowseFilters(
   }
 
   const price = listing.priceCents;
-  if (filters.minPrice != null && (price == null || price < filters.minPrice)) return false;
-  if (filters.maxPrice != null && (price == null || price > filters.maxPrice)) return false;
+  const minPriceCents =
+    filters.minPrice != null ? agentPageBrowseFilterDollarsToCents(filters.minPrice) : null;
+  const maxPriceCents =
+    filters.maxPrice != null ? agentPageBrowseFilterDollarsToCents(filters.maxPrice) : null;
+  if (minPriceCents != null && (price == null || price < minPriceCents)) return false;
+  if (maxPriceCents != null && (price == null || price > maxPriceCents)) return false;
   if (filters.minBeds != null && (listing.beds == null || listing.beds < filters.minBeds)) return false;
   if (filters.minBaths != null && (listing.baths == null || listing.baths < filters.minBaths)) return false;
   if (filters.minSqft != null && (listing.sqft == null || listing.sqft < filters.minSqft)) return false;

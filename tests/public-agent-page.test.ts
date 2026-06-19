@@ -20,6 +20,7 @@ import {
   compareAgentPageListings,
   listingMatchesAgentPageBrowseFilters,
 } from "../shared/agent/publicAgentPageBrowse";
+import { computeAgentPageBrowseFilterFunnel } from "../shared/agent/agentPageBrowseDebug";
 import { prepareAgentPageSettingsPatch } from "../server/agentPage/agentPageSettingsPatch";
 import type { AgentPageSettingsResponse } from "../shared/agent/agentPageSchema";
 import {
@@ -337,7 +338,7 @@ function testBrowseFilters() {
     status: "Active",
     listingLabel: "FOR SALE" as const,
     cityState: "Tampa, FL",
-    priceCents: 450_000_00,
+    priceCents: 45_000_000,
     beds: 3,
     baths: 2,
     sqft: 1800,
@@ -348,15 +349,15 @@ function testBrowseFilters() {
     listingMatchesAgentPageBrowseFilters(base, {
       listingType: "sale",
       location: "tampa",
-      minPrice: 400_000_00,
-      maxPrice: 500_000_00,
+      minPrice: 400_000,
+      maxPrice: 500_000,
       minBeds: 3,
       minBaths: 2,
       minSqft: 1500,
       propertyType: "house",
       sort: "newest",
     }),
-    "matches browse filters",
+    "matches browse filters (filter dollars vs stored cents)",
   );
   assert(
     !listingMatchesAgentPageBrowseFilters(base, {
@@ -386,6 +387,47 @@ function testBrowseFilters() {
     }),
     "sale listing excluded from rent filter",
   );
+
+  const rental = {
+    status: "Active",
+    listingLabel: "FOR RENT" as const,
+    cityState: "Miami, FL",
+    priceCents: 3_500_00,
+    beds: 2,
+    baths: 1,
+    sqft: 900,
+    propertyType: "condo",
+    sortIndex: 1,
+  };
+  assert(
+    listingMatchesAgentPageBrowseFilters(rental, {
+      listingType: "rent",
+      location: null,
+      minPrice: null,
+      maxPrice: 7000,
+      minBeds: null,
+      minBaths: null,
+      minSqft: null,
+      propertyType: null,
+      sort: "newest",
+    }),
+    "rental matches rent + max price $7000 (uses list/rent priceCents)",
+  );
+  assert(
+    !listingMatchesAgentPageBrowseFilters(rental, {
+      listingType: "rent",
+      location: null,
+      minPrice: null,
+      maxPrice: 3000,
+      minBeds: null,
+      minBaths: null,
+      minSqft: null,
+      propertyType: null,
+      sort: "newest",
+    }),
+    "rental excluded when max price below monthly rent",
+  );
+
   assert(
     compareAgentPageListings(
       { ...base, priceCents: 100, sortIndex: 1 },
@@ -395,6 +437,84 @@ function testBrowseFilters() {
     "price desc sort",
   );
   console.log("  browse filters: OK");
+}
+
+function testBrowseFilterFunnel() {
+  const listings = [
+    {
+      id: "sale1",
+      shareUrl: "https://example.com/l/sale1",
+      imageUrl: null,
+      street: null,
+      cityState: "Tampa, FL",
+      price: "$450,000",
+      priceCents: 45_000_000,
+      beds: "3 bed",
+      baths: "2 bath",
+      sqft: "1,800 Sq Ft",
+      bedsNum: 3,
+      bathsNum: 2,
+      sqftNum: 1800,
+      propertyType: "house",
+      status: "Active" as const,
+      listingLabel: "FOR SALE" as const,
+    },
+    {
+      id: "rent1",
+      shareUrl: "https://example.com/l/rent1",
+      imageUrl: null,
+      street: null,
+      cityState: "Miami, FL",
+      price: "$3,500/mo",
+      priceCents: 350_000,
+      beds: "2 bed",
+      baths: "1 bath",
+      sqft: "900 Sq Ft",
+      bedsNum: 2,
+      bathsNum: 1,
+      sqftNum: 900,
+      propertyType: "condo",
+      status: "Active" as const,
+      listingLabel: "FOR RENT" as const,
+    },
+    {
+      id: "rent2",
+      shareUrl: "https://example.com/l/rent2",
+      imageUrl: null,
+      street: null,
+      cityState: "Orlando, FL",
+      price: "$8,500/mo",
+      priceCents: 850_000,
+      beds: "4 bed",
+      baths: "3 bath",
+      sqft: "2,200 Sq Ft",
+      bedsNum: 4,
+      bathsNum: 3,
+      sqftNum: 2200,
+      propertyType: "house",
+      status: "Active" as const,
+      listingLabel: "FOR RENT" as const,
+    },
+  ];
+
+  const funnel = computeAgentPageBrowseFilterFunnel(listings, {
+    listingType: "rent",
+    location: null,
+    minPrice: null,
+    maxPrice: 7000,
+    minBeds: null,
+    minBaths: null,
+    minSqft: null,
+    propertyType: null,
+    sort: "newest",
+  });
+
+  assert(funnel.publishedCount === 3, "funnel published count");
+  assert(funnel.rentalCount === 2, "funnel rental count");
+  assert(funnel.afterListingType === 2, "funnel after rent type");
+  assert(funnel.afterMaxPrice === 1, "funnel after max $7000 excludes $8500 rent");
+  assert(funnel.finalCount === 1, "funnel final rent under $7000");
+  console.log("  browse filter funnel: OK");
 }
 
 function testSocialUrlPatch() {
@@ -460,6 +580,10 @@ function testHtml() {
   assert(html.includes("agent-market-chips"), "market area chips");
   assert(html.includes("market-chip"), "market area chip spacing");
   assert(html.includes("browse-panel-advanced"), "advanced filters single row");
+  assert(html.includes('id="browse-debug"'), "browse debug seed json");
+  assert(html.includes("browse-filter-debug"), "browse debug panel");
+  assert(html.includes("filterDollarsToCents"), "client converts filter dollars to cents");
+  assert(html.includes("Max price ($)"), "max price labeled in dollars");
   assert(html.includes("agent-social"), "social links row");
   assert(html.includes('aria-label="Website"'), "website icon first when url set");
   assert(html.includes('aria-label="Facebook"'), "facebook icon when url set");
@@ -526,6 +650,7 @@ async function main() {
   testMarketAreaChips();
   testAgentPageDbSavePath();
   testBrowseFilters();
+  testBrowseFilterFunnel();
   testSocialUrlPatch();
   testHtml();
   console.log("\nAll tests passed.");
