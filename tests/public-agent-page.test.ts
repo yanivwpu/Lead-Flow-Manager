@@ -19,6 +19,7 @@ import { buildPublicAgentPageHtml } from "../shared/agent/publicAgentPageHtml";
 import {
   compareAgentPageListings,
   listingMatchesAgentPageBrowseFilters,
+  normalizePropertyTypeForFilter,
 } from "../shared/agent/publicAgentPageBrowse";
 import { computeAgentPageBrowseFilterFunnel } from "../shared/agent/agentPageBrowseDebug";
 import {
@@ -347,6 +348,7 @@ function testBrowseFilters() {
     baths: 2,
     sqft: 1800,
     propertyType: "house",
+    propertySubtype: null,
     sortIndex: 0,
   };
   assert(
@@ -401,6 +403,7 @@ function testBrowseFilters() {
     baths: 1,
     sqft: 900,
     propertyType: "condo",
+    propertySubtype: null,
     sortIndex: 1,
   };
   assert(
@@ -430,6 +433,37 @@ function testBrowseFilters() {
       sort: "newest",
     }),
     "rental excluded when max price below monthly rent",
+  );
+
+  const rentalHouse = {
+    status: "Active",
+    listingLabel: "FOR RENT" as const,
+    cityState: "Pompano Beach, FL",
+    priceCents: 350_000,
+    beds: 3,
+    baths: 2,
+    sqft: 1400,
+    propertyType: "Residential Lease",
+    propertySubtype: "Single Family Residence",
+    sortIndex: 2,
+  };
+  assert(
+    normalizePropertyTypeForFilter(rentalHouse.propertyType, rentalHouse.propertySubtype) === "house",
+    "residential lease SFR maps to house bucket",
+  );
+  assert(
+    listingMatchesAgentPageBrowseFilters(rentalHouse, {
+      listingType: "rent",
+      location: null,
+      minPrice: null,
+      maxPrice: 7777,
+      minBeds: null,
+      minBaths: null,
+      minSqft: null,
+      propertyType: "house",
+      sort: "newest",
+    }),
+    "SFR rental lease matches rent + house filter",
   );
 
   assert(
@@ -462,6 +496,7 @@ function testBrowseFilterFunnel() {
       bathsNum: 2,
       sqftNum: 1800,
       propertyType: "house",
+      propertySubtype: null,
       status: "Active" as const,
       listingLabel: "FOR SALE" as const,
     },
@@ -482,6 +517,7 @@ function testBrowseFilterFunnel() {
       bathsNum: 1,
       sqftNum: 900,
       propertyType: "condo",
+      propertySubtype: null,
       status: "Active" as const,
       listingLabel: "FOR RENT" as const,
     },
@@ -502,6 +538,7 @@ function testBrowseFilterFunnel() {
       bathsNum: 3,
       sqftNum: 2200,
       propertyType: "house",
+      propertySubtype: null,
       status: "Active" as const,
       listingLabel: "FOR RENT" as const,
     },
@@ -602,6 +639,7 @@ function testHtml() {
       bathsNum: 2,
       sqftNum: 1800,
       propertyType: "house",
+      propertySubtype: null,
       status: "Active",
       listingLabel: "FOR SALE",
     }],

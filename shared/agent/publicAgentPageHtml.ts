@@ -87,7 +87,7 @@ function listingCardHtml(card: AgentPageListingCard, index: number): string {
   const img = card.imageUrl
     ? `<img src="${escapeHtml(card.imageUrl)}" alt="" loading="lazy" />`
     : `<div class="card-img-placeholder">No photo</div>`;
-  const propertyType = normalizePropertyTypeForFilter(card.propertyType);
+  const propertyType = normalizePropertyTypeForFilter(card.propertyType, card.propertySubtype);
 
   return `<article class="listing-card" data-id="${escapeHtml(card.id)}" data-label="${escapeHtml(card.listingLabel)}" data-status="${escapeHtml(card.status)}" data-city-state="${escapeHtml(card.cityState)}" data-sort-index="${index}" data-price-cents="${card.priceCents ?? ""}" data-beds="${card.bedsNum ?? ""}" data-baths="${card.bathsNum ?? ""}" data-sqft="${card.sqftNum ?? ""}" data-property-type="${escapeHtml(propertyType)}" data-share-url="${escapeHtml(card.shareUrl)}" data-full-address="${escapeHtml(card.fullAddress)}" data-meta-summary="${escapeHtml(card.metaSummary)}">
     <a class="card-img-link" href="${escapeHtml(card.shareUrl)}" target="_blank" rel="noopener noreferrer" data-action="listing_view" data-listing-id="${escapeHtml(card.id)}">${img}</a>

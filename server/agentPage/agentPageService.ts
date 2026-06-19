@@ -185,6 +185,7 @@ function listingToCard(
     bathsNum: Number.isFinite(bathsNum) ? bathsNum : null,
     sqftNum,
     propertyType: listing.propertyType ?? null,
+    propertySubtype: listing.propertySubtype ?? null,
     status: listing.status === "coming_soon" ? "Coming Soon" : "Active",
     listingLabel: resolveFlyerListingLabel(flyerListing),
   };

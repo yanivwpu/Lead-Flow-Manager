@@ -17,6 +17,7 @@ export type AgentPageListingCard = {
   bathsNum: number | null;
   sqftNum: number | null;
   propertyType: string | null;
+  propertySubtype: string | null;
   status: string;
   listingLabel: "FOR SALE" | "FOR RENT";
 };

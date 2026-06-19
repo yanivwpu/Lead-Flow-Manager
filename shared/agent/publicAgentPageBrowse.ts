@@ -1,5 +1,6 @@
 import { listingMatchesAgentPageFilter, type AgentPageListingFilter } from "./publicAgentPage";
 import { agentPageBrowseFilterDollarsToCents } from "./agentPageBrowsePrice";
+import { normalizeAgentPageBrowsePropertyType } from "./agentPageBrowsePropertyType";
 
 export type AgentPageListingSort = "newest" | "price_desc" | "price_asc";
 
@@ -12,6 +13,7 @@ export type AgentPageListingBrowseInput = {
   baths: number | null;
   sqft: number | null;
   propertyType: string | null;
+  propertySubtype: string | null;
   sortIndex: number;
 };
 
@@ -37,15 +39,11 @@ export const AGENT_PAGE_PROPERTY_TYPE_OPTIONS = [
   { value: "other", label: "Other" },
 ] as const;
 
-function normalizePropertyType(value: string | null | undefined): string {
-  const v = (value ?? "").trim().toLowerCase();
-  if (!v) return "other";
-  if (v.includes("condo") || v.includes("apartment")) return "condo";
-  if (v.includes("town")) return "townhouse";
-  if (v.includes("multi") || v.includes("duplex")) return "multi_family";
-  if (v.includes("land") || v.includes("lot")) return "land";
-  if (v.includes("house") || v.includes("single")) return "house";
-  return "other";
+function normalizePropertyType(
+  propertyType: string | null | undefined,
+  propertySubtype?: string | null | undefined,
+): string {
+  return normalizeAgentPageBrowsePropertyType(propertyType, propertySubtype);
 }
 
 export function listingMatchesAgentPageBrowseFilters(
@@ -79,7 +77,9 @@ export function listingMatchesAgentPageBrowseFilters(
   if (filters.minSqft != null && (listing.sqft == null || listing.sqft < filters.minSqft)) return false;
 
   if (filters.propertyType) {
-    if (normalizePropertyType(listing.propertyType) !== filters.propertyType) return false;
+    if (normalizePropertyType(listing.propertyType, listing.propertySubtype) !== filters.propertyType) {
+      return false;
+    }
   }
 
   return true;
@@ -97,6 +97,9 @@ export function compareAgentPageListings(
   return pa - pb;
 }
 
-export function normalizePropertyTypeForFilter(value: string | null | undefined): string {
-  return normalizePropertyType(value);
+export function normalizePropertyTypeForFilter(
+  propertyType: string | null | undefined,
+  propertySubtype?: string | null | undefined,
+): string {
+  return normalizePropertyType(propertyType, propertySubtype);
 }
