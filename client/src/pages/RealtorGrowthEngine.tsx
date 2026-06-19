@@ -89,6 +89,7 @@ import {
 } from "@/lib/shopifyCheckout";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { logRgeSelect } from "@/lib/rgeSelectDebug";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -2517,6 +2518,7 @@ export function RealtorGrowthEngine() {
     };
 
     const updatePref = (key: string, value: any) => {
+      if (localPrefs[key] === value) return;
       setLocalPrefs(prev => ({ ...prev, [key]: value }));
     };
 
@@ -2593,7 +2595,15 @@ export function RealtorGrowthEngine() {
         </div>
         <div>
           <Label className="text-sm font-medium">Preferred Language</Label>
-          <Select value={localPrefs.preferredLanguage || "en"} onValueChange={v => updatePref("preferredLanguage", v)}>
+          <Select
+            value={localPrefs.preferredLanguage || "en"}
+            onValueChange={(v) => {
+              const server = savedPrefs.preferredLanguage || "en";
+              logRgeSelect("RealtorGrowthEngine", "preferredLanguage", server, localPrefs.preferredLanguage, v, "change");
+              if (v === (localPrefs.preferredLanguage || "en")) return;
+              updatePref("preferredLanguage", v);
+            }}
+          >
             <SelectTrigger className="mt-1" data-testid="select-preferred-language">
               <SelectValue />
             </SelectTrigger>
@@ -2742,7 +2752,21 @@ export function RealtorGrowthEngine() {
                     </div>
                     <div>
                       <Label className="text-sm font-medium">Routing Type</Label>
-                      <Select value={svc.routingType} onValueChange={v => update("routingType", v)}>
+                      <Select
+                        value={svc.routingType || "task"}
+                        onValueChange={(v) => {
+                          logRgeSelect(
+                            "RealtorGrowthEngine",
+                            `routingType-${svc.type}`,
+                            svc.routingType,
+                            svc.routingType,
+                            v,
+                            "change",
+                          );
+                          if (v === (svc.routingType || "task")) return;
+                          update("routingType", v);
+                        }}
+                      >
                         <SelectTrigger className="mt-1" data-testid={`select-routing-type-${svc.type}`}>
                           <SelectValue />
                         </SelectTrigger>
@@ -2851,7 +2875,22 @@ export function RealtorGrowthEngine() {
               return (
                 <div key={field}>
                   <Label className="text-sm font-medium">Follow-Up Delay</Label>
-                  <Select value={String(localPrefs[prefKey] || WORKFLOW_PREF_DEFAULTS[wfKey]?.[field] || 24)} onValueChange={v => updatePref(prefKey, Number(v))}>
+                  <Select
+                    value={String(localPrefs[prefKey] ?? WORKFLOW_PREF_DEFAULTS[wfKey]?.[field] ?? 24)}
+                    onValueChange={(v) => {
+                      const current = String(localPrefs[prefKey] ?? WORKFLOW_PREF_DEFAULTS[wfKey]?.[field] ?? 24);
+                      logRgeSelect(
+                        "RealtorGrowthEngine",
+                        `${wfKey}_${field}`,
+                        savedPrefs[prefKey] ?? WORKFLOW_PREF_DEFAULTS[wfKey]?.[field] ?? 24,
+                        localPrefs[prefKey],
+                        v,
+                        "change",
+                      );
+                      if (v === current) return;
+                      updatePref(prefKey, Number(v));
+                    }}
+                  >
                     <SelectTrigger className="mt-1" data-testid={`select-${field}`}>
                       <SelectValue />
                     </SelectTrigger>

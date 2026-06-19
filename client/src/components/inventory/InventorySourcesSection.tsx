@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
+import { logRgeSelect } from "@/lib/rgeSelectDebug";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -125,11 +126,35 @@ function loadFormFromSource(source: PublicInventorySource | undefined): Inventor
   };
 }
 
+function inventoryFormsEqual(a: InventorySourceForm, b: InventorySourceForm): boolean {
+  return (
+    a.displayName === b.displayName &&
+    a.originatingSystemName === b.originatingSystemName &&
+    a.datasetId === b.datasetId &&
+    a.syncCities === b.syncCities &&
+    a.syncZipCodes === b.syncZipCodes &&
+    a.maxListings === b.maxListings
+  );
+}
+
+function normalizeProviderSelectValue(provider: string): InventoryProvider {
+  const match = INVENTORY_PROVIDER_UI_OPTIONS.find((option) => option.id === provider);
+  return match?.id ?? "mls_grid";
+}
+
+function normalizeMaxListingsSelectValue(value: number | undefined): string {
+  const normalized = INVENTORY_MAX_LISTINGS_OPTIONS.includes(value as (typeof INVENTORY_MAX_LISTINGS_OPTIONS)[number])
+    ? value
+    : DEFAULT_MAX_LISTINGS;
+  return String(normalized ?? DEFAULT_MAX_LISTINGS);
+}
+
 export function InventorySourcesSection({ variant = "section", className }: Props) {
   const queryClient = useQueryClient();
   const [showSecrets, setShowSecrets] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [selectedProvider, setSelectedProvider] = useState<InventoryProvider>("mls_grid");
+  const [maxListingsDraft, setMaxListingsDraft] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<InventoryFormFieldErrors>({});
   const [formBannerError, setFormBannerError] = useState<string | null>(null);
   const [removeSourceConfirmOpen, setRemoveSourceConfirmOpen] = useState(false);
@@ -199,7 +224,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     const connected = sources.find((s) => s.connectionStatus === "connected");
     const preferred = running ?? connected ?? sources[0];
     if (preferred) {
-      setSelectedProvider(preferred.provider as InventoryProvider);
+      setSelectedProvider(normalizeProviderSelectValue(preferred.provider));
     }
     providerInitialized.current = true;
   }, [sources, sourcesLoading]);
@@ -219,13 +244,42 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   useEffect(() => {
     const source = sources.find((s) => s.provider === selectedProvider);
     if (source) {
-      setForm(loadFormFromSource(source));
+      const nextForm = loadFormFromSource(source);
+      setForm((prev) => (inventoryFormsEqual(prev, nextForm) ? prev : nextForm));
+      setMaxListingsDraft(null);
     } else {
-      setForm({ ...EMPTY_FORM });
+      setForm((prev) => (inventoryFormsEqual(prev, EMPTY_FORM) ? prev : { ...EMPTY_FORM }));
+      setMaxListingsDraft(null);
     }
     setFieldErrors({});
     setFormBannerError(null);
-  }, [selectedProvider, activeSource?.id, activeSource?.updatedAt, sources]);
+  }, [selectedProvider, activeSource?.id, activeSource?.updatedAt]);
+
+  const serverMaxListings = normalizeMaxListingsSelectValue(form.maxListings);
+  const maxListingsValue = maxListingsDraft ?? serverMaxListings;
+  const providerSelectValue = normalizeProviderSelectValue(selectedProvider);
+
+  useEffect(() => {
+    logRgeSelect(
+      "InventorySourcesSection",
+      "provider",
+      activeSource?.provider ?? null,
+      selectedProvider,
+      providerSelectValue,
+      "value-prop",
+    );
+  }, [activeSource?.provider, providerSelectValue, selectedProvider]);
+
+  useEffect(() => {
+    logRgeSelect(
+      "InventorySourcesSection",
+      "maxListings",
+      serverMaxListings,
+      maxListingsDraft,
+      maxListingsValue,
+      "value-prop",
+    );
+  }, [maxListingsDraft, maxListingsValue, serverMaxListings]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -242,9 +296,23 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       const res = await apiRequest("POST", "/api/inventory/sources", payload);
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
+    onSuccess: (payload: { source?: PublicInventorySource }) => {
+      if (payload?.source) {
+        queryClient.setQueryData(
+          ["/api/inventory/sources"],
+          (prev: { sources?: PublicInventorySource[]; publicationStats?: ListingPublicationStats } | undefined) => {
+            if (!prev?.sources) return prev;
+            const idx = prev.sources.findIndex((s) => s.id === payload.source!.id);
+            const sources =
+              idx >= 0
+                ? prev.sources.map((s, i) => (i === idx ? payload.source! : s))
+                : [...prev.sources, payload.source!];
+            return { ...prev, sources };
+          },
+        );
+      }
       setForm((f) => ({ ...f, accessToken: "", clientId: "", clientSecret: "", serverToken: "" }));
+      setMaxListingsDraft(null);
       clearFormValidation();
       toast({
         title: "Inventory source saved",
@@ -352,8 +420,8 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     onSuccess: () => {
       setRemoveSourceConfirmOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/agent-page"] });
       setForm(EMPTY_FORM);
+      setMaxListingsDraft(null);
       toast({ title: "Inventory source removed" });
     },
     onError: (err: Error) => {
@@ -506,9 +574,20 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                 <div className="space-y-2">
                   <Label htmlFor="inventory-provider">Provider</Label>
                   <Select
-                    value={selectedProvider}
+                    value={providerSelectValue}
                     onValueChange={(v) => {
-                      setSelectedProvider(v as InventoryProvider);
+                      const next = normalizeProviderSelectValue(v);
+                      logRgeSelect(
+                        "InventorySourcesSection",
+                        "provider",
+                        activeSource?.provider ?? null,
+                        selectedProvider,
+                        next,
+                        "change",
+                      );
+                      if (next === providerSelectValue) return;
+                      setSelectedProvider(next);
+                      setMaxListingsDraft(null);
                       setFieldErrors({});
                       setFormBannerError(null);
                     }}
@@ -594,14 +673,22 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         <div className="space-y-2">
                           <Label htmlFor="inventory-max-listings">Max listings</Label>
                           <Select
-                            value={String(form.maxListings ?? DEFAULT_MAX_LISTINGS)}
+                            value={maxListingsValue}
                             onValueChange={(value) => {
+                              logRgeSelect(
+                                "InventorySourcesSection",
+                                "maxListings",
+                                serverMaxListings,
+                                maxListingsDraft,
+                                value,
+                                "change",
+                              );
+                              if (value === maxListingsValue) return;
+                              setMaxListingsDraft(value);
                               const next = Number(value) as InventorySourceForm["maxListings"];
-                              if (next === form.maxListings) return;
-                              setForm((f) => ({
-                                ...f,
-                                maxListings: next,
-                              }));
+                              setForm((f) =>
+                                f.maxListings === next ? f : { ...f, maxListings: next },
+                              );
                             }}
                           >
                             <SelectTrigger id="inventory-max-listings" data-testid="select-inventory-max-listings">

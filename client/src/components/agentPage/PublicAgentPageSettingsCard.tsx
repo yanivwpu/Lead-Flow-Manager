@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Circle, Copy, ExternalLink, Globe, Loader2 } from "lucide-react";
 import { Link } from "wouter";
@@ -21,6 +21,7 @@ import { agentPageLeadCaptureSchema } from "@shared/agent/agentPageSchema";
 import { buildAgentPageUrl, validateAgentPageSlugInput } from "@shared/agent/agentPageSlug";
 import { fetchAgentPageSettings, parseAgentPageApiError } from "@/lib/agentPageApi";
 import { bulkPublishEligibleListings } from "@/lib/inventoryApi";
+import { logRgeSelect } from "@/lib/rgeSelectDebug";
 import { AgentPageMarketAreaChips } from "@/components/agentPage/AgentPageMarketAreaChips";
 
 const BUSINESS_PROFILE_SETTINGS_PATH = "/app/settings";
@@ -64,7 +65,8 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
   const [linkedinUrlDraft, setLinkedinUrlDraft] = useState("");
   const [youtubeUrlDraft, setYoutubeUrlDraft] = useState("");
   const [publicWebsiteDraft, setPublicWebsiteDraft] = useState("");
-  const [leadCaptureDraft, setLeadCaptureDraft] = useState<AgentPageLeadCapture>(DEFAULT_LEAD_CAPTURE);
+  const [leadCaptureDraft, setLeadCaptureDraft] = useState<AgentPageLeadCapture | null>(null);
+  const leadCaptureMutating = useRef(false);
 
   useEffect(() => {
     if (!data) return;
@@ -77,18 +79,35 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
     setInstagramUrlDraft(data.instagramUrl || "");
     setLinkedinUrlDraft(data.linkedinUrl || "");
     setYoutubeUrlDraft(data.youtubeUrl || "");
-    setLeadCaptureDraft(normalizeLeadCapture(data.agentPagePreferredLeadCapture));
   }, [
     data?.agentPageSlug,
     data?.agentPageBio,
     data?.agentPageUseCustomBio,
-    data?.agentPagePreferredLeadCapture,
     data?.publicWebsite,
     data?.facebookUrl,
     data?.instagramUrl,
     data?.linkedinUrl,
     data?.youtubeUrl,
   ]);
+
+  const serverLeadCapture = normalizeLeadCapture(data?.agentPagePreferredLeadCapture);
+  const leadCaptureValue = leadCaptureDraft ?? serverLeadCapture;
+
+  useEffect(() => {
+    if (leadCaptureMutating.current) return;
+    setLeadCaptureDraft(null);
+  }, [serverLeadCapture]);
+
+  useEffect(() => {
+    logRgeSelect(
+      "PublicAgentPageSettingsCard",
+      "preferredLeadCapture",
+      serverLeadCapture,
+      leadCaptureDraft,
+      leadCaptureValue,
+      "value-prop",
+    );
+  }, [serverLeadCapture, leadCaptureDraft, leadCaptureValue]);
 
   const saveMutation = useMutation({
     mutationFn: async (body: Record<string, unknown>) => {
@@ -106,10 +125,13 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
     },
     onSuccess: (payload) => {
       queryClient.setQueryData(["/api/agent-page"], payload);
-      setLeadCaptureDraft(normalizeLeadCapture(payload.agentPagePreferredLeadCapture));
+      leadCaptureMutating.current = false;
+      setLeadCaptureDraft(null);
       toast({ title: "Agent page settings saved" });
     },
     onError: (e: Error) => {
+      leadCaptureMutating.current = false;
+      setLeadCaptureDraft(null);
       toast({ title: "Save failed", description: e.message, variant: "destructive" });
     },
   });
@@ -131,15 +153,24 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
   const handleLeadCaptureChange = useCallback(
     (value: string) => {
       const next = normalizeLeadCapture(value);
-      if (next === leadCaptureDraft) return;
-      if (next === normalizeLeadCapture(data?.agentPagePreferredLeadCapture)) {
-        setLeadCaptureDraft(next);
+      logRgeSelect(
+        "PublicAgentPageSettingsCard",
+        "preferredLeadCapture",
+        serverLeadCapture,
+        leadCaptureDraft,
+        next,
+        "change",
+      );
+      if (next === leadCaptureValue) return;
+      if (next === serverLeadCapture) {
+        setLeadCaptureDraft(null);
         return;
       }
+      leadCaptureMutating.current = true;
       setLeadCaptureDraft(next);
       saveMutation.mutate({ agentPagePreferredLeadCapture: next });
     },
-    [data?.agentPagePreferredLeadCapture, leadCaptureDraft, saveMutation],
+    [leadCaptureDraft, leadCaptureValue, saveMutation, serverLeadCapture],
   );
 
   const bulkPublishMutation = useMutation({
@@ -386,10 +417,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
 
             <div className="space-y-2" data-testid="agent-page-primary-contact-button">
               <Label>Primary contact button</Label>
-              <Select
-                value={leadCaptureDraft}
-                onValueChange={handleLeadCaptureChange}
-              >
+              <Select value={leadCaptureValue} onValueChange={handleLeadCaptureChange}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
