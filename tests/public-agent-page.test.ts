@@ -777,6 +777,8 @@ function testHtml() {
   assert(html.includes("filter-sort"), "sort control");
   assert(html.includes("data-filter=\"sale\""), "listing type filters");
   assert(html.includes("What's My Home Worth?"), "home worth cta");
+  assert(html.includes("Thinking of Selling?"), "home worth modal title");
+  assert(html.includes("Get a free home valuation and personalized selling strategy."), "home worth modal subtitle");
   assert(html.includes('content="noindex, nofollow"'), "noindex");
   console.log("  html: OK");
 }

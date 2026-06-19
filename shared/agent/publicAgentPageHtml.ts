@@ -262,6 +262,8 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .modal-backdrop.open { display: flex; }
     .modal { background: #fff; border-radius: 12px; width: 100%; max-width: 420px; padding: 20px; box-shadow: 0 8px 32px rgba(15,23,42,0.15); }
     .modal h2 { margin: 0 0 12px; font-size: 1.125rem; }
+    .modal-subtitle { margin: -4px 0 14px; font-size: 0.875rem; color: var(--muted); line-height: 1.45; }
+    .modal-subtitle[hidden] { display: none !important; }
     .modal label { display: block; font-size: 0.8125rem; font-weight: 600; margin: 10px 0 4px; }
     .modal input, .modal textarea, .modal select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
     .modal textarea { min-height: 80px; resize: vertical; }
@@ -408,6 +410,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   <div class="modal-backdrop" id="modal-backdrop" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true">
       <h2 id="modal-title">Contact</h2>
+      <p id="modal-subtitle" class="modal-subtitle" hidden></p>
       <div id="modal-listing-context" class="modal-listing-context" hidden>
         <p class="modal-listing-label">Property</p>
         <p class="modal-listing-address" id="modal-listing-address"></p>
@@ -534,8 +537,18 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       function openModal(intent, listingId) {
         document.getElementById("form-intent").value = intent;
         document.getElementById("form-listing-id").value = listingId || "";
-        var title = { message: "Message Me", ask_about: "Ask About This Listing", schedule_showing: "Schedule Showing", home_worth: "What's My Home Worth?" };
+        var title = { message: "Message Me", ask_about: "Ask About This Listing", schedule_showing: "Schedule Showing", home_worth: "Thinking of Selling?" };
         document.getElementById("modal-title").textContent = title[intent] || "Contact";
+        var subtitleEl = document.getElementById("modal-subtitle");
+        if (subtitleEl) {
+          if (intent === "home_worth") {
+            subtitleEl.textContent = "Get a free home valuation and personalized selling strategy.";
+            subtitleEl.hidden = false;
+          } else {
+            subtitleEl.textContent = "";
+            subtitleEl.hidden = true;
+          }
+        }
         document.getElementById("message-field").hidden = intent === "home_worth";
         document.getElementById("home-worth-fields").hidden = intent !== "home_worth";
 
@@ -574,6 +587,11 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         backdrop.classList.remove("open");
         form.reset();
         if (listingContextEl) listingContextEl.hidden = true;
+        var subtitleEl = document.getElementById("modal-subtitle");
+        if (subtitleEl) {
+          subtitleEl.textContent = "";
+          subtitleEl.hidden = true;
+        }
         clearListingLeadFields();
         setNamedFieldEnabled(homeWorthPropertyAddressField, false);
       }
