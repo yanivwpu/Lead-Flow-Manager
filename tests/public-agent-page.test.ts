@@ -2,7 +2,7 @@
  * Public agent page gates, slug utilities, profile inheritance, and patch policy.
  * Run: npx tsx tests/public-agent-page.test.ts
  */
-import { agentPageSettingsPatchSchema } from "../shared/agent/agentPageSchema";
+import { agentPageSettingsPatchSchema, publicAgentBrowseQuerySchema } from "../shared/agent/agentPageSchema";
 import {
   agentPageSettingsSaveAlwaysAllowed,
   resolveAgentPageBio,
@@ -15,13 +15,14 @@ import {
   normalizeAgentPageSlug,
   validateAgentPageSlugInput,
 } from "../shared/agent/agentPageSlug";
-import { buildPublicAgentPageHtml } from "../shared/agent/publicAgentPageHtml";
+import { buildPublicAgentPageHtml, renderAgentPageListingCards } from "../shared/agent/publicAgentPageHtml";
 import {
   compareAgentPageListings,
   listingMatchesAgentPageBrowseFilters,
   normalizePropertyTypeForFilter,
 } from "../shared/agent/publicAgentPageBrowse";
 import { computeAgentPageBrowseFilterFunnel } from "../shared/agent/agentPageBrowseDebug";
+import { browseQueryToFilters } from "../server/agentPage/agentPageBrowseService";
 import {
   buildAgentPageListingFullAddress,
   buildAgentPageListingMetaSummary,
@@ -586,6 +587,48 @@ function testListingDisplayHelpers() {
   console.log("  listing display helpers: OK");
 }
 
+function testBrowseQuerySchema() {
+  const parsed = publicAgentBrowseQuerySchema.safeParse({
+    listingType: "rent",
+    maxPrice: "7777",
+    propertyType: "house",
+    offset: "0",
+    limit: "24",
+  });
+  assert(parsed.success, "browse query parses");
+  if (parsed.success) {
+    const filters = browseQueryToFilters(parsed.data);
+    assert(filters.listingType === "rent", "listing type");
+    assert(filters.maxPrice === 7777, "max price");
+    assert(filters.propertyType === "house", "property type");
+  }
+  const cards = renderAgentPageListingCards([
+    {
+      id: "l1",
+      shareUrl: "https://example.com/l1",
+      imageUrl: null,
+      street: "1 Main",
+      fullAddress: "1 Main, Tampa, FL",
+      metaSummary: "$500,000",
+      cityState: "Tampa, FL",
+      price: "$500,000",
+      priceCents: 50000000,
+      beds: "3 bed",
+      baths: "2 bath",
+      sqft: "1,800 Sq Ft",
+      bedsNum: 3,
+      bathsNum: 2,
+      sqftNum: 1800,
+      propertyType: "house",
+      propertySubtype: null,
+      status: "Active",
+      listingLabel: "FOR SALE",
+    },
+  ]);
+  assert(cards.includes("listing-card"), "render listing cards html");
+  console.log("  browse query: OK");
+}
+
 function testSocialUrlPatch() {
   const parsed = agentPageSettingsPatchSchema.safeParse({
     publicWebsite: "https://example.com",
@@ -643,6 +686,9 @@ function testHtml() {
       status: "Active",
       listingLabel: "FOR SALE",
     }],
+    browseTotal: 1,
+    browseHasMore: false,
+    browsePageSize: 24,
   });
   assert(html.includes("Test Agent"), "name in html");
   assert(html.includes("agent-profile-col"), "profile column layout");
@@ -655,7 +701,9 @@ function testHtml() {
   assert(!html.includes("browse-filter-debug"), "no browse debug panel on public page");
   assert(!html.includes("[REMOVEME]"), "no REMOVEME debug blocks");
   assert(!html.includes('id="browse-debug"'), "no SSR browse debug json");
-  assert(html.includes("filterDollarsToCents"), "client converts filter dollars to cents");
+  assert(html.includes("fetchBrowseListings"), "server-side browse fetch");
+  assert(html.includes("btn-browse-load-more"), "load more button");
+  assert(html.includes("/listings?"), "browse listings API path");
   assert(html.includes("Max price ($)"), "max price labeled in dollars");
   assert(html.includes("agent-social"), "social links row");
   assert(html.includes('aria-label="Website"'), "website icon first when url set");
@@ -687,6 +735,9 @@ function testHtml() {
     preferredLeadCapture: "webchat",
     showHomeValueCta: false,
     listings: [],
+    browseTotal: 0,
+    browseHasMore: false,
+    browsePageSize: 24,
   });
   assert(!emptyLinksHtml.includes('class="agent-social"'), "no social row when all links empty");
   assert(!emptyLinksHtml.includes('class="agent-social-link"'), "no social icon anchors when all links empty");
@@ -729,6 +780,7 @@ async function main() {
   testBrowseFilters();
   testBrowseFilterFunnel();
   testListingDisplayHelpers();
+  testBrowseQuerySchema();
   testSocialUrlPatch();
   testHtml();
   console.log("\nAll tests passed.");

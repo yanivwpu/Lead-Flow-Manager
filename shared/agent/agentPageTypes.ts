@@ -47,4 +47,8 @@ export type PublicAgentPageRenderInput = {
   showHomeValueCta: boolean;
   agentPageSlug: string;
   listings: AgentPageListingCard[];
+  /** Total listings matching current browse filters (server-side). */
+  browseTotal: number;
+  browseHasMore: boolean;
+  browsePageSize: number;
 };

@@ -1,31 +1,26 @@
 import type { AgentPageSettingsResponse } from "@shared/agent/agentPageSchema";
-import type { AgentPageListingCard, PublicAgentPageRenderInput } from "@shared/agent/agentPageTypes";
+import type { PublicAgentPageRenderInput } from "@shared/agent/agentPageTypes";
 import { buildAgentPageUrl } from "@shared/agent/agentPageSlug";
 import { resolveAgentPageBio, resolveAgentPageDisplayName } from "@shared/agent/agentPageProfile";
 import { resolveAgentPageSocialUrls } from "@shared/agent/agentPageSocialUrls";
+import { AGENT_PAGE_BROWSE_PAGE_SIZE } from "@shared/agent/agentPageBrowseConstants";
+import { renderAgentPageListingCards } from "@shared/agent/publicAgentPageHtml";
 import {
-  buildAgentPageListingFullAddress,
-  buildAgentPageListingMetaSummary,
-} from "@shared/agent/agentPageListingDisplay";
-import { buildListingCanonicalShareUrl, pickPrimaryPhotoUrl } from "@shared/inventory/listingViewUrl";
-import { formatListingPriceForComposer } from "@shared/inventory/inventoryComposerDraft";
-import { canShowPublicStreetAddress } from "@shared/inventory/publicListingPublication";
-import {
-  resolveFlyerListingLabel,
-  resolveFlyerSpecFields,
-  type PublicListingFlyerListing,
-} from "@shared/inventory/publicListingFlyer";
+  browseAgentPageListings,
+  DEFAULT_AGENT_PAGE_BROWSE_FILTERS,
+} from "./agentPageBrowseService";
 import { getCalendlyPublicSchedulingUrl, isUserCalendlyBookingConnected } from "../calendlyBookingConnected";
 import { resolveRgeCustomerSchedulingUrl } from "../rgeCustomerSchedulingUrl";
 import { storage } from "../storage";
 import { getListingPublicationStats } from "../inventory/inventoryDb";
 import {
-  fetchPublishedListingsForAgentPage,
   getAgentPageSettingsRow,
   incrementAgentPageAnalytics,
   resolveAgentPageBySlug,
   type AgentPageKnowledgeRow,
 } from "./agentPageDb";
+
+export { inventoryListingToAgentPageCard } from "./agentPageListingCard";
 
 function str(value: string | null | undefined): string {
   return (value || "").trim();
@@ -109,88 +104,6 @@ export type PublicAgentPageData = PublicAgentPageRenderInput & {
   pageUrl: string;
 };
 
-function listingToCard(
-  listing: Awaited<ReturnType<typeof fetchPublishedListingsForAgentPage>>[number],
-  appOrigin: string,
-): AgentPageListingCard {
-  const flyerListing: PublicListingFlyerListing = {
-    id: listing.id,
-    priceCents: listing.priceCents,
-    beds: listing.beds != null ? Number(listing.beds) : null,
-    baths: listing.baths != null ? Number(listing.baths) : null,
-    squareFeet: listing.squareFeet,
-    yearBuilt: listing.yearBuilt,
-    hoaFeeCents: listing.hoaFeeCents,
-    propertyType: listing.propertyType,
-    propertySubtype: listing.propertySubtype,
-    description: listing.description,
-    features: Array.isArray(listing.features) ? listing.features.map(String) : [],
-    photos: Array.isArray(listing.photos) ? (listing.photos as { url: string }[]) : [],
-    addressLine1: listing.addressLine1,
-    addressLine2: listing.addressLine2,
-    city: listing.city,
-    state: listing.state,
-    zip: listing.zip,
-    latitude: listing.latitude,
-    longitude: listing.longitude,
-    status: listing.status,
-    providerListingId: listing.providerListingId,
-    listingDetails: (listing.listingDetails || {}) as PublicListingFlyerListing["listingDetails"],
-    listingCompliance: listing.listingCompliance,
-  };
-
-  const allowStreet = canShowPublicStreetAddress(listing.listingCompliance);
-  const street = allowStreet
-    ? [listing.addressLine1, listing.addressLine2].filter(Boolean).join(", ") || null
-    : null;
-  const cityState = [listing.city, listing.state].filter(Boolean).join(", ");
-  const { sqft } = resolveFlyerSpecFields(flyerListing);
-  const bedsNum = listing.beds != null ? Number(listing.beds) : null;
-  const bathsNum = listing.baths != null ? Number(listing.baths) : null;
-  const beds =
-    bedsNum != null && Number.isFinite(bedsNum)
-      ? `${bedsNum % 1 === 0 ? Math.round(bedsNum) : bedsNum} bed`
-      : null;
-  const baths =
-    bathsNum != null && Number.isFinite(bathsNum)
-      ? `${bathsNum % 1 === 0 ? Math.round(bathsNum) : bathsNum} bath`
-      : null;
-  const sqftNum = listing.squareFeet ?? null;
-  const price = formatListingPriceForComposer(listing.priceCents) || "Price on request";
-  const fullAddress = buildAgentPageListingFullAddress({
-    street,
-    city: listing.city,
-    state: listing.state,
-    zip: listing.zip,
-  });
-  const metaSummary = buildAgentPageListingMetaSummary({ price, beds, baths, sqft });
-
-  return {
-    id: listing.id,
-    shareUrl: buildListingCanonicalShareUrl(
-      { listingId: listing.id, publicSlug: listing.publicSlug },
-      appOrigin,
-    ),
-    imageUrl: pickPrimaryPhotoUrl(flyerListing.photos),
-    street,
-    fullAddress,
-    metaSummary,
-    cityState,
-    price,
-    priceCents: listing.priceCents ?? null,
-    beds,
-    baths,
-    sqft,
-    bedsNum: Number.isFinite(bedsNum) ? bedsNum : null,
-    bathsNum: Number.isFinite(bathsNum) ? bathsNum : null,
-    sqftNum,
-    propertyType: listing.propertyType ?? null,
-    propertySubtype: listing.propertySubtype ?? null,
-    status: listing.status === "coming_soon" ? "Coming Soon" : "Active",
-    listingLabel: resolveFlyerListingLabel(flyerListing),
-  };
-}
-
 export async function getPublicAgentPageData(
   slug: string,
   appOrigin: string,
@@ -205,8 +118,14 @@ export async function getPublicAgentPageData(
   const user = await storage.getUser(agent.userId);
   const widgetEnabled = mergeWidgetEnabled(user?.widgetSettings);
 
-  const listingsRaw = await fetchPublishedListingsForAgentPage(agent.userId);
-  const listings = listingsRaw.map((l) => listingToCard(l, appOrigin));
+  const browse = await browseAgentPageListings({
+    userId: agent.userId,
+    appOrigin,
+    filters: DEFAULT_AGENT_PAGE_BROWSE_FILTERS,
+    offset: 0,
+    limit: AGENT_PAGE_BROWSE_PAGE_SIZE,
+    renderHtml: renderAgentPageListingCards,
+  });
 
   const displayName = resolveAgentPageDisplayName(agent, user?.name);
   const bio = resolveAgentPageBio(agent);
@@ -232,6 +151,9 @@ export async function getPublicAgentPageData(
     widgetEnabled,
     preferredLeadCapture: (agent.agentPagePreferredLeadCapture as "webchat" | "email" | "phone") || "webchat",
     showHomeValueCta: agent.agentPageShowHomeValueCta,
-    listings,
+    listings: browse.listings,
+    browseTotal: browse.total,
+    browseHasMore: browse.hasMore,
+    browsePageSize: AGENT_PAGE_BROWSE_PAGE_SIZE,
   };
 }

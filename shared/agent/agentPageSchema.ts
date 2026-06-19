@@ -103,3 +103,46 @@ export const publicAgentAnalyticsBodySchema = z.object({
   ]),
   listingId: z.string().uuid().optional(),
 });
+
+const optionalBrowseNumber = z.preprocess((value) => {
+  if (value === undefined || value === null || value === "") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}, z.number().nonnegative().optional());
+
+const optionalBrowsePropertyType = z.preprocess((value) => {
+  if (value === undefined || value === null || value === "") return null;
+  return value;
+}, z.enum(["house", "condo", "townhouse", "multi_family", "land", "other"]).nullable());
+
+export const publicAgentBrowseQuerySchema = z.object({
+  listingType: z.enum(["all", "sale", "rent", "coming_soon"]).default("all"),
+  location: z.string().max(200).optional(),
+  minPrice: optionalBrowseNumber,
+  maxPrice: optionalBrowseNumber,
+  minBeds: optionalBrowseNumber,
+  minBaths: optionalBrowseNumber,
+  minSqft: optionalBrowseNumber,
+  propertyType: optionalBrowsePropertyType,
+  sort: z.enum(["newest", "price_desc", "price_asc"]).default("newest"),
+  offset: z.preprocess((value) => {
+    const n = Number(value ?? 0);
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+  }, z.number().int().nonnegative()),
+  limit: z.preprocess((value) => {
+    const n = Number(value ?? 24);
+    if (!Number.isFinite(n) || n < 1) return 24;
+    return Math.min(48, Math.floor(n));
+  }, z.number().int().min(1).max(48)),
+});
+
+export type PublicAgentBrowseQuery = z.infer<typeof publicAgentBrowseQuerySchema>;
+
+export type PublicAgentBrowseListingsResponse = {
+  listings: import("./agentPageTypes").AgentPageListingCard[];
+  html: string;
+  total: number;
+  offset: number;
+  limit: number;
+  hasMore: boolean;
+};

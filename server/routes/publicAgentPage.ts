@@ -1,11 +1,13 @@
 import type { Express, Request, Response } from "express";
-import { publicAgentAnalyticsBodySchema, publicAgentLeadBodySchema } from "@shared/agent/agentPageSchema";
+import { publicAgentAnalyticsBodySchema, publicAgentBrowseQuerySchema, publicAgentLeadBodySchema } from "@shared/agent/agentPageSchema";
 import {
   buildPublicAgentPageHtml,
   buildPublicAgentPageNotFoundHtml,
+  renderAgentPageListingCards,
 } from "@shared/agent/publicAgentPageHtml";
 import { getRequestOrigin } from "../urlOrigins";
 import { getPublicAgentPageData } from "../agentPage/agentPageService";
+import { browseAgentPageListings, browseQueryToFilters } from "../agentPage/agentPageBrowseService";
 import { processPublicAgentPageLead } from "../agentPage/publicAgentPageLeadService";
 import { incrementAgentPageAnalytics, resolveAgentPageBySlug } from "../agentPage/agentPageDb";
 import { requirePublicListingSchemaReady } from "../middleware/requirePublicListingSchemaReady";
@@ -32,6 +34,33 @@ export function registerPublicAgentPageRoutes(app: Express): void {
         error: error instanceof Error ? error.message : String(error),
       });
       res.status(500).type("text/plain").send("Page unavailable");
+    }
+  });
+
+  app.get("/api/public/agents/:slug/listings", requirePublicListingSchemaReady, async (req: Request, res: Response) => {
+    try {
+      const slug = req.params.slug?.trim() ?? "";
+      const parsed = publicAgentBrowseQuerySchema.safeParse(req.query ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid query", details: parsed.error.flatten() });
+      }
+      const agent = await resolveAgentPageBySlug(slug);
+      if (!agent) return res.status(404).json({ error: "Not found" });
+
+      const appOrigin = getRequestOrigin(req);
+      const filters = browseQueryToFilters(parsed.data);
+      const result = await browseAgentPageListings({
+        userId: agent.userId,
+        appOrigin,
+        filters,
+        offset: parsed.data.offset,
+        limit: parsed.data.limit,
+        renderHtml: renderAgentPageListingCards,
+      });
+      res.json(result);
+    } catch (error) {
+      console.error("[public-agent-page] browse listings failed", error);
+      res.status(500).json({ error: "Browse failed" });
     }
   });
 

@@ -42,6 +42,7 @@ export function listingCardToBrowseInput(
     baths: card.bathsNum,
     sqft: card.sqftNum,
     propertyType: card.propertyType,
+    propertySubtype: card.propertySubtype,
     sortIndex,
   };
 }
@@ -101,7 +102,7 @@ export function computeAgentPageBrowseFilterFunnel(
   });
   const afterPropertyType = afterSqft.filter((l) => {
     if (!filters.propertyType) return true;
-    return normalizePropertyTypeForFilter(l.propertyType) === filters.propertyType;
+    return normalizePropertyTypeForFilter(l.propertyType, l.propertySubtype) === filters.propertyType;
   });
   const finalCount = inputs.filter((l) => listingMatchesAgentPageBrowseFilters(l, filters)).length;
 

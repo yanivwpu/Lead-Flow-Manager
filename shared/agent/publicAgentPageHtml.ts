@@ -109,6 +109,10 @@ function listingCardHtml(card: AgentPageListingCard, index: number): string {
   </article>`;
 }
 
+export function renderAgentPageListingCards(cards: AgentPageListingCard[], startIndex = 0): string {
+  return cards.map((card, index) => listingCardHtml(card, startIndex + index)).join("");
+}
+
 export function buildPublicAgentPageNotFoundHtml(): string {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Agent not found</title></head><body style="font-family:system-ui,sans-serif;text-align:center;padding:4rem"><h1>Page not found</h1><p>This agent page is not available.</p></body></html>`;
 }
@@ -132,7 +136,8 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           ? "Let's Chat"
           : "Send a message";
 
-  const cards = data.listings.map((listing, index) => listingCardHtml(listing, index)).join("");
+  const cards = renderAgentPageListingCards(data.listings);
+  const showEmptyInventory = data.browseTotal === 0;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -197,6 +202,9 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .browse-panel-actions { display: none; margin-top: 10px; justify-content: flex-end; gap: 8px; }
     .browse-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 0.875rem; display: none; margin-bottom: 8px; }
     .browse-empty.show { display: block; }
+    .browse-load-more-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 16px 0 8px; }
+    .browse-load-more-wrap[hidden] { display: none !important; }
+    .browse-results-count { margin: 0; font-size: 0.8125rem; color: var(--muted); }
     @media (max-width: 1023px) {
       .browse-panel-advanced { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     }
@@ -358,9 +366,13 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           <button type="button" class="btn btn-sm btn-primary" id="btn-filters-apply">Apply</button>
         </div>
       </div>
-      <div class="browse-empty" id="browse-empty">No listings match your filters.</div>
+      <div class="browse-empty" id="browse-empty" hidden>No listings match your filters.</div>
       <div class="listings-grid" id="listings-grid">
-        ${cards || '<div class="empty-listings">No published listings yet.</div>'}
+        ${showEmptyInventory ? '<div class="empty-listings">No published listings yet.</div>' : cards}
+      </div>
+      <div class="browse-load-more-wrap" id="browse-load-more-wrap" ${data.browseHasMore ? "" : "hidden"}>
+        <button type="button" class="btn btn-outline" id="btn-browse-load-more">Load more</button>
+        <p class="browse-results-count" id="browse-results-count">${data.browseTotal > 0 ? `Showing ${data.listings.length} of ${data.browseTotal}` : ""}</p>
       </div>
     </section>
     <footer class="site-footer">Powered by WhachatCRM</footer>
@@ -424,6 +436,10 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     publicPhone: data.publicPhone,
     chatPrefill: "Hi, I'd like to connect with you about real estate.",
     browseFilterDebug: process.env.NODE_ENV === "development",
+    browsePageSize: data.browsePageSize,
+    browseTotal: data.browseTotal,
+    browseLoaded: data.listings.length,
+    browseHasMore: data.browseHasMore,
   }).replace(/</g, "\\u003c")}</script>
   <script>
     (function () {
@@ -692,93 +708,94 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       function textVal(id) {
         var el = document.getElementById(id);
         if (!el) return "";
-        return String(el.value || "").trim().toLowerCase();
+        return String(el.value || "").trim();
       }
 
-      function filterDollarsToCents(dollars) {
-        return Math.round(dollars * 100);
+      var browseLoaded = config.browseLoaded || 0;
+      var browseTotal = config.browseTotal || 0;
+      var browsePageSize = config.browsePageSize || 24;
+      var browseLoading = false;
+
+      function setBrowseLoading(loading) {
+        browseLoading = loading;
+        if (grid) grid.setAttribute("aria-busy", loading ? "true" : "false");
+        var loadBtn = document.getElementById("btn-browse-load-more");
+        if (loadBtn) loadBtn.disabled = loading;
       }
 
-      function cardMatches(card) {
-        var label = card.getAttribute("data-label");
-        var status = card.getAttribute("data-status");
-        var showType = listingType === "all"
-          || (listingType === "coming_soon" && status === "Coming Soon")
-          || (listingType === "rent" && label === "FOR RENT" && status !== "Coming Soon")
-          || (listingType === "sale" && label === "FOR SALE" && status !== "Coming Soon");
-        if (!showType) return false;
-
-        var locationQuery = textVal("filter-location");
-        if (locationQuery) {
-          var cityState = (card.getAttribute("data-city-state") || "").toLowerCase();
-          if (cityState.indexOf(locationQuery) === -1) return false;
+      function updateBrowseUi() {
+        var wrap = document.getElementById("browse-load-more-wrap");
+        var countEl = document.getElementById("browse-results-count");
+        var hasMore = browseLoaded < browseTotal;
+        if (wrap) wrap.hidden = !hasMore || browseTotal === 0;
+        if (countEl) {
+          countEl.textContent = browseTotal > 0
+            ? "Showing " + browseLoaded + " of " + browseTotal
+            : "";
         }
-
-        var price = card.getAttribute("data-price-cents");
-        var priceNum = price ? Number(price) : null;
-        var minPrice = numVal("filter-min-price");
-        var maxPrice = numVal("filter-max-price");
-        if (minPrice != null && (priceNum == null || priceNum < filterDollarsToCents(minPrice))) return false;
-        if (maxPrice != null && (priceNum == null || priceNum > filterDollarsToCents(maxPrice))) return false;
-
-        var beds = card.getAttribute("data-beds");
-        var bedsNum = beds ? Number(beds) : null;
-        var minBeds = numVal("filter-beds");
-        if (minBeds != null && (bedsNum == null || bedsNum < minBeds)) return false;
-
-        var baths = card.getAttribute("data-baths");
-        var bathsNum = baths ? Number(baths) : null;
-        var minBaths = numVal("filter-baths");
-        if (minBaths != null && (bathsNum == null || bathsNum < minBaths)) return false;
-
-        var sqft = card.getAttribute("data-sqft");
-        var sqftNum = sqft ? Number(sqft) : null;
-        var minSqft = numVal("filter-min-sqft");
-        if (minSqft != null && (sqftNum == null || sqftNum < minSqft)) return false;
-
-        var propType = document.getElementById("filter-property-type");
-        var wantedType = propType && propType.value ? propType.value : "";
-        if (wantedType && card.getAttribute("data-property-type") !== wantedType) return false;
-
-        return true;
+        if (emptyMsg) emptyMsg.hidden = browseTotal !== 0;
       }
 
-      function sortCards(cards) {
+      function buildBrowseQueryParams(offset) {
+        var params = new URLSearchParams();
+        params.set("listingType", listingType);
+        params.set("offset", String(offset));
+        params.set("limit", String(browsePageSize));
+        var location = textVal("filter-location");
+        if (location) params.set("location", location);
+        var minPrice = numVal("filter-min-price");
+        if (minPrice != null) params.set("minPrice", String(minPrice));
+        var maxPrice = numVal("filter-max-price");
+        if (maxPrice != null) params.set("maxPrice", String(maxPrice));
+        var minBeds = numVal("filter-beds");
+        if (minBeds != null) params.set("minBeds", String(minBeds));
+        var minBaths = numVal("filter-baths");
+        if (minBaths != null) params.set("minBaths", String(minBaths));
+        var minSqft = numVal("filter-min-sqft");
+        if (minSqft != null) params.set("minSqft", String(minSqft));
+        var propTypeEl = document.getElementById("filter-property-type");
+        if (propTypeEl && propTypeEl.value) params.set("propertyType", propTypeEl.value);
         var sortEl = document.getElementById("filter-sort");
-        var sort = sortEl ? sortEl.value : "newest";
-        return cards.sort(function (a, b) {
-          if (sort === "newest") {
-            return Number(a.getAttribute("data-sort-index")) - Number(b.getAttribute("data-sort-index"));
-          }
-          var pa = Number(a.getAttribute("data-price-cents")) || -1;
-          var pb = Number(b.getAttribute("data-price-cents")) || -1;
-          return sort === "price_desc" ? pb - pa : pa - pb;
-        });
+        if (sortEl && sortEl.value) params.set("sort", sortEl.value);
+        return params;
+      }
+
+      function fetchBrowseListings(append) {
+        if (!grid || browseLoading) return Promise.resolve();
+        setBrowseLoading(true);
+        var offset = append ? browseLoaded : 0;
+        var url = "/api/public/agents/" + encodeURIComponent(config.slug) + "/listings?"
+          + buildBrowseQueryParams(offset).toString();
+        return fetch(url)
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (res) {
+            if (!res.ok) throw new Error(res.j.error || "Failed to load listings");
+            if (append) {
+              if (res.j.html) grid.insertAdjacentHTML("beforeend", res.j.html);
+            } else {
+              grid.innerHTML = res.j.html || "";
+            }
+            browseLoaded = offset + (res.j.listings ? res.j.listings.length : 0);
+            browseTotal = res.j.total || 0;
+            updateBrowseUi();
+            if (config.browseFilterDebug) {
+              console.log("[Agent Page browse]", { browseLoaded: browseLoaded, browseTotal: browseTotal, append: append });
+            }
+          })
+          .catch(function (err) { showToast(err.message || "Failed to load listings"); })
+          .finally(function () { setBrowseLoading(false); });
       }
 
       function applyBrowseFilters() {
-        if (!grid) return;
-        var cards = Array.prototype.slice.call(grid.querySelectorAll(".listing-card"));
-        var visible = 0;
-        cards.forEach(function (card) {
-          var show = cardMatches(card);
-          card.hidden = !show;
-          if (show) visible += 1;
-        });
-        sortCards(cards.filter(function (c) { return !c.hidden; })).forEach(function (card) {
-          grid.appendChild(card);
-        });
-        if (emptyMsg) emptyMsg.classList.toggle("show", cards.length > 0 && visible === 0);
-        if (config.browseFilterDebug) {
-          console.log("[Agent Page browse debug]", {
-            visible: visible,
-            total: cards.length,
-            listingType: listingType,
-            maxPrice: numVal("filter-max-price"),
-            minPrice: numVal("filter-min-price"),
-          });
-        }
+        fetchBrowseListings(false);
       }
+
+      var loadMoreBtn = document.getElementById("btn-browse-load-more");
+      if (loadMoreBtn) {
+        loadMoreBtn.addEventListener("click", function () { fetchBrowseListings(true); });
+      }
+
+      updateBrowseUi();
 
       document.querySelectorAll(".chip[data-filter]").forEach(function (chip) {
         chip.addEventListener("click", function () {
