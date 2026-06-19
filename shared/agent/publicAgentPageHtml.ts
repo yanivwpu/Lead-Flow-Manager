@@ -117,6 +117,17 @@ export function buildPublicAgentPageNotFoundHtml(): string {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Agent not found</title></head><body style="font-family:system-ui,sans-serif;text-align:center;padding:4rem"><h1>Page not found</h1><p>This agent page is not available.</p></body></html>`;
 }
 
+/** Matches SiteFooter / Sidebar: green rounded square with white W. */
+function renderWhachatLogoMark(): string {
+  return `<span class="whachat-logo-mark" aria-hidden="true">W</span>`;
+}
+
+export function formatBrowseResultsSummary(loaded: number, total: number): string {
+  if (total <= 0) return "";
+  if (loaded < total) return `Showing ${loaded} of ${total} listings`;
+  return `${total} listing${total === 1 ? "" : "s"} found`;
+}
+
 export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): string {
   const slug = data.agentPageSlug || "";
   const bioHtml = data.bio
@@ -138,6 +149,9 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
 
   const cards = renderAgentPageListingCards(data.listings);
   const showEmptyInventory = data.browseTotal === 0;
+  const browseResultsSummary = formatBrowseResultsSummary(data.listings.length, data.browseTotal);
+  const browseRemaining = data.browseHasMore ? Math.max(0, data.browseTotal - data.listings.length) : 0;
+  const chatWidgetClass = data.widgetEnabled ? "chat-widget enabled" : "chat-widget";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -202,9 +216,15 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .browse-panel-actions { display: none; margin-top: 10px; justify-content: flex-end; gap: 8px; }
     .browse-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 0.875rem; display: none; margin-bottom: 8px; }
     .browse-empty.show { display: block; }
-    .browse-load-more-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 16px 0 8px; }
+    .browse-results-count { margin: 4px 0 8px; font-size: 0.8125rem; color: var(--muted); }
+    .browse-results-count:empty { display: none; }
+    .browse-load-more-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 16px 0 8px; }
     .browse-load-more-wrap[hidden] { display: none !important; }
-    .browse-results-count { margin: 0; font-size: 0.8125rem; color: var(--muted); }
+    .browse-remaining-count { margin: 0; font-size: 0.75rem; color: var(--muted); }
+    .browse-remaining-count:empty { display: none; }
+    .browse-back-to-top { font-size: 0.8125rem; color: var(--brand); text-decoration: none; }
+    .browse-back-to-top:hover { text-decoration: underline; }
+    .browse-back-to-top[hidden] { display: none !important; }
     @media (max-width: 1023px) {
       .browse-panel-advanced { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     }
@@ -250,7 +270,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .chat-widget.open { pointer-events: none; }
     .chat-widget-scrim { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.08); pointer-events: auto; }
     .chat-widget.open:not(.minimized) .chat-panel { pointer-events: auto; }
-    .chat-widget.minimized .chat-bubble { pointer-events: auto; }
+    .chat-widget.enabled.minimized .chat-bubble { pointer-events: auto; }
     .chat-panel { position: fixed; bottom: 24px; right: 24px; z-index: 112; background: #fff; border-radius: 12px; width: min(400px, calc(100vw - 48px)); height: min(560px, calc(100vh - 48px)); max-height: 600px; box-shadow: 0 12px 40px rgba(15,23,42,0.18); border: 1px solid var(--border); display: none; flex-direction: column; overflow: hidden; }
     .chat-widget.open:not(.minimized) .chat-panel { display: flex; }
     .chat-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 0.9375rem; background: #fff; flex-shrink: 0; }
@@ -258,10 +278,11 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .chat-panel-btn { border: none; background: transparent; font-size: 1.125rem; line-height: 1; cursor: pointer; color: var(--muted); padding: 6px 8px; border-radius: 6px; min-width: 32px; }
     .chat-panel-btn:hover { background: #f1f5f9; color: var(--ink); }
     .chat-panel iframe { flex: 1; width: 100%; border: none; min-height: 0; display: block; }
-    .chat-bubble { position: fixed; bottom: 24px; right: 24px; z-index: 112; width: 56px; height: 56px; border-radius: 999px; border: none; background: var(--brand); color: #fff; cursor: pointer; display: none; align-items: center; justify-content: center; box-shadow: 0 6px 20px rgba(5,150,105,0.35); transition: transform 0.15s, box-shadow 0.15s; }
-    .chat-bubble:hover { transform: scale(1.04); box-shadow: 0 8px 24px rgba(5,150,105,0.4); }
-    .chat-bubble svg { width: 26px; height: 26px; display: block; }
-    .chat-widget.minimized .chat-bubble { display: flex; }
+    .chat-bubble { position: fixed; bottom: 24px; right: 24px; z-index: 112; border: none; background: var(--brand); color: #fff; cursor: pointer; display: none; align-items: center; justify-content: center; padding: 12px 18px; border-radius: 999px; font: inherit; font-size: 0.875rem; font-weight: 600; box-shadow: 0 6px 20px rgba(5,150,105,0.35); transition: transform 0.15s, box-shadow 0.15s; }
+    .chat-bubble:hover { transform: scale(1.02); box-shadow: 0 8px 24px rgba(5,150,105,0.4); }
+    .chat-widget.enabled:not(.open) .chat-bubble,
+    .chat-widget.enabled.minimized .chat-bubble { display: flex; }
+    .chat-widget.open:not(.minimized) .chat-bubble { display: none; }
     @media (max-width: 639px) {
       .chat-widget.open:not(.minimized) .chat-widget-scrim { display: block; }
       .chat-widget.open:not(.minimized) .chat-panel { bottom: 0; right: 0; left: 0; width: 100%; max-width: none; height: min(92vh, 600px); max-height: none; border-radius: 16px 16px 0 0; border-bottom: none; }
@@ -270,6 +291,8 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 0.875rem; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 200; }
     .toast.show { opacity: 1; }
     .site-footer { margin-top: 32px; text-align: center; font-size: 0.75rem; color: #94a3b8; }
+    .site-footer-brand { display: inline-flex; align-items: center; gap: 6px; }
+    .whachat-logo-mark { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; background: var(--brand); border-radius: 4px; color: #fff; font-weight: 700; font-size: 0.6875rem; line-height: 1; flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -302,6 +325,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
             <span class="toggle-label-mobile">Filters</span>
           </button>
         </div>
+        <p class="browse-results-count" id="browse-results-count">${browseResultsSummary}</p>
       </div>
       <div class="browse-panel-backdrop" id="browse-panel-backdrop" aria-hidden="true"></div>
       <div class="browse-panel" id="browse-panel" hidden>
@@ -371,11 +395,14 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         ${showEmptyInventory ? '<div class="empty-listings">No published listings yet.</div>' : cards}
       </div>
       <div class="browse-load-more-wrap" id="browse-load-more-wrap" ${data.browseHasMore ? "" : "hidden"}>
-        <button type="button" class="btn btn-outline" id="btn-browse-load-more">Load more</button>
-        <p class="browse-results-count" id="browse-results-count">${data.browseTotal > 0 ? `Showing ${data.listings.length} of ${data.browseTotal}` : ""}</p>
+        <button type="button" class="btn btn-outline" id="btn-browse-load-more">Load ${data.browsePageSize} more listings</button>
+        <p class="browse-remaining-count" id="browse-remaining-count">${browseRemaining > 0 ? `${browseRemaining} remaining` : ""}</p>
+        <a href="#" class="browse-back-to-top" id="browse-back-to-top" hidden>Back to top</a>
       </div>
     </section>
-    <footer class="site-footer">Powered by WhachatCRM</footer>
+    <footer class="site-footer">
+      <span class="site-footer-brand">${renderWhachatLogoMark()}<span>Powered by WhachatCRM</span></span>
+    </footer>
   </div>
 
   <div class="modal-backdrop" id="modal-backdrop" aria-hidden="true">
@@ -408,10 +435,10 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       </form>
     </div>
   </div>
-  <div class="chat-widget" id="chat-widget" aria-hidden="true">
+  <div class="${chatWidgetClass}" id="chat-widget" aria-hidden="true">
     <div class="chat-widget-scrim" id="chat-widget-scrim" aria-hidden="true"></div>
     <button type="button" class="chat-bubble" id="chat-bubble" aria-label="Let's Chat">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+      <span class="chat-bubble-label">Let's Chat</span>
     </button>
     <div class="chat-panel" id="chat-panel" role="dialog" aria-modal="false" aria-label="Web chat">
       <div class="chat-panel-header">
@@ -726,14 +753,42 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       function updateBrowseUi() {
         var wrap = document.getElementById("browse-load-more-wrap");
         var countEl = document.getElementById("browse-results-count");
+        var loadBtn = document.getElementById("btn-browse-load-more");
+        var remainingEl = document.getElementById("browse-remaining-count");
         var hasMore = browseLoaded < browseTotal;
         if (wrap) wrap.hidden = !hasMore || browseTotal === 0;
         if (countEl) {
           countEl.textContent = browseTotal > 0
-            ? "Showing " + browseLoaded + " of " + browseTotal
+            ? (browseLoaded < browseTotal
+              ? "Showing " + browseLoaded + " of " + browseTotal + " listings"
+              : browseTotal + (browseTotal === 1 ? " listing" : " listings") + " found")
             : "";
         }
+        if (loadBtn && hasMore) {
+          loadBtn.textContent = "Load " + browsePageSize + " more listings";
+        }
+        if (remainingEl) {
+          remainingEl.textContent = hasMore ? (browseTotal - browseLoaded) + " remaining" : "";
+        }
+        updateBackToTopVisibility();
         if (emptyMsg) emptyMsg.hidden = browseTotal !== 0;
+      }
+
+      function updateBackToTopVisibility() {
+        var backToTop = document.getElementById("browse-back-to-top");
+        if (!backToTop) return;
+        var show = browseLoaded > browsePageSize || window.scrollY > 400;
+        backToTop.hidden = !show;
+      }
+
+      window.addEventListener("scroll", updateBackToTopVisibility, { passive: true });
+
+      var backToTopEl = document.getElementById("browse-back-to-top");
+      if (backToTopEl) {
+        backToTopEl.addEventListener("click", function (e) {
+          e.preventDefault();
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
       }
 
       function buildBrowseQueryParams(offset) {

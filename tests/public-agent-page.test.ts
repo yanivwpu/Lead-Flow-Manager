@@ -703,6 +703,14 @@ function testHtml() {
   assert(!html.includes('id="browse-debug"'), "no SSR browse debug json");
   assert(html.includes("fetchBrowseListings"), "server-side browse fetch");
   assert(html.includes("btn-browse-load-more"), "load more button");
+  assert(html.includes("Load 24 more listings"), "load more copy uses page size");
+  assert(html.includes("browse-results-count"), "results count near filters");
+  assert(html.includes("1 listing found"), "results summary when all loaded");
+  assert(html.includes("browse-back-to-top"), "back to top link");
+  assert(html.includes("browse-remaining-count"), "remaining count element");
+  assert(html.includes("whachat-logo-mark"), "footer WhachatCRM logo mark");
+  assert(html.includes("site-footer-brand"), "footer branding row");
+  assert(html.includes("Powered by WhachatCRM"), "footer powered by text");
   assert(html.includes("/listings?"), "browse listings API path");
   assert(html.includes("Max price ($)"), "max price labeled in dollars");
   assert(html.includes("agent-social"), "social links row");
@@ -748,7 +756,9 @@ function testHtml() {
   assert(html.includes("modal-listing-context"), "listing context in lead modal");
   assert(html.includes("Let's Chat"), "web chat primary button label");
   assert(html.includes("chat-widget"), "docked chat widget");
-  assert(html.includes("chat-bubble"), "minimized chat bubble");
+  assert(html.includes("chat-bubble"), "floating chat bubble");
+  assert(html.includes("chat-bubble-label"), "floating chat CTA label");
+  assert(html.includes('class="chat-widget enabled"'), "chat enabled when widget on");
   assert(html.includes("chat-minimize"), "chat minimize button");
   assert(html.includes("widget-frame"), "widget iframe embed");
   assert(html.includes("source=agent_page"), "agent page webchat source param");
