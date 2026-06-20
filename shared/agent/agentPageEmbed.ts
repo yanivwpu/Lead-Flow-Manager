@@ -34,19 +34,37 @@ export function parseAgentPageEmbedQuery(query: Record<string, unknown>): {
   return { embedMode, initialListingType, hideChat };
 }
 
+export function buildAgentPageEmbedUrl(input: {
+  slug: string;
+  appOrigin: string;
+  listingType?: AgentPageEmbedListingTypeParam;
+  /** Default true — parent site owns the chat CTA when embedding listings. */
+  hideChat?: boolean;
+}): string {
+  const base = buildAgentPageUrl(input.slug, input.appOrigin);
+  const params = new URLSearchParams({ embed: "1" });
+  const listingType = input.listingType ?? "all";
+  if (listingType === "for_sale") params.set("listingType", "for_sale");
+  if (listingType === "for_rent") params.set("listingType", "for_rent");
+  if (input.hideChat !== false) params.set("hideChat", "1");
+  return `${base}?${params.toString()}`;
+}
+
 export function buildAgentPageEmbedIframeHtml(input: {
   slug: string;
   appOrigin: string;
   listingType: AgentPageEmbedListingTypeParam;
   title: string;
   heightPx?: number;
+  hideChat?: boolean;
 }): string {
   const height = input.heightPx ?? 950;
-  const base = buildAgentPageUrl(input.slug, input.appOrigin);
-  const params = new URLSearchParams({ embed: "1" });
-  if (input.listingType === "for_sale") params.set("listingType", "for_sale");
-  if (input.listingType === "for_rent") params.set("listingType", "for_rent");
-  const src = `${base}?${params.toString()}`;
+  const src = buildAgentPageEmbedUrl({
+    slug: input.slug,
+    appOrigin: input.appOrigin,
+    listingType: input.listingType,
+    hideChat: input.hideChat,
+  });
   return `<iframe
   src="${src}"
   style="width:100%; height:${height}px; border:0; border-radius:16px; background:#fff;"

@@ -675,6 +675,7 @@ function testEmbedMode() {
     title: "Homes for Sale",
   });
   assert(snippet.includes("?embed=1&listingType=for_sale"), "embed iframe sale url");
+  assert(snippet.includes("hideChat=1"), "embed iframe src hides chat by default");
   assert(snippet.includes('title="Homes for Sale"'), "embed iframe title");
 
   const embedHtml = buildPublicAgentPageHtml({
@@ -749,9 +750,12 @@ function testEmbedMode() {
   });
   assert(embedHideChatHtml.includes('body class="embed-mode hide-chat"'), "hide-chat body class");
   assert(embedHideChatHtml.includes('"hideChat":true'), "hideChat config flag");
+  assert(!embedHideChatHtml.includes('id="chat-widget"'), "chat widget omitted when hideChat");
+  assert(!embedHideChatHtml.includes('id="chat-bubble"'), "chat bubble omitted when hideChat");
+  assert(!embedHideChatHtml.includes("chat-bubble-label"), "no Let's Chat bubble label when hideChat");
   assert(
-    embedHideChatHtml.includes("body.embed-mode.hide-chat .chat-widget { display: none !important; }"),
-    "hide-chat css rule",
+    embedHideChatHtml.includes("body.embed-mode.hide-chat .chat-bubble"),
+    "hide-chat css fallback for chat bubble",
   );
   assert(embedHideChatHtml.includes('id="lead-form"'), "lead form preserved in hideChat embed");
   assert(embedHideChatHtml.includes("config.hideChat"), "openChatWidget hideChat fallback");

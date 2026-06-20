@@ -27,7 +27,8 @@ async function renderForQuery(query: Record<string, string>) {
     hasHeader: html.includes('<header class="agent-header"'),
     hasEmbedClass: html.includes('body class="embed-mode"') || html.includes('body class="embed-mode hide-chat"'),
     hideChat,
-    hasHideChatCss: html.includes("body.embed-mode.hide-chat .chat-widget { display: none !important; }"),
+    hasHideChatCss: html.includes("body.embed-mode.hide-chat .chat-bubble"),
+    chatWidgetOmitted: !html.includes('id="chat-widget"'),
     hasChatBubble: html.includes("chat-bubble"),
     hasChatEnabled: html.includes('class="chat-widget enabled"'),
     hasListings: html.includes("listings-grid"),
@@ -82,6 +83,10 @@ async function main() {
         }
         if (!result.hasHideChatCss) {
           console.error("FAIL: embed hideChat missing hide-chat css");
+          process.exit(1);
+        }
+        if (!result.chatWidgetOmitted) {
+          console.error("FAIL: embed hideChat should omit chat widget markup");
           process.exit(1);
         }
       }

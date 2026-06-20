@@ -152,9 +152,10 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   const showEmptyInventory = data.browseTotal === 0;
   const browseResultsSummary = formatBrowseResultsSummary(data.listings.length, data.browseTotal);
   const browseRemaining = data.browseHasMore ? Math.max(0, data.browseTotal - data.listings.length) : 0;
-  const chatWidgetClass = data.widgetEnabled ? "chat-widget enabled" : "chat-widget";
   const embedMode = data.embedMode === true;
   const hideChat = embedMode && data.hideChat === true;
+  const chatWidgetClass =
+    !hideChat && data.widgetEnabled ? "chat-widget enabled" : "chat-widget";
   const initialListingType = data.initialListingType ?? "all";
   const pageTitle = embedMode
     ? "Property Listings"
@@ -327,7 +328,9 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     body.embed-mode .listings-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
     body.embed-mode .site-footer { margin-top: 12px; }
     body.embed-mode .modal-backdrop { padding: 12px; }
-    body.embed-mode.hide-chat .chat-widget { display: none !important; }
+    body.embed-mode.hide-chat .chat-widget,
+    body.embed-mode.hide-chat .chat-bubble,
+    body.embed-mode.hide-chat .chat-panel { display: none !important; visibility: hidden !important; pointer-events: none !important; }
   </style>
 </head>
 <body class="${bodyClass}">
@@ -459,7 +462,9 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       </form>
     </div>
   </div>
-  <div class="${chatWidgetClass}" id="chat-widget" aria-hidden="true">
+  ${hideChat
+    ? ""
+    : `<div class="${chatWidgetClass}" id="chat-widget" aria-hidden="true">
     <div class="chat-widget-scrim" id="chat-widget-scrim" aria-hidden="true"></div>
     <button type="button" class="chat-bubble" id="chat-bubble" aria-label="Let's Chat">
       <span class="chat-bubble-label">Let's Chat</span>
@@ -474,7 +479,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       </div>
       <iframe id="chat-iframe" title="Web chat"></iframe>
     </div>
-  </div>
+  </div>`}
   <div class="toast" id="toast" role="status"></div>
 
   <script type="application/json" id="page-config">${JSON.stringify({
