@@ -154,11 +154,14 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   const browseRemaining = data.browseHasMore ? Math.max(0, data.browseTotal - data.listings.length) : 0;
   const chatWidgetClass = data.widgetEnabled ? "chat-widget enabled" : "chat-widget";
   const embedMode = data.embedMode === true;
+  const hideChat = embedMode && data.hideChat === true;
   const initialListingType = data.initialListingType ?? "all";
   const pageTitle = embedMode
     ? "Property Listings"
     : `${data.displayName} | Real Estate Agent`;
-  const bodyClass = embedMode ? "embed-mode" : "";
+  const bodyClass = [embedMode ? "embed-mode" : "", hideChat ? "hide-chat" : ""]
+    .filter(Boolean)
+    .join(" ");
 
   const agentHeaderHtml = embedMode
     ? ""
@@ -324,6 +327,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     body.embed-mode .listings-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
     body.embed-mode .site-footer { margin-top: 12px; }
     body.embed-mode .modal-backdrop { padding: 12px; }
+    body.embed-mode.hide-chat .chat-widget { display: none !important; }
   </style>
 </head>
 <body class="${bodyClass}">
@@ -488,6 +492,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     browseLoaded: data.listings.length,
     browseHasMore: data.browseHasMore,
     embedMode,
+    hideChat,
     initialListingType,
   }).replace(/</g, "\\u003c")}</script>
   <script>
@@ -638,6 +643,10 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       }
 
       function openChatWidget() {
+        if (config.hideChat) {
+          openModal("message");
+          return;
+        }
         if (!chatWidget || !chatIframe || !config.userId) {
           openModal("message");
           return;

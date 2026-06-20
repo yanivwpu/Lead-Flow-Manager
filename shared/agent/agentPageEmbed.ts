@@ -17,20 +17,21 @@ export function normalizeEmbedListingTypeParam(
   return "all";
 }
 
+function parseTruthyQueryFlag(raw: unknown): boolean {
+  return raw === "1" || raw === 1 || raw === true || raw === "true";
+}
+
 export function parseAgentPageEmbedQuery(query: Record<string, unknown>): {
   embedMode: boolean;
   initialListingType: AgentPageInitialListingChip;
+  hideChat: boolean;
 } {
-  const embedRaw = query.embed;
-  const embedMode =
-    embedRaw === "1" ||
-    embedRaw === 1 ||
-    embedRaw === true ||
-    embedRaw === "true";
+  const embedMode = parseTruthyQueryFlag(query.embed);
   const initialListingType = embedMode
     ? normalizeEmbedListingTypeParam(String(query.listingType ?? ""))
     : "all";
-  return { embedMode, initialListingType };
+  const hideChat = embedMode && parseTruthyQueryFlag(query.hideChat);
+  return { embedMode, initialListingType, hideChat };
 }
 
 export function buildAgentPageEmbedIframeHtml(input: {

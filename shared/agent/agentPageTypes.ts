@@ -53,6 +53,8 @@ export type PublicAgentPageRenderInput = {
   browsePageSize: number;
   /** iframe embed mode — listings browse only */
   embedMode?: boolean;
+  /** Hide floating chat launchers inside an embed (requires embedMode) */
+  hideChat?: boolean;
   /** Initial For Sale / For Rent chip when loaded inside an embed */
   initialListingType?: "all" | "sale" | "rent" | "coming_soon";
 };

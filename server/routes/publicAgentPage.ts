@@ -22,11 +22,12 @@ export function registerPublicAgentPageRoutes(app: Express): void {
     }
     try {
       const appOrigin = getRequestOrigin(req);
-      const { embedMode, initialListingType } = parseAgentPageEmbedQuery(
+      const { embedMode, initialListingType, hideChat } = parseAgentPageEmbedQuery(
         (req.query ?? {}) as Record<string, unknown>,
       );
       const data = await getPublicAgentPageData(slug, appOrigin, {
         embedMode,
+        hideChat,
         initialListingType,
       });
       if (!data) {

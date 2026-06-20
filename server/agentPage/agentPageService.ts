@@ -107,6 +107,7 @@ export type PublicAgentPageData = PublicAgentPageRenderInput & {
 
 export type PublicAgentPageLoadOptions = {
   embedMode?: boolean;
+  hideChat?: boolean;
   initialListingType?: AgentPageInitialListingChip;
 };
 
@@ -169,6 +170,7 @@ export async function getPublicAgentPageData(
     browseHasMore: browse.hasMore,
     browsePageSize: AGENT_PAGE_BROWSE_PAGE_SIZE,
     embedMode: options.embedMode ?? false,
+    hideChat: options.embedMode === true && options.hideChat === true,
     initialListingType,
   };
 }

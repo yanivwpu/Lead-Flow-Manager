@@ -313,6 +313,12 @@ function testAgentPageDbSavePath() {
     join(process.cwd(), "client", "src", "pages", "RealtorGrowthEngine.tsx"),
     "utf8",
   );
+  const agentRoute = readFileSync(
+    join(process.cwd(), "server", "routes", "publicAgentPage.ts"),
+    "utf8",
+  );
+  assert(agentRoute.includes('from "../urlOrigins"'), "agent page route imports urlOrigins");
+  assert(agentRoute.includes("getRequestOrigin"), "agent page route uses getRequestOrigin");
   assert(
     rge.includes("Listings available on your public Agent Page come from connected inventory sources"),
     "inventory helper text below agent page",
@@ -653,6 +659,14 @@ function testEmbedMode() {
     parseAgentPageEmbedQuery({ embed: "1", listingType: "for_rent" }).initialListingType === "rent",
     "for_rent maps to rent chip",
   );
+  assert(
+    parseAgentPageEmbedQuery({ embed: "1", hideChat: "1" }).hideChat,
+    "hideChat=1 with embed",
+  );
+  assert(
+    !parseAgentPageEmbedQuery({ hideChat: "1" }).hideChat,
+    "hideChat ignored without embed",
+  );
   assert(normalizeEmbedListingTypeParam("for_sale") === "sale", "normalize for_sale");
   const snippet = buildAgentPageEmbedIframeHtml({
     slug: "yaniv-test",
@@ -700,6 +714,78 @@ function testEmbedMode() {
   assert(embedHtml.includes("Embedded Agent Page listing card"), "embed listing lead source");
   assert(embedHtml.includes("agent_page_embed"), "embed chat widget source");
   assert(embedHtml.includes('data-filter="sale"'), "sale filter chip");
+  assert(embedHtml.includes('class="chat-widget enabled"'), "embed chat visible by default");
+  assert(embedHtml.includes("chat-bubble"), "embed chat bubble present by default");
+
+  const embedHideChatHtml = buildPublicAgentPageHtml({
+    userId: "u1",
+    agentPageSlug: "embed-agent",
+    displayName: "Embed Agent",
+    bio: "",
+    marketArea: "",
+    brokerageName: "",
+    avatarUrl: null,
+    companyLogo: null,
+    socialLinks: {
+      websiteUrl: "",
+      facebookUrl: "",
+      instagramUrl: "",
+      linkedinUrl: "",
+      youtubeUrl: "",
+    },
+    publicEmail: "",
+    publicPhone: "",
+    schedulingUrl: "",
+    widgetEnabled: true,
+    preferredLeadCapture: "webchat",
+    showHomeValueCta: false,
+    listings: [],
+    browseTotal: 0,
+    browseHasMore: false,
+    browsePageSize: 24,
+    embedMode: true,
+    hideChat: true,
+    initialListingType: "rent",
+  });
+  assert(embedHideChatHtml.includes('body class="embed-mode hide-chat"'), "hide-chat body class");
+  assert(embedHideChatHtml.includes('"hideChat":true'), "hideChat config flag");
+  assert(
+    embedHideChatHtml.includes("body.embed-mode.hide-chat .chat-widget { display: none !important; }"),
+    "hide-chat css rule",
+  );
+  assert(embedHideChatHtml.includes('id="lead-form"'), "lead form preserved in hideChat embed");
+  assert(embedHideChatHtml.includes("config.hideChat"), "openChatWidget hideChat fallback");
+
+  const normalHideChatHtml = buildPublicAgentPageHtml({
+    userId: "u1",
+    agentPageSlug: "normal-agent",
+    displayName: "Normal Agent",
+    bio: "",
+    marketArea: "",
+    brokerageName: "",
+    avatarUrl: null,
+    companyLogo: null,
+    socialLinks: {
+      websiteUrl: "",
+      facebookUrl: "",
+      instagramUrl: "",
+      linkedinUrl: "",
+      youtubeUrl: "",
+    },
+    publicEmail: "",
+    publicPhone: "",
+    schedulingUrl: "",
+    widgetEnabled: true,
+    preferredLeadCapture: "webchat",
+    showHomeValueCta: false,
+    listings: [],
+    browseTotal: 0,
+    browseHasMore: false,
+    browsePageSize: 24,
+    hideChat: true,
+  });
+  assert(normalHideChatHtml.includes('class="chat-widget enabled"'), "normal page chat unchanged when hideChat without embed");
+  assert(!/body class="[^"]*hide-chat/.test(normalHideChatHtml), "no hide-chat body class on normal page");
   console.log("  embed mode: OK");
 }
 
