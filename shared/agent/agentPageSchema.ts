@@ -90,6 +90,8 @@ export const publicAgentLeadBodySchema = z.object({
   source: z.string().max(120).optional(),
   timeline: z.string().max(120).optional(),
   reasonForSelling: z.string().max(1000).optional(),
+  /** Set by public agent page JS when loaded with ?embed=1 */
+  embed: z.boolean().optional(),
 });
 
 export type PublicAgentLeadBody = z.infer<typeof publicAgentLeadBodySchema>;
@@ -115,8 +117,17 @@ const optionalBrowsePropertyType = z.preprocess((value) => {
   return value;
 }, z.enum(["house", "condo", "townhouse", "multi_family", "land", "other"]).nullable());
 
+const browseListingTypeSchema = z.preprocess((value) => {
+  const raw = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (raw === "for_sale") return "sale";
+  if (raw === "for_rent") return "rent";
+  return value;
+}, z.enum(["all", "sale", "rent", "coming_soon"]));
+
 export const publicAgentBrowseQuerySchema = z.object({
-  listingType: z.enum(["all", "sale", "rent", "coming_soon"]).default("all"),
+  listingType: browseListingTypeSchema.default("all"),
   location: z.string().max(200).optional(),
   minPrice: optionalBrowseNumber,
   maxPrice: optionalBrowseNumber,

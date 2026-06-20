@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import type { AgentPageLeadCapture, AgentPageSettingsResponse } from "@shared/agent/agentPageSchema";
 import { agentPageLeadCaptureSchema } from "@shared/agent/agentPageSchema";
 import { buildAgentPageUrl, validateAgentPageSlugInput } from "@shared/agent/agentPageSlug";
+import { buildAgentPageEmbedIframeHtml } from "@shared/agent/agentPageEmbed";
 import { fetchAgentPageSettings, parseAgentPageApiError } from "@/lib/agentPageApi";
 import { bulkPublishEligibleListings } from "@/lib/inventoryApi";
 import { logRgeSelect } from "@/lib/rgeSelectDebug";
@@ -26,6 +27,58 @@ import { AgentPageMarketAreaChips } from "@/components/agentPage/AgentPageMarket
 
 const BUSINESS_PROFILE_SETTINGS_PATH = "/app/settings";
 const DEFAULT_LEAD_CAPTURE: AgentPageLeadCapture = "webchat";
+
+function AgentPageEmbedCodeBlock({ slug, appOrigin }: { slug: string; appOrigin: string }) {
+  const saleSnippet = buildAgentPageEmbedIframeHtml({
+    slug,
+    appOrigin,
+    listingType: "for_sale",
+    title: "Homes for Sale",
+  });
+  const rentSnippet = buildAgentPageEmbedIframeHtml({
+    slug,
+    appOrigin,
+    listingType: "for_rent",
+    title: "Long-Term Rentals",
+  });
+
+  const copySnippet = (label: string, code: string) => {
+    navigator.clipboard.writeText(code);
+    toast({ title: `${label} embed code copied` });
+  };
+
+  return (
+    <div className="space-y-3 pt-3 border-t border-gray-100" data-testid="agent-page-embed-code">
+      <div>
+        <p className="text-sm font-medium text-gray-800">Embed on your website</p>
+        <p className="text-xs text-muted-foreground leading-snug mt-1">
+          Paste an iframe on an external site (for example, your brokerage homepage) to show live
+          listings from your Agent Page.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">Homes for sale</Label>
+        <pre className="text-[11px] leading-relaxed font-mono whitespace-pre-wrap break-all rounded-md border border-gray-200 bg-gray-50/80 p-3 max-h-40 overflow-y-auto">
+          {saleSnippet}
+        </pre>
+        <Button type="button" variant="outline" size="sm" onClick={() => copySnippet("For sale", saleSnippet)}>
+          <Copy className="h-3.5 w-3.5 mr-1.5" />
+          Copy for sale embed
+        </Button>
+      </div>
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">Long-term rentals</Label>
+        <pre className="text-[11px] leading-relaxed font-mono whitespace-pre-wrap break-all rounded-md border border-gray-200 bg-gray-50/80 p-3 max-h-40 overflow-y-auto">
+          {rentSnippet}
+        </pre>
+        <Button type="button" variant="outline" size="sm" onClick={() => copySnippet("For rent", rentSnippet)}>
+          <Copy className="h-3.5 w-3.5 mr-1.5" />
+          Copy for rent embed
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function normalizeLeadCapture(value: unknown): AgentPageLeadCapture {
   const parsed = agentPageLeadCaptureSchema.safeParse(value);
@@ -367,6 +420,26 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                   Enable the page and set a slug to get your public URL.
                 </p>
               )}
+              {data.agentPageEnabled && (slugDraft || data.agentPageSlug) ? (
+                <AgentPageEmbedCodeBlock
+                  slug={(slugDraft || data.agentPageSlug || "").trim()}
+                  appOrigin={
+                    agentDisplayUrl
+                      ? (() => {
+                          try {
+                            return new URL(agentDisplayUrl).origin;
+                          } catch {
+                            return typeof window !== "undefined"
+                              ? window.location.origin
+                              : "https://app.whachatcrm.com";
+                          }
+                        })()
+                      : typeof window !== "undefined"
+                        ? window.location.origin
+                        : "https://app.whachatcrm.com"
+                  }
+                />
+              ) : null}
               <div className="flex flex-col sm:flex-row gap-2">
                 <Input
                   id="agent-page-slug"

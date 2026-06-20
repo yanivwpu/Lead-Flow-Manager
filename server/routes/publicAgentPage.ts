@@ -5,7 +5,7 @@ import {
   buildPublicAgentPageNotFoundHtml,
   renderAgentPageListingCards,
 } from "@shared/agent/publicAgentPageHtml";
-import { getRequestOrigin } from "../urlOrigins";
+import { parseAgentPageEmbedQuery } from "@shared/agent/agentPageEmbed";
 import { getPublicAgentPageData } from "../agentPage/agentPageService";
 import { browseAgentPageListings, browseQueryToFilters } from "../agentPage/agentPageBrowseService";
 import { processPublicAgentPageLead } from "../agentPage/publicAgentPageLeadService";
@@ -21,12 +21,21 @@ export function registerPublicAgentPageRoutes(app: Express): void {
     }
     try {
       const appOrigin = getRequestOrigin(req);
-      const data = await getPublicAgentPageData(slug, appOrigin);
+      const { embedMode, initialListingType } = parseAgentPageEmbedQuery(
+        (req.query ?? {}) as Record<string, unknown>,
+      );
+      const data = await getPublicAgentPageData(slug, appOrigin, {
+        embedMode,
+        initialListingType,
+      });
       if (!data) {
         res.status(404).type("html").send(buildPublicAgentPageNotFoundHtml());
         return;
       }
       const { agent: _agent, pageUrl: _pageUrl, ...renderInput } = data;
+      if (embedMode) {
+        res.setHeader("Content-Security-Policy", "frame-ancestors *");
+      }
       res.type("html").send(buildPublicAgentPageHtml(renderInput));
     } catch (error) {
       console.error("[public-agent-page] render failed", {

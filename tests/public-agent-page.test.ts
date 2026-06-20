@@ -17,6 +17,11 @@ import {
 } from "../shared/agent/agentPageSlug";
 import { buildPublicAgentPageHtml, renderAgentPageListingCards } from "../shared/agent/publicAgentPageHtml";
 import {
+  buildAgentPageEmbedIframeHtml,
+  normalizeEmbedListingTypeParam,
+  parseAgentPageEmbedQuery,
+} from "../shared/agent/agentPageEmbed";
+import {
   compareAgentPageListings,
   listingMatchesAgentPageBrowseFilters,
   normalizePropertyTypeForFilter,
@@ -285,6 +290,10 @@ function testAgentPageDbSavePath() {
   assert(!card.includes("agent-page-future-analytics"), "no future analytics placeholder");
   assert(!card.includes("Lead capture analytics"), "no analytics placeholder cards");
   assert(card.includes("agent-page-url-block"), "agent url block");
+  assert(card.includes("agent-page-embed-code"), "embed code block");
+  assert(card.includes("buildAgentPageEmbedIframeHtml"), "embed iframe helper");
+  assert(card.includes('listingType: "for_sale"'), "for sale embed param in snippet builder");
+  assert(card.includes('listingType: "for_rent"'), "for rent embed param in snippet builder");
   assert(card.includes("Primary contact button"), "primary contact button label");
   assert(card.includes("agent-page-primary-contact-button"), "primary contact button test id");
   assert(card.includes("Email link"), "email link option label");
@@ -603,6 +612,10 @@ function testBrowseQuerySchema() {
     assert(filters.maxPrice === 7777, "max price");
     assert(filters.propertyType === "house", "property type");
   }
+  const saleAlias = publicAgentBrowseQuerySchema.safeParse({ listingType: "for_sale" });
+  assert(saleAlias.success && saleAlias.data.listingType === "sale", "for_sale browse alias");
+  const rentAlias = publicAgentBrowseQuerySchema.safeParse({ listingType: "for_rent" });
+  assert(rentAlias.success && rentAlias.data.listingType === "rent", "for_rent browse alias");
   const cards = renderAgentPageListingCards([
     {
       id: "l1",
@@ -628,6 +641,66 @@ function testBrowseQuerySchema() {
   ]);
   assert(cards.includes("listing-card"), "render listing cards html");
   console.log("  browse query: OK");
+}
+
+function testEmbedMode() {
+  assert(parseAgentPageEmbedQuery({ embed: "1", listingType: "for_sale" }).embedMode, "embed=1");
+  assert(
+    parseAgentPageEmbedQuery({ embed: "1", listingType: "for_sale" }).initialListingType === "sale",
+    "for_sale maps to sale chip",
+  );
+  assert(
+    parseAgentPageEmbedQuery({ embed: "1", listingType: "for_rent" }).initialListingType === "rent",
+    "for_rent maps to rent chip",
+  );
+  assert(normalizeEmbedListingTypeParam("for_sale") === "sale", "normalize for_sale");
+  const snippet = buildAgentPageEmbedIframeHtml({
+    slug: "yaniv-test",
+    appOrigin: "https://app.whachatcrm.com",
+    listingType: "for_sale",
+    title: "Homes for Sale",
+  });
+  assert(snippet.includes("?embed=1&listingType=for_sale"), "embed iframe sale url");
+  assert(snippet.includes('title="Homes for Sale"'), "embed iframe title");
+
+  const embedHtml = buildPublicAgentPageHtml({
+    userId: "u1",
+    agentPageSlug: "embed-agent",
+    displayName: "Embed Agent",
+    bio: "Bio hidden in embed",
+    marketArea: "",
+    brokerageName: "",
+    avatarUrl: null,
+    companyLogo: null,
+    socialLinks: {
+      websiteUrl: "",
+      facebookUrl: "",
+      instagramUrl: "",
+      linkedinUrl: "",
+      youtubeUrl: "",
+    },
+    publicEmail: "",
+    publicPhone: "",
+    schedulingUrl: "",
+    widgetEnabled: true,
+    preferredLeadCapture: "webchat",
+    showHomeValueCta: true,
+    listings: [],
+    browseTotal: 0,
+    browseHasMore: false,
+    browsePageSize: 24,
+    embedMode: true,
+    initialListingType: "sale",
+  });
+  assert(embedHtml.includes('body class="embed-mode"'), "embed body class");
+  assert(!embedHtml.includes('<header class="agent-header"'), "no profile header in embed");
+  assert(!embedHtml.includes("Bio hidden in embed"), "profile bio not rendered in embed");
+  assert(embedHtml.includes('"embedMode":true'), "embed config flag");
+  assert(embedHtml.includes('"initialListingType":"sale"'), "initial listing type in config");
+  assert(embedHtml.includes("Embedded Agent Page listing card"), "embed listing lead source");
+  assert(embedHtml.includes("agent_page_embed"), "embed chat widget source");
+  assert(embedHtml.includes('data-filter="sale"'), "sale filter chip");
+  console.log("  embed mode: OK");
 }
 
 function testSocialUrlPatch() {
@@ -764,7 +837,8 @@ function testHtml() {
   assert(html.includes('class="chat-widget enabled"'), "chat enabled when widget on");
   assert(html.includes("chat-minimize"), "chat minimize button");
   assert(html.includes("widget-frame"), "widget iframe embed");
-  assert(html.includes("source=agent_page"), "agent page webchat source param");
+  assert(html.includes("CHAT_WIDGET_SOURCE"), "chat widget source variable");
+  assert(html.includes("agent_page_embed"), "embed chat source supported");
   assert(html.includes("filter-min-price"), "price filters in panel");
   assert(!html.includes("browse-basic-row"), "no always-visible price row");
   assert(!html.includes("section-title"), "no listings heading");
@@ -797,6 +871,7 @@ async function main() {
   testListingDisplayHelpers();
   testBrowseQuerySchema();
   testSocialUrlPatch();
+  testEmbedMode();
   testHtml();
   console.log("\nAll tests passed.");
 }

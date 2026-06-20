@@ -4,6 +4,7 @@ import { buildAgentPageUrl } from "@shared/agent/agentPageSlug";
 import { resolveAgentPageBio, resolveAgentPageDisplayName } from "@shared/agent/agentPageProfile";
 import { resolveAgentPageSocialUrls } from "@shared/agent/agentPageSocialUrls";
 import { AGENT_PAGE_BROWSE_PAGE_SIZE } from "@shared/agent/agentPageBrowseConstants";
+import type { AgentPageInitialListingChip } from "@shared/agent/agentPageEmbed";
 import { renderAgentPageListingCards } from "@shared/agent/publicAgentPageHtml";
 import {
   browseAgentPageListings,
@@ -104,9 +105,15 @@ export type PublicAgentPageData = PublicAgentPageRenderInput & {
   pageUrl: string;
 };
 
+export type PublicAgentPageLoadOptions = {
+  embedMode?: boolean;
+  initialListingType?: AgentPageInitialListingChip;
+};
+
 export async function getPublicAgentPageData(
   slug: string,
   appOrigin: string,
+  options: PublicAgentPageLoadOptions = {},
 ): Promise<PublicAgentPageData | undefined> {
   const agent = await resolveAgentPageBySlug(slug);
   if (!agent) return undefined;
@@ -118,10 +125,16 @@ export async function getPublicAgentPageData(
   const user = await storage.getUser(agent.userId);
   const widgetEnabled = mergeWidgetEnabled(user?.widgetSettings);
 
+  const initialListingType = options.initialListingType ?? "all";
+  const browseFilters =
+    initialListingType !== "all"
+      ? { ...DEFAULT_AGENT_PAGE_BROWSE_FILTERS, listingType: initialListingType }
+      : DEFAULT_AGENT_PAGE_BROWSE_FILTERS;
+
   const browse = await browseAgentPageListings({
     userId: agent.userId,
     appOrigin,
-    filters: DEFAULT_AGENT_PAGE_BROWSE_FILTERS,
+    filters: browseFilters,
     offset: 0,
     limit: AGENT_PAGE_BROWSE_PAGE_SIZE,
     renderHtml: renderAgentPageListingCards,
@@ -155,5 +168,7 @@ export async function getPublicAgentPageData(
     browseTotal: browse.total,
     browseHasMore: browse.hasMore,
     browsePageSize: AGENT_PAGE_BROWSE_PAGE_SIZE,
+    embedMode: options.embedMode ?? false,
+    initialListingType,
   };
 }

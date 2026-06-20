@@ -1,4 +1,5 @@
 import type { PublicAgentPageRenderInput, AgentPageListingCard } from "./agentPageTypes";
+import { listingTypeChipClass } from "./agentPageEmbed";
 import { normalizePropertyTypeForFilter } from "./publicAgentPageBrowse";
 
 const BRAND_GREEN = "#059669";
@@ -152,6 +153,28 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   const browseResultsSummary = formatBrowseResultsSummary(data.listings.length, data.browseTotal);
   const browseRemaining = data.browseHasMore ? Math.max(0, data.browseTotal - data.listings.length) : 0;
   const chatWidgetClass = data.widgetEnabled ? "chat-widget enabled" : "chat-widget";
+  const embedMode = data.embedMode === true;
+  const initialListingType = data.initialListingType ?? "all";
+  const pageTitle = embedMode
+    ? "Property Listings"
+    : `${data.displayName} | Real Estate Agent`;
+  const bodyClass = embedMode ? "embed-mode" : "";
+
+  const agentHeaderHtml = embedMode
+    ? ""
+    : `<header class="agent-header">
+      ${renderProfileColumn(data)}
+      <div class="agent-info-col">
+        <h1 class="agent-name">${escapeHtml(data.displayName)}</h1>
+        ${bioHtml}
+        ${marketHtml}
+        <div class="cta-row">
+          <button type="button" class="btn btn-primary" id="btn-message">${escapeHtml(primaryContactLabel)}</button>
+          ${data.schedulingUrl ? `<a class="btn btn-outline" id="btn-schedule-header" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">Schedule Showing</a>` : `<button type="button" class="btn btn-outline" id="btn-schedule-header">Schedule Showing</button>`}
+          ${homeWorthBtn}
+        </div>
+      </div>
+    </header>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -159,11 +182,12 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex, nofollow" />
-  <title>${escapeHtml(data.displayName)} | Real Estate Agent</title>
+  <title>${escapeHtml(pageTitle)}</title>
   <style>
     :root { --brand: ${BRAND_GREEN}; --brand-dark: ${BRAND_GREEN_DARK}; --ink: #0f172a; --muted: #64748b; --border: #e2e8f0; --bg: #f8fafc; }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.5; }
+    html { overflow-x: hidden; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.5; overflow-x: hidden; }
     .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
     .agent-header { display: grid; gap: 20px; background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 10px; }
     @media (min-width: 640px) { .agent-header { grid-template-columns: auto 1fr; align-items: start; gap: 24px; } }
@@ -295,32 +319,25 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .site-footer { margin-top: 32px; text-align: center; font-size: 0.75rem; color: #94a3b8; }
     .site-footer-brand { display: inline-flex; align-items: center; gap: 6px; }
     .whachat-logo-mark { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; background: var(--brand); border-radius: 4px; color: #fff; font-weight: 700; font-size: 0.6875rem; line-height: 1; flex-shrink: 0; }
+    body.embed-mode .wrap { max-width: 100%; padding: 12px 12px 16px; }
+    body.embed-mode .listings-section { margin-top: 0; }
+    body.embed-mode .listings-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+    body.embed-mode .site-footer { margin-top: 12px; }
+    body.embed-mode .modal-backdrop { padding: 12px; }
   </style>
 </head>
-<body>
+<body class="${bodyClass}">
   <div class="wrap">
-    <header class="agent-header">
-      ${renderProfileColumn(data)}
-      <div class="agent-info-col">
-        <h1 class="agent-name">${escapeHtml(data.displayName)}</h1>
-        ${bioHtml}
-        ${marketHtml}
-        <div class="cta-row">
-          <button type="button" class="btn btn-primary" id="btn-message">${escapeHtml(primaryContactLabel)}</button>
-          ${data.schedulingUrl ? `<a class="btn btn-outline" id="btn-schedule-header" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">Schedule Showing</a>` : `<button type="button" class="btn btn-outline" id="btn-schedule-header">Schedule Showing</button>`}
-          ${homeWorthBtn}
-        </div>
-      </div>
-    </header>
+    ${agentHeaderHtml}
 
     <section class="listings-section">
       <div class="browse-wrap" id="browse-wrap">
         <div class="browse-head">
           <div class="listing-type-row">
-            <button type="button" class="chip active" data-filter="all">All</button>
-            <button type="button" class="chip" data-filter="sale">For Sale</button>
-            <button type="button" class="chip" data-filter="rent">For Rent</button>
-            <button type="button" class="chip" data-filter="coming_soon">Coming Soon</button>
+            <button type="button" class="${listingTypeChipClass("all", initialListingType)}" data-filter="all">All</button>
+            <button type="button" class="${listingTypeChipClass("sale", initialListingType)}" data-filter="sale">For Sale</button>
+            <button type="button" class="${listingTypeChipClass("rent", initialListingType)}" data-filter="rent">For Rent</button>
+            <button type="button" class="${listingTypeChipClass("coming_soon", initialListingType)}" data-filter="coming_soon">Coming Soon</button>
           </div>
           <button type="button" class="btn btn-sm btn-outline browse-toggle-btn" id="btn-toggle-filters" aria-expanded="false" aria-controls="browse-panel">
             <span class="toggle-label-desktop">More Filters</span>
@@ -470,6 +487,8 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     browseTotal: data.browseTotal,
     browseLoaded: data.listings.length,
     browseHasMore: data.browseHasMore,
+    embedMode,
+    initialListingType,
   }).replace(/</g, "\\u003c")}</script>
   <script>
     (function () {
@@ -497,7 +516,10 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       var listingPropertyAddressField = document.getElementById("form-listing-property-address");
       var homeWorthPropertyAddressField = document.getElementById("home-worth-property-address");
       var messageTextarea = form.querySelector('textarea[name="message"]');
-      var LISTING_LEAD_SOURCE = "Agent Page listing card";
+      var LISTING_LEAD_SOURCE = config.embedMode
+        ? "Embedded Agent Page listing card"
+        : "Agent Page listing card";
+      var CHAT_WIDGET_SOURCE = config.embedMode ? "agent_page_embed" : "agent_page";
 
       function findListingCard(listingId) {
         if (!listingId) return null;
@@ -610,7 +632,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           var prefill = encodeURIComponent(config.chatPrefill || "");
           var parentUrl = encodeURIComponent(window.location.href);
           chatIframe.src = "/widget-frame/" + encodeURIComponent(config.userId)
-            + "?prefill=" + prefill + "&parentUrl=" + parentUrl + "&source=agent_page";
+            + "?prefill=" + prefill + "&parentUrl=" + parentUrl + "&source=" + CHAT_WIDGET_SOURCE;
         }
         return true;
       }
@@ -652,7 +674,8 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         });
       }
 
-      document.getElementById("btn-message").addEventListener("click", function () {
+      var btnMessage = document.getElementById("btn-message");
+      if (btnMessage) btnMessage.addEventListener("click", function () {
         if (config.preferredLeadCapture === "webchat") {
           if (config.widgetEnabled) {
             openChatWidget();
@@ -686,7 +709,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       var homeWorth = document.getElementById("btn-home-worth");
       if (homeWorth) homeWorth.addEventListener("click", function () { track("home_value"); openModal("home_worth"); });
 
-      var listingType = "all";
+      var listingType = config.initialListingType || "all";
       var grid = document.getElementById("listings-grid");
       var emptyMsg = document.getElementById("browse-empty");
       var filterPanel = document.getElementById("browse-panel");
@@ -958,6 +981,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           source: fd.get("source") || undefined,
           timeline: fd.get("timeline") || undefined,
           reasonForSelling: fd.get("reasonForSelling") || undefined,
+          embed: config.embedMode === true,
         };
         fetch("/api/public/agents/" + encodeURIComponent(config.slug) + "/leads", {
           method: "POST",

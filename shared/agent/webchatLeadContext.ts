@@ -5,9 +5,12 @@ export const AGENT_PAGE_VISITOR_NAME = "Agent Page Visitor";
 export const ANONYMOUS_WEBCHAT_VISITOR_NAMES = [
   WEBSITE_VISITOR_NAME,
   AGENT_PAGE_VISITOR_NAME,
+  EMBEDDED_AGENT_PAGE_VISITOR_NAME,
 ] as const;
 
-export type WebchatLeadSource = "agent_page" | "website";
+export type WebchatLeadSource = "agent_page" | "agent_page_embed" | "website";
+
+const EMBEDDED_AGENT_PAGE_VISITOR_NAME = "Embedded Agent Page Visitor";
 
 const EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
 const PHONE_RE =
@@ -85,6 +88,7 @@ export function contactNeedsWebchatIdentity(contact: {
 export function resolveWebchatVisitorDisplayName(
   leadSource?: WebchatLeadSource | string | null,
 ): string {
+  if (leadSource === "agent_page_embed") return EMBEDDED_AGENT_PAGE_VISITOR_NAME;
   return leadSource === "agent_page" ? AGENT_PAGE_VISITOR_NAME : WEBSITE_VISITOR_NAME;
 }
 
@@ -95,7 +99,10 @@ export function buildWebchatLeadCustomFields(
 ): Record<string, unknown> {
   const customFields: Record<string, unknown> = { ...(existing || {}) };
   customFields.webchatVisitorId = visitorId;
-  if (leadSource === "agent_page") {
+  if (leadSource === "agent_page_embed") {
+    customFields.sourcePage = "agent_page_embed";
+    customFields.leadSource = "Embedded Agent Page";
+  } else if (leadSource === "agent_page") {
     customFields.sourcePage = "agent_page";
     customFields.leadSource = "Agent Page";
   }
@@ -106,6 +113,7 @@ export function resolveWebchatLeadSource(input: {
   source?: string | null;
   parentUrl?: string | null;
 }): WebchatLeadSource | undefined {
+  if (input.source === "agent_page_embed") return "agent_page_embed";
   if (input.source === "agent_page") return "agent_page";
   const href = (input.parentUrl || "").trim();
   if (href && /\/agents\/[^/?#]+/i.test(href)) return "agent_page";

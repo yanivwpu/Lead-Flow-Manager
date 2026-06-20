@@ -16,7 +16,12 @@ function channelContactId(body: PublicAgentLeadBody): string {
   return `agent_page_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function buildLeadMessage(intent: PublicAgentLeadBody["intent"], body: PublicAgentLeadBody, listingLabel?: string): string {
+function buildLeadMessage(
+  intent: PublicAgentLeadBody["intent"],
+  body: PublicAgentLeadBody,
+  listingLabel?: string,
+  pageLabel = "agent page",
+): string {
   const name = body.name?.trim() || "Visitor";
   const propertyLine = body.propertyAddress?.trim()
     ? `Property: ${body.propertyAddress.trim()}`
@@ -29,21 +34,21 @@ function buildLeadMessage(intent: PublicAgentLeadBody["intent"], body: PublicAge
 
   switch (intent) {
     case "message":
-      return body.message?.trim() || `${name} reached out via agent page.`;
+      return body.message?.trim() || `${name} reached out via ${pageLabel}.`;
     case "ask_about":
       return [body.message?.trim(), ...contextLines]
         .filter(Boolean)
-        .join("\n") || `${name} is interested in ${listingLabel || "a listing"} (agent page).`;
+        .join("\n") || `${name} is interested in ${listingLabel || "a listing"} (${pageLabel}).`;
     case "schedule_showing":
       return [
-        body.message?.trim() || `${name} requested a showing via agent page.`,
+        body.message?.trim() || `${name} requested a showing via ${pageLabel}.`,
         ...contextLines,
       ]
         .filter(Boolean)
         .join("\n");
     case "home_worth":
       return [
-        `${name} requested a home valuation via agent page.`,
+        `${name} requested a home valuation via ${pageLabel}.`,
         body.propertyAddress ? `Address: ${body.propertyAddress}` : null,
         body.timeline ? `Timeline: ${body.timeline}` : null,
         body.reasonForSelling ? `Reason: ${body.reasonForSelling}` : null,
@@ -62,6 +67,10 @@ export async function processPublicAgentPageLead(
   const agent = await resolveAgentPageBySlug(slug);
   if (!agent) return { ok: false, error: "Agent page not found", status: 404 };
 
+  const isEmbed = body.embed === true;
+  const pageLabel = isEmbed ? "embedded agent page" : "agent page";
+  const webchatLeadSource = isEmbed ? ("agent_page_embed" as const) : ("agent_page" as const);
+  const leadSourceLabel = isEmbed ? "Embedded Agent Page" : "Agent Page";
   const userId = agent.userId;
   let listingLabel: string | undefined;
 
@@ -74,18 +83,20 @@ export async function processPublicAgentPageLead(
 
   const { channelService } = await import("../channelService");
   const contactIdKey = channelContactId(body);
-  const message = buildLeadMessage(body.intent, body, listingLabel);
+  const message = buildLeadMessage(body.intent, body, listingLabel, pageLabel);
   const externalMessageId = `agent_page_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
 
   const result = await channelService.processIncomingMessage({
     userId,
     channel: "webchat",
     channelContactId: contactIdKey,
-    contactName: body.name?.trim() || "Agent Page Visitor",
+    contactName:
+      body.name?.trim() ||
+      (isEmbed ? "Embedded Agent Page Visitor" : "Agent Page Visitor"),
     content: message,
     contentType: "text",
     externalMessageId,
-    webchatLeadSource: "agent_page",
+    webchatLeadSource,
   });
 
   if (!result.contact?.id) {
@@ -95,8 +106,8 @@ export async function processPublicAgentPageLead(
   const contactId = result.contact.id;
   const customFields: Record<string, unknown> = {
     ...(result.contact.customFields as Record<string, unknown> | undefined),
-    sourcePage: "agent_page",
-    leadSource: "Agent Page",
+    sourcePage: isEmbed ? "agent_page_embed" : "agent_page",
+    leadSource: leadSourceLabel,
     leadType: body.intent === "home_worth" ? "Seller" : "Buyer",
   };
   if (body.listingId) {

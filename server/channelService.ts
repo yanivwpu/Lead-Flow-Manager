@@ -901,7 +901,7 @@ class ChannelService {
     /** Commerce mirror on existing messaging threads — skips chatbot, keyword workflows, AI handoff, auto-reply. */
     inboundMode?: "commerce";
     /** Public webchat attribution — e.g. agent page embed sets `agent_page`. */
-    webchatLeadSource?: "agent_page" | "website";
+    webchatLeadSource?: "agent_page" | "agent_page_embed" | "website";
   }): Promise<InboundProcessingResult> {
     const {
       userId,
@@ -1007,7 +1007,9 @@ class ChannelService {
       const webchatSourceDetails =
         channel === "webchat" && webchatLeadSource === "agent_page"
           ? { leadSource: "Agent Page" }
-          : undefined;
+          : channel === "webchat" && webchatLeadSource === "agent_page_embed"
+            ? { leadSource: "Embedded Agent Page" }
+            : undefined;
       contact = await storage.createContact({
         userId,
         name: contactName || channelContactId,
@@ -1047,6 +1049,11 @@ class ChannelService {
           contactUpdates.sourceDetails = {
             ...((contact.sourceDetails as Record<string, unknown> | undefined) || {}),
             leadSource: "Agent Page",
+          };
+        } else if (webchatLeadSource === "agent_page_embed") {
+          contactUpdates.sourceDetails = {
+            ...((contact.sourceDetails as Record<string, unknown> | undefined) || {}),
+            leadSource: "Embedded Agent Page",
           };
         }
       }

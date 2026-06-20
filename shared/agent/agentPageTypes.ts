@@ -51,4 +51,8 @@ export type PublicAgentPageRenderInput = {
   browseTotal: number;
   browseHasMore: boolean;
   browsePageSize: number;
+  /** iframe embed mode — listings browse only */
+  embedMode?: boolean;
+  /** Initial For Sale / For Rent chip when loaded inside an embed */
+  initialListingType?: "all" | "sale" | "rent" | "coming_soon";
 };
