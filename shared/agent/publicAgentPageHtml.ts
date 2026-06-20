@@ -4,6 +4,12 @@ import { normalizePropertyTypeForFilter } from "./publicAgentPageBrowse";
 
 const BRAND_GREEN = "#059669";
 const BRAND_GREEN_DARK = "#047857";
+/** Warm cream — matches AffordablePompano embed parent pages */
+const EMBED_CREAM_BG = "#f6f1ea";
+const EMBED_BORDER = "#e8ddd0";
+const EMBED_BORDER_SOFT = "#ebe0d4";
+const EMBED_MUTED = "#8a7f72";
+const EMBED_CHIP_BG = "#faf7f2";
 
 function escapeHtml(value: string): string {
   return value
@@ -323,11 +329,62 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .site-footer { margin-top: 32px; text-align: center; font-size: 0.75rem; color: #94a3b8; }
     .site-footer-brand { display: inline-flex; align-items: center; gap: 6px; }
     .whachat-logo-mark { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; background: var(--brand); border-radius: 4px; color: #fff; font-weight: 700; font-size: 0.6875rem; line-height: 1; flex-shrink: 0; }
-    body.embed-mode .wrap { max-width: 100%; padding: 12px 12px 16px; }
-    body.embed-mode .listings-section { margin-top: 0; }
+    body.embed-mode {
+      --bg: ${EMBED_CREAM_BG};
+      --border: ${EMBED_BORDER};
+      --muted: ${EMBED_MUTED};
+      background: ${EMBED_CREAM_BG};
+    }
+    body.embed-mode .wrap { max-width: 100%; padding: 12px 12px 16px; background: ${EMBED_CREAM_BG}; }
+    body.embed-mode .listings-section { margin-top: 0; background: ${EMBED_CREAM_BG}; }
+    body.embed-mode .browse-wrap { background: ${EMBED_CREAM_BG}; }
+    body.embed-mode .browse-head { background: ${EMBED_CREAM_BG}; }
+    body.embed-mode .browse-panel {
+      background: ${EMBED_CREAM_BG};
+      border-color: ${EMBED_BORDER};
+      box-shadow: none;
+    }
+    body.embed-mode .chip {
+      background: ${EMBED_CHIP_BG};
+      border-color: ${EMBED_BORDER};
+      color: #5c534a;
+    }
+    body.embed-mode .chip.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+    body.embed-mode .browse-panel-location input,
+    body.embed-mode .browse-panel-advanced input,
+    body.embed-mode .browse-panel-advanced select {
+      background: #fff;
+      border-color: ${EMBED_BORDER};
+    }
+    body.embed-mode .browse-results-count { color: ${EMBED_MUTED}; }
+    body.embed-mode .browse-empty { background: ${EMBED_CHIP_BG}; border: 1px dashed ${EMBED_BORDER}; border-radius: 12px; }
     body.embed-mode .listings-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
-    body.embed-mode .site-footer { margin-top: 12px; }
+    body.embed-mode .listing-card {
+      background: #fff;
+      border-color: ${EMBED_BORDER_SOFT};
+      box-shadow: 0 1px 4px rgba(72, 56, 40, 0.06);
+    }
+    body.embed-mode .empty-listings {
+      background: ${EMBED_CHIP_BG};
+      border-color: ${EMBED_BORDER};
+      color: ${EMBED_MUTED};
+    }
+    body.embed-mode .btn-outline {
+      background: ${EMBED_CHIP_BG};
+      border-color: ${EMBED_BORDER};
+      color: #4a4238;
+    }
+    body.embed-mode .btn-outline:hover { background: #f0ebe3; border-color: #ddd2c4; }
+    body.embed-mode .browse-load-more-wrap { background: ${EMBED_CREAM_BG}; }
+    body.embed-mode .browse-remaining-count { color: ${EMBED_MUTED}; }
+    body.embed-mode .site-footer { margin-top: 12px; color: #a39688; background: ${EMBED_CREAM_BG}; }
     body.embed-mode .modal-backdrop { padding: 12px; }
+    @media (max-width: 639px) {
+      body.embed-mode .browse-panel {
+        background: ${EMBED_CHIP_BG};
+        box-shadow: 0 -4px 24px rgba(72, 56, 40, 0.08);
+      }
+    }
     body.embed-mode.hide-chat .chat-widget,
     body.embed-mode.hide-chat .chat-bubble,
     body.embed-mode.hide-chat .chat-panel { display: none !important; visibility: hidden !important; pointer-events: none !important; }

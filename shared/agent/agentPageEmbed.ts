@@ -67,7 +67,7 @@ export function buildAgentPageEmbedIframeHtml(input: {
   });
   return `<iframe
   src="${src}"
-  style="width:100%; height:${height}px; border:0; border-radius:16px; background:#fff;"
+  style="width:100%; height:${height}px; border:0; border-radius:16px; background:#f6f1ea;"
   loading="lazy"
   title="${input.title.replace(/"/g, "&quot;")}">
 </iframe>`;

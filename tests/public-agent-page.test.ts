@@ -708,6 +708,9 @@ function testEmbedMode() {
     initialListingType: "sale",
   });
   assert(embedHtml.includes('body class="embed-mode"'), "embed body class");
+  assert(embedHtml.includes("background: #f6f1ea"), "embed warm cream page background");
+  assert(embedHtml.includes("body.embed-mode .listing-card"), "embed card soft styling");
+  assert(embedHtml.includes("body.embed-mode .browse-panel"), "embed filters warm background");
   assert(!embedHtml.includes('<header class="agent-header"'), "no profile header in embed");
   assert(!embedHtml.includes("Bio hidden in embed"), "profile bio not rendered in embed");
   assert(embedHtml.includes('"embedMode":true'), "embed config flag");
