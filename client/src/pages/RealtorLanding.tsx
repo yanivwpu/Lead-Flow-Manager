@@ -7,8 +7,9 @@ import {
   TrendingUp, PhoneOff, Lightbulb, Clock, LayoutGrid
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { useHideGrowthEngineForShopify, SHOPIFY_RGE_BLOCK_REDIRECT } from "@/lib/shopifyMerchantExperience";
 import { Helmet } from "react-helmet";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getDirection } from "@/lib/i18n";
 import { MARKETING_URL } from "@/lib/marketingUrl";
@@ -43,13 +44,22 @@ function FaqItem({ question, answer, isRTL }: { question: string; answer: string
 
 export function RealtorLanding() {
   const { user } = useAuth();
+  const hideGrowthEngine = useHideGrowthEngineForShopify();
   const [copied, setCopied] = useState(false);
   const [, setLocation] = useLocation();
   const { t } = useTranslation();
   const isRTL = getDirection() === 'rtl';
 
+  useEffect(() => {
+    if (user && hideGrowthEngine) {
+      setLocation(SHOPIFY_RGE_BLOCK_REDIRECT);
+    }
+  }, [user, hideGrowthEngine, setLocation]);
+
   const ctaHref = user
-    ? "/app/templates/realtor-growth-engine"
+    ? hideGrowthEngine
+      ? SHOPIFY_RGE_BLOCK_REDIRECT
+      : "/app/templates/realtor-growth-engine"
     : "/signup?redirect=/app/templates/realtor-growth-engine";
 
   const handleCta = () => {

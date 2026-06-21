@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { useLocation } from "wouter";
-import { isShopifyShopDomain, normalizeShopifyShopDomain } from "@shared/shopifyBilling";
+import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
+import type { BillingSubscriptionFlags } from "@/lib/shopifyBillingContext";
+import { readHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 
 /** Persist Shopify shop domain from URL for SPA navigations (matches Settings localStorage key). */
 export function getShopifyShopHint(): string | undefined {
@@ -55,28 +57,16 @@ export function useShopifyShopHint(): string | undefined {
 }
 
 /**
- * RGE one-time purchase: only attach Shopify billing when the current URL is a Shopify session
- * (?shop= on page + shopify_installed or embedded). Ignores localStorage shop so normal web app uses Stripe.
+ * RGE one-time purchase billing payload. Shopify-installed accounts are blocked from RGE checkout.
  */
-export function getRgePurchaseBillingPayload(): {
-  billingChannel: "stripe" | "shopify";
+export function getRgePurchaseBillingPayload(
+  subscription?: BillingSubscriptionFlags | null,
+): {
+  billingChannel: "stripe" | "blocked";
   shop?: string;
 } {
-  if (typeof window === "undefined") return { billingChannel: "stripe" };
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const shopInUrl = params.get("shop");
-    const normalized = shopInUrl ? normalizeShopifyShopDomain(shopInUrl) : null;
-    const shopifySession =
-      !!normalized &&
-      (params.get("shopify_installed") === "1" ||
-        params.get("embedded") === "1" ||
-        (window.location.pathname.includes("/pricing") && !!shopInUrl));
-    if (shopifySession && normalized) {
-      return { billingChannel: "shopify", shop: normalized };
-    }
-  } catch {
-    /* ignore */
+  if (readHideGrowthEngineForShopify(subscription)) {
+    return { billingChannel: "blocked" };
   }
   return { billingChannel: "stripe" };
 }

@@ -36,6 +36,7 @@ import {
   ensureAdminOverrideGrowthEngineEntitlement,
   shouldAutoGrantGrowthEngineViaAdminOverride,
 } from "./rgePurchase";
+import { rejectRgeForShopifyAccount } from "./shopifyBillingGuard";
 
 const TEMPLATE_ID = "realtor-growth-engine";
 const TEMPLATE_PRICE_CENTS = 19900;
@@ -162,6 +163,10 @@ export function registerTemplateRoutes(app: Express) {
 
   app.post("/api/templates/realtor-growth-engine/purchase", requireAuth, async (req, res) => {
     try {
+      if (await rejectRgeForShopifyAccount(req, res, "templates/rge/purchase", storage.getUser.bind(storage))) {
+        return;
+      }
+
       const { redirectTo, cancelTo } = (req.body || {}) as { redirectTo?: string; cancelTo?: string };
       const userId = (req.user as any).id;
       const user = await storage.getUser(userId);
@@ -236,6 +241,13 @@ export function registerTemplateRoutes(app: Express) {
       }
 
       const billingChannel = await resolveRgePurchaseBillingChannel(userId, req);
+      if (billingChannel.channel === "blocked") {
+        logRgePurchaseEvent("blocked_shopify_account", { userId, reason: billingChannel.reason });
+        return res.status(403).json({
+          error: "Realtor Growth Engine is not available for Shopify-installed accounts.",
+          code: "RGE_NOT_AVAILABLE_SHOPIFY",
+        });
+      }
       logRgePurchaseEvent("purchase_started", {
         userId,
         templateId: TEMPLATE_ID,
@@ -330,6 +342,10 @@ export function registerTemplateRoutes(app: Express) {
 
   app.post("/api/templates/realtor-growth-engine/verify-payment", requireAuth, async (req, res) => {
     try {
+      if (await rejectRgeForShopifyAccount(req, res, "templates/rge/verify-payment", storage.getUser.bind(storage))) {
+        return;
+      }
+
       const userId = (req.user as any).id;
       const { sessionId } = req.body;
 

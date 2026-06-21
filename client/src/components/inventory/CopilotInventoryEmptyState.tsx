@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { Button } from "@/components/ui/button";
 import { Home } from "lucide-react";
 import { RGE_INVENTORY_SETTINGS_PATH } from "@shared/rgePaths";
@@ -9,6 +10,9 @@ type Props = {
 };
 
 export function CopilotInventoryEmptyState({ compact = true }: Props) {
+  const hideGrowthEngine = useHideGrowthEngineForShopify();
+  if (hideGrowthEngine) return null;
+
   return (
     <div
       className="rounded-lg border border-gray-200 bg-white/80 px-2.5 py-2.5 space-y-2"

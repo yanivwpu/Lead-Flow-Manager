@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
+import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { logRgeSelect } from "@/lib/rgeSelectDebug";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -150,6 +151,7 @@ function normalizeMaxListingsSelectValue(value: number | undefined): string {
 }
 
 export function InventorySourcesSection({ variant = "section", className }: Props) {
+  const hideGrowthEngine = useHideGrowthEngineForShopify();
   const queryClient = useQueryClient();
   const [showSecrets, setShowSecrets] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -543,7 +545,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
 
   const inner = (
     <div className={cn("space-y-4", className)}>
-      {!status.rgeInstalled && (
+      {!status.rgeInstalled && !hideGrowthEngine && (
         <Alert className="border-amber-200 bg-amber-50/80">
           <AlertCircle className="h-4 w-4 text-amber-800" />
           <AlertTitle className="text-amber-950">Realtor Growth Engine required</AlertTitle>

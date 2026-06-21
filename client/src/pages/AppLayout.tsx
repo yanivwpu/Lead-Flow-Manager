@@ -10,6 +10,7 @@ import { TrialSetupCluster } from "@/components/TrialSetupCluster";
 import { TrialModalOpenProvider } from "@/lib/trial-modal-context";
 import { TrialEndingSoonBanner } from "@/components/TrialEndingSoonBanner";
 import { ActivationSetupModal } from "@/components/ActivationSetupModal";
+import { ShopifyGrowthEngineRedirect } from "@/components/ShopifyGrowthEngineRedirect";
 import {
   type ActivationStatusPayload,
   activationSetupModalStorageKey,
@@ -163,9 +164,21 @@ function AppContent() {
               <Route path="/app/contacts" component={Contacts} />
               <Route path="/app/workflows" component={Workflows} />
               <Route path="/app/chatbot" component={ChatbotBuilder} />
-              <Route path="/app/templates/realtor-growth-engine/onboarding" component={RealtorGrowthEngine} />
-              <Route path="/app/templates/realtor-growth-engine/status" component={RealtorGrowthEngine} />
-              <Route path="/app/templates/realtor-growth-engine" component={RealtorGrowthEngine} />
+              <Route path="/app/templates/realtor-growth-engine/onboarding">
+                <ShopifyGrowthEngineRedirect>
+                  <RealtorGrowthEngine />
+                </ShopifyGrowthEngineRedirect>
+              </Route>
+              <Route path="/app/templates/realtor-growth-engine/status">
+                <ShopifyGrowthEngineRedirect>
+                  <RealtorGrowthEngine />
+                </ShopifyGrowthEngineRedirect>
+              </Route>
+              <Route path="/app/templates/realtor-growth-engine">
+                <ShopifyGrowthEngineRedirect>
+                  <RealtorGrowthEngine />
+                </ShopifyGrowthEngineRedirect>
+              </Route>
               <Route path="/app/templates" component={Templates} />
               <Route path="/app/widget" component={WebsiteWidget} />
               <Route path="/app/integrations" component={Integrations} />

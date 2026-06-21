@@ -4,6 +4,10 @@ import {
   normalizeShopifyShopDomain,
   SHOPIFY_BILLING_REQUIRED_CODE,
 } from "@shared/shopifyBilling";
+import {
+  RGE_NOT_AVAILABLE_SHOPIFY_CODE,
+  RGE_NOT_AVAILABLE_SHOPIFY_MESSAGE,
+} from "@shared/shopifyRgeVisibility";
 
 type ShopifyBillingUser = { id?: string; shopifyShop?: string | null };
 
@@ -96,6 +100,37 @@ export async function rejectStripeIfShopifyUser(
     error:
       "This account is billed through Shopify. Use Pricing or Settings to subscribe or change plans in Shopify.",
     code: SHOPIFY_BILLING_REQUIRED_CODE,
+  });
+  return true;
+}
+
+/**
+ * Blocks RGE purchase / Stripe verify for Shopify-installed accounts (App Store compliance).
+ */
+export async function rejectRgeForShopifyAccount(
+  req: Request,
+  res: Response,
+  context: string,
+  getUser: (userId: string) => Promise<ShopifyBillingUser | undefined>,
+): Promise<boolean> {
+  const userId = req.user?.id;
+  if (!userId) return false;
+
+  const user = await getUser(userId);
+  if (!isShopifyBillingAccount(user, req)) return false;
+
+  console.warn("[ShopifyBilling] Blocked RGE payment/API", {
+    context,
+    userId,
+    shopifyShop: user?.shopifyShop ?? null,
+    shopQuery: shopDomainFromRequest(req),
+    path: req.path,
+    method: req.method,
+  });
+
+  res.status(403).json({
+    error: RGE_NOT_AVAILABLE_SHOPIFY_MESSAGE,
+    code: RGE_NOT_AVAILABLE_SHOPIFY_CODE,
   });
   return true;
 }

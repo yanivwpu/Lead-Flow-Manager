@@ -217,11 +217,22 @@ export async function resolveRgePurchaseBillingChannel(
 ): Promise<
   | { channel: "shopify"; merchant: ResolvedShopifyMerchant }
   | { channel: "stripe"; stripeFallbackReason?: string }
+  | { channel: "blocked"; reason: "shopify_account" }
 > {
   const user = await storage.getUser(userId);
   const hasShopifyShop = userHasShopifyShopField(user);
   const requestShop = shopDomainFromRequest(req);
   const hasValidShopifyContext = requestSignalsShopifyBilling(req);
+
+  if (hasShopifyShop || hasValidShopifyContext) {
+    logRgePurchaseEvent("billing_channel_blocked_shopify", {
+      userId,
+      hasShopifyShop,
+      hasValidShopifyContext,
+      requestShop,
+    });
+    return { channel: "blocked", reason: "shopify_account" };
+  }
 
   let selectedChannel: "stripe" | "shopify" = "stripe";
 

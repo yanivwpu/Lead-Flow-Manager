@@ -111,6 +111,7 @@ import {
   shouldShowCopilotBuyerPreferences,
   shouldShowCopilotInventoryForContact,
 } from "@/lib/copilotRgeVisibility";
+import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { isQualificationDowngrade, systemTagForQualification } from "@shared/leadQualification";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
@@ -814,6 +815,7 @@ export function InboxLeadDetailsPanel({
   panelClassName,
 }: InboxLeadDetailsPanelProps) {
   const { toast } = useToast();
+  const hideGrowthEngine = useHideGrowthEngineForShopify();
   // Default to full access if no capabilities provided (backward compat)
   const canSeeCopilot    = capabilities ? capabilities.canUseCopilotIntelligence    : true;
   const canSeeWorkflow   = capabilities ? capabilities.canUseWorkflowRecommendations : true;
@@ -1503,8 +1505,9 @@ export function InboxLeadDetailsPanel({
         inventoryStatus,
         industry: businessKnowledge?.industry,
         customFields: contact.customFields,
+        hideGrowthEngineForShopify: hideGrowthEngine,
       }),
-    [inventoryStatus, businessKnowledge?.industry, contact.customFields],
+    [inventoryStatus, businessKnowledge?.industry, contact.customFields, hideGrowthEngine],
   );
 
   const showCopilotInventoryPanels = useMemo(
@@ -1513,8 +1516,9 @@ export function InboxLeadDetailsPanel({
         inventoryStatus,
         customFields: contact.customFields,
         buyerPreferenceProfile: persistedBuyerProfile,
+        hideGrowthEngineForShopify: hideGrowthEngine,
       }),
-    [inventoryStatus, contact.customFields, persistedBuyerProfile],
+    [inventoryStatus, contact.customFields, persistedBuyerProfile, hideGrowthEngine],
   );
 
   const customerInsights = useMemo(

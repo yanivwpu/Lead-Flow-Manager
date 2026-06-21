@@ -3,6 +3,7 @@ import { useLocation, useSearch } from "wouter";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { queryClient } from "@/lib/queryClient";
+import { useHideGrowthEngineForShopify, SHOPIFY_RGE_BLOCK_REDIRECT } from "@/lib/shopifyMerchantExperience";
 import {
   RGE_TEMPLATE_ONBOARDING_PATH,
   normalizeRgePostPurchaseRedirect,
@@ -59,6 +60,7 @@ export function PostCheckout() {
   const [, setLocation] = useLocation();
   const search = useSearch();
   const abortRef = useRef<AbortController | null>(null);
+  const hideGrowthEngine = useHideGrowthEngineForShopify();
 
   const { targetPath, pollTemplate } = useMemo(() => {
     const params = new URLSearchParams(search);
@@ -83,10 +85,18 @@ export function PostCheckout() {
     return { targetPath: target, pollTemplate };
   }, [search]);
 
+  const effectivePollTemplate = pollTemplate && !hideGrowthEngine;
+
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showManualContinue, setShowManualContinue] = useState(false);
 
-  const manualContinuePath = pollTemplate ? RGE_TEMPLATE_ONBOARDING_PATH : targetPath;
+  const manualContinuePath = effectivePollTemplate ? RGE_TEMPLATE_ONBOARDING_PATH : targetPath;
+
+  useEffect(() => {
+    if (hideGrowthEngine && pollTemplate) {
+      setLocation(SHOPIFY_RGE_BLOCK_REDIRECT);
+    }
+  }, [hideGrowthEngine, pollTemplate, setLocation]);
 
   useEffect(() => {
     const slowTimer = window.setTimeout(() => setShowManualContinue(true), 10000);
@@ -126,7 +136,7 @@ export function PostCheckout() {
           return;
         }
 
-        if (pollTemplate && stripeSession) {
+        if (effectivePollTemplate && stripeSession) {
           await verifyRgeStripeSession(stripeSession);
           await queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
           await queryClient.invalidateQueries({
@@ -136,7 +146,7 @@ export function PostCheckout() {
 
         let sub0 = serializeSubscriptionSnapshot(first);
         let tmpl0 = "";
-        if (pollTemplate) {
+        if (effectivePollTemplate) {
           tmpl0 = await fetchTemplateSnapshot();
         }
 
@@ -152,7 +162,7 @@ export function PostCheckout() {
           const snap = serializeSubscriptionSnapshot(next);
           let changed = snap !== sub0;
 
-          if (pollTemplate) {
+          if (effectivePollTemplate) {
             const tnow = await fetchTemplateSnapshot();
             changed = changed || (tnow !== tmpl0 && tnow !== "");
           }
@@ -166,20 +176,20 @@ export function PostCheckout() {
           queryKey: ["/api/templates/realtor-growth-engine/onboarding/progress"],
         });
 
-        const redirectTarget = pollTemplate ? RGE_TEMPLATE_ONBOARDING_PATH : targetPath;
+        const redirectTarget = effectivePollTemplate ? RGE_TEMPLATE_ONBOARDING_PATH : targetPath;
 
         if (!ac.signal.aborted) setLocation(redirectTarget);
       } catch {
         setErrorMsg("Something went wrong confirming your checkout. Redirecting…");
         setTimeout(() => {
-          if (!ac.signal.aborted) setLocation(pollTemplate ? RGE_TEMPLATE_ONBOARDING_PATH : targetPath);
+          if (!ac.signal.aborted) setLocation(pollTemplate && hideGrowthEngine ? SHOPIFY_RGE_BLOCK_REDIRECT : targetPath);
         }, 1600);
       }
     }
 
     waitAndRedirect();
     return () => ac.abort();
-  }, [pollTemplate, search, setLocation, targetPath]);
+  }, [effectivePollTemplate, hideGrowthEngine, pollTemplate, search, setLocation, targetPath]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-6">
@@ -196,7 +206,7 @@ export function PostCheckout() {
           onClick={() => setLocation(manualContinuePath)}
           data-testid="button-post-checkout-continue"
         >
-          {pollTemplate ? "Continue to Realtor Growth Engine onboarding" : "Continue to your account"}
+          {effectivePollTemplate ? "Continue to Realtor Growth Engine onboarding" : "Continue to your account"}
         </Button>
       )}
     </div>

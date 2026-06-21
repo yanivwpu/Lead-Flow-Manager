@@ -146,6 +146,32 @@ export function Pricing() {
   const isShopify = mustUseShopifyBilling(subscriptionData?.subscription, shopHint);
   const planButtonsDisabled = !!user && subscriptionLoading;
 
+  const compareRows: {
+    feature: string;
+    free: boolean | string;
+    starter: boolean | string;
+    pro: boolean | string;
+  }[] = useMemo(() => {
+    const rows = [
+      { feature: t(`${p}.compare.activeConversations`), free: "50", starter: "500", pro: "2,000" },
+      { feature: t(`${p}.compare.users`), free: "1", starter: t(`${p}.compare.upTo3`), pro: t(`${p}.compare.multiple`) },
+      { feature: t(`${p}.compare.whatsappNumbers`), free: "1", starter: "1", pro: t(`${p}.compare.upTo5`) },
+      { feature: t(`${p}.compare.unifiedInbox`), free: true, starter: true, pro: true },
+      { feature: t(`${p}.compare.crm`), free: t(`${p}.compare.basic`), starter: t(`${p}.compare.full`), pro: t(`${p}.compare.full`) },
+      { feature: t(`${p}.compare.pipelineTasks`), free: true, starter: true, pro: true },
+      { feature: t(`${p}.compare.aiAssist`), free: false, starter: t(`${p}.compare.aiAssistBasic`), pro: t(`${p}.compare.aiAssistEnhanced`) },
+      { feature: t(`${p}.compare.automations`), free: false, starter: t(`${p}.compare.basic`), pro: t(`${p}.compare.advancedAutomations`) },
+      { feature: t(`${p}.compare.leadScoring`), free: false, starter: false, pro: true },
+      { feature: t(`${p}.compare.smartRetargeting`), free: false, starter: true, pro: true },
+      { feature: t(`${p}.compare.integrations`), free: false, starter: true, pro: true },
+      { feature: t(`${p}.compare.growthEngines`), free: false, starter: false, pro: t(`${p}.compare.eligible`) },
+      { feature: t(`${p}.compare.aiBrainAddon`), free: false, starter: true, pro: true },
+    ];
+    return isShopify
+      ? rows.filter((row) => row.feature !== t(`${p}.compare.growthEngines`))
+      : rows;
+  }, [isShopify, t, p]);
+
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     const resolved = resolveShopifyShopForCheckout(shopHint);
@@ -300,28 +326,6 @@ export function Pricing() {
       setAiBrainAddonLoading(false);
     }
   };
-
-  // Comparison table rows – feature labels are already translated strings
-  const compareRows: {
-    feature: string;
-    free: boolean | string;
-    starter: boolean | string;
-    pro: boolean | string;
-  }[] = [
-    { feature: t(`${p}.compare.activeConversations`), free: "50", starter: "500", pro: "2,000" },
-    { feature: t(`${p}.compare.users`), free: "1", starter: t(`${p}.compare.upTo3`), pro: t(`${p}.compare.multiple`) },
-    { feature: t(`${p}.compare.whatsappNumbers`), free: "1", starter: "1", pro: t(`${p}.compare.upTo5`) },
-    { feature: t(`${p}.compare.unifiedInbox`), free: true, starter: true, pro: true },
-    { feature: t(`${p}.compare.crm`), free: t(`${p}.compare.basic`), starter: t(`${p}.compare.full`), pro: t(`${p}.compare.full`) },
-    { feature: t(`${p}.compare.pipelineTasks`), free: true, starter: true, pro: true },
-    { feature: t(`${p}.compare.aiAssist`), free: false, starter: t(`${p}.compare.aiAssistBasic`), pro: t(`${p}.compare.aiAssistEnhanced`) },
-    { feature: t(`${p}.compare.automations`), free: false, starter: t(`${p}.compare.basic`), pro: t(`${p}.compare.advancedAutomations`) },
-    { feature: t(`${p}.compare.leadScoring`), free: false, starter: false, pro: true },
-    { feature: t(`${p}.compare.smartRetargeting`), free: false, starter: true, pro: true },
-    { feature: t(`${p}.compare.integrations`), free: false, starter: true, pro: true },
-    { feature: t(`${p}.compare.growthEngines`), free: false, starter: false, pro: t(`${p}.compare.eligible`) },
-    { feature: t(`${p}.compare.aiBrainAddon`), free: false, starter: true, pro: true },
-  ];
 
   return (
     // dir on the root div propagates to all children automatically.

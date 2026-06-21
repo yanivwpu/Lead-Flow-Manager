@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
@@ -218,7 +218,6 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
 
   const isConversationLimit = reason === "conversation_limit";
   const isAutomationsPaidPlan = reason === "automations_paid_plan";
-  const content = isAutomationsPaidPlan ? null : UPGRADE_CONTENT[reason];
 
   const { data: subscription } = useQuery<{
     subscription: { plan: string; isShopify?: boolean } | null;
@@ -233,6 +232,18 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
   });
 
   const isShopify = mustUseShopifyBilling(subscription?.subscription, shopHint);
+
+  const content = useMemo(() => {
+    if (isAutomationsPaidPlan) return null;
+    const base = UPGRADE_CONTENT[reason];
+    if (reason === "automations_upgrade_pro" && isShopify) {
+      return {
+        ...base,
+        description: "Upgrade to Pro for advanced workflows and AI-assisted triggers where enabled.",
+      };
+    }
+    return base;
+  }, [isAutomationsPaidPlan, reason, isShopify]);
 
   const runCheckout = async (plan: TargetPlan) => {
     setLoadingPlan(plan);

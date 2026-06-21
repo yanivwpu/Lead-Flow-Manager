@@ -32,7 +32,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Link } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { 
   FileText, RefreshCw, Lock, Zap, Send, Clock, CheckCircle2, XCircle, Eye,
   AlertCircle, Image, LayoutGrid,
@@ -78,8 +78,8 @@ import {
 } from "@shared/rgePaths";
 import { cn } from "@/lib/utils";
 import { GROWTH_ENGINE_CARDS, sortGrowthEnginesCatalog, type GrowthEngineCardModel } from "@/lib/growthEnginesCatalog";
+import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { useToast } from "@/hooks/use-toast";
-import { useLocation, useSearch } from "wouter";
 import { useTranslation } from "react-i18next";
 import { formatDistanceToNow, format } from "date-fns";
 import { automationSendGuardBlockUserMessage } from "@shared/automationSendGuardMessages";
@@ -781,11 +781,23 @@ function GrowthEnginesTab() {
 export function Templates() {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
+  const hideGrowthEngine = useHideGrowthEngineForShopify();
   const templatesMainTabValue = useMemo(() => {
     const p = new URLSearchParams(searchString).get("tab");
-    const allowed = ["presets", "templates", "re-engagement", "growth-engines"] as const;
+    const allowed = hideGrowthEngine
+      ? (["presets", "templates", "re-engagement"] as const)
+      : (["presets", "templates", "re-engagement", "growth-engines"] as const);
+    if (p === "growth-engines" && hideGrowthEngine) return "presets" as const;
     return (allowed as readonly string[]).includes(p || "") ? (p as (typeof allowed)[number]) : "presets";
-  }, [searchString]);
+  }, [searchString, hideGrowthEngine]);
+
+  useEffect(() => {
+    if (!hideGrowthEngine) return;
+    const p = new URLSearchParams(searchString).get("tab");
+    if (p === "growth-engines") {
+      setLocation("/app/templates");
+    }
+  }, [hideGrowthEngine, searchString, setLocation]);
 
   const handleTemplatesMainTabChange = (next: string) => {
     const sp = new URLSearchParams(searchString);
@@ -1512,7 +1524,7 @@ export function Templates() {
       <div className="flex-1 min-h-0 overflow-y-auto px-4 md:px-6 py-2 md:py-3 pb-24 md:pb-6 overscroll-y-contain">
         <div className="max-w-5xl mx-auto">
           <Tabs value={templatesMainTabValue} onValueChange={handleTemplatesMainTabChange} className="space-y-2 md:space-y-4">
-          <TabsList className="grid w-full grid-cols-4 h-auto gap-0.5 p-0.5 sticky top-0 z-20 bg-muted/95 backdrop-blur-sm rounded-lg border border-gray-100/80 shadow-sm">
+          <TabsList className={`grid w-full ${hideGrowthEngine ? "grid-cols-3" : "grid-cols-4"} h-auto gap-0.5 p-0.5 sticky top-0 z-20 bg-muted/95 backdrop-blur-sm rounded-lg border border-gray-100/80 shadow-sm`}>
             <TabsTrigger value="presets" data-testid="tab-presets" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight">
               <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
               <span>Presets</span>
@@ -1528,6 +1540,7 @@ export function Templates() {
               <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
               <span>Re-engagement ({retargetableChats.length})</span>
             </TabsTrigger>
+            {!hideGrowthEngine && (
             <TabsTrigger value="growth-engines" data-testid="tab-growth-engines" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight relative">
               <Rocket className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
               <span className="text-center leading-tight">
@@ -1536,6 +1549,7 @@ export function Templates() {
               </span>
               <Badge variant="secondary" className="absolute -top-0.5 -right-0.5 text-[9px] px-1 py-0 h-4 bg-purple-100 text-purple-700 border-0 hidden sm:flex">NEW</Badge>
             </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="presets" className="space-y-3 md:space-y-4 mt-0">
@@ -2244,9 +2258,11 @@ export function Templates() {
             </Card>
           </TabsContent>
 
+          {!hideGrowthEngine && (
           <TabsContent value="growth-engines" className="mt-0 space-y-2 md:space-y-4">
             <GrowthEnginesTab />
           </TabsContent>
+          )}
         </Tabs>
 
         {/* Send Template Dialog */}

@@ -1051,13 +1051,20 @@ export function RealtorGrowthEngine() {
 
   const purchaseMutation = useMutation({
     mutationFn: async () => {
+      const billing = getRgePurchaseBillingPayload(billingAccount?.subscription);
+      if (billing.billingChannel === "blocked") {
+        throw Object.assign(new Error("Realtor Growth Engine is not available for Shopify-installed accounts."), {
+          code: "RGE_NOT_AVAILABLE_SHOPIFY",
+          status: 403,
+        });
+      }
       const res = await fetch("/api/templates/realtor-growth-engine/purchase", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...getRgeCheckoutReturnPaths(),
-          ...getRgePurchaseBillingPayload(),
+          ...getRgePurchaseBillingPayload(billingAccount?.subscription),
         }),
       });
       if (res.status === 401) {

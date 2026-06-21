@@ -30,7 +30,9 @@ export function shouldShowCopilotBuyerPreferences(input: {
   inventoryStatus?: InventoryConnectorStatus | null;
   industry?: string | null;
   customFields?: Record<string, unknown> | null;
+  hideGrowthEngineForShopify?: boolean;
 }): boolean {
+  if (input.hideGrowthEngineForShopify) return false;
   if (isRealEstateWorkspaceIndustry(input.industry)) return true;
   if (isBuyerLeadContact(input.customFields)) return true;
   if (input.inventoryStatus?.rgeInstalled) return true;
@@ -40,7 +42,9 @@ export function shouldShowCopilotBuyerPreferences(input: {
 /** Matching Listings — full inventory connector (RGE + env flag). */
 export function shouldShowCopilotInventoryPanels(
   inventoryStatus?: InventoryConnectorStatus | null,
+  hideGrowthEngineForShopify?: boolean,
 ): boolean {
+  if (hideGrowthEngineForShopify) return false;
   return inventoryStatus?.canUse === true;
 }
 
@@ -60,8 +64,9 @@ export function shouldShowCopilotInventoryForContact(input: {
   inventoryStatus?: InventoryConnectorStatus | null;
   customFields?: Record<string, unknown> | null;
   buyerPreferenceProfile?: unknown;
+  hideGrowthEngineForShopify?: boolean;
 }): boolean {
-  if (!shouldShowCopilotInventoryPanels(input.inventoryStatus)) return false;
+  if (!shouldShowCopilotInventoryPanels(input.inventoryStatus, input.hideGrowthEngineForShopify)) return false;
   if (isBuyerLeadContact(input.customFields)) return true;
   return contactHasInventoryMatchCriteria(input.buyerPreferenceProfile);
 }

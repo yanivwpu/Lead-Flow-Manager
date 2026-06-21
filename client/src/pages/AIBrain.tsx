@@ -33,6 +33,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
+import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
 import {
   openShopifyManagedPricing,
@@ -336,6 +337,14 @@ function LockedFeatureTeaser({
 function AIBrainContent() {
   const queryClient = useQueryClient();
   const shopHint = useShopifyShopHint();
+  const hideGrowthEngine = useHideGrowthEngineForShopify();
+  const aiBrainHighlights = useMemo(
+    () =>
+      hideGrowthEngine
+        ? AI_BRAIN_HIGHLIGHTS.filter((h) => h !== "Growth Engine intelligence")
+        : [...AI_BRAIN_HIGHLIGHTS],
+    [hideGrowthEngine],
+  );
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const lastKnowledgeSentRef = useRef<string | null>(null);
   const knowledgeHydratedRef = useRef(false);
@@ -997,7 +1006,7 @@ function AIBrainContent() {
             </CardHeader>
             <CardContent className="space-y-8 pb-6">
               <ul className="grid gap-x-6 gap-y-2.5 text-sm text-slate-700 sm:grid-cols-2">
-                {AI_BRAIN_HIGHLIGHTS.map((f) => (
+                {aiBrainHighlights.map((f) => (
                   <li key={f} className="flex gap-2.5">
                     <span className="mt-0.5 font-medium text-violet-500 select-none" aria-hidden>
                       ✦
@@ -1715,11 +1724,13 @@ function AIBrainContent() {
                 description="Phrase-based guardrails that pause AI when a human should take over — calm, explicit control."
                 preview="“Agent” · “call me” · custom phrases"
               />
+              {!hideGrowthEngine && (
               <LockedFeatureTeaser
                 title="Growth Engine intelligence"
                 description="Where your plan supports it, unlocks deeper industry playbooks and accelerators built on the same memory layer."
                 preview="Industry-ready depth (plan-dependent)"
               />
+              )}
             </div>
           </div>
         )}

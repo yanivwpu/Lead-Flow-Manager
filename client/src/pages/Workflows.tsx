@@ -31,6 +31,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { MODAL_OVERLAY_BACKDROP } from "@/lib/modalOverlay";
 import { useSubscription } from "@/lib/subscription-context";
+import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
 import {
   CRM_WORKFLOW_ACTIONS,
@@ -269,11 +270,19 @@ function ChannelChip({ value, selected, onClick }: { value: string; selected: bo
   );
 }
 
-function StarterPlanAutomationsBanner({ onUpgradePro }: { onUpgradePro: () => void }) {
+function StarterPlanAutomationsBanner({
+  onUpgradePro,
+  hideGrowthEngineCopy = false,
+}: {
+  onUpgradePro: () => void;
+  hideGrowthEngineCopy?: boolean;
+}) {
   return (
     <div className="px-4 sm:px-6 py-3 bg-amber-50/90 border-b border-amber-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm text-amber-950">
       <p>
-        You're on Starter — Basic Automations enabled. Pro unlocks more advanced workflows, Growth Engine automations, and AI-assisted triggers where enabled.
+        {hideGrowthEngineCopy
+          ? "You're on Starter — Basic Automations enabled. Pro unlocks more advanced workflows and AI-assisted triggers where enabled."
+          : "You're on Starter — Basic Automations enabled. Pro unlocks more advanced workflows, Growth Engine automations, and AI-assisted triggers where enabled."}
       </p>
       <Button
         type="button"
@@ -1037,6 +1046,7 @@ export function Workflows() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: subscriptionData, isLoading: subscriptionLoading } = useSubscription();
+  const hideGrowthEngine = useHideGrowthEngineForShopify();
   const limits = subscriptionData?.limits;
   const plan = limits?.plan ?? "free";
   const workflowsEnabled = limits?.workflowsEnabled ?? false;
@@ -1102,9 +1112,10 @@ export function Workflows() {
   const { data: chats = [] } = useQuery<any[]>({ queryKey: ["/api/chats"], retry: false });
   const { data: teamMembers = [] } = useQuery<any[]>({ queryKey: ["/api/team/members"], retry: false });
   const editingGrowthEngine = editingWorkflow ? isGrowthEngineWorkflowRecord(editingWorkflow) : false;
+  const showGrowthEngineWorkflowUi = editingGrowthEngine && !hideGrowthEngine;
   const { data: rgeTemplatePayload } = useQuery<{ assets?: Array<{ assetType: string; definition?: { templates?: Array<{ key: string }> } }> }>({
     queryKey: ["/api/templates/realtor-growth-engine"],
-    enabled: editingGrowthEngine && view === "wf-builder",
+    enabled: showGrowthEngineWorkflowUi && view === "wf-builder",
     retry: false,
   });
   const rgeMessageTemplateKeys =
@@ -1448,7 +1459,12 @@ export function Workflows() {
           </button>
           <h1 className="text-base font-semibold text-gray-900">New Workflow</h1>
         </div>
-        {isStarterPlan && <StarterPlanAutomationsBanner onUpgradePro={openAdvancedAutomationsUpgrade} />}
+        {isStarterPlan && (
+          <StarterPlanAutomationsBanner
+            onUpgradePro={openAdvancedAutomationsUpgrade}
+            hideGrowthEngineCopy={hideGrowthEngine}
+          />
+        )}
         <div className="flex-1 overflow-auto">
           <div className="max-w-2xl mx-auto px-6 py-8">
             <div className="mb-8">
@@ -1474,7 +1490,12 @@ export function Workflows() {
           </button>
           <h1 className="text-base font-semibold text-gray-900">New Sequence</h1>
         </div>
-        {isStarterPlan && <StarterPlanAutomationsBanner onUpgradePro={openAdvancedAutomationsUpgrade} />}
+        {isStarterPlan && (
+          <StarterPlanAutomationsBanner
+            onUpgradePro={openAdvancedAutomationsUpgrade}
+            hideGrowthEngineCopy={hideGrowthEngine}
+          />
+        )}
         <div className="flex-1 overflow-auto">
           <div className="max-w-2xl mx-auto px-6 py-8">
             <div className="mb-8">
@@ -1530,7 +1551,12 @@ export function Workflows() {
           </div>
         </div>
 
-        {isStarterPlan && <StarterPlanAutomationsBanner onUpgradePro={openAdvancedAutomationsUpgrade} />}
+        {isStarterPlan && (
+          <StarterPlanAutomationsBanner
+            onUpgradePro={openAdvancedAutomationsUpgrade}
+            hideGrowthEngineCopy={hideGrowthEngine}
+          />
+        )}
 
         {/* Builder body */}
         <div className="flex-1 overflow-y-auto">
@@ -1612,7 +1638,7 @@ export function Workflows() {
               </div>
 
               <div>
-                {editingGrowthEngine && (
+                {showGrowthEngineWorkflowUi && (
                   <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 mb-3">
                     Some steps are managed automatically by the Growth Engine and may not appear in this editor.
                   </p>
@@ -1624,7 +1650,7 @@ export function Workflows() {
                     index={i}
                     total={actions.length}
                     teamMembers={teamMembers}
-                    messageTemplateKeys={editingGrowthEngine ? rgeMessageTemplateKeys : undefined}
+                    messageTemplateKeys={showGrowthEngineWorkflowUi ? rgeMessageTemplateKeys : undefined}
                     onUpdate={(field, value) => updateAction(i, field, value)}
                     onPatch={(patch) => patchAction(i, patch)}
                     onRemove={() => removeAction(i)}
@@ -1634,7 +1660,7 @@ export function Workflows() {
                 ))}
 
                 {/* Add action — Popover anchored here */}
-                <ActionPickerPopover onSelect={addAction} growthEngine={editingGrowthEngine} />
+                <ActionPickerPopover onSelect={addAction} growthEngine={showGrowthEngineWorkflowUi} />
               </div>
             </div>
 
@@ -1696,7 +1722,12 @@ export function Workflows() {
           </div>
         </div>
 
-        {isStarterPlan && <StarterPlanAutomationsBanner onUpgradePro={openAdvancedAutomationsUpgrade} />}
+        {isStarterPlan && (
+          <StarterPlanAutomationsBanner
+            onUpgradePro={openAdvancedAutomationsUpgrade}
+            hideGrowthEngineCopy={hideGrowthEngine}
+          />
+        )}
 
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
@@ -1845,7 +1876,12 @@ export function Workflows() {
         </div>
       </div>
 
-      {isStarterPlan && <StarterPlanAutomationsBanner onUpgradePro={openAdvancedAutomationsUpgrade} />}
+      {isStarterPlan && (
+        <StarterPlanAutomationsBanner
+          onUpgradePro={openAdvancedAutomationsUpgrade}
+          hideGrowthEngineCopy={hideGrowthEngine}
+        />
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
         <div className="border-b border-gray-200 px-4 sm:px-6 bg-white">
