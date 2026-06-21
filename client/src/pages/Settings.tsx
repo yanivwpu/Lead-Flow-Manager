@@ -417,7 +417,11 @@ export function Settings() {
               <div className="flex gap-2 mt-4">
                 <Button
                   className="bg-brand-green hover:bg-brand-dark"
-                  onClick={() => setLocation(`/auth?redirect=${encodeURIComponent("/app/settings")}`)}
+                  onClick={() =>
+                    setLocation(
+                      `/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`,
+                    )
+                  }
                   data-testid="button-settings-relogin"
                 >
                   Sign in

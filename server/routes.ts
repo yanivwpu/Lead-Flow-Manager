@@ -9761,15 +9761,16 @@ export async function registerRoutes(
     }
   });
 
-  // Admin: Manually trigger trial check-in emails (for testing)
+  // Admin: Manually trigger onboarding activation emails (for testing)
   app.post("/api/admin/trigger-checkin-emails", requireAdmin, async (req, res) => {
     try {
-      const { runTrialCheckinEmails } = await import("./cron");
-      const result = await runTrialCheckinEmails();
-      res.json({ 
-        success: true, 
-        message: `Check-in emails processed: ${result.sent} sent, ${result.errors} errors`,
-        ...result 
+      const { runActivationEmails } = await import("./activationEmailService");
+      const result = await runActivationEmails();
+      res.json({
+        success: true,
+        message: `Activation emails processed: day3=${result.day3Sent}, day10=${result.day10Sent}, errors=${result.errors}`,
+        sent: result.day3Sent + result.day10Sent,
+        ...result,
       });
     } catch (error) {
       console.error("Error running check-in emails:", error);

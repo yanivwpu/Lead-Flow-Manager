@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Activation email previews</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 32px 24px 64px;
+    }
+    h1 { margin: 0 0 8px; font-size: 28px; font-weight: 700; }
+    .intro { margin: 0 0 32px; color: #94a3b8; max-width: 720px; line-height: 1.6; }
+    .preview-block {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 32px;
+    }
+    .preview-meta h2 { margin: 0 0 6px; font-size: 20px; color: #f8fafc; }
+    .subject { margin: 0 0 12px; color: #94a3b8; font-size: 14px; }
+    .png-links { margin: 0 0 20px; display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; }
+    .png-links a { color: #34d399; text-decoration: none; }
+    .png-links a:hover { text-decoration: underline; }
+    .preview-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 1100px) {
+      .preview-row { grid-template-columns: 1fr; }
+    }
+    .viewport-label {
+      margin: 0 0 10px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #64748b;
+    }
+    .device {
+      background: #f8fafc;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #475569;
+      box-shadow: 0 12px 40px rgb(0 0 0 / 0.35);
+    }
+    .device.desktop iframe { width: 800px; height: 2200px; border: 0; display: block; }
+    .device.mobile {
+      width: 390px;
+      max-width: 100%;
+      margin: 0 auto;
+    }
+    .device.mobile iframe { width: 390px; height: 2600px; border: 0; display: block; }
+  </style>
+</head>
+<body>
+  <h1>Activation email previews</h1>
+  <p class="intro">
+    Exact HTML rendered by <code>renderActivationEmailDay3Html</code> and
+    <code>renderActivationEmailDay10Html</code> with local product screenshots.
+    Review spacing, image sizing, CTA buttons, and footer before deployment.
+  </p>
+  
+    <section class="preview-block">
+      <div class="preview-meta">
+        <h2>Day 3 — Getting Connected</h2>
+        <p class="subject"><strong>Subject:</strong> Connect WhatsApp in minutes — your free AI assistant is ready</p>
+        <div class="png-links">
+          <a href="day3-desktop.png" target="_blank">Desktop PNG</a>
+          <a href="day3-mobile.png" target="_blank">Mobile PNG</a>
+          <a href="day3-desktop.html" target="_blank">Desktop HTML</a>
+          <a href="day3-mobile.html" target="_blank">Mobile HTML</a>
+        </div>
+      </div>
+      <div class="preview-row">
+        <div class="preview-col">
+          <p class="viewport-label">Desktop (800px viewport)</p>
+          <div class="device desktop">
+            <iframe src="day3-desktop.html" title="Day 3 — Getting Connected desktop"></iframe>
+          </div>
+        </div>
+        <div class="preview-col">
+          <p class="viewport-label">Mobile (390px viewport)</p>
+          <div class="device mobile">
+            <iframe src="day3-mobile.html" title="Day 3 — Getting Connected mobile"></iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="preview-block">
+      <div class="preview-meta">
+        <h2>Day 10 — Why Connect?</h2>
+        <p class="subject"><strong>Subject:</strong> Your AI assistant is waiting — connect your channels to activate it</p>
+        <div class="png-links">
+          <a href="day10-desktop.png" target="_blank">Desktop PNG</a>
+          <a href="day10-mobile.png" target="_blank">Mobile PNG</a>
+          <a href="day10-desktop.html" target="_blank">Desktop HTML</a>
+          <a href="day10-mobile.html" target="_blank">Mobile HTML</a>
+        </div>
+      </div>
+      <div class="preview-row">
+        <div class="preview-col">
+          <p class="viewport-label">Desktop (800px viewport)</p>
+          <div class="device desktop">
+            <iframe src="day10-desktop.html" title="Day 10 — Why Connect? desktop"></iframe>
+          </div>
+        </div>
+        <div class="preview-col">
+          <p class="viewport-label">Mobile (390px viewport)</p>
+          <div class="device mobile">
+            <iframe src="day10-mobile.html" title="Day 10 — Why Connect? mobile"></iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+</body>
+</html>

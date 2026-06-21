@@ -163,7 +163,10 @@ export const users = pgTable("users", {
   shopifyInstalledAt: timestamp("shopify_installed_at"),
   shopifyAIBrainEnabled: boolean("shopify_ai_brain_enabled").default(false),
   createdAt: timestamp("created_at").defaultNow(),
-  // Trial re-engagement email tracking
+  // Onboarding activation email sequence (day 3 + day 10; skip when messaging channels connected)
+  activationEmailDay3Sent: boolean("activation_email_day3_sent").default(false),
+  activationEmailDay10Sent: boolean("activation_email_day10_sent").default(false),
+  /** @deprecated Legacy trial check-in flag — superseded by activationEmailDay10Sent. Not read by cron. */
   checkinEmailSent: boolean("checkin_email_sent").default(false),
   /** When set, the user has requested account deletion; data may be purged per policy (not immediate hard-delete in MVP). */
   deletionRequestedAt: timestamp("deletion_requested_at"),

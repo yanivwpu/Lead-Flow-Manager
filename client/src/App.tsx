@@ -81,7 +81,8 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
   }
 
   if (!user) {
-    return <Redirect to="/auth" />;
+    const returnTo = `${window.location.pathname}${window.location.search}`;
+    return <Redirect to={`/auth?redirect=${encodeURIComponent(returnTo)}`} />;
   }
 
   return <Component {...rest} />;

@@ -94,6 +94,17 @@ export function emailList(items: string[]): string {
   return `<ul style="color: #475569; font-size: 15px; padding-left: 20px; margin: 0 0 16px; line-height: 1.6;">${lis}</ul>`;
 }
 
+/** Checklist with ✅ markers (no bullet dots). */
+export function emailChecklist(items: string[]): string {
+  const rows = items
+    .map(
+      (item) =>
+        `<li style="margin: 0 0 8px; padding: 0; list-style: none;">✅ ${item}</li>`,
+    )
+    .join("");
+  return `<ul style="color: #475569; font-size: 15px; padding: 0; margin: 0 0 16px; line-height: 1.6; list-style: none;">${rows}</ul>`;
+}
+
 export function emailOrderedList(items: string[]): string {
   const lis = items
     .map((item) => `<li style="margin-bottom: 8px;">${item}</li>`)
@@ -103,6 +114,35 @@ export function emailOrderedList(items: string[]): string {
 
 export function emailDivider(): string {
   return `<div style="border-top: 1px solid #e2e8f0; margin: 28px 0 0; padding-top: 24px;"></div>`;
+}
+
+export function emailFigure(
+  src: string,
+  alt: string,
+  caption?: string,
+  options?: { maxWidth?: number; figureMargin?: string },
+): string {
+  const maxWidth = options?.maxWidth ?? 544;
+  const figureMargin = options?.figureMargin ?? "20px 0 24px";
+  const cap = caption
+    ? `<p style="margin: 8px 0 0; color: #64748b; font-size: 12px; text-align: center; line-height: 1.45;">${escapeHtml(caption)}</p>`
+    : "";
+  return `<figure style="margin: ${figureMargin};">
+    <div style="max-width: ${maxWidth}px; margin: 0 auto;">
+      <img src="${src}" alt="${escapeHtml(alt)}" width="${maxWidth}" style="display: block; width: 100%; max-width: ${maxWidth}px; height: auto; border-radius: 10px; border: 1px solid #e2e8f0; -ms-interpolation-mode: bicubic;" />
+    </div>
+    ${cap}
+  </figure>`;
+}
+
+export function emailActivationFooter(appUrl: string): string {
+  return `<p style="margin: 0 0 8px; color: #94a3b8; font-size: 12px;">Questions? <a href="mailto:support@whachatcrm.com" style="color: #059669; text-decoration: none;">support@whachatcrm.com</a></p>
+    <p style="margin: 0; color: #94a3b8; font-size: 11px;">You're receiving this because you signed up for WhaChatCRM.</p>
+    <p style="margin: 8px 0 0; color: #94a3b8; font-size: 11px;">
+      <a href="${appUrl}/unsubscribe" style="color: #94a3b8; text-decoration: underline;">Unsubscribe</a> ·
+      <a href="${appUrl}/privacy-policy" style="color: #94a3b8; text-decoration: underline;">Privacy Policy</a>
+    </p>
+    <p style="margin: 12px 0 0; color: #94a3b8; font-size: 12px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>`;
 }
 
 export function emailSignatureBlock(): string {

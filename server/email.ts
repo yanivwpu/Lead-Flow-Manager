@@ -14,12 +14,17 @@ import {
   emailInfoBox,
   emailHighlightBox,
   emailTipBox,
+  emailChecklist,
   emailList,
   emailOrderedList,
   emailSignatureBlock,
   emailSupportFooter,
+  emailFigure,
+  emailActivationFooter,
   renderSalespersonAssignedResponsibilitiesSection,
 } from "./emailTemplates";
+import { activationEmailAssets } from "@shared/activationEmailAssets";
+import { settingsChannelsAbsoluteHref } from "@shared/settingsChannelsNavigation";
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const APP_URL = process.env.APP_URL || "https://app.whachatcrm.com";
@@ -390,48 +395,195 @@ export async function sendPartnerWelcomeEmail(
   });
 }
 
-export async function sendTrialCheckinEmail(firstName: string, email: string): Promise<boolean> {
-  const CALENDLY_LINK = "https://calendly.com/whachatcrm/15min";
-  const WHATSAPP_SUPPORT =
-    "https://wa.me/19545138408?text=Hi!%20I%20need%20help%20connecting%20my%20WhatsApp%20number.";
+export interface ActivationEmailRenderOptions {
+  appUrl?: string;
+  /** Override screenshot base URL (e.g. file:// for local previews). */
+  assetBase?: string;
+}
+
+function activationEmailContext(options?: ActivationEmailRenderOptions) {
+  const appUrl = options?.appUrl ?? APP_URL;
+  return {
+    appUrl,
+    assets: activationEmailAssets(appUrl, options?.assetBase ? { assetBase: options.assetBase } : undefined),
+    channelsWhatsAppUrl: settingsChannelsAbsoluteHref(appUrl, { provider: "whatsapp" }),
+  };
+}
+
+const DAY3_EMAIL_FIGURE = { maxWidth: 460, figureMargin: "14px 0 18px" } as const;
+
+export function renderActivationEmailDay3Html(
+  firstName: string,
+  options?: ActivationEmailRenderOptions,
+): string {
+  const { appUrl, assets, channelsWhatsAppUrl } = activationEmailContext(options);
 
   const body = [
-    emailParagraph(`Hi ${escapeHtml(firstName || "there")}!`),
-    emailParagraph("Hope you're enjoying your Pro trial of WhaChatCRM!"),
+    emailParagraph(`Hi ${escapeHtml(firstName)}!`),
     emailParagraph(
-      "We noticed you haven't connected your WhatsApp number yet — totally understandable, the Meta API setup can feel tricky the first time."
+      "Welcome to WhaChatCRM — your unified inbox for WhatsApp, Facebook Messenger, and Instagram, plus AI-powered tools that help you respond faster and keep conversations organized.",
     ),
-    emailParagraph("<strong>No stress — we're here to help make it easy.</strong> Would you like:"),
-    emailList([
-      "A <strong>free 15-minute demo</strong> where we connect it together (screen share)?",
-      "Quick help via chat or email?",
-      "Or just some troubleshooting tips?",
+    emailHighlightBox(
+      "<strong>All your conversations in one place.</strong> When customers message you on any channel, everything flows into a single Inbox — organized, searchable, and ready for your team.",
+    ),
+    emailSectionHeading("Get started with WhaChatCRM"),
+    emailChecklist([
+      "One unified Inbox for WhatsApp, Facebook Messenger, and Instagram",
+      "AI-powered tools to help you respond faster",
+      "Organized conversations and customer history",
+      "Contact management and follow-up tools",
+      "Upgrade anytime for advanced AI automation and lead workflows",
     ]),
-    emailParagraph("Reply to this email or book a quick slot:"),
-    emailButton(CALENDLY_LINK, "Book free demo"),
-    emailSecondaryButton(WHATSAPP_SUPPORT, "Chat on WhatsApp"),
+    emailFigure(
+      assets.channelsPage,
+      "WhaChatCRM Communication Channels settings",
+      "WhatsApp, Facebook Messenger, and Instagram — all in one place",
+      DAY3_EMAIL_FIGURE,
+    ),
+    emailSectionHeading("Simple guided setup with Meta Embedded Signup"),
     emailParagraph(
-      "Once connected, you'll see messages flowing in right away — and we can extend your trial a bit if needed."
+      "No API keys. No copy/paste credentials. No manual Meta configuration. The guided setup walks you through each step with Meta Embedded Signup.",
     ),
-    emailParagraph("How's everything going so far? Any questions or feedback?"),
-    emailDividerSignature(),
-    emailTipBox(
-      "<strong>P.S.</strong> Most users get stuck on the access token or webhook — we fix those in under 5 minutes on a call!"
+    emailFigure(
+      assets.connectWhatsApp,
+      "Connect WhatsApp — Meta Embedded Signup option",
+      'Click Connect, then choose "Continue with Meta Embedded Signup"',
+      DAY3_EMAIL_FIGURE,
     ),
+    emailFigure(
+      assets.embeddedSignup,
+      "Meta Embedded Signup welcome screen",
+      "Meta walks you through connecting your business — familiar and secure",
+      DAY3_EMAIL_FIGURE,
+    ),
+    emailFigure(
+      assets.metaBusinessSelection,
+      "Meta business asset selection",
+      "Choose your business portfolio and WhatsApp Business account in a guided flow",
+      DAY3_EMAIL_FIGURE,
+    ),
+    emailOrderedList([
+      "Choose your Facebook Business Account",
+      "Choose or create your WhatsApp Business Account",
+      "Add or migrate a phone number",
+      "Verify the number",
+      "Start receiving conversations in your Inbox",
+    ]),
+    emailParagraph(
+      "You can also connect <strong>Facebook Messenger</strong> and <strong>Instagram Messaging</strong> from the same Channels page — all three channels feed into your unified Inbox.",
+    ),
+    emailButton(channelsWhatsAppUrl, "Connect WhatsApp"),
   ].join("");
 
-  const footer = `<p style="margin: 0; color: #94a3b8; font-size: 11px;">You're receiving this because you started a Pro trial on WhaChatCRM.</p>
-    <p style="margin: 8px 0 0; color: #94a3b8; font-size: 11px;">
-      <a href="${APP_URL}/unsubscribe" style="color: #94a3b8; text-decoration: underline;">Unsubscribe</a> ·
-      <a href="${APP_URL}/privacy-policy" style="color: #94a3b8; text-decoration: underline;">Privacy Policy</a>
-    </p>
-    <p style="margin: 12px 0 0; color: #94a3b8; font-size: 12px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>`;
+  return renderBrandedEmail({
+    title: "Your AI assistant is ready",
+    bodyHtml: body,
+    footerHtml: emailActivationFooter(appUrl),
+  });
+}
 
+export async function sendActivationEmailDay3(
+  firstName: string,
+  email: string,
+): Promise<boolean> {
   return sendEmail({
     to: email,
-    subject: "Quick check-in: How's your WhaChatCRM trial going?",
-    html: renderBrandedEmail({ title: "Quick check-in", bodyHtml: body, footerHtml: footer }),
+    subject: "Connect WhatsApp in minutes — your free AI assistant is ready",
+    html: renderActivationEmailDay3Html(firstName),
   });
+}
+
+export function renderActivationEmailDay10Html(
+  firstName: string,
+  options?: ActivationEmailRenderOptions,
+): string {
+  const { appUrl, assets, channelsWhatsAppUrl } = activationEmailContext(options);
+
+  const realEstateExample = emailInfoBox(
+    `<p style="margin: 0 0 10px; color: #475569; font-size: 14px;"><strong>Customer:</strong> &ldquo;Is this property still available?&rdquo;</p>
+     <p style="margin: 0 0 8px; color: #475569; font-size: 13px; font-weight: 600;">WhaChatCRM AI can:</p>
+     <ul style="margin: 0; padding-left: 18px; color: #475569; font-size: 13px; line-height: 1.55;">
+       <li>Reply instantly</li>
+       <li>Answer common listing questions</li>
+       <li>Ask qualification questions (timeline, budget)</li>
+       <li>Capture contact information</li>
+       <li>Recommend matching listings</li>
+       <li>Alert your agent when the lead is qualified</li>
+     </ul>`,
+  );
+
+  const medSpaExample = emailInfoBox(
+    `<p style="margin: 0 0 10px; color: #475569; font-size: 14px;"><strong>Customer:</strong> &ldquo;How much is Botox?&rdquo;</p>
+     <p style="margin: 0 0 8px; color: #475569; font-size: 13px; font-weight: 600;">WhaChatCRM AI can:</p>
+     <ul style="margin: 0; padding-left: 18px; color: #475569; font-size: 13px; line-height: 1.55;">
+       <li>Answer pricing and service questions</li>
+       <li>Explain treatments and common FAQs</li>
+       <li>Qualify interest and discuss available options</li>
+       <li>Collect contact information</li>
+       <li>Encourage appointment booking when applicable</li>
+       <li>Route the lead to staff when a human touch is needed</li>
+     </ul>`,
+  );
+
+  const body = [
+    emailParagraph(`Hi ${escapeHtml(firstName)},`),
+    emailHighlightBox(
+      "<strong>Your AI assistant is ready — but it cannot help customers until your messaging channels are connected.</strong>",
+    ),
+    emailParagraph(
+      "WhaChatCRM AI acts like a <strong>virtual assistant for your business</strong>. It can help with repetitive customer conversations so your team can focus on high-value work — available once your channels are live.",
+    ),
+    emailSectionHeading("What your AI assistant does for you"),
+    emailList([
+      "Learns your business — services, products, FAQs, and processes",
+      "Can help handle common customer conversations and frequently asked questions",
+      "Can help qualify leads and answer common customer questions",
+      "Books appointments when applicable",
+      "Escalates conversations when a person should take over",
+      "Suggests next actions to your staff in the Inbox",
+    ]),
+    emailFigure(
+      assets.inbox,
+      "WhaChatCRM unified inbox",
+      "Manage conversations from WhatsApp, Facebook Messenger, and Instagram in one organized Inbox.",
+    ),
+    emailSubheading("Example — Real Estate"),
+    realEstateExample,
+    emailSubheading("Example — Med Spa"),
+    medSpaExample,
+    emailParagraph(
+      "Messages from <strong>WhatsApp</strong>, <strong>Facebook Messenger</strong>, and <strong>Instagram Messaging</strong> all flow into one Inbox — with AI suggestions on every thread.",
+    ),
+    emailTipBox(
+      "The more your team uses WhaChatCRM, the more your AI assistant learns your business, services, customer questions, and preferred responses.",
+    ),
+    emailParagraph(
+      "Connect WhatsApp, Facebook Messenger, or Instagram and start receiving conversations in your Inbox.",
+    ),
+    emailButton(channelsWhatsAppUrl, "Connect Your Channels"),
+  ].join("");
+
+  return renderBrandedEmail({
+    title: "Activate your AI assistant",
+    bodyHtml: body,
+    footerHtml: emailActivationFooter(appUrl),
+  });
+}
+
+export async function sendActivationEmailDay10(
+  firstName: string,
+  email: string,
+): Promise<boolean> {
+  return sendEmail({
+    to: email,
+    subject: "Your AI assistant is waiting — connect your channels to activate it",
+    html: renderActivationEmailDay10Html(firstName),
+  });
+}
+
+/** @deprecated Replaced by sendActivationEmailDay3 / sendActivationEmailDay10 */
+export async function sendTrialCheckinEmail(firstName: string, email: string): Promise<boolean> {
+  return sendActivationEmailDay10(firstName, email);
 }
 
 function emailDividerSignature(): string {
