@@ -16,6 +16,7 @@ import {
   validateAgentPageSlugInput,
 } from "../shared/agent/agentPageSlug";
 import { buildPublicAgentPageHtml, renderAgentPageListingCards } from "../shared/agent/publicAgentPageHtml";
+import { buildListingCanonicalShareUrl } from "../shared/inventory/listingViewUrl";
 import {
   buildAgentPageEmbedIframeHtml,
   normalizeEmbedListingTypeParam,
@@ -752,19 +753,25 @@ function testEmbedMode() {
   assert(embedHtml.includes("card-actions-embed"), "embed compact card actions");
   assert(embedHtml.includes("listing-card-embed"), "embed listing card class");
   assert(!embedHtml.includes('data-action="schedule"'), "no schedule button in embed cards");
-  assert(embedHtml.includes("card-share-link"), "embed share text link");
+  assert(embedHtml.includes(".card-share-btn.icon-btn"), "embed share icon button styles");
   assert(embedHtml.includes("share-url-backdrop"), "share url fallback modal");
   assert(embedHtml.includes("resolveShareUrl"), "share url resolution from card");
-  assert(embedHtml.includes("execCopyFallback"), "clipboard execCommand fallback");
+  assert(embedHtml.includes("resolveShareTitle"), "share title from listing address");
+  assert(embedHtml.includes("e.stopPropagation()"), "share handler stops propagation");
+  assert(embedHtml.includes('if (listingsGrid) listingsGrid.addEventListener("click"'), "delegated grid share clicks");
 
+  const slugShareUrl = buildListingCanonicalShareUrl(
+    { listingId: "11111111-1111-1111-1111-111111111111", publicSlug: "3503-oaks-way-pompano-beach-fl" },
+    "https://app.whachatcrm.com",
+  );
   const embedCards = renderAgentPageListingCards(
     [
       {
-        id: "l-embed",
-        shareUrl: "https://app.whachatcrm.com/share/listings/my-slug",
+        id: "11111111-1111-1111-1111-111111111111",
+        shareUrl: slugShareUrl,
         imageUrl: null,
-        street: "1 Ocean",
-        fullAddress: "1 Ocean, Pompano Beach, FL",
+        street: "3503 Oaks Way",
+        fullAddress: "3503 Oaks Way, Pompano Beach, FL",
         metaSummary: "$2,300/mo",
         cityState: "Pompano Beach, FL",
         price: "$2,300/mo",
@@ -784,6 +791,13 @@ function testEmbedMode() {
     0,
     { embedMode: true },
   );
+  assert(embedCards.includes(`data-share-url="${slugShareUrl}"`), "embed card data-share-url uses slug");
+  assert(embedCards.includes("/share/listings/3503-oaks-way-pompano-beach-fl"), "embed card share href uses public slug");
+  assert(embedCards.includes('class="card-share-btn icon-btn"'), "embed share icon button markup");
+  assert(embedCards.includes('aria-label="Share listing"'), "embed share icon aria-label");
+  assert(embedCards.includes('title="Share listing"'), "embed share icon title");
+  assert(!embedCards.includes("card-share-link"), "no embed share text link");
+  assert(embedCards.includes('data-full-address="3503 Oaks Way, Pompano Beach, FL"'), "embed card keeps full address for share title");
   assert(embedCards.includes("card-actions-embed"), "embed card renderer compact actions");
   assert(!embedCards.includes("Schedule Showing"), "embed card renderer omits schedule");
 
@@ -987,9 +1001,12 @@ function testHtml() {
   assert(html.includes("width: 120px"), "larger desktop avatar");
   assert(html.includes('target="_blank" rel="noopener noreferrer"'), "listing links open in new tab");
   assert(html.includes('data-action="share"'), "share button on listing card");
+  assert(html.includes('class="card-share-btn icon-btn"'), "share icon button on listing card");
+  assert(html.includes('aria-label="Share listing"'), "share icon aria-label");
   assert(html.includes("shareListing"), "web share with clipboard fallback");
   assert(html.includes("resolveShareUrl"), "share url resolved from card data");
   assert(html.includes("share-url-backdrop"), "share url copy modal");
+  assert(html.includes("e.stopPropagation()"), "share click stops propagation");
   assert(html.includes('data-action="schedule"'), "schedule button on normal listing cards");
   assert(html.includes("Schedule Showing"), "schedule showing on normal page cards");
   assert(html.includes("modal-listing-context"), "listing context in lead modal");

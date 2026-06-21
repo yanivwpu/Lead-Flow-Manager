@@ -11,6 +11,14 @@ const EMBED_BORDER_SOFT = "#ebe0d4";
 const EMBED_MUTED = "#8a7f72";
 const EMBED_CHIP_BG = "#faf7f2";
 
+/** Matches public listing flyer share control */
+const LISTING_SHARE_ICON_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>';
+
+function renderListingShareButton(card: AgentPageListingCard): string {
+  return `<button type="button" class="card-share-btn icon-btn" data-action="share" data-listing-id="${escapeHtml(card.id)}" data-share-url="${escapeHtml(card.shareUrl)}" aria-label="Share listing" title="Share listing">${LISTING_SHARE_ICON_SVG}</button>`;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -104,13 +112,13 @@ function listingCardHtml(card: AgentPageListingCard, index: number, embedMode = 
     ? `<div class="card-actions card-actions-embed">
         <a class="btn btn-sm btn-primary btn-embed-action" href="${escapeHtml(card.shareUrl)}" target="_blank" rel="noopener noreferrer" data-action="listing_view" data-listing-id="${escapeHtml(card.id)}">View Listing</a>
         <button type="button" class="btn btn-sm btn-outline btn-embed-action" data-action="ask_about" data-listing-id="${escapeHtml(card.id)}">Ask About This</button>
-        <button type="button" class="card-share-link" data-action="share" data-listing-id="${escapeHtml(card.id)}" data-share-url="${escapeHtml(card.shareUrl)}">Share</button>
+        ${renderListingShareButton(card)}
       </div>`
     : `<div class="card-actions">
         <a class="btn btn-sm btn-primary" href="${escapeHtml(card.shareUrl)}" target="_blank" rel="noopener noreferrer" data-action="listing_view" data-listing-id="${escapeHtml(card.id)}">View Listing</a>
         <button type="button" class="btn btn-sm btn-outline" data-action="ask_about" data-listing-id="${escapeHtml(card.id)}">Ask About This</button>
         ${scheduleBtn}
-        <button type="button" class="btn btn-sm btn-ghost" data-action="share" data-listing-id="${escapeHtml(card.id)}" data-share-url="${escapeHtml(card.shareUrl)}">Share</button>
+        ${renderListingShareButton(card)}
       </div>`;
 
   return `<article class="listing-card${embedMode ? " listing-card-embed" : ""}" data-id="${escapeHtml(card.id)}" data-label="${escapeHtml(card.listingLabel)}" data-status="${escapeHtml(card.status)}" data-city-state="${escapeHtml(card.cityState)}" data-sort-index="${index}" data-price-cents="${card.priceCents ?? ""}" data-beds="${card.bedsNum ?? ""}" data-baths="${card.bathsNum ?? ""}" data-sqft="${card.sqftNum ?? ""}" data-property-type="${escapeHtml(propertyType)}" data-share-url="${escapeHtml(card.shareUrl)}" data-full-address="${escapeHtml(card.fullAddress)}" data-meta-summary="${escapeHtml(card.metaSummary)}">
@@ -308,6 +316,22 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .card-address { margin: 0; font-weight: 600; font-size: 0.9375rem; }
     .card-city, .card-meta { margin: 0; font-size: 0.8125rem; color: var(--muted); }
     .card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 10px; }
+    .card-share-btn.icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--muted);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .card-share-btn.icon-btn:hover { color: var(--ink); border-color: #cbd5e1; background: #f8fafc; }
+    .card-share-btn.icon-btn svg { display: block; }
     .modal-listing-context { margin: 0 0 14px; padding: 12px 14px; background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; }
     .modal-listing-label { margin: 0 0 4px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
     .modal-listing-address { margin: 0; font-size: 0.9375rem; font-weight: 600; color: var(--ink); }
@@ -412,20 +436,17 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       font-size: 0.6875rem;
       white-space: nowrap;
     }
-    body.embed-mode .card-share-link {
-      flex: 0 0 auto;
-      border: none;
-      background: transparent;
-      color: var(--brand);
-      font: inherit;
-      font-size: 0.6875rem;
-      font-weight: 600;
-      cursor: pointer;
-      padding: 4px 2px;
-      text-decoration: underline;
-      white-space: nowrap;
+    body.embed-mode .card-share-btn.icon-btn {
+      width: 30px;
+      height: 30px;
+      border-color: ${EMBED_BORDER};
+      background: ${EMBED_CHIP_BG};
     }
-    body.embed-mode .card-share-link:hover { color: var(--brand-dark); }
+    body.embed-mode .card-share-btn.icon-btn:hover {
+      color: var(--ink);
+      border-color: #ddd2c4;
+      background: #f0ebe3;
+    }
     body.embed-mode .empty-listings {
       background: ${EMBED_CHIP_BG};
       border-color: ${EMBED_BORDER};
@@ -1068,6 +1089,14 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         });
       });
 
+      function resolveShareTitle(triggerEl) {
+        var card = triggerEl && triggerEl.closest ? triggerEl.closest(".listing-card") : null;
+        if (!card) return "Property listing";
+        var title = String(card.getAttribute("data-full-address") || "").trim();
+        if (title) return title;
+        return "Property listing";
+      }
+
       function resolveShareUrl(url, triggerEl) {
         var resolved = String(url || "").trim();
         if (resolved) return resolved;
@@ -1105,7 +1134,11 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         shareUrlInput.value = url;
         shareUrlBackdrop.classList.add("open");
         shareUrlBackdrop.setAttribute("aria-hidden", "false");
-        shareUrlInput.focus();
+        try {
+          shareUrlInput.focus({ preventScroll: true });
+        } catch (err) {
+          shareUrlInput.focus();
+        }
         shareUrlInput.select();
       }
 
@@ -1160,9 +1193,9 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           showToast("No link to share");
           return;
         }
-        var canNativeShare = !config.embedMode && navigator.share && typeof navigator.share === "function";
-        if (canNativeShare) {
-          navigator.share({ url: resolved, title: "Property listing" }).then(function () {
+        var title = resolveShareTitle(triggerEl);
+        if (navigator.share && typeof navigator.share === "function") {
+          navigator.share({ url: resolved, title: title }).then(function () {
             showToast("Shared");
           }).catch(function (err) {
             if (err && err.name === "AbortError") return;
@@ -1173,20 +1206,23 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         copyListingUrl(resolved, triggerEl);
       }
 
-      document.getElementById("listings-grid").addEventListener("click", function (e) {
+      var listingsGrid = document.getElementById("listings-grid");
+      if (listingsGrid) listingsGrid.addEventListener("click", function (e) {
         var t = e.target.closest("[data-action]");
         if (!t) return;
         var action = t.getAttribute("data-action");
         var listingId = t.getAttribute("data-listing-id");
+        if (action === "share") {
+          e.preventDefault();
+          e.stopPropagation();
+          shareListing(t.getAttribute("data-share-url"), t);
+          return;
+        }
         if (action === "listing_view") track("listing_view", listingId);
         if (action === "ask_about") { track("ask_about", listingId); openModal("ask_about", listingId); e.preventDefault(); }
         if (action === "schedule") {
           track("schedule_showing", listingId);
           openModal("schedule_showing", listingId);
-          e.preventDefault();
-        }
-        if (action === "share") {
-          shareListing(t.getAttribute("data-share-url"), t);
           e.preventDefault();
         }
       });
