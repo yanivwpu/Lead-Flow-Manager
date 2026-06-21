@@ -45,6 +45,16 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import type {
+  AdminChannelIndicator,
+  AdminUserChannelConnections,
+} from "@shared/adminChannelConnectionStatus";
+import {
   PARTNER_COMMISSION_POLICY_TEXT,
   PARTNER_COMMISSION_TERM_DISPLAY,
   PARTNER_COMMISSION_TERM_LABEL,
@@ -175,6 +185,74 @@ interface AdminUser {
     internalNotes: string | null;
   } | null;
   rgeConciergeCalendarWarning: boolean;
+  channelConnections?: AdminUserChannelConnections;
+}
+
+type ChannelConnectionFilter = "all" | "none" | "whatsapp" | "needs_attention";
+
+function adminChannelDotClass(state: AdminChannelIndicator["state"]): string {
+  switch (state) {
+    case "connected":
+      return "bg-emerald-500";
+    case "attention":
+      return "bg-amber-400";
+    case "error":
+      return "bg-red-500";
+    default:
+      return "bg-gray-300";
+  }
+}
+
+const EMPTY_CHANNEL_CONNECTIONS: AdminUserChannelConnections = {
+  whatsapp: { state: "disconnected", tooltip: "WhatsApp not connected" },
+  facebook: { state: "disconnected", tooltip: "Facebook not connected" },
+  instagram: { state: "disconnected", tooltip: "Instagram not connected" },
+  hasAnyChannel: false,
+  noChannelsConnected: true,
+  whatsappConnected: false,
+  needsAttention: false,
+};
+
+function AdminChannelIndicators({
+  connections,
+}: {
+  connections: AdminUserChannelConnections;
+}) {
+  const items = [
+    { key: "WA", ...connections.whatsapp },
+    { key: "FB", ...connections.facebook },
+    { key: "IG", ...connections.instagram },
+  ] as const;
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <div
+        className="flex items-center gap-1.5"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        {items.map(({ key, state, tooltip }) => (
+          <Tooltip key={key}>
+            <TooltipTrigger asChild>
+              <span
+                className="inline-flex flex-col items-center gap-0.5 min-w-[24px] cursor-default select-none"
+                aria-label={tooltip}
+                data-testid={`admin-channel-${key.toLowerCase()}`}
+              >
+                <span className={cn("h-2 w-2 rounded-full shrink-0", adminChannelDotClass(state))} />
+                <span className="text-[9px] font-semibold text-gray-500 leading-none tracking-tight">
+                  {key}
+                </span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs text-xs">
+              {tooltip}
+            </TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
+    </TooltipProvider>
+  );
 }
 
 type UserStatusFilter = "all" | "trial" | "active" | "expired";
@@ -521,6 +599,7 @@ export function Admin() {
   const [statusFilter, setStatusFilter] = useState<UserStatusFilter>("all");
   const [aiFilter, setAiFilter] = useState<"all" | "enabled">("all");
   const [overrideFilter, setOverrideFilter] = useState<"all" | "enabled">("all");
+  const [channelFilter, setChannelFilter] = useState<ChannelConnectionFilter>("all");
   const [pageSize, setPageSize] = useState<50 | 100>(50);
   const [page, setPage] = useState(1);
   const [selectedAdminUser, setSelectedAdminUser] = useState<AdminUser | null>(null);
@@ -575,6 +654,14 @@ export function Admin() {
         if (aiFilter === "all") return true;
         return hasAiBrain(u);
       })
+      .filter((u) => {
+        if (channelFilter === "all") return true;
+        const ch = u.channelConnections ?? EMPTY_CHANNEL_CONNECTIONS;
+        if (channelFilter === "none") return ch.noChannelsConnected;
+        if (channelFilter === "whatsapp") return ch.whatsappConnected;
+        if (channelFilter === "needs_attention") return ch.needsAttention;
+        return true;
+      })
       .sort((a, b) => {
         if (userSort === "support") {
           if (a.openTicketCount > 0 && b.openTicketCount === 0) return -1;
@@ -604,12 +691,12 @@ export function Admin() {
       page: safePage,
       pageRows: rows.slice(start, end),
     };
-  }, [aiFilter, filteredUsers, overrideFilter, page, pageSize, planFilter, statusFilter, userSearch, userSort]);
+  }, [aiFilter, channelFilter, filteredUsers, overrideFilter, page, pageSize, planFilter, statusFilter, userSearch, userSort]);
 
   useEffect(() => {
     // Reset to page 1 when filters change
     setPage(1);
-  }, [userSearch, planFilter, statusFilter, aiFilter, overrideFilter, pageSize, showSupportOnly]);
+  }, [userSearch, planFilter, statusFilter, aiFilter, overrideFilter, channelFilter, pageSize, showSupportOnly]);
 
   const createPartner = useMutation({
     mutationFn: async (data: { name: string; email: string; password: string; commissionRate?: string }) => {
@@ -1354,6 +1441,17 @@ export function Admin() {
                       )}
                     </Button>
                     <select
+                      value={channelFilter}
+                      onChange={(e) => setChannelFilter(e.target.value as ChannelConnectionFilter)}
+                      className="h-9 border border-gray-200 rounded-md px-2 text-sm bg-white"
+                      aria-label="Channel connection filter"
+                    >
+                      <option value="all">Channels (all)</option>
+                      <option value="none">No channels connected</option>
+                      <option value="whatsapp">WhatsApp connected</option>
+                      <option value="needs_attention">Needs attention</option>
+                    </select>
+                    <select
                       value={userSort}
                       onChange={(e) => setUserSort(e.target.value as any)}
                       className="h-9 border border-gray-200 rounded-md px-2 text-sm bg-white"
@@ -1383,6 +1481,7 @@ export function Admin() {
                     <TableRow>
                       <TableHead className="min-w-[260px]">User</TableHead>
                       <TableHead>Plan</TableHead>
+                      <TableHead className="min-w-[88px]">Channels</TableHead>
                       <TableHead>Conversations</TableHead>
                       <TableHead>Usage %</TableHead>
                       <TableHead>AI Brain</TableHead>
@@ -1394,7 +1493,7 @@ export function Admin() {
                   <TableBody>
                     {usersError ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8">
+                        <TableCell colSpan={9} className="text-center py-8">
                           <p className="text-red-500 mb-2">Failed to load users: {usersErrorDetails?.message || 'Unknown error'}</p>
                           <Button variant="outline" size="sm" onClick={() => refetchUsers()}>
                             Retry
@@ -1403,7 +1502,7 @@ export function Admin() {
                       </TableRow>
                     ) : derivedUsers.total === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={9} className="text-center py-8 text-gray-500">
                           No users match the current filters.
                         </TableCell>
                       </TableRow>
@@ -1464,6 +1563,11 @@ export function Admin() {
                                   </Badge>
                                 )}
                               </div>
+                            </TableCell>
+                            <TableCell>
+                              <AdminChannelIndicators
+                                connections={u.channelConnections ?? EMPTY_CHANNEL_CONNECTIONS}
+                              />
                             </TableCell>
                             <TableCell className="text-sm text-gray-700">
                               {limit > 0 ? `${used} / ${limit}` : "—"}
@@ -1667,9 +1771,21 @@ export function Admin() {
 
                     <div className="rounded-lg border p-3 space-y-2">
                       <div className="text-sm font-semibold text-gray-900">Connectivity</div>
-                      <div className="flex gap-2">
-                        {selectedAdminUser.twilioConnected ? <Badge variant="outline">Twilio</Badge> : <Badge variant="secondary">Twilio off</Badge>}
-                        {selectedAdminUser.metaConnected ? <Badge variant="outline">Meta</Badge> : <Badge variant="secondary">Meta off</Badge>}
+                      <AdminChannelIndicators
+                        connections={selectedAdminUser.channelConnections ?? EMPTY_CHANNEL_CONNECTIONS}
+                      />
+                      <div className="space-y-1 pt-1 text-xs text-gray-600">
+                        <p>{selectedAdminUser.channelConnections?.whatsapp.tooltip ?? "WhatsApp not connected"}</p>
+                        <p>{selectedAdminUser.channelConnections?.facebook.tooltip ?? "Facebook not connected"}</p>
+                        <p>{selectedAdminUser.channelConnections?.instagram.tooltip ?? "Instagram not connected"}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {selectedAdminUser.twilioConnected ? (
+                          <Badge variant="outline">Twilio legacy</Badge>
+                        ) : null}
+                        {selectedAdminUser.metaConnected ? (
+                          <Badge variant="outline">Meta WA credentials</Badge>
+                        ) : null}
                       </div>
                     </div>
 

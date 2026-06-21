@@ -48,6 +48,7 @@ import {
   type Conversation,
   type Contact,
 } from "@shared/schema";
+import { deriveAdminUserChannelConnections } from "@shared/adminChannelConnectionStatus";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
 import {
   parseConversationReEngagement,
@@ -8550,6 +8551,15 @@ export async function registerRoutes(
       const allSalespeople = await storage.getSalespeople();
       console.log('[Admin Users] Salespeople:', allSalespeople.length);
 
+      const allChannelSettingsRows = await db.select().from(channelSettings);
+      const channelSettingsByUserId = new Map<string, typeof allChannelSettingsRows>();
+      for (const row of allChannelSettingsRows) {
+        const list = channelSettingsByUserId.get(row.userId) ?? [];
+        list.push(row);
+        channelSettingsByUserId.set(row.userId, list);
+      }
+      console.log('[Admin Users] Channel settings rows:', allChannelSettingsRows.length);
+
       const geTasks = await storage.listGrowthEngineSetupTasksForTemplate(RGE_TEMPLATE_ID);
       const geByUserId = new Map(geTasks.map((t) => [t.userId, t]));
       const salespersonCalendarById = new Map(allSalespeople.map((s) => [s.id, s.calendarLink]));
@@ -8641,6 +8651,28 @@ export async function registerRoutes(
           0;
         const stripeSubscriptionItemPriceIds = await getStripePriceIdsForUser(user);
 
+        const channelConnections = deriveAdminUserChannelConnections({
+          user: {
+            whatsappProvider: user.whatsappProvider,
+            metaConnected: user.metaConnected,
+            metaIntegrationStatus: user.metaIntegrationStatus,
+            metaWebhookSubscribed: user.metaWebhookSubscribed,
+            metaLastErrorCode: user.metaLastErrorCode,
+            metaLastErrorMessage: user.metaLastErrorMessage,
+            metaTokenExpiresAt: user.metaTokenExpiresAt,
+            metaVerifiedName: user.metaVerifiedName,
+            metaDisplayPhoneNumber: user.metaDisplayPhoneNumber,
+            twilioConnected: user.twilioConnected,
+            twilioWhatsappNumber: user.twilioWhatsappNumber,
+          },
+          channelSettings: (channelSettingsByUserId.get(user.id) ?? []).map((row) => ({
+            channel: row.channel,
+            isConnected: row.isConnected,
+            isEnabled: row.isEnabled,
+            config: row.config,
+          })),
+        });
+
         return {
           id: user.id,
           name: user.name,
@@ -8704,6 +8736,7 @@ export async function registerRoutes(
                 geTask.salespersonId ? salespersonCalendarById.get(geTask.salespersonId) ?? null : null,
               )
             : false,
+          channelConnections,
         };
       }));
       
