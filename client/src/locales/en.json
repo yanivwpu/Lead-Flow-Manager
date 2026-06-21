@@ -1000,6 +1000,17 @@
     "shopifyToastHint": "Complete your plan selection in Shopify to continue.",
     "shopifyManagedPricingInstructions": "Open WhachatCRM in your Shopify admin to choose or update your plan.",
     "trialNote": "14-day free Pro trial included",
+    "trialState": {
+      "bannerShopify": "You're currently on a 14-day Pro + AI Brain trial. Choose a Shopify plan anytime to continue after your trial.",
+      "bannerWeb": "You're currently on a 14-day Pro + AI Brain trial. Choose a paid plan anytime to continue after your trial.",
+      "freeAfterTrialNote": "Base plan after trial if no paid plan is selected.",
+      "proTrialPlanBadge": "Current trial plan",
+      "proIncludedInTrial": "Included in your trial",
+      "aiBrainIncludedInTrial": "Included in your trial",
+      "chooseStarterAfterTrial": "Select Starter",
+      "keepProAfterTrialShopify": "Keep Pro after trial",
+      "keepProAfterTrialWeb": "Choose Pro after trial"
+    },
     "hero": {
       "title": "Simple, transparent pricing for growing conversations",
       "subtitle": "Start free and upgrade when you're ready for more AI assistance, automation, and team capacity. No WhachatCRM markup on Meta conversation pricing.",

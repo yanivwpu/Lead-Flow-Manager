@@ -114,6 +114,7 @@ export function Pricing() {
       plan: string;
       hasAIBrainAddon?: boolean;
       aiBrainBasePlanEligible?: boolean;
+      isInTrial?: boolean;
     } | null;
     subscription: {
       plan: string;
@@ -121,6 +122,9 @@ export function Pricing() {
       currentPeriodEnd?: string | null;
       isShopify?: boolean;
       shopifyBillingTrialDays?: number;
+      trialIncludesAIBrain?: boolean;
+      isPaidSubscriber?: boolean;
+      trialPlan?: string | null;
     } | null;
   }>({
     queryKey: ["/api/subscription", shopHint ?? ""],
@@ -134,13 +138,42 @@ export function Pricing() {
   });
 
   const limits = subscriptionData?.limits;
+  const subscriptionMeta = subscriptionData?.subscription;
   const subscriptionResolved = !user || !subscriptionLoading;
-  /** Effective billing/trial/override plan — same as Settings & dashboard (`limits.plan`). Not legacy `subscription.plan`. */
+  /** Effective access tier (includes Pro during pro_ai trial). */
   const effectivePlan: "free" | "starter" | "pro" | null = !subscriptionResolved
     ? null
     : limits?.plan && ["free", "starter", "pro"].includes(limits.plan)
       ? (limits.plan as "free" | "starter" | "pro")
       : "free";
+  /** Paid billing tier — stays free while on unpaid pro_ai trial. */
+  const billingPlan: "free" | "starter" | "pro" = useMemo(() => {
+    if (!subscriptionResolved || !user) return "free";
+    if (subscriptionMeta?.isPaidSubscriber) {
+      return effectivePlan ?? "free";
+    }
+    const legacy = (subscriptionMeta?.plan || "free").toLowerCase();
+    if (legacy === "starter" || legacy === "pro") return legacy;
+    return "free";
+  }, [subscriptionResolved, user, subscriptionMeta?.isPaidSubscriber, subscriptionMeta?.plan, effectivePlan]);
+
+  const isActiveProAiTrial = useMemo(() => {
+    if (!user || !subscriptionResolved) return false;
+    return (
+      !!limits?.isInTrial &&
+      !!subscriptionMeta?.trialIncludesAIBrain &&
+      !subscriptionMeta?.isPaidSubscriber &&
+      (subscriptionMeta?.trialPlan ?? "pro_ai") === "pro_ai"
+    );
+  }, [
+    user,
+    subscriptionResolved,
+    limits?.isInTrial,
+    subscriptionMeta?.trialIncludesAIBrain,
+    subscriptionMeta?.isPaidSubscriber,
+    subscriptionMeta?.trialPlan,
+  ]);
+
   const hasAIBrainAddon = limits?.hasAIBrainAddon ?? false;
   const aiBrainBasePlanEligible = limits?.aiBrainBasePlanEligible ?? false;
   const isShopify = mustUseShopifyBilling(subscriptionData?.subscription, shopHint);
@@ -185,12 +218,31 @@ export function Pricing() {
 
   const shopifyPlanButtonLabel = (
     plan: "starter" | "pro" | "aiBrain",
-    isActive: boolean,
+    isActiveBilling: boolean,
   ): string => {
-    if (isActive) return t(`${p}.shopifyManageInShopify`);
+    if (isActiveBilling) return t(`${p}.shopifyManageInShopify`);
     if (plan === "starter") return t(`${p}.shopifyChooseStarter`);
     if (plan === "pro") return t(`${p}.shopifyChoosePro`);
     return t(`${p}.shopifyChooseAiBrain`);
+  };
+
+  const paidPlanButtonLabel = (
+    plan: "starter" | "pro",
+    isActiveBilling: boolean,
+  ): string => {
+    if (isActiveProAiTrial) {
+      if (plan === "starter") return t(`${p}.trialState.chooseStarterAfterTrial`);
+      return isShopify
+        ? t(`${p}.trialState.keepProAfterTrialShopify`)
+        : t(`${p}.trialState.keepProAfterTrialWeb`);
+    }
+    if (isActiveBilling) {
+      return isShopify
+        ? shopifyPlanButtonLabel(plan, true)
+        : t(`${p}.plans.currentPlan`);
+    }
+    if (isShopify) return shopifyPlanButtonLabel(plan, false);
+    return plan === "starter" ? t(`${p}.plans.starter.cta`) : t(`${p}.plans.pro.cta`);
   };
 
   const openShopifyPlans = async () => {
@@ -373,11 +425,26 @@ export function Pricing() {
           </div>
         )}
 
-        {/* ─────────────── FREE TRIAL BANNER ─────────────── */}
+        {/* ─────────────── ACTIVE PRO+AI TRIAL BANNER ─────────────── */}
+        {isActiveProAiTrial ? (
+          <div
+            className="flex items-start gap-3 bg-emerald-50 border border-emerald-300 rounded-xl px-5 py-4 mb-10 text-sm text-emerald-900"
+            role="status"
+            data-testid="banner-pro-ai-trial-active"
+          >
+            <Sparkles className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+            <span>
+              {isShopify
+                ? t(`${p}.trialState.bannerShopify`)
+                : t(`${p}.trialState.bannerWeb`)}
+            </span>
+          </div>
+        ) : (
         <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4 mb-10 text-sm text-emerald-800" data-testid="banner-free-trial">
           <span className="text-emerald-500 mt-0.5 shrink-0">✓</span>
           <span>{t(`${p}.trialBanner`)}</span>
         </div>
+        )}
 
         {/* ─────────────── SECTION 1: HERO ─────────────── */}
         <div className="text-center mb-14">
@@ -577,7 +644,7 @@ export function Pricing() {
         >
           {/* FREE */}
           {(() => {
-            const isCurrentPlan = effectivePlan === "free";
+            const isCurrentBillingPlan = billingPlan === "free" && !isActiveProAiTrial;
             return (
               <div
                 className="bg-white rounded-2xl border-2 border-gray-200 p-6 flex flex-col"
@@ -629,13 +696,21 @@ export function Pricing() {
                 <p className="text-xs text-gray-400 mt-4 mb-4">
                   {t(`${p}.plans.free.upsell`)}
                 </p>
+                {isActiveProAiTrial ? (
+                  <p
+                    className="text-xs font-medium text-gray-600 mb-4 leading-snug"
+                    data-testid="text-free-after-trial-note"
+                  >
+                    {t(`${p}.trialState.freeAfterTrialNote`)}
+                  </p>
+                ) : null}
                 <Button
                   className="w-full bg-gray-100 text-gray-700 hover:bg-gray-200"
                   onClick={() => setLocation(user ? "/app/inbox" : "/auth")}
-                  disabled={planButtonsDisabled || isCurrentPlan}
+                  disabled={planButtonsDisabled || isCurrentBillingPlan}
                   data-testid="button-upgrade-free"
                 >
-                  {isCurrentPlan
+                  {isCurrentBillingPlan
                     ? t(`${p}.plans.currentPlan`)
                     : t(`${p}.plans.free.cta`)}
                 </Button>
@@ -645,7 +720,7 @@ export function Pricing() {
 
           {/* STARTER */}
           {(() => {
-            const isCurrentPlan = effectivePlan === "starter";
+            const isCurrentBillingPlan = billingPlan === "starter";
             const isLoading = loadingPlan === "starter";
             return (
               <div
@@ -724,30 +799,27 @@ export function Pricing() {
                   {t(`${p}.plans.starter.upsell`)}
                 </p>
                 <p className="text-xs font-medium text-emerald-600 mb-4 flex items-center gap-1" data-testid="text-trial-starter">
-                  <span>✓</span> {t(`${p}.trialNote`)}
+                  <span>✓</span>{" "}
+                  {isActiveProAiTrial
+                    ? t(`${p}.trialState.chooseStarterAfterTrial`)
+                    : t(`${p}.trialNote`)}
                 </p>
                 <Button
                   className={`w-full ${
-                    isCurrentPlan && !isShopify
+                    isCurrentBillingPlan && !isShopify
                       ? "bg-gray-100 text-gray-500"
-                      : isCurrentPlan && isShopify
+                      : isCurrentBillingPlan && isShopify
                         ? "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
                         : "bg-blue-600 hover:bg-blue-700 text-white"
                   }`}
-                  disabled={planButtonsDisabled || (isCurrentPlan && !isShopify) || isLoading}
+                  disabled={planButtonsDisabled || (isCurrentBillingPlan && !isShopify) || isLoading}
                   onClick={() => handleUpgrade("starter")}
                   data-testid="button-upgrade-starter"
                 >
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : isCurrentPlan ? (
-                    isShopify
-                      ? shopifyPlanButtonLabel("starter", true)
-                      : t(`${p}.plans.currentPlan`)
-                  ) : isShopify ? (
-                    shopifyPlanButtonLabel("starter", false)
                   ) : (
-                    t(`${p}.plans.starter.cta`)
+                    paidPlanButtonLabel("starter", isCurrentBillingPlan)
                   )}
                 </Button>
               </div>
@@ -756,15 +828,21 @@ export function Pricing() {
 
           {/* PRO */}
           {(() => {
-            const isCurrentPlan = effectivePlan === "pro";
+            const isCurrentBillingPlan = billingPlan === "pro";
             const isLoading = loadingPlan === "pro";
             return (
               <div
-                className="bg-white rounded-2xl border-2 border-brand-green shadow-lg p-6 flex flex-col relative"
+                className={`bg-white rounded-2xl border-2 p-6 flex flex-col relative ${
+                  isActiveProAiTrial
+                    ? "border-brand-green shadow-lg ring-2 ring-emerald-100"
+                    : "border-brand-green shadow-lg"
+                }`}
                 data-testid="plan-card-pro"
               >
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-green text-white text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">
-                  {t(`${p}.plans.pro.badge`)}
+                  {isActiveProAiTrial
+                    ? t(`${p}.trialState.proTrialPlanBadge`)
+                    : t(`${p}.plans.pro.badge`)}
                 </div>
                 <div className="mb-4 mt-2">
                   <span className="text-xs font-semibold text-brand-green uppercase tracking-wider">
@@ -791,7 +869,9 @@ export function Pricing() {
                   dir={isRTL ? "rtl" : "ltr"}
                 >
                   <span className="text-xs font-bold text-brand-green">
-                    {t(`${p}.inherit.starter`)}
+                    {isActiveProAiTrial
+                      ? t(`${p}.trialState.proIncludedInTrial`)
+                      : t(`${p}.inherit.starter`)}
                   </span>
                 </div>
                 <div className="flex-1 space-y-4">
@@ -831,30 +911,31 @@ export function Pricing() {
                   {t(`${p}.plans.pro.upsell`)}
                 </p>
                 <p className="text-xs font-medium text-emerald-600 mb-4 flex items-center gap-1" data-testid="text-trial-pro">
-                  <span>✓</span> {t(`${p}.trialNote`)}
+                  <span>✓</span>{" "}
+                  {isActiveProAiTrial
+                    ? t(`${p}.trialState.proIncludedInTrial`)
+                    : t(`${p}.trialNote`)}
                 </p>
                 <Button
                   className={`w-full ${
-                    isCurrentPlan && !isShopify
+                    isCurrentBillingPlan && !isShopify && !isActiveProAiTrial
                       ? "bg-gray-100 text-gray-500"
-                      : isCurrentPlan && isShopify
+                      : isCurrentBillingPlan && isShopify && !isActiveProAiTrial
                         ? "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
                         : "bg-brand-green hover:bg-emerald-700 text-white"
                   }`}
-                  disabled={planButtonsDisabled || (isCurrentPlan && !isShopify) || isLoading}
+                  disabled={
+                    planButtonsDisabled ||
+                    (isCurrentBillingPlan && !isShopify && !isActiveProAiTrial) ||
+                    isLoading
+                  }
                   onClick={() => handleUpgrade("pro")}
                   data-testid="button-upgrade-pro"
                 >
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : isCurrentPlan ? (
-                    isShopify
-                      ? shopifyPlanButtonLabel("pro", true)
-                      : t(`${p}.plans.currentPlan`)
-                  ) : isShopify ? (
-                    shopifyPlanButtonLabel("pro", false)
                   ) : (
-                    t(`${p}.plans.pro.cta`)
+                    paidPlanButtonLabel("pro", isCurrentBillingPlan)
                   )}
                 </Button>
               </div>
@@ -904,7 +985,9 @@ export function Pricing() {
             </ul>
             <p className="text-xs font-medium text-purple-700 mt-4 mb-1 flex items-center gap-1" dir={isRTL ? "rtl" : "ltr"}>
               <Shield className="w-3 h-3 shrink-0" />
-              {t(`${p}.aiBrainNote`)}
+              {isActiveProAiTrial && hasAIBrainAddon
+                ? t(`${p}.trialState.aiBrainIncludedInTrial`)
+                : t(`${p}.aiBrainNote`)}
             </p>
             <p className="text-xs text-gray-400 mb-4">
               {t(`${p}.plans.aiBrain.upsell`)}

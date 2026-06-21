@@ -965,6 +965,17 @@
     "shopifyToastHint": "השלם את בחירת התוכנית ב-Shopify כדי להמשיך.",
     "shopifyManagedPricingInstructions": "פתח את WhachatCRM בניהול Shopify שלך כדי לבחור או לעדכן תוכנית.",
     "trialNote": "כולל 14 ימי ניסיון Pro חינמיים",
+    "trialState": {
+      "bannerShopify": "אתה כרגע בניסיון של 14 יום ל-Pro + AI Brain. בחר תוכנית Shopify בכל עת כדי להמשיך אחרי הניסיון.",
+      "bannerWeb": "אתה כרגע בניסיון של 14 יום ל-Pro + AI Brain. בחר תוכנית בתשלום בכל עת כדי להמשיך אחרי הניסיון.",
+      "freeAfterTrialNote": "תוכנית הבסיס אחרי הניסיון אם לא נבחרה תוכנית בתשלום.",
+      "proTrialPlanBadge": "תוכנית הניסיון הנוכחית",
+      "proIncludedInTrial": "כלול בניסיון שלך",
+      "aiBrainIncludedInTrial": "כלול בניסיון שלך",
+      "chooseStarterAfterTrial": "בחר Starter",
+      "keepProAfterTrialShopify": "שמור על Pro אחרי הניסיון",
+      "keepProAfterTrialWeb": "בחר Pro אחרי הניסיון"
+    },
     "hero": {
       "title": "תמחור פשוט ושקוף לעסקים שגדלים",
       "subtitle": "התחל בחינם ושדרג כשאתה מוכן ליותר סיוע AI, אוטומציה וכושר עבודה צוותי. ללא תוספת של WhachatCRM על תמחור שיחות Meta.",
