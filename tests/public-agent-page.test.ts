@@ -646,6 +646,35 @@ function testBrowseQuerySchema() {
     },
   ]);
   assert(cards.includes("listing-card"), "render listing cards html");
+  assert(cards.includes("Schedule Showing"), "normal card renderer keeps schedule");
+  const embedOnlyCards = renderAgentPageListingCards(
+    [
+      {
+        id: "l1",
+        shareUrl: "https://example.com/l1",
+        imageUrl: null,
+        street: "1 Main",
+        fullAddress: "1 Main, Tampa, FL",
+        metaSummary: "$500,000",
+        cityState: "Tampa, FL",
+        price: "$500,000",
+        priceCents: 50000000,
+        beds: "3 bed",
+        baths: "2 bath",
+        sqft: "1,800 Sq Ft",
+        bedsNum: 3,
+        bathsNum: 2,
+        sqftNum: 1800,
+        propertyType: "house",
+        propertySubtype: null,
+        status: "Active",
+        listingLabel: "FOR SALE",
+      },
+    ],
+    0,
+    { embedMode: true },
+  );
+  assert(!embedOnlyCards.includes("Schedule Showing"), "embed card renderer hides schedule");
   console.log("  browse query: OK");
 }
 
@@ -720,6 +749,43 @@ function testEmbedMode() {
   assert(embedHtml.includes('data-filter="sale"'), "sale filter chip");
   assert(embedHtml.includes('class="chat-widget enabled"'), "embed chat visible by default");
   assert(embedHtml.includes("chat-bubble"), "embed chat bubble present by default");
+  assert(embedHtml.includes("card-actions-embed"), "embed compact card actions");
+  assert(embedHtml.includes("listing-card-embed"), "embed listing card class");
+  assert(!embedHtml.includes('data-action="schedule"'), "no schedule button in embed cards");
+  assert(embedHtml.includes("card-share-link"), "embed share text link");
+  assert(embedHtml.includes("share-url-backdrop"), "share url fallback modal");
+  assert(embedHtml.includes("resolveShareUrl"), "share url resolution from card");
+  assert(embedHtml.includes("execCopyFallback"), "clipboard execCommand fallback");
+
+  const embedCards = renderAgentPageListingCards(
+    [
+      {
+        id: "l-embed",
+        shareUrl: "https://app.whachatcrm.com/share/listings/my-slug",
+        imageUrl: null,
+        street: "1 Ocean",
+        fullAddress: "1 Ocean, Pompano Beach, FL",
+        metaSummary: "$2,300/mo",
+        cityState: "Pompano Beach, FL",
+        price: "$2,300/mo",
+        priceCents: 230000,
+        beds: "2 bed",
+        baths: "2 bath",
+        sqft: "1,008 sq ft",
+        bedsNum: 2,
+        bathsNum: 2,
+        sqftNum: 1008,
+        propertyType: "condo",
+        propertySubtype: null,
+        status: "Active",
+        listingLabel: "FOR RENT",
+      },
+    ],
+    0,
+    { embedMode: true },
+  );
+  assert(embedCards.includes("card-actions-embed"), "embed card renderer compact actions");
+  assert(!embedCards.includes("Schedule Showing"), "embed card renderer omits schedule");
 
   const embedHideChatHtml = buildPublicAgentPageHtml({
     userId: "u1",
@@ -922,6 +988,10 @@ function testHtml() {
   assert(html.includes('target="_blank" rel="noopener noreferrer"'), "listing links open in new tab");
   assert(html.includes('data-action="share"'), "share button on listing card");
   assert(html.includes("shareListing"), "web share with clipboard fallback");
+  assert(html.includes("resolveShareUrl"), "share url resolved from card data");
+  assert(html.includes("share-url-backdrop"), "share url copy modal");
+  assert(html.includes('data-action="schedule"'), "schedule button on normal listing cards");
+  assert(html.includes("Schedule Showing"), "schedule showing on normal page cards");
   assert(html.includes("modal-listing-context"), "listing context in lead modal");
   assert(html.includes("Let's Chat"), "web chat primary button label");
   assert(html.includes("chat-widget"), "docked chat widget");

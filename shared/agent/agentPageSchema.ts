@@ -145,6 +145,7 @@ export const publicAgentBrowseQuerySchema = z.object({
     if (!Number.isFinite(n) || n < 1) return 24;
     return Math.min(48, Math.floor(n));
   }, z.number().int().min(1).max(48)),
+  embed: z.preprocess((value) => value === "1" || value === 1 || value === true || value === "true", z.boolean()).optional(),
 });
 
 export type PublicAgentBrowseQuery = z.infer<typeof publicAgentBrowseQuerySchema>;

@@ -60,13 +60,15 @@ export function registerPublicAgentPageRoutes(app: Express): void {
 
       const appOrigin = getRequestOrigin(req);
       const filters = browseQueryToFilters(parsed.data);
+      const embedMode = parsed.data.embed === true;
       const result = await browseAgentPageListings({
         userId: agent.userId,
         appOrigin,
         filters,
         offset: parsed.data.offset,
         limit: parsed.data.limit,
-        renderHtml: renderAgentPageListingCards,
+        renderHtml: (cards, startIndex) =>
+          renderAgentPageListingCards(cards, startIndex, { embedMode }),
       });
       res.json(result);
     } catch (error) {

@@ -86,7 +86,7 @@ function renderMarketArea(data: PublicAgentPageRenderInput): string {
   return `<div class="agent-market"><span class="agent-market-label">Market area</span><div class="agent-market-chips">${chips}</div></div>`;
 }
 
-function listingCardHtml(card: AgentPageListingCard, index: number): string {
+function listingCardHtml(card: AgentPageListingCard, index: number, embedMode = false): string {
   const addressLine = card.street
     ? `<p class="card-address">${escapeHtml(card.street)}</p>`
     : "";
@@ -96,7 +96,24 @@ function listingCardHtml(card: AgentPageListingCard, index: number): string {
     : `<div class="card-img-placeholder">No photo</div>`;
   const propertyType = normalizePropertyTypeForFilter(card.propertyType, card.propertySubtype);
 
-  return `<article class="listing-card" data-id="${escapeHtml(card.id)}" data-label="${escapeHtml(card.listingLabel)}" data-status="${escapeHtml(card.status)}" data-city-state="${escapeHtml(card.cityState)}" data-sort-index="${index}" data-price-cents="${card.priceCents ?? ""}" data-beds="${card.bedsNum ?? ""}" data-baths="${card.bathsNum ?? ""}" data-sqft="${card.sqftNum ?? ""}" data-property-type="${escapeHtml(propertyType)}" data-share-url="${escapeHtml(card.shareUrl)}" data-full-address="${escapeHtml(card.fullAddress)}" data-meta-summary="${escapeHtml(card.metaSummary)}">
+  const scheduleBtn = embedMode
+    ? ""
+    : `<button type="button" class="btn btn-sm btn-outline" data-action="schedule" data-listing-id="${escapeHtml(card.id)}">Schedule Showing</button>`;
+
+  const cardActions = embedMode
+    ? `<div class="card-actions card-actions-embed">
+        <a class="btn btn-sm btn-primary btn-embed-action" href="${escapeHtml(card.shareUrl)}" target="_blank" rel="noopener noreferrer" data-action="listing_view" data-listing-id="${escapeHtml(card.id)}">View Listing</a>
+        <button type="button" class="btn btn-sm btn-outline btn-embed-action" data-action="ask_about" data-listing-id="${escapeHtml(card.id)}">Ask About This</button>
+        <button type="button" class="card-share-link" data-action="share" data-listing-id="${escapeHtml(card.id)}" data-share-url="${escapeHtml(card.shareUrl)}">Share</button>
+      </div>`
+    : `<div class="card-actions">
+        <a class="btn btn-sm btn-primary" href="${escapeHtml(card.shareUrl)}" target="_blank" rel="noopener noreferrer" data-action="listing_view" data-listing-id="${escapeHtml(card.id)}">View Listing</a>
+        <button type="button" class="btn btn-sm btn-outline" data-action="ask_about" data-listing-id="${escapeHtml(card.id)}">Ask About This</button>
+        ${scheduleBtn}
+        <button type="button" class="btn btn-sm btn-ghost" data-action="share" data-listing-id="${escapeHtml(card.id)}" data-share-url="${escapeHtml(card.shareUrl)}">Share</button>
+      </div>`;
+
+  return `<article class="listing-card${embedMode ? " listing-card-embed" : ""}" data-id="${escapeHtml(card.id)}" data-label="${escapeHtml(card.listingLabel)}" data-status="${escapeHtml(card.status)}" data-city-state="${escapeHtml(card.cityState)}" data-sort-index="${index}" data-price-cents="${card.priceCents ?? ""}" data-beds="${card.bedsNum ?? ""}" data-baths="${card.bathsNum ?? ""}" data-sqft="${card.sqftNum ?? ""}" data-property-type="${escapeHtml(propertyType)}" data-share-url="${escapeHtml(card.shareUrl)}" data-full-address="${escapeHtml(card.fullAddress)}" data-meta-summary="${escapeHtml(card.metaSummary)}">
     <a class="card-img-link" href="${escapeHtml(card.shareUrl)}" target="_blank" rel="noopener noreferrer" data-action="listing_view" data-listing-id="${escapeHtml(card.id)}">${img}</a>
     <div class="card-body">
       <div class="card-top">
@@ -106,18 +123,22 @@ function listingCardHtml(card: AgentPageListingCard, index: number): string {
       ${addressLine}
       <p class="card-city">${escapeHtml(card.cityState)}</p>
       ${meta ? `<p class="card-meta">${escapeHtml(meta)}</p>` : ""}
-      <div class="card-actions">
-        <a class="btn btn-sm btn-primary" href="${escapeHtml(card.shareUrl)}" target="_blank" rel="noopener noreferrer" data-action="listing_view" data-listing-id="${escapeHtml(card.id)}">View Listing</a>
-        <button type="button" class="btn btn-sm btn-outline" data-action="ask_about" data-listing-id="${escapeHtml(card.id)}">Ask About This</button>
-        <button type="button" class="btn btn-sm btn-outline" data-action="schedule" data-listing-id="${escapeHtml(card.id)}">Schedule Showing</button>
-        <button type="button" class="btn btn-sm btn-ghost" data-action="share" data-share-url="${escapeHtml(card.shareUrl)}">Share</button>
-      </div>
+      ${cardActions}
     </div>
   </article>`;
 }
 
-export function renderAgentPageListingCards(cards: AgentPageListingCard[], startIndex = 0): string {
-  return cards.map((card, index) => listingCardHtml(card, startIndex + index)).join("");
+export type AgentPageListingCardRenderOptions = {
+  embedMode?: boolean;
+};
+
+export function renderAgentPageListingCards(
+  cards: AgentPageListingCard[],
+  startIndex = 0,
+  options: AgentPageListingCardRenderOptions = {},
+): string {
+  const embedMode = options.embedMode === true;
+  return cards.map((card, index) => listingCardHtml(card, startIndex + index, embedMode)).join("");
 }
 
 export function buildPublicAgentPageNotFoundHtml(): string {
@@ -154,12 +175,12 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           ? "Let's Chat"
           : "Send a message";
 
-  const cards = renderAgentPageListingCards(data.listings);
+  const embedMode = data.embedMode === true;
+  const hideChat = embedMode && data.hideChat === true;
+  const cards = renderAgentPageListingCards(data.listings, 0, { embedMode });
   const showEmptyInventory = data.browseTotal === 0;
   const browseResultsSummary = formatBrowseResultsSummary(data.listings.length, data.browseTotal);
   const browseRemaining = data.browseHasMore ? Math.max(0, data.browseTotal - data.listings.length) : 0;
-  const embedMode = data.embedMode === true;
-  const hideChat = embedMode && data.hideChat === true;
   const chatWidgetClass =
     !hideChat && data.widgetEnabled ? "chat-widget enabled" : "chat-widget";
   const initialListingType = data.initialListingType ?? "all";
@@ -302,6 +323,13 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .modal input, .modal textarea, .modal select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
     .modal textarea { min-height: 80px; resize: vertical; }
     .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+    .share-url-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.45); display: none; align-items: center; justify-content: center; z-index: 105; padding: 16px; }
+    .share-url-backdrop.open { display: flex; }
+    .share-url-dialog { background: #fff; border-radius: 12px; width: 100%; max-width: 420px; padding: 18px; box-shadow: 0 8px 32px rgba(15,23,42,0.15); }
+    .share-url-dialog h2 { margin: 0 0 8px; font-size: 1rem; }
+    .share-url-dialog p { margin: 0 0 10px; font-size: 0.8125rem; color: var(--muted); }
+    .share-url-dialog input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 0.8125rem; color: var(--ink); background: #f8fafc; }
+    .share-url-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
     .chat-widget { position: fixed; inset: 0; z-index: 110; pointer-events: none; }
     .chat-widget.open { pointer-events: none; }
     .chat-widget-scrim { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.08); pointer-events: auto; }
@@ -364,6 +392,40 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       border-color: ${EMBED_BORDER_SOFT};
       box-shadow: 0 1px 4px rgba(72, 56, 40, 0.06);
     }
+    body.embed-mode .listing-card-embed .card-img-link { aspect-ratio: 3/2; }
+    body.embed-mode .listing-card-embed .card-body { padding: 10px 12px 12px; gap: 3px; }
+    body.embed-mode .listing-card-embed .card-address { font-size: 0.875rem; margin: 0; }
+    body.embed-mode .listing-card-embed .card-city,
+    body.embed-mode .listing-card-embed .card-meta { font-size: 0.75rem; margin: 0; }
+    body.embed-mode .card-actions-embed {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 6px;
+      margin-top: auto;
+      padding-top: 8px;
+    }
+    body.embed-mode .card-actions-embed .btn-embed-action {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 6px 8px;
+      font-size: 0.6875rem;
+      white-space: nowrap;
+    }
+    body.embed-mode .card-share-link {
+      flex: 0 0 auto;
+      border: none;
+      background: transparent;
+      color: var(--brand);
+      font: inherit;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 4px 2px;
+      text-decoration: underline;
+      white-space: nowrap;
+    }
+    body.embed-mode .card-share-link:hover { color: var(--brand-dark); }
     body.embed-mode .empty-listings {
       background: ${EMBED_CHIP_BG};
       border-color: ${EMBED_BORDER};
@@ -537,6 +599,17 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       <iframe id="chat-iframe" title="Web chat"></iframe>
     </div>
   </div>`}
+  <div class="share-url-backdrop" id="share-url-backdrop" aria-hidden="true">
+    <div class="share-url-dialog" role="dialog" aria-modal="true" aria-labelledby="share-url-title">
+      <h2 id="share-url-title">Copy listing link</h2>
+      <p>Select the link below and copy it to share this property.</p>
+      <input type="text" id="share-url-input" readonly aria-label="Listing share URL" />
+      <div class="share-url-dialog-actions">
+        <button type="button" class="btn btn-outline" id="share-url-close">Close</button>
+        <button type="button" class="btn btn-primary" id="share-url-copy">Copy link</button>
+      </div>
+    </div>
+  </div>
   <div class="toast" id="toast" role="status"></div>
 
   <script type="application/json" id="page-config">${JSON.stringify({
@@ -924,6 +997,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         if (propTypeEl && propTypeEl.value) params.set("propertyType", propTypeEl.value);
         var sortEl = document.getElementById("filter-sort");
         if (sortEl && sortEl.value) params.set("sort", sortEl.value);
+        if (config.embedMode) params.set("embed", "1");
         return params;
       }
 
@@ -994,29 +1068,109 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         });
       });
 
-      function copyListingUrl(url) {
-        navigator.clipboard.writeText(url).then(function () {
-          showToast("Link copied");
-        }).catch(function () {
+      function resolveShareUrl(url, triggerEl) {
+        var resolved = String(url || "").trim();
+        if (resolved) return resolved;
+        var card = triggerEl && triggerEl.closest ? triggerEl.closest(".listing-card") : null;
+        if (card) return String(card.getAttribute("data-share-url") || "").trim();
+        return "";
+      }
+
+      function execCopyFallback(text) {
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, text.length);
+        var ok = false;
+        try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+        document.body.removeChild(ta);
+        return ok;
+      }
+
+      var shareUrlBackdrop = document.getElementById("share-url-backdrop");
+      var shareUrlInput = document.getElementById("share-url-input");
+      var shareUrlCopyBtn = document.getElementById("share-url-copy");
+      var shareUrlCloseBtn = document.getElementById("share-url-close");
+
+      function openShareUrlPrompt(url) {
+        if (!shareUrlBackdrop || !shareUrlInput) {
           showToast("Could not copy link");
+          return;
+        }
+        shareUrlInput.value = url;
+        shareUrlBackdrop.classList.add("open");
+        shareUrlBackdrop.setAttribute("aria-hidden", "false");
+        shareUrlInput.focus();
+        shareUrlInput.select();
+      }
+
+      function closeShareUrlPrompt() {
+        if (!shareUrlBackdrop) return;
+        shareUrlBackdrop.classList.remove("open");
+        shareUrlBackdrop.setAttribute("aria-hidden", "true");
+      }
+
+      if (shareUrlCloseBtn) shareUrlCloseBtn.addEventListener("click", closeShareUrlPrompt);
+      if (shareUrlBackdrop) {
+        shareUrlBackdrop.addEventListener("click", function (e) {
+          if (e.target === shareUrlBackdrop) closeShareUrlPrompt();
+        });
+      }
+      if (shareUrlCopyBtn) {
+        shareUrlCopyBtn.addEventListener("click", function () {
+          var url = shareUrlInput ? shareUrlInput.value : "";
+          if (!url) return;
+          copyListingUrl(url, null).then(function (copied) {
+            if (copied) closeShareUrlPrompt();
+          });
         });
       }
 
-      function shareListing(url) {
-        if (!url) {
+      function copyListingUrl(url, triggerEl) {
+        var resolved = resolveShareUrl(url, triggerEl);
+        if (!resolved) {
+          showToast("No link to share");
+          return Promise.resolve(false);
+        }
+        function onCopied() {
+          showToast("Link copied");
+          return true;
+        }
+        function tryExecCopy() {
+          if (execCopyFallback(resolved)) return Promise.resolve(onCopied());
+          openShareUrlPrompt(resolved);
+          return Promise.resolve(false);
+        }
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+          return navigator.clipboard.writeText(resolved).then(onCopied).catch(function () {
+            return tryExecCopy();
+          });
+        }
+        return tryExecCopy();
+      }
+
+      function shareListing(url, triggerEl) {
+        var resolved = resolveShareUrl(url, triggerEl);
+        if (!resolved) {
           showToast("No link to share");
           return;
         }
-        if (navigator.share) {
-          navigator.share({ url: url, title: "Property listing" }).then(function () {
+        var canNativeShare = !config.embedMode && navigator.share && typeof navigator.share === "function";
+        if (canNativeShare) {
+          navigator.share({ url: resolved, title: "Property listing" }).then(function () {
             showToast("Shared");
           }).catch(function (err) {
             if (err && err.name === "AbortError") return;
-            copyListingUrl(url);
+            copyListingUrl(resolved, triggerEl);
           });
-        } else {
-          copyListingUrl(url);
+          return;
         }
+        copyListingUrl(resolved, triggerEl);
       }
 
       document.getElementById("listings-grid").addEventListener("click", function (e) {
@@ -1032,7 +1186,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           e.preventDefault();
         }
         if (action === "share") {
-          shareListing(t.getAttribute("data-share-url"));
+          shareListing(t.getAttribute("data-share-url"), t);
           e.preventDefault();
         }
       });

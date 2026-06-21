@@ -138,7 +138,8 @@ export async function getPublicAgentPageData(
     filters: browseFilters,
     offset: 0,
     limit: AGENT_PAGE_BROWSE_PAGE_SIZE,
-    renderHtml: renderAgentPageListingCards,
+    renderHtml: (cards, startIndex) =>
+      renderAgentPageListingCards(cards, startIndex, { embedMode: options.embedMode ?? false }),
   });
 
   const displayName = resolveAgentPageDisplayName(agent, user?.name);
