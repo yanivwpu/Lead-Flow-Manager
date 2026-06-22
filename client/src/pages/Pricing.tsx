@@ -20,7 +20,7 @@ import {
   useShopifyShopHint,
 } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
-import { isActiveProAiTrial as checkActiveProAiTrial } from "@/lib/proAiTrialState";
+import { isActiveProAiTrial as checkActiveProAiTrial, proAiTrialDaysRemaining } from "@/lib/proAiTrialState";
 import {
   openShopifyManagedPricing,
   shopifyManagedPricingInstructions,
@@ -116,6 +116,7 @@ export function Pricing() {
       hasAIBrainAddon?: boolean;
       aiBrainBasePlanEligible?: boolean;
       isInTrial?: boolean;
+      trialDaysRemaining?: number;
     } | null;
     subscription: {
       plan: string;
@@ -126,6 +127,7 @@ export function Pricing() {
       trialIncludesAIBrain?: boolean;
       isPaidSubscriber?: boolean;
       trialPlan?: string | null;
+      trialDaysRemaining?: number;
     } | null;
   }>({
     queryKey: ["/api/subscription", shopHint ?? ""],
@@ -162,6 +164,8 @@ export function Pricing() {
     () => (!!user && subscriptionResolved ? checkActiveProAiTrial(subscriptionData) : false),
     [user, subscriptionResolved, subscriptionData],
   );
+
+  const trialDaysRemaining = proAiTrialDaysRemaining(subscriptionData);
 
   const hasAIBrainAddon = limits?.hasAIBrainAddon ?? false;
   const aiBrainBasePlanEligible = limits?.aiBrainBasePlanEligible ?? false;
@@ -417,16 +421,26 @@ export function Pricing() {
         {/* ─────────────── ACTIVE PRO+AI TRIAL BANNER ─────────────── */}
         {isActiveProAiTrial ? (
           <div
-            className="flex items-start gap-3 bg-emerald-50 border border-emerald-300 rounded-xl px-5 py-4 mb-10 text-sm text-emerald-900"
+            className="mb-10 rounded-2xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 px-6 py-5 shadow-sm"
             role="status"
             data-testid="banner-pro-ai-trial-active"
           >
-            <Sparkles className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
-            <span>
+            <p className="text-base font-semibold text-emerald-950 leading-snug">
+              {t(`${p}.trialState.bannerHeadline`)}
+            </p>
+            <p className="mt-2 text-sm text-emerald-900 leading-relaxed">
               {isShopify
-                ? t(`${p}.trialState.bannerShopify`)
-                : t(`${p}.trialState.bannerWeb`)}
-            </span>
+                ? t(`${p}.trialState.bannerBodyShopify`)
+                : t(`${p}.trialState.bannerBodyWeb`)}
+            </p>
+            {trialDaysRemaining > 0 ? (
+              <p
+                className="mt-3 text-sm font-medium text-emerald-800"
+                data-testid="text-trial-days-remaining"
+              >
+                {t(`${p}.trialState.daysRemaining`, { count: trialDaysRemaining })}
+              </p>
+            ) : null}
           </div>
         ) : (
         <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4 mb-10 text-sm text-emerald-800" data-testid="banner-free-trial">
@@ -636,10 +650,17 @@ export function Pricing() {
             const isCurrentBillingPlan = billingPlan === "free" && !isActiveProAiTrial;
             return (
               <div
-                className="bg-white rounded-2xl border-2 border-gray-200 p-6 flex flex-col"
+                className={`bg-white rounded-2xl border-2 p-6 flex flex-col relative ${
+                  isActiveProAiTrial ? "border-gray-300" : "border-gray-200"
+                }`}
                 data-testid="plan-card-free"
               >
-                <div className="mb-5">
+                {isActiveProAiTrial ? (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gray-600 text-white text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">
+                    {t(`${p}.trialState.freePlanBadge`)}
+                  </div>
+                ) : null}
+                <div className={`mb-5 ${isActiveProAiTrial ? "mt-2" : ""}`}>
                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     {t(`${p}.plans.free.name`)}
                   </span>
@@ -687,21 +708,25 @@ export function Pricing() {
                 </p>
                 {isActiveProAiTrial ? (
                   <p
-                    className="text-xs font-medium text-gray-600 mb-4 leading-snug"
+                    className="text-xs text-gray-600 mb-4 leading-relaxed"
                     data-testid="text-free-after-trial-note"
                   >
-                    {t(`${p}.trialState.freeAfterTrialNote`)}
+                    {isShopify
+                      ? t(`${p}.trialState.freeAfterTrialHelper`)
+                      : t(`${p}.trialState.freeAfterTrialHelperWeb`)}
                   </p>
                 ) : null}
                 <Button
                   className="w-full bg-gray-100 text-gray-700 hover:bg-gray-200"
                   onClick={() => setLocation(user ? "/app/inbox" : "/auth")}
-                  disabled={planButtonsDisabled || isCurrentBillingPlan}
+                  disabled={planButtonsDisabled || isCurrentBillingPlan || isActiveProAiTrial}
                   data-testid="button-upgrade-free"
                 >
-                  {isCurrentBillingPlan
-                    ? t(`${p}.plans.currentPlan`)
-                    : t(`${p}.plans.free.cta`)}
+                  {isActiveProAiTrial
+                    ? t(`${p}.trialState.freePlanBadge`)
+                    : isCurrentBillingPlan
+                      ? t(`${p}.plans.currentPlan`)
+                      : t(`${p}.plans.free.cta`)}
                 </Button>
               </div>
             );
@@ -859,7 +884,7 @@ export function Pricing() {
                 >
                   <span className="text-xs font-bold text-brand-green">
                     {isActiveProAiTrial
-                      ? t(`${p}.trialState.proIncludedInTrial`)
+                      ? t(`${p}.trialState.proTrialHelper`)
                       : t(`${p}.inherit.starter`)}
                   </span>
                 </div>
@@ -896,14 +921,8 @@ export function Pricing() {
                     isRTL={isRTL}
                   />
                 </div>
-                <p className="text-xs text-gray-400 mt-4 mb-2">
+                <p className="text-xs text-gray-400 mt-4 mb-4">
                   {t(`${p}.plans.pro.upsell`)}
-                </p>
-                <p className="text-xs font-medium text-emerald-600 mb-4 flex items-center gap-1" data-testid="text-trial-pro">
-                  <span>✓</span>{" "}
-                  {isActiveProAiTrial
-                    ? t(`${p}.trialState.proIncludedInTrial`)
-                    : t(`${p}.trialNote`)}
                 </p>
                 <Button
                   className={`w-full ${
@@ -974,13 +993,22 @@ export function Pricing() {
             </ul>
             <p className="text-xs font-medium text-purple-700 mt-4 mb-1 flex items-center gap-1" dir={isRTL ? "rtl" : "ltr"}>
               <Shield className="w-3 h-3 shrink-0" />
-              {isActiveProAiTrial && hasAIBrainAddon
+              {isActiveProAiTrial
                 ? t(`${p}.trialState.aiBrainIncludedInTrial`)
                 : t(`${p}.aiBrainNote`)}
             </p>
+            {isActiveProAiTrial ? (
+              <p
+                className="text-xs text-purple-800/90 mb-3 leading-relaxed"
+                data-testid="text-ai-brain-trial-helper"
+              >
+                {t(`${p}.trialState.aiBrainTrialHelper`)}
+              </p>
+            ) : (
             <p className="text-xs text-gray-400 mb-4">
               {t(`${p}.plans.aiBrain.upsell`)}
             </p>
+            )}
             {!subscriptionResolved ? (
               <Button className="w-full bg-gray-200 text-gray-500" disabled data-testid="button-ai-brain-loading">
                 <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} />
@@ -995,6 +1023,18 @@ export function Pricing() {
                   {t(`${p}.plans.aiBrain.ctaOpenBrain`)}
                 </Button>
               </Link>
+            ) : isActiveProAiTrial && isShopify ? (
+              <Button
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                onClick={handleAIBrainAddonCheckout}
+                disabled={aiBrainAddonLoading || planButtonsDisabled}
+                data-testid="button-ai-brain-addon-checkout"
+              >
+                {aiBrainAddonLoading ? (
+                  <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} />
+                ) : null}
+                {shopifyPlanButtonLabel("aiBrain", false)}
+              </Button>
             ) : aiBrainBasePlanEligible ? (
               <Button
                 className="w-full bg-purple-600 hover:bg-purple-700 text-white"
@@ -1024,6 +1064,15 @@ export function Pricing() {
             )}
           </div>
         </div>
+
+        {isShopify ? (
+          <p
+            className="text-center text-sm text-gray-600 -mt-8 mb-14 max-w-2xl mx-auto leading-relaxed px-4"
+            data-testid="text-shopify-billing-note"
+          >
+            {t(`${p}.trialState.shopifyBillingNote`)}
+          </p>
+        ) : null}
 
         {/* ─────────────── SECTION 4: COMPARISON TABLE ─────────────── */}
         <div className="mb-14" data-testid="section-comparison-table">
