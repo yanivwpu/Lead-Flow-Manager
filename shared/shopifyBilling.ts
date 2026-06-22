@@ -17,3 +17,16 @@ export const SHOPIFY_RECONNECT_REQUIRED_CODE = "SHOPIFY_RECONNECT_REQUIRED";
 
 export const SHOPIFY_RECONNECT_REQUIRED_MESSAGE =
   "Open WhachatCRM from Shopify admin to reconnect billing.";
+
+/** Synthetic login email for Shopify-only merchant accounts (one per shop slug). */
+export const SHOPIFY_MERCHANT_EMAIL_DOMAIN = "shopify.whachatcrm.com";
+
+export function shopifySyntheticMerchantEmail(shop: string | null | undefined): string | null {
+  const normalized = normalizeShopifyShopDomain(shop);
+  if (!normalized) return null;
+  const suffix = ".myshopify.com";
+  if (!normalized.endsWith(suffix)) return null;
+  const slug = normalized.slice(0, -suffix.length);
+  if (!slug) return null;
+  return `${slug}@${SHOPIFY_MERCHANT_EMAIL_DOMAIN}`.toLowerCase();
+}

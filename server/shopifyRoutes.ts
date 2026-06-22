@@ -28,6 +28,11 @@ import {
 import { normalizeShopifyShopDomain } from '@shared/shopifyBilling';
 import { hasActivePaidPlan } from './trialEntitlements';
 import {
+  isUsersEmailUniqueViolation,
+  resolveShopifyInstallUser,
+} from './shopifyInstallUser';
+import { shopifySyntheticMerchantEmail } from '@shared/shopifyBilling';
+import {
   processShopifyCustomerCreate,
   processShopifyOrderCreate,
   scheduleShopifyCommerceProcessing,
@@ -194,18 +199,20 @@ router.get('/callback', async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Failed to exchange authorization code' });
     }
 
-    let user = await storage.getUserByShopifyShop(shop);
-
     const sessionUserId = (req as any).user?.id as string | undefined;
-    if (!user && sessionUserId) {
-      const sessionUser = await storage.getUser(sessionUserId);
-      if (sessionUser && !sessionUser.shopifyShop) {
-        user = sessionUser;
-        console.log("[Shopify Callback] Linking install to existing session user", {
-          userId: sessionUser.id,
-          shop,
-        });
-      }
+    const resolved = await resolveShopifyInstallUser({ shop, sessionUserId });
+    const normalizedShop = resolved.normalizedShop;
+    if (!normalizedShop) {
+      return res.status(400).json({ error: 'Invalid shop domain' });
+    }
+
+    let user = resolved.user;
+    if (user) {
+      console.log('[Shopify Callback] Reusing existing user', {
+        shop: normalizedShop,
+        userId: user.id,
+        resolution: resolved.resolution,
+      });
     }
 
     if (!user) {
@@ -214,16 +221,36 @@ router.get('/callback', async (req: Request, res: Response) => {
       const trialStartedAt = new Date();
       const trialEndsAt = new Date(trialStartedAt);
       trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+      const merchantEmail = shopifySyntheticMerchantEmail(normalizedShop);
+      if (!merchantEmail) {
+        return res.status(400).json({ error: 'Invalid shop domain' });
+      }
 
-      user = await storage.createUser({
-        name: shop.replace('.myshopify.com', ''),
-        email: `${shop.replace('.myshopify.com', '')}@shopify.whachatcrm.com`,
-        password: hashedPassword,
-        trialStartedAt,
-        trialEndsAt,
-        trialStatus: 'active',
-        trialPlan: 'pro_ai',
-      });
+      try {
+        user = await storage.createUser({
+          name: normalizedShop.replace('.myshopify.com', ''),
+          email: merchantEmail,
+          password: hashedPassword,
+          trialStartedAt,
+          trialEndsAt,
+          trialStatus: 'active',
+          trialPlan: 'pro_ai',
+        });
+      } catch (createErr) {
+        if (!isUsersEmailUniqueViolation(createErr)) {
+          throw createErr;
+        }
+        const existing = await storage.getUserByEmail(merchantEmail);
+        if (!existing) {
+          throw createErr;
+        }
+        user = (await storage.getUserForSession(existing.id)) ?? existing;
+        console.warn('[Shopify Callback] createUser raced or reinstall — reusing by email', {
+          shop: normalizedShop,
+          userId: user.id,
+          email: merchantEmail,
+        });
+      }
     }
 
     const priorShopifyStatus = (user.shopifySubscriptionStatus || '').toLowerCase();
@@ -232,7 +259,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     const usableAppAccess = shopifyMerchantHasUsableAppAccess(user);
 
     const installPatch: Parameters<typeof storage.updateUser>[1] = {
-      shopifyShop: shop,
+      shopifyShop: normalizedShop,
       shopifyAccessToken: accessToken,
       shopifyInstalledAt: user.shopifyInstalledAt ?? new Date(),
     };
@@ -269,7 +296,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       });
       console.log('[Shopify Callback] Granted 14-day Pro + AI trial on first install', {
         userId: user.id,
-        shop,
+        shop: normalizedShop,
       });
     }
     await storage.updateUser(user.id, installPatch);
@@ -280,22 +307,22 @@ router.get('/callback', async (req: Request, res: Response) => {
         userId: user.id,
         type: 'shopify',
         name: 'Shopify',
-        config: { shopUrl: shop, syncOptions: ['new_orders', 'new_customers'] },
+        config: { shopUrl: normalizedShop, syncOptions: ['new_orders', 'new_customers'] },
         isActive: true,
       });
     } else {
       const existingConfig = (existingIntegration.config && typeof existingIntegration.config === 'object') ? existingIntegration.config as Record<string, any> : {};
       await storage.updateIntegration(existingIntegration.id, {
-        config: { ...existingConfig, shopUrl: shop },
+        config: { ...existingConfig, shopUrl: normalizedShop },
         isActive: true,
       });
     }
 
     // Best-effort webhook registration — must not block install
     try {
-      await registerMandatoryWebhooks(shop, accessToken);
+      await registerMandatoryWebhooks(normalizedShop, accessToken);
     } catch (webhookErr) {
-      console.error('[Shopify Webhook Register Failed]', { shop, error: webhookErr });
+      console.error('[Shopify Webhook Register Failed]', { shop: normalizedShop, error: webhookErr });
     }
 
     // Log the merchant into the web app so they can choose Starter vs Pro on Pricing (Shopify Billing API).
@@ -309,10 +336,15 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     const trialDays = 14;
     res.redirect(
-      `/pricing?shopify_installed=1&shop=${encodeURIComponent(shop)}&trial_days=${String(trialDays)}`,
+      `/pricing?shopify_installed=1&shop=${encodeURIComponent(normalizedShop)}&trial_days=${String(trialDays)}`,
     );
   } catch (error) {
     console.error('Shopify callback error:', error);
+    if (isUsersEmailUniqueViolation(error)) {
+      return res.status(409).json({
+        error: 'Shopify merchant account already exists. Please open the app from Shopify admin to continue.',
+      });
+    }
     res.status(500).json({ error: 'Installation failed' });
   }
 });

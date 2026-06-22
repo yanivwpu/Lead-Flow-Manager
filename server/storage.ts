@@ -69,6 +69,7 @@ import {
 } from "@shared/reEngagement";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, campaignEnrollments, calendlyCanceledEventTombstones, type InsertConversationWindow, type ConversationWindow, growthEngineSetupTasks } from "@shared/schema";
+import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray, lt, count } from "drizzle-orm";
 import { getEffectiveTaskPayoutDollars, type TaskPayoutFields } from "./salespersonTaskPayout";
 import {
@@ -785,18 +786,20 @@ export class DbStorage implements IStorage {
   }
 
   async getUserByShopifyShop(shop: string): Promise<User | undefined> {
+    const normalized = normalizeShopifyShopDomain(shop);
+    if (!normalized) return undefined;
     try {
-      const result = await db.select().from(users).where(eq(users.shopifyShop, shop));
-      return result[0];
+      const result = await db.execute(sql`
+        SELECT * FROM public.users
+        WHERE shopify_shop IS NOT NULL
+          AND lower(trim(shopify_shop)) = ${normalized}
+        LIMIT 1
+      `);
+      const rows = (result as { rows: Record<string, unknown>[] }).rows;
+      return rows[0] ? widePgRowToUser(rows[0]) : undefined;
     } catch (err: unknown) {
-      logUserSessionLoadFailure("getUserByShopifyShop_drizzle", shop, err);
-      try {
-        const result = await db.execute(sql`SELECT * FROM public.users WHERE shopify_shop = ${shop} LIMIT 1`);
-        const rows = (result as { rows: Record<string, unknown>[] }).rows;
-        return rows[0] ? widePgRowToUser(rows[0]) : undefined;
-      } catch {
-        return undefined;
-      }
+      logUserSessionLoadFailure("getUserByShopifyShop", normalized, err);
+      return undefined;
     }
   }
 
