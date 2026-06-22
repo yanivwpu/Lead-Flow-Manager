@@ -3,6 +3,8 @@ import { shopifyApi, BillingInterval, Session, ApiVersion } from '@shopify/shopi
 import { Request, Response, NextFunction } from 'express';
 import * as jose from 'jose';
 import crypto from 'crypto';
+import { normalizeShopifyShopDomain } from '@shared/shopifyBilling';
+import { getAppOrigin } from './urlOrigins';
 import { storage } from './storage';
 
 /** Align with shopify.app.whachatcrm.toml webhooks `api_version` (2026-01). */
@@ -650,38 +652,151 @@ export async function cancelShopifySubscription(
 
 const oauthStateStore = new Map<string, { shop: string; timestamp: number }>();
 
+/** OAuth CSRF state TTL — must exceed typical App Store install approval time. */
+export const SHOPIFY_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+
+type SignedOAuthStatePayload = { n: string; s: string; t: number };
+
+function shopifyOAuthStateSecret(): string | null {
+  return SHOPIFY_API_SECRET || null;
+}
+
+/** Stateless signed state — survives multi-instance deploys and server restarts (unlike in-memory Map). */
+export function createSignedShopifyOAuthState(shop: string): string | null {
+  const normalized = normalizeShopifyShopDomain(shop);
+  const secret = shopifyOAuthStateSecret();
+  if (!normalized || !secret) return null;
+
+  const payload: SignedOAuthStatePayload = {
+    n: crypto.randomBytes(16).toString('hex'),
+    s: normalized,
+    t: Date.now(),
+  };
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', secret).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+export type ShopifyOAuthStateFailure =
+  | 'missing_secret'
+  | 'malformed'
+  | 'bad_signature'
+  | 'shop_mismatch'
+  | 'expired'
+  | 'invalid_shop';
+
+/** Validates HMAC-signed OAuth state; returns failure reason for structured logs. */
+export function verifySignedShopifyOAuthState(
+  state: string,
+  shop: string,
+): { ok: true } | { ok: false; reason: ShopifyOAuthStateFailure } {
+  if (!shopifyOAuthStateSecret()) {
+    return { ok: false, reason: 'missing_secret' };
+  }
+
+  const normalizedShop = normalizeShopifyShopDomain(shop);
+  if (!normalizedShop) {
+    return { ok: false, reason: 'invalid_shop' };
+  }
+
+  const dot = state.lastIndexOf('.');
+  if (dot <= 0) {
+    return { ok: false, reason: 'malformed' };
+  }
+
+  const body = state.slice(0, dot);
+  const sig = state.slice(dot + 1);
+  const secret = shopifyOAuthStateSecret()!;
+  const expectedSig = crypto.createHmac('sha256', secret).update(body).digest('base64url');
+
+  try {
+    const sigBuf = Buffer.from(sig);
+    const expectedBuf = Buffer.from(expectedSig);
+    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+      return { ok: false, reason: 'bad_signature' };
+    }
+  } catch {
+    return { ok: false, reason: 'bad_signature' };
+  }
+
+  let payload: SignedOAuthStatePayload;
+  try {
+    payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as SignedOAuthStatePayload;
+  } catch {
+    return { ok: false, reason: 'malformed' };
+  }
+
+  if (!payload?.n || !payload?.s || typeof payload.t !== 'number') {
+    return { ok: false, reason: 'malformed' };
+  }
+
+  if (payload.s !== normalizedShop) {
+    return { ok: false, reason: 'shop_mismatch' };
+  }
+
+  if (Date.now() - payload.t > SHOPIFY_OAUTH_STATE_TTL_MS) {
+    return { ok: false, reason: 'expired' };
+  }
+
+  return { ok: true };
+}
+
+/** @deprecated Legacy in-memory fallback for states issued before signed-state deploy. */
+function validateLegacyInMemoryOAuthState(state: string, shop: string): boolean {
+  const stored = oauthStateStore.get(state);
+  if (!stored) return false;
+
+  if (Date.now() - stored.timestamp > SHOPIFY_OAUTH_STATE_TTL_MS) {
+    oauthStateStore.delete(state);
+    return false;
+  }
+
+  const normalizedShop = normalizeShopifyShopDomain(shop);
+  if (!normalizedShop || stored.shop !== normalizedShop) {
+    return false;
+  }
+
+  oauthStateStore.delete(state);
+  return true;
+}
+
 export function generateShopifyInstallUrl(shop: string): { url: string; state: string } {
   const shopify = getShopifyApi();
-  if (!shopify) return { url: '', state: '' };
-  
-  const state = crypto.randomBytes(16).toString('hex');
-  oauthStateStore.set(state, { shop, timestamp: Date.now() });
-  
-  setTimeout(() => oauthStateStore.delete(state), 10 * 60 * 1000);
-  
-  const redirectUri = `${HOST}/api/shopify/callback`;
+  const normalizedShop = normalizeShopifyShopDomain(shop);
+  if (!shopify || !normalizedShop) return { url: '', state: '' };
+
+  const state = createSignedShopifyOAuthState(normalizedShop);
+  if (!state) return { url: '', state: '' };
+
+  const redirectUri = `${getAppOrigin()}/api/shopify/callback`;
   const scopes = SHOPIFY_SCOPES.join(',');
-  
-  const url = `https://${shop}/admin/oauth/authorize?client_id=${SHOPIFY_API_KEY}&scope=${scopes}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
-  
+
+  const url = `https://${normalizedShop}/admin/oauth/authorize?client_id=${SHOPIFY_API_KEY}&scope=${scopes}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`;
+
   return { url, state };
 }
 
 export function validateOAuthState(state: string, shop: string): boolean {
-  const stored = oauthStateStore.get(state);
-  if (!stored) return false;
-  
-  if (Date.now() - stored.timestamp > 10 * 60 * 1000) {
-    oauthStateStore.delete(state);
-    return false;
+  const signed = verifySignedShopifyOAuthState(state, shop);
+  if (signed.ok) return true;
+  // Rolling deploy: accept in-memory states created on older instances briefly.
+  if (signed.reason === 'bad_signature' || signed.reason === 'malformed') {
+    return validateLegacyInMemoryOAuthState(state, shop);
   }
-  
-  if (stored.shop !== shop) {
-    return false;
+  return false;
+}
+
+export function validateOAuthStateWithReason(
+  state: string,
+  shop: string,
+): { ok: true } | { ok: false; reason: ShopifyOAuthStateFailure | 'legacy_miss' } {
+  const signed = verifySignedShopifyOAuthState(state, shop);
+  if (signed.ok) return { ok: true };
+  if (signed.reason === 'bad_signature' || signed.reason === 'malformed') {
+    if (validateLegacyInMemoryOAuthState(state, shop)) return { ok: true };
+    return { ok: false, reason: 'legacy_miss' };
   }
-  
-  oauthStateStore.delete(state);
-  return true;
+  return signed;
 }
 
 export async function exchangeShopifyCode(

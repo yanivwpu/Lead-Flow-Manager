@@ -4,7 +4,7 @@ import { storage } from './storage';
 import {
   isShopifyConfigured,
   generateShopifyInstallUrl,
-  validateOAuthState,
+  validateOAuthStateWithReason,
   exchangeShopifyCode,
   getActiveShopifySubscription,
   syncShopifyBillingToUser,
@@ -25,6 +25,7 @@ import {
   shopifyMerchantHasUsableAppAccess,
   shopifyMerchantIsFirstTokenInstall,
 } from '@shared/shopifyLaunchRouting';
+import { normalizeShopifyShopDomain } from '@shared/shopifyBilling';
 import { hasActivePaidPlan } from './trialEntitlements';
 import {
   processShopifyCustomerCreate,
@@ -134,13 +135,10 @@ router.get("/listing-check", async (req: Request, res: Response) => {
 });
 
 router.get('/install', (req: Request, res: Response) => {
-  const { shop } = req.query;
+  const rawShop = req.query.shop;
+  const shop = typeof rawShop === 'string' ? normalizeShopifyShopDomain(rawShop) : null;
 
-  if (!shop || typeof shop !== 'string') {
-    return res.status(400).json({ error: 'Missing shop parameter' });
-  }
-
-  if (!shop.endsWith('.myshopify.com')) {
+  if (!shop) {
     return res.status(400).json({ error: 'Invalid shop domain' });
   }
 
@@ -171,7 +169,13 @@ router.get('/callback', async (req: Request, res: Response) => {
     return res.status(401).json({ error: 'Invalid HMAC signature' });
   }
 
-  if (!validateOAuthState(state, shop)) {
+  const stateCheck = validateOAuthStateWithReason(state, shop);
+  if (!stateCheck.ok) {
+    console.warn('[Shopify Callback] Invalid OAuth state', {
+      shop,
+      reason: stateCheck.reason,
+      appOrigin: getAppOrigin(),
+    });
     return res.status(401).json({ error: 'Invalid or expired OAuth state' });
   }
 
