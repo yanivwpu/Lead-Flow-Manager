@@ -116,9 +116,11 @@ export function useAICapabilities(): AICapabilities {
   const creditsRemaining = usageData.creditsRemaining;
   const creditPercent    = usageData.creditPercent;
 
-  const isLimited   = creditPercent >= 75;
-  const isNearLimit = creditPercent >= 90;
-  const isExhausted = creditPercent >= 100 || usageData.usageLimitReached || creditsRemaining <= 0;
+  const isLimited   = monthlyLimit > 0 && creditPercent >= 75;
+  const isNearLimit = monthlyLimit > 0 && creditPercent >= 90;
+  const isExhausted =
+    monthlyLimit > 0 &&
+    (creditPercent >= 100 || usageData.usageLimitReached || creditsRemaining <= 0);
 
   return {
     plan:              usageData.plan,

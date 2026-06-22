@@ -25,6 +25,7 @@ import {
   shopifyMerchantHasUsableAppAccess,
   shopifyMerchantIsFirstTokenInstall,
 } from '@shared/shopifyLaunchRouting';
+import { hasActivePaidPlan } from './trialEntitlements';
 import {
   processShopifyCustomerCreate,
   processShopifyOrderCreate,
@@ -239,6 +240,32 @@ router.get('/callback', async (req: Request, res: Response) => {
         subscriptionPlan: 'free',
         subscriptionStatus: 'active',
         shopifyAIBrainEnabled: false,
+      });
+    }
+
+    // Existing account first Shopify install: grant pro_ai trial only if they never had one.
+    const now = new Date();
+    const trialPreviouslyExpired =
+      user.trialStatus === 'expired' ||
+      (user.trialEndsAt != null && new Date(user.trialEndsAt) <= now);
+    const neverHadTrial = !user.trialEndsAt && !trialPreviouslyExpired;
+    if (
+      firstTokenInstall &&
+      neverHadTrial &&
+      !hasActivePaidPlan(user, now)
+    ) {
+      const trialStartedAt = new Date();
+      const trialEndsAt = new Date(trialStartedAt);
+      trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+      Object.assign(installPatch, {
+        trialStartedAt,
+        trialEndsAt,
+        trialStatus: 'active',
+        trialPlan: 'pro_ai',
+      });
+      console.log('[Shopify Callback] Granted 14-day Pro + AI trial on first install', {
+        userId: user.id,
+        shop,
       });
     }
     await storage.updateUser(user.id, installPatch);

@@ -18,6 +18,11 @@ import { cn } from "@/lib/utils";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
 import {
+  getUpgradeNavigationPath,
+  isActiveProAiTrial,
+  proAiTrialDaysRemaining,
+} from "@/lib/proAiTrialState";
+import {
   openShopifyManagedPricing,
   shopifyManagedPricingInstructions,
 } from "@/lib/shopifyCheckout";
@@ -62,6 +67,10 @@ interface SubscriptionData {
     currentPeriodEnd: string | null;
     isShopify?: boolean;
     isPaidSubscriber?: boolean;
+    trialIncludesAIBrain?: boolean;
+    trialPlan?: string | null;
+    trialEndsAt?: string | null;
+    trialDaysRemaining?: number;
   } | null;
 }
 
@@ -585,6 +594,13 @@ export function Settings() {
     usersCountVal >= usersLimitVal;
 
   const billingUsesShopify = mustUseShopifyBilling(subscriptionData?.subscription, shopHint);
+  const activeProAiTrial = isActiveProAiTrial(subscriptionData);
+  const trialDaysLeft = proAiTrialDaysRemaining(subscriptionData);
+  const billingPlanLabel = subscriptionData?.subscription?.isPaidSubscriber
+    ? (subscriptionData?.limits?.planName || subscriptionData?.limits?.plan || "Free")
+    : activeProAiTrial
+      ? "Free (billing not selected)"
+      : subscriptionData?.limits?.planName || "Free";
 
   const isInShopify =
     billingUsesShopify ||
@@ -1056,13 +1072,40 @@ export function Settings() {
                 <div className="p-5 bg-white rounded-xl border border-gray-200 flex flex-col h-full shadow-sm">
                   <div className="flex items-center gap-2 mb-3">
                     <Crown className="h-4 w-4 text-blue-600" />
-                    <span className="text-xs text-gray-500 uppercase font-bold tracking-wider">Current Plan</span>
+                    <span className="text-xs text-gray-500 uppercase font-bold tracking-wider">
+                      {activeProAiTrial ? "Trial access" : "Current Plan"}
+                    </span>
                   </div>
-                  <p className="text-2xl font-bold text-gray-900 mb-1">{subscriptionData?.limits?.planName || "Free"}</p>
-                  {subscriptionData?.subscription?.currentPeriodEnd && (
-                    <p className="text-xs text-gray-400">
-                      Next billing: {new Date(subscriptionData.subscription.currentPeriodEnd).toLocaleDateString()}
-                    </p>
+                  {activeProAiTrial ? (
+                    <>
+                      <p className="text-2xl font-bold text-gray-900 mb-1">Pro + AI Brain trial</p>
+                      <p className="text-sm text-emerald-800 font-medium mb-1">
+                        {trialDaysLeft > 0
+                          ? `${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"} remaining`
+                          : "Active trial"}
+                      </p>
+                      <p className="text-xs text-gray-500 leading-relaxed">
+                        You have full Pro and AI Brain access during your 14-day trial.
+                        {billingUsesShopify
+                          ? " Choose a Shopify plan anytime to continue after the trial."
+                          : " Choose a paid plan anytime to continue after the trial."}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-2">
+                        Billing plan: {billingPlanLabel}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-2xl font-bold text-gray-900 mb-1">
+                        {subscriptionData?.limits?.planName || "Free"}
+                      </p>
+                      {subscriptionData?.subscription?.currentPeriodEnd && (
+                        <p className="text-xs text-gray-400">
+                          Next billing:{" "}
+                          {new Date(subscriptionData.subscription.currentPeriodEnd).toLocaleDateString()}
+                        </p>
+                      )}
+                    </>
                   )}
                   <div className="mt-auto pt-6 space-y-2">
                     {isInShopify &&
@@ -1072,22 +1115,31 @@ export function Settings() {
                         className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold"
                         onClick={() => shopifyBillingMutation.mutate()}
                         disabled={shopifyBillingMutation.isPending}
-                        data-testid="button-shopify-pro-trial"
+                        data-testid="button-shopify-choose-plan"
                       >
                         {shopifyBillingMutation.isPending ? (
                           <Loader2 className="h-4 w-4 animate-spin mr-2" />
                         ) : (
                           <Zap className="h-4 w-4 mr-2" />
                         )}
-                        Start 14-Day Pro Trial
+                        Choose plan in Shopify
                       </Button>
                     )}
-                    <Link href="/pricing" className="w-full block">
+                    <Link
+                      href={
+                        billingUsesShopify
+                          ? getUpgradeNavigationPath({ shopHint, isShopify: true })
+                          : "/pricing"
+                      }
+                      className="w-full block"
+                    >
                       <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold">
                         <Zap className="h-4 w-4 mr-2" />
-                        {effectivePlan === "free" && !subscriptionData?.limits?.isInTrial
-                          ? "Upgrade Plan"
-                          : "View Plans"}
+                        {activeProAiTrial
+                          ? "View plans for after trial"
+                          : effectivePlan === "free" && !subscriptionData?.limits?.isInTrial
+                            ? "Upgrade Plan"
+                            : "View Plans"}
                       </Button>
                     </Link>
                   </div>

@@ -1,6 +1,10 @@
 import { Lock, ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
+import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
+import { useShopifyShopHint } from "@/lib/shopifyBillingHint";
+import { useSubscription } from "@/lib/subscription-context";
+import { getUpgradeNavigationPath } from "@/lib/proAiTrialState";
 
 interface AIUpgradePromptProps {
   feature:     string;          // e.g. "Auto mode", "Workflow recommendations"
@@ -18,6 +22,13 @@ export function AIUpgradePrompt({
   className,
 }: AIUpgradePromptProps) {
   const [, setLocation] = useLocation();
+  const shopHint = useShopifyShopHint();
+  const { data: subscription } = useSubscription();
+  const isShopify = mustUseShopifyBilling(subscription?.subscription, shopHint);
+
+  const goUpgrade = () => {
+    setLocation(getUpgradeNavigationPath({ shopHint, isShopify }));
+  };
 
   if (size === "sm") {
     return (
@@ -26,7 +37,15 @@ export function AIUpgradePrompt({
           "inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium cursor-pointer hover:text-amber-700 transition-colors",
           className
         )}
-        onClick={() => setLocation("/app/settings/billing")}
+        onClick={goUpgrade}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            goUpgrade();
+          }
+        }}
         data-testid="upgrade-prompt-sm"
       >
         <Lock className="w-2.5 h-2.5 shrink-0" />
@@ -52,7 +71,8 @@ export function AIUpgradePrompt({
           <p className="text-[10px] text-amber-700 leading-snug mt-0.5">{reason}</p>
         )}
         <button
-          onClick={() => setLocation("/app/settings/billing")}
+          type="button"
+          onClick={goUpgrade}
           className="mt-1 inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 hover:text-amber-900 transition-colors"
           data-testid="button-upgrade-cta"
         >

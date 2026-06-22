@@ -20,6 +20,7 @@ import {
   useShopifyShopHint,
 } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
+import { isActiveProAiTrial as checkActiveProAiTrial } from "@/lib/proAiTrialState";
 import {
   openShopifyManagedPricing,
   shopifyManagedPricingInstructions,
@@ -157,22 +158,10 @@ export function Pricing() {
     return "free";
   }, [subscriptionResolved, user, subscriptionMeta?.isPaidSubscriber, subscriptionMeta?.plan, effectivePlan]);
 
-  const isActiveProAiTrial = useMemo(() => {
-    if (!user || !subscriptionResolved) return false;
-    return (
-      !!limits?.isInTrial &&
-      !!subscriptionMeta?.trialIncludesAIBrain &&
-      !subscriptionMeta?.isPaidSubscriber &&
-      (subscriptionMeta?.trialPlan ?? "pro_ai") === "pro_ai"
-    );
-  }, [
-    user,
-    subscriptionResolved,
-    limits?.isInTrial,
-    subscriptionMeta?.trialIncludesAIBrain,
-    subscriptionMeta?.isPaidSubscriber,
-    subscriptionMeta?.trialPlan,
-  ]);
+  const isActiveProAiTrial = useMemo(
+    () => (!!user && subscriptionResolved ? checkActiveProAiTrial(subscriptionData) : false),
+    [user, subscriptionResolved, subscriptionData],
+  );
 
   const hasAIBrainAddon = limits?.hasAIBrainAddon ?? false;
   const aiBrainBasePlanEligible = limits?.aiBrainBasePlanEligible ?? false;
