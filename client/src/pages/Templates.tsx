@@ -83,6 +83,11 @@ import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
 import { formatDistanceToNow, format } from "date-fns";
 import { automationSendGuardBlockUserMessage } from "@shared/automationSendGuardMessages";
+import {
+  isWhatsAppSetupIncompleteError,
+  WHATSAPP_TEMPLATE_SYNC_PREREQUISITE_DESCRIPTION,
+  WHATSAPP_TEMPLATE_SYNC_PREREQUISITE_TITLE,
+} from "@shared/whatsappSetupMessages";
 import { isResendCoolingDown } from "@shared/reEngagement";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -1274,6 +1279,13 @@ export function Templates() {
     onError: (error: any) => {
       const msg = error?.message || "";
       const clean = msg.replace(/^\d+:\s*/, "").replace(/^\{"error":"/, "").replace(/"\}$/, "");
+      if (isWhatsAppSetupIncompleteError(clean)) {
+        toast({
+          title: WHATSAPP_TEMPLATE_SYNC_PREREQUISITE_TITLE,
+          description: WHATSAPP_TEMPLATE_SYNC_PREREQUISITE_DESCRIPTION,
+        });
+        return;
+      }
       toast({
         title: "Sync couldn't finish",
         description: clean || "Templates could not sync. Please review your WhatsApp connection in Settings and try again.",

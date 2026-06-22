@@ -1,6 +1,7 @@
 import {
   WHATSAPP_SETUP_INCOMPLETE_BANNER,
   WHATSAPP_SETUP_INCOMPLETE_SUBTITLE,
+  isWhatsAppSetupIncompleteError,
   metaWhatsAppReadinessBlockerMessage,
   resolveWhatsAppActiveProvider,
   whatsappSetupIncompleteBannerText,
@@ -56,6 +57,15 @@ function run() {
     inboxReady: true,
   });
   assert(blocker?.includes("WABA"), "checklist blocker still available for settings UI");
+
+  assert(
+    isWhatsAppSetupIncompleteError(WHATSAPP_SETUP_INCOMPLETE_BANNER),
+    "detects setup incomplete banner",
+  );
+  assert(
+    !isWhatsAppSetupIncompleteError("Network error: request failed"),
+    "ignores unrelated errors",
+  );
 
   console.log("whatsapp-setup-messages.test.ts: all passed");
 }

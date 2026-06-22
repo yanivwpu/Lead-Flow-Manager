@@ -14,6 +14,21 @@ export const WHATSAPP_SETUP_INCOMPLETE_SUBTITLE =
 
 export const WHATSAPP_SETUP_INCOMPLETE_BANNER = `${WHATSAPP_SETUP_INCOMPLETE_TITLE} — ${WHATSAPP_SETUP_INCOMPLETE_SUBTITLE}`;
 
+/** Friendly copy when template sync is blocked by missing WhatsApp setup (not a failure). */
+export const WHATSAPP_TEMPLATE_SYNC_PREREQUISITE_TITLE = "Connect WhatsApp first";
+export const WHATSAPP_TEMPLATE_SYNC_PREREQUISITE_DESCRIPTION =
+  "Template sync is available after completing WhatsApp setup in Settings.";
+
+/** True when an API/client error is the missing-WhatsApp-setup prerequisite, not a sync failure. */
+export function isWhatsAppSetupIncompleteError(message: string | null | undefined): boolean {
+  if (!message?.trim()) return false;
+  const m = message.toLowerCase();
+  return (
+    m.includes("whatsapp setup incomplete") ||
+    m.includes("finish whatsapp setup in settings")
+  );
+}
+
 export function resolveWhatsAppActiveProvider(user: {
   whatsappProvider?: string | null;
   metaConnected?: boolean | null;
