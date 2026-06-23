@@ -225,8 +225,9 @@ let lastCalendlyPollMinute = -1;
 
 export function startCronJobs() {
   console.log('[Cron] Starting cron scheduler...');
-  
-  runTrialCheckinEmails().catch(err => console.error('[Cron] Initial run error:', err));
+
+  // Activation emails run only on the daily schedule (14:00 UTC) — not on deploy/startup,
+  // to avoid blasting legacy users when new sequence flags are introduced.
   runTrialExpirySync().catch(err => console.error('[Cron] Trial expiry sync error:', err));
 
   // Run webhook health check once at startup (after 30 s to let DB settle)

@@ -7,6 +7,11 @@ import {
   isCanonicalWhatsAppFullyConnected,
 } from "./whatsappService";
 import { sendActivationEmailDay3, sendActivationEmailDay10 } from "./email";
+import {
+  activationStartAt,
+  daysSinceActivationStart,
+  isExcludedFromActivationEmails,
+} from "@shared/activationEmailEligibility";
 
 export type MessagingChannelStatus = {
   whatsappConnected: boolean;
@@ -39,16 +44,21 @@ export async function getUserMessagingChannelStatus(
   };
 }
 
-function daysSinceSignup(createdAt: Date | null, now: Date): number {
-  if (!createdAt) return 0;
-  return Math.floor(
-    (now.getTime() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24),
-  );
-}
-
 function firstName(name: string | null | undefined): string {
   return (name || "there").split(" ")[0] || "there";
 }
+
+const activationUserSelect = {
+  id: users.id,
+  name: users.name,
+  email: users.email,
+  createdAt: users.createdAt,
+  trialStartedAt: users.trialStartedAt,
+  shopifyInstalledAt: users.shopifyInstalledAt,
+  activationEmailDay3Sent: users.activationEmailDay3Sent,
+  activationEmailDay10Sent: users.activationEmailDay10Sent,
+  deletionRequestedAt: users.deletionRequestedAt,
+};
 
 export async function runActivationEmails(): Promise<{
   day3Sent: number;
@@ -64,28 +74,12 @@ export async function runActivationEmails(): Promise<{
 
   try {
     const pendingDay3 = await db
-      .select({
-        id: users.id,
-        name: users.name,
-        email: users.email,
-        createdAt: users.createdAt,
-        activationEmailDay3Sent: users.activationEmailDay3Sent,
-        activationEmailDay10Sent: users.activationEmailDay10Sent,
-        deletionRequestedAt: users.deletionRequestedAt,
-      })
+      .select(activationUserSelect)
       .from(users)
       .where(eq(users.activationEmailDay3Sent, false));
 
     const pendingDay10 = await db
-      .select({
-        id: users.id,
-        name: users.name,
-        email: users.email,
-        createdAt: users.createdAt,
-        activationEmailDay3Sent: users.activationEmailDay3Sent,
-        activationEmailDay10Sent: users.activationEmailDay10Sent,
-        deletionRequestedAt: users.deletionRequestedAt,
-      })
+      .select(activationUserSelect)
       .from(users)
       .where(eq(users.activationEmailDay10Sent, false));
 
@@ -100,9 +94,12 @@ export async function runActivationEmails(): Promise<{
 
     for (const user of uniqueCandidates) {
       if (user.deletionRequestedAt) continue;
-      if (!user.email) continue;
+      if (!user.email || isExcludedFromActivationEmails(user.email)) {
+        continue;
+      }
 
-      const days = daysSinceSignup(user.createdAt, now);
+      const activationStart = activationStartAt(user);
+      const days = daysSinceActivationStart(user, now);
       const channels = await getUserMessagingChannelStatus(user.id);
 
       if (channels.hasAnyMessagingChannel) {
@@ -115,7 +112,7 @@ export async function runActivationEmails(): Promise<{
 
       if (needsDay3) {
         console.log(
-          `[Cron] Sending day-3 activation email to ${user.email} (day ${days} since signup)`,
+          `[Cron] Sending day-3 activation email to ${user.email} (${days} full day(s) since ${activationStart?.toISOString() ?? "unknown"})`,
         );
         try {
           const ok = await sendActivationEmailDay3(firstName(user.name), user.email);
@@ -136,7 +133,7 @@ export async function runActivationEmails(): Promise<{
 
       if (needsDay10) {
         console.log(
-          `[Cron] Sending day-10 activation email to ${user.email} (day ${days} since signup)`,
+          `[Cron] Sending day-10 activation email to ${user.email} (${days} full day(s) since ${activationStart?.toISOString() ?? "unknown"})`,
         );
         try {
           const ok = await sendActivationEmailDay10(firstName(user.name), user.email);
