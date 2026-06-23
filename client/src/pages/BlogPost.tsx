@@ -1449,12 +1449,12 @@ export function BlogPost() {
           <div className="bg-gradient-to-br from-brand-green/5 to-brand-teal/5 rounded-2xl p-8 text-center">
             <h2 className="text-2xl font-display font-bold text-gray-900 mb-3">
               {slug === "realtor-growth-engine-complete-guide"
-                ? "Explore WhachatCRM for real estate"
+                ? "Ready to Explore?"
                 : "Ready to try WhatsApp CRM?"}
             </h2>
             <p className="text-gray-600 mb-6">
               {slug === "realtor-growth-engine-complete-guide"
-                ? "Start a free trial, connect your messaging channels, and learn how the Realtor Growth Engine can support your business."
+                ? "Start a free trial, connect your messaging channels, and explore AI-powered lead management and automation for real estate."
                 : "Start managing your WhatsApp conversations like a pro. Free plan available."}
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -1465,11 +1465,18 @@ export function BlogPost() {
                 </Button>
               </Link>
               {slug === "realtor-growth-engine-complete-guide" ? (
-                <Link href="/realtor-growth-engine">
-                  <Button size="lg" variant="outline">
-                    Realtor Growth Engine
-                  </Button>
-                </Link>
+                <>
+                  <Link href="/whatsapp-crm">
+                    <Button size="lg" variant="outline">
+                      WhatsApp CRM
+                    </Button>
+                  </Link>
+                  <Link href="/pricing">
+                    <Button size="lg" variant="outline">
+                      View Plans
+                    </Button>
+                  </Link>
+                </>
               ) : null}
             </div>
           </div>

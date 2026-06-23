@@ -23,7 +23,7 @@ export const REALTOR_GROWTH_ENGINE_GUIDE_FAQ = {
       name: "Do I need MLS access to use the Realtor Growth Engine?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "No. CRM, messaging, AI, automation, pipelines, follow-up, agent pages, and lead capture work without MLS integration. MLS connection adds listing sync, buyer matching, and inventory-powered recommendations.",
+        text: "No. CRM, AI, messaging, automation, pipelines, lead capture, website chat, and home valuation requests work without MLS integration. Connecting Bridge Interactive MLS enables inventory-powered features such as inventory search, buyer matching, listing recommendations, property discovery, and inventory-powered workflows.",
       },
     },
     {
@@ -31,7 +31,7 @@ export const REALTOR_GROWTH_ENGINE_GUIDE_FAQ = {
       name: "Which MLS feeds does WhachatCRM support?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "WhachatCRM supports RESO-compatible listing providers including MLS Grid, Trestle, and Bridge Interactive. Availability depends on your local MLS membership and data access program.",
+        text: "WhachatCRM currently supports MLS listing synchronization through Bridge Interactive. Additional MLS data providers and IDX integrations may be supported in the future. Agents should check with their local MLS regarding availability, fees, authorization requirements, and supported data providers.",
       },
     },
     {
@@ -71,7 +71,7 @@ export const REALTOR_GROWTH_ENGINE_GUIDE_FAQ = {
       name: "How do I get access to the Realtor Growth Engine?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Availability, activation options, and eligibility may vary. Contact WhachatCRM for current details.",
+        text: "Contact WhachatCRM to learn more about real estate automation, AI-powered lead management, and MLS integration options available in your market.",
       },
     },
     {
@@ -79,7 +79,7 @@ export const REALTOR_GROWTH_ENGINE_GUIDE_FAQ = {
       name: "How do I get started with WhachatCRM?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "You can start a free trial of WhachatCRM, connect your messaging channels, and explore whether the Realtor Growth Engine fits your business. Contact WhachatCRM for current availability and activation options.",
+        text: "Start a free trial of WhachatCRM, connect your messaging channels, and explore AI-powered lead management and automation features. Contact WhachatCRM to learn more about MLS integration options available in your market.",
       },
     },
   ],
@@ -165,8 +165,6 @@ Timed follow-ups (such as 24-hour, 3-day, and 7-day no-reply paths) help ensure 
 ### Pipeline management
 
 Leads can be scored, tagged, and moved through stages automatically based on conversation signals—improving **real estate lead conversion** without constant manual admin work.
-
-Learn more about the product overview on the [Realtor Growth Engine page](/realtor-growth-engine).
 
 ## Do I Need to Replace My Current CRM?
 
@@ -302,7 +300,7 @@ The criteria you care about—budget bands, timeline, financing readiness, prope
 
 ### Listings and inventory context
 
-When MLS or listing feeds are connected, AI can reference real inventory instead of vague promises. Without MLS, AI still supports qualification, follow-up, and conversation management.
+When Bridge Interactive MLS inventory is connected, AI can reference real listing data instead of vague promises. Without MLS, AI still supports qualification, follow-up, and conversation management.
 
 ### Team knowledge
 
@@ -339,35 +337,58 @@ This is one of the most important topics to understand clearly:
 
 **The Realtor Growth Engine works with or without MLS integration. MLS is optional—not required.**
 
-### Without MLS: a full engagement stack still works
+That said, not every feature depends on MLS the same way. It helps to separate two layers:
 
-Even without MLS access, agents can still use CRM tools, AI assistance, messaging, automation, lead qualification, pipelines, website chat, follow-up workflows, agent pages, home valuation requests, and lead capture forms.
+### CRM and engagement functionality (works without MLS)
+
+These core capabilities continue to function independently of any listing feed:
+
+- **CRM** — contacts, conversation history, tags, tasks, and notes
+- **AI** — suggested replies, qualification assistance, lead scoring, and business-specific knowledge
+- **Messaging** and **unified inbox** — WhatsApp, Facebook Messenger, Instagram, and website chat in one place
+- **Automation** — new-lead workflows, nurture sequences, and re-engagement paths
+- **Lead management** — organized records, history, and follow-up visibility
+- **Lead qualification** — structured buyer and seller discovery in conversation
+- **Team collaboration** — shared inbox visibility, assignments, and consistent handoffs
+- **Pipelines** — real-estate stages, routing, and stage management
+- **Website chat** — widget conversations tied to your inbox and workflows
+- **Follow-up workflows** — timed nurture, reminders, and re-engagement sequences
 
 You do not need a listing feed to improve response time, nurture, or **real estate lead management**. Many agents start here—especially if their IDX website is hosted elsewhere or their MLS feed is not yet configured.
 
-### With MLS: inventory-driven growth
+### Inventory-powered functionality (requires Bridge Interactive MLS)
 
-**MLS integration** enhances the platform by adding inventory-driven workflows, buyer matching, property recommendations, and listing engagement.
+Today, inventory-driven experiences in WhachatCRM are powered through **Bridge Interactive**. These capabilities require a connected MLS listing feed:
 
-When you connect a supported listing feed, RGE can unlock features such as:
+- **Inventory search** — filterable listing search in CRM and on public agent pages
+- **Buyer matching** — matching qualified buyers to active MLS inventory
+- **Listing recommendations** — relevant listings suggested during conversations
+- **Property discovery** — browsable public property displays and listing engagement
+- **Inventory-powered workflows** — automation and AI actions that reference live listing data
 
-- **Real-time listings** in your workspace
-- **Property recommendations** during conversations
-- **Buyer matching** based on qualification criteria
-- **Inventory search** aligned to buyer preferences
-- **Listing engagement** from your public agent page
+Without MLS, your agent page can still serve as a **profile and lead-capture destination**—contact forms, general inquiries, home valuation requests, and website chat. It does **not** provide the same inventory-driven browsing experience as a connected Bridge Interactive feed.
 
-WhachatCRM supports listing sync through RESO-compatible providers including **MLS Grid**, **Trestle**, and **Bridge Interactive**, with additional IDX providers on the roadmap. Learn more on the [Realtor Growth Engine](/realtor-growth-engine) page and explore [MLS integration](/realtor-growth-engine) options that fit your market.
+### Bridge Interactive: our current MLS integration
 
-**Important MLS note:**
+**WhachatCRM currently supports MLS listing synchronization through Bridge Interactive.**
 
-As a member of the Miami Association of Realtors, agents can access Bridge Interactive MLS data through their MLS membership. Many other MLS organizations also participate in Bridge Interactive or provide similar MLS data access programs. **Agents should check with their local MLS regarding availability, fees, and requirements.** WhachatCRM does not claim that all MLSs offer free access.
+When eligible agents connect Bridge Interactive, inventory-powered features become available across the workspace and on public surfaces such as agent pages.
 
-MLS integration is powerful—but it is an enhancement, not a prerequisite.
+**Miami Realtors advantage:**
+
+As a member of the Miami Association of Realtors, agents can access Bridge Interactive MLS data through their MLS membership, allowing eligible members to connect MLS inventory, buyer matching, and listing search capabilities directly into WhachatCRM.
+
+Many other MLS organizations also participate in Bridge Interactive or provide similar MLS data access programs. **Agents should check with their local MLS regarding availability, fees, authorization requirements, and supported data providers.** WhachatCRM does not claim that all MLSs offer free access.
+
+### Future MLS and IDX expansion
+
+Additional MLS data providers and IDX integrations may be supported in the future as WhachatCRM expands support for more markets and MLS ecosystems. Today, production listing sync is through Bridge Interactive.
+
+MLS integration is powerful for inventory-driven growth—but it is an enhancement to engagement functionality, not a prerequisite for using the CRM itself.
 
 ## AI Buyer Matching
 
-When inventory is connected, **AI buyer matching** becomes a major time-saver.
+**AI buyer matching** is an inventory-powered capability. When Bridge Interactive MLS inventory is connected, it becomes a major time-saver.
 
 Instead of manually searching dozens of filters after every conversation, the system can:
 
@@ -376,7 +397,7 @@ Instead of manually searching dozens of filters after every conversation, the sy
 - Use **qualification-driven search** (budget, beds, area, property type, amenities)
 - Help agents respond faster with relevant options
 
-This is especially useful for high-volume buyer agents, teams with large listing databases, and agents who want their **IDX CRM** and messaging layer to work as one system.
+This is especially useful for high-volume buyer agents, teams with large listing databases, and agents who want their **IDX CRM** and messaging layer connected through Bridge Interactive MLS inventory.
 
 Buyer matching does not replace your market expertise. It accelerates the search-and-send loop so you can focus on counsel, negotiation, and showings.
 
@@ -408,19 +429,30 @@ These workflows are pre-built for real estate use cases, so agents are not start
 
 ## Agent Pages and Lead Capture
 
-Beyond inbox conversations, RGE supports **lead capture** through public **agent pages**:
+Beyond inbox conversations, RGE supports **lead capture** through public **agent pages**. What your page offers depends on whether inventory is connected.
 
-- Branded public agent profile pages
-- Property and listing cards (when inventory is connected)
-- Lead capture forms
+### Without MLS: profile and capture
+
+- Branded public agent profile
+- Lead capture and contact forms
 - **Home valuation** requests ("Thinking of selling?")
-- **Showing requests** tied to specific listings
-- **Listing inquiries** ("Ask about this property")
+- General message and inquiry forms
 - Website chat widget integration
 
-Leads from agent pages flow into the same CRM and automation system as messaging leads—so nothing sits in a silo.
+Leads from these forms flow into the same CRM and automation system as messaging leads—so nothing sits in a silo.
 
-This is especially useful for agents who want a simple, conversion-focused web presence without rebuilding their entire IDX site.
+### With Bridge Interactive MLS: inventory-powered agent page experiences
+
+When Bridge Interactive inventory is connected, agent pages can also support:
+
+- **Property discovery** — public property displays and browsable listing cards
+- **Listing search** and filtered browse experiences
+- **Listing inquiries** and **showing requests** tied to specific active listings
+- **Inventory widgets** embedded on your site
+
+An agent page without MLS is a strong **engagement and capture** surface. With Bridge Interactive connected, it becomes an **inventory-powered** destination as well.
+
+This is especially useful for agents who want lead capture and messaging workflows in one system—whether or not they also host search elsewhere on a separate IDX site.
 
 ## Who Is RGE Best For?
 
@@ -446,22 +478,29 @@ Agents running Facebook ads, portal leads, or landing pages need speed, automati
 
 ## RGE With MLS vs Without MLS
 
-| Capability | Without MLS | With MLS |
+The table below separates **CRM and engagement** capabilities (available without MLS) from **inventory-powered** capabilities available when **Bridge Interactive MLS** is connected.
+
+| Capability | Without MLS | With Bridge Interactive MLS |
 | --- | --- | --- |
-| Unified inbox (WhatsApp, Messenger, Instagram, web chat) | Yes | Yes |
 | CRM, contacts, tags, tasks | Yes | Yes |
+| Unified inbox (WhatsApp, Messenger, Instagram, web chat) | Yes | Yes |
 | Real estate pipeline | Yes | Yes |
 | AI Copilot and suggested replies | Yes | Yes |
 | Business-specific AI knowledge | Yes | Yes |
+| Lead management | Yes | Yes |
 | Lead qualification workflows | Yes | Yes |
-| Automated follow-up and nurture | Yes | Yes |
-| Agent pages and lead forms | Yes | Yes |
-| Home valuation and showing requests | Yes | Yes |
-| Real-time listing sync | No | Yes |
-| Inventory search in CRM | No | Yes |
-| AI buyer matching | No | Yes |
-| Listing cards on agent page | Limited / manual | Yes |
-| Property recommendations in chat | Manual | Automated |
+| Team collaboration | Yes | Yes |
+| Automation and follow-up workflows | Yes | Yes |
+| Lead capture forms | Yes | Yes |
+| Website chat | Yes | Yes |
+| Home valuation requests | Yes | Yes |
+| Agent page (profile and lead capture) | Yes | Yes |
+| Inventory search | No | Yes |
+| Buyer matching | No | Yes |
+| Listing recommendations | No | Yes |
+| Property discovery on agent page | No | Yes |
+| Inventory-powered workflows | No | Yes |
+| Listing-specific inquiries and showing requests | No | Yes |
 
 ## The Future of Real Estate Is AI-Assisted
 
@@ -482,14 +521,15 @@ The Realtor Growth Engine is a complete growth system for modern real estate pro
 
 Used well, RGE helps agents build a more organized and responsive business: conversations stay in one place, follow-up runs on structure instead of memory, and teams work from shared visibility instead of scattered threads. You do not have to abandon Follow Up Boss, Lofty, kvCORE, BoomTown, Sierra Interactive, Wise Agent, or your current stack. You can use RGE as your primary platform or as the engagement layer your existing CRM has been missing.
 
-**Ready to explore it?**
+### Ready to Explore?
 
 - [Start a free trial](/auth) of WhachatCRM
 - [Connect your messaging channels](/whatsapp-crm)
-- [Explore the Realtor Growth Engine](/realtor-growth-engine)
-- [See WhachatCRM plans](/pricing)
+- [Explore AI-powered lead management](/pricing)
+- Learn about MLS integration options
+- [View WhachatCRM plans](/pricing)
 
-Contact WhachatCRM for current availability and activation options for the Realtor Growth Engine.
+Contact WhachatCRM to learn more about real estate automation, AI-powered lead management, and MLS integration options available in your market.
 
 ## Frequently Asked Questions
 
@@ -503,11 +543,11 @@ Not necessarily. Many agents use it as their primary platform, while others use 
 
 ### Do I need MLS access to use RGE?
 
-No. CRM, messaging, AI, automation, pipelines, follow-up, agent pages, and lead capture work without MLS integration. MLS connection adds listing sync, buyer matching, and inventory-powered recommendations.
+No. CRM, AI, messaging, automation, pipelines, lead capture, website chat, and home valuation requests work without MLS integration. Connecting Bridge Interactive MLS enables inventory-powered features such as inventory search, buyer matching, listing recommendations, property discovery, and inventory-powered workflows. Agent pages still support profile and lead capture without MLS, but not the same inventory-driven browsing experience.
 
 ### Which MLS feeds does WhachatCRM support?
 
-WhachatCRM supports RESO-compatible listing providers including MLS Grid, Trestle, and Bridge Interactive. Availability depends on your local MLS membership and data access program. Check with your MLS for requirements and fees.
+WhachatCRM currently supports MLS listing synchronization through Bridge Interactive. Additional MLS data providers and IDX integrations may be supported in the future as WhachatCRM expands support for more markets and MLS ecosystems. Check with your local MLS regarding availability, fees, authorization requirements, and supported data providers.
 
 ### Can RGE work with WhatsApp, Facebook, and Instagram?
 
@@ -527,9 +567,9 @@ Solo agents, teams, brokerages, new agents, and high-volume lead generators who 
 
 ### How do I get access to the Realtor Growth Engine?
 
-Availability, activation options, and eligibility may vary. Contact WhachatCRM for current details.
+Contact WhachatCRM to learn more about real estate automation, AI-powered lead management, and MLS integration options available in your market.
 
 ### How do I get started?
 
-[Start a free trial](/auth) of WhachatCRM, connect your messaging channels, and explore whether the Realtor Growth Engine fits your business.
+[Start a free trial](/auth) of WhachatCRM, [connect your messaging channels](/whatsapp-crm), and [explore AI-powered lead management](/pricing).
 `;
