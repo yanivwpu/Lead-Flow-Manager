@@ -4,10 +4,19 @@ import { Helmet } from "react-helmet";
 import { Calendar, Clock, ArrowLeft, ArrowRight, Share2, Linkedin, MessageCircle, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BLOG_POSTS } from "./Blog";
+import {
+  REALTOR_GROWTH_ENGINE_GUIDE_CONTENT,
+  REALTOR_GROWTH_ENGINE_GUIDE_FAQ,
+} from "@/content/blog/realtor-growth-engine-complete-guide";
 import { SiteFooter } from "@/components/SiteFooter";
 import { MARKETING_URL } from "@/lib/marketingUrl";
 
+const BLOG_FAQ_SCHEMA: Record<string, object> = {
+  "realtor-growth-engine-complete-guide": REALTOR_GROWTH_ENGINE_GUIDE_FAQ,
+};
+
 const BLOG_CONTENT: Record<string, string> = {
+  "realtor-growth-engine-complete-guide": REALTOR_GROWTH_ENGINE_GUIDE_CONTENT,
   "whatsapp-crm-complete-guide-2025": `
 WhatsApp has become the world's most popular messaging platform with over 2 billion users. For businesses, this presents an incredible opportunity to connect with customers where they already spend their time.
 
@@ -1161,6 +1170,8 @@ export function BlogPost() {
 
   const shareUrl = `${MARKETING_URL}/blog/${slug}`;
   const shareText = encodeURIComponent(post.title);
+  const pageTitle = post.seoTitle ?? `${post.title} | WhachatCRM Blog`;
+  const faqSchema = slug ? BLOG_FAQ_SCHEMA[slug] : undefined;
 
   const renderContent = (markdown: string) => {
     const lines = markdown.trim().split('\n');
@@ -1300,14 +1311,15 @@ export function BlogPost() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>{post.title} | WhachatCRM Blog</title>
+        <title>{pageTitle}</title>
         <meta name="description" content={post.excerpt} />
-        <meta property="og:title" content={post.title} />
+        {post.keywords ? <meta name="keywords" content={post.keywords} /> : null}
+        <meta property="og:title" content={post.seoTitle ?? post.title} />
         <meta property="og:description" content={post.excerpt} />
         <meta property="og:type" content="article" />
         <meta property="og:url" content={shareUrl} />
         <meta name="twitter:card" content="summary" />
-        <meta name="twitter:title" content={post.title} />
+        <meta name="twitter:title" content={post.seoTitle ?? post.title} />
         <meta name="twitter:description" content={post.excerpt} />
         <link rel="canonical" href={shareUrl} />
         <script type="application/ld+json">
@@ -1328,6 +1340,11 @@ export function BlogPost() {
             }
           })}
         </script>
+        {faqSchema ? (
+          <script type="application/ld+json">
+            {JSON.stringify(faqSchema)}
+          </script>
+        ) : null}
       </Helmet>
 
       <header className="border-b border-gray-100">
@@ -1431,17 +1448,30 @@ export function BlogPost() {
         <div className="mt-16 pt-8 border-t border-gray-200">
           <div className="bg-gradient-to-br from-brand-green/5 to-brand-teal/5 rounded-2xl p-8 text-center">
             <h2 className="text-2xl font-display font-bold text-gray-900 mb-3">
-              Ready to try WhatsApp CRM?
+              {slug === "realtor-growth-engine-complete-guide"
+                ? "Explore WhachatCRM for real estate"
+                : "Ready to try WhatsApp CRM?"}
             </h2>
             <p className="text-gray-600 mb-6">
-              Start managing your WhatsApp conversations like a pro. Free plan available.
+              {slug === "realtor-growth-engine-complete-guide"
+                ? "Start a free trial, connect your messaging channels, and learn how the Realtor Growth Engine can support your business."
+                : "Start managing your WhatsApp conversations like a pro. Free plan available."}
             </p>
-            <Link href="/auth">
-              <Button size="lg" className="bg-brand-green hover:bg-brand-green/90">
-                Get Started Free
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Link href="/auth">
+                <Button size="lg" className="bg-brand-green hover:bg-brand-green/90">
+                  Start Free Trial
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Button>
+              </Link>
+              {slug === "realtor-growth-engine-complete-guide" ? (
+                <Link href="/realtor-growth-engine">
+                  <Button size="lg" variant="outline">
+                    Realtor Growth Engine
+                  </Button>
+                </Link>
+              ) : null}
+            </div>
           </div>
         </div>
 

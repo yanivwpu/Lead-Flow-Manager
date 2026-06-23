@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { SiteFooter } from "@/components/SiteFooter";
 import { MARKETING_URL } from "@/lib/marketingUrl";
 
-interface BlogPost {
+export interface BlogPost {
   slug: string;
   title: string;
   excerpt: string;
@@ -17,9 +17,25 @@ interface BlogPost {
   date: string;
   image?: string;
   featured?: boolean;
+  /** Optional override for document title (≤60 chars recommended). */
+  seoTitle?: string;
+  keywords?: string;
 }
 
 export const BLOG_POSTS: BlogPost[] = [
+  {
+    slug: "realtor-growth-engine-complete-guide",
+    title: "What Is the Realtor Growth Engine (RGE)? The Complete Guide for Modern Real Estate Agents",
+    excerpt:
+      "Learn what the Realtor Growth Engine is, how it helps agents with lead follow-up, AI, messaging, MLS integration, and automation—without replacing your CRM.",
+    category: "Real Estate",
+    readTime: "18 min read",
+    date: "2026-06-21",
+    featured: true,
+    seoTitle: "Realtor Growth Engine Guide | Real Estate CRM & AI",
+    keywords:
+      "Realtor CRM, Real Estate CRM, Real Estate Automation, Real Estate AI, Realtor Growth Engine, Real Estate Lead Follow Up, Real Estate Lead Nurturing, IDX CRM, MLS CRM, Real Estate Lead Management, AI CRM for Realtors",
+  },
   {
     slug: "whatsapp-crm-complete-guide-2025",
     title: "WhatsApp CRM: The Complete Guide for Small Businesses in 2025",
@@ -27,7 +43,6 @@ export const BLOG_POSTS: BlogPost[] = [
     category: "Guides",
     readTime: "12 min read",
     date: "2025-12-15",
-    featured: true,
   },
   {
     slug: "whatsapp-business-api-vs-business-app",
@@ -87,7 +102,7 @@ export const BLOG_POSTS: BlogPost[] = [
   },
 ];
 
-const CATEGORIES = ["All", "Guides", "Comparison", "Automation", "Tips", "Customer Service", "Tutorials", "Templates"];
+const CATEGORIES = ["All", "Real Estate", "Guides", "Comparison", "Automation", "Tips", "Customer Service", "Tutorials", "Templates"];
 
 export function Blog() {
   const [searchQuery, setSearchQuery] = useState("");
