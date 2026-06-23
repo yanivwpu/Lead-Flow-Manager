@@ -22,6 +22,7 @@ import {
   User, Phone, Mail, ExternalLink, FileText, AlertCircle,
   Eye, EyeOff, ClipboardList, CircleHelp, XCircle, TrendingUp
 } from "lucide-react";
+import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 import { Textarea } from "@/components/ui/textarea";
 import {
   SALESPERSON_AGREEMENT_TEXT,
@@ -230,6 +231,7 @@ function SalesPortalEarningsDialog({
 }
 
 export function SalesPortal() {
+  const noindex = <NoIndexHelmet />;
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [salesperson, setSalesperson] = useState<SalespersonInfo | null>(null);
   const [email, setEmail] = useState("");
@@ -466,6 +468,8 @@ export function SalesPortal() {
 
   if (!isLoggedIn) {
     return (
+      <>
+        {noindex}
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md">
           <div className="text-center mb-6">
@@ -536,12 +540,15 @@ export function SalesPortal() {
           </form>
         </div>
       </div>
+      </>
     );
   }
 
   // Agreement gate - must accept before accessing portal
   if (agreementRequired) {
     return (
+      <>
+        {noindex}
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-2xl">
           <div className="text-center mb-6">
@@ -623,10 +630,13 @@ export function SalesPortal() {
           </div>
         </div>
       </div>
+      </>
     );
   }
 
   return (
+    <>
+      {noindex}
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
@@ -1085,5 +1095,6 @@ export function SalesPortal() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }

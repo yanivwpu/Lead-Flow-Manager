@@ -8,6 +8,7 @@ import {
   RGE_TEMPLATE_ONBOARDING_PATH,
   normalizeRgePostPurchaseRedirect,
 } from "@shared/rgePaths";
+import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 
 function sanitizeClientRedirect(raw: string | null, fallback: string): string {
   if (!raw || typeof raw !== "string") return fallback;
@@ -192,6 +193,8 @@ export function PostCheckout() {
   }, [effectivePollTemplate, hideGrowthEngine, pollTemplate, search, setLocation, targetPath]);
 
   return (
+    <>
+      <NoIndexHelmet />
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-6">
       <Loader2 className="h-10 w-10 animate-spin text-brand-green mb-4" />
       <p className="text-sm font-medium text-gray-800 text-center max-w-md">
@@ -210,5 +213,6 @@ export function PostCheckout() {
         </Button>
       )}
     </div>
+    </>
   );
 }

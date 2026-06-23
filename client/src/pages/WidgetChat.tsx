@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useRoute } from "wouter";
 import { Loader2 } from "lucide-react";
 import { WebchatWidget } from "@/pages/WidgetFrame";
+import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 
 /**
  * Full-page hosted chat at `/chat/:widgetId`.
@@ -10,6 +11,7 @@ import { WebchatWidget } from "@/pages/WidgetFrame";
  * Does not load `/widget.js` — the floating script is for third-party sites only.
  */
 export function WidgetChat() {
+  const noindex = <NoIndexHelmet />;
   const [match, params] = useRoute("/chat/:widgetId");
   const widgetId = params?.widgetId;
   const [pageHref, setPageHref] = useState<string | null>(null);
@@ -20,21 +22,32 @@ export function WidgetChat() {
 
   if (!match || !widgetId) {
     return (
+      <>
+        {noindex}
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <div className="text-center">
           <p className="text-sm text-gray-500">Chat widget not found</p>
         </div>
       </div>
+      </>
     );
   }
 
   if (pageHref === null) {
     return (
+      <>
+        {noindex}
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <Loader2 className="h-8 w-8 animate-spin text-emerald-600" aria-label="Loading chat" />
       </div>
+      </>
     );
   }
 
-  return <WebchatWidget widgetId={widgetId} resolvePageHref={pageHref} />;
+  return (
+    <>
+      {noindex}
+      <WebchatWidget widgetId={widgetId} resolvePageHref={pageHref} />
+    </>
+  );
 }

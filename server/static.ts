@@ -1,7 +1,17 @@
 import express, { type Express, type Response } from "express";
 import fs from "fs";
 import path from "path";
-import { injectSeoMeta, generateBlogListHtml, generateBlogPostHtml, generateHomepageHtml, injectHomepageSeoMeta, injectPageMeta, getMarketingRoutes } from "./seo";
+import {
+  injectSeoMeta,
+  generateBlogListHtml,
+  generateBlogPostHtml,
+  generateHomepageHtml,
+  injectHomepageSeoMeta,
+  injectPageMeta,
+  getMarketingRoutes,
+  isNoIndexPath,
+  injectNoindexMeta,
+} from "./seo";
 
 const ONE_YEAR = 31536000;
 const ONE_WEEK = 604800;
@@ -43,6 +53,18 @@ function staticWithCache(root: string) {
 function sendSpaShell(res: Response, indexPath: string) {
   res.set("Cache-Control", "no-cache, no-store, must-revalidate");
   res.sendFile(indexPath);
+}
+
+function sendNoIndexSpaShell(res: Response, indexPath: string) {
+  fs.readFile(indexPath, "utf-8", (err, html) => {
+    if (err) {
+      return sendSpaShell(res, indexPath);
+    }
+    const enhancedHtml = injectNoindexMeta(html);
+    res.set("Content-Type", "text/html");
+    res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.send(enhancedHtml);
+  });
 }
 
 export function serveStatic(app: Express) {
@@ -155,21 +177,30 @@ export function serveStatic(app: Express) {
     res.redirect(301, "/user-guide");
   });
 
-  // Serve static assets (JS, CSS, images, fonts, etc.)
+  // Legacy privacy URL → canonical policy page
+  app.get("/privacy", (_req, res) => {
+    res.redirect(301, "/privacy-policy");
+  });
+
+  // Serve static assets (JS, CSS, images, fonts, sitemap.xml, robots.txt, etc.)
   app.use(staticWithCache(distPath));
 
   // Catch-all for SPA routes (excluding protected routes)
   app.use("*", (req, res) => {
     const url = req.originalUrl.split("?")[0];
-    
+
+    if (isNoIndexPath(url)) {
+      return sendNoIndexSpaShell(res, indexPath);
+    }
+
     // Routes that should NOT have SSR or caching (Shopify, auth, API, webhooks)
     const skipSsrRoutes = ['/auth', '/api', '/webhooks', '/shopify', '/app'];
     const shouldSkipSsr = skipSsrRoutes.some(route => url.startsWith(route));
-    
+
     if (shouldSkipSsr) {
       return sendSpaShell(res, indexPath);
     }
-    
+
     // All other routes - serve index.html without SSR
     sendSpaShell(res, indexPath);
   });

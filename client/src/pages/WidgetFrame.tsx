@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRoute, useSearch } from "wouter";
 import { Loader2, Send } from "lucide-react";
+import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 
 interface ButtonOption {
   label: string;
@@ -389,13 +390,22 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
 
 /** iframe embed route — parent `/widget.js` can pass `greeting` / `prefill` query params. */
 export function WidgetFrame() {
+  const noindex = <NoIndexHelmet />;
   const [match, params] = useRoute("/widget-frame/:widgetId");
   if (!match || !params?.widgetId) {
     return (
+      <>
+        {noindex}
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <p className="text-sm text-gray-500">Widget not found</p>
       </div>
+      </>
     );
   }
-  return <WebchatWidget widgetId={params.widgetId} />;
+  return (
+    <>
+      {noindex}
+      <WebchatWidget widgetId={params.widgetId} />
+    </>
+  );
 }

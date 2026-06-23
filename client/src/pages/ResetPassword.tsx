@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { Lock, CheckCircle, XCircle, Eye, EyeOff } from "lucide-react";
+import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 
 export function ResetPassword() {
   const [, setLocation] = useLocation();
@@ -82,6 +83,8 @@ export function ResetPassword() {
 
   if (isSuccess) {
     return (
+      <>
+        <NoIndexHelmet />
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100 p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center">
           <div className="h-16 w-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -94,11 +97,14 @@ export function ResetPassword() {
           </Button>
         </div>
       </div>
+      </>
     );
   }
 
   if (error && !token) {
     return (
+      <>
+        <NoIndexHelmet />
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-red-100 p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center">
           <div className="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -111,10 +117,13 @@ export function ResetPassword() {
           </Button>
         </div>
       </div>
+      </>
     );
   }
 
   return (
+    <>
+      <NoIndexHelmet />
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100 p-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
@@ -179,5 +188,6 @@ export function ResetPassword() {
         </form>
       </div>
     </div>
+    </>
   );
 }

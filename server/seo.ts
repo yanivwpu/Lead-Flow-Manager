@@ -6,22 +6,37 @@ interface BlogPostMeta {
   category: string;
   readTime: string;
   featured?: boolean;
+  /** Optional document title override (≤60 chars). */
+  seoTitle?: string;
 }
 
+/** Keep in sync with client/src/pages/Blog.tsx BLOG_POSTS */
 export const BLOG_POSTS_META: BlogPostMeta[] = [
+  {
+    slug: "realtor-growth-engine-complete-guide",
+    title: "What Is the Realtor Growth Engine (RGE)? The Complete Guide for Modern Real Estate Agents",
+    excerpt:
+      "Learn what the Realtor Growth Engine is, how it helps agents with lead follow-up, AI, messaging, MLS integration, and automation—without replacing your CRM.",
+    category: "Real Estate",
+    date: "2026-06-21",
+    readTime: "18 min read",
+    featured: true,
+    seoTitle: "Realtor Growth Engine Guide | Real Estate CRM & AI",
+  },
   {
     slug: "whatsapp-crm-complete-guide-2025",
     title: "WhatsApp CRM: The Complete Guide for Small Businesses in 2025",
-    excerpt: "Learn how to use WhatsApp as a powerful CRM tool to manage customer relationships, automate responses, and grow your business.",
+    excerpt:
+      "Learn how to use WhatsApp as a powerful CRM tool to manage customer relationships, automate responses, and grow your business. Everything you need to know about WhatsApp Business API and CRM integration.",
     category: "Guides",
     date: "2025-12-15",
     readTime: "12 min read",
-    featured: true,
   },
   {
     slug: "whatsapp-business-api-vs-business-app",
     title: "WhatsApp Business API vs Business App: Which One Do You Need?",
-    excerpt: "Confused about the difference between WhatsApp Business App and WhatsApp Business API? This guide breaks down features, pricing, and helps you choose.",
+    excerpt:
+      "Confused about the difference between WhatsApp Business App and WhatsApp Business API? This guide breaks down features, pricing, and helps you choose the right solution for your team size.",
     category: "Comparison",
     date: "2025-12-10",
     readTime: "8 min read",
@@ -29,7 +44,8 @@ export const BLOG_POSTS_META: BlogPostMeta[] = [
   {
     slug: "automate-whatsapp-messages-small-business",
     title: "How to Automate WhatsApp Messages for Your Small Business",
-    excerpt: "Save hours every day with WhatsApp automation. Learn how to set up auto-replies, away messages, drip campaigns, and workflow triggers.",
+    excerpt:
+      "Save hours every day with WhatsApp automation. Learn how to set up auto-replies, away messages, drip campaigns, and workflow triggers to respond faster and convert more leads.",
     category: "Automation",
     date: "2025-12-05",
     readTime: "10 min read",
@@ -37,40 +53,45 @@ export const BLOG_POSTS_META: BlogPostMeta[] = [
   {
     slug: "whatsapp-lead-management-tips",
     title: "10 WhatsApp Lead Management Tips That Actually Work",
-    excerpt: "Stop losing leads in your WhatsApp inbox. These proven strategies help you organize conversations, follow up on time, and close more deals.",
+    excerpt:
+      "Stop losing leads in your WhatsApp inbox. These proven strategies help you organize conversations, follow up on time, and close more deals using WhatsApp as your main sales channel.",
     category: "Tips",
     date: "2025-11-28",
     readTime: "7 min read",
   },
   {
     slug: "wati-alternatives-comparison",
-    title: "5 Best WATI Alternatives for Small Teams in 2025",
-    excerpt: "Looking for WATI alternatives? We compare the top WhatsApp CRM tools for small teams, including pricing, features, and ease of use.",
+    title: "Top 5 WATI Alternatives for WhatsApp Business in 2025",
+    excerpt:
+      "Looking for a WATI alternative? Compare pricing, features, and ease of use of the best WhatsApp CRM tools including WhachatCRM, Respond.io, and more.",
     category: "Comparison",
     date: "2025-11-20",
     readTime: "9 min read",
   },
   {
     slug: "whatsapp-customer-service-best-practices",
-    title: "WhatsApp Customer Service: 8 Best Practices for 2025",
-    excerpt: "Deliver exceptional customer support via WhatsApp. Learn response time benchmarks, template strategies, and how to handle difficult conversations.",
-    category: "Best Practices",
+    title: "WhatsApp Customer Service: Best Practices for Teams",
+    excerpt:
+      "Deliver exceptional customer support via WhatsApp. Learn response time benchmarks, team collaboration tips, and how to handle high message volumes effectively.",
+    category: "Customer Service",
     date: "2025-11-15",
     readTime: "8 min read",
   },
   {
     slug: "twilio-whatsapp-setup-guide",
-    title: "How to Set Up Twilio for WhatsApp Business: Step-by-Step Guide",
-    excerpt: "A complete walkthrough for connecting your WhatsApp Business account to Twilio. From sandbox testing to production approval in one guide.",
-    category: "Guides",
+    title: "How to Connect WhatsApp with Meta Embedded Signup",
+    excerpt:
+      "A simple walkthrough for connecting WhatsApp through Meta, choosing your business account and phone number, and verifying the inbox connection.",
+    category: "Tutorials",
     date: "2025-11-10",
     readTime: "15 min read",
   },
   {
     slug: "whatsapp-drip-campaigns-examples",
-    title: "WhatsApp Drip Campaigns: 5 Examples That Convert",
-    excerpt: "Learn how to create automated WhatsApp message sequences that nurture leads and drive sales. Includes ready-to-use templates.",
-    category: "Automation",
+    title: "WhatsApp Drip Campaign Examples That Convert",
+    excerpt:
+      "Real examples of successful WhatsApp drip sequences for lead nurturing, customer onboarding, and re-engagement. Copy these templates for your business.",
+    category: "Templates",
     date: "2025-11-05",
     readTime: "11 min read",
   },
@@ -85,6 +106,7 @@ export function injectSeoMeta(html: string, url: string): string {
     
     if (post) {
       const canonicalUrl = `${BASE_URL}/blog/${post.slug}`;
+      const documentTitle = post.seoTitle ?? `${post.title} | WhachatCRM Blog`;
       
       // Remove existing OG and Twitter meta tags to prevent duplicates
       html = html.replace(/<meta property="og:title"[^>]*>/gi, '');
@@ -102,7 +124,7 @@ export function injectSeoMeta(html: string, url: string): string {
       html = html.replace(/<link rel="canonical"[^>]*>/gi, '');
       
       const metaTags = `
-    <title>${post.title} | WhachatCRM Blog</title>
+    <title>${documentTitle}</title>
     <meta name="description" content="${post.excerpt}" />
     <meta property="og:title" content="${post.title}" />
     <meta property="og:description" content="${post.excerpt}" />
@@ -303,7 +325,13 @@ export const PAGE_META: Record<string, PageMeta> = {
     description: "AI-powered WhatsApp automation that qualifies leads and schedules showings automatically. Fully done-for-you setup for real estate agents.",
     canonical: `${BASE_URL}/realtor-growth-engine`,
     ogImage: `${BASE_URL}/og/og-realtor-growth-engine.png`
-  }
+  },
+  "/help": {
+    title: "Help Center | WhachatCRM",
+    description:
+      "Find answers and learn how to use WhachatCRM — WhatsApp setup, unified inbox, templates, campaigns, AI Copilot, integrations, and billing.",
+    canonical: `${BASE_URL}/help`,
+  },
 };
 
 export function injectPageMeta(html: string, url: string): string {
@@ -351,6 +379,34 @@ export function injectPageMeta(html: string, url: string): string {
 
 export function getMarketingRoutes(): string[] {
   return Object.keys(PAGE_META);
+}
+
+const NOINDEX_EXACT_PATHS = new Set([
+  "/auth",
+  "/reset-password",
+  "/sales-admin",
+  "/sales-portal",
+  "/partner-portal",
+  "/demo-scan",
+  "/post-checkout",
+]);
+
+/** Routes that must not be indexed (auth, portals, embeds). */
+export function isNoIndexPath(path: string): boolean {
+  const normalized = path.split("?")[0].replace(/\/$/, "") || "/";
+  if (NOINDEX_EXACT_PATHS.has(normalized)) return true;
+  if (normalized.startsWith("/widget-frame/")) return true;
+  if (normalized.startsWith("/chat/")) return true;
+  return false;
+}
+
+export function injectNoindexMeta(html: string): string {
+  html = html.replace(/<meta name="robots"[^>]*>/gi, "");
+  const robotsTag = `<meta name="robots" content="noindex, nofollow" />`;
+  if (html.includes("</head>")) {
+    return html.replace("</head>", `    ${robotsTag}\n  </head>`);
+  }
+  return html;
 }
 
 export function generateHomepageHtml(): string {

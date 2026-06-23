@@ -43,6 +43,7 @@ import {
   AlertCircle, MessageCircle, ArrowUpDown, Link2, Percent,
   Eye, EyeOff, ClipboardList,
 } from "lucide-react";
+import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -474,6 +475,7 @@ function AdminAccessOverridesForm({ user, onApplied }: { user: AdminUser; onAppl
 }
 
 export function Admin() {
+  const noindex = <NoIndexHelmet />;
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
@@ -909,6 +911,8 @@ export function Admin() {
 
   if (!isLoggedIn) {
     return (
+      <>
+        {noindex}
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md">
           <div className="text-center mb-6">
@@ -967,10 +971,13 @@ export function Admin() {
           </form>
         </div>
       </div>
+      </>
     );
   }
 
   return (
+    <>
+      {noindex}
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
@@ -2635,5 +2642,6 @@ export function Admin() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }

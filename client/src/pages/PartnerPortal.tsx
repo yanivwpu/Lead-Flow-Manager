@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PARTNER_COMMISSION_POLICY_TEXT, PARTNER_COMMISSION_TERM_LABEL } from "@/lib/partnerProgram";
+import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 
 // Social Media Icons component for consistency
 const XIcon = ({ className }: { className?: string }) => (
@@ -289,6 +290,7 @@ I have read and agree to the Partner Referral Agreement.
 I understand that my acceptance is legally binding and that my IP address, timestamp, and agreement version will be recorded.`;
 
 export function PartnerPortal() {
+  const noindex = <NoIndexHelmet />;
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [partner, setPartner] = useState<PartnerInfo | null>(null);
   const [email, setEmail] = useState("");
@@ -410,6 +412,8 @@ export function PartnerPortal() {
 
   if (!isLoggedIn) {
     return (
+      <>
+        {noindex}
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md">
           <div className="text-center mb-6">
@@ -489,12 +493,15 @@ export function PartnerPortal() {
           </form>
         </div>
       </div>
+      </>
     );
   }
 
   // Agreement gate - must accept before accessing portal
   if (agreementRequired) {
     return (
+      <>
+        {noindex}
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-2xl">
           <div className="text-center mb-6">
@@ -574,10 +581,13 @@ export function PartnerPortal() {
           </div>
         </div>
       </div>
+      </>
     );
   }
 
   return (
+    <>
+      {noindex}
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b">
         <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
@@ -953,5 +963,6 @@ export function PartnerPortal() {
         </Tabs>
       </main>
     </div>
+    </>
   );
 }

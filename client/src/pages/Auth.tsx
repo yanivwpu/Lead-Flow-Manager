@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 
 export function AuthPage() {
   const { t } = useTranslation();
@@ -98,6 +99,8 @@ export function AuthPage() {
   };
 
   return (
+    <>
+      <NoIndexHelmet />
     <div dir={isRTL ? 'rtl' : 'ltr'} className={`min-h-screen flex flex-col md:flex-row bg-white overflow-auto ${isRTL ? 'text-right' : 'text-left'}`}>
       {/* Left Panel - Branding */}
       <div className="md:flex-1 bg-brand-dark relative overflow-hidden flex flex-col justify-between p-6 md:p-12 text-white">
@@ -395,5 +398,6 @@ export function AuthPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }

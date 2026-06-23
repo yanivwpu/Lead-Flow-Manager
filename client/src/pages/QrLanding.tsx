@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { getDirection } from "@/lib/i18n";
 import { Helmet } from "react-helmet";
 import { SiteFooter } from "@/components/SiteFooter";
+import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 
 export function QrLanding() {
   const [showDemoModal, setShowDemoModal] = useState(false);
@@ -24,6 +25,7 @@ export function QrLanding() {
     <div dir={isRTL ? 'rtl' : 'ltr'} className={`min-h-screen bg-white ${isRTL ? 'text-right' : 'text-left'}`}>
       <Helmet>
         <title>Book your WhachatCRM Demo | Scan & Schedule</title>
+        <meta name="robots" content="noindex, nofollow" />
       </Helmet>
 
       <BookDemoModal isOpen={showDemoModal} onClose={() => setShowDemoModal(false)} />
