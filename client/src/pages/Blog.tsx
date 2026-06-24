@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Helmet } from "react-helmet";
-import { Calendar, Clock, ArrowRight, Search, Tag } from "lucide-react";
+import { Clock, ArrowRight, Search, Tag } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SiteFooter } from "@/components/SiteFooter";
 import { MARKETING_URL } from "@/lib/marketingUrl";
-import { BLOG_POSTS, resolveBlogFeaturedImageUrl, type BlogPostMeta } from "@shared/blogPosts";
-import { BlogFeaturedImage } from "@/components/blog/BlogFeaturedImage";
+import { BLOG_POSTS, type BlogPostMeta } from "@shared/blogPosts";
+import { BlogFeaturedCard } from "@/components/blog/BlogFeaturedCard";
 
 export type { BlogPostMeta as BlogPost };
 export { BLOG_POSTS };
@@ -91,8 +91,8 @@ export function Blog() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-12">
-        <div className="flex gap-2 overflow-x-auto pb-4 mb-8 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide">
+      <main className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+        <div className="mb-10 flex gap-2 overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide">
           {CATEGORIES.map((category) => (
             <button
               key={category}
@@ -111,55 +111,7 @@ export function Blog() {
         </div>
 
         {featuredPost && selectedCategory === "All" && searchQuery === "" && (
-          <section className="mx-auto mb-12 w-full max-w-[800px]" aria-label="Featured article">
-            <Link href={`/blog/${featuredPost.slug}`}>
-              <a className="group block" data-testid="link-featured-post">
-                <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-all hover:border-gray-300 hover:shadow-md">
-                  {resolveBlogFeaturedImageUrl(featuredPost, MARKETING_URL) ? (
-                    <BlogFeaturedImage
-                      variant="card"
-                      src={resolveBlogFeaturedImageUrl(featuredPost, MARKETING_URL)!}
-                      alt={featuredPost.imageAlt ?? featuredPost.title}
-                      priority
-                      className="rounded-none border-0 shadow-none"
-                    />
-                  ) : null}
-                  <div className="p-5 sm:p-8">
-                    <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500">
-                      <span className="rounded-full bg-brand-green/10 px-2.5 py-0.5 text-xs font-semibold text-brand-green">
-                        {featuredPost.category}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Calendar className="h-3.5 w-3.5" />
-                        {new Date(featuredPost.date).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </span>
-                      <span aria-hidden className="text-gray-300">
-                        ·
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3.5 w-3.5" />
-                        {featuredPost.readTime}
-                      </span>
-                    </div>
-                    <h2 className="font-display text-2xl font-bold leading-snug text-gray-900 transition-colors group-hover:text-brand-green sm:text-[1.75rem] sm:leading-tight line-clamp-3">
-                      {featuredPost.title}
-                    </h2>
-                    <p className="mt-3 text-base leading-relaxed text-gray-600 line-clamp-3">
-                      {featuredPost.excerpt}
-                    </p>
-                    <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-green transition-all group-hover:gap-2.5">
-                      Read article
-                      <ArrowRight className="h-4 w-4" />
-                    </span>
-                  </div>
-                </article>
-              </a>
-            </Link>
-          </section>
+          <BlogFeaturedCard post={featuredPost} className="mb-14" />
         )}
 
         {filteredPosts.length === 0 ? (

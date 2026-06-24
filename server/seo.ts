@@ -23,7 +23,7 @@ export { BLOG_POSTS as BLOG_POSTS_META };
 export function injectSeoMeta(html: string, url: string): string {
   if (url.startsWith("/blog/")) {
     const slug = url.replace("/blog/", "").replace(/\/$/, "");
-    const post = BLOG_POSTS_META.find(p => p.slug === slug);
+    const post = BLOG_POSTS.find(p => p.slug === slug);
     
     if (post) {
       const canonicalUrl = `${BASE_URL}/blog/${post.slug}`;
@@ -419,8 +419,8 @@ function formatDate(dateStr: string): string {
 }
 
 export function generateBlogListHtml(): string {
-  const featuredPost = BLOG_POSTS_META.find(p => p.featured);
-  const regularPosts = BLOG_POSTS_META.filter(p => !p.featured);
+  const featuredPost = BLOG_POSTS.find(p => p.featured);
+  const regularPosts = BLOG_POSTS.filter(p => !p.featured);
   
   let html = `
     <div id="ssr-blog-content" style="font-family: system-ui, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px;">

@@ -117,19 +117,29 @@ export function serveStatic(app: Express) {
   app.get("/blog", (req, res) => {
     fs.readFile(indexPath, "utf-8", (err, html) => {
       if (err) {
+        console.error("[SSR/blog] Failed to read index.html:", err.message);
         return res.sendFile(indexPath);
       }
-      
-      let enhancedHtml = injectSeoMeta(html, "/blog");
-      const ssrContent = generateBlogListHtml();
-      enhancedHtml = enhancedHtml.replace(
-        '<div id="root"></div>',
-        `<div id="root">${ssrContent}</div>`
-      );
-      
-      res.set("Content-Type", "text/html");
-      res.set("Cache-Control", "public, max-age=3600");
-      res.send(enhancedHtml);
+
+      try {
+        let enhancedHtml = injectSeoMeta(html, "/blog");
+        const ssrContent = generateBlogListHtml();
+        enhancedHtml = enhancedHtml.replace(
+          '<div id="root"></div>',
+          `<div id="root">${ssrContent}</div>`,
+        );
+
+        res.set("Content-Type", "text/html");
+        res.set("Cache-Control", "public, max-age=3600");
+        res.send(enhancedHtml);
+      } catch (ssrErr: unknown) {
+        const message = ssrErr instanceof Error ? ssrErr.message : String(ssrErr);
+        console.error("[SSR/blog] Render failed, falling back to SPA shell:", message);
+        if (ssrErr instanceof Error && ssrErr.stack) {
+          console.error(ssrErr.stack);
+        }
+        sendSpaShell(res, indexPath);
+      }
     });
   });
 
@@ -137,21 +147,31 @@ export function serveStatic(app: Express) {
     const slug = req.params.slug;
     fs.readFile(indexPath, "utf-8", (err, html) => {
       if (err) {
+        console.error(`[SSR/blog/${slug}] Failed to read index.html:`, err.message);
         return res.sendFile(indexPath);
       }
-      
-      let enhancedHtml = injectSeoMeta(html, `/blog/${slug}`);
-      const ssrContent = generateBlogPostHtml(slug);
-      if (ssrContent) {
-        enhancedHtml = enhancedHtml.replace(
-          '<div id="root"></div>',
-          `<div id="root">${ssrContent}</div>`
-        );
+
+      try {
+        let enhancedHtml = injectSeoMeta(html, `/blog/${slug}`);
+        const ssrContent = generateBlogPostHtml(slug);
+        if (ssrContent) {
+          enhancedHtml = enhancedHtml.replace(
+            '<div id="root"></div>',
+            `<div id="root">${ssrContent}</div>`,
+          );
+        }
+
+        res.set("Content-Type", "text/html");
+        res.set("Cache-Control", "public, max-age=3600");
+        res.send(enhancedHtml);
+      } catch (ssrErr: unknown) {
+        const message = ssrErr instanceof Error ? ssrErr.message : String(ssrErr);
+        console.error(`[SSR/blog/${slug}] Render failed, falling back to SPA shell:`, message);
+        if (ssrErr instanceof Error && ssrErr.stack) {
+          console.error(ssrErr.stack);
+        }
+        sendSpaShell(res, indexPath);
       }
-      
-      res.set("Content-Type", "text/html");
-      res.set("Cache-Control", "public, max-age=3600");
-      res.send(enhancedHtml);
     });
   });
 
