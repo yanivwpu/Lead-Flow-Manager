@@ -1,5 +1,6 @@
 import { db } from "../drizzle/db";
 import { templates, templateAssets } from "../shared/schema";
+import { rgeW4NoReplyConditions } from "../shared/rgeNoReplyWorkflows";
 import { eq, and } from "drizzle-orm";
 
 export async function seedRealtorTemplate() {
@@ -179,7 +180,7 @@ export async function seedRealtorTemplate() {
             name: "No Response Follow-Up (24h)",
             enabledByDefault: true,
             trigger: { type: "no_reply", delayHours: 24 },
-            conditions: [{ type: "stage_in", stages: ["New Lead", "Responded", "Qualified (Hot)", "Qualified (Warm)"] }],
+            conditions: rgeW4NoReplyConditions(),
             actions: [
               { type: "send_message_template", templateKey: "followup_24h" },
               { type: "apply_tag", tag: "Follow-Up Needed" },
@@ -296,6 +297,27 @@ export async function seedRealtorTemplate() {
     if (!existingAsset) {
       await db.insert(templateAssets).values(asset);
       console.log(`[Seed] Created asset: ${asset.assetType} for ${templateId}`);
+    } else if (asset.assetType === "workflows") {
+      const def = existingAsset.definition as { workflows?: { key?: string; conditions?: unknown[] }[] };
+      const workflows = def?.workflows;
+      if (Array.isArray(workflows)) {
+        const w4 = workflows.find((w) => w?.key === "W4");
+        const nextConditions = rgeW4NoReplyConditions();
+        const legacyStageIn = Array.isArray(w4?.conditions) &&
+          w4!.conditions.some((c) => (c as { type?: string })?.type === "stage_in");
+        if (w4 && legacyStageIn) {
+          w4.conditions = nextConditions;
+          await db
+            .update(templateAssets)
+            .set({ definition: { ...def, workflows } })
+            .where(eq(templateAssets.id, existingAsset.id));
+          console.log(`[Seed] Patched W4 workflow conditions on existing workflows asset for ${templateId}`);
+        } else {
+          console.log(`[Seed] Asset ${asset.assetType} already exists for ${templateId}.`);
+        }
+      } else {
+        console.log(`[Seed] Asset ${asset.assetType} already exists for ${templateId}.`);
+      }
     } else {
       console.log(`[Seed] Asset ${asset.assetType} already exists for ${templateId}.`);
     }

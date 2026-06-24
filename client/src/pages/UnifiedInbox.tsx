@@ -119,6 +119,8 @@ import {
   mediaChannelValidationBubbleText,
 } from "@/lib/mediaChannelValidationError";
 import { outboundDocumentBlockHint } from "@/lib/outboundAttachmentChannelGate";
+import { formatOutboundSendErrorDescription } from "@/lib/webchatSendError";
+import { webchatSendErrorDescription } from "@shared/webchatSendErrors";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok' | 'gohighlevel' | string;
 type FilterTab = 'all' | 'unread' | 'mine';
@@ -1444,7 +1446,14 @@ export function UnifiedInbox() {
           scrollToBottom();
         }, 0);
       }
-      toast({ title: "Message not sent", description: error.message, variant: "destructive" });
+      toast({
+        title: "Message not sent",
+        description: formatOutboundSendErrorDescription(
+          errMsg,
+          (error as Error & { sendPayload?: { errorCode?: string } }).sendPayload?.errorCode,
+        ),
+        variant: "destructive",
+      });
     },
     onSettled: (_data, error, vars, context) => {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
@@ -2969,7 +2978,7 @@ export function UnifiedInbox() {
                                 </p>
                               ) : showSpecificNonReplyFailure ? (
                                 <p className="whitespace-pre-wrap text-[11px] font-medium leading-snug text-red-600 [overflow-wrap:anywhere] break-words">
-                                  {errBubbleText}
+                                  {webchatSendErrorDescription(errBubbleText, msg.errorCode, { expanded: true }) || errBubbleText}
                                 </p>
                               ) : (
                                 <p className="whitespace-pre-wrap text-[11px] leading-snug text-gray-600 [overflow-wrap:anywhere] break-words">

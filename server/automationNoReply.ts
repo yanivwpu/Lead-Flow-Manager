@@ -1,4 +1,5 @@
 import type { NoReplyJob, Workflow } from "@shared/schema";
+import { noReplyStageConditionsAllow as evaluateNoReplyStageRules } from "@shared/rgeNoReplyWorkflows";
 import { storage } from "./storage";
 import { subscriptionService } from "./subscriptionService";
 import { executeWorkflowActions } from "./workflowEngine";
@@ -6,6 +7,11 @@ import { resolveLegacyChatForContact } from "./automationEventDispatcher";
 
 function combinedNoReplyConditionRows(tc: Record<string, unknown> | undefined): { type?: string; value?: string; stages?: string[] }[] {
   return Array.isArray(tc?.rgeConditions) ? (tc!.rgeConditions as { type?: string; value?: string; stages?: string[] }[]) : [];
+}
+
+function noReplyStageConditionsAllow(workflow: Workflow, contact: { pipelineStage?: string | null }): boolean {
+  const tc = workflow.triggerConditions as { rgeConditions?: { type?: string; stages?: string[] }[] } | undefined;
+  return evaluateNoReplyStageRules(tc?.rgeConditions, contact);
 }
 
 function noReplyWorkflowMatchesConversation(workflow: Workflow, conversationChannel: string): boolean {
@@ -20,24 +26,6 @@ function noReplyWorkflowMatchesConversation(workflow: Workflow, conversationChan
   const flatChannel = tc?.channel as string | undefined;
   if (flatChannel && flatChannel !== "any") {
     return flatChannel === conversationChannel;
-  }
-  return true;
-}
-
-/** RGE seed `stage_in` / `stage_not_in` rows live under `triggerConditions.rgeConditions`. */
-function noReplyStageConditionsAllow(workflow: Workflow, contact: { pipelineStage?: string | null }): boolean {
-  const tc = workflow.triggerConditions as { rgeConditions?: { type?: string; stages?: string[] }[] } | undefined;
-  const rules = tc?.rgeConditions;
-  if (!rules?.length) return true;
-  const stage = (contact.pipelineStage || "").trim();
-  for (const rule of rules) {
-    const t = (rule.type || "").trim();
-    const stages = Array.isArray(rule.stages) ? rule.stages.map((s) => String(s).trim()) : [];
-    if (t === "stage_in") {
-      if (stages.length > 0 && !stages.includes(stage)) return false;
-    } else if (t === "stage_not_in") {
-      if (stages.length > 0 && stages.includes(stage)) return false;
-    }
   }
   return true;
 }

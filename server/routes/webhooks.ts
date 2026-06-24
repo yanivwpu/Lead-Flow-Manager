@@ -270,6 +270,9 @@ export function registerWebhookRoutes(app: Express): void {
         return res.json([]);
       }
 
+      const { touchWebchatVisitorSession } = await import("../webchatSession");
+      void touchWebchatVisitorSession(contact.id);
+
       const conversation = await storage.getConversationByContactAndChannel(
         contact.id,
         'webchat'

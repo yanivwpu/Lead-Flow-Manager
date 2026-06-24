@@ -315,14 +315,51 @@ class WebChatAdapter implements ChannelAdapter {
     mediaUrl?: string;
     mediaFilename?: string;
   }): Promise<{ success: boolean; externalMessageId?: string; error?: string }> {
-    return {
-      success: true,
-      externalMessageId: `webchat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    };
+    try {
+      const conversation = await storage.getConversation(params.conversationId);
+      if (!conversation) {
+        const { WEBCHAT_DELIVERY_FAILED_MESSAGE } = await import("@shared/webchatSendErrors");
+        return { success: false, error: WEBCHAT_DELIVERY_FAILED_MESSAGE };
+      }
+
+      const contact = await storage.getContact(params.contactId);
+      if (!contact) {
+        const { WEBCHAT_DELIVERY_FAILED_MESSAGE } = await import("@shared/webchatSendErrors");
+        return { success: false, error: WEBCHAT_DELIVERY_FAILED_MESSAGE };
+      }
+
+      const {
+        isWebchatConfiguredForWorkspace,
+        isWebchatVisitorSessionActive,
+      } = await import("./webchatSession");
+      const {
+        WEBCHAT_NOT_CONFIGURED_MESSAGE,
+        WEBCHAT_SESSION_INACTIVE_MESSAGE,
+        WEBCHAT_DELIVERY_FAILED_MESSAGE,
+      } = await import("@shared/webchatSendErrors");
+
+      if (!(await isWebchatConfiguredForWorkspace(conversation.userId))) {
+        return { success: false, error: WEBCHAT_NOT_CONFIGURED_MESSAGE };
+      }
+
+      if (!(await isWebchatVisitorSessionActive(contact, conversation))) {
+        return { success: false, error: WEBCHAT_SESSION_INACTIVE_MESSAGE };
+      }
+
+      return {
+        success: true,
+        externalMessageId: `webchat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      };
+    } catch (error: unknown) {
+      console.error("Web Chat send error:", error);
+      const { WEBCHAT_DELIVERY_FAILED_MESSAGE } = await import("@shared/webchatSendErrors");
+      return { success: false, error: WEBCHAT_DELIVERY_FAILED_MESSAGE };
+    }
   }
 
   async isAvailable(userId: string): Promise<boolean> {
-    return true;
+    const { isWebchatConfiguredForWorkspace } = await import("./webchatSession");
+    return isWebchatConfiguredForWorkspace(userId);
   }
 }
 

@@ -32,6 +32,10 @@ import {
   userFacingReplyWindowBlockedMessageInbox,
 } from "@shared/metaReplyWindowError";
 import {
+  WEBCHAT_DELIVERY_FAILED_MESSAGE,
+  webchatErrorCodeForMessage,
+} from "@shared/webchatSendErrors";
+import {
   inboundProcessingLog,
   type InboundProcessingResult,
   type InboundProcessingSubState,
@@ -241,6 +245,7 @@ export interface SendMessageResult {
   channel: Channel;
   externalMessageId?: string;
   error?: string;
+  errorCode?: string;
   fallbackUsed?: boolean;
 }
 
@@ -335,20 +340,46 @@ class ChannelService {
     userId: string,
     contact: Contact,
     channel: Channel
-  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+  ): Promise<{ ok: true } | { ok: false; reason: string; code?: string }> {
     if (!CHANNEL_INFO[channel]?.isMessaging) {
       return { ok: false, reason: 'This channel cannot be used for outbound messaging' };
     }
 
     if (channel === 'webchat') {
+      const {
+        isWebchatConfiguredForWorkspace,
+        isWebchatVisitorSessionActive,
+        contactHasWebchatSessionSignals,
+      } = await import("./webchatSession");
+      const {
+        WEBCHAT_NOT_CONFIGURED_MESSAGE,
+        WEBCHAT_SESSION_INACTIVE_MESSAGE,
+      } = await import("@shared/webchatSendErrors");
+
       const conv = await storage.getConversationByContactAndChannel(contact.id, 'webchat');
-      const ok =
-        contact.lastIncomingChannel === 'webchat' ||
-        contact.primaryChannel === 'webchat' ||
-        contact.source === 'webchat' ||
-        !!conv;
-      if (!ok) {
-        return { ok: false, reason: 'This contact has no web chat session — cannot send on Web Chat' };
+
+      if (!(await isWebchatConfiguredForWorkspace(userId))) {
+        return {
+          ok: false,
+          reason: WEBCHAT_NOT_CONFIGURED_MESSAGE,
+          code: "webchat_not_configured",
+        };
+      }
+
+      if (!contactHasWebchatSessionSignals(contact, conv)) {
+        return {
+          ok: false,
+          reason: 'This contact has no web chat session — cannot send on Web Chat',
+          code: "webchat_session_inactive",
+        };
+      }
+
+      if (!(await isWebchatVisitorSessionActive(contact, conv))) {
+        return {
+          ok: false,
+          reason: WEBCHAT_SESSION_INACTIVE_MESSAGE,
+          code: "webchat_session_inactive",
+        };
       }
     } else if (channel === 'gohighlevel' && !contact.ghlId) {
       return { ok: false, reason: 'Contact has no GoHighLevel identifier — cannot send on this channel' };
@@ -367,9 +398,11 @@ class ChannelService {
       }
     }
 
-    const enabled = await this.getEnabledChannels(userId);
-    if (!enabled.includes(channel)) {
-      return { ok: false, reason: `${CHANNEL_INFO[channel].label} is not connected for this workspace` };
+    if (channel !== 'webchat') {
+      const enabled = await this.getEnabledChannels(userId);
+      if (!enabled.includes(channel)) {
+        return { ok: false, reason: `${CHANNEL_INFO[channel].label} is not connected for this workspace` };
+      }
     }
 
     const adapter = this.adapters.get(channel);
@@ -466,7 +499,12 @@ class ChannelService {
           console.warn(
             `[sendMessage] blocked contactId=${contactId} selectedChannel=${forced} reason=${gate.reason}`
           );
-          return { success: false, channel: forced, error: gate.reason };
+          return {
+            success: false,
+            channel: forced,
+            error: gate.reason,
+            errorCode: gate.code,
+          };
         }
       }
       targetChannel = forced;
@@ -619,13 +657,21 @@ class ChannelService {
 
     if (pinChannelNoFallback) {
       const rawErr = sendResult.error || "";
-      const displayErr = coerceReplyWindowErrorToUserMessage(targetChannel, rawErr || "Message delivery failed");
+      const displayErr =
+        targetChannel === "webchat"
+          ? rawErr || WEBCHAT_DELIVERY_FAILED_MESSAGE
+          : coerceReplyWindowErrorToUserMessage(targetChannel, rawErr || "Message delivery failed");
       const windowClass =
-        !!rawErr && (isMetaReplyWindowExpiredError(rawErr) || errorLooksLikeReplyWindowOrTemplateBlock(rawErr));
+        targetChannel !== "webchat" &&
+        !!rawErr &&
+        (isMetaReplyWindowExpiredError(rawErr) || errorLooksLikeReplyWindowOrTemplateBlock(rawErr));
+      const webchatCode =
+        targetChannel === "webchat" ? webchatErrorCodeForMessage(displayErr) : undefined;
       await storage.updateMessage(message.id, {
         status: "failed",
         errorMessage: displayErr,
         ...(windowClass ? { errorCode: "meta_reply_window" as const } : {}),
+        ...(webchatCode ? { errorCode: webchatCode } : {}),
       });
       console.warn(
         `[sendMessage] failed contactId=${contactId} finalChannel=${targetChannel} error=${sendResult.error || 'unknown'}`
@@ -635,6 +681,7 @@ class ChannelService {
         messageId: message.id,
         channel: targetChannel,
         error: displayErr,
+        errorCode: webchatCode,
       };
     }
 
@@ -1192,6 +1239,8 @@ class ChannelService {
         channelContactId,
         leadSource: webchatLeadSource,
       });
+      const { touchWebchatVisitorSession } = await import("./webchatSession");
+      await touchWebchatVisitorSession(contact.id);
     }
 
     await storage.updateConversation(conversation.id, {

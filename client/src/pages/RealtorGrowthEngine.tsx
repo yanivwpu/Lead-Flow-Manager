@@ -2335,7 +2335,7 @@ export function RealtorGrowthEngine() {
       timing: "Immediate on keyword detection",
     },
     W4: {
-      summary: "Sends a friendly follow-up if a lead hasn't replied within 24 hours. Only targets active pipeline stages (New Lead, Responded, Qualified). Tags as 'Follow-Up Needed'.",
+      summary: "Sends a friendly follow-up if a lead hasn't replied within 24 hours. Runs for active leads (Open, Proposal, qualified stages, nurture, etc.) except Closed, Unqualified, Lost, or Do Not Contact. Tags as 'Follow-Up Needed'.",
       triggers: "No reply detected",
       timing: "24 hours after last message",
     },
