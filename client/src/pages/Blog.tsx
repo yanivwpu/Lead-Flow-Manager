@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 import { SiteFooter } from "@/components/SiteFooter";
 import { MARKETING_URL } from "@/lib/marketingUrl";
 import { BLOG_POSTS, resolveBlogFeaturedImageUrl, type BlogPostMeta } from "@shared/blogPosts";
-import { BlogFeaturedImage } from "@/components/blog/BlogFeaturedImage";
 
 export type { BlogPostMeta as BlogPost };
 export { BLOG_POSTS };
@@ -112,40 +111,55 @@ export function Blog() {
 
         {featuredPost && selectedCategory === "All" && searchQuery === "" && (
           <Link href={`/blog/${featuredPost.slug}`}>
-            <a className="block mb-12 group" data-testid="link-featured-post">
-              <div className="bg-gradient-to-br from-brand-green/5 to-brand-teal/5 rounded-2xl overflow-hidden border border-brand-green/20 hover:border-brand-green/40 transition-colors">
+            <a className="group mb-12 block" data-testid="link-featured-post">
+              <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-all hover:border-gray-300 hover:shadow-md">
                 {resolveBlogFeaturedImageUrl(featuredPost, MARKETING_URL) ? (
-                  <BlogFeaturedImage
-                    src={resolveBlogFeaturedImageUrl(featuredPost, MARKETING_URL)!}
-                    alt={featuredPost.imageAlt ?? featuredPost.title}
-                    className="mb-0 rounded-none border-0 shadow-none"
-                  />
+                  <div className="relative h-[200px] w-full overflow-hidden bg-gray-100 sm:h-[240px]">
+                    <img
+                      src={resolveBlogFeaturedImageUrl(featuredPost, MARKETING_URL)!}
+                      alt={featuredPost.imageAlt ?? featuredPost.title}
+                      width={1200}
+                      height={675}
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                      decoding="async"
+                      loading="eager"
+                      fetchPriority="high"
+                    />
+                  </div>
                 ) : null}
-                <div className="p-6 sm:p-8">
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="px-3 py-1 bg-brand-green text-white text-xs font-medium rounded-full">
-                    Featured
+                <div className="p-5 sm:p-7">
+                  <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500">
+                    <span className="rounded-full bg-brand-green/10 px-2.5 py-0.5 text-xs font-semibold text-brand-green">
+                      {featuredPost.category}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3.5 w-3.5" />
+                      {new Date(featuredPost.date).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </span>
+                    <span aria-hidden className="text-gray-300">
+                      ·
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5" />
+                      {featuredPost.readTime}
+                    </span>
+                  </div>
+                  <h2 className="font-display text-2xl font-bold leading-snug text-gray-900 transition-colors group-hover:text-brand-green sm:text-3xl line-clamp-3">
+                    {featuredPost.title}
+                  </h2>
+                  <p className="mt-3 text-base leading-relaxed text-gray-600 line-clamp-3">
+                    {featuredPost.excerpt}
+                  </p>
+                  <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-green transition-all group-hover:gap-2.5">
+                    Read article
+                    <ArrowRight className="h-4 w-4" />
                   </span>
-                  <span className="text-sm text-gray-500">{featuredPost.category}</span>
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-display font-bold text-gray-900 mb-3 group-hover:text-brand-green transition-colors">
-                  {featuredPost.title}
-                </h2>
-                <p className="text-gray-600 mb-4 line-clamp-2">
-                  {featuredPost.excerpt}
-                </p>
-                <div className="flex items-center gap-4 text-sm text-gray-500">
-                  <span className="flex items-center gap-1">
-                    <Calendar className="h-4 w-4" />
-                    {new Date(featuredPost.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    {featuredPost.readTime}
-                  </span>
-                </div>
-                </div>
-              </div>
+              </article>
             </a>
           </Link>
         )}
