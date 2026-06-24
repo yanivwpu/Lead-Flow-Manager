@@ -37,15 +37,14 @@ export function BlogFeaturedImage({
     return (
       <div
         className={cn(
-          "flex w-full items-center justify-center overflow-hidden",
+          "flex h-[200px] w-full items-center justify-center overflow-hidden sm:h-[260px]",
           "bg-gradient-to-b from-slate-50 to-slate-100/80",
-          "aspect-video max-h-[200px] sm:max-h-[260px]",
           className,
         )}
       >
         <img
           {...imgProps}
-          className="h-full w-full object-contain object-center"
+          className="max-h-full max-w-full object-contain object-center"
         />
       </div>
     );
