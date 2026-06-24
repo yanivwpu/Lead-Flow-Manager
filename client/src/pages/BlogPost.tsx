@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, Redirect } from "wouter";
-import { Helmet } from "react-helmet";
 import { Calendar, Clock, ArrowLeft, ArrowRight, Share2, Linkedin, MessageCircle, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BLOG_POSTS } from "./Blog";
+import { BlogFeaturedImage } from "@/components/blog/BlogFeaturedImage";
+import { BlogPostSocialMeta } from "@/components/blog/BlogPostSocialMeta";
+import { resolveBlogFeaturedImageUrl } from "@shared/blogPosts";
 import {
   REALTOR_GROWTH_ENGINE_GUIDE_CONTENT,
   REALTOR_GROWTH_ENGINE_GUIDE_FAQ,
@@ -1172,6 +1174,7 @@ export function BlogPost() {
   const shareText = encodeURIComponent(post.title);
   const pageTitle = post.seoTitle ?? `${post.title} | WhachatCRM Blog`;
   const faqSchema = slug ? BLOG_FAQ_SCHEMA[slug] : undefined;
+  const featuredImageUrl = resolveBlogFeaturedImageUrl(post, MARKETING_URL);
 
   const renderContent = (markdown: string) => {
     const lines = markdown.trim().split('\n');
@@ -1310,42 +1313,7 @@ export function BlogPost() {
 
   return (
     <div className="min-h-screen bg-white">
-      <Helmet>
-        <title>{pageTitle}</title>
-        <meta name="description" content={post.excerpt} />
-        {post.keywords ? <meta name="keywords" content={post.keywords} /> : null}
-        <meta property="og:title" content={post.seoTitle ?? post.title} />
-        <meta property="og:description" content={post.excerpt} />
-        <meta property="og:type" content="article" />
-        <meta property="og:url" content={shareUrl} />
-        <meta name="twitter:card" content="summary" />
-        <meta name="twitter:title" content={post.seoTitle ?? post.title} />
-        <meta name="twitter:description" content={post.excerpt} />
-        <link rel="canonical" href={shareUrl} />
-        <script type="application/ld+json">
-          {JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "BlogPosting",
-            "headline": post.title,
-            "description": post.excerpt,
-            "datePublished": post.date,
-            "author": {
-              "@type": "Organization",
-              "name": "WhachatCRM"
-            },
-            "publisher": {
-              "@type": "Organization",
-              "name": "WhachatCRM",
-              "url": MARKETING_URL
-            }
-          })}
-        </script>
-        {faqSchema ? (
-          <script type="application/ld+json">
-            {JSON.stringify(faqSchema)}
-          </script>
-        ) : null}
-      </Helmet>
+      <BlogPostSocialMeta post={post} shareUrl={shareUrl} pageTitle={pageTitle} faqSchema={faqSchema} />
 
       <header className="border-b border-gray-100">
         <nav className="max-w-4xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
@@ -1385,6 +1353,14 @@ export function BlogPost() {
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-display font-bold text-gray-900 mb-6 leading-tight">
             {post.title}
           </h1>
+
+          {featuredImageUrl ? (
+            <BlogFeaturedImage
+              src={featuredImageUrl}
+              alt={post.imageAlt ?? post.title}
+              priority
+            />
+          ) : null}
           
           <p className="text-xl text-gray-600 leading-relaxed">
             {post.excerpt}

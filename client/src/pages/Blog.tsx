@@ -7,100 +7,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SiteFooter } from "@/components/SiteFooter";
 import { MARKETING_URL } from "@/lib/marketingUrl";
+import { BLOG_POSTS, resolveBlogFeaturedImageUrl, type BlogPostMeta } from "@shared/blogPosts";
+import { BlogFeaturedImage } from "@/components/blog/BlogFeaturedImage";
 
-export interface BlogPost {
-  slug: string;
-  title: string;
-  excerpt: string;
-  category: string;
-  readTime: string;
-  date: string;
-  image?: string;
-  featured?: boolean;
-  /** Optional override for document title (≤60 chars recommended). */
-  seoTitle?: string;
-  keywords?: string;
-}
-
-export const BLOG_POSTS: BlogPost[] = [
-  {
-    slug: "realtor-growth-engine-complete-guide",
-    title: "What Is the Realtor Growth Engine (RGE)? The Complete Guide for Modern Real Estate Agents",
-    excerpt:
-      "Learn what the Realtor Growth Engine is, how it helps agents with lead follow-up, AI, messaging, MLS integration, and automation—without replacing your CRM.",
-    category: "Real Estate",
-    readTime: "18 min read",
-    date: "2026-06-21",
-    featured: true,
-    seoTitle: "Realtor Growth Engine Guide | Real Estate CRM & AI",
-    keywords:
-      "Realtor CRM, Real Estate CRM, Real Estate Automation, Real Estate AI, Realtor Growth Engine, Real Estate Lead Follow Up, Real Estate Lead Nurturing, IDX CRM, MLS CRM, Real Estate Lead Management, AI CRM for Realtors",
-  },
-  {
-    slug: "whatsapp-crm-complete-guide-2025",
-    title: "WhatsApp CRM: The Complete Guide for Small Businesses in 2025",
-    excerpt: "Learn how to use WhatsApp as a powerful CRM tool to manage customer relationships, automate responses, and grow your business. Everything you need to know about WhatsApp Business API and CRM integration.",
-    category: "Guides",
-    readTime: "12 min read",
-    date: "2025-12-15",
-  },
-  {
-    slug: "whatsapp-business-api-vs-business-app",
-    title: "WhatsApp Business API vs Business App: Which One Do You Need?",
-    excerpt: "Confused about the difference between WhatsApp Business App and WhatsApp Business API? This guide breaks down features, pricing, and helps you choose the right solution for your team size.",
-    category: "Comparison",
-    readTime: "8 min read",
-    date: "2025-12-10",
-  },
-  {
-    slug: "automate-whatsapp-messages-small-business",
-    title: "How to Automate WhatsApp Messages for Your Small Business",
-    excerpt: "Save hours every day with WhatsApp automation. Learn how to set up auto-replies, away messages, drip campaigns, and workflow triggers to respond faster and convert more leads.",
-    category: "Automation",
-    readTime: "10 min read",
-    date: "2025-12-05",
-  },
-  {
-    slug: "whatsapp-lead-management-tips",
-    title: "10 WhatsApp Lead Management Tips That Actually Work",
-    excerpt: "Stop losing leads in your WhatsApp inbox. These proven strategies help you organize conversations, follow up on time, and close more deals using WhatsApp as your main sales channel.",
-    category: "Tips",
-    readTime: "7 min read",
-    date: "2025-11-28",
-  },
-  {
-    slug: "wati-alternatives-comparison",
-    title: "Top 5 WATI Alternatives for WhatsApp Business in 2025",
-    excerpt: "Looking for a WATI alternative? Compare pricing, features, and ease of use of the best WhatsApp CRM tools including WhachatCRM, Respond.io, and more.",
-    category: "Comparison",
-    readTime: "9 min read",
-    date: "2025-11-20",
-  },
-  {
-    slug: "whatsapp-customer-service-best-practices",
-    title: "WhatsApp Customer Service: Best Practices for Teams",
-    excerpt: "Deliver exceptional customer support via WhatsApp. Learn response time benchmarks, team collaboration tips, and how to handle high message volumes effectively.",
-    category: "Customer Service",
-    readTime: "8 min read",
-    date: "2025-11-15",
-  },
-  {
-    slug: "twilio-whatsapp-setup-guide",
-    title: "How to Connect WhatsApp with Meta Embedded Signup",
-    excerpt: "A simple walkthrough for connecting WhatsApp through Meta, choosing your business account and phone number, and verifying the inbox connection.",
-    category: "Tutorials",
-    readTime: "15 min read",
-    date: "2025-11-10",
-  },
-  {
-    slug: "whatsapp-drip-campaigns-examples",
-    title: "WhatsApp Drip Campaign Examples That Convert",
-    excerpt: "Real examples of successful WhatsApp drip sequences for lead nurturing, customer onboarding, and re-engagement. Copy these templates for your business.",
-    category: "Templates",
-    readTime: "11 min read",
-    date: "2025-11-05",
-  },
-];
+export type { BlogPostMeta as BlogPost };
+export { BLOG_POSTS };
 
 const CATEGORIES = ["All", "Real Estate", "Guides", "Comparison", "Automation", "Tips", "Customer Service", "Tutorials", "Templates"];
 
@@ -202,7 +113,15 @@ export function Blog() {
         {featuredPost && selectedCategory === "All" && searchQuery === "" && (
           <Link href={`/blog/${featuredPost.slug}`}>
             <a className="block mb-12 group" data-testid="link-featured-post">
-              <div className="bg-gradient-to-br from-brand-green/5 to-brand-teal/5 rounded-2xl p-6 sm:p-8 border border-brand-green/20 hover:border-brand-green/40 transition-colors">
+              <div className="bg-gradient-to-br from-brand-green/5 to-brand-teal/5 rounded-2xl overflow-hidden border border-brand-green/20 hover:border-brand-green/40 transition-colors">
+                {resolveBlogFeaturedImageUrl(featuredPost, MARKETING_URL) ? (
+                  <BlogFeaturedImage
+                    src={resolveBlogFeaturedImageUrl(featuredPost, MARKETING_URL)!}
+                    alt={featuredPost.imageAlt ?? featuredPost.title}
+                    className="mb-0 rounded-none border-0 shadow-none"
+                  />
+                ) : null}
+                <div className="p-6 sm:p-8">
                 <div className="flex items-center gap-2 mb-4">
                   <span className="px-3 py-1 bg-brand-green text-white text-xs font-medium rounded-full">
                     Featured
@@ -224,6 +143,7 @@ export function Blog() {
                     <Clock className="h-4 w-4" />
                     {featuredPost.readTime}
                   </span>
+                </div>
                 </div>
               </div>
             </a>

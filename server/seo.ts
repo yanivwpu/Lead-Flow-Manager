@@ -1,103 +1,24 @@
-interface BlogPostMeta {
-  slug: string;
-  title: string;
-  excerpt: string;
-  date: string;
-  category: string;
-  readTime: string;
-  featured?: boolean;
-  /** Optional document title override (≤60 chars). */
-  seoTitle?: string;
-}
-
-/** Keep in sync with client/src/pages/Blog.tsx BLOG_POSTS */
-export const BLOG_POSTS_META: BlogPostMeta[] = [
-  {
-    slug: "realtor-growth-engine-complete-guide",
-    title: "What Is the Realtor Growth Engine (RGE)? The Complete Guide for Modern Real Estate Agents",
-    excerpt:
-      "Learn what the Realtor Growth Engine is, how it helps agents with lead follow-up, AI, messaging, MLS integration, and automation—without replacing your CRM.",
-    category: "Real Estate",
-    date: "2026-06-21",
-    readTime: "18 min read",
-    featured: true,
-    seoTitle: "Realtor Growth Engine Guide | Real Estate CRM & AI",
-  },
-  {
-    slug: "whatsapp-crm-complete-guide-2025",
-    title: "WhatsApp CRM: The Complete Guide for Small Businesses in 2025",
-    excerpt:
-      "Learn how to use WhatsApp as a powerful CRM tool to manage customer relationships, automate responses, and grow your business. Everything you need to know about WhatsApp Business API and CRM integration.",
-    category: "Guides",
-    date: "2025-12-15",
-    readTime: "12 min read",
-  },
-  {
-    slug: "whatsapp-business-api-vs-business-app",
-    title: "WhatsApp Business API vs Business App: Which One Do You Need?",
-    excerpt:
-      "Confused about the difference between WhatsApp Business App and WhatsApp Business API? This guide breaks down features, pricing, and helps you choose the right solution for your team size.",
-    category: "Comparison",
-    date: "2025-12-10",
-    readTime: "8 min read",
-  },
-  {
-    slug: "automate-whatsapp-messages-small-business",
-    title: "How to Automate WhatsApp Messages for Your Small Business",
-    excerpt:
-      "Save hours every day with WhatsApp automation. Learn how to set up auto-replies, away messages, drip campaigns, and workflow triggers to respond faster and convert more leads.",
-    category: "Automation",
-    date: "2025-12-05",
-    readTime: "10 min read",
-  },
-  {
-    slug: "whatsapp-lead-management-tips",
-    title: "10 WhatsApp Lead Management Tips That Actually Work",
-    excerpt:
-      "Stop losing leads in your WhatsApp inbox. These proven strategies help you organize conversations, follow up on time, and close more deals using WhatsApp as your main sales channel.",
-    category: "Tips",
-    date: "2025-11-28",
-    readTime: "7 min read",
-  },
-  {
-    slug: "wati-alternatives-comparison",
-    title: "Top 5 WATI Alternatives for WhatsApp Business in 2025",
-    excerpt:
-      "Looking for a WATI alternative? Compare pricing, features, and ease of use of the best WhatsApp CRM tools including WhachatCRM, Respond.io, and more.",
-    category: "Comparison",
-    date: "2025-11-20",
-    readTime: "9 min read",
-  },
-  {
-    slug: "whatsapp-customer-service-best-practices",
-    title: "WhatsApp Customer Service: Best Practices for Teams",
-    excerpt:
-      "Deliver exceptional customer support via WhatsApp. Learn response time benchmarks, team collaboration tips, and how to handle high message volumes effectively.",
-    category: "Customer Service",
-    date: "2025-11-15",
-    readTime: "8 min read",
-  },
-  {
-    slug: "twilio-whatsapp-setup-guide",
-    title: "How to Connect WhatsApp with Meta Embedded Signup",
-    excerpt:
-      "A simple walkthrough for connecting WhatsApp through Meta, choosing your business account and phone number, and verifying the inbox connection.",
-    category: "Tutorials",
-    date: "2025-11-10",
-    readTime: "15 min read",
-  },
-  {
-    slug: "whatsapp-drip-campaigns-examples",
-    title: "WhatsApp Drip Campaign Examples That Convert",
-    excerpt:
-      "Real examples of successful WhatsApp drip sequences for lead nurturing, customer onboarding, and re-engagement. Copy these templates for your business.",
-    category: "Templates",
-    date: "2025-11-05",
-    readTime: "11 min read",
-  },
-];
+import {
+  BLOG_POSTS,
+  resolveBlogImageAlt,
+  resolveBlogFeaturedImageUrl,
+  resolveBlogOgImage,
+  type BlogPostMeta,
+} from "@shared/blogPosts";
 
 const BASE_URL = (process.env.MARKETING_URL || "https://www.whachatcrm.com").replace(/\/+$/, "");
+
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/** @deprecated Import from `@shared/blogPosts` */
+export type { BlogPostMeta as BlogPostMeta };
+export { BLOG_POSTS as BLOG_POSTS_META };
 
 export function injectSeoMeta(html: string, url: string): string {
   if (url.startsWith("/blog/")) {
@@ -107,6 +28,11 @@ export function injectSeoMeta(html: string, url: string): string {
     if (post) {
       const canonicalUrl = `${BASE_URL}/blog/${post.slug}`;
       const documentTitle = post.seoTitle ?? `${post.title} | WhachatCRM Blog`;
+      const ogImage = resolveBlogOgImage(post, BASE_URL);
+      const imageAlt = escapeHtmlAttr(resolveBlogImageAlt(post));
+      const safeTitle = escapeHtmlAttr(post.title);
+      const safeExcerpt = escapeHtmlAttr(post.excerpt);
+      const safeDocumentTitle = escapeHtmlAttr(documentTitle);
       
       // Remove existing OG and Twitter meta tags to prevent duplicates
       html = html.replace(/<meta property="og:title"[^>]*>/gi, '');
@@ -124,29 +50,31 @@ export function injectSeoMeta(html: string, url: string): string {
       html = html.replace(/<link rel="canonical"[^>]*>/gi, '');
       
       const metaTags = `
-    <title>${documentTitle}</title>
-    <meta name="description" content="${post.excerpt}" />
-    <meta property="og:title" content="${post.title}" />
-    <meta property="og:description" content="${post.excerpt}" />
+    <title>${safeDocumentTitle}</title>
+    <meta name="description" content="${safeExcerpt}" />
+    <meta property="og:title" content="${safeTitle}" />
+    <meta property="og:description" content="${safeExcerpt}" />
     <meta property="og:type" content="article" />
     <meta property="og:url" content="${canonicalUrl}" />
-    <meta property="og:image" content="${BASE_URL}/og/og-whachatcrm.png?v=3" />
-    <meta property="og:image:alt" content="WhachatCRM – WhatsApp CRM & Automation Platform" />
+    <meta property="og:image" content="${ogImage}" />
+    <meta property="og:image:secure_url" content="${ogImage}" />
+    <meta property="og:image:alt" content="${imageAlt}" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${post.title}" />
-    <meta name="twitter:description" content="${post.excerpt}" />
-    <meta name="twitter:image" content="${BASE_URL}/og/og-whachatcrm.png?v=3" />
-    <meta name="twitter:image:alt" content="WhachatCRM – WhatsApp CRM & Automation Platform" />
+    <meta name="twitter:title" content="${safeTitle}" />
+    <meta name="twitter:description" content="${safeExcerpt}" />
+    <meta name="twitter:image" content="${ogImage}" />
+    <meta name="twitter:image:alt" content="${imageAlt}" />
     <link rel="canonical" href="${canonicalUrl}" />
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "BlogPosting",
-      "headline": "${post.title}",
-      "description": "${post.excerpt}",
+      "headline": "${safeTitle}",
+      "description": "${safeExcerpt}",
       "datePublished": "${post.date}",
+      "image": ["${ogImage}"],
       "url": "${canonicalUrl}",
       "author": { "@type": "Organization", "name": "WhachatCRM" },
       "publisher": { "@type": "Organization", "name": "WhachatCRM", "url": "${BASE_URL}" }
@@ -712,11 +640,17 @@ Start simple and expand based on results.`
 };
 
 export function generateBlogPostHtml(slug: string): string | null {
-  const post = BLOG_POSTS_META.find(p => p.slug === slug);
+  const post = BLOG_POSTS.find(p => p.slug === slug);
   if (!post) return null;
   
   const content = BLOG_CONTENT_SSR[slug];
   const contentHtml = content ? markdownToHtml(content) : `<p style="font-size: 1.1rem; color: #555;">${post.excerpt}</p>`;
+  const featuredImageUrl = resolveBlogFeaturedImageUrl(post, BASE_URL);
+  const featuredImageHtml = featuredImageUrl
+    ? `<figure style="margin: 0 0 24px; border-radius: 16px; overflow: hidden; border: 1px solid #f3f4f6;">
+        <img src="${featuredImageUrl}" alt="${escapeHtmlAttr(resolveBlogImageAlt(post))}" width="1200" height="630" style="display:block;width:100%;height:auto;aspect-ratio:1200/630;object-fit:cover;" loading="eager" decoding="async" />
+      </figure>`
+    : "";
   
   return `
     <div id="ssr-blog-content" style="font-family: system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px;">
@@ -727,9 +661,10 @@ export function generateBlogPostHtml(slug: string): string | null {
         <header style="margin-bottom: 32px;">
           <span style="color: #22c55e; font-size: 14px; font-weight: 500;">${post.category}</span>
           <h1 style="font-size: 2rem; margin: 12px 0 16px;">${post.title}</h1>
-          <div style="color: #666; font-size: 14px;">
+          <div style="color: #666; font-size: 14px; margin-bottom: 16px;">
             <span>${formatDate(post.date)}</span> · <span>${post.readTime}</span>
           </div>
+          ${featuredImageHtml}
         </header>
         <div style="color: #333; line-height: 1.7;">
           <p style="margin: 16px 0;">${contentHtml}</p>
