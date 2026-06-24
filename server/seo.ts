@@ -647,8 +647,8 @@ export function generateBlogPostHtml(slug: string): string | null {
   const contentHtml = content ? markdownToHtml(content) : `<p style="font-size: 1.1rem; color: #555;">${post.excerpt}</p>`;
   const featuredImageUrl = resolveBlogFeaturedImageUrl(post, BASE_URL);
   const featuredImageHtml = featuredImageUrl
-    ? `<figure style="margin: 0 0 24px; border-radius: 16px; overflow: hidden; border: 1px solid #f3f4f6;">
-        <img src="${featuredImageUrl}" alt="${escapeHtmlAttr(resolveBlogImageAlt(post))}" width="1200" height="630" style="display:block;width:100%;height:auto;aspect-ratio:1200/630;object-fit:cover;" loading="eager" decoding="async" />
+    ? `<figure style="margin:0 0 24px;border-radius:16px;overflow:hidden;border:1px solid #f3f4f6;background:linear-gradient(180deg,#f8fafc,#f1f5f9);">
+        <img src="${featuredImageUrl}" alt="${escapeHtmlAttr(resolveBlogImageAlt(post))}" width="1200" height="630" style="display:block;width:100%;max-width:100%;height:auto;object-fit:contain;object-position:center;" loading="eager" decoding="async" />
       </figure>`
     : "";
   

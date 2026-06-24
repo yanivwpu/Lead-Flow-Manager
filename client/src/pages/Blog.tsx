@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { SiteFooter } from "@/components/SiteFooter";
 import { MARKETING_URL } from "@/lib/marketingUrl";
 import { BLOG_POSTS, resolveBlogFeaturedImageUrl, type BlogPostMeta } from "@shared/blogPosts";
+import { BlogFeaturedImage } from "@/components/blog/BlogFeaturedImage";
 
 export type { BlogPostMeta as BlogPost };
 export { BLOG_POSTS };
@@ -114,18 +115,13 @@ export function Blog() {
             <a className="group mb-12 block" data-testid="link-featured-post">
               <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-all hover:border-gray-300 hover:shadow-md">
                 {resolveBlogFeaturedImageUrl(featuredPost, MARKETING_URL) ? (
-                  <div className="relative h-[200px] w-full overflow-hidden bg-gray-100 sm:h-[240px]">
-                    <img
-                      src={resolveBlogFeaturedImageUrl(featuredPost, MARKETING_URL)!}
-                      alt={featuredPost.imageAlt ?? featuredPost.title}
-                      width={1200}
-                      height={675}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                      decoding="async"
-                      loading="eager"
-                      fetchPriority="high"
-                    />
-                  </div>
+                  <BlogFeaturedImage
+                    variant="card"
+                    src={resolveBlogFeaturedImageUrl(featuredPost, MARKETING_URL)!}
+                    alt={featuredPost.imageAlt ?? featuredPost.title}
+                    priority
+                    className="rounded-none border-0 shadow-none"
+                  />
                 ) : null}
                 <div className="p-5 sm:p-7">
                   <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500">
