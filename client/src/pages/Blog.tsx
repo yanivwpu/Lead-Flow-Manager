@@ -91,8 +91,8 @@ export function Blog() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-        <div className="mb-10 flex gap-2 overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide">
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+        <div className="mb-6 flex gap-2 overflow-x-auto pb-3 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide">
           {CATEGORIES.map((category) => (
             <button
               key={category}
@@ -111,7 +111,7 @@ export function Blog() {
         </div>
 
         {featuredPost && selectedCategory === "All" && searchQuery === "" && (
-          <BlogFeaturedCard post={featuredPost} className="mb-14" />
+          <BlogFeaturedCard post={featuredPost} className="mb-8" />
         )}
 
         {filteredPosts.length === 0 ? (
