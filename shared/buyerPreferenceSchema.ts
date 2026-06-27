@@ -126,7 +126,7 @@ export function normalizeBuyerPreferenceProfile(raw: unknown): BuyerPreferencePr
   return emptyBuyerPreferenceProfile();
 }
 
-function fieldActive<T>(f: PreferenceField<T> | undefined, minConfidence = 0.5): boolean {
+function fieldActive(f: PreferenceField<unknown> | undefined, minConfidence = 0.5): boolean {
   return !!f && f.confidence >= minConfidence;
 }
 

@@ -13,7 +13,7 @@ import {
 import { SiteFooter } from "@/components/SiteFooter";
 import { MARKETING_URL } from "@/lib/marketingUrl";
 
-const BLOG_FAQ_SCHEMA: Record<string, object> = {
+const BLOG_FAQ_SCHEMA: Record<string, Record<string, unknown>> = {
   "realtor-growth-engine-complete-guide": REALTOR_GROWTH_ENGINE_GUIDE_FAQ,
 };
 

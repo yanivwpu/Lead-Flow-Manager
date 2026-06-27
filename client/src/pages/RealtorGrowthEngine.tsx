@@ -1191,7 +1191,7 @@ export function RealtorGrowthEngine() {
     verifyPaymentMutation.isPending,
   ]);
 
-  const { data: assetsData } = useQuery({
+  const { data: assetsData } = useQuery<{ assets?: Array<{ assetType?: string; definition?: Record<string, unknown> }> }>({
     queryKey: ["/api/templates/realtor-growth-engine/assets"],
     enabled: !!templateData && status === 'installed'
   });
@@ -2529,14 +2529,14 @@ export function RealtorGrowthEngine() {
       setLocalPrefs(prev => ({ ...prev, [key]: value }));
     };
 
-    const msgTemplates = assetsData?.assets?.find((a: any) => a.assetType === 'message_templates')?.definition?.templates || [];
+    const msgTemplates = (assetsData?.assets?.find((a) => a.assetType === "message_templates")?.definition as { templates?: unknown[] } | undefined)?.templates ?? [];
 
     const getWorkflowTemplates = (wf: any) => {
       if (!wf) return [];
       const templateKeys = (wf.actions || [])
         .filter((a: any) => a.type === 'send_message_template')
         .map((a: any) => a.templateKey);
-      return msgTemplates.filter((t: any) => templateKeys.includes(t.key));
+      return (msgTemplates as Array<{ key?: string }>).filter((t) => templateKeys.includes(t.key));
     };
 
     const hasWorkflowSpecificFields = (wfKey: string) => !!WORKFLOW_FIELDS[wfKey];
@@ -3042,10 +3042,16 @@ export function RealtorGrowthEngine() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {(pipeline.stages?.length > 0 ? pipeline.stages : ['New Lead', 'Discovery', 'Tour Scheduled', 'Offer', 'Closed']).map((stage: any, i: number) => (
+                  {(((pipeline as { stages?: unknown[] }).stages?.length ?? 0) > 0 ? (pipeline as { stages: unknown[] }).stages : ['New Lead', 'Discovery', 'Tour Scheduled', 'Offer', 'Closed']).map((stage: unknown, i: number) => (
                     <div key={i} className="flex items-center gap-2 text-xs">
                       <div className="w-1.5 h-1.5 rounded-full bg-brand-green" />
-                      <span className="text-gray-700">{typeof stage === 'string' ? stage : stage.name || stage.displayName}</span>
+                      <span className="text-gray-700">
+                        {typeof stage === "string"
+                          ? stage
+                          : (stage as { name?: string; displayName?: string }).name ||
+                            (stage as { displayName?: string }).displayName ||
+                            ""}
+                      </span>
                     </div>
                   ))}
                 </div>

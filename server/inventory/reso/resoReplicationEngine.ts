@@ -181,7 +181,7 @@ export async function runResoConnectionProbe(
   sourceKey: string,
   provider: ResoReplicationProviderContract,
   filter: string,
-): Promise<{ ok: true; sampleRows: number } | { ok: false; message: string }> {
+): Promise<{ ok: true; sampleRows: number } | { ok: false; message: string; failureDiagnostics?: ReturnType<typeof resoFailureDiagnosticsFromError> }> {
   try {
     const endpoint = provider.getEndpointConfig();
     const auth = provider.getAuth();
@@ -212,7 +212,7 @@ export async function runResoConnectionProbe(
     return {
       ok: false,
       message: buildResoFailureUserMessage(err, diag),
-      diagnostics: diag,
+      failureDiagnostics: diag,
     };
   }
 }

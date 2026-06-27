@@ -328,15 +328,18 @@ export function WhatsAppTemplateRichPreview({
             <p className="text-sm text-gray-800">{card?.bodyText || "—"}</p>
             {cardButtons.length > 0 ? (
               <div className={cn("flex flex-wrap", carouselTight ? "gap-1 pt-0" : "gap-1.5 pt-0.5")}>
-                {cardButtons.map((btn: Record<string, unknown>, bi: number) => (
+                {cardButtons.map((btn, bi) => {
+                  const button = btn as Record<string, unknown>;
+                  return (
                   <Badge
                     key={bi}
                     variant="outline"
                     className="border-orange-200/90 bg-orange-50/90 text-[10px] font-normal text-orange-950"
                   >
-                    {String(btn.text ?? btn.title ?? `Button ${bi + 1}`)}
+                    {String(button.text ?? button.title ?? `Button ${bi + 1}`)}
                   </Badge>
-                ))}
+                  );
+                })}
               </div>
             ) : null}
             <p className={cn("text-gray-500", carouselTight ? "text-[10px] leading-tight" : "text-[11px]")}>
@@ -473,15 +476,18 @@ export function WhatsAppTemplateRichPreview({
   const btnRow =
     buttons.length > 0 ? (
       <div className={cn("flex flex-wrap gap-2", carouselTight ? "mx-1.5 pt-0.5" : "pt-1")}>
-        {buttons.map((btn: Record<string, unknown>, i: number) => (
-          <Badge
-            key={i}
-            variant="outline"
-            className="border-orange-200/90 bg-orange-50/90 text-[11px] font-normal text-orange-950"
-          >
-            {String(btn.text ?? btn.title ?? `Button ${i + 1}`)}
-          </Badge>
-        ))}
+        {buttons.map((btn, i) => {
+          const button = btn as Record<string, unknown>;
+          return (
+            <Badge
+              key={i}
+              variant="outline"
+              className="border-orange-200/90 bg-orange-50/90 text-[11px] font-normal text-orange-950"
+            >
+              {String(button.text ?? button.title ?? `Button ${i + 1}`)}
+            </Badge>
+          );
+        })}
       </div>
     ) : null;
 

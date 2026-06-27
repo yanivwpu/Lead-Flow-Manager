@@ -946,7 +946,8 @@ async function handleInviteeCreated(
     existingAppointment: dedup.existingAppointment,
     body,
   });
-  if (lifecycleGate.blocked || dedup.action === "ignored_canceled_event") {
+  const dedupAction = dedup.action as string;
+  if (lifecycleGate.blocked || dedupAction === "ignored_canceled_event") {
     logCalendlyLifecycleTrace({
       eventType: "invitee.created",
       status: dedup.existingAppointment?.status ?? null,
@@ -1006,11 +1007,11 @@ async function handleInviteeCreated(
     logCalendlyLifecycleTrace({
       eventType: "invitee.created",
       status: dedup.existingAppointment?.status ?? null,
-      canceled: dedup.action === "ignored_canceled_event",
+      canceled: dedupAction === "ignored_canceled_event",
       scheduledEventUri: scheduledEventUri || dedup.primaryUri,
       contactId: preferredContactId,
       existingAppointmentId: dedup.existingAppointment?.id ?? null,
-      action: dedup.action === "ignored_canceled_event" ? "ignored_canceled_event" : "skipped_duplicate",
+      action: dedupAction === "ignored_canceled_event" ? "ignored_canceled_event" : "skipped_duplicate",
       outboundMessageSent: false,
       source: ingestSource,
       reason: dedup.action,

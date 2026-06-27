@@ -196,23 +196,23 @@ export function registerInventoryRoutes(app: Express): void {
       }
 
       const outcome = await startInventorySourceSync(req.user.id, req.params.id);
-      if (outcome.reason === "source_not_found") {
-        return res.status(404).json({ error: "Inventory source not found" });
-      }
-      if (outcome.reason === "not_supported") {
-        return res.status(400).json({
-          error:
-            "This inventory source does not support listing sync. Connect a listing feed provider as your inventory source.",
-          code: "listing_sync_not_supported",
-        });
-      }
-      if (outcome.reason === "dev_seed_blocked") {
-        return res.status(403).json({
-          error: DEV_SEED_PRODUCTION_BLOCK_MESSAGE,
-          code: "dev_seed_not_allowed",
-        });
-      }
       if (!outcome.started) {
+        if (outcome.reason === "source_not_found") {
+          return res.status(404).json({ error: "Inventory source not found" });
+        }
+        if (outcome.reason === "not_supported") {
+          return res.status(400).json({
+            error:
+              "This inventory source does not support listing sync. Connect a listing feed provider as your inventory source.",
+            code: "listing_sync_not_supported",
+          });
+        }
+        if (outcome.reason === "dev_seed_blocked") {
+          return res.status(403).json({
+            error: DEV_SEED_PRODUCTION_BLOCK_MESSAGE,
+            code: "dev_seed_not_allowed",
+          });
+        }
         return res.status(409).json({ error: "Sync already running", code: "sync_in_progress" });
       }
       res.status(202).json({ syncStarted: true, validated: true });

@@ -485,7 +485,17 @@ async function runInventorySyncJob(
       resumeFromUrl: resumeUrl,
       maxRows: importCapRemaining && importCapRemaining > 0 ? importCapRemaining : undefined,
       onPage: useStreaming
-        ? async ({ rows, pageNumber, nextLink, rowsFetchedTotal }) => {
+        ? async ({
+            rows,
+            pageNumber,
+            nextLink,
+            rowsFetchedTotal,
+          }: {
+            rows: unknown[];
+            pageNumber: number;
+            nextLink: string | null;
+            rowsFetchedTotal: number;
+          }) => {
             pagesFetched = pageNumber;
             listingsFetched = rowsFetchedTotal;
 
@@ -782,8 +792,8 @@ async function runInventorySyncJob(
       datasetId,
       message,
       postgresCause:
-        err instanceof Error && (err as { cause?: Error }).cause instanceof Error
-          ? (err as { cause: Error }).cause.message
+        err instanceof Error && (err as unknown as { cause?: Error }).cause instanceof Error
+          ? (err as unknown as { cause: Error }).cause.message
           : undefined,
       pagesFetched,
       listingsFetched,

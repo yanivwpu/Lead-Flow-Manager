@@ -802,7 +802,7 @@ export function registerContactRoutes(app: Express): void {
       const guardedSource = guardedSources.has(sourceString) ? (sourceString as AutomationSendGuardSource) : null;
       const send = async () =>
         channelService.sendMessage({
-          userId: req.user.id,
+          userId: req.user!.id,
           contactId: req.params.id,
           content: content || '',
           contentType: contentType || mediaType || (mediaUrl ? 'image' : 'text'),

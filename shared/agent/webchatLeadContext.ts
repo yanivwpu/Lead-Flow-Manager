@@ -1,6 +1,7 @@
 /** Anonymous webchat visitor display names stored on CRM contacts. */
 export const WEBSITE_VISITOR_NAME = "Website Visitor";
 export const AGENT_PAGE_VISITOR_NAME = "Agent Page Visitor";
+export const EMBEDDED_AGENT_PAGE_VISITOR_NAME = "Embedded Agent Page Visitor";
 
 export const ANONYMOUS_WEBCHAT_VISITOR_NAMES = [
   WEBSITE_VISITOR_NAME,
@@ -9,8 +10,6 @@ export const ANONYMOUS_WEBCHAT_VISITOR_NAMES = [
 ] as const;
 
 export type WebchatLeadSource = "agent_page" | "agent_page_embed" | "website";
-
-const EMBEDDED_AGENT_PAGE_VISITOR_NAME = "Embedded Agent Page Visitor";
 
 const EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
 const PHONE_RE =

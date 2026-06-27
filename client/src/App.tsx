@@ -56,6 +56,30 @@ const WidgetFrame = lazy(() => import("@/pages/WidgetFrame").then(m => ({ defaul
 const WidgetChat = lazy(() => import("@/pages/WidgetChat").then(m => ({ default: m.WidgetChat })));
 const HelpCenter = lazy(() => import("@/pages/HelpCenter").then(m => ({ default: m.HelpCenter })));
 const UserGuide = lazy(() => import("@/pages/UserGuide").then(m => ({ default: m.UserGuide })));
+const CrmWithMlsIntegrationPage = lazy(() =>
+  import("@/pages/seo/LandingPages").then((m) => ({ default: m.CrmWithMlsIntegrationPage }))
+);
+const RealEstateCrmPage = lazy(() =>
+  import("@/pages/seo/LandingPages").then((m) => ({ default: m.RealEstateCrmPage }))
+);
+const UnifiedInboxPage = lazy(() =>
+  import("@/pages/seo/LandingPages").then((m) => ({ default: m.UnifiedInboxPage }))
+);
+const ShopifyCrmPage = lazy(() =>
+  import("@/pages/seo/LandingPages").then((m) => ({ default: m.ShopifyCrmPage }))
+);
+const WhatsappBusinessApiPage = lazy(() =>
+  import("@/pages/seo/LandingPages").then((m) => ({ default: m.WhatsappBusinessApiPage }))
+);
+const AiLeadScoringPage = lazy(() =>
+  import("@/pages/seo/LandingPages").then((m) => ({ default: m.AiLeadScoringPage }))
+);
+const SharedTeamInboxPage = lazy(() =>
+  import("@/pages/seo/LandingPages").then((m) => ({ default: m.SharedTeamInboxPage }))
+);
+const AutomationTemplatesPage = lazy(() =>
+  import("@/pages/seo/LandingPages").then((m) => ({ default: m.AutomationTemplatesPage }))
+);
 const NotFound = lazy(() => import("@/pages/not-found"));
 import { ReferralCapture } from "@/components/ReferralCapture";
 import { CookieConsentRoot } from "@/components/CookieConsentRoot";
@@ -115,6 +139,14 @@ function MarketingRoutes() {
       <Route path="/respond-io-alternative" component={RespondIoAlternative} />
       <Route path="/waba360-alternative" component={Waba360Alternative} />
       <Route path="/whatsapp-crm" component={WhatsappCrm} />
+      <Route path="/crm-with-mls-integration" component={CrmWithMlsIntegrationPage} />
+      <Route path="/real-estate-crm" component={RealEstateCrmPage} />
+      <Route path="/unified-inbox" component={UnifiedInboxPage} />
+      <Route path="/shopify-crm" component={ShopifyCrmPage} />
+      <Route path="/whatsapp-business-api" component={WhatsappBusinessApiPage} />
+      <Route path="/ai-lead-scoring" component={AiLeadScoringPage} />
+      <Route path="/shared-team-inbox" component={SharedTeamInboxPage} />
+      <Route path="/automation-templates" component={AutomationTemplatesPage} />
       <Route path="/best-whatsapp-crm-2026" component={Comparison} />
       <Route path="/crm-for-whatsapp-business" component={CrmForWhatsappBusiness} />
       <Route path="/contact" component={Contact} />

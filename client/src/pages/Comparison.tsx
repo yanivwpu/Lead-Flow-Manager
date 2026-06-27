@@ -53,9 +53,14 @@ export function Comparison() {
         <meta name="description" content="Discover the best WhatsApp CRM software in 2026. Compare CRM-first platforms vs. BSP providers. A comprehensive guide for small business sales and support." />
         <link rel="canonical" href={`${MARKETING_URL}/best-whatsapp-crm-2026`} />
         <meta property="og:title" content="Best WhatsApp CRM Software 2026 | WhachatCRM" />
-        <meta name="twitter:card" content="summary" />
+        <meta property="og:description" content="Discover the best WhatsApp CRM software in 2026. Compare CRM-first platforms vs. BSP providers. A comprehensive guide for small business sales and support." />
+        <meta property="og:url" content={`${MARKETING_URL}/best-whatsapp-crm-2026`} />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=3`} />
+        <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Best WhatsApp CRM Software 2026 | WhachatCRM" />
         <meta name="twitter:description" content="Discover the best WhatsApp CRM software in 2026. Compare CRM-first platforms vs. BSP providers. A comprehensive guide for small business sales and support." />
+        <meta name="twitter:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=3`} />
         <script type="application/ld+json">
           {JSON.stringify(faqSchema)}
         </script>

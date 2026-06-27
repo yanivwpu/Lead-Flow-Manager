@@ -20,9 +20,13 @@ export function CrmForWhatsappBusiness() {
         <meta property="og:description" content="Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. Manage all conversations in one place." />
         <meta property="og:url" content={`${MARKETING_URL}/crm-for-whatsapp-business`} />
         <meta property="og:type" content="website" />
+        <meta property="og:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=3`} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Multi-Channel CRM for WhatsApp Business" />
+        <meta name="twitter:title" content="CRM for WhatsApp Business | WhachatCRM" />
         <meta name="twitter:description" content="Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat." />
+        <meta name="twitter:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=3`} />
       </Helmet>
 
       {/* Navigation */}

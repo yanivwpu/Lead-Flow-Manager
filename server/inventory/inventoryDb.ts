@@ -16,7 +16,7 @@ import {
   readInventorySyncScope,
   type InventorySyncScope,
 } from "@shared/inventory/reso/resoSyncScope";
-import { providerSupportsListingSync } from "@shared/inventory/inventoryProviderSchema";
+import { providerSupportsListingSync, type InventoryProvider } from "@shared/inventory/inventoryProviderSchema";
 import {
   buildListingPublicSlug,
   isListingShareUuid,
@@ -48,7 +48,7 @@ import {
   profileHasDbPoolHardFilters,
   refineMatchingPoolCandidates,
 } from "@shared/inventory/inventoryMatchingPoolFilters";
-import type { BuyerMatchCriteria } from "@shared/inventory/inventoryMatchScoring";
+import type { BuyerMatchCriteria, MatchListingInput } from "@shared/inventory/inventoryMatchScoring";
 import { db } from "../../drizzle/db";
 import { decryptIntegrationConfig, encryptIntegrationConfig } from "../integrationConfigCrypto";
 
@@ -57,7 +57,7 @@ function devSeedListingExcludeCondition() {
   return sql`${inventoryListings.providerListingId} not like 'dev-seed-%'`;
 }
 
-function isBlockedDevSeedListingRow(row: InventoryListing): boolean {
+function isBlockedDevSeedListingRow(row: { providerListingId: string }): boolean {
   return isProductionDevSeedGuardEnabled() && isDevSeedProviderListingId(row.providerListingId);
 }
 
@@ -250,7 +250,7 @@ export async function resolveMatchingListingLimitForUser(userId: string): Promis
   const sources = await listInventorySources(userId);
   let limit = DEFAULT_MAX_LISTINGS;
   for (const source of sources) {
-    if (!providerSupportsListingSync(source.provider)) continue;
+    if (!providerSupportsListingSync(source.provider as InventoryProvider)) continue;
     const scope = readInventorySyncScope((source.config || {}) as Record<string, unknown>);
     limit = Math.max(limit, scope.maxListings);
   }
@@ -680,7 +680,15 @@ export async function fetchMatchingPoolListings(
 
   let listings = await selectMatchingPoolRows(userId, limit, criteria);
   if (criteria && profileHasDbPoolHardFilters(criteria)) {
-    listings = refineMatchingPoolCandidates(listings, criteria);
+    const matchInputs = listings.map((row) => ({
+      ...row,
+      beds: row.beds != null ? Number(row.beds) : null,
+      baths: row.baths != null ? Number(row.baths) : null,
+    })) as MatchListingInput[];
+    const refinedIds = new Set(
+      refineMatchingPoolCandidates(matchInputs, criteria).map((row) => row.id),
+    );
+    listings = listings.filter((row) => refinedIds.has(row.id));
   }
 
   return {
@@ -997,7 +1005,7 @@ export async function setListingPublication(
     }
     const rejection = getPublicListingPublishRejectionReason({
       status: listing.status,
-      listingCompliance: listing.listingCompliance,
+      listingCompliance: normalizeListingCompliance(listing.listingCompliance),
     });
     if (rejection) {
       throw new Error(rejection);
@@ -1154,7 +1162,7 @@ async function applyDirectShareMlsGate(
   if (
     !canDirectShareListing({
       status: listing.status,
-      listingCompliance: listing.listingCompliance,
+      listingCompliance: normalizeListingCompliance(listing.listingCompliance),
     })
   ) {
     return undefined;
@@ -1327,7 +1335,7 @@ export type ListingDirectShareMeta = {
 export function getListingDirectShareMeta(listing: InventoryListing): ListingDirectShareMeta {
   const blockedReason = getDirectShareRejectionReason({
     status: listing.status,
-    listingCompliance: listing.listingCompliance,
+    listingCompliance: normalizeListingCompliance(listing.listingCompliance),
   });
   return {
     allowed: blockedReason == null,
@@ -1348,7 +1356,7 @@ export async function createDirectShareLinkForUserListing(
 
   const rejection = getDirectShareRejectionReason({
     status: listing.status,
-    listingCompliance: listing.listingCompliance,
+    listingCompliance: normalizeListingCompliance(listing.listingCompliance),
   });
   if (rejection) {
     throw new Error(rejection);
@@ -1361,7 +1369,7 @@ export async function createDirectShareLinkForUserListing(
     workspacePublishListingsPublicly: workspaceOn,
     listingPublishPublicly: refreshed.publishPublicly,
     status: refreshed.status,
-    listingCompliance: refreshed.listingCompliance,
+    listingCompliance: normalizeListingCompliance(refreshed.listingCompliance),
   });
 
   const resolvedSlug = refreshed.publicSlug?.trim() || publicSlug?.trim() || null;
@@ -1441,7 +1449,7 @@ export async function getPublicListingFlyerData(
       workspacePublishListingsPublicly: workspaceOn,
       listingPublishPublicly: listing.publishPublicly,
       status: listing.status,
-      listingCompliance: listing.listingCompliance,
+      listingCompliance: normalizeListingCompliance(listing.listingCompliance),
     });
 
     return {

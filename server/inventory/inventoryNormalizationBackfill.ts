@@ -86,6 +86,8 @@ export async function backfillStoredListingNormalizationForUser(
         description: inventoryListings.description,
         features: inventoryListings.features,
         listingDetails: inventoryListings.listingDetails,
+        addressLine1: inventoryListings.addressLine1,
+        addressLine2: inventoryListings.addressLine2,
       })
       .from(inventoryListings)
       .where(and(...conditions))

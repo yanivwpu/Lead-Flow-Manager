@@ -11,7 +11,7 @@ import { hasActivePaidPlan } from "./trialEntitlements";
 import { storage } from "./storage";
 
 export async function findAttributableDemoBookingForUser(
-  user: Pick<User, "name" | "email" | "phone">,
+  user: Pick<User, "name" | "email">,
 ): Promise<(typeof demoBookings.$inferSelect) | undefined> {
   const normalizedEmail = (user.email || "").toLowerCase().trim();
   if (!normalizedEmail) return undefined;
@@ -61,6 +61,10 @@ export async function tryRecordDemoConversionForUser(
   const demoDate = booking.scheduledDate ? new Date(booking.scheduledDate) : undefined;
   if (!demoDate || Number.isNaN(demoDate.getTime())) {
     return { created: false, reason: "invalid_demo_date" };
+  }
+
+  if (!booking.salespersonId) {
+    return { created: false, reason: "no_salesperson_on_booking" };
   }
 
   const withinWindow = isWithinConversionAttributionWindow(demoDate, conversionDate);

@@ -396,14 +396,14 @@ export function behaviorForActionGroup(group: string): NextBestActionBehavior {
 export function buildContextualNextActions(ctx: ContextualActionContext): ContextualNextAction[] {
   if (ctx.handoffActive) {
     return [
-      { label: "Assign agent", behavior: "assign" },
-      { label: "Reply personally", behavior: "composer" },
+      { label: "Assign agent", behavior: "assign" as const },
+      { label: "Reply personally", behavior: "composer" as const },
     ].slice(0, 3);
   }
 
   return dedupeActionCandidates(collectContextualActionCandidates(ctx)).map((c) => ({
     label: c.label,
-    behavior: behaviorForActionGroup(c.group),
+    behavior: behaviorForActionGroup(c.group) as ContextualNextAction["behavior"],
   }));
 }
 

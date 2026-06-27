@@ -328,7 +328,7 @@ export async function findMatchingListingsForContact(
         }
       }),
     )
-  ).filter((m): m is InventoryMatchResult => m != null);
+  ).filter((m): m is NonNullable<typeof m> => m != null);
   const funnel = auditBuySearchMatchFunnel(inputs, criteria, { rankLimit: pageLimit, sampleLimit: 20 });
   const profileSnapshot = buildPersistedProfileSnapshotForDiagnostics(profile, criteria);
 

@@ -144,7 +144,7 @@ export async function evaluateGrowthEngineAccess(userId: string): Promise<Growth
     return result;
   }
 
-  const hasProTier = limits.plan === "pro" || limits.plan === "scale";
+  const hasProTier = limits.plan === "pro";
   const hasAIBrainAddon = !!limits.hasAIBrainAddon;
   const workflowsEnabled = !!limits.workflowsEnabled;
 

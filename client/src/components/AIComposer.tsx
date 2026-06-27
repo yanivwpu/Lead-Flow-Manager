@@ -77,7 +77,7 @@ export interface AIComposerProps {
   demoMode?: boolean;
   setTyping?: (typing: boolean) => void;
   typingTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
-  fileInputRef?: React.RefObject<HTMLInputElement>;
+  fileInputRef?: React.RefObject<HTMLInputElement | null>;
   handleFileSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   /** When set, Copilot can attach listing photo without switching AI mode to Manual. */
   onAttachPendingMedia?: (media: {
@@ -90,6 +90,8 @@ export interface AIComposerProps {
   metaReplyWindowNotice?: { variant: "soon" | "expired"; text: string } | null;
   /** When true, Send works with empty text (attachment-only send). */
   hasPendingAttachment?: boolean;
+  /** Opens template picker when provided (inbox composer). */
+  onTemplate?: () => void;
 }
 
 const MIN_TEXTAREA_HEIGHT = 58;

@@ -44,7 +44,7 @@ const TEMPLATE_PRICE_CENTS = 19900;
 function buildRgeSubscriptionPayload(ge: Awaited<ReturnType<typeof evaluateGrowthEngineAccess>>) {
   const limits = ge.ok ? ge.limits : ge.limits;
   const hasPro = ge.ok
-    ? ge.limits.plan === "pro" || ge.limits.plan === "scale"
+    ? ge.limits.plan === "pro"
     : ge.hasProTier;
   const hasAI = ge.ok ? !!ge.limits.hasAIBrainAddon : ge.hasAIBrainAddon;
   return {
@@ -71,8 +71,6 @@ export function registerTemplateRoutes(app: Express) {
       const subscription = buildRgeSubscriptionPayload(ge);
 
       res.json({
-        hasPro: subscription.hasPro,
-        hasAI: subscription.hasAI,
         plan,
         ...subscription,
       });
@@ -412,6 +410,10 @@ export function registerTemplateRoutes(app: Express) {
       const entitlement = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
       if (!entitlement || entitlement.status === "locked") {
         return res.status(403).json({ error: "Template not purchased" });
+      }
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
       }
 
       if (user.email !== "demo@whachat.com") {
@@ -756,7 +758,7 @@ export function registerTemplateRoutes(app: Express) {
     try {
       const userId = (req.user as any).id;
       const data = await storage.getUserTemplateDataByKey(userId, TEMPLATE_ID, "routing_config", "realtor_service_routing");
-      res.json({ services: data?.definition?.services || null });
+      res.json({ services: (data?.definition as { services?: unknown } | undefined)?.services || null });
     } catch (error: any) {
       console.error("[Template] Routing config fetch error:", error);
       res.status(500).json({ error: "Failed to fetch routing config" });

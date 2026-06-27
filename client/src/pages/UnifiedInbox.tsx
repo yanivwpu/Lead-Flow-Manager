@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, type ComponentProps } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { WHATSAPP_FREE_FORM_BUFFER_MS } from "@shared/conversationReplyWindow";
 import {
@@ -123,6 +123,10 @@ import { formatOutboundSendErrorDescription } from "@/lib/webchatSendError";
 import { webchatSendErrorDescription } from "@shared/webchatSendErrors";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok' | 'gohighlevel' | string;
+
+type InboxLeadDetailsPanelContact = ComponentProps<typeof InboxLeadDetailsPanel>["contact"];
+type InboxLeadDetailsPanelConversation = ComponentProps<typeof InboxLeadDetailsPanel>["primaryConversation"];
+
 type FilterTab = 'all' | 'unread' | 'mine';
 
 interface Contact {
@@ -160,6 +164,7 @@ interface Conversation {
   channel: Channel;
   status: string;
   unreadCount: number;
+  channelAccountId?: string | null;
   lastMessageAt?: string;
   lastMessagePreview?: string;
   lastMessageDirection?: string;
@@ -1058,7 +1063,7 @@ export function UnifiedInbox() {
 
   const activeHandoff = useMemo(() => {
     const convId = primaryConversation?.id;
-    if (!convId || !isConversationHandoffActive(handoffTimeline, convId)) return null;
+    if (!convId || !isConversationHandoffActive(handoffTimeline as import("@shared/handoffActivity").HandoffTimelineEvent[], convId)) return null;
     const match = handoffTimeline.find((e) => {
       if (e.eventType !== "ai_handoff") return false;
       if (convId && e.conversationId) return e.conversationId === convId;
@@ -3114,8 +3119,8 @@ export function UnifiedInbox() {
       {/* ── RIGHT COLUMN: CRM Panel (desktop) ── */}
       {!isMobile && selectedContactId && contact && (
         <InboxLeadDetailsPanel
-          contact={contact}
-          primaryConversation={primaryConversation}
+          contact={contact as InboxLeadDetailsPanelContact}
+          primaryConversation={primaryConversation as InboxLeadDetailsPanelConversation}
           teamMembers={teamMembers}
           messages={messages.map(m => ({ direction: m.direction, content: m.content || '' }))}
           capabilities={capabilities}
@@ -3157,8 +3162,8 @@ export function UnifiedInbox() {
             <div className="flex-1 min-h-0 overflow-y-auto">
               {showDetailsSheet && selectedContactId && contact ? (
                 <InboxLeadDetailsPanel
-                  contact={contact}
-                  primaryConversation={primaryConversation}
+                  contact={contact as InboxLeadDetailsPanelContact}
+                  primaryConversation={primaryConversation as InboxLeadDetailsPanelConversation}
                   teamMembers={teamMembers}
                   messages={messages.map(m => ({ direction: m.direction, content: m.content || '' }))}
                   capabilities={capabilities}

@@ -42,6 +42,7 @@ export type PublicListingFlyerListing = {
   city: string | null;
   state: string | null;
   zip: string | null;
+  country?: string | null;
   latitude: number | null;
   longitude: number | null;
   status: string;

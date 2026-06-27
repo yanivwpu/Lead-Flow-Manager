@@ -100,7 +100,7 @@ export function detectPreferenceArrayReplacements(text: string): PreferenceArray
 }
 
 export function logBuyerPreferenceFastPath(
-  event: "preference_change_detected" | "profile_updated" | "inventory_refresh_triggered",
+  event: "preference_change_detected" | "preference_change_skipped" | "profile_updated" | "inventory_refresh_triggered",
   payload: Record<string, unknown>,
 ): void {
   console.log(

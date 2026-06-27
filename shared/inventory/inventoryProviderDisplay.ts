@@ -1,4 +1,7 @@
 import type { InventoryProvider } from "./inventoryProviderSchema";
+import { isDevSeedOriginatingSystem } from "./inventoryDevSeedGuard";
+
+export { isDevSeedOriginatingSystem };
 
 /**
  * Inventory feed roadmap (listing sync providers only — not CRM bridges):
@@ -56,8 +59,6 @@ export function isDevSeedDisplayName(value: string | null | undefined): boolean 
   if (!value?.trim()) return false;
   return DEV_SEED_LABEL_PATTERN.test(value.trim());
 }
-
-export { isDevSeedOriginatingSystem } from "./inventoryDevSeedGuard";
 
 /** Hide dev-seed labels in production UI — seed scripts unchanged. */
 export function sanitizeInventoryDisplayNameForUi(

@@ -13,7 +13,7 @@ import {
   stripSfhFromMustHaves,
 } from "./buyerPreferencePropertyTypeRelax";
 import {
-  isPlausibleRentBudgetAmount,
+  isPlausibleRentBudgetAmount as isPlausibleRentBudgetAmountFromRentIntent,
   isPlausibleSaleBudgetAmount,
   isRentIntentEvidence,
   isSaleScaleBudgetAmount,

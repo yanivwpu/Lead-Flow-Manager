@@ -132,10 +132,10 @@ export async function processPublicAgentPageLead(
       lastInboundAt: new Date().toISOString(),
       lastSellerIntent: "seller_valuation",
       ...(body.propertyAddress
-        ? { propertyAddress: { value: body.propertyAddress, source: "explicit" as const, confidence: 1 } }
+        ? { propertyAddress: { value: body.propertyAddress, source: "explicit" as const, confidence: 1, updatedAt: new Date().toISOString() } }
         : {}),
       ...(body.reasonForSelling
-        ? { reasonForSelling: { value: body.reasonForSelling, source: "explicit" as const, confidence: 1 } }
+        ? { reasonForSelling: { value: body.reasonForSelling, source: "explicit" as const, confidence: 1, updatedAt: new Date().toISOString() } }
         : {}),
     };
     await persistSellerPreferenceProfile(contactId, profile);

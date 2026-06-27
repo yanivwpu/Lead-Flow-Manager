@@ -16,7 +16,7 @@ import {
 } from "./listingTransactionIntent";
 import { mapResoPropertyType, addressIndicatesUnitNumber } from "./reso/resoListingClassification";
 import { geoConstraintsMatchScore } from "./buyerGeoConstraints";
-import { isMatchableInventoryStatus } from "./inventoryListingSchema";
+import { isMatchableInventoryStatus, type InventoryListingStatus } from "./inventoryListingSchema";
 import {
   VERIFIED_LISTING_REASON,
   filterReasonsToVerifiedListingFacts,
@@ -680,7 +680,7 @@ export function scoreListingAgainstCriteria(
   listing: MatchListingInput,
   criteria: BuyerMatchCriteria,
 ): ScoredInventoryMatch | null {
-  if (!isMatchableInventoryStatus(listing.status)) return null;
+  if (!isMatchableInventoryStatus(listing.status as InventoryListingStatus)) return null;
 
   const breaker = hitsDealBreaker(listing, criteria.dealBreakers);
   if (breaker) return null;
@@ -870,7 +870,7 @@ export function getListingExclusionReason(
   listing: MatchListingInput,
   criteria: BuyerMatchCriteria,
 ): string | null {
-  if (!isMatchableInventoryStatus(listing.status)) return "inactive or unmatchable status";
+  if (!isMatchableInventoryStatus(listing.status as InventoryListingStatus)) return "inactive or unmatchable status";
 
   const breaker = hitsDealBreaker(listing, criteria.dealBreakers);
   if (breaker) return `deal-breaker: ${breaker}`;
@@ -1083,7 +1083,7 @@ export function passesRawRentalSearchShape(
     priceMax: number;
   },
 ): boolean {
-  if (!isMatchableInventoryStatus(listing.status)) return false;
+  if (!isMatchableInventoryStatus(listing.status as InventoryListingStatus)) return false;
   if (listingIsLikelySalePrice(listing.priceCents) && !listingIsRentalOrLease(listing)) {
     return false;
   }
@@ -1365,7 +1365,7 @@ export function auditBuySearchMatchFunnel(
     if (!listing.propertyType && !listing.propertySubtype) dq.nullPropertyType += 1;
     if (listing.listingDetails?.pool == null && !listingHasPoolSignal(listing)) dq.nullPoolField += 1;
 
-    if (!isMatchableInventoryStatus(listing.status)) continue;
+    if (!isMatchableInventoryStatus(listing.status as InventoryListingStatus)) continue;
     nStatus += 1;
 
     const passesTxn =

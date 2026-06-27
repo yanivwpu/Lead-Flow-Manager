@@ -64,6 +64,16 @@ type WhatsappFbSdkState = {
   version?: string;
 };
 
+type EmbeddedSignupSession = {
+  state: string;
+  redirectUri: string;
+  sdk: { appId: string; graphApiVersion: string; configId: string };
+};
+
+type FacebookSdkWindow = Window & typeof globalThis & Record<string, unknown> & {
+  fbAsyncInit?: () => void;
+};
+
 type WabaChoice = {
   wabaId: string;
   wabaName?: string;
@@ -391,7 +401,7 @@ export function ConnectWhatsAppHub({
   }
 
   async function loadFacebookSdk(appId: string, version: string): Promise<void> {
-    const w = window as Window & typeof globalThis & Record<string, unknown>;
+    const w = window as FacebookSdkWindow;
     const state = getWhatsappFbSdkState(w);
 
     const initSdk = () => {
@@ -462,11 +472,7 @@ export function ConnectWhatsAppHub({
       (window as Window & typeof globalThis & Record<string, unknown>)[WCS_WHATSAPP_FB_SDK] as
         | WhatsappFbSdkState
         | undefined;
-    let session: {
-      state: string;
-      redirectUri: string;
-      sdk: { appId: string; graphApiVersion: string; configId: string };
-    } | null = null;
+    let session: EmbeddedSignupSession | null = null;
 
     try {
       setHubBanner(null);
@@ -479,7 +485,7 @@ export function ConnectWhatsAppHub({
       const startJson = await start.json().catch(() => ({}));
       if (!start.ok) throw new Error(startJson?.error || "Could not start Meta signup");
 
-      session = startJson as typeof session;
+      session = startJson as EmbeddedSignupSession;
       const { appId, graphApiVersion, configId } = session!.sdk;
       const appIdMissing = !appId?.trim();
       const configIdMissing = !configId?.trim();

@@ -567,12 +567,15 @@ router.post('/webhook', async (req: Request, res: Response) => {
             const contact = allContacts.find((c: any) => c.ghlId === ghlContactId);
             if (contact) {
               // Log as activity — do NOT change pipelineStage
-              await storage.createActivity({
+              await storage.createActivityEvent({
                 userId,
                 contactId: contact.id,
-                eventType: 'opportunity_deleted',
-                description: `GHL opportunity deleted (id: ${ghlOpportunityId ?? 'unknown'})`,
-                metadata: JSON.stringify({ ghlOpportunityId }),
+                eventType: "opportunity_deleted",
+                eventData: {
+                  description: `GHL opportunity deleted (id: ${ghlOpportunityId ?? "unknown"})`,
+                  ghlOpportunityId,
+                },
+                actorType: "system",
               });
               console.log(
                 `[LeadConnector Webhook] ${timestamp} | OpportunityDelete — activity logged for contact "${contact.id}"`,

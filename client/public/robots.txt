@@ -1,7 +1,5 @@
 User-agent: *
 Allow: /
-Allow: /user-guide
-Allow: /WhachatCRM-User-Guide.html
 Disallow: /api/
 Disallow: /app/
 

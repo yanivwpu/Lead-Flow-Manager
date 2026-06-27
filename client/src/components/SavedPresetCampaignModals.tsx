@@ -439,8 +439,7 @@ export function SavedPresetCampaignModals(props: Props) {
     const safeTotal = Math.max(1, totalSteps);
     const stepNum = Math.min(e.currentStepIndex + 1, safeTotal);
 
-    const showNextSend =
-      e.status === "active" && e.nextRunAt && e.status !== "cancelled";
+    const showNextSend = e.status === "active" && !!e.nextRunAt;
     const showProgress = e.status !== "cancelled";
 
     return (

@@ -59,6 +59,7 @@ import type { Contact as SchemaContact } from "@shared/schema";
 import {
   filterMeaningfulTimelineEvents,
   formatActivityDetailText,
+  type TimelineEventLike,
 } from "@/lib/contactTimelineFilter";
 import {
   Select,
@@ -615,7 +616,7 @@ type ContactActivityEvent = {
   createdAt: string;
 };
 
-function formatContactActivity(event: ContactActivityEvent): { title: string; detail: string; tone: "green" | "amber" | "gray" } {
+function formatContactActivity(event: TimelineEventLike): { title: string; detail: string; tone: "green" | "amber" | "gray" } {
   const data = event.eventData || {};
   const title = typeof data.title === "string" ? data.title : "";
   const eventType = typeof data.eventType === "string" ? data.eventType : "";
@@ -1070,8 +1071,11 @@ export function InboxLeadDetailsPanel({
   const enrollmentPreviewSteps = useMemo(() => {
     if (!pickedCampaignForEnroll?.messages) return [];
     const defaults = normalizeCampaignPlaceholderDefaults(pickedCampaignForEnroll.placeholderDefaults);
+    const messages = Array.isArray(pickedCampaignForEnroll.messages)
+      ? pickedCampaignForEnroll.messages
+      : [];
     return previewCampaignMessageSteps(
-      pickedCampaignForEnroll.messages,
+      messages,
       defaults,
       contact as unknown as SchemaContact,
     );

@@ -185,7 +185,7 @@ export function registerCampaignEnrollmentRoutes(app: Express): void {
       const rows = await storage.getCampaignEnrollmentsForContact(req.user.id, contactId);
       const enriched = await Promise.all(
         rows.map(async (e) => {
-          const c = await storage.getPresetCampaignForUser(e.campaignId, req.user.id);
+          const c = await storage.getPresetCampaignForUser(e.campaignId, req.user!.id);
           const messages = Array.isArray(c?.messages) ? c.messages : [];
           const totalSteps = messages.length;
           const failedStep =

@@ -1,3 +1,4 @@
+import type { NormalizedInventoryListing } from "@shared/inventory/inventoryListingSchema";
 import type { ResoReplicationFetchOptions } from "@shared/inventory/reso/resoProviderContract";
 import type { InventorySyncMode, ResoSyncDiagnostics } from "@shared/inventory/reso/resoSyncTypes";
 import type { InventoryProvider } from "@shared/inventory/inventoryProviderSchema";

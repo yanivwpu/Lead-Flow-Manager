@@ -45,6 +45,12 @@ export function Blog() {
         <meta property="og:title" content="WhatsApp CRM Blog & Guides | WhachatCRM" />
         <meta property="og:description" content="Learn how to grow your business with WhatsApp. Expert guides on WhatsApp CRM, automation, lead management, and customer service." />
         <meta property="og:type" content="website" />
+        <meta property="og:url" content={`${MARKETING_URL}/blog`} />
+        <meta property="og:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=3`} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="WhatsApp CRM Blog & Guides | WhachatCRM" />
+        <meta name="twitter:description" content="Learn how to grow your business with WhatsApp. Expert guides on WhatsApp CRM, automation, lead management, and customer service." />
+        <meta name="twitter:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=3`} />
         <link rel="canonical" href={`${MARKETING_URL}/blog`} />
       </Helmet>
 

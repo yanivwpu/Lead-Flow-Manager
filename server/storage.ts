@@ -68,7 +68,7 @@ import {
   type ConversationReEngagement,
 } from "@shared/reEngagement";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, campaignEnrollments, calendlyCanceledEventTombstones, type InsertConversationWindow, type ConversationWindow, growthEngineSetupTasks } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, type InsertConversationWindow, type ConversationWindow, growthEngineSetupTasks } from "@shared/schema";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray, lt, count } from "drizzle-orm";
 import { getEffectiveTaskPayoutDollars, type TaskPayoutFields } from "./salespersonTaskPayout";
@@ -2113,7 +2113,7 @@ export class DbStorage implements IStorage {
       }).returning();
       await db.update(salespeople)
         .set({ totalBookings: sql`${salespeople.totalBookings} + 1` })
-        .where(eq(salespeople.id, booking.salespersonId));
+        .where(eq(salespeople.id, booking.salespersonId!));
       return mapDemoBookingRow(result[0] as Record<string, unknown>);
     } catch (error: unknown) {
       if (!isDemoBookingsSchemaMismatchError(error)) throw error;
@@ -2132,7 +2132,7 @@ export class DbStorage implements IStorage {
       `);
       await db.update(salespeople)
         .set({ totalBookings: sql`${salespeople.totalBookings} + 1` })
-        .where(eq(salespeople.id, booking.salespersonId));
+        .where(eq(salespeople.id, booking.salespersonId!));
       return mapDemoBookingRow({
         ...(rows.rows[0] as Record<string, unknown>),
         source: booking.source || "web",
@@ -4075,7 +4075,7 @@ export class DbStorage implements IStorage {
         LIMIT ${limit}
         FOR UPDATE SKIP LOCKED
       `);
-      const rows = (picked as { rows: { id: string }[] }).rows;
+      const rows = (picked as unknown as { rows: { id: string }[] }).rows;
       const ids = rows.map((r) => r.id).filter(Boolean);
       if (ids.length === 0) return [];
       const claimed = await tx
@@ -4208,7 +4208,7 @@ export class DbStorage implements IStorage {
         LIMIT ${limit}
         FOR UPDATE SKIP LOCKED
       `);
-      const ids = ((picked as { rows: { id: string }[] }).rows || []).map((r) => r.id).filter(Boolean);
+      const ids = ((picked as unknown as { rows: { id: string }[] }).rows || []).map((r) => r.id).filter(Boolean);
       if (ids.length === 0) return [];
       return await tx
         .update(noReplyJobs)
@@ -4354,7 +4354,7 @@ export class DbStorage implements IStorage {
         LIMIT ${limit}
         FOR UPDATE SKIP LOCKED
       `);
-      const ids = ((picked as { rows: { id: string }[] }).rows || []).map((r) => r.id).filter(Boolean);
+      const ids = ((picked as unknown as { rows: { id: string }[] }).rows || []).map((r) => r.id).filter(Boolean);
       if (ids.length === 0) return [];
       return await tx
         .update(automationTimerJobs)

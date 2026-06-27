@@ -44,15 +44,40 @@ function rewriteComposerDraftListingShareUrl(
   return text.replace(uuidSharePattern, slugViewUrl);
 }
 
-function formatPrice(cents: number | null, listing?: InventoryMatchListingSummary | null): string {
+function toPriceListingSummary(
+  listing?: InventoryMatchListingSummary | ListingDetail["listing"] | null,
+): InventoryMatchListingSummary | null {
+  if (!listing) return null;
+  const beds =
+    typeof listing.beds === "string" ? parseFloat(listing.beds) || null : listing.beds ?? null;
+  const baths =
+    typeof listing.baths === "string" ? parseFloat(listing.baths) || null : listing.baths ?? null;
+  return {
+    id: listing.id ?? "",
+    providerListingId: "providerListingId" in listing ? listing.providerListingId : listing.id,
+    status: listing.status ?? "active",
+    city: listing.city ?? null,
+    state: "state" in listing ? listing.state ?? null : null,
+    addressLine1: listing.addressLine1 ?? null,
+    priceCents: listing.priceCents ?? null,
+    beds,
+    baths,
+    propertyType: listing.propertyType ?? null,
+    listingUrl: listing.listingUrl ?? null,
+    thumbnailUrl: "thumbnailUrl" in listing ? listing.thumbnailUrl ?? null : null,
+  };
+}
+
+function formatPrice(cents: number | null, listing?: InventoryMatchListingSummary | ListingDetail["listing"] | null): string {
+  const summary = toPriceListingSummary(listing);
   return formatListingPriceDisplay(
     cents,
-    listing
+    summary
       ? {
-          propertyType: listing.propertyType,
+          propertyType: summary.propertyType,
           description: null,
           features: [],
-          priceCents: listing.priceCents,
+          priceCents: summary.priceCents,
         }
       : null,
   );
@@ -245,7 +270,6 @@ export function ListingDetailDialog({
 
     const includesRequired = listingComposerDraftIncludesRequiredDetails(draft.text, {
       listingId,
-      publicSlug: listing?.publicSlug ?? null,
       priceCents,
       beds: beds ?? null,
       baths: baths ?? null,

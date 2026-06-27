@@ -336,7 +336,7 @@ export function Chats() {
     
     if (demoMode) {
       setDemoChats(prev => prev.map(chat => 
-        chat.id === selectedChat.id ? { ...chat, ...updates } : chat
+        chat.id === selectedChat.id ? { ...chat, ...updates } as DemoChat : chat
       ));
       return;
     }

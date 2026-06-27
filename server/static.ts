@@ -181,13 +181,20 @@ export function serveStatic(app: Express) {
     app.get(route, (req, res) => {
       fs.readFile(indexPath, "utf-8", (err, html) => {
         if (err) {
+          console.error(`[SSR${route}] Failed to read index.html:`, err.message);
           return res.sendFile(indexPath);
         }
-        
-        const enhancedHtml = injectPageMeta(html, route);
-        res.set("Content-Type", "text/html");
-        res.set("Cache-Control", "public, max-age=3600");
-        res.send(enhancedHtml);
+
+        try {
+          const enhancedHtml = injectPageMeta(html, route);
+          res.set("Content-Type", "text/html");
+          res.set("Cache-Control", "public, max-age=3600");
+          res.send(enhancedHtml);
+        } catch (ssrErr: unknown) {
+          const message = ssrErr instanceof Error ? ssrErr.message : String(ssrErr);
+          console.error(`[SSR${route}] Render failed, falling back to SPA shell:`, message);
+          sendSpaShell(res, indexPath);
+        }
       });
     });
   });

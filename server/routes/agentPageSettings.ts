@@ -32,7 +32,7 @@ export function registerAgentPageSettingsRoutes(app: Express): void {
         req.user.id,
         req.body,
         (body) => agentPageSettingsPatchSchema.safeParse(body),
-        () => buildAgentPageSettingsResponse(req.user.id, appOrigin),
+        () => buildAgentPageSettingsResponse(req.user!.id, appOrigin),
       );
 
       if (!prepared.ok) {

@@ -16,6 +16,10 @@ function escapeHtmlAttr(value: string): string {
     .replace(/>/g, "&gt;");
 }
 
+function jsonLd(value: string): string {
+  return JSON.stringify(value);
+}
+
 /** @deprecated Import from `@shared/blogPosts` */
 export type { BlogPostMeta as BlogPostMeta };
 export { BLOG_POSTS as BLOG_POSTS_META };
@@ -168,9 +172,58 @@ export const PAGE_META: Record<string, PageMeta> = {
     canonical: `${BASE_URL}/pricing`
   },
   "/whatsapp-crm": {
-    title: "WhatsApp CRM with Notes & Tags | WhachatCRM",
-    description: "Turn WhatsApp into a full CRM. Organize conversations, set reminders, collaborate with teams. Free plan available – no credit card needed.",
+    title: "WhatsApp CRM Software — Shared Inbox, AI & Automation | WhachatCRM",
+    description:
+      "Complete WhatsApp CRM guide: Business App vs API, embedded signup, shared inbox, AI Copilot, team collaboration, automations, Shopify and real estate workflows. Free plan available.",
     canonical: `${BASE_URL}/whatsapp-crm`
+  },
+  "/crm-with-mls-integration": {
+    title: "CRM with MLS Integration | AI Property Matching | WhachatCRM",
+    description:
+      "Connect Bridge Interactive MLS data to WhachatCRM. Sync inventory, qualify buyers with AI, match listings automatically, and route leads from WhatsApp and your agent page.",
+    canonical: `${BASE_URL}/crm-with-mls-integration`
+  },
+  "/real-estate-crm": {
+    title: "Real Estate CRM for Agents & Teams | WhachatCRM",
+    description:
+      "Real estate CRM with WhatsApp, unified inbox, AI lead qualification, MLS integration, agent pages, and follow-up automation. Built for agents who close on messaging apps.",
+    canonical: `${BASE_URL}/real-estate-crm`
+  },
+  "/unified-inbox": {
+    title: "Unified Inbox for WhatsApp, Messenger & Instagram | WhachatCRM",
+    description:
+      "Omnichannel shared inbox for WhatsApp, Facebook Messenger, and Instagram. AI Copilot, team assignments, internal notes, lead scoring, and full conversation history in one place.",
+    canonical: `${BASE_URL}/unified-inbox`
+  },
+  "/shopify-crm": {
+    title: "Shopify CRM with WhatsApp & AI Automation | WhachatCRM",
+    description:
+      "Shopify CRM connecting orders, abandoned carts, and customer support to WhatsApp, Messenger, and Instagram. Preset ecommerce automations, AI Copilot, and unified inbox.",
+    canonical: `${BASE_URL}/shopify-crm`
+  },
+  "/whatsapp-business-api": {
+    title: "WhatsApp Business API Setup & CRM | WhachatCRM",
+    description:
+      "Connect the official Meta WhatsApp Business API with embedded signup. Verification, shared inbox, chatbot automations, AI Copilot, analytics, and team collaboration — no BSP markup.",
+    canonical: `${BASE_URL}/whatsapp-business-api`
+  },
+  "/ai-lead-scoring": {
+    title: "AI Lead Scoring & Qualification | WhachatCRM",
+    description:
+      "AI lead scoring for WhatsApp and omnichannel sales. Qualify buyers and sellers, prioritize hot leads, automate follow-ups, and route conversations with WhachatCRM AI Copilot.",
+    canonical: `${BASE_URL}/ai-lead-scoring`
+  },
+  "/shared-team-inbox": {
+    title: "Shared Team Inbox for WhatsApp & Social | WhachatCRM",
+    description:
+      "Shared team inbox with assignments, internal notes, conversation ownership, AI assistance, and full visibility for WhatsApp, Messenger, and Instagram teams.",
+    canonical: `${BASE_URL}/shared-team-inbox`
+  },
+  "/automation-templates": {
+    title: "Automation Templates for WhatsApp & CRM | WhachatCRM",
+    description:
+      "Built-in automation templates for abandoned cart recovery, appointment reminders, buyer and seller follow-up, Shopify, customer support, real estate, and re-engagement campaigns.",
+    canonical: `${BASE_URL}/automation-templates`
   },
   "/respond-io-alternative": {
     title: "Best Respond.io Alternative | WhachatCRM",
@@ -238,9 +291,9 @@ export const PAGE_META: Record<string, PageMeta> = {
     canonical: `${BASE_URL}/data-deletion`
   },
   "/user-guide": {
-    title: "User Guide & Getting Started | WhachatCRM",
+    title: "Help Center & User Guide | WhachatCRM",
     description:
-      "Step-by-step guide: connect WhatsApp with Meta embedded signup, unified inbox, templates, campaigns, AI Copilot, integrations, and billing.",
+      "Complete WhachatCRM Help Center: onboarding, WhatsApp embedded signup, unified inbox, AI Copilot, Growth Engine, MLS, Shopify, agent pages, and 40+ FAQs.",
     canonical: `${BASE_URL}/user-guide`
   },
   "/unsubscribe": {
@@ -268,6 +321,10 @@ export function injectPageMeta(html: string, url: string): string {
     return html;
   }
 
+  const safeTitle = escapeHtmlAttr(pageMeta.title);
+  const safeDescription = escapeHtmlAttr(pageMeta.description);
+  const ogImage = pageMeta.ogImage || `${BASE_URL}/og/og-whachatcrm.png?v=3`;
+
   // Remove existing meta tags to prevent duplicates
   html = html.replace(/<meta property="og:title"[^>]*>/gi, '');
   html = html.replace(/<meta property="og:description"[^>]*>/gi, '');
@@ -284,22 +341,33 @@ export function injectPageMeta(html: string, url: string): string {
   html = html.replace(/<link rel="canonical"[^>]*>/gi, '');
 
   const metaTags = `
-    <title>${pageMeta.title}</title>
-    <meta name="description" content="${pageMeta.description}" />
-    <meta property="og:title" content="${pageMeta.title}" />
-    <meta property="og:description" content="${pageMeta.description}" />
+    <title>${safeTitle}</title>
+    <meta name="description" content="${safeDescription}" />
+    <meta property="og:title" content="${safeTitle}" />
+    <meta property="og:description" content="${safeDescription}" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${pageMeta.canonical}" />
-    <meta property="og:image" content="${pageMeta.ogImage || `${BASE_URL}/og/og-whachatcrm.png?v=3`}" />
-    <meta property="og:image:alt" content="${pageMeta.title}" />
+    <meta property="og:image" content="${ogImage}" />
+    <meta property="og:image:secure_url" content="${ogImage}" />
+    <meta property="og:image:alt" content="${safeTitle}" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${pageMeta.title}" />
-    <meta name="twitter:description" content="${pageMeta.description}" />
-    <meta name="twitter:image" content="${pageMeta.ogImage || `${BASE_URL}/og/og-whachatcrm.png?v=3`}" />
-    <meta name="twitter:image:alt" content="WhachatCRM – WhatsApp CRM & Automation Platform" />
-    <link rel="canonical" href="${pageMeta.canonical}" />`;
+    <meta name="twitter:title" content="${safeTitle}" />
+    <meta name="twitter:description" content="${safeDescription}" />
+    <meta name="twitter:image" content="${ogImage}" />
+    <meta name="twitter:image:alt" content="${safeTitle}" />
+    <link rel="canonical" href="${pageMeta.canonical}" />
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": ${jsonLd(pageMeta.title)},
+      "description": ${jsonLd(pageMeta.description)},
+      "url": ${jsonLd(pageMeta.canonical)},
+      "isPartOf": { "@id": "${BASE_URL}/#website" }
+    }
+    </script>`;
 
   html = html.replace(/<title>.*?<\/title>/, metaTags);
   return html;

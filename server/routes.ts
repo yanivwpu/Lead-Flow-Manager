@@ -3782,7 +3782,7 @@ export async function registerRoutes(
       const cancelPath = sanitizeStripeReturnPath(cancelTo ?? redirectTo, successPath);
       const result = await subscriptionService.createCheckoutSession(
         req.user.id,
-        planId,
+        planId as SubscriptionPlan,
         baseUrl,
         billingInterval || "monthly",
         { successReturnPath: successPath, cancelReturnPath: cancelPath }
@@ -6763,6 +6763,7 @@ export async function registerRoutes(
         calendlyEventTypes?: string[];
         calendlyWebhookStatus?: string;
         calendlyWebhookError?: string;
+        calendlySyncMode?: string;
         message?: string;
       } = {};
 
@@ -8318,7 +8319,7 @@ export async function registerRoutes(
       const booking = await storage.updateDemoBooking(req.params.id, bookingUpdates as any);
       
       // If status changed to 'converted', automatically create a conversion record
-      if (status === 'converted' && currentBooking && currentBooking.status !== 'converted') {
+      if (status === 'converted' && currentBooking && currentBooking.status !== 'converted' && currentBooking.salespersonId) {
         const { SALES_CONVERSION_PAYOUT_DOLLARS } = await import("@shared/salesCompensation");
         await storage.createSalesConversion({
           bookingId: req.params.id,

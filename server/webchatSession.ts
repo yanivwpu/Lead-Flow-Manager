@@ -52,7 +52,7 @@ export async function isWebchatVisitorSessionActive(
   let lastInboundMs = 0;
   for (const message of messages) {
     if (message.direction !== "inbound") continue;
-    const ms = new Date(message.createdAt).getTime();
+    const ms = message.createdAt ? new Date(message.createdAt).getTime() : 0;
     if (ms > lastInboundMs) lastInboundMs = ms;
   }
   if (!lastInboundMs) return false;

@@ -12,7 +12,7 @@ import {
   extractBuyerMatchCriteria,
   scoreListingAgainstCriteria,
 } from "@shared/inventory/inventoryMatchScoring";
-import { isMatchableInventoryStatus } from "@shared/inventory/inventoryListingSchema";
+import { isMatchableInventoryStatus, type InventoryListingStatus } from "@shared/inventory/inventoryListingSchema";
 import { normalizeListingCompliance } from "@shared/inventory/inventoryListingCompliance";
 import { isCopilotAgentShareListing } from "@shared/inventory/publicListingPublication";
 import { readBuyerPreferenceProfile } from "../buyerPreferenceService";
@@ -81,7 +81,7 @@ async function processAlertResults(
 
   for (const alert of alertResults) {
     const listing = listingById.get(alert.listingId);
-    if (!listing || !isMatchableInventoryStatus(listing.status)) continue;
+    if (!listing || !isMatchableInventoryStatus(listing.status as InventoryListingStatus)) continue;
     if (
       !isCopilotAgentShareListing({
         status: listing.status,
@@ -315,7 +315,7 @@ export async function findInventoryOpportunitiesForContact(
   const opportunities = rows
     .map((row) => {
       const listing = listingById.get(row.listingId);
-      if (!listing || !isMatchableInventoryStatus(listing.status)) return null;
+      if (!listing || !isMatchableInventoryStatus(listing.status as InventoryListingStatus)) return null;
       return toPublicOpportunity(row, listing);
     })
     .filter(Boolean) as InventoryOpportunityResult[];

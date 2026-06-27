@@ -27,13 +27,28 @@ export function SiteFooter() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 lg:gap-12 flex-1">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-8 lg:gap-10 flex-1">
             <div className={isRTL ? 'text-right' : ''}>
               <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wider mb-4">{t('home.footer.product', 'Product')}</h3>
               <ul className="space-y-2.5 text-sm text-gray-500">
                 <li><Link href="/pricing"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.pricing', 'Pricing')}</span></Link></li>
                 <li><Link href="/whatsapp-crm"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.whatsappCrm', 'WhatsApp CRM')}</span></Link></li>
+                <li><Link href="/unified-inbox"><span className="hover:text-gray-900 transition-colors cursor-pointer">Unified Inbox</span></Link></li>
+                <li><Link href="/whatsapp-business-api"><span className="hover:text-gray-900 transition-colors cursor-pointer">WhatsApp Business API</span></Link></li>
+                <li><Link href="/crm-for-whatsapp-business"><span className="hover:text-gray-900 transition-colors cursor-pointer">CRM for WhatsApp Business</span></Link></li>
                 <li><Link href="/contact"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.contact', 'Contact')}</span></Link></li>
+              </ul>
+            </div>
+
+            <div className={isRTL ? 'text-right' : ''}>
+              <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wider mb-4">Solutions</h3>
+              <ul className="space-y-2.5 text-sm text-gray-500">
+                <li><Link href="/shopify-crm"><span className="hover:text-gray-900 transition-colors cursor-pointer">Shopify CRM</span></Link></li>
+                <li><Link href="/real-estate-crm"><span className="hover:text-gray-900 transition-colors cursor-pointer">Real Estate CRM</span></Link></li>
+                <li><Link href="/crm-with-mls-integration"><span className="hover:text-gray-900 transition-colors cursor-pointer">MLS Integration</span></Link></li>
+                <li><Link href="/ai-lead-scoring"><span className="hover:text-gray-900 transition-colors cursor-pointer">AI Lead Scoring</span></Link></li>
+                <li><Link href="/shared-team-inbox"><span className="hover:text-gray-900 transition-colors cursor-pointer">Shared Team Inbox</span></Link></li>
+                <li><Link href="/automation-templates"><span className="hover:text-gray-900 transition-colors cursor-pointer">Automation Templates</span></Link></li>
               </ul>
             </div>
 
@@ -49,11 +64,14 @@ export function SiteFooter() {
             <div className={isRTL ? 'text-right' : ''}>
               <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wider mb-4">{t('home.footer.comparisons', 'Comparisons')}</h3>
               <ul className="space-y-2.5 text-sm text-gray-500">
+                <li><Link href="/best-whatsapp-crm-2026"><span className="hover:text-gray-900 transition-colors cursor-pointer">Best WhatsApp CRM 2026</span></Link></li>
                 <li><Link href="/respond-io-alternative"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.respondAlt', 'Respond.io Alternative')}</span></Link></li>
                 <li><Link href="/wati-alternative"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.watiAlt', 'WATI Alternative')}</span></Link></li>
                 <li><Link href="/zoko-alternative"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.zokoAlt', 'Zoko Alternative')}</span></Link></li>
                 <li><Link href="/manychat-alternative"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.manychatAlt', 'Manychat Alternative')}</span></Link></li>
                 <li><Link href="/pabbly-alternative"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.pabblyAlt', 'Pabbly Alternative')}</span></Link></li>
+                <li><Link href="/interakt-alternative"><span className="hover:text-gray-900 transition-colors cursor-pointer">Interakt Alternative</span></Link></li>
+                <li><Link href="/waba360-alternative"><span className="hover:text-gray-900 transition-colors cursor-pointer">360dialog Alternative</span></Link></li>
               </ul>
             </div>
 

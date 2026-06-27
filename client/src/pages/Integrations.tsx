@@ -719,6 +719,7 @@ export function Integrations() {
         message?: string;
         details?: string;
         lastHubSpotSync?: Record<string, unknown>;
+        calendlySyncMode?: string;
       };
       if (!res.ok) {
         throw new Error(data.error || data.message || `Sync could not finish (${res.status})`);

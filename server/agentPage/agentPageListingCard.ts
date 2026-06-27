@@ -5,6 +5,7 @@ import {
 } from "@shared/agent/agentPageListingDisplay";
 import { buildListingCanonicalShareUrl, pickPrimaryPhotoUrl } from "@shared/inventory/listingViewUrl";
 import { formatListingPriceForComposer } from "@shared/inventory/inventoryComposerDraft";
+import { normalizeListingCompliance } from "@shared/inventory/inventoryListingCompliance";
 import { canShowPublicStreetAddress } from "@shared/inventory/publicListingPublication";
 import {
   resolveFlyerListingLabel,
@@ -40,10 +41,10 @@ export function inventoryListingToAgentPageCard(
     status: listing.status,
     providerListingId: listing.providerListingId,
     listingDetails: (listing.listingDetails || {}) as PublicListingFlyerListing["listingDetails"],
-    listingCompliance: listing.listingCompliance,
+    listingCompliance: normalizeListingCompliance(listing.listingCompliance),
   };
 
-  const allowStreet = canShowPublicStreetAddress(listing.listingCompliance);
+  const allowStreet = canShowPublicStreetAddress(normalizeListingCompliance(listing.listingCompliance));
   const street = allowStreet
     ? [listing.addressLine1, listing.addressLine2].filter(Boolean).join(", ") || null
     : null;

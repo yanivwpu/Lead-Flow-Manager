@@ -1923,6 +1923,9 @@ export function registerTemplateRoutes(app: Express): void {
         recipientName = contact.name;
         crmContactId = contact.id;
       } else {
+        if (!chatId) {
+          return reply(400, { error: "chatId or contactId is required" }, "missing_recipient");
+        }
         const chat = await storage.getChat(chatId);
         if (!chat || chat.userId !== req.user.id) {
           console.warn(
@@ -2700,7 +2703,7 @@ export function registerTemplateRoutes(app: Express): void {
           );
           const displayContent = buildOutboundTemplateDisplayContent(
             {
-              name: displaySource.name,
+              name: displaySource.name ?? "",
               bodyText: displaySource.bodyText,
               headerType: displaySource.headerType,
               headerContent: displaySource.headerContent,
