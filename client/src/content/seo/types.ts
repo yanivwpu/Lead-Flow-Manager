@@ -27,6 +27,8 @@ export type SeoLandingPageConfig = {
   heroFlow?: string[];
   breadcrumbs: SeoBreadcrumbItem[];
   heroImage?: MarketingScreenshotMeta;
+  /** Stack screenshot below copy (default) or show compact screenshot beside copy. */
+  heroLayout?: "stack" | "split";
   ctaHeadline?: string;
   sections: SeoLandingSection[];
   faqs: SeoFaqItem[];

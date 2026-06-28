@@ -5,6 +5,7 @@ import { S } from "@shared/marketingScreenshots";
 
 const heroUnifiedInbox = {
   ...S.unifiedInbox,
+  size: "hero" as const,
   title: "Conversation + AI property matching",
   caption:
     "A buyer messages on WhatsApp, AI qualifies the lead, and matching MLS listings appear instantly in the inbox sidebar.",
@@ -182,6 +183,7 @@ export const realEstateCrmConfig: SeoLandingPageConfig = {
   breadcrumbs: SEO_BREADCRUMBS.page("Real Estate CRM", "real-estate-crm"),
   heroImage: {
     ...S.unifiedInbox,
+    size: "hero",
     title: "Unified inbox with AI property matching",
     caption:
       "AI Copilot, inventory matches, and the customer conversation — all in one workspace built for real estate agents.",
@@ -328,6 +330,7 @@ export const unifiedInboxConfig: SeoLandingPageConfig = {
   breadcrumbs: SEO_BREADCRUMBS.page("Unified Inbox", "unified-inbox"),
   heroImage: {
     ...S.unifiedInbox,
+    size: "hero",
     title: "Full unified inbox",
     caption:
       "WhatsApp, Messenger, AI Copilot, property recommendations, and lead qualification — the complete messaging workspace.",
@@ -472,6 +475,7 @@ export const shopifyCrmConfig: SeoLandingPageConfig = {
   // TODO: Replace hero with an authentic Shopify workflow screenshot (cart recovery / order context) when available.
   heroImage: {
     ...S.unifiedInbox,
+    size: "hero",
     title: "WhatsApp-first customer conversations",
     caption:
       "Until a dedicated Shopify screenshot is available, the unified inbox shows how order support and cart recovery conversations look in WhachatCRM.",

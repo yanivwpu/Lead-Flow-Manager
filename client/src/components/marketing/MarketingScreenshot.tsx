@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { X, ZoomIn } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { MarketingScreenshotMeta } from "@shared/marketingScreenshots";
+import type { MarketingScreenshotMeta, MarketingScreenshotSize } from "@shared/marketingScreenshots";
+import { screenshotDisplayWidth } from "@shared/marketingScreenshots";
 
 type Props = MarketingScreenshotMeta & {
   className?: string;
   priority?: boolean;
-  /** Hero screenshots are larger with premium framing for above-the-fold use. */
+  /** @deprecated Use `size` on meta instead. */
   variant?: "default" | "hero";
+  captionAlign?: "center" | "left";
 };
+
+const FRAME =
+  "overflow-hidden rounded-xl border border-gray-200/80 bg-gray-50 shadow-md shadow-gray-200/40 transition-shadow hover:shadow-lg";
 
 export function MarketingScreenshot({
   src,
@@ -16,13 +21,19 @@ export function MarketingScreenshot({
   caption,
   title,
   figure,
-  width = 1400,
-  height = 900,
+  width,
+  height,
+  size: sizeProp,
   className,
   priority = false,
-  variant = "default",
+  variant,
+  captionAlign = "center",
 }: Props) {
-  const isHero = variant === "hero";
+  const size: MarketingScreenshotSize =
+    sizeProp ?? (variant === "hero" ? "hero" : "content");
+  const nativeWidth = width ?? 640;
+  const nativeHeight = height ?? Math.round(nativeWidth * 0.62);
+  const displayWidth = screenshotDisplayWidth(nativeWidth, size);
   const [open, setOpen] = useState(false);
 
   const close = useCallback(() => setOpen(false), []);
@@ -42,22 +53,19 @@ export function MarketingScreenshot({
   }, [open, close]);
 
   const figCaption =
-    caption ??
-    (figure != null ? `Figure ${figure}. ${alt}` : undefined);
+    caption ?? (figure != null ? `Figure ${figure}. ${alt}` : undefined);
 
   return (
     <>
       <figure
-        className={cn(
-          isHero ? "mx-auto my-0 w-full max-w-[1150px]" : "my-10",
-          className,
-        )}
+        className={cn("mx-auto w-full", className)}
+        style={{ maxWidth: displayWidth }}
       >
         {title ? (
           <p
             className={cn(
-              "font-semibold text-gray-800",
-              isHero ? "mb-3 text-center text-base md:text-lg" : "mb-2 text-sm",
+              "mb-2 text-sm font-semibold text-gray-800",
+              captionAlign === "center" && "text-center",
             )}
           >
             {title}
@@ -67,34 +75,31 @@ export function MarketingScreenshot({
           type="button"
           onClick={() => setOpen(true)}
           className={cn(
-            "group relative block w-full overflow-hidden bg-gray-50 text-left transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2",
-            isHero
-              ? "rounded-2xl border border-gray-200/80 shadow-lg shadow-gray-200/50 hover:shadow-xl"
-              : "rounded-xl border border-gray-200 shadow-sm hover:shadow-md",
+            "group relative block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2",
+            FRAME,
           )}
           aria-label={`Enlarge: ${alt}`}
         >
           <img
             src={src}
             alt={alt}
-            width={width}
-            height={height}
+            width={nativeWidth}
+            height={nativeHeight}
             loading={priority ? "eager" : "lazy"}
             decoding="async"
-            className="w-full object-contain"
+            className="mx-auto block h-auto w-full max-w-full object-contain"
+            style={{ maxWidth: displayWidth }}
           />
-          <span className="pointer-events-none absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-xs font-medium text-gray-600 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-            <ZoomIn className="h-3.5 w-3.5" />
-            Click to enlarge
+          <span className="pointer-events-none absolute bottom-2.5 right-2.5 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-medium text-gray-600 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+            <ZoomIn className="h-3 w-3" />
+            Enlarge
           </span>
         </button>
         {figCaption ? (
           <figcaption
             className={cn(
-              "leading-relaxed text-gray-600",
-              isHero
-                ? "mt-4 text-center text-sm md:text-base"
-                : "mt-3 text-center text-sm",
+              "mt-2.5 text-xs leading-relaxed text-gray-500",
+              captionAlign === "center" ? "text-center" : "text-left",
             )}
           >
             {figCaption}
@@ -121,7 +126,10 @@ export function MarketingScreenshot({
           <img
             src={src}
             alt={alt}
-            className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
+            width={nativeWidth}
+            height={nativeHeight}
+            className="max-h-[90vh] rounded-lg object-contain shadow-2xl"
+            style={{ maxWidth: nativeWidth }}
             onClick={(e) => e.stopPropagation()}
           />
         </div>

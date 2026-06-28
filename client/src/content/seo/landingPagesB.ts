@@ -163,11 +163,12 @@ export const aiLeadScoringConfig: SeoLandingPageConfig = {
   heroIntro:
     "WhachatCRM AI Copilot extracts intent from messages, assigns lead scores, recommends follow-ups, and triggers automations so your team focuses on buyers and sellers ready to move.",
   breadcrumbs: SEO_BREADCRUMBS.page("AI Lead Scoring", "ai-lead-scoring"),
+  heroLayout: "split",
   heroImage: {
     ...S.leadScore,
-    title: "AI lead score panel",
+    title: "Lead score at a glance",
     caption:
-      "Lead score, customer insights, and next-best-action recommendations — updated automatically as conversations progress.",
+      "Score, customer insights, and next-best-action recommendations update as the conversation progresses.",
   },
   sections: [
     {
@@ -177,12 +178,24 @@ export const aiLeadScoringConfig: SeoLandingPageConfig = {
         "Traditional scoring relies on form fields that buyers skip or get wrong. Messaging-first sales happen in natural language — budget mentioned casually, timeline implied, objections buried mid-thread.",
         "AI Copilot analyzes conversation content, engagement patterns, and CRM signals (tags, stages, channel) to produce scores and qualification summaries visible in the inbox sidebar.",
       ],
-      image: {
-        ...S.leadScore,
-        title: "Conversation-based scoring",
-        figure: 1,
-        caption: "Figure 1. " + S.leadScore.caption!,
-      },
+      featureCards: [
+        {
+          title: "Natural language signals",
+          description: "Budget, timeline, and intent extracted from how buyers actually write.",
+        },
+        {
+          title: "Engagement patterns",
+          description: "Response speed and message depth influence score over time.",
+        },
+        {
+          title: "CRM context",
+          description: "Tags, pipeline stage, and channel enrich every qualification.",
+        },
+        {
+          title: "Inbox sidebar",
+          description: "Scores and summaries visible without leaving the conversation.",
+        },
+      ],
     },
     {
       id: "buyer-seller",
@@ -286,6 +299,7 @@ export const sharedTeamInboxConfig: SeoLandingPageConfig = {
   breadcrumbs: SEO_BREADCRUMBS.page("Shared Team Inbox", "shared-team-inbox"),
   heroImage: {
     ...S.unifiedInbox,
+    size: "hero",
     title: "Shared team inbox",
     caption:
       "Every teammate sees the same thread — assignments, AI Copilot, and CRM context prevent duplicate replies.",
@@ -510,6 +524,7 @@ export const whatsappCrmCornerstoneConfig: SeoLandingPageConfig = {
   breadcrumbs: SEO_BREADCRUMBS.page("WhatsApp CRM", "whatsapp-crm"),
   heroImage: {
     ...S.unifiedInbox,
+    size: "hero",
     title: "AI-powered WhatsApp conversations",
     caption:
       "Your WhatsApp conversations become AI-powered customer conversations — shared inbox, lead scoring, and automations in one CRM.",
