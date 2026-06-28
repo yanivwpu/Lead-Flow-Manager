@@ -13,7 +13,7 @@ export type SeoFaqItem = { question: string; answer: string };
 
 export type SeoRelatedLink = { href: string; label: string };
 
-export type SeoBreadcrumbItem = { label: string; href?: string };
+export type SeoBreadcrumbItem = { label: string; href: string };
 
 export type SeoLandingPageConfig = {
   slug: string;

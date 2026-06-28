@@ -5,13 +5,19 @@ import { MARKETING_URL } from "@/lib/marketingUrl";
 
 export type BreadcrumbItem = {
   label: string;
-  href?: string;
+  /** Path on the marketing site (required for valid BreadcrumbList JSON-LD). */
+  href: string;
 };
 
 type Props = {
   items: BreadcrumbItem[];
   className?: string;
 };
+
+function breadcrumbUrl(href: string): string {
+  const path = href.startsWith("/") ? href : `/${href}`;
+  return `${MARKETING_URL}${path}`;
+}
 
 export function MarketingBreadcrumbs({ items, className = "" }: Props) {
   const schema = {
@@ -21,7 +27,7 @@ export function MarketingBreadcrumbs({ items, className = "" }: Props) {
       "@type": "ListItem",
       position: index + 1,
       name: item.label,
-      ...(item.href ? { item: `${MARKETING_URL}${item.href}` } : {}),
+      item: breadcrumbUrl(item.href),
     })),
   };
 
@@ -37,14 +43,14 @@ export function MarketingBreadcrumbs({ items, className = "" }: Props) {
             return (
               <li key={`${item.label}-${index}`} className="flex items-center gap-1">
                 {index > 0 ? <ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-300" aria-hidden /> : null}
-                {item.href && !isLast ? (
+                {isLast ? (
+                  <span className="font-medium text-gray-700" aria-current="page">
+                    {item.label}
+                  </span>
+                ) : (
                   <Link href={item.href}>
                     <a className="hover:text-brand-green">{item.label}</a>
                   </Link>
-                ) : (
-                  <span className={isLast ? "font-medium text-gray-700" : undefined} aria-current={isLast ? "page" : undefined}>
-                    {item.label}
-                  </span>
                 )}
               </li>
             );
@@ -55,13 +61,15 @@ export function MarketingBreadcrumbs({ items, className = "" }: Props) {
   );
 }
 
+/** Breadcrumb trails for SEO pages — only links to real, crawlable URLs. */
 export const SEO_BREADCRUMBS = {
   helpCenter: [
     { label: "Home", href: "/" },
-    { label: "Help Center" },
+    { label: "Help Center", href: "/user-guide" },
   ] as BreadcrumbItem[],
-  product: (page: string) =>
-    [{ label: "Home", href: "/" }, { label: "Product" }, { label: page }] as BreadcrumbItem[],
-  solutions: (page: string) =>
-    [{ label: "Home", href: "/" }, { label: "Solutions" }, { label: page }] as BreadcrumbItem[],
+  /** Home → landing page (no intermediate Product/Solutions levels). */
+  page: (label: string, slug: string): BreadcrumbItem[] => [
+    { label: "Home", href: "/" },
+    { label, href: `/${slug.replace(/^\/+/, "")}` },
+  ],
 };

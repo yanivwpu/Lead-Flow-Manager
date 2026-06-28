@@ -21,7 +21,7 @@ export const crmWithMlsIntegrationConfig: SeoLandingPageConfig = {
   heroIntro:
     "WhachatCRM connects Bridge Interactive MLS feeds to your unified inbox, AI Copilot, and Growth Engine automations — so every buyer conversation turns into qualified showings with the right listings attached.",
   heroFlow: ["Customer messages you", "AI qualifies buyer", "Matching listings appear"],
-  breadcrumbs: SEO_BREADCRUMBS.solutions("CRM with MLS Integration"),
+  breadcrumbs: SEO_BREADCRUMBS.page("CRM with MLS Integration", "crm-with-mls-integration"),
   heroImage: heroUnifiedInbox,
   sections: [
     {
@@ -179,7 +179,7 @@ export const realEstateCrmConfig: SeoLandingPageConfig = {
   h1: "Real Estate CRM That Meets Buyers Where They Message",
   heroIntro:
     "Capture leads from WhatsApp, Instagram, Messenger, and your public agent page. Qualify with AI, sync MLS inventory, automate follow-ups, and collaborate in one shared inbox.",
-  breadcrumbs: SEO_BREADCRUMBS.solutions("Real Estate CRM"),
+  breadcrumbs: SEO_BREADCRUMBS.page("Real Estate CRM", "real-estate-crm"),
   heroImage: {
     ...S.unifiedInbox,
     title: "Unified inbox with AI property matching",
@@ -325,7 +325,7 @@ export const unifiedInboxConfig: SeoLandingPageConfig = {
   h1: "Unified Inbox for Every Customer Conversation",
   heroIntro:
     "Stop switching between apps. WhachatCRM combines WhatsApp, Messenger, Instagram, and more into one searchable inbox with AI assistance, CRM context, and team collaboration built in.",
-  breadcrumbs: SEO_BREADCRUMBS.product("Unified Inbox"),
+  breadcrumbs: SEO_BREADCRUMBS.page("Unified Inbox", "unified-inbox"),
   heroImage: {
     ...S.unifiedInbox,
     title: "Full unified inbox",
@@ -468,7 +468,7 @@ export const shopifyCrmConfig: SeoLandingPageConfig = {
   h1: "Shopify CRM Built for WhatsApp-First Customer Conversations",
   heroIntro:
     "Install from the Shopify App Store, connect messaging channels in minutes, and recover revenue with abandoned cart automations, order notifications, and AI-assisted support — all in one inbox.",
-  breadcrumbs: SEO_BREADCRUMBS.solutions("Shopify CRM"),
+  breadcrumbs: SEO_BREADCRUMBS.page("Shopify CRM", "shopify-crm"),
   // TODO: Replace hero with an authentic Shopify workflow screenshot (cart recovery / order context) when available.
   heroImage: {
     ...S.unifiedInbox,

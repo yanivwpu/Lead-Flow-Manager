@@ -13,7 +13,7 @@ export const whatsappBusinessApiConfig: SeoLandingPageConfig = {
   h1: "WhatsApp Business API for Teams That Outgrew the App",
   heroIntro:
     "WhachatCRM connects you to Meta's Cloud API through embedded signup — then adds shared inbox, automations, AI Copilot, and CRM context so API access translates into revenue, not complexity.",
-  breadcrumbs: SEO_BREADCRUMBS.product("WhatsApp Business API"),
+  breadcrumbs: SEO_BREADCRUMBS.page("WhatsApp Business API", "whatsapp-business-api"),
   heroImage: {
     ...S.embeddedSignup,
     title: "Meta embedded WhatsApp signup",
@@ -162,7 +162,7 @@ export const aiLeadScoringConfig: SeoLandingPageConfig = {
   h1: "AI Lead Scoring That Reads the Conversation — Not Just the Form",
   heroIntro:
     "WhachatCRM AI Copilot extracts intent from messages, assigns lead scores, recommends follow-ups, and triggers automations so your team focuses on buyers and sellers ready to move.",
-  breadcrumbs: SEO_BREADCRUMBS.product("AI Lead Scoring"),
+  breadcrumbs: SEO_BREADCRUMBS.page("AI Lead Scoring", "ai-lead-scoring"),
   heroImage: {
     ...S.leadScore,
     title: "AI lead score panel",
@@ -283,7 +283,7 @@ export const sharedTeamInboxConfig: SeoLandingPageConfig = {
   h1: "Shared Team Inbox With Clear Ownership and AI Assist",
   heroIntro:
     "Give every teammate visibility without chaos. Assign conversations, leave internal notes, track ownership, and let AI Copilot speed replies — across WhatsApp and Meta messaging channels.",
-  breadcrumbs: SEO_BREADCRUMBS.product("Shared Team Inbox"),
+  breadcrumbs: SEO_BREADCRUMBS.page("Shared Team Inbox", "shared-team-inbox"),
   heroImage: {
     ...S.unifiedInbox,
     title: "Shared team inbox",
@@ -391,7 +391,7 @@ export const automationTemplatesConfig: SeoLandingPageConfig = {
   h1: "Automation Templates Ready to Customize and Deploy",
   heroIntro:
     "WhachatCRM ships preset Growth Engine workflows for ecommerce, real estate, and support — so you launch proven sequences in minutes instead of building from scratch.",
-  breadcrumbs: SEO_BREADCRUMBS.product("Automation Templates"),
+  breadcrumbs: SEO_BREADCRUMBS.page("Automation Templates", "automation-templates"),
   heroImage: {
     ...S.automationWorkflows,
     title: "Active automation workflows",
@@ -507,7 +507,7 @@ export const whatsappCrmCornerstoneConfig: SeoLandingPageConfig = {
   h1: "WhatsApp CRM: The Complete Guide for Growing Businesses",
   heroIntro:
     "WhatsApp CRM software turns messaging into a managed sales and support channel — with shared inbox, AI qualification, Meta embedded signup, automations, and integrations for ecommerce and real estate.",
-  breadcrumbs: SEO_BREADCRUMBS.product("WhatsApp CRM"),
+  breadcrumbs: SEO_BREADCRUMBS.page("WhatsApp CRM", "whatsapp-crm"),
   heroImage: {
     ...S.unifiedInbox,
     title: "AI-powered WhatsApp conversations",
