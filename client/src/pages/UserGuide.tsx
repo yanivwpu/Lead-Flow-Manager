@@ -3,6 +3,7 @@ import { Helmet } from "react-helmet";
 import { ArrowLeft } from "lucide-react";
 import { MARKETING_URL } from "@/lib/marketingUrl";
 import { MarketingBreadcrumbs, SEO_BREADCRUMBS } from "@/components/marketing/MarketingBreadcrumbs";
+import { MarketingScreenshot } from "@/components/marketing/MarketingScreenshot";
 import {
   USER_GUIDE_FAQS,
   USER_GUIDE_RELATED_LINKS,
@@ -27,14 +28,7 @@ function renderSection(section: HelpSection) {
           ))}
         </ul>
       ) : null}
-      {section.image ? (
-        <figure className="mt-6 overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
-          <img src={section.image.src} alt={section.image.alt} className="w-full" loading="lazy" decoding="async" />
-          {section.image.caption ? (
-            <figcaption className="px-4 py-2 text-center text-xs text-gray-500">{section.image.caption}</figcaption>
-          ) : null}
-        </figure>
-      ) : null}
+      {section.image ? <MarketingScreenshot {...section.image} className="mt-6" /> : null}
       {section.subsections?.map((sub) => (
         <div key={sub.title} className="mt-8">
           <h3 className="text-lg font-semibold text-gray-900">{sub.title}</h3>
@@ -50,14 +44,7 @@ function renderSection(section: HelpSection) {
               ))}
             </ul>
           ) : null}
-          {sub.image ? (
-            <figure className="mt-4 overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
-              <img src={sub.image.src} alt={sub.image.alt} className="w-full" loading="lazy" decoding="async" />
-              {sub.image.caption ? (
-                <figcaption className="px-4 py-2 text-center text-xs text-gray-500">{sub.image.caption}</figcaption>
-              ) : null}
-            </figure>
-          ) : null}
+          {sub.image ? <MarketingScreenshot {...sub.image} className="mt-4" /> : null}
         </div>
       ))}
     </section>

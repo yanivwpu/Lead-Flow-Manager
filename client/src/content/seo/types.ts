@@ -1,9 +1,12 @@
+import type { MarketingScreenshotMeta } from "@shared/marketingScreenshots";
+
 export type SeoLandingSection = {
   id: string;
   title: string;
   paragraphs: string[];
   bullets?: string[];
-  image?: { src: string; alt: string; caption?: string };
+  featureCards?: { title: string; description: string }[];
+  image?: MarketingScreenshotMeta;
 };
 
 export type SeoFaqItem = { question: string; answer: string };
@@ -20,7 +23,11 @@ export type SeoLandingPageConfig = {
   heroBadge?: string;
   h1: string;
   heroIntro: string;
+  /** Optional arrow-flow steps shown under the hero intro (e.g. message → qualify → match). */
+  heroFlow?: string[];
   breadcrumbs: SeoBreadcrumbItem[];
+  heroImage?: MarketingScreenshotMeta;
+  ctaHeadline?: string;
   sections: SeoLandingSection[];
   faqs: SeoFaqItem[];
   relatedLinks: SeoRelatedLink[];

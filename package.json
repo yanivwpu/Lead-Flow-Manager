@@ -8,6 +8,7 @@
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
     "build": "tsx script/build.ts",
     "hero:assets": "node scripts/generate-hero-responsive.mjs",
+    "screenshots:build": "node scripts/convert-marketing-screenshots.mjs",
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "typecheck": "tsc",

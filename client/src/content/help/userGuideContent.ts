@@ -1,10 +1,12 @@
 import type { SeoFaqItem } from "@/content/seo/types";
+import type { MarketingScreenshotMeta } from "@shared/marketingScreenshots";
+import { S } from "@shared/marketingScreenshots";
 
 export type HelpSubsection = {
   title: string;
   paragraphs?: string[];
   bullets?: string[];
-  image?: { src: string; alt: string; caption?: string };
+  image?: MarketingScreenshotMeta;
 };
 
 export type HelpSection = {
@@ -14,21 +16,7 @@ export type HelpSection = {
   paragraphs?: string[];
   bullets?: string[];
   subsections?: HelpSubsection[];
-  image?: { src: string; alt: string; caption?: string };
-};
-
-const img = {
-  dashboard: { src: "/hero/whachat-hero-mockup.png", alt: "WhachatCRM dashboard overview" },
-  channels: { src: "/email/activation/channels.png", alt: "Channel settings in WhachatCRM" },
-  embeddedSignup: { src: "/email/activation/embedded-signup.png", alt: "Meta embedded WhatsApp signup" },
-  connectWhatsapp: { src: "/email/activation/connect-whatsapp.png", alt: "Connect WhatsApp channel" },
-  inbox: { src: "/email/activation/inbox.png", alt: "Unified inbox" },
-  aiCopilot: { src: "/email/activation/ai-copilot.png", alt: "AI Copilot panel" },
-  aiSuggestions: { src: "/email/activation/inbox-ai-suggestions.png", alt: "AI suggested replies in inbox" },
-  leadQual: { src: "/email/activation/lead-qualification.png", alt: "AI lead qualification" },
-  listing: { src: "/email/activation/listing-recommendation.png", alt: "MLS listing recommendation" },
-  rge: { src: "/rge-layout-preview.png", alt: "Growth Engine automation builder" },
-  aiConversation: { src: "/email/activation/ai-conversation.png", alt: "AI conversation insights" },
+  image?: MarketingScreenshotMeta;
 };
 
 export const USER_GUIDE_SECTIONS: HelpSection[] = [
@@ -68,7 +56,7 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
           "After login, the dashboard summarizes open conversations, follow-ups due today, automation activity, and channel health. Quick links jump to Inbox, Automations, Templates, and Integrations.",
           "Pro users see team workload indicators and assignment queues when enabled.",
         ],
-        image: { ...img.dashboard, caption: "Dashboard and navigation overview" },
+        image: S.dashboard,
       },
       {
         title: "Navigation",
@@ -96,7 +84,7 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
           "Choose Meta (WhatsApp Cloud) and launch embedded signup. Sign in with Facebook, select your business portfolio, WhatsApp Business Account (WABA), and phone number.",
           "WhachatCRM stores connection status in channel settings and surfaces errors inline if Meta rejects a display name or requires verification documents.",
         ],
-        image: { ...img.embeddedSignup, caption: "Meta embedded signup inside WhachatCRM" },
+        image: S.embeddedSignup,
       },
       {
         title: "WhatsApp — Existing number migration",
@@ -110,7 +98,7 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
         paragraphs: [
           "You can register a new Cloud API number without an existing WhatsApp personal account on that line. Complete SMS or voice verification when Meta requests it.",
         ],
-        image: { ...img.connectWhatsapp, caption: "WhatsApp channel connection status" },
+        image: S.connectWhatsapp,
       },
       {
         title: "WhatsApp — Verification and testing",
@@ -142,7 +130,7 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
           "Link an Instagram Professional account connected to your Facebook Page. Business Manager ownership must align — mismatched Page/IG links are a common setup failure.",
           "Instagram DMs share the inbox with WhatsApp and Messenger; session rules differ from WhatsApp templates.",
         ],
-        image: { ...img.channels, caption: "Connect WhatsApp, Messenger, and Instagram" },
+        image: S.channels,
       },
     ],
   },
@@ -159,7 +147,7 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
       "Internal notes — private commentary teammates see but customers do not",
       "Lead timeline — chronological record of messages, stage changes, and automations",
     ],
-    image: { ...img.inbox, caption: "Unified inbox with CRM sidebar" },
+    image: S.unifiedInbox,
   },
   {
     id: "ai-copilot",
@@ -176,7 +164,7 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
       "Conversation insights — highlight objections and next best actions",
       "Message drafting — generate templates for common scenarios",
     ],
-    image: { ...img.aiSuggestions, caption: "Suggested replies in the inbox" },
+    image: S.leadScore,
   },
   {
     id: "growth-engine",
@@ -196,7 +184,7 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
       "Appointment reminders — reduce no-shows for showings and calls",
       "Follow-up automation — no-reply sequences when leads go quiet",
     ],
-    image: { ...img.rge, caption: "Growth Engine workflow editor" },
+    image: S.automationWorkflows,
   },
   {
     id: "agent-pages",
@@ -210,6 +198,7 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
       "Branding — colors and logo aligned with your business",
       "MLS integration — display synced listings when Bridge is connected",
     ],
+    image: S.agentPagePublic,
   },
   {
     id: "mls-integration",
@@ -226,7 +215,7 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
       "Lead qualification — scores reflect engagement with recommended properties",
       "Inventory recommendations — share listings with one click from inbox sidebar",
     ],
-    image: { ...img.listing, caption: "Listing recommendations in a buyer thread" },
+    image: S.inventorySource,
   },
   {
     id: "shopify-integration",
@@ -259,7 +248,7 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
         paragraphs: [
           "Agents see order history beside chats. AI Copilot suggests answers about products, returns, and shipping policies.",
         ],
-        image: { ...img.aiCopilot, caption: "AI Copilot for Shopify support" },
+        image: S.unifiedInbox,
       },
       {
         title: "Preset eCommerce automation templates",

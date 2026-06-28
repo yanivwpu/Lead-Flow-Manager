@@ -1,15 +1,13 @@
 import type { SeoLandingPageConfig } from "./types";
 import { cluster } from "./sharedLinks";
 import { SEO_BREADCRUMBS } from "@/components/marketing/MarketingBreadcrumbs";
+import { S } from "@shared/marketingScreenshots";
 
-const img = {
-  inbox: { src: "/email/activation/inbox.png", alt: "WhachatCRM unified inbox" },
-  channels: { src: "/email/activation/channels.png", alt: "WhachatCRM channel settings" },
-  embeddedSignup: { src: "/email/activation/embedded-signup.png", alt: "Meta embedded WhatsApp signup" },
-  aiCopilot: { src: "/email/activation/ai-copilot.png", alt: "AI Copilot in WhachatCRM" },
-  leadQual: { src: "/email/activation/lead-qualification.png", alt: "AI lead qualification" },
-  listing: { src: "/email/activation/listing-recommendation.png", alt: "MLS listing recommendations" },
-  rge: { src: "/rge-layout-preview.png", alt: "Realtor Growth Engine automation" },
+const heroUnifiedInbox = {
+  ...S.unifiedInbox,
+  title: "Conversation + AI property matching",
+  caption:
+    "A buyer messages on WhatsApp, AI qualifies the lead, and matching MLS listings appear instantly in the inbox sidebar.",
 };
 
 export const crmWithMlsIntegrationConfig: SeoLandingPageConfig = {
@@ -22,65 +20,116 @@ export const crmWithMlsIntegrationConfig: SeoLandingPageConfig = {
   h1: "CRM with MLS Integration for Modern Real Estate Teams",
   heroIntro:
     "WhachatCRM connects Bridge Interactive MLS feeds to your unified inbox, AI Copilot, and Growth Engine automations — so every buyer conversation turns into qualified showings with the right listings attached.",
+  heroFlow: ["Customer messages you", "AI qualifies buyer", "Matching listings appear"],
   breadcrumbs: SEO_BREADCRUMBS.solutions("CRM with MLS Integration"),
+  heroImage: heroUnifiedInbox,
   sections: [
     {
       id: "why-mls-crm",
       title: "Why real estate teams need a CRM with MLS integration",
       paragraphs: [
         "Most CRMs treat property inventory as an afterthought. Agents paste listing links manually, lose track of what a buyer has already seen, and struggle to follow up when MLS status changes. A CRM with MLS integration keeps inventory, conversations, and pipeline stages in one workspace.",
-        "WhachatCRM was built for teams that live in WhatsApp and Meta messaging but still need accurate MLS data. When a buyer asks about neighborhoods, price ranges, or bed counts, your team should not be switching tabs to search the MLS — the CRM should surface matches while the conversation is still warm.",
-        "With Bridge Interactive, listings sync into WhachatCRM on a schedule. Price changes, new photos, and status updates flow through automatically so AI recommendations and agent replies stay current.",
       ],
-      bullets: [
-        "Single workspace for chats, contacts, pipeline, and MLS inventory",
-        "AI extracts buyer preferences from natural conversation",
-        "Automatic listing recommendations tied to each lead",
-        "Seller and buyer workflows share the same Growth Engine automations",
+      featureCards: [
+        {
+          title: "One workspace",
+          description: "Chats, contacts, pipeline, and MLS inventory in a single view — no tab switching.",
+        },
+        {
+          title: "AI buyer preferences",
+          description: "Budget, beds, baths, and neighborhoods extracted from natural conversation.",
+        },
+        {
+          title: "Instant listing match",
+          description: "Relevant properties surface while the conversation is still warm.",
+        },
+        {
+          title: "Shared automations",
+          description: "Buyer and seller workflows run on the same Growth Engine presets.",
+        },
       ],
     },
     {
-      id: "bridge-interactive",
-      title: "Bridge Interactive integration",
+      id: "ai-qualification",
+      title: "AI qualification and lead scoring",
       paragraphs: [
-        "WhachatCRM integrates with Bridge Interactive to pull listing data from participating MLS feeds. After you connect your Bridge credentials in Settings, inventory appears in the Inventory module and powers AI property matching across the platform.",
-        "Synchronization runs on a recurring schedule so your team is not manually exporting spreadsheets. When a listing goes pending or receives a price reduction, that context is available inside the contact sidebar and in automated follow-up sequences.",
-        "Bridge Interactive is widely used by brokerages and IDX providers; WhachatCRM focuses on the CRM layer — qualification, messaging, automation, and lead routing — while Bridge supplies authoritative listing data.",
+        "AI Copilot reads every inbound message to infer budget, property type, bedrooms, bathrooms, neighborhoods, and purchase timeline. Lead score updates automatically as the conversation progresses.",
+        "Hot buyers rise to the top of your queue. Managers see who needs a human callback without reading every thread.",
       ],
-      image: { ...img.listing, caption: "AI-powered listing recommendations inside a buyer conversation" },
+      image: {
+        ...S.leadScore,
+        title: "AI lead scoring",
+        figure: 1,
+        caption: "Figure 1. " + S.leadScore.caption!,
+      },
     },
     {
-      id: "ai-matching",
-      title: "AI property matching and buyer qualification",
+      id: "ai-recommendation",
+      title: "AI property recommendations",
       paragraphs: [
-        "AI Copilot reads conversation history to infer budget, locations, property type, and timeline. Those signals feed lead scoring and inventory search so your next reply can include relevant listings instead of generic questions.",
-        "Buyer qualification is not a one-time form. As the conversation evolves, WhachatCRM updates scores and suggested follow-ups. Hot buyers can be routed to the right agent, enrolled in showing reminders, or tagged for immediate human takeover.",
-        "For seller leads, the same CRM captures motivation, timeline, and property details — then triggers seller nurture sequences from the Realtor Growth Engine preset library.",
+        "When inventory matches buyer criteria, WhachatCRM opens a listing detail view with photos, pricing, and an AI Recommendation block that explains why the property fits — preferred location, budget, bedrooms, and lifestyle signals like waterfront access.",
+        "Agents review and send listings from the inbox. AI assists; humans approve every outbound message.",
       ],
-      bullets: [
-        "AI lead scoring prioritizes ready buyers and sellers",
-        "Preference extraction from WhatsApp, Messenger, and Instagram threads",
-        "One-click listing shares with conversation context preserved",
-        "Pipeline stages reflect qualification progress, not guesswork",
-      ],
-      image: { ...img.leadQual, caption: "AI lead qualification scores inside the inbox" },
+      image: {
+        ...S.propertyMatchDetails,
+        title: "Why this listing matches",
+        figure: 2,
+        caption: "Figure 2. " + S.propertyMatchDetails.caption!,
+      },
     },
     {
-      id: "workflows",
-      title: "Automated recommendations and lead routing",
+      id: "automation",
+      title: "Automation that follows qualification",
       paragraphs: [
-        "Growth Engine workflows can send listing digests, appointment reminders, and no-reply follow-ups when a buyer goes quiet. Triggers include new messages, tag changes, pipeline stage updates, and time-based conditions.",
-        "Team assignment on Pro plans ensures the right agent owns each conversation while managers retain visibility in the shared inbox. Internal notes capture showing feedback without exposing private commentary to the client.",
-        "Agent Pages — public SEO-friendly profiles with lead capture and home valuation CTAs — feed directly into the same MLS-aware CRM record. A web form submission and a WhatsApp message share one timeline.",
+        "Growth Engine workflows launch when a lead is qualified — buyer follow-up, appointment reminders, and no-reply sequences. W2 scores every inbound message; W4–W6 follow up when conversations go quiet.",
       ],
+      image: {
+        ...S.automationWorkflows,
+        title: "Active automation workflows",
+        figure: 3,
+        caption: "Figure 3. " + S.automationWorkflows.caption!,
+      },
+    },
+    {
+      id: "agent-page",
+      title: "Public Agent Pages for SEO and lead capture",
+      paragraphs: [
+        "Every agent gets an SEO-friendly public profile with biography, market areas, lead forms, and home valuation CTAs. Listings from connected inventory sources appear on the page and embed on your brokerage website via iframe widgets.",
+      ],
+      image: {
+        ...S.agentPagePublic,
+        title: "Public Agent Page",
+        figure: 4,
+        caption: "Figure 4. " + S.agentPagePublic.caption!,
+      },
+    },
+    {
+      id: "mls-inventory",
+      title: "MLS inventory sync (Bridge Interactive & MLS Grid)",
+      paragraphs: [
+        "Connect Bridge Interactive or MLS Grid from Settings → Inventory Sources. Scope sync to your cities and ZIP codes, then run scheduled syncs so price, status, and media stay current.",
+        "Synced inventory powers AI property matching, Agent Page listings, price reduction alerts, and automated buyer recommendations.",
+      ],
+      image: {
+        ...S.inventorySource,
+        title: "MLS Grid inventory connection",
+        figure: 5,
+        caption: "Figure 5. " + S.inventorySource.caption!,
+      },
     },
     {
       id: "get-started",
       title: "Getting started with MLS CRM in WhachatCRM",
       paragraphs: [
-        "Start on the Free plan to connect WhatsApp via Meta embedded signup, then upgrade to Pro when you need unlimited users, advanced automations, and Growth Engine templates. Connect Bridge Interactive from Integrations, verify sync, and enable AI Copilot for your workspace.",
+        "Start on the Free plan to connect WhatsApp via Meta embedded signup, then upgrade to Pro for unlimited users, Growth Engine templates, and full AI Copilot. Connect your MLS source, verify sync, and enable AI Brain for deeper qualification.",
         "Our Help Center walks through channel setup, MLS configuration, and preset real estate automations step by step.",
       ],
+      image: {
+        ...S.inventoryHealth,
+        title: "Inventory and qualification status",
+        figure: 6,
+        caption: "Figure 6. " + S.inventoryHealth.caption!,
+      },
     },
   ],
   faqs: [
@@ -131,6 +180,12 @@ export const realEstateCrmConfig: SeoLandingPageConfig = {
   heroIntro:
     "Capture leads from WhatsApp, Instagram, Messenger, and your public agent page. Qualify with AI, sync MLS inventory, automate follow-ups, and collaborate in one shared inbox.",
   breadcrumbs: SEO_BREADCRUMBS.solutions("Real Estate CRM"),
+  heroImage: {
+    ...S.unifiedInbox,
+    title: "Unified inbox with AI property matching",
+    caption:
+      "AI Copilot, inventory matches, and the customer conversation — all in one workspace built for real estate agents.",
+  },
   sections: [
     {
       id: "challenge",
@@ -139,7 +194,6 @@ export const realEstateCrmConfig: SeoLandingPageConfig = {
         "Real estate leads arrive at all hours — portal inquiries, open house sign-ins, referral texts, and DMs on Instagram. Without a purpose-built real estate CRM, speed-to-lead suffers and hot buyers talk to the next agent who replies first.",
         "Spreadsheets and generic CRMs fail because they were not designed for conversational selling. WhachatCRM treats every message thread as the system of record: notes, tags, pipeline stage, showing history, and MLS context live beside the chat.",
       ],
-      image: { ...img.inbox, caption: "Unified inbox for WhatsApp, Messenger, and Instagram" },
     },
     {
       id: "lead-capture",
@@ -147,14 +201,31 @@ export const realEstateCrmConfig: SeoLandingPageConfig = {
       paragraphs: [
         "Connect WhatsApp through Meta embedded signup, link Facebook Pages for Messenger, and attach Instagram Professional accounts for DM management. Each channel feeds the same contact record.",
         "Public Agent Pages give you an SEO-friendly profile with biography, market areas, branding, and lead forms — including home valuation CTAs. Submissions create CRM contacts instantly and can trigger welcome automations.",
-        "QR codes and widget chat extend capture to open houses and listing landing pages without forcing buyers into a phone call first.",
       ],
-      bullets: [
-        "WhatsApp, Messenger, and Instagram in one inbox",
-        "Agent Pages with MLS-backed inventory display",
-        "Lead timeline shows every touchpoint chronologically",
-        "Tags and pipeline stages tailored to buyer/seller journeys",
+      featureCards: [
+        {
+          title: "Omnichannel inbox",
+          description: "WhatsApp, Messenger, and Instagram in one queue with channel badges on every thread.",
+        },
+        {
+          title: "Agent Pages",
+          description: "SEO-friendly profiles with MLS-backed inventory and embeddable listing widgets.",
+        },
+        {
+          title: "Lead timeline",
+          description: "Every touchpoint chronologically — messages, stage changes, and automation events.",
+        },
+        {
+          title: "Buyer/seller pipeline",
+          description: "Tags and stages tailored to how agents actually close deals.",
+        },
       ],
+      image: {
+        ...S.agentPagePublic,
+        title: "Public Agent Page for lead capture",
+        figure: 1,
+        caption: "Figure 1. " + S.agentPagePublic.caption!,
+      },
     },
     {
       id: "ai-qualification",
@@ -163,7 +234,12 @@ export const realEstateCrmConfig: SeoLandingPageConfig = {
         "AI Copilot summarizes long threads, suggests replies, and scores leads based on budget signals, urgency, and engagement. Scores help managers prioritize callbacks and automate nurture for colder leads.",
         "Suggested follow-ups appear when a buyer stops responding or asks for listings in a new area. Conversation insights highlight objections and next best actions without re-reading dozens of messages.",
       ],
-      image: { ...img.aiCopilot, caption: "AI Copilot summaries and suggested replies" },
+      image: {
+        ...S.aiCopilot,
+        title: "AI Copilot lead scoring",
+        figure: 2,
+        caption: "Figure 2. " + S.aiCopilot.caption!,
+      },
     },
     {
       id: "mls-automation",
@@ -172,15 +248,25 @@ export const realEstateCrmConfig: SeoLandingPageConfig = {
         "Bridge Interactive sync keeps listings current inside WhachatCRM. AI matches buyer preferences to inventory and lets agents share properties inside the conversation with full context preserved.",
         "See our dedicated CRM with MLS Integration page for technical setup details and Bridge credential configuration.",
       ],
+      image: {
+        ...S.propertyMatchDetails,
+        title: "AI listing recommendation",
+        figure: 3,
+        caption: "Figure 3. " + S.propertyMatchDetails.caption!,
+      },
     },
     {
       id: "growth-engine",
       title: "Follow-up automation with Growth Engine",
       paragraphs: [
         "The Realtor Growth Engine (RGE) ships preset workflows for buyer follow-up, seller nurture, appointment reminders, and no-reply sequences. Install templates, customize copy, and enroll contacts from the inbox sidebar.",
-        "Triggers include pipeline stage changes, tags, keywords, and time delays. AI actions can draft messages or update scores mid-workflow when enabled for your plan.",
       ],
-      image: { ...img.rge, caption: "Growth Engine automation builder" },
+      image: {
+        ...S.automationWorkflows,
+        title: "Preset real estate workflows",
+        figure: 4,
+        caption: "Figure 4. " + S.automationWorkflows.caption!,
+      },
     },
     {
       id: "team",
@@ -189,6 +275,12 @@ export const realEstateCrmConfig: SeoLandingPageConfig = {
         "Pro plans support unlimited users with conversation assignment, internal notes, and shared visibility. Integrate Calendly or use appointment reminders in automations to reduce no-shows.",
         "Managers see which agent owns each lead, how quickly teams respond, and which automations are driving showings — without exporting reports to a separate BI tool for basic operational visibility.",
       ],
+      image: {
+        ...S.inventoryHealth,
+        title: "Pipeline and team visibility",
+        figure: 5,
+        caption: "Figure 5. " + S.inventoryHealth.caption!,
+      },
     },
   ],
   faqs: [
@@ -234,6 +326,12 @@ export const unifiedInboxConfig: SeoLandingPageConfig = {
   heroIntro:
     "Stop switching between apps. WhachatCRM combines WhatsApp, Messenger, Instagram, and more into one searchable inbox with AI assistance, CRM context, and team collaboration built in.",
   breadcrumbs: SEO_BREADCRUMBS.product("Unified Inbox"),
+  heroImage: {
+    ...S.unifiedInbox,
+    title: "Full unified inbox",
+    caption:
+      "WhatsApp, Messenger, AI Copilot, property recommendations, and lead qualification — the complete messaging workspace.",
+  },
   sections: [
     {
       id: "what-is",
@@ -242,22 +340,37 @@ export const unifiedInboxConfig: SeoLandingPageConfig = {
         "A unified inbox aggregates customer messages from multiple channels into a single queue. Instead of three phones and five browser tabs, your team sees one list sorted by priority, assignment, and last activity.",
         "WhachatCRM goes beyond message aggregation: each thread includes contact details, tags, pipeline stage, internal notes, automation enrollments, and AI-generated summaries. That is what turns a shared inbox into a revenue workspace.",
       ],
-      image: { ...img.inbox, caption: "Multi-channel conversations in one inbox" },
     },
     {
       id: "channels",
       title: "WhatsApp, Messenger, and Instagram together",
       paragraphs: [
         "WhatsApp connects through the official Meta Cloud API via embedded signup — no manual token hunting. Facebook Messenger links through your Facebook Page permissions. Instagram Professional accounts connect for DM management alongside Meta's other messaging products.",
-        "Channel badges on each conversation show where the customer reached out. Reply from the same thread while respecting each platform's messaging rules, including WhatsApp's 24-hour session window and template requirements for re-engagement.",
       ],
-      bullets: [
-        "Official Meta API for WhatsApp — embedded signup in minutes",
-        "Page-linked Messenger with permission-based setup",
-        "Instagram Professional DMs beside WhatsApp threads",
-        "Conversation history preserved when channels multiply",
+      featureCards: [
+        {
+          title: "Official WhatsApp API",
+          description: "Meta embedded signup connects your number in minutes — no developer required.",
+        },
+        {
+          title: "Page-linked Messenger",
+          description: "Permission-based setup tied to your Facebook Page.",
+        },
+        {
+          title: "Instagram Professional DMs",
+          description: "Manage Instagram messages beside WhatsApp threads.",
+        },
+        {
+          title: "Unified history",
+          description: "Conversation context preserved when customers switch channels.",
+        },
       ],
-      image: { ...img.channels, caption: "Connect WhatsApp, Messenger, and Instagram from Settings" },
+      image: {
+        ...S.channels,
+        title: "Channel settings",
+        figure: 1,
+        caption: "Figure 1. " + S.channels.caption!,
+      },
     },
     {
       id: "ai-copilot",
@@ -266,7 +379,12 @@ export const unifiedInboxConfig: SeoLandingPageConfig = {
         "AI Copilot drafts replies, summarizes long threads, scores leads, and recommends follow-ups. Modes range from Manual (human-only) to Suggest (AI drafts, human sends) so you control automation risk.",
         "Lead scoring highlights buyers and sellers ready for the next step — especially valuable when volume spikes and managers need to allocate attention without reading every message.",
       ],
-      image: { ...img.aiCopilot, caption: "AI suggestions while you reply" },
+      image: {
+        ...S.aiCopilot,
+        title: "AI Copilot in the inbox",
+        figure: 2,
+        caption: "Figure 2. " + S.aiCopilot.caption!,
+      },
     },
     {
       id: "collaboration",
@@ -275,13 +393,36 @@ export const unifiedInboxConfig: SeoLandingPageConfig = {
         "On Pro plans, assign conversations to specific teammates while keeping managers in the loop. Internal notes capture context customers never see — showing feedback, commission discussions, or support escalations.",
         "The contact sidebar holds tags, pipeline stages, follow-up reminders, and campaign enrollment. The lead timeline chronologically records messages, stage changes, and automation events for auditability.",
       ],
+      image: {
+        ...S.propertyMatching,
+        title: "Inventory matches in the sidebar",
+        figure: 3,
+        caption: "Figure 3. " + S.propertyMatching.caption!,
+      },
     },
     {
       id: "vs-shared",
       title: "Unified inbox vs. basic shared inbox tools",
       paragraphs: [
         "Basic shared inbox products route messages but omit CRM depth. WhachatCRM includes Growth Engine automations, Shopify and MLS integrations, templates, and AI — so the inbox is the hub, not a dead-end queue.",
-        "Explore our Shared Team Inbox page for a deeper look at collaboration workflows.",
+      ],
+      featureCards: [
+        {
+          title: "CRM depth",
+          description: "Tags, pipeline stages, and lead timeline on every thread.",
+        },
+        {
+          title: "Growth Engine",
+          description: "Automations, templates, and AI actions built into the inbox.",
+        },
+        {
+          title: "Vertical integrations",
+          description: "Shopify orders and MLS inventory beside the conversation.",
+        },
+        {
+          title: "Team collaboration",
+          description: "Assignments, internal notes, and manager visibility on Pro.",
+        },
       ],
     },
   ],
@@ -328,6 +469,14 @@ export const shopifyCrmConfig: SeoLandingPageConfig = {
   heroIntro:
     "Install from the Shopify App Store, connect messaging channels in minutes, and recover revenue with abandoned cart automations, order notifications, and AI-assisted support — all in one inbox.",
   breadcrumbs: SEO_BREADCRUMBS.solutions("Shopify CRM"),
+  // TODO: Replace hero with an authentic Shopify workflow screenshot (cart recovery / order context) when available.
+  heroImage: {
+    ...S.unifiedInbox,
+    title: "WhatsApp-first customer conversations",
+    caption:
+      "Until a dedicated Shopify screenshot is available, the unified inbox shows how order support and cart recovery conversations look in WhachatCRM.",
+  },
+  ctaHeadline: "Ready to recover more Shopify carts on WhatsApp?",
   sections: [
     {
       id: "why",
@@ -336,21 +485,37 @@ export const shopifyCrmConfig: SeoLandingPageConfig = {
         "Email open rates keep falling while customers expect answers on WhatsApp and Instagram. A Shopify CRM that only sends email misses high-intent moments — cart abandonment, shipping questions, and product comparisons happen in real time.",
         "WhachatCRM embeds onboarding for Shopify merchants: install the app, connect Meta channels, and enable preset automations without hiring an integrator. Order context appears beside the chat so agents never ask for an order number twice.",
       ],
-      image: { ...img.inbox, caption: "Customer support with order context in the inbox" },
     },
     {
       id: "install",
       title: "Installing from Shopify and embedded onboarding",
       paragraphs: [
         "Find WhachatCRM in the Shopify App Store and approve permissions. Embedded onboarding walks you through plan selection, WhatsApp embedded signup, and optional Messenger or Instagram connections without leaving Shopify admin.",
-        "Billing can flow through Shopify for eligible merchants, keeping subscription management where you already work. Once connected, customer records sync so automations reference live cart and order data.",
       ],
-      bullets: [
-        "One-click install from Shopify App Store",
-        "Guided WhatsApp setup with Meta embedded signup",
-        "Optional Messenger and Instagram for omnichannel support",
-        "Preset ecommerce templates ready to customize",
+      featureCards: [
+        {
+          title: "One-click install",
+          description: "Install from the Shopify App Store and approve permissions in minutes.",
+        },
+        {
+          title: "Guided WhatsApp setup",
+          description: "Meta embedded signup runs inside onboarding — no token copy-paste.",
+        },
+        {
+          title: "Omnichannel optional",
+          description: "Add Messenger and Instagram when customers reach out on other apps.",
+        },
+        {
+          title: "Preset templates",
+          description: "Ecommerce automations ready to customize before you go live.",
+        },
       ],
+      image: {
+        ...S.unifiedInbox,
+        title: "Unified inbox for Shopify support",
+        figure: 1,
+        caption: "Figure 1. Order context and customer messages in one thread.",
+      },
     },
     {
       id: "abandoned-cart",
@@ -359,6 +524,12 @@ export const shopifyCrmConfig: SeoLandingPageConfig = {
         "Preset abandoned cart workflows message shoppers who leave checkout — using approved WhatsApp templates where required. Combine delays, conditions, and AI-drafted personalization for product names and cart value.",
         "Recovery performs best when support and marketing share one inbox: if a buyer replies with a question, your team continues the thread human-to-human without losing automation context.",
       ],
+      image: {
+        ...S.automationWorkflows,
+        title: "Abandoned cart automation",
+        figure: 2,
+        caption: "Figure 2. " + S.automationWorkflows.caption!,
+      },
     },
     {
       id: "notifications",
@@ -375,7 +546,12 @@ export const shopifyCrmConfig: SeoLandingPageConfig = {
         "AI Copilot suggests answers to product inquiries, return policies, and sizing questions using your conversation history. Agents approve sends, maintaining brand voice while cutting handle time.",
         "Tags and pipeline stages separate pre-sales questions from support tickets. Assign high-value carts to senior agents on Pro plans.",
       ],
-      image: { ...img.aiCopilot, caption: "AI-assisted replies for product inquiries" },
+      image: {
+        ...S.aiCopilot,
+        title: "AI-assisted Shopify support",
+        figure: 3,
+        caption: "Figure 3. " + S.aiCopilot.caption!,
+      },
     },
     {
       id: "templates",
@@ -383,6 +559,24 @@ export const shopifyCrmConfig: SeoLandingPageConfig = {
       paragraphs: [
         "WhachatCRM includes templates for abandoned cart recovery, order follow-up, customer support handoffs, and re-engagement campaigns. Customize copy, delays, and conditions — then enroll segments or trigger from Shopify events.",
         "See Automation Templates for the full showcase of built-in sequences for Shopify and other industries.",
+      ],
+      featureCards: [
+        {
+          title: "Abandoned cart recovery",
+          description: "Re-engage shoppers who leave checkout with compliant WhatsApp templates.",
+        },
+        {
+          title: "Order follow-up",
+          description: "Confirm delivery, request reviews, and suggest complementary products.",
+        },
+        {
+          title: "Support routing",
+          description: "Route keywords to the right owner or auto-acknowledge after hours.",
+        },
+        {
+          title: "Re-engagement",
+          description: "Target tagged segments who have not purchased recently.",
+        },
       ],
     },
   ],
