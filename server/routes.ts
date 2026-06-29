@@ -9664,7 +9664,6 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/activation/accounts", requireAdmin, async (req, res) => {
-    const emptyAccounts = { accounts: [] as const, rows: [] as const, total: 0 };
     const timeoutMs = 25_000;
 
     try {
@@ -9692,10 +9691,17 @@ export async function registerRoutes(
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Failed to fetch activation accounts";
-      console.error("[Admin Activation] accounts error:", message, error);
+      console.error("[Admin Activation] accounts error:", message);
+      if (error instanceof Error && error.stack) {
+        console.error(error.stack);
+      } else {
+        console.error(error);
+      }
       res.status(500).json({
-        ...emptyAccounts,
-        error: message,
+        accounts: [],
+        rows: [],
+        total: 0,
+        error: "Failed to load activation accounts. Check server logs for details.",
       });
     }
   });

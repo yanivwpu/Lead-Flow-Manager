@@ -124,6 +124,19 @@ function pct(count: number, total: number): number {
   return Math.round((count / total) * 1000) / 10;
 }
 
+/** Drizzle/pg may return Date, string, or null — never call .toISOString() directly. */
+export function serializeActivationDate(value: unknown): string | null {
+  if (value == null) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+  return null;
+}
+
 export async function getActivationSummary(): Promise<ActivationSummary> {
   const now = new Date();
   const allUsers = await db.select().from(users);
@@ -410,6 +423,18 @@ export type ActivationAccountsResult = {
 export async function getActivationAccounts(
   filters: ActivationAccountsFilters = {},
 ): Promise<ActivationAccountsResult> {
+  try {
+    return await loadActivationAccounts(filters);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to build activation accounts";
+    console.error("[Admin Activation] getActivationAccounts failed:", message, error);
+    throw error instanceof Error ? error : new Error(message);
+  }
+}
+
+async function loadActivationAccounts(
+  filters: ActivationAccountsFilters = {},
+): Promise<ActivationAccountsResult> {
   const now = new Date();
 
   const [ghlUserIds, allUsers, channelRows, conversationCounts, messageAgg, aiRows, activeWorkflowRows, activeTemplateRows, rgeRows, agentPageRows, inventoryRows] =
@@ -466,11 +491,12 @@ export async function getActivationAccounts(
 
   const sentMap = new Map<string, number>();
   const receivedMap = new Map<string, number>();
-  const lastActivityMap = new Map<string, Date>();
+  const lastActivityMap = new Map<string, string>();
   for (const row of messageAgg) {
     sentMap.set(row.userId, row.sent || 0);
     receivedMap.set(row.userId, row.received || 0);
-    if (row.lastAt) lastActivityMap.set(row.userId, row.lastAt);
+    const lastActivity = serializeActivationDate(row.lastAt);
+    if (lastActivity) lastActivityMap.set(row.userId, lastActivity);
   }
 
   const aiUserIds = new Set(aiRows.map((r) => r.userId));
@@ -514,8 +540,8 @@ export async function getActivationAccounts(
       rgeEnabled: rgeUserIds.has(user.id),
       agentPageEnabled: agentPageUserIds.has(user.id),
       inventoryConnected: inventoryUserIds.has(user.id),
-      lastActivity: lastActivityMap.get(user.id)?.toISOString() || null,
-      createdAt: user.createdAt?.toISOString() || null,
+      lastActivity: lastActivityMap.get(user.id) ?? null,
+      createdAt: serializeActivationDate(user.createdAt),
     };
   });
 
