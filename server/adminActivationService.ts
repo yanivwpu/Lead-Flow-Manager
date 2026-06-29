@@ -400,14 +400,61 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
   };
 }
 
+export type ActivationAccountsResult = {
+  accounts: ActivationAccountRow[];
+  total: number;
+  /** @deprecated Use `accounts` — kept for backward compatibility */
+  rows: ActivationAccountRow[];
+};
+
 export async function getActivationAccounts(
   filters: ActivationAccountsFilters = {},
-): Promise<{ total: number; rows: ActivationAccountRow[] }> {
+): Promise<ActivationAccountsResult> {
   const now = new Date();
-  const ghlUserIds = await getGhlUserIds();
-  const allUsers = await db.select().from(users);
 
-  const channelRows = await db.select().from(channelSettings);
+  const [ghlUserIds, allUsers, channelRows, conversationCounts, messageAgg, aiRows, activeWorkflowRows, activeTemplateRows, rgeRows, agentPageRows, inventoryRows] =
+    await Promise.all([
+      getGhlUserIds(),
+      db.select().from(users),
+      db.select().from(channelSettings),
+      db
+        .select({
+          userId: conversations.userId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(conversations)
+        .groupBy(conversations.userId),
+      db
+        .select({
+          userId: messages.userId,
+          sent: sql<number>`count(*) filter (where ${messages.direction} = 'outbound')::int`,
+          received: sql<number>`count(*) filter (where ${messages.direction} = 'inbound')::int`,
+          lastAt: sql<Date | null>`max(${messages.createdAt})`,
+        })
+        .from(messages)
+        .groupBy(messages.userId),
+      db.select({ userId: aiMessageLog.userId }).from(aiMessageLog).groupBy(aiMessageLog.userId),
+      db
+        .select({ userId: workflows.userId })
+        .from(workflows)
+        .where(eq(workflows.isActive, true))
+        .groupBy(workflows.userId),
+      db
+        .select({ userId: userAutomationTemplates.userId })
+        .from(userAutomationTemplates)
+        .where(eq(userAutomationTemplates.isActive, true))
+        .groupBy(userAutomationTemplates.userId),
+      db
+        .select({ userId: growthEngineSetupTasks.userId })
+        .from(growthEngineSetupTasks)
+        .where(eq(growthEngineSetupTasks.templateId, RGE_TEMPLATE_ID)),
+      db
+        .select({ userId: aiBusinessKnowledge.userId })
+        .from(aiBusinessKnowledge)
+        .where(eq(aiBusinessKnowledge.agentPageEnabled, true)),
+      db.select({ userId: inventorySources.userId }).from(inventorySources),
+    ]);
+
   const channelByUser = new Map<string, typeof channelRows>();
   for (const row of channelRows) {
     const list = channelByUser.get(row.userId) ?? [];
@@ -415,83 +462,25 @@ export async function getActivationAccounts(
     channelByUser.set(row.userId, list);
   }
 
-  const conversationCounts = await db
-    .select({
-      userId: conversations.userId,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(conversations)
-    .groupBy(conversations.userId);
   const conversationCountMap = new Map(conversationCounts.map((r) => [r.userId, r.count || 0]));
 
-  const messageStats = await db
-    .select({
-      userId: messages.userId,
-      direction: messages.direction,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(messages)
-    .groupBy(messages.userId, messages.direction);
   const sentMap = new Map<string, number>();
   const receivedMap = new Map<string, number>();
   const lastActivityMap = new Map<string, Date>();
-
-  const lastMessageRows = await db
-    .select({
-      userId: messages.userId,
-      lastAt: sql<Date>`max(${messages.createdAt})`,
-    })
-    .from(messages)
-    .groupBy(messages.userId);
-  for (const row of lastMessageRows) {
+  for (const row of messageAgg) {
+    sentMap.set(row.userId, row.sent || 0);
+    receivedMap.set(row.userId, row.received || 0);
     if (row.lastAt) lastActivityMap.set(row.userId, row.lastAt);
   }
 
-  for (const row of messageStats) {
-    if (row.direction === "outbound") sentMap.set(row.userId, row.count || 0);
-    if (row.direction === "inbound") receivedMap.set(row.userId, row.count || 0);
-  }
-
-  const aiUserIds = new Set(
-    (await db.select({ userId: aiMessageLog.userId }).from(aiMessageLog).groupBy(aiMessageLog.userId)).map(
-      (r) => r.userId,
-    ),
-  );
-
+  const aiUserIds = new Set(aiRows.map((r) => r.userId));
   const automationUserIds = new Set([
-    ...(await db
-      .select({ userId: workflows.userId })
-      .from(workflows)
-      .where(eq(workflows.isActive, true))
-      .groupBy(workflows.userId)).map((r) => r.userId),
-    ...(await db
-      .select({ userId: userAutomationTemplates.userId })
-      .from(userAutomationTemplates)
-      .where(eq(userAutomationTemplates.isActive, true))
-      .groupBy(userAutomationTemplates.userId)).map((r) => r.userId),
+    ...activeWorkflowRows.map((r) => r.userId),
+    ...activeTemplateRows.map((r) => r.userId),
   ]);
-
-  const rgeUserIds = new Set(
-    (
-      await db
-        .select({ userId: growthEngineSetupTasks.userId })
-        .from(growthEngineSetupTasks)
-        .where(eq(growthEngineSetupTasks.templateId, RGE_TEMPLATE_ID))
-    ).map((r) => r.userId),
-  );
-
-  const agentPageUserIds = new Set(
-    (
-      await db
-        .select({ userId: aiBusinessKnowledge.userId })
-        .from(aiBusinessKnowledge)
-        .where(eq(aiBusinessKnowledge.agentPageEnabled, true))
-    ).map((r) => r.userId),
-  );
-
-  const inventoryUserIds = new Set(
-    (await db.select({ userId: inventorySources.userId }).from(inventorySources)).map((r) => r.userId),
-  );
+  const rgeUserIds = new Set(rgeRows.map((r) => r.userId));
+  const agentPageUserIds = new Set(agentPageRows.map((r) => r.userId));
+  const inventoryUserIds = new Set(inventoryRows.map((r) => r.userId));
 
   let rows: ActivationAccountRow[] = allUsers.map((user) => {
     const connections = deriveAdminUserChannelConnections({
@@ -575,5 +564,6 @@ export async function getActivationAccounts(
   const total = rows.length;
   const offset = filters.offset ?? 0;
   const limit = filters.limit ?? 100;
-  return { total, rows: rows.slice(offset, offset + limit) };
+  const accounts = rows.slice(offset, offset + limit);
+  return { total, accounts, rows: accounts };
 }

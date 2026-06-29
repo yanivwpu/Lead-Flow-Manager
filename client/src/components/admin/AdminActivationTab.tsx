@@ -48,13 +48,29 @@ function getAdminToken() {
   return localStorage.getItem("whachat_admin_token") || "";
 }
 
-function adminFetch(url: string) {
+function adminFetch(url: string, options: RequestInit & { timeoutMs?: number } = {}) {
   const token = getAdminToken();
+  const { timeoutMs = 30_000, ...fetchOptions } = options;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const extraHeaders = (fetchOptions.headers as Record<string, string> | undefined) ?? {};
   return fetch(url, {
+    ...fetchOptions,
+    signal: controller.signal,
     credentials: "include",
-    headers: token ? { "x-admin-token": token } : {},
-  });
+    headers: {
+      ...(token ? { "x-admin-token": token } : {}),
+      ...extraHeaders,
+    },
+  }).finally(() => clearTimeout(timer));
 }
+
+type ActivationAccountsResponse = {
+  accounts?: ActivationAccount[];
+  rows?: ActivationAccount[];
+  total: number;
+  error?: string;
+};
 
 function SubMetric({ label, value }: { label: string; value: number }) {
   return (
@@ -113,18 +129,32 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
     return `/api/admin/activation/accounts?${params.toString()}`;
   }, [source, plan, channelConnected, hasConversations, trial, paying, search]);
 
-  const { data: accountsData, isLoading: accountsLoading } = useQuery<{
-    total: number;
-    rows: ActivationAccount[];
-  }>({
+  const {
+    data: accountsData,
+    isLoading: accountsLoading,
+    isError: accountsError,
+    error: accountsErrorDetail,
+    refetch: refetchAccounts,
+    isFetching: accountsFetching,
+  } = useQuery<ActivationAccountsResponse>({
     queryKey: [accountsQuery],
     queryFn: async () => {
       const res = await adminFetch(accountsQuery);
-      if (!res.ok) throw new Error(await res.text());
-      return res.json();
+      const body = (await res.json().catch(() => ({}))) as ActivationAccountsResponse & { error?: string };
+      if (!res.ok) {
+        throw new Error(body.error || `Failed to load accounts (${res.status})`);
+      }
+      if (body.error) {
+        throw new Error(body.error);
+      }
+      return body;
     },
     enabled,
+    retry: 1,
+    staleTime: 30_000,
   });
+
+  const accountRows = accountsData?.accounts ?? accountsData?.rows ?? [];
 
   if (summaryLoading) {
     return (
@@ -215,7 +245,11 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
           <div>
             <h3 className="text-sm font-semibold text-gray-900">Account activation</h3>
             <p className="text-sm text-gray-500">
-              {accountsData ? `${accountsData.total} account(s)` : "Loading accounts..."}
+              {accountsLoading || accountsFetching
+                ? "Loading accounts..."
+                : accountsError
+                  ? "Could not load accounts"
+                  : `${accountsData?.total ?? accountRows.length} account(s)`}
             </p>
           </div>
           <Input
@@ -225,6 +259,24 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
             className="max-w-xs"
           />
         </div>
+
+        {accountsError ? (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <p className="font-medium">Failed to load account activation data</p>
+            <p className="mt-1 text-red-700">
+              {accountsErrorDetail instanceof Error
+                ? accountsErrorDetail.message
+                : "Unknown error"}
+            </p>
+            <button
+              type="button"
+              className="mt-2 text-sm font-medium text-red-900 underline"
+              onClick={() => void refetchAccounts()}
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
 
         <div className="mb-4 flex flex-wrap gap-2">
           {[
@@ -277,14 +329,26 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {accountsLoading ? (
+              {accountsLoading && accountRows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={18} className="py-8 text-center">
                     <Loader2 className="mx-auto h-5 w-5 animate-spin text-gray-400" />
                   </TableCell>
                 </TableRow>
+              ) : accountsError ? (
+                <TableRow>
+                  <TableCell colSpan={18} className="py-8 text-center text-sm text-gray-500">
+                    No accounts loaded. Use Retry above or check server logs.
+                  </TableCell>
+                </TableRow>
+              ) : accountRows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={18} className="py-8 text-center text-sm text-gray-500">
+                    No accounts match the current filters.
+                  </TableCell>
+                </TableRow>
               ) : (
-                (accountsData?.rows ?? []).map((row) => (
+                accountRows.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell>
                       <div className="font-medium text-gray-900">{row.name}</div>

@@ -55,8 +55,9 @@ export function AdminGhlTab({ enabled }: { enabled: boolean }) {
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [csvPaste, setCsvPaste] = useState("");
+  const [lastImportErrors, setLastImportErrors] = useState<string[]>([]);
 
-  const { data: installations = [], isLoading } = useQuery<GhlInstallRow[]>({
+  const { data: installations = [], isLoading, isError, error, refetch } = useQuery<GhlInstallRow[]>({
     queryKey: ["/api/admin/ghl/installations"],
     queryFn: async () => {
       const res = await adminFetch("/api/admin/ghl/installations");
@@ -77,12 +78,15 @@ export function AdminGhlTab({ enabled }: { enabled: boolean }) {
       if (!res.ok) throw new Error(data.error || "Import failed");
       return data as { imported: number; errors: string[] };
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/ghl/installations"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/ghl-integrations"] });
+    onSuccess: async (data) => {
+      setLastImportErrors(data.errors);
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/ghl/installations"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/ghl-integrations"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/admin/ghl/installations"] });
       toast({
         title: "GHL installs imported",
         description: `${data.imported} row(s) upserted${data.errors.length ? ` · ${data.errors.length} error(s)` : ""}`,
+        variant: data.imported === 0 && data.errors.length > 0 ? "destructive" : "default",
       });
       setCsvPaste("");
     },
@@ -151,7 +155,26 @@ export function AdminGhlTab({ enabled }: { enabled: boolean }) {
           {importCsv.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
           Upsert from paste
         </Button>
+        {lastImportErrors.length > 0 ? (
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <p className="font-medium">Import warnings ({lastImportErrors.length})</p>
+            <ul className="mt-1 list-inside list-disc">
+              {lastImportErrors.slice(0, 5).map((err) => (
+                <li key={err}>{err}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </div>
+
+      {isError ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          Failed to load GHL installs: {error instanceof Error ? error.message : "Unknown error"}
+          <button type="button" className="ml-2 underline" onClick={() => void refetch()}>
+            Retry
+          </button>
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         <div className="overflow-x-auto">

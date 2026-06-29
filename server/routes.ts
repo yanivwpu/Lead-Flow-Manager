@@ -9664,6 +9664,9 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/activation/accounts", requireAdmin, async (req, res) => {
+    const emptyAccounts = { accounts: [] as const, rows: [] as const, total: 0 };
+    const timeoutMs = 25_000;
+
     try {
       const filters = {
         source: req.query.source as string | undefined,
@@ -9677,11 +9680,23 @@ export async function registerRoutes(
         limit: req.query.limit ? Number(req.query.limit) : undefined,
         offset: req.query.offset ? Number(req.query.offset) : undefined,
       };
-      const result = await getActivationAccounts(filters);
+
+      const result = await Promise.race([
+        getActivationAccounts(filters),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("Activation accounts query timed out")), timeoutMs);
+        }),
+      ]);
+
       res.json(result);
-    } catch (error) {
-      console.error("Error fetching activation accounts:", error);
-      res.status(500).json({ error: "Failed to fetch activation accounts" });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to fetch activation accounts";
+      console.error("[Admin Activation] accounts error:", message, error);
+      res.status(500).json({
+        ...emptyAccounts,
+        error: message,
+      });
     }
   });
 

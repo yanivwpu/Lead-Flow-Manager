@@ -359,29 +359,54 @@ const CSV_COLUMN_MAP: Record<string, keyof GhlMarketplaceInstallInput> = {
   agency: "agency",
   "company id": "companyId",
   companyid: "companyId",
+  "company": "companyId",
   "sub-account": "subAccountName",
   subaccount: "subAccountName",
+  "sub account": "subAccountName",
   "location id": "locationId",
   locationid: "locationId",
+  "location": "locationId",
   "white-labeled": "whiteLabeled",
   whitelabeled: "whiteLabeled",
+  "white labeled": "whiteLabeled",
   "agency owner": "agencyOwner",
   agencyowner: "agencyOwner",
+  owner: "agencyOwner",
   "agency email": "agencyEmail",
   agencyemail: "agencyEmail",
+  email: "agencyEmail",
   "install date": "installDate",
   installdate: "installDate",
+  installed: "installDate",
   "installation status": "installationStatus",
   installationstatus: "installationStatus",
+  status: "installationStatus",
   "uninstall date": "uninstallDate",
   uninstalldate: "uninstallDate",
   "price plan": "pricePlan",
   priceplan: "pricePlan",
+  plan: "pricePlan",
   "billing status": "billingStatus",
   billingstatus: "billingStatus",
 };
 
-function parseCsvLine(line: string): string[] {
+function normalizeCsvHeader(header: string): string {
+  return header
+    .replace(/^\ufeff/, "")
+    .toLowerCase()
+    .replace(/"/g, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectDelimiter(line: string): string {
+  const tabs = (line.match(/\t/g) || []).length;
+  const commas = (line.match(/,/g) || []).length;
+  return tabs > commas ? "\t" : ",";
+}
+
+function parseDelimitedLine(line: string, delimiter: string): string[] {
   const result: string[] = [];
   let current = "";
   let inQuotes = false;
@@ -391,7 +416,7 @@ function parseCsvLine(line: string): string[] {
       inQuotes = !inQuotes;
       continue;
     }
-    if (ch === "," && !inQuotes) {
+    if (ch === delimiter && !inQuotes) {
       result.push(current.trim());
       current = "";
       continue;
@@ -406,17 +431,18 @@ export async function importGhlInstallsFromCsv(csvText: string): Promise<{ impor
   const lines = csvText.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length < 2) return { imported: 0, errors: ["CSV must include a header row and at least one data row"] };
 
-  const headers = parseCsvLine(lines[0]).map((h) => h.toLowerCase().replace(/"/g, "").trim());
+  const delimiter = detectDelimiter(lines[0]);
+  const headers = parseDelimitedLine(lines[0], delimiter).map(normalizeCsvHeader);
   const errors: string[] = [];
   let imported = 0;
 
   for (let i = 1; i < lines.length; i++) {
-    const values = parseCsvLine(lines[i]);
+    const values = parseDelimitedLine(lines[i], delimiter);
     if (values.every((v) => !v)) continue;
 
     const row: Partial<GhlMarketplaceInstallInput> = { source: "csv" };
     headers.forEach((header, idx) => {
-      const key = CSV_COLUMN_MAP[header.replace(/\s+/g, " ").trim()];
+      const key = CSV_COLUMN_MAP[header];
       if (!key) return;
       const raw = values[idx]?.replace(/^"|"$/g, "").trim();
       if (!raw) return;
