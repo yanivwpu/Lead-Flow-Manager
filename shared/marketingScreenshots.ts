@@ -12,6 +12,8 @@ export const MARKETING_SCREENSHOTS = {
   inventorySource: "/images/screenshots/inventory-source.webp",
   inventoryHealth: "/images/screenshots/inventory-health.webp",
   embeddedSignup: "/images/screenshots/embedded-signup.webp",
+  embeddedSignupMeta: "/images/screenshots/embedded-signup-meta.webp",
+  automationTemplateCards: "/images/screenshots/automation-template-cards.webp",
   connectWhatsapp: "/images/screenshots/connect-whatsapp.webp",
   channels: "/images/screenshots/channels.webp",
   metaBusinessSelection: "/images/screenshots/meta-business-selection.webp",
@@ -35,6 +37,8 @@ export const SCREENSHOT_DIMENSIONS: Record<
   inventorySource: { width: 843, height: 427 },
   inventoryHealth: { width: 297, height: 567 },
   embeddedSignup: { width: 460, height: 593 },
+  embeddedSignupMeta: { width: 561, height: 601 },
+  automationTemplateCards: { width: 327, height: 444 },
   connectWhatsapp: { width: 460, height: 312 },
   channels: { width: 460, height: 257 },
   metaBusinessSelection: { width: 460, height: 610 },
@@ -121,6 +125,18 @@ export const S = {
     size: "content",
     caption: "Connect WhatsApp through Meta embedded signup without manual API tokens.",
   }),
+  embeddedSignupMeta: screenshot("embeddedSignupMeta", "Meta Facebook Login for Business connecting to WhachatCRM", {
+    size: "content",
+    caption: "Official Meta embedded signup connects a client's WhatsApp Business Account to WhachatCRM.",
+  }),
+  automationTemplateCards: screenshot(
+    "automationTemplateCards",
+    "Abandoned Cart Recovery and Limited-Time Offers automation templates",
+    {
+      size: "compact",
+      caption: "Preset ecommerce templates including Abandoned Cart Recovery and customer retention sequences.",
+    },
+  ),
   connectWhatsapp: screenshot("connectWhatsapp", "Connect WhatsApp channel in WhachatCRM", {
     size: "content",
     caption: "Launch WhatsApp Cloud API setup from channel settings.",

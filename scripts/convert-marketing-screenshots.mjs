@@ -57,6 +57,14 @@ const USER_SCREENSHOTS = [
     out: "unified-inbox.webp",
     src: "c__Users_ssamm_AppData_Roaming_Cursor_User_workspaceStorage_a5fb108744b602079d0761d00e74ddd0_images_Screenshot_2026-06-28_141728-fc6902c9-0815-4809-b6c0-a19084c7daa9.png",
   },
+  {
+    out: "embedded-signup-meta.webp",
+    src: "c__Users_ssamm_AppData_Roaming_Cursor_User_workspaceStorage_a5fb108744b602079d0761d00e74ddd0_images_Screenshot_2026-06-28_231617-5f0d6ac0-a9f4-412e-a2e5-59408e707ce0.png",
+  },
+  {
+    out: "automation-template-cards.webp",
+    src: "c__Users_ssamm_AppData_Roaming_Cursor_User_workspaceStorage_a5fb108744b602079d0761d00e74ddd0_images_Screenshot_2026-06-28_231700-0bbcdfb3-62e6-42d2-8de6-f0f6bd77e9d0.png",
+  },
 ];
 
 const EXISTING_PUBLIC = [

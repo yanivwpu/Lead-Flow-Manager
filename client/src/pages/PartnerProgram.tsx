@@ -25,14 +25,25 @@ import { PARTNER_DEFAULT_COMMISSION_RATE } from "@/lib/partnerProgram";
 import { S } from "@shared/marketingScreenshots";
 import {
   PARTNER_FAQS,
+  PARTNER_HERO,
+  PARTNER_INDUSTRY_SECTION,
+  PARTNER_INDUSTRY_SHOWCASES,
   PARTNER_MODELS,
   PARTNER_PRODUCT_LINES,
   PARTNER_PROGRAM_META,
   PARTNER_RELATED_LINKS,
+  PARTNER_SOLUTIONS_SECTION,
   PARTNER_STEPS,
   PARTNER_TYPES,
   PARTNER_WHY_BENEFITS,
 } from "@/content/partnerProgramContent";
+import { cn } from "@/lib/utils";
+
+const SHOWCASE_SCREENSHOTS = {
+  embeddedSignupMeta: S.embeddedSignupMeta,
+  automationTemplateCards: S.automationTemplateCards,
+  propertyMatchDetails: S.propertyMatchDetails,
+} as const;
 
 const MODEL_ICONS = {
   referral: Users,
@@ -42,6 +53,25 @@ const MODEL_ICONS = {
 } as const;
 
 const canonical = `${MARKETING_URL}/${PARTNER_PROGRAM_META.slug}`;
+
+function CompactBulletList({
+  items,
+  className,
+}: {
+  items: readonly string[];
+  className?: string;
+}) {
+  return (
+    <ul className={cn("space-y-1.5", className)}>
+      {items.map((item) => (
+        <li key={item} className="flex items-start gap-2 text-sm leading-snug text-gray-700">
+          <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-green" />
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export function PartnerProgram() {
   const { toast } = useToast();
@@ -161,7 +191,7 @@ export function PartnerProgram() {
         <script type="application/ld+json">{JSON.stringify(webPageSchema)}</script>
       </Helmet>
 
-      <nav className="mx-auto flex max-w-6xl items-center justify-between p-4 md:p-6">
+      <nav className="mx-auto flex max-w-6xl items-center justify-between p-4 md:px-6 md:py-5">
         <Link href="/">
           <a className="flex cursor-pointer items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-green">
@@ -189,35 +219,34 @@ export function PartnerProgram() {
         </div>
       </nav>
 
-      <header className="border-b border-gray-100 bg-gradient-to-b from-gray-50 to-white px-4 pb-14 pt-8 md:px-6 md:pb-16">
+      <header className="border-b border-gray-100 bg-gradient-to-b from-gray-50 to-white px-4 pb-12 pt-6 md:px-6 md:pb-14 md:pt-8">
         <div className="mx-auto max-w-6xl">
           <MarketingBreadcrumbs
             items={SEO_BREADCRUMBS.page("Partner Program", PARTNER_PROGRAM_META.slug)}
-            className="mb-6"
+            className="mb-5"
           />
-          <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-14">
-            <div className="max-w-xl">
-              <span className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-4 py-1 text-sm font-medium text-brand-green">
+          <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,0.48fr)_minmax(0,0.52fr)] lg:gap-10 xl:gap-12">
+            <div className="flex max-w-xl flex-col">
+              <span className="mb-3 inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-sm font-medium text-brand-green">
                 <Handshake className="h-4 w-4" />
                 Partner Program
               </span>
-              <h1 className="font-display text-3xl font-bold leading-tight text-gray-900 md:text-4xl lg:text-5xl">
-                Partner with WhachatCRM and grow recurring revenue
+              <h1 className="font-display max-w-[22ch] text-balance text-3xl font-bold leading-[1.12] tracking-tight text-gray-900 md:text-4xl lg:text-[2.65rem]">
+                {PARTNER_HERO.headline}
               </h1>
-              <p className="mt-5 text-lg leading-relaxed text-gray-600">
-                Help businesses turn WhatsApp, Messenger, Instagram, Shopify, and real estate leads into
-                AI-powered conversations, automations, and sales.
+              <p className="mt-4 max-w-md text-base leading-relaxed text-gray-600 md:text-[1.05rem]">
+                {PARTNER_HERO.subheadline}
               </p>
-              <p className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-medium text-gray-800 shadow-sm ring-1 ring-gray-200">
-                <Sparkles className="h-4 w-4 text-brand-green" />
-                {PARTNER_DEFAULT_COMMISSION_RATE.replace(".00", "")}% lifetime recurring commission for approved
-                affiliate partners
+              <CompactBulletList items={PARTNER_HERO.bullets} className="mt-5" />
+              <p className="mt-4 inline-flex w-fit items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-medium text-gray-800 ring-1 ring-gray-200 sm:text-sm">
+                <Sparkles className="h-3.5 w-3.5 text-brand-green" />
+                {PARTNER_DEFAULT_COMMISSION_RATE.replace(".00", "")}% lifetime recurring commission
               </p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <div className="mt-5 flex flex-col gap-2.5 sm:flex-row sm:items-center">
                 <button
                   type="button"
                   onClick={scrollToApply}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-brand-green px-7 font-semibold text-white hover:bg-emerald-700"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-brand-green px-6 font-semibold text-white hover:bg-emerald-700"
                 >
                   Apply to Become a Partner
                   <ArrowRight className="h-4 w-4" />
@@ -225,139 +254,181 @@ export function PartnerProgram() {
                 <button
                   type="button"
                   onClick={() => setShowDemoModal(true)}
-                  className="inline-flex h-11 items-center justify-center rounded-full border border-gray-300 bg-white px-7 font-semibold text-gray-900 hover:border-gray-400 hover:bg-gray-50"
+                  className="inline-flex h-11 items-center justify-center rounded-full border border-gray-300 bg-white px-6 font-semibold text-gray-900 hover:border-gray-400 hover:bg-gray-50"
                 >
                   Book a Partner Call
                 </button>
               </div>
             </div>
-            <div className="flex justify-center lg:justify-end">
+            <div className="flex items-center justify-center lg:justify-end">
               <MarketingScreenshot
                 {...S.unifiedInbox}
-                size="hero"
+                size="content"
                 priority
-                title="What partners help clients activate"
-                caption="Unified inbox with AI Copilot, lead scoring, and property matching — a high-converting product your audience already needs."
+                caption="Omnichannel inbox with AI Copilot and automations — one platform for every client vertical you serve."
                 captionAlign="left"
-                className="my-0"
+                className="my-0 w-full max-w-[min(100%,680px)]"
               />
             </div>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-14 md:px-6 md:py-16">
-        <section className="mb-16 md:mb-20">
-          <h2 className="font-display mb-3 text-2xl font-bold text-gray-900 md:text-3xl">Partner models</h2>
-          <p className="mb-8 max-w-2xl text-gray-600">
+      <main className="mx-auto max-w-6xl px-4 py-12 md:px-6 md:py-14">
+        <section className="mb-12 md:mb-14">
+          <h2 className="font-display mb-2 text-center text-2xl font-bold text-gray-900 md:text-3xl">
+            Partner models
+          </h2>
+          <p className="mb-6 text-center text-sm text-gray-600 sm:whitespace-nowrap md:text-base">
             Choose the path that matches how you work with clients. We assign the best fit during approval.
           </p>
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             {PARTNER_MODELS.map((model) => {
               const Icon = MODEL_ICONS[model.id];
               return (
                 <div
                   key={model.id}
-                  className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+                  className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md md:p-6"
                 >
-                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-brand-green">
-                    <Icon className="h-5 w-5" />
+                  <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-brand-green">
+                    <Icon className="h-4 w-4" />
                   </div>
                   <h3 className="text-lg font-bold text-gray-900">{model.title}</h3>
-                  <p className="mt-2 text-sm text-gray-600">{model.audience}</p>
-                  <ul className="mt-4 space-y-2">
-                    {model.benefits.map((b) => (
-                      <li key={b} className="flex items-start gap-2 text-sm text-gray-700">
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" />
-                        {b}
-                      </li>
-                    ))}
-                  </ul>
+                  <p className="mt-1.5 text-sm text-gray-600">{model.audience}</p>
+                  <CompactBulletList items={model.benefits} className="mt-3" />
                 </div>
               );
             })}
           </div>
         </section>
 
-        <section className="mb-16 md:mb-20">
-          <div className="grid items-start gap-10 lg:grid-cols-2 lg:gap-12">
+        <section className="mb-12 md:mb-14">
+          <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-10">
             <div>
-              <h2 className="font-display mb-3 text-2xl font-bold text-gray-900 md:text-3xl">
+              <h2 className="font-display mb-2 text-2xl font-bold text-gray-900 md:text-3xl">
                 Why partner with WhachatCRM
               </h2>
-              <p className="mb-6 text-gray-600">
-                WhachatCRM sits at the intersection of messaging, AI, and revenue workflows — a category your
-                clients are already asking about.
+              <p className="mb-4 max-w-lg text-sm text-gray-600 md:text-base">
+                A single AI messaging suite you can resell across industries—without building custom infrastructure
+                for every client.
               </p>
-              <ul className="grid gap-3 sm:grid-cols-2">
+              <ul className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
                 {PARTNER_WHY_BENEFITS.map((b) => (
-                  <li key={b} className="flex items-start gap-2 text-sm text-gray-700">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" />
-                    {b}
+                  <li key={b} className="flex items-start gap-2 text-sm leading-snug text-gray-700">
+                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-green" />
+                    <span>{b}</span>
                   </li>
                 ))}
               </ul>
             </div>
-            <MarketingScreenshot
-              {...S.aiCopilot}
-              title="AI Copilot partners can demo on day one"
-              captionAlign="left"
-              className="my-0 lg:ml-auto"
-            />
+            <div className="flex items-center justify-center lg:justify-end">
+              <MarketingScreenshot
+                {...S.aiCopilot}
+                title="AI Copilot your clients see on day one"
+                captionAlign="left"
+                className="my-0"
+              />
+            </div>
           </div>
         </section>
 
-        <section className="mb-16 md:mb-20">
-          <h2 className="font-display mb-3 text-2xl font-bold text-gray-900 md:text-3xl">What partners can sell</h2>
-          <p className="mb-8 max-w-2xl text-gray-600">
-            Position complete product lines — from omnichannel inbox to vertical workflows for ecommerce and real
-            estate.
+        <section className="mb-12 md:mb-14">
+          <h2 className="font-display mb-2 text-center text-2xl font-bold text-gray-900 md:text-3xl">
+            {PARTNER_INDUSTRY_SECTION.title}
+          </h2>
+          <p className="mx-auto mb-8 max-w-3xl text-center text-sm text-gray-600 md:text-base">
+            {PARTNER_INDUSTRY_SECTION.intro}
           </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="space-y-10 md:space-y-12">
+            {PARTNER_INDUSTRY_SHOWCASES.map((showcase) => {
+              const shot = SHOWCASE_SCREENSHOTS[showcase.screenshotKey];
+              return (
+                <div
+                  key={showcase.id}
+                  className="grid items-center gap-6 border-t border-gray-100 pt-10 first:border-t-0 first:pt-0 lg:grid-cols-2 lg:gap-10"
+                >
+                  <div className={showcase.imageOnLeft ? "lg:order-2" : undefined}>
+                    <h3 className="text-lg font-bold text-gray-900 md:text-xl">{showcase.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-gray-600">{showcase.intro}</p>
+                    <CompactBulletList items={showcase.bullets} className="mt-3" />
+                  </div>
+                  <div
+                    className={cn(
+                      "flex items-center justify-center",
+                      showcase.imageOnLeft ? "lg:order-1 lg:justify-start" : "lg:justify-end",
+                    )}
+                  >
+                    <MarketingScreenshot
+                      {...shot}
+                      title={showcase.screenshotTitle}
+                      caption={showcase.caption}
+                      captionAlign="left"
+                      className="my-0"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="mb-12 md:mb-14">
+          <h2 className="font-display mb-2 text-center text-2xl font-bold text-gray-900 md:text-3xl">
+            {PARTNER_SOLUTIONS_SECTION.title}
+          </h2>
+          <p className="mx-auto mb-6 max-w-3xl text-center text-sm text-gray-600 md:text-base">
+            {PARTNER_SOLUTIONS_SECTION.intro}
+          </p>
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
             {PARTNER_PRODUCT_LINES.map((item) => (
               <Link key={item.href + item.label} href={item.href}>
-                <a className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-800 transition-colors hover:border-brand-green/30 hover:bg-white hover:text-brand-green">
+                <a className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-800 transition-colors hover:border-brand-green/30 hover:bg-white hover:text-brand-green">
                   {item.label}
-                  <ArrowRight className="h-4 w-4 shrink-0 opacity-50" />
+                  <ArrowRight className="h-3.5 w-3.5 shrink-0 opacity-40" />
                 </a>
               </Link>
             ))}
           </div>
         </section>
 
-        <section className="mb-16 md:mb-20">
-          <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-12">
-            <MarketingScreenshot
-              {...S.automationWorkflows}
-              title="Preset automations accelerate client wins"
-              captionAlign="left"
-              className="my-0"
-            />
+        <section className="mb-12 md:mb-14">
+          <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-10">
             <div>
-              <h2 className="font-display mb-3 text-2xl font-bold text-gray-900 md:text-3xl">How it works</h2>
-              <p className="mb-8 text-gray-600">A straightforward path from application to recurring commissions.</p>
-              <ol className="space-y-6">
+              <h2 className="font-display mb-2 text-2xl font-bold text-gray-900 md:text-3xl">How it works</h2>
+              <p className="mb-6 text-sm text-gray-600 md:text-base">
+                A straightforward path from application to recurring commissions.
+              </p>
+              <ol className="space-y-4">
                 {PARTNER_STEPS.map((s) => (
-                  <li key={s.step} className="flex gap-4">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-green text-sm font-bold text-white">
+                  <li key={s.step} className="flex gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-green text-sm font-bold text-white">
                       {s.step}
                     </span>
-                    <div>
+                    <div className="pt-0.5">
                       <h3 className="font-semibold text-gray-900">{s.title}</h3>
-                      <p className="mt-1 text-sm leading-relaxed text-gray-600">{s.description}</p>
+                      <p className="mt-0.5 text-sm leading-snug text-gray-600">{s.description}</p>
                     </div>
                   </li>
                 ))}
               </ol>
             </div>
+            <div className="flex items-center justify-center lg:justify-end">
+              <MarketingScreenshot
+                {...S.channels}
+                title="Every channel your clients need"
+                caption="WhatsApp, Messenger, Instagram, and more — one inbox across industries."
+                captionAlign="left"
+                className="my-0"
+              />
+            </div>
           </div>
         </section>
 
-        <section id="apply" className="mb-16 scroll-mt-24 md:mb-20">
-          <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-12">
+        <section id="apply" className="mb-12 scroll-mt-24 md:mb-14">
+          <div className="max-w-2xl">
             <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6 md:p-8">
               <h2 className="font-display mb-2 text-2xl font-bold text-gray-900">Apply to the partner program</h2>
-              <p className="mb-6 text-sm text-gray-600">
+              <p className="mb-5 text-sm text-gray-600">
                 Tell us about your business and clients. Already approved?{" "}
                 <Link href="/partner-portal">
                   <a className="font-medium text-brand-green hover:underline">Sign in to the Partner Portal</a>
@@ -443,33 +514,27 @@ export function PartnerProgram() {
                 </button>
               </form>
             </div>
-            <MarketingScreenshot
-              {...S.propertyMatchDetails}
-              title="Real estate partners lead with outcomes"
-              captionAlign="left"
-              className="my-0 hidden lg:block"
-            />
           </div>
         </section>
 
-        <section id="faq" className="mb-16 md:mb-20">
-          <h2 className="font-display mb-6 text-2xl font-bold text-gray-900 md:text-3xl">Partner program FAQs</h2>
-          <dl className="space-y-4">
+        <section id="faq" className="mb-12 md:mb-14">
+          <h2 className="font-display mb-5 text-2xl font-bold text-gray-900 md:text-3xl">Partner program FAQs</h2>
+          <dl className="space-y-3">
             {PARTNER_FAQS.map((f) => (
-              <div key={f.question} className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+              <div key={f.question} className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm md:p-5">
                 <dt className="font-semibold text-gray-900">{f.question}</dt>
-                <dd className="mt-2 text-sm leading-relaxed text-gray-600">{f.answer}</dd>
+                <dd className="mt-1.5 text-sm leading-relaxed text-gray-600">{f.answer}</dd>
               </div>
             ))}
           </dl>
         </section>
 
-        <section className="rounded-2xl border border-gray-100 bg-gray-50 p-6">
-          <h2 className="mb-4 text-lg font-bold text-gray-900">Explore WhachatCRM product pages</h2>
-          <div className="flex flex-wrap gap-3">
+        <section className="rounded-2xl border border-gray-100 bg-gray-50 p-5 md:p-6">
+          <h2 className="mb-3 text-lg font-bold text-gray-900">Explore WhachatCRM product pages</h2>
+          <div className="flex flex-wrap gap-2">
             {PARTNER_RELATED_LINKS.map((l) => (
               <Link key={l.href} href={l.href}>
-                <a className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-brand-green hover:border-brand-green/40">
+                <a className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-brand-green hover:border-brand-green/40">
                   {l.label}
                 </a>
               </Link>
@@ -478,15 +543,15 @@ export function PartnerProgram() {
         </section>
       </main>
 
-      <section className="border-t border-gray-100 bg-gradient-to-b from-gray-50 to-white px-4 py-16 md:px-6">
+      <section className="border-t border-gray-100 bg-gradient-to-b from-gray-50 to-white px-4 py-14 md:px-6">
         <div className="mx-auto max-w-3xl text-center">
           <h2 className="font-display text-2xl font-bold text-gray-900 md:text-3xl">
             Ready to grow with WhachatCRM?
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-gray-600">
-            Join consultants, agencies, and vertical experts earning recurring revenue from AI messaging CRM.
+          <p className="mx-auto mt-3 max-w-lg text-sm text-gray-600 md:text-base">
+            Join agencies and consultants earning recurring revenue from a multi-industry AI messaging CRM.
           </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <div className="mt-6 flex flex-col items-center justify-center gap-2.5 sm:flex-row">
             <button
               type="button"
               onClick={scrollToApply}

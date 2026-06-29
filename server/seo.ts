@@ -278,7 +278,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   "/partner-program": {
     title: "WhachatCRM Partner Program | Earn Recurring Revenue with AI Messaging CRM",
     description:
-      "Partner with WhachatCRM and earn recurring commissions by helping businesses connect WhatsApp, Messenger, Instagram, AI Copilot, Shopify automation, and real estate CRM workflows.",
+      "Partner with WhachatCRM and earn recurring commissions helping ecommerce, service businesses, support teams, and real estate professionals connect WhatsApp, AI Copilot, and automation workflows.",
     canonical: `${BASE_URL}/partner-program`,
   },
   "/privacy-policy": {

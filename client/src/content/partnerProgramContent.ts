@@ -6,8 +6,32 @@ import {
 export const PARTNER_PROGRAM_META = {
   title: "WhachatCRM Partner Program | Earn Recurring Revenue with AI Messaging CRM",
   description:
-    "Partner with WhachatCRM and earn recurring commissions by helping businesses connect WhatsApp, Messenger, Instagram, AI Copilot, Shopify automation, and real estate CRM workflows.",
+    "Partner with WhachatCRM and earn recurring commissions helping ecommerce, service businesses, support teams, and real estate professionals connect WhatsApp, AI Copilot, and automation workflows.",
   slug: "partner-program",
+} as const;
+
+export const PARTNER_HERO = {
+  headline: "Help clients automate conversations—and grow recurring revenue",
+  subheadline:
+    "WhachatCRM is a multi-industry AI messaging platform built for agencies, consultants, and resellers who onboard clients and earn every month they stay subscribed.",
+  bullets: [
+    "Deploy WhatsApp, Messenger, and Instagram automations for clients",
+    "Earn 30% lifetime recurring commission on paid subscriptions",
+    "Serve ecommerce, service businesses, support teams, and real estate",
+    "0% markup on Meta messaging fees",
+  ],
+} as const;
+
+export const PARTNER_SOLUTIONS_SECTION = {
+  title: "One platform. Multiple revenue opportunities.",
+  intro:
+    "Package onboarding, AI, and automation into the services your agency already sells—then grow predictable monthly income as clients scale on WhachatCRM.",
+} as const;
+
+export const PARTNER_INDUSTRY_SECTION = {
+  title: "Solutions you can deploy for clients",
+  intro:
+    "Show prospects real product workflows—not slide decks. Onboard faster, deliver outcomes, and expand into new verticals from one platform.",
 } as const;
 
 export const PARTNER_MODELS = [
@@ -50,11 +74,11 @@ export const PARTNER_MODELS = [
     title: "Shopify / Ecommerce Partner",
     audience: "Shopify experts, ecommerce consultants, and digital agencies.",
     benefits: [
-      "Promote free abandoned cart tools",
-      "WhatsApp follow-up templates",
-      "Customer support inbox",
-      "AI Copilot",
-      "Preset automation templates",
+      "Free Abandoned Cart Recovery templates",
+      "Free Customer Retention and AI chatbot templates",
+      "WhatsApp follow-up and support inbox",
+      "AI Copilot for product and order questions",
+      "One-click template install for merchants",
     ],
   },
 ] as const;
@@ -63,12 +87,62 @@ export const PARTNER_WHY_BENEFITS = [
   `${PARTNER_DEFAULT_COMMISSION_RATE.replace(".00", "")}% lifetime recurring commission`,
   "Fast-growing AI messaging category",
   "WhatsApp + Messenger + Instagram unified inbox",
-  "Shopify automation and abandoned cart workflows",
-  "Real estate CRM with MLS integration",
+  "Free Abandoned Cart Recovery, Free Customer Retention Templates, Free AI Chatbot, and AI-powered follow-up sequences.",
   "AI Copilot and lead scoring",
-  "Partner-friendly pricing",
-  "We do not mark up Meta messaging fees",
+  "0% markup on Meta messaging fees — your customers pay Meta directly at Meta's standard pricing.",
+  "Real estate CRM with MLS integration (one of many supported verticals)",
   "Partner support and enablement resources",
+] as const;
+
+export const PARTNER_INDUSTRY_SHOWCASES = [
+  {
+    id: "embedded-signup",
+    title: "Embedded WhatsApp signup",
+    intro:
+      "Official Meta Embedded Signup lets partners connect client WhatsApp Business Accounts in minutes without complicated setup.",
+    bullets: [
+      "Guided business verification inside WhachatCRM",
+      "No manual API tokens for standard client onboarding",
+      "Faster time-to-live on the Cloud API",
+    ],
+    screenshotKey: "embeddedSignupMeta" as const,
+    screenshotTitle: "Meta embedded signup for Business",
+    caption:
+      "Official Meta onboarding connects your client's WhatsApp Business Account to WhachatCRM in minutes.",
+    imageOnLeft: false,
+  },
+  {
+    id: "shopify",
+    title: "Shopify & ecommerce",
+    intro:
+      "Launch revenue-driving automations on day one with free templates your clients can customize and deploy immediately.",
+    bullets: [
+      "Free Abandoned Cart Recovery sequences",
+      "Customer retention and limited-time offer templates",
+      "Unified inbox for support and marketing in one thread",
+    ],
+    screenshotKey: "automationTemplateCards" as const,
+    screenshotTitle: "Preset ecommerce automation templates",
+    caption:
+      "Abandoned Cart Recovery and Limited-Time Offers templates — free to install for Shopify merchants.",
+    imageOnLeft: true,
+  },
+  {
+    id: "real-estate",
+    title: "Real estate (one of many verticals)",
+    intro:
+      "Offer AI lead qualification, MLS property matching, and follow-up automation when your clients need a real estate workflow.",
+    bullets: [
+      "AI scores buyers and sellers from live conversations",
+      "MLS-backed listing recommendations in the inbox",
+      "Agent Pages and Growth Engine presets included",
+    ],
+    screenshotKey: "propertyMatchDetails" as const,
+    screenshotTitle: "MLS property matching",
+    caption:
+      "AI explains why a listing matches buyer preferences — one supported vertical among many.",
+    imageOnLeft: false,
+  },
 ] as const;
 
 export const PARTNER_PRODUCT_LINES = [
@@ -138,7 +212,7 @@ export const PARTNER_FAQS = [
   {
     question: "Does WhachatCRM mark up Meta messaging fees?",
     answer:
-      "No. WhachatCRM does not add per-message markup on Meta WhatsApp conversation fees. Your clients pay Meta directly for messaging usage per Meta's pricing.",
+      "No. WhachatCRM adds 0% markup on Meta messaging fees — your customers pay Meta directly at Meta's standard pricing.",
   },
   {
     question: "Can real estate consultants partner with WhachatCRM?",
