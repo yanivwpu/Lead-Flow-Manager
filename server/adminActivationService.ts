@@ -1,13 +1,13 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import {
   aiBusinessKnowledge,
   aiMessageLog,
   aiSettings,
   channelSettings,
+  contacts,
   conversations,
   growthEngineSetupTasks,
-  integrations,
   inventorySources,
   messages,
   userAutomationTemplates,
@@ -16,9 +16,23 @@ import {
   workflows,
 } from "@shared/schema";
 import { deriveAdminUserChannelConnections } from "@shared/adminChannelConnectionStatus";
+import {
+  REAL_ACTIVATION_CHANNELS,
+  type ActivationBillingBadge,
+  type ActivationMessageProvider,
+  buildUserMessageActivationStats,
+  deriveActivationBillingBadge,
+  deriveActivationChannelConnections,
+  isExcludedActivationAccount,
+  type ChannelMessageCounts,
+} from "@shared/adminActivationMetrics";
 import { getEffectivePlanForUser } from "./subscriptionService";
 import { computeTrialStatus, isProAiTrialActive } from "./trialEntitlements";
-import { getGhlMarketplacePaidUserIds, getGhlUserIds } from "./ghlMarketplaceService";
+import {
+  countActiveGhlMarketplaceInstalls,
+  getGhlMarketplacePaidUserIds,
+  getGhlUserIds,
+} from "./ghlMarketplaceService";
 import { RGE_TEMPLATE_ID } from "@shared/rgePaths";
 
 export type ActivationFunnelStep = {
@@ -52,6 +66,8 @@ export type ActivationSummary = {
     whatsappConnected: number;
     facebookMessengerConnected: number;
     instagramConnected: number;
+    shopifyConnected: number;
+    ghlConnected: number;
     anyChannelConnected: number;
     multipleChannelsConnected: number;
     embeddedSignupCompleted: number;
@@ -72,6 +88,7 @@ export type ActivationSummary = {
     agentPageEnabled: number;
     inventorySourceConnected: number;
     shopifyAbandonedCartEnabled: number;
+    accountsWithOrphanMessages: number;
   };
   funnel: ActivationFunnelStep[];
 };
@@ -84,6 +101,7 @@ export type ActivationAccountRow = {
   /** Effective plan (includes trial Pro) */
   plan: string;
   billingPlan: string;
+  billingBadge: ActivationBillingBadge;
   subscriptionStatus: string;
   trialStatus: string;
   isPaying: boolean;
@@ -92,14 +110,23 @@ export type ActivationAccountRow = {
   whatsappConnected: boolean;
   facebookConnected: boolean;
   instagramConnected: boolean;
+  shopifyConnected: boolean;
+  ghlConnected: boolean;
   conversationsCount: number;
+  /** Real customer-channel messages only (excludes webchat/sms/test) */
   messagesSent: number;
   messagesReceived: number;
+  messageSources: ActivationMessageProvider[];
+  unknownMessageSources: string[];
+  warningFlags: string[];
   aiUsed: boolean;
   automationsActive: boolean;
   rgeEnabled: boolean;
   agentPageEnabled: boolean;
   inventoryConnected: boolean;
+  /** Last activity on a real connected customer channel */
+  lastRealActivity: string | null;
+  /** @deprecated Use lastRealActivity */
   lastActivity: string | null;
   createdAt: string | null;
 };
@@ -215,23 +242,183 @@ export function serializeActivationDate(value: unknown): string | null {
   return null;
 }
 
+/** Exclude test/demo/seed accounts and contacts from message aggregates. */
+function realMessageSqlConditions() {
+  return and(
+    sql`lower(${users.email}) != 'demo@whachat.com'`,
+    sql`lower(${users.email}) not like '%@test.com'`,
+    sql`lower(${users.email}) not like '%@shopify.whachatcrm.com'`,
+    sql`coalesce(${contacts.notes}, '') not ilike '%test lead%'`,
+    sql`coalesce(${contacts.notes}, '') not ilike '%this is a test%'`,
+  );
+}
+
+async function fetchMessageStatsByUserChannel(): Promise<Map<string, Map<string, ChannelMessageCounts>>> {
+  const rows = await db
+    .select({
+      userId: messages.userId,
+      channel: conversations.channel,
+      sent: sql<number>`count(*) filter (where ${messages.direction} = 'outbound')::int`,
+      received: sql<number>`count(*) filter (where ${messages.direction} = 'inbound')::int`,
+      lastAt: sql<Date | null>`max(${messages.createdAt})`,
+    })
+    .from(messages)
+    .innerJoin(conversations, eq(messages.conversationId, conversations.id))
+    .innerJoin(contacts, eq(messages.contactId, contacts.id))
+    .innerJoin(users, eq(messages.userId, users.id))
+    .where(realMessageSqlConditions())
+    .groupBy(messages.userId, conversations.channel);
+
+  const byUser = new Map<string, Map<string, ChannelMessageCounts>>();
+  for (const row of rows) {
+    let channels = byUser.get(row.userId);
+    if (!channels) {
+      channels = new Map();
+      byUser.set(row.userId, channels);
+    }
+    channels.set(row.channel, {
+      sent: row.sent || 0,
+      received: row.received || 0,
+      lastAt: row.lastAt,
+    });
+  }
+  return byUser;
+}
+
+function mapChannelSettingsRows(channelRows: (typeof channelSettings.$inferSelect)[]) {
+  const channelByUser = new Map<string, typeof channelRows>();
+  for (const row of channelRows) {
+    const list = channelByUser.get(row.userId) ?? [];
+    list.push(row);
+    channelByUser.set(row.userId, list);
+  }
+  return channelByUser;
+}
+
+function deriveUserConnections(
+  user: typeof users.$inferSelect,
+  channelByUser: Map<string, (typeof channelSettings.$inferSelect)[]>,
+  ghlUserIds: Set<string>,
+) {
+  const meta = deriveAdminUserChannelConnections({
+    user,
+    channelSettings: (channelByUser.get(user.id) ?? []).map((row) => ({
+      channel: row.channel,
+      isConnected: row.isConnected,
+      isEnabled: row.isEnabled,
+      config: row.config,
+    })),
+  });
+
+  return {
+    meta,
+    activation: deriveActivationChannelConnections({
+      user,
+      whatsappConnected: meta.whatsappConnected,
+      facebookConnected: meta.facebook.state === "connected",
+      instagramConnected: meta.instagram.state === "connected",
+      ghlUserIds,
+    }),
+  };
+}
+
+function isMetricUser(userId: string, userEmailById: Map<string, string>): boolean {
+  return !isExcludedActivationAccount(userEmailById.get(userId));
+}
+
 export async function getActivationSummary(): Promise<ActivationSummary> {
   const now = new Date();
-  const [allUsers, ghlUserIds, ghlMarketplacePaidUserIds] = await Promise.all([
+  const [
+    allUsers,
+    ghlUserIds,
+    ghlMarketplacePaidUserIds,
+    ghlInstallCount,
+    channelRows,
+    messageStatsByUser,
+    conversationCounts,
+    aiUsers,
+    activeWorkflowUsers,
+    activeTemplateUsers,
+    sessionUsers,
+    aiLeadScoringActive,
+    templatesUsed,
+    rgeEnabled,
+    agentPageEnabled,
+    inventorySourceConnected,
+    shopifyAbandonedCartEnabled,
+  ] = await Promise.all([
     db.select().from(users),
     getGhlUserIds(),
     getGhlMarketplacePaidUserIds(),
+    countActiveGhlMarketplaceInstalls(),
+    db.select().from(channelSettings),
+    fetchMessageStatsByUserChannel(),
+    db
+      .select({
+        userId: conversations.userId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(conversations)
+      .where(inArray(conversations.channel, [...REAL_ACTIVATION_CHANNELS]))
+      .groupBy(conversations.userId),
+    db.select({ userId: aiMessageLog.userId }).from(aiMessageLog).groupBy(aiMessageLog.userId),
+    db
+      .select({ userId: workflows.userId })
+      .from(workflows)
+      .where(eq(workflows.isActive, true))
+      .groupBy(workflows.userId),
+    db
+      .select({ userId: userAutomationTemplates.userId })
+      .from(userAutomationTemplates)
+      .where(eq(userAutomationTemplates.isActive, true))
+      .groupBy(userAutomationTemplates.userId),
+    db
+      .select({ userId: sql<string>`(${userSessions.sess}->'passport'->>'user')` })
+      .from(userSessions)
+      .where(sql`${userSessions.expire} > NOW()`),
+    db
+      .select({ userId: aiSettings.userId })
+      .from(aiSettings)
+      .where(eq(aiSettings.leadQualificationEnabled, true))
+      .then((rows) => rows.length),
+    db
+      .select({ userId: userAutomationTemplates.userId })
+      .from(userAutomationTemplates)
+      .groupBy(userAutomationTemplates.userId)
+      .then((rows) => rows.length),
+    db
+      .select({ userId: growthEngineSetupTasks.userId })
+      .from(growthEngineSetupTasks)
+      .where(eq(growthEngineSetupTasks.templateId, RGE_TEMPLATE_ID))
+      .groupBy(growthEngineSetupTasks.userId)
+      .then((rows) => rows.length),
+    db
+      .select({ userId: aiBusinessKnowledge.userId })
+      .from(aiBusinessKnowledge)
+      .where(eq(aiBusinessKnowledge.agentPageEnabled, true))
+      .then((rows) => rows.length),
+    db
+      .select({ userId: inventorySources.userId })
+      .from(inventorySources)
+      .groupBy(inventorySources.userId)
+      .then((rows) => rows.length),
+    db
+      .select({ userId: userAutomationTemplates.userId })
+      .from(userAutomationTemplates)
+      .where(
+        and(
+          eq(userAutomationTemplates.category, "abandoned_cart"),
+          eq(userAutomationTemplates.isActive, true),
+        ),
+      )
+      .groupBy(userAutomationTemplates.userId)
+      .then((rows) => rows.length),
   ]);
 
-  const ghlInstallCount = (
-    await db
-      .select({ id: integrations.id })
-      .from(integrations)
-      .where(eq(integrations.type, "gohighlevel"))
-  ).length;
-
-  const shopifyInstalls = allUsers.filter((u) => u.shopifyInstalledAt || u.shopifyShop).length;
-  const websiteSignups = allUsers.filter(
+  const userEmailById = new Map(allUsers.map((u) => [u.id, u.email]));
+  const metricUsers = allUsers.filter((u) => !isExcludedActivationAccount(u.email));
+  const shopifyInstalls = metricUsers.filter((u) => u.shopifyInstalledAt || u.shopifyShop).length;
+  const websiteSignups = metricUsers.filter(
     (u) => !ghlUserIds.has(u.id) && !u.shopifyInstalledAt && !u.shopifyShop,
   ).length;
 
@@ -242,31 +429,13 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
   let shopifyPaidUsers = 0;
   let marketplacePaidUsers = 0;
 
-  for (const user of allUsers) {
-    const billing = classifyActivationBilling(user, ghlMarketplacePaidUserIds, now);
-    const effectivePlan = getEffectivePlanForUser(user, now);
-
-    if (billing.isProTrial) proTrialUsers++;
-    if (billing.isPaidSubscriber) {
-      paidSubscribers++;
-      if (billing.paidBillingSource === "website_stripe") websitePaidUsers++;
-      if (billing.paidBillingSource === "shopify") shopifyPaidUsers++;
-      if (billing.paidBillingSource === "ghl_marketplace") marketplacePaidUsers++;
-    }
-    if (effectivePlan === "free" && !billing.isPaidSubscriber) freeUsers++;
-  }
-
-  const channelRows = await db.select().from(channelSettings);
-  const channelByUser = new Map<string, typeof channelRows>();
-  for (const row of channelRows) {
-    const list = channelByUser.get(row.userId) ?? [];
-    list.push(row);
-    channelByUser.set(row.userId, list);
-  }
+  const channelByUser = mapChannelSettingsRows(channelRows);
 
   let whatsappConnected = 0;
   let facebookMessengerConnected = 0;
   let instagramConnected = 0;
+  let shopifyConnectedCount = 0;
+  let ghlConnectedCount = 0;
   let anyChannelConnected = 0;
   let multipleChannelsConnected = 0;
   let embeddedSignupCompleted = 0;
@@ -282,30 +451,40 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
   const usersWithAi = new Set<string>();
   const usersWithAutomation = new Set<string>();
   const usersPaid = new Set<string>();
+  let accountsWithOrphanMessages = 0;
 
-  for (const user of allUsers) {
-    const connections = deriveAdminUserChannelConnections({
-      user,
-      channelSettings: (channelByUser.get(user.id) ?? []).map((row) => ({
-        channel: row.channel,
-        isConnected: row.isConnected,
-        isEnabled: row.isEnabled,
-        config: row.config,
-      })),
-    });
+  for (const user of metricUsers) {
+    const billing = classifyActivationBilling(user, ghlMarketplacePaidUserIds, now);
+    const effectivePlan = getEffectivePlanForUser(user, now);
 
-    if (connections.whatsappConnected) whatsappConnected++;
-    if (connections.facebook.state === "connected") facebookMessengerConnected++;
-    if (connections.instagram.state === "connected") instagramConnected++;
-    if (connections.hasAnyChannel) {
+    if (billing.isProTrial) proTrialUsers++;
+    if (billing.isPaidSubscriber) {
+      paidSubscribers++;
+      if (billing.paidBillingSource === "website_stripe") websitePaidUsers++;
+      if (billing.paidBillingSource === "shopify") shopifyPaidUsers++;
+      if (billing.paidBillingSource === "ghl_marketplace") marketplacePaidUsers++;
+    }
+    if (effectivePlan === "free" && !billing.isPaidSubscriber && !billing.isProTrial) freeUsers++;
+
+    const { activation } = deriveUserConnections(user, channelByUser, ghlUserIds);
+
+    if (activation.whatsappConnected) whatsappConnected++;
+    if (activation.facebookConnected) facebookMessengerConnected++;
+    if (activation.instagramConnected) instagramConnected++;
+    if (activation.shopifyConnected) shopifyConnectedCount++;
+    if (activation.ghlConnected) ghlConnectedCount++;
+
+    if (activation.hasAnyActivationChannel) {
       anyChannelConnected++;
       usersWithChannel.add(user.id);
     }
 
     const connectedCount = [
-      connections.whatsappConnected,
-      connections.facebook.state === "connected",
-      connections.instagram.state === "connected",
+      activation.whatsappConnected,
+      activation.facebookConnected,
+      activation.instagramConnected,
+      activation.shopifyConnected,
+      activation.ghlConnected,
     ].filter(Boolean).length;
     if (connectedCount >= 2) multipleChannelsConnected++;
 
@@ -318,115 +497,41 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
     if (user.metaBusinessAccountId) wabaIdPresent++;
     if (user.metaPhoneNumberId) phoneNumberIdPresent++;
 
-    const billing = classifyActivationBilling(user, ghlMarketplacePaidUserIds, now);
     if (billing.isPaidSubscriber) usersPaid.add(user.id);
+
+    const msgStats = buildUserMessageActivationStats({
+      channelCounts: messageStatsByUser.get(user.id) ?? new Map(),
+      connections: activation,
+      serializeDate: serializeActivationDate,
+    });
+
+    if (msgStats.warningFlags.length > 0) accountsWithOrphanMessages++;
+
+    if (msgStats.funnelReceived > 0) usersWithInbound.add(user.id);
+    if (msgStats.funnelSent > 0) usersWithOutbound.add(user.id);
   }
 
-  const conversationCounts = await db
-    .select({
-      userId: conversations.userId,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(conversations)
-    .groupBy(conversations.userId);
-  const conversationCountMap = new Map(conversationCounts.map((r) => [r.userId, r.count]));
   const totalConversations = conversationCounts.reduce((sum, r) => sum + (r.count || 0), 0);
-  for (const row of conversationCounts) usersWithConversation.add(row.userId);
-
-  const messageStats = await db
-    .select({
-      userId: messages.userId,
-      direction: messages.direction,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(messages)
-    .groupBy(messages.userId, messages.direction);
-
-  for (const row of messageStats) {
-    if (row.direction === "inbound") usersWithInbound.add(row.userId);
-    if (row.direction === "outbound") usersWithOutbound.add(row.userId);
+  for (const row of conversationCounts) {
+    if (isMetricUser(row.userId, userEmailById)) usersWithConversation.add(row.userId);
   }
 
-  const aiUsers = await db
-    .select({ userId: aiMessageLog.userId })
-    .from(aiMessageLog)
-    .groupBy(aiMessageLog.userId);
-  for (const row of aiUsers) usersWithAi.add(row.userId);
-
-  const activeWorkflowUsers = await db
-    .select({ userId: workflows.userId })
-    .from(workflows)
-    .where(eq(workflows.isActive, true))
-    .groupBy(workflows.userId);
-  const activeTemplateUsers = await db
-    .select({ userId: userAutomationTemplates.userId })
-    .from(userAutomationTemplates)
-    .where(eq(userAutomationTemplates.isActive, true))
-    .groupBy(userAutomationTemplates.userId);
+  for (const row of aiUsers) {
+    if (isMetricUser(row.userId, userEmailById)) usersWithAi.add(row.userId);
+  }
   for (const row of [...activeWorkflowUsers, ...activeTemplateUsers]) {
-    usersWithAutomation.add(row.userId);
+    if (isMetricUser(row.userId, userEmailById)) usersWithAutomation.add(row.userId);
   }
-
-  const sessionUsers = await db
-    .select({ userId: sql<string>`(${userSessions.sess}->'passport'->>'user')` })
-    .from(userSessions)
-    .where(sql`${userSessions.expire} > NOW()`);
   for (const row of sessionUsers) {
-    if (row.userId) usersLoggedIn.add(row.userId);
+    if (row.userId && isMetricUser(row.userId, userEmailById)) usersLoggedIn.add(row.userId);
   }
-
-  const aiLeadScoringActive = (
-    await db
-      .select({ userId: aiSettings.userId })
-      .from(aiSettings)
-      .where(eq(aiSettings.leadQualificationEnabled, true))
-  ).length;
 
   const automationsActiveCount = usersWithAutomation.size;
-
-  const templatesUsed = (
-    await db.select({ userId: userAutomationTemplates.userId }).from(userAutomationTemplates).groupBy(
-      userAutomationTemplates.userId,
-    )
-  ).length;
-
-  const rgeEnabled = (
-    await db
-      .select({ userId: growthEngineSetupTasks.userId })
-      .from(growthEngineSetupTasks)
-      .where(eq(growthEngineSetupTasks.templateId, RGE_TEMPLATE_ID))
-      .groupBy(growthEngineSetupTasks.userId)
-  ).length;
-
-  const agentPageEnabled = (
-    await db
-      .select({ userId: aiBusinessKnowledge.userId })
-      .from(aiBusinessKnowledge)
-      .where(eq(aiBusinessKnowledge.agentPageEnabled, true))
-  ).length;
-
-  const inventorySourceConnected = (
-    await db.select({ userId: inventorySources.userId }).from(inventorySources).groupBy(inventorySources.userId)
-  ).length;
-
-  const shopifyAbandonedCartEnabled = (
-    await db
-      .select({ userId: userAutomationTemplates.userId })
-      .from(userAutomationTemplates)
-      .where(
-        and(
-          eq(userAutomationTemplates.category, "abandoned_cart"),
-          eq(userAutomationTemplates.isActive, true),
-        ),
-      )
-      .groupBy(userAutomationTemplates.userId)
-  ).length;
-
-  const totalUsers = allUsers.length;
+  const totalUsers = metricUsers.length;
   const activeUsers = usersLoggedIn.size || usersWithConversation.size;
 
   const signedUp = totalUsers;
-  const loggedIn = Math.max(usersLoggedIn.size, usersWithConversation.size, usersWithInbound.size);
+  const loggedIn = usersLoggedIn.size;
   const connectedChannel = usersWithChannel.size;
   const receivedInbound = usersWithInbound.size;
   const sentReply = usersWithOutbound.size;
@@ -485,6 +590,8 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
       whatsappConnected,
       facebookMessengerConnected,
       instagramConnected,
+      shopifyConnected: shopifyConnectedCount,
+      ghlConnected: ghlConnectedCount,
       anyChannelConnected,
       multipleChannelsConnected,
       embeddedSignupCompleted,
@@ -505,6 +612,7 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
       agentPageEnabled,
       inventorySourceConnected,
       shopifyAbandonedCartEnabled,
+      accountsWithOrphanMessages,
     },
     funnel,
   };
@@ -515,6 +623,7 @@ export type ActivationAccountsResult = {
   total: number;
   /** @deprecated Use `accounts` — kept for backward compatibility */
   rows: ActivationAccountRow[];
+  accountsWithOrphanMessages: number;
 };
 
 export async function getActivationAccounts(
@@ -534,68 +643,57 @@ async function loadActivationAccounts(
 ): Promise<ActivationAccountsResult> {
   const now = new Date();
 
-  const [ghlUserIds, ghlMarketplacePaidUserIds, allUsers, channelRows, conversationCounts, messageAgg, aiRows, activeWorkflowRows, activeTemplateRows, rgeRows, agentPageRows, inventoryRows] =
-    await Promise.all([
-      getGhlUserIds(),
-      getGhlMarketplacePaidUserIds(),
-      db.select().from(users),
-      db.select().from(channelSettings),
-      db
-        .select({
-          userId: conversations.userId,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(conversations)
-        .groupBy(conversations.userId),
-      db
-        .select({
-          userId: messages.userId,
-          sent: sql<number>`count(*) filter (where ${messages.direction} = 'outbound')::int`,
-          received: sql<number>`count(*) filter (where ${messages.direction} = 'inbound')::int`,
-          lastAt: sql<Date | null>`max(${messages.createdAt})`,
-        })
-        .from(messages)
-        .groupBy(messages.userId),
-      db.select({ userId: aiMessageLog.userId }).from(aiMessageLog).groupBy(aiMessageLog.userId),
-      db
-        .select({ userId: workflows.userId })
-        .from(workflows)
-        .where(eq(workflows.isActive, true))
-        .groupBy(workflows.userId),
-      db
-        .select({ userId: userAutomationTemplates.userId })
-        .from(userAutomationTemplates)
-        .where(eq(userAutomationTemplates.isActive, true))
-        .groupBy(userAutomationTemplates.userId),
-      db
-        .select({ userId: growthEngineSetupTasks.userId })
-        .from(growthEngineSetupTasks)
-        .where(eq(growthEngineSetupTasks.templateId, RGE_TEMPLATE_ID)),
-      db
-        .select({ userId: aiBusinessKnowledge.userId })
-        .from(aiBusinessKnowledge)
-        .where(eq(aiBusinessKnowledge.agentPageEnabled, true)),
-      db.select({ userId: inventorySources.userId }).from(inventorySources),
-    ]);
+  const [
+    ghlUserIds,
+    ghlMarketplacePaidUserIds,
+    allUsers,
+    channelRows,
+    conversationCounts,
+    messageStatsByUser,
+    aiRows,
+    activeWorkflowRows,
+    activeTemplateRows,
+    rgeRows,
+    agentPageRows,
+    inventoryRows,
+  ] = await Promise.all([
+    getGhlUserIds(),
+    getGhlMarketplacePaidUserIds(),
+    db.select().from(users),
+    db.select().from(channelSettings),
+    db
+      .select({
+        userId: conversations.userId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(conversations)
+      .where(inArray(conversations.channel, [...REAL_ACTIVATION_CHANNELS]))
+      .groupBy(conversations.userId),
+    fetchMessageStatsByUserChannel(),
+    db.select({ userId: aiMessageLog.userId }).from(aiMessageLog).groupBy(aiMessageLog.userId),
+    db
+      .select({ userId: workflows.userId })
+      .from(workflows)
+      .where(eq(workflows.isActive, true))
+      .groupBy(workflows.userId),
+    db
+      .select({ userId: userAutomationTemplates.userId })
+      .from(userAutomationTemplates)
+      .where(eq(userAutomationTemplates.isActive, true))
+      .groupBy(userAutomationTemplates.userId),
+    db
+      .select({ userId: growthEngineSetupTasks.userId })
+      .from(growthEngineSetupTasks)
+      .where(eq(growthEngineSetupTasks.templateId, RGE_TEMPLATE_ID)),
+    db
+      .select({ userId: aiBusinessKnowledge.userId })
+      .from(aiBusinessKnowledge)
+      .where(eq(aiBusinessKnowledge.agentPageEnabled, true)),
+    db.select({ userId: inventorySources.userId }).from(inventorySources),
+  ]);
 
-  const channelByUser = new Map<string, typeof channelRows>();
-  for (const row of channelRows) {
-    const list = channelByUser.get(row.userId) ?? [];
-    list.push(row);
-    channelByUser.set(row.userId, list);
-  }
-
+  const channelByUser = mapChannelSettingsRows(channelRows);
   const conversationCountMap = new Map(conversationCounts.map((r) => [r.userId, r.count || 0]));
-
-  const sentMap = new Map<string, number>();
-  const receivedMap = new Map<string, number>();
-  const lastActivityMap = new Map<string, string>();
-  for (const row of messageAgg) {
-    sentMap.set(row.userId, row.sent || 0);
-    receivedMap.set(row.userId, row.received || 0);
-    const lastActivity = serializeActivationDate(row.lastAt);
-    if (lastActivity) lastActivityMap.set(row.userId, lastActivity);
-  }
 
   const aiUserIds = new Set(aiRows.map((r) => r.userId));
   const automationUserIds = new Set([
@@ -606,19 +704,21 @@ async function loadActivationAccounts(
   const agentPageUserIds = new Set(agentPageRows.map((r) => r.userId));
   const inventoryUserIds = new Set(inventoryRows.map((r) => r.userId));
 
+  let accountsWithOrphanMessages = 0;
+
   let rows: ActivationAccountRow[] = allUsers.map((user) => {
-    const connections = deriveAdminUserChannelConnections({
-      user,
-      channelSettings: (channelByUser.get(user.id) ?? []).map((row) => ({
-        channel: row.channel,
-        isConnected: row.isConnected,
-        isEnabled: row.isEnabled,
-        config: row.config,
-      })),
-    });
+    const { activation } = deriveUserConnections(user, channelByUser, ghlUserIds);
     const plan = getEffectivePlanForUser(user, now);
     const conversationsCount = conversationCountMap.get(user.id) || 0;
     const billing = classifyActivationBilling(user, ghlMarketplacePaidUserIds, now);
+    const billingBadge = deriveActivationBillingBadge(user, billing);
+    const msgStats = buildUserMessageActivationStats({
+      channelCounts: messageStatsByUser.get(user.id) ?? new Map(),
+      connections: activation,
+      serializeDate: serializeActivationDate,
+    });
+
+    if (msgStats.warningFlags.length > 0) accountsWithOrphanMessages++;
 
     return {
       id: user.id,
@@ -627,23 +727,30 @@ async function loadActivationAccounts(
       source: deriveUserSource(user, ghlUserIds),
       plan,
       billingPlan: user.billingPlan || "free",
+      billingBadge,
       subscriptionStatus: user.subscriptionStatus || "unknown",
       trialStatus: user.trialStatus || "none",
       isPaying: billing.isPaidSubscriber,
       isProTrial: billing.isProTrial,
       paidBillingSource: billing.paidBillingSource,
-      whatsappConnected: connections.whatsappConnected,
-      facebookConnected: connections.facebook.state === "connected",
-      instagramConnected: connections.instagram.state === "connected",
+      whatsappConnected: activation.whatsappConnected,
+      facebookConnected: activation.facebookConnected,
+      instagramConnected: activation.instagramConnected,
+      shopifyConnected: activation.shopifyConnected,
+      ghlConnected: activation.ghlConnected,
       conversationsCount,
-      messagesSent: sentMap.get(user.id) || 0,
-      messagesReceived: receivedMap.get(user.id) || 0,
+      messagesSent: msgStats.messagesSent,
+      messagesReceived: msgStats.messagesReceived,
+      messageSources: msgStats.messageSources,
+      unknownMessageSources: msgStats.unknownMessageSources,
+      warningFlags: msgStats.warningFlags,
       aiUsed: aiUserIds.has(user.id),
       automationsActive: automationUserIds.has(user.id),
       rgeEnabled: rgeUserIds.has(user.id),
       agentPageEnabled: agentPageUserIds.has(user.id),
       inventoryConnected: inventoryUserIds.has(user.id),
-      lastActivity: lastActivityMap.get(user.id) ?? null,
+      lastRealActivity: msgStats.lastRealActivity,
+      lastActivity: msgStats.lastRealActivity,
       createdAt: serializeActivationDate(user.createdAt),
     };
   });
@@ -664,9 +771,23 @@ async function loadActivationAccounts(
     rows = rows.filter((r) => r.subscriptionStatus === filters.status);
   }
   if (filters.channelConnected === "yes") {
-    rows = rows.filter((r) => r.whatsappConnected || r.facebookConnected || r.instagramConnected);
+    rows = rows.filter(
+      (r) =>
+        r.whatsappConnected ||
+        r.facebookConnected ||
+        r.instagramConnected ||
+        r.shopifyConnected ||
+        r.ghlConnected,
+    );
   } else if (filters.channelConnected === "no") {
-    rows = rows.filter((r) => !r.whatsappConnected && !r.facebookConnected && !r.instagramConnected);
+    rows = rows.filter(
+      (r) =>
+        !r.whatsappConnected &&
+        !r.facebookConnected &&
+        !r.instagramConnected &&
+        !r.shopifyConnected &&
+        !r.ghlConnected,
+    );
   }
   if (filters.hasConversations === "yes") {
     rows = rows.filter((r) => r.conversationsCount > 0);
@@ -694,5 +815,5 @@ async function loadActivationAccounts(
   const offset = filters.offset ?? 0;
   const limit = filters.limit ?? 100;
   const accounts = rows.slice(offset, offset + limit);
-  return { total, accounts, rows: accounts };
+  return { total, accounts, rows: accounts, accountsWithOrphanMessages };
 }

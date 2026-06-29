@@ -26,6 +26,8 @@ type ActivationSummary = {
   funnel: { key: string; label: string; count: number; percent: number }[];
 };
 
+type ActivationBillingBadge = "free" | "trial" | "paid" | "canceled" | "expired";
+
 type ActivationAccount = {
   id: string;
   name: string;
@@ -33,6 +35,7 @@ type ActivationAccount = {
   source: string;
   plan: string;
   billingPlan: string;
+  billingBadge: ActivationBillingBadge;
   subscriptionStatus: string;
   trialStatus: string;
   isPaying: boolean;
@@ -41,14 +44,20 @@ type ActivationAccount = {
   whatsappConnected: boolean;
   facebookConnected: boolean;
   instagramConnected: boolean;
+  shopifyConnected: boolean;
+  ghlConnected: boolean;
   conversationsCount: number;
   messagesSent: number;
   messagesReceived: number;
+  messageSources: string[];
+  unknownMessageSources: string[];
+  warningFlags: string[];
   aiUsed: boolean;
   automationsActive: boolean;
   rgeEnabled: boolean;
   agentPageEnabled: boolean;
   inventoryConnected: boolean;
+  lastRealActivity: string | null;
   lastActivity: string | null;
   createdAt: string | null;
 };
@@ -103,6 +112,45 @@ function BoolBadge({ value }: { value: boolean }) {
     <Badge className="bg-green-100 text-green-700">Yes</Badge>
   ) : (
     <Badge variant="secondary">No</Badge>
+  );
+}
+
+const BILLING_BADGE_STYLES: Record<ActivationBillingBadge, string> = {
+  free: "bg-gray-100 text-gray-700",
+  trial: "bg-amber-100 text-amber-800",
+  paid: "bg-emerald-100 text-emerald-800",
+  canceled: "bg-red-100 text-red-800",
+  expired: "bg-orange-100 text-orange-800",
+};
+
+function BillingBadge({ badge }: { badge: ActivationBillingBadge }) {
+  return (
+    <Badge className={BILLING_BADGE_STYLES[badge]}>
+      {badge.charAt(0).toUpperCase() + badge.slice(1)}
+    </Badge>
+  );
+}
+
+function ChannelBadges({ row }: { row: ActivationAccount }) {
+  const channels = [
+    { key: "WA", on: row.whatsappConnected },
+    { key: "FB", on: row.facebookConnected },
+    { key: "IG", on: row.instagramConnected },
+    { key: "Shopify", on: row.shopifyConnected },
+    { key: "GHL", on: row.ghlConnected },
+  ];
+  return (
+    <div className="flex flex-wrap gap-1">
+      {channels.map((c) => (
+        <Badge
+          key={c.key}
+          variant="secondary"
+          className={c.on ? "bg-green-100 text-green-700" : "bg-gray-50 text-gray-400"}
+        >
+          {c.key}
+        </Badge>
+      ))}
+    </div>
   );
 }
 
@@ -181,7 +229,9 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
     <div className="space-y-6">
       <div>
         <h2 className="font-semibold text-gray-900">Activation overview</h2>
-        <p className="text-sm text-gray-500">Product adoption across GHL, Shopify, website signups, and channels.</p>
+        <p className="text-sm text-gray-500">
+          Real customer-channel activation only — excludes webchat, SMS, test/demo accounts, and orphan messages.
+        </p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -323,41 +373,36 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
                 <TableHead>Account</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead>Plan</TableHead>
-                <TableHead>Billing</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Billing status</TableHead>
                 <TableHead>Trial</TableHead>
-                <TableHead>Paying</TableHead>
-                <TableHead>WA</TableHead>
-                <TableHead>FB</TableHead>
-                <TableHead>IG</TableHead>
+                <TableHead>Channels</TableHead>
                 <TableHead>Conv.</TableHead>
                 <TableHead>Sent</TableHead>
                 <TableHead>Recv.</TableHead>
+                <TableHead>Message source</TableHead>
+                <TableHead>Warnings</TableHead>
                 <TableHead>AI</TableHead>
                 <TableHead>Auto</TableHead>
-                <TableHead>RGE</TableHead>
-                <TableHead>Agent</TableHead>
-                <TableHead>Inventory</TableHead>
-                <TableHead>Last activity</TableHead>
+                <TableHead>Last real activity</TableHead>
                 <TableHead>Created</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {accountsLoading && accountRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={20} className="py-8 text-center">
+                  <TableCell colSpan={15} className="py-8 text-center">
                     <Loader2 className="mx-auto h-5 w-5 animate-spin text-gray-400" />
                   </TableCell>
                 </TableRow>
               ) : accountsError ? (
                 <TableRow>
-                  <TableCell colSpan={20} className="py-8 text-center text-sm text-gray-500">
+                  <TableCell colSpan={15} className="py-8 text-center text-sm text-gray-500">
                     No accounts loaded. Use Retry above or check server logs.
                   </TableCell>
                 </TableRow>
               ) : accountRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={20} className="py-8 text-center text-sm text-gray-500">
+                  <TableCell colSpan={15} className="py-8 text-center text-sm text-gray-500">
                     No accounts match the current filters.
                   </TableCell>
                 </TableRow>
@@ -370,34 +415,53 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
                     </TableCell>
                     <TableCell className="text-sm">{row.source}</TableCell>
                     <TableCell className="text-sm capitalize">{row.plan}</TableCell>
-                    <TableCell className="text-sm capitalize">{row.billingPlan}</TableCell>
-                    <TableCell className="text-sm">{row.subscriptionStatus}</TableCell>
-                    <TableCell className="text-sm">
-                      {row.isProTrial ? (
-                        <Badge className="bg-amber-100 text-amber-800">Pro trial</Badge>
-                      ) : (
-                        row.trialStatus
-                      )}
-                    </TableCell>
                     <TableCell>
-                      <BoolBadge value={row.isPaying} />
+                      <BillingBadge badge={row.billingBadge} />
                       {row.paidBillingSource ? (
                         <div className="mt-0.5 text-[10px] text-gray-500">{row.paidBillingSource}</div>
-                      ) : null}
+                      ) : (
+                        <div className="mt-0.5 text-[10px] text-gray-400 capitalize">{row.billingPlan}</div>
+                      )}
                     </TableCell>
-                    <TableCell><BoolBadge value={row.whatsappConnected} /></TableCell>
-                    <TableCell><BoolBadge value={row.facebookConnected} /></TableCell>
-                    <TableCell><BoolBadge value={row.instagramConnected} /></TableCell>
+                    <TableCell className="text-sm">
+                      {row.isProTrial ? (
+                        <Badge className="bg-amber-100 text-amber-800">Active trial</Badge>
+                      ) : row.trialStatus === "expired" ? (
+                        <Badge className="bg-orange-100 text-orange-800">Expired</Badge>
+                      ) : (
+                        <span className="text-gray-500">{row.trialStatus}</span>
+                      )}
+                    </TableCell>
+                    <TableCell><ChannelBadges row={row} /></TableCell>
                     <TableCell className="text-sm">{row.conversationsCount}</TableCell>
                     <TableCell className="text-sm">{row.messagesSent}</TableCell>
                     <TableCell className="text-sm">{row.messagesReceived}</TableCell>
+                    <TableCell className="text-xs text-gray-600">
+                      {row.messageSources.length > 0 ? (
+                        row.messageSources.join(", ")
+                      ) : row.unknownMessageSources.length > 0 ? (
+                        <span className="text-amber-700">Unknown ({row.unknownMessageSources.join(", ")})</span>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {row.warningFlags.length > 0 ? (
+                        row.warningFlags.map((flag) => (
+                          <Badge key={flag} className="mb-0.5 bg-amber-100 text-amber-900">
+                            {flag}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </TableCell>
                     <TableCell><BoolBadge value={row.aiUsed} /></TableCell>
                     <TableCell><BoolBadge value={row.automationsActive} /></TableCell>
-                    <TableCell><BoolBadge value={row.rgeEnabled} /></TableCell>
-                    <TableCell><BoolBadge value={row.agentPageEnabled} /></TableCell>
-                    <TableCell><BoolBadge value={row.inventoryConnected} /></TableCell>
                     <TableCell className="text-sm text-gray-600">
-                      {row.lastActivity ? new Date(row.lastActivity).toLocaleDateString() : "—"}
+                      {(row.lastRealActivity || row.lastActivity)
+                        ? new Date(row.lastRealActivity || row.lastActivity!).toLocaleDateString()
+                        : "—"}
                     </TableCell>
                     <TableCell className="text-sm text-gray-600">
                       {row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "—"}
