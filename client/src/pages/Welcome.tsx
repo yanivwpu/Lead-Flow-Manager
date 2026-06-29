@@ -114,8 +114,11 @@ export function Welcome() {
           <Link href="/pricing" className="h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:inline-flex items-center">
             {t("landing.pricing")}
           </Link>
-          <Link href="/blog" className="h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:inline-flex items-center">
+          <Link href="/blog" className="h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden md:inline-flex items-center">
             {t("landing.blog")}
+          </Link>
+          <Link href="/partner-program" className="h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden lg:inline-flex items-center">
+            Partners
           </Link>
           <Suspense
             fallback={<div className="h-9 w-9 shrink-0 rounded-md bg-gray-100/90 border border-transparent" aria-hidden />}

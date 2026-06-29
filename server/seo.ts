@@ -275,6 +275,12 @@ export const PAGE_META: Record<string, PageMeta> = {
     description: "Contact WhachatCRM for sales questions, support, or partnership inquiries. We're here to help you get the most out of your WhatsApp CRM.",
     canonical: `${BASE_URL}/contact`
   },
+  "/partner-program": {
+    title: "WhachatCRM Partner Program | Earn Recurring Revenue with AI Messaging CRM",
+    description:
+      "Partner with WhachatCRM and earn recurring commissions by helping businesses connect WhatsApp, Messenger, Instagram, AI Copilot, Shopify automation, and real estate CRM workflows.",
+    canonical: `${BASE_URL}/partner-program`,
+  },
   "/privacy-policy": {
     title: "Privacy Policy | WhachatCRM",
     description: "WhachatCRM privacy policy. Learn how we collect, use, and protect your data when using our WhatsApp CRM platform.",

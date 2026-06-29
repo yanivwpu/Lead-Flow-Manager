@@ -49,6 +49,7 @@ const Admin = lazy(() => import("@/pages/Admin").then(m => ({ default: m.Admin }
 const QrLanding = lazy(() => import("@/pages/QrLanding").then(m => ({ default: m.QrLanding })));
 const SalesPortal = lazy(() => import("@/pages/SalesPortal").then(m => ({ default: m.SalesPortal })));
 const PartnerPortal = lazy(() => import("@/pages/PartnerPortal").then(m => ({ default: m.PartnerPortal })));
+const PartnerProgram = lazy(() => import("@/pages/PartnerProgram").then(m => ({ default: m.PartnerProgram })));
 const RealtorGrowthEngine = lazy(() => import("@/pages/RealtorGrowthEngine").then(m => ({ default: m.RealtorGrowthEngine })));
 const PostCheckout = lazy(() => import("@/pages/PostCheckout").then(m => ({ default: m.PostCheckout })));
 const RealtorLanding = lazy(() => import("@/pages/RealtorLanding").then(m => ({ default: m.RealtorLanding })));
@@ -155,6 +156,7 @@ function MarketingRoutes() {
       <Route path="/demo-scan" component={QrLanding} />
       <Route path="/sales-admin" component={Admin} />
       <Route path="/sales-portal" component={SalesPortal} />
+      <Route path="/partner-program" component={PartnerProgram} />
       <Route path="/partner-portal" component={PartnerPortal} />
       <Route path="/realtor-growth-engine" component={RealtorLanding} />
       <Route path="/widget-frame/:widgetId" component={WidgetFrame} />

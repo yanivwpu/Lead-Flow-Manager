@@ -58,6 +58,7 @@ export function SiteFooter() {
                 <li><a href="/user-guide"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.gettingStarted', 'Getting Started')}</span></a></li>
                 <li><Link href="/help"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.helpCenter', 'Help Center')}</span></Link></li>
                 <li><Link href="/blog"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.blog', 'Blog')}</span></Link></li>
+                <li><Link href="/partner-program"><span className="hover:text-gray-900 transition-colors cursor-pointer">Partner Program</span></Link></li>
               </ul>
             </div>
 
