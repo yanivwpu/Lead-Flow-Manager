@@ -281,6 +281,7 @@ export interface IStorage {
   getIntegrations(userId: string): Promise<Integration[]>;
   getIntegration(id: string): Promise<Integration | undefined>;
   getIntegrationsByType(type: string): Promise<Integration[]>;
+  getAllIntegrationsByType(type: string): Promise<Integration[]>;
   getIntegrationByUserAndType(userId: string, type: string): Promise<Integration | undefined>;
   createIntegration(integration: InsertIntegration): Promise<Integration>;
   updateIntegration(id: string, updates: Partial<Integration>): Promise<Integration | undefined>;
@@ -1404,6 +1405,10 @@ export class DbStorage implements IStorage {
   async getIntegrationsByType(type: string): Promise<Integration[]> {
     return await db.select().from(integrations)
       .where(and(eq(integrations.type, type), eq(integrations.isActive, true)));
+  }
+
+  async getAllIntegrationsByType(type: string): Promise<Integration[]> {
+    return await db.select().from(integrations).where(eq(integrations.type, type));
   }
 
   async getIntegrationByUserAndType(userId: string, type: string): Promise<Integration | undefined> {

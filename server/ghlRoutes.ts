@@ -7,8 +7,25 @@ import { contacts, conversations } from '@shared/schema';
 import { eq, and, inArray, notInArray } from 'drizzle-orm';
 import { getAppOrigin } from './urlOrigins';
 import { scheduleHubSpotAutoSync } from './hubspotAutoSync';
+import {
+  extractInstallFromWebhook,
+  linkMarketplaceInstallToIntegration,
+  markMarketplaceUninstalled,
+  upsertGhlMarketplaceInstall,
+} from './ghlMarketplaceService';
 
 const router = Router();
+
+function resolveSessionUserId(req: Request): string | undefined {
+  const authUser = (req as Request & { user?: { id?: string } }).user;
+  return (
+    authUser?.id ||
+    (typeof (req as any).session?.passport?.user === "string"
+      ? ((req as any).session.passport.user as string)
+      : undefined) ||
+    (req as any).session?.userId
+  );
+}
 
 const GHL_TOKEN_URL = 'https://services.leadconnectorhq.com/oauth/token';
 const GHL_CLIENT_ID = process.env.GHL_CLIENT_ID || '';
@@ -104,7 +121,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     const tokenExpiresAt = new Date(Date.now() + (tokenData.expires_in || 86400) * 1000);
     const locationOrCompanyId = tokenData.locationId || tokenData.companyId || 'unknown';
 
-    const existingIntegrations = await storage.getIntegrationsByType('gohighlevel');
+    const existingIntegrations = await storage.getAllIntegrationsByType("gohighlevel");
     const existing = existingIntegrations.find(
       (i: any) => i.config && (
         (tokenData.locationId && (i.config as any).locationId === tokenData.locationId) ||
@@ -128,17 +145,25 @@ router.get('/callback', async (req: Request, res: Response) => {
         lastSyncAt: new Date(),
       });
       console.log('[LeadConnector] Updated existing integration:', existing.id);
+      await linkMarketplaceInstallToIntegration(
+        tokenData.locationId,
+        tokenData.companyId,
+        { ...existing, accessToken: tokenData.access_token } as any,
+      );
     } else {
-      const userId = (req as any).session?.userId;
-
-      const ownerUserId = userId;
+      const ownerUserId = resolveSessionUserId(req);
 
       if (!ownerUserId) {
-        console.error('[LeadConnector OAuth] No session userId — cannot create integration without authenticated user');
-        return res.status(401).json({ error: 'Must be logged in to connect a GHL integration' });
-      }
-
-      if (ownerUserId) {
+        console.error('[LeadConnector OAuth] No authenticated user — recording marketplace install without integration link');
+        await upsertGhlMarketplaceInstall({
+          companyId: tokenData.companyId || "unknown",
+          locationId: tokenData.locationId || null,
+          installDate: new Date().toISOString(),
+          installationStatus: "Active",
+          source: "oauth",
+          rawPayload: tokenData,
+        });
+      } else {
         const integration = await storage.createIntegration({
           userId: ownerUserId,
           type: 'gohighlevel',
@@ -156,10 +181,19 @@ router.get('/callback', async (req: Request, res: Response) => {
           },
         });
         console.log('[LeadConnector] Created new integration:', integration.id, 'for user:', ownerUserId);
-      } else {
-        console.error('[LeadConnector] Could not find a user to associate integration with');
+        await linkMarketplaceInstallToIntegration(tokenData.locationId, tokenData.companyId, integration);
       }
     }
+
+    await upsertGhlMarketplaceInstall({
+      companyId: tokenData.companyId || "unknown",
+      locationId: tokenData.locationId || null,
+      subAccountName: `LeadConnector - ${tokenData.userType === 'Location' ? 'Location' : 'Agency'} (${locationOrCompanyId})`,
+      installDate: new Date().toISOString(),
+      installationStatus: "Active",
+      source: "oauth",
+      rawPayload: tokenData,
+    });
 
     const successHtml = `
       <!DOCTYPE html>
@@ -210,6 +244,37 @@ router.post('/webhook', async (req: Request, res: Response) => {
     const eventId = body.eventId || body.id || null;
 
     console.log(`[LeadConnector Webhook] ${timestamp} | Event: ${type} | Location: ${locationId || 'N/A'}`);
+
+    if (type === 'AppInstall' || type === 'INSTALL') {
+      const installData = extractInstallFromWebhook(body);
+      if (installData) {
+        await upsertGhlMarketplaceInstall(installData);
+        console.log(`[LeadConnector Webhook] ${timestamp} | Recorded marketplace install for location: ${locationId}`);
+      }
+      const allGhl = await storage.getAllIntegrationsByType('gohighlevel');
+      const matched = allGhl.find(
+        (i: any) => i.config && (i.config as any).locationId === locationId,
+      );
+      if (matched) {
+        await linkMarketplaceInstallToIntegration(locationId, body.companyId, matched);
+      }
+      return;
+    }
+
+    if (type === 'AppUninstall' || type === 'UNINSTALL') {
+      await markMarketplaceUninstalled(locationId, body.companyId);
+      const allGhl = await storage.getAllIntegrationsByType('gohighlevel');
+      const matched = allGhl.find(
+        (i: any) => i.config && (i.config as any).locationId === locationId,
+      );
+      if (matched) {
+        await storage.updateIntegration(matched.id, { isActive: false });
+        console.log(`[LeadConnector Webhook] ${timestamp} | Deactivated integration: ${matched.id}`);
+      } else {
+        console.log(`[LeadConnector Webhook] ${timestamp} | App uninstalled for location: ${locationId} (no integration row)`);
+      }
+      return;
+    }
 
     const ghlIntegrations = await storage.getIntegrationsByType('gohighlevel');
     const integration = ghlIntegrations.find(
@@ -603,20 +668,8 @@ router.post('/webhook', async (req: Request, res: Response) => {
 
       case 'AppInstall':
       case 'INSTALL':
-        console.log(`[LeadConnector Webhook] ${timestamp} | App installed for location: ${locationId}`);
-        break;
-
       case 'AppUninstall':
       case 'UNINSTALL':
-        console.log(`[LeadConnector Webhook] ${timestamp} | App uninstalled for location: ${locationId}`);
-        try {
-          if (integration) {
-            await storage.updateIntegration(integration.id, { isActive: false });
-            console.log(`[LeadConnector Webhook] ${timestamp} | Deactivated integration: ${integration.id}`);
-          }
-        } catch (uninstallErr) {
-          console.error(`[LeadConnector Webhook] ${timestamp} | Error handling uninstall:`, uninstallErr);
-        }
         break;
 
       default:

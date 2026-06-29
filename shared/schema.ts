@@ -1823,6 +1823,46 @@ export const insertGhlEventDedupSchema = createInsertSchema(ghlEventDedup).omit(
 export type GhlEventDedup = typeof ghlEventDedup.$inferSelect;
 export type InsertGhlEventDedup = z.infer<typeof insertGhlEventDedupSchema>;
 
+/** GHL Marketplace install registry — webhook, CSV import, and OAuth linkage. */
+export const ghlMarketplaceInstalls = pgTable(
+  "ghl_marketplace_installs",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    agency: text("agency"),
+    companyId: text("company_id").notNull(),
+    locationId: text("location_id"),
+    subAccountName: text("sub_account_name"),
+    whiteLabeled: boolean("white_labeled"),
+    agencyOwner: text("agency_owner"),
+    agencyEmail: text("agency_email"),
+    installDate: timestamp("install_date"),
+    installationStatus: text("installation_status"),
+    uninstallDate: timestamp("uninstall_date"),
+    pricePlan: text("price_plan"),
+    billingStatus: text("billing_status"),
+    integrationId: varchar("integration_id").references(() => integrations.id, { onDelete: "set null" }),
+    whachatUserId: varchar("whachat_user_id").references(() => users.id, { onDelete: "set null" }),
+    lastSyncedAt: timestamp("last_synced_at"),
+    source: text("source").default("webhook"),
+    rawPayload: jsonb("raw_payload").default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (t) => ({
+    locationCompanyUq: uniqueIndex("ghl_marketplace_installs_location_company_uq").on(t.locationId, t.companyId),
+    companyIdIdx: index("ghl_marketplace_installs_company_id_idx").on(t.companyId),
+    whachatUserIdIdx: index("ghl_marketplace_installs_whachat_user_id_idx").on(t.whachatUserId),
+  }),
+);
+
+export const insertGhlMarketplaceInstallSchema = createInsertSchema(ghlMarketplaceInstalls).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type GhlMarketplaceInstall = typeof ghlMarketplaceInstalls.$inferSelect;
+export type InsertGhlMarketplaceInstall = z.infer<typeof insertGhlMarketplaceInstallSchema>;
+
 /** Canceled/deleted Calendly event URIs — block poll/webhook/replay from resurrecting bookings. */
 export const calendlyCanceledEventTombstones = pgTable(
   "calendly_canceled_event_tombstones",

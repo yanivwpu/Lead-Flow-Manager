@@ -41,7 +41,7 @@ import {
   Users, Calendar, DollarSign, Plus, Edit2, Trash2, 
   LogOut, Loader2, CheckCircle, XCircle, Lock, UserCircle,
   AlertCircle, MessageCircle, ArrowUpDown, Link2, Percent,
-  Eye, EyeOff, ClipboardList,
+  Eye, EyeOff, ClipboardList, BarChart3,
 } from "lucide-react";
 import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 import { cn } from "@/lib/utils";
@@ -72,6 +72,8 @@ import {
   computeAggregatePayoutTotals,
   computeSalespersonPayoutTotals,
 } from "@/lib/salesPayoutTotals";
+import { AdminGhlTab } from "@/components/admin/AdminGhlTab";
+import { AdminActivationTab } from "@/components/admin/AdminActivationTab";
 
 /** Centered compact admin form dialogs (~520–600px; scroll inside body only). */
 const ADMIN_FORM_MODAL_CLASS =
@@ -261,18 +263,6 @@ type PlanFilter = "all" | "free" | "starter" | "pro";
 
 interface GhlIntegration {
   id: string;
-  userId: string;
-  userName: string;
-  userEmail: string;
-  userPlan: string;
-  isActive: boolean;
-  locationId: string | null;
-  companyId: string | null;
-  userType: string | null;
-  installedAt: string | null;
-  tokenExpiresAt: string | null;
-  lastSyncAt: string | null;
-  createdAt: string | null;
 }
 
 interface Partner {
@@ -589,8 +579,8 @@ export function Admin() {
   });
 
   const { data: ghlIntegrations = [] } = useQuery<GhlIntegration[]>({
-    queryKey: ['/api/admin/ghl-integrations'],
-    queryFn: adminQueryFn('/api/admin/ghl-integrations'),
+    queryKey: ['/api/admin/ghl/installations'],
+    queryFn: adminQueryFn('/api/admin/ghl/installations'),
     enabled: isLoggedIn,
   });
 
@@ -1054,6 +1044,11 @@ export function Admin() {
                     {ghlIntegrations.length}
                   </Badge>
                 )}
+              </TabsTrigger>
+              <TabsTrigger value="activation" className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4" data-testid="tab-activation">
+                <BarChart3 className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">Activation</span>
+                <span className="sm:hidden">Act</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -2059,78 +2054,11 @@ export function Admin() {
           </TabsContent>
 
           <TabsContent value="ghl">
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="p-4 border-b border-gray-200">
-                <h2 className="font-semibold text-gray-900">LeadConnector / GHL Integrations</h2>
-                <p className="text-sm text-gray-500 mt-1">Users who connected via the GHL Marketplace</p>
-              </div>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>User</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Plan</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Connected</TableHead>
-                      <TableHead>Location ID</TableHead>
-                      <TableHead>Company ID</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Token Expires</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {ghlIntegrations.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8 text-gray-500">
-                          No LeadConnector integrations found yet.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      ghlIntegrations.map(ghl => (
-                        <TableRow key={ghl.id} data-testid={`row-ghl-${ghl.id}`}>
-                          <TableCell className="font-medium">{ghl.userName}</TableCell>
-                          <TableCell className="text-sm">{ghl.userEmail}</TableCell>
-                          <TableCell>
-                            <Badge variant="secondary" className="text-xs capitalize">
-                              {ghl.userPlan}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {ghl.isActive ? (
-                              <Badge className="bg-green-100 text-green-700">Connected</Badge>
-                            ) : (
-                              <Badge variant="secondary" className="text-gray-500">Disconnected</Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-sm text-gray-600">
-                            {ghl.installedAt ? new Date(ghl.installedAt).toLocaleDateString() : '—'}
-                          </TableCell>
-                          <TableCell>
-                            {ghl.locationId ? (
-                              <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">{ghl.locationId}</code>
-                            ) : '—'}
-                          </TableCell>
-                          <TableCell>
-                            {ghl.companyId ? (
-                              <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">{ghl.companyId}</code>
-                            ) : '—'}
-                          </TableCell>
-                          <TableCell className="text-sm capitalize">{ghl.userType || '—'}</TableCell>
-                          <TableCell className="text-sm text-gray-600">
-                            {ghl.tokenExpiresAt ? (
-                              <span className={new Date(ghl.tokenExpiresAt) < new Date() ? 'text-red-600 font-medium' : ''}>
-                                {new Date(ghl.tokenExpiresAt).toLocaleDateString()}
-                              </span>
-                            ) : '—'}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
+            <AdminGhlTab enabled={isLoggedIn} />
+          </TabsContent>
+
+          <TabsContent value="activation">
+            <AdminActivationTab enabled={isLoggedIn} />
           </TabsContent>
         </Tabs>
       </main>

@@ -153,6 +153,8 @@ import { DEFAULT_SALES_TASK_PAYOUT_DOLLARS, getEffectiveTaskPayoutDollars } from
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
 import ghlRoutes from "./ghlRoutes";
+import { listGhlInstallationsForAdmin, importGhlInstallsFromCsv } from "./ghlMarketplaceService";
+import { getActivationSummary, getActivationAccounts } from "./adminActivationService";
 import {
   normalizeWooCommerceStoreUrl,
   verifyWooCommerceRestCredentials,
@@ -9617,38 +9619,69 @@ export async function registerRoutes(
 
   // ================== ADMIN GHL / LEADCONNECTOR ==================
 
-  app.get("/api/admin/ghl-integrations", requireAdmin, async (req, res) => {
+  app.get("/api/admin/ghl-integrations", requireAdmin, async (_req, res) => {
     try {
-      const ghlIntegrations = await storage.getIntegrationsByType('gohighlevel');
-      const allUsers = await storage.getAllUsers();
-      const userMap = new Map(allUsers.map(u => [u.id, u]));
-
-      const result = ghlIntegrations.map(integration => {
-        const user = userMap.get(integration.userId);
-        const config = (integration.config || {}) as any;
-        return {
-          id: integration.id,
-          userId: integration.userId,
-          userName: user?.name || 'Unknown',
-          userEmail: user?.email || 'Unknown',
-          userPlan: user?.subscriptionPlan || 'free',
-          isActive: integration.isActive,
-          locationId: config.locationId || null,
-          companyId: config.companyId || null,
-          userType: config.userType || null,
-          installedAt: config.installedAt || integration.createdAt,
-          tokenExpiresAt: integration.tokenExpiresAt,
-          lastSyncAt: integration.lastSyncAt,
-          createdAt: integration.createdAt,
-        };
-      });
-
-      result.sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
-
+      const result = await listGhlInstallationsForAdmin();
       res.json(result);
     } catch (error) {
       console.error("Error fetching GHL integrations:", error);
       res.status(500).json({ error: "Failed to fetch GHL integrations" });
+    }
+  });
+
+  app.get("/api/admin/ghl/installations", requireAdmin, async (_req, res) => {
+    try {
+      const result = await listGhlInstallationsForAdmin();
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching GHL installations:", error);
+      res.status(500).json({ error: "Failed to fetch GHL installations" });
+    }
+  });
+
+  app.post("/api/admin/ghl/import-installs-csv", requireAdmin, async (req, res) => {
+    try {
+      const csvText = typeof req.body?.csv === "string" ? req.body.csv : "";
+      if (!csvText.trim()) {
+        return res.status(400).json({ error: "Missing csv body field" });
+      }
+      const result = await importGhlInstallsFromCsv(csvText);
+      res.json(result);
+    } catch (error) {
+      console.error("Error importing GHL installs CSV:", error);
+      res.status(500).json({ error: "Failed to import GHL installs" });
+    }
+  });
+
+  app.get("/api/admin/activation/summary", requireAdmin, async (_req, res) => {
+    try {
+      const summary = await getActivationSummary();
+      res.json(summary);
+    } catch (error) {
+      console.error("Error fetching activation summary:", error);
+      res.status(500).json({ error: "Failed to fetch activation summary" });
+    }
+  });
+
+  app.get("/api/admin/activation/accounts", requireAdmin, async (req, res) => {
+    try {
+      const filters = {
+        source: req.query.source as string | undefined,
+        plan: req.query.plan as string | undefined,
+        status: req.query.status as string | undefined,
+        channelConnected: req.query.channelConnected as "yes" | "no" | undefined,
+        hasConversations: req.query.hasConversations as "yes" | "no" | undefined,
+        trial: req.query.trial as "yes" | "no" | undefined,
+        paying: req.query.paying as "yes" | "no" | undefined,
+        search: req.query.search as string | undefined,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+        offset: req.query.offset ? Number(req.query.offset) : undefined,
+      };
+      const result = await getActivationAccounts(filters);
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching activation accounts:", error);
+      res.status(500).json({ error: "Failed to fetch activation accounts" });
     }
   });
 
