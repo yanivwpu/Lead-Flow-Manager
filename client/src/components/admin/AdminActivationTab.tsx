@@ -13,6 +13,11 @@ type ActivationSummary = {
     shopifyInstalls: number;
     websiteSignups: number;
     payingCustomers: number;
+    paidSubscribers: number;
+    proTrialUsers: number;
+    websitePaidUsers: number;
+    shopifyPaidUsers: number;
+    marketplacePaidUsers: number;
     freeUsers: number;
     trialUsers: number;
   };
@@ -27,8 +32,12 @@ type ActivationAccount = {
   email: string;
   source: string;
   plan: string;
+  billingPlan: string;
   subscriptionStatus: string;
   trialStatus: string;
+  isPaying: boolean;
+  isProTrial: boolean;
+  paidBillingSource: string | null;
   whatsappConnected: boolean;
   facebookConnected: boolean;
   instagramConnected: boolean;
@@ -178,12 +187,15 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Total users" value={topMetrics.totalUsers} />
         <MetricCard label="Active users" value={topMetrics.activeUsers} />
+        <MetricCard label="Paid subscribers" value={topMetrics.paidSubscribers} />
+        <MetricCard label="Pro trial users" value={topMetrics.proTrialUsers} />
+        <MetricCard label="Website paid (Stripe)" value={topMetrics.websitePaidUsers} />
+        <MetricCard label="Shopify paid" value={topMetrics.shopifyPaidUsers} />
+        <MetricCard label="Marketplace paid (GHL)" value={topMetrics.marketplacePaidUsers} />
         <MetricCard label="GHL installs" value={topMetrics.ghlInstalls} />
         <MetricCard label="Shopify installs" value={topMetrics.shopifyInstalls} />
         <MetricCard label="Website signups" value={topMetrics.websiteSignups} />
-        <MetricCard label="Paying customers" value={topMetrics.payingCustomers} />
         <MetricCard label="Free users" value={topMetrics.freeUsers} />
-        <MetricCard label="Trial users" value={topMetrics.trialUsers} />
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -311,8 +323,10 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
                 <TableHead>Account</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead>Plan</TableHead>
+                <TableHead>Billing</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Trial</TableHead>
+                <TableHead>Paying</TableHead>
                 <TableHead>WA</TableHead>
                 <TableHead>FB</TableHead>
                 <TableHead>IG</TableHead>
@@ -331,19 +345,19 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
             <TableBody>
               {accountsLoading && accountRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={18} className="py-8 text-center">
+                  <TableCell colSpan={20} className="py-8 text-center">
                     <Loader2 className="mx-auto h-5 w-5 animate-spin text-gray-400" />
                   </TableCell>
                 </TableRow>
               ) : accountsError ? (
                 <TableRow>
-                  <TableCell colSpan={18} className="py-8 text-center text-sm text-gray-500">
+                  <TableCell colSpan={20} className="py-8 text-center text-sm text-gray-500">
                     No accounts loaded. Use Retry above or check server logs.
                   </TableCell>
                 </TableRow>
               ) : accountRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={18} className="py-8 text-center text-sm text-gray-500">
+                  <TableCell colSpan={20} className="py-8 text-center text-sm text-gray-500">
                     No accounts match the current filters.
                   </TableCell>
                 </TableRow>
@@ -356,8 +370,21 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
                     </TableCell>
                     <TableCell className="text-sm">{row.source}</TableCell>
                     <TableCell className="text-sm capitalize">{row.plan}</TableCell>
+                    <TableCell className="text-sm capitalize">{row.billingPlan}</TableCell>
                     <TableCell className="text-sm">{row.subscriptionStatus}</TableCell>
-                    <TableCell className="text-sm">{row.trialStatus}</TableCell>
+                    <TableCell className="text-sm">
+                      {row.isProTrial ? (
+                        <Badge className="bg-amber-100 text-amber-800">Pro trial</Badge>
+                      ) : (
+                        row.trialStatus
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <BoolBadge value={row.isPaying} />
+                      {row.paidBillingSource ? (
+                        <div className="mt-0.5 text-[10px] text-gray-500">{row.paidBillingSource}</div>
+                      ) : null}
+                    </TableCell>
                     <TableCell><BoolBadge value={row.whatsappConnected} /></TableCell>
                     <TableCell><BoolBadge value={row.facebookConnected} /></TableCell>
                     <TableCell><BoolBadge value={row.instagramConnected} /></TableCell>

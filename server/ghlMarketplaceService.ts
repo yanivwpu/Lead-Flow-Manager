@@ -517,6 +517,34 @@ export async function countActiveGhlMarketplaceInstalls(): Promise<number> {
   return rows.filter((r) => (r.installationStatus || "").toLowerCase() !== "uninstalled").length;
 }
 
+function isGhlMarketplacePaidPlan(pricePlan: string | null | undefined): boolean {
+  if (!pricePlan || !String(pricePlan).trim()) return false;
+  const normalized = String(pricePlan).toLowerCase();
+  if (normalized.includes("free")) return false;
+  if (normalized.includes("trial")) return false;
+  return true;
+}
+
+/** Users with an active GHL marketplace install on a non-free, non-trial price plan. */
+export async function getGhlMarketplacePaidUserIds(): Promise<Set<string>> {
+  const rows = await db
+    .select({
+      whachatUserId: ghlMarketplaceInstalls.whachatUserId,
+      pricePlan: ghlMarketplaceInstalls.pricePlan,
+      installationStatus: ghlMarketplaceInstalls.installationStatus,
+    })
+    .from(ghlMarketplaceInstalls);
+
+  const ids = new Set<string>();
+  for (const row of rows) {
+    if (!row.whachatUserId) continue;
+    if ((row.installationStatus || "").toLowerCase() === "uninstalled") continue;
+    if (!isGhlMarketplacePaidPlan(row.pricePlan)) continue;
+    ids.add(row.whachatUserId);
+  }
+  return ids;
+}
+
 export async function getGhlUserIds(): Promise<Set<string>> {
   const ghlIntegrations = await db
     .select({ userId: integrations.userId })

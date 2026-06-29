@@ -17,7 +17,8 @@ import {
 } from "@shared/schema";
 import { deriveAdminUserChannelConnections } from "@shared/adminChannelConnectionStatus";
 import { getEffectivePlanForUser } from "./subscriptionService";
-import { getGhlUserIds } from "./ghlMarketplaceService";
+import { computeTrialStatus, isProAiTrialActive } from "./trialEntitlements";
+import { getGhlMarketplacePaidUserIds, getGhlUserIds } from "./ghlMarketplaceService";
 import { RGE_TEMPLATE_ID } from "@shared/rgePaths";
 
 export type ActivationFunnelStep = {
@@ -27,6 +28,8 @@ export type ActivationFunnelStep = {
   percent: number;
 };
 
+export type ActivationPaidBillingSource = "website_stripe" | "shopify" | "ghl_marketplace";
+
 export type ActivationSummary = {
   topMetrics: {
     totalUsers: number;
@@ -34,8 +37,15 @@ export type ActivationSummary = {
     ghlInstalls: number;
     shopifyInstalls: number;
     websiteSignups: number;
+    /** Confirmed paid billing only — excludes Pro/Pro AI trials */
     payingCustomers: number;
+    paidSubscribers: number;
+    proTrialUsers: number;
+    websitePaidUsers: number;
+    shopifyPaidUsers: number;
+    marketplacePaidUsers: number;
     freeUsers: number;
+    /** @deprecated Alias for proTrialUsers */
     trialUsers: number;
   };
   channelMetrics: {
@@ -71,9 +81,14 @@ export type ActivationAccountRow = {
   name: string;
   email: string;
   source: "GHL" | "Shopify" | "Website" | "Partner";
+  /** Effective plan (includes trial Pro) */
   plan: string;
+  billingPlan: string;
   subscriptionStatus: string;
   trialStatus: string;
+  isPaying: boolean;
+  isProTrial: boolean;
+  paidBillingSource: ActivationPaidBillingSource | null;
   whatsappConnected: boolean;
   facebookConnected: boolean;
   instagramConnected: boolean;
@@ -102,11 +117,74 @@ export type ActivationAccountsFilters = {
   offset?: number;
 };
 
-function isPayingUser(user: typeof users.$inferSelect, effectivePlan: string): boolean {
-  if (effectivePlan !== "free") return true;
-  if (user.shopifySubscriptionStatus === "active") return true;
-  if (user.stripeSubscriptionId && user.subscriptionStatus === "active") return true;
-  return false;
+const INACTIVE_SUBSCRIPTION_STATUSES = new Set([
+  "canceled",
+  "cancelled",
+  "past_due",
+  "unpaid",
+  "incomplete",
+  "incomplete_expired",
+]);
+
+export type ActivationBillingClassification = {
+  isPaidSubscriber: boolean;
+  isProTrial: boolean;
+  paidBillingSource: ActivationPaidBillingSource | null;
+};
+
+/** Pro / Pro AI app trial — not a paid subscription. */
+export function isActivationProTrial(
+  user: typeof users.$inferSelect,
+  now: Date = new Date(),
+): boolean {
+  if (isProAiTrialActive(user, now)) return true;
+  return computeTrialStatus(user, now) === "active";
+}
+
+function hasConfirmedWebsiteStripeBilling(user: typeof users.$inferSelect): boolean {
+  const billingPlan = (user.billingPlan || "free").toLowerCase();
+  if (billingPlan === "free") return false;
+
+  const status = (user.subscriptionStatus || "").toLowerCase();
+  if (INACTIVE_SUBSCRIPTION_STATUSES.has(status)) return false;
+  if (status !== "active") return false;
+
+  return !!(user.stripeSubscriptionId || user.stripeCustomerId);
+}
+
+function hasConfirmedShopifyBilling(user: typeof users.$inferSelect): boolean {
+  const billingPlan = (user.billingPlan || "free").toLowerCase();
+  if (billingPlan === "free") return false;
+  if (!user.shopifyShop) return false;
+  return (user.shopifySubscriptionStatus || "").toLowerCase() === "active";
+}
+
+/**
+ * Paid = confirmed billing record only. Trial Pro / effective-plan Pro ≠ paying.
+ * Does not count admin plan overrides without Stripe/Shopify/GHL marketplace billing.
+ */
+export function classifyActivationBilling(
+  user: typeof users.$inferSelect,
+  ghlMarketplacePaidUserIds: Set<string>,
+  now: Date = new Date(),
+): ActivationBillingClassification {
+  if (isActivationProTrial(user, now)) {
+    return { isPaidSubscriber: false, isProTrial: true, paidBillingSource: null };
+  }
+
+  if (hasConfirmedShopifyBilling(user)) {
+    return { isPaidSubscriber: true, isProTrial: false, paidBillingSource: "shopify" };
+  }
+
+  if (hasConfirmedWebsiteStripeBilling(user)) {
+    return { isPaidSubscriber: true, isProTrial: false, paidBillingSource: "website_stripe" };
+  }
+
+  if (ghlMarketplacePaidUserIds.has(user.id)) {
+    return { isPaidSubscriber: true, isProTrial: false, paidBillingSource: "ghl_marketplace" };
+  }
+
+  return { isPaidSubscriber: false, isProTrial: false, paidBillingSource: null };
 }
 
 function deriveUserSource(
@@ -139,8 +217,11 @@ export function serializeActivationDate(value: unknown): string | null {
 
 export async function getActivationSummary(): Promise<ActivationSummary> {
   const now = new Date();
-  const allUsers = await db.select().from(users);
-  const ghlUserIds = await getGhlUserIds();
+  const [allUsers, ghlUserIds, ghlMarketplacePaidUserIds] = await Promise.all([
+    db.select().from(users),
+    getGhlUserIds(),
+    getGhlMarketplacePaidUserIds(),
+  ]);
 
   const ghlInstallCount = (
     await db
@@ -154,14 +235,25 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
     (u) => !ghlUserIds.has(u.id) && !u.shopifyInstalledAt && !u.shopifyShop,
   ).length;
 
-  let trialUsers = 0;
+  let proTrialUsers = 0;
   let freeUsers = 0;
-  let payingCustomers = 0;
+  let paidSubscribers = 0;
+  let websitePaidUsers = 0;
+  let shopifyPaidUsers = 0;
+  let marketplacePaidUsers = 0;
+
   for (const user of allUsers) {
-    const plan = getEffectivePlanForUser(user, now);
-    if (user.trialStatus === "active") trialUsers++;
-    if (plan === "free" && !isPayingUser(user, plan)) freeUsers++;
-    if (isPayingUser(user, plan)) payingCustomers++;
+    const billing = classifyActivationBilling(user, ghlMarketplacePaidUserIds, now);
+    const effectivePlan = getEffectivePlanForUser(user, now);
+
+    if (billing.isProTrial) proTrialUsers++;
+    if (billing.isPaidSubscriber) {
+      paidSubscribers++;
+      if (billing.paidBillingSource === "website_stripe") websitePaidUsers++;
+      if (billing.paidBillingSource === "shopify") shopifyPaidUsers++;
+      if (billing.paidBillingSource === "ghl_marketplace") marketplacePaidUsers++;
+    }
+    if (effectivePlan === "free" && !billing.isPaidSubscriber) freeUsers++;
   }
 
   const channelRows = await db.select().from(channelSettings);
@@ -226,8 +318,8 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
     if (user.metaBusinessAccountId) wabaIdPresent++;
     if (user.metaPhoneNumberId) phoneNumberIdPresent++;
 
-    const plan = getEffectivePlanForUser(user, now);
-    if (isPayingUser(user, plan)) usersPaid.add(user.id);
+    const billing = classifyActivationBilling(user, ghlMarketplacePaidUserIds, now);
+    if (billing.isPaidSubscriber) usersPaid.add(user.id);
   }
 
   const conversationCounts = await db
@@ -380,9 +472,14 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
       ghlInstalls: Math.max(ghlInstallCount, ghlUserIds.size),
       shopifyInstalls,
       websiteSignups,
-      payingCustomers,
+      payingCustomers: paidSubscribers,
+      paidSubscribers,
+      proTrialUsers,
+      websitePaidUsers,
+      shopifyPaidUsers,
+      marketplacePaidUsers,
       freeUsers,
-      trialUsers,
+      trialUsers: proTrialUsers,
     },
     channelMetrics: {
       whatsappConnected,
@@ -437,9 +534,10 @@ async function loadActivationAccounts(
 ): Promise<ActivationAccountsResult> {
   const now = new Date();
 
-  const [ghlUserIds, allUsers, channelRows, conversationCounts, messageAgg, aiRows, activeWorkflowRows, activeTemplateRows, rgeRows, agentPageRows, inventoryRows] =
+  const [ghlUserIds, ghlMarketplacePaidUserIds, allUsers, channelRows, conversationCounts, messageAgg, aiRows, activeWorkflowRows, activeTemplateRows, rgeRows, agentPageRows, inventoryRows] =
     await Promise.all([
       getGhlUserIds(),
+      getGhlMarketplacePaidUserIds(),
       db.select().from(users),
       db.select().from(channelSettings),
       db
@@ -520,6 +618,7 @@ async function loadActivationAccounts(
     });
     const plan = getEffectivePlanForUser(user, now);
     const conversationsCount = conversationCountMap.get(user.id) || 0;
+    const billing = classifyActivationBilling(user, ghlMarketplacePaidUserIds, now);
 
     return {
       id: user.id,
@@ -527,8 +626,12 @@ async function loadActivationAccounts(
       email: user.email,
       source: deriveUserSource(user, ghlUserIds),
       plan,
+      billingPlan: user.billingPlan || "free",
       subscriptionStatus: user.subscriptionStatus || "unknown",
       trialStatus: user.trialStatus || "none",
+      isPaying: billing.isPaidSubscriber,
+      isProTrial: billing.isProTrial,
+      paidBillingSource: billing.paidBillingSource,
       whatsappConnected: connections.whatsappConnected,
       facebookConnected: connections.facebook.state === "connected",
       instagramConnected: connections.instagram.state === "connected",
@@ -571,14 +674,14 @@ async function loadActivationAccounts(
     rows = rows.filter((r) => r.conversationsCount === 0);
   }
   if (filters.trial === "yes") {
-    rows = rows.filter((r) => r.trialStatus === "active");
+    rows = rows.filter((r) => r.isProTrial);
   } else if (filters.trial === "no") {
-    rows = rows.filter((r) => r.trialStatus !== "active");
+    rows = rows.filter((r) => !r.isProTrial);
   }
   if (filters.paying === "yes") {
-    rows = rows.filter((r) => r.plan !== "free");
+    rows = rows.filter((r) => r.isPaying);
   } else if (filters.paying === "no") {
-    rows = rows.filter((r) => r.plan === "free");
+    rows = rows.filter((r) => !r.isPaying);
   }
 
   rows.sort((a, b) => {
