@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 type ActivationSummary = {
@@ -107,50 +106,118 @@ function MetricCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-function BoolBadge({ value }: { value: boolean }) {
-  return value ? (
-    <Badge className="bg-green-100 text-green-700">Yes</Badge>
-  ) : (
-    <Badge variant="secondary">No</Badge>
-  );
-}
+const COMPACT_PILL =
+  "inline-flex shrink-0 items-center rounded-full px-1.5 py-px text-[10px] font-medium leading-4";
 
 const BILLING_BADGE_STYLES: Record<ActivationBillingBadge, string> = {
-  free: "bg-gray-100 text-gray-700",
+  free: "bg-gray-100 text-gray-600",
   trial: "bg-amber-100 text-amber-800",
   paid: "bg-emerald-100 text-emerald-800",
-  canceled: "bg-red-100 text-red-800",
+  canceled: "bg-red-100 text-red-700",
   expired: "bg-orange-100 text-orange-800",
 };
 
-function BillingBadge({ badge }: { badge: ActivationBillingBadge }) {
+function BoolBadge({ value }: { value: boolean }) {
   return (
-    <Badge className={BILLING_BADGE_STYLES[badge]}>
-      {badge.charAt(0).toUpperCase() + badge.slice(1)}
-    </Badge>
+    <span
+      className={`${COMPACT_PILL} ${value ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"}`}
+    >
+      {value ? "Y" : "—"}
+    </span>
   );
+}
+
+function BillingBadge({ row }: { row: ActivationAccount }) {
+  const label = row.billingBadge.charAt(0).toUpperCase() + row.billingBadge.slice(1);
+  const detail = row.paidBillingSource || row.billingPlan;
+  return (
+    <span className={`${COMPACT_PILL} ${BILLING_BADGE_STYLES[row.billingBadge]}`} title={detail}>
+      {label}
+    </span>
+  );
+}
+
+function TrialBadge({ row }: { row: ActivationAccount }) {
+  if (row.isProTrial) {
+    return (
+      <span className={`${COMPACT_PILL} bg-amber-100 text-amber-800`} title="Pro trial active">
+        Trial
+      </span>
+    );
+  }
+  if (row.trialStatus === "expired") {
+    return (
+      <span className={`${COMPACT_PILL} bg-orange-100 text-orange-800`} title="Trial expired">
+        Exp
+      </span>
+    );
+  }
+  return <span className="text-[10px] text-gray-400">—</span>;
 }
 
 function ChannelBadges({ row }: { row: ActivationAccount }) {
   const channels = [
-    { key: "WA", on: row.whatsappConnected },
-    { key: "FB", on: row.facebookConnected },
-    { key: "IG", on: row.instagramConnected },
-    { key: "Shopify", on: row.shopifyConnected },
-    { key: "GHL", on: row.ghlConnected },
+    { key: "WA", on: row.whatsappConnected, label: "WhatsApp" },
+    { key: "FB", on: row.facebookConnected, label: "Facebook" },
+    { key: "IG", on: row.instagramConnected, label: "Instagram" },
+    { key: "Shop", on: row.shopifyConnected, label: "Shopify" },
+    { key: "GHL", on: row.ghlConnected, label: "GoHighLevel" },
   ];
   return (
-    <div className="flex flex-wrap gap-1">
+    <div className="flex flex-nowrap items-center gap-0.5">
       {channels.map((c) => (
-        <Badge
+        <span
           key={c.key}
-          variant="secondary"
-          className={c.on ? "bg-green-100 text-green-700" : "bg-gray-50 text-gray-400"}
+          title={`${c.label}: ${c.on ? "connected" : "not connected"}`}
+          className={`${COMPACT_PILL} ${c.on ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"}`}
         >
           {c.key}
-        </Badge>
+        </span>
       ))}
     </div>
+  );
+}
+
+const MESSAGE_SOURCE_ABBR: Record<string, string> = {
+  WhatsApp: "WA",
+  Facebook: "FB",
+  Instagram: "IG",
+  Shopify: "Shop",
+  GHL: "GHL",
+  Unknown: "?",
+};
+
+function MessageSourceBadge({ row }: { row: ActivationAccount }) {
+  if (row.messageSources.length > 0) {
+    const short = row.messageSources.map((s) => MESSAGE_SOURCE_ABBR[s] ?? s).join("·");
+    return (
+      <span
+        className={`${COMPACT_PILL} bg-green-50 text-green-800`}
+        title={row.messageSources.join(", ")}
+      >
+        {short}
+      </span>
+    );
+  }
+  if (row.unknownMessageSources.length > 0) {
+    return (
+      <span
+        className={`${COMPACT_PILL} bg-amber-100 text-amber-800`}
+        title={`Unknown: ${row.unknownMessageSources.join(", ")}`}
+      >
+        ?
+      </span>
+    );
+  }
+  return <span className="text-[10px] text-gray-400">—</span>;
+}
+
+function WarningBadge({ flags }: { flags: string[] }) {
+  if (flags.length === 0) return <span className="text-[10px] text-gray-400">—</span>;
+  return (
+    <span className={`${COMPACT_PILL} bg-amber-100 text-amber-800`} title={flags.join("; ")}>
+      !
+    </span>
   );
 }
 
@@ -366,24 +433,24 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
           ))}
         </div>
 
-        <div className="overflow-x-auto">
-          <Table>
+        <div className="-mx-1 overflow-x-auto">
+          <Table className="min-w-[1100px] text-xs">
             <TableHeader>
-              <TableRow>
-                <TableHead>Account</TableHead>
+              <TableRow className="whitespace-nowrap">
+                <TableHead className="min-w-[140px]">Account</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead>Plan</TableHead>
-                <TableHead>Billing status</TableHead>
+                <TableHead>Billing</TableHead>
                 <TableHead>Trial</TableHead>
-                <TableHead>Channels</TableHead>
-                <TableHead>Conv.</TableHead>
+                <TableHead className="min-w-[148px]">Channels</TableHead>
+                <TableHead>Conv</TableHead>
                 <TableHead>Sent</TableHead>
-                <TableHead>Recv.</TableHead>
-                <TableHead>Message source</TableHead>
-                <TableHead>Warnings</TableHead>
+                <TableHead>Recv</TableHead>
+                <TableHead>Msg src</TableHead>
+                <TableHead>Warn</TableHead>
                 <TableHead>AI</TableHead>
                 <TableHead>Auto</TableHead>
-                <TableHead>Last real activity</TableHead>
+                <TableHead>Last activity</TableHead>
                 <TableHead>Created</TableHead>
               </TableRow>
             </TableHeader>
@@ -408,62 +475,43 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
                 </TableRow>
               ) : (
                 accountRows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>
-                      <div className="font-medium text-gray-900">{row.name}</div>
-                      <div className="text-xs text-gray-500">{row.email}</div>
+                  <TableRow key={row.id} className="whitespace-nowrap">
+                    <TableCell className="max-w-[180px] py-1.5">
+                      <div className="truncate font-medium text-gray-900">{row.name}</div>
+                      <div className="truncate text-[10px] text-gray-500">{row.email}</div>
                     </TableCell>
-                    <TableCell className="text-sm">{row.source}</TableCell>
-                    <TableCell className="text-sm capitalize">{row.plan}</TableCell>
-                    <TableCell>
-                      <BillingBadge badge={row.billingBadge} />
-                      {row.paidBillingSource ? (
-                        <div className="mt-0.5 text-[10px] text-gray-500">{row.paidBillingSource}</div>
-                      ) : (
-                        <div className="mt-0.5 text-[10px] text-gray-400 capitalize">{row.billingPlan}</div>
-                      )}
+                    <TableCell className="py-1.5">{row.source}</TableCell>
+                    <TableCell className="py-1.5 capitalize">{row.plan}</TableCell>
+                    <TableCell className="py-1.5">
+                      <BillingBadge row={row} />
                     </TableCell>
-                    <TableCell className="text-sm">
-                      {row.isProTrial ? (
-                        <Badge className="bg-amber-100 text-amber-800">Active trial</Badge>
-                      ) : row.trialStatus === "expired" ? (
-                        <Badge className="bg-orange-100 text-orange-800">Expired</Badge>
-                      ) : (
-                        <span className="text-gray-500">{row.trialStatus}</span>
-                      )}
+                    <TableCell className="py-1.5">
+                      <TrialBadge row={row} />
                     </TableCell>
-                    <TableCell><ChannelBadges row={row} /></TableCell>
-                    <TableCell className="text-sm">{row.conversationsCount}</TableCell>
-                    <TableCell className="text-sm">{row.messagesSent}</TableCell>
-                    <TableCell className="text-sm">{row.messagesReceived}</TableCell>
-                    <TableCell className="text-xs text-gray-600">
-                      {row.messageSources.length > 0 ? (
-                        row.messageSources.join(", ")
-                      ) : row.unknownMessageSources.length > 0 ? (
-                        <span className="text-amber-700">Unknown ({row.unknownMessageSources.join(", ")})</span>
-                      ) : (
-                        "—"
-                      )}
+                    <TableCell className="py-1.5">
+                      <ChannelBadges row={row} />
                     </TableCell>
-                    <TableCell className="text-xs">
-                      {row.warningFlags.length > 0 ? (
-                        row.warningFlags.map((flag) => (
-                          <Badge key={flag} className="mb-0.5 bg-amber-100 text-amber-900">
-                            {flag}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
+                    <TableCell className="py-1.5 tabular-nums">{row.conversationsCount}</TableCell>
+                    <TableCell className="py-1.5 tabular-nums">{row.messagesSent}</TableCell>
+                    <TableCell className="py-1.5 tabular-nums">{row.messagesReceived}</TableCell>
+                    <TableCell className="py-1.5">
+                      <MessageSourceBadge row={row} />
                     </TableCell>
-                    <TableCell><BoolBadge value={row.aiUsed} /></TableCell>
-                    <TableCell><BoolBadge value={row.automationsActive} /></TableCell>
-                    <TableCell className="text-sm text-gray-600">
+                    <TableCell className="py-1.5">
+                      <WarningBadge flags={row.warningFlags} />
+                    </TableCell>
+                    <TableCell className="py-1.5">
+                      <BoolBadge value={row.aiUsed} />
+                    </TableCell>
+                    <TableCell className="py-1.5">
+                      <BoolBadge value={row.automationsActive} />
+                    </TableCell>
+                    <TableCell className="py-1.5 text-gray-600">
                       {(row.lastRealActivity || row.lastActivity)
                         ? new Date(row.lastRealActivity || row.lastActivity!).toLocaleDateString()
                         : "—"}
                     </TableCell>
-                    <TableCell className="text-sm text-gray-600">
+                    <TableCell className="py-1.5 text-gray-600">
                       {row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "—"}
                     </TableCell>
                   </TableRow>
