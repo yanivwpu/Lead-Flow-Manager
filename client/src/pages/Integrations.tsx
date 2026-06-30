@@ -21,6 +21,12 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import {
+  CRM_INTEGRATION_LABEL,
+  CRM_INSTALL_CTA,
+  CRM_MARKETPLACE_CTA,
+  CRM_MARKETPLACE_INSTALL_URL,
+} from "@shared/leadConnectorWhiteLabel";
 import { ShopifyManagePanel } from "@/components/integrations/ShopifyManagePanel";
 
 function integrationBrandLogoLetter(name: string) {
@@ -49,8 +55,6 @@ function normalizeWooStoreUrlInput(raw: string): string | null {
 
 /** Static brand marks under client/public/logos — same-origin only. */
 const INTEGRATION_LOGO_BY_ID: Record<string, string> = {
-  /** Icon-only mark (no wordmark) — `client/public/logos/ghl.svg` */
-  leadconnector: "/logos/ghl.svg",
   shopify: "/logos/shopify.svg",
   stripe: "/logos/stripe.svg",
   hubspot: "/logos/hubspot.svg",
@@ -76,8 +80,20 @@ function IntegrationBrandLogo({
   className?: string;
 }) {
   const letter = integrationBrandLogoLetter(name);
-  const strongSizeBoost =
-    integrationId === "leadconnector" || integrationId === "salesforce";
+  if (integrationId === "leadconnector") {
+    return (
+      <div
+        className={cn(
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-indigo-100 bg-indigo-50",
+          className,
+        )}
+        aria-hidden
+      >
+        <Link2 className="h-5 w-5 text-indigo-600" />
+      </div>
+    );
+  }
+  const strongSizeBoost = integrationId === "salesforce";
   const imgSizeClass = strongSizeBoost
     ? "max-h-[115%] max-w-[115%] origin-center scale-[1.2]"
     : "max-h-full max-w-full";
@@ -183,12 +199,11 @@ const CATEGORY_SECTIONS: { key: IntegrationCategory; title: string }[] = [
   { key: "industry", title: "Industry-specific" },
 ];
 
-/** Marketplace / install entry — override with VITE_LEADCONNECTOR_INSTALL_URL if you use a direct app link. */
-const DEFAULT_LEADCONNECTOR_INSTALL_URL = "https://marketplace.gohighlevel.com/";
-const LEADCONNECTOR_INSTALL_URL =
+/** Marketplace install — override with VITE_LEADCONNECTOR_INSTALL_URL in production env. */
+const CRM_INSTALL_URL =
   (typeof import.meta.env.VITE_LEADCONNECTOR_INSTALL_URL === "string" &&
     import.meta.env.VITE_LEADCONNECTOR_INSTALL_URL.trim()) ||
-  DEFAULT_LEADCONNECTOR_INSTALL_URL;
+  CRM_MARKETPLACE_INSTALL_URL;
 
 const VITE_SHOPIFY_APP_STORE_URL =
   typeof import.meta.env.VITE_SHOPIFY_APP_STORE_URL === "string"
@@ -204,12 +219,12 @@ const CALENDLY_PAT_URL = "https://calendly.com/integrations/api_webhooks";
 const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
   { 
     id: "leadconnector", 
-    name: "GoHighLevel", 
+    name: CRM_INTEGRATION_LABEL, 
     icon: Link2, 
-    description: "Connect your GoHighLevel account via LeadConnector API", 
+    description: "Connect your CRM account to sync leads and activity", 
     color: "bg-indigo-600",
     category: "crm",
-    tagline: "Sync leads & activity with GoHighLevel",
+    tagline: "Sync leads & activity with your CRM",
     fields: [],
     syncOptions: [
       { id: "sync_contacts", label: "Sync Contacts", description: "Keep leads synced between platforms" },
@@ -542,7 +557,7 @@ export function Integrations() {
       const res = await fetch(`/api/ext/connection-status${params}`, { credentials: "include" });
       if (!res.ok) {
         const snippet = (await res.text().catch(() => "")).slice(0, 200);
-        console.warn("[GoHighLevel] /api/ext/connection-status failed:", res.status, snippet);
+        console.warn("[CRM Integration] /api/ext/connection-status failed:", res.status, snippet);
         return { connected: false, tokenExpired: false };
       }
       return res.json() as Promise<{
@@ -888,11 +903,11 @@ export function Integrations() {
       const result = await refetchLcStatus();
       const data = result.data;
       if (data?.connected) {
-        toast({ title: "Connected", description: "GoHighLevel is connected and active." });
+        toast({ title: "Connected", description: "CRM integration is connected and active." });
       } else if (data?.tokenExpired) {
-        toast({ title: "Token Expired", description: "Your GoHighLevel token has expired. Please reinstall the app.", variant: "destructive" });
+        toast({ title: "Token Expired", description: "Your CRM connection token has expired. Please reinstall the app.", variant: "destructive" });
       } else {
-        toast({ title: "Not Connected", description: "No active GoHighLevel connection found. Install the app first.", variant: "destructive" });
+        toast({ title: "Not Connected", description: "No active CRM connection found. Install the app first.", variant: "destructive" });
       }
     } catch {
       toast({ title: "Error", description: "Could not check connection status. Please try again.", variant: "destructive" });
@@ -942,7 +957,7 @@ export function Integrations() {
         </div>
         <h2 className="text-xl font-semibold text-gray-900 mb-2">Integrations are a Paid Feature</h2>
         <p className="text-gray-500 max-w-md mb-6">
-          Connect WhachatCRM with your favorite tools like Shopify, GoHighLevel, HubSpot, Salesforce, and more. 
+          Connect WhachatCRM with your favorite tools like Shopify, CRM platforms, HubSpot, Salesforce, and more. 
           Upgrade to Starter or Pro to unlock integrations.
         </p>
         <Link href="/pricing">
@@ -1015,8 +1030,8 @@ export function Integrations() {
                           primaryLabel = "Manage";
                           primaryAction = () => setLeadManageOpen(true);
                         } else {
-                          primaryLabel = "Connect";
-                          primaryAction = () => window.open(LEADCONNECTOR_INSTALL_URL, "_blank");
+                          primaryLabel = CRM_INSTALL_CTA;
+                          primaryAction = () => window.open(CRM_INSTALL_URL, "_blank");
                         }
                       } else if (wooConnected) {
                         primaryLabel = "Connected";
@@ -1120,7 +1135,7 @@ export function Integrations() {
                             {isLeadConnector && lcStatusError && (
                               <p className="text-xs text-amber-800" role="alert">
                                 Could not verify connection with the server. You can still open the marketplace to
-                                install or manage GoHighLevel.
+                                install or manage your CRM integration.
                               </p>
                             )}
                           </div>
@@ -1622,19 +1637,18 @@ export function Integrations() {
           </DialogContent>
         </Dialog>
 
-        {/* GoHighLevel — manage (install, check, verify) */}
+        {/* CRM Integration — manage (install, check, verify) */}
         <Dialog open={leadManageOpen} onOpenChange={setLeadManageOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <div className="flex items-center gap-3">
                 <IntegrationBrandLogo
-                  name="GoHighLevel"
-                  logoUrl={INTEGRATION_LOGO_BY_ID.leadconnector}
+                  name={CRM_INTEGRATION_LABEL}
                   integrationId="leadconnector"
                 />
                 <div>
-                  <DialogTitle>GoHighLevel</DialogTitle>
-                  <DialogDescription>Install the GoHighLevel app and verify your connection</DialogDescription>
+                  <DialogTitle>{CRM_INTEGRATION_LABEL}</DialogTitle>
+                  <DialogDescription>Install the app from the Marketplace and verify your connection</DialogDescription>
                 </div>
               </div>
             </DialogHeader>
@@ -1643,16 +1657,16 @@ export function Integrations() {
                 variant="outline"
                 size="sm"
                 className="w-full border-gray-200 font-medium"
-                onClick={() => window.open(LEADCONNECTOR_INSTALL_URL, "_blank")}
+                onClick={() => window.open(CRM_INSTALL_URL, "_blank")}
                 data-testid="button-install-leadconnector-dialog"
               >
-                Open GoHighLevel install page
+                {CRM_MARKETPLACE_CTA}
                 <ExternalLink className="h-3 w-3 ml-2" />
               </Button>
               {!lcStatus?.connected && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/80 p-3">
                   <p className="text-xs text-gray-600 flex-1">
-                    Install the app in GoHighLevel, then check status here.
+                    Install the app from the Marketplace, then check status here.
                   </p>
                   <Button
                     variant="outline"

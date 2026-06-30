@@ -101,7 +101,7 @@ router.get('/oidc/authorize', (req: Request, res: Response) => {
       <div class="card">
         <div class="logo">
           <h1>WhachatCRM</h1>
-          <p>Sign in to continue to LeadConnector</p>
+          <p>Sign in to continue</p>
         </div>
         <form id="loginForm">
           <div class="form-group">

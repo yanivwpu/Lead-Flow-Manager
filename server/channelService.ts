@@ -382,7 +382,7 @@ class ChannelService {
         };
       }
     } else if (channel === 'gohighlevel' && !contact.ghlId) {
-      return { ok: false, reason: 'Contact has no GoHighLevel identifier — cannot send on this channel' };
+      return { ok: false, reason: 'Contact has no CRM identifier — cannot send on this channel' };
     } else {
       const channelIdField: Partial<Record<Channel, keyof Contact>> = {
         whatsapp: 'whatsappId',

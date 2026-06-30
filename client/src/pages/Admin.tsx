@@ -1037,8 +1037,8 @@ export function Admin() {
               </TabsTrigger>
               <TabsTrigger value="ghl" className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4" data-testid="tab-ghl">
                 <MessageCircle className="h-4 w-4 shrink-0" />
-                <span className="hidden sm:inline">GHL</span>
-                <span className="sm:hidden">GHL</span>
+                <span className="hidden sm:inline">CRM</span>
+                <span className="sm:hidden">CRM</span>
                 {ghlIntegrations.length > 0 && (
                   <Badge className="ml-1 px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700">
                     {ghlIntegrations.length}

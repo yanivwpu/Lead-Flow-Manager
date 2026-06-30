@@ -97,7 +97,7 @@ export type ActivationAccountRow = {
   id: string;
   name: string;
   email: string;
-  source: "GHL" | "Shopify" | "Website" | "Partner";
+  source: "CRM" | "Shopify" | "Website" | "Partner";
   /** Effective plan (includes trial Pro) */
   plan: string;
   billingPlan: string;
@@ -218,7 +218,7 @@ function deriveUserSource(
   user: typeof users.$inferSelect,
   ghlUserIds: Set<string>,
 ): ActivationAccountRow["source"] {
-  if (ghlUserIds.has(user.id)) return "GHL";
+  if (ghlUserIds.has(user.id)) return "CRM";
   if (user.shopifyInstalledAt || user.shopifyShop) return "Shopify";
   if (user.partnerId) return "Partner";
   return "Website";
@@ -762,7 +762,12 @@ async function loadActivationAccounts(
     );
   }
   if (filters.source && filters.source !== "all") {
-    rows = rows.filter((r) => r.source.toLowerCase() === filters.source!.toLowerCase());
+    const want = filters.source.toLowerCase();
+    rows = rows.filter((r) => {
+      const src = r.source.toLowerCase();
+      if (want === "ghl" || want === "leadconnector") return src === "crm";
+      return src === want;
+    });
   }
   if (filters.plan && filters.plan !== "all") {
     rows = rows.filter((r) => r.plan === filters.plan);

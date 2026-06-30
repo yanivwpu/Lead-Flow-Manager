@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { CRM_INTEGRATION_LABEL, CRM_MARKETPLACE_LABEL } from "@shared/leadConnectorWhiteLabel";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -84,7 +85,7 @@ export function AdminGhlTab({ enabled }: { enabled: boolean }) {
       await queryClient.invalidateQueries({ queryKey: ["/api/admin/ghl-integrations"] });
       await queryClient.refetchQueries({ queryKey: ["/api/admin/ghl/installations"] });
       toast({
-        title: "GHL installs imported",
+        title: "CRM installs imported",
         description: `${data.imported} row(s) upserted${data.errors.length ? ` · ${data.errors.length} error(s)` : ""}`,
         variant: data.imported === 0 && data.errors.length > 0 ? "destructive" : "default",
       });
@@ -104,7 +105,7 @@ export function AdminGhlTab({ enabled }: { enabled: boolean }) {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="font-semibold text-gray-900">LeadConnector / GHL Marketplace</h2>
+          <h2 className="font-semibold text-gray-900">{CRM_MARKETPLACE_LABEL}</h2>
           <p className="text-sm text-gray-500">
             OAuth integrations, marketplace webhooks, and CSV imports — merged by Location ID + Company ID.
           </p>
@@ -169,7 +170,7 @@ export function AdminGhlTab({ enabled }: { enabled: boolean }) {
 
       {isError ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          Failed to load GHL installs: {error instanceof Error ? error.message : "Unknown error"}
+          Failed to load CRM installs: {error instanceof Error ? error.message : "Unknown error"}
           <button type="button" className="ml-2 underline" onClick={() => void refetch()}>
             Retry
           </button>
@@ -208,7 +209,7 @@ export function AdminGhlTab({ enabled }: { enabled: boolean }) {
               ) : installations.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={15} className="py-8 text-center text-gray-500">
-                    No GHL marketplace installs found. Import a CSV from GHL Marketplace or complete an OAuth install.
+                    No {CRM_INTEGRATION_LABEL} installs found. Import a CSV from the {CRM_MARKETPLACE_LABEL} or complete an OAuth install.
                   </TableCell>
                 </TableRow>
               ) : (

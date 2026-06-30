@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { storage } from './storage';
+import { CRM_CONNECTED_BODY, CRM_CONNECTED_TITLE } from '@shared/leadConnectorWhiteLabel';
 import { GHL_TO_CRM_STAGE_MAP, GHL_STATUS_TO_CRM_STAGE } from './ghlSync';
 import { db } from '../drizzle/db';
 import { contacts, conversations } from '@shared/schema';
@@ -62,19 +63,19 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     if (error) {
       console.error('[LeadConnector] OAuth error:', error, error_description);
-      return res.status(400).send(`LeadConnector authorization failed: ${error_description || error}`);
+      return res.status(400).send(`CRM authorization failed: ${error_description || error}`);
     }
 
     if (!code || typeof code !== 'string') {
       console.error('[LeadConnector] No authorization code received. Query params:', req.query);
-      return res.status(400).send('Missing authorization code from LeadConnector.');
+      return res.status(400).send('Missing authorization code. Please try again from the Marketplace.');
     }
 
     console.log('[LeadConnector] Received authorization code, exchanging for tokens...');
 
     if (!GHL_CLIENT_ID || !GHL_CLIENT_SECRET) {
       console.error('[LeadConnector] Missing GHL_CLIENT_ID or GHL_CLIENT_SECRET');
-      return res.status(500).send('LeadConnector integration is not configured. Please contact support.');
+      return res.status(500).send('CRM integration is not configured. Please contact support.');
     }
 
     const params = new URLSearchParams({
@@ -102,12 +103,12 @@ router.get('/callback', async (req: Request, res: Response) => {
       tokenData = JSON.parse(tokenText);
     } catch (e) {
       console.error('[LeadConnector] Non-JSON token response:', tokenText.substring(0, 500));
-      return res.status(500).send('Unexpected response from LeadConnector. Please try again.');
+      return res.status(500).send('Unexpected response from the CRM platform. Please try again.');
     }
 
     if (!tokenResponse.ok || !tokenData.access_token) {
       console.error('[LeadConnector] Token exchange failed:', tokenResponse.status, tokenData);
-      return res.status(400).send(`Failed to connect LeadConnector account: ${tokenData.error_description || tokenData.error || 'Unknown error'}. Please try again.`);
+      return res.status(400).send(`Failed to connect CRM account: ${tokenData.error_description || tokenData.error || 'Unknown error'}. Please try again.`);
     }
 
     console.log('[LeadConnector] Token exchange successful:', {
@@ -167,7 +168,7 @@ router.get('/callback', async (req: Request, res: Response) => {
         const integration = await storage.createIntegration({
           userId: ownerUserId,
           type: 'gohighlevel',
-          name: `LeadConnector - ${tokenData.userType === 'Location' ? 'Location' : 'Agency'} (${locationOrCompanyId})`,
+          name: `CRM Integration - ${tokenData.userType === 'Location' ? 'Location' : 'Agency'} (${locationOrCompanyId})`,
           accessToken: tokenData.access_token,
           refreshToken: tokenData.refresh_token,
           tokenExpiresAt,
@@ -188,7 +189,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     await upsertGhlMarketplaceInstall({
       companyId: tokenData.companyId || "unknown",
       locationId: tokenData.locationId || null,
-      subAccountName: `LeadConnector - ${tokenData.userType === 'Location' ? 'Location' : 'Agency'} (${locationOrCompanyId})`,
+      subAccountName: `CRM Integration - ${tokenData.userType === 'Location' ? 'Location' : 'Agency'} (${locationOrCompanyId})`,
       installDate: new Date().toISOString(),
       installationStatus: "Active",
       source: "oauth",
@@ -199,7 +200,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Connected to LeadConnector</title>
+        <title>${CRM_CONNECTED_TITLE}</title>
         <style>
           body { font-family: -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f8fafc; }
           .card { text-align: center; padding: 48px; background: white; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); max-width: 400px; }
@@ -213,8 +214,8 @@ router.get('/callback', async (req: Request, res: Response) => {
       <body>
         <div class="card">
           <div class="check"><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
-          <h1>Connected to LeadConnector</h1>
-          <p>Your LeadConnector account is now connected. You can return to WhachatCRM to start syncing and automations.</p>
+          <h1>${CRM_CONNECTED_TITLE}</h1>
+          <p>${CRM_CONNECTED_BODY}</p>
           <a href="${getAppOrigin()}/app/integrations" class="btn">Back to WhachatCRM</a>
         </div>
         <script>
@@ -229,7 +230,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     return res.send(successHtml);
   } catch (error) {
     console.error('[LeadConnector] Callback error:', error);
-    return res.status(500).send('An error occurred while connecting LeadConnector. Please try again.');
+    return res.status(500).send('An error occurred while connecting your CRM account. Please try again.');
   }
 });
 
@@ -637,7 +638,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
                 contactId: contact.id,
                 eventType: "opportunity_deleted",
                 eventData: {
-                  description: `GHL opportunity deleted (id: ${ghlOpportunityId ?? "unknown"})`,
+                  description: `CRM opportunity deleted (id: ${ghlOpportunityId ?? "unknown"})`,
                   ghlOpportunityId,
                 },
                 actorType: "system",
@@ -851,7 +852,7 @@ router.post('/admin/cleanup-ghl-contacts', async (req: Request, res: Response) =
       .where(and(eq(contacts.userId, targetUserId), eq(contacts.source, 'gohighlevel')));
 
     if (allGhlContacts.length === 0) {
-      return res.json({ success: true, deleted: 0, message: 'No GHL contacts found' });
+      return res.json({ success: true, deleted: 0, message: 'No CRM contacts found' });
     }
 
     const allGhlContactIds = allGhlContacts.map(c => c.id);

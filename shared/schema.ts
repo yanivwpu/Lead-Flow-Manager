@@ -964,7 +964,7 @@ export const CHANNEL_INFO: Record<Channel, {
   webchat: { label: 'Web Chat', icon: 'globe', color: '#3B82F6', isMessaging: true, supportsMedia: true },
   telegram: { label: 'Telegram', icon: 'send', color: '#0088CC', isMessaging: true, supportsMedia: true },
   tiktok: { label: 'TikTok', icon: 'video', color: '#000000', isMessaging: false, supportsMedia: false }, // Lead-intake only
-  gohighlevel: { label: 'GoHighLevel', icon: 'link-2', color: '#6366F1', isMessaging: true, supportsMedia: true },
+  gohighlevel: { label: 'CRM', icon: 'link-2', color: '#6366F1', isMessaging: true, supportsMedia: true },
   calendly: { label: 'Calendly', icon: 'calendar', color: '#006BFF', isMessaging: false, supportsMedia: false },
   shopify: { label: 'Shopify', icon: 'shopping-cart', color: '#96BF48', isMessaging: false, supportsMedia: false },
   woocommerce: { label: 'WooCommerce', icon: 'shopping-cart', color: '#96588A', isMessaging: false, supportsMedia: false },

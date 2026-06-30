@@ -118,7 +118,7 @@ export const CONTACT_DISPLAY_CHANNEL_LABELS: Record<string, string> = {
   sms: "SMS",
   webchat: "Web Chat",
   telegram: "Telegram",
-  gohighlevel: "GoHighLevel",
+  gohighlevel: "CRM",
   calendly: "Calendly",
   shopify: "Shopify",
   woocommerce: "WooCommerce",

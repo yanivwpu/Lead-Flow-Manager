@@ -8894,7 +8894,7 @@ export async function registerRoutes(
       res.json(failures);
     } catch (error) {
       console.error("Error fetching GHL sync failures:", error);
-      res.status(500).json({ error: "Failed to fetch GHL sync failures" });
+      res.status(500).json({ error: "Failed to fetch CRM sync failures" });
     }
   });
 
@@ -8905,7 +8905,7 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       console.error("Error resolving GHL sync failure:", error);
-      res.status(500).json({ error: "Failed to resolve GHL sync failure" });
+      res.status(500).json({ error: "Failed to resolve CRM sync failure" });
     }
   });
 
@@ -9625,7 +9625,7 @@ export async function registerRoutes(
       res.json(result);
     } catch (error) {
       console.error("Error fetching GHL integrations:", error);
-      res.status(500).json({ error: "Failed to fetch GHL integrations" });
+      res.status(500).json({ error: "Failed to fetch CRM integrations" });
     }
   });
 
@@ -9635,7 +9635,7 @@ export async function registerRoutes(
       res.json(result);
     } catch (error) {
       console.error("Error fetching GHL installations:", error);
-      res.status(500).json({ error: "Failed to fetch GHL installations" });
+      res.status(500).json({ error: "Failed to fetch CRM installations" });
     }
   });
 
@@ -9649,7 +9649,7 @@ export async function registerRoutes(
       res.json(result);
     } catch (error) {
       console.error("Error importing GHL installs CSV:", error);
-      res.status(500).json({ error: "Failed to import GHL installs" });
+      res.status(500).json({ error: "Failed to import CRM installs" });
     }
   });
 

@@ -297,7 +297,7 @@ const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }
   webchat: { icon: Globe, color: '#3B82F6', label: 'Web Chat' },
   telegram: { icon: Send, color: '#0088CC', label: 'Telegram' },
   tiktok: { icon: Video, color: '#000000', label: 'TikTok' },
-  gohighlevel: { icon: Zap, color: '#F97316', label: 'GoHighLevel' },
+  gohighlevel: { icon: Zap, color: '#F97316', label: 'CRM' },
   calendly: { icon: Calendar, color: '#006BFF', label: 'Calendly' },
   shopify: { icon: ShoppingCart, color: '#96BF48', label: 'Shopify' },
   woocommerce: { icon: ShoppingCart, color: '#96588A', label: 'WooCommerce' },

@@ -11,7 +11,7 @@ export const REAL_ACTIVATION_CHANNELS = [
 
 export type RealActivationChannel = (typeof REAL_ACTIVATION_CHANNELS)[number];
 
-export type ActivationMessageProvider = "WhatsApp" | "Facebook" | "Instagram" | "Shopify" | "GHL" | "Unknown";
+export type ActivationMessageProvider = "WhatsApp" | "Facebook" | "Instagram" | "Shopify" | "CRM" | "Unknown";
 
 export type ActivationBillingBadge = "free" | "trial" | "paid" | "canceled" | "expired";
 
@@ -61,7 +61,7 @@ export function activationMessageProviderLabel(
     case "shopify":
       return "Shopify";
     case "gohighlevel":
-      return "GHL";
+      return "CRM";
     default:
       return "Unknown";
   }

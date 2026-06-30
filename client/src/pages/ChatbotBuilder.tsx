@@ -155,7 +155,7 @@ const CHANNEL_OPTIONS: { value: string; label: string; icon: string }[] = [
   { value: "sms",         label: "SMS",                 icon: "✉️"  },
   { value: "webchat",     label: "Web Chat",            icon: "🌐" },
   { value: "telegram",    label: "Telegram",            icon: "✈️"  },
-  { value: "gohighlevel", label: "GoHighLevel",         icon: "🔁" },
+  { value: "gohighlevel", label: "CRM",         icon: "🔁" },
 ];
 
 const MESSAGE_TYPES: { value: MessageType; label: string; icon: any }[] = [

@@ -1,4 +1,9 @@
 import { useMemo, useState } from "react";
+import {
+  CRM_CHANNEL_LABEL,
+  CRM_MARKETPLACE_LABEL,
+  CRM_SOURCE_LABEL,
+} from "@shared/leadConnectorWhiteLabel";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -161,7 +166,7 @@ function ChannelBadges({ row }: { row: ActivationAccount }) {
     { key: "FB", on: row.facebookConnected, label: "Facebook" },
     { key: "IG", on: row.instagramConnected, label: "Instagram" },
     { key: "Shop", on: row.shopifyConnected, label: "Shopify" },
-    { key: "GHL", on: row.ghlConnected, label: "GoHighLevel" },
+    { key: CRM_CHANNEL_LABEL, on: row.ghlConnected, label: CRM_CHANNEL_LABEL },
   ];
   return (
     <div className="flex flex-nowrap items-center gap-0.5">
@@ -183,7 +188,7 @@ const MESSAGE_SOURCE_ABBR: Record<string, string> = {
   Facebook: "FB",
   Instagram: "IG",
   Shopify: "Shop",
-  GHL: "GHL",
+  CRM: "CRM",
   Unknown: "?",
 };
 
@@ -308,8 +313,8 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
         <MetricCard label="Pro trial users" value={topMetrics.proTrialUsers} />
         <MetricCard label="Website paid (Stripe)" value={topMetrics.websitePaidUsers} />
         <MetricCard label="Shopify paid" value={topMetrics.shopifyPaidUsers} />
-        <MetricCard label="Marketplace paid (GHL)" value={topMetrics.marketplacePaidUsers} />
-        <MetricCard label="GHL installs" value={topMetrics.ghlInstalls} />
+        <MetricCard label="Marketplace paid (CRM)" value={topMetrics.marketplacePaidUsers} />
+        <MetricCard label="CRM installs" value={topMetrics.ghlInstalls} />
         <MetricCard label="Shopify installs" value={topMetrics.shopifyInstalls} />
         <MetricCard label="Website signups" value={topMetrics.websiteSignups} />
         <MetricCard label="Free users" value={topMetrics.freeUsers} />
@@ -409,7 +414,7 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
 
         <div className="mb-4 flex flex-wrap gap-2">
           {[
-            { label: "Source", value: source, set: setSource, options: ["all", "GHL", "Shopify", "Website", "Partner"] },
+            { label: "Source", value: source, set: setSource, options: ["all", CRM_SOURCE_LABEL, "Shopify", "Website", "Partner"] },
             { label: "Plan", value: plan, set: setPlan, options: ["all", "free", "starter", "pro"] },
             { label: "Channel", value: channelConnected, set: setChannelConnected, options: ["all", "yes", "no"] },
             { label: "Conversations", value: hasConversations, set: setHasConversations, options: ["all", "yes", "no"] },
