@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Update <lastmod> when a page's content changes materially (YYYY-MM-DD). -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <!-- Core Pages -->
   <url>
@@ -9,13 +10,13 @@
   </url>
   <url>
     <loc>https://www.whachatcrm.com/pricing</loc>
-    <lastmod>2026-06-21</lastmod>
+    <lastmod>2026-07-02</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/contact</loc>
-    <lastmod>2026-06-21</lastmod>
+    <lastmod>2026-07-02</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -89,7 +90,7 @@
   </url>
   <url>
     <loc>https://www.whachatcrm.com/best-whatsapp-crm-2026</loc>
-    <lastmod>2026-06-21</lastmod>
+    <lastmod>2026-07-02</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -141,7 +142,7 @@
   <!-- Realtor Growth Engine -->
   <url>
     <loc>https://www.whachatcrm.com/realtor-growth-engine</loc>
-    <lastmod>2026-06-21</lastmod>
+    <lastmod>2026-07-02</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
@@ -149,13 +150,13 @@
   <!-- Help & Guide -->
   <url>
     <loc>https://www.whachatcrm.com/help</loc>
-    <lastmod>2026-06-21</lastmod>
+    <lastmod>2026-07-02</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/user-guide</loc>
-    <lastmod>2026-06-21</lastmod>
+    <lastmod>2026-07-02</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
@@ -163,25 +164,25 @@
   <!-- Legal Pages -->
   <url>
     <loc>https://www.whachatcrm.com/privacy-policy</loc>
-    <lastmod>2026-06-21</lastmod>
+    <lastmod>2026-07-02</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/terms-of-use</loc>
-    <lastmod>2026-06-21</lastmod>
+    <lastmod>2026-07-02</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/data-deletion</loc>
-    <lastmod>2026-06-21</lastmod>
+    <lastmod>2026-07-02</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.25</priority>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/unsubscribe</loc>
-    <lastmod>2026-06-21</lastmod>
+    <lastmod>2026-07-02</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.2</priority>
   </url>

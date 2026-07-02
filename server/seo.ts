@@ -266,8 +266,9 @@ export const PAGE_META: Record<string, PageMeta> = {
     canonical: `${BASE_URL}/manychat-alternative`
   },
   "/best-whatsapp-crm-2026": {
-    title: "Best WhatsApp CRM Software 2026 | WhachatCRM",
-    description: "Discover the best WhatsApp CRM software in 2026. Compare CRM-first platforms vs. BSP providers. A comprehensive guide for small business sales and support.",
+    title: "Best WhatsApp CRM in 2026 | Omnichannel CRM Comparison",
+    description:
+      "Compare the best WhatsApp CRM platforms in 2026 and learn why businesses are moving toward omnichannel inboxes with AI, automation, Shopify support, and team collaboration.",
     canonical: `${BASE_URL}/best-whatsapp-crm-2026`
   },
   "/contact": {

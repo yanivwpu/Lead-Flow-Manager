@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { Helmet } from "react-helmet";
 import { ArrowLeft } from "lucide-react";
 import { MARKETING_URL } from "@/lib/marketingUrl";
+import { SiteFooter } from "@/components/SiteFooter";
 
 /**
  * Marketing email preferences — transactional/security messages may continue.
@@ -51,6 +52,7 @@ export function Unsubscribe() {
           </p>
         </div>
       </div>
+      <SiteFooter />
     </div>
   );
 }

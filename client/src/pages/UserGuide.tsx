@@ -10,6 +10,7 @@ import {
   USER_GUIDE_SECTIONS,
   type HelpSection,
 } from "@/content/help/userGuideContent";
+import { SiteFooter } from "@/components/SiteFooter";
 
 function renderSection(section: HelpSection) {
   return (
@@ -173,6 +174,7 @@ export function UserGuide() {
           </p>
         </div>
       </div>
+      <SiteFooter />
     </div>
   );
 }

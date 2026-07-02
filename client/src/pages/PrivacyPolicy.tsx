@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { Helmet } from "react-helmet";
 import { ArrowLeft } from "lucide-react";
 import { MARKETING_URL } from "@/lib/marketingUrl";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export function PrivacyPolicy() {
   return (
@@ -345,6 +346,7 @@ export function PrivacyPolicy() {
           <p>WhatsApp Business API access is typically provided through approved providers or direct Meta connections you configure.</p>
         </div>
       </div>
+      <SiteFooter />
     </div>
   );
 }

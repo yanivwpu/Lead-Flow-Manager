@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { supportedLanguages } from "@/lib/i18n";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
+import { SiteFooter } from "@/components/SiteFooter";
 import {
   getSubscriptionApiUrl,
   getShopifyShopHint,
@@ -1200,6 +1201,7 @@ export function Pricing() {
         </div>
 
       </div>
+      <SiteFooter />
     </div>
   );
 }

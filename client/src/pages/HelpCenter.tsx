@@ -12,6 +12,8 @@ import {
   type HelpLanguage,
   type HelpArticle
 } from "@/lib/helpCenterTranslations";
+import { SiteFooter } from "@/components/SiteFooter";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 
 function FeedbackSection({ articleId, articleTitle }: { articleId: string; articleTitle: string }) {
   const [feedback, setFeedback] = useState<'yes' | 'no' | null>(null);
@@ -259,9 +261,11 @@ export function HelpCenter() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-white overflow-hidden" dir={isRTL ? "rtl" : "ltr"}>
+    <div className="flex flex-col min-h-screen bg-white" dir={isRTL ? "rtl" : "ltr"}>
       <Helmet>
         <title>{UI.title} | WhachatCRM</title>
+        <link rel="canonical" href={`${MARKETING_URL}/help`} />
+        <meta property="og:url" content={`${MARKETING_URL}/help`} />
       </Helmet>
 
       <div className="p-4 sm:p-6 border-b border-gray-200 bg-gray-50 shrink-0">
@@ -367,6 +371,7 @@ export function HelpCenter() {
           )}
         </div>
       </div>
+      <SiteFooter />
     </div>
   );
 }

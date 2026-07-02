@@ -1,93 +1,158 @@
 import { Helmet } from "react-helmet";
-import { Check, Shield, Zap, Users, ArrowRight, BarChart3, MessageSquare, Info, Star, Target, Scale, Award } from "lucide-react";
+import {
+  ArrowRight,
+  Award,
+  Check,
+  CheckCircle2,
+  Minus,
+  XCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { SiteFooter } from "@/components/SiteFooter";
 import { MARKETING_URL } from "@/lib/marketingUrl";
+import {
+  BEST_FOR_SEGMENTS,
+  BEST_WHATSAPP_CRM_2026_META,
+  BUYER_CRITERIA,
+  FAQ_ITEMS,
+  HERO_CHANNEL_PILLS,
+  PLATFORM_COMPARISON,
+  RELATED_GUIDE_LINKS,
+  WHACHAT_DIFFERENTIATORS,
+  WHATSAPP_ONLY_PAIN_POINTS,
+  type ComparisonCell,
+} from "@/content/seo/bestWhatsappCrm2026Content";
+
+const CANONICAL = `${MARKETING_URL}/best-whatsapp-crm-2026`;
+
+function ComparisonCellDisplay({ value }: { value: ComparisonCell }) {
+  if (value === "yes") {
+    return <CheckCircle2 className="mx-auto h-5 w-5 text-brand-green" aria-label="Yes" />;
+  }
+  if (value === "partial") {
+    return (
+      <span className="inline-flex items-center justify-center gap-1 text-xs font-medium text-amber-700">
+        <Minus className="h-4 w-4 shrink-0" aria-hidden />
+        Partial
+      </span>
+    );
+  }
+  if (value === "no") {
+    return <XCircle className="mx-auto h-5 w-5 text-gray-300" aria-label="No" />;
+  }
+  return <span className="text-sm text-gray-700">{value}</span>;
+}
 
 export function Comparison() {
-  const faqItems = [
-    {
-      question: "What is a WhatsApp CRM?",
-      answer: "A WhatsApp CRM is a specialized customer relationship management tool that connects to the official WhatsApp Business API. It allows teams to manage high volumes of messages with features like shared inboxes, lead tagging, automated follow-ups, and internal notes, transforming a basic messaging app into a robust sales and support platform."
-    },
-    {
-      question: "How does WhachatCRM differ from other providers?",
-      answer: "WhachatCRM is a CRM-first platform. Unlike technical providers (BSPs) that focus solely on the API connection, we provide a built-in lead management system, automated drip sequences, and team collaboration tools with zero per-message markups, specifically designed for small and medium businesses."
-    },
-    {
-      question: "Does WhachatCRM charge per message?",
-      answer: "No. WhachatCRM does not charge any markups on messages. You pay only your monthly subscription fee. For Meta API users, you benefit from Meta's free tier of 1,000 service conversations per month and pay Meta directly for additional usage at their wholesale rates."
-    },
-    {
-      question: "Is WhachatCRM an official WhatsApp solution?",
-      answer: "Yes. WhachatCRM connects exclusively through official Meta and Twilio APIs. We do not use 'grey market' web-scraping or unauthorized browser extensions, ensuring your business phone number remains secure and compliant with WhatsApp's Terms of Service."
-    },
-    {
-      question: "Can multiple team members use the same WhatsApp number?",
-      answer: "Absolutely. One of the primary benefits of using a WhatsApp CRM like WhachatCRM is enabling your entire team to respond to customers from a single official number, with clear internal assignment and visibility into who is handling each conversation."
-    },
-    {
-      question: "Who is WhachatCRM best for?",
-      answer: "WhachatCRM is ideal for small and medium-sized teams (1-50 members) in industries like Real Estate, E-commerce, Agencies, and Professional Services who need a professional, scalable way to manage WhatsApp sales without technical complexity."
-    }
-  ];
-
   const faqSchema = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    "mainEntity": faqItems.map(item => ({
+    mainEntity: FAQ_ITEMS.map((item) => ({
       "@type": "Question",
-      "name": item.question,
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": item.answer
-      }
-    }))
+      name: item.question,
+      acceptedAnswer: { "@type": "Answer", text: item.answer },
+    })),
+  };
+
+  const webPageSchema = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: BEST_WHATSAPP_CRM_2026_META.title,
+    description: BEST_WHATSAPP_CRM_2026_META.description,
+    url: CANONICAL,
   };
 
   return (
-    <div className="min-h-screen bg-white text-gray-900 font-sans selection:bg-green-100 selection:text-green-900">
+    <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-green-100 selection:text-green-900">
       <Helmet>
-        <title>Best WhatsApp CRM Software 2026 | WhachatCRM</title>
-        <meta name="description" content="Discover the best WhatsApp CRM software in 2026. Compare CRM-first platforms vs. BSP providers. A comprehensive guide for small business sales and support." />
-        <link rel="canonical" href={`${MARKETING_URL}/best-whatsapp-crm-2026`} />
-        <meta property="og:title" content="Best WhatsApp CRM Software 2026 | WhachatCRM" />
-        <meta property="og:description" content="Discover the best WhatsApp CRM software in 2026. Compare CRM-first platforms vs. BSP providers. A comprehensive guide for small business sales and support." />
-        <meta property="og:url" content={`${MARKETING_URL}/best-whatsapp-crm-2026`} />
+        <title>{BEST_WHATSAPP_CRM_2026_META.title}</title>
+        <meta name="description" content={BEST_WHATSAPP_CRM_2026_META.description} />
+        <meta name="keywords" content={BEST_WHATSAPP_CRM_2026_META.keywords} />
+        <link rel="canonical" href={CANONICAL} />
+        <meta property="og:title" content={BEST_WHATSAPP_CRM_2026_META.title} />
+        <meta property="og:description" content={BEST_WHATSAPP_CRM_2026_META.description} />
+        <meta property="og:url" content={CANONICAL} />
         <meta property="og:type" content="website" />
         <meta property="og:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=3`} />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Best WhatsApp CRM Software 2026 | WhachatCRM" />
-        <meta name="twitter:description" content="Discover the best WhatsApp CRM software in 2026. Compare CRM-first platforms vs. BSP providers. A comprehensive guide for small business sales and support." />
+        <meta name="twitter:title" content={BEST_WHATSAPP_CRM_2026_META.title} />
+        <meta name="twitter:description" content={BEST_WHATSAPP_CRM_2026_META.description} />
         <meta name="twitter:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=3`} />
-        <script type="application/ld+json">
-          {JSON.stringify(faqSchema)}
-        </script>
+        <script type="application/ld+json">{JSON.stringify(webPageSchema)}</script>
+        <script type="application/ld+json">{JSON.stringify(faqSchema)}</script>
       </Helmet>
 
-      {/* Hero Section */}
-      <header className="relative overflow-hidden bg-gradient-to-b from-green-50/50 to-white pt-20 pb-16 md:pt-28 md:pb-24 border-b border-gray-100">
-        <div className="container mx-auto px-4 max-w-5xl relative z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-100 text-green-700 text-sm font-semibold mb-6 border border-green-200">
-            <Award className="w-4 h-4" />
-            2026 Industry Analysis
+      <nav className="mx-auto flex max-w-6xl items-center justify-between p-4 md:p-6">
+        <Link href="/">
+          <a className="flex cursor-pointer items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-green">
+              <span className="text-lg font-bold text-white">W</span>
+            </div>
+            <span className="font-display text-xl font-bold text-gray-900">WhachatCRM</span>
+          </a>
+        </Link>
+        <div className="flex items-center gap-2 md:gap-4">
+          <Link href="/pricing">
+            <a className="hidden text-sm font-medium text-gray-600 hover:text-gray-900 sm:block">Pricing</a>
+          </Link>
+          <Link href="/auth">
+            <a className="rounded-full bg-brand-green px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
+              Start Free
+            </a>
+          </Link>
+        </div>
+      </nav>
+
+      {/* 1. Hero */}
+      <header className="relative overflow-hidden border-b border-gray-100 bg-gradient-to-b from-green-50/50 to-white pb-16 pt-10 md:pb-24 md:pt-14">
+        <div className="container relative z-10 mx-auto max-w-5xl px-4">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-green-200 bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
+            <Award className="h-4 w-4" />
+            2026 WhatsApp CRM comparison
           </div>
-          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight text-gray-900 mb-8 leading-[1.1]">
-            Best WhatsApp CRM Software in <span className="text-green-600">2026</span>
+          <h1 className="mb-6 font-display text-3xl font-extrabold leading-[1.12] tracking-tight text-gray-900 md:text-5xl">
+            {BEST_WHATSAPP_CRM_2026_META.h1}
           </h1>
-          <p className="text-xl md:text-2xl text-gray-600 leading-relaxed mb-10 max-w-3xl">
-            In 2026, managing customer relationships on WhatsApp requires more than just a chat window. 
-            Discover how to choose a platform that balances power, simplicity, and cost-effectiveness.
+          <p className="mb-8 max-w-3xl text-lg leading-relaxed text-gray-600 md:text-xl">
+            WhatsApp CRM is no longer only about managing WhatsApp messages. In 2026, businesses
+            evaluate platforms that combine{" "}
+            <Link href="/whatsapp-crm">
+              <a className="font-medium text-brand-green hover:underline">WhatsApp Business API</a>
+            </Link>
+            , Messenger, Instagram, SMS, website chat, automation, AI assistance, and team
+            collaboration in one{" "}
+            <Link href="/unified-inbox">
+              <a className="font-medium text-brand-green hover:underline">omnichannel inbox</a>
+            </Link>
+            .
           </p>
+          <div className="mb-10 flex flex-wrap gap-2">
+            {HERO_CHANNEL_PILLS.map((pill) => (
+              <span
+                key={pill}
+                className="rounded-full bg-white px-3 py-1 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200"
+              >
+                {pill}
+              </span>
+            ))}
+          </div>
           <div className="flex flex-wrap gap-4">
-            <Link href="/">
-              <Button size="lg" className="bg-green-600 hover:bg-green-700 text-white h-14 px-10 text-lg rounded-xl shadow-lg hover:shadow-xl transition-all">
-                WhachatCRM Homepage
+            <Link href="/auth">
+              <Button
+                size="lg"
+                className="h-12 rounded-xl bg-brand-green px-8 text-base text-white shadow-lg hover:bg-emerald-700"
+              >
+                Start Free Trial
+                <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
             <Link href="/pricing">
-              <Button size="lg" variant="outline" className="h-14 px-10 text-lg rounded-xl border-gray-200 hover:bg-gray-50">
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-12 rounded-xl border-gray-200 px-8 text-base hover:bg-gray-50"
+              >
                 View Pricing
               </Button>
             </Link>
@@ -95,213 +160,292 @@ export function Comparison() {
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="container mx-auto px-4 max-w-4xl py-16 md:py-24">
-        <div className="prose prose-lg prose-green max-w-none text-gray-700 leading-relaxed">
-          
-          <section className="mb-20">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">What is a WhatsApp CRM?</h2>
-            <p className="mb-6">
-              A WhatsApp CRM (Customer Relationship Management) system is a professional software layer built on top of the official WhatsApp Business API. While the standard WhatsApp Business app is designed for individual proprietors, a dedicated CRM is built for teams. It centralizes all customer interactions, providing a single source of truth for your sales and support representatives.
+      <main className="container mx-auto max-w-5xl px-4 py-14 md:py-20">
+        {/* 2. What is a WhatsApp CRM? */}
+        <section id="what-is-whatsapp-crm" className="mb-16 scroll-mt-24 md:mb-20">
+          <h2 className="mb-5 font-display text-2xl font-bold text-gray-900 md:text-3xl">
+            What is a WhatsApp CRM?
+          </h2>
+          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6 md:p-8">
+            <p className="mb-4 text-lg leading-relaxed text-gray-700">
+              A <strong>WhatsApp CRM</strong> helps teams manage WhatsApp Business conversations,
+              contacts, follow-ups, automation, and sales pipelines in one workspace—instead of
+              juggling personal phones and scattered chats.
             </p>
-            <p className="mb-6">
-              The primary purpose of a WhatsApp CRM is to eliminate "inbox chaos." Instead of messages being scattered across different personal phones, every conversation is captured in a shared workspace. This allows for professional lead management, where every prospect is tagged, assigned to a specific team member, and tracked through a defined sales pipeline. 
+            <p className="leading-relaxed text-gray-600">
+              The best CRM for WhatsApp connects through the official API, adds shared inbox and
+              assignment rules, and links each conversation to notes, tags, reminders, and pipeline
+              stage. That turns messaging into a repeatable revenue channel rather than an ad hoc
+              inbox.
             </p>
-            <p className="mb-6">
-              In 2026, the best WhatsApp CRM platforms offer deep integration with your existing business ecosystem. This means your WhatsApp conversations aren't isolated islands; they sync with your e-commerce store, your marketing automation tools, and your payment processors.
-            </p>
-            <div className="bg-gray-50 rounded-2xl p-8 border border-gray-100 my-10">
-              <h3 className="text-xl font-bold mb-4 text-gray-900">Key Components of a Modern WhatsApp CRM:</h3>
+          </div>
+        </section>
+
+        {/* 3. Why WhatsApp-only is not enough */}
+        <section id="why-omnichannel" className="mb-16 scroll-mt-24 md:mb-20">
+          <h2 className="mb-3 font-display text-2xl font-bold text-gray-900 md:text-3xl">
+            Why WhatsApp-only CRM is no longer enough
+          </h2>
+          <p className="mb-8 max-w-3xl text-gray-600">
+            A WhatsApp CRM comparison in 2026 should weigh omnichannel coverage—not just how well a
+            tool handles a single green icon.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {WHATSAPP_ONLY_PAIN_POINTS.map((point) => (
+              <div
+                key={point.title}
+                className="rounded-xl border border-amber-100 bg-amber-50/60 p-5"
+              >
+                <h3 className="mb-2 font-semibold text-gray-900">{point.title}</h3>
+                <p className="text-sm leading-relaxed text-gray-600">{point.description}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* 4. What to look for */}
+        <section id="what-to-look-for" className="mb-16 scroll-mt-24 md:mb-20">
+          <h2 className="mb-3 font-display text-2xl font-bold text-gray-900 md:text-3xl">
+            What to look for in the best WhatsApp CRM
+          </h2>
+          <p className="mb-8 max-w-3xl text-gray-600">
+            Use this checklist when you compare WhatsApp CRM platforms—or when you evaluate a
+            WhatsApp CRM vs omnichannel CRM positioning.
+          </p>
+          <div className="grid gap-4 md:grid-cols-2">
+            {BUYER_CRITERIA.map((item) => (
+              <div
+                key={item.title}
+                className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm"
+              >
+                <h3 className="mb-2 font-semibold text-gray-900">{item.title}</h3>
+                <p className="mb-3 text-sm leading-relaxed text-gray-600">{item.description}</p>
+                <Link href={item.link.href}>
+                  <a className="text-sm font-medium text-brand-green hover:underline">
+                    {item.link.label} →
+                  </a>
+                </Link>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* 5. Comparison table */}
+        <section id="comparison-table" className="mb-16 scroll-mt-24 md:mb-20">
+          <h2 className="mb-3 font-display text-2xl font-bold text-gray-900 md:text-3xl">
+            WhatsApp CRM comparison: leading platforms in 2026
+          </h2>
+          <p className="mb-6 max-w-3xl text-sm text-gray-500">
+            High-level feature map for education. Plans and packaging change—verify details on each
+            vendor&apos;s site before you buy.
+          </p>
+          <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <table className="w-full min-w-[960px] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="p-3 font-semibold text-gray-900">Platform</th>
+                  <th className="p-3 font-semibold text-gray-900">WhatsApp Business API</th>
+                  <th className="p-3 font-semibold text-gray-900">Omnichannel Inbox</th>
+                  <th className="p-3 font-semibold text-gray-900">AI Copilot / Lead Scoring</th>
+                  <th className="p-3 font-semibold text-gray-900">Automation Templates</th>
+                  <th className="p-3 font-semibold text-gray-900">Team Inbox</th>
+                  <th className="p-3 font-semibold text-gray-900">Shopify Support</th>
+                  <th className="p-3 font-semibold text-gray-900">Real Estate / MLS</th>
+                  <th className="p-3 font-semibold text-gray-900">Meta Fee Transparency</th>
+                  <th className="min-w-[200px] p-3 font-semibold text-gray-900">Best Fit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {PLATFORM_COMPARISON.map((row) => (
+                  <tr
+                    key={row.platform}
+                    className={
+                      row.highlight
+                        ? "border-t border-green-200 bg-green-50/40"
+                        : "border-t border-gray-100"
+                    }
+                  >
+                    <td className="p-3 font-semibold text-gray-900">
+                      {row.platform}
+                      {row.highlight ? (
+                        <span className="ml-2 rounded-full bg-brand-green px-2 py-0.5 text-xs font-bold text-white">
+                          Featured
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="p-3 text-center">
+                      <ComparisonCellDisplay value={row.whatsappApi} />
+                    </td>
+                    <td className="p-3 text-center">
+                      <ComparisonCellDisplay value={row.omnichannelInbox} />
+                    </td>
+                    <td className="p-3 text-center">
+                      <ComparisonCellDisplay value={row.aiCopilot} />
+                    </td>
+                    <td className="p-3 text-center">
+                      <ComparisonCellDisplay value={row.automationTemplates} />
+                    </td>
+                    <td className="p-3 text-center">
+                      <ComparisonCellDisplay value={row.teamInbox} />
+                    </td>
+                    <td className="p-3 text-center">
+                      <ComparisonCellDisplay value={row.shopifySupport} />
+                    </td>
+                    <td className="p-3 text-center">
+                      <ComparisonCellDisplay value={row.realEstateMls} />
+                    </td>
+                    <td className="p-3 text-center">
+                      <ComparisonCellDisplay value={row.metaFeeTransparency} />
+                    </td>
+                    <td className="p-3 text-gray-600">{row.bestFit}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* 6. Why WhachatCRM is different */}
+        <section id="why-whachatcrm" className="mb-16 scroll-mt-24 md:mb-20">
+          <h2 className="mb-6 font-display text-2xl font-bold text-gray-900 md:text-3xl">
+            Why WhachatCRM is different
+          </h2>
+          <div className="grid gap-8 lg:grid-cols-2">
+            <div className="rounded-2xl border-2 border-brand-green/30 bg-green-50/40 p-6 md:p-8">
+              <p className="mb-5 text-gray-700">
+                WhachatCRM is an <strong>omnichannel CRM platform</strong> built for teams that
+                sell and support on messaging apps—not a single-channel widget bolted onto legacy
+                software.
+              </p>
               <ul className="space-y-3">
-                <li className="flex gap-3">
-                  <Check className="text-green-600 w-6 h-6 flex-shrink-0 mt-1" />
-                  <span><strong>Shared Team Inbox:</strong> Allow multiple agents to respond to customers from a single official number.</span>
-                </li>
-                <li className="flex gap-3">
-                  <Check className="text-green-600 w-6 h-6 flex-shrink-0 mt-1" />
-                  <span><strong>Lead Tagging & Segmentation:</strong> Categorize customers by interest, urgency, or conversion stage.</span>
-                </li>
-                <li className="flex gap-3">
-                  <Check className="text-green-600 w-6 h-6 flex-shrink-0 mt-1" />
-                  <span><strong>Internal Notes:</strong> Collaborate behind the scenes without the customer seeing your team's internal strategy.</span>
-                </li>
-                <li className="flex gap-3">
-                  <Check className="text-green-600 w-6 h-6 flex-shrink-0 mt-1" />
-                  <span><strong>Automated Follow-ups:</strong> Set reminders to re-engage prospects who haven't replied.</span>
-                </li>
+                {WHACHAT_DIFFERENTIATORS.map((item) => (
+                  <li key={item} className="flex gap-3 text-gray-700">
+                    <Check className="mt-0.5 h-5 w-5 shrink-0 text-brand-green" />
+                    <span>{item}</span>
+                  </li>
+                ))}
               </ul>
             </div>
-          </section>
-
-          <section className="mb-20">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">How we evaluated the best WhatsApp CRM tools</h2>
-            <p className="mb-6">
-              Our evaluation process for the 2026 guide focuses on real-world utility for small and medium businesses. We moved beyond simple feature lists and looked at the total cost of ownership and ease of adoption.
-            </p>
-            <div className="grid md:grid-cols-2 gap-8 my-10">
-              <div className="p-6 border border-gray-100 rounded-xl">
-                <h4 className="font-bold text-gray-900 mb-2">1. Compliance & Stability</h4>
-                <p className="text-base text-gray-600">We only consider platforms that use official Meta Cloud API or Twilio connectors. Stability is non-negotiable for business communications.</p>
+            <div className="flex flex-col justify-center gap-4">
+              <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+                <h3 className="mb-2 font-semibold text-gray-900">Channels in one inbox</h3>
+                <p className="text-sm text-gray-600">
+                  WhatsApp, Messenger, Instagram, SMS, Telegram, and website chat widget—see every
+                  thread beside CRM context.
+                </p>
               </div>
-              <div className="p-6 border border-gray-100 rounded-xl">
-                <h4 className="font-bold text-gray-900 mb-2">2. Cost Transparency</h4>
-                <p className="text-base text-gray-600">We prioritize platforms that avoid "hidden" per-message markups, which can make scaling prohibitively expensive for growing teams.</p>
+              <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+                <h3 className="mb-2 font-semibold text-gray-900">Industry templates</h3>
+                <p className="text-sm text-gray-600">
+                  <Link href="/shopify-crm">
+                    <a className="text-brand-green hover:underline">Shopify</a>
+                  </Link>{" "}
+                  retention flows and a{" "}
+                  <Link href="/real-estate-crm">
+                    <a className="text-brand-green hover:underline">real estate growth engine</a>
+                  </Link>{" "}
+                  with property matching—without stitching five tools together.
+                </p>
               </div>
-              <div className="p-6 border border-gray-100 rounded-xl">
-                <h4 className="font-bold text-gray-900 mb-2">3. Speed to Value</h4>
-                <p className="text-base text-gray-600">How quickly can a non-technical team get set up? Platforms requiring weeks of development time were ranked lower.</p>
-              </div>
-              <div className="p-6 border border-gray-100 rounded-xl">
-                <h4 className="font-bold text-gray-900 mb-2">4. Integrated Automation</h4>
-                <p className="text-base text-gray-600">The best tools have automation built into the CRM workflow, rather than requiring separate, expensive third-party tools.</p>
+              <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+                <h3 className="mb-2 font-semibold text-gray-900">Transparent Meta pricing</h3>
+                <p className="text-sm text-gray-600">
+                  0% markup on Meta messaging fees. Compare total cost on{" "}
+                  <Link href="/pricing">
+                    <a className="text-brand-green hover:underline">pricing</a>
+                  </Link>{" "}
+                  before you commit.
+                </p>
               </div>
             </div>
-            <p className="mb-6">
-              Small businesses have unique needs. While an enterprise might have a dedicated IT team to manage a complex BSP (Business Solution Provider) platform, an SMB needs a solution that "just works" out of the box. Our rankings reflect this priority on accessibility and specialized small-business functionality.
-            </p>
-          </section>
+          </div>
+        </section>
 
-          <section className="mb-20">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">Best WhatsApp CRM platforms in 2026</h2>
-            <p className="mb-8">
-              The market has split into three distinct categories. Understanding where your business fits will help you avoid overpaying for unnecessary features or getting stuck with a system that's too basic.
-            </p>
+        {/* 7. Who it's best for */}
+        <section id="best-for" className="mb-16 scroll-mt-24 md:mb-20">
+          <h2 className="mb-8 font-display text-2xl font-bold text-gray-900 md:text-3xl">
+            Who WhachatCRM is best for
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {BEST_FOR_SEGMENTS.map((segment) => (
+              <div
+                key={segment.title}
+                className="rounded-xl border border-gray-100 bg-gray-50 p-5 text-center"
+              >
+                <h3 className="mb-2 font-semibold text-gray-900">{segment.title}</h3>
+                <p className="text-sm text-gray-600">{segment.description}</p>
+              </div>
+            ))}
+          </div>
+        </section>
 
-            <div className="space-y-12">
-              <div className="bg-white border-2 border-green-500 rounded-2xl p-8 relative shadow-sm">
-                <div className="absolute -top-4 left-8 bg-green-500 text-white px-4 py-1 rounded-full text-sm font-bold uppercase tracking-wider">
-                  Top Recommended
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-4">Approach A: CRM-First WhatsApp Platforms</h3>
-                <p className="mb-4 font-semibold text-green-700">Example: WhachatCRM</p>
-                <p className="mb-6">
-                  CRM-first platforms are designed for sales and support teams first, and the technical API connection second. They provide a native interface for managing leads, deals, and follow-ups within the same window as the chat.
-                </p>
-                <div className="grid md:grid-cols-2 gap-6 mb-6">
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <p className="text-sm font-bold text-green-800 mb-1">Best For:</p>
-                    <p className="text-sm text-green-700">Small to medium teams who want a professional CRM without per-message markups or technical overhead.</p>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm font-bold text-gray-800 mb-1">Key Strengths:</p>
-                    <p className="text-sm text-gray-600">Built-in lead management, zero message markups, 5-minute setup, native drip campaigns.</p>
-                  </div>
-                </div>
+        {/* 8. FAQ */}
+        <section id="faq" className="mb-16 scroll-mt-24 md:mb-20">
+          <h2 className="mb-8 font-display text-2xl font-bold text-gray-900 md:text-3xl">
+            Frequently asked questions
+          </h2>
+          <div className="space-y-6">
+            {FAQ_ITEMS.map((item) => (
+              <div
+                key={item.question}
+                className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm"
+              >
+                <h3 className="mb-2 text-lg font-semibold text-gray-900">{item.question}</h3>
+                <p className="leading-relaxed text-gray-600">{item.answer}</p>
               </div>
+            ))}
+          </div>
+        </section>
 
-              <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-                <h3 className="text-2xl font-bold text-gray-900 mb-4">Approach B: Technical BSP Platforms</h3>
-                <p className="mb-4 font-semibold text-blue-700">Example: Twilio, MessageBird</p>
-                <p className="mb-6">
-                  Business Solution Providers focus on the plumbing. They provide robust API infrastructure and high deliverability but often lack a user-friendly interface for day-to-day sales operations.
-                </p>
-                <div className="grid md:grid-cols-2 gap-6 mb-6">
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <p className="text-sm font-bold text-blue-800 mb-1">Best For:</p>
-                    <p className="text-sm text-blue-700">Large companies with internal development teams who want to build a completely custom, proprietary solution.</p>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm font-bold text-gray-800 mb-1">Key Strengths:</p>
-                    <p className="text-sm text-gray-600">Extreme scalability, developer-centric documentation, pay-as-you-go infrastructure pricing.</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-                <h3 className="text-2xl font-bold text-gray-900 mb-4">Approach C: Enterprise Communication Suites</h3>
-                <p className="mb-4 font-semibold text-purple-700">Example: Salesforce, Zendesk</p>
-                <p className="mb-6">
-                  These are massive, all-in-one platforms where WhatsApp is just one of fifty different channels. While powerful, they are often too complex and expensive for focused WhatsApp-first operations.
-                </p>
-                <div className="grid md:grid-cols-2 gap-6 mb-6">
-                  <div className="bg-purple-50 p-4 rounded-lg">
-                    <p className="text-sm font-bold text-purple-800 mb-1">Best For:</p>
-                    <p className="text-sm text-purple-700">Fortune 500 enterprises already deeply entrenched in these ecosystems who need massive multi-channel ticketing.</p>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm font-bold text-gray-800 mb-1">Key Strengths:</p>
-                    <p className="text-sm text-gray-600">Comprehensive data modeling, thousands of integrations, robust enterprise-grade security.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="mb-20">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">Which WhatsApp CRM is best for small businesses?</h2>
-            <p className="mb-6">
-              For small businesses in 2026, the clear winner is the **CRM-first WhatsApp platform**. 
-            </p>
-            <p className="mb-6">
-              WhachatCRM was built specifically to address the gap left by technical BSPs and enterprise giants. While BSPs give you the API and expect you to build the rest, and enterprise suites give you everything but charge for it all, WhachatCRM gives you the specific tools a sales team needs.
-            </p>
-            <div className="grid md:grid-cols-3 gap-6 my-10">
-              <div className="flex flex-col items-center text-center p-6">
-                <div className="w-14 h-14 rounded-full bg-green-100 text-green-600 flex items-center justify-center mb-4">
-                  <Scale className="w-7 h-7" />
-                </div>
-                <h4 className="font-bold mb-2">No Hidden Costs</h4>
-                <p className="text-sm text-gray-600">Zero per-message fees. We believe you should own your conversation costs, not pay a middleman markup.</p>
-              </div>
-              <div className="flex flex-col items-center text-center p-6">
-                <div className="w-14 h-14 rounded-full bg-green-100 text-green-600 flex items-center justify-center mb-4">
-                  <Zap className="w-7 h-7" />
-                </div>
-                <h4 className="font-bold mb-2">Built-in CRM</h4>
-                <p className="text-sm text-gray-600">Don't just chat—manage. Track leads, set follow-ups, and organize your inbox without extra software.</p>
-              </div>
-              <div className="flex flex-col items-center text-center p-6">
-                <div className="w-14 h-14 rounded-full bg-green-100 text-green-600 flex items-center justify-center mb-4">
-                  <Target className="w-7 h-7" />
-                </div>
-                <h4 className="font-bold mb-2">SMB Focus</h4>
-                <p className="text-sm text-gray-600">Designed for teams of 1 to 50. Every feature is built to solve the problems actual small business owners face daily.</p>
-              </div>
-            </div>
-            <p className="mb-6">
-              Whether you are a real estate agent managing dozens of property inquiries, an e-commerce brand handling support, or a service agency booking client calls, your WhatsApp CRM should be your strongest ally, not a source of frustration.
-            </p>
-            
-            <div className="bg-green-600 rounded-3xl p-10 text-white mt-12 text-center md:text-left md:flex items-center justify-between gap-8">
-              <div className="max-w-xl">
-                <h3 className="text-2xl md:text-3xl font-bold mb-4 text-white">Ready to upgrade your sales?</h3>
-                <p className="text-green-50 text-lg mb-6 md:mb-0">
-                  Join hundreds of small businesses using WhachatCRM to professionalize their WhatsApp presence.
-                </p>
-              </div>
-              <Link href="/auth">
-                <Button size="lg" className="bg-white text-green-600 hover:bg-green-50 font-bold h-14 px-10 text-lg rounded-xl flex-shrink-0">
-                  Get Started for Free
-                </Button>
+        {/* Internal links */}
+        <section className="mb-16 border-t border-gray-100 pt-12">
+          <h2 className="mb-6 text-center text-sm font-semibold uppercase tracking-widest text-gray-500">
+            Explore WhachatCRM guides
+          </h2>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+            {RELATED_GUIDE_LINKS.map((link) => (
+              <Link key={link.href} href={link.href}>
+                <a className="block rounded-xl border border-gray-100 p-4 text-center text-sm font-semibold text-gray-700 transition-colors hover:border-green-200 hover:bg-green-50/40 hover:text-gray-900">
+                  {link.label}
+                </a>
               </Link>
-            </div>
-          </section>
+            ))}
+          </div>
+        </section>
 
-          <section className="mb-20">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">Frequently Asked Questions</h2>
-            <div className="space-y-8">
-              {faqItems.map((item, index) => (
-                <div key={index} className="border-b border-gray-100 pb-8 last:border-0">
-                  <h3 className="text-xl font-bold text-gray-900 mb-4">{item.question}</h3>
-                  <p className="text-gray-600 text-lg">{item.answer}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Industry Links Section */}
-          <section className="mt-24 pt-16 border-t border-gray-100">
-            <h2 className="text-2xl font-bold mb-8 text-center text-gray-900 uppercase tracking-widest text-sm">Industry Solutions</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              <Link href="/whatsapp-crm" className="p-4 rounded-xl border border-gray-50 hover:border-green-100 hover:bg-green-50/30 transition-all text-sm font-semibold text-gray-600">Real Estate CRM</Link>
-              <Link href="/crm-for-whatsapp-business" className="p-4 rounded-xl border border-gray-50 hover:border-green-100 hover:bg-green-50/30 transition-all text-sm font-semibold text-gray-600">E-commerce Support</Link>
-              <Link href="/wati-alternative" className="p-4 rounded-xl border border-gray-50 hover:border-green-100 hover:bg-green-50/30 transition-all text-sm font-semibold text-gray-600">Agency CRM</Link>
-              <Link href="/respond-io-alternative" className="p-4 rounded-xl border border-gray-50 hover:border-green-100 hover:bg-green-50/30 transition-all text-sm font-semibold text-gray-600">Service Business</Link>
-            </div>
-          </section>
-
-        </div>
+        {/* CTA */}
+        <section className="rounded-3xl bg-brand-green p-8 text-center text-white md:flex md:items-center md:justify-between md:p-10 md:text-left">
+          <div className="max-w-xl">
+            <h2 className="mb-3 font-display text-2xl font-bold text-white md:text-3xl">
+              Compare WhachatCRM on your real workflows
+            </h2>
+            <p className="text-green-50">
+              Start free, connect WhatsApp through Embedded Signup, and test omnichannel inbox, AI
+              Copilot, and automation templates with your team.
+            </p>
+          </div>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-0 md:shrink-0">
+            <Link href="/auth">
+              <Button
+                size="lg"
+                className="h-12 rounded-xl bg-white px-8 font-bold text-brand-green hover:bg-green-50"
+              >
+                Get Started Free
+              </Button>
+            </Link>
+            <Link href="/contact">
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-12 rounded-xl border-white/40 bg-transparent px-8 text-white hover:bg-white/10"
+              >
+                Talk to Sales
+              </Button>
+            </Link>
+          </div>
+        </section>
       </main>
+
       <SiteFooter />
     </div>
   );

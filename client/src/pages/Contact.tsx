@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Send, Loader2, MessageSquare } from "lucide-react";
 import { MARKETING_URL } from "@/lib/marketingUrl";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export function Contact() {
   const { toast } = useToast();
@@ -162,6 +163,7 @@ export function Contact() {
           </div>
         </div>
       </div>
+      <SiteFooter />
     </div>
   );
 }

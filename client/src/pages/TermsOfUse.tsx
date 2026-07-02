@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { Helmet } from "react-helmet";
 import { ArrowLeft } from "lucide-react";
 import { MARKETING_URL } from "@/lib/marketingUrl";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export function TermsOfUse() {
   return (
@@ -288,6 +289,7 @@ export function TermsOfUse() {
           <p>WhatsApp Business API access is provided by approved third-party providers.</p>
         </div>
       </div>
+      <SiteFooter />
     </div>
   );
 }

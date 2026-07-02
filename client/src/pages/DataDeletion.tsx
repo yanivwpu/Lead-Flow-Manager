@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { Helmet } from "react-helmet";
 import { ArrowLeft } from "lucide-react";
 import { MARKETING_URL } from "@/lib/marketingUrl";
+import { SiteFooter } from "@/components/SiteFooter";
 
 /**
  * Public instructions for account / personal data deletion requests (merchant & end-user context).
@@ -92,6 +93,7 @@ export function DataDeletion() {
           </p>
         </div>
       </div>
+      <SiteFooter />
     </div>
   );
 }
