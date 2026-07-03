@@ -311,18 +311,27 @@ export function SalesPortal() {
     setIsAccepting(true);
     setAcceptError("");
     try {
-      const res = await fetch('/api/sales-portal/accept-agreement', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/sales-portal/accept-agreement", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
       });
-      
+
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || 'Failed to accept agreement');
+        throw new Error(data.error || "Failed to accept agreement");
       }
-      
-      setAgreementRequired(false);
+
+      const checkData = await fetchSalesPortalCheck();
+      if (checkData.salesperson) {
+        setSalesperson(checkData.salesperson);
+      }
+      setAgreementRequired(checkData.agreementRequired === true);
       setAgreementChecked(false);
+
+      if (!checkData.agreementRequired) {
+        await refetchSalesPortalQueries(queryClient);
+      }
     } catch (err: any) {
       console.error('Error accepting agreement:', err);
       setAcceptError(err.message || 'Failed to accept agreement. Please try again.');

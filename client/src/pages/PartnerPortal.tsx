@@ -360,6 +360,7 @@ export function PartnerPortal() {
       const res = await fetch('/api/partner-portal/accept-agreement', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: "include",
       });
       
       if (!res.ok) {
