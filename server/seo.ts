@@ -241,8 +241,9 @@ export const PAGE_META: Record<string, PageMeta> = {
     canonical: `${BASE_URL}/pabbly-alternative`
   },
   "/interakt-alternative": {
-    title: "Best Interakt Alternative | WhachatCRM",
-    description: "Switch from Interakt to WhachatCRM: $19/mo, simpler pricing, unlimited team members. Visual chatbot builder & unified inbox for small teams.",
+    title: "Interakt Alternative: Omnichannel WhatsApp CRM Comparison | WhachatCRM",
+    description:
+      "Compare Interakt vs WhachatCRM for WhatsApp CRM. Balanced overview of strengths, limitations, omnichannel inbox, AI, pricing transparency, and who each platform fits best.",
     canonical: `${BASE_URL}/interakt-alternative`
   },
   "/waba360-alternative": {
@@ -251,8 +252,9 @@ export const PAGE_META: Record<string, PageMeta> = {
     canonical: `${BASE_URL}/waba360-alternative`
   },
   "/crm-for-whatsapp-business": {
-    title: "CRM for WhatsApp Business | WhachatCRM",
-    description: "Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. Manage all customer conversations in one place. Free plan available.",
+    title: "CRM for WhatsApp Business: Complete Guide (2026) | WhachatCRM",
+    description:
+      "Learn what a CRM for WhatsApp Business is, how it differs from the WhatsApp Business app, and how to choose omnichannel inbox, automation, and AI tools for your team.",
     canonical: `${BASE_URL}/crm-for-whatsapp-business`
   },
   "/zoko-alternative": {
