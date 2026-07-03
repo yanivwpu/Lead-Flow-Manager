@@ -124,7 +124,7 @@ export const PARTNER_INDUSTRY_SHOWCASES = [
     screenshotKey: "automationTemplateCards" as const,
     screenshotTitle: "Preset ecommerce automation templates",
     caption:
-      "Abandoned Cart Recovery and Limited-Time Offers templates — free to install for Shopify merchants.",
+      "Abandoned Cart Recovery, Lead Nurture, and Limited-Time Offers — free preset templates for Shopify merchants.",
     imageOnLeft: true,
   },
   {

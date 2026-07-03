@@ -38,7 +38,7 @@ export const SCREENSHOT_DIMENSIONS: Record<
   inventoryHealth: { width: 297, height: 567 },
   embeddedSignup: { width: 460, height: 593 },
   embeddedSignupMeta: { width: 561, height: 601 },
-  automationTemplateCards: { width: 327, height: 444 },
+  automationTemplateCards: { width: 903, height: 442 },
   connectWhatsapp: { width: 460, height: 312 },
   channels: { width: 460, height: 257 },
   metaBusinessSelection: { width: 460, height: 610 },
@@ -131,10 +131,11 @@ export const S = {
   }),
   automationTemplateCards: screenshot(
     "automationTemplateCards",
-    "Abandoned Cart Recovery and Limited-Time Offers automation templates",
+    "Preset WhatsApp ecommerce templates for abandoned cart recovery and customer follow-up",
     {
-      size: "compact",
-      caption: "Preset ecommerce templates including Abandoned Cart Recovery and customer retention sequences.",
+      size: "content",
+      caption:
+        "Preset ecommerce templates including Abandoned Cart Recovery, Lead Nurture, and Limited-Time Offers.",
     },
   ),
   connectWhatsapp: screenshot("connectWhatsapp", "Connect WhatsApp channel in WhachatCRM", {

@@ -472,13 +472,12 @@ export const shopifyCrmConfig: SeoLandingPageConfig = {
   heroIntro:
     "Install from the Shopify App Store, connect messaging channels in minutes, and recover revenue with abandoned cart automations, order notifications, and AI-assisted support — all in one inbox.",
   breadcrumbs: SEO_BREADCRUMBS.page("Shopify CRM", "shopify-crm"),
-  // TODO: Replace hero with an authentic Shopify workflow screenshot (cart recovery / order context) when available.
   heroImage: {
-    ...S.unifiedInbox,
+    ...S.dashboard,
     size: "hero",
     title: "WhatsApp-first customer conversations",
     caption:
-      "Until a dedicated Shopify screenshot is available, the unified inbox shows how order support and cart recovery conversations look in WhachatCRM.",
+      "Manage Shopify customer chats, order questions, and cart recovery follow-ups in one shared inbox.",
   },
   ctaHeadline: "Ready to recover more Shopify carts on WhatsApp?",
   sections: [
@@ -515,10 +514,11 @@ export const shopifyCrmConfig: SeoLandingPageConfig = {
         },
       ],
       image: {
-        ...S.unifiedInbox,
-        title: "Unified inbox for Shopify support",
+        ...S.embeddedSignup,
+        title: "Guided WhatsApp setup from Shopify",
         figure: 1,
-        caption: "Figure 1. Order context and customer messages in one thread.",
+        caption:
+          "Figure 1. Meta embedded signup connects your Shopify store to WhatsApp without manual API tokens.",
       },
     },
     {
@@ -529,10 +529,13 @@ export const shopifyCrmConfig: SeoLandingPageConfig = {
         "Recovery performs best when support and marketing share one inbox: if a buyer replies with a question, your team continues the thread human-to-human without losing automation context.",
       ],
       image: {
-        ...S.automationWorkflows,
+        ...S.automationTemplateCards,
+        size: "hero",
         title: "Abandoned cart automation",
         figure: 2,
-        caption: "Figure 2. " + S.automationWorkflows.caption!,
+        alt: "Preset WhatsApp ecommerce templates for abandoned cart recovery and customer follow-up.",
+        caption:
+          "Figure 2. Preset ecommerce templates including Abandoned Cart Recovery, Lead Nurture, and Limited-Time Offers.",
       },
     },
     {
@@ -551,10 +554,11 @@ export const shopifyCrmConfig: SeoLandingPageConfig = {
         "Tags and pipeline stages separate pre-sales questions from support tickets. Assign high-value carts to senior agents on Pro plans.",
       ],
       image: {
-        ...S.aiCopilot,
-        title: "AI-assisted Shopify support",
+        ...S.channels,
+        title: "Omnichannel Shopify support",
         figure: 3,
-        caption: "Figure 3. " + S.aiCopilot.caption!,
+        caption:
+          "Figure 3. Connect WhatsApp, Messenger, Instagram, and SMS so customers reach your store on their preferred channel.",
       },
     },
     {
