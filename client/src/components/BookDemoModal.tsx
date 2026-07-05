@@ -88,8 +88,8 @@ export function BookDemoModal({ isOpen, onClose, bookingSource = "web" }: BookDe
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <p className="text-gray-600 text-sm">
-            Enter your details below. We&apos;ll assign a demo specialist and take you straight to
-            their calendar to pick a time — one step, no follow-up scheduling email.
+            Enter your details below. We&apos;ll assign your demo specialist and take you directly to
+            their live calendar to choose a convenient date and time.
           </p>
 
           {error && (
@@ -162,7 +162,7 @@ export function BookDemoModal({ isOpen, onClose, bookingSource = "web" }: BookDe
                 Opening calendar…
               </>
             ) : (
-              "Continue to calendar"
+              "Choose a Time"
             )}
           </Button>
         </form>
