@@ -28,11 +28,18 @@ export function filterDemoEligibleSalespeople(
 
 export async function pickSalespersonForDemoAssignment(
   excludeSalespersonId?: string,
-): Promise<DemoEligibleSalesperson | undefined> {
+): Promise<(DemoEligibleSalesperson & { calendarLink: string }) | undefined> {
   const salespeopleRows = await storage.getActiveSalespeople();
   const eligible = filterDemoEligibleSalespeople(salespeopleRows, excludeSalespersonId);
-  if (eligible.length === 0) return undefined;
-  return eligible.reduce((min, p) =>
+  const withCalendar = eligible
+    .map((p) => {
+      const full = salespeopleRows.find((s) => s.id === p.id);
+      const calendarLink = full?.calendarLink?.trim() || "";
+      return calendarLink ? { ...p, calendarLink } : null;
+    })
+    .filter((p): p is DemoEligibleSalesperson & { calendarLink: string } => p != null);
+  if (withCalendar.length === 0) return undefined;
+  return withCalendar.reduce((min, p) =>
     (p.totalBookings || 0) < (min.totalBookings || 0) ? p : min,
   );
 }

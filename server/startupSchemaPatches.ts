@@ -118,12 +118,14 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
     ].join(";\n"),
   },
   {
-    tag: "0049_business_profile_social_links",
+    tag: "0055_demo_bookings_calendly",
     sql: [
-      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS facebook_url text`,
-      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS instagram_url text`,
-      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS linkedin_url text`,
-      `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS youtube_url text`,
+      `ALTER TABLE demo_bookings ALTER COLUMN scheduled_date DROP NOT NULL`,
+      `ALTER TABLE demo_bookings ADD COLUMN IF NOT EXISTS calendly_scheduled_event_uri text`,
+      `ALTER TABLE demo_bookings ADD COLUMN IF NOT EXISTS calendly_invitee_uri text`,
+      `ALTER TABLE demo_bookings ADD COLUMN IF NOT EXISTS meeting_link text`,
+      `ALTER TABLE demo_bookings ADD COLUMN IF NOT EXISTS calendly_payload jsonb`,
+      `ALTER TABLE demo_bookings ADD COLUMN IF NOT EXISTS calendly_confirmed_at timestamp`,
     ].join(";\n"),
   },
 ];

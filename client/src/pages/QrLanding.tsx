@@ -28,7 +28,7 @@ export function QrLanding() {
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
 
-      <BookDemoModal isOpen={showDemoModal} onClose={() => setShowDemoModal(false)} />
+      <BookDemoModal isOpen={showDemoModal} onClose={() => setShowDemoModal(false)} bookingSource="qr_code" />
 
       <nav className="p-4 md:p-6 flex justify-between items-center max-w-7xl mx-auto border-b">
         <div className="flex items-center gap-2">

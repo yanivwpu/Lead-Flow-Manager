@@ -50,11 +50,12 @@ interface Demo {
   visitorName: string;
   visitorEmail: string;
   visitorPhone: string;
-  scheduledDate: string;
+  scheduledDate: string | null;
   status: string;
   notes?: string;
   createdAt: string;
   source?: string;
+  meetingLink?: string | null;
 }
 
 interface Stats {
@@ -146,6 +147,7 @@ async function fetchSalesPortalCheck(): Promise<{
 }
 
 function DemoContactBlock({ demo }: { demo: Demo }) {
+  const meetingLink = demo.meetingLink?.trim() || "";
   return (
     <div className="space-y-1">
       <h3 className="font-medium text-gray-900">{demo.visitorName}</h3>
@@ -163,6 +165,20 @@ function DemoContactBlock({ demo }: { demo: Demo }) {
         <Calendar className="h-3.5 w-3.5 inline mr-1" />
         {formatDemoScheduledDate(demo.scheduledDate)}
       </p>
+      {meetingLink ? (
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="mt-1 h-8 text-xs"
+          data-testid={`button-open-meeting-${demo.id}`}
+        >
+          <a href={meetingLink} target="_blank" rel="noopener noreferrer">
+            <ExternalLink className="h-3.5 w-3.5 mr-1" />
+            Open Meeting
+          </a>
+        </Button>
+      ) : null}
     </div>
   );
 }

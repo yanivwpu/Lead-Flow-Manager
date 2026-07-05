@@ -784,9 +784,9 @@ export const demoBookings = pgTable("demo_bookings", {
   visitorName: text("visitor_name").notNull(),
   visitorEmail: text("visitor_email").notNull(),
   visitorPhone: text("visitor_phone").notNull(),
-  scheduledDate: timestamp("scheduled_date").notNull(),
+  scheduledDate: timestamp("scheduled_date"),
   consentGiven: boolean("consent_given").default(true),
-  status: text("status").notNull().default("pending_acceptance"), // pending_acceptance, accepted, completed, converted, cancelled, needs_reassignment
+  status: text("status").notNull().default("pending_acceptance"), // awaiting_schedule, pending_acceptance, accepted, completed, converted, cancelled, needs_reassignment
   notes: text("notes"),
   source: text("source").default("web"), // web, qr_code
   assignedAt: timestamp("assigned_at"),
@@ -794,6 +794,11 @@ export const demoBookings = pgTable("demo_bookings", {
   declineReason: text("decline_reason"),
   declinedBySalespersonId: varchar("declined_by_salesperson_id"),
   declinedAt: timestamp("declined_at"),
+  calendlyScheduledEventUri: text("calendly_scheduled_event_uri"),
+  calendlyInviteeUri: text("calendly_invitee_uri"),
+  meetingLink: text("meeting_link"),
+  calendlyPayload: jsonb("calendly_payload"),
+  calendlyConfirmedAt: timestamp("calendly_confirmed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

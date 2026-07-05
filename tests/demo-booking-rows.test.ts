@@ -25,7 +25,20 @@ const snake = mapDemoBookingRow({
 assert(snake.visitorName === "Jane Doe", "visitorName from snake_case");
 assert(snake.visitorEmail === "jane@example.com", "visitorEmail from snake_case");
 assert(snake.salespersonId === "sp1", "salespersonId from snake_case");
-assert(!Number.isNaN(snake.scheduledDate.getTime()), "scheduledDate parses");
+assert(!Number.isNaN(snake.scheduledDate!.getTime()), "scheduledDate parses");
+
+const awaiting = mapDemoBookingRow({
+  id: "b3",
+  salesperson_id: "sp3",
+  visitor_name: "Pat",
+  visitor_email: "pat@example.com",
+  visitor_phone: "555",
+  scheduled_date: null,
+  status: "awaiting_schedule",
+  meeting_link: "https://zoom.us/j/123",
+});
+assert(awaiting.scheduledDate === null, "null scheduled_date");
+assert(awaiting.meetingLink === "https://zoom.us/j/123", "meeting_link maps");
 
 const camel = mapDemoBookingRow({
   id: "b2",

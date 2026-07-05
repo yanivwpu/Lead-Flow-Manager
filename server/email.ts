@@ -224,7 +224,8 @@ export async function sendHelpCenterFeedback(
 export async function sendDemoBookingNotification(
   salespersonEmail: string,
   salespersonName: string,
-  visitor: { name: string; email: string; phone: string; scheduledDate: Date }
+  visitor: { name: string; email: string; phone: string; scheduledDate: Date },
+  meetingLink?: string | null,
 ): Promise<boolean> {
   const formattedDate = visitor.scheduledDate.toLocaleDateString("en-US", {
     weekday: "long",
@@ -236,19 +237,25 @@ export async function sendDemoBookingNotification(
     timeZone: "America/New_York",
   });
 
+  const meetingLine = meetingLink?.trim()
+    ? `<br/><strong>Meeting link:</strong> <a href="${escapeHtml(meetingLink.trim())}">${escapeHtml(meetingLink.trim())}</a>`
+    : "";
+
   const body = [
     emailParagraph(`Hi ${escapeHtml(salespersonName)}!`),
-    emailParagraph("You have a new demo scheduled. Here are the details:"),
+    emailParagraph(
+      "A prospect booked a demo on your Calendly and chose the time below. No further scheduling is needed."
+    ),
     emailHighlightBox(
       `<strong>Visitor:</strong> ${escapeHtml(visitor.name)}<br/>
        <strong>Email:</strong> ${escapeHtml(visitor.email)}<br/>
        <strong>Phone:</strong> ${escapeHtml(visitor.phone)}<br/>
-       <strong>Scheduled:</strong> ${escapeHtml(formattedDate)} EST`
+       <strong>Scheduled:</strong> ${escapeHtml(formattedDate)} EST${meetingLine}`
     ),
     emailParagraph(
-      `Please reach out to confirm the demo. Accept or decline the assignment in the Sales Portal within 24 hours. ${SALESPERSON_PAYOUT_POLICY_SHORT}`
+      `Accept or decline this assignment in the Sales Portal within 24 hours. ${SALESPERSON_PAYOUT_POLICY_SHORT}`
     ),
-    emailButton(`mailto:${visitor.email}`, "Contact visitor"),
+    emailButton(`${APP_URL}/sales-portal`, "Open Sales Portal"),
   ].join("");
 
   return sendEmail({
@@ -262,7 +269,8 @@ export async function sendDemoConfirmationEmail(
   visitorEmail: string,
   visitorName: string,
   scheduledDate: Date,
-  salespersonName: string
+  salespersonName: string,
+  meetingLink?: string | null,
 ): Promise<boolean> {
   const formattedDate = scheduledDate.toLocaleDateString("en-US", {
     weekday: "long",
@@ -274,6 +282,10 @@ export async function sendDemoConfirmationEmail(
     timeZone: "America/New_York",
   });
 
+  const meetingLine = meetingLink?.trim()
+    ? `<br/><strong>Meeting link:</strong> <a href="${escapeHtml(meetingLink.trim())}">${escapeHtml(meetingLink.trim())}</a>`
+    : "";
+
   const body = [
     emailParagraph(`Hi ${escapeHtml(visitorName)}!`),
     emailParagraph(
@@ -281,7 +293,7 @@ export async function sendDemoConfirmationEmail(
     ),
     emailHighlightBox(
       `<strong>Scheduled:</strong> ${escapeHtml(formattedDate)} EST<br/>
-       <strong>Your demo specialist:</strong> ${escapeHtml(salespersonName)}`
+       <strong>Your demo specialist:</strong> ${escapeHtml(salespersonName)}${meetingLine}`
     ),
     emailSectionHeading("What to expect"),
     emailList([

@@ -2109,6 +2109,7 @@ export class DbStorage implements IStorage {
 
   async createDemoBooking(booking: InsertDemoBooking): Promise<DemoBooking> {
     const now = new Date();
+    const skipBookingCount = booking.status === "awaiting_schedule";
     try {
       const result = await db.insert(demoBookings).values({
         ...booking,
@@ -2116,9 +2117,11 @@ export class DbStorage implements IStorage {
         assignedAt: booking.assignedAt ?? now,
         source: booking.source || "web",
       }).returning();
-      await db.update(salespeople)
-        .set({ totalBookings: sql`${salespeople.totalBookings} + 1` })
-        .where(eq(salespeople.id, booking.salespersonId!));
+      if (!skipBookingCount && booking.salespersonId) {
+        await db.update(salespeople)
+          .set({ totalBookings: sql`${salespeople.totalBookings} + 1` })
+          .where(eq(salespeople.id, booking.salespersonId!));
+      }
       return mapDemoBookingRow(result[0] as Record<string, unknown>);
     } catch (error: unknown) {
       if (!isDemoBookingsSchemaMismatchError(error)) throw error;
@@ -2135,9 +2138,11 @@ export class DbStorage implements IStorage {
         RETURNING id, salesperson_id, visitor_name, visitor_email, visitor_phone,
                   scheduled_date, consent_given, status, notes, created_at
       `);
-      await db.update(salespeople)
-        .set({ totalBookings: sql`${salespeople.totalBookings} + 1` })
-        .where(eq(salespeople.id, booking.salespersonId!));
+      if (!skipBookingCount && booking.salespersonId) {
+        await db.update(salespeople)
+          .set({ totalBookings: sql`${salespeople.totalBookings} + 1` })
+          .where(eq(salespeople.id, booking.salespersonId!));
+      }
       return mapDemoBookingRow({
         ...(rows.rows[0] as Record<string, unknown>),
         source: booking.source || "web",

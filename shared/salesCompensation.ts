@@ -8,6 +8,8 @@ export const SALES_CONVERSION_ATTRIBUTION_DAYS = 30;
 export const DEMO_ACCEPTANCE_TIMEOUT_HOURS = 24;
 
 export const DEMO_BOOKING_STATUS = {
+  /** Visitor submitted details; redirected to Calendly to pick a time. */
+  awaitingSchedule: "awaiting_schedule",
   pendingAcceptance: "pending_acceptance",
   accepted: "accepted",
   completed: "completed",
@@ -41,6 +43,8 @@ export function isDemoCompleted(status: string): boolean {
 export function demoStatusLabel(status: string): string {
   const s = normalizeDemoBookingStatus(status);
   switch (s) {
+    case DEMO_BOOKING_STATUS.awaitingSchedule:
+      return "Awaiting schedule";
     case DEMO_BOOKING_STATUS.pendingAcceptance:
       return "Pending Acceptance";
     case DEMO_BOOKING_STATUS.accepted:

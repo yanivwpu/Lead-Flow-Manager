@@ -23,6 +23,7 @@ function resolveWebchatPageCopy(ws: Record<string, unknown>, href: string): { gr
 import { parseIncomingWebhook, findUserByTwilioCredentials } from "../userTwilio";
 import { handleCalendlyWebhook } from "../calendlyWebhook";
 import { handleGrowthEngineSetupCalendlyWebhook } from "../growthEngineSetupCalendly";
+import { handleMarketingDemoCalendlyWebhook } from "../marketingDemoCalendlyWebhook";
 import { scheduleHubSpotAutoSync } from "../hubspotAutoSync";
 
 export function registerWebhookRoutes(app: Express): void {
@@ -30,6 +31,10 @@ export function registerWebhookRoutes(app: Express): void {
 
   app.post("/api/webhooks/calendly/growth-engine-setup", (req, res) => {
     void handleGrowthEngineSetupCalendlyWebhook(req, res);
+  });
+
+  app.post("/api/webhooks/calendly/marketing-demo", (req, res) => {
+    void handleMarketingDemoCalendlyWebhook(req, res);
   });
 
   app.post("/api/webhooks/calendly/:userId", (req, res) => {

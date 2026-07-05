@@ -7879,54 +7879,58 @@ export async function registerRoutes(
     }
   });
 
-  // Book a demo (public endpoint)
+  // Book a demo (public) — assign salesperson, create awaiting_schedule row, return Calendly URL for immediate scheduling
   app.post("/api/demo/book", async (req, res) => {
     try {
-      const { name, email, phone, scheduledDate, consent, source } = req.body;
-      
-      if (!name || !email || !phone || !scheduledDate || !consent) {
+      const { name, email, phone, consent, source } = req.body;
+
+      if (!name || !email || !phone || !consent) {
         return res.status(400).json({ error: "All fields are required including consent" });
       }
 
-      // Assign to salesperson with fewest bookings
       const { pickSalespersonForDemoAssignment } = await import("./demoAssignmentService");
+      const { appendMarketingDemoCalendlyParams } = await import("@shared/marketingDemoCalendly");
+      const { DEMO_BOOKING_STATUS } = await import("@shared/salesCompensation");
+
       const assigned = await pickSalespersonForDemoAssignment();
       if (!assigned) {
-        return res.status(400).json({ error: "No salespeople available" });
+        return res.status(503).json({
+          error: "No sales specialists are available for demo booking right now. Please try again later.",
+        });
       }
+
       const salesperson = await storage.getSalesperson(assigned.id);
-      if (!salesperson) {
-        return res.status(400).json({ error: "No salespeople available" });
+      if (!salesperson?.calendarLink?.trim()) {
+        return res.status(503).json({
+          error: "No sales specialists are available for demo booking right now. Please try again later.",
+        });
       }
 
       const booking = await storage.createDemoBooking({
         salespersonId: salesperson.id,
-        visitorName: name,
-        visitorEmail: email,
-        visitorPhone: phone,
-        scheduledDate: new Date(scheduledDate),
+        visitorName: String(name).trim(),
+        visitorEmail: String(email).trim().toLowerCase(),
+        visitorPhone: String(phone).trim(),
+        scheduledDate: null,
         consentGiven: consent,
-        status: "pending_acceptance",
+        status: DEMO_BOOKING_STATUS.awaitingSchedule,
         assignedAt: new Date(),
-        source: source || 'web'
+        source: source || "web",
       });
 
-      // Send email notification to salesperson
-      await sendDemoBookingNotification(
-        salesperson.email,
-        salesperson.name,
-        { name, email, phone, scheduledDate: new Date(scheduledDate) }
-      );
+      const calendlyUrl = appendMarketingDemoCalendlyParams(salesperson.calendarLink.trim(), {
+        demoBookingId: booking.id,
+        visitorEmail: booking.visitorEmail,
+        visitorName: booking.visitorName,
+        source: booking.source || "web",
+      });
 
-      // Send confirmation email to visitor
-      await sendDemoConfirmationEmail(
-        email,
-        name,
-        new Date(scheduledDate),
-        salesperson.name
-      );
-
-      res.json({ success: true, bookingId: booking.id });
+      res.json({
+        success: true,
+        bookingId: booking.id,
+        calendlyUrl,
+        salespersonName: salesperson.name,
+      });
     } catch (error) {
       console.error("Error booking demo:", error);
       res.status(500).json({ error: "Failed to book demo" });
@@ -9274,8 +9278,11 @@ export async function registerRoutes(
   app.get("/api/sales-portal/demos", requireSalesperson, async (req: any, res) => {
     try {
       const { processExpiredDemoAcceptances } = await import("./demoAssignmentService");
+      const { DEMO_BOOKING_STATUS } = await import("@shared/salesCompensation");
       await processExpiredDemoAcceptances();
-      const demos = await storage.getDemoBookingsBySalesperson(req.salesperson.id);
+      const demos = (await storage.getDemoBookingsBySalesperson(req.salesperson.id)).filter(
+        (d) => d.status !== DEMO_BOOKING_STATUS.awaitingSchedule,
+      );
       res.json(demos);
     } catch (error) {
       console.error("Error fetching salesperson demos:", error);
