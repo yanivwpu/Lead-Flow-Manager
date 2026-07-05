@@ -7,6 +7,7 @@ import {
   appendMarketingDemoCalendlyParams,
   MARKETING_DEMO_CALENDLY_UTM_MEDIUM,
   readMarketingDemoBookingIdFromTracking,
+  resolveMarketingDemoBookingIdFromTracking,
   isMarketingDemoCalendlyTracking,
 } from "../shared/marketingDemoCalendly";
 
@@ -29,5 +30,16 @@ const tracking = {
 assert.equal(readMarketingDemoBookingIdFromTracking(tracking), "booking-123");
 assert.equal(isMarketingDemoCalendlyTracking(tracking), true);
 assert.equal(isMarketingDemoCalendlyTracking({ utm_medium: "rge_setup" }), false);
+
+assert.equal(
+  resolveMarketingDemoBookingIdFromTracking({ utm_content: "booking-456" }),
+  "booking-456",
+  "utm_content alone when medium omitted",
+);
+assert.equal(
+  resolveMarketingDemoBookingIdFromTracking({ utm_medium: "rge_setup", utm_content: "user-1" }),
+  undefined,
+  "reject other flow medium with content",
+);
 
 console.log("marketing-demo-calendly.test.ts: OK");

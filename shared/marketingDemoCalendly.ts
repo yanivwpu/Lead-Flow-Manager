@@ -65,6 +65,22 @@ export function readMarketingDemoBookingIdFromTracking(tracking: unknown): strin
   return raw.trim();
 }
 
+/**
+ * Resolve demo_bookings.id from Calendly webhook tracking.
+ * Prefer strict marketing_demo medium; fall back to utm_content alone (Calendly often omits utm_medium).
+ */
+export function resolveMarketingDemoBookingIdFromTracking(tracking: unknown): string | undefined {
+  const strict = readMarketingDemoBookingIdFromTracking(tracking);
+  if (strict) return strict;
+  if (!tracking || typeof tracking !== "object") return undefined;
+  const t = tracking as Record<string, unknown>;
+  const medium = String(t.utm_medium ?? t.utmMedium ?? "").trim();
+  if (medium && medium !== MARKETING_DEMO_CALENDLY_UTM_MEDIUM) return undefined;
+  const raw = t.utm_content ?? t.utmContent;
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  return raw.trim();
+}
+
 export function isMarketingDemoCalendlyTracking(tracking: unknown): boolean {
   if (!tracking || typeof tracking !== "object") return false;
   const t = tracking as Record<string, unknown>;

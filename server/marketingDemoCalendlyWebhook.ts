@@ -1,12 +1,12 @@
 import type { Request, Response } from "express";
-import { eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { DEMO_BOOKING_STATUS } from "@shared/salesCompensation";
 import {
   isMarketingDemoCalendlyTracking,
-  readMarketingDemoBookingIdFromTracking,
+  resolveMarketingDemoBookingIdFromTracking,
 } from "@shared/marketingDemoCalendly";
 import type { DemoBooking } from "@shared/schema";
-import { salespeople } from "@shared/schema";
+import { demoBookings, salespeople } from "@shared/schema";
 import { db } from "../drizzle/db";
 import { extractCalendlyBookingPayload, verifyCalendlyWebhookSignature } from "./calendlyWebhook";
 import { readDemoBookings } from "./demoBookingStorage";
@@ -44,6 +44,26 @@ async function findAwaitingMarketingDemoBooking(params: {
     }
   }
   if (!normalizedEmail) return undefined;
+
+  try {
+    const rows = await db
+      .select()
+      .from(demoBookings)
+      .where(
+        and(
+          eq(demoBookings.status, DEMO_BOOKING_STATUS.awaitingSchedule),
+          sql`LOWER(TRIM(${demoBookings.visitorEmail})) = ${normalizedEmail}`,
+        ),
+      )
+      .orderBy(desc(demoBookings.createdAt))
+      .limit(1);
+    if (rows[0]) {
+      return (await readDemoBookings({ id: rows[0].id }))[0];
+    }
+  } catch (err) {
+    console.warn("[MarketingDemoCalendly] case-insensitive email lookup failed, falling back:", err);
+  }
+
   const byEmail = await readDemoBookings({ email: normalizedEmail });
   return byEmail.find((b) => b.status === DEMO_BOOKING_STATUS.awaitingSchedule);
 }
@@ -80,10 +100,10 @@ export async function processMarketingDemoCalendlyPayload(body: Record<string, u
   if (event !== "invitee.created") return;
 
   const tracking = readTrackingFromBody(body);
-  if (!isMarketingDemoCalendlyTracking(tracking)) {
-    logMarketingDemoCalendly("ignored_non_marketing_tracking", { event });
-    return;
-  }
+  logMarketingDemoCalendly("invitee_created_received", {
+    hasMarketingUtmMedium: isMarketingDemoCalendlyTracking(tracking),
+    tracking: tracking && typeof tracking === "object" ? tracking : null,
+  });
 
   const parsed = extractCalendlyBookingPayload(body);
   if (!parsed?.email) {
@@ -91,7 +111,7 @@ export async function processMarketingDemoCalendlyPayload(body: Record<string, u
     return;
   }
 
-  const demoBookingId = readMarketingDemoBookingIdFromTracking(tracking);
+  const demoBookingId = resolveMarketingDemoBookingIdFromTracking(tracking);
   const booking = await findAwaitingMarketingDemoBooking({
     demoBookingId,
     inviteeEmail: parsed.email,
@@ -101,6 +121,7 @@ export async function processMarketingDemoCalendlyPayload(body: Record<string, u
     logMarketingDemoCalendly("booking_not_found", {
       demoBookingId: demoBookingId || null,
       email: parsed.email,
+      hasMarketingUtmMedium: isMarketingDemoCalendlyTracking(tracking),
     });
     return;
   }
@@ -160,16 +181,27 @@ export async function processMarketingDemoCalendlyPayload(body: Record<string, u
     ? await storage.getSalesperson(booking.salespersonId)
     : undefined;
 
+  let salespersonNotificationSent = false;
   if (salesperson?.email) {
-    await sendDemoBookingNotification(salesperson.email, salesperson.name, {
-      name: booking.visitorName,
-      email: booking.visitorEmail,
-      phone: booking.visitorPhone,
-      scheduledDate: startTime,
-    }, parsed.meetingLink);
+    salespersonNotificationSent = await sendDemoBookingNotification(
+      salesperson.email,
+      salesperson.name,
+      {
+        name: booking.visitorName,
+        email: booking.visitorEmail,
+        phone: booking.visitorPhone,
+        scheduledDate: startTime,
+      },
+      parsed.meetingLink,
+    );
+  } else {
+    logMarketingDemoCalendly("salesperson_notification_skipped", {
+      bookingId: booking.id,
+      reason: "no_salesperson_email",
+    });
   }
 
-  await sendDemoConfirmationEmail(
+  const customerConfirmationSent = await sendDemoConfirmationEmail(
     booking.visitorEmail,
     booking.visitorName,
     startTime,
@@ -177,10 +209,20 @@ export async function processMarketingDemoCalendlyPayload(body: Record<string, u
     parsed.meetingLink,
   );
 
+  logMarketingDemoCalendly("emails_dispatched", {
+    bookingId: booking.id,
+    customerEmail: booking.visitorEmail,
+    customerConfirmationSent,
+    salespersonEmail: salesperson?.email || null,
+    salespersonNotificationSent,
+  });
+
   logMarketingDemoCalendly("booking_confirmed", {
     bookingId: booking.id,
     salespersonId: booking.salespersonId,
     scheduledEventUri: parsed.scheduledEventUri,
     hasMeetingLink: Boolean(parsed.meetingLink),
+    customerConfirmationSent,
+    salespersonNotificationSent,
   });
 }
