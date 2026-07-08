@@ -199,15 +199,19 @@ export function serveStatic(app: Express) {
     });
   });
 
-  // Legacy static HTML guide → canonical SPA route (301 before express.static)
-  app.get("/WhachatCRM-User-Guide.html", (_req, res) => {
-    res.redirect(301, "/user-guide");
-  });
-
-  // Legacy privacy URL → canonical policy page
-  app.get("/privacy", (_req, res) => {
-    res.redirect(301, "/privacy-policy");
-  });
+  // Legacy / removed marketing URLs → current canonical page (301, before express.static).
+  // Keeps old Google-indexed URLs from soft-404ing (200 SPA shell) under "Crawled - currently not indexed".
+  const LEGACY_REDIRECTS: Record<string, string> = {
+    "/WhachatCRM-User-Guide.html": "/user-guide",
+    "/privacy": "/privacy-policy",
+    // Retired competitor page with no dedicated modern equivalent → comparison hub.
+    "/intent-ai-alternative": "/best-whatsapp-crm-2026",
+  };
+  for (const [from, to] of Object.entries(LEGACY_REDIRECTS)) {
+    app.get(from, (_req, res) => {
+      res.redirect(301, to);
+    });
+  }
 
   // Serve static assets (JS, CSS, images, fonts, sitemap.xml, robots.txt, etc.)
   app.use(staticWithCache(distPath));
