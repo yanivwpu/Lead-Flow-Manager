@@ -6,7 +6,6 @@ import {
   Bot,
   Building2,
   Check,
-  ChevronDown,
   Handshake,
   Inbox,
   Layers,
@@ -32,6 +31,7 @@ import {
   GHL_EXTEND_NOT_REPLACE,
   GHL_FAQ_ITEMS,
   GHL_HERO,
+  GHL_PAGE_CTAS,
   GHL_PARTNER_NOTE,
   GHL_WHY_AGENCIES,
   GHL_WHY_MORE_THAN_CRM,
@@ -167,22 +167,6 @@ export function GoHighLevelAgencies() {
                   </li>
                 ))}
               </ul>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <Link href="/partner-program">
-                  <a className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-brand-green px-7 font-semibold text-white shadow-md shadow-emerald-900/10 hover:bg-emerald-700">
-                    {GHL_HERO.primaryCta}
-                    <ArrowRight className="h-4 w-4" />
-                  </a>
-                </Link>
-                <button
-                  type="button"
-                  onClick={scrollToAgencyUseCases}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-gray-300 bg-white px-7 font-semibold text-gray-900 hover:border-gray-400 hover:bg-gray-50"
-                >
-                  {GHL_HERO.secondaryCta}
-                  <ChevronDown className="h-4 w-4" />
-                </button>
-              </div>
             </motion.div>
             <motion.div
               className="flex justify-center lg:justify-end"
@@ -352,7 +336,7 @@ export function GoHighLevelAgencies() {
           <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
             <Link href="/partner-program">
               <a className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-brand-green px-7 font-semibold text-white hover:bg-emerald-700">
-                {GHL_HERO.primaryCta}
+                {GHL_PAGE_CTAS.primary}
                 <ArrowRight className="h-4 w-4" />
               </a>
             </Link>
@@ -361,7 +345,7 @@ export function GoHighLevelAgencies() {
               onClick={scrollToAgencyUseCases}
               className="inline-flex h-12 items-center justify-center rounded-full border border-gray-300 bg-white px-7 font-semibold text-gray-900 hover:border-gray-400 hover:bg-gray-50"
             >
-              {GHL_HERO.secondaryCta}
+              {GHL_PAGE_CTAS.secondary}
             </button>
           </div>
           <p className="mt-8 max-w-2xl border-t border-gray-200 pt-6 text-sm leading-relaxed text-gray-500">

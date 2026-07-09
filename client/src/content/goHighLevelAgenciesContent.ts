@@ -18,14 +18,19 @@ export const GHL_HERO = {
   subheading:
     "Give your clients AI-powered conversations, WhatsApp Business API, Facebook Messenger, Instagram, Shopify CRM, and industry-specific solutions—all seamlessly integrated with GoHighLevel.",
   body: "Instead of competing with GoHighLevel, WhachatCRM extends it by helping agencies deliver smarter customer communication, better client experiences, and new recurring revenue opportunities.",
-  primaryCta: "Add WhachatCRM to Your Agency Stack",
-  secondaryCta: "See Agency Use Cases",
   trustStatements: [
     "Works alongside GoHighLevel",
     "No CRM migration",
     "Built for agencies",
+    "AI-powered omnichannel messaging",
   ] as const,
 };
+
+/** Used in lower-page conversion blocks — not in the hero. */
+export const GHL_PAGE_CTAS = {
+  primary: "Add WhachatCRM to Your Agency Stack",
+  secondary: "See Agency Use Cases",
+} as const;
 
 export const GHL_WHY_MORE_THAN_CRM = {
   heading: "Why GoHighLevel Agencies Need More Than a CRM",
