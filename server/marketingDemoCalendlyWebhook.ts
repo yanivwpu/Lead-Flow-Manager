@@ -3,6 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { DEMO_BOOKING_STATUS } from "@shared/salesCompensation";
 import {
   isMarketingDemoCalendlyTracking,
+  readMarketingDemoBookingIdFromCalendlyBody,
   resolveMarketingDemoBookingIdFromTracking,
 } from "@shared/marketingDemoCalendly";
 import type { DemoBooking } from "@shared/schema";
@@ -31,19 +32,46 @@ function readTrackingFromBody(body: Record<string, unknown>): unknown {
   );
 }
 
+async function countAwaitingScheduleByEmail(email: string): Promise<number> {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return 0;
+  try {
+    const rows = await db
+      .select({ id: demoBookings.id })
+      .from(demoBookings)
+      .where(
+        and(
+          eq(demoBookings.status, DEMO_BOOKING_STATUS.awaitingSchedule),
+          sql`LOWER(TRIM(${demoBookings.visitorEmail})) = ${normalizedEmail}`,
+        ),
+      );
+    return rows.length;
+  } catch {
+    return 0;
+  }
+}
+
 async function findAwaitingMarketingDemoBooking(params: {
   demoBookingId?: string;
   inviteeEmail: string;
-}): Promise<DemoBooking | undefined> {
+}): Promise<{ booking?: DemoBooking; rejectReason?: string }> {
   const normalizedEmail = params.inviteeEmail.trim().toLowerCase();
+
   if (params.demoBookingId) {
     const byId = await readDemoBookings({ id: params.demoBookingId });
     const match = byId[0];
-    if (match?.status === DEMO_BOOKING_STATUS.awaitingSchedule) {
-      return match;
+    if (!match) {
+      return { rejectReason: "booking_id_not_found" };
     }
+    if (match.status !== DEMO_BOOKING_STATUS.awaitingSchedule) {
+      return { booking: undefined, rejectReason: `booking_id_wrong_status:${match.status}` };
+    }
+    return { booking: match };
   }
-  if (!normalizedEmail) return undefined;
+
+  if (!normalizedEmail) {
+    return { rejectReason: "missing_invitee_email" };
+  }
 
   try {
     const rows = await db
@@ -58,14 +86,18 @@ async function findAwaitingMarketingDemoBooking(params: {
       .orderBy(desc(demoBookings.createdAt))
       .limit(1);
     if (rows[0]) {
-      return (await readDemoBookings({ id: rows[0].id }))[0];
+      const booking = (await readDemoBookings({ id: rows[0].id }))[0];
+      if (booking) return { booking };
     }
   } catch (err) {
     console.warn("[MarketingDemoCalendly] case-insensitive email lookup failed, falling back:", err);
   }
 
   const byEmail = await readDemoBookings({ email: normalizedEmail });
-  return byEmail.find((b) => b.status === DEMO_BOOKING_STATUS.awaitingSchedule);
+  const match = byEmail.find((b) => b.status === DEMO_BOOKING_STATUS.awaitingSchedule);
+  if (match) return { booking: match };
+
+  return { rejectReason: "no_awaiting_schedule_for_email" };
 }
 
 export async function handleMarketingDemoCalendlyWebhook(req: Request, res: Response): Promise<void> {
@@ -75,17 +107,35 @@ export async function handleMarketingDemoCalendlyWebhook(req: Request, res: Resp
     String(process.env.CALENDLY_MARKETING_DEMO_WEBHOOK_SIGNING_KEY || "").trim() ||
     String(process.env.CALENDLY_WEBHOOK_SIGNING_KEY || "").trim();
 
+  let body: Record<string, unknown> = {};
+  try {
+    body = (req.body as Record<string, unknown>) || {};
+  } catch {
+    body = {};
+  }
+
+  logMarketingDemoCalendly("http_received", {
+    event: body.event ?? null,
+    hasSignatureHeader: Boolean(sigHeader),
+    hasSigningKey: Boolean(signingKey),
+    hasRawBody: Boolean(rawBody?.length),
+  });
+
   if (!signingKey || !rawBody || !sigHeader) {
     if (process.env.CALENDLY_ALLOW_UNSIGNED_WEBHOOKS !== "true") {
+      logMarketingDemoCalendly("auth_rejected", {
+        reason: !signingKey ? "missing_signing_key" : !sigHeader ? "missing_signature_header" : "missing_raw_body",
+      });
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
+    logMarketingDemoCalendly("auth_unsigned_allowed", { reason: "CALENDLY_ALLOW_UNSIGNED_WEBHOOKS" });
   } else if (!verifyCalendlyWebhookSignature(rawBody, sigHeader, signingKey)) {
+    logMarketingDemoCalendly("auth_rejected", { reason: "invalid_signature" });
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
-  const body = req.body as Record<string, unknown>;
   res.status(200).json({ ok: true });
 
   setImmediate(() => {
@@ -97,7 +147,10 @@ export async function handleMarketingDemoCalendlyWebhook(req: Request, res: Resp
 
 export async function processMarketingDemoCalendlyPayload(body: Record<string, unknown>): Promise<void> {
   const event = String(body.event || "");
-  if (event !== "invitee.created") return;
+  if (event !== "invitee.created") {
+    logMarketingDemoCalendly("ignored_event", { event: event || null });
+    return;
+  }
 
   const tracking = readTrackingFromBody(body);
   logMarketingDemoCalendly("invitee_created_received", {
@@ -111,17 +164,24 @@ export async function processMarketingDemoCalendlyPayload(body: Record<string, u
     return;
   }
 
-  const demoBookingId = resolveMarketingDemoBookingIdFromTracking(tracking);
-  const booking = await findAwaitingMarketingDemoBooking({
+  const demoBookingId =
+    resolveMarketingDemoBookingIdFromTracking(tracking) ||
+    readMarketingDemoBookingIdFromCalendlyBody(body);
+
+  const { booking, rejectReason } = await findAwaitingMarketingDemoBooking({
     demoBookingId,
     inviteeEmail: parsed.email,
   });
 
   if (!booking) {
+    const awaitingCount = await countAwaitingScheduleByEmail(parsed.email);
     logMarketingDemoCalendly("booking_not_found", {
       demoBookingId: demoBookingId || null,
-      email: parsed.email,
+      inviteeEmail: parsed.email,
+      rejectReason: rejectReason || "unknown",
+      awaitingScheduleRowsForEmail: awaitingCount,
       hasMarketingUtmMedium: isMarketingDemoCalendlyTracking(tracking),
+      tracking: tracking && typeof tracking === "object" ? tracking : null,
     });
     return;
   }
@@ -168,6 +228,13 @@ export async function processMarketingDemoCalendlyPayload(body: Record<string, u
   if (!updated) {
     logMarketingDemoCalendly("update_failed", { bookingId: booking.id });
     return;
+  }
+
+  if (updated.status !== DEMO_BOOKING_STATUS.pendingAcceptance) {
+    logMarketingDemoCalendly("update_status_unexpected", {
+      bookingId: booking.id,
+      status: updated.status,
+    });
   }
 
   if (booking.salespersonId) {

@@ -7889,7 +7889,9 @@ export async function registerRoutes(
       }
 
       const { pickSalespersonForDemoAssignment } = await import("./demoAssignmentService");
-      const { appendMarketingDemoCalendlyParams } = await import("@shared/marketingDemoCalendly");
+      const { appendMarketingDemoCalendlyParams, formatMarketingDemoBookingNote } = await import(
+        "@shared/marketingDemoCalendly"
+      );
       const { DEMO_BOOKING_STATUS } = await import("@shared/salesCompensation");
 
       const assigned = await pickSalespersonForDemoAssignment();
@@ -7916,6 +7918,10 @@ export async function registerRoutes(
         status: DEMO_BOOKING_STATUS.awaitingSchedule,
         assignedAt: new Date(),
         source: source || "web",
+      });
+
+      await storage.updateDemoBooking(booking.id, {
+        notes: formatMarketingDemoBookingNote(booking.id),
       });
 
       const calendlyUrl = appendMarketingDemoCalendlyParams(salesperson.calendarLink.trim(), {

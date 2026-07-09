@@ -284,6 +284,12 @@ export const PAGE_META: Record<string, PageMeta> = {
       "Partner with WhachatCRM and earn recurring commissions helping ecommerce, service businesses, support teams, and real estate professionals connect WhatsApp, AI Copilot, and automation workflows.",
     canonical: `${BASE_URL}/partner-program`,
   },
+  "/go-high-level-agencies": {
+    title: "GoHighLevel Agency Partner | WhachatCRM Messaging & AI for GHL",
+    description:
+      "Extend GoHighLevel with AI-powered WhatsApp Business API, Messenger, Instagram, Shopify CRM, and omnichannel inboxes. Built for agencies—no CRM migration required.",
+    canonical: `${BASE_URL}/go-high-level-agencies`,
+  },
   "/privacy-policy": {
     title: "Privacy Policy | WhachatCRM",
     description: "WhachatCRM privacy policy. Learn how we collect, use, and protect your data when using our WhatsApp CRM platform.",

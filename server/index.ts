@@ -587,6 +587,10 @@ app.use((req, res, next) => {
         "[Meta Webhook] Meta App Dashboard callback URL must match:",
         `${appUrl || "(set APP_URL env)"}/api/webhook/meta`,
       );
+      console.log(
+        "[MarketingDemoCalendly] Register Calendly webhook (invitee.created) on the SAME account/org that owns each sales demo event:",
+        `${appUrl || "(set APP_URL env)"}/api/webhooks/calendly/marketing-demo`,
+      );
       runStartupGhlCleanup().catch(err => console.error('[GHL Startup Cleanup] Unhandled error:', err));
       import("./inventory/inventoryDevSeedAudit")
         .then(({ runInventoryDevSeedProductionAudit }) => runInventoryDevSeedProductionAudit())

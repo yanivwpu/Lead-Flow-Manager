@@ -31,10 +31,12 @@ assert.equal(readMarketingDemoBookingIdFromTracking(tracking), "booking-123");
 assert.equal(isMarketingDemoCalendlyTracking(tracking), true);
 assert.equal(isMarketingDemoCalendlyTracking({ utm_medium: "rge_setup" }), false);
 
+const sampleBookingId = "11111111-2222-4333-8444-555555555555";
+
 assert.equal(
-  resolveMarketingDemoBookingIdFromTracking({ utm_content: "booking-456" }),
-  "booking-456",
-  "utm_content alone when medium omitted",
+  resolveMarketingDemoBookingIdFromTracking({ utm_content: sampleBookingId }),
+  sampleBookingId,
+  "utm_content alone when medium omitted (UUID)",
 );
 assert.equal(
   resolveMarketingDemoBookingIdFromTracking({ utm_medium: "rge_setup", utm_content: "user-1" }),

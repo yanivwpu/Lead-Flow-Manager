@@ -205,6 +205,7 @@ async function updateDemoBookingExtendedLegacy(
       status = ${merged.status},
       salesperson_id = ${merged.salespersonId},
       notes = ${merged.notes ?? null},
+      scheduled_date = ${merged.scheduledDate ?? null},
       assigned_at = ${merged.assignedAt ?? null},
       accepted_at = ${merged.acceptedAt ?? null},
       decline_reason = ${merged.declineReason ?? null},
