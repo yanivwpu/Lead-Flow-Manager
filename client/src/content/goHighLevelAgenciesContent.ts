@@ -1,13 +1,16 @@
-/** SEO + on-page copy for /go-high-level-agencies — preserve wording when editing layout only. */
+/** SEO + on-page copy for /go-high-level-agencies */
 
 export const GHL_AGENCIES_SLUG = "go-high-level-agencies";
 
+/** Scroll target for “See Agency Use Cases” */
+export const GHL_AGENCY_USE_CASES_SECTION_ID = "agency-use-cases";
+
 export const GHL_AGENCIES_META = {
-  title: "GoHighLevel Agency Partner | WhachatCRM Messaging & AI for GHL",
+  title: "GoHighLevel Agency Solutions | Add WhatsApp & AI Messaging | WhachatCRM",
   description:
-    "Extend GoHighLevel with AI-powered WhatsApp Business API, Messenger, Instagram, Shopify CRM, and omnichannel inboxes. Built for agencies—no CRM migration required.",
+    "Add AI messaging, WhatsApp Business API, and omnichannel inboxes to your GoHighLevel agency services. Extend GHL for clients—no CRM migration required.",
   keywords:
-    "GoHighLevel agency, GHL partner, GoHighLevel WhatsApp, GoHighLevel messaging, agency CRM extension, omnichannel for GoHighLevel",
+    "GoHighLevel agency services, GHL agency stack, GoHighLevel WhatsApp, GoHighLevel messaging, agency client packages, omnichannel for GoHighLevel",
 };
 
 export const GHL_HERO = {
@@ -15,6 +18,8 @@ export const GHL_HERO = {
   subheading:
     "Give your clients AI-powered conversations, WhatsApp Business API, Facebook Messenger, Instagram, Shopify CRM, and industry-specific solutions—all seamlessly integrated with GoHighLevel.",
   body: "Instead of competing with GoHighLevel, WhachatCRM extends it by helping agencies deliver smarter customer communication, better client experiences, and new recurring revenue opportunities.",
+  primaryCta: "Add WhachatCRM to Your Agency Stack",
+  secondaryCta: "See Agency Use Cases",
   trustStatements: [
     "Works alongside GoHighLevel",
     "No CRM migration",
@@ -53,7 +58,7 @@ export const GHL_WHY_AGENCIES = {
     {
       title: "Create New Revenue Opportunities",
       description:
-        "Package WhachatCRM into premium service plans, offer implementation services, or refer clients directly through our Partner Program to earn recurring commissions.",
+        "Package WhachatCRM into premium service plans, offer implementation services, and bill managed inbox and messaging support as recurring monthly offerings.",
     },
     {
       title: "Deliver More Value Without More Complexity",
@@ -63,14 +68,45 @@ export const GHL_WHY_AGENCIES = {
   ] as const,
 };
 
-/** FAQ copy will be added in a future section; schema renders when items exist. */
-export const GHL_FAQ_ITEMS: readonly { question: string; answer: string }[] = [];
+export const GHL_AGENCY_USE_CASES = {
+  heading: "How GoHighLevel Agencies Can Use WhachatCRM",
+  cards: [
+    {
+      title: "Add AI Messaging to Client Packages",
+      description:
+        "Offer WhachatCRM as part of your monthly marketing, automation, or retention services.",
+    },
+    {
+      title: "Sell WhatsApp Business API Setup",
+      description:
+        "Help clients connect WhatsApp, Facebook Messenger, and Instagram so they can manage conversations from one shared inbox.",
+    },
+    {
+      title: "Offer Industry-Specific Solutions",
+      description:
+        "Use WhachatCRM for real estate, Shopify, local services, and appointment-based businesses instead of selling generic CRM services.",
+    },
+    {
+      title: "Create Managed Inbox Services",
+      description:
+        "Manage replies, lead follow-up, AI-assisted conversations, and customer communication as a premium monthly service.",
+    },
+  ] as const,
+};
 
-export const GHL_FUTURE_SECTIONS = [
-  { id: "everything-your-clients-can-offer", title: "Everything Your Clients Can Offer" },
-  { id: "industry-solutions", title: "Industry Solutions" },
-  { id: "how-it-works-with-gohighlevel", title: "How It Works With GoHighLevel" },
-  { id: "ways-agencies-make-money", title: "Ways Agencies Make Money" },
-  { id: "faq", title: "FAQ" },
-  { id: "final-cta", title: "Final CTA" },
-] as const;
+export const GHL_EXTEND_NOT_REPLACE = {
+  heading: "Built to Extend GoHighLevel, Not Replace It",
+  body: "Your agency can continue using GoHighLevel for funnels, pipelines, calendars, automations, and CRM workflows. WhachatCRM adds the conversation layer your clients use every day: WhatsApp, Messenger, Instagram, Shopify messages, shared inboxes, AI replies, and industry-specific automation.",
+  flowSteps: [
+    "Lead captured in GoHighLevel",
+    "Conversation starts on WhatsApp, Messenger, Instagram, or Shopify",
+    "WhachatCRM inbox centralizes the conversation",
+    "AI assists with qualification and replies",
+    "Agency/client continues the customer journey in GHL",
+  ] as const,
+};
+
+export const GHL_PARTNER_NOTE =
+  "Agencies that refer clients directly to WhachatCRM can also earn 30% recurring commissions through our Partner Program.";
+
+export const GHL_FAQ_ITEMS: readonly { question: string; answer: string }[] = [];

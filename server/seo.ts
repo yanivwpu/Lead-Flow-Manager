@@ -285,9 +285,9 @@ export const PAGE_META: Record<string, PageMeta> = {
     canonical: `${BASE_URL}/partner-program`,
   },
   "/go-high-level-agencies": {
-    title: "GoHighLevel Agency Partner | WhachatCRM Messaging & AI for GHL",
+    title: "GoHighLevel Agency Solutions | Add WhatsApp & AI Messaging | WhachatCRM",
     description:
-      "Extend GoHighLevel with AI-powered WhatsApp Business API, Messenger, Instagram, Shopify CRM, and omnichannel inboxes. Built for agencies—no CRM migration required.",
+      "Add AI messaging, WhatsApp Business API, and omnichannel inboxes to your GoHighLevel agency services. Extend GHL for clients—no CRM migration required.",
     canonical: `${BASE_URL}/go-high-level-agencies`,
   },
   "/privacy-policy": {

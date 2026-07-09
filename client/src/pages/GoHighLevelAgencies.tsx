@@ -1,20 +1,25 @@
-import { useState } from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { Helmet } from "react-helmet";
 import {
   ArrowRight,
+  Bot,
+  Building2,
   Check,
+  ChevronDown,
   Handshake,
+  Inbox,
   Layers,
+  MessageSquare,
+  Package,
   Quote,
   Sparkles,
+  Store,
   TrendingUp,
   Users,
   Wallet,
 } from "lucide-react";
 import { SiteFooter } from "@/components/SiteFooter";
-import { BookDemoModal } from "@/components/BookDemoModal";
 import { MarketingBreadcrumbs, SEO_BREADCRUMBS } from "@/components/marketing/MarketingBreadcrumbs";
 import { MarketingScreenshot } from "@/components/marketing/MarketingScreenshot";
 import { MARKETING_URL } from "@/lib/marketingUrl";
@@ -22,17 +27,20 @@ import { S } from "@shared/marketingScreenshots";
 import {
   GHL_AGENCIES_META,
   GHL_AGENCIES_SLUG,
+  GHL_AGENCY_USE_CASES,
+  GHL_AGENCY_USE_CASES_SECTION_ID,
+  GHL_EXTEND_NOT_REPLACE,
   GHL_FAQ_ITEMS,
-  GHL_FUTURE_SECTIONS,
   GHL_HERO,
+  GHL_PARTNER_NOTE,
   GHL_WHY_AGENCIES,
   GHL_WHY_MORE_THAN_CRM,
 } from "@/content/goHighLevelAgenciesContent";
-import { cn } from "@/lib/utils";
 
 const CANONICAL = `${MARKETING_URL}/${GHL_AGENCIES_SLUG}`;
 
-const CARD_ICONS = [TrendingUp, Users, Wallet, Layers] as const;
+const WHY_AGENCY_ICONS = [TrendingUp, Users, Wallet, Layers] as const;
+const USE_CASE_ICONS = [Package, MessageSquare, Store, Inbox] as const;
 
 const fadeUp = {
   initial: { opacity: 0, y: 16 },
@@ -55,9 +63,11 @@ const organizationSchema = {
   sameAs: ["https://www.linkedin.com/company/whachatcrm", "https://twitter.com/whachatcrm"],
 };
 
-export function GoHighLevelAgencies() {
-  const [showDemoModal, setShowDemoModal] = useState(false);
+function scrollToAgencyUseCases() {
+  document.getElementById(GHL_AGENCY_USE_CASES_SECTION_ID)?.scrollIntoView({ behavior: "smooth" });
+}
 
+export function GoHighLevelAgencies() {
   const webPageSchema = {
     "@context": "https://schema.org",
     "@type": "WebPage",
@@ -65,7 +75,7 @@ export function GoHighLevelAgencies() {
     description: GHL_AGENCIES_META.description,
     url: CANONICAL,
     isPartOf: { "@id": `${MARKETING_URL}/#website` },
-    about: { "@type": "Thing", name: "GoHighLevel agency partnerships" },
+    about: { "@type": "Thing", name: "GoHighLevel agency services" },
   };
 
   const faqSchema =
@@ -114,25 +124,19 @@ export function GoHighLevelAgencies() {
           </a>
         </Link>
         <div className="flex items-center gap-2 md:gap-4">
-          <Link href="/partner-program">
-            <a className="hidden text-sm font-medium text-gray-600 hover:text-gray-900 sm:block">
-              Partner Program
-            </a>
-          </Link>
           <Link href="/pricing">
             <a className="hidden text-sm font-medium text-gray-600 hover:text-gray-900 sm:block">Pricing</a>
           </Link>
           <button
             type="button"
-            onClick={() => setShowDemoModal(true)}
+            onClick={scrollToAgencyUseCases}
             className="rounded-full bg-brand-green px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
           >
-            Book a Demo
+            Agency Solutions
           </button>
         </div>
       </nav>
 
-      {/* Section 1 — Hero */}
       <header className="border-b border-gray-100 bg-gradient-to-b from-emerald-50/60 via-gray-50 to-white px-4 pb-14 pt-6 md:px-6 md:pb-16 md:pt-8">
         <div className="mx-auto max-w-6xl">
           <MarketingBreadcrumbs
@@ -147,8 +151,8 @@ export function GoHighLevelAgencies() {
               transition={{ duration: 0.55 }}
             >
               <span className="mb-4 inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-sm font-medium text-brand-green">
-                <Handshake className="h-4 w-4" />
-                GoHighLevel Agencies
+                <Building2 className="h-4 w-4" />
+                For GoHighLevel Agencies
               </span>
               <h1 className="font-display text-balance text-3xl font-bold leading-[1.12] tracking-tight text-gray-900 md:text-4xl lg:text-[2.65rem]">
                 {GHL_HERO.h1}
@@ -164,19 +168,20 @@ export function GoHighLevelAgencies() {
                 ))}
               </ul>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <button
-                  type="button"
-                  onClick={() => setShowDemoModal(true)}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-brand-green px-7 font-semibold text-white shadow-md shadow-emerald-900/10 hover:bg-emerald-700"
-                >
-                  Book a Demo
-                  <ArrowRight className="h-4 w-4" />
-                </button>
                 <Link href="/partner-program">
-                  <a className="inline-flex h-12 items-center justify-center rounded-full border border-gray-300 bg-white px-7 font-semibold text-gray-900 hover:border-gray-400 hover:bg-gray-50">
-                    Become a Partner
+                  <a className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-brand-green px-7 font-semibold text-white shadow-md shadow-emerald-900/10 hover:bg-emerald-700">
+                    {GHL_HERO.primaryCta}
+                    <ArrowRight className="h-4 w-4" />
                   </a>
                 </Link>
+                <button
+                  type="button"
+                  onClick={scrollToAgencyUseCases}
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-gray-300 bg-white px-7 font-semibold text-gray-900 hover:border-gray-400 hover:bg-gray-50"
+                >
+                  {GHL_HERO.secondaryCta}
+                  <ChevronDown className="h-4 w-4" />
+                </button>
               </div>
             </motion.div>
             <motion.div
@@ -189,7 +194,7 @@ export function GoHighLevelAgencies() {
                 {...S.unifiedInbox}
                 size="content"
                 priority
-                caption="Omnichannel inbox with AI Copilot — extend GoHighLevel with messaging your clients already use every day."
+                caption="Add AI messaging and omnichannel inboxes to the services your GoHighLevel agency already sells."
                 captionAlign="left"
                 className="my-0 w-full max-w-[min(100%,680px)]"
               />
@@ -199,7 +204,6 @@ export function GoHighLevelAgencies() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-14 md:px-6 md:py-16">
-        {/* Section 2 — Why more than a CRM */}
         <motion.section className="mb-16 md:mb-20" {...fadeUp}>
           <h2 className="font-display mb-6 max-w-3xl text-2xl font-bold text-gray-900 md:text-3xl lg:text-4xl">
             {GHL_WHY_MORE_THAN_CRM.heading}
@@ -223,20 +227,23 @@ export function GoHighLevelAgencies() {
           </blockquote>
         </motion.section>
 
-        {/* Section 3 — Why agencies choose */}
-        <motion.section className="mb-16 md:mb-20" {...fadeUp}>
+        <motion.section
+          id={GHL_AGENCY_USE_CASES_SECTION_ID}
+          className="mb-16 scroll-mt-24 md:mb-20"
+          {...fadeUp}
+        >
           <div className="mb-10 text-center md:text-left">
             <span className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
               <Sparkles className="h-3.5 w-3.5 text-brand-green" />
-              Agency advantages
+              Agency use cases
             </span>
             <h2 className="font-display text-2xl font-bold text-gray-900 md:text-3xl lg:text-4xl">
-              {GHL_WHY_AGENCIES.heading}
+              {GHL_AGENCY_USE_CASES.heading}
             </h2>
           </div>
           <div className="grid gap-5 sm:grid-cols-2">
-            {GHL_WHY_AGENCIES.cards.map((card, index) => {
-              const Icon = CARD_ICONS[index] ?? Layers;
+            {GHL_AGENCY_USE_CASES.cards.map((card, index) => {
+              const Icon = USE_CASE_ICONS[index] ?? Layers;
               return (
                 <motion.article
                   key={card.title}
@@ -257,30 +264,117 @@ export function GoHighLevelAgencies() {
           </div>
         </motion.section>
 
-        {/* Future section placeholders */}
-        <section aria-label="Upcoming sections" className="space-y-4 border-t border-gray-100 pt-12">
-          <p className="text-center text-xs font-semibold uppercase tracking-widest text-gray-400">
-            More coming soon
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {GHL_FUTURE_SECTIONS.map((section) => (
-              <div
-                key={section.id}
-                id={section.id}
-                className={cn(
-                  "scroll-mt-24 rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-5 py-6 text-center",
-                  "text-sm font-medium text-gray-400",
-                )}
-              >
-                {section.title}
-              </div>
-            ))}
+        <motion.section className="mb-16 md:mb-20" {...fadeUp}>
+          <div className="mb-10 text-center md:text-left">
+            <span className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+              <Handshake className="h-3.5 w-3.5 text-brand-green" />
+              Agency growth
+            </span>
+            <h2 className="font-display text-2xl font-bold text-gray-900 md:text-3xl lg:text-4xl">
+              {GHL_WHY_AGENCIES.heading}
+            </h2>
           </div>
-        </section>
+          <div className="grid gap-5 sm:grid-cols-2">
+            {GHL_WHY_AGENCIES.cards.map((card, index) => {
+              const Icon = WHY_AGENCY_ICONS[index] ?? Layers;
+              return (
+                <motion.article
+                  key={card.title}
+                  className="group rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition-shadow hover:shadow-md md:p-7"
+                  initial={{ opacity: 0, y: 12 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.4, delay: index * 0.06 }}
+                >
+                  <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-100 text-brand-green transition-colors group-hover:bg-brand-green group-hover:text-white">
+                    <Icon className="h-5 w-5" aria-hidden />
+                  </div>
+                  <h3 className="font-display text-lg font-bold text-gray-900">{card.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-gray-600 md:text-base">{card.description}</p>
+                </motion.article>
+              );
+            })}
+          </div>
+        </motion.section>
+
+        <motion.section className="mb-16 md:mb-20" {...fadeUp}>
+          <h2 className="font-display mb-5 max-w-3xl text-2xl font-bold text-gray-900 md:text-3xl lg:text-4xl">
+            {GHL_EXTEND_NOT_REPLACE.heading}
+          </h2>
+          <p className="max-w-3xl text-base leading-relaxed text-gray-600 md:text-[1.05rem]">
+            {GHL_EXTEND_NOT_REPLACE.body}
+          </p>
+          <ol className="mt-10 space-y-0">
+            {GHL_EXTEND_NOT_REPLACE.flowSteps.map((step, index) => {
+              const isLast = index === GHL_EXTEND_NOT_REPLACE.flowSteps.length - 1;
+              return (
+                <li key={step} className="relative flex gap-4 pb-8 last:pb-0">
+                  {!isLast ? (
+                    <span
+                      className="absolute left-[1.125rem] top-10 h-[calc(100%-1.5rem)] w-px bg-emerald-200"
+                      aria-hidden
+                    />
+                  ) : null}
+                  <span className="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-green text-sm font-bold text-white">
+                    {index === 2 ? (
+                      <Inbox className="h-4 w-4" aria-hidden />
+                    ) : index === 3 ? (
+                      <Bot className="h-4 w-4" aria-hidden />
+                    ) : (
+                      index + 1
+                    )}
+                  </span>
+                  <div className="min-w-0 pt-1">
+                    <p className="text-base font-medium leading-snug text-gray-900 md:text-lg">{step}</p>
+                    {!isLast ? (
+                      <p className="mt-1 text-sm text-brand-green/80" aria-hidden>
+                        ↓
+                      </p>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </motion.section>
+
+        <motion.section
+          className="rounded-2xl border border-gray-100 bg-gradient-to-br from-gray-50 to-white p-8 md:p-10"
+          {...fadeUp}
+        >
+          <h2 className="font-display text-xl font-bold text-gray-900 md:text-2xl">
+            Ready to add messaging to your agency stack?
+          </h2>
+          <p className="mt-3 max-w-2xl text-base leading-relaxed text-gray-600">
+            Package WhachatCRM into your GoHighLevel client services—setup, managed inboxes, industry workflows, and
+            AI-assisted conversations your clients use every day.
+          </p>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Link href="/partner-program">
+              <a className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-brand-green px-7 font-semibold text-white hover:bg-emerald-700">
+                {GHL_HERO.primaryCta}
+                <ArrowRight className="h-4 w-4" />
+              </a>
+            </Link>
+            <button
+              type="button"
+              onClick={scrollToAgencyUseCases}
+              className="inline-flex h-12 items-center justify-center rounded-full border border-gray-300 bg-white px-7 font-semibold text-gray-900 hover:border-gray-400 hover:bg-gray-50"
+            >
+              {GHL_HERO.secondaryCta}
+            </button>
+          </div>
+          <p className="mt-8 max-w-2xl border-t border-gray-200 pt-6 text-sm leading-relaxed text-gray-500">
+            {GHL_PARTNER_NOTE}{" "}
+            <Link href="/partner-program">
+              <a className="font-medium text-brand-green hover:underline">Learn about the Partner Program</a>
+            </Link>
+            .
+          </p>
+        </motion.section>
       </main>
 
       <SiteFooter />
-      <BookDemoModal isOpen={showDemoModal} onClose={() => setShowDemoModal(false)} bookingSource="ghl_agencies" />
     </div>
   );
 }
