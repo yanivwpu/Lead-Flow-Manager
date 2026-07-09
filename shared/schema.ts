@@ -1868,7 +1868,54 @@ export const insertGhlMarketplaceInstallSchema = createInsertSchema(ghlMarketpla
 export type GhlMarketplaceInstall = typeof ghlMarketplaceInstalls.$inferSelect;
 export type InsertGhlMarketplaceInstall = z.infer<typeof insertGhlMarketplaceInstallSchema>;
 
-/** Canceled/deleted Calendly event URIs — block poll/webhook/replay from resurrecting bookings. */
+/** Internal prospect import jobs (GHL → YaBa workspace, provider-agnostic). */
+export const prospectImportJobs = pgTable("prospect_import_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  destinationUserId: varchar("destination_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  initiatedByUserId: varchar("initiated_by_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull().default("gohighlevel"),
+  batchName: text("batch_name"),
+  importReason: text("import_reason"),
+  sourceLocationId: text("source_location_id"),
+  sourceIntegrationId: varchar("source_integration_id"),
+  status: text("status").notNull().default("pending"),
+  undoStatus: text("undo_status").notNull().default("none"),
+  undoneAt: timestamp("undone_at"),
+  undoneByUserId: varchar("undone_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  filters: jsonb("filters").notNull().default(sql`'{}'::jsonb`),
+  importOptions: jsonb("import_options").notNull().default(sql`'{}'::jsonb`),
+  selectedExternalIds: jsonb("selected_external_ids"),
+  previewTotal: integer("preview_total").default(0),
+  progressCurrent: integer("progress_current").default(0),
+  progressTotal: integer("progress_total").default(0),
+  resultImported: integer("result_imported").default(0),
+  resultSkipped: integer("result_skipped").default(0),
+  resultDuplicates: integer("result_duplicates").default(0),
+  resultErrors: integer("result_errors").default(0),
+  resultDetails: jsonb("result_details").default(sql`'{}'::jsonb`),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+});
+
+export type ProspectImportJob = typeof prospectImportJobs.$inferSelect;
+
+export const prospectImportTemplates = pgTable("prospect_import_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  createdByUserId: varchar("created_by_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  templateName: text("template_name").notNull(),
+  provider: text("provider").notNull().default("gohighlevel"),
+  filters: jsonb("filters").notNull().default(sql`'{}'::jsonb`),
+  defaultInternalTag: text("default_internal_tag"),
+  defaultImportReason: text("default_import_reason"),
+  defaultImportLimit: integer("default_import_limit").default(100),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type ProspectImportTemplateRow = typeof prospectImportTemplates.$inferSelect;
+
 export const calendlyCanceledEventTombstones = pgTable(
   "calendly_canceled_event_tombstones",
   {

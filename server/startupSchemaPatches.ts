@@ -128,6 +128,56 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
       `ALTER TABLE demo_bookings ADD COLUMN IF NOT EXISTS calendly_confirmed_at timestamp`,
     ].join(";\n"),
   },
+  {
+    tag: "0056_prospect_import_jobs",
+    sql: `CREATE TABLE IF NOT EXISTS prospect_import_jobs (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      destination_user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      initiated_by_user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      provider text NOT NULL DEFAULT 'gohighlevel',
+      source_location_id text,
+      source_integration_id varchar,
+      status text NOT NULL DEFAULT 'pending',
+      filters jsonb NOT NULL DEFAULT '{}'::jsonb,
+      import_options jsonb NOT NULL DEFAULT '{}'::jsonb,
+      selected_external_ids jsonb,
+      preview_total integer DEFAULT 0,
+      progress_current integer DEFAULT 0,
+      progress_total integer DEFAULT 0,
+      result_imported integer DEFAULT 0,
+      result_skipped integer DEFAULT 0,
+      result_duplicates integer DEFAULT 0,
+      result_errors integer DEFAULT 0,
+      result_details jsonb DEFAULT '{}'::jsonb,
+      error_message text,
+      created_at timestamp DEFAULT now(),
+      started_at timestamp,
+      completed_at timestamp
+    )`,
+  },
+  {
+    tag: "0057_prospect_import_phase15",
+    sql: [
+      `ALTER TABLE prospect_import_jobs ADD COLUMN IF NOT EXISTS batch_name text`,
+      `ALTER TABLE prospect_import_jobs ADD COLUMN IF NOT EXISTS import_reason text`,
+      `ALTER TABLE prospect_import_jobs ADD COLUMN IF NOT EXISTS undo_status text NOT NULL DEFAULT 'none'`,
+      `ALTER TABLE prospect_import_jobs ADD COLUMN IF NOT EXISTS undone_at timestamp`,
+      `ALTER TABLE prospect_import_jobs ADD COLUMN IF NOT EXISTS undone_by_user_id varchar REFERENCES users(id) ON DELETE SET NULL`,
+      `CREATE TABLE IF NOT EXISTS prospect_import_templates (
+        id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+        created_by_user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        template_name text NOT NULL,
+        provider text NOT NULL DEFAULT 'gohighlevel',
+        filters jsonb NOT NULL DEFAULT '{}'::jsonb,
+        default_internal_tag text,
+        default_import_reason text,
+        default_import_limit integer DEFAULT 100,
+        created_at timestamp DEFAULT now(),
+        updated_at timestamp DEFAULT now()
+      )`,
+      `CREATE INDEX IF NOT EXISTS prospect_import_templates_user_idx ON prospect_import_templates (created_by_user_id, updated_at DESC)`,
+    ].join(";\n"),
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {

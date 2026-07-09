@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Bell, Mail, Smartphone, Shield, LogOut, Phone, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap, CheckCircle2, XCircle, MessageSquare, Copy, Check, AlertTriangle, Users, UserPlus, Crown, Clock, Building2, FileText } from "lucide-react";
+import { Bell, Mail, Smartphone, Shield, LogOut, Phone, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap, CheckCircle2, XCircle, MessageSquare, Copy, Check, AlertTriangle, Users, UserPlus, Crown, Clock, Building2, FileText, Sparkles } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
 import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { ChannelSettings } from "@/components/ChannelSettings";
 import { BusinessProfileSettings } from "@/components/settings/BusinessProfileSettings";
+import { GhlProspectImport, useProspectImportAccess } from "@/components/settings/GhlProspectImport";
 import { cn } from "@/lib/utils";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
@@ -396,6 +397,7 @@ export function Settings() {
   const [isImporting, setIsImporting] = useState(false);
 
   const channelsSectionRef = useRef<HTMLDivElement>(null);
+  const prospectImportAccess = useProspectImportAccess();
 
   useEffect(() => {
     if (!user) return;
@@ -1209,6 +1211,16 @@ export function Settings() {
           </div>
 
           <BusinessProfileSettings />
+
+          {prospectImportAccess.data?.allowed ? (
+            <section id="settings-growth-tools" className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-brand-green" />
+                <h2 className="text-lg font-semibold text-gray-900">Growth Tools</h2>
+              </div>
+              <GhlProspectImport />
+            </section>
+          ) : null}
 
           {/* Danger Zone — last section */}
           <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 sm:p-5 shadow-none">
