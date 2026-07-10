@@ -217,6 +217,22 @@ type CrmConnectionStatus = {
   installedAt?: string;
 };
 
+type GhlOAuthAuthorizeDebugSnapshot = {
+  authorizeUrl: string;
+  includesVersionId: boolean;
+  redirectUri: string;
+  clientId: string | null;
+  scope: string;
+  statePresent: boolean;
+  responseType: string | null;
+  host: string;
+  path: string;
+  expectedCallbackExample: string;
+  redirectUriMatchesAppOrigin: boolean;
+  warnings: string[];
+  notes: string[];
+};
+
 const VITE_SHOPIFY_APP_STORE_URL =
   typeof import.meta.env.VITE_SHOPIFY_APP_STORE_URL === "string"
     ? import.meta.env.VITE_SHOPIFY_APP_STORE_URL.trim()
@@ -541,6 +557,9 @@ export function Integrations() {
   const [manageIntegrationId, setManageIntegrationId] = useState<string | null>(null);
   const [pendingDisconnectType, setPendingDisconnectType] = useState<string | null>(null);
   const [leadManageOpen, setLeadManageOpen] = useState(false);
+  const [ghlOAuthDebugOpen, setGhlOAuthDebugOpen] = useState(false);
+  const [ghlOAuthDebug, setGhlOAuthDebug] = useState<GhlOAuthAuthorizeDebugSnapshot | null>(null);
+  const [ghlOAuthDebugLoading, setGhlOAuthDebugLoading] = useState(false);
 
   const integrationsEnabled = subscription?.limits?.integrationsEnabled;
   const maxWebhooks = (subscription?.limits as any)?.maxWebhooks || 0;
@@ -605,6 +624,39 @@ export function Integrations() {
   const startCrmOAuthAuthorize = () => {
     const authorizeUrl = crmInstallConfig?.oauthAuthorizeUrl || "/api/ext/oauth-authorize";
     window.location.href = authorizeUrl;
+  };
+
+  const startCrmOAuthAuthorizeDebugPage = () => {
+    const base = crmInstallConfig?.oauthAuthorizeUrl || "/api/ext/oauth-authorize";
+    const separator = base.includes("?") ? "&" : "?";
+    window.location.href = `${base}${separator}debug=1`;
+  };
+
+  const loadGhlOAuthDebug = async () => {
+    setGhlOAuthDebugLoading(true);
+    try {
+      const res = await fetch("/api/ext/oauth-authorize-debug", { credentials: "include" });
+      const data = (await res.json().catch(() => ({}))) as GhlOAuthAuthorizeDebugSnapshot & { error?: string };
+      if (!res.ok) {
+        toast({
+          title: "OAuth debug unavailable",
+          description: data.error || "Could not load OAuth authorize debug snapshot.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setGhlOAuthDebug(data);
+      setGhlOAuthDebugOpen(true);
+      console.info("[CRM OAuth debug]", data);
+    } catch {
+      toast({
+        title: "OAuth debug failed",
+        description: "Could not load OAuth authorize debug snapshot.",
+        variant: "destructive",
+      });
+    } finally {
+      setGhlOAuthDebugLoading(false);
+    }
   };
 
   const openCrmMarketplace = async () => {
@@ -1219,6 +1271,19 @@ export function Integrations() {
                                 {CRM_INSTALLED_NOT_CONNECTED}
                               </p>
                             )}
+                            {isLeadConnector && !lcConnected && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto w-full py-1 text-xs text-gray-600 hover:text-gray-900"
+                                onClick={() => void loadGhlOAuthDebug()}
+                                disabled={ghlOAuthDebugLoading}
+                                data-testid="button-ghl-oauth-debug"
+                              >
+                                {ghlOAuthDebugLoading ? "Loading OAuth debug…" : "Preview OAuth URL (debug)"}
+                              </Button>
+                            )}
                             {isLeadConnector && lcConnected && (
                               <Button
                                 type="button"
@@ -1736,6 +1801,76 @@ export function Integrations() {
           </DialogContent>
         </Dialog>
 
+        {/* CRM OAuth debug (temporary) */}
+        <Dialog open={ghlOAuthDebugOpen} onOpenChange={setGhlOAuthDebugOpen}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>CRM OAuth URL debug</DialogTitle>
+              <DialogDescription>
+                Temporary diagnostic from /api/ext/oauth-authorize-debug. Search Railway for{" "}
+                <code className="text-xs">oauth_authorize_started</code>.
+              </DialogDescription>
+            </DialogHeader>
+            {ghlOAuthDebug ? (
+              <div className="space-y-3 text-xs">
+                {ghlOAuthDebug.warnings.length > 0 && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-950">
+                    <p className="font-semibold mb-1">Warnings</p>
+                    <ul className="list-disc pl-4 space-y-1">
+                      {ghlOAuthDebug.warnings.map((w) => (
+                        <li key={w}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <dl className="grid gap-2">
+                  {[
+                    ["includesVersionId", String(ghlOAuthDebug.includesVersionId)],
+                    ["statePresent", String(ghlOAuthDebug.statePresent)],
+                    ["host", ghlOAuthDebug.host],
+                    ["path", ghlOAuthDebug.path],
+                    ["redirect_uri", ghlOAuthDebug.redirectUri],
+                    ["client_id", ghlOAuthDebug.clientId || ""],
+                    ["scope", ghlOAuthDebug.scope],
+                    ["expected callback", ghlOAuthDebug.expectedCallbackExample],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="font-medium text-gray-700">{label}</dt>
+                      <dd className="mt-0.5 break-all rounded bg-gray-50 p-2 font-mono text-[11px] text-gray-900">
+                        {value}
+                      </dd>
+                    </div>
+                  ))}
+                  <div>
+                    <dt className="font-medium text-gray-700">authorizeUrl</dt>
+                    <dd className="mt-0.5 break-all rounded bg-gray-50 p-2 font-mono text-[11px] text-gray-900">
+                      {ghlOAuthDebug.authorizeUrl}
+                    </dd>
+                  </div>
+                </dl>
+                {ghlOAuthDebug.notes.length > 0 && (
+                  <ul className="list-disc pl-4 text-gray-600 space-y-1">
+                    {ghlOAuthDebug.notes.map((n) => (
+                      <li key={n}>{n}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : null}
+            <DialogFooter className="gap-2 sm:justify-between">
+              <Button variant="outline" onClick={() => setGhlOAuthDebugOpen(false)}>
+                Close
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={startCrmOAuthAuthorizeDebugPage}>
+                  Open debug redirect page
+                </Button>
+                <Button onClick={startCrmOAuthAuthorize}>Continue OAuth</Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* CRM Integration — manage (install, check, verify) */}
         <Dialog open={leadManageOpen} onOpenChange={setLeadManageOpen}>
           <DialogContent className="max-w-md">
@@ -1806,7 +1941,7 @@ export function Integrations() {
               {!lcStatus?.connected && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/80 p-3">
                   <p className="text-xs text-gray-600 flex-1">
-                    Complete OAuth while logged into WhachatCRM so tokens are saved to your account.
+                    Complete OAuth while logged into WhachatCRM. If GHL opens agency_dashboard with no code, use Preview OAuth URL (debug) or try a private browser window.
                   </p>
                   <Button
                     variant="outline"

@@ -24,7 +24,13 @@ export const DEFAULT_GHL_OAUTH_SCOPES = [
   "contacts.readonly",
 ].join(" ");
 
-const GHL_MARKETPLACE_OAUTH_BASE = "https://marketplace.leadconnectorhq.com/oauth/chooselocation";
+export function resolveGhlOAuthChooseLocationBase(): string {
+  const override = String(process.env.GHL_OAUTH_CHOOSELOCATION_BASE || "").trim();
+  if (override) return override.replace(/\/+$/, "");
+  return "https://marketplace.leadconnectorhq.com/oauth/chooselocation";
+}
+
+const GHL_MARKETPLACE_OAUTH_BASE = resolveGhlOAuthChooseLocationBase();
 
 export type GhlOAuthAuthorizeUrlParams = {
   clientId: string;

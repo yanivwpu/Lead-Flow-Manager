@@ -20,7 +20,10 @@ import {
   summarizeGhlConnectionState,
   resolveUserGhlConnectionStatus,
 } from './ghlConnectionDiagnostics';
-import { requireAuth } from './auth';
+import {
+  buildGhlOAuthAuthorizeDebugSnapshot,
+  logGhlOAuthAuthorizeDebugSnapshot,
+} from './ghlOAuthDebug';
 import {
   appendStateToInstallUrl,
   clearGhlOAuthPending,
@@ -32,6 +35,7 @@ import {
   readGhlOAuthSessionUserId,
   saveSessionValue,
 } from './ghlOAuthFlow';
+import { requireAuth } from './auth';
 
 const router = Router();
 
@@ -113,6 +117,56 @@ router.get('/marketplace-install', async (_req: Request, res: Response) => {
   }
 });
 
+router.get('/oauth-authorize-debug', requireAuth, async (req: Request, res: Response) => {
+  const userId = resolveSessionUserId(req);
+  if (!userId) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
+  const snapshot = buildGhlOAuthAuthorizeDebugSnapshot(userId);
+  logGhlOAuthAuthorizeDebugSnapshot("oauth_authorize_debug_requested", snapshot, {
+    sessionUserId: userId,
+  });
+  res.json(snapshot);
+});
+
+function renderGhlOAuthAuthorizeDebugHtml(snapshot: ReturnType<typeof buildGhlOAuthAuthorizeDebugSnapshot>): string {
+  const rows = [
+    ["authorizeUrl", snapshot.authorizeUrl],
+    ["includesVersionId", String(snapshot.includesVersionId)],
+    ["redirect_uri", snapshot.redirectUri],
+    ["client_id", snapshot.clientId || ""],
+    ["scope", snapshot.scope],
+    ["statePresent", String(snapshot.statePresent)],
+    ["response_type", snapshot.responseType || ""],
+    ["host", snapshot.host],
+    ["path", snapshot.path],
+    ["expectedCallback", snapshot.expectedCallbackExample],
+  ];
+  const warningBlock =
+    snapshot.warnings.length > 0
+      ? `<div class="warn"><strong>Warnings</strong><ul>${snapshot.warnings.map((w) => `<li>${w}</li>`).join("")}</ul></div>`
+      : "";
+  const notesBlock = `<div class="note"><ul>${snapshot.notes.map((n) => `<li>${n}</li>`).join("")}</ul></div>`;
+  return `<!DOCTYPE html>
+<html><head><title>CRM OAuth debug</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 24px auto; padding: 0 16px; color: #0f172a; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th, td { text-align: left; border: 1px solid #e2e8f0; padding: 8px; vertical-align: top; word-break: break-all; }
+  th { width: 180px; background: #f8fafc; }
+  .warn { background: #fff7ed; border: 1px solid #fdba74; padding: 12px; border-radius: 8px; margin: 12px 0; }
+  .note { background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; margin: 12px 0; font-size: 14px; }
+  .btn { display: inline-block; margin-top: 16px; padding: 10px 16px; background: #16a34a; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; }
+</style></head><body>
+  <h1>CRM OAuth authorize debug</h1>
+  <p>Temporary diagnostic — verify URL before redirecting to GoHighLevel.</p>
+  ${warningBlock}
+  <table>${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join("")}</table>
+  ${notesBlock}
+  <a class="btn" href="${snapshot.authorizeUrl.replace(/"/g, "&quot;")}">Continue to GoHighLevel OAuth</a>
+</body></html>`;
+}
+
 router.get('/oauth-authorize', requireAuth, async (req: Request, res: Response) => {
   const userId = resolveSessionUserId(req);
   if (!userId) {
@@ -138,14 +192,17 @@ router.get('/oauth-authorize', requireAuth, async (req: Request, res: Response) 
     await saveSessionValue(req, "ghlMarketplaceInstallPending", true);
 
     const authorizeUrl = appendStateToInstallUrl(config.oauthAuthorizeUrl, state);
-    logGhlOAuthDiagnostic("oauth_authorize_started", {
+    const debugSnapshot = buildGhlOAuthAuthorizeDebugSnapshot(userId);
+    debugSnapshot.authorizeUrl = authorizeUrl;
+    debugSnapshot.statePresent = true;
+    logGhlOAuthAuthorizeDebugSnapshot("oauth_authorize_started", debugSnapshot, {
       sessionUserId: userId,
-      redirectUri: config.redirectUri,
-      hasState: true,
-      flow: "oauth_authorize",
-      includesVersionId: false,
-      targetHost: new URL(authorizeUrl).host,
     });
+
+    if (req.query.debug === "1" || req.query.debug === "true") {
+      return res.send(renderGhlOAuthAuthorizeDebugHtml(debugSnapshot));
+    }
+
     return res.redirect(authorizeUrl);
   } catch (error) {
     console.error("[LeadConnector] oauth-authorize error:", error);

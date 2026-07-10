@@ -6,6 +6,7 @@ import { storage } from "./storage";
 
 export type GhlOAuthDiagnosticEvent =
   | "oauth_authorize_started"
+  | "oauth_authorize_debug_requested"
   | "callback_received"
   | "callback_oauth_error"
   | "callback_missing_code"
