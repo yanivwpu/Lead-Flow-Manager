@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { ghlMarketplaceInstalls, integrations } from "@shared/schema";
 import { db } from "../drizzle/db";
-import { listGhlInstallationsForAdmin } from "./ghlMarketplaceService";
+import { listGhlInstallationsForAdmin, listRecoverableMarketplaceInstallsForUser } from "./ghlMarketplaceService";
 import { storage } from "./storage";
 
 export type GhlOAuthDiagnosticEvent =
@@ -23,7 +23,11 @@ export type GhlOAuthDiagnosticEvent =
   | "webhook_install_marketplace_upserted"
   | "webhook_install_integration_linked"
   | "webhook_install_no_integration"
-  | "prospect_import_locations_empty";
+  | "prospect_import_locations_empty"
+  | "oauth_recovery_no_candidates"
+  | "oauth_recovery_token_invalid"
+  | "oauth_recovery_succeeded"
+  | "oauth_recovery_attempted";
 
 export type UserEligibleGhlMarketplaceInstall = {
   id: string;
@@ -71,6 +75,7 @@ export type UserGhlConnectionStatus = {
   connected: boolean;
   tokenExpired: boolean;
   installedInGhlNotConnected: boolean;
+  recoverableOAuthInstalls: number;
   locationId: string | null;
   companyId: string | null;
   installedAt: string | null;
@@ -80,7 +85,11 @@ export type UserGhlConnectionStatus = {
 export async function resolveUserGhlConnectionStatus(
   userId: string,
   userEmail?: string | null,
-  options?: { oauthPending?: boolean; queryLocationId?: string },
+  options?: {
+    oauthPending?: boolean;
+    queryLocationId?: string;
+    isPlatformAdmin?: boolean;
+  },
 ): Promise<UserGhlConnectionStatus> {
   const userIntegrations = await storage.getIntegrations(userId);
   const ghlIntegrations = userIntegrations.filter((i) => i.type === "gohighlevel");
@@ -101,6 +110,7 @@ export async function resolveUserGhlConnectionStatus(
       connected: !tokenExpired,
       tokenExpired,
       installedInGhlNotConnected: tokenExpired,
+      recoverableOAuthInstalls: 0,
       locationId: (cfg.locationId as string) || null,
       companyId: (cfg.companyId as string) || null,
       installedAt: (cfg.installedAt as string) || null,
@@ -109,18 +119,28 @@ export async function resolveUserGhlConnectionStatus(
   }
 
   const userEligibleInstalls = await listUserEligibleGhlMarketplaceInstalls(userId, userEmail);
+  const recoverableInstalls = await listRecoverableMarketplaceInstallsForUser(userId, userEmail, {
+    isPlatformAdmin: options?.isPlatformAdmin,
+  });
   const hasIncompleteIntegration = ghlIntegrations.some((i) => !i.accessToken);
   const hasUnlinkedUserInstall = userEligibleInstalls.some((r) => !r.integrationId);
   const installedInGhlNotConnected =
-    hasUnlinkedUserInstall || hasIncompleteIntegration || Boolean(options?.oauthPending);
+    hasUnlinkedUserInstall ||
+    hasIncompleteIntegration ||
+    recoverableInstalls.length > 0 ||
+    Boolean(options?.oauthPending);
 
   const fallbackCfg = (ghlIntegrations[0]?.config || {}) as Record<string, unknown>;
+  const recoverablePrimary = recoverableInstalls[0];
   return {
     connected: false,
     tokenExpired: false,
     installedInGhlNotConnected,
-    locationId: (fallbackCfg.locationId as string) || null,
-    companyId: (fallbackCfg.companyId as string) || null,
+    recoverableOAuthInstalls: recoverableInstalls.length,
+    locationId:
+      (fallbackCfg.locationId as string) || recoverablePrimary?.locationId || null,
+    companyId:
+      (fallbackCfg.companyId as string) || recoverablePrimary?.companyId || null,
     installedAt: (fallbackCfg.installedAt as string) || null,
     lastSyncAt: ghlIntegrations[0]?.lastSyncAt ?? null,
   };

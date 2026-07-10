@@ -9,6 +9,94 @@ import {
 } from "@shared/schema";
 import { storage } from "./storage";
 
+type StoredOAuthTokenPayload = {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+  userType?: string;
+  locationId?: string;
+  companyId?: string;
+  scope?: string;
+};
+
+export function extractOAuthTokensFromRawPayload(raw: unknown): StoredOAuthTokenPayload | null {
+  if (!raw || typeof raw !== "object") return null;
+  const payload = raw as Record<string, unknown>;
+  const accessToken = typeof payload.access_token === "string" ? payload.access_token.trim() : "";
+  if (!accessToken) return null;
+
+  return {
+    access_token: accessToken,
+    refresh_token:
+      typeof payload.refresh_token === "string" ? payload.refresh_token.trim() : undefined,
+    expires_in: typeof payload.expires_in === "number" ? payload.expires_in : undefined,
+    userType: typeof payload.userType === "string" ? payload.userType : undefined,
+    locationId: typeof payload.locationId === "string" ? payload.locationId : undefined,
+    companyId: typeof payload.companyId === "string" ? payload.companyId : undefined,
+    scope: typeof payload.scope === "string" ? payload.scope : undefined,
+  };
+}
+
+export function hasRecoverableOAuthTokens(raw: unknown): boolean {
+  return extractOAuthTokensFromRawPayload(raw) !== null;
+}
+
+function normalizeRecoveryEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function isActiveMarketplaceInstall(row: GhlMarketplaceInstall): boolean {
+  return (row.installationStatus || "").toLowerCase() !== "uninstalled";
+}
+
+export type RecoverableMarketplaceInstall = GhlMarketplaceInstall & {
+  tokenPayload: StoredOAuthTokenPayload;
+};
+
+export async function listRecoverableMarketplaceInstallsForUser(
+  userId: string,
+  userEmail?: string | null,
+  options?: { isPlatformAdmin?: boolean },
+): Promise<RecoverableMarketplaceInstall[]> {
+  const rows = await db.select().from(ghlMarketplaceInstalls);
+  const normalizedEmail = userEmail ? normalizeRecoveryEmail(userEmail) : null;
+
+  const ownedCompanyIds = new Set<string>();
+  for (const row of rows) {
+    if (!isActiveMarketplaceInstall(row)) continue;
+    if (row.whachatUserId === userId) ownedCompanyIds.add(row.companyId);
+    if (normalizedEmail && row.agencyEmail && normalizeRecoveryEmail(row.agencyEmail) === normalizedEmail) {
+      ownedCompanyIds.add(row.companyId);
+    }
+  }
+
+  return rows
+    .filter((row) => {
+      if (row.integrationId) return false;
+      if (!isActiveMarketplaceInstall(row)) return false;
+      const tokenPayload = extractOAuthTokensFromRawPayload(row.rawPayload);
+      if (!tokenPayload) return false;
+
+      if (options?.isPlatformAdmin) return true;
+      if (row.whachatUserId === userId) return true;
+      if (normalizedEmail && row.agencyEmail && normalizeRecoveryEmail(row.agencyEmail) === normalizedEmail) {
+        return true;
+      }
+      if (ownedCompanyIds.has(row.companyId)) return true;
+      return false;
+    })
+    .map((row) => ({
+      ...row,
+      tokenPayload: extractOAuthTokensFromRawPayload(row.rawPayload)!,
+    }))
+    .sort((a, b) => {
+      const oauthBoost = (row: RecoverableMarketplaceInstall) => (row.source === "oauth" ? 1 : 0);
+      const score = oauthBoost(b) - oauthBoost(a);
+      if (score !== 0) return score;
+      return (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0);
+    });
+}
+
 export type GhlInstallRow = {
   id: string;
   source: "integration" | "marketplace" | "merged";

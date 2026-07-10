@@ -35,6 +35,7 @@ import {
   readGhlOAuthSessionUserId,
   saveSessionValue,
 } from './ghlOAuthFlow';
+import { recoverGhlOAuthFromMarketplaceInstall } from './ghlOAuthRecovery';
 import { requireAuth } from './auth';
 
 const router = Router();
@@ -63,6 +64,53 @@ function resolveSessionUserId(req: Request): string | undefined {
     (req as any).session?.userId
   );
 }
+
+function isPlatformAdminSession(req: Request): boolean {
+  return (req as Request & { session?: { isAdmin?: boolean } }).session?.isAdmin === true;
+}
+
+router.post('/recover-oauth', requireAuth, async (req: Request, res: Response) => {
+  const userId = resolveSessionUserId(req);
+  if (!userId) {
+    return res.status(401).json({ recovered: false, reason: 'not_authenticated', oauthRequired: true });
+  }
+
+  try {
+    const user = await storage.getUser(userId);
+    const marketplaceInstallId =
+      typeof req.body?.marketplaceInstallId === 'string' ? req.body.marketplaceInstallId : undefined;
+
+    logGhlOAuthDiagnostic('oauth_recovery_attempted', {
+      userId,
+      marketplaceInstallId: marketplaceInstallId ?? null,
+      isPlatformAdmin: isPlatformAdminSession(req),
+    });
+
+    const result = await recoverGhlOAuthFromMarketplaceInstall({
+      userId,
+      userEmail: user?.email,
+      isPlatformAdmin: isPlatformAdminSession(req),
+      marketplaceInstallId,
+    });
+
+    if (!result.recovered) {
+      return res.status(result.reason === 'install_not_owned_or_missing_tokens' ? 403 : 200).json(result);
+    }
+
+    return res.json(result);
+  } catch (error) {
+    logGhlOAuthDiagnostic('oauth_recovery_token_invalid', {
+      userId,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    console.error('[LeadConnector] recover-oauth error:', error);
+    return res.status(500).json({
+      recovered: false,
+      reason: 'recovery_failed',
+      oauthRequired: true,
+    });
+  }
+});
 
 const GHL_TOKEN_URL = 'https://services.leadconnectorhq.com/oauth/token';
 const GHL_CLIENT_ID = process.env.GHL_CLIENT_ID || '';
@@ -981,29 +1029,47 @@ router.get('/connection-diagnostics', async (req: Request, res: Response) => {
 
 router.get('/connection-status', async (req: Request, res: Response) => {
   try {
-    const authUser = (req as Request & { user?: { id?: string; email?: string } }).user;
-    const userId =
-      authUser?.id ||
-      (typeof (req as any).session?.passport?.user === "string"
-        ? ((req as any).session.passport.user as string)
-        : undefined);
+    const userId = resolveSessionUserId(req);
     if (!userId) {
-      return res.json({ connected: false, installedInGhlNotConnected: false });
+      return res.json({ connected: false, installedInGhlNotConnected: false, recoverableOAuthInstalls: 0 });
     }
 
     const queryLocationId = req.query.locationId as string | undefined;
+    const tryRecover =
+      req.query.tryRecover === '1' ||
+      req.query.tryRecover === 'true' ||
+      req.query.recover === '1' ||
+      req.query.recover === 'true';
     const user = await storage.getUser(userId);
     const oauthPending = Boolean((req as any).session?.ghlMarketplaceInstallPending);
+
+    if (tryRecover) {
+      logGhlOAuthDiagnostic('oauth_recovery_attempted', {
+        userId,
+        source: 'connection_status',
+        isPlatformAdmin: isPlatformAdminSession(req),
+      });
+      const recovery = await recoverGhlOAuthFromMarketplaceInstall({
+        userId,
+        userEmail: user?.email,
+        isPlatformAdmin: isPlatformAdminSession(req),
+      });
+      if (recovery.recovered) {
+        clearGhlOAuthPending(req);
+      }
+    }
 
     const status = await resolveUserGhlConnectionStatus(userId, user?.email, {
       oauthPending,
       queryLocationId,
+      isPlatformAdmin: isPlatformAdminSession(req),
     });
 
     res.json({
       connected: status.connected,
       tokenExpired: status.tokenExpired,
       installedInGhlNotConnected: status.installedInGhlNotConnected,
+      recoverableOAuthInstalls: status.recoverableOAuthInstalls,
       locationId: status.locationId,
       companyId: status.companyId,
       installedAt: status.installedAt,
@@ -1011,7 +1077,7 @@ router.get('/connection-status', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('[LeadConnector] Connection status check error:', error);
-    res.json({ connected: false, installedInGhlNotConnected: false });
+    res.json({ connected: false, installedInGhlNotConnected: false, recoverableOAuthInstalls: 0 });
   }
 });
 

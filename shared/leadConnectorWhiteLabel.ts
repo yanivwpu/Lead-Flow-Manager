@@ -10,7 +10,7 @@ export const CRM_INSTALL_CTA = "Connect CRM";
 export const CRM_COMPLETE_OAUTH_CTA = "Complete OAuth";
 export const CRM_MARKETPLACE_CTA = "Open Marketplace";
 export const CRM_INSTALLED_NOT_CONNECTED =
-  "Installed in GHL but not connected to WhachatCRM. Click Complete OAuth while logged in — this authorizes your existing install and saves API tokens (not a new marketplace install).";
+  "Installed in GHL but not connected to WhachatCRM. Click Complete OAuth to recover your existing authorization tokens, or re-authorize only if recovery fails.";
 export const CRM_CONNECTED_TITLE = "Connected Successfully";
 export const CRM_CONNECTED_BODY =
   "Your CRM account is now connected. You can return to WhachatCRM to start syncing and automations.";

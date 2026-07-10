@@ -212,6 +212,7 @@ type CrmConnectionStatus = {
   connected: boolean;
   tokenExpired?: boolean;
   installedInGhlNotConnected?: boolean;
+  recoverableOAuthInstalls?: number;
   locationId?: string;
   companyId?: string;
   installedAt?: string;
@@ -554,6 +555,7 @@ export function Integrations() {
   const [wooOrderHint, setWooOrderHint] = useState<string | null>(null);
   const wooStoreUrlInputRef = useRef<HTMLInputElement>(null);
   const [checkingLcConnection, setCheckingLcConnection] = useState(false);
+  const [recoveringCrmOAuth, setRecoveringCrmOAuth] = useState(false);
   const [manageIntegrationId, setManageIntegrationId] = useState<string | null>(null);
   const [pendingDisconnectType, setPendingDisconnectType] = useState<string | null>(null);
   const [leadManageOpen, setLeadManageOpen] = useState(false);
@@ -621,7 +623,53 @@ export function Integrations() {
     staleTime: 60_000,
   });
 
-  const startCrmOAuthAuthorize = () => {
+  const attemptCrmOAuthRecovery = async (): Promise<boolean> => {
+    const res = await fetch("/api/ext/recover-oauth", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      recovered?: boolean;
+      reason?: string;
+      refreshed?: boolean;
+      oauthRequired?: boolean;
+    };
+    if (data.recovered) {
+      await Promise.all([
+        refetchLcStatus(),
+        queryClient.invalidateQueries({ queryKey: ["/api/integrations"] }),
+      ]);
+      toast({
+        title: "CRM connected",
+        description: data.refreshed
+          ? "Recovered your existing CRM authorization and refreshed the access token."
+          : "Recovered your existing CRM authorization from the marketplace install.",
+      });
+      return true;
+    }
+    if (data.reason && data.reason !== "no_recoverable_install") {
+      console.info("[CRM Integration] OAuth recovery skipped:", data.reason);
+    }
+    return false;
+  };
+
+  const startCrmOAuthAuthorize = async () => {
+    setRecoveringCrmOAuth(true);
+    try {
+      const recovered = await attemptCrmOAuthRecovery();
+      if (recovered) return;
+    } catch {
+      toast({
+        title: "Recovery failed",
+        description: "Could not recover existing CRM tokens. Trying full OAuth authorization…",
+        variant: "destructive",
+      });
+    } finally {
+      setRecoveringCrmOAuth(false);
+    }
+
     const authorizeUrl = crmInstallConfig?.oauthAuthorizeUrl || "/api/ext/oauth-authorize";
     window.location.href = authorizeUrl;
   };
@@ -1007,16 +1055,27 @@ export function Integrations() {
   const handleCheckLcConnection = async () => {
     setCheckingLcConnection(true);
     try {
-      const result = await refetchLcStatus();
-      const data = result.data;
+      const params = new URLSearchParams();
+      if (lcLocationId) params.set("locationId", lcLocationId);
+      params.set("tryRecover", "1");
+      const result = await fetch(`/api/ext/connection-status?${params.toString()}`, {
+        credentials: "include",
+      });
+      const data = (result.ok ? await result.json() : null) as CrmConnectionStatus | null;
+      await Promise.all([
+        refetchLcStatus(),
+        queryClient.invalidateQueries({ queryKey: ["/api/integrations"] }),
+      ]);
       if (data?.connected) {
         toast({ title: "Connected", description: "CRM integration is connected with valid OAuth tokens." });
       } else if (data?.tokenExpired) {
         toast({ title: "Token Expired", description: "Your CRM OAuth token has expired. Use Complete OAuth.", variant: "destructive" });
       } else if (data?.installedInGhlNotConnected) {
         toast({
-          title: "Installed in GHL only",
-          description: CRM_INSTALLED_NOT_CONNECTED,
+          title: data.recoverableOAuthInstalls ? "Recovery still needed" : "Installed in GHL only",
+          description: data.recoverableOAuthInstalls
+            ? "Stored CRM tokens could not be recovered automatically. Use Complete OAuth to retry recovery or re-authorize."
+            : CRM_INSTALLED_NOT_CONNECTED,
           variant: "destructive",
         });
       } else {
@@ -1147,7 +1206,12 @@ export function Integrations() {
                           primaryLabel = lcInstalledNotConnected ? CRM_COMPLETE_OAUTH_CTA : CRM_INSTALL_CTA;
                         } else if (lcInstalledNotConnected || lcStatus?.tokenExpired) {
                           primaryTestId = "button-complete-oauth-leadconnector";
-                          primaryLabel = CRM_COMPLETE_OAUTH_CTA;
+                          primaryLabel = recoveringCrmOAuth
+                            ? "Recovering…"
+                            : (lcStatus?.recoverableOAuthInstalls ?? 0) > 0
+                              ? "Link existing connection"
+                              : CRM_COMPLETE_OAUTH_CTA;
+                          primaryDisabled = recoveringCrmOAuth;
                           primaryAction = startCrmOAuthAuthorize;
                         } else {
                           primaryTestId = "button-install-leadconnector";
@@ -1909,13 +1973,17 @@ export function Integrations() {
                   variant="default"
                   size="sm"
                   className="w-full font-medium"
-                  onClick={startCrmOAuthAuthorize}
-                  disabled={crmInstallConfigFetching}
+                  onClick={() => void startCrmOAuthAuthorize()}
+                  disabled={crmInstallConfigFetching || recoveringCrmOAuth}
                   data-testid="button-complete-oauth-leadconnector-dialog"
                 >
-                  {lcStatus?.installedInGhlNotConnected || lcStatus?.tokenExpired
-                    ? CRM_COMPLETE_OAUTH_CTA
-                    : CRM_INSTALL_CTA}
+                  {recoveringCrmOAuth
+                    ? "Recovering…"
+                    : (lcStatus?.recoverableOAuthInstalls ?? 0) > 0
+                      ? "Link existing connection"
+                      : lcStatus?.installedInGhlNotConnected || lcStatus?.tokenExpired
+                        ? CRM_COMPLETE_OAUTH_CTA
+                        : CRM_INSTALL_CTA}
                 </Button>
               ) : null}
               <Button
@@ -1941,7 +2009,9 @@ export function Integrations() {
               {!lcStatus?.connected && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/80 p-3">
                   <p className="text-xs text-gray-600 flex-1">
-                    Complete OAuth while logged into WhachatCRM. If GHL opens agency_dashboard with no code, use Preview OAuth URL (debug) or try a private browser window.
+                    {(lcStatus?.recoverableOAuthInstalls ?? 0) > 0
+                      ? "Stored CRM authorization tokens were found. Use Link existing connection to recover them without a new OAuth flow."
+                      : "Complete OAuth tries token recovery first, then full authorization only if needed."}
                   </p>
                   <Button
                     variant="outline"
