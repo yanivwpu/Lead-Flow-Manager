@@ -203,6 +203,7 @@ const CATEGORY_SECTIONS: { key: IntegrationCategory; title: string }[] = [
 type CrmMarketplaceInstallConfig = {
   configured: boolean;
   installUrl: string | null;
+  marketplaceInstallUrl?: string | null;
   oauthAuthorizeUrl?: string;
   error: string | null;
 };
@@ -612,15 +613,16 @@ export function Integrations() {
       const refreshed = await refetchCrmInstallConfig();
       config = refreshed.data;
     }
-    if (config?.configured && config.installUrl) {
-      window.open(config.installUrl, "_blank", "noopener,noreferrer");
+    const marketplaceUrl = config?.marketplaceInstallUrl || config?.installUrl;
+    if (config?.configured && marketplaceUrl) {
+      window.open(marketplaceUrl, "_blank", "noopener,noreferrer");
       return;
     }
     toast({
-      title: "CRM install unavailable",
+      title: "CRM marketplace link unavailable",
       description:
         config?.error ||
-        "The CRM marketplace app is not configured on the server. Set GHL_CLIENT_ID and GHL_APP_VERSION_ID, then try again.",
+        "The CRM marketplace install link is not configured (GHL_APP_VERSION_ID). Use Connect CRM or Complete OAuth to authorize an already-installed app.",
       variant: "destructive",
     });
   };

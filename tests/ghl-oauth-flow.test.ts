@@ -8,12 +8,11 @@ import {
   createGhlOAuthState,
   verifyGhlOAuthState,
 } from "../server/ghlOAuthFlow";
-import { buildGhlMarketplaceInstallUrl } from "../shared/ghlMarketplaceOAuth";
+import { buildGhlOAuthAuthorizeUrl } from "../shared/ghlMarketplaceOAuth";
 
-const installUrl = buildGhlMarketplaceInstallUrl({
+const installUrl = buildGhlOAuthAuthorizeUrl({
   clientId: "app-id-suffix",
   redirectUri: "https://whachatcrm.com/api/ext/callback",
-  versionId: "version-1",
 });
 
 const state = createGhlOAuthState("user-123");

@@ -96,8 +96,9 @@ router.get('/marketplace-install', async (_req: Request, res: Response) => {
     }
     res.json({
       configured: true,
-      installUrl: config.installUrl,
       oauthAuthorizeUrl: "/api/ext/oauth-authorize",
+      marketplaceInstallUrl: config.marketplaceInstallUrl,
+      installUrl: config.marketplaceInstallUrl,
       redirectUri: config.redirectUri,
       appIdPrefix: config.appIdPrefix,
       error: null,
@@ -119,7 +120,7 @@ router.get('/oauth-authorize', requireAuth, async (req: Request, res: Response) 
   }
 
   const config = getGhlMarketplaceOAuthConfig();
-  if (!config.configured || !config.installUrl) {
+  if (!config.configured || !config.oauthAuthorizeUrl) {
     logGhlOAuthDiagnostic("callback_oauth_error", {
       event: "oauth_authorize_misconfigured",
       sessionUserId: userId,
@@ -136,11 +137,14 @@ router.get('/oauth-authorize', requireAuth, async (req: Request, res: Response) 
     await saveSessionValue(req, "ghlOAuthStartedAt", Date.now());
     await saveSessionValue(req, "ghlMarketplaceInstallPending", true);
 
-    const authorizeUrl = appendStateToInstallUrl(config.installUrl, state);
+    const authorizeUrl = appendStateToInstallUrl(config.oauthAuthorizeUrl, state);
     logGhlOAuthDiagnostic("oauth_authorize_started", {
       sessionUserId: userId,
       redirectUri: config.redirectUri,
       hasState: true,
+      flow: "oauth_authorize",
+      includesVersionId: false,
+      targetHost: new URL(authorizeUrl).host,
     });
     return res.redirect(authorizeUrl);
   } catch (error) {
