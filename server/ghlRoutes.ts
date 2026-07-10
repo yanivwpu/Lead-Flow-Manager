@@ -14,8 +14,23 @@ import {
   markMarketplaceUninstalled,
   upsertGhlMarketplaceInstall,
 } from './ghlMarketplaceService';
+import { getGhlMarketplaceOAuthConfig } from './ghlOAuthConfig';
 
 const router = Router();
+
+const marketplaceOAuthBoot = getGhlMarketplaceOAuthConfig();
+if (!marketplaceOAuthBoot.configured) {
+  console.warn(
+    "[LeadConnector] Marketplace install URL not ready:",
+    marketplaceOAuthBoot.error || "unknown configuration error",
+  );
+} else {
+  console.log(
+    "[LeadConnector] Marketplace install ready (app:",
+    marketplaceOAuthBoot.appIdPrefix || "unknown",
+    ")",
+  );
+}
 
 function resolveSessionUserId(req: Request): string | undefined {
   const authUser = (req as Request & { user?: { id?: string } }).user;
@@ -51,6 +66,34 @@ function logGhlDuplicateIgnored(externalMessageId: string): void {
     })
   );
 }
+
+router.get('/marketplace-install', async (_req: Request, res: Response) => {
+  try {
+    const config = getGhlMarketplaceOAuthConfig();
+    if (!config.configured) {
+      return res.status(503).json({
+        configured: false,
+        installUrl: null,
+        error: config.error,
+        redirectUri: config.redirectUri,
+      });
+    }
+    res.json({
+      configured: true,
+      installUrl: config.installUrl,
+      redirectUri: config.redirectUri,
+      appIdPrefix: config.appIdPrefix,
+      error: null,
+    });
+  } catch (error) {
+    console.error("[LeadConnector] marketplace-install config error:", error);
+    res.status(500).json({
+      configured: false,
+      installUrl: null,
+      error: "Failed to load CRM install configuration.",
+    });
+  }
+});
 
 router.get('/callback', async (req: Request, res: Response) => {
   try {

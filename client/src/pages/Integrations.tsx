@@ -25,7 +25,6 @@ import {
   CRM_INTEGRATION_LABEL,
   CRM_INSTALL_CTA,
   CRM_MARKETPLACE_CTA,
-  CRM_MARKETPLACE_INSTALL_URL,
 } from "@shared/leadConnectorWhiteLabel";
 import { ShopifyManagePanel } from "@/components/integrations/ShopifyManagePanel";
 
@@ -199,11 +198,11 @@ const CATEGORY_SECTIONS: { key: IntegrationCategory; title: string }[] = [
   { key: "industry", title: "Industry-specific" },
 ];
 
-/** Marketplace install — override with VITE_LEADCONNECTOR_INSTALL_URL in production env. */
-const CRM_INSTALL_URL =
-  (typeof import.meta.env.VITE_LEADCONNECTOR_INSTALL_URL === "string" &&
-    import.meta.env.VITE_LEADCONNECTOR_INSTALL_URL.trim()) ||
-  CRM_MARKETPLACE_INSTALL_URL;
+type CrmMarketplaceInstallConfig = {
+  configured: boolean;
+  installUrl: string | null;
+  error: string | null;
+};
 
 const VITE_SHOPIFY_APP_STORE_URL =
   typeof import.meta.env.VITE_SHOPIFY_APP_STORE_URL === "string"
@@ -543,7 +542,9 @@ export function Integrations() {
     enabled: !!integrationsEnabled,
   });
 
-  const lcLocationId = integrations.find(i => i.type === 'gohighlevel')?.config?.locationId as string | undefined;
+  const lcLocationId = integrations.find((i) => i.type === "gohighlevel")?.config?.locationId as
+    | string
+    | undefined;
 
   const {
     data: lcStatus,
@@ -571,6 +572,47 @@ export function Integrations() {
     enabled: !!integrationsEnabled,
     placeholderData: { connected: false, tokenExpired: false },
   });
+
+  const {
+    data: crmInstallConfig,
+    isFetching: crmInstallConfigFetching,
+    refetch: refetchCrmInstallConfig,
+  } = useQuery<CrmMarketplaceInstallConfig>({
+    queryKey: ["/api/ext/marketplace-install"],
+    queryFn: async () => {
+      const res = await fetch("/api/ext/marketplace-install", { credentials: "include" });
+      const data = (await res.json().catch(() => ({}))) as CrmMarketplaceInstallConfig;
+      if (!res.ok) {
+        return {
+          configured: false,
+          installUrl: null,
+          error: data.error || "CRM install is not available right now.",
+        };
+      }
+      return data;
+    },
+    enabled: !!integrationsEnabled,
+    staleTime: 60_000,
+  });
+
+  const openCrmMarketplace = async () => {
+    let config = crmInstallConfig;
+    if (!config || !config.configured) {
+      const refreshed = await refetchCrmInstallConfig();
+      config = refreshed.data;
+    }
+    if (config?.configured && config.installUrl) {
+      window.open(config.installUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    toast({
+      title: "CRM install unavailable",
+      description:
+        config?.error ||
+        "The CRM marketplace app is not configured on the server. Set GHL_CLIENT_ID and GHL_APP_VERSION_ID, then try again.",
+      variant: "destructive",
+    });
+  };
 
   const {
     data: shopifyStatus,
@@ -1031,7 +1073,7 @@ export function Integrations() {
                           primaryAction = () => setLeadManageOpen(true);
                         } else {
                           primaryLabel = CRM_INSTALL_CTA;
-                          primaryAction = () => window.open(CRM_INSTALL_URL, "_blank");
+                          primaryAction = () => void openCrmMarketplace();
                         }
                       } else if (wooConnected) {
                         primaryLabel = "Connected";
@@ -1653,15 +1695,34 @@ export function Integrations() {
               </div>
             </DialogHeader>
             <div className="space-y-3 pt-1">
+              {!crmInstallConfig?.configured && !crmInstallConfigFetching ? (
+                <div
+                  className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                  role="alert"
+                >
+                  {crmInstallConfig?.error ||
+                    "CRM marketplace install is not configured. Contact support before installing."}
+                </div>
+              ) : null}
               <Button
                 variant="outline"
                 size="sm"
                 className="w-full border-gray-200 font-medium"
-                onClick={() => window.open(CRM_INSTALL_URL, "_blank")}
+                onClick={() => void openCrmMarketplace()}
+                disabled={crmInstallConfigFetching}
                 data-testid="button-install-leadconnector-dialog"
               >
-                {CRM_MARKETPLACE_CTA}
-                <ExternalLink className="h-3 w-3 ml-2" />
+                {crmInstallConfigFetching ? (
+                  <>
+                    <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
+                    Loading install link…
+                  </>
+                ) : (
+                  <>
+                    {CRM_MARKETPLACE_CTA}
+                    <ExternalLink className="h-3 w-3 ml-2" />
+                  </>
+                )}
               </Button>
               {!lcStatus?.connected && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/80 p-3">
