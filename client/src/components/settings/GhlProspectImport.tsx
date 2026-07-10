@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -14,6 +14,7 @@ import {
   Save,
   Sparkles,
   Users,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -111,6 +112,15 @@ function formatDate(iso: string): string {
   }
 }
 
+function WizardValidationHint({ children }: { children: ReactNode }) {
+  return (
+    <p className="flex items-start gap-1.5 text-sm text-amber-700" role="status">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+      <span>{children}</span>
+    </p>
+  );
+}
+
 export function GhlProspectImport() {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>(1);
@@ -129,6 +139,7 @@ export function GhlProspectImport() {
   const [activeJob, setActiveJob] = useState<ProspectImportJobSummary | null>(null);
   const [undoJob, setUndoJob] = useState<ProspectImportHistoryItem | null>(null);
   const [undoPreview, setUndoPreview] = useState<ProspectImportUndoPreview | null>(null);
+  const [appliedTemplateName, setAppliedTemplateName] = useState<string | null>(null);
 
   const locationsQuery = useQuery({
     queryKey: ["/api/growth-tools/prospect-import/ghl/locations"],
@@ -166,6 +177,7 @@ export function GhlProspectImport() {
   });
 
   const applyTemplate = (tpl: {
+    templateName: string;
     filters: ProspectImportContactFilter;
     defaultInternalTag?: ProspectImportInternalTag | null;
     defaultImportReason?: string | null;
@@ -178,8 +190,32 @@ export function GhlProspectImport() {
     if (tpl.defaultImportLimit) {
       setFilters((f) => ({ ...f, importLimit: tpl.defaultImportLimit ?? 100 }));
     }
-    toast({ title: "Template applied", description: "Filters pre-filled from template." });
+    setAppliedTemplateName(tpl.templateName);
+    if (selectedIntegrationId) {
+      setAppliedTemplateName(null);
+      setStep(2);
+      toast({
+        title: `${tpl.templateName} template applied`,
+        description: "Filters pre-filled. Continuing to filter contacts.",
+      });
+      return;
+    }
+    setStep(1);
+    toast({
+      title: `${tpl.templateName} template applied`,
+      description: "Filters are pre-filled. Please select a GoHighLevel location to continue.",
+    });
   };
+
+  const selectLocation = (integrationId: string) => {
+    setSelectedIntegrationId(integrationId);
+    if (step === 1 && integrationId) {
+      setAppliedTemplateName(null);
+      setStep(2);
+    }
+  };
+
+  const canContinueFromStep1 = Boolean(selectedIntegrationId);
 
   const previewMutation = useMutation({
     mutationFn: async () => {
@@ -421,7 +457,7 @@ export function GhlProspectImport() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => applyTemplate(preset)}
+              onClick={() => applyTemplate({ ...preset, templateName: preset.templateName })}
             >
               {preset.templateName}
             </Button>
@@ -432,7 +468,7 @@ export function GhlProspectImport() {
               type="button"
               variant="secondary"
               size="sm"
-              onClick={() => applyTemplate(tpl)}
+              onClick={() => applyTemplate({ ...tpl, templateName: tpl.templateName })}
             >
               {tpl.templateName}
             </Button>
@@ -459,6 +495,13 @@ export function GhlProspectImport() {
 
       {step === 1 && (
         <section className="space-y-4">
+          {appliedTemplateName && !selectedIntegrationId ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              <span className="font-semibold">{appliedTemplateName}</span> template applied. Please
+              select a GoHighLevel location to continue.
+            </div>
+          ) : null}
+
           <div>
             <Label>Provider</Label>
             <Select
@@ -489,6 +532,10 @@ export function GhlProspectImport() {
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <Loader2 className="h-4 w-4 animate-spin" /> Loading locations…
                 </div>
+              ) : (locationsQuery.data?.locations ?? []).length === 0 ? (
+                <p className="text-sm text-gray-600">
+                  No connected GoHighLevel locations found. Connect a GHL sub-account first.
+                </p>
               ) : (
                 <div className="grid gap-2 sm:grid-cols-2">
                   {(locationsQuery.data?.locations ?? []).map((loc) => (
@@ -505,7 +552,7 @@ export function GhlProspectImport() {
                         name="ghl-location"
                         className="h-4 w-4 accent-brand-green"
                         checked={selectedIntegrationId === loc.integrationId}
-                        onChange={() => setSelectedIntegrationId(loc.integrationId)}
+                        onChange={() => selectLocation(loc.integrationId)}
                       />
                       <div>
                         <p className="font-medium text-gray-900">{loc.name}</p>
@@ -515,15 +562,19 @@ export function GhlProspectImport() {
                   ))}
                 </div>
               )}
+              {!selectedIntegrationId && !locationsQuery.isLoading ? (
+                <WizardValidationHint>Please select a GoHighLevel location.</WizardValidationHint>
+              ) : null}
             </>
           ) : null}
 
           <div className="flex justify-end">
             <Button
               type="button"
-              disabled={!selectedIntegrationId}
+              disabled={!canContinueFromStep1}
               onClick={() => setStep(2)}
               className="bg-brand-green hover:bg-emerald-700"
+              title={!canContinueFromStep1 ? "Select a GoHighLevel location first" : undefined}
             >
               Continue <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
@@ -700,8 +751,11 @@ export function GhlProspectImport() {
               Save template
             </Button>
           </div>
+          {!templateNameToSave.trim() ? (
+            <WizardValidationHint>Enter a template name to save these filters.</WizardValidationHint>
+          ) : null}
 
-          <div className="flex justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <Button type="button" variant="outline" onClick={() => setStep(1)}>
               <ArrowLeft className="mr-2 h-4 w-4" /> Back
             </Button>
@@ -908,6 +962,15 @@ export function GhlProspectImport() {
           <p className="text-sm text-gray-600">
             Estimated contacts to process: <strong>{estimatedImport}</strong>
           </p>
+
+          <div className="space-y-2">
+            {!batchName.trim() ? (
+              <WizardValidationHint>Enter a batch / campaign name to start the import.</WizardValidationHint>
+            ) : null}
+            {!importAll && selectedIds.size === 0 ? (
+              <WizardValidationHint>Select at least one contact in the preview step.</WizardValidationHint>
+            ) : null}
+          </div>
 
           <div className="flex justify-between">
             <Button type="button" variant="outline" onClick={() => setStep(3)}>
