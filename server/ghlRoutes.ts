@@ -10,6 +10,7 @@ import { getAppOrigin } from './urlOrigins';
 import { scheduleHubSpotAutoSync } from './hubspotAutoSync';
 import {
   extractInstallFromWebhook,
+  evaluateUnlinkedOAuthRecoveryEligibility,
   linkMarketplaceInstallToIntegration,
   markMarketplaceUninstalled,
   upsertGhlMarketplaceInstall,
@@ -37,6 +38,10 @@ import {
 } from './ghlOAuthFlow';
 import { recoverGhlOAuthFromMarketplaceInstall } from './ghlOAuthRecovery';
 import { requireAuth } from './auth';
+import {
+  canAccessGhlOAuthRecoveryTools,
+  isGhlOAuthRecoveryAllowlisted,
+} from '@shared/ghlOAuthRecoveryAccess';
 
 const router = Router();
 
@@ -69,6 +74,30 @@ function isPlatformAdminSession(req: Request): boolean {
   return (req as Request & { session?: { isAdmin?: boolean } }).session?.isAdmin === true;
 }
 
+function readSessionForRecovery(req: Request): { isAdmin?: boolean } {
+  return ((req as Request & { session?: { isAdmin?: boolean } }).session || {}) as {
+    isAdmin?: boolean;
+  };
+}
+
+async function resolveGhlOAuthRecoveryContext(req: Request) {
+  const userId = resolveSessionUserId(req);
+  if (!userId) return null;
+  const user = await storage.getUser(userId);
+  const session = readSessionForRecovery(req);
+  const sessionIsAdmin = session.isAdmin === true;
+  const recoveryAllowlistEligible = isGhlOAuthRecoveryAllowlisted(user?.email);
+  return {
+    userId,
+    user,
+    session,
+    sessionIsAdmin,
+    recoveryAllowlistEligible,
+    canAccessRecoveryTools: canAccessGhlOAuthRecoveryTools(user, session),
+    canRecoverInstalls: sessionIsAdmin || recoveryAllowlistEligible,
+  };
+}
+
 router.post('/recover-oauth', requireAuth, async (req: Request, res: Response) => {
   const userId = resolveSessionUserId(req);
   if (!userId) {
@@ -90,6 +119,7 @@ router.post('/recover-oauth', requireAuth, async (req: Request, res: Response) =
       userId,
       userEmail: user?.email,
       isPlatformAdmin: isPlatformAdminSession(req),
+      isRecoveryAllowlisted: isGhlOAuthRecoveryAllowlisted(user?.email),
       marketplaceInstallId,
     });
 
@@ -999,17 +1029,27 @@ router.post('/refresh-token', async (req: Request, res: Response) => {
 
 router.get('/connection-diagnostics', async (req: Request, res: Response) => {
   try {
-    const sessionUserId = resolveSessionUserId(req);
-    if (!sessionUserId) {
+    const recoveryContext = await resolveGhlOAuthRecoveryContext(req);
+    if (!recoveryContext) {
       return res.status(401).json({ error: "Authentication required" });
     }
+    const { userId: sessionUserId, user, sessionIsAdmin, recoveryAllowlistEligible, canAccessRecoveryTools } =
+      recoveryContext;
+
     const summary = await summarizeGhlConnectionState();
     const userIntegrations = await storage.getIntegrations(sessionUserId);
     const userGhl = userIntegrations.filter((i) => i.type === "gohighlevel");
-    res.json({
+
+    const response: Record<string, unknown> = {
       ...summary,
       currentSession: {
         userId: sessionUserId,
+        email: user?.email ?? null,
+        sessionIsAdmin,
+        recoveryAllowlistEligible,
+        canAccessRecoveryTools,
+        sessionIsAdminSource:
+          "session.isAdmin is set only by POST /api/admin/login (Sales Admin), not regular WhachatCRM login",
         gohighlevelIntegrationCount: userGhl.length,
         connectedWithToken: userGhl.filter((i) => i.isActive && i.accessToken).length,
         locations: userGhl.map((i) => ({
@@ -1020,7 +1060,31 @@ router.get('/connection-diagnostics', async (req: Request, res: Response) => {
           companyId: ((i.config || {}) as Record<string, unknown>).companyId ?? null,
         })),
       },
-    });
+    };
+
+    if (canAccessRecoveryTools) {
+      const eligibility = await evaluateUnlinkedOAuthRecoveryEligibility({
+        userId: sessionUserId,
+        userEmail: user?.email,
+        sessionIsAdmin,
+        recoveryAllowlistEligible,
+      });
+      response.oauthRecoveryDiagnostics = {
+        unlinkedOauthInstalls: eligibility,
+        recoverableCount: eligibility.filter((row) => row.finalRecoverable).length,
+        recoveryAllowedEmails: process.env.GHL_OAUTH_RECOVERY_ALLOWED_EMAILS
+          ? "GHL_OAUTH_RECOVERY_ALLOWED_EMAILS + PROSPECT_IMPORT_ALLOWED_EMAILS"
+          : "PROSPECT_IMPORT_ALLOWED_EMAILS (default YaBa allowlist)",
+      };
+    } else {
+      response.oauthRecoveryDiagnostics = {
+        error: "Recovery diagnostics require Sales Admin session or recovery allowlisted email",
+        sessionIsAdmin,
+        recoveryAllowlistEligible,
+      };
+    }
+
+    res.json(response);
   } catch (error) {
     console.error("[LeadConnector] connection-diagnostics error:", error);
     res.status(500).json({ error: "Failed to load connection diagnostics" });
@@ -1042,17 +1106,21 @@ router.get('/connection-status', async (req: Request, res: Response) => {
       req.query.recover === 'true';
     const user = await storage.getUser(userId);
     const oauthPending = Boolean((req as any).session?.ghlMarketplaceInstallPending);
+    const sessionIsAdmin = isPlatformAdminSession(req);
+    const recoveryAllowlistEligible = isGhlOAuthRecoveryAllowlisted(user?.email);
 
     if (tryRecover) {
       logGhlOAuthDiagnostic('oauth_recovery_attempted', {
         userId,
         source: 'connection_status',
-        isPlatformAdmin: isPlatformAdminSession(req),
+        isPlatformAdmin: sessionIsAdmin,
+        recoveryAllowlistEligible,
       });
       const recovery = await recoverGhlOAuthFromMarketplaceInstall({
         userId,
         userEmail: user?.email,
-        isPlatformAdmin: isPlatformAdminSession(req),
+        isPlatformAdmin: sessionIsAdmin,
+        isRecoveryAllowlisted: recoveryAllowlistEligible,
       });
       if (recovery.recovered) {
         clearGhlOAuthPending(req);
@@ -1062,7 +1130,8 @@ router.get('/connection-status', async (req: Request, res: Response) => {
     const status = await resolveUserGhlConnectionStatus(userId, user?.email, {
       oauthPending,
       queryLocationId,
-      isPlatformAdmin: isPlatformAdminSession(req),
+      isPlatformAdmin: sessionIsAdmin,
+      isRecoveryAllowlisted: recoveryAllowlistEligible,
     });
 
     res.json({

@@ -49,18 +49,44 @@ function isActiveMarketplaceInstall(row: GhlMarketplaceInstall): boolean {
   return (row.installationStatus || "").toLowerCase() !== "uninstalled";
 }
 
-export type RecoverableMarketplaceInstall = GhlMarketplaceInstall & {
-  tokenPayload: StoredOAuthTokenPayload;
+function estimateTokenExpiry(
+  row: GhlMarketplaceInstall,
+  payload: StoredOAuthTokenPayload,
+): string | null {
+  const issuedAt = row.createdAt ?? row.installDate;
+  if (!issuedAt) return null;
+  const expiresIn = payload.expires_in ?? 86400;
+  return new Date(issuedAt.getTime() + expiresIn * 1000).toISOString();
+}
+
+export type OAuthRecoveryEligibilityDiagnostic = {
+  marketplaceInstallId: string;
+  source: string | null;
+  companyId: string;
+  locationId: string | null;
+  agencyEmail: string | null;
+  whachatUserId: string | null;
+  hasAccessToken: boolean;
+  hasRefreshToken: boolean;
+  tokenExpiry: string | null;
+  currentSessionUserId: string;
+  currentSessionEmail: string | null;
+  sessionIsAdmin: boolean;
+  recoveryAllowlistEligible: boolean;
+  ownershipMatchByUserId: boolean;
+  ownershipMatchByEmail: boolean;
+  ownershipMatchByCompany: boolean;
+  adminOverrideEligible: boolean;
+  finalRecoverable: boolean;
+  rejectionReason: string | null;
+  ownedCompanyIdsForSession: string[];
 };
 
-export async function listRecoverableMarketplaceInstallsForUser(
+function buildOwnedCompanyIds(
+  rows: GhlMarketplaceInstall[],
   userId: string,
-  userEmail?: string | null,
-  options?: { isPlatformAdmin?: boolean },
-): Promise<RecoverableMarketplaceInstall[]> {
-  const rows = await db.select().from(ghlMarketplaceInstalls);
-  const normalizedEmail = userEmail ? normalizeRecoveryEmail(userEmail) : null;
-
+  normalizedEmail: string | null,
+): Set<string> {
   const ownedCompanyIds = new Set<string>();
   for (const row of rows) {
     if (!isActiveMarketplaceInstall(row)) continue;
@@ -69,6 +95,96 @@ export async function listRecoverableMarketplaceInstallsForUser(
       ownedCompanyIds.add(row.companyId);
     }
   }
+  return ownedCompanyIds;
+}
+
+export async function evaluateUnlinkedOAuthRecoveryEligibility(params: {
+  userId: string;
+  userEmail?: string | null;
+  sessionIsAdmin?: boolean;
+  recoveryAllowlistEligible?: boolean;
+}): Promise<OAuthRecoveryEligibilityDiagnostic[]> {
+  const rows = await db.select().from(ghlMarketplaceInstalls);
+  const normalizedEmail = params.userEmail ? normalizeRecoveryEmail(params.userEmail) : null;
+  const ownedCompanyIds = buildOwnedCompanyIds(rows, params.userId, normalizedEmail);
+  const adminOverrideEligible = Boolean(params.sessionIsAdmin);
+  const allowlistOverrideEligible = Boolean(params.recoveryAllowlistEligible);
+
+  return rows
+    .filter((row) => row.source === "oauth" && !row.integrationId)
+    .map((row) => {
+      const tokenPayload = extractOAuthTokensFromRawPayload(row.rawPayload);
+      const ownershipMatchByUserId = row.whachatUserId === params.userId;
+      const ownershipMatchByEmail = Boolean(
+        normalizedEmail &&
+          row.agencyEmail &&
+          normalizeRecoveryEmail(row.agencyEmail) === normalizedEmail,
+      );
+      const ownershipMatchByCompany = ownedCompanyIds.has(row.companyId);
+
+      let rejectionReason: string | null = null;
+      if (row.integrationId) rejectionReason = "already_linked";
+      else if (!isActiveMarketplaceInstall(row)) rejectionReason = "uninstalled";
+      else if (!tokenPayload) rejectionReason = "missing_tokens_in_raw_payload";
+      else if (
+        !adminOverrideEligible &&
+        !allowlistOverrideEligible &&
+        !ownershipMatchByUserId &&
+        !ownershipMatchByEmail &&
+        !ownershipMatchByCompany
+      ) {
+        rejectionReason = "no_ownership_match";
+      }
+
+      const finalRecoverable = Boolean(
+        !row.integrationId &&
+          isActiveMarketplaceInstall(row) &&
+          tokenPayload &&
+          (adminOverrideEligible ||
+            allowlistOverrideEligible ||
+            ownershipMatchByUserId ||
+            ownershipMatchByEmail ||
+            ownershipMatchByCompany),
+      );
+
+      return {
+        marketplaceInstallId: row.id,
+        source: row.source ?? null,
+        companyId: row.companyId,
+        locationId: row.locationId ?? null,
+        agencyEmail: row.agencyEmail ?? null,
+        whachatUserId: row.whachatUserId ?? null,
+        hasAccessToken: Boolean(tokenPayload?.access_token),
+        hasRefreshToken: Boolean(tokenPayload?.refresh_token),
+        tokenExpiry: tokenPayload ? estimateTokenExpiry(row, tokenPayload) : null,
+        currentSessionUserId: params.userId,
+        currentSessionEmail: params.userEmail ?? null,
+        sessionIsAdmin: Boolean(params.sessionIsAdmin),
+        recoveryAllowlistEligible: Boolean(params.recoveryAllowlistEligible),
+        ownershipMatchByUserId,
+        ownershipMatchByEmail,
+        ownershipMatchByCompany,
+        adminOverrideEligible,
+        finalRecoverable,
+        rejectionReason: finalRecoverable ? null : rejectionReason,
+        ownedCompanyIdsForSession: [...ownedCompanyIds],
+      };
+    });
+}
+
+export type RecoverableMarketplaceInstall = GhlMarketplaceInstall & {
+  tokenPayload: StoredOAuthTokenPayload;
+};
+
+export async function listRecoverableMarketplaceInstallsForUser(
+  userId: string,
+  userEmail?: string | null,
+  options?: { isPlatformAdmin?: boolean; isRecoveryAllowlisted?: boolean },
+): Promise<RecoverableMarketplaceInstall[]> {
+  const rows = await db.select().from(ghlMarketplaceInstalls);
+  const normalizedEmail = userEmail ? normalizeRecoveryEmail(userEmail) : null;
+  const ownedCompanyIds = buildOwnedCompanyIds(rows, userId, normalizedEmail);
+  const canOverride = Boolean(options?.isPlatformAdmin || options?.isRecoveryAllowlisted);
 
   return rows
     .filter((row) => {
@@ -77,7 +193,7 @@ export async function listRecoverableMarketplaceInstallsForUser(
       const tokenPayload = extractOAuthTokensFromRawPayload(row.rawPayload);
       if (!tokenPayload) return false;
 
-      if (options?.isPlatformAdmin) return true;
+      if (canOverride) return true;
       if (row.whachatUserId === userId) return true;
       if (normalizedEmail && row.agencyEmail && normalizeRecoveryEmail(row.agencyEmail) === normalizedEmail) {
         return true;

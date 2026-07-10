@@ -169,12 +169,16 @@ export async function recoverGhlOAuthFromMarketplaceInstall(params: {
   userId: string;
   userEmail?: string | null;
   isPlatformAdmin?: boolean;
+  isRecoveryAllowlisted?: boolean;
   marketplaceInstallId?: string;
 }): Promise<GhlOAuthRecoveryResult> {
   const candidates = await listRecoverableMarketplaceInstallsForUser(
     params.userId,
     params.userEmail,
-    { isPlatformAdmin: params.isPlatformAdmin },
+    {
+      isPlatformAdmin: params.isPlatformAdmin,
+      isRecoveryAllowlisted: params.isRecoveryAllowlisted,
+    },
   );
 
   if (candidates.length === 0) {

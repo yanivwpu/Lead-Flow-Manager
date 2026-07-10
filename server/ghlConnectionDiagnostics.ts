@@ -89,6 +89,7 @@ export async function resolveUserGhlConnectionStatus(
     oauthPending?: boolean;
     queryLocationId?: string;
     isPlatformAdmin?: boolean;
+    isRecoveryAllowlisted?: boolean;
   },
 ): Promise<UserGhlConnectionStatus> {
   const userIntegrations = await storage.getIntegrations(userId);
@@ -121,6 +122,7 @@ export async function resolveUserGhlConnectionStatus(
   const userEligibleInstalls = await listUserEligibleGhlMarketplaceInstalls(userId, userEmail);
   const recoverableInstalls = await listRecoverableMarketplaceInstallsForUser(userId, userEmail, {
     isPlatformAdmin: options?.isPlatformAdmin,
+    isRecoveryAllowlisted: options?.isRecoveryAllowlisted,
   });
   const hasIncompleteIntegration = ghlIntegrations.some((i) => !i.accessToken);
   const hasUnlinkedUserInstall = userEligibleInstalls.some((r) => !r.integrationId);
