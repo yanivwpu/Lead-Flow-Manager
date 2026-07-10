@@ -6,6 +6,10 @@ import type {
 } from "@shared/prospectImport";
 import { listGhlInstallationsForAdmin } from "../../ghlMarketplaceService";
 import {
+  logGhlOAuthDiagnostic,
+  summarizeGhlConnectionState,
+} from "../../ghlConnectionDiagnostics";
+import {
   fetchGhlLocationTags,
   fetchGhlLocationUsers,
   fetchGhlPipelines,
@@ -25,7 +29,7 @@ const PAGE_SIZE = 100;
 
 export async function listGhlProspectLocations(): Promise<ProspectImportLocation[]> {
   const rows = await listGhlInstallationsForAdmin();
-  return rows
+  const locations = rows
     .filter((r) => r.isActive && r.integrationId && r.locationId && r.locationId !== "Unknown")
     .map((r) => ({
       id: r.integrationId!,
@@ -34,6 +38,21 @@ export async function listGhlProspectLocations(): Promise<ProspectImportLocation
       locationId: r.locationId,
       isActive: r.isActive,
     }));
+
+  if (locations.length === 0) {
+    const summary = await summarizeGhlConnectionState();
+    logGhlOAuthDiagnostic("prospect_import_locations_empty", {
+      adminRowsTotal: summary.prospectImport.adminRowsTotal,
+      eligibleForImport: summary.prospectImport.eligibleForImport,
+      ineligibleReasons: summary.prospectImport.ineligibleReasons,
+      integrationsWithTokens: summary.integrationsTable.withAccessToken,
+      marketplaceActive: summary.marketplaceInstallsTable.active,
+      marketplaceMissingIntegrationLink: summary.marketplaceInstallsTable.missingIntegrationLink,
+      likelyIssue: summary.likelyIssue,
+    });
+  }
+
+  return locations;
 }
 
 export type GhlLocationMetadata = {

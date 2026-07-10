@@ -15,6 +15,23 @@ import {
   upsertGhlMarketplaceInstall,
 } from './ghlMarketplaceService';
 import { getGhlMarketplaceOAuthConfig } from './ghlOAuthConfig';
+import {
+  logGhlOAuthDiagnostic,
+  summarizeGhlConnectionState,
+  listUnlinkedActiveGhlMarketplaceInstalls,
+} from './ghlConnectionDiagnostics';
+import { requireAuth } from './auth';
+import {
+  appendStateToInstallUrl,
+  clearGhlOAuthSession,
+  createGhlOAuthState,
+  exchangeGhlAuthorizationCode,
+  getDefaultGhlRedirectUri,
+  persistGhlIntegrationForUser,
+  readGhlOAuthSessionUserId,
+  requestGhlReconnectAuthorizationCode,
+  saveSessionValue,
+} from './ghlOAuthFlow';
 
 const router = Router();
 
@@ -46,8 +63,7 @@ function resolveSessionUserId(req: Request): string | undefined {
 const GHL_TOKEN_URL = 'https://services.leadconnectorhq.com/oauth/token';
 const GHL_CLIENT_ID = process.env.GHL_CLIENT_ID || '';
 const GHL_CLIENT_SECRET = process.env.GHL_CLIENT_SECRET || '';
-const GHL_REDIRECT_URI =
-  process.env.GHL_REDIRECT_URI || `${getAppOrigin()}/api/ext/callback`;
+const GHL_REDIRECT_URI = getDefaultGhlRedirectUri();
 
 function isUniqueExternalMessageViolation(err: unknown): boolean {
   const e = err as { code?: string; constraint?: string; message?: string; detail?: string };
@@ -81,6 +97,8 @@ router.get('/marketplace-install', async (_req: Request, res: Response) => {
     res.json({
       configured: true,
       installUrl: config.installUrl,
+      oauthAuthorizeUrl: "/api/ext/oauth-authorize",
+      oauthReconnectUrl: "/api/ext/oauth-reconnect",
       redirectUri: config.redirectUri,
       appIdPrefix: config.appIdPrefix,
       error: null,
@@ -95,21 +113,202 @@ router.get('/marketplace-install', async (_req: Request, res: Response) => {
   }
 });
 
-router.get('/callback', async (req: Request, res: Response) => {
-  try {
-    console.log("[GHL Callback] Host:", {
-      host: req.get("host"),
-      "x-forwarded-host": req.headers["x-forwarded-host"],
-      "x-forwarded-proto": req.headers["x-forwarded-proto"],
+router.get('/oauth-authorize', requireAuth, async (req: Request, res: Response) => {
+  const userId = resolveSessionUserId(req);
+  if (!userId) {
+    return res.status(401).send("Login to WhachatCRM before connecting your CRM account.");
+  }
+
+  const config = getGhlMarketplaceOAuthConfig();
+  if (!config.configured || !config.installUrl) {
+    logGhlOAuthDiagnostic("callback_oauth_error", {
+      event: "oauth_authorize_misconfigured",
+      sessionUserId: userId,
+      error: config.error,
     });
+    return res
+      .status(503)
+      .send(config.error || "CRM OAuth is not configured on the server. Contact support.");
+  }
+
+  try {
+    const state = createGhlOAuthState(userId);
+    await saveSessionValue(req, "ghlOAuthUserId", userId);
+    await saveSessionValue(req, "ghlOAuthStartedAt", Date.now());
+
+    const authorizeUrl = appendStateToInstallUrl(config.installUrl, state);
+    logGhlOAuthDiagnostic("callback_received", {
+      event: "oauth_authorize_redirect",
+      sessionUserId: userId,
+      redirectUri: config.redirectUri,
+      hasState: true,
+    });
+    return res.redirect(authorizeUrl);
+  } catch (error) {
+    console.error("[LeadConnector] oauth-authorize error:", error);
+    return res.status(500).send("Could not start CRM authorization. Please try again.");
+  }
+});
+
+router.post('/oauth-reconnect', requireAuth, async (req: Request, res: Response) => {
+  const userId = resolveSessionUserId(req);
+  if (!userId) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
+
+  if (!GHL_CLIENT_ID || !GHL_CLIENT_SECRET) {
+    return res.status(503).json({ error: "CRM app credentials are not configured on the server." });
+  }
+
+  try {
+    const body = (req.body || {}) as { locationId?: string; companyId?: string };
+    let locationId = typeof body.locationId === "string" ? body.locationId.trim() : undefined;
+    let companyId = typeof body.companyId === "string" ? body.companyId.trim() : undefined;
+
+    if (!locationId && !companyId) {
+      const unlinked = await listUnlinkedActiveGhlMarketplaceInstalls();
+      if (unlinked.length === 1) {
+        locationId = unlinked[0].locationId || undefined;
+        companyId = unlinked[0].companyId;
+      } else if (unlinked.length > 1) {
+        return res.status(400).json({
+          error: "Multiple CRM installs found. Select a location to reconnect.",
+          unlinkedInstalls: unlinked,
+        });
+      } else {
+        return res.status(400).json({
+          error: "No unlinked CRM marketplace install found. Use OAuth authorize to connect a new location.",
+        });
+      }
+    }
+
+    logGhlOAuthDiagnostic("callback_received", {
+      event: "oauth_reconnect_started",
+      sessionUserId: userId,
+      locationId: locationId ?? null,
+      companyId: companyId ?? null,
+    });
+
+    const reconnect = await requestGhlReconnectAuthorizationCode(GHL_CLIENT_ID, GHL_CLIENT_SECRET, {
+      locationId,
+      companyId,
+    });
+
+    if (!reconnect.ok) {
+      logGhlOAuthDiagnostic("callback_token_exchange_failed", {
+        event: "oauth_reconnect_failed",
+        sessionUserId: userId,
+        httpStatus: reconnect.httpStatus,
+        reason: reconnect.error,
+        locationId: locationId ?? null,
+        companyId: companyId ?? null,
+      });
+      return res.status(reconnect.httpStatus >= 400 ? reconnect.httpStatus : 502).json({
+        error: reconnect.error,
+        details: reconnect.details,
+      });
+    }
+
+    const exchange = await exchangeGhlAuthorizationCode(
+      reconnect.authorizationCode,
+      GHL_REDIRECT_URI,
+      GHL_CLIENT_ID,
+      GHL_CLIENT_SECRET,
+    );
+
+    if (!exchange.ok) {
+      logGhlOAuthDiagnostic("callback_token_exchange_failed", {
+        event: "oauth_reconnect_token_exchange_failed",
+        sessionUserId: userId,
+        httpStatus: exchange.httpStatus,
+        oauthError: exchange.data?.error ?? null,
+        locationId: locationId ?? null,
+        companyId: companyId ?? null,
+      });
+      return res.status(400).json({
+        error:
+          exchange.data?.error_description ||
+          exchange.data?.error ||
+          "Failed to exchange CRM reconnect authorization code for tokens.",
+      });
+    }
+
+    const { integration, created } = await persistGhlIntegrationForUser(userId, exchange.data);
+
+    await upsertGhlMarketplaceInstall({
+      companyId: exchange.data.companyId || companyId || "unknown",
+      locationId: exchange.data.locationId || locationId || null,
+      subAccountName: integration.name,
+      installDate: new Date().toISOString(),
+      installationStatus: "Active",
+      source: "oauth_reconnect",
+      rawPayload: { reconnect: true, tokenUserType: exchange.data.userType },
+    });
+
+    logGhlOAuthDiagnostic(created ? "callback_integration_created" : "callback_integration_updated", {
+      event: "oauth_reconnect_completed",
+      integrationId: integration.id,
+      userId,
+      sessionUserId: userId,
+      locationId: exchange.data.locationId ?? null,
+      companyId: exchange.data.companyId ?? null,
+    });
+
+    const postSummary = await summarizeGhlConnectionState();
+    return res.json({
+      success: true,
+      created,
+      integrationId: integration.id,
+      locationId: exchange.data.locationId ?? null,
+      companyId: exchange.data.companyId ?? null,
+      connected: true,
+      eligibleProspectImportLocations: postSummary.prospectImport.eligibleForImport,
+    });
+  } catch (error) {
+    console.error("[LeadConnector] oauth-reconnect error:", error);
+    logGhlOAuthDiagnostic("callback_failed", {
+      event: "oauth_reconnect_exception",
+      sessionUserId: userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(500).json({ error: "CRM reconnect failed. Please try again." });
+  }
+});
+
+router.get('/callback', async (req: Request, res: Response) => {
+  const oauthIntentUserId = readGhlOAuthSessionUserId(req);
+  const sessionUserId = resolveSessionUserId(req);
+  const ownerUserId = oauthIntentUserId || sessionUserId;
+  logGhlOAuthDiagnostic("callback_received", {
+    sessionUserId: sessionUserId ?? null,
+    oauthIntentUserId: oauthIntentUserId ?? null,
+    ownerUserId: ownerUserId ?? null,
+    hasSession: Boolean((req as Request & { session?: unknown }).session),
+    host: req.get("host"),
+    forwardedHost: req.headers["x-forwarded-host"],
+    hasCode: typeof req.query.code === "string",
+    hasState: typeof req.query.state === "string",
+    oauthError: req.query.error ?? null,
+  });
+
+  try {
     const { code, error, error_description } = req.query;
 
     if (error) {
+      logGhlOAuthDiagnostic("callback_oauth_error", {
+        error,
+        error_description: error_description ?? null,
+        sessionUserId: sessionUserId ?? null,
+      });
       console.error('[LeadConnector] OAuth error:', error, error_description);
       return res.status(400).send(`CRM authorization failed: ${error_description || error}`);
     }
 
     if (!code || typeof code !== 'string') {
+      logGhlOAuthDiagnostic("callback_missing_code", {
+        queryKeys: Object.keys(req.query),
+        sessionUserId: sessionUserId ?? null,
+      });
       console.error('[LeadConnector] No authorization code received. Query params:', req.query);
       return res.status(400).send('Missing authorization code. Please try again from the Marketplace.');
     }
@@ -121,38 +320,43 @@ router.get('/callback', async (req: Request, res: Response) => {
       return res.status(500).send('CRM integration is not configured. Please contact support.');
     }
 
-    const params = new URLSearchParams({
-      client_id: GHL_CLIENT_ID,
-      client_secret: GHL_CLIENT_SECRET,
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: GHL_REDIRECT_URI,
-    });
-
     console.log('[LeadConnector] Sending token request to:', GHL_TOKEN_URL);
 
-    const tokenResponse = await fetch(GHL_TOKEN_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-      },
-      body: params.toString(),
+    const exchange = await exchangeGhlAuthorizationCode(
+      code,
+      GHL_REDIRECT_URI,
+      GHL_CLIENT_ID,
+      GHL_CLIENT_SECRET,
+    );
+
+    if (!exchange.ok) {
+      logGhlOAuthDiagnostic("callback_token_exchange_failed", {
+        sessionUserId: sessionUserId ?? null,
+        oauthIntentUserId: oauthIntentUserId ?? null,
+        httpStatus: exchange.httpStatus,
+        oauthError: exchange.data?.error ?? null,
+        oauthErrorDescription: exchange.data?.error_description ?? null,
+        reason: exchange.data ? undefined : "non_json_response",
+        redirectUri: GHL_REDIRECT_URI,
+      });
+      console.error('[LeadConnector] Token exchange failed:', exchange.httpStatus, exchange.data || exchange);
+      return res.status(400).send(
+        `Failed to connect CRM account: ${exchange.data?.error_description || exchange.data?.error || 'Unknown error'}. Please try again.`,
+      );
+    }
+
+    const tokenData = exchange.data;
+
+    logGhlOAuthDiagnostic("callback_token_exchange_ok", {
+      sessionUserId: sessionUserId ?? null,
+      oauthIntentUserId: oauthIntentUserId ?? null,
+      ownerUserId: ownerUserId ?? null,
+      userType: tokenData.userType ?? null,
+      locationId: tokenData.locationId ?? null,
+      companyId: tokenData.companyId ?? null,
+      hasRefreshToken: Boolean(tokenData.refresh_token),
+      expiresIn: tokenData.expires_in ?? null,
     });
-
-    const tokenText = await tokenResponse.text();
-    let tokenData: any;
-    try {
-      tokenData = JSON.parse(tokenText);
-    } catch (e) {
-      console.error('[LeadConnector] Non-JSON token response:', tokenText.substring(0, 500));
-      return res.status(500).send('Unexpected response from the CRM platform. Please try again.');
-    }
-
-    if (!tokenResponse.ok || !tokenData.access_token) {
-      console.error('[LeadConnector] Token exchange failed:', tokenResponse.status, tokenData);
-      return res.status(400).send(`Failed to connect CRM account: ${tokenData.error_description || tokenData.error || 'Unknown error'}. Please try again.`);
-    }
 
     console.log('[LeadConnector] Token exchange successful:', {
       userType: tokenData.userType,
@@ -162,81 +366,69 @@ router.get('/callback', async (req: Request, res: Response) => {
       expiresIn: tokenData.expires_in,
     });
 
-    const tokenExpiresAt = new Date(Date.now() + (tokenData.expires_in || 86400) * 1000);
-    const locationOrCompanyId = tokenData.locationId || tokenData.companyId || 'unknown';
-
-    const existingIntegrations = await storage.getAllIntegrationsByType("gohighlevel");
-    const existing = existingIntegrations.find(
-      (i: any) => i.config && (
-        (tokenData.locationId && (i.config as any).locationId === tokenData.locationId) ||
-        (tokenData.companyId && (i.config as any).companyId === tokenData.companyId)
-      )
-    );
-
-    if (existing) {
-      await storage.updateIntegration(existing.id, {
-        accessToken: tokenData.access_token,
-        refreshToken: tokenData.refresh_token,
-        tokenExpiresAt,
-        isActive: true,
-        config: {
-          ...(existing.config as any),
-          locationId: tokenData.locationId,
-          companyId: tokenData.companyId,
-          userType: tokenData.userType,
-          scope: tokenData.scope,
-        },
-        lastSyncAt: new Date(),
+    if (!ownerUserId) {
+      logGhlOAuthDiagnostic("callback_no_session_user", {
+        locationId: tokenData.locationId ?? null,
+        companyId: tokenData.companyId ?? null,
+        note: "Marketplace install recorded only — integrations row NOT created without WhachatCRM login session. Use /api/ext/oauth-authorize while logged in.",
       });
-      console.log('[LeadConnector] Updated existing integration:', existing.id);
-      await linkMarketplaceInstallToIntegration(
-        tokenData.locationId,
-        tokenData.companyId,
-        { ...existing, accessToken: tokenData.access_token } as any,
-      );
+      console.error('[LeadConnector OAuth] No authenticated user — recording marketplace install without integration link');
+      await upsertGhlMarketplaceInstall({
+        companyId: tokenData.companyId || "unknown",
+        locationId: tokenData.locationId || null,
+        installDate: new Date().toISOString(),
+        installationStatus: "Active",
+        source: "oauth",
+        rawPayload: tokenData,
+      });
     } else {
-      const ownerUserId = resolveSessionUserId(req);
-
-      if (!ownerUserId) {
-        console.error('[LeadConnector OAuth] No authenticated user — recording marketplace install without integration link');
-        await upsertGhlMarketplaceInstall({
-          companyId: tokenData.companyId || "unknown",
-          locationId: tokenData.locationId || null,
-          installDate: new Date().toISOString(),
-          installationStatus: "Active",
-          source: "oauth",
-          rawPayload: tokenData,
-        });
-      } else {
-        const integration = await storage.createIntegration({
+      const { integration, created } = await persistGhlIntegrationForUser(ownerUserId, tokenData);
+      console.log(
+        `[LeadConnector] ${created ? "Created" : "Updated"} integration:`,
+        integration.id,
+        "for user:",
+        ownerUserId,
+      );
+      logGhlOAuthDiagnostic(
+        created ? "callback_integration_created" : "callback_integration_updated",
+        {
+          integrationId: integration.id,
           userId: ownerUserId,
-          type: 'gohighlevel',
-          name: `CRM Integration - ${tokenData.userType === 'Location' ? 'Location' : 'Agency'} (${locationOrCompanyId})`,
-          accessToken: tokenData.access_token,
-          refreshToken: tokenData.refresh_token,
-          tokenExpiresAt,
-          isActive: true,
-          config: {
-            locationId: tokenData.locationId,
-            companyId: tokenData.companyId,
-            userType: tokenData.userType,
-            scope: tokenData.scope,
-            installedAt: new Date().toISOString(),
-          },
-        });
-        console.log('[LeadConnector] Created new integration:', integration.id, 'for user:', ownerUserId);
-        await linkMarketplaceInstallToIntegration(tokenData.locationId, tokenData.companyId, integration);
-      }
+          locationId: tokenData.locationId ?? null,
+          companyId: tokenData.companyId ?? null,
+          sessionUserId: sessionUserId ?? null,
+          oauthIntentUserId: oauthIntentUserId ?? null,
+        },
+      );
     }
+
+    clearGhlOAuthSession(req);
 
     await upsertGhlMarketplaceInstall({
       companyId: tokenData.companyId || "unknown",
       locationId: tokenData.locationId || null,
-      subAccountName: `CRM Integration - ${tokenData.userType === 'Location' ? 'Location' : 'Agency'} (${locationOrCompanyId})`,
+      subAccountName: `CRM Integration - ${tokenData.userType === 'Location' ? 'Location' : 'Agency'} (${tokenData.locationId || tokenData.companyId || 'unknown'})`,
       installDate: new Date().toISOString(),
       installationStatus: "Active",
       source: "oauth",
       rawPayload: tokenData,
+    });
+
+    logGhlOAuthDiagnostic("callback_marketplace_upserted", {
+      locationId: tokenData.locationId ?? null,
+      companyId: tokenData.companyId ?? null,
+      sessionUserId: sessionUserId ?? null,
+      ownerUserId: ownerUserId ?? null,
+    });
+
+    const postSummary = await summarizeGhlConnectionState();
+    logGhlOAuthDiagnostic("callback_completed", {
+      sessionUserId: sessionUserId ?? null,
+      oauthIntentUserId: oauthIntentUserId ?? null,
+      ownerUserId: ownerUserId ?? null,
+      integrationPersisted: Boolean(ownerUserId),
+      eligibleProspectImportLocations: postSummary.prospectImport.eligibleForImport,
+      likelyIssue: postSummary.likelyIssue,
     });
 
     const successHtml = `
@@ -272,6 +464,11 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     return res.send(successHtml);
   } catch (error) {
+    logGhlOAuthDiagnostic("callback_failed", {
+      sessionUserId: sessionUserId ?? null,
+      oauthIntentUserId: oauthIntentUserId ?? null,
+      error: error instanceof Error ? error.message : String(error),
+    });
     console.error('[LeadConnector] Callback error:', error);
     return res.status(500).send('An error occurred while connecting your CRM account. Please try again.');
   }
@@ -290,9 +487,22 @@ router.post('/webhook', async (req: Request, res: Response) => {
     console.log(`[LeadConnector Webhook] ${timestamp} | Event: ${type} | Location: ${locationId || 'N/A'}`);
 
     if (type === 'AppInstall' || type === 'INSTALL') {
+      logGhlOAuthDiagnostic("webhook_install_received", {
+        locationId,
+        companyId: body.companyId ?? null,
+        installType: body.installType ?? null,
+      });
       const installData = extractInstallFromWebhook(body);
       if (installData) {
-        await upsertGhlMarketplaceInstall(installData);
+        const row = await upsertGhlMarketplaceInstall(installData);
+        logGhlOAuthDiagnostic("webhook_install_marketplace_upserted", {
+          marketplaceInstallId: row.id,
+          locationId: row.locationId,
+          companyId: row.companyId,
+          integrationId: row.integrationId,
+          whachatUserId: row.whachatUserId,
+          note: "Webhook does not create OAuth tokens — integrations row still required for API access",
+        });
         console.log(`[LeadConnector Webhook] ${timestamp} | Recorded marketplace install for location: ${locationId}`);
       }
       const allGhl = await storage.getAllIntegrationsByType('gohighlevel');
@@ -301,6 +511,19 @@ router.post('/webhook', async (req: Request, res: Response) => {
       );
       if (matched) {
         await linkMarketplaceInstallToIntegration(locationId, body.companyId, matched);
+        logGhlOAuthDiagnostic("webhook_install_integration_linked", {
+          integrationId: matched.id,
+          userId: matched.userId,
+          locationId,
+          hasAccessToken: Boolean(matched.accessToken),
+        });
+      } else {
+        logGhlOAuthDiagnostic("webhook_install_no_integration", {
+          locationId,
+          companyId: body.companyId ?? null,
+          gohighlevelIntegrationCount: allGhl.length,
+          note: "GHL shows app Active but WhachatCRM has no matching integrations row — user must complete OAuth callback while logged into WhachatCRM",
+        });
       }
       return;
     }
@@ -781,9 +1004,38 @@ router.post('/refresh-token', async (req: Request, res: Response) => {
   }
 });
 
+router.get('/connection-diagnostics', async (req: Request, res: Response) => {
+  try {
+    const sessionUserId = resolveSessionUserId(req);
+    if (!sessionUserId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    const summary = await summarizeGhlConnectionState();
+    const userIntegrations = await storage.getIntegrations(sessionUserId);
+    const userGhl = userIntegrations.filter((i) => i.type === "gohighlevel");
+    res.json({
+      ...summary,
+      currentSession: {
+        userId: sessionUserId,
+        gohighlevelIntegrationCount: userGhl.length,
+        connectedWithToken: userGhl.filter((i) => i.isActive && i.accessToken).length,
+        locations: userGhl.map((i) => ({
+          integrationId: i.id,
+          isActive: i.isActive,
+          hasAccessToken: Boolean(i.accessToken),
+          locationId: ((i.config || {}) as Record<string, unknown>).locationId ?? null,
+          companyId: ((i.config || {}) as Record<string, unknown>).companyId ?? null,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error("[LeadConnector] connection-diagnostics error:", error);
+    res.status(500).json({ error: "Failed to load connection diagnostics" });
+  }
+});
+
 router.get('/connection-status', async (req: Request, res: Response) => {
   try {
-    // Passport session (same as /api/auth/me) — not all code paths use the same cast
     const authUser = (req as Request & { user?: { id?: string } }).user;
     const userId =
       authUser?.id ||
@@ -791,7 +1043,7 @@ router.get('/connection-status', async (req: Request, res: Response) => {
         ? ((req as any).session.passport.user as string)
         : undefined);
     if (!userId) {
-      return res.json({ connected: false });
+      return res.json({ connected: false, marketplaceInstalled: false, installedInGhlNotConnected: false });
     }
 
     const queryLocationId = req.query.locationId as string | undefined;
@@ -800,6 +1052,9 @@ router.get('/connection-status', async (req: Request, res: Response) => {
     const ghlIntegrations = userIntegrations.filter(
       (i: any) => i.type === 'gohighlevel' && i.isActive && i.accessToken
     );
+
+    const unlinkedInstalls = await listUnlinkedActiveGhlMarketplaceInstalls();
+    const marketplaceInstalled = unlinkedInstalls.length > 0;
 
     let activeIntegration;
 
@@ -817,17 +1072,26 @@ router.get('/connection-status', async (req: Request, res: Response) => {
       res.json({
         connected: !tokenExpired,
         tokenExpired: !!tokenExpired,
+        marketplaceInstalled,
+        installedInGhlNotConnected: false,
+        unlinkedMarketplaceInstalls: tokenExpired ? unlinkedInstalls : [],
         locationId: (activeIntegration.config as any)?.locationId || null,
         companyId: (activeIntegration.config as any)?.companyId || null,
         installedAt: (activeIntegration.config as any)?.installedAt || null,
         lastSyncAt: activeIntegration.lastSyncAt,
       });
     } else {
-      res.json({ connected: false });
+      res.json({
+        connected: false,
+        tokenExpired: false,
+        marketplaceInstalled,
+        installedInGhlNotConnected: marketplaceInstalled,
+        unlinkedMarketplaceInstalls: unlinkedInstalls,
+      });
     }
   } catch (error) {
     console.error('[LeadConnector] Connection status check error:', error);
-    res.json({ connected: false });
+    res.json({ connected: false, marketplaceInstalled: false, installedInGhlNotConnected: false });
   }
 });
 
