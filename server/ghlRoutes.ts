@@ -18,18 +18,18 @@ import { getGhlMarketplaceOAuthConfig } from './ghlOAuthConfig';
 import {
   logGhlOAuthDiagnostic,
   summarizeGhlConnectionState,
-  listUnlinkedActiveGhlMarketplaceInstalls,
+  resolveUserGhlConnectionStatus,
 } from './ghlConnectionDiagnostics';
 import { requireAuth } from './auth';
 import {
   appendStateToInstallUrl,
+  clearGhlOAuthPending,
   clearGhlOAuthSession,
   createGhlOAuthState,
   exchangeGhlAuthorizationCode,
   getDefaultGhlRedirectUri,
   persistGhlIntegrationForUser,
   readGhlOAuthSessionUserId,
-  requestGhlReconnectAuthorizationCode,
   saveSessionValue,
 } from './ghlOAuthFlow';
 
@@ -98,7 +98,6 @@ router.get('/marketplace-install', async (_req: Request, res: Response) => {
       configured: true,
       installUrl: config.installUrl,
       oauthAuthorizeUrl: "/api/ext/oauth-authorize",
-      oauthReconnectUrl: "/api/ext/oauth-reconnect",
       redirectUri: config.redirectUri,
       appIdPrefix: config.appIdPrefix,
       error: null,
@@ -135,10 +134,10 @@ router.get('/oauth-authorize', requireAuth, async (req: Request, res: Response) 
     const state = createGhlOAuthState(userId);
     await saveSessionValue(req, "ghlOAuthUserId", userId);
     await saveSessionValue(req, "ghlOAuthStartedAt", Date.now());
+    await saveSessionValue(req, "ghlMarketplaceInstallPending", true);
 
     const authorizeUrl = appendStateToInstallUrl(config.installUrl, state);
-    logGhlOAuthDiagnostic("callback_received", {
-      event: "oauth_authorize_redirect",
+    logGhlOAuthDiagnostic("oauth_authorize_started", {
       sessionUserId: userId,
       redirectUri: config.redirectUri,
       hasState: true,
@@ -147,131 +146,6 @@ router.get('/oauth-authorize', requireAuth, async (req: Request, res: Response) 
   } catch (error) {
     console.error("[LeadConnector] oauth-authorize error:", error);
     return res.status(500).send("Could not start CRM authorization. Please try again.");
-  }
-});
-
-router.post('/oauth-reconnect', requireAuth, async (req: Request, res: Response) => {
-  const userId = resolveSessionUserId(req);
-  if (!userId) {
-    return res.status(401).json({ error: "Authentication required" });
-  }
-
-  if (!GHL_CLIENT_ID || !GHL_CLIENT_SECRET) {
-    return res.status(503).json({ error: "CRM app credentials are not configured on the server." });
-  }
-
-  try {
-    const body = (req.body || {}) as { locationId?: string; companyId?: string };
-    let locationId = typeof body.locationId === "string" ? body.locationId.trim() : undefined;
-    let companyId = typeof body.companyId === "string" ? body.companyId.trim() : undefined;
-
-    if (!locationId && !companyId) {
-      const unlinked = await listUnlinkedActiveGhlMarketplaceInstalls();
-      if (unlinked.length === 1) {
-        locationId = unlinked[0].locationId || undefined;
-        companyId = unlinked[0].companyId;
-      } else if (unlinked.length > 1) {
-        return res.status(400).json({
-          error: "Multiple CRM installs found. Select a location to reconnect.",
-          unlinkedInstalls: unlinked,
-        });
-      } else {
-        return res.status(400).json({
-          error: "No unlinked CRM marketplace install found. Use OAuth authorize to connect a new location.",
-        });
-      }
-    }
-
-    logGhlOAuthDiagnostic("callback_received", {
-      event: "oauth_reconnect_started",
-      sessionUserId: userId,
-      locationId: locationId ?? null,
-      companyId: companyId ?? null,
-    });
-
-    const reconnect = await requestGhlReconnectAuthorizationCode(GHL_CLIENT_ID, GHL_CLIENT_SECRET, {
-      locationId,
-      companyId,
-    });
-
-    if (!reconnect.ok) {
-      logGhlOAuthDiagnostic("callback_token_exchange_failed", {
-        event: "oauth_reconnect_failed",
-        sessionUserId: userId,
-        httpStatus: reconnect.httpStatus,
-        reason: reconnect.error,
-        locationId: locationId ?? null,
-        companyId: companyId ?? null,
-      });
-      return res.status(reconnect.httpStatus >= 400 ? reconnect.httpStatus : 502).json({
-        error: reconnect.error,
-        details: reconnect.details,
-      });
-    }
-
-    const exchange = await exchangeGhlAuthorizationCode(
-      reconnect.authorizationCode,
-      GHL_REDIRECT_URI,
-      GHL_CLIENT_ID,
-      GHL_CLIENT_SECRET,
-    );
-
-    if (!exchange.ok) {
-      logGhlOAuthDiagnostic("callback_token_exchange_failed", {
-        event: "oauth_reconnect_token_exchange_failed",
-        sessionUserId: userId,
-        httpStatus: exchange.httpStatus,
-        oauthError: exchange.data?.error ?? null,
-        locationId: locationId ?? null,
-        companyId: companyId ?? null,
-      });
-      return res.status(400).json({
-        error:
-          exchange.data?.error_description ||
-          exchange.data?.error ||
-          "Failed to exchange CRM reconnect authorization code for tokens.",
-      });
-    }
-
-    const { integration, created } = await persistGhlIntegrationForUser(userId, exchange.data);
-
-    await upsertGhlMarketplaceInstall({
-      companyId: exchange.data.companyId || companyId || "unknown",
-      locationId: exchange.data.locationId || locationId || null,
-      subAccountName: integration.name,
-      installDate: new Date().toISOString(),
-      installationStatus: "Active",
-      source: "oauth_reconnect",
-      rawPayload: { reconnect: true, tokenUserType: exchange.data.userType },
-    });
-
-    logGhlOAuthDiagnostic(created ? "callback_integration_created" : "callback_integration_updated", {
-      event: "oauth_reconnect_completed",
-      integrationId: integration.id,
-      userId,
-      sessionUserId: userId,
-      locationId: exchange.data.locationId ?? null,
-      companyId: exchange.data.companyId ?? null,
-    });
-
-    const postSummary = await summarizeGhlConnectionState();
-    return res.json({
-      success: true,
-      created,
-      integrationId: integration.id,
-      locationId: exchange.data.locationId ?? null,
-      companyId: exchange.data.companyId ?? null,
-      connected: true,
-      eligibleProspectImportLocations: postSummary.prospectImport.eligibleForImport,
-    });
-  } catch (error) {
-    console.error("[LeadConnector] oauth-reconnect error:", error);
-    logGhlOAuthDiagnostic("callback_failed", {
-      event: "oauth_reconnect_exception",
-      sessionUserId: userId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return res.status(500).json({ error: "CRM reconnect failed. Please try again." });
   }
 });
 
@@ -400,6 +274,16 @@ router.get('/callback', async (req: Request, res: Response) => {
           oauthIntentUserId: oauthIntentUserId ?? null,
         },
       );
+      logGhlOAuthDiagnostic("connection_completed", {
+        integrationId: integration.id,
+        userId: ownerUserId,
+        locationId: tokenData.locationId ?? null,
+        companyId: tokenData.companyId ?? null,
+        created,
+        hasAccessToken: true,
+        hasRefreshToken: Boolean(tokenData.refresh_token),
+      });
+      clearGhlOAuthPending(req);
     }
 
     clearGhlOAuthSession(req);
@@ -1036,62 +920,37 @@ router.get('/connection-diagnostics', async (req: Request, res: Response) => {
 
 router.get('/connection-status', async (req: Request, res: Response) => {
   try {
-    const authUser = (req as Request & { user?: { id?: string } }).user;
+    const authUser = (req as Request & { user?: { id?: string; email?: string } }).user;
     const userId =
       authUser?.id ||
       (typeof (req as any).session?.passport?.user === "string"
         ? ((req as any).session.passport.user as string)
         : undefined);
     if (!userId) {
-      return res.json({ connected: false, marketplaceInstalled: false, installedInGhlNotConnected: false });
+      return res.json({ connected: false, installedInGhlNotConnected: false });
     }
 
     const queryLocationId = req.query.locationId as string | undefined;
+    const user = await storage.getUser(userId);
+    const oauthPending = Boolean((req as any).session?.ghlMarketplaceInstallPending);
 
-    const userIntegrations = await storage.getIntegrations(userId);
-    const ghlIntegrations = userIntegrations.filter(
-      (i: any) => i.type === 'gohighlevel' && i.isActive && i.accessToken
-    );
+    const status = await resolveUserGhlConnectionStatus(userId, user?.email, {
+      oauthPending,
+      queryLocationId,
+    });
 
-    const unlinkedInstalls = await listUnlinkedActiveGhlMarketplaceInstalls();
-    const marketplaceInstalled = unlinkedInstalls.length > 0;
-
-    let activeIntegration;
-
-    if (queryLocationId) {
-      activeIntegration = ghlIntegrations.find(
-        (i: any) => (i.config as any)?.locationId === queryLocationId
-      );
-    } else {
-      activeIntegration = ghlIntegrations[0];
-    }
-
-    if (activeIntegration) {
-      const tokenExpired = activeIntegration.tokenExpiresAt && new Date(activeIntegration.tokenExpiresAt) < new Date();
-
-      res.json({
-        connected: !tokenExpired,
-        tokenExpired: !!tokenExpired,
-        marketplaceInstalled,
-        installedInGhlNotConnected: false,
-        unlinkedMarketplaceInstalls: tokenExpired ? unlinkedInstalls : [],
-        locationId: (activeIntegration.config as any)?.locationId || null,
-        companyId: (activeIntegration.config as any)?.companyId || null,
-        installedAt: (activeIntegration.config as any)?.installedAt || null,
-        lastSyncAt: activeIntegration.lastSyncAt,
-      });
-    } else {
-      res.json({
-        connected: false,
-        tokenExpired: false,
-        marketplaceInstalled,
-        installedInGhlNotConnected: marketplaceInstalled,
-        unlinkedMarketplaceInstalls: unlinkedInstalls,
-      });
-    }
+    res.json({
+      connected: status.connected,
+      tokenExpired: status.tokenExpired,
+      installedInGhlNotConnected: status.installedInGhlNotConnected,
+      locationId: status.locationId,
+      companyId: status.companyId,
+      installedAt: status.installedAt,
+      lastSyncAt: status.lastSyncAt,
+    });
   } catch (error) {
     console.error('[LeadConnector] Connection status check error:', error);
-    res.json({ connected: false, marketplaceInstalled: false, installedInGhlNotConnected: false });
+    res.json({ connected: false, installedInGhlNotConnected: false });
   }
 });
 

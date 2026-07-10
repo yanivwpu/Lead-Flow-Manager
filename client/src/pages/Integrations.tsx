@@ -24,8 +24,8 @@ import { cn } from "@/lib/utils";
 import {
   CRM_INTEGRATION_LABEL,
   CRM_INSTALL_CTA,
+  CRM_COMPLETE_OAUTH_CTA,
   CRM_MARKETPLACE_CTA,
-  CRM_RECONNECT_OAUTH_CTA,
   CRM_INSTALLED_NOT_CONNECTED,
 } from "@shared/leadConnectorWhiteLabel";
 import { ShopifyManagePanel } from "@/components/integrations/ShopifyManagePanel";
@@ -204,24 +204,13 @@ type CrmMarketplaceInstallConfig = {
   configured: boolean;
   installUrl: string | null;
   oauthAuthorizeUrl?: string;
-  oauthReconnectUrl?: string;
   error: string | null;
-};
-
-type CrmUnlinkedInstall = {
-  id: string;
-  locationId: string | null;
-  companyId: string;
-  subAccountName: string | null;
-  agency: string | null;
 };
 
 type CrmConnectionStatus = {
   connected: boolean;
   tokenExpired?: boolean;
-  marketplaceInstalled?: boolean;
   installedInGhlNotConnected?: boolean;
-  unlinkedMarketplaceInstalls?: CrmUnlinkedInstall[];
   locationId?: string;
   companyId?: string;
   installedAt?: string;
@@ -548,8 +537,6 @@ export function Integrations() {
   const [wooOrderHint, setWooOrderHint] = useState<string | null>(null);
   const wooStoreUrlInputRef = useRef<HTMLInputElement>(null);
   const [checkingLcConnection, setCheckingLcConnection] = useState(false);
-  const [reconnectingCrm, setReconnectingCrm] = useState(false);
-  const [selectedReconnectInstallId, setSelectedReconnectInstallId] = useState<string | null>(null);
   const [manageIntegrationId, setManageIntegrationId] = useState<string | null>(null);
   const [pendingDisconnectType, setPendingDisconnectType] = useState<string | null>(null);
   const [leadManageOpen, setLeadManageOpen] = useState(false);
@@ -584,12 +571,12 @@ export function Integrations() {
       if (!res.ok) {
         const snippet = (await res.text().catch(() => "")).slice(0, 200);
         console.warn("[CRM Integration] /api/ext/connection-status failed:", res.status, snippet);
-        return { connected: false, tokenExpired: false, marketplaceInstalled: false, installedInGhlNotConnected: false };
+        return { connected: false, tokenExpired: false, installedInGhlNotConnected: false };
       }
       return res.json() as Promise<CrmConnectionStatus>;
     },
     enabled: !!integrationsEnabled,
-    placeholderData: { connected: false, tokenExpired: false, marketplaceInstalled: false, installedInGhlNotConnected: false },
+    placeholderData: { connected: false, tokenExpired: false, installedInGhlNotConnected: false },
   });
 
   const {
@@ -617,97 +604,6 @@ export function Integrations() {
   const startCrmOAuthAuthorize = () => {
     const authorizeUrl = crmInstallConfig?.oauthAuthorizeUrl || "/api/ext/oauth-authorize";
     window.location.href = authorizeUrl;
-  };
-
-  const reconnectCrmOAuth = async (install?: CrmUnlinkedInstall) => {
-    setReconnectingCrm(true);
-    try {
-      const res = await fetch(crmInstallConfig?.oauthReconnectUrl || "/api/ext/oauth-reconnect", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          locationId: install?.locationId || undefined,
-          companyId: install?.companyId,
-        }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        success?: boolean;
-        locationId?: string | null;
-        unlinkedInstalls?: CrmUnlinkedInstall[];
-      };
-
-      if (!res.ok) {
-        if (data.unlinkedInstalls?.length) {
-          toast({
-            title: "Select a CRM location",
-            description: data.error || "Choose which installed CRM location to reconnect.",
-            variant: "destructive",
-          });
-          return;
-        }
-        toast({
-          title: "Reconnect failed",
-          description: data.error || "Could not reconnect CRM OAuth tokens. Try authorizing again.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      await Promise.all([
-        refetchLcStatus(),
-        queryClient.invalidateQueries({ queryKey: ["/api/integrations"] }),
-      ]);
-      toast({
-        title: "CRM connected",
-        description: data.locationId
-          ? `OAuth tokens saved for location ${data.locationId}.`
-          : "OAuth tokens saved to your WhachatCRM account.",
-      });
-    } catch {
-      toast({
-        title: "Reconnect failed",
-        description: "Could not reconnect CRM OAuth tokens. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setReconnectingCrm(false);
-    }
-  };
-
-  const handleCrmPrimaryAction = async () => {
-    const installs = lcStatus?.unlinkedMarketplaceInstalls || [];
-    const selected =
-      installs.find((row) => row.id === selectedReconnectInstallId) ||
-      (installs.length === 1 ? installs[0] : undefined);
-
-    if (!selected && installs.length > 1) {
-      toast({
-        title: "Select a CRM location",
-        description: "Choose which installed CRM location to reconnect OAuth tokens for.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (selected || lcStatus?.tokenExpired || lcStatus?.installedInGhlNotConnected) {
-      await reconnectCrmOAuth(
-        selected ||
-          (lcStatus?.locationId || lcStatus?.companyId
-            ? {
-                id: "current",
-                locationId: lcStatus.locationId ?? null,
-                companyId: lcStatus.companyId || "",
-                subAccountName: null,
-                agency: null,
-              }
-            : undefined),
-      );
-      return;
-    }
-
-    startCrmOAuthAuthorize();
   };
 
   const openCrmMarketplace = async () => {
@@ -1062,7 +958,7 @@ export function Integrations() {
       if (data?.connected) {
         toast({ title: "Connected", description: "CRM integration is connected with valid OAuth tokens." });
       } else if (data?.tokenExpired) {
-        toast({ title: "Token Expired", description: "Your CRM OAuth token has expired. Use Reconnect OAuth.", variant: "destructive" });
+        toast({ title: "Token Expired", description: "Your CRM OAuth token has expired. Use Complete OAuth.", variant: "destructive" });
       } else if (data?.installedInGhlNotConnected) {
         toast({
           title: "Installed in GHL only",
@@ -1168,8 +1064,6 @@ export function Integrations() {
                       const isLeadConnector = integration.id === "leadconnector";
                       const lcConnected = !!lcStatus?.connected;
                       const lcInstalledNotConnected = !!lcStatus?.installedInGhlNotConnected && !lcConnected;
-                      const lcNeedsReconnect = !lcConnected && (!!lcStatus?.tokenExpired || lcInstalledNotConnected);
-                      const lcUnlinkedInstalls = lcStatus?.unlinkedMarketplaceInstalls || [];
                       const wooConnected = integration.id === "woocommerce" && !!connected;
                       const calendlyConnected = integration.id === "calendly" && !!connected;
                       const shopifyManageConnected = integration.id === "shopify" && shopifyConnected;
@@ -1188,23 +1082,23 @@ export function Integrations() {
                       let primaryTestId = `button-connect-${integration.id}`;
 
                       if (isLeadConnector) {
-                        primaryTestId = lcConnected
-                          ? "button-manage-leadconnector"
-                          : lcNeedsReconnect
-                            ? "button-reconnect-leadconnector"
-                            : "button-install-leadconnector";
-                        if (lcStatusFetching || reconnectingCrm) {
+                        if (lcConnected) {
+                          primaryTestId = "button-leadconnector-connected";
+                          primaryLabel = "Connected";
                           primaryDisabled = true;
-                          primaryLabel = lcNeedsReconnect ? CRM_RECONNECT_OAUTH_CTA : CRM_INSTALL_CTA;
-                        } else if (lcConnected) {
-                          primaryLabel = "Manage";
-                          primaryAction = () => setLeadManageOpen(true);
-                        } else if (lcNeedsReconnect) {
-                          primaryLabel = CRM_RECONNECT_OAUTH_CTA;
-                          primaryAction = () => void handleCrmPrimaryAction();
+                          primaryAction = () => {};
+                        } else if (lcStatusFetching) {
+                          primaryTestId = "button-install-leadconnector";
+                          primaryDisabled = true;
+                          primaryLabel = lcInstalledNotConnected ? CRM_COMPLETE_OAUTH_CTA : CRM_INSTALL_CTA;
+                        } else if (lcInstalledNotConnected || lcStatus?.tokenExpired) {
+                          primaryTestId = "button-complete-oauth-leadconnector";
+                          primaryLabel = CRM_COMPLETE_OAUTH_CTA;
+                          primaryAction = startCrmOAuthAuthorize;
                         } else {
+                          primaryTestId = "button-install-leadconnector";
                           primaryLabel = CRM_INSTALL_CTA;
-                          primaryAction = () => startCrmOAuthAuthorize();
+                          primaryAction = startCrmOAuthAuthorize;
                         }
                       } else if (wooConnected) {
                         primaryLabel = "Connected";
@@ -1287,10 +1181,10 @@ export function Integrations() {
                                   <RefreshCw className="h-3.5 w-3.5 animate-spin text-gray-400" />
                                   Loading…
                                 </span>
-                              ) : reconnectingCrm && isLeadConnector ? (
-                                <span className="inline-flex items-center gap-2">
-                                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-gray-400" />
-                                  Reconnecting…
+                              ) : lcConnected && isLeadConnector ? (
+                                <span className="inline-flex items-center justify-center gap-1.5 text-emerald-800">
+                                  <Check className="h-3.5 w-3.5" aria-hidden />
+                                  Connected
                                 </span>
                               ) : shopifyStatusFetching && integration.id === "shopify" ? (
                                 <span className="inline-flex items-center gap-2">
@@ -1323,22 +1217,17 @@ export function Integrations() {
                                 {CRM_INSTALLED_NOT_CONNECTED}
                               </p>
                             )}
-                            {isLeadConnector && lcInstalledNotConnected && lcUnlinkedInstalls.length > 1 && (
-                              <Select
-                                value={selectedReconnectInstallId || undefined}
-                                onValueChange={setSelectedReconnectInstallId}
+                            {isLeadConnector && lcConnected && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto w-full py-1 text-xs text-gray-600 hover:text-gray-900"
+                                onClick={() => setLeadManageOpen(true)}
+                                data-testid="button-leadconnector-manage"
                               >
-                                <SelectTrigger className="h-8 text-xs">
-                                  <SelectValue placeholder="Select CRM location to reconnect" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {lcUnlinkedInstalls.map((row) => (
-                                    <SelectItem key={row.id} value={row.id}>
-                                      {row.subAccountName || row.agency || row.locationId || row.companyId}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                Manage integration
+                              </Button>
                             )}
                             {isLeadConnector && lcStatusError && (
                               <p className="text-xs text-amber-800" role="alert">
@@ -1883,30 +1772,13 @@ export function Integrations() {
                   variant="default"
                   size="sm"
                   className="w-full font-medium"
-                  onClick={() => void handleCrmPrimaryAction()}
-                  disabled={crmInstallConfigFetching || reconnectingCrm}
-                  data-testid="button-reconnect-leadconnector-dialog"
-                >
-                  {reconnectingCrm ? (
-                    <>
-                      <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
-                      Reconnecting OAuth…
-                    </>
-                  ) : (
-                    CRM_RECONNECT_OAUTH_CTA
-                  )}
-                </Button>
-              ) : null}
-              {!lcStatus?.connected ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full border-gray-200 font-medium"
                   onClick={startCrmOAuthAuthorize}
-                  disabled={crmInstallConfigFetching || reconnectingCrm}
-                  data-testid="button-oauth-authorize-leadconnector-dialog"
+                  disabled={crmInstallConfigFetching}
+                  data-testid="button-complete-oauth-leadconnector-dialog"
                 >
-                  Authorize in CRM (OAuth)
+                  {lcStatus?.installedInGhlNotConnected || lcStatus?.tokenExpired
+                    ? CRM_COMPLETE_OAUTH_CTA
+                    : CRM_INSTALL_CTA}
                 </Button>
               ) : null}
               <Button
@@ -1932,7 +1804,7 @@ export function Integrations() {
               {!lcStatus?.connected && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/80 p-3">
                   <p className="text-xs text-gray-600 flex-1">
-                    Reconnect OAuth saves tokens to WhachatCRM. Use Authorize if GHL still shows the app as installed.
+                    Complete OAuth while logged into WhachatCRM so tokens are saved to your account.
                   </p>
                   <Button
                     variant="outline"

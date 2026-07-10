@@ -5,7 +5,6 @@ import { linkMarketplaceInstallToIntegration } from "./ghlMarketplaceService";
 import type { Integration } from "@shared/schema";
 
 const GHL_TOKEN_URL = "https://services.leadconnectorhq.com/oauth/token";
-const GHL_RECONNECT_URL = "https://services.leadconnectorhq.com/oauth/reconnect";
 
 export type GhlTokenPayload = {
   access_token: string;
@@ -18,10 +17,6 @@ export type GhlTokenPayload = {
   error?: string;
   error_description?: string;
 };
-
-export type GhlReconnectResult =
-  | { ok: true; authorizationCode: string }
-  | { ok: false; httpStatus: number; error: string; details?: unknown };
 
 function oauthStateSecret(): string {
   return (
@@ -97,6 +92,11 @@ export function clearGhlOAuthSession(req: { session?: Record<string, unknown> })
   delete req.session.ghlOAuthStartedAt;
 }
 
+export function clearGhlOAuthPending(req: { session?: Record<string, unknown> }): void {
+  if (!req.session) return;
+  delete req.session.ghlMarketplaceInstallPending;
+}
+
 export async function exchangeGhlAuthorizationCode(
   code: string,
   redirectUri: string,
@@ -133,55 +133,6 @@ export async function exchangeGhlAuthorizationCode(
   }
 
   return { ok: true, data: tokenData };
-}
-
-export async function requestGhlReconnectAuthorizationCode(
-  clientId: string,
-  clientSecret: string,
-  target: { locationId?: string | null; companyId?: string | null },
-): Promise<GhlReconnectResult> {
-  const locationId = target.locationId?.trim() || undefined;
-  const companyId = target.companyId?.trim() || undefined;
-  if (!locationId && !companyId) {
-    return { ok: false, httpStatus: 400, error: "locationId or companyId is required" };
-  }
-
-  const body: Record<string, string> = {
-    clientKey: clientId,
-    clientSecret,
-  };
-  if (locationId) body.locationId = locationId;
-  else if (companyId) body.companyId = companyId;
-
-  const response = await fetch(GHL_RECONNECT_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  const text = await response.text();
-  let parsed: { authorizationCode?: string; error?: string; message?: string } | null = null;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return {
-      ok: false,
-      httpStatus: response.status,
-      error: "Invalid response from CRM reconnect API",
-      details: text.slice(0, 300),
-    };
-  }
-
-  if (!response.ok || !parsed?.authorizationCode) {
-    return {
-      ok: false,
-      httpStatus: response.status,
-      error: parsed?.message || parsed?.error || "CRM reconnect failed",
-      details: parsed,
-    };
-  }
-
-  return { ok: true, authorizationCode: parsed.authorizationCode };
 }
 
 export async function persistGhlIntegrationForUser(

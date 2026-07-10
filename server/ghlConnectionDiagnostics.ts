@@ -2,8 +2,10 @@ import { eq } from "drizzle-orm";
 import { ghlMarketplaceInstalls, integrations } from "@shared/schema";
 import { db } from "../drizzle/db";
 import { listGhlInstallationsForAdmin } from "./ghlMarketplaceService";
+import { storage } from "./storage";
 
 export type GhlOAuthDiagnosticEvent =
+  | "oauth_authorize_started"
   | "callback_received"
   | "callback_oauth_error"
   | "callback_missing_code"
@@ -14,6 +16,7 @@ export type GhlOAuthDiagnosticEvent =
   | "callback_integration_created"
   | "callback_marketplace_upserted"
   | "callback_completed"
+  | "connection_completed"
   | "callback_failed"
   | "webhook_install_received"
   | "webhook_install_marketplace_upserted"
@@ -21,17 +24,109 @@ export type GhlOAuthDiagnosticEvent =
   | "webhook_install_no_integration"
   | "prospect_import_locations_empty";
 
-export type UnlinkedGhlMarketplaceInstall = {
+export type UserEligibleGhlMarketplaceInstall = {
   id: string;
   locationId: string | null;
   companyId: string;
   subAccountName: string | null;
   agency: string | null;
   installationStatus: string | null;
-  source: string | null;
+  integrationId: string | null;
+  whachatUserId: string | null;
 };
 
-export async function listUnlinkedActiveGhlMarketplaceInstalls(): Promise<UnlinkedGhlMarketplaceInstall[]> {
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+/** Marketplace installs scoped to the logged-in user — never platform-wide. */
+export async function listUserEligibleGhlMarketplaceInstalls(
+  userId: string,
+  userEmail?: string | null,
+): Promise<UserEligibleGhlMarketplaceInstall[]> {
+  const marketplaceRows = await db.select().from(ghlMarketplaceInstalls);
+  const normalizedEmail = userEmail ? normalizeEmail(userEmail) : null;
+
+  return marketplaceRows
+    .filter((r) => {
+      if ((r.installationStatus || "").toLowerCase() === "uninstalled") return false;
+      if (r.whachatUserId === userId) return true;
+      if (normalizedEmail && r.agencyEmail && normalizeEmail(r.agencyEmail) === normalizedEmail) return true;
+      return false;
+    })
+    .map((r) => ({
+      id: r.id,
+      locationId: r.locationId,
+      companyId: r.companyId,
+      subAccountName: r.subAccountName,
+      agency: r.agency,
+      installationStatus: r.installationStatus,
+      integrationId: r.integrationId,
+      whachatUserId: r.whachatUserId,
+    }));
+}
+
+export type UserGhlConnectionStatus = {
+  connected: boolean;
+  tokenExpired: boolean;
+  installedInGhlNotConnected: boolean;
+  locationId: string | null;
+  companyId: string | null;
+  installedAt: string | null;
+  lastSyncAt: Date | null;
+};
+
+export async function resolveUserGhlConnectionStatus(
+  userId: string,
+  userEmail?: string | null,
+  options?: { oauthPending?: boolean; queryLocationId?: string },
+): Promise<UserGhlConnectionStatus> {
+  const userIntegrations = await storage.getIntegrations(userId);
+  const ghlIntegrations = userIntegrations.filter((i) => i.type === "gohighlevel");
+  const ghlWithTokens = ghlIntegrations.filter((i) => i.isActive && i.accessToken);
+
+  let activeIntegration = options?.queryLocationId
+    ? ghlWithTokens.find(
+        (i) => ((i.config || {}) as Record<string, unknown>).locationId === options.queryLocationId,
+      )
+    : ghlWithTokens[0];
+
+  if (activeIntegration) {
+    const tokenExpired = Boolean(
+      activeIntegration.tokenExpiresAt && new Date(activeIntegration.tokenExpiresAt) < new Date(),
+    );
+    const cfg = (activeIntegration.config || {}) as Record<string, unknown>;
+    return {
+      connected: !tokenExpired,
+      tokenExpired,
+      installedInGhlNotConnected: tokenExpired,
+      locationId: (cfg.locationId as string) || null,
+      companyId: (cfg.companyId as string) || null,
+      installedAt: (cfg.installedAt as string) || null,
+      lastSyncAt: activeIntegration.lastSyncAt,
+    };
+  }
+
+  const userEligibleInstalls = await listUserEligibleGhlMarketplaceInstalls(userId, userEmail);
+  const hasIncompleteIntegration = ghlIntegrations.some((i) => !i.accessToken);
+  const hasUnlinkedUserInstall = userEligibleInstalls.some((r) => !r.integrationId);
+  const installedInGhlNotConnected =
+    hasUnlinkedUserInstall || hasIncompleteIntegration || Boolean(options?.oauthPending);
+
+  const fallbackCfg = (ghlIntegrations[0]?.config || {}) as Record<string, unknown>;
+  return {
+    connected: false,
+    tokenExpired: false,
+    installedInGhlNotConnected,
+    locationId: (fallbackCfg.locationId as string) || null,
+    companyId: (fallbackCfg.companyId as string) || null,
+    installedAt: (fallbackCfg.installedAt as string) || null,
+    lastSyncAt: ghlIntegrations[0]?.lastSyncAt ?? null,
+  };
+}
+
+/** @deprecated Use listUserEligibleGhlMarketplaceInstalls — platform-wide listing is not user-safe. */
+export async function listUnlinkedActiveGhlMarketplaceInstalls(): Promise<UserEligibleGhlMarketplaceInstall[]> {
   const marketplaceRows = await db.select().from(ghlMarketplaceInstalls);
   return marketplaceRows
     .filter(
@@ -46,7 +141,8 @@ export async function listUnlinkedActiveGhlMarketplaceInstalls(): Promise<Unlink
       subAccountName: r.subAccountName,
       agency: r.agency,
       installationStatus: r.installationStatus,
-      source: r.source,
+      integrationId: r.integrationId,
+      whachatUserId: r.whachatUserId,
     }));
 }
 
