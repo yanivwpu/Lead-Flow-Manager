@@ -208,6 +208,15 @@ type CrmMarketplaceInstallConfig = {
   error: string | null;
 };
 
+type CrmOAuthRecoveryAttemptResult = {
+  recovered: boolean;
+  oauthRequired: boolean;
+  reason: string | null;
+  reasonCategory: string | null;
+  httpStatus: number;
+  raw: Record<string, unknown>;
+};
+
 type CrmConnectionStatus = {
   connected: boolean;
   tokenExpired?: boolean;
@@ -623,55 +632,92 @@ export function Integrations() {
     staleTime: 60_000,
   });
 
-  const attemptCrmOAuthRecovery = async (): Promise<boolean> => {
+  const attemptCrmOAuthRecovery = async (): Promise<CrmOAuthRecoveryAttemptResult> => {
+    const requestMeta = {
+      method: "POST",
+      url: "/api/ext/recover-oauth",
+      at: new Date().toISOString(),
+    };
+    console.info("[CRM Integration] recover-oauth request", requestMeta);
+
     const res = await fetch("/api/ext/recover-oauth", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: "{}",
     });
-    const data = (await res.json().catch(() => ({}))) as {
-      recovered?: boolean;
-      reason?: string;
-      refreshed?: boolean;
-      oauthRequired?: boolean;
+    const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const result: CrmOAuthRecoveryAttemptResult = {
+      recovered: raw.recovered === true,
+      oauthRequired: raw.oauthRequired === true,
+      reason: typeof raw.reason === "string" ? raw.reason : null,
+      reasonCategory: typeof raw.reasonCategory === "string" ? raw.reasonCategory : null,
+      httpStatus: res.status,
+      raw,
     };
-    if (data.recovered) {
+    console.info("[CRM Integration] recover-oauth response", result);
+
+    if (result.recovered) {
       await Promise.all([
         refetchLcStatus(),
         queryClient.invalidateQueries({ queryKey: ["/api/integrations"] }),
       ]);
       toast({
         title: "CRM connected",
-        description: data.refreshed
+        description: raw.refreshed
           ? "Recovered your existing CRM authorization and refreshed the access token."
           : "Recovered your existing CRM authorization from the marketplace install.",
       });
-      return true;
     }
-    if (data.reason && data.reason !== "no_recoverable_install") {
-      console.info("[CRM Integration] OAuth recovery skipped:", data.reason);
-    }
-    return false;
+
+    return result;
   };
 
   const startCrmOAuthAuthorize = async () => {
+    console.info("[CRM Integration] startCrmOAuthAuthorize clicked — recovery runs before any OAuth redirect");
     setRecoveringCrmOAuth(true);
     try {
-      const recovered = await attemptCrmOAuthRecovery();
-      if (recovered) return;
-    } catch {
+      const recovery = await attemptCrmOAuthRecovery();
+      if (recovery.recovered) {
+        console.info("[CRM Integration] recover-oauth succeeded — not redirecting to GHL");
+        return;
+      }
+
+      if (recovery.oauthRequired === true) {
+        const authorizeUrl = crmInstallConfig?.oauthAuthorizeUrl || "/api/ext/oauth-authorize";
+        console.warn("[CRM Integration] redirecting to OAuth because recover-oauth returned oauthRequired=true", {
+          reason: recovery.reason,
+          reasonCategory: recovery.reasonCategory,
+          httpStatus: recovery.httpStatus,
+          authorizeUrl,
+        });
+        window.location.href = authorizeUrl;
+        return;
+      }
+
+      console.warn("[CRM Integration] not redirecting — recover-oauth failed without oauthRequired=true", recovery);
+      toast({
+        title: "Recovery incomplete",
+        description:
+          recovery.httpStatus === 401
+            ? "Your WhachatCRM session expired. Log in again, then retry Link existing connection."
+            : recovery.reasonCategory === "ownership_mismatch"
+              ? "Stored CRM tokens exist but are not linked to your account. Check /api/ext/connection-diagnostics."
+              : recovery.reason
+                ? `Recovery stopped: ${recovery.reason}`
+                : "Recovery did not complete. Check the browser console for recover-oauth response details.",
+        variant: "destructive",
+      });
+    } catch (error) {
+      console.error("[CRM Integration] recover-oauth threw before redirect decision", error);
       toast({
         title: "Recovery failed",
-        description: "Could not recover existing CRM tokens. Trying full OAuth authorization…",
+        description: "Could not call recover-oauth. Check the browser console and network tab.",
         variant: "destructive",
       });
     } finally {
       setRecoveringCrmOAuth(false);
     }
-
-    const authorizeUrl = crmInstallConfig?.oauthAuthorizeUrl || "/api/ext/oauth-authorize";
-    window.location.href = authorizeUrl;
   };
 
   const startCrmOAuthAuthorizeDebugPage = () => {
@@ -1290,8 +1336,10 @@ export function Integrations() {
                               variant="outline"
                               size="sm"
                               className="w-full border-gray-200 bg-white font-medium text-gray-900 shadow-none hover:bg-gray-50"
-                              disabled={primaryDisabled}
-                              onClick={primaryAction}
+                              disabled={primaryDisabled || (isLeadConnector && recoveringCrmOAuth)}
+                              onClick={() => {
+                                void primaryAction();
+                              }}
                               data-testid={primaryTestId}
                             >
                               {lcStatusFetching && isLeadConnector ? (
@@ -1313,6 +1361,11 @@ export function Integrations() {
                                 <span className="inline-flex items-center justify-center gap-1.5 text-emerald-800">
                                   <Check className="h-3.5 w-3.5" aria-hidden />
                                   Connected
+                                </span>
+                              ) : recoveringCrmOAuth && isLeadConnector ? (
+                                <span className="inline-flex items-center gap-2">
+                                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-gray-400" />
+                                  Recovering…
                                 </span>
                               ) : (
                                 primaryLabel

@@ -101,27 +101,49 @@ async function resolveGhlOAuthRecoveryContext(req: Request) {
 router.post('/recover-oauth', requireAuth, async (req: Request, res: Response) => {
   const userId = resolveSessionUserId(req);
   if (!userId) {
-    return res.status(401).json({ recovered: false, reason: 'not_authenticated', oauthRequired: true });
+    const body = {
+      recovered: false,
+      reason: 'not_authenticated',
+      reasonCategory: 'other',
+      oauthRequired: false,
+    };
+    console.log(JSON.stringify({ tag: '[GHL-OAuth-Recovery]', event: 'recover_oauth_response', ...body }));
+    return res.status(401).json(body);
   }
 
   try {
     const user = await storage.getUser(userId);
     const marketplaceInstallId =
       typeof req.body?.marketplaceInstallId === 'string' ? req.body.marketplaceInstallId : undefined;
+    const recoveryAllowlistEligible = isGhlOAuthRecoveryAllowlisted(user?.email);
 
     logGhlOAuthDiagnostic('oauth_recovery_attempted', {
       userId,
+      userEmail: user?.email ?? null,
       marketplaceInstallId: marketplaceInstallId ?? null,
       isPlatformAdmin: isPlatformAdminSession(req),
+      recoveryAllowlistEligible,
     });
 
     const result = await recoverGhlOAuthFromMarketplaceInstall({
       userId,
       userEmail: user?.email,
       isPlatformAdmin: isPlatformAdminSession(req),
-      isRecoveryAllowlisted: isGhlOAuthRecoveryAllowlisted(user?.email),
+      isRecoveryAllowlisted: recoveryAllowlistEligible,
       marketplaceInstallId,
     });
+
+    console.log(
+      JSON.stringify({
+        tag: '[GHL-OAuth-Recovery]',
+        event: 'recover_oauth_response',
+        userId,
+        userEmail: user?.email ?? null,
+        recoveryAllowlistEligible,
+        sessionIsAdmin: isPlatformAdminSession(req),
+        ...result,
+      }),
+    );
 
     if (!result.recovered) {
       return res.status(result.reason === 'install_not_owned_or_missing_tokens' ? 403 : 200).json(result);
@@ -129,16 +151,21 @@ router.post('/recover-oauth', requireAuth, async (req: Request, res: Response) =
 
     return res.json(result);
   } catch (error) {
-    logGhlOAuthDiagnostic('oauth_recovery_token_invalid', {
-      userId,
-      reason: error instanceof Error ? error.message : String(error),
-    });
-    console.error('[LeadConnector] recover-oauth error:', error);
-    return res.status(500).json({
+    const body = {
       recovered: false,
       reason: 'recovery_failed',
-      oauthRequired: true,
+      reasonCategory: 'other',
+      oauthRequired: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+    logGhlOAuthDiagnostic('oauth_recovery_token_invalid', {
+      userId,
+      reason: body.error,
+      reasonCategory: 'other',
     });
+    console.error('[LeadConnector] recover-oauth error:', error);
+    console.log(JSON.stringify({ tag: '[GHL-OAuth-Recovery]', event: 'recover_oauth_response', userId, ...body }));
+    return res.status(500).json(body);
   }
 });
 

@@ -148,6 +148,44 @@ export async function linkMarketplaceInstallsForCompany(
   }
 }
 
+export type GhlOAuthRecoveryReasonCategory =
+  | "no_recoverable_install"
+  | "invalid_access_token"
+  | "refresh_failed"
+  | "ownership_mismatch"
+  | "other";
+
+export function categorizeGhlOAuthRecoveryReason(reason: string): GhlOAuthRecoveryReasonCategory {
+  switch (reason) {
+    case "no_recoverable_install":
+      return "no_recoverable_install";
+    case "access_token_invalid_no_refresh":
+    case "refreshed_token_invalid":
+      return "invalid_access_token";
+    case "refresh_failed":
+      return "refresh_failed";
+    case "install_not_owned_or_missing_tokens":
+    case "no_ownership_match":
+      return "ownership_mismatch";
+    default:
+      return "other";
+  }
+}
+
+function failureRecoveryResult(
+  reason: string,
+  oauthRequired: boolean,
+  extra?: { recoverableCount?: number },
+): Extract<GhlOAuthRecoveryResult, { recovered: false }> {
+  return {
+    recovered: false,
+    reason,
+    reasonCategory: categorizeGhlOAuthRecoveryReason(reason),
+    oauthRequired,
+    ...extra,
+  };
+}
+
 export type GhlOAuthRecoveryResult =
   | {
       recovered: true;
@@ -161,6 +199,7 @@ export type GhlOAuthRecoveryResult =
   | {
       recovered: false;
       reason: string;
+      reasonCategory: GhlOAuthRecoveryReasonCategory;
       oauthRequired: boolean;
       recoverableCount?: number;
     };
@@ -185,15 +224,17 @@ export async function recoverGhlOAuthFromMarketplaceInstall(params: {
     logGhlOAuthDiagnostic("oauth_recovery_no_candidates", {
       userId: params.userId,
       isPlatformAdmin: Boolean(params.isPlatformAdmin),
+      isRecoveryAllowlisted: Boolean(params.isRecoveryAllowlisted),
+      userEmail: params.userEmail ?? null,
     });
-    return { recovered: false, reason: "no_recoverable_install", oauthRequired: true };
+    return failureRecoveryResult("no_recoverable_install", true);
   }
 
   let target: RecoverableMarketplaceInstall | undefined;
   if (params.marketplaceInstallId) {
     target = candidates.find((row) => row.id === params.marketplaceInstallId);
     if (!target) {
-      return { recovered: false, reason: "install_not_owned_or_missing_tokens", oauthRequired: true };
+      return failureRecoveryResult("install_not_owned_or_missing_tokens", true);
     }
   } else {
     target = candidates[0];
@@ -207,13 +248,11 @@ export async function recoverGhlOAuthFromMarketplaceInstall(params: {
       companyId: target.companyId,
       locationId: target.locationId,
       reason: tokenResult.reason,
+      reasonCategory: categorizeGhlOAuthRecoveryReason(tokenResult.reason),
     });
-    return {
-      recovered: false,
-      reason: tokenResult.reason,
-      oauthRequired: true,
+    return failureRecoveryResult(tokenResult.reason, true, {
       recoverableCount: candidates.length,
-    };
+    });
   }
 
   const { integration, created } = await persistGhlIntegrationForUser(
