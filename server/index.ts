@@ -26,6 +26,7 @@ import { ExpressAdapter } from "@bull-board/express";
 import { getAppOrigin } from "./urlOrigins";
 import { corsMiddleware } from "./corsMiddleware";
 import { rateLimitMiddleware } from "./rateLimitMiddleware";
+import { logGhlOAuthRecoveryAllowlistAtStartup } from "./ghlOAuthRecoveryStartup";
 
 /** SaaS routes must run on APP_URL host (e.g. app.whachatcrm.com), not www marketing. */
 function isSaaSPathname(pathname: string): boolean {
@@ -58,6 +59,8 @@ console.log("ENV CHECK:", {
   REDIS: !!process.env.REDIS_URL,
   APP_URL: !!process.env.APP_URL
 });
+
+logGhlOAuthRecoveryAllowlistAtStartup();
 
 const metaAppSecretForStartupLog = process.env.META_APP_SECRET || "";
 console.log(
