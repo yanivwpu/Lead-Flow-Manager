@@ -60,8 +60,6 @@ console.log("ENV CHECK:", {
   APP_URL: !!process.env.APP_URL
 });
 
-logGhlOAuthRecoveryAllowlistAtStartup();
-
 const metaAppSecretForStartupLog = process.env.META_APP_SECRET || "";
 console.log(
   `[Meta] Using META_APP_SECRET length=${metaAppSecretForStartupLog.length} prefix=${metaAppSecretForStartupLog.slice(0, 4) || "(unset)"}`
@@ -314,6 +312,8 @@ const authDeployMarker =
   process.env.COMMIT_SHA ||
   "(no CI commit SHA — local or unset)";
 console.log("[AUTH FIX DEPLOYED] raw email lookup active", { gitSha: authDeployMarker });
+
+logGhlOAuthRecoveryAllowlistAtStartup("post-auth-deploy-marker");
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -585,6 +585,7 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      logGhlOAuthRecoveryAllowlistAtStartup("http-listen");
       const appUrl = String(process.env.APP_URL || "").replace(/\/+$/, "");
       console.log(
         "[Meta Webhook] Meta App Dashboard callback URL must match:",
