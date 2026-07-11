@@ -54,7 +54,12 @@ export function registerProspectImportRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const metadata = await prospectImportService.getGhlLocationMetadata(req.params.integrationId);
+        const locationId =
+          typeof req.query.locationId === "string" ? req.query.locationId.trim() : undefined;
+        const metadata = await prospectImportService.getGhlLocationMetadata(
+          req.params.integrationId,
+          locationId,
+        );
         res.json(metadata);
       } catch (err) {
         console.error("[ProspectImport] metadata error:", err);
@@ -70,15 +75,18 @@ export function registerProspectImportRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const { integrationId, filters } = req.body as {
+        const { integrationId, locationId, filters } = req.body as {
           integrationId?: string;
+          locationId?: string;
           filters?: ProspectImportContactFilter;
         };
         if (!integrationId) return res.status(400).json({ error: "integrationId required" });
+        if (!locationId?.trim()) return res.status(400).json({ error: "locationId required" });
 
         const destinationUserId = await prospectImportService.resolveProspectImportDestinationUserId();
         const preview = await prospectImportService.previewGhlProspectImport({
           integrationId,
+          locationId: locationId.trim(),
           filters: filters || {},
           destinationUserId,
         });
@@ -97,19 +105,22 @@ export function registerProspectImportRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const { integrationId, filters, importOptions, previewTotal } = req.body as {
+        const { integrationId, locationId, filters, importOptions, previewTotal } = req.body as {
           integrationId?: string;
+          locationId?: string;
           filters?: ProspectImportContactFilter;
           importOptions?: ProspectImportOptions;
           previewTotal?: number;
         };
         if (!integrationId) return res.status(400).json({ error: "integrationId required" });
+        if (!locationId?.trim()) return res.status(400).json({ error: "locationId required" });
         const batchName = String(importOptions?.batchName || "").trim();
         if (!batchName) return res.status(400).json({ error: "batchName is required" });
 
         const job = await prospectImportService.createProspectImportJob({
           initiatedByUserId: (req.user as { id: string }).id,
           integrationId,
+          locationId: locationId.trim(),
           filters: filters || {},
           importOptions: {
             internalTag: "Imported-GHL",

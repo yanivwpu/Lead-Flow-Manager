@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { integrations, type Integration } from "@shared/schema";
+import { readGhlMarketplaceAppIdPrefix } from "@shared/ghlMarketplaceOAuth";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
 
@@ -84,6 +85,95 @@ export function readGhlLocationId(integration: Integration): string | null {
   const config = (integration.config || {}) as Record<string, unknown>;
   const id = String(config.locationId || "").trim();
   return id || null;
+}
+
+export function readGhlCompanyId(integration: Integration): string | null {
+  const config = (integration.config || {}) as Record<string, unknown>;
+  const id = String(config.companyId || "").trim();
+  return id || null;
+}
+
+export function readGhlUserType(integration: Integration): string | null {
+  const config = (integration.config || {}) as Record<string, unknown>;
+  const userType = String(config.userType || "").trim();
+  return userType || null;
+}
+
+/** True when OAuth token is agency/company-scoped (no sub-account locationId on the integration). */
+export function isGhlCompanyScopedIntegration(integration: Integration): boolean {
+  if (readGhlLocationId(integration)) return false;
+  const userType = (readGhlUserType(integration) || "").toLowerCase();
+  return userType === "company" || userType === "agency" || Boolean(readGhlCompanyId(integration));
+}
+
+export function resolveGhlProspectLocationId(
+  integration: Integration,
+  selectedLocationId?: string | null,
+): string | null {
+  const override = String(selectedLocationId || "").trim();
+  if (override) return override;
+  return readGhlLocationId(integration);
+}
+
+export type GhlInstalledLocation = {
+  locationId: string;
+  name: string;
+};
+
+function readGhlMarketplaceAppId(): string | null {
+  const clientId = String(process.env.GHL_CLIENT_ID || "").trim();
+  if (!clientId) return null;
+  return readGhlMarketplaceAppIdPrefix(clientId);
+}
+
+export async function fetchGhlInstalledLocations(params: {
+  token: string;
+  companyId: string;
+  appId?: string | null;
+}): Promise<GhlInstalledLocation[]> {
+  const companyId = params.companyId.trim();
+  const appId = (params.appId || readGhlMarketplaceAppId() || "").trim();
+  if (!companyId || !appId) return [];
+
+  const collected: GhlInstalledLocation[] = [];
+  let skip = 0;
+  const limit = 100;
+
+  for (let page = 0; page < 20; page++) {
+    const query = new URLSearchParams({
+      companyId,
+      appId,
+      limit: String(limit),
+      skip: String(skip),
+      isInstalled: "true",
+    });
+    const data = (await ghlFetch(
+      `${GHL_API_BASE}/oauth/installedLocations?${query.toString()}`,
+      params.token,
+    )) as {
+      locations?: Array<Record<string, unknown>>;
+    };
+
+    const batch = (data.locations ?? [])
+      .map((row) => {
+        const locationId = String(row.locationId || row._id || "").trim();
+        if (!locationId) return null;
+        const name = String(row.name || row.locationName || row.businessName || locationId).trim();
+        return { locationId, name: name || locationId };
+      })
+      .filter((row): row is GhlInstalledLocation => Boolean(row));
+
+    collected.push(...batch);
+    if (batch.length < limit) break;
+    skip += limit;
+  }
+
+  const seen = new Set<string>();
+  return collected.filter((row) => {
+    if (seen.has(row.locationId)) return false;
+    seen.add(row.locationId);
+    return true;
+  });
 }
 
 export async function searchGhlContacts(params: {

@@ -126,6 +126,7 @@ export function GhlProspectImport() {
   const [step, setStep] = useState<Step>(1);
   const [provider, setProvider] = useState<ProspectImportProvider>("gohighlevel");
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<string>("");
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("");
   const [filters, setFilters] = useState<ProspectImportContactFilter>({ importLimit: 100 });
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
   const [preview, setPreview] = useState<ProspectImportPreviewResult | null>(null);
@@ -151,11 +152,15 @@ export function GhlProspectImport() {
   });
 
   const metadataQuery = useQuery({
-    queryKey: ["/api/growth-tools/prospect-import/ghl/metadata", selectedIntegrationId],
-    enabled: Boolean(selectedIntegrationId),
+    queryKey: [
+      "/api/growth-tools/prospect-import/ghl/metadata",
+      selectedIntegrationId,
+      selectedLocationId,
+    ],
+    enabled: Boolean(selectedIntegrationId && selectedLocationId),
     queryFn: () =>
       fetchJson<LocationMetadata>(
-        `/api/growth-tools/prospect-import/ghl/locations/${selectedIntegrationId}/metadata`,
+        `/api/growth-tools/prospect-import/ghl/locations/${selectedIntegrationId}/metadata?locationId=${encodeURIComponent(selectedLocationId)}`,
       ),
   });
 
@@ -191,7 +196,7 @@ export function GhlProspectImport() {
       setFilters((f) => ({ ...f, importLimit: tpl.defaultImportLimit ?? 100 }));
     }
     setAppliedTemplateName(tpl.templateName);
-    if (selectedIntegrationId) {
+    if (selectedIntegrationId && selectedLocationId) {
       setAppliedTemplateName(null);
       setStep(2);
       toast({
@@ -207,15 +212,16 @@ export function GhlProspectImport() {
     });
   };
 
-  const selectLocation = (integrationId: string) => {
-    setSelectedIntegrationId(integrationId);
-    if (step === 1 && integrationId) {
+  const selectLocation = (loc: ProspectImportLocation) => {
+    setSelectedIntegrationId(loc.integrationId);
+    setSelectedLocationId(loc.locationId);
+    if (step === 1 && loc.integrationId && loc.locationId) {
       setAppliedTemplateName(null);
       setStep(2);
     }
   };
 
-  const canContinueFromStep1 = Boolean(selectedIntegrationId);
+  const canContinueFromStep1 = Boolean(selectedIntegrationId && selectedLocationId);
 
   const previewMutation = useMutation({
     mutationFn: async () => {
@@ -226,7 +232,11 @@ export function GhlProspectImport() {
       return fetchJson<ProspectImportPreviewResult>("/api/growth-tools/prospect-import/ghl/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ integrationId: selectedIntegrationId, filters: mergedFilters }),
+        body: JSON.stringify({
+          integrationId: selectedIntegrationId,
+          locationId: selectedLocationId,
+          filters: mergedFilters,
+        }),
       });
     },
     onSuccess: (data) => {
@@ -254,6 +264,7 @@ export function GhlProspectImport() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             integrationId: selectedIntegrationId,
+            locationId: selectedLocationId,
             filters: mergedFilters,
             previewTotal: preview?.contacts.length ?? 0,
             importOptions: {
@@ -366,8 +377,11 @@ export function GhlProspectImport() {
   };
 
   const selectedLocation = useMemo(
-    () => locationsQuery.data?.locations.find((l) => l.integrationId === selectedIntegrationId),
-    [locationsQuery.data, selectedIntegrationId],
+    () =>
+      locationsQuery.data?.locations.find(
+        (l) => l.integrationId === selectedIntegrationId && l.locationId === selectedLocationId,
+      ),
+    [locationsQuery.data, selectedIntegrationId, selectedLocationId],
   );
 
   const progressPct =
@@ -540,9 +554,10 @@ export function GhlProspectImport() {
                 <div className="grid gap-2 sm:grid-cols-2">
                   {(locationsQuery.data?.locations ?? []).map((loc) => (
                     <label
-                      key={loc.integrationId}
+                      key={loc.id}
                       className={`flex cursor-pointer items-center gap-3 rounded-xl border p-4 transition-colors ${
-                        selectedIntegrationId === loc.integrationId
+                        selectedIntegrationId === loc.integrationId &&
+                        selectedLocationId === loc.locationId
                           ? "border-brand-green bg-emerald-50/50"
                           : "border-gray-200 hover:border-gray-300"
                       }`}
@@ -551,8 +566,11 @@ export function GhlProspectImport() {
                         type="radio"
                         name="ghl-location"
                         className="h-4 w-4 accent-brand-green"
-                        checked={selectedIntegrationId === loc.integrationId}
-                        onChange={() => selectLocation(loc.integrationId)}
+                        checked={
+                          selectedIntegrationId === loc.integrationId &&
+                          selectedLocationId === loc.locationId
+                        }
+                        onChange={() => selectLocation(loc)}
                       />
                       <div>
                         <p className="font-medium text-gray-900">{loc.name}</p>
@@ -562,7 +580,7 @@ export function GhlProspectImport() {
                   ))}
                 </div>
               )}
-              {!selectedIntegrationId && !locationsQuery.isLoading ? (
+              {!canContinueFromStep1 && !locationsQuery.isLoading ? (
                 <WizardValidationHint>Please select a GoHighLevel location.</WizardValidationHint>
               ) : null}
             </>

@@ -27,7 +27,7 @@ import {
   listGhlProspectLocations,
   previewGhlProspectImport,
 } from "./providers/ghlProspectProvider";
-import { getIntegrationById, readGhlLocationId } from "./ghlApiClient";
+import { getIntegrationById, resolveGhlProspectLocationId } from "./ghlApiClient";
 import {
   canUndoImportJob,
   executeProspectImportUndo,
@@ -133,6 +133,7 @@ export async function listProspectImportHistory(limit = 30): Promise<ProspectImp
 export async function createProspectImportJob(params: {
   initiatedByUserId: string;
   integrationId: string;
+  locationId: string;
   filters: ProspectImportContactFilter;
   importOptions: ProspectImportOptions;
   previewTotal: number;
@@ -142,7 +143,10 @@ export async function createProspectImportJob(params: {
 
   const destinationUserId = await resolveProspectImportDestinationUserId();
   const integration = await getIntegrationById(params.integrationId);
-  const locationId = integration ? readGhlLocationId(integration) : null;
+  const locationId = integration
+    ? resolveGhlProspectLocationId(integration, params.locationId)
+    : params.locationId.trim();
+  if (!locationId) throw new Error("GHL token or location unavailable");
 
   const skipDuplicates = params.importOptions.skipDuplicates !== false;
   const importOptions: ProspectImportOptions = {
@@ -255,6 +259,7 @@ async function runProspectImportJob(jobId: string): Promise<void> {
 
     const rawContacts = await fetchGhlContactsForImport({
       integrationId: job.sourceIntegrationId!,
+      locationId: job.sourceLocationId,
       filters,
       externalIds: selectedIds,
     });

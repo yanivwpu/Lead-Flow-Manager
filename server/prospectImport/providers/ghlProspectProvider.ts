@@ -1,22 +1,28 @@
+import { eq } from "drizzle-orm";
 import type {
   ProspectImportContactFilter,
   ProspectImportLocation,
   ProspectImportPreviewContact,
   ProspectImportPreviewResult,
 } from "@shared/prospectImport";
-import { listGhlInstallationsForAdmin } from "../../ghlMarketplaceService";
+import { ghlMarketplaceInstalls, integrations } from "@shared/schema";
+import { db } from "../../../drizzle/db";
 import {
   logGhlOAuthDiagnostic,
   summarizeGhlConnectionState,
 } from "../../ghlConnectionDiagnostics";
 import {
+  fetchGhlInstalledLocations,
   fetchGhlLocationTags,
   fetchGhlLocationUsers,
   fetchGhlPipelines,
   getIntegrationById,
   getValidGhlToken,
+  isGhlCompanyScopedIntegration,
   normalizeGhlContactName,
+  readGhlCompanyId,
   readGhlLocationId,
+  resolveGhlProspectLocationId,
   searchGhlContacts,
   type GhlRawContact,
 } from "../ghlApiClient";
@@ -27,17 +33,91 @@ const DEFAULT_IMPORT_LIMIT = 100;
 const MAX_IMPORT_LIMIT = 1000;
 const PAGE_SIZE = 100;
 
+type GhlInstalledLocation = { locationId: string; name: string };
+
+async function listMarketplaceLocationsForCompany(companyId: string): Promise<GhlInstalledLocation[]> {
+  const rows = await db
+    .select({
+      locationId: ghlMarketplaceInstalls.locationId,
+      subAccountName: ghlMarketplaceInstalls.subAccountName,
+      installationStatus: ghlMarketplaceInstalls.installationStatus,
+    })
+    .from(ghlMarketplaceInstalls)
+    .where(eq(ghlMarketplaceInstalls.companyId, companyId));
+
+  const seen = new Set<string>();
+  const locations: GhlInstalledLocation[] = [];
+  for (const row of rows) {
+    const locationId = String(row.locationId || "").trim();
+    if (!locationId || seen.has(locationId)) continue;
+    if ((row.installationStatus || "").toLowerCase() === "uninstalled") continue;
+    seen.add(locationId);
+    locations.push({
+      locationId,
+      name: String(row.subAccountName || locationId).trim() || locationId,
+    });
+  }
+  return locations;
+}
+
+async function resolveCompanyScopedLocations(integration: Awaited<ReturnType<typeof getIntegrationById>>): Promise<GhlInstalledLocation[]> {
+  if (!integration) return [];
+  const companyId = readGhlCompanyId(integration);
+  if (!companyId) return [];
+
+  const token = await getValidGhlToken(integration);
+  if (token) {
+    try {
+      const fromApi = await fetchGhlInstalledLocations({ token, companyId });
+      if (fromApi.length > 0) return fromApi;
+    } catch (err) {
+      logGhlOAuthDiagnostic("prospect_import_installed_locations_failed", {
+        integrationId: integration.id,
+        companyId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return listMarketplaceLocationsForCompany(companyId);
+}
+
 export async function listGhlProspectLocations(): Promise<ProspectImportLocation[]> {
-  const rows = await listGhlInstallationsForAdmin();
-  const locations = rows
-    .filter((r) => r.isActive && r.integrationId && r.locationId && r.locationId !== "Unknown")
-    .map((r) => ({
-      id: r.integrationId!,
-      integrationId: r.integrationId!,
-      name: r.subAccountName || r.agency || r.locationId,
-      locationId: r.locationId,
-      isActive: r.isActive,
-    }));
+  const rows = await db
+    .select()
+    .from(integrations)
+    .where(eq(integrations.type, "gohighlevel"));
+
+  const locations: ProspectImportLocation[] = [];
+
+  for (const integration of rows) {
+    if (!integration.isActive || !integration.accessToken) continue;
+
+    const configLocationId = readGhlLocationId(integration);
+    if (configLocationId) {
+      locations.push({
+        id: `${integration.id}:${configLocationId}`,
+        integrationId: integration.id,
+        name: integration.name,
+        locationId: configLocationId,
+        isActive: true,
+      });
+      continue;
+    }
+
+    if (!isGhlCompanyScopedIntegration(integration)) continue;
+
+    const companyLocations = await resolveCompanyScopedLocations(integration);
+    for (const loc of companyLocations) {
+      locations.push({
+        id: `${integration.id}:${loc.locationId}`,
+        integrationId: integration.id,
+        name: loc.name,
+        locationId: loc.locationId,
+        isActive: true,
+      });
+    }
+  }
 
   if (locations.length === 0) {
     const summary = await summarizeGhlConnectionState();
@@ -61,11 +141,14 @@ export type GhlLocationMetadata = {
   users: { id: string; name: string; email?: string }[];
 };
 
-export async function getGhlLocationMetadata(integrationId: string): Promise<GhlLocationMetadata> {
+export async function getGhlLocationMetadata(
+  integrationId: string,
+  selectedLocationId?: string | null,
+): Promise<GhlLocationMetadata> {
   const integration = await getIntegrationById(integrationId);
   if (!integration?.isActive) throw new Error("GHL integration not found or inactive");
   const token = await getValidGhlToken(integration);
-  const locationId = readGhlLocationId(integration);
+  const locationId = resolveGhlProspectLocationId(integration, selectedLocationId);
   if (!token || !locationId) throw new Error("GHL token or location unavailable");
 
   const [tags, pipelines, users] = await Promise.all([
@@ -155,13 +238,14 @@ function mapRawContact(c: GhlRawContact): Omit<ProspectImportPreviewContact, "is
 
 export async function previewGhlProspectImport(params: {
   integrationId: string;
+  locationId?: string | null;
   filters: ProspectImportContactFilter;
   destinationUserId: string;
 }): Promise<ProspectImportPreviewResult> {
   const integration = await getIntegrationById(params.integrationId);
   if (!integration?.isActive) throw new Error("GHL integration not found or inactive");
   const token = await getValidGhlToken(integration);
-  const locationId = readGhlLocationId(integration);
+  const locationId = resolveGhlProspectLocationId(integration, params.locationId);
   if (!token || !locationId) throw new Error("GHL token or location unavailable");
 
   const limit = Math.min(
@@ -212,13 +296,14 @@ export async function previewGhlProspectImport(params: {
 
 export async function fetchGhlContactsForImport(params: {
   integrationId: string;
+  locationId?: string | null;
   filters: ProspectImportContactFilter;
   externalIds?: string[];
 }): Promise<GhlRawContact[]> {
   const integration = await getIntegrationById(params.integrationId);
   if (!integration?.isActive) throw new Error("GHL integration not found or inactive");
   const token = await getValidGhlToken(integration);
-  const locationId = readGhlLocationId(integration);
+  const locationId = resolveGhlProspectLocationId(integration, params.locationId);
   if (!token || !locationId) throw new Error("GHL token or location unavailable");
 
   const selected = new Set(params.externalIds ?? []);
