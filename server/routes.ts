@@ -19,6 +19,7 @@ import { registerCampaignEnrollmentRoutes } from "./routes/campaignEnrollments";
 import { registerWebhookRoutes } from "./routes/webhooks";
 import { registerInventoryRoutes } from "./routes/inventory";
 import { registerProspectImportRoutes } from "./routes/prospectImport";
+import { registerProspectIntelligenceRoutes } from "./routes/prospectIntelligence";
 import { registerPublicListingRoutes } from "./routes/publicListings";
 import { registerPublicAgentPageRoutes } from "./routes/publicAgentPage";
 import { registerAgentPageSettingsRoutes } from "./routes/agentPageSettings";
@@ -11248,6 +11249,7 @@ export async function registerRoutes(
   registerWebhookRoutes(app);
   registerInventoryRoutes(app);
   registerProspectImportRoutes(app);
+  registerProspectIntelligenceRoutes(app);
   registerPublicListingRoutes(app);
   registerPublicAgentPageRoutes(app);
   registerAgentPageSettingsRoutes(app);

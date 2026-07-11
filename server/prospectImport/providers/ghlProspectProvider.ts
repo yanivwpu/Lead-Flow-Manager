@@ -157,69 +157,11 @@ export async function getGhlLocationMetadata(
   return { tags, pipelines, users };
 }
 
-function parseDate(value: string | undefined): Date | null {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function contactPassesFilters(c: GhlRawContact, filters: ProspectImportContactFilter): boolean {
-  const tags = (c.tags ?? []).map((t) => t.toLowerCase());
-  if (filters.tags?.length) {
-    const wanted = filters.tags.map((t) => t.toLowerCase());
-    if (!wanted.some((t) => tags.includes(t))) return false;
-  }
-
-  if (filters.contactSource?.trim()) {
-    const src = String(c.source || "").toLowerCase();
-    if (!src.includes(filters.contactSource.trim().toLowerCase())) return false;
-  }
-
-  if (filters.assignedUserId?.trim() && c.assignedTo !== filters.assignedUserId.trim()) {
-    return false;
-  }
-
-  const created = parseDate(c.dateAdded);
-  if (filters.createdAfter && created) {
-    const after = new Date(filters.createdAfter);
-    if (created < after) return false;
-  }
-  if (filters.createdBefore && created) {
-    const before = new Date(filters.createdBefore);
-    if (created > before) return false;
-  }
-
-  if (filters.lastActivityDays) {
-    const activity = parseDate(c.lastActivity || c.dateUpdated || c.dateAdded);
-    if (activity) {
-      const cutoff = Date.now() - filters.lastActivityDays * 24 * 60 * 60 * 1000;
-      if (activity.getTime() < cutoff) return false;
-    }
-  }
-
-  const hasEmail = Boolean(String(c.email || "").trim());
-  const hasPhone = Boolean(String(c.phone || "").replace(/\D/g, "").length >= 7);
-  if (filters.hasBoth && !(hasEmail && hasPhone)) return false;
-  if (filters.hasEmail && !hasEmail) return false;
-  if (filters.hasPhone && !hasPhone) return false;
-
-  if (filters.search?.trim()) {
-    const q = filters.search.trim().toLowerCase();
-    const hay = [
-      normalizeGhlContactName(c),
-      c.companyName,
-      c.email,
-      c.phone,
-      ...(c.tags ?? []),
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-    if (!hay.includes(q)) return false;
-  }
-
-  return true;
-}
+import {
+  contactPassesFilters,
+  explainGhlContactFilterRejection,
+  sanitizeGhlContactForDiagnostics,
+} from "../ghlContactFilters";
 
 function mapRawContact(c: GhlRawContact): Omit<ProspectImportPreviewContact, "isDuplicate" | "duplicateReason"> {
   return {
@@ -239,6 +181,7 @@ export async function previewGhlProspectImport(params: {
   locationId?: string | null;
   filters: ProspectImportContactFilter;
   destinationUserId: string;
+  appliedTemplateHint?: string | null;
 }): Promise<ProspectImportPreviewResult> {
   const integration = await getIntegrationById(params.integrationId);
   if (!integration?.isActive) throw new Error("GHL integration not found or inactive");
@@ -255,6 +198,11 @@ export async function previewGhlProspectImport(params: {
   let page = 1;
   let totalReported: number | undefined;
   let skippedByFilters = 0;
+  const skippedContacts: {
+    externalId: string;
+    contact: Record<string, unknown>;
+    skipReason: string;
+  }[] = [];
 
   while (matched.length < limit) {
     const { contacts, total } = await searchGhlContacts({
@@ -268,8 +216,16 @@ export async function previewGhlProspectImport(params: {
     if (!contacts.length) break;
 
     for (const c of contacts) {
-      if (!contactPassesFilters(c, params.filters)) {
+      const skipReason = explainGhlContactFilterRejection(c, params.filters);
+      if (skipReason) {
         skippedByFilters += 1;
+        if (skippedContacts.length < 25) {
+          skippedContacts.push({
+            externalId: c.id,
+            contact: sanitizeGhlContactForDiagnostics(c),
+            skipReason,
+          });
+        }
         continue;
       }
       matched.push(c);
@@ -281,6 +237,22 @@ export async function previewGhlProspectImport(params: {
     if (page > 50) break;
   }
 
+  if (skippedContacts.length > 0) {
+    console.log(
+      JSON.stringify({
+        tag: "[GHL-ProspectImport-Preview]",
+        event: "prospect_import_filter_skips",
+        at: new Date().toISOString(),
+        integrationId: params.integrationId,
+        locationId,
+        appliedTemplateHint: params.appliedTemplateHint ?? null,
+        activeFilters: params.filters,
+        skippedByFilters,
+        skippedContacts,
+      }),
+    );
+  }
+
   const destinationContacts = await storage.getContacts(params.destinationUserId, 50000);
 
   return assembleProspectPreviewResult({
@@ -289,6 +261,11 @@ export async function previewGhlProspectImport(params: {
     skippedByFilters,
     totalFound: totalReported ?? matched.length,
     truncated: matched.length >= limit,
+    diagnostics: {
+      activeFilters: params.filters,
+      appliedTemplateHint: params.appliedTemplateHint ?? null,
+      skippedContacts,
+    },
   });
 }
 

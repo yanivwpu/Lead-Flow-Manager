@@ -132,6 +132,7 @@ export function assembleProspectPreviewResult(params: {
   totalFound?: number;
   truncated?: boolean;
   updateMissingFieldsOnly?: boolean;
+  diagnostics?: import("@shared/prospectImport").ProspectImportPreviewDiagnostics;
 }): ProspectImportPreviewResult {
   const dedupIndex = buildProspectDedupIndex(params.destinationContacts);
   const contacts = markPreviewDuplicates(params.rows, dedupIndex);
@@ -145,5 +146,6 @@ export function assembleProspectPreviewResult(params: {
     contacts,
     truncated: params.truncated ?? false,
     stats,
+    diagnostics: params.diagnostics,
   };
 }

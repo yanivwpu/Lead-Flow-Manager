@@ -1916,6 +1916,71 @@ export const prospectImportTemplates = pgTable("prospect_import_templates", {
 
 export type ProspectImportTemplateRow = typeof prospectImportTemplates.$inferSelect;
 
+/** Phase 2 — AI prospect intelligence per imported contact (queryable). */
+export const prospectIntelligence = pgTable("prospect_intelligence", {
+  contactId: varchar("contact_id").primaryKey().references(() => contacts.id, { onDelete: "cascade" }),
+  importJobId: varchar("import_job_id").references(() => prospectImportJobs.id, { onDelete: "set null" }),
+  analysisStatus: text("analysis_status").notNull().default("pending"),
+  reviewStatus: text("review_status").notNull().default("pending"),
+  industry: text("industry"),
+  businessType: text("business_type"),
+  companyName: text("company_name"),
+  jobTitle: text("job_title"),
+  agencyLikelihood: integer("agency_likelihood"),
+  shopifyMerchantLikelihood: integer("shopify_merchant_likelihood"),
+  realEstateLikelihood: integer("real_estate_likelihood"),
+  localBusinessLikelihood: integer("local_business_likelihood"),
+  saasLikelihood: integer("saas_likelihood"),
+  potentialFit: text("potential_fit"),
+  leadScore: integer("lead_score"),
+  priority: text("priority"),
+  recommendedOffer: text("recommended_offer"),
+  suggestedOutreachAngle: text("suggested_outreach_angle"),
+  suggestedFirstMessage: text("suggested_first_message"),
+  reasoningSummary: text("reasoning_summary"),
+  needsReview: boolean("needs_review").notNull().default(false),
+  confidence: integer("confidence"),
+  aiModel: text("ai_model"),
+  aiVersion: text("ai_version"),
+  promptTokens: integer("prompt_tokens"),
+  completionTokens: integer("completion_tokens"),
+  rawResult: jsonb("raw_result").default(sql`'{}'::jsonb`),
+  errorMessage: text("error_message"),
+  approvedAt: timestamp("approved_at"),
+  approvedByUserId: varchar("approved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  analyzedAt: timestamp("analyzed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type ProspectIntelligenceRow = typeof prospectIntelligence.$inferSelect;
+
+/** Phase 2 — batch AI analysis jobs for prospect import batches. */
+export const prospectIntelligenceJobs = pgTable("prospect_intelligence_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  importJobId: varchar("import_job_id").notNull().references(() => prospectImportJobs.id, { onDelete: "cascade" }),
+  initiatedByUserId: varchar("initiated_by_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"),
+  contactIds: jsonb("contact_ids").notNull().default(sql`'[]'::jsonb`),
+  progressCurrent: integer("progress_current").default(0),
+  progressTotal: integer("progress_total").default(0),
+  resultAnalyzed: integer("result_analyzed").default(0),
+  resultHighPriority: integer("result_high_priority").default(0),
+  resultMediumPriority: integer("result_medium_priority").default(0),
+  resultLowPriority: integer("result_low_priority").default(0),
+  resultNeedsReview: integer("result_needs_review").default(0),
+  resultErrors: integer("result_errors").default(0),
+  aiModel: text("ai_model"),
+  promptTokensTotal: integer("prompt_tokens_total").default(0),
+  completionTokensTotal: integer("completion_tokens_total").default(0),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+});
+
+export type ProspectIntelligenceJobRow = typeof prospectIntelligenceJobs.$inferSelect;
+
 export const calendlyCanceledEventTombstones = pgTable(
   "calendly_canceled_event_tombstones",
   {

@@ -49,8 +49,9 @@ export class AIProvider {
     options?: {
       jsonMode?: boolean;
       maxTokens?: number;
+      returnUsage?: boolean;
     }
-  ): Promise<string> {
+  ): Promise<string | { content: string; usage?: { promptTokens: number; completionTokens: number } }> {
     const config = this.getModelConfig(capability);
     
     if (config.provider === "openai") {
@@ -63,8 +64,8 @@ export class AIProvider {
   private async openaiComplete(
     config: AIProviderConfig,
     messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
-    options?: { jsonMode?: boolean; maxTokens?: number }
-  ): Promise<string> {
+    options?: { jsonMode?: boolean; maxTokens?: number; returnUsage?: boolean }
+  ): Promise<string | { content: string; usage?: { promptTokens: number; completionTokens: number } }> {
     try {
       const response = await this.openaiClient.chat.completions.create({
         model: config.model,
@@ -73,7 +74,17 @@ export class AIProvider {
         ...(options?.jsonMode ? { response_format: { type: "json_object" as const } } : {}),
       });
 
-      return response.choices[0]?.message?.content || "";
+      const content = response.choices[0]?.message?.content || "";
+      if (options?.returnUsage) {
+        return {
+          content,
+          usage: {
+            promptTokens: response.usage?.prompt_tokens ?? 0,
+            completionTokens: response.usage?.completion_tokens ?? 0,
+          },
+        };
+      }
+      return content;
     } catch (error) {
       console.error(`[AIProvider] Error with ${config.provider}/${config.model}:`, error);
       throw error;

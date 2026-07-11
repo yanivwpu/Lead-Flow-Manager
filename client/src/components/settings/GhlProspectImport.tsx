@@ -59,6 +59,7 @@ import type {
   ProspectImportReason,
   ProspectImportTemplate,
   ProspectImportUndoPreview,
+  ProspectIntelligenceJobSummary,
 } from "@shared/prospectImport";
 import {
   PROSPECT_IMPORT_INTERNAL_TAGS,
@@ -67,6 +68,7 @@ import {
   PROSPECT_IMPORT_PROVIDERS,
   PROSPECT_IMPORT_REASONS,
 } from "@shared/prospectImport";
+import { AnalyzeConfirmDialog, ProspectIntelligencePanel } from "./ProspectIntelligencePanel";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
@@ -141,6 +143,12 @@ export function GhlProspectImport() {
   const [undoJob, setUndoJob] = useState<ProspectImportHistoryItem | null>(null);
   const [undoPreview, setUndoPreview] = useState<ProspectImportUndoPreview | null>(null);
   const [appliedTemplateName, setAppliedTemplateName] = useState<string | null>(null);
+  const [analysisJob, setAnalysisJob] = useState<ProspectIntelligenceJobSummary | null>(null);
+  const [analyzeDialog, setAnalyzeDialog] = useState<{
+    importJobId: string;
+    batchName: string;
+    contactCount: number;
+  } | null>(null);
 
   const locationsQuery = useQuery({
     queryKey: ["/api/growth-tools/prospect-import/ghl/locations"],
@@ -221,6 +229,38 @@ export function GhlProspectImport() {
     }
   };
 
+  const pollAnalysisJob = useCallback(async (jobId: string) => {
+    try {
+      const data = await fetchJson<{ job: ProspectIntelligenceJobSummary }>(
+        `/api/growth-tools/prospect-intelligence/jobs/${jobId}`,
+      );
+      setAnalysisJob(data.job);
+      if (data.job.status === "running" || data.job.status === "pending") {
+        setTimeout(() => void pollAnalysisJob(jobId), 2000);
+      } else {
+        void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+        void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-import/dashboard"] });
+      }
+    } catch {
+      /* ignore transient poll errors */
+    }
+  }, [queryClient]);
+
+  useEffect(() => {
+    if (analysisJob?.status === "running" || analysisJob?.status === "pending") {
+      const timer = setTimeout(() => void pollAnalysisJob(analysisJob.id), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [analysisJob, pollAnalysisJob]);
+
+  const openAnalyzeDialog = (job: ProspectImportJobSummary) => {
+    setAnalyzeDialog({
+      importJobId: job.id,
+      batchName: job.batchName,
+      contactCount: job.imported,
+    });
+  };
+
   const canContinueFromStep1 = Boolean(selectedIntegrationId && selectedLocationId);
 
   const previewMutation = useMutation({
@@ -236,6 +276,7 @@ export function GhlProspectImport() {
           integrationId: selectedIntegrationId,
           locationId: selectedLocationId,
           filters: mergedFilters,
+          appliedTemplateHint: appliedTemplateName,
         }),
       });
     },
@@ -821,6 +862,31 @@ export function GhlProspectImport() {
             </div>
           </div>
 
+          {preview.diagnostics?.skippedContacts?.length ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+              <p className="text-sm font-semibold text-amber-900">Skipped by filters — diagnostics</p>
+              {preview.diagnostics.appliedTemplateHint ? (
+                <p className="mt-1 text-xs text-amber-800">
+                  Template: <span className="font-medium">{preview.diagnostics.appliedTemplateHint}</span>
+                </p>
+              ) : null}
+              <div className="mt-3 space-y-3">
+                {preview.diagnostics.skippedContacts.map((row) => (
+                  <div key={row.externalId} className="rounded-md border border-amber-100 bg-white/80 p-3 text-sm">
+                    <p className="font-medium text-gray-900">
+                      {(row.contact.name as string) || row.externalId}
+                    </p>
+                    <p className="mt-1 text-amber-900">{row.skipReason}</p>
+                    <p className="mt-2 font-mono text-xs text-gray-600">
+                      tags: {JSON.stringify(row.contact.tags ?? [])} · source:{" "}
+                      {String(row.contact.source || "(empty)")}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {preview.tagBreakdown.length > 0 ? (
             <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
               <p className="text-sm font-medium text-gray-700">Tag breakdown</p>
@@ -1053,13 +1119,17 @@ export function GhlProspectImport() {
                   <div>
                     <p className="font-medium text-gray-900">Analyze with AI</p>
                     <p className="text-xs text-gray-500">
-                      Coming next — AI will score prospects, classify business type, suggest outreach
-                      angle, and draft a first message.
+                      Classify prospects, score WhaChatCRM fit, and draft a personalized first message.
                     </p>
                   </div>
-                  <Button type="button" variant="outline" disabled>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!activeJob || activeJob.imported < 1}
+                    onClick={() => activeJob && openAnalyzeDialog(activeJob)}
+                  >
                     <Brain className="mr-2 h-4 w-4" />
-                    Coming next
+                    Analyze with AI
                   </Button>
                 </div>
               </div>
@@ -1114,21 +1184,34 @@ export function GhlProspectImport() {
                     <TableCell>{job.errors}</TableCell>
                     <TableCell className="text-xs">{job.internalTag || "—"}</TableCell>
                     <TableCell>
-                      {job.canUndo ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => void openUndoDialog(job)}
-                        >
-                          <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                          Undo
-                        </Button>
-                      ) : job.undoBlockedReason ? (
-                        <span className="text-xs text-gray-400" title={job.undoBlockedReason}>
-                          —
-                        </span>
-                      ) : null}
+                      <div className="flex flex-wrap gap-1">
+                        {job.status === "completed" && job.undoStatus !== "undone" && job.imported > 0 ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openAnalyzeDialog(job)}
+                          >
+                            <Brain className="h-3.5 w-3.5 mr-1" />
+                            Analyze
+                          </Button>
+                        ) : null}
+                        {job.canUndo ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => void openUndoDialog(job)}
+                          >
+                            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                            Undo
+                          </Button>
+                        ) : job.undoBlockedReason ? (
+                          <span className="text-xs text-gray-400" title={job.undoBlockedReason}>
+                            —
+                          </span>
+                        ) : null}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1137,6 +1220,25 @@ export function GhlProspectImport() {
           </div>
         )}
       </section>
+
+      <ProspectIntelligencePanel
+        activeAnalysisJob={analysisJob}
+        onAnalysisJobUpdate={setAnalysisJob}
+      />
+
+      {analyzeDialog ? (
+        <AnalyzeConfirmDialog
+          open={Boolean(analyzeDialog)}
+          onOpenChange={(open) => !open && setAnalyzeDialog(null)}
+          importJobId={analyzeDialog.importJobId}
+          batchName={analyzeDialog.batchName}
+          contactCount={analyzeDialog.contactCount}
+          onStarted={(job) => {
+            setAnalysisJob(job);
+            void pollAnalysisJob(job.id);
+          }}
+        />
+      ) : null}
 
       <Dialog open={Boolean(undoJob)} onOpenChange={(open) => !open && setUndoJob(null)}>
         <DialogContent>

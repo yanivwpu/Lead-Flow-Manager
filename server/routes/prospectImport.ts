@@ -1,5 +1,4 @@
-import type { Express, Request, Response, NextFunction } from "express";
-import { canAccessProspectImportTools } from "@shared/prospectImportAccess";
+import type { Express, Request, Response } from "express";
 import type {
   ProspectImportContactFilter,
   ProspectImportInternalTag,
@@ -7,20 +6,9 @@ import type {
   ProspectImportProvider,
   ProspectImportReason,
 } from "@shared/prospectImport";
+import { canAccessProspectImportTools } from "@shared/prospectImportAccess";
 import { prospectImportService } from "../prospectImport/prospectImportService";
-
-function requireProspectImportAccess(req: Request, res: Response, next: NextFunction): void {
-  if (!req.isAuthenticated?.() || !req.user) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
-  const session = req.session as { isAdmin?: boolean } | undefined;
-  if (!canAccessProspectImportTools(req.user as { id: string; email?: string | null }, session)) {
-    res.status(403).json({ error: "Growth Tools access denied" });
-    return;
-  }
-  next();
-}
+import { requireProspectImportAccess } from "./prospectImportAccess";
 
 export function registerProspectImportRoutes(app: Express): void {
   app.get("/api/growth-tools/prospect-import/access", (req, res) => {
@@ -75,10 +63,11 @@ export function registerProspectImportRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const { integrationId, locationId, filters } = req.body as {
+        const { integrationId, locationId, filters, appliedTemplateHint } = req.body as {
           integrationId?: string;
           locationId?: string;
           filters?: ProspectImportContactFilter;
+          appliedTemplateHint?: string | null;
         };
         if (!integrationId) return res.status(400).json({ error: "integrationId required" });
         if (!locationId?.trim()) return res.status(400).json({ error: "locationId required" });
@@ -89,6 +78,7 @@ export function registerProspectImportRoutes(app: Express): void {
           locationId: locationId.trim(),
           filters: filters || {},
           destinationUserId,
+          appliedTemplateHint: appliedTemplateHint ?? null,
         });
         res.json(preview);
       } catch (err) {
