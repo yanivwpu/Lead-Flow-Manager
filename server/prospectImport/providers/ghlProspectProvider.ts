@@ -22,10 +22,10 @@ import {
   normalizeGhlContactName,
   readGhlCompanyId,
   readGhlLocationId,
-  resolveGhlProspectLocationId,
   searchGhlContacts,
   type GhlRawContact,
 } from "../ghlApiClient";
+import { getGhlProspectApiToken } from "../ghlProspectApiToken";
 import { assembleProspectPreviewResult } from "../prospectImportDedup";
 import { storage } from "../../storage";
 
@@ -147,14 +147,12 @@ export async function getGhlLocationMetadata(
 ): Promise<GhlLocationMetadata> {
   const integration = await getIntegrationById(integrationId);
   if (!integration?.isActive) throw new Error("GHL integration not found or inactive");
-  const token = await getValidGhlToken(integration);
-  const locationId = resolveGhlProspectLocationId(integration, selectedLocationId);
-  if (!token || !locationId) throw new Error("GHL token or location unavailable");
+  const resolved = await getGhlProspectApiToken(integration, selectedLocationId);
 
   const [tags, pipelines, users] = await Promise.all([
-    fetchGhlLocationTags(token, locationId),
-    fetchGhlPipelines(token, locationId),
-    fetchGhlLocationUsers(token, locationId),
+    fetchGhlLocationTags(resolved.token, resolved.locationId),
+    fetchGhlPipelines(resolved.token, resolved.locationId),
+    fetchGhlLocationUsers(resolved.token, resolved.locationId),
   ]);
   return { tags, pipelines, users };
 }
@@ -244,9 +242,9 @@ export async function previewGhlProspectImport(params: {
 }): Promise<ProspectImportPreviewResult> {
   const integration = await getIntegrationById(params.integrationId);
   if (!integration?.isActive) throw new Error("GHL integration not found or inactive");
-  const token = await getValidGhlToken(integration);
-  const locationId = resolveGhlProspectLocationId(integration, params.locationId);
-  if (!token || !locationId) throw new Error("GHL token or location unavailable");
+  const resolved = await getGhlProspectApiToken(integration, params.locationId);
+  const token = resolved.token;
+  const locationId = resolved.locationId;
 
   const limit = Math.min(
     Math.max(params.filters.importLimit ?? DEFAULT_IMPORT_LIMIT, 1),
@@ -302,9 +300,9 @@ export async function fetchGhlContactsForImport(params: {
 }): Promise<GhlRawContact[]> {
   const integration = await getIntegrationById(params.integrationId);
   if (!integration?.isActive) throw new Error("GHL integration not found or inactive");
-  const token = await getValidGhlToken(integration);
-  const locationId = resolveGhlProspectLocationId(integration, params.locationId);
-  if (!token || !locationId) throw new Error("GHL token or location unavailable");
+  const resolved = await getGhlProspectApiToken(integration, params.locationId);
+  const token = resolved.token;
+  const locationId = resolved.locationId;
 
   const selected = new Set(params.externalIds ?? []);
   const useSelection = selected.size > 0;

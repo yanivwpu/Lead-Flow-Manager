@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import type { Integration } from "../shared/schema";
 import {
   isGhlCompanyScopedIntegration,
+  isGhlLocationScopedIntegration,
   resolveGhlProspectLocationId,
   readGhlLocationId,
 } from "../server/prospectImport/ghlApiClient";
@@ -42,6 +43,8 @@ assert.equal(readGhlLocationId(locationIntegration), "loc-abc");
 assert.equal(readGhlLocationId(companyIntegration), null);
 assert.equal(isGhlCompanyScopedIntegration(locationIntegration), false);
 assert.equal(isGhlCompanyScopedIntegration(companyIntegration), true);
+assert.equal(isGhlLocationScopedIntegration(locationIntegration), true);
+assert.equal(isGhlLocationScopedIntegration(companyIntegration), false);
 assert.equal(resolveGhlProspectLocationId(locationIntegration), "loc-abc");
 assert.equal(resolveGhlProspectLocationId(companyIntegration), null);
 assert.equal(resolveGhlProspectLocationId(companyIntegration, "loc-picked"), "loc-picked");

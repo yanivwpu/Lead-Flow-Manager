@@ -3,6 +3,7 @@ import { integrations, type Integration } from "@shared/schema";
 import { readGhlMarketplaceAppIdPrefix } from "@shared/ghlMarketplaceOAuth";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
+import { getAppOrigin } from "../urlOrigins";
 
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 const GHL_TOKEN_URL = `${GHL_API_BASE}/oauth/token`;
@@ -49,7 +50,11 @@ export async function getIntegrationById(integrationId: string): Promise<Integra
   return rows[0] ?? null;
 }
 
-export async function getValidGhlToken(integration: Integration): Promise<string | null> {
+export async function getValidGhlAgencyAccessToken(
+  integration: Integration,
+  deps?: { fetchImpl?: typeof fetch },
+): Promise<string | null> {
+  const fetchFn = deps?.fetchImpl ?? fetch;
   const isExpired =
     integration.tokenExpiresAt && new Date(integration.tokenExpiresAt) < new Date();
   if (!isExpired && integration.accessToken) return integration.accessToken;
@@ -58,18 +63,29 @@ export async function getValidGhlToken(integration: Integration): Promise<string
   const clientSecret = process.env.GHL_CLIENT_SECRET ?? "";
   if (!clientId || !clientSecret || !integration.refreshToken) return null;
 
+  const config = (integration.config || {}) as Record<string, unknown>;
+  const userType = String(config.userType || "").trim();
+
   const params = new URLSearchParams({
     client_id: clientId,
     client_secret: clientSecret,
     grant_type: "refresh_token",
     refresh_token: integration.refreshToken,
   });
-  const resp = await fetch(GHL_TOKEN_URL, {
+  if (userType) params.set("user_type", userType);
+  const redirectUri = process.env.GHL_REDIRECT_URI || `${getAppOrigin()}/api/ext/callback`;
+  if (redirectUri) params.set("redirect_uri", redirectUri);
+
+  const resp = await fetchFn(GHL_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body: params.toString(),
   });
-  const data = (await resp.json()) as { access_token?: string; refresh_token?: string; expires_in?: number };
+  const data = (await resp.json()) as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+  };
   if (!resp.ok || !data.access_token) return null;
 
   await storage.updateIntegration(integration.id, {
@@ -79,6 +95,14 @@ export async function getValidGhlToken(integration: Integration): Promise<string
     lastSyncAt: new Date(),
   });
   return data.access_token;
+}
+
+/** Refresh and return the stored agency/location integration access token (never a derived location token). */
+export async function getValidGhlToken(
+  integration: Integration,
+  deps?: { fetchImpl?: typeof fetch },
+): Promise<string | null> {
+  return getValidGhlAgencyAccessToken(integration, deps);
 }
 
 export function readGhlLocationId(integration: Integration): string | null {
@@ -104,6 +128,13 @@ export function isGhlCompanyScopedIntegration(integration: Integration): boolean
   if (readGhlLocationId(integration)) return false;
   const userType = (readGhlUserType(integration) || "").toLowerCase();
   return userType === "company" || userType === "agency" || Boolean(readGhlCompanyId(integration));
+}
+
+/** True when OAuth token is sub-account/location-scoped. */
+export function isGhlLocationScopedIntegration(integration: Integration): boolean {
+  if (isGhlCompanyScopedIntegration(integration)) return false;
+  const userType = (readGhlUserType(integration) || "").toLowerCase();
+  return userType === "location" || userType === "sub-account" || Boolean(readGhlLocationId(integration));
 }
 
 export function resolveGhlProspectLocationId(
