@@ -256,7 +256,7 @@ export async function analyzeProspectContact(params: {
     let completionTokens = 0;
 
     if (hasInsufficientProspectData(input)) {
-      intel = buildInsufficientDataResult(model);
+      intel = buildInsufficientDataResult(model, input);
     } else {
       const completeFn = params.completeFn ?? defaultAiComplete;
       const messages = [
@@ -276,7 +276,7 @@ export async function analyzeProspectContact(params: {
           promptTokens += response.usage?.promptTokens ?? 0;
           completionTokens += response.usage?.completionTokens ?? 0;
           const raw = JSON.parse(response.content || "{}");
-          parsed = parseAndValidateProspectIntelligence(raw, model);
+          parsed = parseAndValidateProspectIntelligence(raw, model, input);
           break;
         } catch (err) {
           lastErr = err;

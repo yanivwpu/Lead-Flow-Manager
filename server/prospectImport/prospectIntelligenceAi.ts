@@ -99,6 +99,186 @@ export function hasInsufficientProspectData(input: ProspectIntelligenceAiInput):
   return signals.length < 2;
 }
 
+function isUnknownLabel(value?: string | null): boolean {
+  const v = String(value || "").trim().toLowerCase();
+  return !v || v === "unknown" || v === "n/a" || v === "none";
+}
+
+export function hasInterestEvidence(input: ProspectIntelligenceAiInput): boolean {
+  const hay = [...input.originalTags, input.notes, input.ghlSource, input.importReason]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return /\b(interested in|looking for|inquiry|inquired|requested info|requested a demo|signed up|opted in|want(?:s|ed)?)\b/i.test(
+    hay,
+  );
+}
+
+export function hasAgencyEvidence(
+  input: ProspectIntelligenceAiInput,
+  result: ProspectIntelligence,
+): boolean {
+  if ((result.agencyLikelihood ?? 0) >= 50) return true;
+  const tags = input.originalTags.map((t) => t.toLowerCase());
+  if (tags.some((t) => t.includes("agency"))) return true;
+  if ((result.businessType || "").toLowerCase().includes("agency")) return true;
+  if ((input.importReason || "").toLowerCase().includes("agency")) return true;
+  if ((input.importTag || "").toLowerCase().includes("agency")) return true;
+  return false;
+}
+
+export function hasShopifyEvidence(
+  input: ProspectIntelligenceAiInput,
+  result: ProspectIntelligence,
+): boolean {
+  if ((result.shopifyMerchantLikelihood ?? 0) >= 50) return true;
+  const tags = input.originalTags.map((t) => t.toLowerCase());
+  if (tags.some((t) => t.includes("shopify"))) return true;
+  if ((result.businessType || "").toLowerCase().includes("shopify")) return true;
+  if ((input.importReason || "").toLowerCase().includes("shopify")) return true;
+  if ((input.importTag || "").toLowerCase().includes("shopify")) return true;
+  return false;
+}
+
+export function hasRealEstateEvidence(
+  input: ProspectIntelligenceAiInput,
+  result: ProspectIntelligence,
+): boolean {
+  if ((result.realEstateLikelihood ?? 0) >= 50) return true;
+  const tags = input.originalTags.map((t) => t.toLowerCase());
+  if (tags.some((t) => /real[\s-]?estate|realtor|broker/.test(t))) return true;
+  if ((result.businessType || "").toLowerCase().includes("real estate")) return true;
+  if ((input.importReason || "").toLowerCase().includes("real estate")) return true;
+  return false;
+}
+
+export function hasBusinessEvidence(
+  input: ProspectIntelligenceAiInput,
+  result: ProspectIntelligence,
+): boolean {
+  if (input.company?.trim()) return true;
+  if ((result.companyName || "").trim()) return true;
+  if (!isUnknownLabel(result.businessType)) return true;
+  if (!isUnknownLabel(result.industry)) return true;
+  return false;
+}
+
+export function requiresNeutralOutreachMode(result: ProspectIntelligence): boolean {
+  if (result.needsReview !== true) return false;
+  if (result.potentialFit !== "unknown") return false;
+  return isUnknownLabel(result.industry) && isUnknownLabel(result.businessType);
+}
+
+function firstNameFromInput(input: ProspectIntelligenceAiInput): string {
+  const part = input.name.trim().split(/\s+/)[0];
+  return part || "there";
+}
+
+export function buildNeutralFirstMessage(input: ProspectIntelligenceAiInput): string {
+  const name = firstNameFromInput(input);
+  return `Hi ${name}, I'm reaching out from WhaChatCRM. We built a platform that brings WhatsApp, Instagram, Messenger and other customer conversations into one inbox with AI-powered follow-up. I wanted to introduce myself and see if this is relevant to what you do.`;
+}
+
+const UNSUPPORTED_OUTREACH_PHRASE_RULES: Array<{
+  id: string;
+  pattern: RegExp;
+  isAllowed: (input: ProspectIntelligenceAiInput, result: ProspectIntelligence) => boolean;
+}> = [
+  {
+    id: "noticed_interest",
+    pattern: /I noticed your interest in/i,
+    isAllowed: (input) => hasInterestEvidence(input),
+  },
+  {
+    id: "saw_looking",
+    pattern: /I saw you were looking for/i,
+    isAllowed: (input) => hasInterestEvidence(input),
+  },
+  {
+    id: "noticed_business",
+    pattern: /I noticed your business/i,
+    isAllowed: (input, result) => hasBusinessEvidence(input, result),
+  },
+  {
+    id: "businesses_like_yours",
+    pattern: /businesses like yours/i,
+    isAllowed: (input, result) => hasBusinessEvidence(input, result),
+  },
+  {
+    id: "your_agency",
+    pattern: /\byour agency\b/i,
+    isAllowed: (input, result) => hasAgencyEvidence(input, result),
+  },
+  {
+    id: "your_clients",
+    pattern: /\byour clients\b/i,
+    isAllowed: (input, result) => hasAgencyEvidence(input, result),
+  },
+  {
+    id: "your_store",
+    pattern: /\byour store\b/i,
+    isAllowed: (input, result) => hasShopifyEvidence(input, result),
+  },
+  {
+    id: "your_real_estate_business",
+    pattern: /\byour real estate business\b/i,
+    isAllowed: (input, result) => hasRealEstateEvidence(input, result),
+  },
+  {
+    id: "your_team",
+    pattern: /\byour team\b/i,
+    isAllowed: (input, result) =>
+      hasBusinessEvidence(input, result) || hasAgencyEvidence(input, result),
+  },
+];
+
+export function detectUnsupportedOutreachClaims(
+  message: string,
+  input: ProspectIntelligenceAiInput,
+  result: ProspectIntelligence,
+): string[] {
+  const violations: string[] = [];
+  for (const rule of UNSUPPORTED_OUTREACH_PHRASE_RULES) {
+    if (rule.pattern.test(message) && !rule.isAllowed(input, result)) {
+      violations.push(rule.id);
+    }
+  }
+  return violations;
+}
+
+export function applyOutreachMessageGuardrails(
+  result: ProspectIntelligence,
+  input: ProspectIntelligenceAiInput,
+): ProspectIntelligence {
+  const guarded = { ...result };
+
+  if (requiresNeutralOutreachMode(guarded)) {
+    guarded.suggestedFirstMessage = buildNeutralFirstMessage(input);
+    guarded.suggestedOutreachAngle =
+      "Neutral introduction — limited prospect data available; qualify before pitching a specific offer.";
+    return guarded;
+  }
+
+  const message = guarded.suggestedFirstMessage || "";
+  const violations = detectUnsupportedOutreachClaims(message, input, guarded);
+  if (violations.length > 0) {
+    guarded.suggestedFirstMessage = buildNeutralFirstMessage(input);
+    if (guarded.suggestedOutreachAngle) {
+      const angleViolations = detectUnsupportedOutreachClaims(
+        guarded.suggestedOutreachAngle,
+        input,
+        guarded,
+      );
+      if (angleViolations.length > 0) {
+        guarded.suggestedOutreachAngle =
+          "Neutral introduction — original draft contained unsupported assumptions.";
+      }
+    }
+  }
+
+  return guarded;
+}
+
 export function buildProspectIntelligencePrompt(input: ProspectIntelligenceAiInput): string {
   return `Analyze this imported prospect for WhaChatCRM (unified WhatsApp/Instagram/Messenger inbox + AI for agencies, Shopify merchants, real estate, affiliates, local businesses).
 
@@ -107,6 +287,12 @@ STRICT RULES:
 - Do not invent company size, revenue, websites, job titles, or industries.
 - If data is insufficient, set needsReview=true, potentialFit="unknown", priority="needs_review".
 - Use concise internal language. suggestedFirstMessage max 400 chars.
+
+OUTREACH MESSAGE RULES (suggestedFirstMessage):
+- Never claim the prospect showed interest in WhaChatCRM, messaging, CRM, AI, Shopify, real estate, agency services, or any other topic unless explicit source evidence says so.
+- Never use phrases like "I noticed your interest in...", "I saw you were looking for...", "businesses like yours", "your agency", "your store", "your clients", "your team", or "your real estate business" unless the prospect input explicitly supports that claim.
+- Do not assume the prospect owns or represents a business unless company, businessType, industry, or tags support it.
+- For needs_review / unknown-fit prospects with minimal data, write a neutral introduction that explains WhaChatCRM and asks whether it is relevant — without pretending to know their business or intent.
 
 WhaChatCRM offer angles:
 - partner_program / agency_white_label: digital/GHL agencies, multi-client operators
@@ -141,8 +327,11 @@ Return JSON only with this schema:
 }`;
 }
 
-export function buildInsufficientDataResult(model: string): ProspectIntelligence {
-  return {
+export function buildInsufficientDataResult(
+  model: string,
+  input?: ProspectIntelligenceAiInput,
+): ProspectIntelligence {
+  const base: ProspectIntelligence = {
     industry: undefined,
     businessType: "unknown",
     potentialFit: "unknown",
@@ -161,11 +350,14 @@ export function buildInsufficientDataResult(model: string): ProspectIntelligence
     analysisStatus: "needs_review",
     reviewStatus: "needs_review",
   };
+  if (!input) return base;
+  return applyOutreachMessageGuardrails(base, input);
 }
 
 export function parseAndValidateProspectIntelligence(
   raw: unknown,
   model: string,
+  input?: ProspectIntelligenceAiInput,
 ): ProspectIntelligence {
   const data = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
 
@@ -224,6 +416,10 @@ export function parseAndValidateProspectIntelligence(
     result.analysisStatus = "needs_review";
     result.reviewStatus = "needs_review";
     result.reasoningSummary = "AI response missing reasoning summary.";
+  }
+
+  if (input) {
+    return applyOutreachMessageGuardrails(result, input);
   }
 
   return result;

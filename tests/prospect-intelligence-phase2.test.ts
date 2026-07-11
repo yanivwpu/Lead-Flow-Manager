@@ -49,14 +49,22 @@ function testInsufficientDataNeedsReview() {
   });
   const input = buildProspectIntelligenceInput(sparse);
   assert.equal(hasInsufficientProspectData(input), true);
-  const result = buildInsufficientDataResult("gpt-4o-mini");
+  const result = buildInsufficientDataResult("gpt-4o-mini", input);
   assert.equal(result.needsReview, true);
   assert.equal(result.priority, "needs_review");
   assert.equal(result.potentialFit, "unknown");
   assert.match(result.reasoningSummary || "", /Insufficient/i);
+  assert.match(result.suggestedFirstMessage || "", /WhaChatCRM/i);
+  assert.doesNotMatch(result.suggestedFirstMessage || "", /noticed your interest/i);
 }
 
 function testStructuredValidation() {
+  const agencyInput = {
+    name: "Jane Agency",
+    company: "Bright Digital",
+    originalTags: ["Agency"],
+    importReason: "Agency recruitment",
+  };
   const parsed = parseAndValidateProspectIntelligence(
     {
       industry: "marketing",
@@ -71,12 +79,13 @@ function testStructuredValidation() {
       priority: "high",
       recommendedOffer: "partner_program",
       suggestedOutreachAngle: "Lead with 30% lifetime partner program.",
-      suggestedFirstMessage: "Hi {{name}}, we help agencies unify client messaging.",
+      suggestedFirstMessage: "Hi Jane, we help agencies unify client messaging.",
       reasoningSummary: "Company notes and GHL tags suggest agency services.",
       needsReview: false,
       confidence: 78,
     },
     "gpt-4o-mini",
+    agencyInput,
   );
 
   assert.equal(parsed.agencyLikelihood, 85);
