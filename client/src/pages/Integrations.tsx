@@ -28,6 +28,10 @@ import {
   CRM_MARKETPLACE_CTA,
   CRM_INSTALLED_NOT_CONNECTED,
 } from "@shared/leadConnectorWhiteLabel";
+import {
+  CRM_TRY_FULL_OAUTH_CTA,
+  humanReadableCrmOAuthRecoveryMessage,
+} from "@shared/ghlOAuthRecoveryMessages";
 import { ShopifyManagePanel } from "@/components/integrations/ShopifyManagePanel";
 
 function integrationBrandLogoLetter(name: string) {
@@ -242,6 +246,40 @@ type GhlOAuthAuthorizeDebugSnapshot = {
   warnings: string[];
   notes: string[];
 };
+
+function CrmOAuthRecoveryResultPanel({ result }: { result: CrmOAuthRecoveryAttemptResult }) {
+  const humanMessage = humanReadableCrmOAuthRecoveryMessage({
+    recovered: result.recovered,
+    oauthRequired: result.oauthRequired,
+    reason: result.reason,
+    reasonCategory: result.reasonCategory,
+    httpStatus: result.httpStatus,
+    refreshed: result.raw.refreshed === true,
+  });
+  const panelClass = result.recovered
+    ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+    : "border-amber-200 bg-amber-50 text-amber-950";
+
+  return (
+    <div
+      className={`rounded-md border px-3 py-2 text-xs space-y-1.5 ${panelClass}`}
+      role="status"
+      data-testid="crm-oauth-recovery-result"
+    >
+      <p className="text-sm font-medium leading-snug">{humanMessage}</p>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[11px]">
+        <dt className="font-medium">recovered</dt>
+        <dd>{String(result.recovered)}</dd>
+        <dt className="font-medium">oauthRequired</dt>
+        <dd>{String(result.oauthRequired)}</dd>
+        <dt className="font-medium">reasonCategory</dt>
+        <dd>{result.reasonCategory ?? "—"}</dd>
+        <dt className="font-medium">reason</dt>
+        <dd className="break-all">{result.reason ?? "—"}</dd>
+      </dl>
+    </div>
+  );
+}
 
 const VITE_SHOPIFY_APP_STORE_URL =
   typeof import.meta.env.VITE_SHOPIFY_APP_STORE_URL === "string"
@@ -565,6 +603,7 @@ export function Integrations() {
   const wooStoreUrlInputRef = useRef<HTMLInputElement>(null);
   const [checkingLcConnection, setCheckingLcConnection] = useState(false);
   const [recoveringCrmOAuth, setRecoveringCrmOAuth] = useState(false);
+  const [crmOAuthRecoveryResult, setCrmOAuthRecoveryResult] = useState<CrmOAuthRecoveryAttemptResult | null>(null);
   const [manageIntegrationId, setManageIntegrationId] = useState<string | null>(null);
   const [pendingDisconnectType, setPendingDisconnectType] = useState<string | null>(null);
   const [leadManageOpen, setLeadManageOpen] = useState(false);
@@ -633,13 +672,6 @@ export function Integrations() {
   });
 
   const attemptCrmOAuthRecovery = async (): Promise<CrmOAuthRecoveryAttemptResult> => {
-    const requestMeta = {
-      method: "POST",
-      url: "/api/ext/recover-oauth",
-      at: new Date().toISOString(),
-    };
-    console.info("[CRM Integration] recover-oauth request", requestMeta);
-
     const res = await fetch("/api/ext/recover-oauth", {
       method: "POST",
       credentials: "include",
@@ -655,69 +687,64 @@ export function Integrations() {
       httpStatus: res.status,
       raw,
     };
-    console.info("[CRM Integration] recover-oauth response", result);
 
     if (result.recovered) {
       await Promise.all([
         refetchLcStatus(),
         queryClient.invalidateQueries({ queryKey: ["/api/integrations"] }),
       ]);
-      toast({
-        title: "CRM connected",
-        description: raw.refreshed
-          ? "Recovered your existing CRM authorization and refreshed the access token."
-          : "Recovered your existing CRM authorization from the marketplace install.",
-      });
     }
 
     return result;
   };
 
-  const startCrmOAuthAuthorize = async () => {
-    console.info("[CRM Integration] startCrmOAuthAuthorize clicked — recovery runs before any OAuth redirect");
+  const showCrmOAuthRecoveryToast = (result: CrmOAuthRecoveryAttemptResult) => {
+    const description = humanReadableCrmOAuthRecoveryMessage({
+      recovered: result.recovered,
+      oauthRequired: result.oauthRequired,
+      reason: result.reason,
+      reasonCategory: result.reasonCategory,
+      httpStatus: result.httpStatus,
+      refreshed: result.raw.refreshed === true,
+    });
+    const detail = `recovered=${result.recovered}, oauthRequired=${result.oauthRequired}, reasonCategory=${result.reasonCategory ?? "—"}, reason=${result.reason ?? "—"}. ${description}`;
+    if (result.recovered) {
+      toast({ title: "CRM recovery succeeded", description: detail });
+      return;
+    }
+    toast({ title: "CRM recovery failed", description: detail, variant: "destructive" });
+  };
+
+  const runCrmOAuthRecovery = async () => {
     setRecoveringCrmOAuth(true);
     try {
       const recovery = await attemptCrmOAuthRecovery();
-      if (recovery.recovered) {
-        console.info("[CRM Integration] recover-oauth succeeded — not redirecting to GHL");
-        return;
-      }
-
-      if (recovery.oauthRequired === true) {
-        const authorizeUrl = crmInstallConfig?.oauthAuthorizeUrl || "/api/ext/oauth-authorize";
-        console.warn("[CRM Integration] redirecting to OAuth because recover-oauth returned oauthRequired=true", {
-          reason: recovery.reason,
-          reasonCategory: recovery.reasonCategory,
-          httpStatus: recovery.httpStatus,
-          authorizeUrl,
-        });
-        window.location.href = authorizeUrl;
-        return;
-      }
-
-      console.warn("[CRM Integration] not redirecting — recover-oauth failed without oauthRequired=true", recovery);
+      setCrmOAuthRecoveryResult(recovery);
+      showCrmOAuthRecoveryToast(recovery);
+    } catch {
+      const fallback: CrmOAuthRecoveryAttemptResult = {
+        recovered: false,
+        oauthRequired: false,
+        reason: "network_error",
+        reasonCategory: "other",
+        httpStatus: 0,
+        raw: {},
+      };
+      setCrmOAuthRecoveryResult(fallback);
       toast({
-        title: "Recovery incomplete",
+        title: "CRM recovery failed",
         description:
-          recovery.httpStatus === 401
-            ? "Your WhachatCRM session expired. Log in again, then retry Link existing connection."
-            : recovery.reasonCategory === "ownership_mismatch"
-              ? "Stored CRM tokens exist but are not linked to your account. Check /api/ext/connection-diagnostics."
-              : recovery.reason
-                ? `Recovery stopped: ${recovery.reason}`
-                : "Recovery did not complete. Check the browser console for recover-oauth response details.",
-        variant: "destructive",
-      });
-    } catch (error) {
-      console.error("[CRM Integration] recover-oauth threw before redirect decision", error);
-      toast({
-        title: "Recovery failed",
-        description: "Could not call recover-oauth. Check the browser console and network tab.",
+          "recovered=false, oauthRequired=false, reasonCategory=other, reason=network_error. Could not reach /api/ext/recover-oauth.",
         variant: "destructive",
       });
     } finally {
       setRecoveringCrmOAuth(false);
     }
+  };
+
+  const startCrmFullOAuthAuthorization = () => {
+    const authorizeUrl = crmInstallConfig?.oauthAuthorizeUrl || "/api/ext/oauth-authorize";
+    window.location.href = authorizeUrl;
   };
 
   const startCrmOAuthAuthorizeDebugPage = () => {
@@ -1258,11 +1285,11 @@ export function Integrations() {
                               ? "Link existing connection"
                               : CRM_COMPLETE_OAUTH_CTA;
                           primaryDisabled = recoveringCrmOAuth;
-                          primaryAction = startCrmOAuthAuthorize;
+                          primaryAction = runCrmOAuthRecovery;
                         } else {
                           primaryTestId = "button-install-leadconnector";
                           primaryLabel = CRM_INSTALL_CTA;
-                          primaryAction = startCrmOAuthAuthorize;
+                          primaryAction = runCrmOAuthRecovery;
                         }
                       } else if (wooConnected) {
                         primaryLabel = "Connected";
@@ -1383,10 +1410,25 @@ export function Integrations() {
                                 Manage integration
                               </Button>
                             )}
-                            {isLeadConnector && lcInstalledNotConnected && (
+                            {isLeadConnector && lcInstalledNotConnected && !crmOAuthRecoveryResult && (
                               <p className="text-xs text-amber-900" role="alert">
                                 {CRM_INSTALLED_NOT_CONNECTED}
                               </p>
+                            )}
+                            {isLeadConnector && crmOAuthRecoveryResult && (
+                              <CrmOAuthRecoveryResultPanel result={crmOAuthRecoveryResult} />
+                            )}
+                            {isLeadConnector && !lcConnected && crmOAuthRecoveryResult && !crmOAuthRecoveryResult.recovered && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="w-full border-gray-200 font-medium"
+                                onClick={startCrmFullOAuthAuthorization}
+                                data-testid="button-try-full-oauth-leadconnector"
+                              >
+                                {CRM_TRY_FULL_OAUTH_CTA}
+                              </Button>
                             )}
                             {isLeadConnector && !lcConnected && (
                               <Button
@@ -1982,7 +2024,7 @@ export function Integrations() {
                 <Button variant="outline" onClick={startCrmOAuthAuthorizeDebugPage}>
                   Open debug redirect page
                 </Button>
-                <Button onClick={startCrmOAuthAuthorize}>Continue OAuth</Button>
+                <Button onClick={startCrmFullOAuthAuthorization}>{CRM_TRY_FULL_OAUTH_CTA}</Button>
               </div>
             </DialogFooter>
           </DialogContent>
@@ -2026,7 +2068,7 @@ export function Integrations() {
                   variant="default"
                   size="sm"
                   className="w-full font-medium"
-                  onClick={() => void startCrmOAuthAuthorize()}
+                  onClick={() => void runCrmOAuthRecovery()}
                   disabled={crmInstallConfigFetching || recoveringCrmOAuth}
                   data-testid="button-complete-oauth-leadconnector-dialog"
                 >
@@ -2037,6 +2079,20 @@ export function Integrations() {
                       : lcStatus?.installedInGhlNotConnected || lcStatus?.tokenExpired
                         ? CRM_COMPLETE_OAUTH_CTA
                         : CRM_INSTALL_CTA}
+                </Button>
+              ) : null}
+              {crmOAuthRecoveryResult ? (
+                <CrmOAuthRecoveryResultPanel result={crmOAuthRecoveryResult} />
+              ) : null}
+              {!lcStatus?.connected && crmOAuthRecoveryResult && !crmOAuthRecoveryResult.recovered ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full border-gray-200 font-medium"
+                  onClick={startCrmFullOAuthAuthorization}
+                  data-testid="button-try-full-oauth-leadconnector-dialog"
+                >
+                  {CRM_TRY_FULL_OAUTH_CTA}
                 </Button>
               ) : null}
               <Button
@@ -2063,8 +2119,8 @@ export function Integrations() {
                 <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/80 p-3">
                   <p className="text-xs text-gray-600 flex-1">
                     {(lcStatus?.recoverableOAuthInstalls ?? 0) > 0
-                      ? "Stored CRM authorization tokens were found. Use Link existing connection to recover them without a new OAuth flow."
-                      : "Complete OAuth tries token recovery first, then full authorization only if needed."}
+                      ? "Stored CRM authorization tokens were found. Use Link existing connection to recover them. Results appear on this card — no redirect during diagnostics."
+                      : "Link existing connection tries token recovery first. Use Try full OAuth authorization only if recovery fails."}
                   </p>
                   <Button
                     variant="outline"
