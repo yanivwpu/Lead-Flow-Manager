@@ -55,6 +55,7 @@ import type {
   ProspectImportLocation,
   ProspectImportPreviewContact,
   ProspectImportPreviewResult,
+  ProspectImportPreviewJobSummary,
   ProspectImportProvider,
   ProspectImportReason,
   ProspectImportTemplate,
@@ -67,6 +68,10 @@ import {
   PROSPECT_IMPORT_PROVIDER_LABELS,
   PROSPECT_IMPORT_PROVIDERS,
   PROSPECT_IMPORT_REASONS,
+  PROSPECT_IMPORT_SCAN_SCOPES,
+  PROSPECT_IMPORT_LIMITS,
+  PROSPECT_IMPORT_DEFAULT_SCAN_SCOPE,
+  PROSPECT_IMPORT_DEFAULT_IMPORT_LIMIT,
 } from "@shared/prospectImport";
 import { AnalyzeConfirmDialog, ProspectIntelligencePanel } from "./ProspectIntelligencePanel";
 
@@ -129,9 +134,14 @@ export function GhlProspectImport() {
   const [provider, setProvider] = useState<ProspectImportProvider>("gohighlevel");
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<string>("");
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
-  const [filters, setFilters] = useState<ProspectImportContactFilter>({ importLimit: 100 });
+  const [filters, setFilters] = useState<ProspectImportContactFilter>({
+    importLimit: PROSPECT_IMPORT_DEFAULT_IMPORT_LIMIT,
+    scanScope: PROSPECT_IMPORT_DEFAULT_SCAN_SCOPE,
+  });
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
   const [preview, setPreview] = useState<ProspectImportPreviewResult | null>(null);
+  const [previewJobId, setPreviewJobId] = useState<string | null>(null);
+  const [previewJob, setPreviewJob] = useState<ProspectImportPreviewJobSummary | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [importAll, setImportAll] = useState(true);
   const [internalTag, setInternalTag] = useState<ProspectImportInternalTag>("Imported-GHL");
@@ -269,7 +279,10 @@ export function GhlProspectImport() {
         ...filters,
         tags: selectedTagFilters.length ? selectedTagFilters : filters.tags,
       };
-      return fetchJson<ProspectImportPreviewResult>("/api/growth-tools/prospect-import/ghl/preview", {
+      return fetchJson<
+        | { async: false; preview: ProspectImportPreviewResult }
+        | { async: true; previewJobId: string }
+      >("/api/growth-tools/prospect-import/ghl/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -281,8 +294,29 @@ export function GhlProspectImport() {
       });
     },
     onSuccess: (data) => {
-      setPreview(data);
-      setSelectedIds(new Set(data.contacts.map((c) => c.externalId)));
+      if (data.async) {
+        setPreview(null);
+        setPreviewJobId(data.previewJobId);
+        setPreviewJob({
+          id: data.previewJobId,
+          status: "pending",
+          integrationId: selectedIntegrationId,
+          locationId: selectedLocationId,
+          scanScope: filters.scanScope ?? PROSPECT_IMPORT_DEFAULT_SCAN_SCOPE,
+          importLimit: filters.importLimit ?? PROSPECT_IMPORT_DEFAULT_IMPORT_LIMIT,
+          progressScanned: 0,
+          progressTarget: 0,
+          progressMatches: 0,
+          filterFingerprint: "",
+          createdAt: new Date().toISOString(),
+        });
+        setStep(3);
+        return;
+      }
+      setPreviewJobId(data.preview.previewJobId ?? null);
+      setPreviewJob(null);
+      setPreview(data.preview);
+      setSelectedIds(new Set(data.preview.contacts.map((c) => c.externalId)));
       setImportAll(true);
       setStep(3);
     },
@@ -290,6 +324,37 @@ export function GhlProspectImport() {
       toast({ title: "Preview failed", description: err.message, variant: "destructive" });
     },
   });
+
+  const pollPreviewJob = useCallback(async (jobId: string) => {
+    try {
+      const data = await fetchJson<{
+        job: ProspectImportPreviewJobSummary & { result?: ProspectImportPreviewResult | null };
+      }>(`/api/growth-tools/prospect-import/ghl/preview-jobs/${jobId}`);
+      setPreviewJob(data.job);
+      if (data.job.status === "completed" && data.job.result) {
+        setPreview(data.job.result);
+        setPreviewJobId(data.job.id);
+        setSelectedIds(new Set(data.job.result.contacts.map((c) => c.externalId)));
+        setImportAll(true);
+      }
+      if (data.job.status === "failed") {
+        toast({
+          title: "Preview scan failed",
+          description: data.job.errorMessage || "Unknown error",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      /* ignore transient poll errors */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!previewJobId || !previewJob) return;
+    if (previewJob.status === "completed" || previewJob.status === "failed") return;
+    const timer = setInterval(() => void pollPreviewJob(previewJobId), 2000);
+    return () => clearInterval(timer);
+  }, [previewJobId, previewJob, pollPreviewJob]);
 
   const importMutation = useMutation({
     mutationFn: async () => {
@@ -307,7 +372,9 @@ export function GhlProspectImport() {
             integrationId: selectedIntegrationId,
             locationId: selectedLocationId,
             filters: mergedFilters,
-            previewTotal: preview?.contacts.length ?? 0,
+            previewTotal: preview?.stats.estimatedFinalImport ?? 0,
+            previewJobId: previewJobId ?? preview?.previewJobId,
+            filterFingerprint: preview?.filterFingerprint,
             importOptions: {
               internalTag,
               batchName: batchName.trim(),
@@ -662,16 +729,43 @@ export function GhlProspectImport() {
               />
             </div>
             <div>
-              <Label>Import limit (max 1000)</Label>
-              <Input
-                type="number"
-                min={1}
-                max={1000}
-                value={filters.importLimit ?? 100}
-                onChange={(e) =>
-                  setFilters((f) => ({ ...f, importLimit: Number(e.target.value) || 100 }))
+              <Label>Scan scope (contacts to scan in GHL)</Label>
+              <Select
+                value={String(filters.scanScope ?? PROSPECT_IMPORT_DEFAULT_SCAN_SCOPE)}
+                onValueChange={(v) =>
+                  setFilters((f) => ({
+                    ...f,
+                    scanScope: (v === "entire" ? "entire" : Number(v)) as ProspectImportContactFilter["scanScope"],
+                  }))
                 }
-              />
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PROSPECT_IMPORT_SCAN_SCOPES.map((scope) => (
+                    <SelectItem key={String(scope)} value={String(scope)}>
+                      {scope === "entire" ? "Entire location" : `First ${scope.toLocaleString()}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Import limit (max to import after filters)</Label>
+              <Select
+                value={String(filters.importLimit ?? PROSPECT_IMPORT_DEFAULT_IMPORT_LIMIT)}
+                onValueChange={(v) =>
+                  setFilters((f) => ({ ...f, importLimit: Number(v) as ProspectImportContactFilter["importLimit"] }))
+                }
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PROSPECT_IMPORT_LIMITS.map((limit) => (
+                    <SelectItem key={limit} value={String(limit)}>
+                      {limit.toLocaleString()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>Contact source</Label>
@@ -825,7 +919,7 @@ export function GhlProspectImport() {
               onClick={() => previewMutation.mutate()}
             >
               {previewMutation.isPending ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing (dry run)…</>
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Starting scan…</>
               ) : (
                 <>Preview — analyze only <ArrowRight className="ml-2 h-4 w-4" /></>
               )}
@@ -837,13 +931,53 @@ export function GhlProspectImport() {
         </section>
       )}
 
+      {step === 3 && previewJob && !preview ? (
+        <section className="space-y-5">
+          <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-6">
+            <div className="flex items-center gap-2 text-sm font-semibold text-blue-900">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Scanning GHL contacts…
+            </div>
+            <p className="mt-2 text-sm text-blue-800">
+              {previewJob.progressScanned.toLocaleString()}
+              {previewJob.progressTarget > 0
+                ? ` / ${previewJob.progressTarget.toLocaleString()} scanned`
+                : " scanned"}
+              {previewJob.progressMatches > 0
+                ? ` · ${previewJob.progressMatches.toLocaleString()} matches`
+                : ""}
+            </p>
+            {previewJob.progressTarget > 0 ? (
+              <Progress
+                className="mt-4 h-2"
+                value={Math.min(
+                  100,
+                  Math.round((previewJob.progressScanned / previewJob.progressTarget) * 100),
+                )}
+              />
+            ) : null}
+            {previewJob.ghlReportedTotal != null ? (
+              <p className="mt-3 text-xs text-blue-700">
+                GHL reported total contacts: {previewJob.ghlReportedTotal.toLocaleString()}
+              </p>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
       {step === 3 && preview && (
         <section className="space-y-5">
           <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
             <p className="text-sm font-semibold text-blue-900">Dry run — no database writes</p>
+            {preview.stats.ghlReportedTotal != null ? (
+              <p className="mt-1 text-xs text-blue-800">
+                GHL reported total contacts: {preview.stats.ghlReportedTotal.toLocaleString()}
+              </p>
+            ) : null}
             <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-sm">
               {[
-                { label: "Total matching", value: preview.stats.totalMatching },
+                { label: "Contacts scanned", value: preview.stats.totalContactsScanned },
+                { label: "Matching filters", value: preview.stats.totalMatching },
                 { label: "Will import (new)", value: preview.stats.willImportNew },
                 { label: "Already exists", value: preview.stats.alreadyExists },
                 { label: "Dup by GHL ID", value: preview.stats.duplicatesByGhlId },
@@ -853,6 +987,14 @@ export function GhlProspectImport() {
                 { label: "Missing phone", value: preview.stats.missingPhone },
                 { label: "Skipped by filters", value: preview.stats.skippedByFilters },
                 { label: "Estimated final import", value: preview.stats.estimatedFinalImport },
+                {
+                  label: "Scan status",
+                  value: preview.stats.scanStoppedEarly
+                    ? "Stopped at scan limit"
+                    : preview.stats.scanComplete
+                      ? "Entire scan scope completed"
+                      : "In progress",
+                },
               ].map((row) => (
                 <div key={row.label} className="flex justify-between gap-2 rounded-md bg-white/80 px-3 py-2">
                   <span className="text-gray-600">{row.label}</span>

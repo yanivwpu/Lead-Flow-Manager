@@ -73,18 +73,39 @@ export function registerProspectImportRoutes(app: Express): void {
         if (!locationId?.trim()) return res.status(400).json({ error: "locationId required" });
 
         const destinationUserId = await prospectImportService.resolveProspectImportDestinationUserId();
-        const preview = await prospectImportService.previewGhlProspectImport({
+        const outcome = await prospectImportService.previewGhlProspectImport({
           integrationId,
           locationId: locationId.trim(),
           filters: filters || {},
           destinationUserId,
+          initiatedByUserId: (req.user as { id: string }).id,
           appliedTemplateHint: appliedTemplateHint ?? null,
         });
-        res.json(preview);
+
+        if (outcome.mode === "async") {
+          return res.status(202).json({ async: true, previewJobId: outcome.previewJobId });
+        }
+        res.json({ async: false, preview: outcome.result });
       } catch (err) {
         console.error("[ProspectImport] preview error:", err);
         res.status(500).json({
           error: err instanceof Error ? err.message : "Preview failed",
+        });
+      }
+    },
+  );
+
+  app.get(
+    "/api/growth-tools/prospect-import/ghl/preview-jobs/:jobId",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const job = await prospectImportService.getGhlProspectPreviewJob(req.params.jobId);
+        if (!job) return res.status(404).json({ error: "Preview job not found" });
+        res.json({ job });
+      } catch (err) {
+        res.status(500).json({
+          error: err instanceof Error ? err.message : "Failed to load preview job",
         });
       }
     },
@@ -95,15 +116,19 @@ export function registerProspectImportRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const { integrationId, locationId, filters, importOptions, previewTotal } = req.body as {
+        const { integrationId, locationId, filters, importOptions, previewTotal, previewJobId, filterFingerprint } =
+          req.body as {
           integrationId?: string;
           locationId?: string;
           filters?: ProspectImportContactFilter;
           importOptions?: ProspectImportOptions;
           previewTotal?: number;
+          previewJobId?: string;
+          filterFingerprint?: string;
         };
         if (!integrationId) return res.status(400).json({ error: "integrationId required" });
         if (!locationId?.trim()) return res.status(400).json({ error: "locationId required" });
+        if (!previewJobId?.trim()) return res.status(400).json({ error: "previewJobId required" });
         const batchName = String(importOptions?.batchName || "").trim();
         if (!batchName) return res.status(400).json({ error: "batchName is required" });
 
@@ -118,6 +143,8 @@ export function registerProspectImportRoutes(app: Express): void {
             batchName,
           },
           previewTotal: previewTotal ?? 0,
+          previewJobId: previewJobId.trim(),
+          filterFingerprint: filterFingerprint?.trim(),
         });
         res.status(202).json({ job });
       } catch (err) {

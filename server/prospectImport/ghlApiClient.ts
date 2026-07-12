@@ -4,6 +4,7 @@ import { readGhlMarketplaceAppIdPrefix } from "@shared/ghlMarketplaceOAuth";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
 import { getAppOrigin } from "../urlOrigins";
+import { fetchGhlWithRetry } from "./ghlApiRetry";
 
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 const GHL_TOKEN_URL = `${GHL_API_BASE}/oauth/token`;
@@ -213,6 +214,7 @@ export async function searchGhlContacts(params: {
   page: number;
   pageLimit: number;
   query?: string;
+  fetchImpl?: typeof fetch;
 }): Promise<{ contacts: GhlRawContact[]; total?: number }> {
   const body: Record<string, unknown> = {
     locationId: params.locationId,
@@ -221,12 +223,18 @@ export async function searchGhlContacts(params: {
   };
   if (params.query?.trim()) body.query = params.query.trim();
 
-  const data = (await ghlFetch(`${GHL_API_BASE}/contacts/search`, params.token, {
-    method: "POST",
-    body: JSON.stringify(body),
-  })) as { contacts?: GhlRawContact[]; total?: number };
+  const { data } = await fetchGhlWithRetry(
+    `${GHL_API_BASE}/contacts/search`,
+    params.token,
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+    },
+    { fetchImpl: params.fetchImpl },
+  );
 
-  return { contacts: data.contacts ?? [], total: data.total };
+  const parsed = data as { contacts?: GhlRawContact[]; total?: number };
+  return { contacts: parsed.contacts ?? [], total: parsed.total };
 }
 
 export async function fetchGhlLocationTags(token: string, locationId: string): Promise<string[]> {

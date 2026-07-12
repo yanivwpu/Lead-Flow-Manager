@@ -77,6 +77,10 @@ export function buildPreviewStats(
     skippedByFilters: number;
     updateMissingFieldsOnly?: boolean;
     selectionCount?: number;
+    totalContactsScanned?: number;
+    ghlReportedTotal?: number | null;
+    scanStoppedEarly?: boolean;
+    scanComplete?: boolean;
   },
 ): import("@shared/prospectImport").ProspectImportPreviewStats {
   const totalMatching = contacts.length;
@@ -88,7 +92,6 @@ export function buildPreviewStats(
   const missingEmail = contacts.filter((c) => c.missingEmail).length;
   const missingPhone = contacts.filter((c) => c.missingPhone).length;
 
-  const pool = params.selectionCount ?? totalMatching;
   const poolNew = contacts.filter((c) => !c.isDuplicate).length;
   const poolDup = contacts.filter((c) => c.isDuplicate).length;
   const estimatedFinalImport = params.updateMissingFieldsOnly ? poolNew + poolDup : poolNew;
@@ -105,6 +108,10 @@ export function buildPreviewStats(
     skippedByFilters: params.skippedByFilters,
     estimatedFinalImport,
     dryRun: true,
+    totalContactsScanned: params.totalContactsScanned ?? totalMatching,
+    ghlReportedTotal: params.ghlReportedTotal ?? null,
+    scanStoppedEarly: params.scanStoppedEarly ?? false,
+    scanComplete: params.scanComplete ?? true,
   };
 }
 
@@ -133,12 +140,23 @@ export function assembleProspectPreviewResult(params: {
   truncated?: boolean;
   updateMissingFieldsOnly?: boolean;
   diagnostics?: import("@shared/prospectImport").ProspectImportPreviewDiagnostics;
+  totalContactsScanned?: number;
+  ghlReportedTotal?: number | null;
+  scanStoppedEarly?: boolean;
+  scanComplete?: boolean;
+  previewJobId?: string;
+  filterFingerprint?: string;
+  scannedAt?: string;
 }): ProspectImportPreviewResult {
   const dedupIndex = buildProspectDedupIndex(params.destinationContacts);
   const contacts = markPreviewDuplicates(params.rows, dedupIndex);
   const stats = buildPreviewStats(contacts, {
     skippedByFilters: params.skippedByFilters,
     updateMissingFieldsOnly: params.updateMissingFieldsOnly,
+    totalContactsScanned: params.totalContactsScanned,
+    ghlReportedTotal: params.ghlReportedTotal,
+    scanStoppedEarly: params.scanStoppedEarly,
+    scanComplete: params.scanComplete,
   });
   return {
     totalFound: params.totalFound ?? contacts.length,
@@ -147,5 +165,8 @@ export function assembleProspectPreviewResult(params: {
     truncated: params.truncated ?? false,
     stats,
     diagnostics: params.diagnostics,
+    previewJobId: params.previewJobId,
+    filterFingerprint: params.filterFingerprint,
+    scannedAt: params.scannedAt,
   };
 }

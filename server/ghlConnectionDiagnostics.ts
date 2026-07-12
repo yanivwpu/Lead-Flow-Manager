@@ -24,6 +24,7 @@ export type GhlOAuthDiagnosticEvent =
   | "webhook_install_integration_linked"
   | "webhook_install_no_integration"
   | "prospect_import_locations_empty"
+  | "prospect_import_installed_locations_failed"
   | "oauth_recovery_no_candidates"
   | "oauth_recovery_token_invalid"
   | "oauth_recovery_succeeded"

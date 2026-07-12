@@ -1886,6 +1886,7 @@ export const prospectImportJobs = pgTable("prospect_import_jobs", {
   importOptions: jsonb("import_options").notNull().default(sql`'{}'::jsonb`),
   selectedExternalIds: jsonb("selected_external_ids"),
   previewTotal: integer("preview_total").default(0),
+  previewJobId: varchar("preview_job_id"),
   progressCurrent: integer("progress_current").default(0),
   progressTotal: integer("progress_total").default(0),
   resultImported: integer("result_imported").default(0),
@@ -1900,6 +1901,40 @@ export const prospectImportJobs = pgTable("prospect_import_jobs", {
 });
 
 export type ProspectImportJob = typeof prospectImportJobs.$inferSelect;
+
+/** Phase 2.5 — background GHL contact scan / preview jobs. */
+export const prospectImportPreviewJobs = pgTable("prospect_import_preview_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  integrationId: varchar("integration_id").notNull(),
+  locationId: text("location_id").notNull(),
+  destinationUserId: varchar("destination_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  initiatedByUserId: varchar("initiated_by_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  filters: jsonb("filters").notNull().default(sql`'{}'::jsonb`),
+  filterFingerprint: text("filter_fingerprint").notNull(),
+  scanScope: text("scan_scope").notNull().default("1000"),
+  importLimit: integer("import_limit").notNull().default(100),
+  appliedTemplateHint: text("applied_template_hint"),
+  status: text("status").notNull().default("pending"),
+  progressScanned: integer("progress_scanned").default(0),
+  progressTarget: integer("progress_target").default(0),
+  progressMatches: integer("progress_matches").default(0),
+  ghlReportedTotal: integer("ghl_reported_total"),
+  lastPage: integer("last_page").default(1),
+  scanStoppedEarly: boolean("scan_stopped_early").default(false),
+  scanComplete: boolean("scan_complete").default(false),
+  skippedByFilters: integer("skipped_by_filters").default(0),
+  matchedSnapshots: jsonb("matched_snapshots").default(sql`'[]'::jsonb`),
+  allMatchedExternalIds: jsonb("all_matched_external_ids").default(sql`'[]'::jsonb`),
+  skippedDiagnostics: jsonb("skipped_diagnostics").default(sql`'[]'::jsonb`),
+  previewResult: jsonb("preview_result"),
+  errorMessage: text("error_message"),
+  scannedAt: timestamp("scanned_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+});
+
+export type ProspectImportPreviewJob = typeof prospectImportPreviewJobs.$inferSelect;
 
 export const prospectImportTemplates = pgTable("prospect_import_templates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

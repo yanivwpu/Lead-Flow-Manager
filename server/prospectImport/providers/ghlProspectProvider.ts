@@ -2,7 +2,6 @@ import { eq } from "drizzle-orm";
 import type {
   ProspectImportContactFilter,
   ProspectImportLocation,
-  ProspectImportPreviewContact,
   ProspectImportPreviewResult,
 } from "@shared/prospectImport";
 import { ghlMarketplaceInstalls, integrations } from "@shared/schema";
@@ -19,19 +18,15 @@ import {
   getIntegrationById,
   getValidGhlToken,
   isGhlCompanyScopedIntegration,
-  normalizeGhlContactName,
   readGhlCompanyId,
   readGhlLocationId,
-  searchGhlContacts,
   type GhlRawContact,
 } from "../ghlApiClient";
 import { getGhlProspectApiToken } from "../ghlProspectApiToken";
-import { assembleProspectPreviewResult } from "../prospectImportDedup";
-import { storage } from "../../storage";
-
-const DEFAULT_IMPORT_LIMIT = 100;
-const MAX_IMPORT_LIMIT = 1000;
-const PAGE_SIZE = 100;
+import {
+  createGhlProspectPreviewJob,
+  getGhlProspectPreviewJob,
+} from "../prospectImportPreviewService";
 
 type GhlInstalledLocation = { locationId: string; name: string };
 
@@ -157,163 +152,55 @@ export async function getGhlLocationMetadata(
   return { tags, pipelines, users };
 }
 
-import {
-  contactPassesFilters,
-  explainGhlContactFilterRejection,
-  sanitizeGhlContactForDiagnostics,
-} from "../ghlContactFilters";
-
-function mapRawContact(c: GhlRawContact): Omit<ProspectImportPreviewContact, "isDuplicate" | "duplicateReason"> {
-  return {
-    externalId: c.id,
-    name: normalizeGhlContactName(c),
-    company: c.companyName || undefined,
-    email: c.email || undefined,
-    phone: c.phone || undefined,
-    tags: c.tags ?? [],
-    source: c.source || undefined,
-    lastActivity: c.lastActivity || c.dateUpdated || c.dateAdded || undefined,
-  };
-}
-
 export async function previewGhlProspectImport(params: {
   integrationId: string;
   locationId?: string | null;
   filters: ProspectImportContactFilter;
   destinationUserId: string;
+  initiatedByUserId: string;
   appliedTemplateHint?: string | null;
-}): Promise<ProspectImportPreviewResult> {
-  const integration = await getIntegrationById(params.integrationId);
-  if (!integration?.isActive) throw new Error("GHL integration not found or inactive");
-  const resolved = await getGhlProspectApiToken(integration, params.locationId);
-  const token = resolved.token;
-  const locationId = resolved.locationId;
-
-  const limit = Math.min(
-    Math.max(params.filters.importLimit ?? DEFAULT_IMPORT_LIMIT, 1),
-    MAX_IMPORT_LIMIT,
-  );
-
-  const matched: GhlRawContact[] = [];
-  let page = 1;
-  let totalReported: number | undefined;
-  let skippedByFilters = 0;
-  const skippedContacts: {
-    externalId: string;
-    contact: Record<string, unknown>;
-    skipReason: string;
-  }[] = [];
-
-  while (matched.length < limit) {
-    const { contacts, total } = await searchGhlContacts({
-      token,
-      locationId,
-      page,
-      pageLimit: PAGE_SIZE,
-      query: params.filters.search,
-    });
-    if (totalReported == null && total != null) totalReported = total;
-    if (!contacts.length) break;
-
-    for (const c of contacts) {
-      const skipReason = explainGhlContactFilterRejection(c, params.filters);
-      if (skipReason) {
-        skippedByFilters += 1;
-        if (skippedContacts.length < 25) {
-          skippedContacts.push({
-            externalId: c.id,
-            contact: sanitizeGhlContactForDiagnostics(c),
-            skipReason,
-          });
-        }
-        continue;
-      }
-      matched.push(c);
-      if (matched.length >= limit) break;
-    }
-
-    if (contacts.length < PAGE_SIZE) break;
-    page += 1;
-    if (page > 50) break;
-  }
-
-  if (skippedContacts.length > 0) {
-    console.log(
-      JSON.stringify({
-        tag: "[GHL-ProspectImport-Preview]",
-        event: "prospect_import_filter_skips",
-        at: new Date().toISOString(),
-        integrationId: params.integrationId,
-        locationId,
-        appliedTemplateHint: params.appliedTemplateHint ?? null,
-        activeFilters: params.filters,
-        skippedByFilters,
-        skippedContacts,
-      }),
-    );
-  }
-
-  const destinationContacts = await storage.getContacts(params.destinationUserId, 50000);
-
-  return assembleProspectPreviewResult({
-    rows: matched.map(mapRawContact),
-    destinationContacts,
-    skippedByFilters,
-    totalFound: totalReported ?? matched.length,
-    truncated: matched.length >= limit,
-    diagnostics: {
-      activeFilters: params.filters,
-      appliedTemplateHint: params.appliedTemplateHint ?? null,
-      skippedContacts,
-    },
+}): Promise<
+  | { mode: "sync"; result: ProspectImportPreviewResult }
+  | { mode: "async"; previewJobId: string }
+> {
+  const outcome = await createGhlProspectPreviewJob({
+    integrationId: params.integrationId,
+    locationId: params.locationId?.trim() || "",
+    filters: params.filters,
+    destinationUserId: params.destinationUserId,
+    initiatedByUserId: params.initiatedByUserId,
+    appliedTemplateHint: params.appliedTemplateHint,
   });
+
+  if (outcome.async) {
+    return { mode: "async", previewJobId: outcome.job.id };
+  }
+  return { mode: "sync", result: outcome.result };
 }
 
-export async function fetchGhlContactsForImport(params: {
-  integrationId: string;
-  locationId?: string | null;
-  filters: ProspectImportContactFilter;
-  externalIds?: string[];
-}): Promise<GhlRawContact[]> {
-  const integration = await getIntegrationById(params.integrationId);
-  if (!integration?.isActive) throw new Error("GHL integration not found or inactive");
-  const resolved = await getGhlProspectApiToken(integration, params.locationId);
-  const token = resolved.token;
-  const locationId = resolved.locationId;
+export { getGhlProspectPreviewJob };
 
-  const selected = new Set(params.externalIds ?? []);
-  const useSelection = selected.size > 0;
-
-  const limit = useSelection
-    ? selected.size
-    : Math.min(Math.max(params.filters.importLimit ?? DEFAULT_IMPORT_LIMIT, 1), MAX_IMPORT_LIMIT);
-
-  const matched: GhlRawContact[] = [];
-  let page = 1;
-
-  while (matched.length < limit) {
-    const { contacts } = await searchGhlContacts({
-      token,
-      locationId,
-      page,
-      pageLimit: PAGE_SIZE,
-      query: params.filters.search,
-    });
-    if (!contacts.length) break;
-
-    for (const c of contacts) {
-      if (useSelection && !selected.has(c.id)) continue;
-      if (!useSelection && !contactPassesFilters(c, params.filters)) continue;
-      matched.push(c);
-      if (matched.length >= limit) break;
-      if (useSelection && matched.length >= selected.size) break;
-    }
-
-    if (contacts.length < PAGE_SIZE) break;
-    if (useSelection && matched.length >= selected.size) break;
-    page += 1;
-    if (page > 50) break;
-  }
-
-  return matched;
+export function snapshotsToGhlRawContacts(
+  snapshots: Array<{
+    externalId: string;
+    name: string;
+    company?: string;
+    email?: string;
+    phone?: string;
+    tags: string[];
+    source?: string;
+    lastActivity?: string;
+  }>,
+): GhlRawContact[] {
+  return snapshots.map((s) => ({
+    id: s.externalId,
+    contactName: s.name,
+    name: s.name,
+    email: s.email,
+    phone: s.phone,
+    companyName: s.company,
+    tags: s.tags,
+    source: s.source,
+    lastActivity: s.lastActivity,
+  }));
 }

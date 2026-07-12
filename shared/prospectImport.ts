@@ -54,6 +54,24 @@ export const PROSPECT_IMPORT_DASHBOARD_STAGES: ProspectImportPipelineStage[] = [
   "Partner",
 ];
 
+/** How many GHL contacts to scan before filters are fully evaluated (not the import cap). */
+export const PROSPECT_IMPORT_SCAN_SCOPES = [500, 1000, 5000, 10000, "entire"] as const;
+export type ProspectImportScanScope = (typeof PROSPECT_IMPORT_SCAN_SCOPES)[number];
+
+/** Max contacts to import from a preview result. */
+export const PROSPECT_IMPORT_LIMITS = [10, 50, 100, 250, 500, 1000] as const;
+export type ProspectImportLimit = (typeof PROSPECT_IMPORT_LIMITS)[number];
+
+export const PROSPECT_IMPORT_DEFAULT_SCAN_SCOPE: ProspectImportScanScope = 1000;
+export const PROSPECT_IMPORT_DEFAULT_IMPORT_LIMIT: ProspectImportLimit = 100;
+export const PROSPECT_IMPORT_ASYNC_SCAN_THRESHOLD = 1000;
+export const GHL_CONTACT_SEARCH_PAGE_SIZE = 100;
+export const PROSPECT_IMPORT_PREVIEW_ROWS_CAP = 250;
+export const PROSPECT_IMPORT_MATCHED_SNAPSHOTS_CAP = 5000;
+export const PROSPECT_IMPORT_SKIP_DIAGNOSTICS_CAP = 25;
+/** Safety cap when scanScope is "entire". */
+export const PROSPECT_IMPORT_ENTIRE_SCAN_MAX = 100_000;
+
 export type ProspectImportContactFilter = {
   tags?: string[];
   pipelineId?: string;
@@ -67,7 +85,43 @@ export type ProspectImportContactFilter = {
   hasPhone?: boolean;
   hasBoth?: boolean;
   search?: string;
+  /** Max contacts to import from matching pool (default 100, max 1000). */
   importLimit?: number;
+  /** Max contacts to scan in GHL before filter evaluation (default 1000). */
+  scanScope?: ProspectImportScanScope;
+};
+
+/** Which Prospect Import filters map to GHL Contacts Search API vs local evaluation. */
+export const PROSPECT_IMPORT_FILTER_APPLICATION: Record<
+  keyof Pick<
+    ProspectImportContactFilter,
+    | "search"
+    | "tags"
+    | "pipelineId"
+    | "pipelineStageId"
+    | "contactSource"
+    | "assignedUserId"
+    | "createdAfter"
+    | "createdBefore"
+    | "lastActivityDays"
+    | "hasEmail"
+    | "hasPhone"
+    | "hasBoth"
+  >,
+  "ghl_api" | "local"
+> = {
+  search: "ghl_api",
+  tags: "local",
+  pipelineId: "local",
+  pipelineStageId: "local",
+  contactSource: "local",
+  assignedUserId: "local",
+  createdAfter: "local",
+  createdBefore: "local",
+  lastActivityDays: "local",
+  hasEmail: "local",
+  hasPhone: "local",
+  hasBoth: "local",
 };
 
 export type ProspectImportOptions = {
@@ -111,6 +165,14 @@ export type ProspectImportPreviewStats = {
   skippedByFilters: number;
   estimatedFinalImport: number;
   dryRun: true;
+  /** Contacts fetched from GHL during this scan. */
+  totalContactsScanned: number;
+  /** GHL-reported total for the location when available. */
+  ghlReportedTotal?: number | null;
+  /** True when scan hit scanScope before exhausting the location. */
+  scanStoppedEarly: boolean;
+  /** True when all pages through scanScope or location end were processed. */
+  scanComplete: boolean;
 };
 
 export type ProspectImportFilterSkipDiagnostic = {
@@ -125,6 +187,17 @@ export type ProspectImportPreviewDiagnostics = {
   skippedContacts: ProspectImportFilterSkipDiagnostic[];
 };
 
+export type ProspectImportMatchedSnapshot = {
+  externalId: string;
+  name: string;
+  company?: string;
+  email?: string;
+  phone?: string;
+  tags: string[];
+  source?: string;
+  lastActivity?: string;
+};
+
 export type ProspectImportPreviewResult = {
   totalFound: number;
   tagBreakdown: { tag: string; count: number }[];
@@ -132,6 +205,32 @@ export type ProspectImportPreviewResult = {
   truncated: boolean;
   stats: ProspectImportPreviewStats;
   diagnostics?: ProspectImportPreviewDiagnostics;
+  previewJobId?: string;
+  filterFingerprint?: string;
+  scannedAt?: string;
+};
+
+export type ProspectImportPreviewJobStatus = "pending" | "running" | "completed" | "failed";
+
+export type ProspectImportPreviewJobSummary = {
+  id: string;
+  status: ProspectImportPreviewJobStatus;
+  integrationId: string;
+  locationId: string;
+  scanScope: ProspectImportScanScope;
+  importLimit: number;
+  progressScanned: number;
+  progressTarget: number;
+  progressMatches: number;
+  ghlReportedTotal?: number | null;
+  filterFingerprint: string;
+  errorMessage?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+};
+
+export type ProspectImportPreviewJobPoll = ProspectImportPreviewJobSummary & {
+  result?: ProspectImportPreviewResult | null;
 };
 
 export type ProspectImportJobStatus = "pending" | "running" | "completed" | "failed";
@@ -321,7 +420,7 @@ export const PROSPECT_IMPORT_PRESET_TEMPLATES: Omit<
   {
     templateName: "Agency Prospects",
     provider: "gohighlevel",
-    filters: { tags: ["Agency"], importLimit: 100 },
+    filters: { tags: ["Agency"], importLimit: 100, scanScope: 1000 },
     defaultInternalTag: "Imported-Agency",
     defaultImportReason: "Agency recruitment",
     defaultImportLimit: 100,

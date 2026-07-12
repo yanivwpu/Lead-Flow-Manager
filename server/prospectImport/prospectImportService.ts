@@ -22,12 +22,17 @@ import {
   findProspectDuplicate,
 } from "./prospectImportDedup";
 import {
-  fetchGhlContactsForImport,
   getGhlLocationMetadata,
   listGhlProspectLocations,
   previewGhlProspectImport,
+  snapshotsToGhlRawContacts,
 } from "./providers/ghlProspectProvider";
-import { getIntegrationById, resolveGhlProspectLocationId } from "./ghlApiClient";
+import { getIntegrationById, resolveGhlProspectLocationId, type GhlRawContact } from "./ghlApiClient";
+import {
+  loadPreviewSnapshotsForImport,
+  validatePreviewImportRequest,
+  getGhlProspectPreviewJob,
+} from "./prospectImportPreviewService";
 import {
   canUndoImportJob,
   executeProspectImportUndo,
@@ -40,6 +45,8 @@ import {
 } from "./prospectImportTemplates";
 
 const runningJobs = new Set<string>();
+const IMPORT_BATCH_SIZE = 50;
+const PREVIEW_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export async function resolveProspectImportDestinationUserId(): Promise<string> {
   const envId = String(process.env.PROSPECT_IMPORT_DESTINATION_USER_ID || "").trim();
@@ -137,9 +144,14 @@ export async function createProspectImportJob(params: {
   filters: ProspectImportContactFilter;
   importOptions: ProspectImportOptions;
   previewTotal: number;
+  previewJobId?: string;
+  filterFingerprint?: string;
 }): Promise<ProspectImportJobSummary> {
   const batchName = String(params.importOptions.batchName || "").trim();
   if (!batchName) throw new Error("Batch name is required");
+  if (!params.previewJobId?.trim()) {
+    throw new Error("previewJobId is required — run preview before import");
+  }
 
   const destinationUserId = await resolveProspectImportDestinationUserId();
   const integration = await getIntegrationById(params.integrationId);
@@ -148,6 +160,25 @@ export async function createProspectImportJob(params: {
     : params.locationId.trim();
   if (!locationId) throw new Error("GHL token or location unavailable");
 
+  const previewData = await loadPreviewSnapshotsForImport(
+    params.previewJobId.trim(),
+    params.importOptions.selectedExternalIds,
+  );
+
+  validatePreviewImportRequest({
+    previewJobId: params.previewJobId,
+    filterFingerprint: params.filterFingerprint,
+    locationId,
+    integrationId: params.integrationId,
+    expectedFingerprint: previewData.filterFingerprint,
+    scannedAt: previewData.scannedAt,
+    maxAgeMs: PREVIEW_MAX_AGE_MS,
+  });
+
+  if (previewData.locationId !== locationId || previewData.integrationId !== params.integrationId) {
+    throw new Error("Preview location/integration mismatch — run preview again");
+  }
+
   const skipDuplicates = params.importOptions.skipDuplicates !== false;
   const importOptions: ProspectImportOptions = {
     ...params.importOptions,
@@ -155,6 +186,12 @@ export async function createProspectImportJob(params: {
     skipDuplicates,
     updateMissingFieldsOnly: skipDuplicates ? false : Boolean(params.importOptions.updateMissingFieldsOnly),
   };
+
+  const importLimit = Math.min(Math.max(previewData.filters.importLimit ?? 100, 1), 1000);
+  let snapshots = previewData.snapshots;
+  if (!importOptions.selectedExternalIds?.length) {
+    snapshots = snapshots.slice(0, importLimit);
+  }
 
   const [row] = await db
     .insert(prospectImportJobs)
@@ -169,9 +206,11 @@ export async function createProspectImportJob(params: {
       status: "pending",
       filters: params.filters,
       importOptions,
-      selectedExternalIds: importOptions.selectedExternalIds ?? null,
+      selectedExternalIds: importOptions.selectedExternalIds ?? snapshots.map((s) => s.externalId),
       previewTotal: params.previewTotal,
-      progressTotal: importOptions.selectedExternalIds?.length ?? params.previewTotal,
+      previewJobId: params.previewJobId.trim(),
+      progressTotal: snapshots.length,
+      resultDetails: { previewSnapshots: snapshots },
     })
     .returning();
 
@@ -255,14 +294,33 @@ async function runProspectImportJob(jobId: string): Promise<void> {
     const destinationUserId = job.destinationUserId;
     const filters = (job.filters || {}) as ProspectImportContactFilter;
     const options = (job.importOptions || {}) as ProspectImportOptions;
-    const selectedIds = (job.selectedExternalIds as string[] | null) ?? options.selectedExternalIds;
+    const resultDetails = (job.resultDetails || {}) as {
+      previewSnapshots?: Array<{
+        externalId: string;
+        name: string;
+        company?: string;
+        email?: string;
+        phone?: string;
+        tags: string[];
+        source?: string;
+        lastActivity?: string;
+      }>;
+      createdContactIds?: string[];
+      updatedContactIds?: string[];
+    };
 
-    const rawContacts = await fetchGhlContactsForImport({
-      integrationId: job.sourceIntegrationId!,
-      locationId: job.sourceLocationId,
-      filters,
-      externalIds: selectedIds,
-    });
+    let rawContacts: GhlRawContact[];
+    if (resultDetails.previewSnapshots?.length) {
+      rawContacts = snapshotsToGhlRawContacts(resultDetails.previewSnapshots);
+    } else if (job.previewJobId) {
+      const loaded = await loadPreviewSnapshotsForImport(
+        job.previewJobId,
+        (job.selectedExternalIds as string[] | null) ?? options.selectedExternalIds,
+      );
+      rawContacts = snapshotsToGhlRawContacts(loaded.snapshots);
+    } else {
+      throw new Error("Import job missing preview snapshots — cannot import safely");
+    }
 
     const total = rawContacts.length;
     await updateJob(jobId, { progressTotal: total });
@@ -273,6 +331,7 @@ async function runProspectImportJob(jobId: string): Promise<void> {
     let imported = 0;
     let skipped = 0;
     let duplicates = 0;
+    let updated = 0;
     let errors = 0;
 
     const internalTag = (options.internalTag || "Imported-GHL") as ProspectImportInternalTag;
@@ -282,6 +341,7 @@ async function runProspectImportJob(jobId: string): Promise<void> {
     const skipDuplicates = options.skipDuplicates !== false;
     const updateMissingOnly = Boolean(options.updateMissingFieldsOnly);
     const createdContactIds: string[] = [];
+    const updatedContactIds: string[] = [];
 
     for (let i = 0; i < rawContacts.length; i++) {
       const raw = rawContacts[i];
@@ -320,13 +380,15 @@ async function runProspectImportJob(jobId: string): Promise<void> {
               ...prospectMeta,
               createdByImportJob: false,
             });
-            const updated = await storage.updateContact(dup.contact.id, {
+            const updatedContact = await storage.updateContact(dup.contact.id, {
               ...patch,
               sourceDetails: metaPatch.sourceDetails,
               customFields: metaPatch.customFields,
             });
-            if (updated) {
-              if (updated.ghlId) dedupIndex.byGhlId.set(updated.ghlId, updated);
+            if (updatedContact) {
+              updated += 1;
+              updatedContactIds.push(updatedContact.id);
+              if (updatedContact.ghlId) dedupIndex.byGhlId.set(updatedContact.ghlId, updatedContact);
             }
           } else {
             skipped += 1;
@@ -370,7 +432,7 @@ async function runProspectImportJob(jobId: string): Promise<void> {
         console.error("[ProspectImport] Row error:", raw.id, err);
       }
 
-      if ((i + 1) % 5 === 0 || i === rawContacts.length - 1) {
+      if ((i + 1) % IMPORT_BATCH_SIZE === 0 || i === rawContacts.length - 1) {
         await updateJob(jobId, { progressCurrent: i + 1 });
       }
     }
@@ -383,7 +445,7 @@ async function runProspectImportJob(jobId: string): Promise<void> {
       resultSkipped: skipped,
       resultDuplicates: duplicates,
       resultErrors: errors,
-      resultDetails: { createdContactIds },
+      resultDetails: { createdContactIds, updatedContactIds, updated },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -411,4 +473,5 @@ export const prospectImportService = {
   listProspectImportTemplates,
   saveProspectImportTemplate,
   deleteProspectImportTemplate,
+  getGhlProspectPreviewJob,
 };

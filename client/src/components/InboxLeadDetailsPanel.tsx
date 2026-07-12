@@ -1361,8 +1361,16 @@ export function InboxLeadDetailsPanel({
 
   // ── AI Memory: fetch AI-generated summary whenever messages change meaningfully ──
   useEffect(() => {
+    // Hard-reset when switching contacts so prior contact memory cannot linger.
+    aiMemoryKeyRef.current = "";
+    setAiMemory("");
+    setAiMemoryLoading(false);
+  }, [contact.id]);
+
+  useEffect(() => {
     if (messages.length === 0) {
       setAiMemory('');
+      aiMemoryKeyRef.current = '';
       return;
     }
     // Build a key from contact id + message count to avoid duplicate fetches
@@ -2504,9 +2512,20 @@ export function InboxLeadDetailsPanel({
                 />
               ) : (
                 <>
+                  {!primaryConversation || messages.length === 0 ? (
+                    <div
+                      className="mb-3 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-3 py-2.5"
+                      data-testid="copilot-no-conversation-context"
+                    >
+                      <p className="text-[12px] font-medium text-gray-700">No conversation context yet</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                        Conversation-based insights appear after the first message on this contact.
+                      </p>
+                    </div>
+                  ) : null}
                   {/* A. Lead score + insights (action-oriented; criteria live in Buyer Preferences) */}
                   <div className="space-y-3">
-                    {intel.leadScoreDetails ? (
+                    {intel.leadScoreDetails && messages.length > 0 ? (
                       <div className="flex items-end justify-between gap-2">
                         <div className="space-y-0.5 min-w-0">
                           <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
@@ -2526,14 +2545,14 @@ export function InboxLeadDetailsPanel({
                           </div>
                         </div>
                       </div>
-                    ) : (
+                    ) : messages.length > 0 ? (
                       <div className="flex items-center gap-2">
                         <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", intel.leadScore.dot)} />
                         <span className={cn("text-[13px] font-bold", intel.leadScore.color)}>
                           {intel.leadScore.label} Lead
                         </span>
                       </div>
-                    )}
+                    ) : null}
 
                     {customerInsights.length > 0 ? (
                       <div className="space-y-1">

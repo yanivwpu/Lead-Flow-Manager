@@ -11,6 +11,10 @@ import { waUploadFileSizeCheck, waUploadTooLargeMessage } from "@shared/whatsapp
 import { Link, useRoute, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import {
+  resolveInboxSelectionState,
+  shouldFetchInboxMessages,
+} from "@/lib/inboxSelectionState";
 import { useSubscription } from "@/lib/subscription-context";
 import { AIComposer, type AIComposerHandle, type ContactContext } from "@/components/AIComposer";
 import { WhatsAppTemplateRichPreview } from "@/components/WhatsAppTemplateRichPreview";
@@ -687,18 +691,30 @@ export function UnifiedInbox() {
   const { data: contactData } = useQuery<{ contact: Contact; conversations: Conversation[] }>({
     queryKey: ["/api/contacts", selectedContactId],
     enabled: !!selectedContactId,
+    // keepPreviousData is OK for network caching, but UI must gate on contact.id === selectedContactId
+    // via resolveInboxSelectionState — never render previous contact's conversations/messages.
     placeholderData: keepPreviousData,
   });
+
+  const inboxSelectedItem = useMemo(
+    () => (selectedContactId ? inbox.find((item) => item.contact.id === selectedContactId) : undefined),
+    [inbox, selectedContactId],
+  );
+
+  // First pass: match contact only (channel preference computed after reachable channels).
+  const contactMatchesSelection = contactData?.contact?.id === selectedContactId;
+  const matchedContact = contactMatchesSelection ? contactData!.contact : undefined;
+  const matchedConversations = contactMatchesSelection ? (contactData?.conversations ?? []) : [];
+
+  /** Header/CRM: matched detail or inbox list row — never a mismatched previous contact. */
+  const displayContact: Contact | undefined =
+    matchedContact ?? (inboxSelectedItem?.contact as Contact | undefined);
 
   const { profile: persistedBuyerProfile } = usePersistedBuyerPreferences(selectedContactId);
 
   const contactReachableChannels = useMemo(
-    () =>
-      getReachableChannelsForContact(
-        contactData?.contact as Contact | undefined,
-        contactData?.conversations
-      ),
-    [contactData?.contact, contactData?.conversations]
+    () => getReachableChannelsForContact(displayContact, matchedConversations),
+    [displayContact, matchedConversations]
   );
 
   /** Deep link from Re-engagement (Templates): `/app/inbox/:contactId?channel=facebook|instagram|whatsapp&focusComposer=1` */
@@ -753,8 +769,9 @@ export function UnifiedInbox() {
   }, [selectedContactId, contactReachableChannels, setLocation]);
 
   // Mirror backend getPrimaryChannel, then clamp to channels this contact can actually use.
+  // Use displayContact (matched detail or inbox list) — never previous-contact placeholder data.
   const effectiveChannel = useMemo(() => {
-    const c = contactData?.contact as Contact | undefined;
+    const c = displayContact;
     if (!c) return undefined;
     const reachable = contactReachableChannels;
     if (reachable.length === 0) return undefined;
@@ -778,11 +795,22 @@ export function UnifiedInbox() {
     if (reachable.includes(c.primaryChannel as Channel)) return c.primaryChannel as Channel;
 
     return reachable[0];
-  }, [contactData?.contact, contactReachableChannels]);
+  }, [displayContact, contactReachableChannels]);
 
-  const primaryConversation =
-    contactData?.conversations?.find((c) => c.channel === effectiveChannel) ||
-    contactData?.conversations?.[0];
+  const selectionBase = useMemo(
+    () =>
+      resolveInboxSelectionState({
+        selectedContactId,
+        contactQueryData: contactData,
+        preferredChannel: effectiveChannel ?? null,
+        messagesQueryData: null,
+        inboxListContact: inboxSelectedItem?.contact ?? null,
+      }),
+    [selectedContactId, contactData, effectiveChannel, inboxSelectedItem?.contact],
+  );
+
+  const primaryConversation = (selectionBase.primaryConversation as Conversation | null) ?? undefined;
+  const activeConversationId = selectionBase.activeConversationId;
 
   const composerScopeKey = useMemo(() => {
     if (!selectedContactId) return null;
@@ -877,7 +905,7 @@ export function UnifiedInbox() {
   }, [contactReachableChannels, sendChannelUi]);
 
   const activeChannel: Channel | undefined = useMemo(() => {
-    const c = contactData?.contact as Contact | undefined;
+    const c = displayContact;
     const reachable = contactReachableChannels;
     if (reachable.length === 0) return undefined;
 
@@ -886,7 +914,7 @@ export function UnifiedInbox() {
     if (effectiveChannel && reachable.includes(effectiveChannel)) return effectiveChannel;
     return reachable[0];
   }, [
-    contactData?.contact,
+    displayContact,
     contactReachableChannels,
     sendChannelUi,
     effectiveChannel,
@@ -901,12 +929,12 @@ export function UnifiedInbox() {
   const isWhatsAppContact = activeChannel === 'whatsapp';
 
   const windowConversationId = useMemo(() => {
-    if (!activeChannel) return undefined;
+    if (!activeChannel || !contactMatchesSelection) return undefined;
     const ch = activeChannel as string;
     if (!['whatsapp', 'facebook', 'instagram'].includes(ch)) return undefined;
-    const conv = contactData?.conversations?.find((c) => c.channel === activeChannel);
+    const conv = matchedConversations.find((c) => c.channel === activeChannel);
     return conv?.id ?? primaryConversation?.id;
-  }, [activeChannel, contactData?.conversations, primaryConversation?.id]);
+  }, [activeChannel, matchedConversations, primaryConversation?.id, contactMatchesSelection]);
 
   /** Drives reply-window UI every minute without waiting on React Query refetch. */
   const [replyWindowNow, setReplyWindowNow] = useState(() => Date.now());
@@ -919,15 +947,31 @@ export function UnifiedInbox() {
     bumpReplyWindowClockRef.current = () => setReplyWindowNow(Date.now());
   }, []);
 
-  const { data: messages = [], isLoading: messagesLoading, isFetching: messagesFetching } = useQuery<Message[]>({
-    queryKey: ["/api/conversations", primaryConversation?.id, "messages"],
-    enabled: !!primaryConversation?.id,
+  const messagesEnabled = shouldFetchInboxMessages({
+    selectedContactId,
+    contactMatchesSelection,
+    conversationId: activeConversationId,
+  });
+
+  const {
+    data: messagesQueryData,
+    isLoading: messagesLoading,
+    isFetching: messagesFetching,
+  } = useQuery<Message[]>({
+    queryKey: ["/api/conversations", activeConversationId, "messages"],
+    enabled: messagesEnabled,
     staleTime: 8_000,
     refetchInterval: () =>
       typeof document !== "undefined" && document.hidden ? false : 10_000,
     refetchIntervalInBackground: true,
-    placeholderData: keepPreviousData,
+    // CRITICAL: do not keepPreviousData — contact-only records must never show
+    // the previous contact's messages while conversationId is null/disabled.
   });
+
+  const messages = useMemo(() => {
+    if (!messagesEnabled || !activeConversationId) return [];
+    return messagesQueryData ?? [];
+  }, [messagesEnabled, activeConversationId, messagesQueryData]);
 
   const expandedCalendlyMessageIndex = useMemo(
     () => findExpandedCalendlyMessageIndex(messages),
@@ -1756,11 +1800,18 @@ export function UnifiedInbox() {
   }, [toast]);
 
   const handleEditContact = () => {
-    if (contactData?.contact) {
+    if (matchedContact) {
       setEditContactForm({
-        name: contactData.contact.name || "",
-        phone: contactData.contact.phone || "",
-        email: contactData.contact.email || "",
+        name: matchedContact.name || "",
+        phone: matchedContact.phone || "",
+        email: matchedContact.email || "",
+      });
+      setShowEditContact(true);
+    } else if (displayContact) {
+      setEditContactForm({
+        name: displayContact.name || "",
+        phone: displayContact.phone || "",
+        email: displayContact.email || "",
       });
       setShowEditContact(true);
     }
@@ -1955,7 +2006,8 @@ export function UnifiedInbox() {
     return format(date, "MMM d");
   };
 
-  const contact = contactData?.contact;
+  /** Matched detail contact or inbox-list fallback — never previous contact via keepPreviousData. */
+  const contact = displayContact;
 
   // Business knowledge (industry gate for Copilot intel; no backend logic change)
   const { data: aiBusinessKnowledge } = useQuery<{ industry?: string }>({
@@ -1963,14 +2015,18 @@ export function UnifiedInbox() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Build contact context for AI reply quality improvement (must be after contact + messages are declared)
+  // Build contact context for AI reply quality improvement (must be after contact + messages are declared).
+  // messages is already selection-isolated (empty when no conversation / contact mismatch).
   const contactContext: ContactContext | undefined = useMemo(() => {
-    if (!contact) return undefined;
+    if (!contact || contact.id !== selectedContactId) return undefined;
     const msgList = messages.map(m => ({ direction: m.direction, content: m.content || '' }));
-    const intel = analyzeConversation(msgList, {
-      industry: aiBusinessKnowledge?.industry,
-      crmLeadScore: contact.leadScore ?? null,
-    });
+    const intel =
+      msgList.length > 0
+        ? analyzeConversation(msgList, {
+            industry: aiBusinessKnowledge?.industry,
+            crmLeadScore: contact.leadScore ?? null,
+          })
+        : null;
     const buyerPrefsSummary = (() => {
       const ind = (aiBusinessKnowledge?.industry || "").toLowerCase();
       const re =
@@ -1999,8 +2055,9 @@ export function UnifiedInbox() {
       leadScore:     intel?.leadScore?.label,
       buyerPreferences: buyerPrefsSummary,
     };
-  }, [contact, messages, aiBusinessKnowledge?.industry, persistedBuyerProfile]);
+  }, [contact, selectedContactId, messages, aiBusinessKnowledge?.industry, persistedBuyerProfile]);
 
+  const hasConversation = !!activeConversationId && contactMatchesSelection;
   const convStatus = primaryConversation?.status || 'open';
   const conversationStatusRow = getConversationStatusRow(convStatus);
 
@@ -2352,11 +2409,17 @@ export function UnifiedInbox() {
               <ChatAvatar src={contact.avatar} name={contact.name} size="md" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <h3 className="font-semibold text-sm truncate">{contact.name}</h3>
+                  <h3 className="font-semibold text-sm truncate" data-testid="inbox-selected-contact-name">{contact.name}</h3>
                   {getChannelIcon(activeChannel)}
-                  <span className={cn("text-[10px] font-medium tracking-tight", conversationStatusRow.textClass)}>
-                    {conversationStatusRow.label}
-                  </span>
+                  {hasConversation ? (
+                    <span className={cn("text-[10px] font-medium tracking-tight", conversationStatusRow.textClass)}>
+                      {conversationStatusRow.label}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-medium tracking-tight text-muted-foreground">
+                      No conversation
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   {contact.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{contact.phone}</span>}
@@ -2481,7 +2544,7 @@ export function UnifiedInbox() {
             >
               <div className="absolute inset-0 bg-[#efeae2]/90 pointer-events-none" />
               <div ref={messagesInnerRef} className="relative z-10 flex min-w-0 flex-col gap-1.5 p-2 sm:p-3">
-                {messagesLoading && messages.length === 0 ? (
+                {messagesLoading && messagesEnabled && messages.length === 0 ? (
                   <div className="flex flex-col gap-3 pb-4">
                     {[80, 55, 120, 45, 90].map((w, i) => (
                       <div key={i} className={`flex min-w-0 ${i % 2 === 0 ? 'justify-start' : 'justify-end'}`}>
@@ -2489,8 +2552,22 @@ export function UnifiedInbox() {
                       </div>
                     ))}
                   </div>
+                ) : !hasConversation ? (
+                  <div
+                    className="text-center text-gray-600 py-10 self-center max-w-sm px-4"
+                    data-testid="inbox-no-conversation-yet"
+                  >
+                    <MessageCircle className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-medium text-gray-800">No conversation yet</p>
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                      This contact has no message history.
+                      {contactReachableChannels.length > 0
+                        ? " Choose an available channel below to start a conversation."
+                        : " Add a phone number or connect a messaging channel to start a conversation."}
+                    </p>
+                  </div>
                 ) : !messagesLoading && messages.length === 0 ? (
-                  <div className="text-center text-gray-500 py-8 self-center">
+                  <div className="text-center text-gray-500 py-8 self-center" data-testid="inbox-no-messages-yet">
                     <MessageCircle className="w-10 h-10 mx-auto mb-2 opacity-30" />
                     <p className="text-sm">No messages yet</p>
                   </div>
@@ -3075,7 +3152,7 @@ export function UnifiedInbox() {
 
             {/* Composer — Meta reply-window + AI notices merge into one chip bar inside AIComposer */}
             <AIComposer
-              key={composerScopeKey ?? "no-contact"}
+              key={composerScopeKey ?? `contact-${selectedContactId}`}
               ref={composerRef}
               value={messageInput}
               onChange={handleComposerChange}
@@ -3088,28 +3165,38 @@ export function UnifiedInbox() {
               handoffKeywords={handoffKeywords}
               contactId={selectedContactId}
               contactContext={contactContext}
-              conversationId={primaryConversation?.id ?? null}
-              messages={messages.map((m) => ({
-                role: m.direction === "inbound" ? "user" : "assistant",
-                direction: m.direction,
-                content: m.content || "",
-              }))}
-              onTemplate={isWhatsAppContact ? handleOpenTemplatePicker : undefined}
+              conversationId={hasConversation ? (primaryConversation?.id ?? null) : null}
+              messages={
+                hasConversation
+                  ? messages.map((m) => ({
+                      role: m.direction === "inbound" ? "user" : "assistant",
+                      direction: m.direction,
+                      content: m.content || "",
+                    }))
+                  : []
+              }
+              onTemplate={isWhatsAppContact && hasConversation ? handleOpenTemplatePicker : undefined}
               fileInputRef={fileInputRef}
               handleFileSelect={handleFileSelect}
-              metaReplyWindowNotice={metaComposerWindowNotice}
+              metaReplyWindowNotice={hasConversation ? metaComposerWindowNotice : null}
               hasPendingAttachment={!!pendingFile}
               onAttachPendingMedia={attachComposerPendingMedia}
             />
           </>
+        ) : selectedContactId ? (
+          /* Contact selected but detail still loading (and not yet in inbox list cache) */
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#efeae2]/30">
+            <Loader2 className="w-8 h-8 animate-spin text-primary mb-3" />
+            <p className="text-sm text-muted-foreground">Loading contact…</p>
+          </div>
         ) : (
-          /* Empty state */
+          /* Empty state — no contact selected */
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#efeae2]/30">
             <div className="bg-white rounded-2xl p-8 shadow-sm max-w-sm">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <MessageCircle className="w-8 h-8 text-gray-600" />
               </div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">Select a conversation</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">Select a contact</h2>
               <p className="text-gray-500 text-sm">Choose a contact from the list to view messages and manage their CRM details.</p>
             </div>
           </div>
@@ -3119,16 +3206,17 @@ export function UnifiedInbox() {
       {/* ── RIGHT COLUMN: CRM Panel (desktop) ── */}
       {!isMobile && selectedContactId && contact && (
         <InboxLeadDetailsPanel
+          key={contact.id}
           contact={contact as InboxLeadDetailsPanelContact}
-          primaryConversation={primaryConversation as InboxLeadDetailsPanelConversation}
+          primaryConversation={hasConversation ? (primaryConversation as InboxLeadDetailsPanelConversation) : undefined}
           teamMembers={teamMembers}
-          messages={messages.map(m => ({ direction: m.direction, content: m.content || '' }))}
+          messages={hasConversation ? messages.map(m => ({ direction: m.direction, content: m.content || '' })) : []}
           capabilities={capabilities}
           currentUserId={user?.id}
-          handoffActive={!!activeHandoff}
-          handoffEventId={activeHandoff?.id ?? null}
+          handoffActive={!!activeHandoff && hasConversation}
+          handoffEventId={hasConversation ? (activeHandoff?.id ?? null) : null}
           handoffMessage={
-            activeHandoff
+            hasConversation && activeHandoff
               ? String((activeHandoff.eventData as any)?.reason || "Customer requested human assistance")
               : undefined
           }
@@ -3141,7 +3229,7 @@ export function UnifiedInbox() {
           connectedChannels={connectedChannelsMap}
           onUpdateContact={updateContact}
           onUpdateConversationStatus={status => {
-            if (primaryConversation) {
+            if (primaryConversation && hasConversation) {
               updateConversationMutation.mutate({ conversationId: primaryConversation.id, status });
             }
           }}
@@ -3162,17 +3250,18 @@ export function UnifiedInbox() {
             <div className="flex-1 min-h-0 overflow-y-auto">
               {showDetailsSheet && selectedContactId && contact ? (
                 <InboxLeadDetailsPanel
+                  key={contact.id}
                   contact={contact as InboxLeadDetailsPanelContact}
-                  primaryConversation={primaryConversation as InboxLeadDetailsPanelConversation}
+                  primaryConversation={hasConversation ? (primaryConversation as InboxLeadDetailsPanelConversation) : undefined}
                   teamMembers={teamMembers}
-                  messages={messages.map(m => ({ direction: m.direction, content: m.content || '' }))}
+                  messages={hasConversation ? messages.map(m => ({ direction: m.direction, content: m.content || '' })) : []}
                   capabilities={capabilities}
                   currentUserId={user?.id}
                   panelClassName="flex flex-col w-full bg-white"
-                  handoffActive={!!activeHandoff}
-                  handoffEventId={activeHandoff?.id ?? null}
+                  handoffActive={!!activeHandoff && hasConversation}
+                  handoffEventId={hasConversation ? (activeHandoff?.id ?? null) : null}
                   handoffMessage={
-                    activeHandoff
+                    hasConversation && activeHandoff
                       ? String((activeHandoff.eventData as any)?.reason || "Customer requested human assistance")
                       : undefined
                   }
@@ -3185,7 +3274,7 @@ export function UnifiedInbox() {
                   connectedChannels={connectedChannelsMap}
                   onUpdateContact={updateContact}
                   onUpdateConversationStatus={status => {
-                    if (primaryConversation) {
+                    if (primaryConversation && hasConversation) {
                       updateConversationMutation.mutate({ conversationId: primaryConversation.id, status });
                     }
                   }}
