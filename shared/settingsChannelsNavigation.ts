@@ -1,6 +1,6 @@
 /** Deep-link query params for Settings → Communication Channels (see Settings + ChannelSettings). */
 
-export type SettingsChannelProvider = "whatsapp" | "instagram" | "facebook";
+export type SettingsChannelProvider = "whatsapp" | "instagram" | "facebook" | "email";
 
 export function settingsChannelsQuery(opts?: { provider?: SettingsChannelProvider }): string {
   const q = new URLSearchParams();

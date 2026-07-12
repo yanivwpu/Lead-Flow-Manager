@@ -92,6 +92,8 @@ export interface AIComposerProps {
   hasPendingAttachment?: boolean;
   /** Opens template picker when provided (inbox composer). */
   onTemplate?: () => void;
+  /** Messaging channel for AI tone/context (e.g. email vs WhatsApp). */
+  channel?: string | null;
 }
 
 const MIN_TEXTAREA_HEIGHT = 58;
@@ -161,6 +163,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   contactId = null,
   metaReplyWindowNotice = null,
   hasPendingAttachment = false,
+  channel = null,
 }, ref) {
   const isMobile = useIsMobile();
   // Resolve effective access from capabilities (falls back to legacy aiEnabled prop)
@@ -374,6 +377,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
           contactId: contactId || undefined,
           conversationHistory: history.slice(-12),
           aiMode: 'auto',
+          channel: channel || undefined,
           ...(contactContext ? { contactContext } : {}),
         }),
       });
@@ -559,6 +563,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
             chatId: conversationId,
             contactId: contactId || undefined,
             conversationHistory: history.slice(-12),
+            channel: channel || undefined,
             ...(contactContext ? { contactContext } : {}),
           }),
         });
@@ -650,6 +655,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
           chatId: conversationId,
           contactId: contactId || undefined,
           conversationHistory: messages.slice(-12),
+          channel: channel || undefined,
           ...(contactContext ? { contactContext } : {}),
         }),
       });

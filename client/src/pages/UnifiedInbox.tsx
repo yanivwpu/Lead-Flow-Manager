@@ -52,7 +52,9 @@ import {
   Calendar,
   CalendarCheck,
   ShoppingCart,
+  Mail,
 } from "lucide-react";
+import { EmailMessageBody } from "@/components/inbox/EmailMessageBody";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -169,6 +171,8 @@ interface Conversation {
   status: string;
   unreadCount: number;
   channelAccountId?: string | null;
+  externalThreadId?: string | null;
+  subject?: string | null;
   lastMessageAt?: string;
   lastMessagePreview?: string;
   lastMessageDirection?: string;
@@ -301,6 +305,7 @@ const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }
   webchat: { icon: Globe, color: '#3B82F6', label: 'Web Chat' },
   telegram: { icon: Send, color: '#0088CC', label: 'Telegram' },
   tiktok: { icon: Video, color: '#000000', label: 'TikTok' },
+  email: { icon: Mail, color: '#EA4335', label: 'Email' },
   gohighlevel: { icon: Zap, color: '#F97316', label: 'CRM' },
   calendly: { icon: Calendar, color: '#006BFF', label: 'Calendly' },
   shopify: { icon: ShoppingCart, color: '#96BF48', label: 'Shopify' },
@@ -333,8 +338,9 @@ function getReachableChannelsForContact(
   if (c.phone) keys.add('sms');
   if (c.telegramId) keys.add('telegram');
   if (c.ghlId) keys.add('gohighlevel');
+  if (c.email && String(c.email).includes('@')) keys.add('email');
   if (contactHasWebchatReachability(c, conversations)) keys.add('webchat');
-  const order: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'gohighlevel'];
+  const order: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'email', 'gohighlevel'];
   return order.filter((k) => keys.has(k));
 }
 
@@ -540,9 +546,10 @@ export function UnifiedInbox() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
-  const allChannels: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok', 'calendly', 'shopify', 'woocommerce'];
+  const allChannels: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'email', 'tiktok', 'calendly', 'shopify', 'woocommerce'];
   const [selectedChannels, setSelectedChannels] = useState<Set<Channel>>(new Set(allChannels));
   const [messageInput, setMessageInput] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
   const messageInputRef = useRef(messageInput);
   messageInputRef.current = messageInput;
   const prevComposerScopeRef = useRef<string | null>(null);
@@ -927,6 +934,15 @@ export function UnifiedInbox() {
   contactReachableChannelsRef.current = contactReachableChannels;
 
   const isWhatsAppContact = activeChannel === 'whatsapp';
+  const isEmailChannel = activeChannel === 'email';
+
+  // Prefill subject when opening an email thread
+  useEffect(() => {
+    if (!isEmailChannel) return;
+    const subj = primaryConversation?.subject?.trim();
+    if (subj) setEmailSubject(subj.startsWith("Re:") ? subj : `Re: ${subj}`);
+    else if (!primaryConversation) setEmailSubject((prev) => prev); // keep draft for new compose
+  }, [isEmailChannel, primaryConversation?.id, primaryConversation?.subject]);
 
   const windowConversationId = useMemo(() => {
     if (!activeChannel || !contactMatchesSelection) return undefined;
@@ -1285,6 +1301,7 @@ export function UnifiedInbox() {
       mediaFilename?: string;
       contentType?: string;
       source?: string;
+      emailSubject?: string;
     }) => {
       const channel = clampOutboundChannel(
         displayedOutboundChannelRef.current,
@@ -1293,19 +1310,41 @@ export function UnifiedInbox() {
       if (channel === null) {
         throw new Error('No available messaging channel for this contact.');
       }
+      const emailThreadId =
+        channel === "email"
+          ? primaryConversation?.channel === "email"
+            ? primaryConversation.externalThreadId || undefined
+            : undefined
+          : undefined;
+      const body: Record<string, unknown> = {
+        content: data.content,
+        contentType: data.contentType || (data.mediaType || 'text'),
+        mediaUrl: data.mediaUrl,
+        mediaType: data.mediaType ? `${data.mediaType}` : undefined,
+        mediaFilename: data.mediaFilename,
+        channel,
+        source: data.source,
+      };
+      if (channel === "email") {
+        const subject =
+          (data.emailSubject || emailSubject || primaryConversation?.subject || "").trim() ||
+          (emailThreadId ? "Re:" : "");
+        body.emailRich = {
+          subject: subject || undefined,
+          textBody: data.content,
+          replyMode: emailThreadId ? "reply" : "new",
+          providerThreadId: emailThreadId,
+          mailboxId: primaryConversation?.channelAccountId || undefined,
+        };
+        if (!emailThreadId && !subject) {
+          throw new Error("Subject is required for a new email.");
+        }
+      }
       const res = await fetch(`/api/contacts/${data.contactId}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          content: data.content,
-          contentType: data.contentType || (data.mediaType || 'text'),
-          mediaUrl: data.mediaUrl,
-          mediaType: data.mediaType ? `${data.mediaType}` : undefined,
-          mediaFilename: data.mediaFilename,
-          channel,
-          source: data.source,
-        }),
+        body: JSON.stringify(body),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -1663,6 +1702,14 @@ export function UnifiedInbox() {
   const handleSendMessage = () => {
     if (!messageInput.trim() && !pendingFile) return;
     if (!selectedContactId) return;
+    if (isEmailChannel && !primaryConversation?.externalThreadId && !emailSubject.trim()) {
+      toast({
+        title: "Subject required",
+        description: "Enter a subject to start a new email.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (pendingFile && !messageInput.trim()) {
       toast({
         title: "Add listing details text",
@@ -1696,6 +1743,7 @@ export function UnifiedInbox() {
     sendMessageMutation.mutate({
       contactId: selectedContactId,
       content: messageInput,
+      emailSubject: isEmailChannel ? emailSubject : undefined,
       ...(pendingFile ? {
         mediaUrl: pendingFile.mediaUrl,
         mediaType: pendingFile.mediaType,
@@ -2421,7 +2469,15 @@ export function UnifiedInbox() {
                     </span>
                   )}
                 </div>
+                {isEmailChannel && (primaryConversation?.subject || emailSubject) ? (
+                  <p className="text-xs text-gray-600 truncate" data-testid="inbox-email-subject">
+                    {primaryConversation?.subject || emailSubject}
+                  </p>
+                ) : null}
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {isEmailChannel && contact.email ? (
+                    <span className="flex items-center gap-1 truncate"><Mail className="w-3 h-3" />{contact.email}</span>
+                  ) : null}
                   {contact.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{contact.phone}</span>}
                   {contact.assignedTo && (() => {
                     const assignee = teamMembers.find((m: TeamMember) => (m.memberId || m.id) === contact.assignedTo);
@@ -3019,6 +3075,18 @@ export function UnifiedInbox() {
                                 <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] break-words">{msg.mediaFilename || msg.content || 'Document'}</span>
                               </a>
                             );
+                            if (
+                              ct === "email" ||
+                              ct === "email_html" ||
+                              (activeChannel === "email" && !hasMedia && !msg.mediaUrl)
+                            ) {
+                              return (
+                                <EmailMessageBody
+                                  messageId={msg.id}
+                                  fallbackText={msg.content || ""}
+                                />
+                              );
+                            }
                             return <p className="whitespace-pre-wrap leading-snug [overflow-wrap:anywhere] break-words">{msg.content || (ct === 'sticker' ? 'Sticker received' : '')}</p>;
                             })()}
                           </div>
@@ -3150,6 +3218,31 @@ export function UnifiedInbox() {
               </div>
             )}
 
+            {isEmailChannel && (
+              <div className="border-t border-gray-200 bg-white px-4 pt-2.5 pb-1 space-y-1.5 shrink-0">
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <span className="w-10 shrink-0">To</span>
+                  <span className="truncate text-gray-800" data-testid="inbox-email-to">
+                    {contact.email || "No email on contact"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="inbox-email-subject" className="w-10 shrink-0 text-xs text-gray-500">
+                    Subj
+                  </label>
+                  <Input
+                    id="inbox-email-subject"
+                    value={emailSubject}
+                    onChange={(e) => setEmailSubject(e.target.value)}
+                    placeholder={primaryConversation?.externalThreadId ? "Re: …" : "Subject"}
+                    className="h-8 text-sm"
+                    data-testid="input-inbox-email-subject"
+                    disabled={!!primaryConversation?.externalThreadId && !!primaryConversation?.subject}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Composer — Meta reply-window + AI notices merge into one chip bar inside AIComposer */}
             <AIComposer
               key={composerScopeKey ?? `contact-${selectedContactId}`}
@@ -3157,7 +3250,7 @@ export function UnifiedInbox() {
               value={messageInput}
               onChange={handleComposerChange}
               onSend={handleSendMessage}
-              onAutoSend={handleAutoSend}
+              onAutoSend={isEmailChannel ? undefined : handleAutoSend}
               aiEnabled={aiEnabled}
               hasFullAIBrain={hasFullAIBrain}
               capabilities={capabilities}
@@ -3166,6 +3259,7 @@ export function UnifiedInbox() {
               contactId={selectedContactId}
               contactContext={contactContext}
               conversationId={hasConversation ? (primaryConversation?.id ?? null) : null}
+              channel={isEmailChannel ? "email" : activeChannel}
               messages={
                 hasConversation
                   ? messages.map((m) => ({
@@ -3176,11 +3270,11 @@ export function UnifiedInbox() {
                   : []
               }
               onTemplate={isWhatsAppContact && hasConversation ? handleOpenTemplatePicker : undefined}
-              fileInputRef={fileInputRef}
-              handleFileSelect={handleFileSelect}
-              metaReplyWindowNotice={hasConversation ? metaComposerWindowNotice : null}
-              hasPendingAttachment={!!pendingFile}
-              onAttachPendingMedia={attachComposerPendingMedia}
+              fileInputRef={isEmailChannel ? undefined : fileInputRef}
+              handleFileSelect={isEmailChannel ? undefined : handleFileSelect}
+              metaReplyWindowNotice={hasConversation && !isEmailChannel ? metaComposerWindowNotice : null}
+              hasPendingAttachment={!!pendingFile && !isEmailChannel}
+              onAttachPendingMedia={isEmailChannel ? undefined : attachComposerPendingMedia}
             />
           </>
         ) : selectedContactId ? (

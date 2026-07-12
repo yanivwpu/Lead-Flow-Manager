@@ -733,6 +733,30 @@ class TelegramAdapter implements ChannelAdapter {
   }
 }
 
+class EmailAdapter implements ChannelAdapter {
+  async send(_params: {
+    contactId: string;
+    conversationId: string;
+    content: string;
+    contentType?: string;
+    mediaUrl?: string;
+    mediaFilename?: string;
+  }): Promise<{ success: boolean; externalMessageId?: string; error?: string }> {
+    // Native email uses channelService.sendMessage early-branch → sendEmailViaMailbox.
+    // This adapter exists for isAvailable checks and registry completeness.
+    return {
+      success: false,
+      error: "Email sends must go through channelService email path",
+    };
+  }
+
+  async isAvailable(userId: string): Promise<boolean> {
+    const { getPrimaryEmailMailbox } = await import("./emailChannel/mailboxStore");
+    const mailbox = await getPrimaryEmailMailbox(userId);
+    return !!(mailbox && ["connected", "syncing"].includes(mailbox.syncStatus));
+  }
+}
+
 export function registerChannelAdapters(): void {
   channelService.registerAdapter('whatsapp', new WhatsAppAdapter());
   channelService.registerAdapter('sms', new SMSAdapter());
@@ -741,6 +765,7 @@ export function registerChannelAdapters(): void {
   channelService.registerAdapter('instagram', new InstagramAdapter());
   channelService.registerAdapter('facebook', new FacebookAdapter());
   channelService.registerAdapter('tiktok', new TiktokAdapter());
+  channelService.registerAdapter('email', new EmailAdapter());
   
-  console.log("Channel adapters registered: whatsapp, sms, webchat, telegram, instagram, facebook, tiktok");
+  console.log("Channel adapters registered: whatsapp, sms, webchat, telegram, instagram, facebook, tiktok, email");
 }

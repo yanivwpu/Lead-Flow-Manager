@@ -257,7 +257,11 @@ export interface ChannelAdapter {
     contentType?: string;
     mediaUrl?: string;
     mediaFilename?: string;
-  }): Promise<{ success: boolean; externalMessageId?: string; error?: string }>;
+    /** Optional rich payload for email (ignored by other adapters). */
+    emailRich?: import("@shared/emailChannel").EmailRichSendPayload;
+    sentByUserId?: string;
+    userId?: string;
+  }): Promise<{ success: boolean; externalMessageId?: string; error?: string; messageId?: string; conversationId?: string }>;
   
   isAvailable(userId: string): Promise<boolean>;
 }
@@ -279,6 +283,7 @@ class ChannelService {
         sms:       'phone',
         telegram:  'telegramId',
         calendly:  'email',
+        email:     'email',
       };
       const idField = channelIdField[override];
       const hasId = !idField || !!contact[idField];
@@ -322,6 +327,7 @@ class ChannelService {
       );
     }
     if (channel === 'gohighlevel') return !!contact.ghlId;
+    if (channel === 'email') return !!contact.email;
     const channelIdField: Partial<Record<Channel, keyof Contact>> = {
       whatsapp: 'whatsappId',
       instagram: 'instagramId',
@@ -329,6 +335,7 @@ class ChannelService {
       sms: 'phone',
       telegram: 'telegramId',
       calendly: 'email',
+      email: 'email',
     };
     const idField = channelIdField[channel];
     if (!idField) return true;
@@ -391,6 +398,7 @@ class ChannelService {
         sms: 'phone',
         telegram: 'telegramId',
         calendly: 'email',
+        email: 'email',
       };
       const idField = channelIdField[channel];
       if (idField && !contact[idField]) {
@@ -453,6 +461,9 @@ class ChannelService {
     /** When true (Unified Inbox / POST /api/contacts/:id/send), block WhatsApp free-form outside CSW. */
     enforceWhatsAppCustomerServiceWindow?: boolean;
     templateVariables?: Record<string, any>;
+    /** Optional email-rich payload (subject, html, to/cc, mailboxId, replyMode). */
+    emailRich?: import("@shared/emailChannel").EmailRichSendPayload;
+    sentByUserId?: string;
   }): Promise<SendMessageResult> {
     const {
       userId,
@@ -465,10 +476,12 @@ class ChannelService {
       suppressFallback,
       enforceWhatsAppCustomerServiceWindow,
       templateVariables,
+      emailRich,
+      sentByUserId,
     } = params;
     let content = params.content ?? '';
 
-    if (!content && !mediaUrl) {
+    if (!content && !mediaUrl && !emailRich?.htmlBody && !emailRich?.textBody) {
       return { success: false, channel: 'whatsapp', error: 'Message must have content or media' };
     }
 
@@ -483,15 +496,49 @@ class ChannelService {
         ? ''
         : String(rawForce).trim();
     const explicitForce = trimmedForce.length > 0;
-    const pinChannelNoFallback = explicitForce && suppressFallback === true;
 
     let targetChannel: Channel;
-
     if (explicitForce) {
       if (!(CHANNELS as readonly string[]).includes(trimmedForce)) {
-        console.warn(`[sendMessage] blocked contactId=${contactId} selectedChannel=${trimmedForce} reason=invalid_channel`);
         return { success: false, channel: 'whatsapp', error: 'Invalid channel' };
       }
+      targetChannel = trimmedForce as Channel;
+    } else {
+      targetChannel = this.getPrimaryChannel(contact);
+    }
+
+    // Native email: dedicated send path (creates its own message rows + Gmail API).
+    if (targetChannel === 'email') {
+      const { getPrimaryEmailMailbox } = await import('./emailChannel/mailboxStore');
+      const { sendEmailViaMailbox } = await import('./emailChannel/sendService');
+      const mailboxId = emailRich?.mailboxId || (await getPrimaryEmailMailbox(userId))?.id;
+      if (!mailboxId) {
+        return { success: false, channel: 'email', error: 'No connected email mailbox' };
+      }
+      const result = await sendEmailViaMailbox({
+        workspaceUserId: userId,
+        sentByUserId: sentByUserId || userId,
+        contactId,
+        mailboxId,
+        content: content || emailRich?.textBody || '',
+        rich: {
+          ...(emailRich || { mailboxId }),
+          mailboxId,
+          replyMode: emailRich?.replyMode || (emailRich?.providerThreadId ? 'reply' : 'new'),
+        },
+      });
+      return {
+        success: result.success,
+        channel: 'email',
+        messageId: result.messageId,
+        error: result.error,
+        externalMessageId: result.externalMessageId,
+      };
+    }
+
+    const pinChannelNoFallback = explicitForce && suppressFallback === true;
+
+    if (explicitForce) {
       const forced = trimmedForce as Channel;
       if (pinChannelNoFallback) {
         const gate = await this.validateForcedOutboundChannel(userId, contact, forced);
@@ -508,8 +555,6 @@ class ChannelService {
         }
       }
       targetChannel = forced;
-    } else {
-      targetChannel = this.getPrimaryChannel(contact);
     }
 
     console.log(
@@ -1671,6 +1716,7 @@ class ChannelService {
       case 'telegram': return 'telegramId';
       case 'calendly': return 'email';
       case 'shopify': return 'email';
+      case 'email': return 'email';
       default: return 'phone';
     }
   }

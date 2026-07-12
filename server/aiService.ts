@@ -58,6 +58,7 @@ export class AIService {
       listingFollowUp?: string;
     },
     routing?: AiRoutingResult,
+    channel?: string | null,
   ): Promise<{ suggestion: string; confidence: number }> {
     const lastMessage = conversationHistory[conversationHistory.length - 1]?.content || "";
 
@@ -75,7 +76,16 @@ export class AIService {
 
     const detectedLanguage = language || await this.detectMessageLanguage(lastMessage);
     const isFirstMessage = conversationHistory.length <= 2;
-    const systemPrompt = this.buildSystemPrompt(businessKnowledge, settings, tone, detectedLanguage, contactContext, isFirstMessage, routing);
+    const systemPrompt = this.buildSystemPrompt(
+      businessKnowledge,
+      settings,
+      tone,
+      detectedLanguage,
+      contactContext,
+      isFirstMessage,
+      routing,
+      channel,
+    );
     
     try {
       const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
@@ -432,10 +442,12 @@ Return JSON only: { "summary": "..." }`;
     },
     isFirstMessage?: boolean,
     routing?: AiRoutingResult,
+    channel?: string | null,
   ): string {
     const langInstruction = language ? LANGUAGE_PROMPTS[language].instruction : LANGUAGE_PROMPTS.en.instruction;
     const industry = (businessKnowledge?.industry || "general").toLowerCase();
     const isRealEstate = industry.includes("real estate") || industry.includes("realestate") || industry.includes("property") || industry.includes("realtor");
+    const isEmailChannel = String(channel || "").toLowerCase() === "email";
 
     const persona = settings?.aiPersona || "professional";
     const toneGuide: Record<string, string> = {
@@ -450,7 +462,11 @@ Return JSON only: { "summary": "..." }`;
       casual: "natural and casual",
       formal: "formal and precise",
     };
-    const toneDesc = tone ? (toneGuide[tone] || "warm and direct") : (personaGuide[persona] || "warm and direct");
+    const toneDesc = tone
+      ? (toneGuide[tone] || "warm and direct")
+      : isEmailChannel
+        ? "professional and clear"
+        : (personaGuide[persona] || "warm and direct");
 
     const bookingUrl = String(businessKnowledge?.bookingLink || "").trim();
     const bookingContextLine = bookingUrl
@@ -461,6 +477,14 @@ Return JSON only: { "summary": "..." }`;
       routing?.reason === "info_seeking_qualify" ||
       routing?.signals?.includes("info_seeking") === true;
 
+    const emailChannelBlock = isEmailChannel
+      ? `\n\nCHANNEL: Email
+- Write a concise email reply body (plain text), not a chat/SMS blast.
+- Do not include a subject line unless the user explicitly asks for one.
+- Do not restate long quoted reply chains; focus on the latest ask.
+- Prefer short paragraphs; avoid emoji-heavy chat style.`
+      : "";
+
     let prompt = isRealEstate
       ? `You are an experienced buyer's agent replying on behalf of ${businessKnowledge?.businessName || "the team"} (${businessKnowledge?.industry || "real estate"}).
 
@@ -470,6 +494,8 @@ TONE: ${toneDesc} — like a confident local agent texting a client: warm, direc
 
 LANGUAGE: ${langInstruction}
 TONE: Be ${toneDesc} — concise, human, and commercially sharp.`;
+
+    prompt += emailChannelBlock;
 
     prompt += `
 

@@ -2328,6 +2328,21 @@ export class DbStorage implements IStorage {
           .limit(1);
         return r[0];
       }
+      case 'email': {
+        const em = channelId.trim().toLowerCase();
+        const r = await db
+          .select()
+          .from(contacts)
+          .where(
+            and(
+              eq(contacts.userId, userId),
+              sql`lower(trim(${contacts.email})) = ${em}`,
+            ),
+          )
+          .orderBy(asc(contacts.createdAt))
+          .limit(1);
+        return r[0];
+      }
       case 'webchat': {
         const byPhone = await db
           .select()

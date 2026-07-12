@@ -951,7 +951,7 @@ export type AgreementAcceptance = typeof agreementAcceptances.$inferSelect;
 // ============= MULTI-CHANNEL CRM SCHEMA =============
 
 // Channel enum - all supported messaging channels
-export const CHANNELS = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok', 'gohighlevel', 'calendly', 'shopify', 'woocommerce'] as const;
+export const CHANNELS = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok', 'gohighlevel', 'calendly', 'shopify', 'woocommerce', 'email'] as const;
 export type Channel = typeof CHANNELS[number];
 
 // Channel metadata for UI and logic
@@ -973,6 +973,7 @@ export const CHANNEL_INFO: Record<Channel, {
   calendly: { label: 'Calendly', icon: 'calendar', color: '#006BFF', isMessaging: false, supportsMedia: false },
   shopify: { label: 'Shopify', icon: 'shopping-cart', color: '#96BF48', isMessaging: false, supportsMedia: false },
   woocommerce: { label: 'WooCommerce', icon: 'shopping-cart', color: '#96588A', isMessaging: false, supportsMedia: false },
+  email: { label: 'Email', icon: 'mail', color: '#EA4335', isMessaging: true, supportsMedia: true },
 };
 
 // Unified contacts table - one record per lead
@@ -1051,6 +1052,9 @@ export const conversations = pgTable("conversations", {
   lastMessagePreview: text("last_message_preview"),
   lastMessageDirection: text("last_message_direction"), // inbound, outbound
 
+  /** Email thread subject (nullable for non-email channels). */
+  subject: text("subject"),
+
   /**
    * CRM re-engagement follow-up state (JSON document) — see `shared/reEngagement.ts`.
    * DB: `migrations/0013_conversations_re_engagement.sql` (additive jsonb; not a boolean flag).
@@ -1100,6 +1104,9 @@ export const messages = pgTable(
     externalMessageId: text("external_message_id"), // Platform's message ID
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
+
+    /** WhachatCRM team member who clicked Send (workspace attribution). */
+    sentByUserId: varchar("sent_by_user_id").references(() => users.id, { onDelete: "set null" }),
 
     // Fallback delivery tracking
     sentViaFallback: boolean("sent_via_fallback").default(false),
@@ -1249,6 +1256,96 @@ export type InsertActivityEvent = z.infer<typeof insertActivityEventSchema>;
 export type ActivityEvent = typeof activityEvents.$inferSelect;
 export type InsertChannelSetting = z.infer<typeof insertChannelSettingSchema>;
 export type ChannelSetting = typeof channelSettings.$inferSelect;
+
+/** Connected email mailboxes (Gmail Phase 1A; multi-mailbox-ready). */
+export const emailMailboxes = pgTable(
+  "email_mailboxes",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    workspaceUserId: varchar("workspace_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    connectedByUserId: varchar("connected_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull().default("gmail"),
+    emailAddress: text("email_address").notNull(),
+    displayName: text("display_name"),
+    providerAccountId: text("provider_account_id"),
+    accessTokenEncrypted: text("access_token_encrypted").notNull(),
+    refreshTokenEncrypted: text("refresh_token_encrypted"),
+    tokenExpiresAt: timestamp("token_expires_at"),
+    scopes: text("scopes"),
+    syncCursor: text("sync_cursor"),
+    lastSyncAt: timestamp("last_sync_at"),
+    syncStatus: text("sync_status").notNull().default("disconnected"),
+    syncError: text("sync_error"),
+    syncProgressCurrent: integer("sync_progress_current").default(0),
+    syncProgressTotal: integer("sync_progress_total").default(0),
+    webhookSubscriptionId: text("webhook_subscription_id"),
+    webhookExpiresAt: timestamp("webhook_expires_at"),
+    isPrimary: boolean("is_primary").notNull().default(true),
+    visibility: text("visibility").notNull().default("workspace"),
+    signatureHtml: text("signature_html"),
+    syncFromDate: timestamp("sync_from_date"),
+    initialSyncMode: text("initial_sync_mode").notNull().default("last_30_days"),
+    messagesSentToday: integer("messages_sent_today").default(0),
+    messagesSentHour: integer("messages_sent_hour").default(0),
+    sendCountDayKey: text("send_count_day_key"),
+    sendCountHourKey: text("send_count_hour_key"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (t) => ({
+    workspaceProviderEmailUq: uniqueIndex("email_mailboxes_workspace_provider_email_uq").on(
+      t.workspaceUserId,
+      t.provider,
+      t.emailAddress,
+    ),
+  }),
+);
+
+export const emailMessageDetails = pgTable("email_message_details", {
+  messageId: varchar("message_id")
+    .primaryKey()
+    .references(() => messages.id, { onDelete: "cascade" }),
+  subject: text("subject"),
+  htmlBody: text("html_body"),
+  textBody: text("text_body"),
+  fromAddress: text("from_address"),
+  toAddresses: jsonb("to_addresses").notNull().default(sql`'[]'::jsonb`),
+  ccAddresses: jsonb("cc_addresses").notNull().default(sql`'[]'::jsonb`),
+  bccAddresses: jsonb("bcc_addresses").notNull().default(sql`'[]'::jsonb`),
+  replyToAddress: text("reply_to_address"),
+  rfcMessageId: text("rfc_message_id"),
+  inReplyTo: text("in_reply_to"),
+  referencesHeader: jsonb("references_header").notNull().default(sql`'[]'::jsonb`),
+  providerThreadId: text("provider_thread_id"),
+  snippet: text("snippet"),
+  hasAttachments: boolean("has_attachments").notNull().default(false),
+  attachmentMetadata: jsonb("attachment_metadata").notNull().default(sql`'[]'::jsonb`),
+  selectedHeaders: jsonb("selected_headers").notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const emailOauthStates = pgTable("email_oauth_states", {
+  state: text("state").primaryKey(),
+  workspaceUserId: varchar("workspace_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  connectedByUserId: varchar("connected_by_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  codeVerifier: text("code_verifier"),
+  redirectUri: text("redirect_uri"),
+  createdAt: timestamp("created_at").defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+
+export type EmailMailbox = typeof emailMailboxes.$inferSelect;
+export type InsertEmailMailbox = typeof emailMailboxes.$inferInsert;
+export type EmailMessageDetail = typeof emailMessageDetails.$inferSelect;
+export type InsertEmailMessageDetail = typeof emailMessageDetails.$inferInsert;
 
 // Support tickets table - for tracking user support requests
 export const supportTickets = pgTable("support_tickets", {

@@ -20,6 +20,7 @@ import { registerWebhookRoutes } from "./routes/webhooks";
 import { registerInventoryRoutes } from "./routes/inventory";
 import { registerProspectImportRoutes } from "./routes/prospectImport";
 import { registerProspectIntelligenceRoutes } from "./routes/prospectIntelligence";
+import { registerEmailChannelRoutes } from "./routes/emailChannel";
 import { registerPublicListingRoutes } from "./routes/publicListings";
 import { registerPublicAgentPageRoutes } from "./routes/publicAgentPage";
 import { registerAgentPageSettingsRoutes } from "./routes/agentPageSettings";
@@ -10531,7 +10532,7 @@ export async function registerRoutes(
       }
       const userId = req.user.id;
 
-      const { chatId, conversationHistory, tone, aiMode: requestedMode, contactContext, contactId: bodyContactId } =
+      const { chatId, conversationHistory, tone, aiMode: requestedMode, contactContext, contactId: bodyContactId, channel: bodyChannel } =
         req.body;
 
       let resolvedContactId: string | null =
@@ -10601,7 +10602,19 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Conversation history required" });
       }
 
-      const historyTurns = conversationHistory as ChatTurn[];
+      const messagingChannel =
+        typeof bodyChannel === "string" && bodyChannel.trim()
+          ? bodyChannel.trim().toLowerCase()
+          : null;
+
+      let historyTurns = conversationHistory as ChatTurn[];
+      if (messagingChannel === "email") {
+        const { stripQuotedEmailReplies } = await import("./emailChannel/htmlSanitize");
+        historyTurns = historyTurns.map((m) => ({
+          ...m,
+          content: stripQuotedEmailReplies(m.content || ""),
+        }));
+      }
       const lastInbound = (() => {
         const inbound = historyTurns.filter((m) => m.role === "user").map((m) => m.content || "");
         return (inbound[inbound.length - 1] || "").trim();
@@ -10985,13 +10998,14 @@ export async function registerRoutes(
         suggestion = await aiService.suggestReply(
           userId,
           chatId,
-          conversationHistory,
+          historyTurns,
           knowledge || undefined,
           settings || undefined,
           selectedTone,
           aiLanguage,
           enrichedContactContext || undefined,
           aiRouting,
+          messagingChannel,
         );
       }
 
@@ -11250,6 +11264,7 @@ export async function registerRoutes(
   registerInventoryRoutes(app);
   registerProspectImportRoutes(app);
   registerProspectIntelligenceRoutes(app);
+  registerEmailChannelRoutes(app);
   registerPublicListingRoutes(app);
   registerPublicAgentPageRoutes(app);
   registerAgentPageSettingsRoutes(app);

@@ -764,8 +764,30 @@ export function registerContactRoutes(app: Express): void {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const { content, contentType, mediaUrl, mediaType, mediaFilename, channel, source, idempotencyKey } = req.body;
-      if (!content?.trim() && !mediaUrl) {
+      const {
+        content,
+        contentType,
+        mediaUrl,
+        mediaType,
+        mediaFilename,
+        channel,
+        source,
+        idempotencyKey,
+        emailRich,
+        subject,
+        htmlBody,
+        textBody,
+        to,
+        cc,
+        bcc,
+        replyMode,
+        providerThreadId,
+        mailboxId,
+      } = req.body;
+      const hasEmailBody =
+        !!(emailRich && (emailRich.htmlBody || emailRich.textBody)) ||
+        !!(htmlBody || textBody || subject);
+      if (!content?.trim() && !mediaUrl && !hasEmailBody) {
         return res.status(400).json({ error: "Message must have content or a media attachment" });
       }
       const requested =
@@ -800,6 +822,39 @@ export function registerContactRoutes(app: Express): void {
       const guardedSources = new Set(["ai_auto", "workflow", "delayed_job", "template", "broadcast", "follow_up", "booking_flow", "chatbot", "campaign"]);
       const sourceString = typeof source === "string" ? source.trim() : "";
       const guardedSource = guardedSources.has(sourceString) ? (sourceString as AutomationSendGuardSource) : null;
+      const resolvedEmailRich =
+        requested === "email" || emailRich || hasEmailBody
+          ? {
+              mailboxId:
+                (typeof emailRich?.mailboxId === "string" && emailRich.mailboxId) ||
+                (typeof mailboxId === "string" && mailboxId) ||
+                "",
+              subject:
+                (typeof emailRich?.subject === "string" && emailRich.subject) ||
+                (typeof subject === "string" ? subject : undefined),
+              htmlBody:
+                (typeof emailRich?.htmlBody === "string" && emailRich.htmlBody) ||
+                (typeof htmlBody === "string" ? htmlBody : undefined),
+              textBody:
+                (typeof emailRich?.textBody === "string" && emailRich.textBody) ||
+                (typeof textBody === "string" ? textBody : undefined) ||
+                (typeof content === "string" ? content : undefined),
+              to: Array.isArray(emailRich?.to) ? emailRich.to : Array.isArray(to) ? to : undefined,
+              cc: Array.isArray(emailRich?.cc) ? emailRich.cc : Array.isArray(cc) ? cc : undefined,
+              bcc: Array.isArray(emailRich?.bcc) ? emailRich.bcc : Array.isArray(bcc) ? bcc : undefined,
+              replyMode:
+                emailRich?.replyMode ||
+                (replyMode === "reply" || replyMode === "reply_all" || replyMode === "new"
+                  ? replyMode
+                  : undefined),
+              providerThreadId:
+                (typeof emailRich?.providerThreadId === "string" && emailRich.providerThreadId) ||
+                (typeof providerThreadId === "string" ? providerThreadId : undefined),
+              inReplyTo: typeof emailRich?.inReplyTo === "string" ? emailRich.inReplyTo : undefined,
+              references: Array.isArray(emailRich?.references) ? emailRich.references : undefined,
+            }
+          : undefined;
+
       const send = async () =>
         channelService.sendMessage({
           userId: req.user!.id,
@@ -812,6 +867,8 @@ export function registerContactRoutes(app: Express): void {
           forceChannel: requested,
           suppressFallback: !!requested,
           enforceWhatsAppCustomerServiceWindow: true,
+          emailRich: resolvedEmailRich,
+          sentByUserId: req.user!.id,
         });
       const guarded = guardedSource
         ? await withAutomationSendGuard(

@@ -21,6 +21,8 @@ import {
   ArrowLeft,
   ExternalLink,
   FlaskConical,
+  Mail,
+  RefreshCw,
 } from "lucide-react";
 import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { ConnectWhatsAppHub } from "@/components/ConnectWhatsAppHub";
@@ -41,9 +43,9 @@ import { cn } from "@/lib/utils";
 
 type UnifiedPillKind = "connected" | "needs_attention" | "not_connected" | "test_number" | "error" | "loading";
 
-type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
+type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok' | 'email';
 
-type ChannelWithBrandLogo = Exclude<Channel, 'webchat'>;
+type ChannelWithBrandLogo = Exclude<Channel, 'webchat' | 'email'>;
 
 const CHANNEL_BRAND: Record<
   ChannelWithBrandLogo,
@@ -155,6 +157,12 @@ const CHANNEL_CONFIG: Record<Channel, {
     description: 'Lead intake only (not messaging)',
     isMessaging: false,
   },
+  email: {
+    color: '#EA4335',
+    label: 'Email',
+    description: 'Connect Gmail / Google Workspace for inbox sync and replies',
+    isMessaging: true,
+  },
 };
 
 function ChannelStatusPill({ kind, label }: { kind: UnifiedPillKind; label?: string }) {
@@ -225,6 +233,29 @@ export function ChannelSettings() {
   const [resubscribeResult, setResubscribeResult] = useState<{ success: boolean; message: string } | null>(null);
   const [manageCopiedUrl, setManageCopiedUrl] = useState(false);
   const [manageCopiedToken, setManageCopiedToken] = useState(false);
+  const [emailBusy, setEmailBusy] = useState(false);
+
+  const { data: emailStatus, isLoading: emailStatusLoading } = useQuery<{
+    connected: boolean;
+    mailbox: {
+      id: string;
+      emailAddress: string;
+      displayName: string | null;
+      syncStatus: string;
+      syncError: string | null;
+      lastSyncAt: string | null;
+      syncProgressCurrent: number;
+      syncProgressTotal: number;
+    } | null;
+    redirectUri?: string;
+  }>({
+    queryKey: ["/api/integrations/email/status"],
+    staleTime: 15_000,
+    refetchInterval: (q) => {
+      const st = q.state.data?.mailbox?.syncStatus;
+      return st === "syncing" || st === "connecting" ? 4_000 : false;
+    },
+  });
 
   // Detect OAuth callback: ?meta_oauth=ready&channel=facebook|instagram
   useEffect(() => {
@@ -257,15 +288,16 @@ export function ChannelSettings() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Deep link: ?section=channels&provider=whatsapp|instagram|facebook (legacy: tab=channels) */
+  /** Deep link: ?section=channels&provider=whatsapp|instagram|facebook|email (legacy: tab=channels) */
   useEffect(() => {
     const params = new URLSearchParams(searchString);
     const sectionOk =
       params.get("section") === "channels" || params.get("tab") === "channels";
     if (!sectionOk) return;
     const raw = params.get("provider");
-    if (raw !== "whatsapp" && raw !== "instagram" && raw !== "facebook") return;
+    if (raw !== "whatsapp" && raw !== "instagram" && raw !== "facebook" && raw !== "email") return;
     const provider = raw as SettingsChannelProvider;
+    if (provider === "email") setConfigChannel("email");
     const scrollTimer = window.setTimeout(() => {
       const el = document.getElementById(`channel-card-${provider}`);
       el?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -276,6 +308,37 @@ export function ChannelSettings() {
     }, 450);
     return () => clearTimeout(scrollTimer);
   }, [searchString]);
+
+  /** Gmail OAuth return: emailConnected / emailError */
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const connected = params.get("emailConnected");
+    const emailError = params.get("emailError");
+    const mailbox = params.get("mailbox");
+    if (!connected && !emailError) return;
+    if (connected === "1") {
+      toast({
+        title: "Gmail connected",
+        description: mailbox
+          ? `${decodeURIComponent(mailbox)} is syncing into your Unified Inbox.`
+          : "Your mailbox is syncing into the Unified Inbox.",
+      });
+      setConfigChannel("email");
+      void queryClient.invalidateQueries({ queryKey: ["/api/integrations/email/status"] });
+    } else if (emailError) {
+      toast({
+        title: "Gmail connection failed",
+        description: decodeURIComponent(emailError),
+        variant: "destructive",
+      });
+      setConfigChannel("email");
+    }
+    params.delete("emailConnected");
+    params.delete("emailError");
+    params.delete("mailbox");
+    const q = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${q ? `?${q}` : ""}`);
+  }, [searchString, queryClient]);
 
   useEffect(() => {
     const params = new URLSearchParams(searchString);
@@ -923,6 +986,56 @@ export function ChannelSettings() {
       };
     }
 
+    if (channel === "email") {
+      const mb = emailStatus?.mailbox;
+      const syncStatus = mb?.syncStatus || "disconnected";
+      if (emailStatusLoading) {
+        return {
+          pill: "loading",
+          subline: "Checking Gmail connection…",
+          action: "manage",
+          actionLabel: "Open",
+          onAction: () => setConfigChannel("email"),
+          cardClass: baseNeutral,
+          showReceiveToggle: false,
+        };
+      }
+      if (syncStatus === "connected" || syncStatus === "syncing") {
+        return {
+          pill: syncStatus === "syncing" ? "loading" : "connected",
+          pillLabel: syncStatus === "syncing" ? "Syncing…" : "Connected",
+          subline: mb?.emailAddress
+            ? `${mb.emailAddress}${syncStatus === "syncing" ? " · initial sync in progress" : ""}`
+            : config.description,
+          action: "manage",
+          actionLabel: "Manage",
+          onAction: () => setConfigChannel("email"),
+          cardClass: baseOk,
+          showReceiveToggle: false,
+        };
+      }
+      if (syncStatus === "needs_reconnect" || syncStatus === "error") {
+        return {
+          pill: "needs_attention",
+          subline: mb?.syncError || "Reconnect Gmail to resume sync",
+          action: "reconnect",
+          actionLabel: "Reconnect",
+          onAction: () => setConfigChannel("email"),
+          cardClass: baseNeutral,
+          showReceiveToggle: false,
+        };
+      }
+      return {
+        pill: "not_connected",
+        subline: config.description,
+        action: "connect",
+        actionLabel: "Connect Gmail",
+        onAction: () => setConfigChannel("email"),
+        cardClass: baseNeutral,
+        showReceiveToggle: false,
+      };
+    }
+
     return {
       pill: "not_connected",
       subline: config.description,
@@ -971,7 +1084,13 @@ export function ChannelSettings() {
                 )}
               >
                 <div className="flex items-start gap-3 min-w-0 flex-1">
-                  <ChannelBrandIcon channel={channel as ChannelWithBrandLogo} className="shrink-0" />
+                  {channel === "email" ? (
+                    <div className="w-10 h-10 flex items-center justify-center rounded-lg flex-shrink-0 bg-[#EA4335]">
+                      <Mail className="w-5 h-5 text-white" />
+                    </div>
+                  ) : (
+                    <ChannelBrandIcon channel={channel as ChannelWithBrandLogo} className="shrink-0" />
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2 gap-y-1.5">
                       <span className="font-medium text-gray-900">{config.label}</span>
@@ -1674,6 +1793,146 @@ export function ChannelSettings() {
           </Dialog>
         );
       })()}
+
+      <Dialog open={configChannel === "email"} onOpenChange={(open) => !open && setConfigChannel(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="w-9 h-9 flex items-center justify-center rounded-lg bg-[#EA4335]">
+                <Mail className="w-4 h-4 text-white" />
+              </div>
+              Email (Gmail)
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Connect one Gmail or Google Workspace mailbox. Recent threads sync into the Unified Inbox so you can reply from WhachatCRM.
+            </p>
+            {emailStatus?.mailbox ? (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-1.5">
+                <p className="text-sm font-medium text-gray-900">{emailStatus.mailbox.emailAddress}</p>
+                <p className="text-xs text-gray-500 capitalize">
+                  Status: {emailStatus.mailbox.syncStatus.replace(/_/g, " ")}
+                  {emailStatus.mailbox.lastSyncAt
+                    ? ` · Last sync ${new Date(emailStatus.mailbox.lastSyncAt).toLocaleString()}`
+                    : ""}
+                </p>
+                {emailStatus.mailbox.syncStatus === "syncing" && (
+                  <p className="text-xs text-amber-800">
+                    Syncing {emailStatus.mailbox.syncProgressCurrent}
+                    {emailStatus.mailbox.syncProgressTotal
+                      ? ` / ${emailStatus.mailbox.syncProgressTotal}`
+                      : ""}{" "}
+                    messages…
+                  </p>
+                )}
+                {emailStatus.mailbox.syncError ? (
+                  <p className="text-xs text-red-700">{emailStatus.mailbox.syncError}</p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">
+                Phase 1A supports one mailbox per workspace. Scopes: gmail.readonly + gmail.send.
+              </p>
+            )}
+            <div className="flex flex-col gap-2">
+              {!emailStatus?.mailbox ||
+              emailStatus.mailbox.syncStatus === "disconnected" ||
+              emailStatus.mailbox.syncStatus === "needs_reconnect" ||
+              emailStatus.mailbox.syncStatus === "error" ? (
+                <Button
+                  disabled={emailBusy}
+                  data-testid="button-connect-gmail"
+                  onClick={async () => {
+                    setEmailBusy(true);
+                    try {
+                      const res = await fetch("/api/integrations/email/gmail/auth-url", {
+                        credentials: "include",
+                      });
+                      const json = await res.json();
+                      if (!res.ok || !json.url) throw new Error(json.error || "Failed to start OAuth");
+                      window.location.href = json.url;
+                    } catch (err) {
+                      toast({
+                        title: "Could not start Gmail connect",
+                        description: err instanceof Error ? err.message : "Try again",
+                        variant: "destructive",
+                      });
+                      setEmailBusy(false);
+                    }
+                  }}
+                >
+                  {emailBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Connect Gmail
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    disabled={emailBusy || emailStatus.mailbox.syncStatus === "syncing"}
+                    data-testid="button-sync-gmail"
+                    onClick={async () => {
+                      setEmailBusy(true);
+                      try {
+                        const res = await fetch("/api/integrations/email/sync", {
+                          method: "POST",
+                          credentials: "include",
+                        });
+                        const json = await res.json();
+                        if (!res.ok) throw new Error(json.error || "Sync failed");
+                        toast({ title: "Sync started", description: "Refreshing mailbox into the inbox." });
+                        void queryClient.invalidateQueries({ queryKey: ["/api/integrations/email/status"] });
+                      } catch (err) {
+                        toast({
+                          title: "Sync failed",
+                          description: err instanceof Error ? err.message : "Try again",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setEmailBusy(false);
+                      }
+                    }}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Sync now
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="text-red-700 border-red-200 hover:bg-red-50"
+                    disabled={emailBusy}
+                    data-testid="button-disconnect-gmail"
+                    onClick={async () => {
+                      setEmailBusy(true);
+                      try {
+                        const res = await fetch("/api/integrations/email/disconnect", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          credentials: "include",
+                          body: JSON.stringify({ mailboxId: emailStatus.mailbox?.id }),
+                        });
+                        const json = await res.json();
+                        if (!res.ok) throw new Error(json.error || "Disconnect failed");
+                        toast({ title: "Gmail disconnected" });
+                        void queryClient.invalidateQueries({ queryKey: ["/api/integrations/email/status"] });
+                      } catch (err) {
+                        toast({
+                          title: "Disconnect failed",
+                          description: err instanceof Error ? err.message : "Try again",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setEmailBusy(false);
+                      }
+                    }}
+                  >
+                    Disconnect
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

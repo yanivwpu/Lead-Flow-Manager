@@ -286,6 +286,13 @@ export function startCronJobs() {
         .then(({ runCalendlyPollingCron }) => runCalendlyPollingCron())
         .catch((err) => console.error("[CalendlyPoll] cron error:", err));
     }
+
+    // Native email Gmail incremental sync — every 5 minutes
+    if (utcMin % 5 === 2) {
+      import("./emailChannel/syncService")
+        .then(({ runEmailPollingCron }) => runEmailPollingCron())
+        .catch((err) => console.error("[EmailPoll] cron error:", err));
+    }
   }, 60000);
   
   console.log('[Cron] Cron scheduler started (activation emails: 10 AM EST, hot list: 9 AM EST, webhook health: hourly)');
