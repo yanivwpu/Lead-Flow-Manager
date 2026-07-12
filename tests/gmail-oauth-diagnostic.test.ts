@@ -11,6 +11,7 @@ import {
   sanitizeDiagPayload,
   resolveGmailOAuthDiagGitSha,
   GmailOAuthDiagnosticError,
+  gmailOAuthErrorUiMessageFromDiagnostic,
 } from "../server/emailChannel/gmailOAuthDiagnostic";
 
 function run(name: string, fn: () => void) {
@@ -90,6 +91,20 @@ run("UI message preserves Failed to load Gmail profile + category", () => {
   assert.match(gmailOAuthErrorUiMessage("profile_api_403"), /Failed to load Gmail profile/);
   assert.match(gmailOAuthErrorUiMessage("profile_api_403"), /profile_api_403/);
   assert.match(gmailOAuthErrorUiMessage("gmail_api_disabled"), /gmail_api_disabled/);
+});
+
+run("UI profile error includes safe Google reason and message", () => {
+  const err = new GmailOAuthDiagnosticError("profile_api_403", "Failed to load Gmail profile", {
+    httpStatus: 403,
+    googleErrorCode: 403,
+    googleErrorMessage: "Gmail API has not been used in project 123 before or it is disabled.",
+    googleErrorStatus: "PERMISSION_DENIED",
+    googleErrorReason: "accessNotConfigured",
+  });
+  const ui = gmailOAuthErrorUiMessageFromDiagnostic(err);
+  assert.match(ui, /profile_api_403/);
+  assert.match(ui, /Google: accessNotConfigured/);
+  assert.match(ui, /Gmail API has not been used/i);
 });
 
 run("categoryFromUnknownError reads GmailOAuthDiagnosticError", () => {

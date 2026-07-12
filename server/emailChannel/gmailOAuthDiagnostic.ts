@@ -49,6 +49,8 @@ export class GmailOAuthDiagnosticError extends Error {
   readonly httpStatus?: number;
   readonly googleErrorCode?: string | number | null;
   readonly googleErrorMessage?: string | null;
+  readonly googleErrorStatus?: string | null;
+  readonly googleErrorReason?: string | null;
 
   constructor(
     category: GmailOAuthErrorCategory,
@@ -57,6 +59,8 @@ export class GmailOAuthDiagnosticError extends Error {
       httpStatus?: number;
       googleErrorCode?: string | number | null;
       googleErrorMessage?: string | null;
+      googleErrorStatus?: string | null;
+      googleErrorReason?: string | null;
     },
   ) {
     super(message);
@@ -65,6 +69,8 @@ export class GmailOAuthDiagnosticError extends Error {
     this.httpStatus = extras?.httpStatus;
     this.googleErrorCode = extras?.googleErrorCode ?? null;
     this.googleErrorMessage = extras?.googleErrorMessage ?? null;
+    this.googleErrorStatus = extras?.googleErrorStatus ?? null;
+    this.googleErrorReason = extras?.googleErrorReason ?? null;
   }
 }
 
@@ -206,4 +212,23 @@ export function gmailOAuthErrorUiMessage(category: GmailOAuthErrorCategory, fall
       : "Gmail connection failed (oauth_failed)",
   };
   return map[category] || map.oauth_failed;
+}
+
+/** TEMPORARY: surface safe Google profile API error fields in Settings UI redirect. */
+export function gmailOAuthErrorUiMessageFromDiagnostic(err: GmailOAuthDiagnosticError): string {
+  const base = gmailOAuthErrorUiMessage(err.category, err.message);
+  const isProfileCategory =
+    err.category === "profile_api_401" ||
+    err.category === "profile_api_403" ||
+    err.category === "gmail_api_disabled";
+  if (!isProfileCategory) return base;
+
+  const reasonOrCode =
+    (err.googleErrorReason && String(err.googleErrorReason).trim()) ||
+    (err.googleErrorCode != null && String(err.googleErrorCode).trim()) ||
+    (err.googleErrorStatus && String(err.googleErrorStatus).trim()) ||
+    "unknown";
+  const message =
+    (err.googleErrorMessage && String(err.googleErrorMessage).trim().slice(0, 300)) || "no message";
+  return `${base} Google: ${reasonOrCode} — ${message}`;
 }

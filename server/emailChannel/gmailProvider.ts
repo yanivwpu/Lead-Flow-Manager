@@ -378,6 +378,21 @@ export class GmailEmailProvider implements EmailProvider {
     if (!res.ok) {
       const parsed = parseGoogleApiErrorBody(res.status, json);
       const category = categorizeProfileFetchFailure(parsed);
+
+      // TEMPORARY: plain console.log probe — Railway indexes stdout startup logs reliably.
+      console.log(
+        `[GmailProfile403Probe] ${JSON.stringify({
+          status: res.status,
+          statusText: res.statusText || null,
+          googleErrorCode: parsed.googleErrorCode,
+          googleErrorMessage: parsed.googleErrorMessage,
+          googleErrorStatus: parsed.googleErrorStatus,
+          googleErrorReason: parsed.googleErrorReason,
+          endpoint: GMAIL_PROFILE_PATH,
+          grantedScopes: opts?.grantedScopes ?? null,
+        })}`,
+      );
+
       logGmailOAuthDiag("profile_fetch_failed", {
         httpStatus: parsed.httpStatus,
         googleErrorCode: parsed.googleErrorCode,
@@ -394,6 +409,8 @@ export class GmailEmailProvider implements EmailProvider {
         httpStatus: parsed.httpStatus,
         googleErrorCode: parsed.googleErrorCode,
         googleErrorMessage: parsed.googleErrorMessage,
+        googleErrorStatus: parsed.googleErrorStatus,
+        googleErrorReason: parsed.googleErrorReason,
       });
     }
 

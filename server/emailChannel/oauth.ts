@@ -25,6 +25,7 @@ import {
   GmailOAuthDiagnosticError,
   categoryFromUnknownError,
   gmailOAuthErrorUiMessage,
+  gmailOAuthErrorUiMessageFromDiagnostic,
   logGmailOAuthDiag,
 } from "./gmailOAuthDiagnostic";
 
@@ -188,9 +189,13 @@ export function toGmailOAuthRedirectError(err: unknown): {
 } {
   const category = categoryFromUnknownError(err);
   const fallback = err instanceof Error ? err.message : "oauth_failed";
+  const uiMessage =
+    err instanceof GmailOAuthDiagnosticError
+      ? gmailOAuthErrorUiMessageFromDiagnostic(err)
+      : gmailOAuthErrorUiMessage(category, fallback);
   return {
     category,
-    uiMessage: gmailOAuthErrorUiMessage(category, fallback),
+    uiMessage,
   };
 }
 
