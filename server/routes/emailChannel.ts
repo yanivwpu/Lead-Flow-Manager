@@ -24,6 +24,7 @@ function requireAuth(req: Request, res: Response): req is Request & { user: { id
 }
 
 export function registerEmailChannelRoutes(app: Express): void {
+  console.error("[EmailRouteBootProbe] entered_register");
   app.get("/api/integrations/email/status", async (req, res) => {
     try {
       if (!requireAuth(req, res)) return;

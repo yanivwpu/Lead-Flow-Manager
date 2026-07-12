@@ -11264,6 +11264,7 @@ export async function registerRoutes(
   registerInventoryRoutes(app);
   registerProspectImportRoutes(app);
   registerProspectIntelligenceRoutes(app);
+  console.error("[EmailRouteBootProbe] before_register");
   registerEmailChannelRoutes(app);
   registerPublicListingRoutes(app);
   registerPublicAgentPageRoutes(app);
