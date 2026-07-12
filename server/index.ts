@@ -577,6 +577,24 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
+
+  // TEMPORARY: prove which build artifact is serving app.whachatcrm.com (no secrets).
+  app.get("/api/debug/production-build-probe", (_req, res) => {
+    const gitSha =
+      process.env.RAILWAY_GIT_COMMIT_SHA ||
+      process.env.RAILWAY_GIT_COMMIT ||
+      process.env.VERCEL_GIT_COMMIT_SHA ||
+      process.env.GITHUB_SHA ||
+      process.env.COMMIT_SHA ||
+      null;
+    res.json({
+      probe: "production-build-probe-v1",
+      gitSha,
+      nodeEnv: process.env.NODE_ENV || null,
+      emailRouteBootProbeSource: true,
+    });
+  });
+
   httpServer.listen(
     {
       port,
@@ -585,6 +603,16 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      const productionBuildGitSha =
+        process.env.RAILWAY_GIT_COMMIT_SHA ||
+        process.env.RAILWAY_GIT_COMMIT ||
+        process.env.VERCEL_GIT_COMMIT_SHA ||
+        process.env.GITHUB_SHA ||
+        process.env.COMMIT_SHA ||
+        "(unset)";
+      console.error(
+        `[ProductionBuildProbe] runtime_alive gitSha=${productionBuildGitSha} NODE_ENV=${process.env.NODE_ENV || "(unset)"}`,
+      );
       logGhlOAuthRecoveryAllowlistAtStartup("http-listen");
       const appUrl = String(process.env.APP_URL || "").replace(/\/+$/, "");
       console.log(
