@@ -5,6 +5,7 @@
 export const GMAIL_OAUTH_DIAG_TAG = "[Gmail-OAuth-Diagnostic]";
 
 export type GmailOAuthDiagEvent =
+  | "startup_logger_ready"
   | "callback_received"
   | "token_exchange_started"
   | "token_exchange_ok"
@@ -16,6 +17,20 @@ export type GmailOAuthDiagEvent =
   | "mailbox_persist_ok"
   | "mailbox_persist_failed"
   | "callback_failed";
+
+/** Temporary deploy marker — prefer Railway/Vercel/GitHub commit env vars. */
+export function resolveGmailOAuthDiagGitSha(): string | null {
+  const raw =
+    process.env.RAILWAY_GIT_COMMIT_SHA ||
+    process.env.RAILWAY_GIT_COMMIT ||
+    process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.GITHUB_SHA ||
+    process.env.COMMIT_SHA ||
+    process.env.SOURCE_VERSION ||
+    null;
+  const sha = String(raw || "").trim();
+  return sha || null;
+}
 
 export type GmailOAuthErrorCategory =
   | "profile_api_401"
@@ -74,14 +89,25 @@ export function logGmailOAuthDiag(
   event: GmailOAuthDiagEvent,
   payload: Record<string, unknown> = {},
 ): void {
+  const gitSha = resolveGmailOAuthDiagGitSha();
   // Single-line JSON so Railway/log aggregators keep the full event detail.
   console.error(
     JSON.stringify({
       tag: GMAIL_OAUTH_DIAG_TAG,
       event,
+      gitSha,
+      gitShaShort: gitSha ? gitSha.slice(0, 8) : null,
       ...sanitizeDiagPayload(payload),
     }),
   );
+}
+
+/** Emit once at route registration so deploy SHA is visible without reconnecting Gmail. */
+export function logGmailOAuthDiagStartupReady(): void {
+  logGmailOAuthDiag("startup_logger_ready", {
+    format: "single_line_json",
+    loggerVersion: "gmail-oauth-diag-v2-sha",
+  });
 }
 
 export type ParsedGoogleApiError = {

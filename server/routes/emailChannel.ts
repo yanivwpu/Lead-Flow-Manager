@@ -13,7 +13,7 @@ import { runInitialEmailSync } from "../emailChannel/syncService";
 import { getEmailMessageDetail } from "../emailChannel/mailboxStore";
 import { assertEmailEncryptionConfigured } from "../emailChannel/credentials";
 import { GMAIL_OAUTH_SCOPES } from "@shared/emailChannel";
-import { logGmailOAuthDiag } from "../emailChannel/gmailOAuthDiagnostic";
+import { logGmailOAuthDiag, logGmailOAuthDiagStartupReady } from "../emailChannel/gmailOAuthDiagnostic";
 
 function requireAuth(req: Request, res: Response): req is Request & { user: { id: string } } {
   if (!req.user?.id) {
@@ -159,6 +159,8 @@ export function registerEmailChannelRoutes(app: Express): void {
       res.status(500).json({ error: "Failed to load email details" });
     }
   });
+
+  logGmailOAuthDiagStartupReady();
 }
 
 async function storageGetMessage(id: string) {

@@ -9,6 +9,7 @@ import {
   gmailOAuthErrorUiMessage,
   parseGoogleApiErrorBody,
   sanitizeDiagPayload,
+  resolveGmailOAuthDiagGitSha,
   GmailOAuthDiagnosticError,
 } from "../server/emailChannel/gmailOAuthDiagnostic";
 
@@ -33,6 +34,17 @@ run("sanitizeDiagPayload redacts token-like fields", () => {
   assert.equal("refresh_token" in out, false);
   assert.equal(out.httpStatus, 403);
   assert.equal(out.grantedScopes, "gmail.readonly");
+});
+
+run("resolveGmailOAuthDiagGitSha reads Railway env", () => {
+  const prev = process.env.RAILWAY_GIT_COMMIT_SHA;
+  process.env.RAILWAY_GIT_COMMIT_SHA = "b5016d1dd87ba8950ba109154d47c7dba80e1923";
+  try {
+    assert.equal(resolveGmailOAuthDiagGitSha(), "b5016d1dd87ba8950ba109154d47c7dba80e1923");
+  } finally {
+    if (prev === undefined) delete process.env.RAILWAY_GIT_COMMIT_SHA;
+    else process.env.RAILWAY_GIT_COMMIT_SHA = prev;
+  }
 });
 
 run("parseGoogleApiErrorBody extracts Gmail API disabled message", () => {
