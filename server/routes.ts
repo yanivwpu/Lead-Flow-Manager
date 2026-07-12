@@ -11251,6 +11251,23 @@ export async function registerRoutes(
   });
 
   // ============= ROUTE MODULES =============
+  // TEMPORARY: production build identity probe — MUST register before serveStatic/SPA catch-all.
+  app.get("/api/debug/production-build-probe", (_req, res) => {
+    const gitSha =
+      process.env.RAILWAY_GIT_COMMIT_SHA ||
+      process.env.RAILWAY_GIT_COMMIT ||
+      process.env.VERCEL_GIT_COMMIT_SHA ||
+      process.env.GITHUB_SHA ||
+      process.env.COMMIT_SHA ||
+      null;
+    res.json({
+      probe: "production-build-probe-v1",
+      gitSha,
+      nodeEnv: process.env.NODE_ENV || null,
+      emailRouteBootProbeSource: true,
+    });
+  });
+
   registerMediaRoutes(app);
   registerWhatsappIntegrationRoutes(app);
   registerContactRoutes(app);
