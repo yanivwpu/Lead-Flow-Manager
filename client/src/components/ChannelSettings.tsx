@@ -309,11 +309,12 @@ export function ChannelSettings() {
     return () => clearTimeout(scrollTimer);
   }, [searchString]);
 
-  /** Gmail OAuth return: emailConnected / emailError */
+  /** Gmail OAuth return: emailConnected / emailError / emailErrorMsg */
   useEffect(() => {
     const params = new URLSearchParams(searchString);
     const connected = params.get("emailConnected");
     const emailError = params.get("emailError");
+    const emailErrorMsg = params.get("emailErrorMsg");
     const mailbox = params.get("mailbox");
     if (!connected && !emailError) return;
     if (connected === "1") {
@@ -326,15 +327,19 @@ export function ChannelSettings() {
       setConfigChannel("email");
       void queryClient.invalidateQueries({ queryKey: ["/api/integrations/email/status"] });
     } else if (emailError) {
+      const detail = emailErrorMsg
+        ? decodeURIComponent(emailErrorMsg)
+        : decodeURIComponent(emailError);
       toast({
         title: "Gmail connection failed",
-        description: decodeURIComponent(emailError),
+        description: detail,
         variant: "destructive",
       });
       setConfigChannel("email");
     }
     params.delete("emailConnected");
     params.delete("emailError");
+    params.delete("emailErrorMsg");
     params.delete("mailbox");
     const q = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${q ? `?${q}` : ""}`);

@@ -6,12 +6,14 @@ import {
   getWorkspaceEmailStatus,
   startGmailOAuth,
   toPublicMailbox,
+  toGmailOAuthRedirectError,
 } from "../emailChannel/oauth";
 import { getPrimaryEmailMailbox, getEmailMailboxById, listEmailMailboxes } from "../emailChannel/mailboxStore";
 import { runInitialEmailSync } from "../emailChannel/syncService";
 import { getEmailMessageDetail } from "../emailChannel/mailboxStore";
 import { assertEmailEncryptionConfigured } from "../emailChannel/credentials";
 import { GMAIL_OAUTH_SCOPES } from "@shared/emailChannel";
+import { logGmailOAuthDiag } from "../emailChannel/gmailOAuthDiagnostic";
 
 function requireAuth(req: Request, res: Response): req is Request & { user: { id: string } } {
   if (!req.user?.id) {
@@ -59,19 +61,51 @@ export function registerEmailChannelRoutes(app: Express): void {
       const code = typeof req.query.code === "string" ? req.query.code : "";
       const state = typeof req.query.state === "string" ? req.query.state : "";
       const oauthError = typeof req.query.error === "string" ? req.query.error : "";
+
+      logGmailOAuthDiag("callback_received", {
+        hasCode: !!code,
+        hasState: !!state,
+        oauthError: oauthError || null,
+      });
+
       if (oauthError) {
-        return res.redirect(`${settingsUrl}&emailError=${encodeURIComponent(oauthError)}`);
+        logGmailOAuthDiag("callback_failed", { category: "oauth_failed", oauthError });
+        return res.redirect(
+          `${settingsUrl}&emailError=${encodeURIComponent("oauth_failed")}&emailErrorMsg=${encodeURIComponent(oauthError)}`,
+        );
       }
       if (!code || !state) {
-        return res.redirect(`${settingsUrl}&emailError=${encodeURIComponent("missing_code_or_state")}`);
+        logGmailOAuthDiag("callback_failed", {
+          category: "oauth_failed",
+          reason: "missing_code_or_state",
+        });
+        return res.redirect(
+          `${settingsUrl}&emailError=${encodeURIComponent("oauth_failed")}&emailErrorMsg=${encodeURIComponent("missing_code_or_state")}`,
+        );
       }
       const result = await completeGmailOAuth({ code, state });
       return res.redirect(
         `${settingsUrl}&emailConnected=1&mailbox=${encodeURIComponent(result.emailAddress)}`,
       );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "oauth_failed";
-      return res.redirect(`${settingsUrl}&emailError=${encodeURIComponent(msg)}`);
+      const { category, uiMessage } = toGmailOAuthRedirectError(err);
+      logGmailOAuthDiag("callback_failed", {
+        category,
+        message: err instanceof Error ? err.message.slice(0, 200) : "oauth_failed",
+        httpStatus:
+          err instanceof Error && "httpStatus" in err ? (err as { httpStatus?: number }).httpStatus : null,
+        googleErrorCode:
+          err instanceof Error && "googleErrorCode" in err
+            ? (err as { googleErrorCode?: string | number | null }).googleErrorCode
+            : null,
+        googleErrorMessage:
+          err instanceof Error && "googleErrorMessage" in err
+            ? String((err as { googleErrorMessage?: string | null }).googleErrorMessage || "").slice(0, 400)
+            : null,
+      });
+      return res.redirect(
+        `${settingsUrl}&emailError=${encodeURIComponent(category)}&emailErrorMsg=${encodeURIComponent(uiMessage)}`,
+      );
     }
   });
 

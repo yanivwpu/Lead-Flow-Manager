@@ -21,6 +21,12 @@ import {
   setMailboxSyncStatus,
 } from "./mailboxStore";
 import { storage } from "../storage";
+import {
+  GmailOAuthDiagnosticError,
+  categoryFromUnknownError,
+  gmailOAuthErrorUiMessage,
+  logGmailOAuthDiag,
+} from "./gmailOAuthDiagnostic";
 
 function getAppOrigin(): string {
   return String(process.env.APP_URL || "https://app.whachatcrm.com").replace(/\/+$/, "");
@@ -77,12 +83,18 @@ export async function completeGmailOAuth(params: {
   assertEmailEncryptionConfigured();
   const oauthState = await consumeOauthState(params.state);
   if (!oauthState) {
-    throw new Error("Invalid or expired OAuth state");
+    throw new GmailOAuthDiagnosticError(
+      "invalid_or_expired_oauth_state",
+      "Invalid or expired OAuth state",
+    );
   }
 
   const existing = await countEmailMailboxes(oauthState.workspaceUserId);
   if (existing > 0) {
-    throw new Error("A mailbox is already connected for this workspace");
+    throw new GmailOAuthDiagnosticError(
+      "mailbox_already_connected",
+      "A mailbox is already connected for this workspace",
+    );
   }
 
   const provider = getEmailProvider("gmail");
@@ -93,51 +105,93 @@ export async function completeGmailOAuth(params: {
   });
 
   if (!exchanged.refreshToken) {
-    throw new Error(
+    logGmailOAuthDiag("callback_failed", {
+      category: "missing_refresh_token",
+      hasAccessToken: !!exchanged.accessToken,
+      hasRefreshToken: false,
+      grantedScopes: exchanged.scopes ?? null,
+    });
+    throw new GmailOAuthDiagnosticError(
+      "missing_refresh_token",
       "Google did not return a refresh token. Remove WhachatCRM access in Google Account permissions and reconnect with consent.",
     );
   }
 
-  const syncFromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const mailbox = await insertEmailMailbox({
+  logGmailOAuthDiag("mailbox_persist_started", {
     workspaceUserId: oauthState.workspaceUserId,
-    connectedByUserId: oauthState.connectedByUserId,
-    provider: "gmail",
-    emailAddress: exchanged.emailAddress,
-    displayName: exchanged.displayName,
-    providerAccountId: exchanged.providerAccountId,
-    accessTokenEncrypted: encryptEmailCredential(exchanged.accessToken),
-    refreshTokenEncrypted: encryptEmailCredential(exchanged.refreshToken),
-    tokenExpiresAt: exchanged.expiresAt ?? null,
-    scopes: exchanged.scopes || GMAIL_OAUTH_SCOPES.join(" "),
-    syncStatus: "syncing",
-    isPrimary: true,
-    visibility: "workspace",
-    syncFromDate,
-    initialSyncMode: EMAIL_DEFAULT_INITIAL_SYNC_MODE,
+    hasAccessToken: true,
+    hasRefreshToken: true,
+    grantedScopes: exchanged.scopes ?? null,
   });
 
-  await storage.upsertChannelSetting(oauthState.workspaceUserId, "email", {
-    isConnected: true,
-    isEnabled: true,
-    config: {
-      mailboxId: mailbox.id,
-      emailAddress: mailbox.emailAddress,
+  try {
+    const syncFromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const mailbox = await insertEmailMailbox({
+      workspaceUserId: oauthState.workspaceUserId,
+      connectedByUserId: oauthState.connectedByUserId,
       provider: "gmail",
-    },
-  });
+      emailAddress: exchanged.emailAddress,
+      displayName: exchanged.displayName,
+      providerAccountId: exchanged.providerAccountId,
+      accessTokenEncrypted: encryptEmailCredential(exchanged.accessToken),
+      refreshTokenEncrypted: encryptEmailCredential(exchanged.refreshToken),
+      tokenExpiresAt: exchanged.expiresAt ?? null,
+      scopes: exchanged.scopes || GMAIL_OAUTH_SCOPES.join(" "),
+      syncStatus: "syncing",
+      isPrimary: true,
+      visibility: "workspace",
+      syncFromDate,
+      initialSyncMode: EMAIL_DEFAULT_INITIAL_SYNC_MODE,
+    });
 
-  // Fire-and-forget initial sync
-  void import("./syncService")
-    .then(({ runInitialEmailSync }) => runInitialEmailSync(mailbox.id))
-    .catch((err) =>
-      console.error(
-        "[EmailOAuth] initial sync failed:",
-        err instanceof Error ? err.message : String(err),
-      ),
+    await storage.upsertChannelSetting(oauthState.workspaceUserId, "email", {
+      isConnected: true,
+      isEnabled: true,
+      config: {
+        mailboxId: mailbox.id,
+        emailAddress: mailbox.emailAddress,
+        provider: "gmail",
+      },
+    });
+
+    logGmailOAuthDiag("mailbox_persist_ok", {
+      mailboxId: mailbox.id,
+      syncStatus: "syncing",
+    });
+
+    // Fire-and-forget initial sync
+    void import("./syncService")
+      .then(({ runInitialEmailSync }) => runInitialEmailSync(mailbox.id))
+      .catch((err) =>
+        console.error(
+          "[EmailOAuth] initial sync failed:",
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
+
+    return { mailboxId: mailbox.id, emailAddress: mailbox.emailAddress };
+  } catch (err) {
+    if (err instanceof GmailOAuthDiagnosticError) throw err;
+    logGmailOAuthDiag("mailbox_persist_failed", {
+      message: err instanceof Error ? err.message.slice(0, 200) : "persist_failed",
+    });
+    throw new GmailOAuthDiagnosticError(
+      "mailbox_persist_failed",
+      err instanceof Error ? err.message : "Failed to save mailbox",
     );
+  }
+}
 
-  return { mailboxId: mailbox.id, emailAddress: mailbox.emailAddress };
+export function toGmailOAuthRedirectError(err: unknown): {
+  category: ReturnType<typeof categoryFromUnknownError>;
+  uiMessage: string;
+} {
+  const category = categoryFromUnknownError(err);
+  const fallback = err instanceof Error ? err.message : "oauth_failed";
+  return {
+    category,
+    uiMessage: gmailOAuthErrorUiMessage(category, fallback),
+  };
 }
 
 export async function getValidMailboxAccessToken(mailboxId: string): Promise<{

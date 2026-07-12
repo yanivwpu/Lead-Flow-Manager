@@ -55,7 +55,10 @@ export interface EmailProvider {
 
   refreshAccessToken(refreshToken: string): Promise<EmailMailboxTokens>;
 
-  getMailboxProfile(accessToken: string): Promise<EmailMailboxProfile>;
+  getMailboxProfile(
+    accessToken: string,
+    opts?: { grantedScopes?: string | null; hasRefreshToken?: boolean },
+  ): Promise<EmailMailboxProfile>;
 
   /** List recent messages for initial sync (Inbox + Sent). */
   listRecentMessages(params: {

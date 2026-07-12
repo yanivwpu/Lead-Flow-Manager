@@ -8,10 +8,18 @@ import type {
   EmailSyncPageResult,
 } from "./provider";
 import { htmlToPlainText } from "./htmlSanitize";
+import {
+  GmailOAuthDiagnosticError,
+  categorizeProfileFetchFailure,
+  logGmailOAuthDiag,
+  parseGoogleApiErrorBody,
+} from "./gmailOAuthDiagnostic";
 
 const GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN = "https://oauth2.googleapis.com/token";
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1";
+const GMAIL_PROFILE_PATH = "/users/me/profile";
+const GMAIL_PROFILE_ENDPOINT = `${GMAIL_API}${GMAIL_PROFILE_PATH}`;
 
 function requireGmailEnv(): { clientId: string; clientSecret: string } {
   const clientId = String(process.env.GMAIL_CLIENT_ID || process.env.GOOGLE_EMAIL_CLIENT_ID || "").trim();
@@ -260,6 +268,17 @@ export class GmailEmailProvider implements EmailProvider {
     });
     if (params.codeVerifier) body.set("code_verifier", params.codeVerifier);
 
+    logGmailOAuthDiag("token_exchange_started", {
+      redirectUriHost: (() => {
+        try {
+          return new URL(params.redirectUri).host;
+        } catch {
+          return "invalid_redirect_uri";
+        }
+      })(),
+      hasCodeVerifier: !!params.codeVerifier,
+    });
+
     const tokenRes = await fetch(GOOGLE_TOKEN, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -267,19 +286,48 @@ export class GmailEmailProvider implements EmailProvider {
     });
     const tokenJson = (await tokenRes.json().catch(() => ({}))) as Record<string, unknown>;
     if (!tokenRes.ok || !tokenJson.access_token) {
-      throw new Error("Gmail OAuth token exchange failed");
+      const parsed = parseGoogleApiErrorBody(tokenRes.status, tokenJson);
+      logGmailOAuthDiag("token_exchange_failed", {
+        httpStatus: parsed.httpStatus,
+        googleErrorCode: parsed.googleErrorCode,
+        googleErrorMessage: parsed.googleErrorMessage,
+        googleErrorStatus: parsed.googleErrorStatus,
+        endpoint: GOOGLE_TOKEN,
+      });
+      throw new GmailOAuthDiagnosticError(
+        "token_exchange_failed",
+        "Gmail OAuth token exchange failed",
+        {
+          httpStatus: parsed.httpStatus,
+          googleErrorCode: parsed.googleErrorCode,
+          googleErrorMessage: parsed.googleErrorMessage,
+        },
+      );
     }
 
     const accessToken = String(tokenJson.access_token);
     const refreshToken = tokenJson.refresh_token ? String(tokenJson.refresh_token) : null;
     const expiresIn = Number(tokenJson.expires_in || 3600);
-    const profile = await this.getMailboxProfile(accessToken);
+    const grantedScopes = tokenJson.scope ? String(tokenJson.scope) : null;
+
+    logGmailOAuthDiag("token_exchange_ok", {
+      httpStatus: tokenRes.status,
+      hasAccessToken: true,
+      hasRefreshToken: !!refreshToken,
+      grantedScopes,
+      expiresIn,
+    });
+
+    const profile = await this.getMailboxProfile(accessToken, {
+      grantedScopes,
+      hasRefreshToken: !!refreshToken,
+    });
 
     return {
       accessToken,
       refreshToken,
       expiresAt: new Date(Date.now() + expiresIn * 1000),
-      scopes: tokenJson.scope ? String(tokenJson.scope) : GMAIL_OAUTH_SCOPES.join(" "),
+      scopes: grantedScopes || GMAIL_OAUTH_SCOPES.join(" "),
       ...profile,
     };
   }
@@ -310,14 +358,70 @@ export class GmailEmailProvider implements EmailProvider {
     };
   }
 
-  async getMailboxProfile(accessToken: string): Promise<EmailMailboxProfile> {
-    const res = await fetch(`${GMAIL_API}/users/me/profile`, {
+  async getMailboxProfile(
+    accessToken: string,
+    opts?: { grantedScopes?: string | null; hasRefreshToken?: boolean },
+  ): Promise<EmailMailboxProfile> {
+    logGmailOAuthDiag("profile_fetch_started", {
+      endpoint: GMAIL_PROFILE_ENDPOINT,
+      path: GMAIL_PROFILE_PATH,
+      hasAccessToken: !!accessToken,
+      hasRefreshToken: opts?.hasRefreshToken ?? null,
+      grantedScopes: opts?.grantedScopes ?? null,
+    });
+
+    const res = await fetch(GMAIL_PROFILE_ENDPOINT, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok) throw new Error("Failed to load Gmail profile");
+
+    if (!res.ok) {
+      const parsed = parseGoogleApiErrorBody(res.status, json);
+      const category = categorizeProfileFetchFailure(parsed);
+      logGmailOAuthDiag("profile_fetch_failed", {
+        httpStatus: parsed.httpStatus,
+        googleErrorCode: parsed.googleErrorCode,
+        googleErrorMessage: parsed.googleErrorMessage,
+        endpoint: GMAIL_PROFILE_PATH,
+        grantedScopes: opts?.grantedScopes ?? null,
+        hasAccessToken: !!accessToken,
+        hasRefreshToken: !!opts?.hasRefreshToken,
+        category,
+        googleErrorStatus: parsed.googleErrorStatus,
+        googleErrorReason: parsed.googleErrorReason,
+      });
+      throw new GmailOAuthDiagnosticError(category, "Failed to load Gmail profile", {
+        httpStatus: parsed.httpStatus,
+        googleErrorCode: parsed.googleErrorCode,
+        googleErrorMessage: parsed.googleErrorMessage,
+      });
+    }
+
+    // Gmail users.getProfile returns { emailAddress, messagesTotal?, threadsTotal?, historyId? }
     const emailAddress = String(json.emailAddress || "").trim().toLowerCase();
-    if (!emailAddress) throw new Error("Gmail profile missing emailAddress");
+    if (!emailAddress) {
+      logGmailOAuthDiag("profile_fetch_failed", {
+        httpStatus: res.status,
+        googleErrorCode: "missing_emailAddress",
+        googleErrorMessage: "Gmail profile JSON missing emailAddress field",
+        endpoint: GMAIL_PROFILE_PATH,
+        grantedScopes: opts?.grantedScopes ?? null,
+        hasAccessToken: !!accessToken,
+        hasRefreshToken: !!opts?.hasRefreshToken,
+        category: "profile_response_invalid",
+        responseKeys: Object.keys(json).slice(0, 12),
+      });
+      throw new GmailOAuthDiagnosticError(
+        "profile_response_invalid",
+        "Gmail profile missing emailAddress",
+      );
+    }
+
+    logGmailOAuthDiag("profile_fetch_ok", {
+      endpoint: GMAIL_PROFILE_PATH,
+      hasEmailAddress: true,
+      hasHistoryId: typeof json.historyId !== "undefined",
+    });
 
     let displayName: string | null = null;
     try {
@@ -329,7 +433,7 @@ export class GmailEmailProvider implements EmailProvider {
         displayName = u.name?.trim() || null;
       }
     } catch {
-      /* optional */
+      /* optional — not required for mailbox connect */
     }
 
     return {
