@@ -36,6 +36,7 @@ export type GmailOAuthErrorCategory =
   | "profile_api_401"
   | "profile_api_403"
   | "gmail_api_disabled"
+  | "gmail_no_mailbox"
   | "token_exchange_failed"
   | "profile_response_invalid"
   | "mailbox_persist_failed"
@@ -169,6 +170,12 @@ export function parseGoogleApiErrorBody(
 export function categorizeProfileFetchFailure(parsed: ParsedGoogleApiError): GmailOAuthErrorCategory {
   const blob = `${parsed.googleErrorMessage || ""} ${parsed.googleErrorReason || ""} ${parsed.googleErrorStatus || ""}`.toLowerCase();
   if (
+    parsed.googleErrorReason === "failedPrecondition" ||
+    blob.includes("failedprecondition")
+  ) {
+    return "gmail_no_mailbox";
+  }
+  if (
     parsed.googleErrorReason === "accessNotConfigured" ||
     blob.includes("accessnotconfigured") ||
     blob.includes("has not been used") ||
@@ -201,6 +208,8 @@ export function gmailOAuthErrorUiMessage(category: GmailOAuthErrorCategory, fall
     profile_api_401: "Failed to load Gmail profile (profile_api_401)",
     profile_api_403: "Failed to load Gmail profile (profile_api_403)",
     gmail_api_disabled: "Failed to load Gmail profile (gmail_api_disabled)",
+    gmail_no_mailbox:
+      "This Google Account does not have an active Gmail mailbox. Connect a Gmail or Google Workspace account with Gmail enabled.",
     token_exchange_failed: "Gmail token exchange failed (token_exchange_failed)",
     profile_response_invalid: "Gmail profile response invalid (profile_response_invalid)",
     mailbox_persist_failed: "Failed to save mailbox (mailbox_persist_failed)",
@@ -220,8 +229,13 @@ export function gmailOAuthErrorUiMessageFromDiagnostic(err: GmailOAuthDiagnostic
   const isProfileCategory =
     err.category === "profile_api_401" ||
     err.category === "profile_api_403" ||
-    err.category === "gmail_api_disabled";
+    err.category === "gmail_api_disabled" ||
+    err.category === "gmail_no_mailbox";
   if (!isProfileCategory) return base;
+
+  if (err.category === "gmail_no_mailbox") {
+    return gmailOAuthErrorUiMessage("gmail_no_mailbox");
+  }
 
   const reasonOrCode =
     (err.googleErrorReason && String(err.googleErrorReason).trim()) ||

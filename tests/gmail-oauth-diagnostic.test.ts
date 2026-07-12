@@ -107,6 +107,26 @@ run("UI profile error includes safe Google reason and message", () => {
   assert.match(ui, /Gmail API has not been used/i);
 });
 
+run("failedPrecondition maps to gmail_no_mailbox with user-facing message", () => {
+  const parsed = parseGoogleApiErrorBody(403, {
+    error: {
+      code: 403,
+      message: "Mail service not enabled",
+      status: "FAILED_PRECONDITION",
+      errors: [{ reason: "failedPrecondition", message: "Mail service not enabled" }],
+    },
+  });
+  assert.equal(categorizeProfileFetchFailure(parsed), "gmail_no_mailbox");
+  const err = new GmailOAuthDiagnosticError("gmail_no_mailbox", "Failed to load Gmail profile", {
+    httpStatus: 403,
+    googleErrorReason: "failedPrecondition",
+    googleErrorMessage: "Mail service not enabled",
+  });
+  const ui = gmailOAuthErrorUiMessageFromDiagnostic(err);
+  assert.match(ui, /does not have an active Gmail mailbox/i);
+  assert.match(ui, /Google Workspace account with Gmail enabled/i);
+});
+
 run("categoryFromUnknownError reads GmailOAuthDiagnosticError", () => {
   const err = new GmailOAuthDiagnosticError("gmail_api_disabled", "Failed to load Gmail profile");
   assert.equal(categoryFromUnknownError(err), "gmail_api_disabled");
