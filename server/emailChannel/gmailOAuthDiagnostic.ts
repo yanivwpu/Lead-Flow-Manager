@@ -74,7 +74,14 @@ export function logGmailOAuthDiag(
   event: GmailOAuthDiagEvent,
   payload: Record<string, unknown> = {},
 ): void {
-  console.error(GMAIL_OAUTH_DIAG_TAG, event, sanitizeDiagPayload(payload));
+  // Single-line JSON so Railway/log aggregators keep the full event detail.
+  console.error(
+    JSON.stringify({
+      tag: GMAIL_OAUTH_DIAG_TAG,
+      event,
+      ...sanitizeDiagPayload(payload),
+    }),
+  );
 }
 
 export type ParsedGoogleApiError = {
