@@ -1,12 +1,20 @@
 /**
- * Documents Native Gmail inbound poll schedule (no live cron).
+ * Documents Native Gmail inbound poll schedule (Phase 1B elapsed-time guard).
  * Run: npx tsx tests/gmail-inbound-poll-schedule.test.ts
  */
 import assert from "node:assert/strict";
+import { EMAIL_POLL_FALLBACK_INTERVAL_MS } from "../server/emailChannel/gmailPushConfig";
 
-/** Mirrors server/cron.ts: utcMin % 5 === 2 */
-function shouldPollEmailAtUtcMinute(utcMin: number): boolean {
-  return utcMin % 5 === 2;
+function shouldPollEmailElapsed(params: {
+  nowMs: number;
+  lastEmailPollAtMs: number;
+  inFlight: boolean;
+  intervalMs?: number;
+}): boolean {
+  if (params.inFlight) return false;
+  const interval = params.intervalMs ?? EMAIL_POLL_FALLBACK_INTERVAL_MS;
+  if (params.lastEmailPollAtMs === 0) return true;
+  return params.nowMs - params.lastEmailPollAtMs >= interval;
 }
 
 function run(name: string, fn: () => void) {
@@ -19,21 +27,40 @@ function run(name: string, fn: () => void) {
   }
 }
 
-run("email poll slots are every 5 minutes (:02, :07, …)", () => {
-  const slots = Array.from({ length: 60 }, (_, m) => m).filter(shouldPollEmailAtUtcMinute);
-  assert.deepEqual(slots, [2, 7, 12, 17, 22, 27, 32, 37, 42, 47, 52, 57]);
-  for (let i = 1; i < slots.length; i++) {
-    assert.equal(slots[i] - slots[i - 1], 5);
-  }
-  // wrap-around gap from :57 to next hour :02 is also 5 minutes
-  assert.equal((60 - 57) + 2, 5);
+run("fallback interval is elapsed-time based (default 10 min)", () => {
+  assert.equal(EMAIL_POLL_FALLBACK_INTERVAL_MS, 10 * 60 * 1000);
 });
 
-run("typical inbound delay is up to one poll cycle (~5 min), not push", () => {
-  // Message arriving just after :02 poll waits until :07 ≈ 5 minutes
-  const pollMinute = 2;
-  const nextPoll = pollMinute + 5;
-  assert.equal(nextPoll - pollMinute, 5);
+run("poll fires when enough time elapsed regardless of UTC minute slot", () => {
+  const t0 = Date.parse("2026-07-13T12:00:00Z");
+  assert.equal(
+    shouldPollEmailElapsed({ nowMs: t0 + 9 * 60_000, lastEmailPollAtMs: t0, inFlight: false }),
+    false,
+  );
+  assert.equal(
+    shouldPollEmailElapsed({ nowMs: t0 + 10 * 60_000, lastEmailPollAtMs: t0, inFlight: false }),
+    true,
+  );
+  // A skipped cron minute does not skip an entire poll cycle forever.
+  assert.equal(
+    shouldPollEmailElapsed({
+      nowMs: t0 + 11 * 60_000,
+      lastEmailPollAtMs: t0,
+      inFlight: false,
+    }),
+    true,
+  );
+});
+
+run("in-flight poll prevents overlapping cron runs", () => {
+  assert.equal(
+    shouldPollEmailElapsed({
+      nowMs: Date.now(),
+      lastEmailPollAtMs: 0,
+      inFlight: true,
+    }),
+    false,
+  );
 });
 
 console.log("\nAll Gmail inbound poll schedule tests passed.");

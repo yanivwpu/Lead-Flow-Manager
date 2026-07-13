@@ -1284,6 +1284,19 @@ export const emailMailboxes = pgTable(
     syncProgressTotal: integer("sync_progress_total").default(0),
     webhookSubscriptionId: text("webhook_subscription_id"),
     webhookExpiresAt: timestamp("webhook_expires_at"),
+    /** Gmail users.watch metadata (Phase 1B). Separate from syncCursor. */
+    gmailWatchHistoryId: text("gmail_watch_history_id"),
+    gmailWatchExpiration: timestamp("gmail_watch_expiration"),
+    gmailWatchStatus: text("gmail_watch_status").notNull().default("not_configured"),
+    gmailWatchLastRegisteredAt: timestamp("gmail_watch_last_registered_at"),
+    gmailWatchLastNotificationAt: timestamp("gmail_watch_last_notification_at"),
+    gmailWatchLastError: text("gmail_watch_last_error"),
+    /** Mailbox-level sync coalescing (push + poll). */
+    syncPending: boolean("sync_pending").notNull().default(false),
+    syncLockUntil: timestamp("sync_lock_until"),
+    syncLockOwner: text("sync_lock_owner"),
+    /** Last historyId observed from a Pub/Sub notification (diagnostic high-water). */
+    observedRemoteHistoryId: text("observed_remote_history_id"),
     isPrimary: boolean("is_primary").notNull().default(true),
     visibility: text("visibility").notNull().default("workspace"),
     signatureHtml: text("signature_html"),

@@ -366,6 +366,26 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
       `CREATE INDEX IF NOT EXISTS email_oauth_states_expires_idx ON email_oauth_states (expires_at)`,
     ].join(";\n"),
   },
+  {
+    tag: "0061_gmail_push_watch",
+    sql: [
+      `ALTER TABLE email_mailboxes ADD COLUMN IF NOT EXISTS gmail_watch_history_id text`,
+      `ALTER TABLE email_mailboxes ADD COLUMN IF NOT EXISTS gmail_watch_expiration timestamp`,
+      `ALTER TABLE email_mailboxes ADD COLUMN IF NOT EXISTS gmail_watch_status text NOT NULL DEFAULT 'not_configured'`,
+      `ALTER TABLE email_mailboxes ADD COLUMN IF NOT EXISTS gmail_watch_last_registered_at timestamp`,
+      `ALTER TABLE email_mailboxes ADD COLUMN IF NOT EXISTS gmail_watch_last_notification_at timestamp`,
+      `ALTER TABLE email_mailboxes ADD COLUMN IF NOT EXISTS gmail_watch_last_error text`,
+      `ALTER TABLE email_mailboxes ADD COLUMN IF NOT EXISTS sync_pending boolean NOT NULL DEFAULT false`,
+      `ALTER TABLE email_mailboxes ADD COLUMN IF NOT EXISTS sync_lock_until timestamp`,
+      `ALTER TABLE email_mailboxes ADD COLUMN IF NOT EXISTS sync_lock_owner text`,
+      `ALTER TABLE email_mailboxes ADD COLUMN IF NOT EXISTS observed_remote_history_id text`,
+      `CREATE INDEX IF NOT EXISTS email_mailboxes_gmail_watch_expiration_idx
+        ON email_mailboxes (gmail_watch_expiration)
+        WHERE provider = 'gmail'`,
+      `CREATE INDEX IF NOT EXISTS email_mailboxes_gmail_email_norm_idx
+        ON email_mailboxes (provider, lower(email_address))`,
+    ].join(";\n"),
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {

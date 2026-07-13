@@ -6,6 +6,8 @@ import {
   GMAIL_OAUTH_SCOPES,
   type EmailMailboxPublic,
   type EmailInitialSyncMode,
+  type EmailSyncMode,
+  type GmailWatchStatus,
 } from "@shared/emailChannel";
 import {
   encryptEmailCredential,
@@ -303,6 +305,16 @@ export async function disconnectEmailMailbox(params: {
   if (!mailbox || mailbox.workspaceUserId !== params.workspaceUserId) {
     throw new Error("Mailbox not found");
   }
+  // Best-effort stop watch; never block disconnect on watch failure.
+  try {
+    if (mailbox.provider === "gmail" && mailbox.gmailWatchStatus === "active") {
+      const { accessToken } = await getValidMailboxAccessToken(mailbox.id);
+      const provider = getEmailProvider(mailbox.provider);
+      if (provider.stopWatch) await provider.stopWatch({ accessToken });
+    }
+  } catch {
+    /* ignore */
+  }
   await deleteEmailMailbox(mailbox.id);
   const remaining = await countEmailMailboxes(params.workspaceUserId);
   if (remaining === 0) {
@@ -314,9 +326,40 @@ export async function disconnectEmailMailbox(params: {
   }
 }
 
+export function resolveEmailSyncMode(m: {
+  gmailWatchStatus?: string | null;
+  gmailWatchExpiration?: Date | null;
+}): { syncMode: EmailSyncMode; syncModeLabel: string; watchStatus: GmailWatchStatus } {
+  const watchStatus = (m.gmailWatchStatus as GmailWatchStatus) || "not_configured";
+  const expOk =
+    m.gmailWatchExpiration instanceof Date &&
+    m.gmailWatchExpiration.getTime() > Date.now() &&
+    watchStatus === "active";
+  if (expOk) {
+    return {
+      watchStatus: "active",
+      syncMode: "realtime",
+      syncModeLabel: "Near-real-time sync active",
+    };
+  }
+  if (watchStatus === "not_configured") {
+    return {
+      watchStatus,
+      syncMode: "polling_fallback",
+      syncModeLabel: "Email sync active via polling",
+    };
+  }
+  return {
+    watchStatus,
+    syncMode: "polling_fallback",
+    syncModeLabel: "Polling fallback active",
+  };
+}
+
 export function toPublicMailbox(
   m: NonNullable<Awaited<ReturnType<typeof getEmailMailboxById>>>,
 ): EmailMailboxPublic {
+  const mode = resolveEmailSyncMode(m);
   return {
     id: m.id,
     provider: (m.provider as "gmail") || "gmail",
@@ -330,6 +373,9 @@ export function toPublicMailbox(
     isPrimary: m.isPrimary,
     initialSyncMode: (m.initialSyncMode as EmailInitialSyncMode) || EMAIL_DEFAULT_INITIAL_SYNC_MODE,
     connectedAt: m.createdAt?.toISOString() ?? null,
+    watchStatus: mode.watchStatus,
+    syncMode: mode.syncMode,
+    syncModeLabel: mode.syncModeLabel,
   };
 }
 
@@ -361,6 +407,9 @@ export async function getWorkspaceEmailStatus(workspaceUserId: string) {
         hasRefreshToken: Boolean(mailbox.refreshTokenEncrypted),
       });
       await setMailboxSyncStatus(mailbox.id, "connected", { syncError: null });
+      void import("./gmailWatch")
+        .then(({ ensureGmailWatch }) => ensureGmailWatch(mailbox.id))
+        .catch(() => undefined);
     }
   } catch (err) {
     logEmailChannelHealthDiag({

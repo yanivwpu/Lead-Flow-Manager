@@ -90,6 +90,16 @@ export async function runInitialEmailSync(mailboxId: string): Promise<void> {
         imported,
       }),
     );
+
+    // Phase 1B: register watch after incremental cursor is established (never resets syncCursor).
+    void import("./gmailWatch")
+      .then(({ ensureGmailWatch }) => ensureGmailWatch(mailboxId))
+      .catch((err) =>
+        console.warn(
+          "[GmailWatch] post-initial register failed:",
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
   } catch (err) {
     const message = syncErrorFromUnknown(err);
     if (isEmailCredentialDecryptFailure(err)) {
@@ -330,10 +340,15 @@ export async function runIncrementalEmailSync(mailboxId: string): Promise<void> 
 }
 
 export async function runEmailPollingCron(): Promise<void> {
+  const { triggerMailboxIncrementalSync } = await import("./gmailSyncTrigger");
   const mailboxes = await listConnectedMailboxesForPoll(40);
   for (const m of mailboxes) {
     try {
-      await runIncrementalEmailSync(m.id);
+      await triggerMailboxIncrementalSync({
+        mailboxId: m.id,
+        source: "poll",
+        wait: true,
+      });
     } catch (err) {
       console.error(
         "[EmailPoll] mailbox failed:",

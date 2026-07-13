@@ -33,7 +33,7 @@ export function registerEmailChannelRoutes(app: Express): void {
         ...status,
         scopes: GMAIL_OAUTH_SCOPES,
         redirectUri: getGmailOAuthRedirectUri(),
-        phase: "1A",
+        phase: "1B",
         oneMailboxPerWorkspace: true,
       });
     } catch (err) {

@@ -38,6 +38,11 @@ export type EmailHistoryResult = {
   needsBoundedResync: boolean;
 };
 
+export type GmailWatchResult = {
+  historyId: string;
+  expiration: Date;
+};
+
 export interface EmailProvider {
   readonly id: EmailProviderId;
 
@@ -74,6 +79,15 @@ export interface EmailProvider {
     accessToken: string;
     startHistoryId: string;
   }): Promise<EmailHistoryResult>;
+
+  /** Gmail users.watch — optional; only Gmail implements. */
+  watchMailbox?(params: {
+    accessToken: string;
+    topicName: string;
+    labelIds?: string[];
+  }): Promise<GmailWatchResult>;
+
+  stopWatch?(params: { accessToken: string }): Promise<void>;
 
   sendNewEmail(params: {
     accessToken: string;

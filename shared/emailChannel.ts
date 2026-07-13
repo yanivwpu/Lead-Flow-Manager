@@ -27,6 +27,15 @@ export const EMAIL_SYNC_STATUSES = [
 ] as const;
 export type EmailSyncStatus = (typeof EMAIL_SYNC_STATUSES)[number];
 
+/** Gmail users.watch / Pub/Sub push status — separate from credential syncStatus. */
+export const GMAIL_WATCH_STATUSES = [
+  "active",
+  "renewal_due",
+  "error",
+  "not_configured",
+] as const;
+export type GmailWatchStatus = (typeof GMAIL_WATCH_STATUSES)[number];
+
 /** Soft caps for manual one-to-one sends (WhachatCRM-side). */
 export const EMAIL_SEND_HOURLY_SOFT_CAP = Number(process.env.EMAIL_SEND_HOURLY_SOFT_CAP || 30);
 export const EMAIL_SEND_DAILY_SOFT_CAP = Number(process.env.EMAIL_SEND_DAILY_SOFT_CAP || 200);
@@ -84,6 +93,8 @@ export type EmailRichSendPayload = {
   references?: string[];
 };
 
+export type EmailSyncMode = "realtime" | "polling_fallback" | "unknown";
+
 export type EmailMailboxPublic = {
   id: string;
   provider: EmailProviderId;
@@ -97,6 +108,10 @@ export type EmailMailboxPublic = {
   isPrimary: boolean;
   initialSyncMode: EmailInitialSyncMode;
   connectedAt: string | null;
+  /** Phase 1B — watch/push vs polling; never forces reconnect alone. */
+  watchStatus?: GmailWatchStatus | null;
+  syncMode?: EmailSyncMode | null;
+  syncModeLabel?: string | null;
 };
 
 export function normalizeEmailAddress(raw: string | null | undefined): string | null {

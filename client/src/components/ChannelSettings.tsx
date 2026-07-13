@@ -251,6 +251,9 @@ export function ChannelSettings() {
       lastSyncAt: string | null;
       syncProgressCurrent: number;
       syncProgressTotal: number;
+      syncMode?: string | null;
+      syncModeLabel?: string | null;
+      watchStatus?: string | null;
     } | null;
     redirectUri?: string;
   }>({
@@ -1003,11 +1006,17 @@ export function ChannelSettings() {
         };
       }
       if (syncStatus === "connected" || syncStatus === "syncing") {
+        const syncHint =
+          syncStatus === "syncing"
+            ? " · initial sync in progress"
+            : mb?.syncModeLabel
+              ? ` · ${mb.syncModeLabel}`
+              : "";
         return {
           pill: syncStatus === "syncing" ? "loading" : "connected",
           pillLabel: syncStatus === "syncing" ? "Syncing…" : "Connected",
           subline: mb?.emailAddress
-            ? `${mb.emailAddress}${syncStatus === "syncing" ? " · initial sync in progress" : ""}`
+            ? `${mb.emailAddress}${syncHint}`
             : config.description,
           action: "manage",
           actionLabel: "Manage",
@@ -1819,6 +1828,9 @@ export function ChannelSettings() {
                     ? ` · Last sync ${new Date(emailStatus.mailbox.lastSyncAt).toLocaleString()}`
                     : ""}
                 </p>
+                {emailStatus.mailbox.syncModeLabel ? (
+                  <p className="text-xs text-gray-500">{emailStatus.mailbox.syncModeLabel}</p>
+                ) : null}
                 {emailStatus.mailbox.syncStatus === "syncing" && (
                   <p className="text-xs text-amber-800">
                     Syncing {emailStatus.mailbox.syncProgressCurrent}
@@ -1834,7 +1846,7 @@ export function ChannelSettings() {
               </div>
             ) : (
               <p className="text-xs text-gray-500">
-                Phase 1A supports one mailbox per workspace. Scopes: gmail.readonly + gmail.send.
+                One Gmail mailbox per workspace. Scopes: gmail.readonly + gmail.send. Push sync when Pub/Sub is configured.
               </p>
             )}
             <div className="flex flex-col gap-2">

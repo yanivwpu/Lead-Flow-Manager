@@ -4,6 +4,7 @@ import { eq, and, lte, gte, isNotNull, or, desc, ne, inArray, sql } from 'drizzl
 import { sendDailyHotListEmail, type HotLeadEntry } from './email';
 import { runActivationEmails } from './activationEmailService';
 import { runCampaignSchedulerTick } from './campaignExecution';
+import { EMAIL_POLL_FALLBACK_INTERVAL_MS } from './emailChannel/gmailPushConfig';
 
 const GRAPH = "https://graph.facebook.com/v19.0";
 
@@ -222,6 +223,9 @@ let lastWebhookHealthHour = -1;
 
 let lastInventoryReconcileHour = -1;
 let lastCalendlyPollMinute = -1;
+let lastEmailPollAtMs = 0;
+let emailPollInFlight = false;
+let lastGmailWatchRenewalDay = "";
 
 export function startCronJobs() {
   console.log('[Cron] Starting cron scheduler...');
@@ -287,17 +291,52 @@ export function startCronJobs() {
         .catch((err) => console.error("[CalendlyPoll] cron error:", err));
     }
 
-    // Native email Gmail incremental sync — every ~5 minutes.
-    // Fires when UTC minute ≡ 2 (mod 5): :02, :07, :12, :17, :22, :27, :32, :37, :42, :47, :52, :57.
-    // Scheduler tick is setInterval(60_000); a skipped tick can stretch the gap toward ~10 minutes.
-    // No Gmail push/watch — inbound is poll-only via history.list.
-    if (utcMin % 5 === 2) {
-      import("./emailChannel/syncService")
-        .then(({ runEmailPollingCron }) => runEmailPollingCron())
-        .catch((err) => console.error("[EmailPoll] cron error:", err));
+    // Native email Gmail incremental sync — elapsed-time fallback (default 10 min).
+    // Push is primary; polling is reconciliation. Shared mailbox lock coalesces with push.
+    {
+      const nowMs = Date.now();
+      if (
+        !emailPollInFlight &&
+        (lastEmailPollAtMs === 0 || nowMs - lastEmailPollAtMs >= EMAIL_POLL_FALLBACK_INTERVAL_MS)
+      ) {
+        emailPollInFlight = true;
+        lastEmailPollAtMs = nowMs;
+        import("./emailChannel/syncService")
+          .then(({ runEmailPollingCron }) => runEmailPollingCron())
+          .catch((err) => console.error("[EmailPoll] cron error:", err))
+          .finally(() => {
+            emailPollInFlight = false;
+          });
+      }
+    }
+
+    // Gmail users.watch renewal — at least daily (UTC day change or first tick)
+    {
+      const dayKey = `${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}`;
+      if (dayKey !== lastGmailWatchRenewalDay && utcHour === 3 && utcMin === 15) {
+        lastGmailWatchRenewalDay = dayKey;
+        import("./emailChannel/gmailWatch")
+          .then(({ runGmailWatchRenewalCron }) => runGmailWatchRenewalCron())
+          .catch((err) => console.error("[GmailWatch] renewal cron error:", err));
+      }
     }
   }, 60000);
   
+  // Soft-warn once if Pub/Sub is not configured (polling still works).
+  void import("./emailChannel/gmailPushConfig").then(({ resolveGmailPubSubConfig, logGmailWatchEvent }) => {
+    const cfg = resolveGmailPubSubConfig();
+    if (!cfg.configured) {
+      logGmailWatchEvent("backfill_skipped_not_configured", { reason: cfg.reason, phase: "cron_start" });
+    } else {
+      // One deferred backfill for existing mailboxes (metadata-gated; skips active non-expiring).
+      setTimeout(() => {
+        import("./emailChannel/gmailWatch")
+          .then(({ runGmailWatchRenewalCron }) => runGmailWatchRenewalCron())
+          .catch((err) => console.error("[GmailWatch] startup backfill error:", err));
+      }, 45_000);
+    }
+  });
+
   console.log('[Cron] Cron scheduler started (activation emails: 10 AM EST, hot list: 9 AM EST, webhook health: hourly)');
 }
 

@@ -573,6 +573,64 @@ export class GmailEmailProvider implements EmailProvider {
     };
   }
 
+  async watchMailbox(params: {
+    accessToken: string;
+    topicName: string;
+    labelIds?: string[];
+  }): Promise<import("./provider").GmailWatchResult> {
+    const topicName = String(params.topicName || "").trim();
+    if (!/^projects\/[^/]+\/topics\/[^/]+$/.test(topicName)) {
+      throw new Error("Invalid Gmail Pub/Sub topicName");
+    }
+    const body: { topicName: string; labelIds?: string[] } = { topicName };
+    if (params.labelIds?.length) body.labelIds = params.labelIds;
+
+    const res = await fetch(`${GMAIL_API}/users/me/watch`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${params.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      historyId?: string;
+      expiration?: string;
+      error?: { message?: string; code?: number };
+    };
+    if (!res.ok) {
+      throw new Error(json.error?.message || `Gmail users.watch failed (${res.status})`);
+    }
+    const historyId = json.historyId ? String(json.historyId) : "";
+    const expirationMs = json.expiration ? Number(json.expiration) : NaN;
+    if (!historyId || !Number.isFinite(expirationMs)) {
+      throw new Error("Gmail users.watch response missing historyId/expiration");
+    }
+    return {
+      historyId,
+      expiration: new Date(expirationMs),
+    };
+  }
+
+  async stopWatch(params: { accessToken: string }): Promise<void> {
+    const res = await fetch(`${GMAIL_API}/users/me/stop`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${params.accessToken}` },
+    });
+    if (!res.ok && res.status !== 204) {
+      // Best-effort on disconnect — do not throw hard.
+      const text = await res.text().catch(() => "");
+      console.warn(
+        JSON.stringify({
+          tag: "[GmailWatch]",
+          event: "stop_watch_failed",
+          status: res.status,
+          detail: text.slice(0, 120),
+        }),
+      );
+    }
+  }
+
   async sendNewEmail(params: {
     accessToken: string;
     from: string;

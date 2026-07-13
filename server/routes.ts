@@ -21,6 +21,7 @@ import { registerInventoryRoutes } from "./routes/inventory";
 import { registerProspectImportRoutes } from "./routes/prospectImport";
 import { registerProspectIntelligenceRoutes } from "./routes/prospectIntelligence";
 import { registerEmailChannelRoutes } from "./routes/emailChannel";
+import { registerGmailPubSubWebhookRoutes } from "./routes/gmailPubSubWebhook";
 import { registerPublicListingRoutes } from "./routes/publicListings";
 import { registerPublicAgentPageRoutes } from "./routes/publicAgentPage";
 import { registerAgentPageSettingsRoutes } from "./routes/agentPageSettings";
@@ -11375,6 +11376,7 @@ export async function registerRoutes(
   registerProspectIntelligenceRoutes(app);
   console.error("[EmailRouteBootProbe] before_register");
   registerEmailChannelRoutes(app);
+  registerGmailPubSubWebhookRoutes(app);
   registerPublicListingRoutes(app);
   registerPublicAgentPageRoutes(app);
   registerAgentPageSettingsRoutes(app);
