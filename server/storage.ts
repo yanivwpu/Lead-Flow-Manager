@@ -384,6 +384,8 @@ export interface IStorage {
   getConversationByContactAndChannel(contactId: string, channel: Channel, channelAccountId?: string): Promise<Conversation | undefined>;
   createConversation(conversation: InsertConversation): Promise<Conversation>;
   updateConversation(id: string, updates: Partial<Conversation>): Promise<Conversation | undefined>;
+  /** Zero unreadCount for every conversation belonging to this contact (inbox badge is a sum). */
+  markContactConversationsRead(userId: string, contactId: string): Promise<number>;
   deleteConversation(id: string): Promise<void>;
   
   // Message methods
@@ -2797,6 +2799,20 @@ export class DbStorage implements IStorage {
       .where(eq(conversations.id, id))
       .returning();
     return result[0];
+  }
+
+  async markContactConversationsRead(userId: string, contactId: string): Promise<number> {
+    const result = await db
+      .update(conversations)
+      .set({ unreadCount: 0, updatedAt: new Date() })
+      .where(
+        and(
+          eq(conversations.userId, userId),
+          eq(conversations.contactId, contactId),
+        ),
+      )
+      .returning({ id: conversations.id });
+    return result.length;
   }
 
   async deleteConversation(id: string): Promise<void> {

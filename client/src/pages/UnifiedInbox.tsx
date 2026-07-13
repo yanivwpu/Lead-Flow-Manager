@@ -127,6 +127,13 @@ import {
   mediaChannelValidationBubbleText,
 } from "@/lib/mediaChannelValidationError";
 import { outboundDocumentBlockHint } from "@/lib/outboundAttachmentChannelGate";
+import {
+  applyInboxContactMarkRead,
+  inboxConversationRowChromeClassName,
+  INBOX_ROW_HEADER_CLASS,
+  INBOX_ROW_STATUS_BAND_CLASS,
+  mergeInboxUnreadPreservingLocalRead,
+} from "@/lib/inboxConversationRow";
 import { formatOutboundSendErrorDescription } from "@/lib/webchatSendError";
 import { webchatSendErrorDescription } from "@shared/webchatSendErrors";
 
@@ -574,6 +581,9 @@ export function UnifiedInbox() {
   // Set to true on every send so that all post-render scrolls are forced,
   // regardless of where the user was scrolled before they sent.
   const justSentRef = useRef(false);
+  /** Contacts marked read in this session — blocks stale inbox refetch from restoring badges briefly. */
+  const recentlyReadContactIdsRef = useRef<Set<string>>(new Set());
+  const recentlyReadClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const scrollToBottom = useCallback(() => {
     const run = () => {
@@ -676,6 +686,23 @@ export function UnifiedInbox() {
       typeof document !== "undefined" && document.hidden ? false : 15_000,
     refetchIntervalInBackground: true,
     placeholderData: keepPreviousData,
+    queryFn: async ({ signal }) => {
+      const res = await fetch("/api/inbox", {
+        credentials: "include",
+        cache: "no-store",
+        signal,
+      });
+      if (!res.ok) {
+        throw new Error(`${res.status}: ${await res.text()}`);
+      }
+      const incoming = (await res.json()) as InboxItem[];
+      const previous = queryClient.getQueryData<InboxItem[]>(["/api/inbox"]);
+      return mergeInboxUnreadPreservingLocalRead(
+        previous,
+        incoming,
+        recentlyReadContactIdsRef.current,
+      );
+    },
   });
 
   const inbox: InboxItem[] = useMemo(() => inboxData || [], [inboxData]);
@@ -1274,22 +1301,49 @@ export function UnifiedInbox() {
     return () => ro.disconnect();
   }, [selectedContactId, scrollToBottom]);
 
-  // Mark conversation as read when opened
+  // Mark all conversations for the contact as read when opened (inbox badge is a sum).
   useEffect(() => {
-    if (!primaryConversation?.id) return;
-    fetch(`/api/conversations/${primaryConversation.id}/read`, {
-      method: "POST",
-      credentials: "include",
-    }).then(() => {
-      queryClient.setQueryData<InboxItem[]>(["/api/inbox"], (old) => {
-        if (!old) return old;
-        return old.map((item) =>
-          item.contact.id === selectedContactId
-            ? { ...item, unreadCount: 0, conversation: item.conversation ? { ...item.conversation, unreadCount: 0 } : item.conversation }
-            : item
-        );
-      });
-    }).catch(() => {});
+    if (!primaryConversation?.id || !selectedContactId) return;
+    const contactId = selectedContactId;
+    const conversationId = primaryConversation.id;
+    let cancelled = false;
+
+    const rememberLocalRead = () => {
+      recentlyReadContactIdsRef.current.add(contactId);
+      const existing = recentlyReadClearTimersRef.current.get(contactId);
+      if (existing) clearTimeout(existing);
+      const timer = setTimeout(() => {
+        recentlyReadContactIdsRef.current.delete(contactId);
+        recentlyReadClearTimersRef.current.delete(contactId);
+      }, 60_000);
+      recentlyReadClearTimersRef.current.set(contactId, timer);
+    };
+
+    void (async () => {
+      rememberLocalRead();
+      await queryClient.cancelQueries({ queryKey: ["/api/inbox"] });
+      queryClient.setQueryData<InboxItem[]>(["/api/inbox"], (old) =>
+        applyInboxContactMarkRead(old, contactId) as InboxItem[] | undefined,
+      );
+      try {
+        const res = await fetch(`/api/conversations/${conversationId}/read`, {
+          method: "POST",
+          credentials: "include",
+        });
+        if (cancelled) return;
+        if (res.ok) {
+          queryClient.setQueryData<InboxItem[]>(["/api/inbox"], (old) =>
+            applyInboxContactMarkRead(old, contactId) as InboxItem[] | undefined,
+          );
+        }
+      } catch {
+        /* non-fatal — badge may restore on next successful refetch */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [primaryConversation?.id, selectedContactId, queryClient]);
 
   // --- Mutations ---
@@ -2388,12 +2442,10 @@ export function UnifiedInbox() {
               <div
                 key={item.contact.id}
                 onClick={() => setLocation(`/app/inbox/${item.contact.id}`)}
-                className={cn(
-                  "p-3 border-b cursor-pointer transition-colors bg-transparent hover:bg-gray-100/70",
-                  selectedContactId === item.contact.id &&
-                    "bg-white shadow-sm ring-1 ring-gray-200 hover:bg-white border-l-2 border-l-gray-300",
-                  isOverdue && !bookedAppt && "border-l-2 border-l-red-400"
-                )}
+                className={inboxConversationRowChromeClassName({
+                  selected: selectedContactId === item.contact.id,
+                  overdue: isOverdue && !bookedAppt,
+                })}
                 data-testid={`inbox-item-${item.contact.id}`}
               >
                 <div className="flex items-start gap-2.5">
@@ -2404,17 +2456,19 @@ export function UnifiedInbox() {
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1 mb-0.5">
+                    <div className={INBOX_ROW_HEADER_CLASS}>
                       <span className={cn("font-medium text-sm truncate flex-1 min-w-0", needsReply && "font-semibold")}>{item.contact.name}</span>
                       <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatTime(item.lastMessageAt)}</span>
-                      {item.unreadCount > 0 && (
-                        <Badge className="ml-0.5 text-[10px] px-1.5 py-0 h-4 flex-shrink-0 bg-gray-200 text-gray-800">{item.unreadCount}</Badge>
+                      {item.unreadCount > 0 ? (
+                        <Badge className="ml-0.5 text-[10px] px-1.5 py-0 h-4 min-w-[1rem] flex-shrink-0 bg-gray-200 text-gray-800">{item.unreadCount}</Badge>
+                      ) : (
+                        <span className="ml-0.5 h-4 min-w-[1rem] flex-shrink-0" aria-hidden />
                       )}
                     </div>
-                    <p className={cn("text-xs truncate mb-1", needsReply ? "text-gray-700 font-medium" : "text-muted-foreground")}>
+                    <p className={cn("text-xs truncate mb-1 leading-4 min-h-4", needsReply ? "text-gray-700 font-medium" : "text-muted-foreground")}>
                       {item.lastMessage || "No messages yet"}
                     </p>
-                    <div className="flex items-center gap-1 flex-wrap">
+                    <div className={INBOX_ROW_STATUS_BAND_CLASS}>
                       {needsReply ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold border bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-0.5" data-testid={`badge-needs-reply-${item.contact.id}`}>
                           <Zap className="w-2.5 h-2.5" />Needs Reply

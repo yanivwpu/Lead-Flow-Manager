@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { conversations, type EmailMailbox } from "@shared/schema";
 import type { NormalizedEmailMessage } from "@shared/emailChannel";
+import { nextEmailConversationUnreadCount } from "@shared/emailUnreadState";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
 import { notifyUser } from "../presence";
@@ -93,10 +94,11 @@ export async function persistNormalizedEmailMessage(params: {
       unreadCount: normalized.direction === "inbound" ? 1 : 0,
     } as any);
   } else {
-    const unread =
-      normalized.direction === "inbound"
-        ? (conversation.unreadCount || 0) + 1
-        : conversation.unreadCount || 0;
+    const unread = nextEmailConversationUnreadCount({
+      messageAlreadyExists: false,
+      direction: normalized.direction,
+      currentUnread: conversation.unreadCount || 0,
+    });
     await storage.updateConversation(conversation.id, {
       lastMessageAt: normalized.sentAt,
       lastMessagePreview: (normalized.snippet || normalized.textBody || "").slice(0, 100),
