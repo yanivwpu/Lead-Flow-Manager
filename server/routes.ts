@@ -11377,6 +11377,17 @@ export async function registerRoutes(
   console.error("[EmailRouteBootProbe] before_register");
   registerEmailChannelRoutes(app);
   registerGmailPubSubWebhookRoutes(app);
+  // Confirms Gmail Pub/Sub webhook is mounted inside registerRoutes (before serveStatic/SPA).
+  console.error(
+    JSON.stringify({
+      tag: "[GmailPushE2E]",
+      event: "route_registered",
+      path: "/api/webhooks/gmail/pubsub",
+      method: "POST",
+      beforeServeStatic: true,
+      at: new Date().toISOString(),
+    }),
+  );
   registerPublicListingRoutes(app);
   registerPublicAgentPageRoutes(app);
   registerAgentPageSettingsRoutes(app);

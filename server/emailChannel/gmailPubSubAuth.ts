@@ -2,7 +2,11 @@
  * Authenticate Google Cloud Pub/Sub push JWTs (OIDC).
  */
 import { OAuth2Client } from "google-auth-library";
-import { resolveGmailPubSubConfig, logGmailPushEvent } from "./gmailPushConfig";
+import {
+  resolveGmailPubSubConfig,
+  logGmailPushEvent,
+  logGmailPushE2EEvent,
+} from "./gmailPushConfig";
 
 const oauthClient = new OAuth2Client();
 
@@ -49,6 +53,13 @@ export async function authenticateGmailPubSubRequest(
   const config = resolveGmailPubSubConfig();
   if (!config.configured) {
     logGmailPushEvent("auth_rejected", { reason: "pubsub_not_configured" });
+    // #region agent log
+    logGmailPushE2EEvent("jwt_rejected", {
+      hypothesisId: "H-B",
+      reason: "pubsub_not_configured",
+      status: 403,
+    });
+    // #endregion
     return { ok: false, status: 403, reason: "pubsub_not_configured" };
   }
 
@@ -56,6 +67,15 @@ export async function authenticateGmailPubSubRequest(
   const match = /^Bearer\s+(.+)$/i.exec(raw);
   if (!match?.[1]) {
     logGmailPushEvent("auth_rejected", { reason: "missing_bearer" });
+    // #region agent log
+    logGmailPushE2EEvent("jwt_rejected", {
+      hypothesisId: "H-B",
+      reason: "missing_bearer",
+      status: 401,
+      audienceConfigured: Boolean(config.audience),
+      pushSaConfigured: Boolean(config.pushServiceAccount),
+    });
+    // #endregion
     return { ok: false, status: 401, reason: "missing_bearer" };
   }
 
@@ -68,6 +88,13 @@ export async function authenticateGmailPubSubRequest(
     const payload = ticket.getPayload();
     if (!payload) {
       logGmailPushEvent("auth_rejected", { reason: "empty_payload" });
+      // #region agent log
+      logGmailPushE2EEvent("jwt_rejected", {
+        hypothesisId: "H-B",
+        reason: "empty_payload",
+        status: 401,
+      });
+      // #endregion
       return { ok: false, status: 401, reason: "empty_payload" };
     }
 
@@ -78,11 +105,48 @@ export async function authenticateGmailPubSubRequest(
     });
     if (!checked.ok) {
       logGmailPushEvent("auth_rejected", { reason: checked.reason });
+      // #region agent log
+      logGmailPushE2EEvent("jwt_rejected", {
+        hypothesisId: "H-B",
+        reason: checked.reason,
+        status: checked.status,
+        tokenIssPresent: Boolean(payload.iss),
+        tokenAudMatchesConfigured:
+          Array.isArray(payload.aud)
+            ? payload.aud.includes(config.audience)
+            : String(payload.aud || "") === config.audience,
+        tokenEmailPresent: Boolean(payload.email),
+        emailVerifiedClaim: payload.email_verified ?? null,
+      });
+      // #endregion
       return checked;
     }
+    // #region agent log
+    logGmailPushE2EEvent("jwt_verified", {
+      hypothesisId: "H-B",
+      status: 200,
+      serviceAccountEmailRedacted: checked.serviceAccountEmail.includes("@")
+        ? `***@${checked.serviceAccountEmail.split("@")[1]}`
+        : null,
+      audienceHost: (() => {
+        try {
+          return new URL(config.audience).host;
+        } catch {
+          return null;
+        }
+      })(),
+    });
+    // #endregion
     return checked;
   } catch {
     logGmailPushEvent("auth_rejected", { reason: "jwt_invalid" });
+    // #region agent log
+    logGmailPushE2EEvent("jwt_rejected", {
+      hypothesisId: "H-B",
+      reason: "jwt_invalid",
+      status: 401,
+    });
+    // #endregion
     return { ok: false, status: 401, reason: "jwt_invalid" };
   }
 }

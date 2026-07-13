@@ -79,6 +79,56 @@ export function logGmailSyncTriggerEvent(
   console.log(JSON.stringify({ tag: "[GmailSyncTrigger]", event, ...fields }));
 }
 
+/**
+ * TEMPORARY Phase 1B E2E diagnostics for Railway production push failure triage.
+ * Safe fields only — never log tokens, JWTs, Authorization headers, or message bodies.
+ */
+export type GmailPushE2EEvent =
+  | "watch_state"
+  | "webhook_http_received"
+  | "jwt_verified"
+  | "jwt_rejected"
+  | "notification_decoded"
+  | "mailbox_matched"
+  | "mailbox_not_found"
+  | "trigger_requested"
+  | "lease_acquired"
+  | "lease_deferred"
+  | "history_started"
+  | "history_result"
+  | "message_persisted"
+  | "inbox_row_result";
+
+export function logGmailPushE2EEvent(
+  event: GmailPushE2EEvent,
+  fields: Record<string, unknown> = {},
+): void {
+  const payload = {
+    tag: "[GmailPushE2E]",
+    event,
+    at: new Date().toISOString(),
+    ...fields,
+  };
+  console.log(JSON.stringify(payload));
+  // #region agent log
+  fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "32aec0",
+    },
+    body: JSON.stringify({
+      sessionId: "32aec0",
+      hypothesisId: String(fields.hypothesisId || event),
+      location: `gmailPushE2E:${event}`,
+      message: event,
+      data: fields,
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+}
+
 /** Prefer the numerically newer Gmail historyId; never move backward. */
 export function preferNewerHistoryId(
   current: string | null | undefined,
