@@ -6312,37 +6312,85 @@ export async function registerRoutes(
         result.push(entry);
       }
 
-      // ── Always surface all five main channels (gray if not configured) ──────
-      const MAIN_CHANNELS = ['whatsapp', 'facebook', 'instagram', 'telegram', 'tiktok'];
-      for (const ch of MAIN_CHANNELS) {
-        if (!result.find(r => r.channel === ch)) {
-          result.push({
-            channel: ch,
-            isConnected: false,
-            isEnabled: false,
-            pageName: null,
-            healthy: null,
-            issues: [],
-            warnings: [],
-            healthState: "unknown",
-            checks: {
-              tokenValid: null,
-              tokenScopes: null,
-              missingScopes: null,
-              pageAccessible: null,
-              subscriptionOk: null,
-              subscriptionFields: null,
-            },
-          });
-        }
-      }
+      // ── Always surface main messaging channels (gray if not configured) ──────
+      // Email uses the same mailbox status source as Settings (not channel_settings alone).
+      try {
+        const { getWorkspaceEmailStatus } = await import("./emailChannel/oauth");
+        const {
+          emailStatusToChannelHealthEntry,
+          INBOX_CHANNEL_HEALTH_ORDER,
+        } = await import("@shared/inboxChannelHealthBar");
+        const emailStatus = await getWorkspaceEmailStatus(req.user.id);
+        const emailEntry = emailStatusToChannelHealthEntry(emailStatus);
+        const withoutEmail = result.filter((r) => r.channel !== "email");
+        withoutEmail.push(emailEntry);
+        result.length = 0;
+        result.push(...withoutEmail);
 
-      // Sort in display order: WhatsApp, Facebook, Instagram, Telegram, TikTok, then others
-      result.sort((a, b) => {
-        const ai = MAIN_CHANNELS.indexOf(a.channel);
-        const bi = MAIN_CHANNELS.indexOf(b.channel);
-        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-      });
+        const MAIN_CHANNELS = [...INBOX_CHANNEL_HEALTH_ORDER];
+        for (const ch of MAIN_CHANNELS) {
+          if (!result.find((r) => r.channel === ch)) {
+            result.push({
+              channel: ch,
+              isConnected: false,
+              isEnabled: false,
+              pageName: null,
+              healthy: null,
+              issues: [],
+              warnings: [],
+              healthState: "unknown",
+              checks: {
+                tokenValid: null,
+                tokenScopes: null,
+                missingScopes: null,
+                pageAccessible: null,
+                subscriptionOk: null,
+                subscriptionFields: null,
+              },
+            });
+          }
+        }
+
+        // Sort in display order: WhatsApp … TikTok · Email, then others
+        result.sort((a, b) => {
+          const ai = MAIN_CHANNELS.indexOf(a.channel as (typeof MAIN_CHANNELS)[number]);
+          const bi = MAIN_CHANNELS.indexOf(b.channel as (typeof MAIN_CHANNELS)[number]);
+          return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+        });
+      } catch (emailHealthErr) {
+        console.warn(
+          "[ChannelHealth] email status:",
+          emailHealthErr instanceof Error ? emailHealthErr.message : String(emailHealthErr),
+        );
+        const MAIN_CHANNELS = ["whatsapp", "facebook", "instagram", "telegram", "tiktok", "email"];
+        for (const ch of MAIN_CHANNELS) {
+          if (!result.find((r) => r.channel === ch)) {
+            result.push({
+              channel: ch,
+              isConnected: false,
+              isEnabled: false,
+              pageName: null,
+              healthy: null,
+              issues: [],
+              warnings: [],
+              healthState: "unknown",
+              checks: {
+                tokenValid: null,
+                tokenScopes: null,
+                missingScopes: null,
+                pageAccessible: null,
+                subscriptionOk: null,
+                subscriptionFields: null,
+              },
+            });
+          }
+        }
+        result.sort((a, b) => {
+          const ai = MAIN_CHANNELS.indexOf(a.channel);
+          const bi = MAIN_CHANNELS.indexOf(b.channel);
+          return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+        });
+      }
 
       if (userSession) {
         const row = settings.find((x) => x.channel === "whatsapp");

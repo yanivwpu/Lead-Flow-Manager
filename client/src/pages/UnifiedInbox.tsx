@@ -146,6 +146,10 @@ import {
   mergeInboxUnreadPreservingLocalRead,
   remainingContactUnreadAfterMarkingConversation,
 } from "@/lib/inboxConversationRow";
+import {
+  INBOX_CHANNEL_HEALTH_LABELS,
+  buildInboxChannelHealthRows,
+} from "@shared/inboxChannelHealthBar";
 import { formatOutboundSendErrorDescription } from "@/lib/webchatSendError";
 import { webchatSendErrorDescription } from "@shared/webchatSendErrors";
 
@@ -2329,27 +2333,22 @@ export function UnifiedInbox() {
             ))}
           </div>
 
-          {/* Channel health bar — always shows all 5 channels; gray = not configured */}
+          {/* Channel health bar — always shows main messaging channels; gray = not configured */}
           {(() => {
-            const ORDERED = ['whatsapp', 'facebook', 'instagram', 'telegram', 'tiktok'];
-            const LABELS: Record<string, string> = {
-              whatsapp: 'WhatsApp', facebook: 'Facebook', instagram: 'Instagram',
-              telegram: 'Telegram', tiktok: 'TikTok',
-            };
-            // Build a map from health data; channels missing from data = not configured
-            const healthMap = new Map(channelHealth.map(ch => [ch.channel, ch]));
-            const rows = ORDERED.map(key => healthMap.get(key) ?? {
-              channel: key, isConnected: false, isEnabled: false,
-              pageName: null, healthy: null, issues: [], warnings: [], healthState: "unknown", checks: {},
-            });
+            const rows = buildInboxChannelHealthRows(channelHealth);
 
-            const getTooltip = (ch: typeof rows[0]) => {
-              const label = LABELS[ch.channel] ?? ch.channel;
+            const getTooltip = (ch: (typeof rows)[0]) => {
+              const label = INBOX_CHANNEL_HEALTH_LABELS[ch.channel as keyof typeof INBOX_CHANNEL_HEALTH_LABELS] ?? ch.channel;
               if (!ch.isConnected) return `${label}: not configured — set up in Settings`;
               if (ch.healthy === true) {
                 if (ch.channel === 'whatsapp') return `${label}: account verified and ready`;
                 if (ch.channel === 'telegram') return `${label}: bot token valid, webhook active`;
                 if (ch.channel === 'tiktok')   return `${label}: lead intake is active`;
+                if (ch.channel === 'email') {
+                  return ch.pageName
+                    ? `${label}: connected (${ch.pageName})`
+                    : `${label}: Gmail mailbox connected`;
+                }
                 if (ch.healthState === "degraded" || (ch.warnings && ch.warnings.length))
                   return `${label}: connected — ${ch.warnings?.[0] ?? "Meta verification temporarily unavailable."}`;
                 return `${label}: token valid, page accessible, webhook subscribed`;
@@ -2361,7 +2360,7 @@ export function UnifiedInbox() {
             };
 
             return (
-              <div className="flex items-center gap-2 mt-2 pt-2 border-t flex-wrap" data-testid="channel-health-bar">
+              <div className="flex items-center gap-x-2 gap-y-1 mt-2 pt-2 border-t flex-wrap" data-testid="channel-health-bar">
                 {rows.map(ch => {
                   const isDegraded =
                     ch.isConnected &&
@@ -2382,7 +2381,7 @@ export function UnifiedInbox() {
                       data-testid={`channel-health-${ch.channel}`}
                     >
                       <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", dotColor)} />
-                      <span>{LABELS[ch.channel] ?? ch.channel}</span>
+                      <span>{INBOX_CHANNEL_HEALTH_LABELS[ch.channel as keyof typeof INBOX_CHANNEL_HEALTH_LABELS] ?? ch.channel}</span>
                     </div>
                   );
                 })}

@@ -113,11 +113,12 @@ export function mergeInboxUnreadPreservingLocalRead<T extends InboxUnreadItem>(
  * Outer row: fixed height + identical padding/border box for every state.
  * Selected/unread/status MUST NOT add padding, ring, outer shadow, or wrap.
  *
- * Height budget (68px):
- *   py-2 (16) + line1 20 + gap 2 + line2 16 + gap 2 + line3 20 + border ≈ 68
+ * Height budget (75px, box-border):
+ *   py-1.5 (12) + line1 20 + gap 2 + line2 16 + gap 2 + line3 20 + border-b ≈ 73
+ *   → 75px leaves ~2px slack so status pills are not clipped.
  */
 export const INBOX_ROW_OUTER_BASE =
-  "box-border h-[68px] px-3 py-2 border-b border-l-2 border-l-transparent cursor-pointer overflow-hidden transition-colors bg-transparent hover:bg-gray-100/70";
+  "box-border h-[75px] px-3 py-1.5 border-b border-l-2 border-l-transparent cursor-pointer overflow-hidden transition-colors bg-transparent hover:bg-gray-100/70";
 
 export const INBOX_ROW_INNER =
   "flex h-full min-h-0 items-center gap-2.5 overflow-hidden";
@@ -200,8 +201,8 @@ export function inboxConversationRowLayoutContract(input: InboxRowChromeInput): 
     line1: INBOX_ROW_LINE1,
     line2: INBOX_ROW_LINE2,
     line3: INBOX_ROW_LINE3,
-    heightClass: "h-[68px]",
-    paddingClass: "px-3 py-2",
+    heightClass: "h-[75px]",
+    paddingClass: "px-3 py-1.5",
     borderWidthClass: "border-l-2",
   };
 }

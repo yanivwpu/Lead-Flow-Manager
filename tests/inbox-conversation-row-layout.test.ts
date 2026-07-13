@@ -47,8 +47,8 @@ run("all row variants share identical outer height/padding/border-width contract
     assert.equal(c.line1, base.line1, `${c.name} line1`);
     assert.equal(c.line2, base.line2, `${c.name} line2`);
     assert.equal(c.line3, base.line3, `${c.name} line3`);
-    assert.match(c.outer, /h-\[68px\]/, `${c.name} fixed height`);
-    assert.match(c.outer, /px-3 py-2/, `${c.name} padding`);
+    assert.match(c.outer, /h-\[75px\]/, `${c.name} fixed height`);
+    assert.match(c.outer, /px-3 py-1\.5/, `${c.name} padding`);
     assert.match(c.outer, /border-l-2/, `${c.name} border-l-2`);
     assert.match(c.outer, /overflow-hidden/, `${c.name} overflow`);
     assert.doesNotMatch(c.outer, /\bring-1\b/, `${c.name} no ring`);
@@ -61,15 +61,16 @@ run("all row variants share identical outer height/padding/border-width contract
 run("selected only changes background/accent color, not box model", () => {
   const normal = inboxConversationRowChromeClassName({ selected: false });
   const selected = inboxConversationRowChromeClassName({ selected: true });
-  assert.match(INBOX_ROW_OUTER_BASE, /h-\[68px\]/);
-  assert.match(normal, /h-\[68px\]/);
-  assert.match(selected, /h-\[68px\]/);
-  assert.match(normal, /px-3 py-2/);
-  assert.match(selected, /px-3 py-2/);
+  assert.match(INBOX_ROW_OUTER_BASE, /h-\[75px\]/);
+  assert.match(normal, /h-\[75px\]/);
+  assert.match(selected, /h-\[75px\]/);
+  assert.match(normal, /px-3 py-1\.5/);
+  assert.match(selected, /px-3 py-1\.5/);
   assert.match(selected, /bg-white/);
   assert.match(selected, /border-l-gray-300|!border-l-gray-300/);
   // Selected must not introduce extra vertical padding classes
   assert.doesNotMatch(selected, /\bpy-3\b/);
+  assert.doesNotMatch(selected, /\bpy-2\b/);
   assert.doesNotMatch(selected, /\bp-3\b/);
   assert.doesNotMatch(selected, /\bring-/);
 });
