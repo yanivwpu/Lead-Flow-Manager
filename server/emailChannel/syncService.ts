@@ -12,6 +12,11 @@ import {
   listConnectedMailboxesForPoll,
 } from "./mailboxStore";
 import { persistNormalizedEmailMessage } from "./persistInbound";
+import {
+  isEmailCredentialDecryptFailure,
+  logEmailChannelHealthDiag,
+  syncErrorFromUnknown,
+} from "./credentials";
 
 export async function runInitialEmailSync(mailboxId: string): Promise<void> {
   const mailbox = await getEmailMailboxById(mailboxId);
@@ -81,8 +86,21 @@ export async function runInitialEmailSync(mailboxId: string): Promise<void> {
       }),
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await setMailboxSyncStatus(mailboxId, "error", { syncError: message });
+    const message = syncErrorFromUnknown(err);
+    if (isEmailCredentialDecryptFailure(err)) {
+      logEmailChannelHealthDiag({
+        mailboxId,
+        workspaceId: mailbox.workspaceUserId,
+        stage: "initial_sync_decrypt_failed",
+        error: err,
+        syncStatus: mailbox.syncStatus,
+        lastSyncAt: mailbox.lastSyncAt,
+        hasRefreshToken: Boolean(mailbox.refreshTokenEncrypted),
+      });
+      await setMailboxSyncStatus(mailboxId, "needs_reconnect", { syncError: message });
+    } else {
+      await setMailboxSyncStatus(mailboxId, "error", { syncError: message });
+    }
     console.error("[EmailSync] initial failed:", message);
   }
 }
@@ -153,8 +171,19 @@ export async function runIncrementalEmailSync(mailboxId: string): Promise<void> 
       syncCursor: history.historyId || fresh.syncCursor,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (message.includes("reconnect")) {
+    const message = syncErrorFromUnknown(err);
+    if (isEmailCredentialDecryptFailure(err) || message.includes("reconnect")) {
+      if (isEmailCredentialDecryptFailure(err)) {
+        logEmailChannelHealthDiag({
+          mailboxId,
+          workspaceId: mailbox.workspaceUserId,
+          stage: "incremental_sync_decrypt_failed",
+          error: err,
+          syncStatus: mailbox.syncStatus,
+          lastSyncAt: mailbox.lastSyncAt,
+          hasRefreshToken: Boolean(mailbox.refreshTokenEncrypted),
+        });
+      }
       await setMailboxSyncStatus(mailboxId, "needs_reconnect", { syncError: message });
     } else {
       await setMailboxSyncStatus(mailboxId, "error", { syncError: message });

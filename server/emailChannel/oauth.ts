@@ -7,7 +7,15 @@ import {
   type EmailMailboxPublic,
   type EmailInitialSyncMode,
 } from "@shared/emailChannel";
-import { encryptEmailCredential, assertEmailEncryptionConfigured, decryptEmailCredential } from "./credentials";
+import {
+  encryptEmailCredential,
+  assertEmailEncryptionConfigured,
+  decryptEmailCredentialField,
+  EmailCredentialDecryptError,
+  isEmailCredentialDecryptFailure,
+  logEmailChannelHealthDiag,
+  syncErrorFromUnknown,
+} from "./credentials";
 import { getEmailProvider } from "./gmailProvider";
 import {
   countEmailMailboxes,
@@ -206,18 +214,58 @@ export async function getValidMailboxAccessToken(mailboxId: string): Promise<{
   const mailbox = await getEmailMailboxById(mailboxId);
   if (!mailbox) throw new Error("Mailbox not found");
 
-  let accessToken = decryptEmailCredential(mailbox.accessTokenEncrypted);
+  const diagBase = {
+    mailboxId: mailbox.id,
+    workspaceId: mailbox.workspaceUserId,
+    syncStatus: mailbox.syncStatus,
+    lastSyncAt: mailbox.lastSyncAt,
+    hasRefreshToken: Boolean(mailbox.refreshTokenEncrypted),
+  };
+
+  let accessToken: string;
+  try {
+    accessToken = decryptEmailCredentialField(mailbox.accessTokenEncrypted, "access_token", {
+      ...diagBase,
+      stage: "token_read_access",
+    });
+  } catch (err) {
+    if (isEmailCredentialDecryptFailure(err)) {
+      await setMailboxSyncStatus(mailbox.id, "needs_reconnect", {
+        syncError: syncErrorFromUnknown(err),
+      });
+    }
+    throw err;
+  }
+
   const expiresAt = mailbox.tokenExpiresAt?.getTime() ?? 0;
   const needsRefresh = !expiresAt || expiresAt < Date.now() + 60_000;
 
   if (needsRefresh) {
     if (!mailbox.refreshTokenEncrypted) {
+      logEmailChannelHealthDiag({
+        ...diagBase,
+        stage: "token_refresh_missing_refresh",
+        hasRefreshToken: false,
+      });
       await setMailboxSyncStatus(mailbox.id, "needs_reconnect", {
         syncError: "Missing refresh token",
       });
       throw new Error("Mailbox needs reconnect");
     }
-    const refreshToken = decryptEmailCredential(mailbox.refreshTokenEncrypted);
+    let refreshToken: string;
+    try {
+      refreshToken = decryptEmailCredentialField(mailbox.refreshTokenEncrypted, "refresh_token", {
+        ...diagBase,
+        stage: "token_read_refresh",
+      });
+    } catch (err) {
+      if (isEmailCredentialDecryptFailure(err)) {
+        await setMailboxSyncStatus(mailbox.id, "needs_reconnect", {
+          syncError: syncErrorFromUnknown(err),
+        });
+      }
+      throw err;
+    }
     const provider = getEmailProvider(mailbox.provider);
     try {
       const refreshed = await provider.refreshAccessToken(refreshToken);
@@ -228,7 +276,14 @@ export async function getValidMailboxAccessToken(mailboxId: string): Promise<{
         syncStatus: mailbox.syncStatus === "needs_reconnect" ? "connected" : mailbox.syncStatus,
         syncError: null,
       });
-    } catch {
+    } catch (err) {
+      if (err instanceof EmailCredentialDecryptError) throw err;
+      logEmailChannelHealthDiag({
+        ...diagBase,
+        stage: "token_refresh_provider",
+        encryptedField: "refresh_token",
+        error: err,
+      });
       await setMailboxSyncStatus(mailbox.id, "needs_reconnect", {
         syncError: "Token refresh failed",
       });
@@ -278,12 +333,58 @@ export function toPublicMailbox(
   };
 }
 
+/**
+ * Settings health check: same credential path as sync/send.
+ * Heals stale decrypt/sync errors when tokens still decrypt (and refresh if needed).
+ * Does not overwrite a working mailbox with a blind reconnect.
+ */
 export async function getWorkspaceEmailStatus(workspaceUserId: string) {
   const mailbox = await getPrimaryEmailMailbox(workspaceUserId);
   if (!mailbox) {
     return { connected: false, mailbox: null as EmailMailboxPublic | null };
   }
-  return { connected: true, mailbox: toPublicMailbox(mailbox) };
+
+  const stickyFailure =
+    mailbox.syncStatus === "error" || mailbox.syncStatus === "needs_reconnect";
+
+  try {
+    await getValidMailboxAccessToken(mailbox.id);
+    // Credentials readable on this instance — clear sticky Needs attention from a
+    // prior poll/decrypt failure (e.g. another instance with a different key).
+    if (stickyFailure) {
+      logEmailChannelHealthDiag({
+        mailboxId: mailbox.id,
+        workspaceId: workspaceUserId,
+        stage: "status_heal_credentials_ok",
+        syncStatus: mailbox.syncStatus,
+        lastSyncAt: mailbox.lastSyncAt,
+        hasRefreshToken: Boolean(mailbox.refreshTokenEncrypted),
+      });
+      await setMailboxSyncStatus(mailbox.id, "connected", { syncError: null });
+    }
+  } catch (err) {
+    logEmailChannelHealthDiag({
+      mailboxId: mailbox.id,
+      workspaceId: workspaceUserId,
+      stage: "status_probe_failed",
+      encryptedField: err instanceof EmailCredentialDecryptError ? err.field : null,
+      error: err,
+      syncStatus: mailbox.syncStatus,
+      lastSyncAt: mailbox.lastSyncAt,
+      hasRefreshToken: Boolean(mailbox.refreshTokenEncrypted),
+    });
+    // Persist a user-safe message when the DB still has the raw OpenSSL string.
+    const safe = syncErrorFromUnknown(err);
+    if (
+      isEmailCredentialDecryptFailure(err) &&
+      (mailbox.syncError !== safe || !stickyFailure)
+    ) {
+      await setMailboxSyncStatus(mailbox.id, "needs_reconnect", { syncError: safe });
+    }
+  }
+
+  const fresh = (await getPrimaryEmailMailbox(workspaceUserId))!;
+  return { connected: true, mailbox: toPublicMailbox(fresh) };
 }
 
 export { EMAIL_SEND_DAILY_SOFT_CAP, EMAIL_SEND_HOURLY_SOFT_CAP };

@@ -18,7 +18,12 @@ import { shouldSuppressEmailContactCreation } from "../server/emailChannel/conta
 import {
   encryptEmailCredential,
   decryptEmailCredential,
+  decryptEmailCredentialField,
   isEmailCredentialEncrypted,
+  EmailCredentialDecryptError,
+  EMAIL_CREDENTIAL_DECRYPT_USER_MESSAGE,
+  isNodeCryptoAuthFailure,
+  syncErrorFromUnknown,
 } from "../server/emailChannel/credentials";
 import { CHANNELS, CHANNEL_INFO } from "../shared/schema";
 
@@ -102,6 +107,42 @@ run("email credentials encrypt/decrypt with fail-closed format", () => {
   assert.ok(isEmailCredentialEncrypted(enc));
   assert.equal(decryptEmailCredential(enc), token);
   assert.throws(() => decryptEmailCredential("plaintext-token"), /refusing plaintext/i);
+});
+
+run("wrong EMAIL_ENCRYPTION_KEY yields Node crypto auth failure (Settings syncError source)", () => {
+  process.env.EMAIL_ENCRYPTION_KEY = "test-email-encryption-key-alpha!!";
+  const enc = encryptEmailCredential("ya29.access");
+  process.env.EMAIL_ENCRYPTION_KEY = "test-email-encryption-key-beta!!!";
+  assert.throws(() => decryptEmailCredential(enc), /unable to authenticate data|Unsupported state/i);
+});
+
+run("decryptEmailCredentialField wraps crypto auth failure with field + user-safe message", () => {
+  process.env.EMAIL_ENCRYPTION_KEY = "test-email-encryption-key-alpha!!";
+  const enc = encryptEmailCredential("ya29.refresh");
+  process.env.EMAIL_ENCRYPTION_KEY = "test-email-encryption-key-beta!!!";
+
+  try {
+    decryptEmailCredentialField(enc, "refresh_token", {
+      mailboxId: "mb-diag",
+      workspaceId: "ws-diag",
+      stage: "test_decrypt",
+      hasRefreshToken: true,
+    });
+    assert.fail("expected decrypt to throw");
+  } catch (err) {
+    assert.ok(err instanceof EmailCredentialDecryptError);
+    assert.equal(err.field, "refresh_token");
+    assert.equal(err.message, EMAIL_CREDENTIAL_DECRYPT_USER_MESSAGE);
+    assert.ok(
+      isNodeCryptoAuthFailure({ message: err.causeMessage }) ||
+        /authenticate|Unsupported/i.test(err.causeMessage),
+    );
+    assert.equal(syncErrorFromUnknown(err), EMAIL_CREDENTIAL_DECRYPT_USER_MESSAGE);
+    assert.doesNotMatch(syncErrorFromUnknown(err), /Unsupported state/);
+  }
+
+  // restore stable test key for any later runs in this process
+  process.env.EMAIL_ENCRYPTION_KEY = "test-email-encryption-key-32b!";
 });
 
 run("email thread identity model: mailbox + threadId keys conversation uniqueness", () => {
