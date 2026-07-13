@@ -175,4 +175,12 @@ export function registerGmailPubSubWebhookRoutes(app: Express): void {
 
     return res.status(204).send();
   });
+
+  // Emitted only after POST /api/webhooks/gmail/pubsub is mounted (still inside registerRoutes, before SPA).
+  logGmailPushE2EEvent("route_registered", {
+    hypothesisId: "H-A",
+    path: "/api/webhooks/gmail/pubsub",
+    method: "POST",
+    beforeServeStatic: true,
+  });
 }

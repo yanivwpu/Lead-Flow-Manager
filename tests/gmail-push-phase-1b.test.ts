@@ -7,6 +7,7 @@ import {
   EMAIL_POLL_FALLBACK_INTERVAL_MS,
   preferNewerHistoryId,
   resolveGmailPubSubConfig,
+  logGmailPushE2EEvent,
 } from "../server/emailChannel/gmailPushConfig";
 import { assertPubSubJwtClaims } from "../server/emailChannel/gmailPubSubAuth";
 import { shouldRenewGmailWatch } from "../server/emailChannel/gmailWatch";
@@ -193,6 +194,31 @@ async function main() {
     const badJwt = await authenticateGmailPubSubRequest("Bearer not.a.jwt");
     assert.equal(badJwt.ok, false);
     if (!badJwt.ok) assert.equal(badJwt.status, 401);
+  });
+
+  await run("GmailPushE2E logger emits Railway-required message field", () => {
+    const lines: string[] = [];
+    const origLog = console.log;
+    const origErr = console.error;
+    console.log = ((msg?: unknown) => {
+      lines.push(String(msg));
+    }) as typeof console.log;
+    console.error = ((msg?: unknown) => {
+      lines.push(String(msg));
+    }) as typeof console.error;
+    try {
+      logGmailPushE2EEvent("route_registered", { path: "/api/webhooks/gmail/pubsub" });
+      const structured = lines.find((l) => l.startsWith("{") && l.includes("GmailPushE2E"));
+      assert.ok(structured, "expected structured JSON log line");
+      const parsed = JSON.parse(structured!);
+      assert.equal(parsed.message, "[GmailPushE2E] route_registered");
+      assert.equal(parsed.tag, "[GmailPushE2E]");
+      assert.equal(parsed.event, "route_registered");
+      assert.ok(lines.some((l) => l === "[GmailPushE2E] route_registered"));
+    } finally {
+      console.log = origLog;
+      console.error = origErr;
+    }
   });
 
   console.log("\nAll Gmail Phase 1B unit tests passed.");

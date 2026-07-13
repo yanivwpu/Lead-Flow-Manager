@@ -84,6 +84,7 @@ export function logGmailSyncTriggerEvent(
  * Safe fields only — never log tokens, JWTs, Authorization headers, or message bodies.
  */
 export type GmailPushE2EEvent =
+  | "route_registered"
   | "watch_state"
   | "webhook_http_received"
   | "jwt_verified"
@@ -99,17 +100,27 @@ export type GmailPushE2EEvent =
   | "message_persisted"
   | "inbox_row_result";
 
+/**
+ * Railway structured logs require a `message` field for text search/display.
+ * Plain EmailRouteBootProbe strings worked; JSON-only { tag, event } without
+ * `message` is parsed as structured JSON but is not found by searching [GmailPushE2E].
+ */
 export function logGmailPushE2EEvent(
   event: GmailPushE2EEvent,
   fields: Record<string, unknown> = {},
 ): void {
+  const message = `[GmailPushE2E] ${event}`;
   const payload = {
+    message,
+    level: "info",
     tag: "[GmailPushE2E]",
     event,
     at: new Date().toISOString(),
     ...fields,
   };
+  // Structured (Railway indexes `message`) + plain stderr twin (same pattern as EmailRouteBootProbe).
   console.log(JSON.stringify(payload));
+  console.error(message);
   // #region agent log
   fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
     method: "POST",
