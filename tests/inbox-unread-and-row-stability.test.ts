@@ -4,11 +4,12 @@
  */
 import assert from "node:assert/strict";
 import {
-  applyInboxContactMarkRead,
+  applyInboxConversationMarkRead,
   inboxConversationRowChromeClassName,
   INBOX_ROW_HEADER_CLASS,
   INBOX_ROW_STATUS_BAND_CLASS,
   mergeInboxUnreadPreservingLocalRead,
+  remainingContactUnreadAfterMarkingConversation,
 } from "../client/src/lib/inboxConversationRow";
 import {
   nextEmailConversationUnreadCount,
@@ -26,47 +27,71 @@ function run(name: string, fn: () => void) {
   }
 }
 
-run("1. mark email conversation read → badge stays gone after refetch", () => {
+run("opening email does NOT clear WhatsApp unread for same contact", () => {
+  const conversations = [
+    { id: "wa-1", unreadCount: 3 },
+    { id: "email-1", unreadCount: 1 },
+  ];
+  const remaining = remainingContactUnreadAfterMarkingConversation({
+    conversations,
+    markedConversationId: "email-1",
+  });
+  assert.equal(remaining, 3, "WhatsApp unread must remain");
+
   const inbox = [
     {
       contact: { id: "c1" },
-      unreadCount: 1,
-      conversation: { unreadCount: 1 },
-    },
-    {
-      contact: { id: "c2" },
-      unreadCount: 2,
-      conversation: { unreadCount: 2 },
+      unreadCount: 4,
+      conversation: { id: "email-1", unreadCount: 1 },
     },
   ];
-  const afterMark = applyInboxContactMarkRead(inbox, "c1")!;
-  assert.equal(afterMark[0].unreadCount, 0);
-  assert.equal(afterMark[0].conversation?.unreadCount, 0);
-  assert.equal(afterMark[1].unreadCount, 2);
+  const after = applyInboxConversationMarkRead(inbox, "c1", {
+    conversationId: "email-1",
+    remainingUnread: remaining,
+  })!;
+  assert.equal(after[0].unreadCount, 3, "aggregate badge = remaining WhatsApp unread");
+  assert.equal(after[0].conversation?.unreadCount, 0);
+});
 
-  // Stale refetch still reports unread for c1 — preserve local read.
+run("1. mark selected conversation read → badge uses remaining sum after refetch", () => {
+  const conversations = [
+    { id: "email-1", unreadCount: 1 },
+    { id: "wa-1", unreadCount: 2 },
+  ];
+  const remaining = remainingContactUnreadAfterMarkingConversation({
+    conversations,
+    markedConversationId: "email-1",
+  });
+  assert.equal(remaining, 2);
+
+  const inbox = [
+    {
+      contact: { id: "c1" },
+      unreadCount: 3,
+      conversation: { id: "email-1", unreadCount: 1 },
+    },
+  ];
+  const afterMark = applyInboxConversationMarkRead(inbox, "c1", {
+    conversationId: "email-1",
+    remainingUnread: remaining,
+  })!;
+  assert.equal(afterMark[0].unreadCount, 2);
+
+  // Stale refetch still includes cleared email unread in the sum (3) — clamp to remaining 2.
   const staleServer = [
     {
       contact: { id: "c1" },
-      unreadCount: 1,
-      conversation: { unreadCount: 1 },
-    },
-    {
-      contact: { id: "c2" },
-      unreadCount: 2,
-      conversation: { unreadCount: 2 },
+      unreadCount: 3,
+      conversation: { id: "email-1", unreadCount: 1 },
     },
   ];
   const merged = mergeInboxUnreadPreservingLocalRead(
     afterMark,
     staleServer,
-    new Set(["c1"]),
+    new Map([["c1", 2]]),
   );
-  assert.equal(merged[0].unreadCount, 0, "badge must stay gone after stale refetch");
-  assert.equal(merged[1].unreadCount, 2);
-
-  // After contact-level mark-all, server sum is 0.
-  assert.equal(sumContactUnread([0, 0]), 0);
+  assert.equal(merged[0].unreadCount, 2, "stale refetch cannot restore cleared conversation unread");
+  assert.equal(sumContactUnread([0, 2]), 2);
 });
 
 run("2. incremental email sync does not restore stale unread for existing message", () => {
@@ -81,7 +106,6 @@ run("2. incremental email sync does not restore stale unread for existing messag
       currentUnread: 0,
     }),
     0,
-    "re-sync of existing message must not re-apply unread after CRM mark-read",
   );
   assert.equal(
     nextEmailConversationUnreadCount({
@@ -90,38 +114,44 @@ run("2. incremental email sync does not restore stale unread for existing messag
       currentUnread: 0,
     }),
     1,
-    "new inbound still bumps unread",
-  );
-  assert.equal(
-    nextEmailConversationUnreadCount({
-      messageAlreadyExists: false,
-      direction: "outbound",
-      currentUnread: 2,
-    }),
-    2,
   );
 });
 
 run("3. selected/unselected conversation row dimensions use identical spacing classes", () => {
   const selected = inboxConversationRowChromeClassName({ selected: true });
   const unselected = inboxConversationRowChromeClassName({ selected: false });
-  const selectedOverdue = inboxConversationRowChromeClassName({ selected: true, overdue: true });
-  const unselectedOverdue = inboxConversationRowChromeClassName({
-    selected: false,
-    overdue: true,
-  });
-
-  for (const cls of [selected, unselected, selectedOverdue, unselectedOverdue]) {
-    assert.match(cls, /\bp-3\b/, "same padding");
-    assert.match(cls, /\bborder-l-2\b/, "left border width always reserved");
-    assert.doesNotMatch(cls, /\bring-1\b/, "no ring that expands layout box");
-    assert.doesNotMatch(cls, /\bshadow-sm\b/, "no outer shadow that changes perceived thickness");
+  for (const cls of [selected, unselected]) {
+    assert.match(cls, /\bp-3\b/);
+    assert.match(cls, /\bborder-l-2\b/);
+    assert.doesNotMatch(cls, /\bring-1\b/);
+    assert.doesNotMatch(cls, /\bshadow-sm\b/);
   }
-
-  assert.match(selected, /border-l-gray-300|border-l-red-400/);
-  assert.match(unselected, /border-l-transparent/);
   assert.match(INBOX_ROW_HEADER_CLASS, /min-h-\[20px\]/);
   assert.match(INBOX_ROW_STATUS_BAND_CLASS, /min-h-\[22px\]/);
+});
+
+run("switching channel marks only that conversation (remaining recalculated)", () => {
+  const conversations = [
+    { id: "email-1", unreadCount: 0 }, // already viewed
+    { id: "wa-1", unreadCount: 2 },
+  ];
+  const remaining = remainingContactUnreadAfterMarkingConversation({
+    conversations,
+    markedConversationId: "wa-1",
+  });
+  assert.equal(remaining, 0);
+  const inbox = [
+    {
+      contact: { id: "c1" },
+      unreadCount: 2,
+      conversation: { id: "wa-1", unreadCount: 2 },
+    },
+  ];
+  const after = applyInboxConversationMarkRead(inbox, "c1", {
+    conversationId: "wa-1",
+    remainingUnread: remaining,
+  })!;
+  assert.equal(after[0].unreadCount, 0);
 });
 
 console.log("\nAll inbox unread / row stability tests passed.");

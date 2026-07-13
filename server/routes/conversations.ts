@@ -199,8 +199,8 @@ export function registerConversationRoutes(app: Express): void {
     }
   });
 
-  // Mark conversation as read — clears unread for the whole contact so the
-  // inbox contact-level badge (sum of all conversations) stays cleared.
+  // Mark conversation as read — only the viewed conversation/thread.
+  // Contact-level inbox badge is a sum; sibling channels/threads stay unread.
   app.post("/api/conversations/:id/read", async (req, res) => {
     try {
       if (!req.user) {
@@ -213,11 +213,12 @@ export function registerConversationRoutes(app: Express): void {
       if (conversation.userId !== req.user.id) {
         return res.status(403).json({ error: "Forbidden" });
       }
-      const cleared = await storage.markContactConversationsRead(
-        req.user.id,
-        conversation.contactId,
-      );
-      res.json({ success: true, clearedConversations: cleared, contactId: conversation.contactId });
+      await storage.updateConversation(req.params.id, { unreadCount: 0 });
+      res.json({
+        success: true,
+        conversationId: conversation.id,
+        contactId: conversation.contactId,
+      });
     } catch (error) {
       console.error("Error marking conversation as read:", error);
       res.status(500).json({ error: "Failed to mark as read" });

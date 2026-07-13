@@ -5,10 +5,58 @@
 export type InboxUnreadItem = {
   contact: { id: string };
   unreadCount: number;
-  conversation?: { unreadCount?: number | null } | null;
+  conversation?: { id?: string; unreadCount?: number | null } | null;
 };
 
-/** Optimistically clear contact-level unread (inbox list sums all conversations). */
+export type ConversationUnreadLike = {
+  id: string;
+  unreadCount?: number | null;
+};
+
+/**
+ * After marking one conversation read, recompute contact aggregate badge.
+ * Does NOT zero unread on other conversations/channels for the same contact.
+ */
+export function remainingContactUnreadAfterMarkingConversation(input: {
+  conversations: ConversationUnreadLike[];
+  markedConversationId: string;
+}): number {
+  return input.conversations.reduce((sum, c) => {
+    if (c.id === input.markedConversationId) return sum;
+    return sum + Math.max(0, c.unreadCount || 0);
+  }, 0);
+}
+
+/**
+ * Optimistically clear unread for one conversation and set contact aggregate
+ * to the remaining sum (other channels/threads stay unread).
+ */
+export function applyInboxConversationMarkRead<T extends InboxUnreadItem>(
+  items: T[] | undefined | null,
+  contactId: string,
+  opts: {
+    conversationId: string;
+    remainingUnread: number;
+  },
+): T[] | undefined | null {
+  if (!items) return items;
+  const remaining = Math.max(0, opts.remainingUnread);
+  return items.map((item) => {
+    if (item.contact.id !== contactId) return item;
+    const conversation =
+      item.conversation &&
+      (item.conversation.id == null || item.conversation.id === opts.conversationId)
+        ? { ...item.conversation, unreadCount: 0 }
+        : item.conversation;
+    return {
+      ...item,
+      unreadCount: remaining,
+      conversation,
+    };
+  });
+}
+
+/** @deprecated Use applyInboxConversationMarkRead — contact-wide clear hides other channels. */
 export function applyInboxContactMarkRead<T extends InboxUnreadItem>(
   items: T[] | undefined | null,
   contactId: string,
@@ -27,25 +75,28 @@ export function applyInboxContactMarkRead<T extends InboxUnreadItem>(
   );
 }
 
-/** Preserve a zeroed contact unread across a stale inbox refetch. */
+/**
+ * Preserve local remaining unread for a contact when a stale inbox refetch
+ * reports a higher aggregate (e.g. still includes a conversation we just cleared).
+ * Never forces the badge to 0 if other conversations remain unread.
+ */
 export function mergeInboxUnreadPreservingLocalRead<T extends InboxUnreadItem>(
   previous: T[] | undefined | null,
   incoming: T[],
-  recentlyReadContactIds: ReadonlySet<string>,
+  localRemainingByContactId: ReadonlyMap<string, number>,
 ): T[] {
-  if (!recentlyReadContactIds.size) return incoming;
-  const prevById = new Map((previous || []).map((i) => [i.contact.id, i]));
+  if (!localRemainingByContactId.size) return incoming;
   return incoming.map((item) => {
-    if (!recentlyReadContactIds.has(item.contact.id)) return item;
-    const prev = prevById.get(item.contact.id);
-    // If we already cleared locally, do not let a stale server sum restore the badge.
-    if (prev && prev.unreadCount === 0 && item.unreadCount > 0) {
+    const localRemaining = localRemainingByContactId.get(item.contact.id);
+    if (localRemaining == null) return item;
+    if (item.unreadCount > localRemaining) {
       return {
         ...item,
-        unreadCount: 0,
-        conversation: item.conversation
-          ? { ...item.conversation, unreadCount: 0 }
-          : item.conversation,
+        unreadCount: localRemaining,
+        conversation:
+          item.conversation && localRemaining === 0
+            ? { ...item.conversation, unreadCount: 0 }
+            : item.conversation,
       };
     }
     return item;

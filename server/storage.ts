@@ -384,7 +384,10 @@ export interface IStorage {
   getConversationByContactAndChannel(contactId: string, channel: Channel, channelAccountId?: string): Promise<Conversation | undefined>;
   createConversation(conversation: InsertConversation): Promise<Conversation>;
   updateConversation(id: string, updates: Partial<Conversation>): Promise<Conversation | undefined>;
-  /** Zero unreadCount for every conversation belonging to this contact (inbox badge is a sum). */
+  /**
+   * Zero unreadCount for every conversation belonging to this contact.
+   * Prefer per-conversation mark-read for inbox open; use only for explicit "mark all".
+   */
   markContactConversationsRead(userId: string, contactId: string): Promise<number>;
   deleteConversation(id: string): Promise<void>;
   

@@ -128,11 +128,12 @@ import {
 } from "@/lib/mediaChannelValidationError";
 import { outboundDocumentBlockHint } from "@/lib/outboundAttachmentChannelGate";
 import {
-  applyInboxContactMarkRead,
+  applyInboxConversationMarkRead,
   inboxConversationRowChromeClassName,
   INBOX_ROW_HEADER_CLASS,
   INBOX_ROW_STATUS_BAND_CLASS,
   mergeInboxUnreadPreservingLocalRead,
+  remainingContactUnreadAfterMarkingConversation,
 } from "@/lib/inboxConversationRow";
 import { formatOutboundSendErrorDescription } from "@/lib/webchatSendError";
 import { webchatSendErrorDescription } from "@shared/webchatSendErrors";
@@ -581,9 +582,9 @@ export function UnifiedInbox() {
   // Set to true on every send so that all post-render scrolls are forced,
   // regardless of where the user was scrolled before they sent.
   const justSentRef = useRef(false);
-  /** Contacts marked read in this session — blocks stale inbox refetch from restoring badges briefly. */
-  const recentlyReadContactIdsRef = useRef<Set<string>>(new Set());
-  const recentlyReadClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  /** Contact → remaining unread after marking a viewed conversation (blocks stale refetch inflate). */
+  const localRemainingUnreadByContactRef = useRef<Map<string, number>>(new Map());
+  const localRemainingClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const scrollToBottom = useCallback(() => {
     const run = () => {
@@ -700,7 +701,7 @@ export function UnifiedInbox() {
       return mergeInboxUnreadPreservingLocalRead(
         previous,
         incoming,
-        recentlyReadContactIdsRef.current,
+        localRemainingUnreadByContactRef.current,
       );
     },
   });
@@ -954,6 +955,21 @@ export function UnifiedInbox() {
     contactReachableChannels,
     sendChannelUi,
     effectiveChannel,
+  ]);
+
+  /** Conversation actually being viewed (active channel) — mark-read targets this only. */
+  const viewedConversation = useMemo((): Conversation | undefined => {
+    if (!contactMatchesSelection) return primaryConversation;
+    if (activeChannel) {
+      const match = matchedConversations.find((c) => c.channel === activeChannel);
+      if (match) return match as Conversation;
+    }
+    return primaryConversation;
+  }, [
+    contactMatchesSelection,
+    activeChannel,
+    matchedConversations,
+    primaryConversation,
   ]);
 
   /** Single source for POST /send `channel`: mirrors header label each render; mutation reads at request time. */
@@ -1301,29 +1317,49 @@ export function UnifiedInbox() {
     return () => ro.disconnect();
   }, [selectedContactId, scrollToBottom]);
 
-  // Mark all conversations for the contact as read when opened (inbox badge is a sum).
+  // Mark only the viewed conversation/thread as read. Sibling channels stay unread;
+  // contact badge becomes the remaining sum.
   useEffect(() => {
-    if (!primaryConversation?.id || !selectedContactId) return;
+    if (!viewedConversation?.id || !selectedContactId || !contactMatchesSelection) return;
     const contactId = selectedContactId;
-    const conversationId = primaryConversation.id;
+    const conversationId = viewedConversation.id;
+    const remainingUnread = remainingContactUnreadAfterMarkingConversation({
+      conversations: matchedConversations,
+      markedConversationId: conversationId,
+    });
     let cancelled = false;
 
-    const rememberLocalRead = () => {
-      recentlyReadContactIdsRef.current.add(contactId);
-      const existing = recentlyReadClearTimersRef.current.get(contactId);
+    const rememberLocalRemaining = () => {
+      localRemainingUnreadByContactRef.current.set(contactId, remainingUnread);
+      const existing = localRemainingClearTimersRef.current.get(contactId);
       if (existing) clearTimeout(existing);
       const timer = setTimeout(() => {
-        recentlyReadContactIdsRef.current.delete(contactId);
-        recentlyReadClearTimersRef.current.delete(contactId);
+        localRemainingUnreadByContactRef.current.delete(contactId);
+        localRemainingClearTimersRef.current.delete(contactId);
       }, 60_000);
-      recentlyReadClearTimersRef.current.set(contactId, timer);
+      localRemainingClearTimersRef.current.set(contactId, timer);
     };
 
     void (async () => {
-      rememberLocalRead();
+      rememberLocalRemaining();
       await queryClient.cancelQueries({ queryKey: ["/api/inbox"] });
       queryClient.setQueryData<InboxItem[]>(["/api/inbox"], (old) =>
-        applyInboxContactMarkRead(old, contactId) as InboxItem[] | undefined,
+        applyInboxConversationMarkRead(old, contactId, {
+          conversationId,
+          remainingUnread,
+        }) as InboxItem[] | undefined,
+      );
+      queryClient.setQueryData<{ contact: Contact; conversations: Conversation[] }>(
+        ["/api/contacts", contactId],
+        (old) => {
+          if (!old || old.contact.id !== contactId) return old;
+          return {
+            ...old,
+            conversations: old.conversations.map((c) =>
+              c.id === conversationId ? { ...c, unreadCount: 0 } : c,
+            ),
+          };
+        },
       );
       try {
         const res = await fetch(`/api/conversations/${conversationId}/read`, {
@@ -1333,18 +1369,24 @@ export function UnifiedInbox() {
         if (cancelled) return;
         if (res.ok) {
           queryClient.setQueryData<InboxItem[]>(["/api/inbox"], (old) =>
-            applyInboxContactMarkRead(old, contactId) as InboxItem[] | undefined,
+            applyInboxConversationMarkRead(old, contactId, {
+              conversationId,
+              remainingUnread,
+            }) as InboxItem[] | undefined,
           );
         }
       } catch {
-        /* non-fatal — badge may restore on next successful refetch */
+        /* non-fatal */
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [primaryConversation?.id, selectedContactId, queryClient]);
+    // Intentionally keyed by viewed conversation id — not matchedConversations identity —
+    // so cache updates after mark-read do not re-POST. Channel switch changes viewed id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- matchedConversations read at effect start
+  }, [viewedConversation?.id, selectedContactId, contactMatchesSelection, queryClient]);
 
   // --- Mutations ---
 
