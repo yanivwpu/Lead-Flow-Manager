@@ -98,6 +98,8 @@ import { WHATSAPP_SETUP_INCOMPLETE_BANNER } from "@shared/whatsappSetupMessages"
 import {
   buildBuyerPreferenceAiContext,
 } from "@shared/buyerPreferenceDisplay";
+import { shouldInjectBuyerRealEstateContext } from "@shared/aiDomainEligibility";
+import { extractBuyerMatchCriteria } from "@shared/inventory/inventoryMatchScoring";
 import { usePersistedBuyerPreferences } from "@/lib/buyerPreferencesQuery";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
 import {
@@ -2075,21 +2077,27 @@ export function UnifiedInbox() {
             crmLeadScore: contact.leadScore ?? null,
           })
         : null;
-    const buyerPrefsSummary = (() => {
-      const ind = (aiBusinessKnowledge?.industry || "").toLowerCase();
-      const re =
-        ind.includes("real estate") ||
-        ind.includes("realtor") ||
-        ind.includes("property");
-      const isBuyer =
-        String((contact.customFields as Record<string, unknown> | undefined)?.leadType || "").toLowerCase() ===
-        "buyer";
-      if (!re && !isBuyer && persistedBuyerProfile.profileStatus === "empty") return undefined;
-      const aiCtx = buildBuyerPreferenceAiContext(persistedBuyerProfile);
-      return aiCtx.buyerPreferences;
-    })();
+    const lastInbound =
+      [...msgList].reverse().find((m) => m.direction === "inbound")?.content || "";
+    const joinedInbound = msgList
+      .filter((m) => m.direction === "inbound")
+      .map((m) => m.content)
+      .join("\n");
+    const injectBuyerCtx = shouldInjectBuyerRealEstateContext({
+      inboundText: lastInbound,
+      conversationText: joinedInbound,
+      leadType: String(
+        (contact.customFields as Record<string, unknown> | undefined)?.leadType || "",
+      ),
+      industry: aiBusinessKnowledge?.industry,
+      buyerProfileHasCriteria: extractBuyerMatchCriteria(persistedBuyerProfile).hasAnyCriteria,
+      contactEmail: (contact as { email?: string | null }).email ?? null,
+      channel: primaryConversation?.channel,
+    });
 
-    const aiPrefFields = buildBuyerPreferenceAiContext(persistedBuyerProfile);
+    const aiPrefFields = injectBuyerCtx
+      ? buildBuyerPreferenceAiContext(persistedBuyerProfile)
+      : { buyerPreferences: undefined, budget: undefined, timeline: undefined, financing: undefined };
 
     return {
       name:          contact.name,
@@ -2101,9 +2109,16 @@ export function UnifiedInbox() {
       financing:     aiPrefFields.financing ?? undefined,
       intent:        intel?.intent,
       leadScore:     intel?.leadScore?.label,
-      buyerPreferences: buyerPrefsSummary,
+      buyerPreferences: injectBuyerCtx ? aiPrefFields.buyerPreferences : undefined,
     };
-  }, [contact, selectedContactId, messages, aiBusinessKnowledge?.industry, persistedBuyerProfile]);
+  }, [
+    contact,
+    selectedContactId,
+    messages,
+    aiBusinessKnowledge?.industry,
+    persistedBuyerProfile,
+    primaryConversation?.channel,
+  ]);
 
   const hasConversation = !!activeConversationId && contactMatchesSelection;
   const convStatus = primaryConversation?.status || 'open';

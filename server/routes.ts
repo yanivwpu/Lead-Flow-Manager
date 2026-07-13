@@ -10793,11 +10793,11 @@ export async function registerRoutes(
                 shouldRunBuyerPreferencePipeline,
                 syncBuyerPreferencesForInboundMessage,
                 readBuyerPreferenceProfile,
+                isRgeInstalledForUser,
               } = await import("./buyerPreferenceService");
               const { buildBuyerPreferenceAiContext } = await import(
                 "@shared/buyerPreferenceDisplay"
               );
-              const historyTurns = conversationHistory as Array<{ role: string; content?: string }>;
               const lastUserInbound =
                 historyTurns.filter((m) => m.role === "user").pop()?.content?.trim() || "";
               const isBookingSuggestRoute =
@@ -10810,6 +10810,15 @@ export async function registerRoutes(
                 shouldSkipBuyerPipelineForSellerLead,
                 readSellerPreferenceProfile,
               } = await import("./sellerPreferenceService");
+              const {
+                resolveAiDomainEligibility,
+                stripIneligibleRealEstateContactContext,
+              } = await import("@shared/aiDomainEligibility");
+              const { extractBuyerMatchCriteria } = await import(
+                "@shared/inventory/inventoryMatchScoring"
+              );
+              const { sellerProfileHasData } = await import("@shared/sellerPreferenceSchema");
+
               const sellerGate = await shouldRunSellerPreferencePipeline(
                 userId,
                 contactForPrefs,
@@ -10818,9 +10827,34 @@ export async function registerRoutes(
               const skipBuyerForSeller = shouldSkipBuyerPipelineForSellerLead(sellerGate.sellerIntent);
 
               const prefGate = await shouldRunBuyerPreferencePipeline(userId, contactForPrefs);
-              const contextPatch: Record<string, unknown> = { ...(contactContext || {}) };
+              const buyerProfilePreview = readBuyerPreferenceProfile(contactForPrefs);
+              const sellerProfilePreview = readSellerPreferenceProfile(contactForPrefs);
+              const cfLead = (contactForPrefs.customFields || {}) as Record<string, unknown>;
+              const rgeInstalled = await isRgeInstalledForUser(userId);
+              const bkIndustry = (await storage.getAiBusinessKnowledge(userId))?.industry ?? null;
+              const domainDecision = resolveAiDomainEligibility({
+                inboundText: lastUserInbound,
+                conversationText: historyTurns
+                  .filter((m) => m.role === "user")
+                  .map((m) => m.content || "")
+                  .join("\n"),
+                sellerIntent: sellerGate.sellerIntent,
+                leadType: typeof cfLead.leadType === "string" ? cfLead.leadType : null,
+                rgeInstalled,
+                industry: bkIndustry,
+                buyerProfileHasCriteria: extractBuyerMatchCriteria(buyerProfilePreview).hasAnyCriteria,
+                sellerProfileHasData: sellerProfileHasData(sellerProfilePreview),
+                contactEmail: contactForPrefs.email ?? null,
+                channel: typeof bodyChannel === "string" ? bodyChannel : null,
+              });
 
-              if (sellerGate.ok && lastUserInbound) {
+              let contextPatch: Record<string, unknown> = { ...(contactContext || {}) };
+
+              if (
+                sellerGate.ok &&
+                domainDecision.injectSellerContext &&
+                lastUserInbound
+              ) {
                 const sellerProfile = isBookingSuggestRoute
                   ? readSellerPreferenceProfile(contactForPrefs)
                   : await syncSellerPreferencesForInboundMessage({
@@ -10847,7 +10881,7 @@ export async function registerRoutes(
 
               let profile = isBookingSuggestRoute
                 ? readBuyerPreferenceProfile(contactForPrefs)
-                : skipBuyerForSeller
+                : skipBuyerForSeller || !domainDecision.injectBuyerContext
                   ? readBuyerPreferenceProfile(contactForPrefs)
                   : await syncBuyerPreferencesForInboundMessage({
                       contact: contactForPrefs,
@@ -10858,7 +10892,12 @@ export async function registerRoutes(
 
               copilotTraceProfile = profile;
 
-              if (prefGate.ok && !isBookingSuggestRoute && !skipBuyerForSeller) {
+              if (
+                prefGate.ok &&
+                domainDecision.injectBuyerContext &&
+                !isBookingSuggestRoute &&
+                !skipBuyerForSeller
+              ) {
                 const {
                   assessBuyerQualification,
                   formatQualificationContextForAi,
@@ -10922,16 +10961,18 @@ export async function registerRoutes(
                 if (aiPrefCtx.financing) contextPatch.financing = aiPrefCtx.financing;
                 else delete contextPatch.financing;
 
-                const inventorySummary = await getInventoryMatchSummaryForContact(
-                  convForPrefs.contactId,
-                  userId,
-                  { qualificationLevel: qualification.level },
-                );
-                if (inventorySummary) {
-                  contextPatch.inventoryMatchSummary = inventorySummary;
+                if (domainDecision.injectInventoryContext) {
+                  const inventorySummary = await getInventoryMatchSummaryForContact(
+                    convForPrefs.contactId,
+                    userId,
+                    { qualificationLevel: qualification.level },
+                  );
+                  if (inventorySummary) {
+                    contextPatch.inventoryMatchSummary = inventorySummary;
+                  }
                 }
               }
-              if (lastUserInbound) {
+              if (domainDecision.injectInventoryContext && lastUserInbound) {
                 const { detectListingFollowUp } = await import(
                   "@shared/inventory/inventoryListingFollowUp"
                 );
@@ -10984,9 +11025,12 @@ export async function registerRoutes(
                   }
                 }
               }
-              if (Object.keys(contextPatch).length > 0) {
-                enrichedContactContext = contextPatch;
-              }
+
+              contextPatch = stripIneligibleRealEstateContactContext(
+                contextPatch,
+                domainDecision,
+              );
+              enrichedContactContext = contextPatch;
             }
           }
         } catch {

@@ -15,8 +15,11 @@ import {
 } from "./leadQualification";
 import { resolveAiRouting, type AiRoutingDecision } from "./aiRouting";
 import { resolveCopilotDominantIntent } from "./copilotIntent";
+import {
+  resolveAiDomainEligibility,
+  type AiDomainEligibilityInput,
+} from "./aiDomainEligibility";
 import type { SellerIntentClass } from "./sellerIntent";
-import { isPureSellerIntent } from "./sellerIntent";
 
 export type CustomerInsightContext = {
   reasons?: string[];
@@ -189,6 +192,14 @@ export type ContextualActionContext = {
   sellerIntent?: SellerIntentClass | null;
   /** Latest inbound line — preferred for dominant intent when set */
   latestInboundText?: string;
+  /** Shared domain eligibility inputs (aligned with Suggest Reply). */
+  rgeInstalled?: boolean;
+  industry?: string | null;
+  leadType?: string | null;
+  buyerProfileHasCriteria?: boolean;
+  sellerProfileHasData?: boolean;
+  contactEmail?: string | null;
+  conversationText?: string | null;
 };
 
 type ActionCandidate = { label: string; rank: number; group: string };
@@ -214,38 +225,56 @@ function collectBuyerInventoryActions(ctx: ContextualActionContext): ActionCandi
   return actions;
 }
 
+function domainEligibilityFromActionContext(
+  ctx: ContextualActionContext,
+): AiDomainEligibilityInput {
+  const intentText = ctx.latestInboundText ?? ctx.inboundText;
+  return {
+    inboundText: intentText,
+    conversationText: ctx.conversationText ?? ctx.inboundText,
+    sellerIntent: ctx.sellerIntent ?? null,
+    leadType: ctx.leadType,
+    rgeInstalled: ctx.rgeInstalled,
+    industry: ctx.industry,
+    buyerProfileHasCriteria: ctx.buyerProfileHasCriteria,
+    sellerProfileHasData: ctx.sellerProfileHasData,
+    contactEmail: ctx.contactEmail,
+  };
+}
+
 function collectContextualActionCandidates(ctx: ContextualActionContext): ActionCandidate[] {
   const actions: ActionCandidate[] = [];
   const timing = ctx.showingTimingPhrase?.trim();
   const sellerIntent = ctx.sellerIntent ?? null;
-  const intentText = ctx.latestInboundText ?? ctx.inboundText;
-  const dominantIntent = resolveCopilotDominantIntent({
-    inboundText: intentText,
-    sellerIntent,
-  });
+  const domainInput = domainEligibilityFromActionContext(ctx);
+  const domainDecision = resolveAiDomainEligibility(domainInput);
+  const dominantIntent = resolveCopilotDominantIntent(domainInput);
 
-  if (dominantIntent === "seller") {
-    if (sellerIntent === "seller_valuation") {
-      actions.push({ label: "Request CMA Information", rank: 97, group: "seller_cma" });
-      actions.push({ label: "Request Property Address", rank: 95, group: "seller_address" });
-    } else if (sellerIntent === "seller_listing_consultation" || sellerIntent === "seller_new") {
-      actions.push({ label: "Book Listing Consultation", rank: 98, group: "seller_consult" });
-      actions.push({ label: "Request Property Address", rank: 94, group: "seller_address" });
-    } else {
-      actions.push({ label: "Book Listing Consultation", rank: 92, group: "seller_consult" });
+  // Real-estate Copilot actions require shared domain eligibility (not workspace RGE alone).
+  if (domainDecision.showRealEstateCopilotRecommendations) {
+    if (dominantIntent === "seller") {
+      if (sellerIntent === "seller_valuation") {
+        actions.push({ label: "Request CMA Information", rank: 97, group: "seller_cma" });
+        actions.push({ label: "Request Property Address", rank: 95, group: "seller_address" });
+      } else if (sellerIntent === "seller_listing_consultation" || sellerIntent === "seller_new") {
+        actions.push({ label: "Book Listing Consultation", rank: 98, group: "seller_consult" });
+        actions.push({ label: "Request Property Address", rank: 94, group: "seller_address" });
+      } else {
+        actions.push({ label: "Book Listing Consultation", rank: 92, group: "seller_consult" });
+      }
+      actions.push({ label: "Assign Listing Agent", rank: 88, group: "seller_assign" });
+      actions.push({ label: "Follow Up", rank: 50, group: "seller_followup" });
+      return dedupeActionCandidates(actions).slice(0, 3);
     }
-    actions.push({ label: "Assign Listing Agent", rank: 88, group: "seller_assign" });
-    actions.push({ label: "Follow Up", rank: 50, group: "seller_followup" });
-    return dedupeActionCandidates(actions).slice(0, 3);
-  }
 
-  if (dominantIntent === "mixed") {
-    actions.push({ label: "Book Listing Consultation", rank: 90, group: "seller_consult" });
-    actions.push({ label: "Request Property Address", rank: 86, group: "seller_address" });
-  }
+    if (dominantIntent === "mixed") {
+      actions.push({ label: "Book Listing Consultation", rank: 90, group: "seller_consult" });
+      actions.push({ label: "Request Property Address", rank: 86, group: "seller_address" });
+    }
 
-  if (dominantIntent === "buyer") {
-    actions.push(...collectBuyerInventoryActions(ctx));
+    if (dominantIntent === "buyer") {
+      actions.push(...collectBuyerInventoryActions(ctx));
+    }
   }
 
   const routing =
@@ -280,7 +309,12 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
     (!routingDecision && ctx.hasShowingIntent) ||
     (routingDecision === "CONTINUE_AI" && ctx.hasShowingIntent && !needsClarify);
 
-  if (allowBookingActions && ctx.hasShowingIntent) {
+  // Showing / financing recommendations are real-estate domain actions.
+  if (
+    domainDecision.showRealEstateCopilotRecommendations &&
+    allowBookingActions &&
+    ctx.hasShowingIntent
+  ) {
     actions.push({
       label: timing ? `Confirm ${timing} availability` : "Confirm showing availability",
       rank: 100,
@@ -295,13 +329,17 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
     }
   }
 
-  if (ctx.hasFinancingDiscussion || ctx.mentionedDeposit) {
+  if (
+    domainDecision.showRealEstateCopilotRecommendations &&
+    (ctx.hasFinancingDiscussion || ctx.mentionedDeposit)
+  ) {
     actions.push({
       label: "Ask if financing is already arranged",
       rank: 88,
       group: "financing",
     });
   } else if (
+    domainDecision.showRealEstateCopilotRecommendations &&
     ctx.hasStrongPurchaseIntent &&
     !ctx.hasShowingIntent &&
     routingDecision !== "ASSIGN_AGENT" &&

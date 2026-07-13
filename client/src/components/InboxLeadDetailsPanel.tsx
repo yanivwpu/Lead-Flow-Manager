@@ -111,6 +111,7 @@ import { MatchingListingsPanel } from "@/components/inventory/MatchingListingsPa
 import {
   shouldShowCopilotBuyerPreferences,
   shouldShowCopilotInventoryForContact,
+  contactHasInventoryMatchCriteria,
 } from "@/lib/copilotRgeVisibility";
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { isQualificationDowngrade, systemTagForQualification } from "@shared/leadQualification";
@@ -1833,6 +1834,15 @@ export function InboxLeadDetailsPanel({
       needsRoutingClarification: aiRouting.needsRoutingClarification,
       enrollableCampaignCount,
       sellerIntent,
+      rgeInstalled: inventoryStatus?.rgeInstalled === true,
+      industry: businessKnowledge?.industry,
+      leadType: String(
+        (contact.customFields as Record<string, unknown> | undefined)?.leadType || "",
+      ),
+      buyerProfileHasCriteria: contactHasInventoryMatchCriteria(persistedBuyerProfile),
+      sellerProfileHasData: Boolean(sellerProfile),
+      contactEmail: contact.email ?? null,
+      conversationText: inboundText,
     });
   }, [
     handoffActive,
@@ -1845,12 +1855,16 @@ export function InboxLeadDetailsPanel({
     inboundText,
     contact.assignedTo,
     contact.followUpDate,
+    contact.customFields,
+    contact.email,
     effectiveAiPaused,
     stageSignals.viewingIntent,
     stageSignals.strongIntent,
     businessKnowledge?.industry,
     schedulingLinkSent,
     enrollableCampaignCount,
+    inventoryStatus?.rgeInstalled,
+    persistedBuyerProfile,
   ]);
 
   const runComposerAction = useCallback(

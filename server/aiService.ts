@@ -56,6 +56,8 @@ export class AIService {
       buyerQualificationContext?: string;
       inventoryMatchSummary?: string;
       listingFollowUp?: string;
+      useRealEstatePromptPersona?: boolean;
+      aiConversationDomain?: string;
     },
     routing?: AiRoutingResult,
     channel?: string | null,
@@ -439,6 +441,8 @@ Return JSON only: { "summary": "..." }`;
       buyerQualificationContext?: string;
       inventoryMatchSummary?: string;
       listingFollowUp?: string;
+      useRealEstatePromptPersona?: boolean;
+      aiConversationDomain?: string;
     },
     isFirstMessage?: boolean,
     routing?: AiRoutingResult,
@@ -446,7 +450,14 @@ Return JSON only: { "summary": "..." }`;
   ): string {
     const langInstruction = language ? LANGUAGE_PROMPTS[language].instruction : LANGUAGE_PROMPTS.en.instruction;
     const industry = (businessKnowledge?.industry || "general").toLowerCase();
-    const isRealEstate = industry.includes("real estate") || industry.includes("realestate") || industry.includes("property") || industry.includes("realtor");
+    // Domain eligibility from suggest-reply — never inherit RE persona from workspace industry alone.
+    const isRealEstate =
+      contactContext?.useRealEstatePromptPersona === true ||
+      (contactContext == null &&
+        (industry.includes("real estate") ||
+          industry.includes("realestate") ||
+          industry.includes("property") ||
+          industry.includes("realtor")));
     const isEmailChannel = String(channel || "").toLowerCase() === "email";
 
     const persona = settings?.aiPersona || "professional";
