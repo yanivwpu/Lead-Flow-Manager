@@ -18,6 +18,11 @@ import {
   syncErrorFromUnknown,
 } from "./credentials";
 
+/** Temporary safe inbound timing diag — no tokens, bodies, subjects, or addresses. */
+function logGmailInboundTiming(payload: Record<string, unknown>): void {
+  console.log(JSON.stringify({ tag: "[GmailInboundTiming]", ...payload }));
+}
+
 export async function runInitialEmailSync(mailboxId: string): Promise<void> {
   const mailbox = await getEmailMailboxById(mailboxId);
   if (!mailbox) return;
@@ -110,6 +115,9 @@ export async function runIncrementalEmailSync(mailboxId: string): Promise<void> 
   if (!mailbox) return;
   if (!["connected", "error", "syncing"].includes(mailbox.syncStatus)) return;
 
+  const syncStartedAt = new Date().toISOString();
+  const historyStartId = mailbox.syncCursor ?? null;
+
   try {
     const { accessToken, mailbox: fresh } = await getValidMailboxAccessToken(mailboxId);
     const provider = getEmailProvider(fresh.provider);
@@ -122,14 +130,52 @@ export async function runIncrementalEmailSync(mailboxId: string): Promise<void> 
         afterDate,
         maxResults: 50,
       });
+      let messagesPersisted = 0;
       for (const msg of page.messages) {
-        await persistNormalizedEmailMessage({ mailbox: fresh, normalized: msg });
+        const result = await persistNormalizedEmailMessage({ mailbox: fresh, normalized: msg });
+        if (result?.created) {
+          messagesPersisted += 1;
+          const persistedAt = new Date().toISOString();
+          const gmailInternalDate = msg.sentAt?.toISOString?.() ?? null;
+          const delaySeconds =
+            msg.sentAt instanceof Date && !Number.isNaN(msg.sentAt.getTime())
+              ? Math.max(0, Math.round((Date.now() - msg.sentAt.getTime()) / 1000))
+              : null;
+          logGmailInboundTiming({
+            mailboxId,
+            syncStartedAt,
+            syncFinishedAt: persistedAt,
+            historyStartId: null,
+            historyEndId: page.historyId || null,
+            messagesDiscovered: page.messages.length,
+            messagesPersisted,
+            providerMessageId: msg.providerMessageId,
+            gmailInternalDate,
+            persistedAt,
+            delaySeconds,
+            path: "bounded_resync_no_cursor",
+          });
+        }
       }
       await updateEmailMailbox(mailboxId, {
         syncStatus: "connected",
         syncError: null,
         lastSyncAt: new Date(),
         syncCursor: page.historyId || fresh.syncCursor,
+      });
+      logGmailInboundTiming({
+        mailboxId,
+        syncStartedAt,
+        syncFinishedAt: new Date().toISOString(),
+        historyStartId: null,
+        historyEndId: page.historyId || null,
+        messagesDiscovered: page.messages.length,
+        messagesPersisted,
+        providerMessageId: null,
+        gmailInternalDate: null,
+        persistedAt: null,
+        delaySeconds: null,
+        path: "bounded_resync_no_cursor_summary",
       });
       return;
     }
@@ -146,8 +192,32 @@ export async function runIncrementalEmailSync(mailboxId: string): Promise<void> 
         afterDate,
         maxResults: 50,
       });
+      let messagesPersisted = 0;
       for (const msg of page.messages) {
-        await persistNormalizedEmailMessage({ mailbox: fresh, normalized: msg });
+        const result = await persistNormalizedEmailMessage({ mailbox: fresh, normalized: msg });
+        if (result?.created) {
+          messagesPersisted += 1;
+          const persistedAt = new Date().toISOString();
+          const gmailInternalDate = msg.sentAt?.toISOString?.() ?? null;
+          const delaySeconds =
+            msg.sentAt instanceof Date && !Number.isNaN(msg.sentAt.getTime())
+              ? Math.max(0, Math.round((Date.now() - msg.sentAt.getTime()) / 1000))
+              : null;
+          logGmailInboundTiming({
+            mailboxId,
+            syncStartedAt,
+            syncFinishedAt: persistedAt,
+            historyStartId,
+            historyEndId: page.historyId || null,
+            messagesDiscovered: page.messages.length,
+            messagesPersisted,
+            providerMessageId: msg.providerMessageId,
+            gmailInternalDate,
+            persistedAt,
+            delaySeconds,
+            path: "bounded_resync_stale_history",
+          });
+        }
       }
       await updateEmailMailbox(mailboxId, {
         syncStatus: "connected",
@@ -155,13 +225,51 @@ export async function runIncrementalEmailSync(mailboxId: string): Promise<void> 
         lastSyncAt: new Date(),
         syncCursor: page.historyId || fresh.syncCursor,
       });
+      logGmailInboundTiming({
+        mailboxId,
+        syncStartedAt,
+        syncFinishedAt: new Date().toISOString(),
+        historyStartId,
+        historyEndId: page.historyId || null,
+        messagesDiscovered: page.messages.length,
+        messagesPersisted,
+        providerMessageId: null,
+        gmailInternalDate: null,
+        persistedAt: null,
+        delaySeconds: null,
+        path: "bounded_resync_stale_history_summary",
+      });
       return;
     }
 
+    let messagesPersisted = 0;
     for (const messageId of history.messageIds) {
       const normalized = await provider.getMessage(accessToken, messageId);
       if (!normalized) continue;
-      await persistNormalizedEmailMessage({ mailbox: fresh, normalized });
+      const result = await persistNormalizedEmailMessage({ mailbox: fresh, normalized });
+      if (result?.created) {
+        messagesPersisted += 1;
+        const persistedAt = new Date().toISOString();
+        const gmailInternalDate = normalized.sentAt?.toISOString?.() ?? null;
+        const delaySeconds =
+          normalized.sentAt instanceof Date && !Number.isNaN(normalized.sentAt.getTime())
+            ? Math.max(0, Math.round((Date.now() - normalized.sentAt.getTime()) / 1000))
+            : null;
+        logGmailInboundTiming({
+          mailboxId,
+          syncStartedAt,
+          syncFinishedAt: persistedAt,
+          historyStartId,
+          historyEndId: history.historyId || null,
+          messagesDiscovered: history.messageIds.length,
+          messagesPersisted,
+          providerMessageId: normalized.providerMessageId,
+          gmailInternalDate,
+          persistedAt,
+          delaySeconds,
+          path: "history_list",
+        });
+      }
     }
 
     await updateEmailMailbox(mailboxId, {
@@ -169,6 +277,21 @@ export async function runIncrementalEmailSync(mailboxId: string): Promise<void> 
       syncError: null,
       lastSyncAt: new Date(),
       syncCursor: history.historyId || fresh.syncCursor,
+    });
+
+    logGmailInboundTiming({
+      mailboxId,
+      syncStartedAt,
+      syncFinishedAt: new Date().toISOString(),
+      historyStartId,
+      historyEndId: history.historyId || null,
+      messagesDiscovered: history.messageIds.length,
+      messagesPersisted,
+      providerMessageId: null,
+      gmailInternalDate: null,
+      persistedAt: null,
+      delaySeconds: null,
+      path: "history_list_summary",
     });
   } catch (err) {
     const message = syncErrorFromUnknown(err);
@@ -188,6 +311,21 @@ export async function runIncrementalEmailSync(mailboxId: string): Promise<void> 
     } else {
       await setMailboxSyncStatus(mailboxId, "error", { syncError: message });
     }
+    logGmailInboundTiming({
+      mailboxId,
+      syncStartedAt,
+      syncFinishedAt: new Date().toISOString(),
+      historyStartId,
+      historyEndId: null,
+      messagesDiscovered: 0,
+      messagesPersisted: 0,
+      providerMessageId: null,
+      gmailInternalDate: null,
+      persistedAt: null,
+      delaySeconds: null,
+      path: "incremental_failed",
+      errorName: err instanceof Error ? err.name : "Error",
+    });
   }
 }
 

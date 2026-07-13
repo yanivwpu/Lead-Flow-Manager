@@ -287,7 +287,10 @@ export function startCronJobs() {
         .catch((err) => console.error("[CalendlyPoll] cron error:", err));
     }
 
-    // Native email Gmail incremental sync — every 5 minutes
+    // Native email Gmail incremental sync — every ~5 minutes.
+    // Fires when UTC minute ≡ 2 (mod 5): :02, :07, :12, :17, :22, :27, :32, :37, :42, :47, :52, :57.
+    // Scheduler tick is setInterval(60_000); a skipped tick can stretch the gap toward ~10 minutes.
+    // No Gmail push/watch — inbound is poll-only via history.list.
     if (utcMin % 5 === 2) {
       import("./emailChannel/syncService")
         .then(({ runEmailPollingCron }) => runEmailPollingCron())
