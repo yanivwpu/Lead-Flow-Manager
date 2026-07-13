@@ -1,9 +1,17 @@
 /**
  * Inbox selection isolation — prevents Contact A header + Contact B messages
  * (and vice versa) when switching to contact-only records with no conversation.
+ *
+ * Native Email: multiple sibling threads share channel "email". Primary is the
+ * newest by lastMessageAt (not Array.find(channel)).
  */
 
-export type InboxConversationLike = {
+import {
+  resolveContactCenterConversation,
+  type ConversationForPrimaryPick,
+} from "@shared/inboxPrimaryConversation";
+
+export type InboxConversationLike = ConversationForPrimaryPick & {
   id: string;
   channel?: string | null;
   channelAccountId?: string | null;
@@ -24,6 +32,16 @@ export type ResolveInboxSelectionInput = {
   messagesQueryData: unknown[] | null | undefined;
   /** Fallback contact from inbox list while detail query loads. */
   inboxListContact?: { id: string } | null;
+  /**
+   * Authoritative primary conversation from GET /api/inbox for this contact.
+   * Prevents mixed row (newest) + center (stale sibling) when contact detail lags.
+   */
+  inboxRowConversation?: InboxConversationLike | null;
+  /**
+   * While reading an older sibling thread, keep center on this id until leave/reselect.
+   * Row payload must still represent newestPrimary.
+   */
+  stickyConversationId?: string | null;
 };
 
 export type ResolvedInboxSelection<TMsg = unknown> = {
@@ -37,8 +55,12 @@ export type ResolvedInboxSelection<TMsg = unknown> = {
    */
   displayContact: { id: string } | null;
   conversations: InboxConversationLike[];
+  /** Conversation the center panel / composer / messages use. */
   primaryConversation: InboxConversationLike | null;
+  /** Newest conversation by lastMessageAt (row-aligned); may differ when sticky. */
+  newestPrimaryConversation: InboxConversationLike | null;
   activeConversationId: string | null;
+  usedStickyConversation: boolean;
   /** Messages safe to render for the current selection (never previous contact). */
   messages: TMsg[];
   hasConversation: boolean;
@@ -61,7 +83,9 @@ export function resolveInboxSelectionState<TMsg = unknown>(
       displayContact: null,
       conversations: [],
       primaryConversation: null,
+      newestPrimaryConversation: null,
       activeConversationId: null,
+      usedStickyConversation: false,
       messages: [],
       hasConversation: false,
     };
@@ -80,20 +104,29 @@ export function resolveInboxSelectionState<TMsg = unknown>(
       : [];
 
   const preferred = input.preferredChannel?.trim() || null;
-  const primaryConversation =
-    (preferred
-      ? conversations.find((c) => c.channel === preferred)
-      : undefined) ||
-    conversations[0] ||
-    null;
+  const inboxRow =
+    input.inboxRowConversation && typeof input.inboxRowConversation.id === "string"
+      ? input.inboxRowConversation
+      : null;
 
+  const resolved = resolveContactCenterConversation({
+    conversations,
+    preferredChannel: preferred,
+    stickyConversationId: input.stickyConversationId,
+    inboxRowConversation: inboxRow,
+  });
+
+  const primaryConversation = resolved.centerConversation;
   const activeConversationId = primaryConversation?.id ?? null;
 
-  // Never render messages unless we have a conversation for the matched contact.
-  const messages =
-    contactMatchesSelection && activeConversationId
-      ? ((input.messagesQueryData as TMsg[] | null | undefined) ?? [])
-      : [];
+  // Never render messages unless we have a conversation for the matched contact
+  // — or an inbox-row conversation we can open before contact detail catches up.
+  const messagesAllowed =
+    !!activeConversationId && (contactMatchesSelection || !!inboxListContact);
+
+  const messages = messagesAllowed
+    ? ((input.messagesQueryData as TMsg[] | null | undefined) ?? [])
+    : [];
 
   return {
     contactMatchesSelection,
@@ -101,7 +134,9 @@ export function resolveInboxSelectionState<TMsg = unknown>(
     displayContact,
     conversations,
     primaryConversation,
+    newestPrimaryConversation: resolved.newestPrimary,
     activeConversationId,
+    usedStickyConversation: resolved.usedSticky,
     messages,
     hasConversation: !!activeConversationId,
   };
@@ -112,10 +147,12 @@ export function shouldFetchInboxMessages(params: {
   selectedContactId: string | null | undefined;
   contactMatchesSelection: boolean;
   conversationId: string | null | undefined;
+  /** Allow fetch from inbox-row conversation before contact detail matches. */
+  allowInboxRowFallback?: boolean;
 }): boolean {
   return (
     !!params.selectedContactId &&
-    params.contactMatchesSelection &&
+    (!!params.contactMatchesSelection || !!params.allowInboxRowFallback) &&
     !!params.conversationId
   );
 }

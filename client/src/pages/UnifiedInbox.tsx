@@ -466,6 +466,15 @@ export function UnifiedInbox() {
             /* no-op */
           } else if (msg.type === "new_message") {
             queryClient.refetchQueries({ queryKey: ["/api/inbox"], type: "active" });
+            if (typeof msg.contactId === "string" && msg.contactId) {
+              queryClient.invalidateQueries({
+                queryKey: ["/api/contacts", msg.contactId],
+              });
+              void queryClient.refetchQueries({
+                queryKey: ["/api/contacts", msg.contactId],
+                type: "active",
+              });
+            }
             if (msg.replyWindowReopened) {
               queryClient.invalidateQueries({ queryKey: ["/api/templates/retargetable-chats"] });
               toast({
@@ -756,6 +765,22 @@ export function UnifiedInbox() {
     [inbox, selectedContactId],
   );
 
+  /**
+   * Sticky sibling thread while actively reading. Cleared on contact change or
+   * when the user re-clicks the row (open newest primary).
+   */
+  const stickyConversationIdRef = useRef<string | null>(null);
+  const stickyContactIdRef = useRef<string | null>(null);
+  if (selectedContactId !== stickyContactIdRef.current) {
+    stickyContactIdRef.current = selectedContactId ?? null;
+    stickyConversationIdRef.current = null;
+  }
+  const [stickyEpoch, setStickyEpoch] = useState(0);
+  const clearStickyAndOpenNewest = useCallback(() => {
+    stickyConversationIdRef.current = null;
+    setStickyEpoch((n) => n + 1);
+  }, []);
+
   // First pass: match contact only (channel preference computed after reachable channels).
   const contactMatchesSelection = contactData?.contact?.id === selectedContactId;
   const matchedContact = contactMatchesSelection ? contactData!.contact : undefined;
@@ -860,12 +885,71 @@ export function UnifiedInbox() {
         preferredChannel: effectiveChannel ?? null,
         messagesQueryData: null,
         inboxListContact: inboxSelectedItem?.contact ?? null,
+        inboxRowConversation: (inboxSelectedItem?.conversation as Conversation | null) ?? null,
+        stickyConversationId: stickyConversationIdRef.current,
       }),
-    [selectedContactId, contactData, effectiveChannel, inboxSelectedItem?.contact],
+    // stickyEpoch forces re-resolve after clearStickyAndOpenNewest / lock
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sticky via ref + epoch
+    [
+      selectedContactId,
+      contactData,
+      effectiveChannel,
+      inboxSelectedItem?.contact,
+      inboxSelectedItem?.conversation,
+      stickyEpoch,
+    ],
   );
 
   const primaryConversation = (selectionBase.primaryConversation as Conversation | null) ?? undefined;
+  const newestPrimaryConversation =
+    (selectionBase.newestPrimaryConversation as Conversation | null) ?? undefined;
   const activeConversationId = selectionBase.activeConversationId;
+
+  // Lock sticky to the conversation currently being viewed (once resolved).
+  useEffect(() => {
+    if (!selectedContactId || !activeConversationId) return;
+    if (!stickyConversationIdRef.current) {
+      stickyConversationIdRef.current = activeConversationId;
+    }
+  }, [selectedContactId, activeConversationId]);
+
+  // Safe center/row alignment diagnostic (no bodies).
+  useEffect(() => {
+    if (!selectedContactId || !primaryConversation?.id) return;
+    // #region agent log
+    fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "32aec0",
+      },
+      body: JSON.stringify({
+        sessionId: "32aec0",
+        hypothesisId: "H-H",
+        location: "UnifiedInbox.tsx:selected_conversation_resolved",
+        message: "selected_conversation_resolved",
+        data: {
+          selectedContactId,
+          centerConversationId: primaryConversation.id,
+          newestPrimaryConversationId: newestPrimaryConversation?.id ?? null,
+          inboxRowConversationId: inboxSelectedItem?.conversation?.id ?? null,
+          usedSticky: selectionBase.usedStickyConversation,
+          subjectPresent: Boolean(primaryConversation.subject),
+          unreadCount: primaryConversation.unreadCount ?? null,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+  }, [
+    selectedContactId,
+    primaryConversation?.id,
+    primaryConversation?.subject,
+    primaryConversation?.unreadCount,
+    newestPrimaryConversation?.id,
+    inboxSelectedItem?.conversation?.id,
+    selectionBase.usedStickyConversation,
+  ]);
 
   const composerScopeKey = useMemo(() => {
     if (!selectedContactId) return null;
@@ -975,20 +1059,8 @@ export function UnifiedInbox() {
     effectiveChannel,
   ]);
 
-  /** Conversation actually being viewed (active channel) — mark-read targets this only. */
-  const viewedConversation = useMemo((): Conversation | undefined => {
-    if (!contactMatchesSelection) return primaryConversation;
-    if (activeChannel) {
-      const match = matchedConversations.find((c) => c.channel === activeChannel);
-      if (match) return match as Conversation;
-    }
-    return primaryConversation;
-  }, [
-    contactMatchesSelection,
-    activeChannel,
-    matchedConversations,
-    primaryConversation,
-  ]);
+  /** Conversation actually being viewed — same as selection primary (sticky-aware). */
+  const viewedConversation = primaryConversation;
 
   /** Single source for POST /send `channel`: mirrors header label each render; mutation reads at request time. */
   const displayedOutboundChannelRef = useRef<Channel | undefined>(undefined);
@@ -1030,6 +1102,7 @@ export function UnifiedInbox() {
     selectedContactId,
     contactMatchesSelection,
     conversationId: activeConversationId,
+    allowInboxRowFallback: Boolean(inboxSelectedItem?.conversation?.id),
   });
 
   const {
@@ -2508,7 +2581,16 @@ export function UnifiedInbox() {
               return (
               <div
                 key={item.contact.id}
-                onClick={() => setLocation(`/app/inbox/${item.contact.id}`)}
+                onClick={() => {
+                  // Re-clicking the contact row always opens the newest primary sibling.
+                  if (item.contact.id === selectedContactId) {
+                    clearStickyAndOpenNewest();
+                  } else {
+                    stickyConversationIdRef.current = null;
+                    stickyContactIdRef.current = null;
+                  }
+                  setLocation(`/app/inbox/${item.contact.id}`);
+                }}
                 className={inboxConversationRowChromeClassName({
                   selected: isSelected,
                   overdue: isOverdue && !bookedAppt,

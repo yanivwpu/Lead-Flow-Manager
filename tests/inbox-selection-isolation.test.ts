@@ -173,14 +173,32 @@ run("preferred channel picks matching conversation", () => {
     contactQueryData: {
       contact: { id: "c1" },
       conversations: [
-        { id: "wa", channel: "whatsapp" },
-        { id: "sms", channel: "sms" },
+        { id: "wa", channel: "whatsapp", lastMessageAt: "2026-01-01T00:00:00.000Z" },
+        { id: "sms", channel: "sms", lastMessageAt: "2026-02-01T00:00:00.000Z" },
       ],
     },
     preferredChannel: "sms",
     messagesQueryData: [{ id: "1" }],
   });
   assert.equal(resolved.activeConversationId, "sms");
+  assert.deepEqual(resolved.messages, [{ id: "1" }]);
+});
+
+run("preferred channel picks newest matching conversation by lastMessageAt (not Array.find)", () => {
+  const resolved = resolveInboxSelectionState({
+    selectedContactId: "c1",
+    contactQueryData: {
+      contact: { id: "c1" },
+      conversations: [
+        { id: "email-old", channel: "email", lastMessageAt: "2026-01-01T00:00:00.000Z" },
+        { id: "wa", channel: "whatsapp", lastMessageAt: "2026-06-01T00:00:00.000Z" },
+        { id: "email-new", channel: "email", lastMessageAt: "2026-07-01T00:00:00.000Z" },
+      ],
+    },
+    preferredChannel: "email",
+    messagesQueryData: [{ id: "1" }],
+  });
+  assert.equal(resolved.activeConversationId, "email-new");
   assert.deepEqual(resolved.messages, [{ id: "1" }]);
 });
 
