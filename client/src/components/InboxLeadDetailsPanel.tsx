@@ -1512,17 +1512,6 @@ export function InboxLeadDetailsPanel({
   const { profile: persistedBuyerProfile, chips: persistedBuyerChips, buyerMatchingTraceId } =
     usePersistedBuyerPreferences(contact.id);
 
-  const showCopilotBuyerPreferences = useMemo(
-    () =>
-      shouldShowCopilotBuyerPreferences({
-        inventoryStatus,
-        industry: businessKnowledge?.industry,
-        customFields: contact.customFields,
-        hideGrowthEngineForShopify: hideGrowthEngine,
-      }),
-    [inventoryStatus, businessKnowledge?.industry, contact.customFields, hideGrowthEngine],
-  );
-
   const showCopilotInventoryPanels = useMemo(
     () =>
       shouldShowCopilotInventoryForContact({
@@ -1694,11 +1683,12 @@ export function InboxLeadDetailsPanel({
   const activeSuggestionCount = (hasAnyChips ? 1 : 0) + (qualifyAction ? 1 : 0);
 
   type NextBestActionRow = {
-    id: "book" | "assign" | "follow" | "snooze" | "qualify" | "campaign";
+    id: "book" | "assign" | "follow" | "snooze" | "qualify" | "campaign" | "info";
     label: string;
     priority: number;
     onClick: () => void;
     title?: string;
+    informational?: boolean;
   };
 
   const inboundText = useMemo(
@@ -1708,6 +1698,36 @@ export function InboxLeadDetailsPanel({
         .map((m) => m.content)
         .join(" "),
     [messages],
+  );
+
+  const lastInboundText = useMemo(() => {
+    const last = [...messages].reverse().find((m) => m.direction === "inbound");
+    return last?.content ?? "";
+  }, [messages]);
+
+  /** Buyer Preferences — shared domain eligibility (buyer/rental/mixed only). */
+  const showCopilotBuyerPreferences = useMemo(
+    () =>
+      shouldShowCopilotBuyerPreferences({
+        inventoryStatus,
+        industry: businessKnowledge?.industry,
+        customFields: contact.customFields,
+        hideGrowthEngineForShopify: hideGrowthEngine,
+        inboundText: lastInboundText || inboundText,
+        conversationText: inboundText,
+        contactEmail: contact.email,
+        buyerPreferenceProfile: persistedBuyerProfile,
+      }),
+    [
+      inventoryStatus,
+      businessKnowledge?.industry,
+      contact.customFields,
+      contact.email,
+      hideGrowthEngine,
+      lastInboundText,
+      inboundText,
+      persistedBuyerProfile,
+    ],
   );
 
   const schedulingLinkSent = useMemo(
@@ -1957,7 +1977,7 @@ export function InboxLeadDetailsPanel({
   const nextBestActions = useMemo((): NextBestActionRow[] => {
     if (!canSeeWorkflow) return [];
 
-    const runToolAction = (behavior: Exclude<NextBestActionBehavior, "composer" | "campaign">) => {
+    const runToolAction = (behavior: Exclude<NextBestActionBehavior, "composer" | "campaign" | "info">) => {
       openCopilotPopover(behavior);
     };
 
@@ -1968,8 +1988,11 @@ export function InboxLeadDetailsPanel({
           ? "qualify"
           : behavior === "campaign"
             ? "campaign"
-            : behavior;
+            : behavior === "info"
+              ? "info"
+              : behavior;
       const onClick = () => {
+        if (behavior === "info") return;
         if (behavior === "composer") {
           void runComposerAction(action.label);
         } else if (behavior === "campaign") {
@@ -1984,6 +2007,7 @@ export function InboxLeadDetailsPanel({
         priority: 100 - i,
         onClick,
         title: action.label,
+        informational: behavior === "info",
       };
     });
   }, [canSeeWorkflow, contextualNextActions, openCopilotPopover, openCampaignPicker, runComposerAction]);
@@ -2630,13 +2654,13 @@ export function InboxLeadDetailsPanel({
                   {canSeeWorkflow && (() => {
                     const actionRows = nextBestActions;
                     const primary = actionRows[0];
-                    const secondary = actionRows.slice(1, 3);
+                    const secondary = actionRows.slice(1, 3).filter((r) => !r.informational);
                     if (!primary && !handoffActive) return null;
 
                     return (
                       <div className="rounded-xl border border-gray-200 bg-white px-3 py-3 shadow-md shadow-gray-900/[0.06] ring-1 ring-gray-100/80">
                         <p className="text-[9px] uppercase tracking-widest font-bold text-gray-500">
-                          Primary recommendation
+                          {primary?.informational ? "Status" : "Primary recommendation"}
                         </p>
 
                         {handoffActive && (
@@ -2652,7 +2676,19 @@ export function InboxLeadDetailsPanel({
                           </div>
                         )}
 
-                        {primary ? (
+                        {primary?.informational ? (
+                          <div
+                            className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2"
+                            data-testid="next-best-action-primary-info"
+                          >
+                            <p className="text-[12px] font-semibold text-gray-800 leading-snug">
+                              {primary.label}
+                            </p>
+                            <p className="text-[10px] text-gray-500 mt-0.5 leading-snug">
+                              Automated or system notification — no lead follow-up needed.
+                            </p>
+                          </div>
+                        ) : primary ? (
                           <button
                             type="button"
                             onClick={(e) => {

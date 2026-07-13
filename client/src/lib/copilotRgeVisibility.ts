@@ -2,6 +2,11 @@ import type { InventoryConnectorStatus } from "@/lib/inventoryApi";
 import { normalizeBuyerPreferenceProfile } from "@shared/buyerPreferenceSchema";
 import { extractBuyerMatchCriteria } from "@shared/inventory/inventoryMatchScoring";
 import {
+  resolveAiDomainEligibility,
+  type AiDomainEligibilityInput,
+} from "@shared/aiDomainEligibility";
+import type { SellerIntentClass } from "@shared/sellerIntent";
+import {
   isInventoryOwnerDebugEnabled,
   isInventorySupportDebugEnabled,
 } from "@/lib/inventoryMatchUi";
@@ -23,20 +28,33 @@ export function isBuyerLeadContact(customFields?: Record<string, unknown> | null
 }
 
 /**
- * Buyer Preferences in Copilot — RGE installed OR real-estate workspace OR buyer lead type.
- * Waits for inventory status before using the RGE-installed path (avoids flash for general CRM).
+ * Buyer Preferences in Copilot — uses shared resolveAiDomainEligibility.
+ * Visible only for real_estate_buyer / rental / mixed (injectBuyerContext).
+ * Workspace RGE alone never shows an empty Buyer Preferences panel.
  */
 export function shouldShowCopilotBuyerPreferences(input: {
   inventoryStatus?: InventoryConnectorStatus | null;
   industry?: string | null;
   customFields?: Record<string, unknown> | null;
   hideGrowthEngineForShopify?: boolean;
+  inboundText?: string | null;
+  conversationText?: string | null;
+  contactEmail?: string | null;
+  sellerIntent?: SellerIntentClass | null;
+  buyerPreferenceProfile?: unknown;
 }): boolean {
   if (input.hideGrowthEngineForShopify) return false;
-  if (isRealEstateWorkspaceIndustry(input.industry)) return true;
-  if (isBuyerLeadContact(input.customFields)) return true;
-  if (input.inventoryStatus?.rgeInstalled) return true;
-  return false;
+  const domainInput: AiDomainEligibilityInput = {
+    inboundText: input.inboundText,
+    conversationText: input.conversationText,
+    sellerIntent: input.sellerIntent ?? null,
+    leadType: String(input.customFields?.leadType ?? ""),
+    rgeInstalled: input.inventoryStatus?.rgeInstalled === true,
+    industry: input.industry,
+    buyerProfileHasCriteria: contactHasInventoryMatchCriteria(input.buyerPreferenceProfile),
+    contactEmail: input.contactEmail,
+  };
+  return resolveAiDomainEligibility(domainInput).showBuyerPreferencesPanel;
 }
 
 /** Matching Listings — full inventory connector (RGE + env flag). */

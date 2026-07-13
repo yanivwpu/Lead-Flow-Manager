@@ -5,9 +5,12 @@
  * injected merely because the workspace has RGE installed or industry=real estate.
  * Conversation (and contact) evidence must establish a real-estate domain first.
  *
+ * System / automated emails resolve to domain `system` (not a lead workflow).
+ *
  * Used by:
  * - Copilot next-action recommendations (customerInsights)
  * - Suggest Reply / AI reply generation (routes + aiService)
+ * - Copilot Buyer Preferences panel visibility
  */
 
 import {
@@ -24,7 +27,9 @@ export type AiConversationDomain =
   | "real_estate_rental"
   | "real_estate_seller"
   | "real_estate_mixed"
-  | "generic";
+  | "generic"
+  /** Automated / noreply / legal / account notification — not an actionable lead. */
+  | "system";
 
 export type AiDomainEligibilityInput = {
   /** Latest inbound message (preferred). */
@@ -55,12 +60,20 @@ const BED_OR_BUDGET_RE =
 const AREA_OR_PROPERTY_RE =
   /\b(?:condo(?:minium)?s?|townhouses?|town[\s-]?houses?|single[\s-]?family|sfh|apartments?|houses?|homes?|villas?|duplex(?:es)?)\b|\b(?:in|near|around)\s+(?!the\b|a\b|an\b|this\b|that\b|your\b|our\b|any\b|all\b|each\b|such\b|which\b)([A-Za-z][A-Za-z\s.-]{1,40})\b/i;
 
-/** System / notification senders — never inherit RGE workflows. */
-const SYSTEM_EMAIL_LOCAL_RE =
-  /^(noreply|no-reply|no_reply|donotreply|do-not-reply|mailer-daemon|postmaster|notifications?|alerts?|updates?|news|newsletter|billing|receipts?|security|accounts?|support|info|hello|team|newsletters?)\b/i;
+/**
+ * Strong automated-sender local parts (including google-noreply, notifications+tag).
+ * Deliberately excludes support/info/hello/team — those can be real human inquiries.
+ */
+const STRONG_SYSTEM_LOCAL_RE =
+  /(?:^|[-_.+])(noreply|no-reply|no_reply|donotreply|do-not-reply|mailer-daemon|postmaster)(?:$|[-_.+])|^(notifications?|alerts?|newsletters?|updates?)(?:$|[-_.+])/i;
 
-const GOOGLE_SYSTEM_RE =
-  /\b(?:google\s+terms?\s+of\s+service|terms\s+of\s+service|privacy\s+policy|account\s+activity|security\s+alert|sign[\s-]?in\s+(?:attempt|from)|2[\s-]?step\s+verification|gmail\s+team|google\s+llc)\b/i;
+/** Platform / legal / account notification semantics (content). */
+const SYSTEM_NOTIFICATION_CONTENT_RE =
+  /\b(?:terms?\s+of\s+service|privacy\s+policy|security\s+alert|account\s+(?:activity|notification|alert)|sign[\s-]?in\s+(?:attempt|from|notification)|2[\s-]?step\s+verification|password\s+reset|verify\s+your\s+(?:email|account)|we(?:'ve| have)\s+updated\s+our|policy\s+update|automated\s+(?:message|notification|email)|do\s+not\s+reply\s+to\s+this|this\s+(?:is\s+an?\s+)?(?:automated|system)\s+(?:message|email|notification)|receipt\s+for\s+your|order\s+confirmation|payment\s+received|billing\s+statement|gmail\s+team|google\s+llc)\b/i;
+
+/** Real human sales/support ask — keeps company-domain emails actionable. */
+const HUMAN_INQUIRY_RE =
+  /\b(?:can\s+you|could\s+you|would\s+you|please\s+help|i(?:'m|\s+am)\s+(?:looking|interested|trying|hoping)|how\s+(?:do|does|can|much)|does\s+.+\s+work|what\s+(?:is|are|does)|need\s+(?:help|support|info|information)|want\s+to\s+(?:buy|know|learn|schedule|book)|we(?:'d|\s+would)\s+like|interested\s+in)\b|\?/i;
 
 /** Product / SaaS / agency CRM questions — business domain, not real-estate lead. */
 const PRODUCT_SAAS_INQUIRY_RE =
@@ -89,18 +102,47 @@ export function isRealEstateWorkspaceCapable(input: {
   return lt === "buyer" || lt === "seller" || lt === "renter" || lt === "investor";
 }
 
+export function looksLikeHumanInquiry(text: string | null | undefined): boolean {
+  return HUMAN_INQUIRY_RE.test(String(text || ""));
+}
+
+export function looksLikeSystemNotificationContent(text: string | null | undefined): boolean {
+  return SYSTEM_NOTIFICATION_CONTENT_RE.test(String(text || ""));
+}
+
+/**
+ * Classify automated / system mail.
+ *
+ * Rule:
+ * 1. Strong noreply-style sender local-part → system (even without content match).
+ * 2. Known Google/Accounts system domains with noreply-ish local → system.
+ * 3. Notification/legal/account content WITHOUT human inquiry signals → system.
+ * 4. Human sales/support inquiry from a company domain stays actionable
+ *    (content alone + human ask does NOT force system).
+ */
 export function looksLikeSystemOrNotificationEmail(input: {
   contactEmail?: string | null;
   inboundText?: string | null;
 }): boolean {
   const email = String(input.contactEmail || "").trim().toLowerCase();
-  if (email) {
-    const local = email.split("@")[0] || "";
-    if (SYSTEM_EMAIL_LOCAL_RE.test(local)) return true;
-    if (email.endsWith("@google.com") || email.endsWith("@accounts.google.com")) return true;
-  }
+  const local = email.includes("@") ? email.split("@")[0] || "" : email;
+  const domain = email.includes("@") ? email.split("@")[1] || "" : "";
   const text = String(input.inboundText || "");
-  if (GOOGLE_SYSTEM_RE.test(text)) return true;
+  const strongLocal = !!local && STRONG_SYSTEM_LOCAL_RE.test(local);
+  const googleSystemDomain =
+    domain === "google.com" ||
+    domain === "accounts.google.com" ||
+    domain.endsWith(".google.com");
+
+  if (strongLocal) return true;
+  if (googleSystemDomain && (strongLocal || /noreply|no-reply|notification/i.test(local))) {
+    return true;
+  }
+
+  if (looksLikeSystemNotificationContent(text) && !looksLikeHumanInquiry(text)) {
+    return true;
+  }
+
   return false;
 }
 
@@ -157,7 +199,7 @@ export function resolveAiConversationDomain(
       inboundText: primary,
     })
   ) {
-    return "generic";
+    return "system";
   }
 
   if (looksLikeProductOrSaasInquiry(primary)) {
@@ -217,14 +259,27 @@ function hasSellerContinuity(text: string, input: AiDomainEligibilityInput): boo
 export function isRealEstateConversationDomain(
   domain: AiConversationDomain,
 ): boolean {
-  return domain !== "generic";
+  return (
+    domain === "real_estate_buyer" ||
+    domain === "real_estate_rental" ||
+    domain === "real_estate_seller" ||
+    domain === "real_estate_mixed"
+  );
 }
 
 export type AiDomainDecision = {
   domain: AiConversationDomain;
   workspaceCapable: boolean;
+  /** Automated / noreply / legal notification — not a lead. */
+  isSystemNotification: boolean;
+  /** Suppress Assign agent / nurture / booking / listing lead workflows. */
+  suppressLeadWorkflowActions: boolean;
+  /** Copilot informational "No action needed" state. */
+  copilotNoActionNeeded: boolean;
   /** Inject buyer prefs / qualification / inventory into AI prompts. */
   injectBuyerContext: boolean;
+  /** Show Copilot Buyer Preferences panel (same gate as injectBuyerContext). */
+  showBuyerPreferencesPanel: boolean;
   /** Inject seller prefs / seller qualification. */
   injectSellerContext: boolean;
   /** Inject inventory match summaries / listing follow-up enrichment. */
@@ -244,6 +299,7 @@ export function resolveAiDomainEligibility(
 ): AiDomainDecision {
   const domain = resolveAiConversationDomain(input);
   const workspaceCapable = isRealEstateWorkspaceCapable(input);
+  const isSystemNotification = domain === "system";
   const reDomain = isRealEstateConversationDomain(domain);
 
   // Injection requires conversation domain evidence. Workspace capability is
@@ -263,7 +319,11 @@ export function resolveAiDomainEligibility(
   return {
     domain,
     workspaceCapable,
+    isSystemNotification,
+    suppressLeadWorkflowActions: isSystemNotification,
+    copilotNoActionNeeded: isSystemNotification,
     injectBuyerContext,
+    showBuyerPreferencesPanel: injectBuyerContext,
     injectSellerContext,
     injectInventoryContext,
     // Conversation domain is the gate — workspace RGE alone never forces these.
@@ -283,6 +343,12 @@ export function shouldInjectBuyerRealEstateContext(
   input: AiDomainEligibilityInput,
 ): boolean {
   return resolveAiDomainEligibility(input).injectBuyerContext;
+}
+
+export function shouldShowBuyerPreferencesPanel(
+  input: AiDomainEligibilityInput,
+): boolean {
+  return resolveAiDomainEligibility(input).showBuyerPreferencesPanel;
 }
 
 export function shouldInjectSellerRealEstateContext(

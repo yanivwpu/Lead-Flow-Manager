@@ -250,6 +250,11 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
   const domainDecision = resolveAiDomainEligibility(domainInput);
   const dominantIntent = resolveCopilotDominantIntent(domainInput);
 
+  // System / automated notifications — no lead workflow actions.
+  if (domainDecision.suppressLeadWorkflowActions || domainDecision.copilotNoActionNeeded) {
+    return [{ label: "No action needed", rank: 100, group: "system_info" }];
+  }
+
   // Real-estate Copilot actions require shared domain eligibility (not workspace RGE alone).
   if (domainDecision.showRealEstateCopilotRecommendations) {
     if (dominantIntent === "seller") {
@@ -398,7 +403,7 @@ function dedupeActionCandidates(candidates: ActionCandidate[]): ActionCandidate[
     .slice(0, 3);
 }
 
-export type NextBestActionBehavior = "book" | "follow" | "assign" | "snooze" | "composer" | "campaign";
+export type NextBestActionBehavior = "book" | "follow" | "assign" | "snooze" | "composer" | "campaign" | "info";
 
 export type ContextualNextAction = {
   label: string;
@@ -408,6 +413,8 @@ export type ContextualNextAction = {
 /** Map internal action group → UI surface (intent-based, not label text). */
 export function behaviorForActionGroup(group: string): NextBestActionBehavior {
   switch (group) {
+    case "system_info":
+      return "info";
     case "showing":
     case "seller_consult":
       return "book";
@@ -439,6 +446,11 @@ export function buildContextualNextActions(ctx: ContextualActionContext): Contex
     ].slice(0, 3);
   }
 
+  const domainDecision = resolveAiDomainEligibility(domainEligibilityFromActionContext(ctx));
+  if (domainDecision.copilotNoActionNeeded || domainDecision.suppressLeadWorkflowActions) {
+    return [{ label: "No action needed", behavior: "info" }];
+  }
+
   return dedupeActionCandidates(collectContextualActionCandidates(ctx)).map((c) => ({
     label: c.label,
     behavior: behaviorForActionGroup(c.group) as ContextualNextAction["behavior"],
@@ -454,6 +466,10 @@ export { FINANCING_GUIDANCE_SUGGESTION };
 /** Label-only fallback when behavior is not embedded (e.g. legacy labels). */
 export function getNextBestActionBehavior(label: string): NextBestActionBehavior {
   const l = label.toLowerCase();
+
+  if (/\bno action needed\b/.test(l)) {
+    return "info";
+  }
 
   if (/\b(snooze|pause autopilot|pause ai)\b/.test(l)) {
     return "snooze";
