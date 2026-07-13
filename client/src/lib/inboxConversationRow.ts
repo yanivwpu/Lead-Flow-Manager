@@ -1,5 +1,6 @@
 /**
- * Inbox unread + conversation row layout helpers (testable, shared with UnifiedInbox).
+ * Inbox conversation list row — fixed compact layout contract.
+ * Unread mark-read helpers live below; row chrome is independent of unread logic.
  */
 
 export type InboxUnreadItem = {
@@ -103,32 +104,106 @@ export function mergeInboxUnreadPreservingLocalRead<T extends InboxUnreadItem>(
   });
 }
 
+// ── Fixed compact row layout contract ───────────────────────────────────────
+
+/**
+ * Outer row: fixed height + identical padding/border box for every state.
+ * Selected/unread/status MUST NOT add padding, ring, outer shadow, or wrap.
+ *
+ * Height budget (68px):
+ *   py-2 (16) + line1 20 + gap 2 + line2 16 + gap 2 + line3 20 + border ≈ 68
+ */
+export const INBOX_ROW_OUTER_BASE =
+  "box-border h-[68px] px-3 py-2 border-b border-l-2 border-l-transparent cursor-pointer overflow-hidden transition-colors bg-transparent hover:bg-gray-100/70";
+
+export const INBOX_ROW_INNER =
+  "flex h-full min-h-0 items-center gap-2.5 overflow-hidden";
+
+export const INBOX_ROW_BODY =
+  "flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden";
+
+/** Line 1 — name / time / unread */
+export const INBOX_ROW_LINE1 =
+  "flex h-5 min-h-[20px] max-h-[20px] items-center gap-1 overflow-hidden";
+
+/** Line 2 — channel icon + single-line preview */
+export const INBOX_ROW_LINE2 =
+  "flex h-4 min-h-[16px] max-h-[16px] items-center gap-1 overflow-hidden";
+
+/** Line 3 — status/tag chips, single line, clip overflow (never wrap) */
+export const INBOX_ROW_LINE3 =
+  "flex h-5 min-h-[20px] max-h-[20px] items-center gap-1 overflow-hidden whitespace-nowrap";
+
+export const INBOX_ROW_NAME =
+  "min-w-0 flex-1 truncate text-sm font-medium leading-5";
+
+export const INBOX_ROW_NAME_UNREAD = "font-semibold";
+
+export const INBOX_ROW_TIME =
+  "shrink-0 text-[10px] leading-none text-muted-foreground whitespace-nowrap";
+
+export const INBOX_ROW_UNREAD_BADGE =
+  "ml-0.5 inline-flex h-4 min-h-[16px] max-h-[16px] shrink-0 items-center justify-center rounded-full bg-gray-200 px-1.5 text-[10px] font-medium leading-none text-gray-800";
+
+export const INBOX_ROW_PREVIEW =
+  "min-w-0 flex-1 truncate text-xs leading-4 text-muted-foreground whitespace-nowrap";
+
+export const INBOX_ROW_PREVIEW_UNREAD = "font-medium text-gray-700";
+
+export const INBOX_ROW_CHANNEL_ICON_WRAP =
+  "inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center";
+
+/** Compact chips — fixed height, never grow the row */
+export const INBOX_ROW_CHIP =
+  "inline-flex h-4 max-h-4 shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full border px-1.5 text-[10px] font-medium leading-none";
+
 export type InboxRowChromeInput = {
   selected: boolean;
   overdue?: boolean;
 };
 
 /**
- * Stable row chrome — always reserve left border width so selection does not
- * change row height/width. Avoid ring/outline that expands layout box.
+ * Outer chrome classes. Selected/overdue only change color/background —
+ * never padding, height, border width, or box model.
  */
 export function inboxConversationRowChromeClassName(input: InboxRowChromeInput): string {
-  const parts = [
-    "p-3 border-b border-l-2 cursor-pointer transition-colors bg-transparent hover:bg-gray-100/70",
-  ];
+  const parts = [INBOX_ROW_OUTER_BASE];
   if (input.selected) {
-    parts.push("bg-white hover:bg-white shadow-[inset_0_0_0_1px_rgba(229,231,235,1)]");
-    parts.push(input.overdue ? "border-l-red-400" : "border-l-gray-300");
+    parts.push("bg-white hover:bg-white");
+    parts.push(input.overdue ? "!border-l-red-400" : "!border-l-gray-300");
   } else if (input.overdue) {
-    parts.push("border-l-red-400");
-  } else {
-    parts.push("border-l-transparent");
+    parts.push("!border-l-red-400");
   }
   return parts.join(" ");
 }
 
-/** Fixed band for status chips so Needs Reply mount/unmount does not change row height. */
-export const INBOX_ROW_STATUS_BAND_CLASS = "flex items-center gap-1 flex-wrap min-h-[22px]";
+/** Layout contract shared by all row variants — for regression tests. */
+export function inboxConversationRowLayoutContract(input: InboxRowChromeInput): {
+  outer: string;
+  inner: string;
+  body: string;
+  line1: string;
+  line2: string;
+  line3: string;
+  heightClass: string;
+  paddingClass: string;
+  borderWidthClass: string;
+} {
+  const outer = inboxConversationRowChromeClassName(input);
+  return {
+    outer,
+    inner: INBOX_ROW_INNER,
+    body: INBOX_ROW_BODY,
+    line1: INBOX_ROW_LINE1,
+    line2: INBOX_ROW_LINE2,
+    line3: INBOX_ROW_LINE3,
+    heightClass: "h-[68px]",
+    paddingClass: "px-3 py-2",
+    borderWidthClass: "border-l-2",
+  };
+}
 
-/** Name/time/badge row — stable height whether unread badge is present. */
-export const INBOX_ROW_HEADER_CLASS = "flex items-center gap-1 mb-0.5 min-h-[20px]";
+/** @deprecated — use INBOX_ROW_LINE3 */
+export const INBOX_ROW_STATUS_BAND_CLASS = INBOX_ROW_LINE3;
+/** @deprecated — use INBOX_ROW_LINE1 */
+export const INBOX_ROW_HEADER_CLASS = INBOX_ROW_LINE1;

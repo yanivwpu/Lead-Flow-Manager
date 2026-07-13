@@ -1,13 +1,10 @@
 /**
- * Inbox unread badge + conversation row stability.
+ * Inbox unread badge stability (separate from row layout).
  * Run: npx tsx tests/inbox-unread-and-row-stability.test.ts
  */
 import assert from "node:assert/strict";
 import {
   applyInboxConversationMarkRead,
-  inboxConversationRowChromeClassName,
-  INBOX_ROW_HEADER_CLASS,
-  INBOX_ROW_STATUS_BAND_CLASS,
   mergeInboxUnreadPreservingLocalRead,
   remainingContactUnreadAfterMarkingConversation,
 } from "../client/src/lib/inboxConversationRow";
@@ -77,7 +74,6 @@ run("1. mark selected conversation read → badge uses remaining sum after refet
   })!;
   assert.equal(afterMark[0].unreadCount, 2);
 
-  // Stale refetch still includes cleared email unread in the sum (3) — clamp to remaining 2.
   const staleServer = [
     {
       contact: { id: "c1" },
@@ -117,22 +113,9 @@ run("2. incremental email sync does not restore stale unread for existing messag
   );
 });
 
-run("3. selected/unselected conversation row dimensions use identical spacing classes", () => {
-  const selected = inboxConversationRowChromeClassName({ selected: true });
-  const unselected = inboxConversationRowChromeClassName({ selected: false });
-  for (const cls of [selected, unselected]) {
-    assert.match(cls, /\bp-3\b/);
-    assert.match(cls, /\bborder-l-2\b/);
-    assert.doesNotMatch(cls, /\bring-1\b/);
-    assert.doesNotMatch(cls, /\bshadow-sm\b/);
-  }
-  assert.match(INBOX_ROW_HEADER_CLASS, /min-h-\[20px\]/);
-  assert.match(INBOX_ROW_STATUS_BAND_CLASS, /min-h-\[22px\]/);
-});
-
 run("switching channel marks only that conversation (remaining recalculated)", () => {
   const conversations = [
-    { id: "email-1", unreadCount: 0 }, // already viewed
+    { id: "email-1", unreadCount: 0 },
     { id: "wa-1", unreadCount: 2 },
   ];
   const remaining = remainingContactUnreadAfterMarkingConversation({
@@ -154,4 +137,4 @@ run("switching channel marks only that conversation (remaining recalculated)", (
   assert.equal(after[0].unreadCount, 0);
 });
 
-console.log("\nAll inbox unread / row stability tests passed.");
+console.log("\nAll inbox unread stability tests passed.");

@@ -130,8 +130,19 @@ import { outboundDocumentBlockHint } from "@/lib/outboundAttachmentChannelGate";
 import {
   applyInboxConversationMarkRead,
   inboxConversationRowChromeClassName,
-  INBOX_ROW_HEADER_CLASS,
-  INBOX_ROW_STATUS_BAND_CLASS,
+  INBOX_ROW_BODY,
+  INBOX_ROW_CHANNEL_ICON_WRAP,
+  INBOX_ROW_CHIP,
+  INBOX_ROW_INNER,
+  INBOX_ROW_LINE1,
+  INBOX_ROW_LINE2,
+  INBOX_ROW_LINE3,
+  INBOX_ROW_NAME,
+  INBOX_ROW_NAME_UNREAD,
+  INBOX_ROW_PREVIEW,
+  INBOX_ROW_PREVIEW_UNREAD,
+  INBOX_ROW_TIME,
+  INBOX_ROW_UNREAD_BADGE,
   mergeInboxUnreadPreservingLocalRead,
   remainingContactUnreadAfterMarkingConversation,
 } from "@/lib/inboxConversationRow";
@@ -2480,69 +2491,103 @@ export function UnifiedInbox() {
               const bookedAppt = nextAppointmentByContact.get(item.contact.id);
               const crmTag = isCrmDisplayTag(item.contact.tag) ? item.contact.tag : null;
               const showFollowUpBadge = fuStatus && !bookedAppt;
+              const isSelected = selectedContactId === item.contact.id;
               return (
               <div
                 key={item.contact.id}
                 onClick={() => setLocation(`/app/inbox/${item.contact.id}`)}
                 className={inboxConversationRowChromeClassName({
-                  selected: selectedContactId === item.contact.id,
+                  selected: isSelected,
                   overdue: isOverdue && !bookedAppt,
                 })}
                 data-testid={`inbox-item-${item.contact.id}`}
               >
-                <div className="flex items-start gap-2.5">
-                  <div className="relative flex-shrink-0">
-                    <ChatAvatar src={item.contact.avatar} name={item.contact.name} size="md" />
-                    <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-white rounded-full flex items-center justify-center shadow-sm">
-                      {getChannelIcon(item.channel)}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className={INBOX_ROW_HEADER_CLASS}>
-                      <span className={cn("font-medium text-sm truncate flex-1 min-w-0", needsReply && "font-semibold")}>{item.contact.name}</span>
-                      <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatTime(item.lastMessageAt)}</span>
+                <div className={INBOX_ROW_INNER}>
+                  <ChatAvatar
+                    src={item.contact.avatar}
+                    name={item.contact.name}
+                    size="sm"
+                    className="shrink-0"
+                  />
+                  <div className={INBOX_ROW_BODY}>
+                    <div className={INBOX_ROW_LINE1}>
+                      <span
+                        className={cn(
+                          INBOX_ROW_NAME,
+                          needsReply && INBOX_ROW_NAME_UNREAD,
+                        )}
+                      >
+                        {item.contact.name}
+                      </span>
+                      <span className={INBOX_ROW_TIME}>{formatTime(item.lastMessageAt)}</span>
                       {item.unreadCount > 0 ? (
-                        <Badge className="ml-0.5 text-[10px] px-1.5 py-0 h-4 min-w-[1rem] flex-shrink-0 bg-gray-200 text-gray-800">{item.unreadCount}</Badge>
-                      ) : (
-                        <span className="ml-0.5 h-4 min-w-[1rem] flex-shrink-0" aria-hidden />
-                      )}
+                        <span className={INBOX_ROW_UNREAD_BADGE}>{item.unreadCount}</span>
+                      ) : null}
                     </div>
-                    <p className={cn("text-xs truncate mb-1 leading-4 min-h-4", needsReply ? "text-gray-700 font-medium" : "text-muted-foreground")}>
-                      {item.lastMessage || "No messages yet"}
-                    </p>
-                    <div className={INBOX_ROW_STATUS_BAND_CLASS}>
+                    <div className={INBOX_ROW_LINE2}>
+                      <span className={INBOX_ROW_CHANNEL_ICON_WRAP} aria-hidden>
+                        {getChannelIcon(item.channel, "w-3 h-3")}
+                      </span>
+                      <p
+                        className={cn(
+                          INBOX_ROW_PREVIEW,
+                          needsReply && INBOX_ROW_PREVIEW_UNREAD,
+                        )}
+                      >
+                        {item.lastMessage || "No messages yet"}
+                      </p>
+                    </div>
+                    <div className={INBOX_ROW_LINE3}>
                       {needsReply ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold border bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-0.5" data-testid={`badge-needs-reply-${item.contact.id}`}>
-                          <Zap className="w-2.5 h-2.5" />Needs Reply
+                        <span
+                          className={cn(INBOX_ROW_CHIP, "border-blue-200 bg-blue-50 font-semibold text-blue-700")}
+                          data-testid={`badge-needs-reply-${item.contact.id}`}
+                        >
+                          <Zap className="h-2.5 w-2.5 shrink-0" />Needs Reply
                         </span>
                       ) : showFollowUpBadge && fuStatus === 'overdue' ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold border bg-red-50 text-red-600 border-red-200" data-testid={`badge-overdue-${item.contact.id}`}>
-                          ⏰ Overdue
+                        <span
+                          className={cn(INBOX_ROW_CHIP, "border-red-200 bg-red-50 font-semibold text-red-600")}
+                          data-testid={`badge-overdue-${item.contact.id}`}
+                        >
+                          Overdue
                         </span>
                       ) : showFollowUpBadge && fuStatus === 'today' ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium border bg-amber-50 text-amber-600 border-amber-200" data-testid={`badge-today-${item.contact.id}`}>
-                          ⏰ Today
+                        <span
+                          className={cn(INBOX_ROW_CHIP, "border-amber-200 bg-amber-50 text-amber-600")}
+                          data-testid={`badge-today-${item.contact.id}`}
+                        >
+                          Today
                         </span>
                       ) : showFollowUpBadge && fuStatus === 'upcoming' ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium border bg-slate-50 text-slate-500 border-slate-200" data-testid={`badge-upcoming-${item.contact.id}`}>
-                          ⏰ {item.contact.followUp}
+                        <span
+                          className={cn(INBOX_ROW_CHIP, "border-slate-200 bg-slate-50 text-slate-500")}
+                          data-testid={`badge-upcoming-${item.contact.id}`}
+                        >
+                          {item.contact.followUp}
                         </span>
                       ) : null}
-                      {crmTag && (
-                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium border", TAG_COLORS[crmTag] || 'bg-blue-100 text-blue-700 border-blue-200')} data-testid={`badge-tag-${item.contact.id}`}>
+                      {crmTag ? (
+                        <span
+                          className={cn(
+                            INBOX_ROW_CHIP,
+                            TAG_COLORS[crmTag] || "border-blue-200 bg-blue-100 text-blue-700",
+                          )}
+                          data-testid={`badge-tag-${item.contact.id}`}
+                        >
                           {crmTag}
                         </span>
-                      )}
-                      {bookedAppt && (
+                      ) : null}
+                      {bookedAppt ? (
                         <span
-                          className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium border bg-emerald-50 text-emerald-700 border-emerald-200"
+                          className={cn(INBOX_ROW_CHIP, "border-emerald-200 bg-emerald-50 text-emerald-700")}
                           title={`Booked · ${format(new Date(bookedAppt.appointmentDate), "MMM d 'at' h:mm a")}`}
                           data-testid={`badge-booked-${item.contact.id}`}
                         >
-                          <CalendarCheck className="w-3 h-3" aria-hidden />
+                          <CalendarCheck className="h-2.5 w-2.5 shrink-0" aria-hidden />
                           Booked
                         </span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </div>
