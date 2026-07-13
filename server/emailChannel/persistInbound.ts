@@ -8,6 +8,7 @@ import { notifyUser } from "../presence";
 import { resolveEmailContact } from "./contactMatch";
 import { insertEmailMessageDetail } from "./mailboxStore";
 import { sanitizeEmailHtml, htmlToPlainText } from "./htmlSanitize";
+import { logEmailUnreadDiag } from "./emailUnreadDiag";
 
 export async function findEmailConversationByThread(params: {
   workspaceUserId: string;
@@ -42,6 +43,12 @@ export async function persistNormalizedEmailMessage(params: {
     normalized.providerMessageId,
   );
   if (existing) {
+    logEmailUnreadDiag("persist_skip_existing_message", {
+      conversationId: existing.conversationId,
+      contactId: existing.contactId,
+      providerMessageId: normalized.providerMessageId,
+      unreadBump: false,
+    });
     return {
       messageId: existing.id,
       conversationId: existing.conversationId,
@@ -80,6 +87,7 @@ export async function persistNormalizedEmailMessage(params: {
   });
 
   if (!conversation) {
+    const initialUnread = normalized.direction === "inbound" ? 1 : 0;
     conversation = await storage.createConversation({
       userId: mailbox.workspaceUserId,
       contactId: contact.id,
@@ -91,13 +99,22 @@ export async function persistNormalizedEmailMessage(params: {
       lastMessageAt: normalized.sentAt,
       lastMessagePreview: (normalized.snippet || normalized.textBody || "").slice(0, 100),
       lastMessageDirection: normalized.direction,
-      unreadCount: normalized.direction === "inbound" ? 1 : 0,
+      unreadCount: initialUnread,
     } as any);
+    logEmailUnreadDiag("persist_create_conversation_unread", {
+      conversationId: conversation.id,
+      contactId: contact.id,
+      channel: "email",
+      direction: normalized.direction,
+      unreadCountSet: initialUnread,
+      providerThreadId: normalized.providerThreadId,
+    });
   } else {
+    const beforeUnread = conversation.unreadCount || 0;
     const unread = nextEmailConversationUnreadCount({
       messageAlreadyExists: false,
       direction: normalized.direction,
-      currentUnread: conversation.unreadCount || 0,
+      currentUnread: beforeUnread,
     });
     await storage.updateConversation(conversation.id, {
       lastMessageAt: normalized.sentAt,
@@ -106,6 +123,17 @@ export async function persistNormalizedEmailMessage(params: {
       unreadCount: unread,
       subject: conversation.subject || normalized.subject,
     } as any);
+    if (unread !== beforeUnread) {
+      logEmailUnreadDiag("persist_update_conversation_unread", {
+        conversationId: conversation.id,
+        contactId: contact.id,
+        channel: "email",
+        direction: normalized.direction,
+        unreadCountBefore: beforeUnread,
+        unreadCountAfter: unread,
+        providerThreadId: normalized.providerThreadId,
+      });
+    }
   }
 
   const textContent =

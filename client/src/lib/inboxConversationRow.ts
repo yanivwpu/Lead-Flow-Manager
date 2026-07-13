@@ -6,6 +6,8 @@
 export type InboxUnreadItem = {
   contact: { id: string };
   unreadCount: number;
+  /** Aggregate across all conversations — used for Unread filter, not row badge. */
+  contactUnreadTotal?: number;
   conversation?: { id?: string; unreadCount?: number | null } | null;
 };
 
@@ -15,7 +17,7 @@ export type ConversationUnreadLike = {
 };
 
 /**
- * After marking one conversation read, recompute contact aggregate badge.
+ * After marking one conversation read, recompute contact aggregate.
  * Does NOT zero unread on other conversations/channels for the same contact.
  */
 export function remainingContactUnreadAfterMarkingConversation(input: {
@@ -29,8 +31,9 @@ export function remainingContactUnreadAfterMarkingConversation(input: {
 }
 
 /**
- * Optimistically clear unread for one conversation and set contact aggregate
- * to the remaining sum (other channels/threads stay unread).
+ * Optimistically clear unread for the conversation represented by the inbox row.
+ * `unreadCount` on the item is the ROW conversation unread (not contact aggregate).
+ * `contactUnreadTotal` tracks remaining unread across siblings.
  */
 export function applyInboxConversationMarkRead<T extends InboxUnreadItem>(
   items: T[] | undefined | null,
@@ -44,15 +47,16 @@ export function applyInboxConversationMarkRead<T extends InboxUnreadItem>(
   const remaining = Math.max(0, opts.remainingUnread);
   return items.map((item) => {
     if (item.contact.id !== contactId) return item;
-    const conversation =
-      item.conversation &&
-      (item.conversation.id == null || item.conversation.id === opts.conversationId)
-        ? { ...item.conversation, unreadCount: 0 }
-        : item.conversation;
+    const isRowConversation = item.conversation?.id === opts.conversationId;
     return {
       ...item,
-      unreadCount: remaining,
-      conversation,
+      // Row badge follows the conversation shown on the row.
+      unreadCount: isRowConversation ? 0 : item.unreadCount,
+      contactUnreadTotal: remaining,
+      conversation:
+        isRowConversation && item.conversation
+          ? { ...item.conversation, unreadCount: 0 }
+          : item.conversation,
     };
   });
 }
@@ -68,6 +72,7 @@ export function applyInboxContactMarkRead<T extends InboxUnreadItem>(
       ? {
           ...item,
           unreadCount: 0,
+          contactUnreadTotal: 0,
           conversation: item.conversation
             ? { ...item.conversation, unreadCount: 0 }
             : item.conversation,
@@ -77,30 +82,28 @@ export function applyInboxContactMarkRead<T extends InboxUnreadItem>(
 }
 
 /**
- * Preserve local remaining unread for a contact when a stale inbox refetch
- * reports a higher aggregate (e.g. still includes a conversation we just cleared).
- * Never forces the badge to 0 if other conversations remain unread.
+ * Preserve cleared row-conversation unread when a stale inbox refetch still
+ * reports unreadCount > 0 for a conversation we just marked read.
  */
 export function mergeInboxUnreadPreservingLocalRead<T extends InboxUnreadItem>(
   previous: T[] | undefined | null,
   incoming: T[],
-  localRemainingByContactId: ReadonlyMap<string, number>,
+  recentlyClearedConversationIds: ReadonlySet<string>,
 ): T[] {
-  if (!localRemainingByContactId.size) return incoming;
+  if (!recentlyClearedConversationIds.size) return incoming;
   return incoming.map((item) => {
-    const localRemaining = localRemainingByContactId.get(item.contact.id);
-    if (localRemaining == null) return item;
-    if (item.unreadCount > localRemaining) {
-      return {
-        ...item,
-        unreadCount: localRemaining,
-        conversation:
-          item.conversation && localRemaining === 0
-            ? { ...item.conversation, unreadCount: 0 }
-            : item.conversation,
-      };
+    const convId = item.conversation?.id;
+    if (!convId || !recentlyClearedConversationIds.has(convId)) return item;
+    if ((item.unreadCount || 0) <= 0 && (item.conversation?.unreadCount || 0) <= 0) {
+      return item;
     }
-    return item;
+    return {
+      ...item,
+      unreadCount: 0,
+      conversation: item.conversation
+        ? { ...item.conversation, unreadCount: 0 }
+        : item.conversation,
+    };
   });
 }
 

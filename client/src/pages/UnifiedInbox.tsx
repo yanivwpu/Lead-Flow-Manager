@@ -251,7 +251,10 @@ interface InboxItem {
   channel: Channel;
   lastMessage: string;
   lastMessageAt: string | null;
+  /** Unread for the conversation represented by this row (not contact aggregate). */
   unreadCount: number;
+  /** Sum across all conversations for this contact (Unread filter). */
+  contactUnreadTotal?: number;
 }
 
 interface TeamMember {
@@ -593,9 +596,9 @@ export function UnifiedInbox() {
   // Set to true on every send so that all post-render scrolls are forced,
   // regardless of where the user was scrolled before they sent.
   const justSentRef = useRef(false);
-  /** Contact → remaining unread after marking a viewed conversation (blocks stale refetch inflate). */
-  const localRemainingUnreadByContactRef = useRef<Map<string, number>>(new Map());
-  const localRemainingClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  /** Conversations cleared in this session — blocks stale inbox refetch from restoring that row badge. */
+  const recentlyClearedConversationIdsRef = useRef<Set<string>>(new Set());
+  const recentlyClearedClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const scrollToBottom = useCallback(() => {
     const run = () => {
@@ -712,7 +715,7 @@ export function UnifiedInbox() {
       return mergeInboxUnreadPreservingLocalRead(
         previous,
         incoming,
-        localRemainingUnreadByContactRef.current,
+        recentlyClearedConversationIdsRef.current,
       );
     },
   });
@@ -1328,8 +1331,8 @@ export function UnifiedInbox() {
     return () => ro.disconnect();
   }, [selectedContactId, scrollToBottom]);
 
-  // Mark only the viewed conversation/thread as read. Sibling channels stay unread;
-  // contact badge becomes the remaining sum.
+  // Mark only the viewed conversation/thread as read. Sibling channels stay unread.
+  // Row badge uses that conversation's unreadCount (not contact aggregate).
   useEffect(() => {
     if (!viewedConversation?.id || !selectedContactId || !contactMatchesSelection) return;
     const contactId = selectedContactId;
@@ -1340,19 +1343,19 @@ export function UnifiedInbox() {
     });
     let cancelled = false;
 
-    const rememberLocalRemaining = () => {
-      localRemainingUnreadByContactRef.current.set(contactId, remainingUnread);
-      const existing = localRemainingClearTimersRef.current.get(contactId);
+    const rememberClearedConversation = () => {
+      recentlyClearedConversationIdsRef.current.add(conversationId);
+      const existing = recentlyClearedClearTimersRef.current.get(conversationId);
       if (existing) clearTimeout(existing);
       const timer = setTimeout(() => {
-        localRemainingUnreadByContactRef.current.delete(contactId);
-        localRemainingClearTimersRef.current.delete(contactId);
+        recentlyClearedConversationIdsRef.current.delete(conversationId);
+        recentlyClearedClearTimersRef.current.delete(conversationId);
       }, 60_000);
-      localRemainingClearTimersRef.current.set(contactId, timer);
+      recentlyClearedClearTimersRef.current.set(conversationId, timer);
     };
 
     void (async () => {
-      rememberLocalRemaining();
+      rememberClearedConversation();
       await queryClient.cancelQueries({ queryKey: ["/api/inbox"] });
       queryClient.setQueryData<InboxItem[]>(["/api/inbox"], (old) =>
         applyInboxConversationMarkRead(old, contactId, {
@@ -2080,7 +2083,13 @@ export function UnifiedInbox() {
       item.contact.phone?.includes(searchQuery) ||
       item.contact.email?.toLowerCase().includes(searchQuery.toLowerCase())
     );
-    if (filterTab === 'unread') result = result.filter(item => item.unreadCount > 0);
+    if (filterTab === 'unread') {
+      result = result.filter(
+        (item) =>
+          item.unreadCount > 0 ||
+          (item.contactUnreadTotal != null && item.contactUnreadTotal > 0),
+      );
+    }
     if (filterTab === 'mine') result = result.filter(item => item.contact.assignedTo === user?.id);
     if (selectedChannels.size < allChannels.length) {
       result = result.filter(item => selectedChannels.has(item.channel as Channel));
@@ -2486,7 +2495,12 @@ export function UnifiedInbox() {
           ) : (
             filteredInbox.map(item => {
               const fuStatus = getFollowUpStatus(item.contact.followUpDate);
-              const needsReply = item.conversation?.lastMessageDirection === 'inbound' && item.unreadCount > 0;
+              const rowUnread =
+                item.conversation?.unreadCount != null
+                  ? item.conversation.unreadCount
+                  : item.unreadCount;
+              const needsReply =
+                item.conversation?.lastMessageDirection === "inbound" && rowUnread > 0;
               const isOverdue = fuStatus === 'overdue';
               const bookedAppt = nextAppointmentByContact.get(item.contact.id);
               const crmTag = isCrmDisplayTag(item.contact.tag) ? item.contact.tag : null;
@@ -2520,8 +2534,8 @@ export function UnifiedInbox() {
                         {item.contact.name}
                       </span>
                       <span className={INBOX_ROW_TIME}>{formatTime(item.lastMessageAt)}</span>
-                      {item.unreadCount > 0 ? (
-                        <span className={INBOX_ROW_UNREAD_BADGE}>{item.unreadCount}</span>
+                      {rowUnread > 0 ? (
+                        <span className={INBOX_ROW_UNREAD_BADGE}>{rowUnread}</span>
                       ) : null}
                     </div>
                     <div className={INBOX_ROW_LINE2}>

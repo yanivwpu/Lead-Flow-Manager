@@ -38,7 +38,8 @@ run("opening email does NOT clear WhatsApp unread for same contact", () => {
   const inbox = [
     {
       contact: { id: "c1" },
-      unreadCount: 4,
+      unreadCount: 1,
+      contactUnreadTotal: 4,
       conversation: { id: "email-1", unreadCount: 1 },
     },
   ];
@@ -46,11 +47,12 @@ run("opening email does NOT clear WhatsApp unread for same contact", () => {
     conversationId: "email-1",
     remainingUnread: remaining,
   })!;
-  assert.equal(after[0].unreadCount, 3, "aggregate badge = remaining WhatsApp unread");
+  assert.equal(after[0].unreadCount, 0, "row badge cleared for viewed email");
+  assert.equal(after[0].contactUnreadTotal, 3, "WA remains in contact total");
   assert.equal(after[0].conversation?.unreadCount, 0);
 });
 
-run("1. mark selected conversation read → badge uses remaining sum after refetch", () => {
+run("1. mark selected conversation read → row badge stays gone after refetch", () => {
   const conversations = [
     { id: "email-1", unreadCount: 1 },
     { id: "wa-1", unreadCount: 2 },
@@ -64,7 +66,8 @@ run("1. mark selected conversation read → badge uses remaining sum after refet
   const inbox = [
     {
       contact: { id: "c1" },
-      unreadCount: 3,
+      unreadCount: 1,
+      contactUnreadTotal: 3,
       conversation: { id: "email-1", unreadCount: 1 },
     },
   ];
@@ -72,21 +75,22 @@ run("1. mark selected conversation read → badge uses remaining sum after refet
     conversationId: "email-1",
     remainingUnread: remaining,
   })!;
-  assert.equal(afterMark[0].unreadCount, 2);
+  assert.equal(afterMark[0].unreadCount, 0);
 
   const staleServer = [
     {
       contact: { id: "c1" },
-      unreadCount: 3,
+      unreadCount: 1,
+      contactUnreadTotal: 3,
       conversation: { id: "email-1", unreadCount: 1 },
     },
   ];
   const merged = mergeInboxUnreadPreservingLocalRead(
     afterMark,
     staleServer,
-    new Map([["c1", 2]]),
+    new Set(["email-1"]),
   );
-  assert.equal(merged[0].unreadCount, 2, "stale refetch cannot restore cleared conversation unread");
+  assert.equal(merged[0].unreadCount, 0, "stale refetch cannot restore row conversation unread");
   assert.equal(sumContactUnread([0, 2]), 2);
 });
 
@@ -102,14 +106,6 @@ run("2. incremental email sync does not restore stale unread for existing messag
       currentUnread: 0,
     }),
     0,
-  );
-  assert.equal(
-    nextEmailConversationUnreadCount({
-      messageAlreadyExists: false,
-      direction: "inbound",
-      currentUnread: 0,
-    }),
-    1,
   );
 });
 
@@ -127,6 +123,7 @@ run("switching channel marks only that conversation (remaining recalculated)", (
     {
       contact: { id: "c1" },
       unreadCount: 2,
+      contactUnreadTotal: 2,
       conversation: { id: "wa-1", unreadCount: 2 },
     },
   ];

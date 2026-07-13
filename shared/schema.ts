@@ -1381,7 +1381,13 @@ export type InboxItem = {
   channel: Channel;
   lastMessage: string;
   lastMessageAt: Date | null;
+  /**
+   * Unread for the conversation represented by this row (primary/latest thread).
+   * NOT the sum across all contact conversations.
+   */
   unreadCount: number;
+  /** Sum of unread across all conversations for this contact (filters / elsewhere). */
+  contactUnreadTotal?: number;
 };
 
 // ==========================================

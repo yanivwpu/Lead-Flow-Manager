@@ -2910,13 +2910,16 @@ export class DbStorage implements IStorage {
       
       const primaryConv = convs[0];
       if (primaryConv) {
+        const contactUnreadTotal = convs.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+        // Row badge = primary conversation unread only (not contact aggregate).
         inboxItems.push({
           contact,
           conversation: primaryConv,
           channel: (contact.primaryChannelOverride || contact.primaryChannel) as Channel,
           lastMessage: primaryConv.lastMessagePreview || '',
           lastMessageAt: primaryConv.lastMessageAt,
-          unreadCount: convs.reduce((sum, c) => sum + (c.unreadCount || 0), 0),
+          unreadCount: primaryConv.unreadCount || 0,
+          contactUnreadTotal,
         });
       } else {
         inboxItems.push({
@@ -2926,6 +2929,7 @@ export class DbStorage implements IStorage {
           lastMessage: '',
           lastMessageAt: null,
           unreadCount: 0,
+          contactUnreadTotal: 0,
         });
       }
     }

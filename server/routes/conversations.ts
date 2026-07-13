@@ -200,7 +200,7 @@ export function registerConversationRoutes(app: Express): void {
   });
 
   // Mark conversation as read — only the viewed conversation/thread.
-  // Contact-level inbox badge is a sum; sibling channels/threads stay unread.
+  // Sibling channels/threads stay unread. Inbox row badge uses that conversation's unread.
   app.post("/api/conversations/:id/read", async (req, res) => {
     try {
       if (!req.user) {
@@ -213,11 +213,56 @@ export function registerConversationRoutes(app: Express): void {
       if (conversation.userId !== req.user.id) {
         return res.status(403).json({ error: "Forbidden" });
       }
+
+      const { logEmailUnreadDiag } = await import("../emailChannel/emailUnreadDiag");
+      const beforeUnread = conversation.unreadCount || 0;
+      const siblingsBefore = await storage.getContactWithConversations(conversation.contactId);
+      const siblingSnapshot =
+        siblingsBefore?.conversations.map((c) => ({
+          conversationId: c.id,
+          channel: c.channel,
+          unreadCount: c.unreadCount || 0,
+        })) ?? [];
+
+      logEmailUnreadDiag("mark_read_before", {
+        selectedConversationId: conversation.id,
+        contactId: conversation.contactId,
+        channel: conversation.channel,
+        unreadCountBefore: beforeUnread,
+        siblings: siblingSnapshot,
+        contactUnreadTotalBefore: siblingSnapshot.reduce((s, c) => s + c.unreadCount, 0),
+      });
+
       await storage.updateConversation(req.params.id, { unreadCount: 0 });
+
+      const after = await storage.getConversation(req.params.id);
+      const siblingsAfter = await storage.getContactWithConversations(conversation.contactId);
+      const siblingAfterSnapshot =
+        siblingsAfter?.conversations.map((c) => ({
+          conversationId: c.id,
+          channel: c.channel,
+          unreadCount: c.unreadCount || 0,
+        })) ?? [];
+      const contactUnreadTotalAfter = siblingAfterSnapshot.reduce((s, c) => s + c.unreadCount, 0);
+
+      logEmailUnreadDiag("mark_read_after", {
+        selectedConversationId: conversation.id,
+        contactId: conversation.contactId,
+        channel: conversation.channel,
+        unreadCountAfter: after?.unreadCount || 0,
+        siblings: siblingAfterSnapshot,
+        contactUnreadTotalAfter,
+        inboxRowUnreadWouldBe:
+          siblingAfterSnapshot.find((c) => c.conversationId === conversation.id)?.unreadCount ?? 0,
+      });
+
       res.json({
         success: true,
         conversationId: conversation.id,
         contactId: conversation.contactId,
+        unreadCountBefore: beforeUnread,
+        unreadCountAfter: after?.unreadCount || 0,
+        contactUnreadTotalAfter,
       });
     } catch (error) {
       console.error("Error marking conversation as read:", error);
