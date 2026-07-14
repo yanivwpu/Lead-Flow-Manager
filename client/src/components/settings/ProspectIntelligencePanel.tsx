@@ -1,15 +1,18 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Brain,
   Check,
   Loader2,
+  Pencil,
   RefreshCw,
   Sparkles,
   AlertTriangle,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -40,6 +43,12 @@ import type {
   ProspectIntelligenceJobSummary,
   ProspectIntelligenceListItem,
 } from "@shared/prospectImport";
+import {
+  isValidProspectEmail,
+  isValidProspectPhone,
+  normalizeProspectEmailForSave,
+  normalizeProspectPhoneForSave,
+} from "@shared/prospectContactEnrichment";
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { credentials: "include", ...init });
@@ -145,9 +154,248 @@ type DetailDialogProps = {
   item: ProspectIntelligenceListItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onContactFieldsUpdated: (contactId: string, patch: { email?: string | null; phone?: string | null }) => void;
 };
 
-function ProspectIntelligenceDetailDialog({ item, open, onOpenChange }: DetailDialogProps) {
+type ContactFieldKind = "email" | "phone";
+
+function ProspectContactFieldRow(props: {
+  kind: ContactFieldKind;
+  label: string;
+  value: string | null | undefined;
+  contactId: string;
+  onSaved: (patch: { email?: string | null; phone?: string | null }) => void;
+}) {
+  const { kind, label, value, contactId, onSaved } = props;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value || ""));
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editing) setDraft(String(value || ""));
+  }, [value, editing]);
+
+  const status: "ready" | "missing" =
+    kind === "email"
+      ? isValidProspectEmail(value) ? "ready" : "missing"
+      : isValidProspectPhone(value) ? "ready" : "missing";
+  const missingLabel = kind === "email" ? "Missing email" : "Missing phone";
+
+  const saveMutation = useMutation({
+    mutationFn: async (nextRaw: string) => {
+      const trimmed = nextRaw.trim();
+      const body: { email?: string | null; phone?: string | null } = {};
+      if (kind === "email") {
+        if (!trimmed) {
+          body.email = null;
+        } else {
+          const normalized = normalizeProspectEmailForSave(trimmed);
+          if (!normalized) throw new Error("Enter a valid email address");
+          body.email = normalized;
+        }
+      } else {
+        if (!trimmed) {
+          body.phone = null;
+        } else {
+          const normalized = normalizeProspectPhoneForSave(trimmed);
+          if (!normalized) throw new Error("Enter a valid phone (at least 7 digits)");
+          body.phone = normalized;
+        }
+      }
+      // #region agent log
+      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
+        body: JSON.stringify({
+          sessionId: "32aec0",
+          runId: "pi-contact-edit",
+          hypothesisId: "H1",
+          location: "ProspectIntelligencePanel.tsx:saveMutation",
+          message: "PATCH existing contact (no create)",
+          data: {
+            kind,
+            contactIdPrefix: contactId.slice(0, 8),
+            clearing: trimmed.length === 0,
+            hasNormalized: Boolean(body.email || body.phone),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      const res = await fetch(`/api/contacts/${contactId}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((data as { error?: string }).error || "Failed to update contact");
+      }
+      // #region agent log
+      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
+        body: JSON.stringify({
+          sessionId: "32aec0",
+          runId: "pi-contact-edit",
+          hypothesisId: "H2",
+          location: "ProspectIntelligencePanel.tsx:saveOk",
+          message: "Contact PATCH succeeded",
+          data: {
+            kind,
+            contactIdPrefix: contactId.slice(0, 8),
+            httpStatus: res.status,
+            returnedIdPrefix:
+              typeof (data as { id?: string }).id === "string"
+                ? (data as { id: string }).id.slice(0, 8)
+                : null,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      return body;
+    },
+    onSuccess: (body) => {
+      setLocalError(null);
+      setEditing(false);
+      // #region agent log
+      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
+        body: JSON.stringify({
+          sessionId: "32aec0",
+          runId: "pi-contact-edit",
+          hypothesisId: "H3",
+          location: "ProspectIntelligencePanel.tsx:onSuccess",
+          message: "Refreshing modal outreach state",
+          data: {
+            kind,
+            emailReady:
+              kind === "email"
+                ? isValidProspectEmail(body.email)
+                : undefined,
+            phoneReady:
+              kind === "phone"
+                ? isValidProspectPhone(body.phone)
+                : undefined,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      onSaved(body);
+      toast({
+        title: kind === "email" ? "Email saved" : "Phone saved",
+        description: "Updated WhachatCRM contact.",
+      });
+    },
+    onError: (err: Error) => {
+      setLocalError(err.message);
+      toast({ title: "Could not save", description: err.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <div className="space-y-1" data-testid={`pi-contact-field-${kind}`}>
+      <div className="flex items-start gap-1.5">
+        <span className="text-gray-500 shrink-0 pt-0.5">{label}:</span>
+        {editing ? (
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+            <Input
+              autoFocus
+              type={kind === "email" ? "email" : "tel"}
+              className="h-8 max-w-[220px] text-sm"
+              value={draft}
+              placeholder={kind === "email" ? "name@company.com" : "+17865551234"}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                setLocalError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  saveMutation.mutate(draft);
+                }
+                if (e.key === "Escape") {
+                  setEditing(false);
+                  setLocalError(null);
+                  setDraft(String(value || ""));
+                }
+              }}
+              data-testid={`pi-contact-${kind}-input`}
+            />
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 bg-brand-green hover:bg-emerald-700"
+              disabled={saveMutation.isPending}
+              onClick={() => saveMutation.mutate(draft)}
+              data-testid={`pi-contact-${kind}-save`}
+            >
+              {saveMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-8 px-2"
+              disabled={saveMutation.isPending}
+              onClick={() => {
+                setEditing(false);
+                setLocalError(null);
+                setDraft(String(value || ""));
+              }}
+              aria-label="Cancel"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-center gap-1">
+            <span
+              className={
+                status === "missing" ? "text-amber-700 font-medium" : "text-gray-900"
+              }
+              data-testid={`pi-contact-${kind}-value`}
+            >
+              {status === "missing" ? missingLabel : String(value)}
+            </span>
+            {status === "missing" ? (
+              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800 text-[10px] px-1.5 py-0">
+                {kind === "email" ? "Email unavailable" : "Phone unavailable"}
+              </Badge>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 shrink-0 p-0 text-gray-500 hover:text-gray-900"
+              onClick={() => {
+                setDraft(String(value || ""));
+                setLocalError(null);
+                setEditing(true);
+              }}
+              aria-label={`Edit ${label.toLowerCase()}`}
+              data-testid={`pi-contact-${kind}-edit`}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
+      </div>
+      {localError ? <p className="text-xs text-red-600">{localError}</p> : null}
+    </div>
+  );
+}
+
+function ProspectIntelligenceDetailDialog({
+  item,
+  open,
+  onOpenChange,
+  onContactFieldsUpdated,
+}: DetailDialogProps) {
   const queryClient = useQueryClient();
   const [editMessage, setEditMessage] = useState("");
   const intel = item?.intelligence;
@@ -212,9 +460,21 @@ function ProspectIntelligenceDetailDialog({ item, open, onOpenChange }: DetailDi
         </DialogHeader>
 
         <div className="space-y-4 text-sm">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <p><span className="text-gray-500">Email:</span> {item.email || "—"}</p>
-            <p><span className="text-gray-500">Phone:</span> {item.phone || "—"}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ProspectContactFieldRow
+              kind="email"
+              label="Email"
+              value={item.email}
+              contactId={item.contactId}
+              onSaved={(patch) => onContactFieldsUpdated(item.contactId, patch)}
+            />
+            <ProspectContactFieldRow
+              kind="phone"
+              label="Phone"
+              value={item.phone}
+              contactId={item.contactId}
+              onSaved={(patch) => onContactFieldsUpdated(item.contactId, patch)}
+            />
             <p><span className="text-gray-500">Import tag:</span> {item.importTag || "—"}</p>
             <p><span className="text-gray-500">Import reason:</span> {item.importReason || "—"}</p>
             <p><span className="text-gray-500">Pipeline:</span> {item.pipelineStage || "—"}</p>
@@ -303,6 +563,7 @@ export function ProspectIntelligencePanel(props: {
   const [sortBy, setSortBy] = useState<"leadScore" | "priority" | "confidence" | "name">("leadScore");
   const [selected, setSelected] = useState<ProspectIntelligenceListItem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const dashboardQuery = useQuery({
     queryKey: ["/api/growth-tools/prospect-intelligence/dashboard"],
@@ -476,7 +737,31 @@ export function ProspectIntelligencePanel(props: {
         </div>
       )}
 
-      <ProspectIntelligenceDetailDialog item={selected} open={detailOpen} onOpenChange={setDetailOpen} />
+      <ProspectIntelligenceDetailDialog
+        item={selected}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        onContactFieldsUpdated={(contactId, patch) => {
+          setSelected((prev) =>
+            prev && prev.contactId === contactId ? { ...prev, ...patch } : prev,
+          );
+          queryClient.setQueriesData<{ items: ProspectIntelligenceListItem[] }>(
+            { queryKey: ["/api/growth-tools/prospect-intelligence"] },
+            (old) => {
+              if (!old?.items) return old;
+              return {
+                ...old,
+                items: old.items.map((row) =>
+                  row.contactId === contactId ? { ...row, ...patch } : row,
+                ),
+              };
+            },
+          );
+          void queryClient.invalidateQueries({
+            queryKey: ["/api/growth-tools/prospect-intelligence"],
+          });
+        }}
+      />
     </section>
   );
 }
