@@ -6,7 +6,10 @@ import assert from "node:assert/strict";
 import {
   buildProspectOutreachInboxHref,
   buildProspectOutreachSubject,
+  parseProspectOutreachComposePayload,
+  prospectOutreachPayloadDiag,
   resolveProspectApproveOutreachUi,
+  shouldStripProspectComposeQuery,
   titleCaseProspectName,
 } from "../shared/prospectContactEnrichment";
 
@@ -92,6 +95,88 @@ run("edited message survives approval payload shape", () => {
   };
   assert.equal(outreachPrefill.body, draftBeforeApprove);
   assert.match(outreachPrefill.subject, /Jives Media/);
+});
+
+run("manually-enriched email path still builds subject+body payload", () => {
+  const name = "smash interactive agency | digital marketing agency miami";
+  const approvedBody = "Approved Smash outreach draft — edited before approve.";
+  const payload = {
+    contactId: "contact-smash",
+    source: "prospect_intelligence" as const,
+    subject: buildProspectOutreachSubject(name),
+    body: approvedBody,
+    createdAt: Date.now(),
+  };
+  const diag = prospectOutreachPayloadDiag(payload);
+  assert.equal(diag.hasSubject, true);
+  assert.equal(diag.hasBody, true);
+  assert.ok(diag.subjectLength > 0);
+  assert.ok(diag.bodyLength > 0);
+  assert.match(payload.subject, /Smash Interactive Agency/i);
+});
+
+run("parse rejects mismatched contactId and accepts exact match", () => {
+  const raw = JSON.stringify({
+    contactId: "contact-a",
+    source: "prospect_intelligence",
+    subject: "Idea for Acme",
+    body: "Hello Acme",
+    createdAt: 1,
+  });
+  assert.equal(parseProspectOutreachComposePayload(raw, "contact-b"), null);
+  const ok = parseProspectOutreachComposePayload(raw, "contact-a");
+  assert.ok(ok);
+  assert.equal(ok?.subject, "Idea for Acme");
+  assert.equal(ok?.body, "Hello Acme");
+});
+
+run("do not strip compose=new until email reachable and handoff adopted", () => {
+  // Regression: stripQuery on missing email killed compose params while Manual banner still showed.
+  assert.equal(
+    shouldStripProspectComposeQuery({
+      composeNew: true,
+      emailReachable: false,
+      handoffAdopted: false,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldStripProspectComposeQuery({
+      composeNew: true,
+      emailReachable: true,
+      handoffAdopted: false,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldStripProspectComposeQuery({
+      composeNew: true,
+      emailReachable: true,
+      handoffAdopted: true,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldStripProspectComposeQuery({
+      composeNew: false,
+      emailReachable: true,
+      handoffAdopted: false,
+    }),
+    true,
+  );
+});
+
+run("existing-email and enriched-email payloads both include subject+body", () => {
+  const existing = {
+    body: "Jives body",
+    subject: buildProspectOutreachSubject("Jives Media"),
+  };
+  const enriched = {
+    body: "Smash body",
+    subject: buildProspectOutreachSubject("smash interactive"),
+  };
+  assert.equal(prospectOutreachPayloadDiag(existing as any).hasBody, true);
+  assert.equal(prospectOutreachPayloadDiag(enriched as any).hasSubject, true);
 });
 
 console.log("All prospect-approve-outreach tests passed.");

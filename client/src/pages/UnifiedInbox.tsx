@@ -18,6 +18,9 @@ import {
 import { inboxRowKey, isEmailConversationChannel } from "@shared/inboxRowModel";
 import {
   PROSPECT_OUTREACH_COMPOSE_STORAGE_KEY,
+  parseProspectOutreachComposePayload,
+  prospectOutreachPayloadDiag,
+  shouldStripProspectComposeQuery,
   type ProspectOutreachComposePayload,
 } from "@shared/prospectContactEnrichment";
 import { useSubscription } from "@/lib/subscription-context";
@@ -604,6 +607,8 @@ export function UnifiedInbox() {
   const forceNewEmailComposeRef = useRef(false);
   forceNewEmailComposeRef.current = forceNewEmailCompose;
   const pendingOutreachPrefillRef = useRef<ProspectOutreachComposePayload | null>(null);
+  /** True after subject+body from PI handoff have been written into compose state. */
+  const outreachHandoffAdoptedRef = useRef(false);
   const prevContactForComposeRef = useRef<string | null>(null);
   const messageInputRef = useRef(messageInput);
   messageInputRef.current = messageInput;
@@ -851,6 +856,16 @@ export function UnifiedInbox() {
     if (prev && prev !== selectedContactId) {
       setForceNewEmailCompose(false);
       pendingOutreachPrefillRef.current = null;
+      outreachHandoffAdoptedRef.current = false;
+      console.info(
+        JSON.stringify({
+          tag: "[ProspectOutreachHandoff]",
+          event: "draft_reset",
+          reason: "contact_changed",
+          contactId: selectedContactId,
+          composeMode: "new",
+        }),
+      );
     }
     prevContactForComposeRef.current = selectedContactId;
   }, [selectedContactId]);
@@ -883,32 +898,121 @@ export function UnifiedInbox() {
       });
     };
 
-    const readOutreachPrefill = () => {
+    const logHandoff = (event: string, data: Record<string, unknown>) => {
+      console.info(
+        JSON.stringify({
+          tag: "[ProspectOutreachHandoff]",
+          event,
+          contactId: selectedContactId,
+          composeMode: composeNew ? "new" : "reply",
+          ...data,
+        }),
+      );
+      // #region agent log
+      if (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)) {
+        fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
+          body: JSON.stringify({
+            sessionId: "32aec0",
+            runId: "pi-outreach-handoff",
+            hypothesisId: "H-handoff",
+            location: "UnifiedInbox.tsx:outreachHandoff",
+            message: event,
+            data: { contactIdPrefix: selectedContactId.slice(0, 8), ...data },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+      }
+      // #endregion
+    };
+
+    const loadOutreachPayload = (): ProspectOutreachComposePayload | null => {
+      if (pendingOutreachPrefillRef.current?.contactId === selectedContactId) {
+        return pendingOutreachPrefillRef.current;
+      }
       try {
         const raw = sessionStorage.getItem(PROSPECT_OUTREACH_COMPOSE_STORAGE_KEY);
-        if (!raw) return;
-        const parsed = JSON.parse(raw) as ProspectOutreachComposePayload;
-        if (parsed.contactId !== selectedContactId) return;
+        const parsed = parseProspectOutreachComposePayload(raw, selectedContactId);
+        if (!parsed) {
+          logHandoff("payload_loaded", {
+            found: false,
+            emailReachable: contactReachableChannels.includes("email"),
+            ...prospectOutreachPayloadDiag(null),
+          });
+          return null;
+        }
         pendingOutreachPrefillRef.current = parsed;
+        logHandoff("payload_loaded", {
+          found: true,
+          emailReachable: contactReachableChannels.includes("email"),
+          ...prospectOutreachPayloadDiag(parsed),
+        });
+        return parsed;
+      } catch {
+        return null;
+      }
+    };
+
+    const adoptOutreachPayload = (payload: ProspectOutreachComposePayload) => {
+      if (outreachHandoffAdoptedRef.current) return true;
+      setForceNewEmailCompose(true);
+      setSendChannelUi("email");
+      if (payload.subject) setEmailSubject(payload.subject);
+      if (payload.body?.trim()) {
+        setMessageInput(payload.body);
+      }
+      // Keep payload briefly so the composer-scope effect can persist the draft scope key.
+      pendingOutreachPrefillRef.current = payload;
+      outreachHandoffAdoptedRef.current = true;
+      try {
         sessionStorage.removeItem(PROSPECT_OUTREACH_COMPOSE_STORAGE_KEY);
       } catch {
         /* ignore */
       }
+      logHandoff("draft_hydrated", {
+        ...prospectOutreachPayloadDiag(payload),
+        manualMode: true,
+      });
+      logHandoff("payload_consumed", {
+        ...prospectOutreachPayloadDiag(payload),
+      });
+      logHandoff("manual_mode_initialized", { forceNewEmailCompose: true });
+      return true;
     };
 
+    // Wait for contact channel data before deciding — empty list means still loading.
     if (contactReachableChannels.length === 0) return;
 
     if (composeNew && wantEmail) {
-      if (!contactReachableChannels.includes("email")) {
-        stripQuery();
+      const emailReachable = contactReachableChannels.includes("email");
+      const payload = loadOutreachPayload();
+
+      if (!emailReachable) {
+        // Keep compose=new in the URL until email is on the contact (manual enrich race).
+        logHandoff("waiting_for_email", {
+          emailReachable: false,
+          ...prospectOutreachPayloadDiag(payload),
+        });
         return;
       }
-      readOutreachPrefill();
-      setForceNewEmailCompose(true);
-      setSendChannelUi("email");
-      const pending = pendingOutreachPrefillRef.current;
-      if (pending?.subject) setEmailSubject(pending.subject);
-      stripQuery();
+
+      if (payload && !outreachHandoffAdoptedRef.current) {
+        adoptOutreachPayload(payload);
+      } else {
+        setForceNewEmailCompose(true);
+        setSendChannelUi("email");
+      }
+
+      if (
+        shouldStripProspectComposeQuery({
+          composeNew: true,
+          emailReachable: true,
+          handoffAdopted: outreachHandoffAdoptedRef.current || !payload,
+        })
+      ) {
+        stripQuery();
+      }
       if (focusComposer) focusComposerInput();
       return;
     }
@@ -933,7 +1037,12 @@ export function UnifiedInbox() {
       stripQuery();
       focusComposerInput();
     }
-  }, [selectedContactId, contactReachableChannels, setLocation, buildInboxHref]);
+  }, [
+    selectedContactId,
+    contactReachableChannels,
+    setLocation,
+    buildInboxHref,
+  ]);
 
   // Mirror backend getPrimaryChannel, then clamp to channels this contact can actually use.
   // Use displayContact (matched detail or inbox list) — never previous-contact placeholder data.
@@ -1077,6 +1186,7 @@ export function UnifiedInbox() {
       setMessageInput(pending.body);
       if (pending.subject) setEmailSubject(pending.subject);
       pendingOutreachPrefillRef.current = null;
+      outreachHandoffAdoptedRef.current = true;
       logComposerDraftTrace({
         event: "load",
         activeContactId: selectedContactId,
@@ -1084,6 +1194,22 @@ export function UnifiedInbox() {
         source: "manual",
         conversationId: null,
       });
+      console.info(
+        JSON.stringify({
+          tag: "[ProspectOutreachHandoff]",
+          event: "draft_hydrated",
+          writer: "composerScopeEffect",
+          contactId: selectedContactId,
+          ...prospectOutreachPayloadDiag(pending),
+          composeMode: "new",
+        }),
+      );
+      return;
+    }
+
+    // After PI handoff already hydrated React state, never overwrite with empty local draft.
+    if (outreachHandoffAdoptedRef.current && messageInputRef.current.trim()) {
+      saveComposerDraft(composerScopeKey, messageInputRef.current, "manual");
       return;
     }
 

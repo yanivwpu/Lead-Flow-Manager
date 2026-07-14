@@ -143,3 +143,50 @@ export function buildProspectOutreachInboxHref(contactId: string): string {
   return `/app/inbox/${id}?channel=email&compose=new&focusComposer=1`;
 }
 
+/** Parse + validate PI outreach handoff payload (safe; no body content returned beyond lengths). */
+export function parseProspectOutreachComposePayload(
+  raw: string | null | undefined,
+  expectedContactId: string,
+): ProspectOutreachComposePayload | null {
+  if (!raw || !expectedContactId) return null;
+  try {
+    const parsed = JSON.parse(raw) as ProspectOutreachComposePayload;
+    if (!parsed || typeof parsed !== "object") return null;
+    if (parsed.source !== "prospect_intelligence") return null;
+    if (String(parsed.contactId || "") !== expectedContactId) return null;
+    return {
+      contactId: String(parsed.contactId),
+      source: "prospect_intelligence",
+      subject: typeof parsed.subject === "string" ? parsed.subject : "",
+      body: typeof parsed.body === "string" ? parsed.body : "",
+      createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * compose=new must stay in the URL until email is reachable and handoff is adopted.
+ * Stripping earlier drops the handoff while forceNewEmailCompose can still stay true
+ * from the initial URL snapshot — blank subject/body with Manual banner showing.
+ */
+export function shouldStripProspectComposeQuery(input: {
+  composeNew: boolean;
+  emailReachable: boolean;
+  handoffAdopted: boolean;
+}): boolean {
+  if (!input.composeNew) return true;
+  if (!input.emailReachable) return false;
+  return input.handoffAdopted;
+}
+
+export function prospectOutreachPayloadDiag(payload: ProspectOutreachComposePayload | null) {
+  return {
+    hasSubject: Boolean(payload?.subject?.trim()),
+    hasBody: Boolean(payload?.body?.trim()),
+    subjectLength: payload?.subject?.length ?? 0,
+    bodyLength: payload?.body?.length ?? 0,
+  };
+}
+

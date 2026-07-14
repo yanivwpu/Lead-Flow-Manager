@@ -53,6 +53,7 @@ import {
   normalizeProspectEmailForSave,
   normalizeProspectPhoneForSave,
   PROSPECT_OUTREACH_COMPOSE_STORAGE_KEY,
+  prospectOutreachPayloadDiag,
   resolveProspectApproveOutreachUi,
   type ProspectOutreachComposePayload,
 } from "@shared/prospectContactEnrichment";
@@ -514,12 +515,34 @@ function ProspectIntelligenceDetailDialog({
     }
     console.info(
       JSON.stringify({
-        tag: "[BrowserPermissionAudit]",
-        event: "native_email_outreach_navigate",
-        note: "no_localhost_ingest",
-        contactIdPrefix: item.contactId.slice(0, 8),
+        tag: "[ProspectOutreachHandoff]",
+        event: "payload_created",
+        contactId: item.contactId,
+        prospectIntelligenceId: item.contactId,
+        ...prospectOutreachPayloadDiag(payload),
+        composeMode: "new",
       }),
     );
+    // #region agent log
+    if (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)) {
+      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
+        body: JSON.stringify({
+          sessionId: "32aec0",
+          runId: "pi-outreach-handoff",
+          hypothesisId: "H-handoff",
+          location: "ProspectIntelligencePanel.tsx:openNativeEmailOutreach",
+          message: "payload_created",
+          data: {
+            contactIdPrefix: item.contactId.slice(0, 8),
+            ...prospectOutreachPayloadDiag(payload),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    }
+    // #endregion
     onOpenChange(false);
     setLocation(buildProspectOutreachInboxHref(item.contactId));
   };
