@@ -8,7 +8,7 @@ import {
   type TemplateCarouselDefaultMediaMap,
 } from "@shared/metaTemplateSend";
 import { waUploadFileSizeCheck, waUploadTooLargeMessage } from "@shared/whatsappMediaLimits";
-import { Link, useRoute, useLocation } from "wouter";
+import { Link, useRoute, useLocation, useSearch } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
@@ -432,6 +432,7 @@ function getFollowUpStatus(followUpDate: string | null | undefined): 'overdue' |
 export function UnifiedInbox() {
   const [match, params] = useRoute("/app/inbox/:contactId?");
   const [pathname, setLocation] = useLocation();
+  const searchString = useSearch();
   const { user } = useAuth();
   const { t } = useTranslation();
 
@@ -670,13 +671,15 @@ export function UnifiedInbox() {
       ? String(params.contactId)
       : null;
 
-  /** Email thread identity from `?conversation=` — each Gmail thread is its own inbox row. */
+  /**
+   * Email thread identity from `?conversation=`.
+   * MUST depend on `searchString` (wouter useSearch) — pathname alone does not change when
+   * switching sibling threads for the same contactId, which previously left selection stuck.
+   */
   const selectedConversationId = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    const id = new URLSearchParams(window.location.search).get("conversation");
+    const id = new URLSearchParams(searchString || "").get("conversation");
     return id && id.trim() ? id.trim() : null;
-    // pathname changes on setLocation; also re-read when contact changes
-  }, [pathname, selectedContactId]);
+  }, [searchString]);
 
   const buildInboxHref = useCallback((contactId: string, conversationId?: string | null) => {
     if (conversationId) {
@@ -1012,12 +1015,17 @@ export function UnifiedInbox() {
   const activeConversationId = selectionBase.activeConversationId;
 
   // Lock sticky to the conversation currently being viewed (once resolved).
+  // Explicit URL conversation always wins and refreshes sticky for passive inbox refreshes.
   useEffect(() => {
     if (!selectedContactId || !activeConversationId) return;
+    if (selectedConversationId) {
+      stickyConversationIdRef.current = selectedConversationId;
+      return;
+    }
     if (!stickyConversationIdRef.current) {
       stickyConversationIdRef.current = activeConversationId;
     }
-  }, [selectedContactId, activeConversationId]);
+  }, [selectedContactId, activeConversationId, selectedConversationId]);
 
   const composerScopeKey = useMemo(() => {
     if (!selectedContactId) return null;
@@ -2703,12 +2711,39 @@ export function UnifiedInbox() {
               <div
                 key={rowId}
                 onClick={() => {
-                  stickyConversationIdRef.current = null;
-                  stickyContactIdRef.current = null;
-                  clearStickyAndOpenNewest();
-                  const convId =
-                    isEmailRow && item.conversation?.id ? item.conversation.id : null;
-                  setLocation(buildInboxHref(item.contact.id, convId));
+                  // Explicit row click always wins over sticky / newest-primary.
+                  const convId = item.conversation?.id?.trim() || null;
+                  stickyContactIdRef.current = item.contact.id;
+                  stickyConversationIdRef.current = convId;
+                  setStickyEpoch((n) => n + 1);
+                  // #region agent log
+                  fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
+                    body: JSON.stringify({
+                      sessionId: "32aec0",
+                      runId: "inbox-sibling-click",
+                      hypothesisId: "H-sibling",
+                      location: "UnifiedInbox.tsx:rowClick",
+                      message: "Inbox row click selection",
+                      data: {
+                        contactIdPrefix: item.contact.id.slice(0, 8),
+                        convIdPrefix: convId ? convId.slice(0, 8) : null,
+                        isEmailRow,
+                        prevSelectedConvPrefix: selectedConversationId
+                          ? selectedConversationId.slice(0, 8)
+                          : null,
+                      },
+                      timestamp: Date.now(),
+                    }),
+                  }).catch(() => {});
+                  // #endregion
+                  setLocation(
+                    buildInboxHref(
+                      item.contact.id,
+                      isEmailRow ? convId : null,
+                    ),
+                  );
                 }}
                 className={inboxConversationRowChromeClassName({
                   selected: isSelected,

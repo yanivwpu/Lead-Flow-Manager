@@ -414,22 +414,23 @@ export function analyzeConversation(
 
   const scoring = scoreLead(messages, opts?.businessKnowledge ?? { industry: opts?.industry }, { isRealEstate });
 
-  const conversationDisqualifies =
-    scoring.bucket === "unqualified" ||
-    scoring.score < MIN_HOT_TAG_SCORE ||
-    scoring.mediaOnly;
-
+  /**
+   * Contact-level CRM score is the source of truth for Hot/Warm display & tagging.
+   * A weak sibling thread (generic/system email) must NOT wipe a strong CRM score.
+   * Conversation-only scoring is kept separately via conversationScore for diagnostics.
+   */
   let displayBucket: LeadBucket = scoring.bucket;
   let displayScore = scoring.score;
   let scoreSource: "crm" | "conversation" = "conversation";
 
-  if (crmScore != null && !conversationDisqualifies) {
+  if (crmScore != null) {
     const mergedScore = Math.max(crmScore, scoring.score);
-    displayBucket = bucketFromNumericScore(mergedScore);
     displayScore = mergedScore;
-    scoreSource = mergedScore === crmScore ? "crm" : "conversation";
+    displayBucket = bucketFromNumericScore(mergedScore);
+    scoreSource = mergedScore === crmScore && scoring.score <= crmScore ? "crm" : "conversation";
+    // Keep hot floor consistent with CRM aggregation (never invent unqualified from merge).
     if (displayBucket === "hot" && displayScore < MIN_HOT_TAG_SCORE) {
-      displayBucket = "unqualified";
+      displayBucket = bucketFromNumericScore(displayScore);
     }
   }
 
@@ -474,7 +475,7 @@ export function analyzeConversation(
       confidence01,
       signals: scoring.signals,
       scoreSource,
-      conversationScore: scoreSource === "crm" ? scoring.score : undefined,
+      conversationScore: scoring.score,
       tagDiagnostics,
       mediaOnly: scoring.mediaOnly,
     },

@@ -7,8 +7,8 @@ import { channelService } from "../channelService";
 import { scheduleHubSpotAutoSync, contactPatchAffectsHubSpot } from "../hubspotAutoSync";
 import { withAutomationSendGuard, type AutomationSendGuardSource } from "../automationSendGuard";
 import {
-  isQualificationDowngrade,
   MIN_HOT_TAG_SCORE,
+  shouldApplySystemScoreTag,
   systemTagForQualification,
 } from "@shared/leadQualification";
 import OpenAI from "openai";
@@ -522,36 +522,39 @@ export function registerContactRoutes(app: Express): void {
       const desiredTag = systemTagForQualification(bucketTyped, numericScore);
 
       const oldTag = (contact as any).tag as string;
+      const scoreSource =
+        typeof req.body?.scoreSource === "string" ? req.body.scoreSource : null;
 
-      if (!desiredTag) {
-        return res.json({
-          applied: false,
-          skipped: true,
-          reason: "bucket_not_eligible",
-          oldTag,
-          newTag: null,
-          tagDiagnostics,
-        });
-      }
+      const policy = shouldApplySystemScoreTag({
+        desiredTag,
+        currentTag: oldTag,
+        crmLeadScore:
+          typeof contact.leadScore === "number" && Number.isFinite(contact.leadScore)
+            ? contact.leadScore
+            : null,
+        scoreSource,
+        confidence,
+      });
 
-      const downgrade = isQualificationDowngrade(desiredTag, oldTag);
-      if (!downgrade && (confidence == null || confidence < 0.75)) {
+      if (!policy.apply) {
         console.info("[system-score-tag] skipped", {
           contactId: contact.id,
-          reason: "confidence_below_threshold",
+          reason: policy.reason,
           oldTag,
           bucket,
           score,
           confidence,
+          scoreSource,
+          crmLeadScore: contact.leadScore ?? null,
           tagDiagnostics,
           reasons: reasons.slice(0, 4),
         });
         return res.json({
           applied: false,
           skipped: true,
-          reason: "confidence_below_threshold",
+          reason: policy.reason,
           oldTag,
-          newTag: null,
+          newTag: desiredTag,
           bucket,
           score,
           confidence,
@@ -595,19 +598,6 @@ export function registerContactRoutes(app: Express): void {
         });
       }
 
-      if ((oldTag || "").trim() === desiredTag) {
-        return res.json({
-          applied: false,
-          skipped: true,
-          reason: "already_set",
-          oldTag,
-          newTag: desiredTag,
-          bucket,
-          score,
-          confidence,
-        });
-      }
-
       const updated = await storage.updateContact(contact.id, { tag: desiredTag });
       scheduleHubSpotAutoSync(req.user.id, contact.id);
 
@@ -618,10 +608,10 @@ export function registerContactRoutes(app: Express): void {
         bucket,
         score,
         confidence,
-        downgrade,
+        scoreSource,
         reasons: reasons.slice(0, 4),
         tagDiagnostics,
-        reason: downgrade ? "downgrade_applied" : "eligible_and_confident",
+        reason: policy.reason,
       });
 
       res.json({

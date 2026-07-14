@@ -1603,6 +1603,7 @@ export function InboxLeadDetailsPanel({
   }, [intel.leadScoreDetails, contact.pipelineStage, contactPipelineStageOptions, stageSignals]);
 
   // ── Safe system score auto-tag (server-enforced) ──────────────────────────
+  // Never auto-downgrade Hot/Warm from a single conversation view (sibling emails).
   const systemScoreTagKeyRef = useRef<string>("");
   useEffect(() => {
     const d = intel.leadScoreDetails;
@@ -1615,7 +1616,24 @@ export function InboxLeadDetailsPanel({
     if (!desiredTag) return;
 
     const isDowngrade = isQualificationDowngrade(desiredTag, contact.tag);
-    if (!isDowngrade && (d.confidence01 ?? 0) < 0.75) return;
+    if (isDowngrade) {
+      console.info(
+        JSON.stringify({
+          tag: "[LeadScoreAudit]",
+          event: "classification_changed",
+          writer: "InboxLeadDetailsPanel.systemScoreTag",
+          reason: "auto_downgrade_blocked_client",
+          contactId: contact.id,
+          previousClassification: contact.tag,
+          newClassification: desiredTag,
+          previousScore: contact.leadScore ?? null,
+          newScore: d.score,
+          scoreSource: d.scoreSource ?? null,
+        }),
+      );
+      return;
+    }
+    if ((d.confidence01 ?? 0) < 0.75) return;
 
     const key = `${contact.id}:${desiredTag}:${Math.round((d.confidence01 ?? 0) * 100)}:${d.score}`;
     if (systemScoreTagKeyRef.current === key) return;
@@ -1631,6 +1649,8 @@ export function InboxLeadDetailsPanel({
         confidence: d.confidence01,
         reasons: d.reasons,
         tagDiagnostics: d.tagDiagnostics,
+        scoreSource: d.scoreSource ?? "conversation",
+        conversationScore: d.conversationScore,
       }),
     })
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
@@ -1656,7 +1676,7 @@ export function InboxLeadDetailsPanel({
         }
       })
       .catch(() => {});
-  }, [contact.id, intel.leadScoreDetails, contact.tag, onUpdateContact, queryClient]);
+  }, [contact.id, intel.leadScoreDetails, contact.tag, contact.leadScore, onUpdateContact, queryClient]);
 
   const completeAction = (actionType: string, toastMsg: string) => {
     setFadingAction(actionType);

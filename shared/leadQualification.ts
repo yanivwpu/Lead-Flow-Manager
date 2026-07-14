@@ -52,6 +52,45 @@ export function isQualificationDowngrade(
   return cur === "Hot Lead" || cur === "Warm Lead";
 }
 
+/**
+ * Policy for `/api/contacts/:id/system-score-tag`.
+ * Conversation-scoped Copilot scoring must NEVER auto-downgrade Hot/Warm → Unqualified.
+ * Contact-level CRM score (lead_score) is the source of truth against weak sibling threads.
+ */
+export function shouldApplySystemScoreTag(input: {
+  desiredTag: "Hot Lead" | "Warm Lead" | "Unqualified" | null;
+  currentTag: string | null | undefined;
+  crmLeadScore?: number | null;
+  scoreSource?: "crm" | "conversation" | string | null;
+  confidence?: number | null;
+}): { apply: boolean; reason: string } {
+  const desired = input.desiredTag;
+  if (!desired) return { apply: false, reason: "bucket_not_eligible" };
+
+  const current = (input.currentTag || "").trim();
+  if (current === desired) return { apply: false, reason: "already_set" };
+
+  const downgrade = isQualificationDowngrade(desired, current);
+  if (downgrade) {
+    // Never erase Hot/Warm from a weak sibling / conversation-only view.
+    return { apply: false, reason: "auto_downgrade_blocked" };
+  }
+
+  const crm =
+    typeof input.crmLeadScore === "number" && Number.isFinite(input.crmLeadScore)
+      ? input.crmLeadScore
+      : null;
+  if (crm != null && crm >= MIN_HOT_TAG_SCORE && desired === "Unqualified") {
+    return { apply: false, reason: "crm_score_blocks_unqualified" };
+  }
+
+  if ((input.confidence == null || input.confidence < 0.75) && !downgrade) {
+    return { apply: false, reason: "confidence_below_threshold" };
+  }
+
+  return { apply: true, reason: "eligible_and_confident" };
+}
+
 export type ConversationActivityStats = {
   inbound: number;
   outbound: number;
