@@ -6,7 +6,6 @@ import { normalizeEmailAddress } from "@shared/emailChannel";
 import { authenticateGmailPubSubRequest } from "../emailChannel/gmailPubSubAuth";
 import {
   logGmailPushEvent,
-  logGmailPushE2EEvent,
   redactEmailForLog,
   resolveGmailPubSubConfig,
 } from "../emailChannel/gmailPushConfig";
@@ -42,17 +41,6 @@ function decodePubSubData(dataB64: string): GmailNotificationData | null {
 
 export function registerGmailPubSubWebhookRoutes(app: Express): void {
   app.post("/api/webhooks/gmail/pubsub", async (req: Request, res: Response) => {
-    // #region agent log
-    logGmailPushE2EEvent("webhook_http_received", {
-      hypothesisId: "H-A",
-      method: req.method,
-      path: req.path,
-      hasAuthorizationHeader: Boolean(req.headers.authorization),
-      contentType: String(req.headers["content-type"] || ""),
-      bodyHasMessage: Boolean((req.body as PubSubPushBody)?.message),
-    });
-    // #endregion
-
     const auth = await authenticateGmailPubSubRequest(req.headers.authorization);
     if (!auth.ok) {
       return res.status(auth.status).json({ error: auth.reason });
@@ -91,17 +79,6 @@ export function registerGmailPubSubWebhookRoutes(app: Express): void {
         ? String(decoded.historyId).trim()
         : null;
 
-    // #region agent log
-    logGmailPushE2EEvent("notification_decoded", {
-      hypothesisId: "H-C",
-      pubsubMessageId: messageId || null,
-      emailRedacted: redactEmailForLog(emailNorm || decoded.emailAddress),
-      notificationHistoryId: historyId,
-      hasEmail: Boolean(emailNorm),
-      hasHistoryId: Boolean(historyId),
-    });
-    // #endregion
-
     if (!emailNorm || !historyId) {
       logGmailPushEvent("payload_invalid", {
         pubsubMessageId: messageId || null,
@@ -118,42 +95,11 @@ export function registerGmailPubSubWebhookRoutes(app: Express): void {
         emailRedacted: redactEmailForLog(emailNorm),
         notificationHistoryId: historyId,
       });
-      // #region agent log
-      logGmailPushE2EEvent("mailbox_not_found", {
-        hypothesisId: "H-C",
-        pubsubMessageId: messageId || null,
-        emailRedacted: redactEmailForLog(emailNorm),
-        notificationHistoryId: historyId,
-      });
-      // #endregion
       logGmailPushEvent("acked", { pubsubMessageId: messageId || null, result: "mailbox_not_found" });
       return res.status(204).send();
     }
 
-    // #region agent log
-    logGmailPushE2EEvent("mailbox_matched", {
-      hypothesisId: "H-C",
-      mailboxId: mailbox.id,
-      workspaceId: mailbox.workspaceUserId,
-      emailRedacted: redactEmailForLog(mailbox.emailAddress),
-      syncStatus: mailbox.syncStatus,
-      syncCursor: mailbox.syncCursor ?? null,
-      notificationHistoryId: historyId,
-      gmailWatchStatus: mailbox.gmailWatchStatus,
-    });
-    // #endregion
-
     // Durable pending flag + async sync; ACK immediately.
-    // #region agent log
-    logGmailPushE2EEvent("trigger_requested", {
-      hypothesisId: "H-D",
-      mailboxId: mailbox.id,
-      workspaceId: mailbox.workspaceUserId,
-      source: "push",
-      notificationHistoryId: historyId,
-      storedSyncCursor: mailbox.syncCursor ?? null,
-    });
-    // #endregion
     scheduleMailboxIncrementalSync({
       mailboxId: mailbox.id,
       source: "push",
@@ -174,13 +120,5 @@ export function registerGmailPubSubWebhookRoutes(app: Express): void {
     });
 
     return res.status(204).send();
-  });
-
-  // Emitted only after POST /api/webhooks/gmail/pubsub is mounted (still inside registerRoutes, before SPA).
-  logGmailPushE2EEvent("route_registered", {
-    hypothesisId: "H-A",
-    path: "/api/webhooks/gmail/pubsub",
-    method: "POST",
-    beforeServeStatic: true,
   });
 }

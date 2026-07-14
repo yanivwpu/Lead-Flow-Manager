@@ -12,7 +12,6 @@ import {
 } from "./mailboxStore";
 import {
   GMAIL_WATCH_RENEW_WITHIN_MS,
-  logGmailPushE2EEvent,
   logGmailWatchEvent,
   resolveGmailPubSubConfig,
 } from "./gmailPushConfig";
@@ -77,22 +76,6 @@ export async function ensureGmailWatch(mailboxId: string): Promise<{
     mailbox.gmailWatchExpiration &&
     !shouldRenewGmailWatch(mailbox.gmailWatchExpiration)
   ) {
-    // #region agent log
-    logGmailPushE2EEvent("watch_state", {
-      hypothesisId: "H-A",
-      mailboxId: mailbox.id,
-      workspaceId: mailbox.workspaceUserId,
-      gmailWatchStatus: mailbox.gmailWatchStatus,
-      gmailWatchExpiration: mailbox.gmailWatchExpiration.toISOString(),
-      gmailWatchLastRegisteredAt: mailbox.gmailWatchLastRegisteredAt?.toISOString?.() ?? null,
-      syncCursor: mailbox.syncCursor ?? null,
-      observedRemoteHistoryId: mailbox.observedRemoteHistoryId ?? null,
-      gmailWatchLastNotificationAt: mailbox.gmailWatchLastNotificationAt?.toISOString?.() ?? null,
-      renewed: false,
-      register_ok: false,
-      reason: "already_active",
-    });
-    // #endregion
     return { ok: true, status: "active", renewed: false };
   }
 
@@ -141,21 +124,6 @@ export async function ensureGmailWatch(mailboxId: string): Promise<{
       syncCursorPreserved: fresh.syncCursor ?? null,
       status,
     });
-
-    // #region agent log
-    logGmailPushE2EEvent("watch_state", {
-      hypothesisId: "H-A",
-      mailboxId,
-      workspaceId: fresh.workspaceUserId,
-      gmailWatchStatus: status,
-      gmailWatchExpiration: watch.expiration.toISOString(),
-      gmailWatchHistoryId: watch.historyId,
-      syncCursor: fresh.syncCursor ?? null,
-      renewed: true,
-      register_ok: !isRenewal,
-      renewal_ok: isRenewal,
-    });
-    // #endregion
 
     return { ok: true, status, renewed: true };
   } catch (err) {

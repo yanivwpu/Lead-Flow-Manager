@@ -15,7 +15,6 @@ import {
 import { runIncrementalEmailSync } from "./syncService";
 import {
   EMAIL_SYNC_LOCK_LEASE_MS,
-  logGmailPushE2EEvent,
   logGmailSyncTriggerEvent,
 } from "./gmailPushConfig";
 
@@ -119,26 +118,8 @@ async function maybeRunMailboxIncrementalSync(
       mailboxId,
       triggerSource: source,
     });
-    // #region agent log
-    logGmailPushE2EEvent("lease_deferred", {
-      hypothesisId: "H-D",
-      mailboxId,
-      triggerSource: source,
-      reason: "sync_already_running",
-    });
-    // #endregion
     return false;
   }
-
-  // #region agent log
-  logGmailPushE2EEvent("lease_acquired", {
-    hypothesisId: "H-D",
-    mailboxId,
-    triggerSource: source,
-    leaseMs: EMAIL_SYNC_LOCK_LEASE_MS,
-    wait,
-  });
-  // #endregion
 
   if (wait) {
     await runLockedMailboxSyncLoop(mailboxId, owner, source);

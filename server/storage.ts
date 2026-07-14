@@ -2915,66 +2915,6 @@ export class DbStorage implements IStorage {
 
       if (primaryConv) {
         const contactUnreadTotal = convs.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
-        const emailSiblings = convs.filter((c) => c.channel === "email");
-        if (emailSiblings.length > 1) {
-          // #region agent log
-          const siblingPayload = {
-            message: "[GmailPushE2E] sibling_conversations_loaded",
-            level: "info",
-            tag: "[GmailPushE2E]",
-            event: "sibling_conversations_loaded",
-            hypothesisId: "H-H",
-            contactId: contact.id,
-            siblingCount: emailSiblings.length,
-            siblings: emailSiblings.map((c, index) => ({
-              index,
-              conversationId: c.id,
-              channel: c.channel,
-              channelAccountId: c.channelAccountId ?? null,
-              subjectPresent: Boolean(c.subject),
-              lastMessageAt: c.lastMessageAt?.toISOString?.() ?? null,
-              updatedAt: c.updatedAt?.toISOString?.() ?? null,
-              unreadCount: c.unreadCount ?? 0,
-              status: c.status,
-              externalThreadIdPresent: Boolean(c.externalThreadId),
-              lastMessageDirection: c.lastMessageDirection ?? null,
-            })),
-          };
-          console.log(JSON.stringify(siblingPayload));
-          console.error("[GmailPushE2E] sibling_conversations_loaded");
-          const primaryPayload = {
-            message: "[GmailPushE2E] primary_conversation_selected",
-            level: "info",
-            tag: "[GmailPushE2E]",
-            event: "primary_conversation_selected",
-            hypothesisId: "H-H",
-            contactId: contact.id,
-            primaryConversationId: primaryConv.id,
-            primaryLastMessageAt: primaryConv.lastMessageAt?.toISOString?.() ?? null,
-            primaryUnreadCount: primaryConv.unreadCount ?? 0,
-            primarySubjectPresent: Boolean(primaryConv.subject),
-            orderBy: "lastMessageAt_desc_then_selectPrimaryConversation",
-          };
-          console.log(JSON.stringify(primaryPayload));
-          console.error("[GmailPushE2E] primary_conversation_selected");
-          const inboxPayload = {
-            message: "[GmailPushE2E] inbox_payload_built",
-            level: "info",
-            tag: "[GmailPushE2E]",
-            event: "inbox_payload_built",
-            hypothesisId: "H-H",
-            contactId: contact.id,
-            conversationId: primaryConv.id,
-            lastMessageAt: primaryConv.lastMessageAt?.toISOString?.() ?? null,
-            unreadCount: primaryConv.unreadCount || 0,
-            previewFromPrimary: true,
-            subjectFromPrimary: true,
-            mixedSiblingFields: false,
-          };
-          console.log(JSON.stringify(inboxPayload));
-          console.error("[GmailPushE2E] inbox_payload_built");
-          // #endregion
-        }
         // Row badge = primary conversation unread only (not contact aggregate).
         inboxItems.push({
           contact,

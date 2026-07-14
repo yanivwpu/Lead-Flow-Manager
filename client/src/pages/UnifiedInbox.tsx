@@ -901,8 +901,6 @@ export function UnifiedInbox() {
   );
 
   const primaryConversation = (selectionBase.primaryConversation as Conversation | null) ?? undefined;
-  const newestPrimaryConversation =
-    (selectionBase.newestPrimaryConversation as Conversation | null) ?? undefined;
   const activeConversationId = selectionBase.activeConversationId;
 
   // Lock sticky to the conversation currently being viewed (once resolved).
@@ -912,44 +910,6 @@ export function UnifiedInbox() {
       stickyConversationIdRef.current = activeConversationId;
     }
   }, [selectedContactId, activeConversationId]);
-
-  // Safe center/row alignment diagnostic (no bodies).
-  useEffect(() => {
-    if (!selectedContactId || !primaryConversation?.id) return;
-    // #region agent log
-    fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "32aec0",
-      },
-      body: JSON.stringify({
-        sessionId: "32aec0",
-        hypothesisId: "H-H",
-        location: "UnifiedInbox.tsx:selected_conversation_resolved",
-        message: "selected_conversation_resolved",
-        data: {
-          selectedContactId,
-          centerConversationId: primaryConversation.id,
-          newestPrimaryConversationId: newestPrimaryConversation?.id ?? null,
-          inboxRowConversationId: inboxSelectedItem?.conversation?.id ?? null,
-          usedSticky: selectionBase.usedStickyConversation,
-          subjectPresent: Boolean(primaryConversation.subject),
-          unreadCount: primaryConversation.unreadCount ?? null,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-  }, [
-    selectedContactId,
-    primaryConversation?.id,
-    primaryConversation?.subject,
-    primaryConversation?.unreadCount,
-    newestPrimaryConversation?.id,
-    inboxSelectedItem?.conversation?.id,
-    selectionBase.usedStickyConversation,
-  ]);
 
   const composerScopeKey = useMemo(() => {
     if (!selectedContactId) return null;

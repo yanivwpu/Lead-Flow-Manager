@@ -9,7 +9,6 @@ import { resolveEmailContact } from "./contactMatch";
 import { insertEmailMessageDetail } from "./mailboxStore";
 import { sanitizeEmailHtml, htmlToPlainText } from "./htmlSanitize";
 import { logEmailUnreadDiag } from "./emailUnreadDiag";
-import { logGmailPushE2EEvent } from "./gmailPushConfig";
 
 export async function findEmailConversationByThread(params: {
   workspaceUserId: string;
@@ -86,11 +85,9 @@ export async function persistNormalizedEmailMessage(params: {
     mailboxId: mailbox.id,
     threadId: normalized.providerThreadId,
   });
-  let persistedUnread = 0;
 
   if (!conversation) {
     const initialUnread = normalized.direction === "inbound" ? 1 : 0;
-    persistedUnread = initialUnread;
     conversation = await storage.createConversation({
       userId: mailbox.workspaceUserId,
       contactId: contact.id,
@@ -119,7 +116,6 @@ export async function persistNormalizedEmailMessage(params: {
       direction: normalized.direction,
       currentUnread: beforeUnread,
     });
-    persistedUnread = unread;
     await storage.updateConversation(conversation.id, {
       lastMessageAt: normalized.sentAt,
       lastMessagePreview: (normalized.snippet || normalized.textBody || "").slice(0, 100),
@@ -203,35 +199,6 @@ export async function persistNormalizedEmailMessage(params: {
       contactId: contact.id,
     });
   }
-
-  // #region agent log
-  logGmailPushE2EEvent("message_persisted", {
-    hypothesisId: "H-E",
-    mailboxId: mailbox.id,
-    workspaceId: mailbox.workspaceUserId,
-    messageId: message.id,
-    conversationId: conversation.id,
-    contactId: contact.id,
-    providerMessageId: normalized.providerMessageId,
-    providerThreadId: normalized.providerThreadId,
-    direction: normalized.direction,
-    unreadCount: persistedUnread,
-    created: true,
-    silent: Boolean(params.silent),
-  });
-  logGmailPushE2EEvent("inbox_row_result", {
-    hypothesisId: "H-E",
-    mailboxId: mailbox.id,
-    workspaceId: mailbox.workspaceUserId,
-    contactId: contact.id,
-    conversationId: conversation.id,
-    channel: "email",
-    unreadCount: persistedUnread,
-    lastMessageAt: normalized.sentAt?.toISOString?.() ?? null,
-    lastMessageDirection: normalized.direction,
-    subjectPresent: Boolean(normalized.subject),
-  });
-  // #endregion
 
   return {
     messageId: message.id,

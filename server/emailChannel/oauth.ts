@@ -19,7 +19,6 @@ import {
   syncErrorFromUnknown,
 } from "./credentials";
 import { getEmailProvider } from "./gmailProvider";
-import { logGmailPushE2EEvent } from "./gmailPushConfig";
 import {
   countEmailMailboxes,
   insertEmailMailbox,
@@ -434,25 +433,7 @@ export async function getWorkspaceEmailStatus(workspaceUserId: string) {
   }
 
   const fresh = (await getPrimaryEmailMailbox(workspaceUserId))!;
-  const publicMailbox = toPublicMailbox(fresh);
-  // #region agent log
-  logGmailPushE2EEvent("watch_state", {
-    hypothesisId: "H-A",
-    mailboxId: fresh.id,
-    workspaceId: workspaceUserId,
-    gmailWatchStatus: fresh.gmailWatchStatus,
-    gmailWatchExpiration: fresh.gmailWatchExpiration?.toISOString?.() ?? null,
-    gmailWatchLastRegisteredAt: fresh.gmailWatchLastRegisteredAt?.toISOString?.() ?? null,
-    gmailWatchLastNotificationAt: fresh.gmailWatchLastNotificationAt?.toISOString?.() ?? null,
-    syncCursor: fresh.syncCursor ?? null,
-    observedRemoteHistoryId: fresh.observedRemoteHistoryId ?? null,
-    syncStatus: fresh.syncStatus,
-    syncMode: publicMailbox.syncMode,
-    syncModeLabel: publicMailbox.syncModeLabel,
-    source: "workspace_email_status",
-  });
-  // #endregion
-  return { connected: true, mailbox: publicMailbox };
+  return { connected: true, mailbox: toPublicMailbox(fresh) };
 }
 
 export { EMAIL_SEND_DAILY_SOFT_CAP, EMAIL_SEND_HOURLY_SOFT_CAP };

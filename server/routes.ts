@@ -11377,9 +11377,6 @@ export async function registerRoutes(
   console.error("[EmailRouteBootProbe] before_register");
   registerEmailChannelRoutes(app);
   registerGmailPubSubWebhookRoutes(app);
-  // route_registered is logged inside registerGmailPubSubWebhookRoutes via logGmailPushE2EEvent
-  // (Railway-searchable `message` + plain stderr). Do not use JSON-only {tag} here.
-  console.error("[EmailRouteBootProbe] after_gmail_pubsub_register");
   registerPublicListingRoutes(app);
   registerPublicAgentPageRoutes(app);
   registerAgentPageSettingsRoutes(app);

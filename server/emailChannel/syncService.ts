@@ -17,7 +17,6 @@ import {
   logEmailChannelHealthDiag,
   syncErrorFromUnknown,
 } from "./credentials";
-import { logGmailPushE2EEvent } from "./gmailPushConfig";
 
 /** Temporary safe inbound timing diag — no tokens, bodies, subjects, or addresses. */
 function logGmailInboundTiming(payload: Record<string, unknown>): void {
@@ -191,32 +190,12 @@ export async function runIncrementalEmailSync(mailboxId: string): Promise<void> 
       return;
     }
 
-    // #region agent log
-    logGmailPushE2EEvent("history_started", {
-      hypothesisId: "H-D",
-      mailboxId,
-      startHistoryId: fresh.syncCursor,
-      path: "history_list",
-    });
-    // #endregion
-
     const history = await provider.historyList({
       accessToken,
       startHistoryId: fresh.syncCursor,
     });
 
     if (history.needsBoundedResync) {
-      // #region agent log
-      logGmailPushE2EEvent("history_result", {
-        hypothesisId: "H-D",
-        mailboxId,
-        startHistoryId: historyStartId,
-        historyEndId: null,
-        messageAddedCount: 0,
-        needsBoundedResync: true,
-        path: "bounded_resync_stale_history",
-      });
-      // #endregion
       const afterDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       const page = await provider.listRecentMessages({
         accessToken,
@@ -272,18 +251,6 @@ export async function runIncrementalEmailSync(mailboxId: string): Promise<void> 
       });
       return;
     }
-
-    // #region agent log
-    logGmailPushE2EEvent("history_result", {
-      hypothesisId: "H-D",
-      mailboxId,
-      startHistoryId: historyStartId,
-      historyEndId: history.historyId || null,
-      messageAddedCount: history.messageIds.length,
-      needsBoundedResync: false,
-      path: "history_list",
-    });
-    // #endregion
 
     let messagesPersisted = 0;
     for (const messageId of history.messageIds) {
