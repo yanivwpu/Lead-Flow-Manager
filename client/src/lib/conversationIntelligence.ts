@@ -6,6 +6,11 @@
 
 import { humanizeScoringReasons } from "@shared/customerBehaviorCopy";
 import {
+  buildOutboundOnlyConversationSummary,
+  extractNeutralOutreachTopic,
+  isOutboundOnlyConversation,
+} from "@shared/conversationSummaryDirection";
+import {
   buildTagDiagnostics,
   qualifiesForHotTag,
 } from "@shared/leadQualification";
@@ -697,6 +702,7 @@ function extractListingHint(messages: ConversationMessage[]): string | null {
 /**
  * Builds a natural-language AI Memory summary from intel signals and raw messages.
  * Never returns label strings like "Interested in Investor."
+ * Never invents prospect intent from outbound-only outreach.
  */
 export function buildAIMemorySummary(
   intel: CopilotIntelligence,
@@ -704,6 +710,16 @@ export function buildAIMemorySummary(
   opts?: { industry?: string; isRealEstate?: boolean }
 ): string {
   if (!messages || messages.length === 0) return '';
+
+  if (isOutboundOnlyConversation(messages)) {
+    const outboundText = messages
+      .filter((m) => m.direction === "outbound")
+      .map((m) => m.content || "")
+      .join("\n");
+    return buildOutboundOnlyConversationSummary({
+      productHint: extractNeutralOutreachTopic(outboundText),
+    });
+  }
 
   const parts: string[] = [];
   const industry = (opts?.industry || '').toLowerCase();

@@ -2799,7 +2799,7 @@ export function InboxLeadDetailsPanel({
 
                   {/* D. Short narrative summary — action/context only; no duplicate criteria */}
                   {(customerSummaryBullets.length > 0 || aiMemoryLoading) && (
-                    <div className="pt-2 border-t border-gray-100">
+                    <div className="pt-2 border-t border-gray-100" data-testid="copilot-summary-section">
                       <p className="text-[9px] uppercase tracking-wide font-medium text-gray-400 mb-1">
                         Summary
                       </p>
@@ -2838,54 +2838,8 @@ export function InboxLeadDetailsPanel({
                     />
                   )}
 
-                  {/* Suggestion chips — compact, below the flow */}
-                  {canSeeWorkflow && hasAnyChips && (
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {activeChipActions.slice(0, hasAIBrain ? 4 : 2).map(action => {
-                        const chipHandlers: Record<string, () => void> = {
-                          assign:  () => { openCopilotPopover("assign"); completeAction(action.type, "Lead assigned"); },
-                          book:    () => { openCopilotPopover("book"); completeAction(action.type, "Appointment scheduled"); },
-                          nurture: () => { completeAction(action.type, "Added to nurture queue"); },
-                        };
-                        const handler = chipHandlers[action.type];
-                        return (
-                          <button
-                            key={action.type}
-                            onClick={handler}
-                            disabled={!handler}
-                            title={action.reason}
-                            data-testid={`workflow-action-${action.type}`}
-                            className={cn(
-                              "text-[10px] font-medium px-2 py-0.5 rounded-md border transition-all leading-none",
-                              "bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700",
-                              !handler && "opacity-60 cursor-default",
-                              fadingAction === action.type && "opacity-0 scale-95"
-                            )}
-                          >
-                            {action.label}
-                          </button>
-                        );
-                      })}
-                      {hasTagSuggestion && (
-                        <button
-                          onClick={() => { onUpdateContact({ tag: workflow.tagSuggestion! }); completeAction('tag', `Tagged as "${workflow.tagSuggestion}"`); }}
-                          data-testid="workflow-tag-suggestion"
-                          className={cn("text-[10px] font-medium px-2 py-0.5 rounded-md border bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700 transition-all leading-none", fadingAction === 'tag' && "opacity-0 scale-95")}
-                        >
-                          Tag: {workflow.tagSuggestion} ↗
-                        </button>
-                      )}
-                      {hasStageSuggestion && (
-                        <button
-                          onClick={() => { onUpdateContact({ pipelineStage: workflow.stageSuggestion! }); completeAction('stage', `Moved to ${workflow.stageSuggestion}`); }}
-                          data-testid="workflow-stage-suggestion"
-                          className={cn("text-[10px] font-medium px-2 py-0.5 rounded-md border bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700 transition-all leading-none", fadingAction === 'stage' && "opacity-0 scale-95")}
-                        >
-                          → {workflow.stageSuggestion}
-                        </button>
-                      )}
-                    </div>
-                  )}
+                  {/* Workflow chips (nurture / tag / stage) intentionally not rendered under Summary —
+                      recommendations, lifecycle, status, stage, and tags have their own UI. */}
 
                   {/* Safe AI stage suggestion — click to apply (never auto-moves) */}
                   {stageSuggestion && !completedActions.has("stage") && (

@@ -300,40 +300,67 @@ Return JSON: { "summary": "your summary" }`;
   ): Promise<string> {
     if (!messages || messages.length === 0) return '';
 
-    // Use last 10 messages for context
+    const {
+      buildOutboundOnlyConversationSummary,
+      countMessageDirections,
+      extractNeutralOutreachTopic,
+      isOutboundOnlyConversation,
+      summaryFabricatesProspectIntent,
+    } = await import("@shared/conversationSummaryDirection");
+
+    // Outbound-only (cold outreach / no reply): never invent prospect intent from our pitch.
+    if (isOutboundOnlyConversation(messages)) {
+      const outboundText = messages
+        .filter((m) => m.direction === "outbound")
+        .map((m) => m.content || "")
+        .join("\n");
+      return buildOutboundOnlyConversationSummary({
+        productHint: extractNeutralOutreachTopic(outboundText),
+      });
+    }
+
+    // Use last 10 messages for context — keep explicit speaker labels.
     const recent = messages.slice(-10);
     const conversation = recent
-      .map(m => `${m.direction === 'inbound' ? 'Lead' : 'Agent'}: ${m.content}`)
+      .map(m => `${m.direction === 'inbound' ? 'Lead (prospect)' : 'Agent (us / outbound)'}: ${m.content}`)
       .join('\n');
 
+    const { inbound } = countMessageDirections(messages);
     const intelLines = [
-      intel.intent    ? `Detected intent: ${intel.intent}` : null,
+      intel.intent    ? `Detected intent (inbound-derived): ${intel.intent}` : null,
       intel.budget    ? `Budget: ${intel.budget}`           : null,
       intel.timeline  ? `Timeline: ${intel.timeline}`       : null,
       intel.financing ? `Financing: ${intel.financing}`     : null,
     ].filter(Boolean).join('\n');
 
-    const systemPrompt = `You are a CRM assistant helping businesses understand customer conversations and decide clear next steps.
-Write a short, natural 1–2 sentence summary of what this customer wants, based on the conversation.
+    const systemPrompt = `You are a CRM assistant writing a short conversation summary for an agent.
+
+CRITICAL SPEAKER RULES:
+- "Lead (prospect)" messages are the ONLY source of prospect needs, interests, goals, objections, or intent.
+- "Agent (us / outbound)" messages are what WE said or offered — NEVER rewrite them as what the prospect wants, needs, is exploring, or is interested in.
+- Do NOT invent customer intent from outbound sales copy or product pitches.
+- If inbound evidence is thin, stay factual and neutral (what was asked/said), not speculative.
+
+Write a short, natural 1–2 sentence summary.
 
 Rules:
 - Write like a human note an agent would read at a glance
-- Be specific about what the lead asked or mentioned
+- Attribute needs/interest only when supported by Lead (prospect) messages
+- When summarizing a mixed thread, you may note what we offered separately from what the prospect said
 - Do NOT use labels like "Intent:", "Budget:", "Buyer:", "Investor:"
-- Do NOT say "Interested in Investor" or "Interested in Seller" — those are awkward
-- If they are an investor, say "Investor looking for..." 
-- If they asked about a listing, say "Inquired about..."
-- If they want to buy, say "Looking to buy..."
-- Mention budget or timeline naturally if known (e.g. "around $500k", "within 2 months")
+- Do NOT say "Interested in Investor" or "Interested in Seller"
+- If they are an investor (from inbound), say "Investor looking for..."
+- If they asked about a listing (from inbound), say "Inquired about..."
+- Mention budget or timeline naturally only if known from inbound
 - Keep it under 2 sentences
 - Return ONLY the summary text, no JSON, no labels`;
 
-    const userPrompt = `Conversation:
+    const userPrompt = `Conversation (${inbound} inbound message(s) from prospect):
 ${conversation}
 
-${intelLines ? `Extracted signals:\n${intelLines}` : ''}
+${intelLines ? `Extracted inbound signals:\n${intelLines}` : ''}
 
-Write a short natural summary of what this lead wants.`;
+Write a short natural summary. Only attribute intent to the prospect when Lead (prospect) messages support it.`;
 
     try {
       const response = await aiProvider.complete("summarization", [
@@ -342,17 +369,25 @@ Write a short natural summary of what this lead wants.`;
       ]);
 
       const text = (response || '').trim();
-      // Strip any JSON wrappers if model returns them anyway
+      let summary = text;
       if (text.startsWith('{')) {
         try {
           const parsed = JSON.parse(text);
-          return parsed.summary || parsed.memory || 'Customer inquiring about details.';
+          summary = parsed.summary || parsed.memory || '';
         } catch { /* not JSON */ }
       }
-      return text || 'Customer inquiring about details.';
+      summary = (summary || '').trim();
+      if (!summary || summaryFabricatesProspectIntent(summary)) {
+        // Soft guard: if model still invents interest without clear inbound, stay factual.
+        const hasStrongInboundSignals = Boolean(intel.intent || intel.budget || intel.timeline);
+        if (!hasStrongInboundSignals && summaryFabricatesProspectIntent(summary)) {
+          return "Prospect has replied. Review the thread for their exact questions or interest.";
+        }
+      }
+      return summary || "Prospect has replied. Review the thread for details.";
     } catch (error) {
       console.error('[AI] Error generating AI memory:', error);
-      return 'Customer inquiring about details.';
+      return "Prospect has replied. Review the thread for details.";
     }
   }
 
