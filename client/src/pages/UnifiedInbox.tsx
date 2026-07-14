@@ -908,26 +908,6 @@ export function UnifiedInbox() {
       setSendChannelUi("email");
       const pending = pendingOutreachPrefillRef.current;
       if (pending?.subject) setEmailSubject(pending.subject);
-      // #region agent log
-      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
-        body: JSON.stringify({
-          sessionId: "32aec0",
-          runId: "pi-approve",
-          hypothesisId: "H-outreach",
-          location: "UnifiedInbox.tsx:composeNewEmail",
-          message: "Entered forceNewEmailCompose",
-          data: {
-            contactIdPrefix: selectedContactId.slice(0, 8),
-            hasPrefill: Boolean(pending),
-            subjectLen: pending?.subject?.length ?? 0,
-            bodyLen: pending?.body?.length ?? 0,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       stripQuery();
       if (focusComposer) focusComposerInput();
       return;
@@ -2716,28 +2696,6 @@ export function UnifiedInbox() {
                   stickyContactIdRef.current = item.contact.id;
                   stickyConversationIdRef.current = convId;
                   setStickyEpoch((n) => n + 1);
-                  // #region agent log
-                  fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
-                    body: JSON.stringify({
-                      sessionId: "32aec0",
-                      runId: "inbox-sibling-click",
-                      hypothesisId: "H-sibling",
-                      location: "UnifiedInbox.tsx:rowClick",
-                      message: "Inbox row click selection",
-                      data: {
-                        contactIdPrefix: item.contact.id.slice(0, 8),
-                        convIdPrefix: convId ? convId.slice(0, 8) : null,
-                        isEmailRow,
-                        prevSelectedConvPrefix: selectedConversationId
-                          ? selectedConversationId.slice(0, 8)
-                          : null,
-                      },
-                      timestamp: Date.now(),
-                    }),
-                  }).catch(() => {});
-                  // #endregion
                   setLocation(
                     buildInboxHref(
                       item.contact.id,

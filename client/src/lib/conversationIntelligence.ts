@@ -6,9 +6,7 @@
 
 import { humanizeScoringReasons } from "@shared/customerBehaviorCopy";
 import {
-  bucketFromNumericScore,
   buildTagDiagnostics,
-  MIN_HOT_TAG_SCORE,
   qualifiesForHotTag,
 } from "@shared/leadQualification";
 import {
@@ -349,38 +347,22 @@ export function analyzeConversation(
   const crmScore = normalizeCrmLeadScore(opts?.crmLeadScore);
 
   if (!messages || messages.length === 0) {
-    if (crmScore != null) {
-      const bucket = bucketFromNumericScore(crmScore);
-      const confidence01 = 0.78;
-      return {
-        budget: null,
-        timeline: null,
-        financing: null,
-        intent: "Browsing",
-        hasBudget: false,
-        hasTimeline: false,
-        hasFinancing: false,
-        leadScore: leadScoreBadgeFromBucket(bucket, confidence01),
-        leadScoreDetails: {
-          score: crmScore,
-          bucket,
-          reasons: [],
-          missingRequired: [],
-          negativeSignals: [],
-          confidence01,
-          scoreSource: "crm",
-        },
-        aiState: "Stalled",
-        signalCount: 0,
-        isUrgent: false,
-        messageCount: 0,
-        lastDirection: null,
-      };
-    }
+    // Empty thread: no conversation intent. CRM score is not treated as conversation evidence.
+    void crmScore;
     return {
       budget: null, timeline: null, financing: null, intent: 'Browsing',
       hasBudget: false, hasTimeline: false, hasFinancing: false,
       leadScore: { label: 'Cold', color: 'text-blue-500', dot: 'bg-blue-400', confidence: 20 },
+      leadScoreDetails: {
+        score: 0,
+        bucket: "unqualified",
+        reasons: [],
+        missingRequired: [],
+        negativeSignals: [],
+        confidence01: 0.2,
+        scoreSource: "conversation",
+        conversationScore: 0,
+      },
       aiState: 'Stalled',
       signalCount: 0, isUrgent: false, messageCount: 0, lastDirection: null,
     };
@@ -415,47 +397,31 @@ export function analyzeConversation(
   const scoring = scoreLead(messages, opts?.businessKnowledge ?? { industry: opts?.industry }, { isRealEstate });
 
   /**
-   * Contact-level CRM score is the source of truth for Hot/Warm display & tagging.
-   * A weak sibling thread (generic/system email) must NOT wipe a strong CRM score.
-   * Conversation-only scoring is kept separately via conversationScore for diagnostics.
+   * Conversation-level AI intent only. Do NOT max() with contacts.lead_score —
+   * durable CRM classification lives on the contact (tag / lead_score / W2) and
+   * must not be permanently floor-locked by stale CRM values or overwritten by
+   * sibling-thread heuristics.
    */
-  let displayBucket: LeadBucket = scoring.bucket;
-  let displayScore = scoring.score;
-  let scoreSource: "crm" | "conversation" = "conversation";
-
-  if (crmScore != null) {
-    const mergedScore = Math.max(crmScore, scoring.score);
-    displayScore = mergedScore;
-    displayBucket = bucketFromNumericScore(mergedScore);
-    scoreSource = mergedScore === crmScore && scoring.score <= crmScore ? "crm" : "conversation";
-    // Keep hot floor consistent with CRM aggregation (never invent unqualified from merge).
-    if (displayBucket === "hot" && displayScore < MIN_HOT_TAG_SCORE) {
-      displayBucket = bucketFromNumericScore(displayScore);
-    }
-  }
-
-  const confidence01 =
-    scoreSource === "crm"
-      ? Math.max(scoring.confidence, 0.78)
-      : scoring.confidence;
-
-  const tagDiagnostics =
-    scoreSource === "crm"
-      ? buildTagDiagnostics({
-          score: displayScore,
-          bucket: displayBucket,
-          confidence: confidence01,
-          reasons: scoring.reasons,
-          stats: {
-            inbound: inboundCount,
-            outbound: messages.length - inboundCount,
-            turns: Math.min(inboundCount, messages.filter((m) => m.direction === "outbound").length),
-          },
-          mediaOnly: scoring.mediaOnly,
-          inboundJoined: messages.filter((m) => m.direction === "inbound").map((m) => m.content).join(" "),
-          scoreSource,
-        })
-      : scoring.tagDiagnostics;
+  const displayBucket: LeadBucket = scoring.bucket;
+  const displayScore = scoring.score;
+  const scoreSource: "crm" | "conversation" = "conversation";
+  const confidence01 = scoring.confidence;
+  const tagDiagnostics = buildTagDiagnostics({
+    score: displayScore,
+    bucket: displayBucket,
+    confidence: confidence01,
+    reasons: scoring.reasons,
+    stats: {
+      inbound: inboundCount,
+      outbound: messages.length - inboundCount,
+      turns: Math.min(inboundCount, messages.filter((m) => m.direction === "outbound").length),
+    },
+    mediaOnly: scoring.mediaOnly,
+    inboundJoined: messages.filter((m) => m.direction === "inbound").map((m) => m.content).join(" "),
+    scoreSource,
+  });
+  // crmLeadScore retained only for diagnostics / future CRM panel — not merged.
+  void crmScore;
 
   const leadScore = leadScoreBadgeFromBucket(displayBucket, confidence01);
   const aiState   = computeAiState(hasBudget, hasTimeline, hasFinancing, messageCount, lastDirection, isUrgent);

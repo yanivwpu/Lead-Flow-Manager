@@ -1602,8 +1602,9 @@ export function InboxLeadDetailsPanel({
     return null;
   }, [intel.leadScoreDetails, contact.pipelineStage, contactPipelineStageOptions, stageSignals]);
 
-  // ── Safe system score auto-tag (server-enforced) ──────────────────────────
-  // Never auto-downgrade Hot/Warm from a single conversation view (sibling emails).
+  // ── System score auto-tag ─────────────────────────────────────────────────
+  // Conversation-scoped Copilot intent must not mutate contact CRM classification.
+  // Durable contact.tag / lead_score are owned by W2 + manual edits (scoreSource=crm).
   const systemScoreTagKeyRef = useRef<string>("");
   useEffect(() => {
     const d = intel.leadScoreDetails;
@@ -1615,24 +1616,25 @@ export function InboxLeadDetailsPanel({
     );
     if (!desiredTag) return;
 
-    const isDowngrade = isQualificationDowngrade(desiredTag, contact.tag);
-    if (isDowngrade) {
+    // Always log; never POST conversation-scoped mutations.
+    if ((d.scoreSource || "conversation") !== "crm") {
       console.info(
         JSON.stringify({
           tag: "[LeadScoreAudit]",
-          event: "classification_changed",
+          event: "classification_unchanged",
           writer: "InboxLeadDetailsPanel.systemScoreTag",
-          reason: "auto_downgrade_blocked_client",
-          contactId: contact.id,
-          previousClassification: contact.tag,
-          newClassification: desiredTag,
-          previousScore: contact.leadScore ?? null,
-          newScore: d.score,
-          scoreSource: d.scoreSource ?? null,
+          reason: "conversation_scoped_no_contact_mutation",
+          contactIdPrefix: String(contact.id).slice(0, 8),
+          crmTag: contact.tag || null,
+          conversationDesiredTag: desiredTag,
+          conversationScore: d.score,
+          scoreSource: d.scoreSource ?? "conversation",
         }),
       );
       return;
     }
+
+    if (isQualificationDowngrade(desiredTag, contact.tag)) return;
     if ((d.confidence01 ?? 0) < 0.75) return;
 
     const key = `${contact.id}:${desiredTag}:${Math.round((d.confidence01 ?? 0) * 100)}:${d.score}`;
@@ -1649,26 +1651,24 @@ export function InboxLeadDetailsPanel({
         confidence: d.confidence01,
         reasons: d.reasons,
         tagDiagnostics: d.tagDiagnostics,
-        scoreSource: d.scoreSource ?? "conversation",
+        scoreSource: "crm",
         conversationScore: d.conversationScore,
       }),
     })
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((resp) => {
-        if (resp?.applied || resp?.skipped) {
-          console.info("[system-score-tag]", {
-            contactId: contact.id,
-            applied: resp.applied,
-            skipped: resp.skipped,
-            reason: resp.reason,
-            oldTag: resp.oldTag,
-            newTag: resp.newTag,
-            bucket: d.bucket,
-            score: d.score,
-            confidence: d.confidence01,
-            tagDiagnostics: d.tagDiagnostics ?? resp.tagDiagnostics,
-          });
-        }
+        console.info(
+          JSON.stringify({
+            tag: "[LeadScoreAudit]",
+            event: resp?.applied ? "classification_changed" : "classification_unchanged",
+            writer: "InboxLeadDetailsPanel.systemScoreTag",
+            reason: resp?.reason ?? null,
+            contactIdPrefix: String(contact.id).slice(0, 8),
+            applied: Boolean(resp?.applied),
+            oldTag: resp?.oldTag ?? null,
+            newTag: resp?.newTag ?? null,
+          }),
+        );
         if (resp?.applied && resp.newTag) {
           onUpdateContact({ tag: resp.newTag });
           void queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });

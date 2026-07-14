@@ -223,21 +223,6 @@ function ProspectContactFieldRow(props: {
           fieldName: kind,
         }),
       );
-      // #region agent log
-      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
-        body: JSON.stringify({
-          sessionId: "32aec0",
-          runId: "pi-enrichment-ratelimit",
-          hypothesisId: "H-rl",
-          location: "ProspectIntelligencePanel.tsx:save_requested",
-          message: "ProspectEnrichment save_requested",
-          data: { kind, contactIdPrefix: contactId.slice(0, 8) },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       try {
         const res = await fetch(`/api/contacts/${contactId}`, {
           method: "PATCH",
@@ -261,21 +246,6 @@ function ProspectContactFieldRow(props: {
               limiter,
             }),
           );
-          // #region agent log
-          fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
-            body: JSON.stringify({
-              sessionId: "32aec0",
-              runId: "pi-enrichment-ratelimit",
-              hypothesisId: "H-rl",
-              location: "ProspectIntelligencePanel.tsx:save_rate_limited",
-              message: "ProspectEnrichment save_rate_limited",
-              data: { kind, contactIdPrefix: contactId.slice(0, 8), limiter },
-              timestamp: Date.now(),
-            }),
-          }).catch(() => {});
-          // #endregion
           throw new Error(
             (data as { error?: string }).error ||
               "Too many requests. Please try again shortly.",
@@ -302,29 +272,6 @@ function ProspectContactFieldRow(props: {
             status: res.status,
           }),
         );
-        // #region agent log
-        fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
-          body: JSON.stringify({
-            sessionId: "32aec0",
-            runId: "pi-enrichment-ratelimit",
-            hypothesisId: "H-rl",
-            location: "ProspectIntelligencePanel.tsx:save_succeeded",
-            message: "ProspectEnrichment save_succeeded",
-            data: {
-              kind,
-              contactIdPrefix: contactId.slice(0, 8),
-              httpStatus: res.status,
-              returnedIdPrefix:
-                typeof (data as { id?: string }).id === "string"
-                  ? (data as { id: string }).id.slice(0, 8)
-                  : null,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
         return body;
       } finally {
         saveInFlightRef.current = false;
@@ -507,25 +454,6 @@ function ProspectIntelligenceDetailDialog({
         },
       ),
     onSuccess: (data) => {
-      // #region agent log
-      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
-        body: JSON.stringify({
-          sessionId: "32aec0",
-          runId: "pi-approve",
-          hypothesisId: "H-approve-stale",
-          location: "ProspectIntelligencePanel.tsx:approveOnSuccess",
-          message: "Approve response applied to selected item",
-          data: {
-            returnedReviewStatus: data.item?.intelligence?.reviewStatus ?? null,
-            returnedNeedsReview: data.item?.intelligence?.needsReview ?? null,
-            messageLen: (data.item?.intelligence?.suggestedFirstMessage || "").length,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       if (data.item) {
         applyItemUpdate(data.item);
         setEditMessage(data.item.intelligence?.suggestedFirstMessage || editMessage);
@@ -584,26 +512,14 @@ function ProspectIntelligenceDetailDialog({
     } catch {
       /* ignore quota */
     }
-    // #region agent log
-    fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
-      body: JSON.stringify({
-        sessionId: "32aec0",
-        runId: "pi-approve",
-        hypothesisId: "H-outreach",
-        location: "ProspectIntelligencePanel.tsx:openNativeEmailOutreach",
-        message: "Navigating to native email compose",
-        data: {
-          contactIdPrefix: item.contactId.slice(0, 8),
-          subjectLen: payload.subject.length,
-          bodyLen: payload.body.length,
-          reviewStatus: item.intelligence?.reviewStatus ?? null,
-        },
-        timestamp: Date.now(),
+    console.info(
+      JSON.stringify({
+        tag: "[BrowserPermissionAudit]",
+        event: "native_email_outreach_navigate",
+        note: "no_localhost_ingest",
+        contactIdPrefix: item.contactId.slice(0, 8),
       }),
-    }).catch(() => {});
-    // #endregion
+    );
     onOpenChange(false);
     setLocation(buildProspectOutreachInboxHref(item.contactId));
   };

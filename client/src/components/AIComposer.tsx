@@ -311,21 +311,6 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       setAiMode("manual");
       setAutoSkippedWithDraft(false);
       setAutoSendBlockedMessage(null);
-      // #region agent log
-      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
-        body: JSON.stringify({
-          sessionId: "32aec0",
-          runId: "pi-outreach-manual",
-          hypothesisId: "H-manual",
-          location: "AIComposer.tsx:forceManualMode",
-          message: "Forced Manual for prospect outreach compose",
-          data: { businessAiMode, contactIdPrefix: contactId ? String(contactId).slice(0, 8) : null },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       return;
     }
     if (autoOverride) return;

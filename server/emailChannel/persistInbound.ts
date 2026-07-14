@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { conversations, type EmailMailbox } from "@shared/schema";
 import type { NormalizedEmailMessage } from "@shared/emailChannel";
+import { isCalendarOrInviteEmail } from "@shared/emailChannel";
 import { nextEmailConversationUnreadCount } from "@shared/emailUnreadState";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
@@ -55,6 +56,25 @@ export async function persistNormalizedEmailMessage(params: {
       contactId: existing.contactId,
       created: false,
     };
+  }
+
+  if (
+    isCalendarOrInviteEmail({
+      subject: normalized.subject,
+      snippet: normalized.snippet,
+      selectedHeaders: normalized.selectedHeaders,
+    })
+  ) {
+    console.log(
+      JSON.stringify({
+        tag: "[ContactIdentityAudit]",
+        event: "calendar_invite_skipped",
+        direction: normalized.direction,
+        subjectPrefix: String(normalized.subject || "").slice(0, 40),
+        fromDomain: String(normalized.from.email || "").split("@")[1] || null,
+      }),
+    );
+    return null;
   }
 
   const primaryTo = normalized.to[0]?.email || null;

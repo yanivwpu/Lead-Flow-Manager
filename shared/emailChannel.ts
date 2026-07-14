@@ -120,6 +120,35 @@ export function normalizeEmailAddress(raw: string | null | undefined): string | 
   return v;
 }
 
+/**
+ * Calendar / invite noise must not create Inbox CRM conversations or drive lead tags.
+ * Matching is subject/header based — never by contact display name.
+ */
+export function isCalendarOrInviteEmail(input: {
+  subject?: string | null;
+  snippet?: string | null;
+  selectedHeaders?: Record<string, string> | null;
+}): boolean {
+  const subject = String(input.subject || "").trim();
+  if (
+    /^(invitation|updated invitation|canceled invitation|cancelled invitation)\s*:/i.test(subject)
+  ) {
+    return true;
+  }
+  if (/^(accepted|declined|tentative)\s*:/i.test(subject)) return true;
+  const headers = input.selectedHeaders || {};
+  const headerBlob = Object.entries(headers)
+    .map(([k, v]) => `${k}:${v}`)
+    .join("\n")
+    .toLowerCase();
+  if (headerBlob.includes("text/calendar") || headerBlob.includes("method=request")) {
+    return true;
+  }
+  const snippet = String(input.snippet || "").toLowerCase();
+  if (snippet.includes("text/calendar") || snippet.includes("begin:vcalendar")) return true;
+  return false;
+}
+
 export function initialSyncModeToDays(mode: EmailInitialSyncMode): number | null {
   switch (mode) {
     case "last_7_days":

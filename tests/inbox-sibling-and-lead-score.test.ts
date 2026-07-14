@@ -1,5 +1,5 @@
 /**
- * Sibling email thread selection + CRM lead score stability.
+ * Sibling email selection + contact vs conversation lead-score model.
  * Run: npx tsx tests/inbox-sibling-and-lead-score.test.ts
  */
 import assert from "node:assert/strict";
@@ -9,15 +9,18 @@ import {
   shouldApplySystemScoreTag,
   systemTagForQualification,
 } from "../shared/leadQualification";
+import { isCalendarOrInviteEmail, normalizeEmailAddress } from "../shared/emailChannel";
+import fs from "node:fs";
+import path from "node:path";
 
-function run(name: string, fn: () => void) {
-  try {
-    fn();
-    console.log(`✓ ${name}`);
-  } catch (err) {
-    console.error(`✗ ${name}`);
-    throw err;
-  }
+function run(name: string, fn: () => void | Promise<void>) {
+  return Promise.resolve()
+    .then(fn)
+    .then(() => console.log(`✓ ${name}`))
+    .catch((err) => {
+      console.error(`✗ ${name}`);
+      throw err;
+    });
 }
 
 /** Mirrors UnifiedInbox selectedConversationId parsing from wouter useSearch. */
@@ -47,97 +50,151 @@ const thread53 = {
 };
 const conversations = [thread51, thread52, thread53];
 
-run("same-contact query-only switch updates selectedConversationId", () => {
-  // Pathname would stay /app/inbox/contact-yaniv — only search changes.
-  const open53 = parseConversationSearch("?conversation=conv-test-53");
-  const open52 = parseConversationSearch("?conversation=conv-test-52");
-  const open51 = parseConversationSearch("?conversation=conv-test-51");
-  assert.equal(open53, "conv-test-53");
-  assert.equal(open52, "conv-test-52");
-  assert.equal(open51, "conv-test-51");
-  assert.notEqual(open53, open52);
-});
-
-run("explicit click conversationId overrides sticky older sibling", () => {
-  // User was on Test 53 (sticky) then clicks Test 52 — URL conversation wins.
-  const afterClick52 = resolveInboxSelectionState({
-    selectedContactId: contactId,
-    contactQueryData: { contact: { id: contactId }, conversations },
-    preferredChannel: "email",
-    messagesQueryData: [],
-    inboxRowConversation: thread52,
-    selectedConversationId: "conv-test-52",
-    stickyConversationId: "conv-test-53",
+async function main() {
+  await run("same-contact query-only switch updates selectedConversationId", () => {
+    const open53 = parseConversationSearch("?conversation=conv-test-53");
+    const open52 = parseConversationSearch("?conversation=conv-test-52");
+    const open51 = parseConversationSearch("?conversation=conv-test-51");
+    assert.equal(open53, "conv-test-53");
+    assert.equal(open52, "conv-test-52");
+    assert.equal(open51, "conv-test-51");
+    assert.notEqual(open53, open52);
   });
-  assert.equal(afterClick52.activeConversationId, "conv-test-52");
-  assert.equal(afterClick52.usedStickyConversation, false);
 
-  const afterClick51 = resolveInboxSelectionState({
-    selectedContactId: contactId,
-    contactQueryData: { contact: { id: contactId }, conversations },
-    preferredChannel: "email",
-    messagesQueryData: [],
-    inboxRowConversation: thread51,
-    selectedConversationId: "conv-test-51",
-    stickyConversationId: "conv-test-52",
+  await run("explicit click conversationId overrides sticky older sibling", () => {
+    const afterClick52 = resolveInboxSelectionState({
+      selectedContactId: contactId,
+      contactQueryData: { contact: { id: contactId }, conversations },
+      preferredChannel: "email",
+      messagesQueryData: [],
+      inboxRowConversation: thread52,
+      selectedConversationId: "conv-test-52",
+      stickyConversationId: "conv-test-53",
+    });
+    assert.equal(afterClick52.activeConversationId, "conv-test-52");
+    assert.equal(afterClick52.usedStickyConversation, false);
   });
-  assert.equal(afterClick51.activeConversationId, "conv-test-51");
-});
 
-run("passive refresh keeps sticky when no new explicit conversation", () => {
-  const sticky = resolveInboxSelectionState({
-    selectedContactId: contactId,
-    contactQueryData: { contact: { id: contactId }, conversations },
-    preferredChannel: "email",
-    messagesQueryData: [],
-    inboxRowConversation: thread53, // newest primary shifted
-    selectedConversationId: null,
-    stickyConversationId: "conv-test-51",
+  await run("passive refresh keeps sticky when no new explicit conversation", () => {
+    const sticky = resolveInboxSelectionState({
+      selectedContactId: contactId,
+      contactQueryData: { contact: { id: contactId }, conversations },
+      preferredChannel: "email",
+      messagesQueryData: [],
+      inboxRowConversation: thread53,
+      selectedConversationId: null,
+      stickyConversationId: "conv-test-51",
+    });
+    assert.equal(sticky.activeConversationId, "conv-test-51");
+    assert.equal(sticky.usedStickyConversation, true);
   });
-  assert.equal(sticky.activeConversationId, "conv-test-51");
-  assert.equal(sticky.usedStickyConversation, true);
-});
 
-run("weak sibling email does not wipe CRM Hot Lead display score", () => {
-  const weakMsgs = [
-    { direction: "inbound" as const, content: "Delivery Status Notification" },
-    { direction: "inbound" as const, content: "Mail delivery failed" },
-  ];
-  const intel = analyzeConversation(weakMsgs, {
-    isRealEstate: true,
-    crmLeadScore: 88,
+  await run("Copilot score is conversation-scoped (no max CRM floor)", () => {
+    const weakMsgs = [
+      { direction: "inbound" as const, content: "Delivery Status Notification" },
+      { direction: "inbound" as const, content: "Mail delivery failed" },
+    ];
+    const intel = analyzeConversation(weakMsgs, {
+      isRealEstate: true,
+      crmLeadScore: 88,
+    });
+    assert.equal(intel.leadScoreDetails?.scoreSource, "conversation");
+    assert.ok((intel.leadScoreDetails?.score ?? 100) < 75);
+    // CRM score is not merged into display — stale CRM cannot force Hot forever.
   });
-  assert.ok((intel.leadScoreDetails?.score ?? 0) >= 75);
-  assert.notEqual(intel.leadScoreDetails?.bucket, "unqualified");
-  assert.equal(intel.leadScoreDetails?.scoreSource, "crm");
-  assert.ok((intel.leadScoreDetails?.conversationScore ?? 100) < 75);
-});
 
-run("auto Hot→Unqualified downgrade blocked by policy", () => {
-  const desired = systemTagForQualification("unqualified", 5);
-  assert.equal(desired, "Unqualified");
-  const policy = shouldApplySystemScoreTag({
-    desiredTag: desired,
-    currentTag: "Hot Lead",
-    crmLeadScore: 88,
-    scoreSource: "conversation",
-    confidence: 0.9,
+  await run("conversation-scoped tag write blocked", () => {
+    const desired = systemTagForQualification("hot", 90);
+    assert.equal(desired, "Hot Lead");
+    const policy = shouldApplySystemScoreTag({
+      desiredTag: desired,
+      currentTag: "Unqualified",
+      crmLeadScore: null,
+      scoreSource: "conversation",
+      confidence: 0.95,
+    });
+    assert.equal(policy.apply, false);
+    assert.equal(policy.reason, "conversation_scoped_no_contact_mutation");
   });
-  assert.equal(policy.apply, false);
-  assert.equal(policy.reason, "auto_downgrade_blocked");
-});
 
-run("Warm→Hot upgrade still allowed when confident", () => {
-  const desired = systemTagForQualification("hot", 90);
-  assert.equal(desired, "Hot Lead");
-  const policy = shouldApplySystemScoreTag({
-    desiredTag: desired,
-    currentTag: "Warm Lead",
-    crmLeadScore: 80,
-    scoreSource: "crm",
-    confidence: 0.9,
+  await run("auto Hot→Unqualified downgrade blocked even for crm source", () => {
+    const desired = systemTagForQualification("unqualified", 5);
+    const policy = shouldApplySystemScoreTag({
+      desiredTag: desired,
+      currentTag: "Hot Lead",
+      crmLeadScore: 88,
+      scoreSource: "crm",
+      confidence: 0.9,
+    });
+    assert.equal(policy.apply, false);
+    assert.equal(policy.reason, "auto_downgrade_blocked");
   });
-  assert.equal(policy.apply, true);
-});
 
-console.log("\nAll inbox-sibling-and-lead-score tests passed.");
+  await run("Warm→Hot upgrade allowed only with scoreSource=crm", () => {
+    const desired = systemTagForQualification("hot", 90);
+    const blocked = shouldApplySystemScoreTag({
+      desiredTag: desired,
+      currentTag: "Warm Lead",
+      crmLeadScore: 80,
+      scoreSource: "conversation",
+      confidence: 0.9,
+    });
+    assert.equal(blocked.apply, false);
+    const allowed = shouldApplySystemScoreTag({
+      desiredTag: desired,
+      currentTag: "Warm Lead",
+      crmLeadScore: 80,
+      scoreSource: "crm",
+      confidence: 0.9,
+    });
+    assert.equal(allowed.apply, true);
+  });
+
+  await run("calendar invite subjects are detected as non-CRM email", () => {
+    assert.equal(
+      isCalendarOrInviteEmail({
+        subject: "Invitation: Yaya and Yaniv Haramatiy @ Fri Jul 10, 2026 10am - 10:30am",
+      }),
+      true,
+    );
+    assert.equal(isCalendarOrInviteEmail({ subject: "Test 53" }), false);
+    assert.equal(
+      isCalendarOrInviteEmail({
+        subject: "Hello",
+        selectedHeaders: { "Content-Type": "text/calendar; method=REQUEST" },
+      }),
+      true,
+    );
+  });
+
+  await run("email identity normalizes address (exact match key)", () => {
+    assert.equal(normalizeEmailAddress("  Foo.Bar@Gmail.COM "), "foo.bar@gmail.com");
+    assert.equal(normalizeEmailAddress("not-an-email"), null);
+    // Display name is intentionally not an identity key — only normalized email is.
+  });
+
+  await run("no client localhost debug ingest (permission popup regression)", () => {
+    const roots = [
+      path.join("client", "src", "pages", "UnifiedInbox.tsx"),
+      path.join("client", "src", "components", "AIComposer.tsx"),
+      path.join("client", "src", "components", "settings", "ProspectIntelligencePanel.tsx"),
+      path.join("client", "src", "components", "InboxLeadDetailsPanel.tsx"),
+    ];
+    for (const rel of roots) {
+      const abs = path.join(process.cwd(), rel);
+      const text = fs.readFileSync(abs, "utf8");
+      assert.equal(
+        text.includes("127.0.0.1:7693"),
+        false,
+        `${rel} must not call localhost ingest (Chrome Local Network Access popup)`,
+      );
+    }
+  });
+
+  console.log("\nAll inbox-sibling-and-lead-score tests passed.");
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
