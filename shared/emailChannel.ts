@@ -98,6 +98,75 @@ export type EmailRichSendPayload = {
   prospectOutreach?: boolean;
 };
 
+/**
+ * Normalize / whitelist emailRich from POST /api/contacts/:id/send.
+ * Must preserve prospectOutreach so channelService can mark PI outreach_sent.
+ */
+export function resolveEmailRichFromSendBody(input: {
+  requestedChannel?: string | null;
+  emailRich?: Partial<EmailRichSendPayload> | null;
+  hasEmailBody?: boolean;
+  subject?: unknown;
+  htmlBody?: unknown;
+  textBody?: unknown;
+  content?: unknown;
+  to?: unknown;
+  cc?: unknown;
+  bcc?: unknown;
+  replyMode?: unknown;
+  providerThreadId?: unknown;
+  mailboxId?: unknown;
+}): EmailRichSendPayload | undefined {
+  const emailRich = input.emailRich || undefined;
+  const requested = input.requestedChannel ? String(input.requestedChannel).trim() : undefined;
+  const hasEmailBody = Boolean(input.hasEmailBody);
+  if (!(requested === "email" || emailRich || hasEmailBody)) return undefined;
+
+  return {
+    mailboxId:
+      (typeof emailRich?.mailboxId === "string" && emailRich.mailboxId) ||
+      (typeof input.mailboxId === "string" && input.mailboxId) ||
+      "",
+    subject:
+      (typeof emailRich?.subject === "string" && emailRich.subject) ||
+      (typeof input.subject === "string" ? input.subject : undefined),
+    htmlBody:
+      (typeof emailRich?.htmlBody === "string" && emailRich.htmlBody) ||
+      (typeof input.htmlBody === "string" ? input.htmlBody : undefined),
+    textBody:
+      (typeof emailRich?.textBody === "string" && emailRich.textBody) ||
+      (typeof input.textBody === "string" ? input.textBody : undefined) ||
+      (typeof input.content === "string" ? input.content : undefined),
+    to: Array.isArray(emailRich?.to)
+      ? (emailRich!.to as string[])
+      : Array.isArray(input.to)
+        ? (input.to as string[])
+        : undefined,
+    cc: Array.isArray(emailRich?.cc)
+      ? (emailRich!.cc as string[])
+      : Array.isArray(input.cc)
+        ? (input.cc as string[])
+        : undefined,
+    bcc: Array.isArray(emailRich?.bcc)
+      ? (emailRich!.bcc as string[])
+      : Array.isArray(input.bcc)
+        ? (input.bcc as string[])
+        : undefined,
+    replyMode:
+      emailRich?.replyMode ||
+      (input.replyMode === "reply" || input.replyMode === "reply_all" || input.replyMode === "new"
+        ? input.replyMode
+        : undefined),
+    providerThreadId:
+      (typeof emailRich?.providerThreadId === "string" && emailRich.providerThreadId) ||
+      (typeof input.providerThreadId === "string" ? input.providerThreadId : undefined),
+    inReplyTo: typeof emailRich?.inReplyTo === "string" ? emailRich.inReplyTo : undefined,
+    references: Array.isArray(emailRich?.references) ? (emailRich!.references as string[]) : undefined,
+    // Critical: PI lifecycle marker must survive API sanitization.
+    prospectOutreach: emailRich?.prospectOutreach === true,
+  };
+}
+
 export type EmailSyncMode = "realtime" | "polling_fallback" | "unknown";
 
 export type EmailMailboxPublic = {

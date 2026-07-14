@@ -13,6 +13,7 @@ import {
   shouldPersistFirstOutreachSentAt,
 } from "../shared/prospectOutreachLifecycle";
 import { resolveProspectApproveOutreachUi } from "../shared/prospectContactEnrichment";
+import { resolveEmailRichFromSendBody } from "../shared/emailChannel";
 
 function run(name: string, fn: () => void) {
   try {
@@ -185,6 +186,41 @@ run("10. normal inbox (no PI context) UI unchanged — no send CTA without appro
   assert.equal(ui.showViewThread, false);
   // Without prospectOutreach flag, mark would no-op for non-approved — coverage for hook gate.
   assert.equal(canMarkProspectOutreachSent({ reviewStatus: "pending", outreachStatus: "not_sent" }), false);
+});
+
+run("11. API send body must preserve prospectOutreach into channelService emailRich", () => {
+  // Regression: W.I.N. send succeeded but stayed Approved because contacts route
+  // rebuilt emailRich without prospectOutreach, so markProspectOutreachSent never ran.
+  const fixed = resolveEmailRichFromSendBody({
+    requestedChannel: "email",
+    emailRich: {
+      mailboxId: "mb-1",
+      subject: "Idea for W.i.n. Marketing Agency",
+      textBody: "Hello from PI",
+      replyMode: "new",
+      prospectOutreach: true,
+    },
+    hasEmailBody: true,
+    content: "Hello from PI",
+  });
+  assert.ok(fixed);
+  assert.equal(fixed!.prospectOutreach, true);
+  assert.equal(fixed!.replyMode, "new");
+  assert.equal(fixed!.subject, "Idea for W.i.n. Marketing Agency");
+
+  const normalInbox = resolveEmailRichFromSendBody({
+    requestedChannel: "email",
+    emailRich: {
+      mailboxId: "mb-1",
+      subject: "Re: hello",
+      textBody: "Reply",
+      replyMode: "reply",
+      providerThreadId: "gmail-thread-1",
+    },
+    hasEmailBody: true,
+  });
+  assert.equal(normalInbox?.prospectOutreach, false);
+  assert.equal(normalInbox?.replyMode, "reply");
 });
 
 console.log("\nAll prospect-outreach-lifecycle tests passed.");
