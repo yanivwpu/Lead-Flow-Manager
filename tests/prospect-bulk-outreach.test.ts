@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import {
   buildQueueDedupKey,
   computeNextScheduledDelayMs,
+  isProspectOutreachQueueArmed,
   normalizeRecipientIdentity,
   prospectBulkOutreachLog,
   prospectOutreachEligibilityReasonLabel,
@@ -17,6 +18,7 @@ import {
   resolveRecipientForChannel,
   shouldSkipDefaultBulkReanalyze,
 } from "../shared/prospectOutreachEligibility";
+import { detectPriorProspectOutreach } from "../shared/prospectPriorOutreach";
 import {
   canMarkProspectOutreachSent,
   shouldMarkOutreachReplied,
@@ -281,6 +283,52 @@ function testSafeLoggingNoBodies() {
   assert.equal("messageSnapshot" in payload, false);
 }
 
+function testQueueArmedOnlyAfterStart() {
+  // 1. Queue without Start -> worker must not claim
+  assert.equal(isProspectOutreachQueueArmed({ queueRunning: false, paused: false }), false);
+  assert.equal(isProspectOutreachQueueArmed({ queueRunning: false, paused: true }), false);
+  // 2. Start begins sending
+  assert.equal(isProspectOutreachQueueArmed({ queueRunning: true, paused: false }), true);
+  // 3. Pause stops remaining
+  assert.equal(isProspectOutreachQueueArmed({ queueRunning: true, paused: true }), false);
+}
+
+function testManualOutreachBlocksBulkQueueEvenIfStatusStuckApproved() {
+  // Smash regression: PI still approved/not_sent but Idea-for thread already sent manually
+  const prior = detectPriorProspectOutreach({
+    outreachStatus: "not_sent",
+    outreachConversationId: null,
+    outreachSentAt: null,
+    emailConversations: [
+      {
+        id: "conv-manual",
+        subject: "Idea for Smash Interactive Agency | Digital Marketing Agency Miami",
+        hasOutbound: true,
+      },
+    ],
+  });
+  assert.equal(prior.alreadyContacted, true);
+  assert.equal(prior.reason, "manual_outreach_conversation");
+  assert.equal(prior.conversationId, "conv-manual");
+
+  const gated = resolveProspectOutreachEligibility({
+    email: "info@smashtoday.com",
+    emailConnected: true,
+    reviewStatus: "approved",
+    outreachStatus: "outreach_sent",
+    analysisStatus: "completed",
+    preferredChannel: "auto",
+  });
+  assert.equal(gated.anyEligible, false);
+  assert.equal(gated.summaryReason, "already_outreach_sent");
+
+  const clean = detectPriorProspectOutreach({
+    outreachStatus: "not_sent",
+    emailConversations: [],
+  });
+  assert.equal(clean.alreadyContacted, false);
+}
+
 function testAutoDoesNotPickProhibitedChannel() {
   // Phone present but WhatsApp/SMS not bulk-enabled and no email
   const result = resolveProspectOutreachEligibility({
@@ -317,6 +365,8 @@ const tests: Array<[string, () => void]> = [
   ["Auto + valid email + Gmail → Email selected (production regression)", testAutoSelectsEmailWhenConnectedLikeProduction],
   ["human-readable eligibility labels", testHumanReadableReasonLabels],
   ["sticky needs_reconnect is sendable candidate", testStickyNeedsReconnectStatusIsSendableCandidate],
+  ["queue without Start sends zero; Start arms; Pause stops", testQueueArmedOnlyAfterStart],
+  ["manual PI outreach blocks bulk queue even if status stuck", testManualOutreachBlocksBulkQueueEvenIfStatusStuckApproved],
 ];
 
 let failed = 0;

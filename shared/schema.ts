@@ -2151,6 +2151,8 @@ export const prospectOutreachSettings = pgTable("prospect_outreach_settings", {
   hourlySendLimit: integer("hourly_send_limit").notNull().default(12),
   minDelaySeconds: integer("min_delay_seconds").notNull().default(90),
   maxDelaySeconds: integer("max_delay_seconds").notNull().default(180),
+  /** Explicit Start arm — queueing alone must not send. Default false. */
+  queueRunning: boolean("queue_running").notNull().default(false),
   paused: boolean("paused").notNull().default(false),
   updatedAt: timestamp("updated_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),

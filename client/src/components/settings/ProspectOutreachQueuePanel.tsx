@@ -265,6 +265,11 @@ export function ProspectOutreachQueuePanel() {
       {dash?.queuePaused ? (
         <p className="text-sm text-amber-700">Queue is paused — no new sends until Resume / Start.</p>
       ) : null}
+      {!dash?.queueRunning && !dash?.queuePaused ? (
+        <p className="text-sm text-amber-800" data-testid="po-queue-waiting-start">
+          Queue is armed off — prospects can be queued, but nothing sends until you press Start queue.
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         {[

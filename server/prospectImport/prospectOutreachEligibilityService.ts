@@ -17,9 +17,14 @@ import type {
   ProspectOutreachEligibilityResult,
   ProspectOutreachPreferredChannel,
 } from "@shared/prospectBulkOutreach";
+import {
+  detectPriorProspectOutreach,
+  isProspectIntelligenceOutreachSubject,
+  type PriorProspectOutreachEvidenceResult,
+} from "@shared/prospectPriorOutreach";
 import { normalizeOutreachStatus } from "@shared/prospectOutreachLifecycle";
 import { db } from "../../drizzle/db";
-import { prospectIntelligence, prospectOutreachQueueItems } from "@shared/schema";
+import { messages, prospectIntelligence, prospectOutreachQueueItems } from "@shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 
 export type WorkspaceChannelConnections = {
@@ -137,6 +142,72 @@ export async function hasActiveQueueItem(params: {
   return filtered.length > 0;
 }
 
+/**
+ * Gather all duplicate-protection signals for a prospect:
+ * PI outreach_status / conversation linkage / prior queue sends /
+ * existing "Idea for …" email threads with outbound (manual PI outreach).
+ */
+export async function loadPriorProspectOutreachEvidence(
+  contactId: string,
+): Promise<PriorProspectOutreachEvidenceResult> {
+  const piRows = await db
+    .select({
+      outreachStatus: prospectIntelligence.outreachStatus,
+      outreachConversationId: prospectIntelligence.outreachConversationId,
+      outreachMessageId: prospectIntelligence.outreachMessageId,
+      outreachSentAt: prospectIntelligence.outreachSentAt,
+    })
+    .from(prospectIntelligence)
+    .where(eq(prospectIntelligence.contactId, contactId))
+    .limit(1);
+  const pi = piRows[0];
+
+  const sentQueue = await db
+    .select({ id: prospectOutreachQueueItems.id })
+    .from(prospectOutreachQueueItems)
+    .where(
+      and(
+        eq(prospectOutreachQueueItems.contactId, contactId),
+        eq(prospectOutreachQueueItems.queueStatus, "sent"),
+      ),
+    )
+    .limit(1);
+
+  const withConvs = await storage.getContactWithConversations(contactId);
+  const emailConversations: Array<{
+    id: string;
+    subject: string | null;
+    hasOutbound: boolean;
+  }> = [];
+
+  for (const conv of withConvs?.conversations || []) {
+    if (String(conv.channel) !== "email") continue;
+    if (!isProspectIntelligenceOutreachSubject(conv.subject)) continue;
+    const outbound = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(eq(messages.conversationId, conv.id), eq(messages.direction, "outbound")))
+      .limit(1);
+    emailConversations.push({
+      id: conv.id,
+      subject: conv.subject,
+      hasOutbound: outbound.length > 0,
+      lastMessageAt: conv.lastMessageAt?.getTime?.() ?? 0,
+    });
+  }
+  // Prefer earliest PI outreach thread (manual first send) when multiple exist.
+  emailConversations.sort((a, b) => a.lastMessageAt - b.lastMessageAt);
+
+  return detectPriorProspectOutreach({
+    outreachStatus: pi?.outreachStatus,
+    outreachConversationId: pi?.outreachConversationId,
+    outreachMessageId: pi?.outreachMessageId,
+    outreachSentAt: pi?.outreachSentAt,
+    emailConversations,
+    hasSuccessfulQueueSend: sentQueue.length > 0,
+  });
+}
+
 export async function resolveProspectOutreachEligibilityForContact(params: {
   contact: Contact;
   workspaceUserId: string;
@@ -145,10 +216,13 @@ export async function resolveProspectOutreachEligibilityForContact(params: {
   excludeQueueItemId?: string;
   /** When true, ignore active-queue duplicate gate (send-time re-check of claimed item). */
   ignoreAlreadyQueued?: boolean;
+  /** Explicit resend bypass (future Autopilot / operator override). */
+  forceResend?: boolean;
 }): Promise<{
   result: ProspectOutreachEligibilityResult;
   mailboxId: string | null;
   input: ProspectOutreachEligibilityInput;
+  priorOutreach: PriorProspectOutreachEvidenceResult;
 }> {
   const connections =
     params.connections ?? (await loadWorkspaceChannelConnections(params.workspaceUserId));
@@ -167,9 +241,40 @@ export async function resolveProspectOutreachEligibilityForContact(params: {
         excludeQueueItemId: params.excludeQueueItemId,
       });
 
+  let priorOutreach = await loadPriorProspectOutreachEvidence(params.contact.id);
+  if (params.forceResend) {
+    priorOutreach = { alreadyContacted: false, reason: "ok" };
+  }
+
+  // Heal stuck Approved / not_sent when a prior PI outreach conversation exists.
+  if (
+    priorOutreach.alreadyContacted &&
+    priorOutreach.conversationId &&
+    pi &&
+    normalizeOutreachStatus(pi.outreachStatus, {
+      outreachSentAt: pi.outreachSentAt,
+      repliedAt: pi.repliedAt,
+    }) === "not_sent"
+  ) {
+    try {
+      const { markProspectOutreachSent } = await import("./prospectIntelligenceService");
+      await markProspectOutreachSent({
+        contactId: params.contact.id,
+        conversationId: priorOutreach.conversationId,
+        source: "queue_eligibility_prior_outreach_reconcile",
+      });
+    } catch {
+      /* non-fatal — still block queue */
+    }
+  }
+
   const input: ProspectOutreachEligibilityInput = {
     reviewStatus: pi?.reviewStatus,
-    outreachStatus: pi?.outreachStatus,
+    outreachStatus: priorOutreach.alreadyContacted
+      ? priorOutreach.reason === "already_replied"
+        ? "replied"
+        : "outreach_sent"
+      : pi?.outreachStatus,
     outreachSentAt: pi?.outreachSentAt,
     repliedAt: pi?.repliedAt,
     analysisStatus: pi?.analysisStatus,
@@ -193,7 +298,7 @@ export async function resolveProspectOutreachEligibilityForContact(params: {
   };
 
   const result = resolveProspectOutreachEligibility(input);
-  return { result, mailboxId: connections.emailMailboxId, input };
+  return { result, mailboxId: connections.emailMailboxId, input, priorOutreach };
 }
 
 export function recipientIdentityForSelectedChannel(

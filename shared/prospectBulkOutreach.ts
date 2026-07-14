@@ -63,6 +63,11 @@ export const PROSPECT_OUTREACH_DEFAULT_SETTINGS = {
   maxDelaySeconds: 180,
   /** Soft per-mailbox hourly guard for bulk queue (below Gmail soft cap). */
   hourlySendLimit: 12,
+  /**
+   * Fail-closed: queueing must NOT send until explicit Start.
+   * Worker claims only when queueRunning && !paused.
+   */
+  queueRunning: false,
   paused: false,
 } as const;
 
@@ -72,9 +77,19 @@ export type ProspectOutreachWorkspaceSettings = {
   minDelaySeconds: number;
   maxDelaySeconds: number;
   hourlySendLimit: number;
+  /** Explicit Start arm — default false. */
+  queueRunning: boolean;
   paused: boolean;
   updatedAt?: string;
 };
+
+/** Worker may claim/send only when Start has armed the queue and Pause is clear. */
+export function isProspectOutreachQueueArmed(settings: {
+  queueRunning?: boolean | null;
+  paused?: boolean | null;
+}): boolean {
+  return settings.queueRunning === true && settings.paused !== true;
+}
 
 export type ProspectOutreachEligibilityReason =
   | "eligible"
@@ -234,6 +249,7 @@ export type ProspectOutreachQueueDashboard = {
   paused: number;
   settings: ProspectOutreachWorkspaceSettings;
   queuePaused: boolean;
+  queueRunning: boolean;
 };
 
 export type ProspectBulkAnalysisJobSummary = {

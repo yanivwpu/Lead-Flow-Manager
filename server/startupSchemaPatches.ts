@@ -413,6 +413,7 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
         hourly_send_limit integer NOT NULL DEFAULT 12,
         min_delay_seconds integer NOT NULL DEFAULT 90,
         max_delay_seconds integer NOT NULL DEFAULT 180,
+        queue_running boolean NOT NULL DEFAULT false,
         paused boolean NOT NULL DEFAULT false,
         updated_at timestamp DEFAULT now(),
         created_at timestamp DEFAULT now()
@@ -495,6 +496,13 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
         ON prospect_outreach_queue_items (contact_id)`,
       `CREATE INDEX IF NOT EXISTS prospect_outreach_queue_batch_idx
         ON prospect_outreach_queue_items (batch_id)`,
+    ].join(";\n"),
+  },
+  {
+    tag: "0064_prospect_outreach_queue_running",
+    sql: [
+      `ALTER TABLE prospect_outreach_settings
+        ADD COLUMN IF NOT EXISTS queue_running boolean NOT NULL DEFAULT false`,
     ].join(";\n"),
   },
 ];

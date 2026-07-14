@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS prospect_outreach_settings (
   hourly_send_limit integer NOT NULL DEFAULT 12,
   min_delay_seconds integer NOT NULL DEFAULT 90,
   max_delay_seconds integer NOT NULL DEFAULT 180,
+  queue_running boolean NOT NULL DEFAULT false,
   paused boolean NOT NULL DEFAULT false,
   updated_at timestamp DEFAULT now(),
   created_at timestamp DEFAULT now()

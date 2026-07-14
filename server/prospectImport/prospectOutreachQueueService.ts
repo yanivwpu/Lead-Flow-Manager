@@ -18,6 +18,7 @@ import {
   PROSPECT_OUTREACH_DEFAULT_SETTINGS,
   buildQueueDedupKey,
   computeNextScheduledDelayMs,
+  isProspectOutreachQueueArmed,
   normalizeRecipientIdentity,
   prospectBulkOutreachLog,
   prospectOutreachEligibilityReasonLabel,
@@ -50,6 +51,7 @@ function mapSettings(
       minDelaySeconds: PROSPECT_OUTREACH_DEFAULT_SETTINGS.minDelaySeconds,
       maxDelaySeconds: PROSPECT_OUTREACH_DEFAULT_SETTINGS.maxDelaySeconds,
       hourlySendLimit: PROSPECT_OUTREACH_DEFAULT_SETTINGS.hourlySendLimit,
+      queueRunning: PROSPECT_OUTREACH_DEFAULT_SETTINGS.queueRunning,
       paused: PROSPECT_OUTREACH_DEFAULT_SETTINGS.paused,
     };
   }
@@ -59,6 +61,7 @@ function mapSettings(
     minDelaySeconds: row.minDelaySeconds,
     maxDelaySeconds: row.maxDelaySeconds,
     hourlySendLimit: row.hourlySendLimit,
+    queueRunning: row.queueRunning ?? false,
     paused: row.paused,
     updatedAt: row.updatedAt?.toISOString(),
   };
@@ -135,6 +138,7 @@ export async function updateOutreachSettings(
       Math.max(5, patch.minDelaySeconds ?? current.minDelaySeconds),
       patch.maxDelaySeconds ?? current.maxDelaySeconds,
     ),
+    queueRunning: patch.queueRunning ?? current.queueRunning,
     paused: patch.paused ?? current.paused,
   };
 
@@ -580,10 +584,12 @@ export async function getQueueDashboard(
     paused,
     settings,
     queuePaused: settings.paused,
+    queueRunning: settings.queueRunning,
   };
 }
 
 export async function pauseQueue(workspaceUserId: string): Promise<ProspectOutreachWorkspaceSettings> {
+  // Keep queueRunning true so Resume continues; only Pause clears new claims.
   const settings = await updateOutreachSettings(workspaceUserId, { paused: true });
   await db
     .update(prospectOutreachQueueItems)
@@ -606,7 +612,10 @@ export async function pauseQueue(workspaceUserId: string): Promise<ProspectOutre
 }
 
 export async function resumeQueue(workspaceUserId: string): Promise<ProspectOutreachWorkspaceSettings> {
-  const settings = await updateOutreachSettings(workspaceUserId, { paused: false });
+  const settings = await updateOutreachSettings(workspaceUserId, {
+    paused: false,
+    queueRunning: true,
+  });
   await db
     .update(prospectOutreachQueueItems)
     .set({ queueStatus: "queued", updatedAt: new Date() })
@@ -616,10 +625,9 @@ export async function resumeQueue(workspaceUserId: string): Promise<ProspectOutr
         eq(prospectOutreachQueueItems.queueStatus, "paused"),
       ),
     );
-  // Re-open batch statuses
   await db
     .update(prospectOutreachBatches)
-    .set({ status: "queued" })
+    .set({ status: "running" })
     .where(
       and(
         eq(prospectOutreachBatches.workspaceUserId, workspaceUserId),
@@ -630,7 +638,7 @@ export async function resumeQueue(workspaceUserId: string): Promise<ProspectOutr
     JSON.stringify(
       prospectBulkOutreachLog("queue_resumed", {
         workspaceId: workspaceUserId,
-        status: "queued",
+        status: "running",
       }),
     ),
   );
@@ -638,7 +646,20 @@ export async function resumeQueue(workspaceUserId: string): Promise<ProspectOutr
 }
 
 export async function startQueue(workspaceUserId: string): Promise<ProspectOutreachWorkspaceSettings> {
-  const settings = await updateOutreachSettings(workspaceUserId, { paused: false });
+  const settings = await updateOutreachSettings(workspaceUserId, {
+    queueRunning: true,
+    paused: false,
+  });
+  // Re-arm any items left paused from an earlier Pause.
+  await db
+    .update(prospectOutreachQueueItems)
+    .set({ queueStatus: "queued", updatedAt: new Date() })
+    .where(
+      and(
+        eq(prospectOutreachQueueItems.workspaceUserId, workspaceUserId),
+        eq(prospectOutreachQueueItems.queueStatus, "paused"),
+      ),
+    );
   await db
     .update(prospectOutreachBatches)
     .set({ status: "running", startedAt: new Date() })
@@ -648,6 +669,15 @@ export async function startQueue(workspaceUserId: string): Promise<ProspectOutre
         inArray(prospectOutreachBatches.status, ["queued", "paused"]),
       ),
     );
+  console.info(
+    JSON.stringify(
+      prospectBulkOutreachLog("queue_resumed", {
+        workspaceId: workspaceUserId,
+        status: "running",
+        reason: "start_queue",
+      }),
+    ),
+  );
   return settings;
 }
 
@@ -716,7 +746,8 @@ export async function claimNextDueQueueItem(
   workspaceUserId: string,
 ): Promise<ProspectOutreachQueueItemRow | null> {
   const settings = await getOutreachSettings(workspaceUserId);
-  if (settings.paused) return null;
+  // Fail-closed: queueing alone must never send; Start arms queueRunning.
+  if (!isProspectOutreachQueueArmed(settings)) return null;
 
   const now = new Date();
   const due = await db
@@ -802,6 +833,39 @@ export async function processClaimedQueueItem(
   if (!contact) {
     await markItemFailed(item, "contact_not_found", false);
     return { ok: false, reason: "contact_not_found" };
+  }
+
+  const { loadPriorProspectOutreachEvidence } = await import(
+    "./prospectOutreachEligibilityService"
+  );
+  const prior = await loadPriorProspectOutreachEvidence(item.contactId);
+  // Allow this claim's own conversation if we already linked during an earlier partial send (none yet).
+  if (prior.alreadyContacted) {
+    // If evidence is only this in-flight send path's future link, continue;
+    // otherwise skip duplicates (manual or prior queue).
+    const selfConversation =
+      item.conversationId && prior.conversationId && item.conversationId === prior.conversationId;
+    if (!selfConversation) {
+      await db
+        .update(prospectOutreachQueueItems)
+        .set({
+          queueStatus: "skipped",
+          lastError: prior.reason,
+          updatedAt: new Date(),
+        })
+        .where(eq(prospectOutreachQueueItems.id, item.id));
+      console.info(
+        JSON.stringify(
+          prospectBulkOutreachLog("prospect_skipped", {
+            workspaceId: item.workspaceUserId,
+            queueItemId: item.id,
+            contactId: item.contactId,
+            reason: prior.reason,
+          }),
+        ),
+      );
+      return { ok: false, reason: prior.reason };
+    }
   }
 
   const piRows = await db
