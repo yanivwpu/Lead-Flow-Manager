@@ -45,6 +45,7 @@ import type {
   ProspectIntelligenceJobSummary,
   ProspectIntelligenceListItem,
 } from "@shared/prospectImport";
+import { prospectOutreachEligibilityReasonLabel } from "@shared/prospectBulkOutreach";
 import {
   buildProspectOutreachInboxHref,
   buildProspectOutreachSubject,
@@ -787,7 +788,13 @@ export function ProspectIntelligencePanel(props: {
     willQueue: number;
     eligibleByChannel: Record<string, number>;
     notBulkEligible: number;
-    skips: Array<{ contactId: string; name?: string; reason: string }>;
+    skips: Array<{
+      contactId: string;
+      name?: string;
+      reason: string;
+      reasonLabel?: string;
+      detail?: string;
+    }>;
   } | null>(null);
   const [bulkAnalysisJobId, setBulkAnalysisJobId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -1305,7 +1312,8 @@ export function ProspectIntelligencePanel(props: {
                 ) : null}
                 {queuePreview.skips.slice(0, 8).map((s) => (
                   <li key={s.contactId}>
-                    {s.name || s.contactId.slice(0, 8)} — {s.reason}
+                    {s.name || s.contactId.slice(0, 8)} —{" "}
+                    {s.reasonLabel || prospectOutreachEligibilityReasonLabel(s.reason, s.detail)}
                   </li>
                 ))}
                 {queuePreview.skips.length > 8 ? (

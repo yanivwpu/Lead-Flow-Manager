@@ -31,13 +31,36 @@ export type WorkspaceChannelConnections = {
   instagramConnected: boolean;
 };
 
+/**
+ * Resolve Email sender availability the same way manual PI outreach does:
+ * probe credentials (heals sticky needs_reconnect when tokens still work).
+ * Do NOT gate only on raw syncStatus ∈ {connected, syncing} — that falsely rejects
+ * mailboxes that still send successfully.
+ */
+export async function resolveEmailSenderForBulkOutreach(
+  workspaceUserId: string,
+): Promise<{ emailConnected: boolean; emailMailboxId: string | null }> {
+  const mailbox = await getPrimaryEmailMailbox(workspaceUserId).catch(() => null);
+  if (!mailbox) return { emailConnected: false, emailMailboxId: null };
+
+  const { isEmailMailboxSyncStatusSendable } = await import("@shared/emailMailboxAvailability");
+  if (!isEmailMailboxSyncStatusSendable(mailbox.syncStatus)) {
+    return { emailConnected: false, emailMailboxId: null };
+  }
+
+  try {
+    const { getValidMailboxAccessToken } = await import("../emailChannel/oauth");
+    const { mailbox: fresh } = await getValidMailboxAccessToken(mailbox.id);
+    return { emailConnected: true, emailMailboxId: fresh.id };
+  } catch {
+    return { emailConnected: false, emailMailboxId: null };
+  }
+}
+
 export async function loadWorkspaceChannelConnections(
   workspaceUserId: string,
 ): Promise<WorkspaceChannelConnections> {
-  const mailbox = await getPrimaryEmailMailbox(workspaceUserId).catch(() => null);
-  const emailOk =
-    !!mailbox &&
-    ["connected", "syncing"].includes(String(mailbox.syncStatus || "").toLowerCase());
+  const email = await resolveEmailSenderForBulkOutreach(workspaceUserId);
 
   const settings = await storage.getChannelSettings(workspaceUserId).catch(() => []);
   const byChannel = new Map(
@@ -50,8 +73,8 @@ export async function loadWorkspaceChannelConnections(
   };
 
   return {
-    emailConnected: emailOk,
-    emailMailboxId: emailOk ? mailbox!.id : null,
+    emailConnected: email.emailConnected,
+    emailMailboxId: email.emailMailboxId,
     smsConnected: connected("sms"),
     whatsappConnected: connected("whatsapp"),
     facebookConnected: connected("facebook"),

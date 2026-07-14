@@ -8,8 +8,10 @@ import {
   computeNextScheduledDelayMs,
   normalizeRecipientIdentity,
   prospectBulkOutreachLog,
+  prospectOutreachEligibilityReasonLabel,
   PROSPECT_BULK_SEND_ENABLED_CHANNELS,
 } from "../shared/prospectBulkOutreach";
+import { isEmailMailboxSyncStatusSendable } from "../shared/emailMailboxAvailability";
 import {
   resolveProspectOutreachEligibility,
   resolveRecipientForChannel,
@@ -203,6 +205,69 @@ function testManualSendLifecycleStillWorks() {
   assert.equal(sibling.reason, "conversation_mismatch");
 }
 
+function testSummaryReasonDoesNotMaskSenderNotConnected() {
+  const result = resolveProspectOutreachEligibility({
+    email: "a@example.com",
+    emailConnected: false,
+    reviewStatus: "approved",
+    outreachStatus: "not_sent",
+    analysisStatus: "completed",
+    preferredChannel: "auto",
+  });
+  assert.equal(result.channels.email.reason, "sender_not_connected");
+  assert.equal(result.summaryReason, "sender_not_connected");
+  assert.equal(result.anyEligible, false);
+  assert.equal(result.selectedChannel, null);
+}
+
+function testAutoSelectsEmailWhenConnectedLikeProduction() {
+  // Mirrors production: valid email + usable Gmail + Preferred = Auto
+  const result = resolveProspectOutreachEligibility({
+    email: "solomonjames@gmail.com",
+    emailConnected: true,
+    reviewStatus: "approved",
+    outreachStatus: "not_sent",
+    analysisStatus: "completed",
+    needsReview: false,
+    preferredChannel: "auto",
+  });
+  assert.equal(result.channels.email.technicallyAvailable, true);
+  assert.equal(result.channels.email.connected, true);
+  assert.equal(result.channels.email.policyEligible, true);
+  assert.equal(result.channels.email.eligible, true);
+  assert.equal(result.channels.email.reason, "eligible");
+  assert.equal(result.selectedChannel, "email");
+  assert.equal(result.anyEligible, true);
+  assert.equal(result.summaryReason, "eligible");
+}
+
+function testHumanReadableReasonLabels() {
+  assert.equal(
+    prospectOutreachEligibilityReasonLabel("sender_not_connected"),
+    "Email sender not connected",
+  );
+  assert.equal(
+    prospectOutreachEligibilityReasonLabel("missing_identity", "missing_email"),
+    "Missing email",
+  );
+  assert.equal(prospectOutreachEligibilityReasonLabel("needs_review"), "Needs review");
+  assert.equal(
+    prospectOutreachEligibilityReasonLabel("already_outreach_sent"),
+    "Already contacted",
+  );
+  assert.equal(
+    prospectOutreachEligibilityReasonLabel("not_enabled_for_bulk"),
+    "No bulk-enabled channel available",
+  );
+}
+
+function testStickyNeedsReconnectStatusIsSendableCandidate() {
+  assert.equal(isEmailMailboxSyncStatusSendable("needs_reconnect"), true);
+  assert.equal(isEmailMailboxSyncStatusSendable("connected"), true);
+  assert.equal(isEmailMailboxSyncStatusSendable("error"), true);
+  assert.equal(isEmailMailboxSyncStatusSendable("disconnected"), false);
+}
+
 function testSafeLoggingNoBodies() {
   const payload = prospectBulkOutreachLog("send_succeeded", {
     workspaceId: "w",
@@ -248,6 +313,10 @@ const tests: Array<[string, () => void]> = [
   ["24-26 reply exact thread + manual lifecycle", testManualSendLifecycleStillWorks],
   ["observability safe fields", testSafeLoggingNoBodies],
   ["auto never silently picks prohibited channel", testAutoDoesNotPickProhibitedChannel],
+  ["summaryReason does not mask sender_not_connected", testSummaryReasonDoesNotMaskSenderNotConnected],
+  ["Auto + valid email + Gmail → Email selected (production regression)", testAutoSelectsEmailWhenConnectedLikeProduction],
+  ["human-readable eligibility labels", testHumanReadableReasonLabels],
+  ["sticky needs_reconnect is sendable candidate", testStickyNeedsReconnectStatusIsSendableCandidate],
 ];
 
 let failed = 0;

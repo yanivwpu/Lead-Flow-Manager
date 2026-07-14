@@ -20,6 +20,7 @@ import {
   computeNextScheduledDelayMs,
   normalizeRecipientIdentity,
   prospectBulkOutreachLog,
+  prospectOutreachEligibilityReasonLabel,
   type ProspectOutreachBatchSummary,
   type ProspectOutreachChannel,
   type ProspectOutreachPreferredChannel,
@@ -173,7 +174,12 @@ export async function previewQueueBatch(params: {
   for (const contactId of uniqueIds) {
     const contact = await storage.getContact(contactId);
     if (!contact) {
-      skips.push({ contactId, reason: "missing_identity", detail: "contact_not_found" });
+      skips.push({
+        contactId,
+        reason: "missing_identity",
+        detail: "contact_not_found",
+        reasonLabel: prospectOutreachEligibilityReasonLabel("missing_identity", "contact_not_found"),
+      });
       continue;
     }
     const { result } = await resolveProspectOutreachEligibilityForContact({
@@ -183,7 +189,15 @@ export async function previewQueueBatch(params: {
       connections,
     });
     if (!result.anyEligible || !result.selectedChannel) {
-      const reason = result.summaryReason || "not_enabled_for_bulk";
+      const reason = result.summaryReason || result.channels.email?.reason || "not_enabled_for_bulk";
+      const detail = result.channels.email?.detail;
+      const skip = {
+        contactId,
+        name: contact.name,
+        reason,
+        detail,
+        reasonLabel: prospectOutreachEligibilityReasonLabel(reason, detail),
+      };
       if (
         reason === "already_outreach_sent" ||
         reason === "already_replied" ||
@@ -192,24 +206,37 @@ export async function previewQueueBatch(params: {
         reason === "duplicate_queued" ||
         reason === "suppressed" ||
         reason === "opted_out" ||
-        reason === "analysis_incomplete"
+        reason === "analysis_incomplete" ||
+        reason === "sender_not_connected" ||
+        reason === "missing_identity" ||
+        reason === "missing_message_snapshot"
       ) {
-        skips.push({ contactId, name: contact.name, reason });
+        skips.push(skip);
       } else {
         notBulkEligible += 1;
-        skips.push({ contactId, name: contact.name, reason, detail: "no_eligible_channel" });
+        skips.push(skip);
       }
       continue;
     }
 
     const recipient = recipientIdentityForSelectedChannel(result.selectedChannel, contact);
     if (!recipient) {
-      skips.push({ contactId, name: contact.name, reason: "missing_identity" });
+      skips.push({
+        contactId,
+        name: contact.name,
+        reason: "missing_identity",
+        reasonLabel: prospectOutreachEligibilityReasonLabel("missing_identity", "missing_email"),
+      });
       continue;
     }
     const recipientKey = `${result.selectedChannel}:${recipient}`;
     if (seenRecipients.has(recipientKey)) {
-      skips.push({ contactId, name: contact.name, reason: "duplicate_recipient" });
+      skips.push({
+        contactId,
+        name: contact.name,
+        reason: "duplicate_recipient",
+        reasonLabel: prospectOutreachEligibilityReasonLabel("duplicate_recipient"),
+      });
       continue;
     }
 
@@ -220,7 +247,12 @@ export async function previewQueueBatch(params: {
       .limit(1);
     const message = String(piRows[0]?.suggestedFirstMessage || "").trim();
     if (!message) {
-      skips.push({ contactId, name: contact.name, reason: "missing_message_snapshot" });
+      skips.push({
+        contactId,
+        name: contact.name,
+        reason: "missing_message_snapshot",
+        reasonLabel: prospectOutreachEligibilityReasonLabel("missing_message_snapshot"),
+      });
       continue;
     }
 

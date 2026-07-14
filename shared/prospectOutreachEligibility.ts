@@ -448,8 +448,34 @@ export function resolveProspectOutreachEligibility(
     channels,
     selectedChannel,
     anyEligible: selectedChannel != null,
-    summaryReason: selectedChannel ? "eligible" : "not_enabled_for_bulk",
+    summaryReason: selectedChannel
+      ? "eligible"
+      : resolveNoChannelSummaryReason(channels, preferred),
   };
+}
+
+/**
+ * When Auto/preferred selects nothing, surface the real channel rejection —
+ * never mask sender_not_connected / missing_identity as not_enabled_for_bulk.
+ */
+function resolveNoChannelSummaryReason(
+  channels: Record<ProspectOutreachChannel, ProspectChannelEligibility>,
+  preferred: ProspectOutreachPreferredChannel,
+): ProspectOutreachEligibilityReason {
+  if (preferred !== "auto") {
+    const ch = preferred as ProspectOutreachChannel;
+    return channels[ch]?.reason || "not_enabled_for_bulk";
+  }
+  // Production bulk path is Email-first — prefer its concrete reason for Auto.
+  const emailReason = channels.email?.reason;
+  if (emailReason && emailReason !== "eligible") return emailReason;
+  for (const ch of CHANNEL_PRIORITY) {
+    const reason = channels[ch]?.reason;
+    if (reason && reason !== "eligible" && reason !== "not_enabled_for_bulk") {
+      return reason;
+    }
+  }
+  return "not_enabled_for_bulk";
 }
 
 export function resolveRecipientForChannel(

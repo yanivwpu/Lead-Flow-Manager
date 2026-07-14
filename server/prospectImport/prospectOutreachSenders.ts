@@ -48,18 +48,30 @@ export const emailProspectOutreachSender: ProspectOutreachSender = {
   channel: "email",
 
   async canSend(input) {
-    const mailbox = input.senderMailboxId
-      ? await getEmailMailboxById(input.senderMailboxId)
-      : await getPrimaryEmailMailbox(input.workspaceUserId);
-    if (!mailbox) {
-      return { ok: false, reason: "sender_not_connected", pauseQueue: true };
-    }
-    const status = String(mailbox.syncStatus || "").toLowerCase();
-    if (status === "disconnected" || status === "needs_reconnect" || status === "error") {
-      return { ok: false, reason: "sender_not_connected", pauseQueue: true };
-    }
-    if (!["connected", "syncing"].includes(status) && status !== "connecting") {
-      return { ok: false, reason: "sender_not_connected", pauseQueue: true };
+    const { resolveEmailSenderForBulkOutreach } = await import(
+      "./prospectOutreachEligibilityService"
+    );
+    // When a specific mailbox is specified, probe that id; else primary for workspace.
+    if (input.senderMailboxId) {
+      const mailbox = await getEmailMailboxById(input.senderMailboxId);
+      if (!mailbox) {
+        return { ok: false, reason: "sender_not_connected", pauseQueue: true };
+      }
+      const { isEmailMailboxSyncStatusSendable } = await import("@shared/emailMailboxAvailability");
+      if (!isEmailMailboxSyncStatusSendable(mailbox.syncStatus)) {
+        return { ok: false, reason: "sender_not_connected", pauseQueue: true };
+      }
+      try {
+        const { getValidMailboxAccessToken } = await import("../emailChannel/oauth");
+        await getValidMailboxAccessToken(mailbox.id);
+      } catch {
+        return { ok: false, reason: "sender_not_connected", pauseQueue: true };
+      }
+    } else {
+      const avail = await resolveEmailSenderForBulkOutreach(input.workspaceUserId);
+      if (!avail.emailConnected) {
+        return { ok: false, reason: "sender_not_connected", pauseQueue: true };
+      }
     }
     if (!String(input.recipientIdentity || "").includes("@")) {
       return { ok: false, reason: "missing_identity" };

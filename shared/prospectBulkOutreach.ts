@@ -97,6 +97,57 @@ export type ProspectOutreachEligibilityReason =
   | "unsupported_for_cold_outreach"
   | "policy_blocked";
 
+/** User-facing confirmation copy — never lead with internal codes. */
+export function prospectOutreachEligibilityReasonLabel(
+  reason: string | null | undefined,
+  detail?: string | null,
+): string {
+  const r = String(reason || "").toLowerCase();
+  switch (r) {
+    case "eligible":
+      return "Eligible";
+    case "missing_identity":
+      return detail === "missing_email" || detail === "contact_not_found"
+        ? "Missing email"
+        : detail === "missing_phone"
+          ? "Missing phone"
+          : "Missing contact identity";
+    case "sender_not_connected":
+      return "Email sender not connected";
+    case "already_outreach_sent":
+    case "already_contacted":
+      return "Already contacted";
+    case "already_replied":
+      return "Already replied";
+    case "needs_review":
+      return "Needs review";
+    case "not_approved":
+      return "Not approved yet";
+    case "analysis_incomplete":
+      return "AI analysis incomplete";
+    case "duplicate_queued":
+    case "duplicate_recipient":
+    case "dedup_key_collision":
+      return "Already queued (duplicate)";
+    case "missing_message_snapshot":
+      return "Missing approved message";
+    case "suppressed":
+      return "Suppressed";
+    case "opted_out":
+      return "Opted out";
+    case "missing_consent":
+      return "Missing consent for this channel";
+    case "template_required":
+    case "unsupported_for_cold_outreach":
+    case "existing_conversation_only":
+      return "Channel not available for cold outreach";
+    case "not_enabled_for_bulk":
+      return "No bulk-enabled channel available";
+    default:
+      return "Not eligible for bulk outreach";
+  }
+}
+
 export type ProspectChannelEligibility = {
   channel: ProspectOutreachChannel;
   eligible: boolean;
@@ -121,6 +172,8 @@ export type ProspectOutreachQueuePreviewSkip = {
   contactId: string;
   name?: string;
   reason: ProspectOutreachEligibilityReason | string;
+  /** Human-readable confirmation copy. */
+  reasonLabel?: string;
   detail?: string;
 };
 
