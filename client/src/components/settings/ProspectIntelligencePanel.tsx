@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Brain,
@@ -178,6 +178,7 @@ function ProspectContactFieldRow(props: {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value || ""));
   const [localError, setLocalError] = useState<string | null>(null);
+  const saveInFlightRef = useRef(false);
 
   useEffect(() => {
     if (!editing) setDraft(String(value || ""));
@@ -191,6 +192,10 @@ function ProspectContactFieldRow(props: {
 
   const saveMutation = useMutation({
     mutationFn: async (nextRaw: string) => {
+      if (saveInFlightRef.current) {
+        throw new Error("Save already in progress");
+      }
+      saveInFlightRef.current = true;
       const trimmed = nextRaw.trim();
       const body: { email?: string | null; phone?: string | null } = {};
       if (kind === "email") {
@@ -210,83 +215,124 @@ function ProspectContactFieldRow(props: {
           body.phone = normalized;
         }
       }
+      console.info(
+        JSON.stringify({
+          tag: "[ProspectEnrichment]",
+          event: "save_requested",
+          contactId,
+          fieldName: kind,
+        }),
+      );
       // #region agent log
       fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
         body: JSON.stringify({
           sessionId: "32aec0",
-          runId: "pi-contact-edit",
-          hypothesisId: "H1",
-          location: "ProspectIntelligencePanel.tsx:saveMutation",
-          message: "PATCH existing contact (no create)",
-          data: {
-            kind,
-            contactIdPrefix: contactId.slice(0, 8),
-            clearing: trimmed.length === 0,
-            hasNormalized: Boolean(body.email || body.phone),
-          },
+          runId: "pi-enrichment-ratelimit",
+          hypothesisId: "H-rl",
+          location: "ProspectIntelligencePanel.tsx:save_requested",
+          message: "ProspectEnrichment save_requested",
+          data: { kind, contactIdPrefix: contactId.slice(0, 8) },
           timestamp: Date.now(),
         }),
       }).catch(() => {});
       // #endregion
-      const res = await fetch(`/api/contacts/${contactId}`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error((data as { error?: string }).error || "Failed to update contact");
+      try {
+        const res = await fetch(`/api/contacts/${contactId}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 429) {
+          const limiter =
+            typeof (data as { limiter?: string }).limiter === "string"
+              ? (data as { limiter: string }).limiter
+              : null;
+          console.warn(
+            JSON.stringify({
+              tag: "[ProspectEnrichment]",
+              event: "save_rate_limited",
+              contactId,
+              fieldName: kind,
+              status: 429,
+              limiter,
+            }),
+          );
+          // #region agent log
+          fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
+            body: JSON.stringify({
+              sessionId: "32aec0",
+              runId: "pi-enrichment-ratelimit",
+              hypothesisId: "H-rl",
+              location: "ProspectIntelligencePanel.tsx:save_rate_limited",
+              message: "ProspectEnrichment save_rate_limited",
+              data: { kind, contactIdPrefix: contactId.slice(0, 8), limiter },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          // #endregion
+          throw new Error(
+            (data as { error?: string }).error ||
+              "Too many requests. Please try again shortly.",
+          );
+        }
+        if (!res.ok) {
+          console.warn(
+            JSON.stringify({
+              tag: "[ProspectEnrichment]",
+              event: "save_failed",
+              contactId,
+              fieldName: kind,
+              status: res.status,
+            }),
+          );
+          throw new Error((data as { error?: string }).error || "Failed to update contact");
+        }
+        console.info(
+          JSON.stringify({
+            tag: "[ProspectEnrichment]",
+            event: "save_succeeded",
+            contactId,
+            fieldName: kind,
+            status: res.status,
+          }),
+        );
+        // #region agent log
+        fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
+          body: JSON.stringify({
+            sessionId: "32aec0",
+            runId: "pi-enrichment-ratelimit",
+            hypothesisId: "H-rl",
+            location: "ProspectIntelligencePanel.tsx:save_succeeded",
+            message: "ProspectEnrichment save_succeeded",
+            data: {
+              kind,
+              contactIdPrefix: contactId.slice(0, 8),
+              httpStatus: res.status,
+              returnedIdPrefix:
+                typeof (data as { id?: string }).id === "string"
+                  ? (data as { id: string }).id.slice(0, 8)
+                  : null,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+        return body;
+      } finally {
+        saveInFlightRef.current = false;
       }
-      // #region agent log
-      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
-        body: JSON.stringify({
-          sessionId: "32aec0",
-          runId: "pi-contact-edit",
-          hypothesisId: "H2",
-          location: "ProspectIntelligencePanel.tsx:saveOk",
-          message: "Contact PATCH succeeded",
-          data: {
-            kind,
-            contactIdPrefix: contactId.slice(0, 8),
-            httpStatus: res.status,
-            returnedIdPrefix:
-              typeof (data as { id?: string }).id === "string"
-                ? (data as { id: string }).id.slice(0, 8)
-                : null,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-      return body;
     },
     onSuccess: (body) => {
       setLocalError(null);
       setEditing(false);
-      // #region agent log
-      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
-        body: JSON.stringify({
-          sessionId: "32aec0",
-          runId: "pi-contact-edit",
-          hypothesisId: "H3",
-          location: "ProspectIntelligencePanel.tsx:onSuccess",
-          message: "Refreshing modal outreach state",
-          data: {
-            kind,
-            emailReady: kind === "email" ? isValidProspectEmail(body.email) : undefined,
-            phoneReady: kind === "phone" ? isValidProspectPhone(body.phone) : undefined,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       onSaved(body);
       toast({
         title: kind === "email" ? "Email saved" : "Phone saved",
@@ -294,10 +340,16 @@ function ProspectContactFieldRow(props: {
       });
     },
     onError: (err: Error) => {
+      if (err.message === "Save already in progress") return;
       setLocalError(err.message);
       toast({ title: "Could not save", description: err.message, variant: "destructive" });
     },
   });
+
+  const requestSave = () => {
+    if (saveMutation.isPending || saveInFlightRef.current) return;
+    saveMutation.mutate(draft);
+  };
 
   return (
     <div className="space-y-1" data-testid={`pi-contact-field-${kind}`}>
@@ -318,7 +370,7 @@ function ProspectContactFieldRow(props: {
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-                  saveMutation.mutate(draft);
+                  requestSave();
                 }
                 if (e.key === "Escape") {
                   setEditing(false);
@@ -333,7 +385,7 @@ function ProspectContactFieldRow(props: {
               size="sm"
               className="h-8 bg-brand-green hover:bg-emerald-700"
               disabled={saveMutation.isPending}
-              onClick={() => saveMutation.mutate(draft)}
+              onClick={requestSave}
               data-testid={`pi-contact-${kind}-save`}
             >
               {saveMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
@@ -522,6 +574,7 @@ function ProspectIntelligenceDetailDialog({
     if (!item || !approveUi.showSendOutreach) return;
     const payload: ProspectOutreachComposePayload = {
       contactId: item.contactId,
+      source: "prospect_intelligence",
       subject: buildProspectOutreachSubject(item.name),
       body: editMessage || item.intelligence?.suggestedFirstMessage || "",
       createdAt: Date.now(),

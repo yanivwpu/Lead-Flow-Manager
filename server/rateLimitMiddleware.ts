@@ -15,7 +15,7 @@ export function isWebhookPath(path: string): boolean {
   return WEBHOOK_RATE_LIMIT_EXCLUDED_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
-type RateLimitRule = {
+export type RateLimitRule = {
   id: string;
   match: (path: string, method: string) => boolean;
   limit: number;
@@ -29,9 +29,30 @@ function isIntegrationStartOrComplete(path: string): boolean {
 }
 
 const INVENTORY_MATCHES_PATH = /^\/api\/contacts\/[^/]+\/inventory-matches$/;
+const CONTACTS_API_PREFIX = "/api/contacts";
+const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-const RATE_LIMIT_RULES: RateLimitRule[] = [
+/**
+ * Contact / CRM rate limits.
+ *
+ * IMPORTANT: Do not share one low bucket across all /api/contacts* traffic.
+ * Authenticated Inbox uses many GETs (detail, timeline, notes, appointments).
+ * That used to exhaust a combined 120/15m "contact" limit and 429 manual CRM
+ * PATCH saves (Prospect Intelligence email enrichment).
+ *
+ * Split:
+ * - public-contact: unauthenticated lead capture form
+ * - contacts-read: authenticated CRM reads (generous)
+ * - contacts-write: authenticated CRM mutations (manual edits / sends)
+ */
+export const RATE_LIMIT_RULES: RateLimitRule[] = [
   { id: "auth", match: (path) => path.startsWith("/api/auth"), limit: 30, windowMs: 15 * 60 * 1000 },
+  {
+    id: "public-contact",
+    match: (path) => path === "/api/contact",
+    limit: 30,
+    windowMs: 15 * 60 * 1000,
+  },
   {
     id: "inventory-matches-read",
     match: (path, method) => method === "GET" && INVENTORY_MATCHES_PATH.test(path),
@@ -39,9 +60,18 @@ const RATE_LIMIT_RULES: RateLimitRule[] = [
     windowMs: 15 * 60 * 1000,
   },
   {
-    id: "contact",
-    match: (path) => path === "/api/contact" || path.startsWith("/api/contacts"),
-    limit: 120,
+    id: "contacts-write",
+    match: (path, method) =>
+      WRITE_METHODS.has(method.toUpperCase()) && path.startsWith(CONTACTS_API_PREFIX),
+    // Manual CRM edits + send: ample for normal use, still abuse-resistant
+    limit: 180,
+    windowMs: 15 * 60 * 1000,
+  },
+  {
+    id: "contacts-read",
+    match: (path, method) => method.toUpperCase() === "GET" && path.startsWith(CONTACTS_API_PREFIX),
+    // Inbox polls detail/timeline/notes heavily — keep separate from writes
+    limit: 1200,
     windowMs: 15 * 60 * 1000,
   },
   {
@@ -122,6 +152,11 @@ function getOptionalRedis(): IORedis | null {
 type MemEntry = { count: number; expiresAt: number };
 const memoryCounters = new Map<string, MemEntry>();
 
+/** Test-only: clear in-memory counters between suites. */
+export function __resetRateLimitMemoryForTests(): void {
+  memoryCounters.clear();
+}
+
 function memoryIncrement(key: string, windowMs: number): number {
   const now = Date.now();
   const existing = memoryCounters.get(key);
@@ -160,15 +195,17 @@ function getClientIp(req: Request): string {
   return req.ip || req.socket.remoteAddress || "unknown";
 }
 
-function findRule(path: string, method: string): RateLimitRule | undefined {
-  return RATE_LIMIT_RULES.find((rule) => rule.match(path, method));
+export function findRateLimitRule(path: string, method: string): RateLimitRule | undefined {
+  const normalizedMethod = method.toUpperCase();
+  return RATE_LIMIT_RULES.find((rule) => rule.match(path, normalizedMethod));
 }
 
 export function listProtectedRateLimitPatterns(): string[] {
   return [
     "/api/auth/*",
-    "/api/contact",
-    "/api/contacts/*",
+    "POST /api/contact",
+    "GET /api/contacts/*",
+    "PATCH|POST|PUT|DELETE /api/contacts/*",
     "/api/widget*",
     "/widget.js",
     "/api/ai/*",
@@ -188,7 +225,7 @@ export function rateLimitMiddleware(req: Request, res: Response, next: NextFunct
     return;
   }
 
-  const rule = findRule(path, req.method);
+  const rule = findRateLimitRule(path, req.method);
   if (!rule) {
     next();
     return;
@@ -205,9 +242,14 @@ export function rateLimitMiddleware(req: Request, res: Response, next: NextFunct
     .then((count) => {
       if (count > rule.limit) {
         console.log(
-          `[RATE_LIMIT] ${req.method} ${path} ${ip} ${userId ?? "-"} ${rule.limit} ${rule.windowMs}`
+          `[RATE_LIMIT] ${req.method} ${path} ${ip} ${userId ?? "-"} limiter=${rule.id} limit=${rule.limit} windowMs=${rule.windowMs} count=${count}`,
         );
-        res.status(429).json({ error: "Too many requests. Please try again shortly." });
+        res.status(429).json({
+          error: "Too many requests. Please try again shortly.",
+          code: "RATE_LIMITED",
+          limiter: rule.id,
+          retryAfterSec: Math.ceil(rule.windowMs / 1000),
+        });
         return;
       }
       next();

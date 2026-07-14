@@ -4,6 +4,7 @@
  */
 
 import { normalizeEmailAddress } from "./emailChannel";
+import { resolveProspectOutreachLifecycleUi } from "./prospectOutreachLifecycle";
 
 const EMAIL_FORMAT_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -73,22 +74,32 @@ export type ProspectApproveOutreachUi = {
   isApproved: boolean;
   showApproveButton: boolean;
   showSendOutreach: boolean;
+  showViewThread: boolean;
   emailGateLabel: string | null;
+  statusLabel: string;
+  isOutreachSentOrLater: boolean;
 };
 
 /** Approve / Send outreach visibility from reviewStatus + email (no fake send). */
 export function resolveProspectApproveOutreachUi(input: {
   reviewStatus?: string | null;
   email?: string | null;
+  outreachConversationId?: string | null;
 }): ProspectApproveOutreachUi {
-  const isApproved = input.reviewStatus === "approved";
-  const hasEmail = isValidProspectEmail(input.email);
+  const lifecycle = resolveProspectOutreachLifecycleUi({
+    reviewStatus: input.reviewStatus,
+    email: input.email,
+    outreachConversationId: input.outreachConversationId,
+    hasValidEmail: isValidProspectEmail(input.email),
+  });
   return {
-    isApproved,
-    showApproveButton: !isApproved,
-    showSendOutreach: isApproved && hasEmail,
-    emailGateLabel:
-      isApproved && !hasEmail ? "Add email to send outreach" : !hasEmail ? "Email unavailable" : null,
+    isApproved: lifecycle.isApprovedOrLater,
+    showApproveButton: lifecycle.showApproveButton && !lifecycle.isOutreachSentOrLater,
+    showSendOutreach: lifecycle.showSendOutreach,
+    showViewThread: lifecycle.showViewThread,
+    emailGateLabel: lifecycle.emailGateLabel,
+    statusLabel: lifecycle.statusLabel,
+    isOutreachSentOrLater: lifecycle.isOutreachSentOrLater,
   };
 }
 
@@ -118,7 +129,10 @@ export function titleCaseProspectName(name?: string | null): string {
 export const PROSPECT_OUTREACH_COMPOSE_STORAGE_KEY = "whachat:prospect-outreach-compose";
 
 export type ProspectOutreachComposePayload = {
+  /** Same as prospect_intelligence.contact_id (PK). */
   contactId: string;
+  /** Marker so Native Email send can attribute success to PI outreach. */
+  source: "prospect_intelligence";
   subject: string;
   body: string;
   createdAt: number;
@@ -128,3 +142,4 @@ export function buildProspectOutreachInboxHref(contactId: string): string {
   const id = encodeURIComponent(contactId);
   return `/app/inbox/${id}?channel=email&compose=new&focusComposer=1`;
 }
+
