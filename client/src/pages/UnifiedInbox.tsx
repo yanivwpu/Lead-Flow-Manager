@@ -15,6 +15,7 @@ import {
   resolveInboxSelectionState,
   shouldFetchInboxMessages,
 } from "@/lib/inboxSelectionState";
+import { inboxRowKey, isEmailConversationChannel } from "@shared/inboxRowModel";
 import { useSubscription } from "@/lib/subscription-context";
 import { AIComposer, type AIComposerHandle, type ContactContext } from "@/components/AIComposer";
 import { WhatsAppTemplateRichPreview } from "@/components/WhatsAppTemplateRichPreview";
@@ -653,13 +654,28 @@ export function UnifiedInbox() {
       ? String(params.contactId)
       : null;
 
+  /** Email thread identity from `?conversation=` — each Gmail thread is its own inbox row. */
+  const selectedConversationId = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    const id = new URLSearchParams(window.location.search).get("conversation");
+    return id && id.trim() ? id.trim() : null;
+    // pathname changes on setLocation; also re-read when contact changes
+  }, [pathname, selectedContactId]);
+
+  const buildInboxHref = useCallback((contactId: string, conversationId?: string | null) => {
+    if (conversationId) {
+      return `/app/inbox/${contactId}?conversation=${encodeURIComponent(conversationId)}`;
+    }
+    return `/app/inbox/${contactId}`;
+  }, []);
+
   useEffect(() => {
     setFilePickerHint(null);
     setPendingFile((prev) => {
       if (prev?.localPreview) URL.revokeObjectURL(prev.localPreview);
       return null;
     });
-  }, [selectedContactId]);
+  }, [selectedContactId, selectedConversationId]);
 
   const insertComposerDraftFromCopilot = useCallback(
     (draft: CopilotComposerInsert): boolean => {
@@ -760,10 +776,24 @@ export function UnifiedInbox() {
     placeholderData: keepPreviousData,
   });
 
-  const inboxSelectedItem = useMemo(
-    () => (selectedContactId ? inbox.find((item) => item.contact.id === selectedContactId) : undefined),
-    [inbox, selectedContactId],
-  );
+  const inboxSelectedItem = useMemo(() => {
+    if (!selectedContactId) return undefined;
+    if (selectedConversationId) {
+      return inbox.find(
+        (item) =>
+          item.contact.id === selectedContactId &&
+          item.conversation?.id === selectedConversationId,
+      );
+    }
+    // Prefer non-email (messaging) row when no conversation query is present.
+    return (
+      inbox.find(
+        (item) =>
+          item.contact.id === selectedContactId &&
+          !isEmailConversationChannel(item.channel),
+      ) || inbox.find((item) => item.contact.id === selectedContactId)
+    );
+  }, [inbox, selectedContactId, selectedConversationId]);
 
   /**
    * Sticky sibling thread while actively reading. Cleared on contact change or
@@ -813,9 +843,8 @@ export function UnifiedInbox() {
         : null;
 
     const stripQuery = () => {
-      if (window.location.search) {
-        setLocation(`/app/inbox/${selectedContactId}`, { replace: true });
-      }
+      const conv = params.get("conversation");
+      setLocation(buildInboxHref(selectedContactId, conv), { replace: true });
     };
 
     const focusComposerInput = () => {
@@ -886,12 +915,16 @@ export function UnifiedInbox() {
         messagesQueryData: null,
         inboxListContact: inboxSelectedItem?.contact ?? null,
         inboxRowConversation: (inboxSelectedItem?.conversation as Conversation | null) ?? null,
-        stickyConversationId: stickyConversationIdRef.current,
+        selectedConversationId,
+        stickyConversationId: selectedConversationId
+          ? null
+          : stickyConversationIdRef.current,
       }),
     // stickyEpoch forces re-resolve after clearStickyAndOpenNewest / lock
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sticky via ref + epoch
     [
       selectedContactId,
+      selectedConversationId,
       contactData,
       effectiveChannel,
       inboxSelectedItem?.contact,
@@ -1538,12 +1571,22 @@ export function UnifiedInbox() {
       const previewText = data.content || (data.mediaUrl ? mediaLabel : '');
       queryClient.setQueryData<InboxItem[]>(inboxKey, (old) => {
         if (!old) return old;
-        const list = old.map((item) =>
-          item.contact.id === data.contactId
+        const targetConversationId = conversationId || null;
+        const list = old.map((item) => {
+          const match = targetConversationId
+            ? item.conversation?.id === targetConversationId
+            : item.contact.id === data.contactId &&
+              !isEmailConversationChannel(item.channel);
+          return match
             ? { ...item, lastMessage: previewText, lastMessageAt: now, unreadCount: 0 }
-            : item
+            : item;
+        });
+        const idx = list.findIndex((item) =>
+          targetConversationId
+            ? item.conversation?.id === targetConversationId
+            : item.contact.id === data.contactId &&
+              !isEmailConversationChannel(item.channel),
         );
-        const idx = list.findIndex((item) => item.contact.id === data.contactId);
         if (idx > 0) {
           const [moved] = list.splice(idx, 1);
           list.unshift(moved);
@@ -2115,21 +2158,22 @@ export function UnifiedInbox() {
   // --- Filtering ---
 
   const filteredInbox = useMemo(() => {
-    let result = inbox.filter(item =>
-      item.contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.contact.phone?.includes(searchQuery) ||
-      item.contact.email?.toLowerCase().includes(searchQuery.toLowerCase())
+    const q = searchQuery.toLowerCase();
+    let result = inbox.filter(
+      (item) =>
+        item.contact.name.toLowerCase().includes(q) ||
+        item.contact.phone?.includes(searchQuery) ||
+        item.contact.email?.toLowerCase().includes(q) ||
+        item.lastMessage?.toLowerCase().includes(q) ||
+        (item.conversation as Conversation | null)?.subject?.toLowerCase().includes(q),
     );
-    if (filterTab === 'unread') {
-      result = result.filter(
-        (item) =>
-          item.unreadCount > 0 ||
-          (item.contactUnreadTotal != null && item.contactUnreadTotal > 0),
-      );
+    // Per-row unread (email threads are separate rows — do not use contact aggregate).
+    if (filterTab === "unread") {
+      result = result.filter((item) => item.unreadCount > 0);
     }
-    if (filterTab === 'mine') result = result.filter(item => item.contact.assignedTo === user?.id);
+    if (filterTab === "mine") result = result.filter((item) => item.contact.assignedTo === user?.id);
     if (selectedChannels.size < allChannels.length) {
-      result = result.filter(item => selectedChannels.has(item.channel as Channel));
+      result = result.filter((item) => selectedChannels.has(item.channel as Channel));
     }
     return result;
   }, [inbox, searchQuery, filterTab, user?.id, selectedChannels]);
@@ -2537,25 +2581,30 @@ export function UnifiedInbox() {
               const bookedAppt = nextAppointmentByContact.get(item.contact.id);
               const crmTag = isCrmDisplayTag(item.contact.tag) ? item.contact.tag : null;
               const showFollowUpBadge = fuStatus && !bookedAppt;
-              const isSelected = selectedContactId === item.contact.id;
+              const rowId = inboxRowKey(item);
+              const isEmailRow = isEmailConversationChannel(item.channel);
+              const isSelected =
+                selectedContactId === item.contact.id &&
+                (isEmailRow
+                  ? selectedConversationId === item.conversation?.id
+                  : !selectedConversationId ||
+                    selectedConversationId === item.conversation?.id);
               return (
               <div
-                key={item.contact.id}
+                key={rowId}
                 onClick={() => {
-                  // Re-clicking the contact row always opens the newest primary sibling.
-                  if (item.contact.id === selectedContactId) {
-                    clearStickyAndOpenNewest();
-                  } else {
-                    stickyConversationIdRef.current = null;
-                    stickyContactIdRef.current = null;
-                  }
-                  setLocation(`/app/inbox/${item.contact.id}`);
+                  stickyConversationIdRef.current = null;
+                  stickyContactIdRef.current = null;
+                  clearStickyAndOpenNewest();
+                  const convId =
+                    isEmailRow && item.conversation?.id ? item.conversation.id : null;
+                  setLocation(buildInboxHref(item.contact.id, convId));
                 }}
                 className={inboxConversationRowChromeClassName({
                   selected: isSelected,
                   overdue: isOverdue && !bookedAppt,
                 })}
-                data-testid={`inbox-item-${item.contact.id}`}
+                data-testid={`inbox-item-${rowId}`}
               >
                 <div className={INBOX_ROW_INNER}>
                   <ChatAvatar

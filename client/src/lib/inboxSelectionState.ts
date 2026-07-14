@@ -33,13 +33,15 @@ export type ResolveInboxSelectionInput = {
   /** Fallback contact from inbox list while detail query loads. */
   inboxListContact?: { id: string } | null;
   /**
-   * Authoritative primary conversation from GET /api/inbox for this contact.
-   * Prevents mixed row (newest) + center (stale sibling) when contact detail lags.
+   * Authoritative primary conversation from GET /api/inbox for this contact / row.
    */
   inboxRowConversation?: InboxConversationLike | null;
   /**
-   * While reading an older sibling thread, keep center on this id until leave/reselect.
-   * Row payload must still represent newestPrimary.
+   * Explicit conversation from URL (`?conversation=`) — opens that exact email thread.
+   */
+  selectedConversationId?: string | null;
+  /**
+   * While reading an older sibling without URL identity, keep center on this id.
    */
   stickyConversationId?: string | null;
 };
@@ -109,15 +111,24 @@ export function resolveInboxSelectionState<TMsg = unknown>(
       ? input.inboxRowConversation
       : null;
 
+  const explicitId = input.selectedConversationId?.trim() || null;
+  const explicitConversation =
+    (explicitId ? conversations.find((c) => c.id === explicitId) : null) ||
+    (explicitId && inboxRow?.id === explicitId ? inboxRow : null) ||
+    null;
+
   const resolved = resolveContactCenterConversation({
     conversations,
     preferredChannel: preferred,
-    stickyConversationId: input.stickyConversationId,
+    stickyConversationId: explicitConversation ? null : input.stickyConversationId,
     inboxRowConversation: inboxRow,
   });
 
-  const primaryConversation = resolved.centerConversation;
+  const primaryConversation = explicitConversation || resolved.centerConversation;
   const activeConversationId = primaryConversation?.id ?? null;
+  const usedStickyConversation = Boolean(explicitConversation)
+    ? false
+    : resolved.usedSticky;
 
   // Never render messages unless we have a conversation for the matched contact
   // — or an inbox-row conversation we can open before contact detail catches up.
@@ -136,7 +147,7 @@ export function resolveInboxSelectionState<TMsg = unknown>(
     primaryConversation,
     newestPrimaryConversation: resolved.newestPrimary,
     activeConversationId,
-    usedStickyConversation: resolved.usedSticky,
+    usedStickyConversation,
     messages,
     hasConversation: !!activeConversationId,
   };

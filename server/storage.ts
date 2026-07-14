@@ -67,7 +67,7 @@ import {
   shouldRepairReEngagementJsonFromLatestFailedTemplate,
   type ConversationReEngagement,
 } from "@shared/reEngagement";
-import { selectPrimaryConversation } from "@shared/inboxPrimaryConversation";
+import { buildInboxItemsForContact } from "@shared/inboxRowModel";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, type InsertConversationWindow, type ConversationWindow, growthEngineSetupTasks } from "@shared/schema";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
@@ -2897,43 +2897,34 @@ export class DbStorage implements IStorage {
 
   // Unified inbox methods
   async getUnifiedInbox(userId: string, limit: number = 100): Promise<InboxItem[]> {
+    // Contact-scoped fetch; email threads expand to one row each below.
     const userContacts = await db.select().from(contacts)
       .where(eq(contacts.userId, userId))
       .orderBy(desc(contacts.updatedAt))
       .limit(limit);
 
     const inboxItems: InboxItem[] = [];
-    
+
     for (const contact of userContacts) {
       const convs = await db.select().from(conversations)
         .where(eq(conversations.contactId, contact.id))
         .orderBy(desc(conversations.lastMessageAt));
 
-      // Newest conversation by lastMessageAt across channels (ORDER BY DESC → [0]).
-      // Do NOT filter by contact.primaryChannel — that only drives the row channel icon.
-      const primaryConv = selectPrimaryConversation(convs) || convs[0];
-
-      if (primaryConv) {
-        const contactUnreadTotal = convs.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
-        // Row badge = primary conversation unread only (not contact aggregate).
+      const built = buildInboxItemsForContact({ contact, conversations: convs });
+      for (const row of built) {
         inboxItems.push({
-          contact,
-          conversation: primaryConv,
-          channel: (contact.primaryChannelOverride || contact.primaryChannel) as Channel,
-          lastMessage: primaryConv.lastMessagePreview || '',
-          lastMessageAt: primaryConv.lastMessageAt,
-          unreadCount: primaryConv.unreadCount || 0,
-          contactUnreadTotal,
-        });
-      } else {
-        inboxItems.push({
-          contact,
-          conversation: null as any,
-          channel: (contact.primaryChannelOverride || contact.primaryChannel) as Channel,
-          lastMessage: '',
-          lastMessageAt: null,
-          unreadCount: 0,
-          contactUnreadTotal: 0,
+          contact: row.contact,
+          conversation: (row.conversation as Conversation) || (null as any),
+          channel: row.channel as Channel,
+          lastMessage: row.lastMessage,
+          lastMessageAt:
+            row.lastMessageAt instanceof Date
+              ? row.lastMessageAt
+              : row.lastMessageAt
+                ? new Date(row.lastMessageAt)
+                : null,
+          unreadCount: row.unreadCount,
+          contactUnreadTotal: row.contactUnreadTotal,
         });
       }
     }

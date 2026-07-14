@@ -1387,19 +1387,19 @@ export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit
 export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
 export type SupportTicket = typeof supportTickets.$inferSelect;
 
-// Unified inbox item type (for API responses)
+/**
+ * Unread for the conversation represented by this row.
+ * Email: one row per thread — unread is that conversation only.
+ * Chat channels: one row per contact — unread is the primary messaging conversation.
+ */
 export type InboxItem = {
   contact: Contact;
   conversation: Conversation;
   channel: Channel;
   lastMessage: string;
   lastMessageAt: Date | null;
-  /**
-   * Unread for the conversation represented by this row (primary/latest thread).
-   * NOT the sum across all contact conversations.
-   */
   unreadCount: number;
-  /** Sum of unread across all conversations for this contact (filters / elsewhere). */
+  /** Sum of unread across all conversations for this contact (aggregate helpers). */
   contactUnreadTotal?: number;
 };
 
