@@ -284,8 +284,20 @@ export const PROSPECT_INTELLIGENCE_ANALYSIS_STATUS = [
 ] as const;
 export type ProspectIntelligenceAnalysisStatus = (typeof PROSPECT_INTELLIGENCE_ANALYSIS_STATUS)[number];
 
-export const PROSPECT_INTELLIGENCE_REVIEW_STATUS = ["pending", "approved", "needs_review"] as const;
+export const PROSPECT_INTELLIGENCE_REVIEW_STATUS = [
+  "pending",
+  "approved",
+  "needs_review",
+] as const;
 export type ProspectIntelligenceReviewStatus = (typeof PROSPECT_INTELLIGENCE_REVIEW_STATUS)[number];
+
+export const PROSPECT_INTELLIGENCE_OUTREACH_STATUS = [
+  "not_sent",
+  "outreach_sent",
+  "replied",
+] as const;
+export type ProspectIntelligenceOutreachStatus =
+  (typeof PROSPECT_INTELLIGENCE_OUTREACH_STATUS)[number];
 
 export const PROSPECT_INTELLIGENCE_RECOMMENDED_OFFERS = [
   "partner_program",
@@ -322,6 +334,13 @@ export type ProspectIntelligence = {
   aiVersion?: string;
   analysisStatus?: ProspectIntelligenceAnalysisStatus;
   reviewStatus?: ProspectIntelligenceReviewStatus;
+  /** Separate from AI review — not_sent → outreach_sent → replied. */
+  outreachStatus?: ProspectIntelligenceOutreachStatus;
+  /** ISO timestamp when native outreach email was successfully sent. */
+  outreachSentAt?: string;
+  outreachConversationId?: string | null;
+  outreachMessageId?: string | null;
+  repliedAt?: string;
 };
 
 export type ProspectIntelligenceListItem = {

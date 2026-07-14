@@ -2099,6 +2099,17 @@ export const prospectIntelligence = pgTable("prospect_intelligence", {
   errorMessage: text("error_message"),
   approvedAt: timestamp("approved_at"),
   approvedByUserId: varchar("approved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  /**
+   * Outreach lifecycle (separate from review_status):
+   * not_sent → outreach_sent → replied
+   */
+  outreachStatus: text("outreach_status").notNull().default("not_sent"),
+  /** Set when Native Email send succeeds for PI "Send outreach email" flow. */
+  outreachSentAt: timestamp("outreach_sent_at"),
+  outreachConversationId: varchar("outreach_conversation_id"),
+  outreachMessageId: varchar("outreach_message_id"),
+  /** Set when a real inbound reply arrives on the linked outreach conversation. */
+  repliedAt: timestamp("replied_at"),
   analyzedAt: timestamp("analyzed_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

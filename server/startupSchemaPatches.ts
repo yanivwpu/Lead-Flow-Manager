@@ -386,6 +386,23 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
         ON email_mailboxes (provider, lower(email_address))`,
     ].join(";\n"),
   },
+  {
+    tag: "0062_prospect_intelligence_outreach_lifecycle",
+    sql: [
+      `ALTER TABLE prospect_intelligence ADD COLUMN IF NOT EXISTS outreach_status text NOT NULL DEFAULT 'not_sent'`,
+      `ALTER TABLE prospect_intelligence ADD COLUMN IF NOT EXISTS outreach_sent_at timestamp`,
+      `ALTER TABLE prospect_intelligence ADD COLUMN IF NOT EXISTS outreach_conversation_id varchar`,
+      `ALTER TABLE prospect_intelligence ADD COLUMN IF NOT EXISTS outreach_message_id varchar`,
+      `ALTER TABLE prospect_intelligence ADD COLUMN IF NOT EXISTS replied_at timestamp`,
+      `CREATE INDEX IF NOT EXISTS prospect_intelligence_outreach_conversation_idx
+        ON prospect_intelligence (outreach_conversation_id)
+        WHERE outreach_conversation_id IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS prospect_intelligence_outreach_status_idx
+        ON prospect_intelligence (outreach_status)`,
+      `CREATE INDEX IF NOT EXISTS prospect_intelligence_review_status_idx
+        ON prospect_intelligence (review_status)`,
+    ].join(";\n"),
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {

@@ -220,6 +220,29 @@ export async function persistNormalizedEmailMessage(params: {
     });
   }
 
+  if (normalized.direction === "inbound") {
+    try {
+      const { isCalendarOrInviteEmail } = await import("@shared/emailChannel");
+      const { markProspectOutreachReplied } = await import(
+        "../prospectImport/prospectIntelligenceService"
+      );
+      await markProspectOutreachReplied({
+        conversationId: conversation.id,
+        contactId: contact.id,
+        fromEmail: normalized.from.email,
+        subject: normalized.subject,
+        direction: "inbound",
+        isCalendarOrInvite: isCalendarOrInviteEmail({
+          subject: normalized.subject,
+          snippet: normalized.snippet,
+          selectedHeaders: normalized.selectedHeaders,
+        }),
+      });
+    } catch (err) {
+      console.error("[ProspectOutreachLifecycle] reply check failed", err);
+    }
+  }
+
   return {
     messageId: message.id,
     conversationId: conversation.id,

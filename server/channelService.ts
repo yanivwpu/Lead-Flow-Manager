@@ -527,10 +527,51 @@ class ChannelService {
           replyMode: emailRich?.replyMode || (emailRich?.providerThreadId ? 'reply' : 'new'),
         },
       });
+
+      if (
+        result.success &&
+        result.conversationId &&
+        emailRich?.prospectOutreach === true &&
+        (emailRich?.replyMode || "new") === "new"
+      ) {
+        try {
+          const { markProspectOutreachSent } = await import(
+            "./prospectImport/prospectIntelligenceService"
+          );
+          console.info(
+            JSON.stringify({
+              tag: "[ProspectOutreachLifecycle]",
+              event: "send_succeeded",
+              contactId,
+              conversationId: result.conversationId,
+              messageId: result.messageId || null,
+            }),
+          );
+          await markProspectOutreachSent({
+            contactId,
+            conversationId: result.conversationId,
+            messageId: result.messageId || null,
+            source: "channelService.sendMessage",
+          });
+        } catch (err) {
+          console.error("[ProspectOutreachLifecycle] mark sent failed", err);
+        }
+      } else if (emailRich?.prospectOutreach === true && !result.success) {
+        console.info(
+          JSON.stringify({
+            tag: "[ProspectOutreachLifecycle]",
+            event: "send_failed",
+            contactId,
+            reason: result.error || "send_failed",
+          }),
+        );
+      }
+
       return {
         success: result.success,
         channel: 'email',
         messageId: result.messageId,
+        conversationId: result.conversationId,
         error: result.error,
         externalMessageId: result.externalMessageId,
       };

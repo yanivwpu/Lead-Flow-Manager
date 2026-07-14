@@ -1734,7 +1734,19 @@ export function UnifiedInbox() {
             !forceNewEmailComposeRef.current && primaryConversation?.channel === "email"
               ? primaryConversation.channelAccountId || undefined
               : undefined,
+          prospectOutreach: forceNewEmailComposeRef.current === true,
         };
+        if (forceNewEmailComposeRef.current) {
+          console.info(
+            JSON.stringify({
+              tag: "[ProspectOutreachLifecycle]",
+              event: "send_attempted",
+              contactId: data.contactId,
+              composeMode: "new",
+              prospectOutreach: true,
+            }),
+          );
+        }
         if (!emailThreadId && !subject) {
           throw new Error("Subject is required for a new email.");
         }
@@ -1955,6 +1967,7 @@ export function UnifiedInbox() {
     onSettled: (_data, error, vars, context) => {
       if (!error) {
         setForceNewEmailCompose(false);
+        void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activation-status"] });

@@ -80,21 +80,27 @@ export type ProspectApproveOutreachUi = {
   isOutreachSentOrLater: boolean;
 };
 
-/** Approve / Send outreach visibility from reviewStatus + email (no fake send). */
+/** Approve / Send outreach visibility from reviewStatus + outreachStatus + email. */
 export function resolveProspectApproveOutreachUi(input: {
   reviewStatus?: string | null;
+  outreachStatus?: string | null;
+  outreachSentAt?: string | null;
+  repliedAt?: string | null;
   email?: string | null;
   outreachConversationId?: string | null;
 }): ProspectApproveOutreachUi {
   const lifecycle = resolveProspectOutreachLifecycleUi({
     reviewStatus: input.reviewStatus,
+    outreachStatus: input.outreachStatus,
+    outreachSentAt: input.outreachSentAt,
+    repliedAt: input.repliedAt,
     email: input.email,
     outreachConversationId: input.outreachConversationId,
     hasValidEmail: isValidProspectEmail(input.email),
   });
   return {
-    isApproved: lifecycle.isApprovedOrLater,
-    showApproveButton: lifecycle.showApproveButton && !lifecycle.isOutreachSentOrLater,
+    isApproved: lifecycle.isApproved,
+    showApproveButton: lifecycle.showApproveButton,
     showSendOutreach: lifecycle.showSendOutreach,
     showViewThread: lifecycle.showViewThread,
     emailGateLabel: lifecycle.emailGateLabel,

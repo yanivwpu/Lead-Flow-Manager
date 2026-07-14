@@ -67,6 +67,11 @@ function mapIntelligenceRow(row: ProspectIntelligenceRow): ProspectIntelligence 
     aiVersion: row.aiVersion ?? undefined,
     analysisStatus: (row.analysisStatus as ProspectIntelligence["analysisStatus"]) ?? undefined,
     reviewStatus: (row.reviewStatus as ProspectIntelligence["reviewStatus"]) ?? undefined,
+    outreachStatus: (row.outreachStatus as ProspectIntelligence["outreachStatus"]) ?? undefined,
+    outreachSentAt: row.outreachSentAt?.toISOString(),
+    outreachConversationId: row.outreachConversationId ?? undefined,
+    outreachMessageId: row.outreachMessageId ?? undefined,
+    repliedAt: row.repliedAt?.toISOString(),
   };
 }
 
@@ -727,6 +732,230 @@ export async function reanalyzeProspectContact(contactId: string): Promise<Prosp
   return analyzeProspectContact({ contactId, force: true });
 }
 
+/**
+ * Mark outreach_sent only after a successful native email send (Gmail API success).
+ * Links the exact conversationId for reply matching. Idempotent.
+ */
+export async function markProspectOutreachSent(params: {
+  contactId: string;
+  conversationId: string;
+  messageId?: string | null;
+  source?: string;
+}): Promise<{ updated: boolean; reason: string; outreachStatus?: string }> {
+  const { contactId, conversationId, messageId } = params;
+  const rows = await db
+    .select()
+    .from(prospectIntelligence)
+    .where(eq(prospectIntelligence.contactId, contactId))
+    .limit(1);
+  const row = rows[0];
+  if (!row) {
+    console.info(
+      JSON.stringify({
+        tag: "[ProspectOutreachLifecycle]",
+        event: "send_succeeded",
+        reason: "no_pi_record",
+        contactId,
+        conversationId,
+      }),
+    );
+    return { updated: false, reason: "no_pi_record" };
+  }
+
+  const { nextOutreachStatusAfterSend, shouldPersistFirstOutreachSentAt } = await import(
+    "@shared/prospectOutreachLifecycle"
+  );
+  const next = nextOutreachStatusAfterSend({
+    reviewStatus: row.reviewStatus,
+    outreachStatus: row.outreachStatus,
+    outreachSentAt: row.outreachSentAt,
+    repliedAt: row.repliedAt,
+  });
+  if (!next) {
+    console.info(
+      JSON.stringify({
+        tag: "[ProspectOutreachLifecycle]",
+        event: "send_succeeded",
+        reason: "lifecycle_not_eligible",
+        contactId,
+        conversationId,
+        reviewStatus: row.reviewStatus,
+        outreachStatus: row.outreachStatus,
+      }),
+    );
+    return { updated: false, reason: "lifecycle_not_eligible", outreachStatus: row.outreachStatus };
+  }
+
+  // Idempotent: already sent/replied — keep original conversation link.
+  if (row.outreachStatus === "outreach_sent" || row.outreachStatus === "replied") {
+    console.info(
+      JSON.stringify({
+        tag: "[ProspectOutreachLifecycle]",
+        event: "outreach_marked_sent",
+        reason: "idempotent_already_sent",
+        contactId,
+        conversationId: row.outreachConversationId || conversationId,
+        outreachStatus: row.outreachStatus,
+      }),
+    );
+    return {
+      updated: false,
+      reason: "idempotent_already_sent",
+      outreachStatus: row.outreachStatus,
+    };
+  }
+
+  const persistSentAt = shouldPersistFirstOutreachSentAt({
+    outreachStatus: row.outreachStatus,
+    outreachSentAt: row.outreachSentAt,
+    repliedAt: row.repliedAt,
+  });
+
+  const patch: Partial<typeof prospectIntelligence.$inferInsert> = {
+    outreachStatus: next,
+    outreachConversationId: conversationId,
+    updatedAt: new Date(),
+  };
+  if (persistSentAt || !row.outreachSentAt) {
+    patch.outreachSentAt = new Date();
+  }
+  if (messageId && !row.outreachMessageId) {
+    patch.outreachMessageId = messageId;
+  }
+
+  await db.update(prospectIntelligence).set(patch).where(eq(prospectIntelligence.contactId, contactId));
+
+  console.info(
+    JSON.stringify({
+      tag: "[ProspectOutreachLifecycle]",
+      event: "outreach_marked_sent",
+      contactId,
+      conversationId,
+      messageId: messageId || null,
+      outreachStatus: next,
+      source: params.source || "email_send",
+    }),
+  );
+
+  return { updated: true, reason: "outreach_marked_sent", outreachStatus: next };
+}
+
+/**
+ * Mark replied only when inbound arrives on the exact linked outreach conversationId.
+ */
+export async function markProspectOutreachReplied(params: {
+  conversationId: string;
+  contactId?: string | null;
+  fromEmail?: string | null;
+  subject?: string | null;
+  isCalendarOrInvite?: boolean;
+  direction: string;
+}): Promise<{ updated: boolean; reason: string }> {
+  const { shouldMarkOutreachReplied } = await import("@shared/prospectOutreachLifecycle");
+
+  const rows = await db
+    .select()
+    .from(prospectIntelligence)
+    .where(eq(prospectIntelligence.outreachConversationId, params.conversationId))
+    .limit(1);
+  const row = rows[0];
+  if (!row) {
+    console.info(
+      JSON.stringify({
+        tag: "[ProspectOutreachLifecycle]",
+        event: "inbound_checked",
+        reason: "no_linked_pi",
+        conversationId: params.conversationId,
+      }),
+    );
+    return { updated: false, reason: "no_linked_pi" };
+  }
+
+  const decision = shouldMarkOutreachReplied({
+    direction: params.direction,
+    conversationId: params.conversationId,
+    linkedOutreachConversationId: row.outreachConversationId,
+    outreachStatus: row.outreachStatus,
+    outreachSentAt: row.outreachSentAt,
+    repliedAt: row.repliedAt,
+    fromEmail: params.fromEmail,
+    subject: params.subject,
+    isCalendarOrInvite: params.isCalendarOrInvite,
+  });
+
+  console.info(
+    JSON.stringify({
+      tag: "[ProspectOutreachLifecycle]",
+      event: decision.mark ? "reply_matched" : "reply_ignored",
+      reason: decision.reason,
+      contactId: row.contactId,
+      conversationId: params.conversationId,
+      outreachStatus: row.outreachStatus,
+    }),
+  );
+
+  if (!decision.mark) {
+    return { updated: false, reason: decision.reason };
+  }
+
+  if (row.outreachStatus === "replied" && row.repliedAt) {
+    return { updated: false, reason: "already_replied" };
+  }
+
+  await db
+    .update(prospectIntelligence)
+    .set({
+      outreachStatus: "replied",
+      repliedAt: row.repliedAt || new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(prospectIntelligence.contactId, row.contactId));
+
+  console.info(
+    JSON.stringify({
+      tag: "[ProspectOutreachLifecycle]",
+      event: "outreach_marked_replied",
+      contactId: row.contactId,
+      conversationId: params.conversationId,
+    }),
+  );
+
+  return { updated: true, reason: "outreach_marked_replied" };
+}
+
+/**
+ * Safe one-time backfill: link an already-sent outreach conversation when
+ * review=approved, outreach not_sent, and exactly one deterministic email
+ * conversation matches (outbound-first, subject Idea for …).
+ */
+export async function reconcileProspectOutreachConversation(params: {
+  contactId: string;
+  conversationId: string;
+  messageId?: string | null;
+  dryRun?: boolean;
+}): Promise<{ updated: boolean; reason: string }> {
+  const rows = await db
+    .select()
+    .from(prospectIntelligence)
+    .where(eq(prospectIntelligence.contactId, params.contactId))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return { updated: false, reason: "no_pi_record" };
+  if (row.reviewStatus !== "approved") return { updated: false, reason: "not_approved" };
+  if (row.outreachStatus === "outreach_sent" || row.outreachStatus === "replied") {
+    return { updated: false, reason: "already_sent_or_later" };
+  }
+  if (params.dryRun) {
+    return { updated: false, reason: "dry_run_eligible" };
+  }
+  return markProspectOutreachSent({
+    contactId: params.contactId,
+    conversationId: params.conversationId,
+    messageId: params.messageId,
+    source: "reconcile",
+  });
+}
+
 export const prospectIntelligenceService = {
   getImportJobContactIds,
   createProspectIntelligenceJob,
@@ -739,4 +968,7 @@ export const prospectIntelligenceService = {
   patchProspectIntelligence,
   reanalyzeProspectContact,
   analyzeProspectContact,
+  markProspectOutreachSent,
+  markProspectOutreachReplied,
+  reconcileProspectOutreachConversation,
 };

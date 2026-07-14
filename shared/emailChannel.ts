@@ -91,6 +91,11 @@ export type EmailRichSendPayload = {
   providerThreadId?: string;
   inReplyTo?: string;
   references?: string[];
+  /**
+   * True when this send originated from Prospect Intelligence "Send outreach email".
+   * Used to mark outreach_sent only after Gmail send succeeds.
+   */
+  prospectOutreach?: boolean;
 };
 
 export type EmailSyncMode = "realtime" | "polling_fallback" | "unknown";

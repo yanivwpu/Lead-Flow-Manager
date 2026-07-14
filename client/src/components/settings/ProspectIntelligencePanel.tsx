@@ -57,6 +57,11 @@ import {
   resolveProspectApproveOutreachUi,
   type ProspectOutreachComposePayload,
 } from "@shared/prospectContactEnrichment";
+import {
+  prospectDisplayStatusLabel,
+  resolveProspectDisplayStatus,
+} from "@shared/prospectOutreachLifecycle";
+import { format } from "date-fns";
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { credentials: "include", ...init });
@@ -409,8 +414,27 @@ function ProspectIntelligenceDetailDialog({
 
   const approveUi = resolveProspectApproveOutreachUi({
     reviewStatus: intel?.reviewStatus,
+    outreachStatus: intel?.outreachStatus,
+    outreachSentAt: intel?.outreachSentAt,
+    repliedAt: intel?.repliedAt,
     email: item?.email,
+    outreachConversationId: intel?.outreachConversationId,
   });
+
+  const displayStatus = resolveProspectDisplayStatus({
+    reviewStatus: intel?.reviewStatus,
+    outreachStatus: intel?.outreachStatus,
+    outreachSentAt: intel?.outreachSentAt,
+    repliedAt: intel?.repliedAt,
+  });
+
+  const openLinkedConversation = () => {
+    if (!item?.contactId || !intel?.outreachConversationId) return;
+    onOpenChange(false);
+    setLocation(
+      `/app/inbox/${encodeURIComponent(item.contactId)}?conversation=${encodeURIComponent(intel.outreachConversationId)}`,
+    );
+  };
 
   const applyItemUpdate = (next: ProspectIntelligenceListItem | null | undefined) => {
     if (!next) return;
@@ -592,6 +616,22 @@ function ProspectIntelligenceDetailDialog({
                 {intel.reviewStatus || "pending"}
               </span>
             </p>
+            <p data-testid="pi-display-status">
+              <span className="text-gray-500">Status:</span>{" "}
+              <span className="font-medium">{prospectDisplayStatusLabel(displayStatus)}</span>
+            </p>
+            {intel.outreachSentAt ? (
+              <p data-testid="pi-outreach-sent-at">
+                <span className="text-gray-500">Outreach sent:</span>{" "}
+                {format(new Date(intel.outreachSentAt), "MMM d, yyyy h:mm a")}
+              </p>
+            ) : null}
+            {intel.repliedAt ? (
+              <p data-testid="pi-outreach-replied-at">
+                <span className="text-gray-500">Replied:</span>{" "}
+                {format(new Date(intel.repliedAt), "MMM d, yyyy h:mm a")}
+              </p>
+            ) : null}
           </div>
 
           <div className="rounded-lg border bg-gray-50 p-3">
@@ -637,13 +677,19 @@ function ProspectIntelligenceDetailDialog({
             <p className="mt-1 text-gray-600">{intel.reasoningSummary || "—"}</p>
           </div>
 
-          {approveUi.isApproved ? (
+          {approveUi.isApproved || approveUi.isOutreachSentOrLater ? (
             <div
               className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3"
               data-testid="pi-outreach-panel"
             >
               <p className="font-medium text-emerald-900">Outreach</p>
-              {approveUi.showSendOutreach ? (
+              {approveUi.showViewThread ? (
+                <p className="mt-1 text-emerald-800">
+                  {displayStatus === "replied"
+                    ? "Prospect replied on the linked outreach thread."
+                    : "First outreach email was sent. Continue the conversation from Inbox."}
+                </p>
+              ) : approveUi.showSendOutreach ? (
                 <p className="mt-1 text-emerald-800">
                   Ready for a one-contact native email. Review the draft in Inbox before sending.
                 </p>
@@ -691,11 +737,11 @@ function ProspectIntelligenceDetailDialog({
               )}
               Approve AI result
             </Button>
-          ) : (
+          ) : approveUi.isApproved || approveUi.isOutreachSentOrLater ? (
             <Button type="button" variant="outline" disabled data-testid="pi-approved-button">
               <Check className="mr-2 h-4 w-4" /> Approved
             </Button>
-          )}
+          ) : null}
           {approveUi.showSendOutreach ? (
             <Button
               type="button"
@@ -704,6 +750,16 @@ function ProspectIntelligenceDetailDialog({
               data-testid="pi-send-outreach-email"
             >
               <Mail className="mr-2 h-4 w-4" /> Send outreach email
+            </Button>
+          ) : null}
+          {approveUi.showViewThread ? (
+            <Button
+              type="button"
+              className="bg-brand-green hover:bg-emerald-700"
+              onClick={openLinkedConversation}
+              data-testid="pi-view-conversation"
+            >
+              <Mail className="mr-2 h-4 w-4" /> Open conversation
             </Button>
           ) : null}
         </DialogFooter>
@@ -880,17 +936,47 @@ export function ProspectIntelligencePanel(props: {
                   <TableCell className="max-w-[140px] truncate">{offerLabel(row.intelligence.recommendedOffer)}</TableCell>
                   <TableCell className="max-w-[200px] truncate">{row.intelligence.suggestedOutreachAngle || "—"}</TableCell>
                   <TableCell>
-                    {row.intelligence.needsReview ? (
-                      <span className="flex items-center gap-1 text-amber-700 text-xs">
-                        <AlertTriangle className="h-3 w-3" /> Review
-                      </span>
-                    ) : row.intelligence.reviewStatus === "approved" ? (
-                      <Badge className="bg-emerald-600 text-[10px]" data-testid="pi-table-approved">
-                        Approved
-                      </Badge>
-                    ) : (
-                      <span className="text-xs text-gray-500">{row.intelligence.reviewStatus || row.intelligence.analysisStatus}</span>
-                    )}
+                    {(() => {
+                      const status = resolveProspectDisplayStatus({
+                        reviewStatus: row.intelligence.reviewStatus,
+                        outreachStatus: row.intelligence.outreachStatus,
+                        outreachSentAt: row.intelligence.outreachSentAt,
+                        repliedAt: row.intelligence.repliedAt,
+                      });
+                      if (status === "replied") {
+                        return (
+                          <Badge className="bg-blue-600 text-[10px]" data-testid="pi-table-replied">
+                            Replied
+                          </Badge>
+                        );
+                      }
+                      if (status === "outreach_sent") {
+                        return (
+                          <Badge className="bg-indigo-600 text-[10px]" data-testid="pi-table-outreach-sent">
+                            Outreach Sent
+                          </Badge>
+                        );
+                      }
+                      if (status === "approved") {
+                        return (
+                          <Badge className="bg-emerald-600 text-[10px]" data-testid="pi-table-approved">
+                            Approved
+                          </Badge>
+                        );
+                      }
+                      if (status === "needs_review" || row.intelligence.needsReview) {
+                        return (
+                          <span className="flex items-center gap-1 text-amber-700 text-xs">
+                            <AlertTriangle className="h-3 w-3" /> Needs Review
+                          </span>
+                        );
+                      }
+                      return (
+                        <span className="text-xs text-gray-500">
+                          {prospectDisplayStatusLabel(status)}
+                        </span>
+                      );
+                    })()}
                   </TableCell>
                 </TableRow>
               ))}
