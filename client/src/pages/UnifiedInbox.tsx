@@ -593,7 +593,13 @@ export function UnifiedInbox() {
   const [messageInput, setMessageInput] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
   /** PI / manual: compose a brand-new email thread (not reply to an existing Gmail thread). */
-  const [forceNewEmailCompose, setForceNewEmailCompose] = useState(false);
+  const [forceNewEmailCompose, setForceNewEmailCompose] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    const composeNew = params.get("compose") === "new";
+    const channel = params.get("channel");
+    return composeNew && (!channel || channel === "email");
+  });
   const forceNewEmailComposeRef = useRef(false);
   forceNewEmailComposeRef.current = forceNewEmailCompose;
   const pendingOutreachPrefillRef = useRef<ProspectOutreachComposePayload | null>(null);
@@ -3656,6 +3662,7 @@ export function UnifiedInbox() {
               metaReplyWindowNotice={hasConversation && !isEmailChannel ? metaComposerWindowNotice : null}
               hasPendingAttachment={!!pendingFile && !isEmailChannel}
               onAttachPendingMedia={isEmailChannel ? undefined : attachComposerPendingMedia}
+              forceManualMode={forceNewEmailCompose}
             />
           </>
         ) : selectedContactId ? (

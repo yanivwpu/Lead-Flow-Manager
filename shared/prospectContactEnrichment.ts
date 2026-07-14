@@ -93,8 +93,25 @@ export function resolveProspectApproveOutreachUi(input: {
 }
 
 export function buildProspectOutreachSubject(name?: string | null): string {
-  const clean = String(name || "").trim() || "your business";
+  const clean = titleCaseProspectName(name) || "Your Business";
   return `Idea for ${clean}`;
+}
+
+/** Title-case prospect/business names for outreach subject lines. */
+export function titleCaseProspectName(name?: string | null): string {
+  const raw = String(name || "").trim();
+  if (!raw) return "";
+  return raw
+    .split(/\s+/)
+    .map((word) => {
+      if (!word) return word;
+      // Preserve short all-caps tokens (e.g. LLC, AI) as uppercase.
+      if (word.length <= 3 && word === word.toUpperCase() && /[A-Z]/.test(word)) {
+        return word.toUpperCase();
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(" ");
 }
 
 /** sessionStorage payload for PI → Inbox new-email compose. */

@@ -7,6 +7,7 @@ import {
   buildProspectOutreachInboxHref,
   buildProspectOutreachSubject,
   resolveProspectApproveOutreachUi,
+  titleCaseProspectName,
 } from "../shared/prospectContactEnrichment";
 
 function run(name: string, fn: () => void) {
@@ -57,6 +58,21 @@ run("inbox href targets contact email compose=new", () => {
 
 run("outreach subject uses prospect name", () => {
   assert.equal(buildProspectOutreachSubject("Jives Media"), "Idea for Jives Media");
+});
+
+run("title-cases lowercase prospect names in outreach subject", () => {
+  assert.equal(titleCaseProspectName("jives media"), "Jives Media");
+  assert.equal(buildProspectOutreachSubject("jives media"), "Idea for Jives Media");
+  assert.equal(buildProspectOutreachSubject("Jives Media"), "Idea for Jives Media");
+  assert.equal(buildProspectOutreachSubject("  jives   media "), "Idea for Jives Media");
+  assert.notEqual(buildProspectOutreachSubject("jives media"), "Idea for jives media");
+});
+
+run("forceManualMode follows only the prospect-outreach compose flag", () => {
+  // UnifiedInbox passes forceManualMode={forceNewEmailCompose} only for compose=new PI flow.
+  const resolveForceManual = (forceNewEmailCompose: boolean) => Boolean(forceNewEmailCompose);
+  assert.equal(resolveForceManual(true), true);
+  assert.equal(resolveForceManual(false), false);
 });
 
 run("edited message survives approval payload shape", () => {

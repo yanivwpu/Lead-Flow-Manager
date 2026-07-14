@@ -85,6 +85,8 @@ export interface AIComposerProps {
     mediaType: "image" | "video";
     filename?: string;
   } | null) => void;
+  /** When true (e.g. Prospect Intelligence new-email outreach), stay in Manual so drafts are visible. */
+  forceManualMode?: boolean;
   className?: string;
   /** Meta reply-window hint (Inbox only); merged into composer chip bar. */
   metaReplyWindowNotice?: { variant: "soon" | "expired"; text: string } | null;
@@ -164,6 +166,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   metaReplyWindowNotice = null,
   hasPendingAttachment = false,
   channel = null,
+  forceManualMode = false,
 }, ref) {
   const isMobile = useIsMobile();
   // Resolve effective access from capabilities (falls back to legacy aiEnabled prop)
@@ -301,7 +304,30 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   }, [conversationId, contactId]);
 
   // Sync composer mode from business settings (Full Auto only when business + plan allow).
+  // Prospect Intelligence outreach compose forces Manual so the approved draft is visible.
   useEffect(() => {
+    if (forceManualMode) {
+      userLockedManualRef.current = true;
+      setAiMode("manual");
+      setAutoSkippedWithDraft(false);
+      setAutoSendBlockedMessage(null);
+      // #region agent log
+      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
+        body: JSON.stringify({
+          sessionId: "32aec0",
+          runId: "pi-outreach-manual",
+          hypothesisId: "H-manual",
+          location: "AIComposer.tsx:forceManualMode",
+          message: "Forced Manual for prospect outreach compose",
+          data: { businessAiMode, contactIdPrefix: contactId ? String(contactId).slice(0, 8) : null },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      return;
+    }
     if (autoOverride) return;
     if (!showAIModes) {
       setAiMode("manual");
@@ -323,7 +349,15 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       setAiMode(effectiveCanSuggest ? "suggest" : "manual");
       return;
     }
-  }, [autoOverride, businessAiMode, effectiveCanAuto, effectiveCanSuggest, showAIModes]);
+  }, [
+    autoOverride,
+    businessAiMode,
+    contactId,
+    effectiveCanAuto,
+    effectiveCanSuggest,
+    forceManualMode,
+    showAIModes,
+  ]);
 
   // ─── Auto-reply engine ───────────────────────────────────────────────────
   const executeAutoReply = useCallback(async (history: AIComposerMessage[]) => {
@@ -774,7 +808,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   };
 
   /** Passive Auto panel (click to take over) — hidden when we need to show a skipped-auto draft in the textarea. */
-  const isAutoPassive = aiMode === "auto" && !autoOverride && !autoSkippedWithDraft;
+  const isAutoPassive = aiMode === "auto" && !autoOverride && !autoSkippedWithDraft && !forceManualMode;
   const isSuggestMode = aiMode === "suggest" && aiEnabled;
 
   // ─── Auto-passive icon & label ───────────────────────────────────────────
