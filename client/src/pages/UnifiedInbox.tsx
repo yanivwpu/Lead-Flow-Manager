@@ -16,6 +16,10 @@ import {
   shouldFetchInboxMessages,
 } from "@/lib/inboxSelectionState";
 import { inboxRowKey, isEmailConversationChannel } from "@shared/inboxRowModel";
+import {
+  PROSPECT_OUTREACH_COMPOSE_STORAGE_KEY,
+  type ProspectOutreachComposePayload,
+} from "@shared/prospectContactEnrichment";
 import { useSubscription } from "@/lib/subscription-context";
 import { AIComposer, type AIComposerHandle, type ContactContext } from "@/components/AIComposer";
 import { WhatsAppTemplateRichPreview } from "@/components/WhatsAppTemplateRichPreview";
@@ -588,6 +592,12 @@ export function UnifiedInbox() {
   const [selectedChannels, setSelectedChannels] = useState<Set<Channel>>(new Set(allChannels));
   const [messageInput, setMessageInput] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
+  /** PI / manual: compose a brand-new email thread (not reply to an existing Gmail thread). */
+  const [forceNewEmailCompose, setForceNewEmailCompose] = useState(false);
+  const forceNewEmailComposeRef = useRef(false);
+  forceNewEmailComposeRef.current = forceNewEmailCompose;
+  const pendingOutreachPrefillRef = useRef<ProspectOutreachComposePayload | null>(null);
+  const prevContactForComposeRef = useRef<string | null>(null);
   const messageInputRef = useRef(messageInput);
   messageInputRef.current = messageInput;
   const prevComposerScopeRef = useRef<string | null>(null);
@@ -827,42 +837,101 @@ export function UnifiedInbox() {
     [displayContact, matchedConversations]
   );
 
-  /** Deep link from Re-engagement (Templates): `/app/inbox/:contactId?channel=facebook|instagram|whatsapp&focusComposer=1` */
+  useEffect(() => {
+    const prev = prevContactForComposeRef.current;
+    if (prev && prev !== selectedContactId) {
+      setForceNewEmailCompose(false);
+      pendingOutreachPrefillRef.current = null;
+    }
+    prevContactForComposeRef.current = selectedContactId;
+  }, [selectedContactId]);
+
+  /** Deep link from Templates / Prospect Intelligence outreach. */
   useEffect(() => {
     if (!selectedContactId) return;
     const params = new URLSearchParams(window.location.search);
     const rawChannel = params.get("channel");
     const focusComposer =
       params.get("focusComposer") === "1" || params.get("focusComposer") === "true";
+    const composeNew = params.get("compose") === "new";
 
-    if (!rawChannel && !focusComposer) return;
+    if (!rawChannel && !focusComposer && !composeNew) return;
 
-    const validChannel =
+    const validSocial =
       rawChannel === "whatsapp" || rawChannel === "facebook" || rawChannel === "instagram"
         ? rawChannel
         : null;
+    const wantEmail = rawChannel === "email" || (composeNew && (!rawChannel || rawChannel === "email"));
 
     const stripQuery = () => {
-      const conv = params.get("conversation");
+      const conv = composeNew ? null : params.get("conversation");
       setLocation(buildInboxHref(selectedContactId, conv), { replace: true });
     };
 
     const focusComposerInput = () => {
-      window.setTimeout(() => {
+      requestAnimationFrame(() => {
         document.querySelector<HTMLTextAreaElement>('[data-testid="input-message"]')?.focus();
-      }, 160);
+      });
     };
 
-    if (!validChannel && !focusComposer) {
+    const readOutreachPrefill = () => {
+      try {
+        const raw = sessionStorage.getItem(PROSPECT_OUTREACH_COMPOSE_STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as ProspectOutreachComposePayload;
+        if (parsed.contactId !== selectedContactId) return;
+        pendingOutreachPrefillRef.current = parsed;
+        sessionStorage.removeItem(PROSPECT_OUTREACH_COMPOSE_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    if (contactReachableChannels.length === 0) return;
+
+    if (composeNew && wantEmail) {
+      if (!contactReachableChannels.includes("email")) {
+        stripQuery();
+        return;
+      }
+      readOutreachPrefill();
+      setForceNewEmailCompose(true);
+      setSendChannelUi("email");
+      const pending = pendingOutreachPrefillRef.current;
+      if (pending?.subject) setEmailSubject(pending.subject);
+      // #region agent log
+      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
+        body: JSON.stringify({
+          sessionId: "32aec0",
+          runId: "pi-approve",
+          hypothesisId: "H-outreach",
+          location: "UnifiedInbox.tsx:composeNewEmail",
+          message: "Entered forceNewEmailCompose",
+          data: {
+            contactIdPrefix: selectedContactId.slice(0, 8),
+            hasPrefill: Boolean(pending),
+            subjectLen: pending?.subject?.length ?? 0,
+            bodyLen: pending?.body?.length ?? 0,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      stripQuery();
+      if (focusComposer) focusComposerInput();
+      return;
+    }
+
+    if (!validSocial && !focusComposer) {
       stripQuery();
       return;
     }
 
-    if (contactReachableChannels.length === 0) return;
-
-    if (validChannel) {
-      if (contactReachableChannels.includes(validChannel as Channel)) {
-        setSendChannelUi(validChannel as Channel);
+    if (validSocial) {
+      if (contactReachableChannels.includes(validSocial as Channel)) {
+        setSendChannelUi(validSocial as Channel);
         stripQuery();
         if (focusComposer) focusComposerInput();
       } else {
@@ -875,7 +944,7 @@ export function UnifiedInbox() {
       stripQuery();
       focusComposerInput();
     }
-  }, [selectedContactId, contactReachableChannels, setLocation]);
+  }, [selectedContactId, contactReachableChannels, setLocation, buildInboxHref]);
 
   // Mirror backend getPrimaryChannel, then clamp to channels this contact can actually use.
   // Use displayContact (matched detail or inbox list) — never previous-contact placeholder data.
@@ -1008,6 +1077,22 @@ export function UnifiedInbox() {
       return;
     }
 
+    const pending = pendingOutreachPrefillRef.current;
+    if (pending && pending.contactId === selectedContactId && pending.body?.trim()) {
+      saveComposerDraft(composerScopeKey, pending.body, "manual");
+      setMessageInput(pending.body);
+      if (pending.subject) setEmailSubject(pending.subject);
+      pendingOutreachPrefillRef.current = null;
+      logComposerDraftTrace({
+        event: "load",
+        activeContactId: selectedContactId,
+        draftContactId: selectedContactId,
+        source: "manual",
+        conversationId: null,
+      });
+      return;
+    }
+
     const loaded = loadComposerDraft(composerScopeKey);
     setMessageInput(loaded);
     logComposerDraftTrace({
@@ -1041,7 +1126,9 @@ export function UnifiedInbox() {
     const reachable = contactReachableChannels;
     if (reachable.length === 0) return undefined;
 
-    const preferred = sendChannelUi ?? effectiveChannel ?? c?.primaryChannel ?? reachable[0];
+    const preferred = forceNewEmailCompose
+      ? "email"
+      : (sendChannelUi ?? effectiveChannel ?? c?.primaryChannel ?? reachable[0]);
     if (reachable.includes(preferred as Channel)) return preferred as Channel;
     if (effectiveChannel && reachable.includes(effectiveChannel)) return effectiveChannel;
     return reachable[0];
@@ -1050,6 +1137,7 @@ export function UnifiedInbox() {
     contactReachableChannels,
     sendChannelUi,
     effectiveChannel,
+    forceNewEmailCompose,
   ]);
 
   /** Conversation actually being viewed — same as selection primary (sticky-aware). */
@@ -1067,10 +1155,11 @@ export function UnifiedInbox() {
   // Prefill subject when opening an email thread
   useEffect(() => {
     if (!isEmailChannel) return;
+    if (forceNewEmailCompose) return;
     const subj = primaryConversation?.subject?.trim();
     if (subj) setEmailSubject(subj.startsWith("Re:") ? subj : `Re: ${subj}`);
     else if (!primaryConversation) setEmailSubject((prev) => prev); // keep draft for new compose
-  }, [isEmailChannel, primaryConversation?.id, primaryConversation?.subject]);
+  }, [isEmailChannel, primaryConversation?.id, primaryConversation?.subject, forceNewEmailCompose]);
 
   const windowConversationId = useMemo(() => {
     if (!activeChannel || !contactMatchesSelection) return undefined;
@@ -1114,9 +1203,10 @@ export function UnifiedInbox() {
   });
 
   const messages = useMemo(() => {
+    if (forceNewEmailCompose) return [];
     if (!messagesEnabled || !activeConversationId) return [];
     return messagesQueryData ?? [];
-  }, [messagesEnabled, activeConversationId, messagesQueryData]);
+  }, [forceNewEmailCompose, messagesEnabled, activeConversationId, messagesQueryData]);
 
   const expandedCalendlyMessageIndex = useMemo(
     () => findExpandedCalendlyMessageIndex(messages),
@@ -1493,7 +1583,7 @@ export function UnifiedInbox() {
         throw new Error('No available messaging channel for this contact.');
       }
       const emailThreadId =
-        channel === "email"
+        channel === "email" && !forceNewEmailComposeRef.current
           ? primaryConversation?.channel === "email"
             ? primaryConversation.externalThreadId || undefined
             : undefined
@@ -1509,14 +1599,21 @@ export function UnifiedInbox() {
       };
       if (channel === "email") {
         const subject =
-          (data.emailSubject || emailSubject || primaryConversation?.subject || "").trim() ||
-          (emailThreadId ? "Re:" : "");
+          (
+            data.emailSubject ||
+            emailSubject ||
+            (!forceNewEmailComposeRef.current ? primaryConversation?.subject : "") ||
+            ""
+          ).trim() || (emailThreadId ? "Re:" : "");
         body.emailRich = {
           subject: subject || undefined,
           textBody: data.content,
           replyMode: emailThreadId ? "reply" : "new",
           providerThreadId: emailThreadId,
-          mailboxId: primaryConversation?.channelAccountId || undefined,
+          mailboxId:
+            !forceNewEmailComposeRef.current && primaryConversation?.channel === "email"
+              ? primaryConversation.channelAccountId || undefined
+              : undefined,
         };
         if (!emailThreadId && !subject) {
           throw new Error("Subject is required for a new email.");
@@ -1736,6 +1833,9 @@ export function UnifiedInbox() {
       });
     },
     onSettled: (_data, error, vars, context) => {
+      if (!error) {
+        setForceNewEmailCompose(false);
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activation-status"] });
       const errMsg = error instanceof Error ? error.message : "";
@@ -1894,7 +1994,11 @@ export function UnifiedInbox() {
   const handleSendMessage = () => {
     if (!messageInput.trim() && !pendingFile) return;
     if (!selectedContactId) return;
-    if (isEmailChannel && !primaryConversation?.externalThreadId && !emailSubject.trim()) {
+    if (
+      isEmailChannel &&
+      (forceNewEmailCompose || !primaryConversation?.externalThreadId) &&
+      !emailSubject.trim()
+    ) {
       toast({
         title: "Subject required",
         description: "Enter a subject to start a new email.",
@@ -3478,6 +3582,15 @@ export function UnifiedInbox() {
               </div>
             )}
 
+            {isEmailChannel && forceNewEmailCompose ? (
+              <div
+                className="border-t border-emerald-100 bg-emerald-50/70 px-4 py-2 text-xs text-emerald-900 shrink-0"
+                data-testid="inbox-new-outreach-compose-banner"
+              >
+                New outreach email — review subject and message, then Send. This starts a new thread (not a reply).
+              </div>
+            ) : null}
+
             {isEmailChannel && (
               <div className="border-t border-gray-200 bg-white px-4 pt-2.5 pb-1 space-y-1.5 shrink-0">
                 <div className="flex items-center gap-2 text-xs text-gray-500">
@@ -3494,10 +3607,18 @@ export function UnifiedInbox() {
                     id="inbox-email-subject"
                     value={emailSubject}
                     onChange={(e) => setEmailSubject(e.target.value)}
-                    placeholder={primaryConversation?.externalThreadId ? "Re: …" : "Subject"}
+                    placeholder={
+                      forceNewEmailCompose || !primaryConversation?.externalThreadId
+                        ? "Subject"
+                        : "Re: …"
+                    }
                     className="h-8 text-sm"
                     data-testid="input-inbox-email-subject"
-                    disabled={!!primaryConversation?.externalThreadId && !!primaryConversation?.subject}
+                    disabled={
+                      !forceNewEmailCompose &&
+                      !!primaryConversation?.externalThreadId &&
+                      !!primaryConversation?.subject
+                    }
                   />
                 </div>
               </div>

@@ -4,6 +4,7 @@ import {
   Brain,
   Check,
   Loader2,
+  Mail,
   Pencil,
   RefreshCw,
   Sparkles,
@@ -38,16 +39,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 import type {
   ProspectIntelligenceDashboardCounts,
   ProspectIntelligenceJobSummary,
   ProspectIntelligenceListItem,
 } from "@shared/prospectImport";
 import {
+  buildProspectOutreachInboxHref,
+  buildProspectOutreachSubject,
   isValidProspectEmail,
   isValidProspectPhone,
   normalizeProspectEmailForSave,
   normalizeProspectPhoneForSave,
+  PROSPECT_OUTREACH_COMPOSE_STORAGE_KEY,
+  resolveProspectApproveOutreachUi,
+  type ProspectOutreachComposePayload,
 } from "@shared/prospectContactEnrichment";
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -155,6 +162,7 @@ type DetailDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onContactFieldsUpdated: (contactId: string, patch: { email?: string | null; phone?: string | null }) => void;
+  onItemUpdated: (item: ProspectIntelligenceListItem) => void;
 };
 
 type ContactFieldKind = "email" | "phone";
@@ -272,14 +280,8 @@ function ProspectContactFieldRow(props: {
           message: "Refreshing modal outreach state",
           data: {
             kind,
-            emailReady:
-              kind === "email"
-                ? isValidProspectEmail(body.email)
-                : undefined,
-            phoneReady:
-              kind === "phone"
-                ? isValidProspectPhone(body.phone)
-                : undefined,
+            emailReady: kind === "email" ? isValidProspectEmail(body.email) : undefined,
+            phoneReady: kind === "phone" ? isValidProspectPhone(body.phone) : undefined,
           },
           timestamp: Date.now(),
         }),
@@ -355,9 +357,7 @@ function ProspectContactFieldRow(props: {
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-1">
             <span
-              className={
-                status === "missing" ? "text-amber-700 font-medium" : "text-gray-900"
-              }
+              className={status === "missing" ? "text-amber-700 font-medium" : "text-gray-900"}
               data-testid={`pi-contact-${kind}-value`}
             >
               {status === "missing" ? missingLabel : String(value)}
@@ -395,40 +395,107 @@ function ProspectIntelligenceDetailDialog({
   open,
   onOpenChange,
   onContactFieldsUpdated,
+  onItemUpdated,
 }: DetailDialogProps) {
   const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
   const [editMessage, setEditMessage] = useState("");
   const intel = item?.intelligence;
 
+  useEffect(() => {
+    if (!open || !item) return;
+    setEditMessage(item.intelligence?.suggestedFirstMessage || "");
+  }, [open, item?.contactId, item?.intelligence?.suggestedFirstMessage]);
+
+  const approveUi = resolveProspectApproveOutreachUi({
+    reviewStatus: intel?.reviewStatus,
+    email: item?.email,
+  });
+
+  const applyItemUpdate = (next: ProspectIntelligenceListItem | null | undefined) => {
+    if (!next) return;
+    onItemUpdated(next);
+    queryClient.setQueriesData<{ items: ProspectIntelligenceListItem[] }>(
+      { queryKey: ["/api/growth-tools/prospect-intelligence"] },
+      (old) => {
+        if (!old?.items) return old;
+        return {
+          ...old,
+          items: old.items.map((row) => (row.contactId === next.contactId ? next : row)),
+        };
+      },
+    );
+    void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+  };
+
   const patchMutation = useMutation({
     mutationFn: (body: { suggestedFirstMessage: string }) =>
-      fetchJson(`/api/growth-tools/prospect-intelligence/${item!.contactId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
-      toast({ title: "Message updated" });
+      fetchJson<ProspectIntelligenceListItem>(
+        `/api/growth-tools/prospect-intelligence/${item!.contactId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      ),
+    onSuccess: (data) => {
+      applyItemUpdate(data);
+      toast({ title: "Draft message saved" });
     },
   });
 
   const approveMutation = useMutation({
     mutationFn: () =>
-      fetchJson(`/api/growth-tools/prospect-intelligence/${item!.contactId}/approve`, { method: "POST" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+      fetchJson<{ item?: ProspectIntelligenceListItem }>(
+        `/api/growth-tools/prospect-intelligence/${item!.contactId}/approve`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ suggestedFirstMessage: editMessage }),
+        },
+      ),
+    onSuccess: (data) => {
+      // #region agent log
+      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
+        body: JSON.stringify({
+          sessionId: "32aec0",
+          runId: "pi-approve",
+          hypothesisId: "H-approve-stale",
+          location: "ProspectIntelligencePanel.tsx:approveOnSuccess",
+          message: "Approve response applied to selected item",
+          data: {
+            returnedReviewStatus: data.item?.intelligence?.reviewStatus ?? null,
+            returnedNeedsReview: data.item?.intelligence?.needsReview ?? null,
+            messageLen: (data.item?.intelligence?.suggestedFirstMessage || "").length,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      if (data.item) {
+        applyItemUpdate(data.item);
+        setEditMessage(data.item.intelligence?.suggestedFirstMessage || editMessage);
+      } else {
+        void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+      }
       toast({ title: "AI result approved" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Approve failed", description: err.message, variant: "destructive" });
     },
   });
 
   const needsReviewMutation = useMutation({
     mutationFn: () =>
-      fetchJson(`/api/growth-tools/prospect-intelligence/${item!.contactId}/needs-review`, {
-        method: "POST",
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+      fetchJson<{ item?: ProspectIntelligenceListItem }>(
+        `/api/growth-tools/prospect-intelligence/${item!.contactId}/needs-review`,
+        { method: "POST" },
+      ),
+    onSuccess: (data) => {
+      if (data.item) applyItemUpdate(data.item);
+      else void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
       toast({ title: "Marked needs review" });
     },
   });
@@ -438,8 +505,12 @@ function ProspectIntelligenceDetailDialog({
       fetchJson(`/api/growth-tools/prospect-intelligence/${item!.contactId}/reanalyze`, {
         method: "POST",
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+    onSuccess: async () => {
+      const detail = await fetchJson<ProspectIntelligenceListItem>(
+        `/api/growth-tools/prospect-intelligence/${item!.contactId}`,
+      ).catch(() => null);
+      if (detail?.contactId) applyItemUpdate(detail);
+      else void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
       toast({ title: "Re-analysis complete" });
     },
     onError: (err: Error) => {
@@ -447,13 +518,57 @@ function ProspectIntelligenceDetailDialog({
     },
   });
 
+  const openNativeEmailOutreach = () => {
+    if (!item || !approveUi.showSendOutreach) return;
+    const payload: ProspectOutreachComposePayload = {
+      contactId: item.contactId,
+      subject: buildProspectOutreachSubject(item.name),
+      body: editMessage || item.intelligence?.suggestedFirstMessage || "",
+      createdAt: Date.now(),
+    };
+    try {
+      sessionStorage.setItem(PROSPECT_OUTREACH_COMPOSE_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      /* ignore quota */
+    }
+    // #region agent log
+    fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
+      body: JSON.stringify({
+        sessionId: "32aec0",
+        runId: "pi-approve",
+        hypothesisId: "H-outreach",
+        location: "ProspectIntelligencePanel.tsx:openNativeEmailOutreach",
+        message: "Navigating to native email compose",
+        data: {
+          contactIdPrefix: item.contactId.slice(0, 8),
+          subjectLen: payload.subject.length,
+          bodyLen: payload.body.length,
+          reviewStatus: item.intelligence?.reviewStatus ?? null,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    onOpenChange(false);
+    setLocation(buildProspectOutreachInboxHref(item.contactId));
+  };
+
   if (!item || !intel) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{item.name}</DialogTitle>
+          <DialogTitle className="flex flex-wrap items-center gap-2">
+            <span>{item.name}</span>
+            {approveUi.isApproved ? (
+              <Badge className="bg-emerald-600" data-testid="pi-approved-badge">
+                Approved
+              </Badge>
+            ) : null}
+          </DialogTitle>
           <DialogDescription>
             Internal Prospect Intelligence — {item.batchName || "Imported batch"}
           </DialogDescription>
@@ -479,6 +594,12 @@ function ProspectIntelligenceDetailDialog({
             <p><span className="text-gray-500">Import reason:</span> {item.importReason || "—"}</p>
             <p><span className="text-gray-500">Pipeline:</span> {item.pipelineStage || "—"}</p>
             <p><span className="text-gray-500">Confidence:</span> {intel.confidence ?? "—"}</p>
+            <p data-testid="pi-review-status">
+              <span className="text-gray-500">Review status:</span>{" "}
+              <span className={approveUi.isApproved ? "font-medium text-emerald-700" : ""}>
+                {intel.reviewStatus || "pending"}
+              </span>
+            </p>
           </div>
 
           <div className="rounded-lg border bg-gray-50 p-3">
@@ -507,11 +628,15 @@ function ProspectIntelligenceDetailDialog({
 
           <div>
             <p className="font-medium text-gray-900">Suggested first message</p>
+            <p className="mt-1 text-xs text-gray-500">
+              Save message keeps a draft. Approve AI result also saves the text currently in this box.
+            </p>
             <Textarea
               className="mt-2"
               rows={4}
-              value={editMessage || intel.suggestedFirstMessage || ""}
+              value={editMessage}
               onChange={(e) => setEditMessage(e.target.value)}
+              data-testid="pi-suggested-message"
             />
           </div>
 
@@ -519,6 +644,24 @@ function ProspectIntelligenceDetailDialog({
             <p className="font-medium text-gray-900">Internal reasoning</p>
             <p className="mt-1 text-gray-600">{intel.reasoningSummary || "—"}</p>
           </div>
+
+          {approveUi.isApproved ? (
+            <div
+              className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3"
+              data-testid="pi-outreach-panel"
+            >
+              <p className="font-medium text-emerald-900">Outreach</p>
+              {approveUi.showSendOutreach ? (
+                <p className="mt-1 text-emerald-800">
+                  Ready for a one-contact native email. Review the draft in Inbox before sending.
+                </p>
+              ) : (
+                <p className="mt-1 text-amber-800" data-testid="pi-email-unavailable">
+                  {approveUi.emailGateLabel || "Add email to send outreach"}
+                </p>
+              )}
+            </div>
+          ) : null}
         </div>
 
         <DialogFooter className="flex-wrap gap-2">
@@ -537,17 +680,40 @@ function ProspectIntelligenceDetailDialog({
           <Button
             type="button"
             variant="outline"
-            onClick={() =>
-              patchMutation.mutate({
-                suggestedFirstMessage: editMessage || intel.suggestedFirstMessage || "",
-              })
-            }
+            onClick={() => patchMutation.mutate({ suggestedFirstMessage: editMessage })}
           >
             Save message
           </Button>
-          <Button type="button" className="bg-brand-green hover:bg-emerald-700" onClick={() => approveMutation.mutate()}>
-            <Check className="mr-2 h-4 w-4" /> Approve AI result
-          </Button>
+          {approveUi.showApproveButton ? (
+            <Button
+              type="button"
+              className="bg-brand-green hover:bg-emerald-700"
+              disabled={approveMutation.isPending}
+              onClick={() => approveMutation.mutate()}
+              data-testid="pi-approve-button"
+            >
+              {approveMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="mr-2 h-4 w-4" />
+              )}
+              Approve AI result
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" disabled data-testid="pi-approved-button">
+              <Check className="mr-2 h-4 w-4" /> Approved
+            </Button>
+          )}
+          {approveUi.showSendOutreach ? (
+            <Button
+              type="button"
+              className="bg-brand-green hover:bg-emerald-700"
+              onClick={openNativeEmailOutreach}
+              data-testid="pi-send-outreach-email"
+            >
+              <Mail className="mr-2 h-4 w-4" /> Send outreach email
+            </Button>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -726,6 +892,10 @@ export function ProspectIntelligencePanel(props: {
                       <span className="flex items-center gap-1 text-amber-700 text-xs">
                         <AlertTriangle className="h-3 w-3" /> Review
                       </span>
+                    ) : row.intelligence.reviewStatus === "approved" ? (
+                      <Badge className="bg-emerald-600 text-[10px]" data-testid="pi-table-approved">
+                        Approved
+                      </Badge>
                     ) : (
                       <span className="text-xs text-gray-500">{row.intelligence.reviewStatus || row.intelligence.analysisStatus}</span>
                     )}
@@ -741,6 +911,7 @@ export function ProspectIntelligencePanel(props: {
         item={selected}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        onItemUpdated={(next) => setSelected(next)}
         onContactFieldsUpdated={(contactId, patch) => {
           setSelected((prev) =>
             prev && prev.contactId === contactId ? { ...prev, ...patch } : prev,

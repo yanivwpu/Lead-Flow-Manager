@@ -68,3 +68,46 @@ export function resolveProspectOutreachChannelState(input: {
     phoneStatus: hasPhone ? "ready" : "missing",
   };
 }
+
+export type ProspectApproveOutreachUi = {
+  isApproved: boolean;
+  showApproveButton: boolean;
+  showSendOutreach: boolean;
+  emailGateLabel: string | null;
+};
+
+/** Approve / Send outreach visibility from reviewStatus + email (no fake send). */
+export function resolveProspectApproveOutreachUi(input: {
+  reviewStatus?: string | null;
+  email?: string | null;
+}): ProspectApproveOutreachUi {
+  const isApproved = input.reviewStatus === "approved";
+  const hasEmail = isValidProspectEmail(input.email);
+  return {
+    isApproved,
+    showApproveButton: !isApproved,
+    showSendOutreach: isApproved && hasEmail,
+    emailGateLabel:
+      isApproved && !hasEmail ? "Add email to send outreach" : !hasEmail ? "Email unavailable" : null,
+  };
+}
+
+export function buildProspectOutreachSubject(name?: string | null): string {
+  const clean = String(name || "").trim() || "your business";
+  return `Idea for ${clean}`;
+}
+
+/** sessionStorage payload for PI → Inbox new-email compose. */
+export const PROSPECT_OUTREACH_COMPOSE_STORAGE_KEY = "whachat:prospect-outreach-compose";
+
+export type ProspectOutreachComposePayload = {
+  contactId: string;
+  subject: string;
+  body: string;
+  createdAt: number;
+};
+
+export function buildProspectOutreachInboxHref(contactId: string): string {
+  const id = encodeURIComponent(contactId);
+  return `/app/inbox/${id}?channel=email&compose=new&focusComposer=1`;
+}

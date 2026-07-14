@@ -9,6 +9,7 @@ import {
   isValidProspectPhone,
   normalizeProspectEmailForSave,
   normalizeProspectPhoneForSave,
+  resolveProspectApproveOutreachUi,
   resolveProspectOutreachChannelState,
 } from "../shared/prospectContactEnrichment";
 
@@ -57,4 +58,14 @@ run("marks outreach email as missing until a valid email exists", () => {
   assert.equal(after.emailLabel, "hello@shop.com");
 });
 
+run("approve UI: approved status replaces active Approve button", () => {
+  const pending = resolveProspectApproveOutreachUi({ reviewStatus: "pending", email: "a@b.com" });
+  assert.equal(pending.showApproveButton, true);
+  const approved = resolveProspectApproveOutreachUi({ reviewStatus: "approved", email: "a@b.com" });
+  assert.equal(approved.showApproveButton, false);
+  assert.equal(approved.isApproved, true);
+  assert.equal(approved.showSendOutreach, true);
+});
+
 console.log("All prospect-contact-enrichment tests passed.");
+

@@ -624,20 +624,30 @@ export async function getProspectIntelligenceDashboardCounts(): Promise<Prospect
   };
 }
 
-export async function approveProspectIntelligence(contactId: string, userId: string): Promise<void> {
+export async function approveProspectIntelligence(
+  contactId: string,
+  userId: string,
+  opts?: { suggestedFirstMessage?: string },
+): Promise<ProspectIntelligenceListItem | null> {
   const contact = await storage.getContact(contactId);
   if (!contact) throw new Error("Contact not found");
   assertInternalImportedProspect(contact);
 
+  const messagePatch: Partial<typeof prospectIntelligence.$inferInsert> = {
+    reviewStatus: "approved",
+    needsReview: false,
+    approvedAt: new Date(),
+    approvedByUserId: userId,
+    updatedAt: new Date(),
+  };
+  // Approval retains the current edited outreach draft when provided (Save message not required).
+  if (opts?.suggestedFirstMessage !== undefined) {
+    messagePatch.suggestedFirstMessage = opts.suggestedFirstMessage;
+  }
+
   await db
     .update(prospectIntelligence)
-    .set({
-      reviewStatus: "approved",
-      needsReview: false,
-      approvedAt: new Date(),
-      approvedByUserId: userId,
-      updatedAt: new Date(),
-    })
+    .set(messagePatch)
     .where(eq(prospectIntelligence.contactId, contactId));
 
   const rows = await db
@@ -649,6 +659,7 @@ export async function approveProspectIntelligence(contactId: string, userId: str
     const intel = mapIntelligenceRow(rows[0]);
     await syncContactIntelligence(contact, { ...intel, reviewStatus: "approved", needsReview: false }, rows[0].importJobId);
   }
+  return getProspectIntelligenceDetail(contactId);
 }
 
 export async function markProspectNeedsReview(contactId: string): Promise<void> {

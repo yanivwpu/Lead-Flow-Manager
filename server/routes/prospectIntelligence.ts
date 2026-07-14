@@ -150,8 +150,15 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
     async (req, res) => {
       try {
         const userId = (req.user as { id: string }).id;
-        await prospectIntelligenceService.approveProspectIntelligence(req.params.contactId, userId);
-        const item = await prospectIntelligenceService.getProspectIntelligenceDetail(req.params.contactId);
+        const suggestedFirstMessage =
+          typeof req.body?.suggestedFirstMessage === "string"
+            ? req.body.suggestedFirstMessage
+            : undefined;
+        const item = await prospectIntelligenceService.approveProspectIntelligence(
+          req.params.contactId,
+          userId,
+          suggestedFirstMessage !== undefined ? { suggestedFirstMessage } : undefined,
+        );
         res.json({ item });
       } catch (err) {
         console.error("[ProspectIntelligence] approve error:", err);
