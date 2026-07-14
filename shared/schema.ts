@@ -2143,6 +2143,98 @@ export const prospectIntelligenceJobs = pgTable("prospect_intelligence_jobs", {
 
 export type ProspectIntelligenceJobRow = typeof prospectIntelligenceJobs.$inferSelect;
 
+/** Phase 2 bulk outreach — workspace send controls. */
+export const prospectOutreachSettings = pgTable("prospect_outreach_settings", {
+  workspaceUserId: varchar("workspace_user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  preferredChannel: text("preferred_channel").notNull().default("auto"),
+  dailySendLimit: integer("daily_send_limit").notNull().default(40),
+  hourlySendLimit: integer("hourly_send_limit").notNull().default(12),
+  minDelaySeconds: integer("min_delay_seconds").notNull().default(90),
+  maxDelaySeconds: integer("max_delay_seconds").notNull().default(180),
+  paused: boolean("paused").notNull().default(false),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type ProspectOutreachSettingsRow = typeof prospectOutreachSettings.$inferSelect;
+
+/** Free-form bulk AI analysis (selected / filtered prospects). */
+export const prospectBulkAnalysisJobs = pgTable("prospect_bulk_analysis_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  workspaceUserId: varchar("workspace_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  initiatedByUserId: varchar("initiated_by_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"),
+  contactIds: jsonb("contact_ids").notNull().default(sql`'[]'::jsonb`),
+  selectionMode: text("selection_mode").notNull().default("selected"),
+  forceReanalyze: boolean("force_reanalyze").notNull().default(false),
+  progressCurrent: integer("progress_current").default(0),
+  progressTotal: integer("progress_total").default(0),
+  resultCompleted: integer("result_completed").default(0),
+  resultNeedsReview: integer("result_needs_review").default(0),
+  resultFailed: integer("result_failed").default(0),
+  resultSkipped: integer("result_skipped").default(0),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+});
+
+export type ProspectBulkAnalysisJobRow = typeof prospectBulkAnalysisJobs.$inferSelect;
+
+export const prospectOutreachBatches = pgTable("prospect_outreach_batches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  workspaceUserId: varchar("workspace_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("queued"),
+  preferredChannel: text("preferred_channel").notNull().default("auto"),
+  selectedCount: integer("selected_count").notNull().default(0),
+  queuedCount: integer("queued_count").notNull().default(0),
+  skippedCount: integer("skipped_count").notNull().default(0),
+  sentCount: integer("sent_count").notNull().default(0),
+  failedCount: integer("failed_count").notNull().default(0),
+  skipSummary: jsonb("skip_summary").default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+});
+
+export type ProspectOutreachBatchRow = typeof prospectOutreachBatches.$inferSelect;
+
+/**
+ * Channel-agnostic durable outreach queue.
+ * Snapshots approved subject/body at queue time — never regenerate silently at send.
+ * sequence_step supports future follow-ups without redesign.
+ */
+export const prospectOutreachQueueItems = pgTable("prospect_outreach_queue_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  batchId: varchar("batch_id").notNull().references(() => prospectOutreachBatches.id, { onDelete: "cascade" }),
+  workspaceUserId: varchar("workspace_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  selectedChannel: text("selected_channel").notNull(),
+  senderMailboxId: varchar("sender_mailbox_id"),
+  recipientIdentity: text("recipient_identity").notNull(),
+  recipientIdentityNormalized: text("recipient_identity_normalized").notNull(),
+  subjectSnapshot: text("subject_snapshot"),
+  messageSnapshot: text("message_snapshot").notNull(),
+  recommendedOffer: text("recommended_offer"),
+  outreachAngle: text("outreach_angle"),
+  queueStatus: text("queue_status").notNull().default("queued"),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(3),
+  lastError: text("last_error"),
+  dedupKey: text("dedup_key").notNull(),
+  sequenceStep: integer("sequence_step").notNull().default(1),
+  scheduledAt: timestamp("scheduled_at"),
+  startedAt: timestamp("started_at"),
+  sentAt: timestamp("sent_at"),
+  conversationId: varchar("conversation_id"),
+  messageId: varchar("message_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type ProspectOutreachQueueItemRow = typeof prospectOutreachQueueItems.$inferSelect;
+
 export const calendlyCanceledEventTombstones = pgTable(
   "calendly_canceled_event_tombstones",
   {

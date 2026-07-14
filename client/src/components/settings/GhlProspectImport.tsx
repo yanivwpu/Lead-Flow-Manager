@@ -74,6 +74,7 @@ import {
   PROSPECT_IMPORT_DEFAULT_IMPORT_LIMIT,
 } from "@shared/prospectImport";
 import { AnalyzeConfirmDialog, ProspectIntelligencePanel } from "./ProspectIntelligencePanel";
+import { ProspectOutreachQueuePanel } from "./ProspectOutreachQueuePanel";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
@@ -1367,6 +1368,8 @@ export function GhlProspectImport() {
         activeAnalysisJob={analysisJob}
         onAnalysisJobUpdate={setAnalysisJob}
       />
+
+      <ProspectOutreachQueuePanel />
 
       {analyzeDialog ? (
         <AnalyzeConfirmDialog

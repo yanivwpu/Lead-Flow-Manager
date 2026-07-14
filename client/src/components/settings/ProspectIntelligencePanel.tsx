@@ -774,32 +774,87 @@ export function ProspectIntelligencePanel(props: {
 }) {
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [businessFilter, setBusinessFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [channelFilter, setChannelFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"leadScore" | "priority" | "confidence" | "name">("leadScore");
   const [selected, setSelected] = useState<ProspectIntelligenceListItem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectAllFiltered, setSelectAllFiltered] = useState(false);
+  const [queuePreviewOpen, setQueuePreviewOpen] = useState(false);
+  const [queuePreview, setQueuePreview] = useState<{
+    selectedCount: number;
+    willQueue: number;
+    eligibleByChannel: Record<string, number>;
+    notBulkEligible: number;
+    skips: Array<{ contactId: string; name?: string; reason: string }>;
+  } | null>(null);
+  const [bulkAnalysisJobId, setBulkAnalysisJobId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const dashboardQuery = useQuery({
     queryKey: ["/api/growth-tools/prospect-intelligence/dashboard"],
     queryFn: () => fetchJson<ProspectIntelligenceDashboardCounts>("/api/growth-tools/prospect-intelligence/dashboard"),
-    refetchInterval: props.activeAnalysisJob?.status === "running" ? 2000 : false,
+    refetchInterval: props.activeAnalysisJob?.status === "running" || bulkAnalysisJobId ? 2000 : false,
   });
 
   const listQuery = useQuery({
-    queryKey: ["/api/growth-tools/prospect-intelligence", priorityFilter, businessFilter, sortBy],
+    queryKey: [
+      "/api/growth-tools/prospect-intelligence",
+      priorityFilter,
+      businessFilter,
+      statusFilter,
+      channelFilter,
+      sortBy,
+    ],
     queryFn: () => {
       const params = new URLSearchParams();
       if (priorityFilter !== "all") params.set("priority", priorityFilter);
       if (businessFilter !== "all" && businessFilter !== "needs_review") params.set("segment", businessFilter);
       if (businessFilter === "needs_review") params.set("needsReviewOnly", "true");
+      if (statusFilter !== "all") params.set("statusFilter", statusFilter);
+      if (channelFilter === "has_email") params.set("hasEmail", "true");
+      if (channelFilter === "has_phone") params.set("hasPhone", "true");
+      if (channelFilter === "email_eligible") params.set("emailEligible", "true");
+      if (channelFilter === "any_eligible") params.set("anyEligibleChannel", "true");
       params.set("sortBy", sortBy);
       params.set("sortDir", sortBy === "name" ? "asc" : "desc");
+      params.set("limit", "500");
       return fetchJson<{ items: ProspectIntelligenceListItem[] }>(
         `/api/growth-tools/prospect-intelligence?${params.toString()}`,
       );
     },
-    refetchInterval: props.activeAnalysisJob?.status === "running" ? 2000 : false,
+    refetchInterval: props.activeAnalysisJob?.status === "running" || bulkAnalysisJobId ? 2000 : false,
   });
+
+  const bulkJobQuery = useQuery({
+    queryKey: ["/api/growth-tools/prospect-intelligence/bulk-analyze", bulkAnalysisJobId],
+    queryFn: () =>
+      fetchJson<{ job: { id: string; status: string; progressCurrent: number; progressTotal: number; completed: number; failed: number; skipped: number; needsReview: number } }>(
+        `/api/growth-tools/prospect-intelligence/bulk-analyze/${bulkAnalysisJobId}`,
+      ),
+    enabled: Boolean(bulkAnalysisJobId),
+    refetchInterval: (q) => {
+      const st = q.state.data?.job?.status;
+      return st === "running" || st === "pending" ? 1500 : false;
+    },
+  });
+
+  useEffect(() => {
+    const job = bulkJobQuery.data?.job;
+    if (!job) return;
+    if (job.status === "completed" || job.status === "failed") {
+      void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence/dashboard"] });
+      if (job.status === "completed") {
+        toast({
+          title: "Bulk analysis complete",
+          description: `${job.completed} analyzed, ${job.skipped} skipped, ${job.failed} failed, ${job.needsReview} needs review`,
+        });
+      }
+      setBulkAnalysisJobId(null);
+    }
+  }, [bulkJobQuery.data?.job?.status]);
 
   const counts = dashboardQuery.data;
   const items = listQuery.data?.items ?? [];
@@ -810,6 +865,149 @@ export function ProspectIntelligencePanel(props: {
     return `Analyzing prospects… ${job.progressCurrent} / ${job.progressTotal}`;
   }, [props.activeAnalysisJob]);
 
+  const effectiveSelectedIds = useMemo(() => {
+    if (selectAllFiltered) return new Set(items.map((i) => i.contactId));
+    return selectedIds;
+  }, [selectAllFiltered, items, selectedIds]);
+
+  const toggleRow = (contactId: string, e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    setSelectAllFiltered(false);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(contactId)) next.delete(contactId);
+      else next.add(contactId);
+      return next;
+    });
+  };
+
+  const selectVisible = () => {
+    setSelectAllFiltered(false);
+    setSelectedIds(new Set(items.map((i) => i.contactId)));
+  };
+
+  const clearSelection = () => {
+    setSelectAllFiltered(false);
+    setSelectedIds(new Set());
+  };
+
+  const selectedCount = effectiveSelectedIds.size;
+  const selectedContactIds = Array.from(effectiveSelectedIds);
+
+  const bulkAnalyzeMutation = useMutation({
+    mutationFn: (opts: { allFiltered?: boolean }) =>
+      fetchJson<{ job: { id: string } }>("/api/growth-tools/prospect-intelligence/bulk-analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          opts.allFiltered
+            ? {
+                allFiltered: true,
+                filters: {
+                  ...(priorityFilter !== "all" ? { priority: priorityFilter } : {}),
+                  ...(businessFilter !== "all" && businessFilter !== "needs_review"
+                    ? { segment: businessFilter }
+                    : {}),
+                  ...(businessFilter === "needs_review" ? { needsReviewOnly: true } : {}),
+                  ...(statusFilter !== "all" ? { statusFilter } : {}),
+                  ...(channelFilter === "has_email" ? { hasEmail: true } : {}),
+                  ...(channelFilter === "has_phone" ? { hasPhone: true } : {}),
+                  ...(channelFilter === "email_eligible" ? { emailEligible: true } : {}),
+                  ...(channelFilter === "any_eligible" ? { anyEligibleChannel: true } : {}),
+                },
+              }
+            : { contactIds: selectedContactIds },
+        ),
+      }),
+    onSuccess: (data) => {
+      setBulkAnalysisJobId(data.job.id);
+      toast({ title: "Bulk analysis queued" });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Analyze failed", description: err.message, variant: "destructive" }),
+  });
+
+  const bulkApproveMutation = useMutation({
+    mutationFn: () =>
+      fetchJson<{ approved: number; skipped: unknown[] }>(
+        "/api/growth-tools/prospect-intelligence/bulk-approve",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contactIds: selectedContactIds }),
+        },
+      ),
+    onSuccess: (data) => {
+      toast({
+        title: `Approved ${data.approved}`,
+        description: data.skipped.length ? `${data.skipped.length} skipped` : undefined,
+      });
+      void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+      clearSelection();
+    },
+    onError: (err: Error) =>
+      toast({ title: "Bulk approve failed", description: err.message, variant: "destructive" }),
+  });
+
+  const bulkNeedsReviewMutation = useMutation({
+    mutationFn: () =>
+      fetchJson("/api/growth-tools/prospect-intelligence/bulk-needs-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactIds: selectedContactIds }),
+      }),
+    onSuccess: () => {
+      toast({ title: "Marked needs review" });
+      void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+      clearSelection();
+    },
+  });
+
+  const previewQueueMutation = useMutation({
+    mutationFn: () =>
+      fetchJson<{ preview: typeof queuePreview }>(
+        "/api/growth-tools/prospect-outreach/queue/preview",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contactIds: selectedContactIds, preferredChannel: "auto" }),
+        },
+      ),
+    onSuccess: (data) => {
+      setQueuePreview(data.preview);
+      setQueuePreviewOpen(true);
+    },
+    onError: (err: Error) =>
+      toast({ title: "Preview failed", description: err.message, variant: "destructive" }),
+  });
+
+  const confirmQueueMutation = useMutation({
+    mutationFn: () =>
+      fetchJson<{ preview?: { willQueue?: number } }>("/api/growth-tools/prospect-outreach/queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactIds: selectedContactIds,
+          preferredChannel: "auto",
+          idempotencyKey: `ui-${Date.now()}`,
+        }),
+      }),
+    onSuccess: (data) => {
+      toast({
+        title: `Queued ${data.preview?.willQueue ?? "prospects"}`,
+        description: "Start the queue to send gradually. Scanning ≠ blasting.",
+      });
+      setQueuePreviewOpen(false);
+      clearSelection();
+      void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-outreach"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Queue failed", description: err.message, variant: "destructive" }),
+  });
+
+  const bulkJob = bulkJobQuery.data?.job;
+
   return (
     <section className="mt-10 space-y-5 border-t pt-8">
       <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
@@ -817,7 +1015,8 @@ export function ProspectIntelligencePanel(props: {
         Prospect AI Intelligence
       </h3>
       <p className="text-sm text-gray-600">
-        Internal growth tool — classify imported prospects, score fit, and draft outreach. No sending yet.
+        Classify imported prospects, score fit, draft personalized outreach, then approve in batches
+        and queue controlled Email sends. Manual one-contact send remains available.
       </p>
 
       {props.activeAnalysisJob?.status === "running" ? (
@@ -825,6 +1024,15 @@ export function ProspectIntelligencePanel(props: {
           <p className="flex items-center gap-2 font-medium">
             <Loader2 className="h-4 w-4 animate-spin" />
             {jobProgressLabel}
+          </p>
+        </div>
+      ) : null}
+
+      {bulkJob && (bulkJob.status === "running" || bulkJob.status === "pending") ? (
+        <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-900">
+          <p className="flex items-center gap-2 font-medium">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Bulk analyzing… {bulkJob.progressCurrent} / {bulkJob.progressTotal}
           </p>
         </div>
       ) : null}
@@ -847,12 +1055,6 @@ export function ProspectIntelligencePanel(props: {
               </div>
             ))}
           </div>
-          {(props.activeAnalysisJob.promptTokens || props.activeAnalysisJob.completionTokens) ? (
-            <p className="mt-2 text-xs text-gray-500">
-              Tokens — prompt: {props.activeAnalysisJob.promptTokens ?? 0}, completion:{" "}
-              {props.activeAnalysisJob.completionTokens ?? 0} ({props.activeAnalysisJob.aiModel})
-            </p>
-          ) : null}
         </div>
       ) : null}
 
@@ -892,6 +1094,29 @@ export function ProspectIntelligencePanel(props: {
             <SelectItem value="needs_review">Needs review</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[170px]"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="needs_review">Needs Review</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="queued">Queued</SelectItem>
+            <SelectItem value="outreach_sent">Outreach Sent</SelectItem>
+            <SelectItem value="replied">Replied</SelectItem>
+            <SelectItem value="failed">Failed</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={channelFilter} onValueChange={setChannelFilter}>
+          <SelectTrigger className="w-[170px]"><SelectValue placeholder="Channel" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Any contact info</SelectItem>
+            <SelectItem value="has_email">Has Email</SelectItem>
+            <SelectItem value="has_phone">Has Phone</SelectItem>
+            <SelectItem value="email_eligible">Email eligible</SelectItem>
+            <SelectItem value="any_eligible">Any eligible channel</SelectItem>
+          </SelectContent>
+        </Select>
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
           <SelectTrigger className="w-[160px]"><SelectValue placeholder="Sort" /></SelectTrigger>
           <SelectContent>
@@ -903,6 +1128,66 @@ export function ProspectIntelligencePanel(props: {
         </Select>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-gray-50/80 p-3">
+        <Button type="button" size="sm" variant="outline" onClick={selectVisible}>
+          Select visible ({items.length})
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            setSelectAllFiltered(true);
+            setSelectedIds(new Set());
+          }}
+        >
+          Select all filtered
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={clearSelection}>
+          Clear
+        </Button>
+        <span className="text-sm text-gray-600">{selectedCount} selected</span>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!selectedCount || bulkAnalyzeMutation.isPending}
+            onClick={() => bulkAnalyzeMutation.mutate({ allFiltered: selectAllFiltered })}
+          >
+            <Brain className="mr-1 h-3.5 w-3.5" /> Analyze with AI
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!selectedCount || bulkApproveMutation.isPending}
+            onClick={() => bulkApproveMutation.mutate()}
+          >
+            <Check className="mr-1 h-3.5 w-3.5" /> Approve selected
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!selectedCount || bulkNeedsReviewMutation.isPending}
+            onClick={() => bulkNeedsReviewMutation.mutate()}
+          >
+            Needs Review
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="bg-brand-green hover:bg-emerald-700"
+            disabled={!selectedCount || previewQueueMutation.isPending}
+            onClick={() => previewQueueMutation.mutate()}
+            data-testid="pi-queue-outreach"
+          >
+            <Mail className="mr-1 h-3.5 w-3.5" /> Queue for outreach
+          </Button>
+        </div>
+      </div>
+
       {items.length === 0 ? (
         <p className="text-sm text-gray-500">No AI-analyzed prospects yet. Run Analyze with AI on an import batch.</p>
       ) : (
@@ -910,6 +1195,7 @@ export function ProspectIntelligencePanel(props: {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10" />
                 <TableHead>Name</TableHead>
                 <TableHead>Business type</TableHead>
                 <TableHead>Score</TableHead>
@@ -929,6 +1215,15 @@ export function ProspectIntelligencePanel(props: {
                     setDetailOpen(true);
                   }}
                 >
+                  <TableCell onClick={(e) => toggleRow(row.contactId, e)}>
+                    <input
+                      type="checkbox"
+                      checked={effectiveSelectedIds.has(row.contactId)}
+                      onChange={() => {}}
+                      aria-label={`Select ${row.name}`}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">{row.name}</TableCell>
                   <TableCell>{row.intelligence.businessType || "—"}</TableCell>
                   <TableCell>{row.intelligence.leadScore ?? "—"}</TableCell>
@@ -984,6 +1279,63 @@ export function ProspectIntelligencePanel(props: {
           </Table>
         </div>
       )}
+
+      <Dialog open={queuePreviewOpen} onOpenChange={setQueuePreviewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Queue outreach confirmation</DialogTitle>
+            <DialogDescription>
+              Preferred channel: Auto (Email is the only bulk-enabled channel today). Snapshots of
+              approved subject/body are frozen at queue time.
+            </DialogDescription>
+          </DialogHeader>
+          {queuePreview ? (
+            <div className="space-y-3 text-sm">
+              <p>
+                <strong>{queuePreview.selectedCount}</strong> selected
+              </p>
+              <ul className="list-disc pl-5 text-gray-700">
+                {Object.entries(queuePreview.eligibleByChannel || {}).map(([ch, n]) => (
+                  <li key={ch}>
+                    {n} {ch} eligible
+                  </li>
+                ))}
+                {queuePreview.notBulkEligible > 0 ? (
+                  <li>{queuePreview.notBulkEligible} not currently bulk-send eligible</li>
+                ) : null}
+                {queuePreview.skips.slice(0, 8).map((s) => (
+                  <li key={s.contactId}>
+                    {s.name || s.contactId.slice(0, 8)} — {s.reason}
+                  </li>
+                ))}
+                {queuePreview.skips.length > 8 ? (
+                  <li>+{queuePreview.skips.length - 8} more skips</li>
+                ) : null}
+              </ul>
+              <p className="font-medium text-emerald-800">
+                {queuePreview.willQueue} will be queued
+              </p>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setQueuePreviewOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-brand-green hover:bg-emerald-700"
+              disabled={!queuePreview?.willQueue || confirmQueueMutation.isPending}
+              onClick={() => confirmQueueMutation.mutate()}
+              data-testid="pi-confirm-queue"
+            >
+              {confirmQueueMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Queue {queuePreview?.willQueue ?? 0} prospects
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ProspectIntelligenceDetailDialog
         item={selected}

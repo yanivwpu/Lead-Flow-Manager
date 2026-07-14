@@ -525,6 +525,40 @@ export async function listProspectIntelligence(
   const rows = await db.select().from(prospectIntelligence);
   const items: ProspectIntelligenceListItem[] = [];
 
+  // Queue state lookup for statusFilter / eligibility filters
+  let queuedContactIds = new Set<string>();
+  let failedContactIds = new Set<string>();
+  const needsQueueLookup =
+    !!filters.statusFilter || filters.emailEligible || filters.anyEligibleChannel;
+  if (needsQueueLookup) {
+    const { prospectOutreachQueueItems } = await import("@shared/schema");
+    const qRows = await db
+      .select({
+        contactId: prospectOutreachQueueItems.contactId,
+        status: prospectOutreachQueueItems.queueStatus,
+      })
+      .from(prospectOutreachQueueItems)
+      .where(eq(prospectOutreachQueueItems.workspaceUserId, destinationUserId));
+    queuedContactIds = new Set(
+      qRows
+        .filter((r) => ["queued", "sending", "paused"].includes(r.status))
+        .map((r) => r.contactId),
+    );
+    failedContactIds = new Set(
+      qRows.filter((r) => r.status === "failed").map((r) => r.contactId),
+    );
+  }
+
+  let connections: Awaited<
+    ReturnType<typeof import("./prospectOutreachEligibilityService").loadWorkspaceChannelConnections>
+  > | null = null;
+  if (filters.emailEligible || filters.anyEligibleChannel) {
+    const { loadWorkspaceChannelConnections } = await import(
+      "./prospectOutreachEligibilityService"
+    );
+    connections = await loadWorkspaceChannelConnections(destinationUserId);
+  }
+
   for (const row of rows) {
     const contact = contactMap.get(row.contactId);
     if (!contact) continue;
@@ -540,6 +574,70 @@ export async function listProspectIntelligence(
     if (filters.segment === "local_business" && (row.localBusinessLikelihood ?? 0) < 40) continue;
     if (filters.segment === "saas" && (row.saasLikelihood ?? 0) < 40) continue;
     if (filters.segment === "affiliate" && row.recommendedOffer !== "partner_program") continue;
+
+    if (filters.hasEmail === true) {
+      const { isValidProspectEmail } = await import("@shared/prospectContactEnrichment");
+      if (!isValidProspectEmail(contact.email)) continue;
+    }
+    if (filters.hasPhone === true) {
+      const { isValidProspectPhone } = await import("@shared/prospectContactEnrichment");
+      if (!isValidProspectPhone(contact.phone)) continue;
+    }
+
+    if (filters.statusFilter) {
+      const review = String(row.reviewStatus || "pending").toLowerCase();
+      const outreach = String(row.outreachStatus || "not_sent").toLowerCase();
+      switch (filters.statusFilter) {
+        case "pending":
+          if (review !== "pending" || outreach !== "not_sent") continue;
+          if (queuedContactIds.has(row.contactId)) continue;
+          break;
+        case "needs_review":
+          if (review !== "needs_review" && !row.needsReview) continue;
+          break;
+        case "approved":
+          if (review !== "approved" || outreach !== "not_sent") continue;
+          if (queuedContactIds.has(row.contactId)) continue;
+          break;
+        case "queued":
+          if (!queuedContactIds.has(row.contactId)) continue;
+          break;
+        case "outreach_sent":
+          if (outreach !== "outreach_sent") continue;
+          break;
+        case "replied":
+          if (outreach !== "replied") continue;
+          break;
+        case "failed":
+          if (!failedContactIds.has(row.contactId)) continue;
+          break;
+      }
+    }
+
+    if ((filters.emailEligible || filters.anyEligibleChannel) && connections) {
+      const { resolveProspectOutreachEligibility } = await import(
+        "@shared/prospectOutreachEligibility"
+      );
+      // Filter for channel capability (ignore approve/queue lifecycle for listing).
+      const raw = resolveProspectOutreachEligibility({
+        email: contact.email,
+        phone: contact.phone,
+        whatsappId: contact.whatsappId,
+        facebookId: contact.facebookId,
+        instagramId: contact.instagramId,
+        emailConnected: connections.emailConnected,
+        smsConnected: connections.smsConnected,
+        whatsappConnected: connections.whatsappConnected,
+        facebookConnected: connections.facebookConnected,
+        instagramConnected: connections.instagramConnected,
+        reviewStatus: "approved",
+        outreachStatus: "not_sent",
+        analysisStatus: "completed",
+        preferredChannel: filters.emailEligible ? "email" : "auto",
+      });
+      if (filters.emailEligible && !raw.channels.email.eligible) continue;
+      if (filters.anyEligibleChannel && !raw.anyEligible) continue;
+    }
 
     const meta = readProspectImportMetadata(contact);
     items.push({

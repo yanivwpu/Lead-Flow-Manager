@@ -242,6 +242,7 @@ async function rememberCalendlyBookingContext(contact: Contact, context: {
 export interface SendMessageResult {
   success: boolean;
   messageId?: string;
+  conversationId?: string;
   channel: Channel;
   externalMessageId?: string;
   error?: string;

@@ -377,6 +377,16 @@ export type ProspectIntelligenceJobSummary = {
   completedAt?: string | null;
 };
 
+/** Combined list filter — do not confuse with DB review_status alone. */
+export type ProspectIntelligenceStatusFilter =
+  | "pending"
+  | "needs_review"
+  | "approved"
+  | "queued"
+  | "outreach_sent"
+  | "replied"
+  | "failed";
+
 export type ProspectIntelligenceListFilters = {
   priority?: ProspectIntelligencePriority;
   businessType?: string;
@@ -384,6 +394,12 @@ export type ProspectIntelligenceListFilters = {
   segment?: "agency" | "shopify" | "real_estate" | "affiliate" | "local_business" | "saas";
   needsReviewOnly?: boolean;
   importJobId?: string;
+  /** Distinct from review_status / outreach_status — may also match queue state. */
+  statusFilter?: ProspectIntelligenceStatusFilter;
+  hasEmail?: boolean;
+  hasPhone?: boolean;
+  emailEligible?: boolean;
+  anyEligibleChannel?: boolean;
   sortBy?: "leadScore" | "priority" | "confidence" | "name";
   sortDir?: "asc" | "desc";
   limit?: number;
