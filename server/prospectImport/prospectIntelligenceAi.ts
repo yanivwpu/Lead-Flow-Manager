@@ -10,9 +10,15 @@ import {
   PROSPECT_INTELLIGENCE_PRIORITY,
   PROSPECT_INTELLIGENCE_RECOMMENDED_OFFERS,
 } from "@shared/prospectImport";
+import {
+  buildWhachatPositioningForProspect,
+  buildWhachatProductContextForPrompt,
+  detectWeakWhachatPositioning,
+  hasConcreteWhachatPositioning,
+} from "@shared/whachatProductPositioning";
 import { readProspectImportMetadata } from "./prospectIntelligenceEligibility";
 
-export const PROSPECT_INTELLIGENCE_AI_VERSION = "v1";
+export const PROSPECT_INTELLIGENCE_AI_VERSION = "v2";
 
 export type ProspectIntelligenceAiInput = {
   name: string;
@@ -175,8 +181,58 @@ function firstNameFromInput(input: ProspectIntelligenceAiInput): string {
 }
 
 export function buildNeutralFirstMessage(input: ProspectIntelligenceAiInput): string {
+  return buildTailoredFirstMessage(input, {
+    recommendedOffer: "general_demo",
+    potentialFit: "unknown",
+    needsReview: true,
+  });
+}
+
+/** Deterministic, offer-aware first message when AI undersells or data is thin. */
+export function buildTailoredFirstMessage(
+  input: ProspectIntelligenceAiInput,
+  result: Pick<
+    ProspectIntelligence,
+    | "recommendedOffer"
+    | "industry"
+    | "businessType"
+    | "agencyLikelihood"
+    | "shopifyMerchantLikelihood"
+    | "realEstateLikelihood"
+    | "localBusinessLikelihood"
+    | "potentialFit"
+    | "needsReview"
+  >,
+): string {
   const name = firstNameFromInput(input);
-  return `Hi ${name}, I'm reaching out from WhaChatCRM. We built a platform that brings WhatsApp, Instagram, Messenger and other customer conversations into one inbox with AI-powered follow-up. I wanted to introduce myself and see if this is relevant to what you do.`;
+  const ctx = buildWhachatPositioningForProspect({
+    recommendedOffer: result.recommendedOffer,
+    industry: result.industry,
+    businessType: result.businessType,
+    importTag: input.importTag,
+    importReason: input.importReason,
+    originalTags: input.originalTags,
+    agencyLikelihood: result.agencyLikelihood,
+    shopifyMerchantLikelihood: result.shopifyMerchantLikelihood,
+    realEstateLikelihood: result.realEstateLikelihood,
+    localBusinessLikelihood: result.localBusinessLikelihood,
+  });
+
+  const question =
+    ctx.segment === "partner"
+      ? "Would it be worth a quick look at whether this fits your audience?"
+      : ctx.segment === "agency" || ctx.segment === "ghl_agency"
+        ? "Would it be useful if I shared how agencies use this with their clients?"
+        : "Would it be useful if I shared how this could fit what you do?";
+
+  const parts = [
+    `Hi ${name}, I'm reaching out from WhachatCRM.`,
+    ctx.positioningSentence,
+    ctx.optionalCloser,
+    question,
+  ].filter(Boolean);
+
+  return parts.join(" ").replace(/\s+/g, " ").trim().substring(0, 400);
 }
 
 const UNSUPPORTED_OUTREACH_PHRASE_RULES: Array<{
@@ -262,7 +318,7 @@ export function applyOutreachMessageGuardrails(
   const message = guarded.suggestedFirstMessage || "";
   const violations = detectUnsupportedOutreachClaims(message, input, guarded);
   if (violations.length > 0) {
-    guarded.suggestedFirstMessage = buildNeutralFirstMessage(input);
+    guarded.suggestedFirstMessage = buildTailoredFirstMessage(input, guarded);
     if (guarded.suggestedOutreachAngle) {
       const angleViolations = detectUnsupportedOutreachClaims(
         guarded.suggestedOutreachAngle,
@@ -274,13 +330,22 @@ export function applyOutreachMessageGuardrails(
           "Neutral introduction — original draft contained unsupported assumptions.";
       }
     }
+    return guarded;
+  }
+
+  const weak = detectWeakWhachatPositioning(message);
+  const namesProduct = /whachat\s*crm/i.test(message);
+  if (weak.length > 0 || (namesProduct && !hasConcreteWhachatPositioning(message))) {
+    guarded.suggestedFirstMessage = buildTailoredFirstMessage(input, guarded);
   }
 
   return guarded;
 }
 
 export function buildProspectIntelligencePrompt(input: ProspectIntelligenceAiInput): string {
-  return `Analyze this imported prospect for WhaChatCRM (unified WhatsApp/Instagram/Messenger inbox + AI for agencies, Shopify merchants, real estate, affiliates, local businesses).
+  return `Analyze this imported prospect for WhachatCRM outreach and classification.
+
+${buildWhachatProductContextForPrompt()}
 
 STRICT RULES:
 - Never claim facts not supported by the input. Use likelihood scores 0-100 instead of definitive labels.
@@ -289,17 +354,19 @@ STRICT RULES:
 - Use concise internal language. suggestedFirstMessage max 400 chars.
 
 OUTREACH MESSAGE RULES (suggestedFirstMessage):
-- Never claim the prospect showed interest in WhaChatCRM, messaging, CRM, AI, Shopify, real estate, agency services, or any other topic unless explicit source evidence says so.
+- Ground WhachatCRM positioning in the PRODUCT CONTEXT above. Pick 2–4 benefits for THIS prospect based on industry, business type, likelihood scores, and recommendedOffer.
+- Never claim the prospect showed interest in WhachatCRM, messaging, CRM, AI, Shopify, real estate, agency services, or any other topic unless explicit source evidence says so.
 - Never use phrases like "I noticed your interest in...", "I saw you were looking for...", "businesses like yours", "your agency", "your store", "your clients", "your team", or "your real estate business" unless the prospect input explicitly supports that claim.
 - Do not assume the prospect owns or represents a business unless company, businessType, industry, or tags support it.
-- For needs_review / unknown-fit prospects with minimal data, write a neutral introduction that explains WhaChatCRM and asks whether it is relevant — without pretending to know their business or intent.
+- For needs_review / unknown-fit prospects with minimal data, write a neutral introduction that explains WhachatCRM accurately (CRM + unified inbox + AI engagement) and asks whether it is relevant — without pretending to know their business or intent.
+- The recommendedOffer must change the pitch materially (partner_program → partnership + 30% lifetime recurring commission; agency_white_label → agency/client-service + white-label; shopify_app → commerce messaging; real_estate_growth_engine → RE Growth Engine; core_whachatcrm/general_demo → operational product value).
 
-WhaChatCRM offer angles:
-- partner_program / agency_white_label: digital/GHL agencies, multi-client operators
-- shopify_app: Shopify merchants, ecommerce
-- real_estate_growth_engine: real estate professionals
-- core_whachatcrm / general_demo: local businesses, general fit
-- not_a_fit: poor fit
+OFFER ↔ SEGMENT HINTS:
+- partner_program → partner
+- agency_white_label → agency / ghl_agency
+- shopify_app → shopify
+- real_estate_growth_engine → real_estate
+- core_whachatcrm / general_demo → local_service or general
 
 Prospect input JSON:
 ${JSON.stringify(input, null, 2)}

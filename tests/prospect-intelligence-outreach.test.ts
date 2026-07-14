@@ -164,7 +164,7 @@ const needsReviewUnknown: ProspectIntelligence = {
   const guarded = applyOutreachMessageGuardrails(needsReviewUnknown, input);
   assert.doesNotMatch(guarded.suggestedFirstMessage || "", /noticed your interest/i);
   assert.doesNotMatch(guarded.suggestedFirstMessage || "", /businesses like yours/i);
-  assert.match(guarded.suggestedFirstMessage || "", /see if this is relevant/i);
+  assert.match(guarded.suggestedFirstMessage || "", /WhachatCRM|multi-channel CRM|unified inbox/i);
 }
 
 console.log("prospect-intelligence-outreach.test.ts: OK");
