@@ -52,13 +52,13 @@ export function PrivacyPolicy() {
               <strong>Messaging and CRM Content:</strong> Messages, contacts, conversation metadata, tags, notes, pipeline
               information, tasks, and related CRM records processed through the platform — including when you connect{" "}
               <strong>WhatsApp</strong> (via Twilio or Meta), <strong>Instagram</strong>, <strong>Facebook Messenger</strong>,{" "}
-              <strong>SMS</strong> (where supported through your providers), <strong>Telegram</strong>, <strong>web chat</strong>, or
-              other connected channels.
+              <strong>SMS</strong> (where supported through your providers), <strong>Telegram</strong>, <strong>web chat</strong>,{" "}
+              <strong>Gmail / email</strong> (when you connect a mailbox), or other connected channels.
             </li>
             <li>
               <strong>Provider &amp; Integration Credentials:</strong> Such as Twilio credentials, Meta WhatsApp Business API
-              tokens and identifiers, and other channel connection details you authorize — stored encrypted as described in
-              Section 4 and used only to provide the integrations you enable.
+              tokens and identifiers, Google OAuth tokens for connected Gmail mailboxes, and other channel connection details
+              you authorize — stored encrypted as described in Section 4 and used only to provide the integrations you enable.
             </li>
             <li>
               <strong>Shopify Data (if you connect Shopify):</strong> Information made available through your Shopify
@@ -163,6 +163,17 @@ export function PrivacyPolicy() {
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">5. Third-Party Services</h2>
           <p className="text-gray-600 mb-4">WhachatCRM integrates with services you choose to connect. Examples include:</p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
+            <li>
+              <strong>Google (Gmail):</strong> When you connect a Gmail mailbox, we request Google OAuth access to send email
+              on your behalf and to read mailbox data needed to sync threads, detect replies, and keep your Inbox accurate
+              (scopes such as Gmail send and Gmail read). Tokens are encrypted at rest. We use this access only to provide
+              messaging features you enable. You can revoke access anytime in your Google Account permissions and by
+              disconnecting the mailbox in WhachatCRM. See also our{" "}
+              <a href="/terms" className="text-brand-green hover:underline">
+                Terms of Service
+              </a>
+              .
+            </li>
             <li>
               <strong>Twilio:</strong> Optional WhatsApp Business API and SMS-related connectivity. Your Twilio credentials are
               stored securely and used only as directed by your configuration.

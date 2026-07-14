@@ -84,6 +84,14 @@ export async function sendEmailViaMailbox(params: {
   if (dnc.blocked) {
     return { success: false, channel: "email", error: "Contact is marked do-not-contact" };
   }
+  const cf = (contact.customFields || {}) as Record<string, unknown>;
+  if (cf.emailBounced === true || cf.bounced === true || cf.suppressed === true) {
+    return {
+      success: false,
+      channel: "email",
+      error: `Contact email is suppressed (${String(cf.suppressionReason || "bounced_or_suppressed")})`,
+    };
+  }
 
   const mailbox = await getEmailMailboxById(params.mailboxId);
   if (!mailbox || mailbox.workspaceUserId !== params.workspaceUserId) {
@@ -249,6 +257,25 @@ export async function sendEmailViaMailbox(params: {
         status: "failed",
         errorMessage: result.error || "Send failed",
       });
+
+      try {
+        const { isPermanentEmailSendFailure } = await import("@shared/prospectEmailSuppression");
+        if (isPermanentEmailSendFailure(result.error)) {
+          const { applyProspectEmailSuppression } = await import(
+            "../prospectImport/prospectEmailSuppressionService"
+          );
+          await applyProspectEmailSuppression({
+            contactId: contact.id,
+            reason: "invalid_recipient",
+            detail: (result.error || "permanent_send_failure").substring(0, 300),
+            bouncedEmail: to[0] || null,
+            source: "email_send_permanent_failure",
+          });
+        }
+      } catch (err) {
+        console.error("[EmailSend] permanent-failure suppression failed", err);
+      }
+
       return {
         success: false,
         channel: "email",

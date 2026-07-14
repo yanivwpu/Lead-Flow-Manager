@@ -44,6 +44,8 @@ export type ProspectOutreachEligibilityInput = {
   whatsappConsent?: boolean;
   suppressed?: boolean;
   optedOut?: boolean;
+  /** Human/machine detail for suppressed/opted-out (bounce, unsubscribe, …). */
+  suppressionDetail?: string | null;
   /** Already has active/successful queue item for same channel+recipient. */
   alreadyQueued?: boolean;
   preferredChannel?: ProspectOutreachPreferredChannel;
@@ -74,6 +76,7 @@ function emailEligibility(input: ProspectOutreachEligibilityInput): ProspectChan
       connected,
       policyEligible: false,
       reason: input.suppressed ? "suppressed" : "opted_out",
+      detail: input.suppressionDetail || undefined,
     });
   }
   if (!hasEmail) {
@@ -131,6 +134,7 @@ function smsEligibility(input: ProspectOutreachEligibilityInput): ProspectChanne
       connected,
       policyEligible: false,
       reason: input.suppressed ? "suppressed" : "opted_out",
+      detail: input.suppressionDetail || undefined,
     });
   }
   if (!hasPhone) {
@@ -200,6 +204,7 @@ function whatsappEligibility(input: ProspectOutreachEligibilityInput): ProspectC
       connected,
       policyEligible: false,
       reason: input.suppressed ? "suppressed" : "opted_out",
+      detail: input.suppressionDetail || undefined,
     });
   }
   if (!hasIdentity) {
@@ -365,6 +370,10 @@ function instagramEligibility(input: ProspectOutreachEligibilityInput): Prospect
 function lifecycleGate(
   input: ProspectOutreachEligibilityInput,
 ): ProspectOutreachEligibilityReason | null {
+  // Deliverability / compliance always wins over review/lifecycle state.
+  if (input.suppressed) return "suppressed";
+  if (input.optedOut) return "opted_out";
+
   const outreach = normalizeOutreachStatus(input.outreachStatus, {
     outreachSentAt: input.outreachSentAt,
     repliedAt: input.repliedAt,
@@ -382,8 +391,6 @@ function lifecycleGate(
   if (!input.allowUnapproved && review !== "approved") return "not_approved";
 
   if (input.alreadyQueued) return "duplicate_queued";
-  if (input.suppressed) return "suppressed";
-  if (input.optedOut) return "opted_out";
   return null;
 }
 
@@ -427,11 +434,16 @@ export function resolveProspectOutreachEligibility(
   const gate = lifecycleGate(input);
   if (gate) {
     // Lifecycle / suppression blocks all channels for bulk queue.
+    const detail =
+      gate === "suppressed" || gate === "opted_out"
+        ? input.suppressionDetail || undefined
+        : undefined;
     for (const ch of CHANNEL_PRIORITY) {
       channels[ch] = {
         ...channels[ch],
         eligible: false,
         reason: gate,
+        detail,
       };
     }
     return {

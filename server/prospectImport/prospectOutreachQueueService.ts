@@ -725,6 +725,20 @@ export async function retryFailedQueueItem(params: {
   if (!item) return { retried: false, reason: "not_found" };
   if (item.queueStatus !== "failed") return { retried: false, reason: "not_failed" };
   if (item.attempts >= item.maxAttempts) return { retried: false, reason: "max_attempts" };
+  const lastErr = String(item.lastError || "");
+  if (/^permanent:/i.test(lastErr) || /suppressed|opted_out|bounce/i.test(lastErr)) {
+    return { retried: false, reason: "permanent_failure" };
+  }
+
+  // Re-check contact suppression before allowing retry.
+  const contact = await storage.getContact(item.contactId);
+  if (contact) {
+    const { contactSuppressionState } = await import("./prospectOutreachEligibilityService");
+    const suppression = contactSuppressionState(contact);
+    if (suppression.suppressed || suppression.optedOut) {
+      return { retried: false, reason: "contact_suppressed" };
+    }
+  }
 
   await db
     .update(prospectOutreachQueueItems)
@@ -982,7 +996,30 @@ export async function processClaimedQueueItem(
         })
         .where(eq(prospectOutreachQueueItems.id, item.id));
     } else {
-      await markItemFailed(item, sendResult.error || "send_failed", false);
+      const { isPermanentEmailSendFailure } = await import("@shared/prospectEmailSuppression");
+      const permanent = isPermanentEmailSendFailure(sendResult.error);
+      if (permanent) {
+        try {
+          const { applyProspectEmailSuppression } = await import("./prospectEmailSuppressionService");
+          await applyProspectEmailSuppression({
+            contactId: item.contactId,
+            reason: "invalid_recipient",
+            detail: (sendResult.error || "permanent_send_failure").substring(0, 300),
+            bouncedEmail: item.recipientIdentity,
+            source: "prospect_queue_permanent_send_failure",
+          });
+        } catch (err) {
+          console.error("[ProspectOutreach] permanent-failure suppression failed", err);
+        }
+        // Terminal — never silent requeue for permanent recipient failures.
+        await markItemFailed(item, `permanent:${sendResult.error || "send_failed"}`, false);
+        await db
+          .update(prospectOutreachQueueItems)
+          .set({ attempts: item.maxAttempts, updatedAt: new Date() })
+          .where(eq(prospectOutreachQueueItems.id, item.id));
+      } else {
+        await markItemFailed(item, sendResult.error || "send_failed", false);
+      }
     }
     console.info(
       JSON.stringify(

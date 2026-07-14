@@ -3,6 +3,8 @@
  * REVIEW STATE / OUTREACH LIFECYCLE / QUEUE EXECUTION remain distinct.
  */
 
+import { prospectSuppressionDetailLabel } from "./prospectEmailSuppression";
+
 export const PROSPECT_OUTREACH_CHANNELS = [
   "email",
   "sms",
@@ -147,9 +149,9 @@ export function prospectOutreachEligibilityReasonLabel(
     case "missing_message_snapshot":
       return "Missing approved message";
     case "suppressed":
-      return "Suppressed";
+      return prospectSuppressionDetailLabel(detail, detail);
     case "opted_out":
-      return "Opted out";
+      return prospectSuppressionDetailLabel(detail || "unsubscribe", detail);
     case "missing_consent":
       return "Missing consent for this channel";
     case "template_required":

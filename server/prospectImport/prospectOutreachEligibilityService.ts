@@ -90,21 +90,40 @@ export async function loadWorkspaceChannelConnections(
 export function contactSuppressionState(contact: Contact): {
   suppressed: boolean;
   optedOut: boolean;
-  reason?: string;
+  /** Stable machine reason: bounce | unsubscribe | dnc | suppressed | … */
+  reason: string | null;
+  detail: string | null;
 } {
   const dnc = contactHasDoNotContact(contact);
   if (dnc.blocked) {
+    const optedOut = dnc.reason === "unsubscribed";
     return {
       suppressed: true,
-      optedOut: dnc.reason === "unsubscribed",
-      reason: dnc.detail || dnc.reason,
+      optedOut,
+      reason: optedOut ? "unsubscribe" : "dnc",
+      detail: dnc.detail || dnc.reason || null,
     };
   }
   const cf = (contact.customFields || {}) as Record<string, unknown>;
-  if (cf.emailBounced === true || cf.bounced === true || cf.suppressed === true) {
-    return { suppressed: true, optedOut: false, reason: "bounced_or_suppressed_flag" };
+  if (cf.emailBounced === true || cf.bounced === true) {
+    return {
+      suppressed: true,
+      optedOut: false,
+      reason: "bounce",
+      detail: String(cf.suppressionDetail || cf.suppressionReason || "bounce"),
+    };
   }
-  return { suppressed: false, optedOut: false };
+  if (cf.suppressed === true) {
+    const reason = String(cf.suppressionReason || "suppressed");
+    const optedOut = reason === "unsubscribe" || cf.unsubscribed === true || cf.optOut === true;
+    return {
+      suppressed: true,
+      optedOut,
+      reason,
+      detail: String(cf.suppressionDetail || reason),
+    };
+  }
+  return { suppressed: false, optedOut: false, reason: null, detail: null };
 }
 
 export async function hasActiveQueueItem(params: {
@@ -293,6 +312,7 @@ export async function resolveProspectOutreachEligibilityForContact(params: {
     whatsappConsent: false,
     suppressed: suppression.suppressed,
     optedOut: suppression.optedOut,
+    suppressionDetail: suppression.detail || suppression.reason || null,
     alreadyQueued,
     preferredChannel: params.preferredChannel || "auto",
   };
