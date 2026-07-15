@@ -478,7 +478,7 @@
     "dashboard": "Dashboard",
     "heroTitle": "Unified Inbox Zero Complexity",
     "heroEyebrow": "Official Meta API inbox with 0% Meta fee markup",
-    "heroSubtitle": "One unified inbox for WhatsApp, Instagram, Facebook Messenger, SMS, Telegram, and web chat — with AI Copilot, CRM context, and automated follow-ups built in.",
+    "heroSubtitle": "One unified inbox for WhatsApp, Instagram, Facebook Messenger, SMS, Telegram, Email, and web chat — with AI Copilot, CRM context, and automated follow-ups built in.",
     "startTrial": "Start Free Trial",
     "bookDemo": "Book a Demo",
     "noCreditCard": "No credit card required",
@@ -511,7 +511,7 @@
   "home": {
     "hero": {
       "title": "One Inbox. Every Channel. Zero Complexity.",
-      "subtitle": "WhatsApp, Instagram, Facebook Messenger, SMS, Telegram, and web chat in one unified inbox. Respond faster, collaborate as a team, and automate the follow-up work that usually slips.",
+      "subtitle": "WhatsApp, Instagram, Facebook Messenger, SMS, Telegram, Email, and web chat in one unified inbox and CRM. Respond faster, collaborate as a team, and automate the follow-up work that usually slips.",
       "cta": {
         "primary": "Start Your 14-Day Free Trial",
         "secondary": "See Pricing",

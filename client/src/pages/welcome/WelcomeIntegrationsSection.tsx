@@ -4,6 +4,7 @@ const INTEGRATIONS = [
   { name: "WhatsApp via Meta", logo: "/logos/whatsapp.svg" },
   { name: "Instagram", logo: "/logos/instagram.svg" },
   { name: "Facebook Messenger", logo: "/logos/facebook.svg" },
+  { name: "Gmail / Google Workspace", logo: "/logos/gmail.svg" },
   { name: "Shopify", logo: "/logos/shopify.svg" },
   { name: "Stripe", logo: "/logos/stripe.svg" },
   { name: "Calendly", logo: "/logos/calendly.svg" },
