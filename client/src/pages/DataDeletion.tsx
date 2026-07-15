@@ -28,7 +28,7 @@ export function DataDeletion() {
         </Link>
 
         <h1 className="mb-2 font-display text-3xl font-bold text-gray-900">Data deletion</h1>
-        <p className="mb-8 text-sm text-gray-500">Last updated: May 8, 2026</p>
+        <p className="mb-8 text-sm text-gray-500">Last updated: July 15, 2026</p>
 
         <div className="prose prose-gray max-w-none">
           <p className="text-gray-600 mb-4">
@@ -53,8 +53,8 @@ export function DataDeletion() {
             <Link href="/privacy-policy">
               <a className="text-brand-green hover:underline">Privacy Policy</a>
             </Link>{" "}
-            (including typical completion within the timeframe described there for active databases). Some records may be
-            retained where required for legal, tax, or fraud-prevention reasons, as explained in the Privacy Policy.
+            without undue delay for active production systems, subject to verification and technical complexity. Some records may
+            be retained where required for legal, tax, or fraud-prevention reasons, as explained in the Privacy Policy.
           </p>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">Shopify merchants</h2>

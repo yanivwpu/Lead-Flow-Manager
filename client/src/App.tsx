@@ -130,6 +130,9 @@ function MarketingRoutes() {
       <Route path="/privacy">
         <Redirect to="/privacy-policy" />
       </Route>
+      <Route path="/terms">
+        <Redirect to="/terms-of-use" />
+      </Route>
       <Route path="/intent-ai-alternative">
         <Redirect to="/best-whatsapp-crm-2026" />
       </Route>

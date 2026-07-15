@@ -26,7 +26,7 @@ export function TermsOfUse() {
         </Link>
 
         <h1 className="text-3xl font-display font-bold text-gray-900 mb-2">Terms of Use</h1>
-        <p className="text-sm text-gray-500 mb-8">Last updated: May 8, 2026</p>
+        <p className="text-sm text-gray-500 mb-8">Last updated: July 15, 2026</p>
 
         <div className="prose prose-gray max-w-none">
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">1. Acceptance of Terms</h2>
@@ -36,16 +36,22 @@ export function TermsOfUse() {
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">2. Description of Service</h2>
           <p className="text-gray-600 mb-4">
-            WhachatCRM is a <strong>customer relationship management (CRM) and customer communication platform</strong> for
-            businesses to manage conversations, organize leads, set follow-ups, and run sales workflows. Depending on your
-            configuration, the Service may support <strong>multiple channels</strong> (for example, WhatsApp, Instagram,
-            Facebook Messenger, SMS, Telegram, and web chat) and <strong>integrations</strong> such as Shopify, subject to
-            feature availability and your connected providers.
+            WhachatCRM is a <strong>unified inbox, CRM, and AI-assisted communication platform</strong> for businesses to manage
+            conversations, organize leads and contacts, set follow-ups, run sales workflows, and configure automations.
+            Depending on your configuration and feature availability, the Service may support <strong>multiple channels</strong>{" "}
+            (for example, WhatsApp, Instagram, Facebook Messenger, SMS, Telegram, web chat, and Email/Gmail when you connect a
+            mailbox) and <strong>integrations</strong> such as Shopify and Google/Gmail, subject to your connected providers.
           </p>
           <p className="text-gray-600 mb-4">
-            The Service is intended for <strong>legitimate customer communication</strong> and relationship management. It is
-            not a “blast” or unsolicited bulk-messaging system, and you may not use it to evade platform rules, anti-spam laws, or
-            consent requirements.
+            Certain workspaces may also use tools such as <strong>Prospect Intelligence / Prospect Engine</strong> and related
+            review and email outreach queue features to draft, approve, and send outreach through channels you authorize (including
+            a connected Gmail account). These features remain user-configured and subject to the acceptable-use and compliance
+            rules below.
+          </p>
+          <p className="text-gray-600 mb-4">
+            The Service is intended for <strong>legitimate customer and business communication</strong> and relationship
+            management. It is not a tool for illegal, deceptive, or abusive messaging, and you may not use it to evade platform
+            rules, anti-spam laws, or consent and opt-out requirements.
           </p>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">3. Account Registration</h2>
@@ -100,9 +106,10 @@ export function TermsOfUse() {
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">5. Messaging providers, channels, and integrations</h2>
           <p className="text-gray-600 mb-4">
             The Service may connect to third-party providers you authorize — including, depending on your setup,{" "}
-            <strong>Twilio</strong>, <strong>Meta</strong> (for example WhatsApp Cloud API and, where enabled, Instagram or
-            Messenger messaging products), and other channel providers. <strong>Shopify</strong> and other integrations are
-            optional and governed by the permissions you grant.
+            <strong>Google / Gmail</strong>, <strong>Twilio</strong>, <strong>Meta</strong> (for example WhatsApp Cloud API and,
+            where enabled, Instagram or Messenger messaging products), and other channel providers. <strong>Shopify</strong> and
+            other integrations are optional and governed by the permissions you grant. Availability of any channel depends on your
+            plan, configuration, and whether that channel is generally enabled for your workspace.
           </p>
           <p className="text-gray-600 mb-4">You are responsible for:</p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
@@ -110,35 +117,56 @@ export function TermsOfUse() {
             <li>Keeping tokens, API keys, and credentials secure</li>
             <li>Complying with each provider&apos;s terms, product policies, and technical requirements</li>
             <li>All fees, rate limits, and message charges imposed by providers</li>
-            <li>Configuration required for webhooks, phone numbers, sender registration, and quality rules</li>
+            <li>Configuration required for webhooks, phone numbers, sender registration, mailboxes, and quality rules</li>
+            <li>
+              Content, recipients, campaigns, automations, outreach queues, and account configuration you set in the Service
+            </li>
           </ul>
           <p className="text-gray-600 mb-4">
             WhachatCRM stores integration credentials using encryption at rest and uses them only to provide the features you
             enable. <strong>Third-party services may change, suspend, or limit functionality</strong> without notice; WhachatCRM
-            is not responsible for provider outages, policy changes, or delivery failures outside our reasonable control.
+            is not responsible for provider outages, policy changes, account restrictions, or delivery failures outside our
+            reasonable control.
+          </p>
+
+          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">5.1 Google / Gmail</h3>
+          <p className="text-gray-600 mb-4">
+            If you connect Gmail or Google Workspace, you authorize WhachatCRM to access Google APIs as described in our{" "}
+            <Link href="/privacy-policy">
+              <a className="text-brand-green hover:underline">Privacy Policy</a>
+            </Link>{" "}
+            (including Gmail read access for inbox synchronization and reply handling, and Gmail send access for sending mail
+            through your connected account). You must comply with Google&apos;s applicable terms and policies. You may disconnect
+            Gmail in the product or revoke access in your Google Account. Google may restrict or suspend access independently of
+            WhachatCRM.
           </p>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">6. Acceptable Use</h2>
           <p className="text-gray-600 mb-4">You agree not to:</p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
-            <li>Use the Service for spam, harassment, or illegal activities</li>
-            <li>Violate WhatsApp's Business Policy or Terms of Service</li>
-            <li>Send unsolicited bulk messages</li>
-            <li>Impersonate others or misrepresent your identity</li>
-            <li>Attempt to access other users' accounts or data</li>
+            <li>Use the Service for spam, harassment, phishing, fraud, or other illegal activities</li>
+            <li>Violate WhatsApp&apos;s Business Policy or Terms of Service, or any other provider&apos;s rules for a channel you use</li>
+            <li>Send unsolicited bulk messages or deceptive commercial communications</li>
+            <li>
+              Upload, purchase, scrape, or otherwise use contact lists that you do not have a lawful right to contact
+            </li>
+            <li>Impersonate others or misrepresent your identity or affiliation</li>
+            <li>Attempt to access other users&apos; accounts or data</li>
             <li>Interfere with or disrupt the Service</li>
             <li>Use automated systems to abuse the platform</li>
             <li>
-              Run campaigns, workflows, or sequences in ways that are likely to violate anti-spam laws, consent rules, or a
-              provider&apos;s messaging policies
+              Run campaigns, workflows, sequences, or outreach queues in ways that are likely to violate anti-spam laws, consent
+              rules, opt-out / do-not-contact requirements, or a provider&apos;s messaging policies
             </li>
-            <li>Misrepresent automated content as human where disclosure is required</li>
+            <li>Misrepresent automated or AI-generated content as human where disclosure is required</li>
           </ul>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">7. Messaging compliance, automation, AI features, and Shopify</h2>
           <p className="text-gray-600 mb-4">
             WhachatCRM provides tools; <strong>you remain responsible</strong> for lawful use. Nothing in these Terms guarantees
-            regulatory compliance for your business — requirements vary by region and industry.
+            regulatory compliance for your business — requirements vary by region, channel, and industry. Where email is used,
+            laws such as the U.S. CAN-SPAM Act may apply to certain commercial messages; other jurisdictions have different rules.
+            Compliance with one law is not globally sufficient.
           </p>
 
           <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">7.1 WhatsApp (Business Platform)</h3>
@@ -163,24 +191,35 @@ export function TermsOfUse() {
             requirements imposed by your provider or regulators.
           </p>
 
-          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">7.4 Automation, campaigns, scheduling, and workflows</h3>
+          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">7.4 Email and Gmail outreach</h3>
           <p className="text-gray-600 mb-4">
-            Features such as preset campaigns, enrollment scheduling, reminders, and workflows send or queue messages based on your
-            configuration. <strong>Scheduled messaging is not a promise of delivery</strong> — delivery may fail due to provider
-            errors, recipient eligibility, conversation windows, blocks, quality enforcement, or maintenance. You must configure
-            automation responsibly and honor recipient opt-outs promptly (including tags/fields your workspace uses to suppress
-            outreach).
+            Where you use Email/Gmail, you are responsible for lawful commercial and transactional email practices applicable to
+            your recipients and jurisdictions — including accurate sender identification, truthful subject lines where required,
+            honoring unsubscribe / opt-out / stop / remove-me requests, and suppressing contacts that are do-not-contact, bounced,
+            or otherwise ineligible. You are responsible for the content, recipients, frequency, and purpose of messages you send
+            through your connected mailbox, including messages generated with AI assistance or queued via Prospect Engine tools.
           </p>
 
-          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">7.5 Artificial intelligence (AI) features</h3>
+          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">7.5 Automation, campaigns, Prospect Engine, scheduling, and workflows</h3>
           <p className="text-gray-600 mb-4">
-            Certain features may generate drafts, summaries, or suggestions using AI. AI outputs can be incorrect or inappropriate.
+            Features such as preset campaigns, enrollment scheduling, reminders, workflows, Prospect Intelligence analysis /
+            review, and outreach queues send or queue messages based on your configuration.{" "}
+            <strong>Scheduled or queued messaging is not a promise of delivery</strong> — delivery may fail due to provider
+            errors, recipient eligibility, conversation windows, blocks, quality enforcement, bounce/suppression rules, or
+            maintenance. You must configure automation and outreach responsibly, obtain and maintain any required consent or lawful
+            basis, and honor recipient opt-outs promptly (including tags/fields and suppression signals your workspace uses to
+            block outreach).
+          </p>
+
+          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">7.6 Artificial intelligence (AI) features</h3>
+          <p className="text-gray-600 mb-4">
+            Certain features may generate drafts, summaries, scores, or suggestions using AI. AI outputs can be incorrect or inappropriate.
             <strong> You are responsible for reviewing content before sending</strong> when human oversight is required by law or
             by your policies. WhachatCRM does not warrant that AI outputs are accurate, complete, or fit for any particular legal
             purpose.
           </p>
 
-          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">7.6 Shopify merchants</h3>
+          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">7.7 Shopify merchants</h3>
           <p className="text-gray-600 mb-4">
             If you use WhachatCRM with Shopify, you acknowledge that you control how you collect and use your customers&apos;
             information in your store and messaging practices. You are responsible for publishing appropriate privacy notices,
@@ -265,7 +304,9 @@ export function TermsOfUse() {
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">12. Termination</h2>
           <p className="text-gray-600 mb-4">
-            We may suspend or terminate access for violations of these Terms. You may close your account at any time. Upon termination, provider credentials will be removed.
+            We may suspend or terminate access for violations of these Terms, including abuse, spam, fraudulent use, or other
+            policy violations. You may close your account at any time. Upon termination, provider credentials will be removed,
+            subject to short operational delays and any records we must retain as described in our Privacy Policy.
           </p>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">13. Changes to Terms</h2>
@@ -285,8 +326,9 @@ export function TermsOfUse() {
         </div>
 
         <div className="mt-8 pt-6 border-t border-gray-200 text-xs text-gray-400 space-y-1">
-          <p>WhachatCRM is a CRM platform and is not affiliated with Meta or WhatsApp.</p>
+          <p>WhachatCRM is a CRM platform and is not affiliated with Meta, WhatsApp, or Google.</p>
           <p>WhatsApp Business API access is provided by approved third-party providers.</p>
+          <p>Gmail and Google Workspace are trademarks of Google LLC.</p>
         </div>
       </div>
       <SiteFooter />

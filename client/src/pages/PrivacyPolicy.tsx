@@ -11,11 +11,11 @@ export function PrivacyPolicy() {
         <title>Privacy Policy | WhachatCRM</title>
         <meta
           name="description"
-          content="WhachatCRM privacy policy: CRM and multi-channel messaging, AI-assisted features, automation, cookies, and your rights."
+          content="WhachatCRM privacy policy: CRM and multi-channel messaging, Gmail/Google OAuth data use, AI-assisted features, automation, cookies, and your rights."
         />
         <link rel="canonical" href={`${MARKETING_URL}/privacy-policy`} />
         <meta property="og:title" content="Privacy Policy | WhachatCRM" />
-        <meta property="og:description" content="WhachatCRM privacy policy. Learn how we collect, use, and protect your data." />
+        <meta property="og:description" content="WhachatCRM privacy policy. Learn how we collect, use, and protect your data, including Google/Gmail integrations." />
         <meta property="og:url" content={`${MARKETING_URL}/privacy-policy`} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary" />
@@ -29,16 +29,17 @@ export function PrivacyPolicy() {
         </Link>
 
         <h1 className="text-3xl font-display font-bold text-gray-900 mb-2">Privacy Policy</h1>
-        <p className="text-sm text-gray-500 mb-8">Last updated: May 8, 2026</p>
+        <p className="text-sm text-gray-500 mb-8">Last updated: July 15, 2026</p>
 
         <div className="prose prose-gray max-w-none">
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">1. Introduction</h2>
           <p className="text-gray-600 mb-4">
             Welcome to WhachatCRM (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;). We are committed to protecting your privacy and personal
             information. WhachatCRM is a <strong>customer relationship management (CRM) and customer communication platform</strong>{" "}
-            — built for teams to organize conversations and workflows, not for unsolicited bulk messaging. This Privacy Policy
-            explains how we collect, use, disclose, and safeguard your information when you use our services, including
-            multi-channel messaging, integrations (such as Shopify), and optional AI-assisted features.
+            — built for teams to organize conversations and workflows across connected channels (such as WhatsApp, Instagram,
+            Facebook Messenger, SMS, Telegram, web chat, and, when you connect it, Gmail). This Privacy Policy explains how we
+            collect, use, disclose, and safeguard your information when you use our services, including multi-channel messaging,
+            integrations (such as Shopify), optional AI-assisted features, and user-configured outreach tools.
           </p>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">2. Information We Collect</h2>
@@ -56,6 +57,17 @@ export function PrivacyPolicy() {
               <strong>Gmail / email</strong> (when you connect a mailbox), or other connected channels.
             </li>
             <li>
+              <strong>Google Account identity (when you connect Gmail):</strong> Basic identity information returned by Google
+              Sign-In / OpenID Connect for the authorized account (such as email address and basic profile information needed to
+              identify and display the connected mailbox).
+            </li>
+            <li>
+              <strong>Gmail mailbox data (when you connect Gmail):</strong> Email messages and related metadata accessed through
+              Google APIs for the mailbox you authorize — including subject, body content, sender/recipient addresses, thread
+              identifiers, timestamps, and related headers needed to synchronize conversations into WhachatCRM. See Section 5 for
+              details.
+            </li>
+            <li>
               <strong>Provider &amp; Integration Credentials:</strong> Such as Twilio credentials, Meta WhatsApp Business API
               tokens and identifiers, Google OAuth tokens for connected Gmail mailboxes, and other channel connection details
               you authorize — stored encrypted as described in Section 4 and used only to provide the integrations you enable.
@@ -66,12 +78,12 @@ export function PrivacyPolicy() {
               workflows). Scope depends on permissions you grant and features you use.
             </li>
             <li>
-              <strong>Campaign &amp; Automation Metadata:</strong> When you use preset campaigns, sequences, workflows, or
-              enrollments, we process configuration and operational data (for example, step schedules, enrollment status, and
-              delivery-related logs) needed to run those features.
+              <strong>Campaign, automation, and outreach metadata:</strong> When you use preset campaigns, sequences, workflows,
+              enrollments, or user-configured prospect outreach tools, we process configuration and operational data (for example,
+              step schedules, enrollment status, queue status, and delivery-related logs) needed to run those features.
             </li>
             <li>
-              <strong>AI Feature Inputs and Outputs (if enabled on your plan):</strong> Content you choose to send for
+              <strong>AI Feature Inputs and Outputs (if enabled on your plan):</strong> Content you choose to process for
               suggestions, summaries, or assisted replies may be processed to provide those features. AI features are designed
               to assist your team — they are not a substitute for your judgment or legal compliance obligations (see Sections 9
               and 11).
@@ -90,16 +102,19 @@ export function PrivacyPolicy() {
           <p className="text-gray-600 mb-4">We use your information for the following purposes:</p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
             <li>
-              <strong>Service Provision:</strong> To operate the CRM and inbox, route messages through your connected channels,
-              and power features you enable (including reminders, templates where applicable, and internal collaboration tools).
+              <strong>Service Provision:</strong> To operate the CRM and unified inbox, route messages through your connected
+              channels, synchronize connected mailboxes (including Gmail when enabled), and power features you enable (including
+              reminders, templates where applicable, and internal collaboration tools).
             </li>
             <li>
               <strong>Integrations:</strong> To connect and maintain links to messaging providers, Meta-related signup or
-              configuration flows you initiate in-product, Shopify (when installed), and other integrations you configure.
+              configuration flows you initiate in-product, Google/Gmail (when connected), Shopify (when installed), and other
+              integrations you configure.
             </li>
             <li>
-              <strong>Automation &amp; Campaign Execution:</strong> To schedule, queue, and execute automation you configure
-              (including campaign enrollments and workflow steps), subject to platform rules and your provider constraints.
+              <strong>Automation, campaigns, and outreach execution:</strong> To schedule, queue, and execute automation and
+              outreach you configure (including campaign enrollments, workflow steps, and user-configured prospect outreach),
+              subject to platform rules and your provider constraints.
             </li>
             <li>
               <strong>AI-Assisted Features (where available):</strong> To generate suggestions, summaries, or drafts based on
@@ -131,8 +146,9 @@ export function PrivacyPolicy() {
               encrypted using TLS (HTTPS).
             </li>
             <li>
-              <strong>Data at Rest:</strong> Sensitive credentials (such as provider tokens) are encrypted at rest using
-              AES-256-GCM. Our primary databases run on infrastructure that supports encryption at rest.
+              <strong>Data at Rest:</strong> Sensitive credentials (such as provider tokens, including Google OAuth tokens for
+              connected Gmail mailboxes) are encrypted at rest using AES-256-GCM. Our primary databases run on infrastructure that
+              supports encryption at rest.
             </li>
             <li>
               <strong>Backups:</strong> We perform automated backups. Backup files are protected with access controls and stored
@@ -160,19 +176,112 @@ export function PrivacyPolicy() {
           </ul>
           <p className="text-gray-600 mb-4">However, no method of transmission over the Internet is 100% secure.</p>
 
-          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">5. Third-Party Services</h2>
+          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">5. Google / Gmail data (OAuth)</h2>
+          <p className="text-gray-600 mb-4">
+            When you choose to connect a Gmail or Google Workspace mailbox, WhachatCRM requests Google OAuth permission so we can
+            operate email features inside the product. Google remains the source of mailbox data. Depending on configuration,
+            mailbox changes may be detected via Google push / Pub/Sub and then synchronized into WhachatCRM; disconnecting ends
+            our authorized API access for that mailbox.
+          </p>
+          <p className="text-gray-600 mb-4">
+            <strong>WhachatCRM&apos;s use and transfer to any other app of information received from Google APIs will adhere to
+            the Google API Services User Data Policy, including the Limited Use requirements.</strong>
+          </p>
+
+          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">5.1 What Google data we access</h3>
+          <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
+            <li>
+              <strong>Basic Google account identity</strong> via OpenID Connect scopes used to identify the authorized account
+              (for example account email and basic profile information needed to display the connected mailbox).
+            </li>
+            <li>
+              <strong>Gmail read access</strong> (<code className="text-sm">gmail.readonly</code>): email messages and related
+              metadata (subject, body, participants, thread identifiers, timestamps, and related headers) for the mailbox you
+              authorize.
+            </li>
+            <li>
+              <strong>Gmail send access</strong> (<code className="text-sm">gmail.send</code>): the ability to send new emails and
+              replies through the authenticated user&apos;s connected Gmail account.
+            </li>
+          </ul>
+
+          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">5.2 Why we need that data and what features it enables</h3>
+          <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
+            <li>
+              <strong>gmail.readonly</strong> is used as an email client feature to synchronize and display email messages and
+              conversation history, receive and process inbound replies, maintain thread context, and manage email conversations
+              in the WhachatCRM unified inbox / CRM.
+            </li>
+            <li>
+              <strong>gmail.send</strong> is used to send new emails and replies through the authenticated user&apos;s connected
+              Gmail account — including one-to-one inbox replies and user-configured email outreach you choose to run from
+              WhachatCRM.
+            </li>
+          </ul>
+
+          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">5.3 How Gmail data is used, stored, and processed</h3>
+          <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
+            <li>
+              Synced email content and metadata are stored in your WhachatCRM workspace so your team can view and manage
+              conversations in the unified inbox alongside related CRM records.
+            </li>
+            <li>
+              OAuth tokens are encrypted at rest and used only to authorize API calls needed to provide the email features you
+              enable.
+            </li>
+            <li>
+              If you use AI-assisted features on a conversation that includes email content, relevant conversation context may be
+              processed by our AI service providers solely to generate the requested suggestion, summary, or draft for your
+              workspace. See Section 9.
+            </li>
+            <li>
+              We do not use Google user data for advertising. We do not sell Google user data. We do not use Google user data to
+              build generalized advertising profiles or sell advertising services.
+            </li>
+            <li>
+              We do not transfer Google user data to third parties except as needed to provide or secure the Service (for example,
+              hosting infrastructure or AI subprocessors operating the feature you enable), to comply with law, or as directed by
+              you / with your consent through product configuration.
+            </li>
+            <li>
+              Human access to Google user data is limited to circumstances such as: providing support when you request it;
+              investigating security, abuse, or reliability issues; complying with applicable law; or other Limited Use–compatible
+              circumstances.
+            </li>
+          </ul>
+
+          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">5.4 Disconnecting Gmail and requesting deletion</h3>
+          <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
+            <li>
+              You can disconnect your Gmail mailbox in WhachatCRM channel / email settings. You can also revoke WhachatCRM access
+              at any time in your Google Account permissions.
+            </li>
+            <li>
+              To request deletion of your WhachatCRM account and associated data, follow the instructions on our{" "}
+              <Link href="/data-deletion">
+                <a className="text-brand-green hover:underline">Data deletion</a>
+              </Link>{" "}
+              page or email{" "}
+              <a href="mailto:support@whachatcrm.com" className="text-brand-green hover:underline">
+                support@whachatcrm.com
+              </a>
+              .
+            </li>
+          </ul>
+          <p className="text-gray-600 mb-4">
+            See also our{" "}
+            <Link href="/terms-of-use">
+              <a className="text-brand-green hover:underline">Terms of Use</a>
+            </Link>
+            .
+          </p>
+
+          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">6. Third-Party Services</h2>
           <p className="text-gray-600 mb-4">WhachatCRM integrates with services you choose to connect. Examples include:</p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
             <li>
-              <strong>Google (Gmail):</strong> When you connect a Gmail mailbox, we request Google OAuth access to send email
-              on your behalf and to read mailbox data needed to sync threads, detect replies, and keep your Inbox accurate
-              (scopes such as Gmail send and Gmail read). Tokens are encrypted at rest. We use this access only to provide
-              messaging features you enable. You can revoke access anytime in your Google Account permissions and by
-              disconnecting the mailbox in WhachatCRM. See also our{" "}
-              <a href="/terms" className="text-brand-green hover:underline">
-                Terms of Service
-              </a>
-              .
+              <strong>Google (Gmail):</strong> Optional mailbox connection described in Section 5. Tokens are encrypted at rest.
+              Access is used only to provide email messaging and related CRM features you enable.
             </li>
             <li>
               <strong>Twilio:</strong> Optional WhatsApp Business API and SMS-related connectivity. Your Twilio credentials are
@@ -194,21 +303,25 @@ export function PrivacyPolicy() {
               operate the integration features you enable.
             </li>
             <li>
-              <strong>Analytics:</strong> We use privacy-preserving analytics tooling on our marketing site (see Section 10) to
+              <strong>AI service providers:</strong> Where AI-assisted features are enabled, relevant inputs may be processed by
+              our configured AI providers solely to generate the requested outputs for your workspace.
+            </li>
+            <li>
+              <strong>Analytics:</strong> We use privacy-preserving analytics tooling on our marketing site (see Section 11) to
               understand aggregate traffic patterns.
             </li>
           </ul>
 
-          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">6. Data Sharing &amp; Sales</h2>
+          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">7. Data Sharing &amp; Sales</h2>
           <p className="text-gray-600 mb-4">
             <strong>We do not sell your personal information.</strong> As of our current operations, we do not engage in the sale
-            of personal data as defined by applicable privacy laws.
+            of personal data as defined by applicable privacy laws. We do not sell Google user data.
           </p>
           <p className="text-gray-600 mb-4">We may share data with categories of recipients such as:</p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
             <li>
               <strong>Your messaging and infrastructure providers:</strong> To deliver messages and operate integrations you
-              enable (for example, Twilio, Meta, or Shopify).
+              enable (for example, Google/Gmail, Twilio, Meta, or Shopify).
             </li>
             <li>
               <strong>Service providers:</strong> Hosting, payment processing, email delivery, security vendors, and (where
@@ -219,12 +332,12 @@ export function PrivacyPolicy() {
             </li>
           </ul>
 
-          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">7. Your Rights</h2>
+          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">8. Your Rights</h2>
           <p className="text-gray-600 mb-4">Depending on your jurisdiction, you may have rights to:</p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
             <li>Access or correct certain personal information</li>
             <li>Request deletion of your account and associated data</li>
-            <li>Disconnect integrations and channel providers you previously authorized</li>
+            <li>Disconnect integrations and channel providers you previously authorized (including Gmail)</li>
             <li>Export certain data where the product provides export capabilities</li>
             <li>Opt out of marketing communications (transactional messages may continue where permitted)</li>
           </ul>
@@ -240,7 +353,7 @@ export function PrivacyPolicy() {
             .
           </p>
 
-          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">8. Data Retention</h2>
+          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">9. Data Retention</h2>
           <p className="text-gray-600 mb-4">
             We retain personal data for as long as needed to provide the service and for legitimate business operations,
             security, and legal compliance:
@@ -251,13 +364,14 @@ export function PrivacyPolicy() {
               use, unless you delete content or request deletion.
             </li>
             <li>
-              <strong>Account Deletion:</strong> When you request account deletion, we delete or anonymize associated personal
-              data from our active production systems within a reasonable period — typically within <strong>30 days</strong>,
-              unless a longer retention is required by law or necessary to resolve disputes or enforce agreements.
+              <strong>Account Deletion:</strong> When you request account deletion and we verify the request, we delete or
+              anonymize associated personal data from our active production systems without undue delay, unless a longer retention
+              is required by law or necessary to resolve disputes or enforce agreements. Processing timelines can vary based on
+              verification and technical complexity; see our Data deletion page for how to submit a request.
             </li>
             <li>
-              <strong>Credentials:</strong> Provider credentials are removed when you disconnect an integration or delete your
-              account, subject to short operational delays for consistency.
+              <strong>Credentials:</strong> Provider credentials (including Google OAuth tokens) are removed when you disconnect
+              an integration or delete your account, subject to short operational delays for consistency.
             </li>
             <li>
               <strong>Backups &amp; Logs:</strong> Deleted information may persist for a limited time in backups and operational
@@ -270,14 +384,24 @@ export function PrivacyPolicy() {
           </ul>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">
-            9. AI-assisted features, automation, campaigns, and scheduling
+            10. AI-assisted features, automation, campaigns, and outreach
           </h2>
           <p className="text-gray-600 mb-4">
             Certain plans or features may include <strong>AI-assisted drafting or insights</strong>, as well as{" "}
-            <strong>automations</strong> such as workflows, reminders, preset campaigns, scheduled sequences, and enrollment
-            execution. These tools process the content and metadata needed to operate the feature you enable.
+            <strong>automations</strong> such as workflows, reminders, preset campaigns, scheduled sequences, enrollment
+            execution, and user-configured prospect outreach. These tools process the content and metadata needed to operate the
+            feature you enable.
           </p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
+            <li>
+              When AI features are used, relevant conversation context (which may include synced email content for that
+              conversation) may be sent to our configured AI service providers to generate the requested output for your
+              workspace. Provider handling of that data is governed by their terms and our configuration with them.
+            </li>
+            <li>
+              We do not claim specific third-party model-training practices in this Policy. We do not use Google user data for
+              advertising or to create advertising profiles.
+            </li>
             <li>
               AI outputs may be imperfect; your team remains responsible for reviewing messages before they are sent where
               applicable.
@@ -292,7 +416,7 @@ export function PrivacyPolicy() {
             </li>
           </ul>
 
-          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">10. Cookies and similar technologies</h2>
+          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">11. Cookies and similar technologies</h2>
           <p className="text-gray-600 mb-4">
             We use cookies and similar technologies for purposes that include security, preferences, analytics, and referral
             attribution. This section summarizes common categories — not every cookie applies to every visitor or session.
@@ -329,21 +453,21 @@ export function PrivacyPolicy() {
             staying logged in).
           </p>
 
-          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">11. Your responsibilities toward people you message</h2>
+          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">12. Your responsibilities toward people you message</h2>
           <p className="text-gray-600 mb-4">
             If you use WhachatCRM to communicate with customers or leads, <strong>you</strong> are responsible for lawful
             messaging practices — including consent, opt-outs, template compliance where required, and honoring channel-specific
-            rules (WhatsApp, Instagram, Messenger, SMS, etc.). WhachatCRM provides tooling; it does not provide legal advice and
+            rules (WhatsApp, Instagram, Messenger, SMS, email, etc.). WhachatCRM provides tooling; it does not provide legal advice and
             cannot guarantee regulatory compliance on your behalf.
           </p>
 
-          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">12. Changes to This Policy</h2>
+          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">13. Changes to This Policy</h2>
           <p className="text-gray-600 mb-4">
             We may update this Privacy Policy from time to time. We will notify you of significant changes via email or through
             the platform where appropriate.
           </p>
 
-          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">13. Contact Us</h2>
+          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">14. Contact Us</h2>
           <p className="text-gray-600 mb-4">
             Questions about this Privacy Policy:{" "}
             <a href="mailto:support@whachatcrm.com" className="text-brand-green hover:underline">
@@ -353,8 +477,9 @@ export function PrivacyPolicy() {
         </div>
 
         <div className="mt-8 pt-6 border-t border-gray-200 text-xs text-gray-400 space-y-1">
-          <p>WhachatCRM is a CRM platform and is not affiliated with Meta or WhatsApp.</p>
+          <p>WhachatCRM is a CRM platform and is not affiliated with Meta, WhatsApp, or Google.</p>
           <p>WhatsApp Business API access is typically provided through approved providers or direct Meta connections you configure.</p>
+          <p>Gmail and Google Workspace are trademarks of Google LLC. Use of Google APIs is subject to Google&apos;s applicable terms and policies.</p>
         </div>
       </div>
       <SiteFooter />
