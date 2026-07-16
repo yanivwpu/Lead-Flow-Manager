@@ -28,6 +28,8 @@ import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { ConnectWhatsAppHub } from "@/components/ConnectWhatsAppHub";
 import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
 import { ConnectMetaFbIgWizard } from "@/components/ConnectMetaFbIgWizard";
+import { trackGmailConnected, trackWhatsappConnected } from "@/lib/ga4Events";
+import { useAuth } from "@/lib/auth-context";
 import type { SettingsChannelProvider } from "@/lib/settingsChannelsNavigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -213,6 +215,7 @@ function ChannelStatusPill({ kind, label }: { kind: UnifiedPillKind; label?: str
 }
 
 export function ChannelSettings() {
+  const { user } = useAuth();
   const searchString = useSearch();
   const queryClient = useQueryClient();
   const [configChannel, setConfigChannel] = useState<Channel | null>(null);
@@ -309,6 +312,8 @@ export function ChannelSettings() {
           : "Your mailbox is syncing into the Unified Inbox.",
       });
       void queryClient.invalidateQueries({ queryKey: ["/api/integrations/email/status"] });
+      // GA4: gmail_connected — OAuth callback success (mailbox id survives before user hydrates)
+      trackGmailConnected({ userId: user?.id || oauthReturn.mailbox || "gmail" });
     } else {
       toast({
         title: "Gmail connection failed",
@@ -323,7 +328,7 @@ export function ChannelSettings() {
 
     const cleaned = stripGmailOAuthCallbackParams(searchString);
     window.history.replaceState({}, "", `${window.location.pathname}${cleaned}`);
-  }, [searchString, queryClient]);
+  }, [searchString, queryClient, user?.id]);
 
   /** Deep link: ?section=channels&provider=whatsapp|instagram|facebook|email (legacy: tab=channels) */
   useEffect(() => {
@@ -380,6 +385,8 @@ export function ChannelSettings() {
             title: "WhatsApp connected",
             description: "Meta Cloud API is active. You can send and receive from the inbox.",
           });
+          // GA4: whatsapp_connected — embedded signup redirect success
+          if (user?.id) trackWhatsappConnected({ userId: user.id, embeddedSignup: true });
         } else {
           setWhatsappShowPostConnectHealth(true);
           setConfigChannel("whatsapp");

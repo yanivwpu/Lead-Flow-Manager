@@ -25,6 +25,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { trackWhatsappConnected } from "@/lib/ga4Events";
 import {
   META_EMBEDDED_SIGNUP_BLOCKED_MESSAGE,
   buildEmbeddedSignupPreLoginDiagnostics,
@@ -560,6 +561,10 @@ export function ConnectWhatsAppHub({
           }
           setPostConnectHealthOpen(true);
           await refreshConnectionHealth(true);
+          // GA4: whatsapp_connected — SDK embedded signup completed (may still finish health checks)
+          if (authedUser?.id) {
+            trackWhatsappConnected({ userId: authedUser.id, embeddedSignup: true });
+          }
         };
 
         const loginCb = (response: unknown) => {

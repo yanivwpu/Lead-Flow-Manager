@@ -231,6 +231,20 @@ function Router() {
       return;
     }
 
+    // GA4: shopify_connected (+ sign_up once for new Shopify-created accounts)
+    if (bootstrap.shopifyInstalled) {
+      void import("@/lib/ga4Events").then(({ trackShopifyConnected, trackSignUp }) => {
+        // Deduped by userId — existing email users who already fired sign_up won't double-count.
+        trackSignUp({
+          method: "shopify",
+          plan: "trial",
+          source: "shopify_app",
+          userId: user.id,
+        });
+        trackShopifyConnected({ userId: user.id });
+      });
+    }
+
     let cancelled = false;
     fetch("/api/auth/me", { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))

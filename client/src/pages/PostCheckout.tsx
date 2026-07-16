@@ -9,6 +9,7 @@ import {
   normalizeRgePostPurchaseRedirect,
 } from "@shared/rgePaths";
 import { NoIndexHelmet } from "@/components/NoIndexHelmet";
+import { trackPurchase } from "@/lib/ga4Events";
 
 function sanitizeClientRedirect(raw: string | null, fallback: string): string {
   if (!raw || typeof raw !== "string") return fallback;
@@ -143,6 +144,37 @@ export function PostCheckout() {
           await queryClient.invalidateQueries({
             queryKey: ["/api/templates/realtor-growth-engine/onboarding/progress"],
           });
+        }
+
+        // GA4: purchase — only after Stripe session is paid (deduped by transaction_id)
+        if (stripeSession) {
+          try {
+            const payRes = await fetch(
+              `/api/subscription/checkout-session?session_id=${encodeURIComponent(stripeSession)}`,
+              { credentials: "include" },
+            );
+            if (payRes.ok) {
+              const pay = (await payRes.json()) as {
+                transaction_id: string;
+                value: number;
+                currency: string;
+                plan: string;
+                billing_interval: string;
+                paid?: boolean;
+              };
+              if (pay.paid !== false && pay.transaction_id) {
+                trackPurchase({
+                  transactionId: pay.transaction_id,
+                  value: Number(pay.value) || 0,
+                  currency: pay.currency || "USD",
+                  plan: pay.plan || "unknown",
+                  billingInterval: pay.billing_interval || "monthly",
+                });
+              }
+            }
+          } catch {
+            /* fail silently — do not block checkout redirect */
+          }
         }
 
         let sub0 = serializeSubscriptionSnapshot(first);

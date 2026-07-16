@@ -20,6 +20,8 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
+import { trackFacebookConnected, trackInstagramConnected } from "@/lib/ga4Events";
 
 export interface MetaPage {
   id: string;
@@ -120,6 +122,7 @@ export function ConnectMetaFbIgWizard({
   existingInstagramAccountId,
 }: ConnectMetaFbIgWizardProps) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const isFacebook = channel === "facebook";
   const ChannelIcon = isFacebook ? Facebook : Instagram;
   const iconColor = isFacebook ? "#1877F2" : "#E4405F";
@@ -283,6 +286,12 @@ export function ConnectMetaFbIgWizard({
     queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
     queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
     queryClient.invalidateQueries({ queryKey: ["/api/integrations/meta-webhook-config"] });
+
+    // GA4: facebook_connected / instagram_connected — page connect succeeded
+    if (user?.id) {
+      if (channel === "facebook") trackFacebookConnected({ userId: user.id });
+      else trackInstagramConnected({ userId: user.id });
+    }
 
     await delay(400);
     setStage("success");

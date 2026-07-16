@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2 } from "lucide-react";
+import { trackDemoBooked } from "@/lib/ga4Events";
 
 interface BookDemoModalProps {
   isOpen: boolean;
@@ -59,6 +60,13 @@ export function BookDemoModal({ isOpen, onClose, bookingSource = "web" }: BookDe
       if (!data.calendlyUrl) {
         throw new Error("Calendar link unavailable. Please try again later.");
       }
+
+      // GA4: demo_booked — marketing demo booking record created (before Calendly redirect)
+      trackDemoBooked({
+        source: bookingSource,
+        bookingType: "marketing_demo",
+        bookingId: typeof data.bookingId === "string" ? data.bookingId : undefined,
+      });
 
       // Same-window redirect: visitor schedules once on the assigned rep's Calendly immediately.
       window.location.assign(data.calendlyUrl);

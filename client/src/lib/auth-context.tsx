@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { trackSignUp } from "@/lib/ga4Events";
 
 interface User {
   id: string;
@@ -91,11 +92,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (response.ok) {
         const me = await fetch("/api/auth/me", { credentials: "include" });
+        let userData: User;
         if (me.ok) {
-          setUser(await me.json());
+          userData = await me.json();
+          setUser(userData);
         } else {
-          setUser(await response.json());
+          userData = await response.json();
+          setUser(userData);
         }
+        // GA4: sign_up — email/password account created
+        const source =
+          typeof window !== "undefined"
+            ? new URLSearchParams(window.location.search).get("ref") ||
+              new URLSearchParams(window.location.search).get("source") ||
+              undefined
+            : undefined;
+        trackSignUp({
+          method: "email",
+          plan: "free",
+          source: source || undefined,
+          userId: userData.id,
+        });
         return { success: true };
       }
       const errorData = await response.json().catch(() => ({ error: 'Signup failed' }));

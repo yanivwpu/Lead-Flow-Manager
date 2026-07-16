@@ -3801,6 +3801,68 @@ export async function registerRoutes(
     }
   });
 
+  /** GA4 purchase helper — returns paid Checkout Session fields for the authenticated owner only. */
+  app.get("/api/subscription/checkout-session", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const sessionId = typeof req.query.session_id === "string" ? req.query.session_id.trim() : "";
+      if (!sessionId.startsWith("cs_")) {
+        return res.status(400).json({ error: "Invalid session_id" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      const metaUserId = session.metadata?.userId;
+      const user = await storage.getUserForSession(req.user.id);
+      const ownsSession =
+        metaUserId === req.user.id ||
+        (!!session.customer && !!user?.stripeCustomerId && session.customer === user.stripeCustomerId);
+      if (!ownsSession) {
+        return res.status(403).json({ error: "Session not found" });
+      }
+
+      const paid =
+        session.payment_status === "paid" ||
+        session.status === "complete";
+      if (!paid) {
+        return res.status(409).json({ error: "Payment not completed", paid: false });
+      }
+
+      const amountTotal = typeof session.amount_total === "number" ? session.amount_total : 0;
+      const value = amountTotal / 100;
+      const currency = (session.currency || "usd").toUpperCase();
+      const planRaw = String(session.metadata?.plan || session.metadata?.type || "unknown");
+      const plan =
+        planRaw === "starter"
+          ? "Starter"
+          : planRaw === "pro"
+            ? "Pro"
+            : planRaw === "plan_ai_bundle" || planRaw === "pro_ai"
+              ? "Pro"
+              : session.metadata?.templateId
+                ? "Realtor Growth Engine"
+                : planRaw;
+      const billingInterval = String(
+        session.metadata?.billingInterval ||
+          (session.mode === "subscription" ? "monthly" : "one_time"),
+      );
+
+      res.json({
+        transaction_id: session.id,
+        value,
+        currency,
+        plan,
+        billing_interval: billingInterval === "yearly" ? "yearly" : billingInterval === "one_time" ? "one_time" : "monthly",
+        paid: true,
+      });
+    } catch (error: any) {
+      console.error("Error loading checkout session for GA4:", error);
+      res.status(500).json({ error: "Failed to load checkout session" });
+    }
+  });
+
   app.post("/api/subscription/checkout/pro-ai", async (req, res) => {
     try {
       if (!req.user) {
