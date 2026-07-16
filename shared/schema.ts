@@ -2169,6 +2169,12 @@ export const prospectBulkAnalysisJobs = pgTable("prospect_bulk_analysis_jobs", {
   contactIds: jsonb("contact_ids").notNull().default(sql`'[]'::jsonb`),
   selectionMode: text("selection_mode").notNull().default("selected"),
   forceReanalyze: boolean("force_reanalyze").notNull().default(false),
+  /** Per-contact outcomes for resume / failed-only retry. */
+  itemResults: jsonb("item_results").notNull().default(sql`'{}'::jsonb`),
+  filtersSnapshot: jsonb("filters_snapshot"),
+  leaseOwner: text("lease_owner"),
+  leaseExpiresAt: timestamp("lease_expires_at"),
+  parentJobId: varchar("parent_job_id"),
   progressCurrent: integer("progress_current").default(0),
   progressTotal: integer("progress_total").default(0),
   resultCompleted: integer("result_completed").default(0),
@@ -2179,6 +2185,7 @@ export const prospectBulkAnalysisJobs = pgTable("prospect_bulk_analysis_jobs", {
   createdAt: timestamp("created_at").defaultNow(),
   startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export type ProspectBulkAnalysisJobRow = typeof prospectBulkAnalysisJobs.$inferSelect;

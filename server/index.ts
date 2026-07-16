@@ -543,6 +543,12 @@ app.use((req, res, next) => {
   );
   startProspectOutreachQueueWorker();
 
+  // Durable Prospect Intelligence bulk AI analysis worker (restart-safe)
+  const { startProspectBulkAnalysisWorker } = await import(
+    "./prospectImport/prospectBulkAnalysisWorker"
+  );
+  startProspectBulkAnalysisWorker();
+
   // IndexNow: detect new/changed content and submit to search engines on startup.
   // Uses a persisted state snapshot to submit only newly added blog posts and
   // landing pages. Falls back to submitting all pages when no prior state exists

@@ -505,6 +505,25 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
         ADD COLUMN IF NOT EXISTS queue_running boolean NOT NULL DEFAULT false`,
     ].join(";\n"),
   },
+  {
+    tag: "0065_prospect_bulk_analysis_durable",
+    sql: [
+      `ALTER TABLE prospect_bulk_analysis_jobs
+        ADD COLUMN IF NOT EXISTS item_results jsonb NOT NULL DEFAULT '{}'::jsonb`,
+      `ALTER TABLE prospect_bulk_analysis_jobs
+        ADD COLUMN IF NOT EXISTS filters_snapshot jsonb`,
+      `ALTER TABLE prospect_bulk_analysis_jobs
+        ADD COLUMN IF NOT EXISTS lease_owner text`,
+      `ALTER TABLE prospect_bulk_analysis_jobs
+        ADD COLUMN IF NOT EXISTS lease_expires_at timestamp`,
+      `ALTER TABLE prospect_bulk_analysis_jobs
+        ADD COLUMN IF NOT EXISTS updated_at timestamp DEFAULT now()`,
+      `ALTER TABLE prospect_bulk_analysis_jobs
+        ADD COLUMN IF NOT EXISTS parent_job_id varchar`,
+      `CREATE INDEX IF NOT EXISTS prospect_bulk_analysis_jobs_claim_idx
+        ON prospect_bulk_analysis_jobs (status, lease_expires_at, created_at)`,
+    ].join(";\n"),
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {

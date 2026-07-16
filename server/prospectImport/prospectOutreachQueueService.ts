@@ -1157,10 +1157,14 @@ export async function listWorkspaceIdsWithDueQueue(): Promise<string[]> {
 export async function bulkApproveProspects(params: {
   contactIds: string[];
   userId: string;
-}): Promise<{ approved: number; skipped: Array<{ contactId: string; reason: string }> }> {
+}): Promise<{
+  approved: number;
+  approvedContactIds: string[];
+  skipped: Array<{ contactId: string; reason: string }>;
+}> {
   const { approveProspectIntelligence } = await import("./prospectIntelligenceService");
   const skipped: Array<{ contactId: string; reason: string }> = [];
-  let approved = 0;
+  const approvedContactIds: string[] = [];
 
   for (const contactId of Array.from(new Set(params.contactIds))) {
     const rows = await db
@@ -1187,7 +1191,7 @@ export async function bulkApproveProspects(params: {
     }
     try {
       await approveProspectIntelligence(contactId, params.userId);
-      approved += 1;
+      approvedContactIds.push(contactId);
     } catch (err) {
       skipped.push({
         contactId,
@@ -1195,7 +1199,7 @@ export async function bulkApproveProspects(params: {
       });
     }
   }
-  return { approved, skipped };
+  return { approved: approvedContactIds.length, approvedContactIds, skipped };
 }
 
 export async function bulkMarkNeedsReview(contactIds: string[]): Promise<{ updated: number }> {

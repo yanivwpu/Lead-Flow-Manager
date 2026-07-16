@@ -267,6 +267,9 @@ export type ProspectBulkAnalysisJobSummary = {
   errorMessage?: string | null;
   createdAt: string;
   completedAt?: string | null;
+  parentJobId?: string | null;
+  /** Failed contact ids (for UI retry). */
+  failedContactIds?: string[];
 };
 
 /** Safe structured log helper — never include bodies/tokens. */

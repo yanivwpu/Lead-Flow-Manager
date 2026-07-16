@@ -782,6 +782,13 @@ export function ProspectIntelligencePanel(props: {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAllFiltered, setSelectAllFiltered] = useState(false);
+  /** Frozen server-resolved IDs when Select all filtered is used (not browser rows). */
+  const [resolvedFilteredIds, setResolvedFilteredIds] = useState<string[] | null>(null);
+  const [resolvedFilteredCount, setResolvedFilteredCount] = useState<number | null>(null);
+  const [approveHandoff, setApproveHandoff] = useState<{
+    approvedContactIds: string[];
+    approved: number;
+  } | null>(null);
   const [queuePreviewOpen, setQueuePreviewOpen] = useState(false);
   const [queuePreview, setQueuePreview] = useState<{
     selectedCount: number;
@@ -797,7 +804,39 @@ export function ProspectIntelligencePanel(props: {
     }>;
   } | null>(null);
   const [bulkAnalysisJobId, setBulkAnalysisJobId] = useState<string | null>(null);
+  const [recentBulkSummary, setRecentBulkSummary] = useState<{
+    completed: number;
+    failed: number;
+    skipped: number;
+    needsReview: number;
+    status: string;
+  } | null>(null);
   const queryClient = useQueryClient();
+
+  const currentFiltersPayload = useMemo(() => {
+    return {
+      ...(priorityFilter !== "all" ? { priority: priorityFilter } : {}),
+      ...(businessFilter !== "all" && businessFilter !== "needs_review"
+        ? { segment: businessFilter }
+        : {}),
+      ...(businessFilter === "needs_review" ? { needsReviewOnly: true } : {}),
+      ...(statusFilter !== "all" ? { statusFilter } : {}),
+      ...(channelFilter === "has_email" ? { hasEmail: true } : {}),
+      ...(channelFilter === "has_phone" ? { hasPhone: true } : {}),
+      ...(channelFilter === "email_eligible" ? { emailEligible: true } : {}),
+      ...(channelFilter === "any_eligible" ? { anyEligibleChannel: true } : {}),
+    };
+  }, [priorityFilter, businessFilter, statusFilter, channelFilter]);
+
+  // Filter changes invalidate frozen allFiltered selection.
+  useEffect(() => {
+    if (selectAllFiltered) {
+      setSelectAllFiltered(false);
+      setResolvedFilteredIds(null);
+      setResolvedFilteredCount(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only clear when filters change
+  }, [priorityFilter, businessFilter, statusFilter, channelFilter]);
 
   const dashboardQuery = useQuery({
     queryKey: ["/api/growth-tools/prospect-intelligence/dashboard"],
@@ -834,12 +873,62 @@ export function ProspectIntelligencePanel(props: {
     refetchInterval: props.activeAnalysisJob?.status === "running" || bulkAnalysisJobId ? 2000 : false,
   });
 
+  // Restore active/recent bulk analysis job after refresh/navigation.
+  const activeBulkJobQuery = useQuery({
+    queryKey: ["/api/growth-tools/prospect-intelligence/bulk-analyze/active"],
+    queryFn: () =>
+      fetchJson<{
+        job: {
+          id: string;
+          status: string;
+          progressCurrent: number;
+          progressTotal: number;
+          completed: number;
+          failed: number;
+          skipped: number;
+          needsReview: number;
+          failedContactIds?: string[];
+        } | null;
+      }>("/api/growth-tools/prospect-intelligence/bulk-analyze/active"),
+    refetchInterval: (q) => {
+      const st = q.state.data?.job?.status;
+      return st === "running" || st === "pending" ? 2000 : false;
+    },
+  });
+
+  useEffect(() => {
+    const job = activeBulkJobQuery.data?.job;
+    if (!job) return;
+    if (job.status === "pending" || job.status === "running") {
+      setBulkAnalysisJobId(job.id);
+      setRecentBulkSummary(null);
+    } else if (job.status === "completed" || job.status === "failed") {
+      setRecentBulkSummary({
+        completed: job.completed,
+        failed: job.failed,
+        skipped: job.skipped,
+        needsReview: job.needsReview,
+        status: job.status,
+      });
+    }
+  }, [activeBulkJobQuery.data?.job?.id, activeBulkJobQuery.data?.job?.status]);
+
   const bulkJobQuery = useQuery({
     queryKey: ["/api/growth-tools/prospect-intelligence/bulk-analyze", bulkAnalysisJobId],
     queryFn: () =>
-      fetchJson<{ job: { id: string; status: string; progressCurrent: number; progressTotal: number; completed: number; failed: number; skipped: number; needsReview: number } }>(
-        `/api/growth-tools/prospect-intelligence/bulk-analyze/${bulkAnalysisJobId}`,
-      ),
+      fetchJson<{
+        job: {
+          id: string;
+          status: string;
+          progressCurrent: number;
+          progressTotal: number;
+          completed: number;
+          failed: number;
+          skipped: number;
+          needsReview: number;
+          failedContactIds?: string[];
+        };
+      }>(`/api/growth-tools/prospect-intelligence/bulk-analyze/${bulkAnalysisJobId}`),
     enabled: Boolean(bulkAnalysisJobId),
     refetchInterval: (q) => {
       const st = q.state.data?.job?.status;
@@ -853,6 +942,16 @@ export function ProspectIntelligencePanel(props: {
     if (job.status === "completed" || job.status === "failed") {
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence/dashboard"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["/api/growth-tools/prospect-intelligence/bulk-analyze/active"],
+      });
+      setRecentBulkSummary({
+        completed: job.completed,
+        failed: job.failed,
+        skipped: job.skipped,
+        needsReview: job.needsReview,
+        status: job.status,
+      });
       if (job.status === "completed") {
         toast({
           title: "Bulk analysis complete",
@@ -872,14 +971,34 @@ export function ProspectIntelligencePanel(props: {
     return `Analyzing prospects… ${job.progressCurrent} / ${job.progressTotal}`;
   }, [props.activeAnalysisJob]);
 
+  const selectionBody = useMemo(() => {
+    if (selectAllFiltered && resolvedFilteredIds) {
+      // Frozen server IDs — filter changes clear this state
+      return { contactIds: resolvedFilteredIds };
+    }
+    if (selectAllFiltered) {
+      return { allFiltered: true as const, filters: currentFiltersPayload };
+    }
+    return { contactIds: Array.from(selectedIds) };
+  }, [selectAllFiltered, resolvedFilteredIds, currentFiltersPayload, selectedIds]);
+
+  const selectedCount = selectAllFiltered
+    ? resolvedFilteredCount ?? resolvedFilteredIds?.length ?? 0
+    : selectedIds.size;
+  const selectedContactIds = Array.from(
+    selectAllFiltered && resolvedFilteredIds ? resolvedFilteredIds : selectedIds,
+  );
   const effectiveSelectedIds = useMemo(() => {
+    if (selectAllFiltered && resolvedFilteredIds) return new Set(resolvedFilteredIds);
     if (selectAllFiltered) return new Set(items.map((i) => i.contactId));
     return selectedIds;
-  }, [selectAllFiltered, items, selectedIds]);
+  }, [selectAllFiltered, resolvedFilteredIds, items, selectedIds]);
 
   const toggleRow = (contactId: string, e: { stopPropagation: () => void }) => {
     e.stopPropagation();
     setSelectAllFiltered(false);
+    setResolvedFilteredIds(null);
+    setResolvedFilteredCount(null);
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(contactId)) next.delete(contactId);
@@ -890,44 +1009,52 @@ export function ProspectIntelligencePanel(props: {
 
   const selectVisible = () => {
     setSelectAllFiltered(false);
+    setResolvedFilteredIds(null);
+    setResolvedFilteredCount(null);
     setSelectedIds(new Set(items.map((i) => i.contactId)));
   };
 
   const clearSelection = () => {
     setSelectAllFiltered(false);
+    setResolvedFilteredIds(null);
+    setResolvedFilteredCount(null);
     setSelectedIds(new Set());
   };
 
-  const selectedCount = effectiveSelectedIds.size;
-  const selectedContactIds = Array.from(effectiveSelectedIds);
+  const selectAllFilteredMutation = useMutation({
+    mutationFn: () =>
+      fetchJson<{ selection: { contactIds: string[]; count: number } }>(
+        "/api/growth-tools/prospect-intelligence/resolve-selection",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ allFiltered: true, filters: currentFiltersPayload }),
+        },
+      ),
+    onSuccess: (data) => {
+      setSelectAllFiltered(true);
+      setSelectedIds(new Set());
+      setResolvedFilteredIds(data.selection.contactIds);
+      setResolvedFilteredCount(data.selection.count);
+      toast({
+        title: `${data.selection.count} prospects selected`,
+        description: "Server-resolved filtered set (not just visible rows).",
+      });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Could not select all filtered", description: err.message, variant: "destructive" }),
+  });
 
   const bulkAnalyzeMutation = useMutation({
-    mutationFn: (opts: { allFiltered?: boolean }) =>
+    mutationFn: () =>
       fetchJson<{ job: { id: string } }>("/api/growth-tools/prospect-intelligence/bulk-analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          opts.allFiltered
-            ? {
-                allFiltered: true,
-                filters: {
-                  ...(priorityFilter !== "all" ? { priority: priorityFilter } : {}),
-                  ...(businessFilter !== "all" && businessFilter !== "needs_review"
-                    ? { segment: businessFilter }
-                    : {}),
-                  ...(businessFilter === "needs_review" ? { needsReviewOnly: true } : {}),
-                  ...(statusFilter !== "all" ? { statusFilter } : {}),
-                  ...(channelFilter === "has_email" ? { hasEmail: true } : {}),
-                  ...(channelFilter === "has_phone" ? { hasPhone: true } : {}),
-                  ...(channelFilter === "email_eligible" ? { emailEligible: true } : {}),
-                  ...(channelFilter === "any_eligible" ? { anyEligibleChannel: true } : {}),
-                },
-              }
-            : { contactIds: selectedContactIds },
-        ),
+        body: JSON.stringify(selectionBody),
       }),
     onSuccess: (data) => {
       setBulkAnalysisJobId(data.job.id);
+      setRecentBulkSummary(null);
       toast({ title: "Bulk analysis queued" });
     },
     onError: (err: Error) =>
@@ -936,21 +1063,34 @@ export function ProspectIntelligencePanel(props: {
 
   const bulkApproveMutation = useMutation({
     mutationFn: () =>
-      fetchJson<{ approved: number; skipped: unknown[] }>(
-        "/api/growth-tools/prospect-intelligence/bulk-approve",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contactIds: selectedContactIds }),
-        },
-      ),
+      fetchJson<{
+        approved: number;
+        approvedContactIds: string[];
+        skipped: unknown[];
+      }>("/api/growth-tools/prospect-intelligence/bulk-approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(selectionBody),
+      }),
     onSuccess: (data) => {
       toast({
         title: `Approved ${data.approved}`,
         description: data.skipped.length ? `${data.skipped.length} skipped` : undefined,
       });
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
-      clearSelection();
+      if (data.approvedContactIds?.length) {
+        setApproveHandoff({
+          approvedContactIds: data.approvedContactIds,
+          approved: data.approved,
+        });
+        setSelectAllFiltered(false);
+        setResolvedFilteredIds(data.approvedContactIds);
+        setResolvedFilteredCount(data.approved);
+        setSelectedIds(new Set(data.approvedContactIds));
+      } else {
+        clearSelection();
+        setApproveHandoff(null);
+      }
     },
     onError: (err: Error) =>
       toast({ title: "Bulk approve failed", description: err.message, variant: "destructive" }),
@@ -961,7 +1101,7 @@ export function ProspectIntelligencePanel(props: {
       fetchJson("/api/growth-tools/prospect-intelligence/bulk-needs-review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactIds: selectedContactIds }),
+        body: JSON.stringify(selectionBody),
       }),
     onSuccess: () => {
       toast({ title: "Marked needs review" });
@@ -971,13 +1111,17 @@ export function ProspectIntelligencePanel(props: {
   });
 
   const previewQueueMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (contactIds?: string[]) =>
       fetchJson<{ preview: typeof queuePreview }>(
         "/api/growth-tools/prospect-outreach/queue/preview",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contactIds: selectedContactIds, preferredChannel: "auto" }),
+          body: JSON.stringify(
+            contactIds?.length
+              ? { contactIds, preferredChannel: "auto" }
+              : { ...selectionBody, preferredChannel: "auto" },
+          ),
         },
       ),
     onSuccess: (data) => {
@@ -994,7 +1138,7 @@ export function ProspectIntelligencePanel(props: {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contactIds: selectedContactIds,
+          ...selectionBody,
           preferredChannel: "auto",
           idempotencyKey: `ui-${Date.now()}`,
         }),
@@ -1005,12 +1149,28 @@ export function ProspectIntelligencePanel(props: {
         description: "Start the queue to send gradually. Scanning ≠ blasting.",
       });
       setQueuePreviewOpen(false);
+      setApproveHandoff(null);
       clearSelection();
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-outreach"] });
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
     },
     onError: (err: Error) =>
       toast({ title: "Queue failed", description: err.message, variant: "destructive" }),
+  });
+
+  const retryFailedMutation = useMutation({
+    mutationFn: (jobId: string) =>
+      fetchJson<{ job: { id: string } }>(
+        `/api/growth-tools/prospect-intelligence/bulk-analyze/${jobId}/retry-failed`,
+        { method: "POST" },
+      ),
+    onSuccess: (data) => {
+      setBulkAnalysisJobId(data.job.id);
+      setRecentBulkSummary(null);
+      toast({ title: "Retrying failed analyses only" });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Retry failed", description: err.message, variant: "destructive" }),
   });
 
   const bulkJob = bulkJobQuery.data?.job;
@@ -1041,6 +1201,69 @@ export function ProspectIntelligencePanel(props: {
             <Loader2 className="h-4 w-4 animate-spin" />
             Bulk analyzing… {bulkJob.progressCurrent} / {bulkJob.progressTotal}
           </p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-4 text-xs">
+            <span>Completed: {bulkJob.completed}</span>
+            <span>Needs review: {bulkJob.needsReview}</span>
+            <span>Failed: {bulkJob.failed}</span>
+            <span>Skipped: {bulkJob.skipped}</span>
+          </div>
+        </div>
+      ) : null}
+
+      {recentBulkSummary && !bulkAnalysisJobId ? (
+        <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm">
+          <p className="font-semibold text-gray-900">
+            Last bulk analysis ({recentBulkSummary.status})
+          </p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-4 text-xs text-gray-600">
+            <span>Completed: {recentBulkSummary.completed}</span>
+            <span>Needs review: {recentBulkSummary.needsReview}</span>
+            <span>Failed: {recentBulkSummary.failed}</span>
+            <span>Skipped: {recentBulkSummary.skipped}</span>
+          </div>
+          {recentBulkSummary.failed > 0 && activeBulkJobQuery.data?.job?.id ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-3"
+              disabled={retryFailedMutation.isPending}
+              onClick={() => retryFailedMutation.mutate(activeBulkJobQuery.data!.job!.id)}
+            >
+              Retry {recentBulkSummary.failed} failed only
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {approveHandoff ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-950">
+          <p className="font-semibold">{approveHandoff.approved} prospects approved</p>
+          <p className="mt-1 text-emerald-900/80">
+            Approval does not guarantee outreach eligibility. Queue still re-checks suppression, duplicates, and channel readiness.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setStatusFilter("approved");
+                setApproveHandoff(null);
+              }}
+            >
+              View approved
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="bg-brand-green hover:bg-emerald-700"
+              disabled={previewQueueMutation.isPending}
+              onClick={() => previewQueueMutation.mutate(approveHandoff.approvedContactIds)}
+            >
+              Queue {approveHandoff.approved} for outreach
+            </Button>
+          </div>
         </div>
       ) : null}
 
@@ -1143,24 +1366,25 @@ export function ProspectIntelligencePanel(props: {
           type="button"
           size="sm"
           variant="outline"
-          onClick={() => {
-            setSelectAllFiltered(true);
-            setSelectedIds(new Set());
-          }}
+          disabled={selectAllFilteredMutation.isPending}
+          onClick={() => selectAllFilteredMutation.mutate()}
         >
-          Select all filtered
+          {selectAllFilteredMutation.isPending ? "Resolving…" : "Select all filtered"}
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={clearSelection}>
           Clear
         </Button>
-        <span className="text-sm text-gray-600">{selectedCount} selected</span>
+        <span className="text-sm text-gray-600">
+          {selectedCount} selected
+          {selectAllFiltered && resolvedFilteredCount != null ? " (server-resolved)" : ""}
+        </span>
         <div className="ml-auto flex flex-wrap gap-2">
           <Button
             type="button"
             size="sm"
             variant="outline"
             disabled={!selectedCount || bulkAnalyzeMutation.isPending}
-            onClick={() => bulkAnalyzeMutation.mutate({ allFiltered: selectAllFiltered })}
+            onClick={() => bulkAnalyzeMutation.mutate()}
           >
             <Brain className="mr-1 h-3.5 w-3.5" /> Analyze with AI
           </Button>

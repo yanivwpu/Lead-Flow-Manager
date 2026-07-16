@@ -1,39 +1,58 @@
 /**
- * Bulk AI analysis for selected / filtered Prospect Intelligence rows.
- * Runs as background job (setImmediate) — browser need not stay open.
- * Skips Outreach Sent / Replied by default unless force=true.
+ * Durable bulk AI analysis for Prospect Intelligence.
+ * Jobs are claimed via DB lease; worker resumes unfinished contacts using item_results.
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import {
   prospectBulkAnalysisJobs,
   prospectIntelligence,
   type ProspectBulkAnalysisJobRow,
 } from "@shared/schema";
 import type { ProspectBulkAnalysisJobSummary } from "@shared/prospectBulkOutreach";
-import { prospectBulkOutreachLog } from "@shared/prospectBulkOutreach";
+import {
+  failedContactIdsFromItemResults,
+  prospectBulkAnalysisLog,
+  recountBulkAnalysisItemResults,
+  PROSPECT_BULK_ANALYSIS_LEASE_MS,
+  type ProspectBulkAnalysisItemResults,
+} from "@shared/prospectBulkSelection";
 import { shouldSkipDefaultBulkReanalyze } from "@shared/prospectOutreachEligibility";
 import { db } from "../../drizzle/db";
 import { analyzeProspectContact } from "./prospectIntelligenceService";
 import { resolveProspectImportDestinationUserId } from "./prospectImportService";
-
-const runningBulkJobs = new Set<string>();
+import type { ProspectIntelligenceListFilters } from "@shared/prospectImport";
+import crypto from "crypto";
 
 function mapJob(row: ProspectBulkAnalysisJobRow): ProspectBulkAnalysisJobSummary {
+  const results = (row.itemResults || {}) as ProspectBulkAnalysisItemResults;
+  const counts = recountBulkAnalysisItemResults(results);
   return {
     id: row.id,
     workspaceUserId: row.workspaceUserId,
     status: row.status as ProspectBulkAnalysisJobSummary["status"],
-    progressCurrent: row.progressCurrent ?? 0,
+    progressCurrent: row.progressCurrent ?? counts.processed,
     progressTotal: row.progressTotal ?? 0,
-    completed: row.resultCompleted ?? 0,
-    needsReview: row.resultNeedsReview ?? 0,
-    failed: row.resultFailed ?? 0,
-    skipped: row.resultSkipped ?? 0,
+    completed: row.resultCompleted ?? counts.completed,
+    needsReview: row.resultNeedsReview ?? counts.needsReview,
+    failed: row.resultFailed ?? counts.failed,
+    skipped: row.resultSkipped ?? counts.skipped,
     errorMessage: row.errorMessage,
     createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
+    parentJobId: row.parentJobId ?? null,
+    failedContactIds: failedContactIdsFromItemResults(results),
   };
+}
+
+async function updateJob(
+  jobId: string,
+  patch: Partial<typeof prospectBulkAnalysisJobs.$inferInsert>,
+): Promise<void> {
+  await db
+    .update(prospectBulkAnalysisJobs)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(eq(prospectBulkAnalysisJobs.id, jobId));
 }
 
 export async function createBulkAnalysisJob(params: {
@@ -42,6 +61,8 @@ export async function createBulkAnalysisJob(params: {
   workspaceUserId?: string;
   selectionMode?: "selected" | "filtered";
   force?: boolean;
+  filtersSnapshot?: ProspectIntelligenceListFilters | null;
+  parentJobId?: string | null;
 }): Promise<ProspectBulkAnalysisJobSummary> {
   const ids = Array.from(new Set(params.contactIds.map((id) => String(id).trim()).filter(Boolean)));
   if (!ids.length) throw new Error("No prospects selected for analysis.");
@@ -73,160 +94,299 @@ export async function createBulkAnalysisJob(params: {
       selectionMode: params.selectionMode || "selected",
       forceReanalyze: Boolean(params.force),
       progressTotal: ids.length,
+      itemResults: {},
+      filtersSnapshot: params.filtersSnapshot || null,
+      parentJobId: params.parentJobId || null,
+      updatedAt: new Date(),
     })
     .returning();
 
   console.info(
     JSON.stringify(
-      prospectBulkOutreachLog("analysis_batch_created", {
+      prospectBulkAnalysisLog("job_created", {
         workspaceId: workspaceUserId,
-        batchId: row.id,
+        jobId: row.id,
         status: "pending",
         progressTotal: ids.length,
+        parentJobId: params.parentJobId || null,
       }),
     ),
   );
 
-  setImmediate(() => {
-    void runBulkAnalysisJob(row.id).catch((err) => {
-      console.error("[ProspectBulkOutreach] analysis job failed:", err);
-    });
-  });
-
+  // Durable worker claims — no setImmediate runner.
   return mapJob(row);
 }
 
-async function updateJob(
-  jobId: string,
-  patch: Partial<typeof prospectBulkAnalysisJobs.$inferInsert>,
-): Promise<void> {
-  await db.update(prospectBulkAnalysisJobs).set(patch).where(eq(prospectBulkAnalysisJobs.id, jobId));
+/**
+ * Atomically claim next recoverable pending/running job (SKIP LOCKED).
+ */
+export async function claimNextBulkAnalysisJob(
+  workerId: string,
+): Promise<ProspectBulkAnalysisJobRow | null> {
+  const now = new Date();
+  const leaseUntil = new Date(now.getTime() + PROSPECT_BULK_ANALYSIS_LEASE_MS);
+
+  const claimed = await db.execute(sql`
+    UPDATE prospect_bulk_analysis_jobs AS j
+    SET
+      status = 'running',
+      lease_owner = ${workerId},
+      lease_expires_at = ${leaseUntil},
+      started_at = COALESCE(j.started_at, ${now}),
+      updated_at = ${now}
+    WHERE j.id = (
+      SELECT id FROM prospect_bulk_analysis_jobs
+      WHERE status IN ('pending', 'running')
+        AND (lease_expires_at IS NULL OR lease_expires_at < ${now})
+      ORDER BY created_at ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    )
+    RETURNING j.id
+  `);
+
+  const id = String((claimed as { rows?: Array<{ id?: string }> }).rows?.[0]?.id || "");
+  if (!id) return null;
+
+  const rows = await db
+    .select()
+    .from(prospectBulkAnalysisJobs)
+    .where(eq(prospectBulkAnalysisJobs.id, id))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+
+  const results = (row.itemResults || {}) as ProspectBulkAnalysisItemResults;
+  const processed = Object.keys(results).length;
+  console.info(
+    JSON.stringify(
+      prospectBulkAnalysisLog(processed > 0 ? "job_resumed" : "job_claimed", {
+        jobId: row.id,
+        workspaceId: row.workspaceUserId,
+        workerId,
+        progressCurrent: processed,
+        progressTotal: row.progressTotal,
+      }),
+    ),
+  );
+  if (processed > 0) {
+    console.info(
+      JSON.stringify(
+        prospectBulkAnalysisLog("stale_job_recovered", {
+          jobId: row.id,
+          workspaceId: row.workspaceUserId,
+          progressCurrent: processed,
+        }),
+      ),
+    );
+  }
+  return row;
 }
 
-export async function runBulkAnalysisJob(jobId: string): Promise<void> {
-  if (runningBulkJobs.has(jobId)) return;
-  runningBulkJobs.add(jobId);
+async function renewLease(jobId: string, workerId: string): Promise<boolean> {
+  const now = new Date();
+  const leaseUntil = new Date(now.getTime() + PROSPECT_BULK_ANALYSIS_LEASE_MS);
+  const updated = await db
+    .update(prospectBulkAnalysisJobs)
+    .set({
+      leaseOwner: workerId,
+      leaseExpiresAt: leaseUntil,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(prospectBulkAnalysisJobs.id, jobId),
+        eq(prospectBulkAnalysisJobs.leaseOwner, workerId),
+        eq(prospectBulkAnalysisJobs.status, "running"),
+      ),
+    )
+    .returning({ id: prospectBulkAnalysisJobs.id });
+  return updated.length > 0;
+}
 
-  try {
-    const rows = await db
-      .select()
-      .from(prospectBulkAnalysisJobs)
-      .where(eq(prospectBulkAnalysisJobs.id, jobId))
-      .limit(1);
-    const job = rows[0];
-    if (!job) return;
+/**
+ * Process one claimed job to completion (or until lease lost).
+ * Skips contacts already present in item_results (no duplicate AI work).
+ */
+export async function processClaimedBulkAnalysisJob(
+  job: ProspectBulkAnalysisJobRow,
+  workerId: string,
+): Promise<void> {
+  const contactIds = (Array.isArray(job.contactIds) ? job.contactIds : []) as string[];
+  let itemResults: ProspectBulkAnalysisItemResults = {
+    ...((job.itemResults || {}) as ProspectBulkAnalysisItemResults),
+  };
 
-    await updateJob(jobId, { status: "running", startedAt: new Date() });
+  for (let i = 0; i < contactIds.length; i++) {
+    const contactId = contactIds[i];
+    if (itemResults[contactId]) {
+      continue; // already processed — resume-safe
+    }
 
-    const contactIds = (job.contactIds as string[]) || [];
-    let completed = 0;
-    let needsReview = 0;
-    let failed = 0;
-    let skipped = 0;
-
-    for (let i = 0; i < contactIds.length; i++) {
-      const contactId = contactIds[i];
+    if (!(await renewLease(job.id, workerId))) {
       console.info(
         JSON.stringify(
-          prospectBulkOutreachLog("analysis_item_queued", {
-            workspaceId: job.workspaceUserId,
-            batchId: jobId,
-            prospectIntelligenceId: contactId,
+          prospectBulkAnalysisLog("job_lease_lost", {
+            jobId: job.id,
+            workerId,
             contactId,
           }),
         ),
       );
+      return;
+    }
 
-      try {
-        const existing = await db
-          .select()
-          .from(prospectIntelligence)
-          .where(eq(prospectIntelligence.contactId, contactId))
-          .limit(1);
-        const row = existing[0];
-        if (
-          row &&
-          shouldSkipDefaultBulkReanalyze({
-            outreachStatus: row.outreachStatus,
-            outreachSentAt: row.outreachSentAt,
-            repliedAt: row.repliedAt,
-            force: job.forceReanalyze,
-          })
-        ) {
-          skipped += 1;
-          console.info(
-            JSON.stringify(
-              prospectBulkOutreachLog("analysis_item_completed", {
-                workspaceId: job.workspaceUserId,
-                batchId: jobId,
-                contactId,
-                status: "skipped",
-                reason: "already_contacted",
-              }),
-            ),
-          );
-        } else {
-          const intel = await analyzeProspectContact({
-            contactId,
-            force: job.forceReanalyze,
-          });
-          completed += 1;
-          if (intel.needsReview || intel.priority === "needs_review") needsReview += 1;
-          console.info(
-            JSON.stringify(
-              prospectBulkOutreachLog("analysis_item_completed", {
-                workspaceId: job.workspaceUserId,
-                batchId: jobId,
-                contactId,
-                status: intel.analysisStatus || "completed",
-              }),
-            ),
-          );
-        }
-      } catch (err) {
-        failed += 1;
-        const reason = err instanceof Error ? err.message : String(err);
+    console.info(
+      JSON.stringify(
+        prospectBulkAnalysisLog("item_started", {
+          jobId: job.id,
+          workspaceId: job.workspaceUserId,
+          contactId,
+        }),
+      ),
+    );
+
+    try {
+      const existing = await db
+        .select()
+        .from(prospectIntelligence)
+        .where(eq(prospectIntelligence.contactId, contactId))
+        .limit(1);
+      const row = existing[0];
+      if (
+        row &&
+        shouldSkipDefaultBulkReanalyze({
+          outreachStatus: row.outreachStatus,
+          outreachSentAt: row.outreachSentAt,
+          repliedAt: row.repliedAt,
+          force: job.forceReanalyze,
+        })
+      ) {
+        itemResults[contactId] = {
+          status: "skipped",
+          at: new Date().toISOString(),
+          reason: "already_contacted",
+        };
         console.info(
           JSON.stringify(
-            prospectBulkOutreachLog("analysis_item_failed", {
-              workspaceId: job.workspaceUserId,
-              batchId: jobId,
+            prospectBulkAnalysisLog("item_completed", {
+              jobId: job.id,
               contactId,
-              status: "failed",
-              reason: reason.substring(0, 200),
+              status: "skipped",
+              reason: "already_contacted",
+            }),
+          ),
+        );
+      } else {
+        const intel = await analyzeProspectContact({
+          contactId,
+          force: job.forceReanalyze,
+        });
+        const needsReview = Boolean(intel.needsReview || intel.priority === "needs_review");
+        itemResults[contactId] = {
+          status: needsReview ? "needs_review" : "completed",
+          at: new Date().toISOString(),
+        };
+        console.info(
+          JSON.stringify(
+            prospectBulkAnalysisLog("item_completed", {
+              jobId: job.id,
+              contactId,
+              status: needsReview ? "needs_review" : "completed",
             }),
           ),
         );
       }
-
-      await updateJob(jobId, {
-        progressCurrent: i + 1,
-        resultCompleted: completed,
-        resultNeedsReview: needsReview,
-        resultFailed: failed,
-        resultSkipped: skipped,
-      });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      itemResults[contactId] = {
+        status: "failed",
+        at: new Date().toISOString(),
+        reason: reason.substring(0, 200),
+      };
+      console.info(
+        JSON.stringify(
+          prospectBulkAnalysisLog("item_failed", {
+            jobId: job.id,
+            contactId,
+            reason: reason.substring(0, 200),
+          }),
+        ),
+      );
     }
 
-    await updateJob(jobId, {
-      status: "completed",
-      completedAt: new Date(),
-      progressCurrent: contactIds.length,
-      resultCompleted: completed,
-      resultNeedsReview: needsReview,
-      resultFailed: failed,
-      resultSkipped: skipped,
+    const counts = recountBulkAnalysisItemResults(itemResults);
+    await updateJob(job.id, {
+      itemResults,
+      progressCurrent: counts.processed,
+      progressTotal: contactIds.length,
+      resultCompleted: counts.completed,
+      resultNeedsReview: counts.needsReview,
+      resultFailed: counts.failed,
+      resultSkipped: counts.skipped,
+      leaseOwner: workerId,
+      leaseExpiresAt: new Date(Date.now() + PROSPECT_BULK_ANALYSIS_LEASE_MS),
     });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await updateJob(jobId, {
-      status: "failed",
-      completedAt: new Date(),
-      errorMessage: message.substring(0, 500),
-    });
-  } finally {
-    runningBulkJobs.delete(jobId);
   }
+
+  const finalCounts = recountBulkAnalysisItemResults(itemResults);
+  await updateJob(job.id, {
+    status: "completed",
+    completedAt: new Date(),
+    itemResults,
+    progressCurrent: contactIds.length,
+    progressTotal: contactIds.length,
+    resultCompleted: finalCounts.completed,
+    resultNeedsReview: finalCounts.needsReview,
+    resultFailed: finalCounts.failed,
+    resultSkipped: finalCounts.skipped,
+    leaseOwner: null,
+    leaseExpiresAt: null,
+  });
+
+  console.info(
+    JSON.stringify(
+      prospectBulkAnalysisLog("job_completed", {
+        jobId: job.id,
+        workspaceId: job.workspaceUserId,
+        completed: finalCounts.completed,
+        failed: finalCounts.failed,
+        skipped: finalCounts.skipped,
+        needsReview: finalCounts.needsReview,
+      }),
+    ),
+  );
+}
+
+/** Recover stale running jobs by clearing expired leases (claim will pick them up). */
+export async function recoverStaleBulkAnalysisJobs(): Promise<number> {
+  const now = new Date();
+  const updated = await db
+    .update(prospectBulkAnalysisJobs)
+    .set({
+      leaseOwner: null,
+      leaseExpiresAt: null,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(prospectBulkAnalysisJobs.status, "running"),
+        or(isNull(prospectBulkAnalysisJobs.leaseExpiresAt), lt(prospectBulkAnalysisJobs.leaseExpiresAt, now)),
+      ),
+    )
+    .returning({ id: prospectBulkAnalysisJobs.id });
+
+  for (const row of updated) {
+    console.info(
+      JSON.stringify(
+        prospectBulkAnalysisLog("stale_job_recovered", {
+          jobId: row.id,
+          reason: "lease_expired",
+        }),
+      ),
+    );
+  }
+  return updated.length;
 }
 
 export async function getBulkAnalysisJob(
@@ -240,8 +400,102 @@ export async function getBulkAnalysisJob(
   return rows[0] ? mapJob(rows[0]) : null;
 }
 
+export async function getActiveOrRecentBulkAnalysisJob(
+  workspaceUserId?: string,
+): Promise<ProspectBulkAnalysisJobSummary | null> {
+  const wid = workspaceUserId || (await resolveProspectImportDestinationUserId());
+  const active = await db
+    .select()
+    .from(prospectBulkAnalysisJobs)
+    .where(
+      and(
+        eq(prospectBulkAnalysisJobs.workspaceUserId, wid),
+        inArray(prospectBulkAnalysisJobs.status, ["pending", "running"]),
+      ),
+    )
+    .orderBy(desc(prospectBulkAnalysisJobs.createdAt))
+    .limit(1);
+  if (active[0]) return mapJob(active[0]);
+
+  const recent = await db
+    .select()
+    .from(prospectBulkAnalysisJobs)
+    .where(eq(prospectBulkAnalysisJobs.workspaceUserId, wid))
+    .orderBy(desc(prospectBulkAnalysisJobs.createdAt))
+    .limit(1);
+  return recent[0] ? mapJob(recent[0]) : null;
+}
+
+/**
+ * Retry only failed items from a completed/failed job — new child job, same workspace.
+ * Does not re-queue successful contacts.
+ */
+export async function retryFailedBulkAnalysisItems(params: {
+  jobId: string;
+  initiatedByUserId: string;
+  workspaceUserId?: string;
+}): Promise<ProspectBulkAnalysisJobSummary> {
+  const wid = params.workspaceUserId || (await resolveProspectImportDestinationUserId());
+  const rows = await db
+    .select()
+    .from(prospectBulkAnalysisJobs)
+    .where(
+      and(
+        eq(prospectBulkAnalysisJobs.id, params.jobId),
+        eq(prospectBulkAnalysisJobs.workspaceUserId, wid),
+      ),
+    )
+    .limit(1);
+  const parent = rows[0];
+  if (!parent) throw new Error("Analysis job not found");
+
+  const failedIds = failedContactIdsFromItemResults(
+    (parent.itemResults || {}) as ProspectBulkAnalysisItemResults,
+  );
+  if (!failedIds.length) throw new Error("No failed items to retry.");
+
+  return createBulkAnalysisJob({
+    contactIds: failedIds,
+    initiatedByUserId: params.initiatedByUserId,
+    workspaceUserId: wid,
+    selectionMode: "selected",
+    force: true,
+    filtersSnapshot: (parent.filtersSnapshot as ProspectIntelligenceListFilters) || null,
+    parentJobId: parent.id,
+  });
+}
+
+/** Test helper — process a job synchronously without worker. */
+export async function runBulkAnalysisJob(jobId: string): Promise<void> {
+  const workerId = `sync-${crypto.randomBytes(4).toString("hex")}`;
+  const rows = await db
+    .select()
+    .from(prospectBulkAnalysisJobs)
+    .where(eq(prospectBulkAnalysisJobs.id, jobId))
+    .limit(1);
+  const job = rows[0];
+  if (!job) return;
+  await updateJob(jobId, {
+    status: "running",
+    leaseOwner: workerId,
+    leaseExpiresAt: new Date(Date.now() + PROSPECT_BULK_ANALYSIS_LEASE_MS),
+    startedAt: job.startedAt || new Date(),
+  });
+  const refreshed = await db
+    .select()
+    .from(prospectBulkAnalysisJobs)
+    .where(eq(prospectBulkAnalysisJobs.id, jobId))
+    .limit(1);
+  if (refreshed[0]) await processClaimedBulkAnalysisJob(refreshed[0], workerId);
+}
+
 export const prospectBulkAnalysisService = {
   createBulkAnalysisJob,
   getBulkAnalysisJob,
+  getActiveOrRecentBulkAnalysisJob,
+  claimNextBulkAnalysisJob,
+  processClaimedBulkAnalysisJob,
+  recoverStaleBulkAnalysisJobs,
+  retryFailedBulkAnalysisItems,
   runBulkAnalysisJob,
 };
