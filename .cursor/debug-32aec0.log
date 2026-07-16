@@ -1,0 +1,2 @@
+{"sessionId":"32aec0","runId":"pi-approve","hypothesisId":"H-outreach","location":"ProspectIntelligencePanel.tsx:openNativeEmailOutreach","message":"Navigating to native email compose","data":{"contactIdPrefix":"fbe2242d","subjectLen":20,"bodyLen":280,"reviewStatus":"approved"},"timestamp":1784005315568}
+{"sessionId":"32aec0","runId":"pi-approve","hypothesisId":"H-outreach","location":"UnifiedInbox.tsx:composeNewEmail","message":"Entered forceNewEmailCompose","data":{"contactIdPrefix":"fbe2242d","hasPrefill":true,"subjectLen":20,"bodyLen":280},"timestamp":1784005316257}
