@@ -12,6 +12,7 @@ import {
   isNoIndexPath,
   injectNoindexMeta,
 } from "./seo";
+import { normalizeRequestPath, shouldServeSpaFallback } from "./spaRouting";
 
 const ONE_YEAR = 31536000;
 const ONE_WEEK = 604800;
@@ -50,18 +51,45 @@ function staticWithCache(root: string) {
   });
 }
 
-function sendSpaShell(res: Response, indexPath: string) {
+function sendSpaShell(res: Response, indexPath: string, status = 200) {
+  res.status(status);
   res.set("Cache-Control", "no-cache, no-store, must-revalidate");
   res.sendFile(indexPath);
 }
 
-function sendNoIndexSpaShell(res: Response, indexPath: string) {
+function sendNoIndexSpaShell(res: Response, indexPath: string, status = 200) {
   fs.readFile(indexPath, "utf-8", (err, html) => {
     if (err) {
-      return sendSpaShell(res, indexPath);
+      return sendSpaShell(res, indexPath, status);
     }
     const enhancedHtml = injectNoindexMeta(html);
-    res.set("Content-Type", "text/html");
+    res.status(status);
+    res.set("Content-Type", "text/html; charset=utf-8");
+    res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.send(enhancedHtml);
+  });
+}
+
+/** Unknown marketing URL: HTTP 404 + noindex + SPA shell so React NotFound can hydrate. */
+function sendNotFoundSpaShell(res: Response, indexPath: string) {
+  fs.readFile(indexPath, "utf-8", (err, html) => {
+    if (err) {
+      res.status(404).type("text").send("Not Found");
+      return;
+    }
+    let enhancedHtml = injectNoindexMeta(html);
+    enhancedHtml = enhancedHtml.replace(
+      /<title>.*?<\/title>/i,
+      "<title>404 Page Not Found | WhachatCRM</title>",
+    );
+    if (enhancedHtml.includes('<div id="root"></div>')) {
+      enhancedHtml = enhancedHtml.replace(
+        '<div id="root"></div>',
+        `<div id="root"><main data-ssr-404="true"><h1>404 Page Not Found</h1><p>This page does not exist.</p><p><a href="/">Go to homepage</a></p></main></div>`,
+      );
+    }
+    res.status(404);
+    res.set("Content-Type", "text/html; charset=utf-8");
     res.set("Cache-Control", "no-cache, no-store, must-revalidate");
     res.send(enhancedHtml);
   });
@@ -96,17 +124,17 @@ export function serveStatic(app: Express) {
       if (err) {
         return res.sendFile(indexPath);
       }
-      
+
       // Inject WebPage schema (keeps existing Organization + SoftwareApplication schemas)
       let enhancedHtml = injectHomepageSeoMeta(html);
-      
+
       // Generate and inject SSR content for homepage
       const ssrContent = generateHomepageHtml();
       enhancedHtml = enhancedHtml.replace(
         '<div id="root"></div>',
-        `<div id="root">${ssrContent}</div>`
+        `<div id="root">${ssrContent}</div>`,
       );
-      
+
       res.set("Content-Type", "text/html");
       res.set("Cache-Control", "public, max-age=3600"); // 1 hour cache
       res.send(enhancedHtml);
@@ -177,7 +205,7 @@ export function serveStatic(app: Express) {
 
   // Marketing pages with SSR meta injection - MUST be before express.static
   const marketingRoutes = getMarketingRoutes();
-  marketingRoutes.forEach(route => {
+  marketingRoutes.forEach((route) => {
     app.get(route, (req, res) => {
       fs.readFile(indexPath, "utf-8", (err, html) => {
         if (err) {
@@ -216,23 +244,18 @@ export function serveStatic(app: Express) {
   // Serve static assets (JS, CSS, images, fonts, sitemap.xml, robots.txt, etc.)
   app.use(staticWithCache(distPath));
 
-  // Catch-all for SPA routes (excluding protected routes)
+  // Catch-all: known SPA/product routes → 200 shell; unknown marketing URLs → HTTP 404 + noindex.
   app.use("*", (req, res) => {
-    const url = req.originalUrl.split("?")[0];
+    const url = normalizeRequestPath(req.originalUrl || req.url || "/");
+
+    if (!shouldServeSpaFallback(url, marketingRoutes)) {
+      return sendNotFoundSpaShell(res, indexPath);
+    }
 
     if (isNoIndexPath(url)) {
       return sendNoIndexSpaShell(res, indexPath);
     }
 
-    // Routes that should NOT have SSR or caching (Shopify, auth, API, webhooks)
-    const skipSsrRoutes = ['/auth', '/api', '/webhooks', '/shopify', '/app'];
-    const shouldSkipSsr = skipSsrRoutes.some(route => url.startsWith(route));
-
-    if (shouldSkipSsr) {
-      return sendSpaShell(res, indexPath);
-    }
-
-    // All other routes - serve index.html without SSR
-    sendSpaShell(res, indexPath);
+    return sendSpaShell(res, indexPath);
   });
 }

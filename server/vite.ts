@@ -5,6 +5,8 @@ import viteConfig from "../vite.config";
 import fs from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
+import { getMarketingRoutes, injectNoindexMeta, isNoIndexPath } from "./seo";
+import { normalizeRequestPath, shouldServeSpaFallback } from "./spaRouting";
 
 const viteLogger = createLogger();
 
@@ -31,8 +33,11 @@ export async function setupVite(server: Server, app: Express) {
 
   app.use(vite.middlewares);
 
+  const marketingRoutes = getMarketingRoutes();
+
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
+    const pathname = normalizeRequestPath(url);
 
     try {
       const clientTemplate = path.resolve(
@@ -48,7 +53,23 @@ export async function setupVite(server: Server, app: Express) {
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`,
       );
-      const page = await vite.transformIndexHtml(url, template);
+      let page = await vite.transformIndexHtml(url, template);
+
+      const isKnownSpa = shouldServeSpaFallback(pathname, marketingRoutes);
+      if (!isKnownSpa) {
+        page = injectNoindexMeta(page);
+        page = page.replace(
+          /<title>.*?<\/title>/i,
+          "<title>404 Page Not Found | WhachatCRM</title>",
+        );
+        res.status(404).set({ "Content-Type": "text/html" }).end(page);
+        return;
+      }
+
+      if (isNoIndexPath(pathname)) {
+        page = injectNoindexMeta(page);
+      }
+
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);

@@ -177,7 +177,7 @@ const WK_FIELD_ROWS: { key: keyof WkUrlsState; label: string; placeholder: strin
   { key: "returnPolicy", label: "Return policy URL", placeholder: "https://example.com/returns" },
   { key: "terms", label: "Terms URL", placeholder: "https://example.com/terms" },
   { key: "privacy", label: "Privacy policy URL", placeholder: "https://example.com/privacy" },
-  { key: "other", label: "Other URL (optional)", placeholder: "https://example.com/…" },
+  { key: "other", label: "Other URL (optional)", placeholder: "https://example.com/..." },
 ];
 
 type WkPageResultRow = {
