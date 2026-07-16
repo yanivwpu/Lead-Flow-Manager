@@ -11,10 +11,11 @@ export const HERO_CHANNEL_PILLS = [
   "WhatsApp",
   "Messenger",
   "Instagram",
+  "Email / Gmail",
   "SMS",
   "Website chat",
   "Automation",
-  "AI Copilot",
+  "AI Assist",
   "Team inbox",
 ] as const;
 
@@ -62,19 +63,19 @@ export const BUYER_CRITERIA = [
   {
     title: "Unified omnichannel inbox",
     description:
-      "The best WhatsApp CRM in 2026 usually includes WhatsApp plus Messenger, Instagram, SMS, and website chat in one timeline per contact.",
+      "The best WhatsApp CRM in 2026 usually includes WhatsApp plus Messenger, Instagram, Email, SMS, and website chat in one timeline per contact.",
     link: { href: "/unified-inbox", label: "Unified inbox overview" },
   },
   {
-    title: "AI Copilot and lead scoring",
+    title: "AI Assist and lead scoring",
     description:
-      "AI should help draft replies, summarize context, and surface hotter leads—not replace your team or add opaque black-box decisions.",
+      "AI should help draft replies, summarize context, and surface hotter leads—not replace your team or add opaque black-box decisions. Confirm which AI features are included vs add-ons.",
     link: { href: "/ai-lead-scoring", label: "AI lead scoring" },
   },
   {
     title: "Automation templates",
     description:
-      "Pre-built flows for follow-ups, qualification, and handoffs save weeks compared with building every sequence from scratch.",
+      "Pre-built flows for follow-ups, qualification, and handoffs save weeks compared with building every sequence from scratch. On WhachatCRM these ship on Starter and Pro.",
     link: { href: "/automation-templates", label: "Automation templates" },
   },
   {
@@ -90,21 +91,39 @@ export const BUYER_CRITERIA = [
     link: { href: "/whatsapp-crm", label: "WhatsApp CRM guide" },
   },
   {
+    title: "Email / Gmail in the same inbox",
+    description:
+      "Modern buyers email and message. Native Gmail OAuth keeps Email beside WhatsApp and Meta channels so follow-ups are not siloed in a separate mailbox.",
+    link: { href: "/unified-inbox", label: "Unified inbox overview" },
+  },
+  {
+    title: "GoHighLevel and CRM sync",
+    description:
+      "Agencies often need contact and pipeline sync with tools like GoHighLevel. Prefer platforms with documented OAuth/integrations rather than one-way CSV workarounds.",
+    link: { href: "/pricing", label: "Plans and integrations" },
+  },
+  {
     title: "Shopify support",
     description:
-      "Ecommerce teams benefit from order context, abandoned-cart recovery, and retention templates tied to customer history.",
+      "Ecommerce teams benefit from order and customer context in chat, plus automation templates for retention workflows on paid plans.",
     link: { href: "/shopify-crm", label: "Shopify CRM" },
   },
   {
     title: "Real estate and property matching",
     description:
-      "For brokerages and agents, MLS-aware workflows and listing recommendations inside chat can shorten time-to-showing.",
+      "For brokerages and agents, specialized Growth Engine workflows (where offered) and listing recommendations inside chat can shorten time-to-showing.",
     link: { href: "/crm-with-mls-integration", label: "MLS integration" },
+  },
+  {
+    title: "Unlimited team seats on a clear Pro plan",
+    description:
+      "Seat packs inflate cost as sales and support grow. Prefer Pro-style unlimited users so collaboration does not require buying another license for every teammate.",
+    link: { href: "/pricing", label: "WhachatCRM pricing" },
   },
   {
     title: "Transparent Meta messaging fees",
     description:
-      "Understand whether a vendor marks up Meta conversation fees on top of subscription pricing. Many teams prefer 0% markup models.",
+      "Meta may update WhatsApp pricing independently. Prefer vendors that do not add their own per-message markup on top of Meta's official charges.",
     link: { href: "/pricing", label: "WhachatCRM pricing" },
   },
 ] as const;
@@ -203,12 +222,14 @@ export const PLATFORM_COMPARISON: PlatformComparisonRow[] = [
 ];
 
 export const WHACHAT_DIFFERENTIATORS = [
-  "Omnichannel inbox for WhatsApp, Messenger, Instagram, SMS, Telegram, and website chat",
-  "AI Copilot for reply suggestions and faster qualification",
-  "Automation templates plus a free visual chatbot builder",
-  "Shopify abandoned-cart and retention templates",
-  "Realtor Growth Engine with property matching and MLS-oriented workflows",
-  "0% markup on Meta messaging fees—pay Meta directly at their rates",
+  "Meta Embedded Signup with native WhatsApp Cloud API onboarding (Twilio not required for new setups)",
+  "Omnichannel inbox for WhatsApp, Messenger, Instagram, Email (Gmail), SMS, Telegram, and website chat",
+  "AI Assist on Starter/Pro, with optional AI Brain add-on for deeper intelligence",
+  "Chatbot / Flow Builder and preset automation templates included on Starter and Pro",
+  "Shopify integration and GoHighLevel sync on Starter+ (Integrations page)",
+  "Realtor Growth Engine for eligible Pro + AI Brain workspaces",
+  "Unlimited users on Pro ($49/mo) with Free and Starter ($19/mo) entry points",
+  "0% WhachatCRM markup on Meta messaging fees—Meta may change its rates independently",
 ] as const;
 
 export const BEST_FOR_SEGMENTS = [
@@ -229,6 +250,13 @@ export const RELATED_GUIDE_LINKS = [
   { href: "/shopify-crm", label: "Shopify CRM" },
   { href: "/real-estate-crm", label: "Real Estate CRM" },
   { href: "/crm-with-mls-integration", label: "MLS Integration" },
+  { href: "/wati-alternative", label: "WATI Alternative" },
+  { href: "/manychat-alternative", label: "ManyChat Alternative" },
+  { href: "/interakt-alternative", label: "Interakt Alternative" },
+  { href: "/respond-io-alternative", label: "Respond.io Alternative" },
+  { href: "/waba360-alternative", label: "360dialog Alternative" },
+  { href: "/zoko-alternative", label: "Zoko Alternative" },
+  { href: "/pabbly-alternative", label: "Pabbly Alternative" },
   { href: "/pricing", label: "Pricing" },
 ] as const;
 
@@ -284,13 +312,28 @@ export const FAQ_ITEMS = [
       "Yes. AI Copilot and lead scoring can summarize conversations, suggest replies, and highlight higher-intent chats so reps spend time on leads most likely to convert—without removing human judgment from the sales process.",
   },
   {
+    question: "Does WhachatCRM include Email / Gmail?",
+    answer:
+      "Yes. WhachatCRM supports Email via Gmail OAuth in the Unified Inbox alongside WhatsApp, Messenger, and Instagram—so follow-ups are not stuck in a separate mailbox.",
+  },
+  {
+    question: "Is the chatbot included on the Free plan?",
+    answer:
+      "No. The visual chatbot / Flow Builder and preset automation templates are included on Starter ($19/mo) and Pro ($49/mo). Free is for validating Unified Inbox and CRM workflows before you upgrade.",
+  },
+  {
+    question: "How much does WhachatCRM cost?",
+    answer:
+      "WhachatCRM offers a Free plan, Starter at $19/mo (up to 3 users), and Pro at $49/mo with unlimited users. Optional AI Brain is $29/mo on Starter or Pro. Meta WhatsApp conversation fees are separate; WhachatCRM does not add its own per-message markup. Meta may update WhatsApp pricing independently.",
+  },
+  {
     question: "How is WhachatCRM different from Respond.io or WATI?",
     answer:
-      "Respond.io and WATI are strong WhatsApp and omnichannel options for many teams. WhachatCRM differentiates with bundled AI Copilot, automation templates, Shopify and real estate workflows, a free plan, and 0% markup on Meta messaging fees—aimed at SMBs and agencies that want breadth without enterprise complexity.",
+      "Respond.io and WATI are strong WhatsApp and omnichannel options for many teams. WhachatCRM differentiates with Meta Embedded Signup, Email/Gmail in the same inbox, chatbot and templates on Starter+, Shopify and GoHighLevel integrations on paid plans, unlimited users on Pro, a free plan to start, and 0% WhachatCRM markup on Meta messaging fees—aimed at SMBs and agencies that want breadth without enterprise complexity.",
   },
   {
     question: "What should I compare before choosing a WhatsApp CRM?",
     answer:
-      "Compare official API access, embedded signup experience, channel coverage, automation depth, AI features, team inbox controls, industry templates (Shopify or real estate), and how Meta conversation fees are passed through. A side-by-side trial on your real workflows beats feature checklists alone.",
+      "Compare Embedded Signup, channel coverage (including Email), automation depth, AI features, team inbox controls, integrations (Shopify or GoHighLevel), seat model, and how Meta conversation fees are passed through. A side-by-side trial on your real workflows beats feature checklists alone.",
   },
 ] as const;

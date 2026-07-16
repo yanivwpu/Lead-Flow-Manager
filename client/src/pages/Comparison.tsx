@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { SiteFooter } from "@/components/SiteFooter";
 import { MARKETING_URL } from "@/lib/marketingUrl";
+import { DEFAULT_COMPARISON_SCREENSHOTS } from "@/content/seo/comparisonShared";
 import {
   BEST_FOR_SEGMENTS,
   BEST_WHATSAPP_CRM_2026_META,
@@ -63,6 +64,33 @@ export function Comparison() {
     url: CANONICAL,
   };
 
+  const softwareSchema = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "WhachatCRM",
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+    url: MARKETING_URL,
+    description:
+      "Unified inbox and CRM for WhatsApp, Messenger, Instagram, Email, SMS, and more — with AI Assist, chatbot on Starter+, Shopify and GoHighLevel integrations.",
+    offers: {
+      "@type": "AggregateOffer",
+      lowPrice: "0",
+      highPrice: "49",
+      priceCurrency: "USD",
+      offerCount: "3",
+    },
+  };
+
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: MARKETING_URL },
+      { "@type": "ListItem", position: 2, name: "Best WhatsApp CRM 2026", item: CANONICAL },
+    ],
+  };
+
   return (
     <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-green-100 selection:text-green-900">
       <Helmet>
@@ -81,6 +109,8 @@ export function Comparison() {
         <meta name="twitter:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=3`} />
         <script type="application/ld+json">{JSON.stringify(webPageSchema)}</script>
         <script type="application/ld+json">{JSON.stringify(faqSchema)}</script>
+        <script type="application/ld+json">{JSON.stringify(softwareSchema)}</script>
+        <script type="application/ld+json">{JSON.stringify(breadcrumbSchema)}</script>
       </Helmet>
 
       <nav className="mx-auto flex max-w-6xl items-center justify-between p-4 md:p-6">
@@ -104,6 +134,18 @@ export function Comparison() {
         </div>
       </nav>
 
+      <nav className="mx-auto max-w-5xl px-4 text-sm text-gray-500 md:px-6" aria-label="Breadcrumb">
+        <ol className="flex flex-wrap items-center gap-1">
+          <li>
+            <Link href="/">
+              <a className="hover:text-brand-green">Home</a>
+            </Link>
+          </li>
+          <li aria-hidden>/</li>
+          <li className="text-gray-800">Best WhatsApp CRM 2026</li>
+        </ol>
+      </nav>
+
       {/* 1. Hero */}
       <header className="relative overflow-hidden border-b border-gray-100 bg-gradient-to-b from-green-50/50 to-white pb-16 pt-10 md:pb-24 md:pt-14">
         <div className="container relative z-10 mx-auto max-w-5xl px-4">
@@ -117,10 +159,10 @@ export function Comparison() {
           <p className="mb-8 max-w-3xl text-lg leading-relaxed text-gray-600 md:text-xl">
             WhatsApp CRM is no longer only about managing WhatsApp messages. In 2026, businesses
             evaluate platforms that combine{" "}
-            <Link href="/whatsapp-crm">
-              <a className="font-medium text-brand-green hover:underline">WhatsApp Business API</a>
+            <Link href="/whatsapp-business-api">
+              <a className="font-medium text-brand-green hover:underline">official WhatsApp Business API</a>
             </Link>
-            , Messenger, Instagram, SMS, website chat, automation, AI assistance, and team
+            {" "}with Embedded Signup, Messenger, Instagram, Email, SMS, website chat, automation, AI assistance, and team
             collaboration in one{" "}
             <Link href="/unified-inbox">
               <a className="font-medium text-brand-green hover:underline">omnichannel inbox</a>
@@ -230,14 +272,43 @@ export function Comparison() {
           </div>
         </section>
 
+        {/* Product screenshots */}
+        <section id="platform-screenshots" className="mb-16 scroll-mt-24 md:mb-20">
+          <h2 className="mb-3 font-display text-2xl font-bold text-gray-900 md:text-3xl">
+            Current WhachatCRM platform
+          </h2>
+          <p className="mb-8 max-w-3xl text-gray-600">
+            Official Meta Embedded Signup, Unified Inbox (including Email), AI Copilot, and free automation
+            templates — the current WhachatCRM platform, not an API-only BSP.
+          </p>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {DEFAULT_COMPARISON_SCREENSHOTS.map((shot) => (
+              <figure key={shot.src} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                <img
+                  src={shot.src}
+                  alt={shot.alt}
+                  className="h-44 w-full object-cover object-top"
+                  loading="lazy"
+                  width={640}
+                  height={360}
+                />
+                <figcaption className="border-t border-gray-100 px-3 py-2 text-xs text-gray-600">
+                  {shot.caption}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </section>
+
         {/* 5. Comparison table */}
         <section id="comparison-table" className="mb-16 scroll-mt-24 md:mb-20">
           <h2 className="mb-3 font-display text-2xl font-bold text-gray-900 md:text-3xl">
             WhatsApp CRM comparison: leading platforms in 2026
           </h2>
           <p className="mb-6 max-w-3xl text-sm text-gray-500">
-            High-level feature map for education. Plans and packaging change—verify details on each
-            vendor&apos;s site before you buy.
+            High-level feature map for education. Competitor pricing and plan limits may change—verify details on each
+            vendor&apos;s official website before purchasing. Meta may update WhatsApp pricing independently.
+            WhachatCRM does not add its own per-message markup on top of Meta&apos;s official charges.
           </p>
           <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
             <table className="w-full min-w-[960px] border-collapse text-left text-sm">

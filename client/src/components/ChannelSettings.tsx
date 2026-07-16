@@ -448,7 +448,7 @@ export function ChannelSettings() {
     }
   }, [isTiktokSetupMode, isTiktokChannelActive]);
 
-  const { data: user } = useQuery<{
+  const { data: meStatus } = useQuery<{
     id: string;
     twilioConnected?: boolean;
     metaConnected?: boolean;
@@ -624,15 +624,15 @@ export function ChannelSettings() {
 
     if (channel === 'whatsapp') {
       if (waIntegrationStatus?.fullyReady && waIntegrationStatus.activeProvider === 'meta') return 'connected';
-      if (waIntegrationStatus?.setupIncomplete || (user?.whatsappProvider === 'meta' && user?.metaConnected)) {
+      if (waIntegrationStatus?.setupIncomplete || (meStatus?.whatsappProvider === 'meta' && meStatus?.metaConnected)) {
         return 'pending';
       }
-      if (user?.twilioConnected && waIntegrationStatus?.activeProvider === 'twilio') return 'connected';
+      if (meStatus?.twilioConnected && waIntegrationStatus?.activeProvider === 'twilio') return 'connected';
       return 'disconnected';
     }
 
     if (channel === 'sms') {
-      return user?.twilioConnected ? 'connected' : 'disconnected';
+      return meStatus?.twilioConnected ? 'connected' : 'disconnected';
     }
 
     // For Facebook/Instagram: credentials may be saved (integration exists) but
@@ -929,7 +929,7 @@ export function ChannelSettings() {
     }
 
     if (channel === "sms") {
-      if (user?.twilioConnected) {
+      if (meStatus?.twilioConnected) {
         return {
           pill: "connected",
           subline: "SMS via your Twilio account",
