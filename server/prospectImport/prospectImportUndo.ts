@@ -89,10 +89,14 @@ export async function classifyUndoCandidates(
   return { deletable, blocked };
 }
 
-export async function previewProspectImportUndo(jobId: string): Promise<ProspectImportUndoPreview | null> {
+export async function previewProspectImportUndo(
+  jobId: string,
+  workspaceUserId?: string,
+): Promise<ProspectImportUndoPreview | null> {
   const rows = await db.select().from(prospectImportJobs).where(eq(prospectImportJobs.id, jobId)).limit(1);
   const job = rows[0];
   if (!job) return null;
+  if (workspaceUserId && job.destinationUserId !== workspaceUserId) return null;
 
   const { deletable, blocked } = await classifyUndoCandidates(job.destinationUserId, jobId);
 
@@ -112,10 +116,14 @@ export async function previewProspectImportUndo(jobId: string): Promise<Prospect
 export async function executeProspectImportUndo(params: {
   jobId: string;
   undoneByUserId: string;
+  workspaceUserId?: string;
 }): Promise<{ deleted: number; blocked: number; undoStatus: "partial" | "undone" }> {
   const rows = await db.select().from(prospectImportJobs).where(eq(prospectImportJobs.id, params.jobId)).limit(1);
   const job = rows[0];
   if (!job) throw new Error("Import job not found");
+  if (params.workspaceUserId && job.destinationUserId !== params.workspaceUserId) {
+    throw new Error("Import job not found");
+  }
   if (job.undoStatus === "undone") throw new Error("This import batch was already undone");
 
   const { deletable, blocked } = await classifyUndoCandidates(job.destinationUserId, params.jobId);

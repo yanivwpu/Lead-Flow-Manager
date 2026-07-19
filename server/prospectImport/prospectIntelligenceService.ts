@@ -24,6 +24,7 @@ import {
   hasInsufficientProspectData,
   parseAndValidateProspectIntelligence,
   PROSPECT_INTELLIGENCE_AI_VERSION,
+  type ProspectWorkspaceBusinessContext,
 } from "./prospectIntelligenceAi";
 import {
   assertInternalImportedProspect,
@@ -31,7 +32,7 @@ import {
   readProspectImportMetadata,
   resolvePipelineStageAfterAnalysis,
 } from "./prospectIntelligenceEligibility";
-import { resolveProspectImportDestinationUserId } from "./prospectImportService";
+import { assertContactInWorkspace } from "./prospectWorkspaceScope";
 
 const runningBatchJobs = new Set<string>();
 const runningContactAnalysis = new Set<string>();
@@ -41,6 +42,56 @@ const MAX_AI_RETRIES = 2;
 type AiCompleteFn = (
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
 ) => Promise<{ content: string; usage?: { promptTokens: number; completionTokens: number } }>;
+
+function text(value: unknown): string | undefined {
+  const v = typeof value === "string" ? value.trim() : "";
+  return v || undefined;
+}
+
+async function loadWorkspaceBusinessContext(
+  userId: string,
+): Promise<ProspectWorkspaceBusinessContext> {
+  const knowledge = await storage.getAiBusinessKnowledge(userId);
+  if (!knowledge) return { configured: false };
+
+  const faqs = Array.isArray(knowledge.faqs)
+    ? knowledge.faqs
+        .map((item) => {
+          if (!item || typeof item !== "object") return null;
+          const row = item as Record<string, unknown>;
+          const question = text(row.question);
+          const answer = text(row.answer);
+          return question && answer ? { question, answer } : null;
+        })
+        .filter((item): item is { question: string; answer: string } => Boolean(item))
+        .slice(0, 20)
+    : [];
+
+  const businessName = text(knowledge.businessName);
+  const industry = text(knowledge.industry);
+  const servicesProducts = text(knowledge.servicesProducts);
+  const websiteKnowledgeSummary = text(knowledge.websiteKnowledgeSummary);
+  const about = text(knowledge.aboutText);
+  const configured = Boolean(
+    businessName ||
+      industry ||
+      servicesProducts ||
+      websiteKnowledgeSummary ||
+      about ||
+      faqs.length,
+  );
+
+  return {
+    configured,
+    businessName,
+    industry,
+    servicesProducts,
+    websiteKnowledgeSummary,
+    faqs,
+    // AI Brain has no standalone Executive Summary column yet; derive one from canonical knowledge.
+    executiveSummary: about || websiteKnowledgeSummary || servicesProducts,
+  };
+}
 
 function mapIntelligenceRow(row: ProspectIntelligenceRow): ProspectIntelligence {
   return {
@@ -111,7 +162,9 @@ async function enrichJobSummary(summary: ProspectIntelligenceJobSummary): Promis
 function toDbPatch(
   intel: ProspectIntelligence,
   extras?: Partial<typeof prospectIntelligence.$inferInsert>,
-): typeof prospectIntelligence.$inferInsert {
+): Omit<typeof prospectIntelligence.$inferInsert, "contactId"> {
+  // Update patch only — contactId is the row key, not a writable field here.
+  const { contactId: _contactId, ...restExtras } = extras ?? {};
   return {
     analysisStatus: intel.analysisStatus ?? "completed",
     reviewStatus: intel.reviewStatus ?? "pending",
@@ -137,7 +190,7 @@ function toDbPatch(
     aiVersion: intel.aiVersion ?? PROSPECT_INTELLIGENCE_AI_VERSION,
     analyzedAt: intel.analyzedAt ? new Date(intel.analyzedAt) : new Date(),
     updatedAt: new Date(),
-    ...extras,
+    ...restExtras,
   };
 }
 
@@ -256,21 +309,25 @@ export async function analyzeProspectContact(params: {
       });
 
     const input = buildProspectIntelligenceInput(contact);
+    const workspaceContext = await loadWorkspaceBusinessContext(contact.userId);
     let intel: ProspectIntelligence;
     let promptTokens = 0;
     let completionTokens = 0;
 
     if (hasInsufficientProspectData(input)) {
-      intel = buildInsufficientDataResult(model, input);
+      intel = buildInsufficientDataResult(model, input, workspaceContext);
     } else {
       const completeFn = params.completeFn ?? defaultAiComplete;
       const messages = [
         {
           role: "system" as const,
           content:
-            "You are an internal WhaChatCRM growth analyst. Output strict JSON only. Never hallucinate unsupported business facts.",
+            "You are Prospect AI, a growth analyst for the current workspace. Use the workspace's existing AI Brain context when provided. Output strict JSON only. Never hallucinate unsupported business facts.",
         },
-        { role: "user" as const, content: buildProspectIntelligencePrompt(input) },
+        {
+          role: "user" as const,
+          content: buildProspectIntelligencePrompt(input, workspaceContext),
+        },
       ];
 
       let lastErr: unknown;
@@ -281,7 +338,7 @@ export async function analyzeProspectContact(params: {
           promptTokens += response.usage?.promptTokens ?? 0;
           completionTokens += response.usage?.completionTokens ?? 0;
           const raw = JSON.parse(response.content || "{}");
-          parsed = parseAndValidateProspectIntelligence(raw, model, input);
+          parsed = parseAndValidateProspectIntelligence(raw, model, input, workspaceContext);
           break;
         } catch (err) {
           lastErr = err;
@@ -516,9 +573,10 @@ function prioritySortValue(priority?: string | null): number {
 
 export async function listProspectIntelligence(
   filters: ProspectIntelligenceListFilters = {},
+  workspaceUserId: string,
 ): Promise<ProspectIntelligenceListItem[]> {
-  const destinationUserId = await resolveProspectImportDestinationUserId();
-  const contacts = await storage.getContacts(destinationUserId, 50000);
+  if (!workspaceUserId) throw new Error("workspaceUserId is required");
+  const contacts = await storage.getContacts(workspaceUserId, 50000);
   const importedContacts = contacts.filter(isInternalImportedProspect);
   const contactMap = new Map(importedContacts.map((c) => [c.id, c]));
 
@@ -538,7 +596,7 @@ export async function listProspectIntelligence(
         status: prospectOutreachQueueItems.queueStatus,
       })
       .from(prospectOutreachQueueItems)
-      .where(eq(prospectOutreachQueueItems.workspaceUserId, destinationUserId));
+      .where(eq(prospectOutreachQueueItems.workspaceUserId, workspaceUserId));
     queuedContactIds = new Set(
       qRows
         .filter((r) => ["queued", "sending", "paused"].includes(r.status))
@@ -556,7 +614,7 @@ export async function listProspectIntelligence(
     const { loadWorkspaceChannelConnections } = await import(
       "./prospectOutreachEligibilityService"
     );
-    connections = await loadWorkspaceChannelConnections(destinationUserId);
+    connections = await loadWorkspaceChannelConnections(workspaceUserId);
   }
 
   for (const row of rows) {
@@ -678,9 +736,14 @@ export async function listProspectIntelligence(
   return items.slice(0, limit);
 }
 
-export async function getProspectIntelligenceDetail(contactId: string): Promise<ProspectIntelligenceListItem | null> {
+export async function getProspectIntelligenceDetail(
+  contactId: string,
+  workspaceUserId: string,
+): Promise<ProspectIntelligenceListItem | null> {
   const contact = await storage.getContact(contactId);
-  if (!contact || !isInternalImportedProspect(contact)) return null;
+  if (!contact || contact.userId !== workspaceUserId || !isInternalImportedProspect(contact)) {
+    return null;
+  }
 
   const rows = await db
     .select()
@@ -704,14 +767,20 @@ export async function getProspectIntelligenceDetail(contactId: string): Promise<
   };
 }
 
-export async function getProspectIntelligenceDashboardCounts(): Promise<ProspectIntelligenceDashboardCounts> {
-  const rows = await db.select().from(prospectIntelligence);
+export async function getProspectIntelligenceDashboardCounts(
+  workspaceUserId: string,
+): Promise<ProspectIntelligenceDashboardCounts> {
+  const items = await listProspectIntelligence({ limit: 1000 }, workspaceUserId);
   let highPriority = 0;
   let mediumPriority = 0;
   let lowPriority = 0;
   let needsReview = 0;
+  let aiReviewed = 0;
 
-  for (const row of rows) {
+  for (const item of items) {
+    const row = item.intelligence;
+    const status = String(row.analysisStatus || "");
+    if (status === "completed" || status === "needs_review") aiReviewed += 1;
     if (row.priority === "high") highPriority += 1;
     else if (row.priority === "medium") mediumPriority += 1;
     else if (row.priority === "low") lowPriority += 1;
@@ -719,7 +788,7 @@ export async function getProspectIntelligenceDashboardCounts(): Promise<Prospect
   }
 
   return {
-    aiReviewed: rows.filter((r) => r.analysisStatus === "completed" || r.analysisStatus === "needs_review").length,
+    aiReviewed,
     highPriority,
     mediumPriority,
     lowPriority,
@@ -730,10 +799,11 @@ export async function getProspectIntelligenceDashboardCounts(): Promise<Prospect
 export async function approveProspectIntelligence(
   contactId: string,
   userId: string,
-  opts?: { suggestedFirstMessage?: string },
+  opts?: { suggestedFirstMessage?: string; workspaceUserId?: string },
 ): Promise<ProspectIntelligenceListItem | null> {
   const contact = await storage.getContact(contactId);
   if (!contact) throw new Error("Contact not found");
+  if (opts?.workspaceUserId) assertContactInWorkspace(contact, opts.workspaceUserId);
   assertInternalImportedProspect(contact);
 
   const messagePatch: Partial<typeof prospectIntelligence.$inferInsert> = {
@@ -762,12 +832,16 @@ export async function approveProspectIntelligence(
     const intel = mapIntelligenceRow(rows[0]);
     await syncContactIntelligence(contact, { ...intel, reviewStatus: "approved", needsReview: false }, rows[0].importJobId);
   }
-  return getProspectIntelligenceDetail(contactId);
+  return getProspectIntelligenceDetail(contactId, opts?.workspaceUserId || contact.userId);
 }
 
-export async function markProspectNeedsReview(contactId: string): Promise<void> {
+export async function markProspectNeedsReview(
+  contactId: string,
+  workspaceUserId?: string,
+): Promise<void> {
   const contact = await storage.getContact(contactId);
   if (!contact) throw new Error("Contact not found");
+  if (workspaceUserId) assertContactInWorkspace(contact, workspaceUserId);
   assertInternalImportedProspect(contact);
 
   await db
@@ -794,9 +868,11 @@ export async function markProspectNeedsReview(contactId: string): Promise<void> 
 export async function patchProspectIntelligence(
   contactId: string,
   patch: Partial<Pick<ProspectIntelligence, "suggestedFirstMessage" | "suggestedOutreachAngle" | "reasoningSummary">>,
+  workspaceUserId?: string,
 ): Promise<ProspectIntelligenceListItem | null> {
   const contact = await storage.getContact(contactId);
   if (!contact) throw new Error("Contact not found");
+  if (workspaceUserId) assertContactInWorkspace(contact, workspaceUserId);
   assertInternalImportedProspect(contact);
 
   const rows = await db
@@ -819,14 +895,20 @@ export async function patchProspectIntelligence(
 
   await db.update(prospectIntelligence).set(dbPatch).where(eq(prospectIntelligence.contactId, contactId));
 
-  const detail = await getProspectIntelligenceDetail(contactId);
+  const detail = await getProspectIntelligenceDetail(contactId, workspaceUserId || contact.userId);
   if (detail && contact) {
     await syncContactIntelligence(contact, detail.intelligence, null);
   }
   return detail;
 }
 
-export async function reanalyzeProspectContact(contactId: string): Promise<ProspectIntelligence> {
+export async function reanalyzeProspectContact(
+  contactId: string,
+  workspaceUserId?: string,
+): Promise<ProspectIntelligence> {
+  const contact = await storage.getContact(contactId);
+  if (!contact) throw new Error("Contact not found");
+  if (workspaceUserId) assertContactInWorkspace(contact, workspaceUserId);
   return analyzeProspectContact({ contactId, force: true });
 }
 

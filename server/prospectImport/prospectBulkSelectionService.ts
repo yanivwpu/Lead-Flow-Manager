@@ -10,7 +10,6 @@ import {
   type ProspectBulkSelectionResult,
 } from "@shared/prospectBulkSelection";
 import { listProspectIntelligence } from "./prospectIntelligenceService";
-import { resolveProspectImportDestinationUserId } from "./prospectImportService";
 import { storage } from "../storage";
 import { isInternalImportedProspect } from "./prospectIntelligenceEligibility";
 
@@ -49,19 +48,24 @@ async function scopedContactIds(
  * Throws ProspectBulkSelectionError when over max (no silent truncate).
  */
 export async function resolveProspectBulkSelection(
-  params: ProspectBulkSelectionRequest & { workspaceUserId?: string },
+  params: ProspectBulkSelectionRequest & { workspaceUserId: string },
 ): Promise<ProspectBulkSelectionResult> {
-  const workspaceUserId =
-    params.workspaceUserId || (await resolveProspectImportDestinationUserId());
+  const workspaceUserId = String(params.workspaceUserId || "").trim();
+  if (!workspaceUserId) {
+    throw new ProspectBulkSelectionError("workspaceUserId is required", "invalid");
+  }
   const maxBatchSize = PROSPECT_BULK_MAX_BATCH_SIZE;
 
   if (params.allFiltered) {
     const filters: ProspectIntelligenceListFilters = { ...(params.filters || {}) };
     // Fetch one past max to detect over-limit without pretending we process them all.
-    const items = await listProspectIntelligence({
-      ...filters,
-      limit: maxBatchSize + 1,
-    });
+    const items = await listProspectIntelligence(
+      {
+        ...filters,
+        limit: maxBatchSize + 1,
+      },
+      workspaceUserId,
+    );
     const matchedCount = items.length;
     if (matchedCount === 0) {
       throw new ProspectBulkSelectionError("No prospects match the current filters.", "empty");

@@ -129,7 +129,15 @@ function WizardValidationHint({ children }: { children: ReactNode }) {
   );
 }
 
-export function GhlProspectImport() {
+export type GhlProspectImportView = "full" | "embedded";
+
+export function GhlProspectImport({
+  view = "full",
+}: {
+  /** `embedded` hides Review / Campaign Queue / Import history for Prospect AI Discover. */
+  view?: GhlProspectImportView;
+} = {}) {
+  const embedded = view === "embedded";
   const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>(1);
   const [provider, setProvider] = useState<ProspectImportProvider>("gohighlevel");
@@ -192,6 +200,7 @@ export function GhlProspectImport() {
     queryKey: ["/api/growth-tools/prospect-import/history"],
     queryFn: () =>
       fetchJson<{ history: ProspectImportHistoryItem[] }>("/api/growth-tools/prospect-import/history"),
+    enabled: !embedded,
   });
 
   const templatesQuery = useQuery({
@@ -264,7 +273,7 @@ export function GhlProspectImport() {
     }
   }, [analysisJob, pollAnalysisJob]);
 
-  const openAnalyzeDialog = (job: ProspectImportJobSummary) => {
+  const openAnalyzeDialog = (job: Pick<ProspectImportJobSummary, "id" | "batchName" | "imported">) => {
     setAnalyzeDialog({
       importJobId: job.id,
       batchName: job.batchName,
@@ -538,14 +547,19 @@ export function GhlProspectImport() {
       <div className="mb-6 flex flex-col gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand-green">
-              <Sparkles className="h-3.5 w-3.5" />
-              Internal Growth Tool
-            </div>
-            <h2 className="text-lg font-semibold text-gray-900">Prospect Import</h2>
+            {!embedded ? (
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand-green">
+                <Sparkles className="h-3.5 w-3.5" />
+                Internal Growth Tool
+              </div>
+            ) : null}
+            <h2 className="text-lg font-semibold text-gray-900">
+              {embedded ? "GoHighLevel Import" : "Prospect Import"}
+            </h2>
             <p className="mt-1 max-w-2xl text-sm text-gray-600">
-              Import prospects from external CRMs into your YaBa workspace for outbound sales,
-              partnerships, and recruitment. Contacts only — no inbox threads.
+              {embedded
+                ? "Import prospects from GoHighLevel into your workspace for Review and campaigns. Contacts only — no inbox threads."
+                : "Import prospects from external CRMs into your YaBa workspace for outbound sales, partnerships, and recruitment. Contacts only — no inbox threads."}
             </p>
           </div>
         </div>
@@ -1284,92 +1298,23 @@ export function GhlProspectImport() {
         </section>
       )}
 
-      <section className="mt-10 space-y-4 border-t pt-8">
-        <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
-          <History className="h-4 w-4 text-brand-green" />
-          Import history
-        </h3>
-        {historyQuery.isLoading ? (
-          <p className="text-sm text-gray-500">Loading history…</p>
-        ) : (historyQuery.data?.history ?? []).length === 0 ? (
-          <p className="text-sm text-gray-500">No import jobs yet.</p>
-        ) : (
-          <div className="overflow-auto rounded-xl border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Batch</TableHead>
-                  <TableHead>Provider</TableHead>
-                  <TableHead>Reason</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Imported</TableHead>
-                  <TableHead>Dups</TableHead>
-                  <TableHead>Errors</TableHead>
-                  <TableHead>Tag</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(historyQuery.data?.history ?? []).map((job) => (
-                  <TableRow key={job.id}>
-                    <TableCell className="font-medium">{job.batchName}</TableCell>
-                    <TableCell>{PROSPECT_IMPORT_PROVIDER_LABELS[job.provider]}</TableCell>
-                    <TableCell>{job.importReason || "—"}</TableCell>
-                    <TableCell className="text-xs whitespace-nowrap">{formatDate(job.createdAt)}</TableCell>
-                    <TableCell>
-                      <Badge variant={job.status === "completed" ? "secondary" : "outline"}>
-                        {job.undoStatus === "undone" ? "Undone" : job.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{job.imported}</TableCell>
-                    <TableCell>{job.duplicates}</TableCell>
-                    <TableCell>{job.errors}</TableCell>
-                    <TableCell className="text-xs">{job.internalTag || "—"}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {job.status === "completed" && job.undoStatus !== "undone" && job.imported > 0 ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openAnalyzeDialog(job)}
-                          >
-                            <Brain className="h-3.5 w-3.5 mr-1" />
-                            Analyze
-                          </Button>
-                        ) : null}
-                        {job.canUndo ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => void openUndoDialog(job)}
-                          >
-                            <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                            Undo
-                          </Button>
-                        ) : job.undoBlockedReason ? (
-                          <span className="text-xs text-gray-400" title={job.undoBlockedReason}>
-                            —
-                          </span>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </section>
+      {!embedded ? (
+        <ProspectImportHistoryPanel
+          history={historyQuery.data?.history}
+          isLoading={historyQuery.isLoading}
+          onAnalyze={openAnalyzeDialog}
+          onUndo={(job) => void openUndoDialog(job)}
+        />
+      ) : null}
 
-      <ProspectIntelligencePanel
-        activeAnalysisJob={analysisJob}
-        onAnalysisJobUpdate={setAnalysisJob}
-      />
+      {!embedded ? (
+        <ProspectIntelligencePanel
+          activeAnalysisJob={analysisJob}
+          onAnalysisJobUpdate={setAnalysisJob}
+        />
+      ) : null}
 
-      <ProspectOutreachQueuePanel />
+      {!embedded ? <ProspectOutreachQueuePanel /> : null}
 
       {analyzeDialog ? (
         <AnalyzeConfirmDialog
@@ -1430,6 +1375,107 @@ export function GhlProspectImport() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export function ProspectImportHistoryPanel({
+  history,
+  isLoading,
+  onAnalyze,
+  onUndo,
+}: {
+  history?: ProspectImportHistoryItem[];
+  isLoading?: boolean;
+  onAnalyze?: (job: ProspectImportHistoryItem | ProspectImportJobSummary) => void;
+  onUndo?: (job: ProspectImportHistoryItem) => void;
+} = {}) {
+  const historyQuery = useQuery({
+    queryKey: ["/api/growth-tools/prospect-import/history"],
+    queryFn: () =>
+      fetchJson<{ history: ProspectImportHistoryItem[] }>("/api/growth-tools/prospect-import/history"),
+    enabled: history === undefined,
+  });
+  const rows = history ?? historyQuery.data?.history ?? [];
+  const loading = isLoading ?? historyQuery.isLoading;
+
+  return (
+    <section className="mt-10 space-y-4 border-t pt-8" data-testid="prospect-import-history">
+      <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
+        <History className="h-4 w-4 text-brand-green" />
+        Import history
+      </h3>
+      {loading ? (
+        <p className="text-sm text-gray-500">Loading history…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-gray-500">No import jobs yet.</p>
+      ) : (
+        <div className="overflow-auto rounded-xl border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Batch</TableHead>
+                <TableHead>Provider</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Imported</TableHead>
+                <TableHead>Dups</TableHead>
+                <TableHead>Errors</TableHead>
+                <TableHead>Tag</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((job) => (
+                <TableRow key={job.id}>
+                  <TableCell className="font-medium">{job.batchName}</TableCell>
+                  <TableCell>{PROSPECT_IMPORT_PROVIDER_LABELS[job.provider]}</TableCell>
+                  <TableCell>{job.importReason || "—"}</TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">{formatDate(job.createdAt)}</TableCell>
+                  <TableCell>
+                    <Badge variant={job.status === "completed" ? "secondary" : "outline"}>
+                      {job.undoStatus === "undone" ? "Undone" : job.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{job.imported}</TableCell>
+                  <TableCell>{job.duplicates}</TableCell>
+                  <TableCell>{job.errors}</TableCell>
+                  <TableCell className="text-xs">{job.internalTag || "—"}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {onAnalyze &&
+                      job.status === "completed" &&
+                      job.undoStatus !== "undone" &&
+                      job.imported > 0 ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onAnalyze(job)}
+                        >
+                          <Brain className="h-3.5 w-3.5 mr-1" />
+                          Analyze
+                        </Button>
+                      ) : null}
+                      {onUndo && job.canUndo ? (
+                        <Button type="button" variant="ghost" size="sm" onClick={() => onUndo(job)}>
+                          <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                          Undo
+                        </Button>
+                      ) : job.undoBlockedReason ? (
+                        <span className="text-xs text-gray-400" title={job.undoBlockedReason}>
+                          —
+                        </span>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -6,29 +6,42 @@ import type {
   ProspectImportProvider,
   ProspectImportReason,
 } from "@shared/prospectImport";
-import { canAccessProspectImportTools } from "@shared/prospectImportAccess";
 import { prospectImportService } from "../prospectImport/prospectImportService";
 import { requireProspectImportAccess } from "./prospectImportAccess";
+import {
+  canAccessProspectWorkspaceTools,
+  resolveProspectWorkspaceUserId,
+} from "../prospectImport/prospectWorkspaceScope";
 
 export function registerProspectImportRoutes(app: Express): void {
-  app.get("/api/growth-tools/prospect-import/access", (req, res) => {
+  app.get("/api/growth-tools/prospect-import/access", async (req, res) => {
     if (!req.isAuthenticated?.() || !req.user) {
       return res.json({ allowed: false });
     }
     const session = req.session as { isAdmin?: boolean } | undefined;
-    const allowed = canAccessProspectImportTools(
-      req.user as { id: string; email?: string | null },
-      session,
-    );
-    res.json({ allowed });
+    const user = req.user as { id: string; email?: string | null };
+    try {
+      const allowed = await canAccessProspectWorkspaceTools({
+        userId: user.id,
+        email: user.email,
+        isAdmin: session?.isAdmin === true,
+      });
+      res.json({ allowed });
+    } catch (err) {
+      console.error("[ProspectImport] access check error:", err);
+      res.json({ allowed: false });
+    }
   });
 
   app.get(
     "/api/growth-tools/prospect-import/ghl/locations",
     requireProspectImportAccess,
-    async (_req, res) => {
+    async (req, res) => {
       try {
-        const locations = await prospectImportService.listGhlProspectLocations();
+        const workspaceUserId = await resolveProspectWorkspaceUserId(
+          (req.user as { id: string }).id,
+        );
+        const locations = await prospectImportService.listGhlProspectLocations(workspaceUserId);
         res.json({ locations });
       } catch (err) {
         console.error("[ProspectImport] locations error:", err);
@@ -42,11 +55,15 @@ export function registerProspectImportRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
+        const workspaceUserId = await resolveProspectWorkspaceUserId(
+          (req.user as { id: string }).id,
+        );
         const locationId =
           typeof req.query.locationId === "string" ? req.query.locationId.trim() : undefined;
         const metadata = await prospectImportService.getGhlLocationMetadata(
           req.params.integrationId,
           locationId,
+          workspaceUserId,
         );
         res.json(metadata);
       } catch (err) {
@@ -72,7 +89,9 @@ export function registerProspectImportRoutes(app: Express): void {
         if (!integrationId) return res.status(400).json({ error: "integrationId required" });
         if (!locationId?.trim()) return res.status(400).json({ error: "locationId required" });
 
-        const destinationUserId = await prospectImportService.resolveProspectImportDestinationUserId();
+        const destinationUserId = await resolveProspectWorkspaceUserId(
+          (req.user as { id: string }).id,
+        );
         const outcome = await prospectImportService.previewGhlProspectImport({
           integrationId,
           locationId: locationId.trim(),
@@ -100,7 +119,13 @@ export function registerProspectImportRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const job = await prospectImportService.getGhlProspectPreviewJob(req.params.jobId);
+        const workspaceUserId = await resolveProspectWorkspaceUserId(
+          (req.user as { id: string }).id,
+        );
+        const job = await prospectImportService.getGhlProspectPreviewJob(
+          req.params.jobId,
+          workspaceUserId,
+        );
         if (!job) return res.status(404).json({ error: "Preview job not found" });
         res.json({ job });
       } catch (err) {
@@ -132,8 +157,12 @@ export function registerProspectImportRoutes(app: Express): void {
         const batchName = String(importOptions?.batchName || "").trim();
         if (!batchName) return res.status(400).json({ error: "batchName is required" });
 
+        const destinationUserId = await resolveProspectWorkspaceUserId(
+          (req.user as { id: string }).id,
+        );
         const job = await prospectImportService.createProspectImportJob({
           initiatedByUserId: (req.user as { id: string }).id,
+          destinationUserId,
           integrationId,
           locationId: locationId.trim(),
           filters: filters || {},
@@ -161,7 +190,13 @@ export function registerProspectImportRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const job = await prospectImportService.getProspectImportJob(req.params.jobId);
+        const workspaceUserId = await resolveProspectWorkspaceUserId(
+          (req.user as { id: string }).id,
+        );
+        const job = await prospectImportService.getProspectImportJob(
+          req.params.jobId,
+          workspaceUserId,
+        );
         if (!job) return res.status(404).json({ error: "Job not found" });
         res.json({ job });
       } catch (err) {
@@ -173,9 +208,12 @@ export function registerProspectImportRoutes(app: Express): void {
   app.get(
     "/api/growth-tools/prospect-import/history",
     requireProspectImportAccess,
-    async (_req, res) => {
+    async (req, res) => {
       try {
-        const history = await prospectImportService.listProspectImportHistory();
+        const destinationUserId = await resolveProspectWorkspaceUserId(
+          (req.user as { id: string }).id,
+        );
+        const history = await prospectImportService.listProspectImportHistory(30, destinationUserId);
         res.json({ history });
       } catch (err) {
         res.status(500).json({ error: "Failed to load import history" });
@@ -188,7 +226,13 @@ export function registerProspectImportRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const preview = await prospectImportService.previewProspectImportUndo(req.params.jobId);
+        const workspaceUserId = await resolveProspectWorkspaceUserId(
+          (req.user as { id: string }).id,
+        );
+        const preview = await prospectImportService.previewProspectImportUndo(
+          req.params.jobId,
+          workspaceUserId,
+        );
         if (!preview) return res.status(404).json({ error: "Job not found" });
         res.json({ preview });
       } catch (err) {
@@ -202,9 +246,13 @@ export function registerProspectImportRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
+        const workspaceUserId = await resolveProspectWorkspaceUserId(
+          (req.user as { id: string }).id,
+        );
         const result = await prospectImportService.executeProspectImportUndo({
           jobId: req.params.jobId,
           undoneByUserId: (req.user as { id: string }).id,
+          workspaceUserId,
         });
         res.json({ result });
       } catch (err) {
@@ -282,9 +330,11 @@ export function registerProspectImportRoutes(app: Express): void {
   app.get(
     "/api/growth-tools/prospect-import/dashboard",
     requireProspectImportAccess,
-    async (_req, res) => {
+    async (req, res) => {
       try {
-        const destinationUserId = await prospectImportService.resolveProspectImportDestinationUserId();
+        const destinationUserId = await resolveProspectWorkspaceUserId(
+          (req.user as { id: string }).id,
+        );
         const stats = await prospectImportService.getProspectImportDashboardStats(destinationUserId);
         res.json(stats);
       } catch (err) {

@@ -18,6 +18,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Users,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -32,6 +33,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useProspectAiStatus, PROSPECT_AI_PATH } from "@/lib/prospectAi";
 
 function readCollapsed(): boolean {
   try {
@@ -52,6 +54,8 @@ export function Sidebar() {
   const { logout, user } = useAuth();
   const { t } = useTranslation();
   const isRTL = getDirection() === "rtl";
+  const prospectAiStatus = useProspectAiStatus();
+  const prospectAiActivated = Boolean(prospectAiStatus.data?.activated);
 
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
@@ -89,6 +93,21 @@ export function Sidebar() {
         { icon: Brain, label: t("nav.aiBrain", "AI Features"), href: "/app/ai-brain", testId: "sidebar-ai-brain" },
       ],
     },
+    ...(prospectAiActivated
+      ? [
+          {
+            label: t("nav.growthEngines", "Growth Engines"),
+            items: [
+              {
+                icon: Sparkles,
+                label: t("nav.prospectAi", "Prospect AI"),
+                href: PROSPECT_AI_PATH,
+                testId: "sidebar-prospect-ai",
+              },
+            ],
+          },
+        ]
+      : []),
     {
       label: t("nav.toolsSetup", "Tools & Setup"),
       items: [

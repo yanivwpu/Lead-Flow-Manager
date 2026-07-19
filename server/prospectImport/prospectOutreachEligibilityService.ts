@@ -197,6 +197,7 @@ export async function loadPriorProspectOutreachEvidence(
     id: string;
     subject: string | null;
     hasOutbound: boolean;
+    lastMessageAt: number;
   }> = [];
 
   for (const conv of withConvs?.conversations || []) {

@@ -50,6 +50,31 @@ export const TEMPLATES_GROWTH_ENGINES_TAB_PATH = "/app/templates?tab=growth-engi
 
 export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
   {
+    sortOrder: 5,
+    slug: "prospect-ai",
+    title: "Prospect AI",
+    industry: "Sales & outreach",
+    badges: ["Featured", "AI Discovery", "Campaigns"],
+    summary:
+      "Discover potential customers, analyze their fit with AI, launch personalized outreach campaigns, and manage every reply from one unified inbox.",
+    benefits: [
+      "Discover prospects by type and location",
+      "AI fit review before you outreach",
+      "Campaign queue into a unified inbox",
+    ],
+    status: "available",
+    detailHref: "/app/prospect-ai",
+    ctaLabel: "Activate",
+    placeholderKey: "capital",
+    oneTimePrice: null,
+    subscriptionRequirementShort: "Starter 100 / Pro 500 Prospect Discoveries included each month",
+    monthlyRequirementLabel: null,
+    monthlyRequirementBreakdown: null,
+    requirements: [],
+    metaFeesNote: null,
+    galleryPricingMode: "show",
+  },
+  {
     sortOrder: 10,
     slug: "realtor-growth-engine",
     title: "Realtor Growth Engine",

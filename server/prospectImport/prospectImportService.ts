@@ -128,12 +128,22 @@ export async function getProspectImportDashboardStats(
   };
 }
 
-export async function listProspectImportHistory(limit = 30): Promise<ProspectImportHistoryItem[]> {
-  const rows = await db
-    .select()
-    .from(prospectImportJobs)
-    .orderBy(desc(prospectImportJobs.createdAt))
-    .limit(limit);
+export async function listProspectImportHistory(
+  limit = 30,
+  destinationUserId?: string,
+): Promise<ProspectImportHistoryItem[]> {
+  const rows = destinationUserId
+    ? await db
+        .select()
+        .from(prospectImportJobs)
+        .where(eq(prospectImportJobs.destinationUserId, destinationUserId))
+        .orderBy(desc(prospectImportJobs.createdAt))
+        .limit(limit)
+    : await db
+        .select()
+        .from(prospectImportJobs)
+        .orderBy(desc(prospectImportJobs.createdAt))
+        .limit(limit);
   return Promise.all(rows.map(mapHistoryItem));
 }
 
@@ -146,6 +156,8 @@ export async function createProspectImportJob(params: {
   previewTotal: number;
   previewJobId?: string;
   filterFingerprint?: string;
+  /** When set (Prospect AI workspace), imports land in the caller's CRM — not the legacy fixed destination. */
+  destinationUserId?: string;
 }): Promise<ProspectImportJobSummary> {
   const batchName = String(params.importOptions.batchName || "").trim();
   if (!batchName) throw new Error("Batch name is required");
@@ -153,16 +165,20 @@ export async function createProspectImportJob(params: {
     throw new Error("previewJobId is required — run preview before import");
   }
 
-  const destinationUserId = await resolveProspectImportDestinationUserId();
+  const destinationUserId =
+    String(params.destinationUserId || "").trim() ||
+    (await resolveProspectImportDestinationUserId());
   const integration = await getIntegrationById(params.integrationId);
-  const locationId = integration
-    ? resolveGhlProspectLocationId(integration, params.locationId)
-    : params.locationId.trim();
+  if (!integration?.isActive || integration.userId !== destinationUserId) {
+    throw new Error("GHL integration not found or inactive");
+  }
+  const locationId = resolveGhlProspectLocationId(integration, params.locationId);
   if (!locationId) throw new Error("GHL token or location unavailable");
 
   const previewData = await loadPreviewSnapshotsForImport(
     params.previewJobId.trim(),
     params.importOptions.selectedExternalIds,
+    destinationUserId,
   );
 
   validatePreviewImportRequest({
@@ -223,9 +239,15 @@ export async function createProspectImportJob(params: {
   return mapJobSummary(row);
 }
 
-export async function getProspectImportJob(jobId: string): Promise<ProspectImportJobSummary | null> {
+export async function getProspectImportJob(
+  jobId: string,
+  workspaceUserId?: string,
+): Promise<ProspectImportJobSummary | null> {
   const rows = await db.select().from(prospectImportJobs).where(eq(prospectImportJobs.id, jobId)).limit(1);
-  return rows[0] ? mapJobSummary(rows[0]) : null;
+  const row = rows[0];
+  if (!row) return null;
+  if (workspaceUserId && row.destinationUserId !== workspaceUserId) return null;
+  return mapJobSummary(row);
 }
 
 async function updateJob(

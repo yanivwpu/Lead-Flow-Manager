@@ -674,8 +674,25 @@ function ProspectIntelligenceDetailDialog({
           </div>
 
           <div>
-            <p className="font-medium text-gray-900">Internal reasoning</p>
-            <p className="mt-1 text-gray-600">{intel.reasoningSummary || "—"}</p>
+            <p className="font-medium text-gray-900">Why AI Recommends This Prospect</p>
+            {(() => {
+              const raw = (intel.reasoningSummary || "").trim();
+              if (!raw) return <p className="mt-1 text-gray-600">—</p>;
+              const bullets = raw
+                .split(/\n+|(?<=\.)\s+(?=[A-Z])/)
+                .map((s) => s.replace(/^[-•*\d.)\s]+/, "").trim())
+                .filter(Boolean);
+              if (bullets.length > 1) {
+                return (
+                  <ul className="mt-2 list-disc space-y-1.5 ps-5 text-gray-600">
+                    {bullets.map((b) => (
+                      <li key={b.slice(0, 48)}>{b}</li>
+                    ))}
+                  </ul>
+                );
+              }
+              return <p className="mt-1 text-gray-600">{raw}</p>;
+            })()}
           </div>
 
           {approveUi.isApproved || approveUi.isOutreachSentOrLater ? (
@@ -772,6 +789,8 @@ function ProspectIntelligenceDetailDialog({
 export function ProspectIntelligencePanel(props: {
   activeAnalysisJob: ProspectIntelligenceJobSummary | null;
   onAnalysisJobUpdate: (job: ProspectIntelligenceJobSummary | null) => void;
+  /** When true, omit outer top border (Prospect AI workspace tabs). */
+  embedded?: boolean;
 }) {
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [businessFilter, setBusinessFilter] = useState<string>("all");
@@ -1176,10 +1195,10 @@ export function ProspectIntelligencePanel(props: {
   const bulkJob = bulkJobQuery.data?.job;
 
   return (
-    <section className="mt-10 space-y-5 border-t pt-8">
+    <section className={props.embedded ? "space-y-5" : "mt-10 space-y-5 border-t pt-8"}>
       <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
         <Sparkles className="h-4 w-4 text-brand-green" />
-        Prospect AI Intelligence
+        {props.embedded ? "Review" : "Prospect AI Intelligence"}
       </h3>
       <p className="text-sm text-gray-600">
         Classify imported prospects, score fit, draft personalized outreach, then approve in batches
@@ -1261,7 +1280,7 @@ export function ProspectIntelligencePanel(props: {
               disabled={previewQueueMutation.isPending}
               onClick={() => previewQueueMutation.mutate(approveHandoff.approvedContactIds)}
             >
-              Queue {approveHandoff.approved} for outreach
+              Queue {approveHandoff.approved} for campaign
             </Button>
           </div>
         </div>
@@ -1395,7 +1414,7 @@ export function ProspectIntelligencePanel(props: {
             disabled={!selectedCount || bulkApproveMutation.isPending}
             onClick={() => bulkApproveMutation.mutate()}
           >
-            <Check className="mr-1 h-3.5 w-3.5" /> Approve selected
+            <Check className="mr-1 h-3.5 w-3.5" /> Bulk Approve
           </Button>
           <Button
             type="button"
@@ -1411,10 +1430,10 @@ export function ProspectIntelligencePanel(props: {
             size="sm"
             className="bg-brand-green hover:bg-emerald-700"
             disabled={!selectedCount || previewQueueMutation.isPending}
-            onClick={() => previewQueueMutation.mutate()}
+            onClick={() => previewQueueMutation.mutate(undefined)}
             data-testid="pi-queue-outreach"
           >
-            <Mail className="mr-1 h-3.5 w-3.5" /> Queue for outreach
+            <Mail className="mr-1 h-3.5 w-3.5" /> Send to Campaign
           </Button>
         </div>
       </div>

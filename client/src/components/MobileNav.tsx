@@ -12,6 +12,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useTranslation } from "react-i18next";
 import { getDirection } from "@/lib/i18n";
+import { PROSPECT_AI_PATH, useProspectAiStatus } from "@/lib/prospectAi";
 
 export function MobileNav() {
   const [location] = useLocation();
@@ -19,6 +20,8 @@ export function MobileNav() {
   const { logout, user } = useAuth();
   const { t } = useTranslation();
   const isRTL = getDirection() === 'rtl';
+  const prospectAiStatus = useProspectAiStatus();
+  const prospectAiActivated = Boolean(prospectAiStatus.data?.activated);
 
   const mainNavItems = [
     { icon: Inbox, label: t('nav.inbox', 'Inbox'), href: "/app/inbox", testId: "mobile-nav-inbox" },
@@ -29,6 +32,9 @@ export function MobileNav() {
   const moreNavItems = [
     { label: t('nav.chatbot', 'Flow Builder'), href: "/app/chatbot", testId: "chatbot" },
     { label: t('nav.automation', 'Automations'), href: "/app/workflows", testId: "automation" },
+    ...(prospectAiActivated
+      ? [{ label: t('nav.prospectAi', 'Prospect AI'), href: PROSPECT_AI_PATH, testId: "prospect-ai" }]
+      : []),
     { label: t('nav.templates', 'Templates'), href: "/app/templates", testId: "templates" },
     { label: t('nav.websiteWidget', 'Website Widget'), href: "/app/widget", testId: "website-widget" },
     { label: t('nav.integrations', 'Integrations'), href: "/app/integrations", testId: "integrations" },

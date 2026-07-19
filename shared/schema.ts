@@ -2389,3 +2389,98 @@ export const automationSendDedup = pgTable("automation_send_dedup", {
 
 export type AutomationSendDedup = typeof automationSendDedup.$inferSelect;
 export type InsertAutomationSendDedup = typeof automationSendDedup.$inferInsert;
+
+// ─── Prospect AI (customer-facing Growth Engine discovery) ─────────────────────
+/** Workspace-scoped activation for the authenticated account (never fixed destination). */
+export const prospectAiActivations = pgTable("prospect_ai_activations", {
+  workspaceUserId: varchar("workspace_user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  activatedByUserId: varchar("activated_by_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull().default("google_places"),
+  status: text("status").notNull().default("active"),
+  activatedAt: timestamp("activated_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type ProspectAiActivation = typeof prospectAiActivations.$inferSelect;
+
+export const prospectAiDiscoverySearches = pgTable(
+  "prospect_ai_discovery_searches",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    workspaceUserId: varchar("workspace_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdByUserId: varchar("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    businessType: text("business_type").notNull(),
+    location: text("location").notNull(),
+    radiusKm: numeric("radius_km", { precision: 8, scale: 2 }),
+    provider: text("provider").notNull().default("google_places"),
+    status: text("status").notNull().default("completed"),
+    resultCount: integer("result_count").notNull().default(0),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    workspaceCreatedIdx: index("prospect_ai_discovery_searches_workspace_created_idx").on(
+      t.workspaceUserId,
+      t.createdAt,
+    ),
+  }),
+);
+
+export type ProspectAiDiscoverySearch = typeof prospectAiDiscoverySearches.$inferSelect;
+
+/**
+ * Persisted discovery rows — monthly quota is derived from count(created_at in period)
+ * scoped by workspace_user_id.
+ */
+export const prospectAiDiscoveryResults = pgTable(
+  "prospect_ai_discovery_results",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    searchId: varchar("search_id")
+      .notNull()
+      .references(() => prospectAiDiscoverySearches.id, { onDelete: "cascade" }),
+    workspaceUserId: varchar("workspace_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull().default("google_places"),
+    providerPlaceId: text("provider_place_id").notNull(),
+    name: text("name").notNull(),
+    businessType: text("business_type"),
+    address: text("address"),
+    phone: text("phone"),
+    website: text("website"),
+    email: text("email"),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    rating: numeric("rating", { precision: 3, scale: 1 }),
+    reviewCount: integer("review_count"),
+    rawPayload: jsonb("raw_payload").notNull().default(sql`'{}'::jsonb`),
+    contactId: varchar("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    sentToReviewAt: timestamp("sent_to_review_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    searchPlaceUq: uniqueIndex("prospect_ai_discovery_results_search_place_uq").on(
+      t.searchId,
+      t.providerPlaceId,
+    ),
+    workspaceCreatedIdx: index("prospect_ai_discovery_results_workspace_created_idx").on(
+      t.workspaceUserId,
+      t.createdAt,
+    ),
+    workspaceContactIdx: index("prospect_ai_discovery_results_workspace_contact_idx").on(
+      t.workspaceUserId,
+      t.contactId,
+    ),
+  }),
+);
+
+export type ProspectAiDiscoveryResult = typeof prospectAiDiscoveryResults.$inferSelect;

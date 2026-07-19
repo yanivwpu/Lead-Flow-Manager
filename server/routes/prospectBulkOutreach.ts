@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import type { ProspectIntelligenceListFilters } from "@shared/prospectImport";
 import type { ProspectOutreachPreferredChannel } from "@shared/prospectBulkOutreach";
 import { PROSPECT_BULK_MAX_BATCH_SIZE } from "@shared/prospectBulkSelection";
@@ -9,7 +9,7 @@ import {
   ProspectBulkSelectionError,
   resolveProspectBulkSelection,
 } from "../prospectImport/prospectBulkSelectionService";
-import { resolveProspectImportDestinationUserId } from "../prospectImport/prospectImportService";
+import { resolveProspectWorkspaceUserId } from "../prospectImport/prospectWorkspaceScope";
 
 type SelectionBody = {
   contactIds?: string[];
@@ -17,12 +17,17 @@ type SelectionBody = {
   filters?: ProspectIntelligenceListFilters;
 };
 
-async function resolveFromBody(body: SelectionBody) {
+async function resolveFromBody(body: SelectionBody, workspaceUserId: string) {
   return resolveProspectBulkSelection({
     contactIds: body.contactIds,
     allFiltered: body.allFiltered === true,
     filters: body.filters,
+    workspaceUserId,
   });
+}
+
+async function workspaceFromReq(req: Request): Promise<string> {
+  return resolveProspectWorkspaceUserId((req.user as { id: string }).id);
 }
 
 function selectionErrorResponse(err: unknown, res: import("express").Response) {
@@ -38,13 +43,13 @@ function selectionErrorResponse(err: unknown, res: import("express").Response) {
 }
 
 export function registerProspectBulkOutreachRoutes(app: Express): void {
-  // Resolve selection (confirmation counts) — frozen IDs for subsequent actions
   app.post(
     "/api/growth-tools/prospect-intelligence/resolve-selection",
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const selection = await resolveFromBody(req.body || {});
+        const workspaceUserId = await workspaceFromReq(req);
+        const selection = await resolveFromBody(req.body || {}, workspaceUserId);
         res.json({ selection });
       } catch (err) {
         if (selectionErrorResponse(err, res)) return;
@@ -53,19 +58,20 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
     },
   );
 
-  // --- Bulk AI analysis ---
   app.post(
     "/api/growth-tools/prospect-intelligence/bulk-analyze",
     requireProspectImportAccess,
     async (req, res) => {
       try {
         const userId = (req.user as { id: string }).id;
+        const workspaceUserId = await workspaceFromReq(req);
         const body = req.body as SelectionBody & { force?: boolean };
-        const selection = await resolveFromBody(body);
+        const selection = await resolveFromBody(body, workspaceUserId);
 
         const job = await prospectBulkAnalysisService.createBulkAnalysisJob({
           contactIds: selection.contactIds,
           initiatedByUserId: userId,
+          workspaceUserId,
           selectionMode: selection.selectionMode,
           force: body.force === true,
           filtersSnapshot: selection.filters || null,
@@ -82,9 +88,10 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
   app.get(
     "/api/growth-tools/prospect-intelligence/bulk-analyze/active",
     requireProspectImportAccess,
-    async (_req, res) => {
+    async (req, res) => {
       try {
-        const job = await prospectBulkAnalysisService.getActiveOrRecentBulkAnalysisJob();
+        const workspaceUserId = await workspaceFromReq(req);
+        const job = await prospectBulkAnalysisService.getActiveOrRecentBulkAnalysisJob(workspaceUserId);
         res.json({ job });
       } catch (err) {
         res.status(500).json({ error: "Failed to load analysis job" });
@@ -97,8 +104,11 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
+        const workspaceUserId = await workspaceFromReq(req);
         const job = await prospectBulkAnalysisService.getBulkAnalysisJob(req.params.jobId);
-        if (!job) return res.status(404).json({ error: "Analysis job not found" });
+        if (!job || job.workspaceUserId !== workspaceUserId) {
+          return res.status(404).json({ error: "Analysis job not found" });
+        }
         res.json({ job });
       } catch (err) {
         res.status(500).json({ error: "Failed to load analysis job" });
@@ -112,9 +122,15 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
     async (req, res) => {
       try {
         const userId = (req.user as { id: string }).id;
+        const workspaceUserId = await workspaceFromReq(req);
+        const existing = await prospectBulkAnalysisService.getBulkAnalysisJob(req.params.jobId);
+        if (!existing || existing.workspaceUserId !== workspaceUserId) {
+          return res.status(404).json({ error: "Analysis job not found" });
+        }
         const job = await prospectBulkAnalysisService.retryFailedBulkAnalysisItems({
           jobId: req.params.jobId,
           initiatedByUserId: userId,
+          workspaceUserId,
         });
         res.status(202).json({ job });
       } catch (err) {
@@ -123,17 +139,18 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
     },
   );
 
-  // --- Bulk review actions ---
   app.post(
     "/api/growth-tools/prospect-intelligence/bulk-approve",
     requireProspectImportAccess,
     async (req, res) => {
       try {
         const userId = (req.user as { id: string }).id;
-        const selection = await resolveFromBody(req.body || {});
+        const workspaceUserId = await workspaceFromReq(req);
+        const selection = await resolveFromBody(req.body || {}, workspaceUserId);
         const result = await prospectOutreachQueueService.bulkApproveProspects({
           contactIds: selection.contactIds,
           userId,
+          workspaceUserId,
         });
         res.json({ ...result, selection });
       } catch (err) {
@@ -148,8 +165,12 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const selection = await resolveFromBody(req.body || {});
-        const result = await prospectOutreachQueueService.bulkMarkNeedsReview(selection.contactIds);
+        const workspaceUserId = await workspaceFromReq(req);
+        const selection = await resolveFromBody(req.body || {}, workspaceUserId);
+        const result = await prospectOutreachQueueService.bulkMarkNeedsReview(
+          selection.contactIds,
+          workspaceUserId,
+        );
         res.json({ ...result, selection });
       } catch (err) {
         if (selectionErrorResponse(err, res)) return;
@@ -158,19 +179,20 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
     },
   );
 
-  // --- Queue preview / create ---
   app.post(
     "/api/growth-tools/prospect-outreach/queue/preview",
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const selection = await resolveFromBody(req.body || {});
+        const workspaceUserId = await workspaceFromReq(req);
+        const selection = await resolveFromBody(req.body || {}, workspaceUserId);
         const preferredChannel = req.body?.preferredChannel as
           | ProspectOutreachPreferredChannel
           | undefined;
         const preview = await prospectOutreachQueueService.previewQueueBatch({
           contactIds: selection.contactIds,
           preferredChannel,
+          workspaceUserId,
         });
         res.json({ preview, selection });
       } catch (err) {
@@ -186,7 +208,8 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
     async (req, res) => {
       try {
         const userId = (req.user as { id: string }).id;
-        const selection = await resolveFromBody(req.body || {});
+        const workspaceUserId = await workspaceFromReq(req);
+        const selection = await resolveFromBody(req.body || {}, workspaceUserId);
         const preferredChannel = req.body?.preferredChannel as
           | ProspectOutreachPreferredChannel
           | undefined;
@@ -194,6 +217,7 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
           contactIds: selection.contactIds,
           createdByUserId: userId,
           preferredChannel,
+          workspaceUserId,
           idempotencyKey:
             typeof req.body?.idempotencyKey === "string" ? req.body.idempotencyKey : undefined,
         });
@@ -211,8 +235,12 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
+        const workspaceUserId = await workspaceFromReq(req);
         const status = typeof req.query.status === "string" ? req.query.status : undefined;
-        const items = await prospectOutreachQueueService.listQueueItems({ status });
+        const items = await prospectOutreachQueueService.listQueueItems({
+          status,
+          workspaceUserId,
+        });
         res.json({ items });
       } catch (err) {
         res.status(500).json({ error: "Failed to list queue" });
@@ -223,9 +251,10 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
   app.get(
     "/api/growth-tools/prospect-outreach/dashboard",
     requireProspectImportAccess,
-    async (_req, res) => {
+    async (req, res) => {
       try {
-        const dashboard = await prospectOutreachQueueService.getQueueDashboard();
+        const workspaceUserId = await workspaceFromReq(req);
+        const dashboard = await prospectOutreachQueueService.getQueueDashboard(workspaceUserId);
         res.json(dashboard);
       } catch (err) {
         res.status(500).json({ error: "Failed to load outreach dashboard" });
@@ -236,9 +265,10 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
   app.get(
     "/api/growth-tools/prospect-outreach/settings",
     requireProspectImportAccess,
-    async (_req, res) => {
+    async (req, res) => {
       try {
-        const settings = await prospectOutreachQueueService.getOutreachSettings();
+        const workspaceUserId = await workspaceFromReq(req);
+        const settings = await prospectOutreachQueueService.getOutreachSettings(workspaceUserId);
         res.json({ settings });
       } catch (err) {
         res.status(500).json({ error: "Failed to load settings" });
@@ -251,7 +281,7 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const workspaceUserId = await resolveProspectImportDestinationUserId();
+        const workspaceUserId = await workspaceFromReq(req);
         const settings = await prospectOutreachQueueService.updateOutreachSettings(
           workspaceUserId,
           req.body || {},
@@ -266,9 +296,9 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
   app.post(
     "/api/growth-tools/prospect-outreach/queue/start",
     requireProspectImportAccess,
-    async (_req, res) => {
+    async (req, res) => {
       try {
-        const workspaceUserId = await resolveProspectImportDestinationUserId();
+        const workspaceUserId = await workspaceFromReq(req);
         const settings = await prospectOutreachQueueService.startQueue(workspaceUserId);
         res.json({ settings });
       } catch (err) {
@@ -280,9 +310,9 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
   app.post(
     "/api/growth-tools/prospect-outreach/queue/pause",
     requireProspectImportAccess,
-    async (_req, res) => {
+    async (req, res) => {
       try {
-        const workspaceUserId = await resolveProspectImportDestinationUserId();
+        const workspaceUserId = await workspaceFromReq(req);
         const settings = await prospectOutreachQueueService.pauseQueue(workspaceUserId);
         res.json({ settings });
       } catch (err) {
@@ -294,9 +324,9 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
   app.post(
     "/api/growth-tools/prospect-outreach/queue/resume",
     requireProspectImportAccess,
-    async (_req, res) => {
+    async (req, res) => {
       try {
-        const workspaceUserId = await resolveProspectImportDestinationUserId();
+        const workspaceUserId = await workspaceFromReq(req);
         const settings = await prospectOutreachQueueService.resumeQueue(workspaceUserId);
         res.json({ settings });
       } catch (err) {
@@ -310,7 +340,7 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const workspaceUserId = await resolveProspectImportDestinationUserId();
+        const workspaceUserId = await workspaceFromReq(req);
         const result = await prospectOutreachQueueService.removeQueueItem({
           queueItemId: req.params.itemId,
           workspaceUserId,
@@ -327,7 +357,7 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const workspaceUserId = await resolveProspectImportDestinationUserId();
+        const workspaceUserId = await workspaceFromReq(req);
         const result = await prospectOutreachQueueService.retryFailedQueueItem({
           queueItemId: req.params.itemId,
           workspaceUserId,

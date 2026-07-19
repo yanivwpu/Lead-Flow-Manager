@@ -18,7 +18,17 @@ import {
 } from "@shared/whachatProductPositioning";
 import { readProspectImportMetadata } from "./prospectIntelligenceEligibility";
 
-export const PROSPECT_INTELLIGENCE_AI_VERSION = "v2";
+export const PROSPECT_INTELLIGENCE_AI_VERSION = "v3-ai-brain-context";
+
+export type ProspectWorkspaceBusinessContext = {
+  configured: boolean;
+  businessName?: string;
+  industry?: string;
+  servicesProducts?: string;
+  websiteKnowledgeSummary?: string;
+  faqs?: Array<{ question: string; answer: string }>;
+  executiveSummary?: string;
+};
 
 export type ProspectIntelligenceAiInput = {
   name: string;
@@ -305,11 +315,14 @@ export function detectUnsupportedOutreachClaims(
 export function applyOutreachMessageGuardrails(
   result: ProspectIntelligence,
   input: ProspectIntelligenceAiInput,
+  workspaceContext?: ProspectWorkspaceBusinessContext,
 ): ProspectIntelligence {
   const guarded = { ...result };
 
   if (requiresNeutralOutreachMode(guarded)) {
-    guarded.suggestedFirstMessage = buildNeutralFirstMessage(input);
+    guarded.suggestedFirstMessage = workspaceContext
+      ? buildWorkspaceFirstMessage(input, workspaceContext)
+      : buildNeutralFirstMessage(input);
     guarded.suggestedOutreachAngle =
       "Neutral introduction — limited prospect data available; qualify before pitching a specific offer.";
     return guarded;
@@ -318,7 +331,9 @@ export function applyOutreachMessageGuardrails(
   const message = guarded.suggestedFirstMessage || "";
   const violations = detectUnsupportedOutreachClaims(message, input, guarded);
   if (violations.length > 0) {
-    guarded.suggestedFirstMessage = buildTailoredFirstMessage(input, guarded);
+    guarded.suggestedFirstMessage = workspaceContext
+      ? buildWorkspaceFirstMessage(input, workspaceContext)
+      : buildTailoredFirstMessage(input, guarded);
     if (guarded.suggestedOutreachAngle) {
       const angleViolations = detectUnsupportedOutreachClaims(
         guarded.suggestedOutreachAngle,
@@ -333,19 +348,108 @@ export function applyOutreachMessageGuardrails(
     return guarded;
   }
 
-  const weak = detectWeakWhachatPositioning(message);
-  const namesProduct = /whachat\s*crm/i.test(message);
-  if (weak.length > 0 || (namesProduct && !hasConcreteWhachatPositioning(message))) {
-    guarded.suggestedFirstMessage = buildTailoredFirstMessage(input, guarded);
+  if (!workspaceContext) {
+    const weak = detectWeakWhachatPositioning(message);
+    const namesProduct = /whachat\s*crm/i.test(message);
+    if (weak.length > 0 || (namesProduct && !hasConcreteWhachatPositioning(message))) {
+      guarded.suggestedFirstMessage = buildTailoredFirstMessage(input, guarded);
+    }
   }
 
   return guarded;
 }
 
-export function buildProspectIntelligencePrompt(input: ProspectIntelligenceAiInput): string {
-  return `Analyze this imported prospect for WhachatCRM outreach and classification.
+function buildWorkspaceFirstMessage(
+  input: ProspectIntelligenceAiInput,
+  context: ProspectWorkspaceBusinessContext,
+): string {
+  if (!context.configured) return "";
+  const name = firstNameFromInput(input);
+  const sender = context.businessName?.trim() || "our team";
+  const value =
+    readableServices(context.servicesProducts) ||
+    context.executiveSummary?.trim().replace(/\s+/g, " ").slice(0, 180) ||
+    "help organizations improve customer acquisition and follow-up";
+  return `Hi ${name}, I'm reaching out from ${sender}. We ${value.replace(/^[Ww]e\s+/, "")}. Would a quick conversation be useful?`.slice(
+    0,
+    400,
+  );
+}
 
-${buildWhachatProductContextForPrompt()}
+function readableServices(raw: string | undefined): string | undefined {
+  const value = raw?.trim();
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (Array.isArray(parsed)) {
+      const entries = parsed
+        .map((item) =>
+          typeof item === "string"
+            ? item
+            : item && typeof item === "object"
+              ? String(
+                  (item as Record<string, unknown>).name ||
+                    (item as Record<string, unknown>).title ||
+                    "",
+                )
+              : "",
+        )
+        .filter(Boolean);
+      if (entries.length) return `offer ${entries.slice(0, 3).join(", ")}`.slice(0, 180);
+    }
+  } catch {
+    // AI Brain also supports plain text; keep it as written.
+  }
+  return value.replace(/\s+/g, " ").slice(0, 180);
+}
+
+function buildWorkspaceContextForPrompt(
+  context: ProspectWorkspaceBusinessContext | undefined,
+): string {
+  if (!context) return buildWhachatProductContextForPrompt();
+  if (!context.configured) {
+    return `WORKSPACE BUSINESS CONTEXT:
+AI Brain is not configured. Perform basic prospect analysis only.
+- Score data completeness, business legitimacy signals, online presence, and outreach readiness.
+- Do not infer fit for a specific product or service.
+- Leave suggestedFirstMessage empty rather than inventing what the workspace sells.`;
+  }
+  return `WORKSPACE BUSINESS CONTEXT (AI Brain is the source of truth):
+${JSON.stringify(
+  {
+    businessName: context.businessName || null,
+    industry: context.industry || null,
+    productsAndServices: context.servicesProducts || null,
+    websiteKnowledge: context.websiteKnowledgeSummary || null,
+    faqs: context.faqs || [],
+    executiveSummary: context.executiveSummary || null,
+  },
+  null,
+  2,
+)}
+
+Use this context to assess fit and personalize outreach. Never ask what the workspace sells and never invent details beyond this context.`;
+}
+
+export function buildProspectIntelligencePrompt(
+  input: ProspectIntelligenceAiInput,
+  workspaceContext?: ProspectWorkspaceBusinessContext,
+): string {
+  const offerGuidance = workspaceContext
+    ? `OFFER GUIDANCE:
+- Use recommendedOffer="general_demo" when the prospect is a plausible fit for the workspace's products/services.
+- Use recommendedOffer="not_a_fit" only when evidence clearly indicates poor fit.
+- Legacy WhachatCRM offer categories are reserved for internal use and must not be selected for customer workspaces.`
+    : `OFFER ↔ SEGMENT HINTS:
+- partner_program → partner
+- agency_white_label → agency / ghl_agency
+- shopify_app → shopify
+- real_estate_growth_engine → real_estate
+- core_whachatcrm / general_demo → local_service or general`;
+
+  return `Analyze this prospect for acquisition fit, outreach readiness, and classification.
+
+${buildWorkspaceContextForPrompt(workspaceContext)}
 
 STRICT RULES:
 - Never claim facts not supported by the input. Use likelihood scores 0-100 instead of definitive labels.
@@ -354,19 +458,14 @@ STRICT RULES:
 - Use concise internal language. suggestedFirstMessage max 400 chars.
 
 OUTREACH MESSAGE RULES (suggestedFirstMessage):
-- Ground WhachatCRM positioning in the PRODUCT CONTEXT above. Pick 2–4 benefits for THIS prospect based on industry, business type, likelihood scores, and recommendedOffer.
-- Never claim the prospect showed interest in WhachatCRM, messaging, CRM, AI, Shopify, real estate, agency services, or any other topic unless explicit source evidence says so.
+- Ground positioning only in the WORKSPACE BUSINESS CONTEXT above. If AI Brain is not configured, leave suggestedFirstMessage empty.
+- Never claim the prospect showed interest in the workspace, its products, messaging, CRM, AI, Shopify, real estate, agency services, or any other topic unless explicit source evidence says so.
 - Never use phrases like "I noticed your interest in...", "I saw you were looking for...", "businesses like yours", "your agency", "your store", "your clients", "your team", or "your real estate business" unless the prospect input explicitly supports that claim.
 - Do not assume the prospect owns or represents a business unless company, businessType, industry, or tags support it.
 - For needs_review / unknown-fit prospects with minimal data, write a neutral introduction that explains WhachatCRM accurately (CRM + unified inbox + AI engagement) and asks whether it is relevant — without pretending to know their business or intent.
-- The recommendedOffer must change the pitch materially (partner_program → partnership + 30% lifetime recurring commission; agency_white_label → agency/client-service + white-label; shopify_app → commerce messaging; real_estate_growth_engine → RE Growth Engine; core_whachatcrm/general_demo → operational product value).
+- The recommendedOffer must follow the offer guidance below.
 
-OFFER ↔ SEGMENT HINTS:
-- partner_program → partner
-- agency_white_label → agency / ghl_agency
-- shopify_app → shopify
-- real_estate_growth_engine → real_estate
-- core_whachatcrm / general_demo → local_service or general
+${offerGuidance}
 
 Prospect input JSON:
 ${JSON.stringify(input, null, 2)}
@@ -397,6 +496,7 @@ Return JSON only with this schema:
 export function buildInsufficientDataResult(
   model: string,
   input?: ProspectIntelligenceAiInput,
+  workspaceContext?: ProspectWorkspaceBusinessContext,
 ): ProspectIntelligence {
   const base: ProspectIntelligence = {
     industry: undefined,
@@ -418,13 +518,14 @@ export function buildInsufficientDataResult(
     reviewStatus: "needs_review",
   };
   if (!input) return base;
-  return applyOutreachMessageGuardrails(base, input);
+  return applyOutreachMessageGuardrails(base, input, workspaceContext);
 }
 
 export function parseAndValidateProspectIntelligence(
   raw: unknown,
   model: string,
   input?: ProspectIntelligenceAiInput,
+  workspaceContext?: ProspectWorkspaceBusinessContext,
 ): ProspectIntelligence {
   const data = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
 
@@ -486,7 +587,7 @@ export function parseAndValidateProspectIntelligence(
   }
 
   if (input) {
-    return applyOutreachMessageGuardrails(result, input);
+    return applyOutreachMessageGuardrails(result, input, workspaceContext);
   }
 
   return result;

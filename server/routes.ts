@@ -28,6 +28,7 @@ import { registerPublicAgentPageRoutes } from "./routes/publicAgentPage";
 import { registerAgentPageSettingsRoutes } from "./routes/agentPageSettings";
 import { registerPublicListingSitemapRoutes } from "./routes/publicListingsSitemap";
 import { registerBusinessProfileRoutes } from "./routes/businessProfile";
+import { registerProspectAiRoutes } from "./routes/prospectAI";
 import {
   getWhatsAppAvailability,
   sendWhatsAppMessage,
@@ -11446,6 +11447,7 @@ export async function registerRoutes(
   registerAgentPageSettingsRoutes(app);
   registerPublicListingSitemapRoutes(app);
   registerBusinessProfileRoutes(app);
+  registerProspectAiRoutes(app);
 
   return httpServer;
 }

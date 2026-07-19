@@ -186,6 +186,15 @@ export async function previewQueueBatch(params: {
       });
       continue;
     }
+    if (contact.userId !== workspaceUserId) {
+      skips.push({
+        contactId,
+        reason: "missing_identity",
+        detail: "wrong_workspace",
+        reasonLabel: prospectOutreachEligibilityReasonLabel("missing_identity", "wrong_workspace"),
+      });
+      continue;
+    }
     const { result } = await resolveProspectOutreachEligibilityForContact({
       contact,
       workspaceUserId,
@@ -1157,6 +1166,7 @@ export async function listWorkspaceIdsWithDueQueue(): Promise<string[]> {
 export async function bulkApproveProspects(params: {
   contactIds: string[];
   userId: string;
+  workspaceUserId?: string;
 }): Promise<{
   approved: number;
   approvedContactIds: string[];
@@ -1167,6 +1177,13 @@ export async function bulkApproveProspects(params: {
   const approvedContactIds: string[] = [];
 
   for (const contactId of Array.from(new Set(params.contactIds))) {
+    if (params.workspaceUserId) {
+      const contact = await storage.getContact(contactId);
+      if (!contact || contact.userId !== params.workspaceUserId) {
+        skipped.push({ contactId, reason: "wrong_workspace" });
+        continue;
+      }
+    }
     const rows = await db
       .select()
       .from(prospectIntelligence)
@@ -1190,7 +1207,9 @@ export async function bulkApproveProspects(params: {
       continue;
     }
     try {
-      await approveProspectIntelligence(contactId, params.userId);
+      await approveProspectIntelligence(contactId, params.userId, {
+        workspaceUserId: params.workspaceUserId,
+      });
       approvedContactIds.push(contactId);
     } catch (err) {
       skipped.push({
@@ -1202,12 +1221,15 @@ export async function bulkApproveProspects(params: {
   return { approved: approvedContactIds.length, approvedContactIds, skipped };
 }
 
-export async function bulkMarkNeedsReview(contactIds: string[]): Promise<{ updated: number }> {
+export async function bulkMarkNeedsReview(
+  contactIds: string[],
+  workspaceUserId?: string,
+): Promise<{ updated: number }> {
   const { markProspectNeedsReview } = await import("./prospectIntelligenceService");
   let updated = 0;
   for (const contactId of Array.from(new Set(contactIds))) {
     try {
-      await markProspectNeedsReview(contactId);
+      await markProspectNeedsReview(contactId, workspaceUserId);
       updated += 1;
     } catch {
       /* skip */

@@ -36,9 +36,9 @@ import { Link, useLocation, useSearch } from "wouter";
 import { 
   FileText, RefreshCw, Lock, Zap, Send, Clock, CheckCircle2, XCircle, Eye,
   AlertCircle, Image, LayoutGrid,
-  Users, Target, Sparkles, Rocket, ArrowRight, TrendingUp, Wrench,
+  Users, Target,   Sparkles, Rocket, ArrowRight, TrendingUp, Wrench,
   Search, MessageCircle, Facebook, Instagram, Building2,
-  Pencil, Pause, Play, Copy, Trash2, MoreVertical, ChevronDown,
+  Pencil, Pause, Play, Copy, Trash2, MoreVertical, ChevronDown, Star,
 } from "lucide-react";
 import {
   WhatsAppTemplateRichPreview,
@@ -78,6 +78,7 @@ import {
 } from "@shared/rgePaths";
 import { cn } from "@/lib/utils";
 import { GROWTH_ENGINE_CARDS, sortGrowthEnginesCatalog, type GrowthEngineCardModel } from "@/lib/growthEnginesCatalog";
+import { prospectDiscoveriesCatalogCopy, useProspectAiStatus } from "@/lib/prospectAi";
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
@@ -573,6 +574,7 @@ function GrowthEngineGalleryCard({
   engine,
   setLocation,
   rgeEntitlement,
+  prospectAiActivated,
 }: {
   engine: GrowthEngineCardModel;
   setLocation: (path: string, opts?: { replace?: boolean }) => void;
@@ -581,16 +583,20 @@ function GrowthEngineGalleryCard({
     purchasedAt?: string | null;
     onboardingSubmittedAt?: string | null;
   } | null;
+  prospectAiActivated?: boolean;
 }) {
   const isComingSoon = engine.status === "coming_soon";
   const showRealtorMark = engine.slug === "realtor-growth-engine";
+  const isProspectAi = engine.slug === "prospect-ai";
   const isRge = engine.slug === "realtor-growth-engine";
   const rgeEntitlementStatus = rgeEntitlement?.status ?? null;
   const rgeOwned = isRge && isRgeOwnedStatus(rgeEntitlementStatus);
   const hubHref = isRge ? getRgeHubPath(rgeEntitlementStatus, rgeEntitlement) : engine.detailHref;
   const ctaLabel = isRge
     ? getRgeGalleryCtaLabel(rgeEntitlementStatus, engine.ctaLabel)
-    : engine.ctaLabel;
+    : isProspectAi && prospectAiActivated
+      ? "Open"
+      : engine.ctaLabel;
   const statusLabel = isRge ? getRgeGalleryStatusLabel(rgeEntitlementStatus, rgeEntitlement) : null;
   const phKey = engine.placeholderKey ?? "wellness";
   const ph = GROWTH_ENGINE_PLACEHOLDER[phKey];
@@ -602,7 +608,9 @@ function GrowthEngineGalleryCard({
         "flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-white shadow-sm transition-[box-shadow,border-color,transform] duration-200",
         isComingSoon
           ? "border-gray-200/75 text-gray-800 hover:border-gray-200"
-          : "border-gray-200/90 hover:-translate-y-0.5 hover:border-gray-300/90 hover:shadow-lg",
+          : isProspectAi
+            ? "border-emerald-200/90 ring-1 ring-emerald-100/80 hover:-translate-y-0.5 hover:border-emerald-300/90 hover:shadow-lg"
+            : "border-gray-200/90 hover:-translate-y-0.5 hover:border-gray-300/90 hover:shadow-lg",
       )}
       data-testid={engine.slug === "realtor-growth-engine" ? "card-realtor-growth-engine" : `card-engine-${engine.slug}`}
     >
@@ -644,6 +652,14 @@ function GrowthEngineGalleryCard({
             </Badge>
           </div>
         ) : null}
+        {isProspectAi ? (
+          <div className="pointer-events-none absolute left-4 top-4 z-[1]">
+            <Badge className="border border-emerald-200/80 bg-white/95 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800 shadow-sm backdrop-blur-sm">
+              <Star className="mr-1 h-3 w-3 fill-current" aria-hidden />
+              Featured
+            </Badge>
+          </div>
+        ) : null}
         {isComingSoon ? (
           <div className="pointer-events-none absolute right-4 top-4 z-[1]">
             <Badge className="border border-white/30 bg-gray-900/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm backdrop-blur-sm">
@@ -663,6 +679,11 @@ function GrowthEngineGalleryCard({
               <>
                 <RealtorMark /> Growth Engine
               </>
+            ) : isProspectAi ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Star className="h-4 w-4 shrink-0 fill-amber-400 text-amber-500" aria-hidden />
+                {engine.title}
+              </span>
             ) : (
               engine.title
             )}
@@ -671,6 +692,15 @@ function GrowthEngineGalleryCard({
         <p className="text-sm leading-relaxed text-gray-600 text-pretty [overflow-wrap:anywhere]">{engine.summary}</p>
         {(() => {
           if (rgeOwned) return null;
+          if (isProspectAi) {
+            return (
+              <div className="rounded-lg border border-emerald-100/90 bg-gradient-to-br from-emerald-50/70 to-sky-50/40 px-3 py-2 shadow-sm">
+                <p className="text-sm font-semibold leading-snug text-gray-900">
+                  {engine.subscriptionRequirementShort || prospectDiscoveriesCatalogCopy()}
+                </p>
+              </div>
+            );
+          }
           const mode =
             engine.galleryPricingMode ??
             (engine.oneTimePrice ? "show" : engine.status === "coming_soon" ? "coming_soon" : "hidden");
@@ -726,7 +756,13 @@ function GrowthEngineGalleryCard({
             <Button
               className="w-full bg-brand-green text-white shadow-md shadow-emerald-900/10 ring-1 ring-emerald-600/20 hover:bg-brand-green/90"
               onClick={() => hubHref && setLocation(hubHref)}
-              data-testid={engine.slug === "realtor-growth-engine" ? "button-view-activate-engine" : undefined}
+              data-testid={
+                engine.slug === "realtor-growth-engine"
+                  ? "button-view-activate-engine"
+                  : isProspectAi
+                    ? "button-activate-prospect-ai"
+                    : undefined
+              }
             >
               {ctaLabel}
               <ArrowRight className="ml-2 h-4 w-4 shrink-0" />
@@ -752,7 +788,8 @@ function GrowthEnginesTab() {
     staleTime: 30_000,
   });
   const rgeEntitlement = rgeTemplate?.entitlement ?? null;
-  const rgeEntitlementStatus = rgeEntitlement?.status ?? null;
+  const prospectAiStatus = useProspectAiStatus();
+  const prospectAiActivated = Boolean(prospectAiStatus.data?.activated);
 
   return (
     <div className="space-y-8 md:space-y-10">
@@ -775,6 +812,7 @@ function GrowthEnginesTab() {
               engine={engine}
               setLocation={setLocation}
               rgeEntitlement={engine.slug === "realtor-growth-engine" ? rgeEntitlement : undefined}
+              prospectAiActivated={engine.slug === "prospect-ai" ? prospectAiActivated : undefined}
             />
           ))}
         </div>

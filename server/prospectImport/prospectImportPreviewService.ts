@@ -370,6 +370,7 @@ export async function createGhlProspectPreviewJob(params: {
 
 export async function getGhlProspectPreviewJob(
   jobId: string,
+  workspaceUserId?: string,
 ): Promise<ProspectImportPreviewJobPoll | null> {
   const rows = await db
     .select()
@@ -378,6 +379,7 @@ export async function getGhlProspectPreviewJob(
     .limit(1);
   const row = rows[0];
   if (!row) return null;
+  if (workspaceUserId && row.destinationUserId !== workspaceUserId) return null;
 
   const summary = mapPreviewJobSummary(row);
   if (row.status !== "completed") {
@@ -393,6 +395,7 @@ export async function getGhlProspectPreviewJob(
 export async function loadPreviewSnapshotsForImport(
   previewJobId: string,
   selectedExternalIds?: string[],
+  workspaceUserId?: string,
 ): Promise<{
   snapshots: ProspectImportMatchedSnapshot[];
   filterFingerprint: string;
@@ -408,6 +411,9 @@ export async function loadPreviewSnapshotsForImport(
     .limit(1);
   const job = rows[0];
   if (!job || job.status !== "completed") {
+    throw new Error("Preview job not found or not completed");
+  }
+  if (workspaceUserId && job.destinationUserId !== workspaceUserId) {
     throw new Error("Preview job not found or not completed");
   }
 

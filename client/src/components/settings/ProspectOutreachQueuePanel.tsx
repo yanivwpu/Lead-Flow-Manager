@@ -55,7 +55,12 @@ function statusBadge(status: string) {
   }
 }
 
-export function ProspectOutreachQueuePanel() {
+export function ProspectOutreachQueuePanel({
+  embedded = false,
+}: {
+  /** When true, omit outer top border and use Campaign Queue title (Prospect AI workspace). */
+  embedded?: boolean;
+} = {}) {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
@@ -159,10 +164,13 @@ export function ProspectOutreachQueuePanel() {
   );
 
   return (
-    <section className="mt-10 space-y-5 border-t pt-8" data-testid="prospect-outreach-queue">
+    <section
+      className={embedded ? "space-y-5" : "mt-10 space-y-5 border-t pt-8"}
+      data-testid="prospect-outreach-queue"
+    >
       <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
         <ListOrdered className="h-4 w-4 text-brand-green" />
-        Outreach Queue
+        Campaign Queue
       </h3>
       <p className="text-sm text-gray-600">
         Controlled multi-channel queue (Email enabled for bulk). Analyzing thousands ≠ sending
@@ -294,7 +302,7 @@ export function ProspectOutreachQueuePanel() {
 
       {items.length === 0 ? (
         <p className="text-sm text-gray-500">
-          No queue items yet. Approve prospects, then use Queue for outreach from Prospect Intelligence.
+          No queue items yet. Approve prospects, then use Send to Campaign from Review.
         </p>
       ) : (
         <div className="overflow-auto rounded-xl border">

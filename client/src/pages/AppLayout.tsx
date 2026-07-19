@@ -38,6 +38,7 @@ const UnifiedInbox = lazy(() => import("./UnifiedInbox").then(m => ({ default: m
 const WebsiteWidget = lazy(() => import("./WebsiteWidget").then(m => ({ default: m.WebsiteWidget })));
 const AIBrain = lazy(() => import("./AIBrain").then(m => ({ default: m.AIBrain })));
 const RealtorGrowthEngine = lazy(() => import("./RealtorGrowthEngine").then(m => ({ default: m.RealtorGrowthEngine })));
+const ProspectAI = lazy(() => import("./ProspectAI").then(m => ({ default: m.ProspectAI })));
 const Contacts = lazy(() => import("./Contacts").then(m => ({ default: m.Contacts })));
 
 const PageLoader = () => (
@@ -164,6 +165,7 @@ function AppContent() {
               <Route path="/app/contacts" component={Contacts} />
               <Route path="/app/workflows" component={Workflows} />
               <Route path="/app/chatbot" component={ChatbotBuilder} />
+              <Route path="/app/prospect-ai" component={ProspectAI} />
               <Route path="/app/templates/realtor-growth-engine/onboarding">
                 <ShopifyGrowthEngineRedirect>
                   <RealtorGrowthEngine />

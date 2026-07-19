@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type {
   ProspectImportContactFilter,
   ProspectImportLocation,
@@ -77,11 +77,16 @@ async function resolveCompanyScopedLocations(integration: Awaited<ReturnType<typ
   return listMarketplaceLocationsForCompany(companyId);
 }
 
-export async function listGhlProspectLocations(): Promise<ProspectImportLocation[]> {
+export async function listGhlProspectLocations(
+  workspaceUserId: string,
+): Promise<ProspectImportLocation[]> {
+  const ownerId = String(workspaceUserId || "").trim();
+  if (!ownerId) return [];
+
   const rows = await db
     .select()
     .from(integrations)
-    .where(eq(integrations.type, "gohighlevel"));
+    .where(and(eq(integrations.type, "gohighlevel"), eq(integrations.userId, ownerId)));
 
   const locations: ProspectImportLocation[] = [];
 
@@ -139,9 +144,13 @@ export type GhlLocationMetadata = {
 export async function getGhlLocationMetadata(
   integrationId: string,
   selectedLocationId?: string | null,
+  workspaceUserId?: string,
 ): Promise<GhlLocationMetadata> {
   const integration = await getIntegrationById(integrationId);
   if (!integration?.isActive) throw new Error("GHL integration not found or inactive");
+  if (workspaceUserId && integration.userId !== workspaceUserId) {
+    throw new Error("GHL integration not found or inactive");
+  }
   const resolved = await getGhlProspectApiToken(integration, selectedLocationId);
 
   const [tags, pipelines, users] = await Promise.all([
@@ -163,6 +172,11 @@ export async function previewGhlProspectImport(params: {
   | { mode: "sync"; result: ProspectImportPreviewResult }
   | { mode: "async"; previewJobId: string }
 > {
+  const integration = await getIntegrationById(params.integrationId);
+  if (!integration?.isActive || integration.userId !== params.destinationUserId) {
+    throw new Error("GHL integration not found or inactive");
+  }
+
   const outcome = await createGhlProspectPreviewJob({
     integrationId: params.integrationId,
     locationId: params.locationId?.trim() || "",

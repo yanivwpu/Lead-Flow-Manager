@@ -1,9 +1,10 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express } from "express";
 import type { ProspectIntelligenceListFilters } from "@shared/prospectImport";
 import { prospectIntelligenceService } from "../prospectImport/prospectIntelligenceService";
 import { getProspectImportJob } from "../prospectImport/prospectImportService";
 import { getImportJobContactIds } from "../prospectImport/prospectIntelligenceService";
 import { requireProspectImportAccess } from "./prospectImportAccess";
+import { resolveProspectWorkspaceUserId } from "../prospectImport/prospectWorkspaceScope";
 
 export function registerProspectIntelligenceRoutes(app: Express): void {
   app.post(
@@ -11,7 +12,8 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const importJob = await getProspectImportJob(req.params.jobId);
+        const workspaceUserId = await resolveProspectWorkspaceUserId((req.user as { id: string }).id);
+        const importJob = await getProspectImportJob(req.params.jobId, workspaceUserId);
         if (!importJob) return res.status(404).json({ error: "Import job not found" });
 
         const contactIds = await getImportJobContactIds(req.params.jobId);
@@ -54,9 +56,12 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
   app.get(
     "/api/growth-tools/prospect-intelligence/dashboard",
     requireProspectImportAccess,
-    async (_req, res) => {
+    async (req, res) => {
       try {
-        const counts = await prospectIntelligenceService.getProspectIntelligenceDashboardCounts();
+        const workspaceUserId = await resolveProspectWorkspaceUserId((req.user as { id: string }).id);
+        const counts = await prospectIntelligenceService.getProspectIntelligenceDashboardCounts(
+          workspaceUserId,
+        );
         res.json(counts);
       } catch (err) {
         console.error("[ProspectIntelligence] dashboard error:", err);
@@ -70,6 +75,7 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
+        const workspaceUserId = await resolveProspectWorkspaceUserId((req.user as { id: string }).id);
         const filters: ProspectIntelligenceListFilters = {
           priority: req.query.priority as ProspectIntelligenceListFilters["priority"],
           businessType: typeof req.query.businessType === "string" ? req.query.businessType : undefined,
@@ -87,7 +93,10 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
           sortDir: req.query.sortDir as ProspectIntelligenceListFilters["sortDir"],
           limit: req.query.limit ? Number(req.query.limit) : undefined,
         };
-        const items = await prospectIntelligenceService.listProspectIntelligence(filters);
+        const items = await prospectIntelligenceService.listProspectIntelligence(
+          filters,
+          workspaceUserId,
+        );
         res.json({ items });
       } catch (err) {
         console.error("[ProspectIntelligence] list error:", err);
@@ -101,7 +110,11 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const item = await prospectIntelligenceService.getProspectIntelligenceDetail(req.params.contactId);
+        const workspaceUserId = await resolveProspectWorkspaceUserId((req.user as { id: string }).id);
+        const item = await prospectIntelligenceService.getProspectIntelligenceDetail(
+          req.params.contactId,
+          workspaceUserId,
+        );
         if (!item) return res.status(404).json({ error: "Prospect intelligence not found" });
         res.json(item);
       } catch (err) {
@@ -116,7 +129,11 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        const intelligence = await prospectIntelligenceService.reanalyzeProspectContact(req.params.contactId);
+        const workspaceUserId = await resolveProspectWorkspaceUserId((req.user as { id: string }).id);
+        const intelligence = await prospectIntelligenceService.reanalyzeProspectContact(
+          req.params.contactId,
+          workspaceUserId,
+        );
         res.json({ intelligence });
       } catch (err) {
         console.error("[ProspectIntelligence] reanalyze error:", err);
@@ -130,16 +147,21 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
+        const workspaceUserId = await resolveProspectWorkspaceUserId((req.user as { id: string }).id);
         const { suggestedFirstMessage, suggestedOutreachAngle, reasoningSummary } = req.body as {
           suggestedFirstMessage?: string;
           suggestedOutreachAngle?: string;
           reasoningSummary?: string;
         };
-        const item = await prospectIntelligenceService.patchProspectIntelligence(req.params.contactId, {
-          suggestedFirstMessage,
-          suggestedOutreachAngle,
-          reasoningSummary,
-        });
+        const item = await prospectIntelligenceService.patchProspectIntelligence(
+          req.params.contactId,
+          {
+            suggestedFirstMessage,
+            suggestedOutreachAngle,
+            reasoningSummary,
+          },
+          workspaceUserId,
+        );
         if (!item) return res.status(404).json({ error: "Prospect intelligence not found" });
         res.json(item);
       } catch (err) {
@@ -155,6 +177,7 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
     async (req, res) => {
       try {
         const userId = (req.user as { id: string }).id;
+        const workspaceUserId = await resolveProspectWorkspaceUserId(userId);
         const suggestedFirstMessage =
           typeof req.body?.suggestedFirstMessage === "string"
             ? req.body.suggestedFirstMessage
@@ -162,7 +185,10 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
         const item = await prospectIntelligenceService.approveProspectIntelligence(
           req.params.contactId,
           userId,
-          suggestedFirstMessage !== undefined ? { suggestedFirstMessage } : undefined,
+          {
+            suggestedFirstMessage,
+            workspaceUserId,
+          },
         );
         res.json({ item });
       } catch (err) {
@@ -177,8 +203,15 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
     requireProspectImportAccess,
     async (req, res) => {
       try {
-        await prospectIntelligenceService.markProspectNeedsReview(req.params.contactId);
-        const item = await prospectIntelligenceService.getProspectIntelligenceDetail(req.params.contactId);
+        const workspaceUserId = await resolveProspectWorkspaceUserId((req.user as { id: string }).id);
+        await prospectIntelligenceService.markProspectNeedsReview(
+          req.params.contactId,
+          workspaceUserId,
+        );
+        const item = await prospectIntelligenceService.getProspectIntelligenceDetail(
+          req.params.contactId,
+          workspaceUserId,
+        );
         res.json({ item });
       } catch (err) {
         console.error("[ProspectIntelligence] needs-review error:", err);
