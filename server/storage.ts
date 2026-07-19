@@ -399,6 +399,7 @@ export interface IStorage {
   getMessageByUserExternalId(userId: string, externalMessageId: string): Promise<Message | undefined>;
   createMessage(message: InsertMessage): Promise<Message>;
   updateMessage(id: string, updates: Partial<Message>): Promise<Message | undefined>;
+  deleteMessage(id: string): Promise<void>;
   
   // Unified inbox methods
   getUnifiedInbox(userId: string, limit?: number): Promise<InboxItem[]>;
@@ -2895,6 +2896,10 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
+  async deleteMessage(id: string): Promise<void> {
+    await db.delete(messages).where(eq(messages.id, id));
+  }
+
   // Unified inbox methods
   async getUnifiedInbox(userId: string, limit: number = 100): Promise<InboxItem[]> {
     // Contact-scoped fetch; email threads expand to one row each below.
@@ -2912,6 +2917,19 @@ export class DbStorage implements IStorage {
 
       const built = buildInboxItemsForContact({ contact, conversations: convs });
       for (const row of built) {
+        let lastEmailMessageId: string | null = null;
+        if (
+          row.channel === "email" &&
+          row.conversation?.id
+        ) {
+          const latest = await db
+            .select({ id: messages.id })
+            .from(messages)
+            .where(eq(messages.conversationId, row.conversation.id))
+            .orderBy(desc(messages.sentAt), desc(messages.createdAt))
+            .limit(1);
+          lastEmailMessageId = latest[0]?.id ?? null;
+        }
         inboxItems.push({
           contact: row.contact,
           conversation: (row.conversation as Conversation) || (null as any),
@@ -2925,6 +2943,7 @@ export class DbStorage implements IStorage {
                 : null,
           unreadCount: row.unreadCount,
           contactUnreadTotal: row.contactUnreadTotal,
+          lastEmailMessageId,
         });
       }
     }

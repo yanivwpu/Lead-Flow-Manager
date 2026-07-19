@@ -89,6 +89,12 @@ export interface EmailProvider {
 
   stopWatch?(params: { accessToken: string }): Promise<void>;
 
+  /** Move a Gmail message to Trash by exact Gmail message id (not thread id). */
+  trashMessage?(params: {
+    accessToken: string;
+    providerMessageId: string;
+  }): Promise<{ success: boolean; error?: string; alreadyTrashed?: boolean }>;
+
   sendNewEmail(params: {
     accessToken: string;
     from: string;

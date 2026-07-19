@@ -161,6 +161,32 @@ export function registerEmailChannelRoutes(app: Express): void {
     }
   });
 
+  /**
+   * Move one Gmail message to Trash by local message id → Gmail externalMessageId.
+   * Does not delete the contact or other channel conversations.
+   */
+  app.post("/api/messages/:messageId/trash-email", async (req, res) => {
+    try {
+      if (!requireAuth(req, res)) return;
+      const { trashEmailMessageByLocalId } = await import("../emailChannel/trashEmailMessage");
+      const result = await trashEmailMessageByLocalId({
+        workspaceUserId: req.user.id,
+        messageId: req.params.messageId,
+      });
+      res.json(result);
+    } catch (err) {
+      if (err && typeof err === "object" && "status" in err && "code" in err) {
+        const e = err as { status: number; code: string; message: string };
+        return res.status(e.status).json({ error: e.message, code: e.code });
+      }
+      console.error(
+        "[EmailTrash] route failed:",
+        err instanceof Error ? err.message : String(err),
+      );
+      res.status(500).json({ error: "Email could not be deleted. Please try again." });
+    }
+  });
+
   logGmailOAuthDiagStartupReady();
 }
 

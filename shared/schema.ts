@@ -1401,6 +1401,11 @@ export type InboxItem = {
   unreadCount: number;
   /** Sum of unread across all conversations for this contact (aggregate helpers). */
   contactUnreadTotal?: number;
+  /**
+   * Email rows only: local `messages.id` of the newest message in that thread.
+   * Used for quick-delete of the latest Gmail message (not the whole thread).
+   */
+  lastEmailMessageId?: string | null;
 };
 
 // ==========================================

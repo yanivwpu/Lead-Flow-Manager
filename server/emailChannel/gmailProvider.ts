@@ -631,6 +631,34 @@ export class GmailEmailProvider implements EmailProvider {
     }
   }
 
+  async trashMessage(params: {
+    accessToken: string;
+    providerMessageId: string;
+  }): Promise<{ success: boolean; error?: string; alreadyTrashed?: boolean }> {
+    const id = String(params.providerMessageId || "").trim();
+    if (!id) return { success: false, error: "Missing Gmail message id" };
+
+    const res = await fetch(`${GMAIL_API}/users/me/messages/${encodeURIComponent(id)}/trash`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${params.accessToken}` },
+    });
+
+    if (res.ok || res.status === 204) {
+      return { success: true };
+    }
+
+    // Already gone / already in trash — treat as success for local cleanup.
+    if (res.status === 404) {
+      return { success: true, alreadyTrashed: true };
+    }
+
+    const json = (await res.json().catch(() => ({}))) as {
+      error?: { message?: string; status?: string; code?: number };
+    };
+    const message = json.error?.message || `Gmail trash failed (${res.status})`;
+    return { success: false, error: message };
+  }
+
   async sendNewEmail(params: {
     accessToken: string;
     from: string;

@@ -3,13 +3,18 @@
 export const EMAIL_PROVIDERS = ["gmail", "microsoft"] as const;
 export type EmailProviderId = (typeof EMAIL_PROVIDERS)[number];
 
-/** Narrowest practical Gmail scopes for Phase 1A send + sync. */
+/**
+ * Gmail scopes for sync, send, and message trash (Phase 1B+).
+ * gmail.modify is required to move messages to Gmail Trash (users.messages.trash).
+ * Existing mailboxes must reconnect once to grant modify.
+ */
 export const GMAIL_OAUTH_SCOPES = [
   "openid",
   "email",
   "profile",
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/gmail.send",
+  "https://www.googleapis.com/auth/gmail.modify",
 ] as const;
 
 export const EMAIL_INITIAL_SYNC_MODES = ["last_7_days", "last_30_days", "last_90_days", "new_only"] as const;

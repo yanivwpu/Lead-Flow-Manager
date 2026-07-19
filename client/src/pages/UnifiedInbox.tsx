@@ -267,6 +267,8 @@ interface InboxItem {
   unreadCount: number;
   /** Sum across all conversations for this contact (Unread filter). */
   contactUnreadTotal?: number;
+  /** Email thread rows: newest local message id for quick-delete of latest Gmail message. */
+  lastEmailMessageId?: string | null;
 }
 
 interface TeamMember {
@@ -617,6 +619,11 @@ export function UnifiedInbox() {
   const [showEditContact, setShowEditContact] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [emailTrashTarget, setEmailTrashTarget] = useState<{
+    messageId: string;
+    /** list = latest message on thread row; bubble = exact open message */
+    source: "list" | "bubble";
+  } | null>(null);
   const [showDetailsSheet, setShowDetailsSheet] = useState(false);
   const [editContactForm, setEditContactForm] = useState({ name: "", phone: "", email: "" });
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -2117,6 +2124,84 @@ export function UnifiedInbox() {
     },
   });
 
+  const trashEmailMutation = useMutation({
+    mutationFn: async (vars: { messageId: string; source: "list" | "bubble" }) => {
+      const res = await apiRequest(
+        "POST",
+        `/api/messages/${encodeURIComponent(vars.messageId)}/trash-email`,
+      );
+      return (await res.json()) as {
+        ok: boolean;
+        messageId: string;
+        conversationId: string;
+        conversationDeleted: boolean;
+        conversation?: {
+          id: string;
+          lastMessagePreview: string | null;
+          lastMessageAt: string | null;
+          lastMessageDirection: string | null;
+          unreadCount: number;
+          subject: string | null;
+        };
+      };
+    },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["/api/inbox"] });
+      const previousInbox = queryClient.getQueryData<InboxItem[]>(["/api/inbox"]);
+      return { previousInbox };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousInbox) {
+        queryClient.setQueryData(["/api/inbox"], context.previousInbox);
+      }
+      toast({
+        title: "Email could not be deleted. Please try again.",
+        variant: "destructive",
+      });
+    },
+    onSuccess: (data) => {
+      setEmailTrashTarget(null);
+      if (data.conversationId) {
+        queryClient.setQueryData<Message[] | undefined>(
+          [`/api/conversations/${data.conversationId}/messages`],
+          (old) => (old ? old.filter((m) => m.id !== data.messageId) : old),
+        );
+        queryClient.invalidateQueries({
+          queryKey: [`/api/conversations/${data.conversationId}/messages`],
+        });
+      }
+      if (data.conversationDeleted) {
+        queryClient.setQueryData<InboxItem[]>(["/api/inbox"], (old) =>
+          old ? old.filter((item) => item.conversation?.id !== data.conversationId) : old,
+        );
+        if (selectedConversationId === data.conversationId) {
+          setLocation("/app/inbox");
+        }
+      } else if (data.conversation) {
+        queryClient.setQueryData<InboxItem[]>(["/api/inbox"], (old) => {
+          if (!old) return old;
+          return old.map((item) => {
+            if (item.conversation?.id !== data.conversationId) return item;
+            const subject = String(data.conversation?.subject || "").trim();
+            const preview = (
+              subject ||
+              data.conversation?.lastMessagePreview ||
+              item.lastMessage
+            ).slice(0, 100);
+            return {
+              ...item,
+              lastMessage: preview,
+              lastMessageAt: data.conversation?.lastMessageAt ?? item.lastMessageAt,
+              unreadCount: data.conversation?.unreadCount ?? item.unreadCount,
+              lastEmailMessageId: null,
+            };
+          });
+        });
+      }
+      void queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+    },
+  });
+
   // --- CRM helpers ---
 
   const updateContact = useCallback((fields: Record<string, unknown>) => {
@@ -2842,10 +2927,13 @@ export function UnifiedInbox() {
                     ),
                   );
                 }}
-                className={inboxConversationRowChromeClassName({
-                  selected: isSelected,
-                  overdue: isOverdue && !bookedAppt,
-                })}
+                className={cn(
+                  inboxConversationRowChromeClassName({
+                    selected: isSelected,
+                    overdue: isOverdue && !bookedAppt,
+                  }),
+                  item.channel === "email" && "group/email-row",
+                )}
                 data-testid={`inbox-item-${rowId}`}
               >
                 <div className={INBOX_ROW_INNER}>
@@ -2865,7 +2953,51 @@ export function UnifiedInbox() {
                       >
                         {item.contact.name}
                       </span>
-                      <span className={INBOX_ROW_TIME}>{formatTime(item.lastMessageAt)}</span>
+                      <span className="relative inline-flex h-4 min-w-[2.75rem] shrink-0 items-center justify-end">
+                        <span
+                          className={cn(
+                            INBOX_ROW_TIME,
+                            item.channel === "email" &&
+                              item.lastEmailMessageId &&
+                              "group-hover/email-row:invisible",
+                          )}
+                        >
+                          {formatTime(item.lastMessageAt)}
+                        </span>
+                        {item.channel === "email" && item.lastEmailMessageId ? (
+                          <button
+                            type="button"
+                            title="Delete latest email"
+                            aria-label="Delete latest email"
+                            data-testid={`button-trash-email-row-${rowId}`}
+                            disabled={
+                              trashEmailMutation.isPending &&
+                              emailTrashTarget?.messageId === item.lastEmailMessageId
+                            }
+                            className={cn(
+                              "absolute right-0 top-1/2 -translate-y-1/2 inline-flex h-4 w-4 items-center justify-center rounded text-gray-400 opacity-0 transition-opacity hover:text-red-600 group-hover/email-row:opacity-100",
+                              trashEmailMutation.isPending &&
+                                emailTrashTarget?.messageId === item.lastEmailMessageId &&
+                                "opacity-100",
+                            )}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setEmailTrashTarget({
+                                messageId: item.lastEmailMessageId!,
+                                source: "list",
+                              });
+                            }}
+                          >
+                            {trashEmailMutation.isPending &&
+                            emailTrashTarget?.messageId === item.lastEmailMessageId ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        ) : null}
+                      </span>
                       {rowUnread > 0 ? (
                         <span className={INBOX_ROW_UNREAD_BADGE}>{rowUnread}</span>
                       ) : null}
@@ -3611,6 +3743,36 @@ export function UnifiedInbox() {
                                       {msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : '✓'}
                                     </span>
                             )}
+                            {isEmailChannel && !msg.id.startsWith("optimistic-") ? (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    type="button"
+                                    title="Email actions"
+                                    aria-label="Email actions"
+                                    data-testid={`button-email-message-menu-${msg.id}`}
+                                    className="inline-flex h-4 w-4 items-center justify-center rounded text-gray-400 hover:text-gray-700"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <MoreVertical className="h-3 w-3" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-40">
+                                  <DropdownMenuItem
+                                    className="text-red-600 focus:text-red-600"
+                                    data-testid={`menu-delete-email-message-${msg.id}`}
+                                    disabled={trashEmailMutation.isPending}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEmailTrashTarget({ messageId: msg.id, source: "bubble" });
+                                    }}
+                                  >
+                                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                    Delete Email
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            ) : null}
                           </div>
                           {isOut &&
                             msg.status === "failed" &&
@@ -3991,6 +4153,50 @@ export function UnifiedInbox() {
             <Button variant="destructive" onClick={() => { if (selectedContactId) deleteContactMutation.mutate(selectedContactId); }} disabled={deleteContactMutation.isPending} data-testid="button-confirm-delete">
               {deleteContactMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Delete Contact
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Email message trash — separate from Delete Contact */}
+      <Dialog
+        open={!!emailTrashTarget}
+        onOpenChange={(open) => {
+          if (!open && !trashEmailMutation.isPending) setEmailTrashTarget(null);
+        }}
+      >
+        <DialogContent className="max-w-sm" data-testid="dialog-delete-email">
+          <DialogHeader>
+            <DialogTitle>Delete Email</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to move this email to Trash? Other messages and the contact will remain.
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={trashEmailMutation.isPending}
+              onClick={() => setEmailTrashTarget(null)}
+              data-testid="button-cancel-delete-email"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={trashEmailMutation.isPending || !emailTrashTarget}
+              data-testid="button-confirm-delete-email"
+              onClick={() => {
+                if (!emailTrashTarget) return;
+                trashEmailMutation.mutate({
+                  messageId: emailTrashTarget.messageId,
+                  source: emailTrashTarget.source,
+                });
+              }}
+            >
+              {trashEmailMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Delete Email
             </Button>
           </div>
         </DialogContent>

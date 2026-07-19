@@ -25,10 +25,11 @@ function run(name: string, fn: () => void | Promise<void>) {
 }
 
 async function main() {
-  await run("gmail.readonly remains sufficient for users.watch (no scope expansion)", () => {
+  await run("Gmail scopes cover watch + send + trash (modify), not full mail", () => {
     assert.ok(GMAIL_OAUTH_SCOPES.includes("https://www.googleapis.com/auth/gmail.readonly"));
     assert.ok(GMAIL_OAUTH_SCOPES.includes("https://www.googleapis.com/auth/gmail.send"));
-    assert.ok(!GMAIL_OAUTH_SCOPES.some((s) => s.includes("gmail.modify") || s.includes("mail.google.com")));
+    assert.ok(GMAIL_OAUTH_SCOPES.includes("https://www.googleapis.com/auth/gmail.modify"));
+    assert.ok(!GMAIL_OAUTH_SCOPES.some((s) => s.includes("mail.google.com")));
   });
 
   await run("missing GMAIL_PUBSUB_TOPIC → not configured (app still boots / polling ok)", () => {

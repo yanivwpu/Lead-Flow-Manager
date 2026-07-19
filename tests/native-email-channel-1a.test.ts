@@ -43,11 +43,11 @@ run("email is a first-class CHANNELS messaging entry", () => {
   assert.equal(CHANNEL_INFO.email.label, "Email");
 });
 
-run("Gmail scopes are readonly + send (not modify / full mail)", () => {
+run("Gmail scopes include readonly + send + modify (trash), not full mail", () => {
   const joined = GMAIL_OAUTH_SCOPES.join(" ");
   assert.match(joined, /gmail\.readonly/);
   assert.match(joined, /gmail\.send/);
-  assert.doesNotMatch(joined, /gmail\.modify/);
+  assert.match(joined, /gmail\.modify/);
   assert.doesNotMatch(joined, /mail\.google\.com/);
 });
 
