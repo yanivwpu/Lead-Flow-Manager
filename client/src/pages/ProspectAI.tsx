@@ -48,6 +48,7 @@ import { ProspectIntelligencePanel } from "@/components/settings/ProspectIntelli
 import { ProspectOutreachQueuePanel } from "@/components/settings/ProspectOutreachQueuePanel";
 import type { ProspectIntelligenceJobSummary } from "@shared/prospectImport";
 import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
+import { cn } from "@/lib/utils";
 
 const WORKFLOW_STEPS = [
   { key: "discover", label: "Discover" },
@@ -58,6 +59,14 @@ const WORKFLOW_STEPS = [
 ] as const;
 
 type WorkspaceTab = "discover" | "review" | "campaign" | "activity";
+
+/** Map page tabs to conceptual workflow stages. History has no stage. */
+function workflowStageForTab(tab: WorkspaceTab): "discover" | "review" | "campaign" | null {
+  if (tab === "discover") return "discover";
+  if (tab === "review") return "review";
+  if (tab === "campaign") return "campaign";
+  return null;
+}
 
 function parseTab(raw: string | null): WorkspaceTab {
   if (raw === "review" || raw === "campaign" || raw === "activity") return raw;
@@ -97,7 +106,7 @@ function QuotaMeter({ status }: { status: ProspectAiStatus }) {
     <div className="rounded-xl border border-gray-200/90 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 text-pretty">
             Prospect Discoveries
           </p>
           <p className="mt-1 text-sm text-gray-800">
@@ -136,124 +145,143 @@ function AiBrainPanel({ status }: { status: ProspectAiStatus }) {
 
   if (brain.configured) {
     return (
-      <div className="relative overflow-hidden rounded-2xl border border-violet-200/60 bg-gradient-to-br from-white via-violet-50/40 to-purple-50/30 p-5 shadow-md shadow-violet-500/[0.08] ring-1 ring-violet-100/80 sm:p-6">
+      <div className="relative overflow-hidden rounded-xl border border-violet-200/55 bg-gradient-to-br from-white via-violet-50/35 to-purple-50/25 px-3.5 py-3 shadow-sm shadow-violet-500/[0.06] ring-1 ring-violet-100/70 sm:px-4 sm:py-3.5">
         <div
-          className="pointer-events-none absolute -right-8 -top-10 h-36 w-36 rounded-full bg-violet-400/20 blur-2xl"
+          className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-violet-400/15 blur-2xl"
           aria-hidden
         />
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-violet-200/80 bg-white text-violet-600 shadow-sm shadow-violet-500/10">
-              <Brain className="h-5 w-5" />
+        <div className="relative flex flex-col gap-2.5 lg:flex-row lg:items-center lg:gap-5">
+          <div className="flex min-w-0 flex-1 items-start gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-violet-200/80 bg-white text-violet-600 shadow-sm shadow-violet-500/10">
+              <Brain className="h-4 w-4" />
             </div>
-            <div className="min-w-0 space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-base font-semibold tracking-tight text-violet-950">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 gap-y-1">
+                <h3 className="text-sm font-semibold tracking-tight text-violet-950 text-pretty">
                   AI Brain Connected
                 </h3>
-                <Badge className="border border-violet-200/80 bg-white/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 shadow-none">
+                <Badge className="border border-violet-200/80 bg-white/90 px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide text-violet-700 shadow-none">
                   Connected
                 </Badge>
               </div>
-              <p className="text-sm leading-relaxed text-violet-900/75">
-                Prospect AI is using AI Brain to analyze every business before outreach.
+              <p className="mt-0.5 text-xs leading-snug text-violet-900/75 text-pretty sm:text-[13px]">
+                Prospect AI uses AI Brain to analyze every business before outreach.
               </p>
             </div>
           </div>
+          <ul className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2 lg:max-w-md lg:shrink-0">
+            {[
+              "Website Analysis",
+              "Company Intelligence",
+              "AI Fit Scoring",
+              "Personalized Outreach Angles",
+              "Business Context",
+            ].map((item) => (
+              <li
+                key={item}
+                className="flex items-center gap-1.5 text-xs leading-snug text-violet-950/85 text-pretty"
+              >
+                <Check className="h-3.5 w-3.5 shrink-0 text-violet-600" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
         </div>
-        <ul className="relative mt-4 grid gap-2 sm:grid-cols-2">
-          {[
-            "Website Analysis",
-            "Company Intelligence",
-            "AI Fit Scoring",
-            "Personalized Outreach Angles",
-            "Business Context",
-          ].map((item) => (
-            <li key={item} className="flex items-center gap-2 text-sm text-violet-950/90">
-              <Check className="h-4 w-4 shrink-0 text-violet-600" />
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
       </div>
     );
   }
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-violet-200/70 bg-gradient-to-br from-white via-violet-50/50 to-purple-50/40 p-5 shadow-lg shadow-violet-500/[0.1] ring-1 ring-violet-100/90 sm:p-6">
+    <div className="relative overflow-hidden rounded-xl border border-violet-200/65 bg-gradient-to-br from-white via-violet-50/45 to-purple-50/30 px-3.5 py-3 shadow-sm shadow-violet-500/[0.08] ring-1 ring-violet-100/80 sm:px-4 sm:py-3.5">
       <div
-        className="pointer-events-none absolute -left-10 top-0 h-40 w-40 rounded-full bg-purple-400/15 blur-3xl"
+        className="pointer-events-none absolute -right-8 -top-6 h-28 w-28 rounded-full bg-violet-400/15 blur-2xl"
         aria-hidden
       />
-      <div
-        className="pointer-events-none absolute -right-6 bottom-0 h-32 w-32 rounded-full bg-violet-400/20 blur-2xl"
-        aria-hidden
-      />
-      <div className="relative space-y-4">
-        <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center gap-0.5 rounded-xl border border-violet-200/80 bg-white text-violet-600 shadow-sm shadow-violet-500/15">
-            <Sparkles className="h-4 w-4" />
-            <Brain className="h-4 w-4 text-purple-600" />
+      <div className="relative flex flex-col gap-2.5 lg:flex-row lg:items-center lg:gap-5">
+        <div className="flex min-w-0 flex-1 items-start gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center gap-0.5 rounded-lg border border-violet-200/80 bg-white text-violet-600 shadow-sm">
+            <Sparkles className="h-3.5 w-3.5" />
+            <Brain className="h-3.5 w-3.5 text-purple-600" />
           </div>
           <div className="min-w-0">
-            <h3 className="text-base font-semibold tracking-tight text-violet-950">Unlock AI Brain</h3>
-            <p className="mt-1 text-sm leading-relaxed text-violet-900/80">
-              Prospect AI works without AI Brain.
-              <br className="hidden sm:block" />
-              {" "}
-              Add AI Brain to automatically understand every business before you reach out.
+            <h3 className="text-sm font-semibold tracking-tight text-violet-950 text-pretty">
+              Unlock AI Brain
+            </h3>
+            <p className="mt-0.5 text-xs leading-snug text-violet-900/80 text-pretty sm:text-[13px]">
+              Prospect AI works without AI Brain. Add AI Brain to automatically understand every
+              business before you reach out.
             </p>
           </div>
         </div>
-
-        <ul className="grid gap-2 sm:grid-cols-2">
-          {[
-            "Analyze every business website",
-            "Score prospect fit automatically",
-            "Generate personalized outreach angles",
-            "Recommend the best offer",
-            "Improve reply rates with richer business context",
-          ].map((item) => (
-            <li key={item} className="flex items-start gap-2 text-sm text-violet-950/90">
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
-
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <Link href="/app/ai-brain">
-            <Button
-              type="button"
-              className="w-full border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-md shadow-violet-500/25 hover:from-violet-500 hover:to-purple-500 sm:w-auto"
-            >
-              Upgrade to AI Brain
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </Link>
-          <p className="text-xs leading-relaxed text-violet-800/70 sm:max-w-xs sm:text-right">
-            Prospect AI works on its own.
-            <br />
-            AI Brain makes every discovery smarter.
-          </p>
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center lg:max-w-md lg:shrink-0">
+          <ul className="grid flex-1 grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-2">
+            {[
+              "Analyze every business website",
+              "Score prospect fit automatically",
+              "Generate personalized outreach angles",
+              "Recommend the best offer",
+              "Improve reply rates with richer context",
+            ].map((item) => (
+              <li
+                key={item}
+                className="flex items-start gap-1.5 text-xs leading-snug text-violet-950/85 text-pretty"
+              >
+                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-600" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex shrink-0 flex-col gap-1 sm:items-end">
+            <Link href="/app/ai-brain">
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 border-0 bg-gradient-to-r from-violet-600 to-purple-600 px-3 text-xs text-white shadow-sm shadow-violet-500/20 hover:from-violet-500 hover:to-purple-500"
+              >
+                Upgrade to AI Brain
+                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+              </Button>
+            </Link>
+            <p className="text-[11px] leading-snug text-violet-800/65 text-pretty sm:text-right">
+              Prospect AI works on its own. AI Brain makes every discovery smarter.
+            </p>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function WorkflowStrip() {
+function WorkflowStrip({ activeTab }: { activeTab: WorkspaceTab }) {
+  const stage = workflowStageForTab(activeTab);
   return (
     <nav
       aria-label="Prospect AI workflow"
-      className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500 sm:gap-2 sm:text-sm"
+      className="flex flex-wrap items-center gap-x-1 gap-y-1 text-[11px] leading-none text-gray-400 sm:text-xs"
     >
-      {WORKFLOW_STEPS.map((step, i) => (
-        <div key={step.key} className="flex items-center gap-1.5 sm:gap-2">
-          {i > 0 ? <ChevronRight className="h-3.5 w-3.5 text-gray-300" aria-hidden /> : null}
-          <span className="rounded-full px-2.5 py-1 font-medium text-gray-600">{step.label}</span>
-        </div>
-      ))}
+      {WORKFLOW_STEPS.map((step, i) => {
+        const isActive = stage != null && step.key === stage;
+        return (
+          <div key={step.key} className="flex items-center gap-1 sm:gap-1.5">
+            {i > 0 ? (
+              <ChevronRight className="h-3 w-3 shrink-0 text-gray-300" aria-hidden />
+            ) : null}
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 whitespace-nowrap text-pretty",
+                isActive
+                  ? "font-semibold text-gray-700 underline decoration-brand-green/50 decoration-1 underline-offset-4"
+                  : "font-normal text-gray-400",
+              )}
+            >
+              {isActive ? (
+                <span className="h-1 w-1 shrink-0 rounded-full bg-brand-green" aria-hidden />
+              ) : null}
+              {step.label}
+            </span>
+          </div>
+        );
+      })}
     </nav>
   );
 }
@@ -408,8 +436,10 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
             <Radar className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold tracking-tight text-gray-900">Discover Businesses</h2>
-            <p className="mt-1.5 text-sm leading-relaxed text-gray-600">
+            <h2 className="text-lg font-semibold tracking-tight text-gray-900 text-pretty sm:text-xl sm:font-bold">
+              Discover Businesses
+            </h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-gray-600 text-pretty">
               Search by business type and location. Selected results go to AI Review for fit analysis.
             </p>
           </div>
@@ -767,18 +797,18 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
-      <header className="space-y-4">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-5 sm:px-6 sm:py-7">
+      <header className="space-y-2.5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <div className="inline-flex items-center gap-1.5 text-brand-green">
               <Star className="h-3.5 w-3.5 fill-current" aria-hidden />
               <span className="text-[11px] font-semibold uppercase tracking-wide">Growth Engine</span>
             </div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">
+            <h1 className="font-display text-2xl font-semibold tracking-tight text-gray-900 text-pretty sm:text-3xl">
               Prospect AI
             </h1>
-            <p className="max-w-2xl text-sm text-gray-600">
+            <p className="max-w-2xl text-sm leading-relaxed text-gray-600 text-pretty">
               Find new businesses → AI understands them → Launch outreach → Manage replies → Win customers.
             </p>
           </div>
@@ -789,11 +819,11 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
             </Button>
           </Link>
         </div>
-        <WorkflowStrip />
+        <WorkflowStrip activeTab={activeTab} />
       </header>
 
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-        <TabsList className="h-auto w-full flex-wrap justify-start gap-4 border-b border-gray-200 bg-transparent p-0 pb-0">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-5">
+        <TabsList className="mt-1 h-auto w-full flex-wrap justify-start gap-x-4 gap-y-1 border-b border-gray-200 bg-transparent p-0 pb-0 pt-3">
           {(
             [
               ["discover", "Discover"],
@@ -805,7 +835,7 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
             <TabsTrigger
               key={value}
               value={value}
-              className="h-11 rounded-none border-b-2 border-transparent px-0 pb-3 data-[state=active]:border-brand-green data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              className="h-10 rounded-none border-b-2 border-transparent px-0 pb-2.5 text-sm whitespace-nowrap data-[state=active]:border-brand-green data-[state=active]:bg-transparent data-[state=active]:shadow-none"
             >
               {label}
             </TabsTrigger>
