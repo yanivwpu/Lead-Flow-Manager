@@ -5,7 +5,6 @@ import {
   ArrowRight,
   Brain,
   Check,
-  ChevronRight,
   Inbox,
   Loader2,
   MapPin,
@@ -48,25 +47,8 @@ import { ProspectIntelligencePanel } from "@/components/settings/ProspectIntelli
 import { ProspectOutreachQueuePanel } from "@/components/settings/ProspectOutreachQueuePanel";
 import type { ProspectIntelligenceJobSummary } from "@shared/prospectImport";
 import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
-import { cn } from "@/lib/utils";
-
-const WORKFLOW_STEPS = [
-  { key: "discover", label: "Discover" },
-  { key: "review", label: "AI Review" },
-  { key: "campaign", label: "Campaigns" },
-  { key: "inbox", label: "Inbox" },
-  { key: "close", label: "Close" },
-] as const;
 
 type WorkspaceTab = "discover" | "review" | "campaign" | "activity";
-
-/** Map page tabs to conceptual workflow stages. History has no stage. */
-function workflowStageForTab(tab: WorkspaceTab): "discover" | "review" | "campaign" | null {
-  if (tab === "discover") return "discover";
-  if (tab === "review") return "review";
-  if (tab === "campaign") return "campaign";
-  return null;
-}
 
 function parseTab(raw: string | null): WorkspaceTab {
   if (raw === "review" || raw === "campaign" || raw === "activity") return raw;
@@ -249,40 +231,6 @@ function AiBrainPanel({ status }: { status: ProspectAiStatus }) {
         </div>
       </div>
     </div>
-  );
-}
-
-function WorkflowStrip({ activeTab }: { activeTab: WorkspaceTab }) {
-  const stage = workflowStageForTab(activeTab);
-  return (
-    <nav
-      aria-label="Prospect AI workflow"
-      className="flex flex-wrap items-center gap-x-1 gap-y-1 text-[11px] leading-none text-gray-400 sm:text-xs"
-    >
-      {WORKFLOW_STEPS.map((step, i) => {
-        const isActive = stage != null && step.key === stage;
-        return (
-          <div key={step.key} className="flex items-center gap-1 sm:gap-1.5">
-            {i > 0 ? (
-              <ChevronRight className="h-3 w-3 shrink-0 text-gray-300" aria-hidden />
-            ) : null}
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 whitespace-nowrap text-pretty",
-                isActive
-                  ? "font-semibold text-gray-700 underline decoration-brand-green/50 decoration-1 underline-offset-4"
-                  : "font-normal text-gray-400",
-              )}
-            >
-              {isActive ? (
-                <span className="h-1 w-1 shrink-0 rounded-full bg-brand-green" aria-hidden />
-              ) : null}
-              {step.label}
-            </span>
-          </div>
-        );
-      })}
-    </nav>
   );
 }
 
@@ -789,6 +737,10 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
   const [analysisJob, setAnalysisJob] = useState<ProspectIntelligenceJobSummary | null>(null);
 
   const handleTabChange = (next: string) => {
+    if (next === "close") {
+      setLocation("/app/inbox");
+      return;
+    }
     const params = new URLSearchParams(searchString);
     if (next === "discover") params.delete("tab");
     else params.set("tab", next);
@@ -797,8 +749,8 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-5 sm:px-6 sm:py-7">
-      <header className="space-y-2.5">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-5 sm:gap-5 sm:px-6 sm:py-6">
+      <header className="space-y-1">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <div className="inline-flex items-center gap-1.5 text-brand-green">
@@ -809,7 +761,8 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
               Prospect AI
             </h1>
             <p className="max-w-2xl text-sm leading-relaxed text-gray-600 text-pretty">
-              Find new businesses → AI understands them → Launch outreach → Manage replies → Win customers.
+              Find new businesses, let AI qualify them, launch outreach, and close customers from one
+              inbox.
             </p>
           </div>
           <Link href="/app/inbox">
@@ -819,17 +772,17 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
             </Button>
           </Link>
         </div>
-        <WorkflowStrip activeTab={activeTab} />
       </header>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-5">
-        <TabsList className="mt-1 h-auto w-full flex-wrap justify-start gap-x-4 gap-y-1 border-b border-gray-200 bg-transparent p-0 pb-0 pt-3">
+        <TabsList className="h-auto w-full flex-wrap justify-start gap-x-4 gap-y-1 border-b border-gray-200 bg-transparent p-0 pb-0">
           {(
             [
               ["discover", "Discover"],
               ["review", "AI Review"],
               ["campaign", "Campaigns"],
               ["activity", "History"],
+              ["close", "Close"],
             ] as const
           ).map(([value, label]) => (
             <TabsTrigger
