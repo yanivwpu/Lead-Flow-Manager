@@ -11,6 +11,7 @@ import {
   MapPin,
   Radar,
   Search,
+  Sparkles,
   Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,6 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { useSubscription } from "@/lib/subscription-context";
 import {
-  AI_BRAIN_SOURCE_LABELS,
   PROSPECT_AI_PATH,
   prospectDiscoveriesPlanPanel,
   useActivateProspectAi,
@@ -48,7 +48,6 @@ import { ProspectIntelligencePanel } from "@/components/settings/ProspectIntelli
 import { ProspectOutreachQueuePanel } from "@/components/settings/ProspectOutreachQueuePanel";
 import type { ProspectIntelligenceJobSummary } from "@shared/prospectImport";
 import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
-import { cn } from "@/lib/utils";
 
 const WORKFLOW_STEPS = [
   { key: "discover", label: "Discover" },
@@ -132,110 +131,129 @@ function QuotaMeter({ status }: { status: ProspectAiStatus }) {
   );
 }
 
-function AiBrainPanel({
-  status,
-  continueBasic,
-  onContinueBasic,
-}: {
-  status: ProspectAiStatus;
-  continueBasic: boolean;
-  onContinueBasic: () => void;
-}) {
+function AiBrainPanel({ status }: { status: ProspectAiStatus }) {
   const brain = status.aiBrain;
+
   if (brain.configured) {
     return (
-      <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/50 p-4">
-        <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
-            <Brain className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 flex-1 space-y-2">
-            <p className="font-medium text-emerald-950">Powered by AI Brain</p>
-            <p className="text-sm text-emerald-900/80">
-              Prospect analysis uses your configured business intelligence for sharper fit scoring.
-            </p>
-            <ul className="flex flex-wrap gap-2">
-              {AI_BRAIN_SOURCE_LABELS.map(({ key, label }) => (
-                <li key={key}>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[11px]",
-                      brain[key]
-                        ? "border-emerald-300 bg-white text-emerald-900"
-                        : "border-gray-200 bg-gray-50 text-gray-500",
-                    )}
-                  >
-                    {brain[key] ? <Check className="mr-1 h-3 w-3" /> : null}
-                    {label}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
+      <div className="relative overflow-hidden rounded-2xl border border-violet-200/60 bg-gradient-to-br from-white via-violet-50/40 to-purple-50/30 p-5 shadow-md shadow-violet-500/[0.08] ring-1 ring-violet-100/80 sm:p-6">
+        <div
+          className="pointer-events-none absolute -right-8 -top-10 h-36 w-36 rounded-full bg-violet-400/20 blur-2xl"
+          aria-hidden
+        />
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-violet-200/80 bg-white text-violet-600 shadow-sm shadow-violet-500/10">
+              <Brain className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-base font-semibold tracking-tight text-violet-950">
+                  AI Brain Connected
+                </h3>
+                <Badge className="border border-violet-200/80 bg-white/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 shadow-none">
+                  Connected
+                </Badge>
+              </div>
+              <p className="text-sm leading-relaxed text-violet-900/75">
+                Prospect AI is using AI Brain to analyze every business before outreach.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  if (continueBasic) {
-    return (
-      <div className="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-3 text-sm text-gray-600">
-        Continuing with basic analysis. You can configure AI Brain anytime for richer fit scoring.
+        <ul className="relative mt-4 grid gap-2 sm:grid-cols-2">
+          {[
+            "Website Analysis",
+            "Company Intelligence",
+            "AI Fit Scoring",
+            "Personalized Outreach Angles",
+            "Business Context",
+          ].map((item) => (
+            <li key={item} className="flex items-center gap-2 text-sm text-violet-950/90">
+              <Check className="h-4 w-4 shrink-0 text-violet-600" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-amber-200/80 bg-amber-50/60 p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <p className="font-medium text-amber-950">Prospect AI works even better with AI Brain.</p>
-          <p className="mt-1 text-sm text-amber-900/80">
-            Optional — configure AI Brain for richer fit analysis, or continue with basic analysis.
-          </p>
+    <div className="relative overflow-hidden rounded-2xl border border-violet-200/70 bg-gradient-to-br from-white via-violet-50/50 to-purple-50/40 p-5 shadow-lg shadow-violet-500/[0.1] ring-1 ring-violet-100/90 sm:p-6">
+      <div
+        className="pointer-events-none absolute -left-10 top-0 h-40 w-40 rounded-full bg-purple-400/15 blur-3xl"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute -right-6 bottom-0 h-32 w-32 rounded-full bg-violet-400/20 blur-2xl"
+        aria-hidden
+      />
+      <div className="relative space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center gap-0.5 rounded-xl border border-violet-200/80 bg-white text-violet-600 shadow-sm shadow-violet-500/15">
+            <Sparkles className="h-4 w-4" />
+            <Brain className="h-4 w-4 text-purple-600" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-base font-semibold tracking-tight text-violet-950">Unlock AI Brain</h3>
+            <p className="mt-1 text-sm leading-relaxed text-violet-900/80">
+              Prospect AI works without AI Brain.
+              <br className="hidden sm:block" />
+              {" "}
+              Add AI Brain to automatically understand every business before you reach out.
+            </p>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2 shrink-0">
+
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {[
+            "Analyze every business website",
+            "Score prospect fit automatically",
+            "Generate personalized outreach angles",
+            "Recommend the best offer",
+            "Improve reply rates with richer business context",
+          ].map((item) => (
+            <li key={item} className="flex items-start gap-2 text-sm text-violet-950/90">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <Link href="/app/ai-brain">
-            <Button type="button" variant="outline" size="sm">
-              Configure AI Brain
+            <Button
+              type="button"
+              className="w-full border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-md shadow-violet-500/25 hover:from-violet-500 hover:to-purple-500 sm:w-auto"
+            >
+              Upgrade to AI Brain
+              <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </Link>
-          <Button type="button" size="sm" variant="secondary" onClick={onContinueBasic}>
-            Continue with Basic Analysis
-          </Button>
+          <p className="text-xs leading-relaxed text-violet-800/70 sm:max-w-xs sm:text-right">
+            Prospect AI works on its own.
+            <br />
+            AI Brain makes every discovery smarter.
+          </p>
         </div>
       </div>
     </div>
   );
 }
 
-function WorkflowStrip({ active }: { active: WorkspaceTab }) {
-  const activeKey =
-    active === "campaign" ? "campaign" : active === "review" ? "review" : "discover";
+function WorkflowStrip() {
   return (
     <nav
       aria-label="Prospect AI workflow"
-      className="flex flex-wrap items-center gap-1.5 text-xs sm:gap-2 sm:text-sm"
+      className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500 sm:gap-2 sm:text-sm"
     >
-      {WORKFLOW_STEPS.map((step, i) => {
-        const isActive = step.key === activeKey;
-        return (
-          <div key={step.key} className="flex items-center gap-1.5 sm:gap-2">
-            {i > 0 ? <ChevronRight className="h-3.5 w-3.5 text-gray-300" aria-hidden /> : null}
-            <span
-              className={cn(
-                "rounded-full px-2.5 py-1 font-medium transition-colors",
-                isActive
-                  ? "bg-brand-green/10 text-brand-green"
-                  : "text-gray-500",
-              )}
-            >
-              {step.label}
-            </span>
-          </div>
-        );
-      })}
+      {WORKFLOW_STEPS.map((step, i) => (
+        <div key={step.key} className="flex items-center gap-1.5 sm:gap-2">
+          {i > 0 ? <ChevronRight className="h-3.5 w-3.5 text-gray-300" aria-hidden /> : null}
+          <span className="rounded-full px-2.5 py-1 font-medium text-gray-600">{step.label}</span>
+        </div>
+      ))}
     </nav>
   );
 }
@@ -300,7 +318,7 @@ function ActivationScreen({
             </p>
           ))}
           <Link
-            href="/app/settings"
+            href="/pricing"
             className="mt-2 inline-block text-xs font-medium text-brand-green hover:underline"
           >
             View plan limits
@@ -355,7 +373,6 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
   const [businessType, setBusinessType] = useState("");
   const [location, setLocation] = useState("");
   const [radiusKm, setRadiusKm] = useState("");
-  const [continueBasic, setContinueBasic] = useState(false);
   const [searchId, setSearchId] = useState<string | null>(null);
   const [results, setResults] = useState<ProspectAiDiscoverResult[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -381,22 +398,18 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <QuotaMeter status={status} />
-      <AiBrainPanel
-        status={status}
-        continueBasic={continueBasic}
-        onContinueBasic={() => setContinueBasic(true)}
-      />
+      <AiBrainPanel status={status} />
 
-      <div className="rounded-2xl border border-gray-200/90 bg-white p-5 shadow-sm sm:p-6">
-        <div className="mb-5 flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-green/10 text-brand-green">
-            <Radar className="h-4 w-4" />
+      <div className="rounded-2xl border border-emerald-200/70 bg-white p-6 shadow-md shadow-emerald-900/[0.04] ring-1 ring-emerald-100/80 sm:p-7">
+        <div className="mb-6 flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-green/10 text-brand-green">
+            <Radar className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-gray-900">Discover prospects</h2>
-            <p className="mt-1 text-sm text-gray-600">
+            <h2 className="text-lg font-semibold tracking-tight text-gray-900">Discover Businesses</h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-gray-600">
               Search by business type and location. Selected results go to AI Review for fit analysis.
             </p>
           </div>
@@ -569,18 +582,29 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50/50 p-5">
+      <div className="rounded-xl border border-gray-200/70 bg-gray-50/40 p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold text-gray-900">GoHighLevel Import</p>
-            <p className="mt-1 text-sm text-gray-600">
-              Secondary acquisition source — import existing CRM contacts into Review.
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-medium text-gray-800">GoHighLevel Import</p>
+              <Badge
+                variant="outline"
+                className="border-gray-200 bg-white px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide text-gray-500 shadow-none"
+              >
+                Optional
+              </Badge>
+            </div>
+            <p className="mt-1 text-sm text-gray-500">
+              Already have contacts?
+              <br />
+              Import them into Prospect AI instead of discovering new businesses.
             </p>
           </div>
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="sm"
+            className="shrink-0 text-gray-600 hover:text-gray-900"
             onClick={() => setGhlOpen((v) => !v)}
             data-testid="prospect-ai-toggle-ghl"
           >
@@ -588,7 +612,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
           </Button>
         </div>
         {ghlOpen ? (
-          <div className="mt-5 border-t border-gray-200/80 pt-5">
+          <div className="mt-4 border-t border-gray-200/70 pt-4">
             <GhlProspectImport view="embedded" />
           </div>
         ) : null}
@@ -627,10 +651,17 @@ function ActivityTab() {
 
   return (
     <div className="space-y-8">
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight text-gray-900">Prospect History</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Discovery searches, imports, campaigns, and completed outreach in one place.
+        </p>
+      </div>
+
       <section className="space-y-3">
-        <h3 className="text-base font-semibold text-gray-900">Discovery searches</h3>
+        <h3 className="text-sm font-semibold text-gray-800">Discovery searches</h3>
         {activityQuery.isLoading ? (
-          <p className="text-sm text-gray-500">Loading activity…</p>
+          <p className="text-sm text-gray-500">Loading history…</p>
         ) : searches.length === 0 ? (
           <p className="text-sm text-gray-500">No discovery searches yet.</p>
         ) : (
@@ -748,7 +779,7 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
               Prospect AI
             </h1>
             <p className="max-w-2xl text-sm text-gray-600">
-              Daily workspace — discover, AI review, campaigns, then close replies in Inbox.
+              Find new businesses → AI understands them → Launch outreach → Manage replies → Win customers.
             </p>
           </div>
           <Link href="/app/inbox">
@@ -758,7 +789,7 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
             </Button>
           </Link>
         </div>
-        <WorkflowStrip active={activeTab} />
+        <WorkflowStrip />
       </header>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
@@ -768,7 +799,7 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
               ["discover", "Discover"],
               ["review", "AI Review"],
               ["campaign", "Campaigns"],
-              ["activity", "Activity"],
+              ["activity", "History"],
             ] as const
           ).map(([value, label]) => (
             <TabsTrigger

@@ -170,7 +170,7 @@ export function ProspectOutreachQueuePanel({
     >
       <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
         <ListOrdered className="h-4 w-4 text-brand-green" />
-        {embedded ? "Campaigns" : "Campaign Queue"}
+        {embedded ? "Launch Outreach Campaigns" : "Campaign Queue"}
       </h3>
       <p className="text-sm text-gray-600">
         Controlled multi-channel queue (Email enabled for bulk). Analyzing thousands ≠ sending

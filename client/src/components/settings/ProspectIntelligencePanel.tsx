@@ -1198,7 +1198,7 @@ export function ProspectIntelligencePanel(props: {
     <section className={props.embedded ? "space-y-5" : "mt-10 space-y-5 border-t pt-8"}>
       <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
         <Sparkles className="h-4 w-4 text-brand-green" />
-        {props.embedded ? "AI Review" : "Prospect AI Intelligence"}
+        {props.embedded ? "Review AI Recommendations" : "Prospect AI Intelligence"}
       </h3>
       <p className="text-sm text-gray-600">
         Classify imported prospects, score fit, draft personalized outreach, then approve in batches
