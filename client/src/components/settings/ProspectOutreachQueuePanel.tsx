@@ -58,7 +58,7 @@ function statusBadge(status: string) {
 export function ProspectOutreachQueuePanel({
   embedded = false,
 }: {
-  /** When true, omit outer top border and use Campaign Queue title (Prospect AI workspace). */
+  /** When true, omit outer top border and use Campaigns title (Prospect AI workspace). */
   embedded?: boolean;
 } = {}) {
   const queryClient = useQueryClient();
@@ -170,7 +170,7 @@ export function ProspectOutreachQueuePanel({
     >
       <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
         <ListOrdered className="h-4 w-4 text-brand-green" />
-        Campaign Queue
+        {embedded ? "Campaigns" : "Campaign Queue"}
       </h3>
       <p className="text-sm text-gray-600">
         Controlled multi-channel queue (Email enabled for bulk). Analyzing thousands ≠ sending

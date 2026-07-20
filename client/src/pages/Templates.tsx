@@ -78,7 +78,8 @@ import {
 } from "@shared/rgePaths";
 import { cn } from "@/lib/utils";
 import { GROWTH_ENGINE_CARDS, sortGrowthEnginesCatalog, type GrowthEngineCardModel } from "@/lib/growthEnginesCatalog";
-import { prospectDiscoveriesCatalogCopy, useProspectAiStatus } from "@/lib/prospectAi";
+import { prospectDiscoveriesCatalogLines, useProspectAiStatus } from "@/lib/prospectAi";
+import { ProspectAiCardArt } from "@/components/growthEngines/ProspectAiCardArt";
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
@@ -601,6 +602,7 @@ function GrowthEngineGalleryCard({
   const phKey = engine.placeholderKey ?? "wellness";
   const ph = GROWTH_ENGINE_PLACEHOLDER[phKey];
   const PhIcon = ph.icon;
+  const catalogQuota = prospectDiscoveriesCatalogLines();
 
   return (
     <Card
@@ -615,7 +617,9 @@ function GrowthEngineGalleryCard({
       data-testid={engine.slug === "realtor-growth-engine" ? "card-realtor-growth-engine" : `card-engine-${engine.slug}`}
     >
       <div className="relative isolate h-40 w-full shrink-0 overflow-hidden rounded-t-xl bg-gray-100 sm:h-44">
-        {engine.image ? (
+        {isProspectAi ? (
+          <ProspectAiCardArt className="h-full w-full" />
+        ) : engine.image ? (
           <img src={engine.image} alt="" className="h-full w-full object-cover object-[center_22%]" loading="lazy" />
         ) : (
           <div
@@ -694,10 +698,17 @@ function GrowthEngineGalleryCard({
           if (rgeOwned) return null;
           if (isProspectAi) {
             return (
-              <div className="rounded-lg border border-emerald-100/90 bg-gradient-to-br from-emerald-50/70 to-sky-50/40 px-3 py-2 shadow-sm">
-                <p className="text-sm font-semibold leading-snug text-gray-900">
-                  {engine.subscriptionRequirementShort || prospectDiscoveriesCatalogCopy()}
+              <div className="rounded-lg border border-emerald-100/90 bg-gradient-to-br from-emerald-50/70 to-sky-50/40 px-3 py-2.5 shadow-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800/80">
+                  {catalogQuota.title}
                 </p>
+                <ul className="mt-1.5 space-y-0.5 text-sm leading-snug text-gray-800">
+                  {catalogQuota.lines.map((line) => (
+                    <li key={line} className="tabular-nums">
+                      {line}
+                    </li>
+                  ))}
+                </ul>
               </div>
             );
           }

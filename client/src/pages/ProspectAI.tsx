@@ -11,7 +11,6 @@ import {
   MapPin,
   Radar,
   Search,
-  Sparkles,
   Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,8 +33,7 @@ import { useSubscription } from "@/lib/subscription-context";
 import {
   AI_BRAIN_SOURCE_LABELS,
   PROSPECT_AI_PATH,
-  prospectDiscoveriesCatalogCopy,
-  prospectDiscoveriesPlanCopy,
+  prospectDiscoveriesPlanPanel,
   useActivateProspectAi,
   useProspectAiActivity,
   useProspectAiDiscover,
@@ -44,6 +42,7 @@ import {
   type ProspectAiDiscoverResult,
   type ProspectAiStatus,
 } from "@/lib/prospectAi";
+import { ProspectAiCardArt } from "@/components/growthEngines/ProspectAiCardArt";
 import { GhlProspectImport, ProspectImportHistoryPanel } from "@/components/settings/GhlProspectImport";
 import { ProspectIntelligencePanel } from "@/components/settings/ProspectIntelligencePanel";
 import { ProspectOutreachQueuePanel } from "@/components/settings/ProspectOutreachQueuePanel";
@@ -53,8 +52,8 @@ import { cn } from "@/lib/utils";
 
 const WORKFLOW_STEPS = [
   { key: "discover", label: "Discover" },
-  { key: "review", label: "Review" },
-  { key: "campaign", label: "Campaign" },
+  { key: "review", label: "AI Review" },
+  { key: "campaign", label: "Campaigns" },
   { key: "inbox", label: "Inbox" },
   { key: "close", label: "Close" },
 ] as const;
@@ -85,29 +84,50 @@ function formatActivityDate(iso?: string | null): string {
 }
 
 function QuotaMeter({ status }: { status: ProspectAiStatus }) {
+  const used = Math.max(0, status.used ?? 0);
+  const monthlyQuota = Math.max(0, status.monthlyQuota ?? 0);
+  const remaining = Math.max(0, status.remaining ?? monthlyQuota - used);
   const pct =
-    status.monthlyQuota > 0
-      ? Math.min(100, Math.round((status.used / status.monthlyQuota) * 100))
-      : 0;
+    monthlyQuota > 0 ? Math.min(100, Math.round((used / monthlyQuota) * 100)) : 0;
+  const exhausted = monthlyQuota > 0 && remaining <= 0;
+  const nearing =
+    !exhausted && monthlyQuota > 0 && (remaining / monthlyQuota <= 0.15 || remaining <= 15);
+  const isStarter = String(status.plan || "").toLowerCase().includes("starter");
+
   return (
     <div className="rounded-xl border border-gray-200/90 bg-white p-4 shadow-sm">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Monthly Prospect Discoveries
+            Prospect Discoveries
           </p>
-          <p className="mt-1 text-sm text-gray-700">
-            <span className="font-semibold tabular-nums text-gray-900">{status.remaining}</span> remaining
-            {" · "}
-            <span className="tabular-nums">{status.used}</span> of{" "}
-            <span className="tabular-nums">{status.monthlyQuota}</span> used
+          <p className="mt-1 text-sm text-gray-800">
+            <span className="font-semibold tabular-nums text-gray-900">{used}</span>
+            {" of "}
+            <span className="tabular-nums">{monthlyQuota}</span> used this month
           </p>
+          <p className="mt-0.5 text-xs text-gray-500">Resets each billing month</p>
         </div>
-        <Badge variant="outline" className="capitalize">
+        <Badge variant="outline" className="capitalize shrink-0">
           {status.plan || "Plan"}
         </Badge>
       </div>
       <Progress value={pct} className="mt-3 h-2" />
+      {exhausted ? (
+        <p className="mt-3 text-sm text-amber-900">
+          You’ve used all of your monthly Prospect Discoveries.
+          {isStarter ? (
+            <>
+              {" "}
+              Upgrade to Pro for 500 Prospect Discoveries each month.
+            </>
+          ) : null}
+        </p>
+      ) : nearing ? (
+        <p className="mt-3 text-sm text-amber-800">
+          You’re nearing your monthly Prospect Discovery limit.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -130,9 +150,9 @@ function AiBrainPanel({
             <Brain className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1 space-y-2">
-            <p className="font-medium text-emerald-950">AI Brain configured</p>
+            <p className="font-medium text-emerald-950">Powered by AI Brain</p>
             <p className="text-sm text-emerald-900/80">
-              Discovery analysis uses your configured sources for sharper fit scoring.
+              Prospect analysis uses your configured business intelligence for sharper fit scoring.
             </p>
             <ul className="flex flex-wrap gap-2">
               {AI_BRAIN_SOURCE_LABELS.map(({ key, label }) => (
@@ -170,7 +190,7 @@ function AiBrainPanel({
     <div className="rounded-xl border border-amber-200/80 bg-amber-50/60 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="font-medium text-amber-950">AI Brain not configured yet</p>
+          <p className="font-medium text-amber-950">Prospect AI works even better with AI Brain.</p>
           <p className="mt-1 text-sm text-amber-900/80">
             Optional — configure AI Brain for richer fit analysis, or continue with basic analysis.
           </p>
@@ -231,15 +251,17 @@ function ActivationScreen({
     subscription?.limits?.plan ||
     subscription?.subscription?.effectivePlan ||
     subscription?.subscription?.plan ||
-    "starter";
+    null;
   const activate = useActivateProspectAi();
+  const planPanel = prospectDiscoveriesPlanPanel(plan);
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-8 px-4 py-10 sm:py-14">
-      <div className="space-y-3 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-green/10 text-brand-green">
-          <Sparkles className="h-6 w-6" />
-        </div>
+    <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-8 sm:py-10">
+      <div className="overflow-hidden rounded-2xl border border-emerald-200/70 shadow-sm">
+        <ProspectAiCardArt className="h-36 w-full sm:h-40" />
+      </div>
+
+      <div className="space-y-2.5 text-center">
         <div className="inline-flex items-center gap-1.5 text-brand-green">
           <Star className="h-4 w-4 fill-current" aria-hidden />
           <span className="text-xs font-semibold uppercase tracking-wide">Growth Engine</span>
@@ -248,17 +270,17 @@ function ActivationScreen({
           Prospect AI
         </h1>
         <p className="mx-auto max-w-xl text-sm leading-relaxed text-gray-600 sm:text-base">
-          Discover potential customers, analyze their fit with AI, launch personalized outreach
-          campaigns, and manage every reply from one unified inbox.
+          Find new businesses, let AI qualify the best opportunities, launch personalized outreach,
+          and turn conversations into customers.
         </p>
       </div>
 
-      <div className="rounded-2xl border border-gray-200/90 bg-gradient-to-br from-white to-emerald-50/40 p-6 shadow-sm sm:p-8">
-        <ul className="space-y-3 text-sm text-gray-700">
+      <div className="rounded-2xl border border-gray-200/90 bg-white p-5 shadow-sm sm:p-6">
+        <ul className="space-y-2.5 text-sm text-gray-700">
           {[
             "Discover prospects by business type and location",
-            "Review AI fit scoring before you outreach",
-            "Run campaigns from one queue, then close in Inbox",
+            "Review AI fit insights before you reach out",
+            "Launch campaigns and manage every reply from one inbox",
           ].map((line) => (
             <li key={line} className="flex gap-2.5">
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" />
@@ -266,10 +288,27 @@ function ActivationScreen({
             </li>
           ))}
         </ul>
-        <p className="mt-5 text-sm text-gray-600">{prospectDiscoveriesPlanCopy(plan)}</p>
-        <p className="mt-1 text-xs text-gray-500">{prospectDiscoveriesCatalogCopy()}</p>
+
+        <div className="mt-5 rounded-xl border border-gray-100 bg-gray-50/80 px-3.5 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+            {planPanel.title}
+          </p>
+          <p className="mt-1 text-sm font-medium tabular-nums text-gray-900">{planPanel.primary}</p>
+          {planPanel.secondaryLines?.map((line) => (
+            <p key={line} className="mt-0.5 text-xs tabular-nums text-gray-500">
+              {line}
+            </p>
+          ))}
+          <Link
+            href="/app/settings"
+            className="mt-2 inline-block text-xs font-medium text-brand-green hover:underline"
+          >
+            View plan limits
+          </Link>
+        </div>
+
         <Button
-          className="mt-6 w-full bg-brand-green text-white hover:bg-brand-green/90 sm:w-auto"
+          className="mt-5 w-full bg-brand-green text-white hover:bg-brand-green/90 sm:w-auto"
           disabled={activate.isPending}
           onClick={() => {
             activate.mutate(undefined, {
@@ -358,7 +397,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
           <div>
             <h2 className="text-base font-semibold text-gray-900">Discover prospects</h2>
             <p className="mt-1 text-sm text-gray-600">
-              Search by business type and location. Selected results go to Review for AI fit analysis.
+              Search by business type and location. Selected results go to AI Review for fit analysis.
             </p>
           </div>
         </div>
@@ -485,7 +524,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
               {sendToReview.isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Send to Review
+              Send to AI Review
             </Button>
           </div>
           <div className="overflow-auto rounded-xl border">
@@ -709,7 +748,7 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
               Prospect AI
             </h1>
             <p className="max-w-2xl text-sm text-gray-600">
-              Daily workspace — discover, review, campaign, then close replies in Inbox.
+              Daily workspace — discover, AI review, campaigns, then close replies in Inbox.
             </p>
           </div>
           <Link href="/app/inbox">
@@ -727,8 +766,8 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
           {(
             [
               ["discover", "Discover"],
-              ["review", "Review"],
-              ["campaign", "Campaign Queue"],
+              ["review", "AI Review"],
+              ["campaign", "Campaigns"],
               ["activity", "Activity"],
             ] as const
           ).map(([value, label]) => (

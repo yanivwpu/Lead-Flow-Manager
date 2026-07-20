@@ -92,14 +92,62 @@ export function prospectDiscoveriesForPlan(plan: string | null | undefined): num
   return 100;
 }
 
-export function prospectDiscoveriesPlanCopy(plan: string | null | undefined): string {
-  const quota = prospectDiscoveriesForPlan(plan);
-  const label = (plan || "").toLowerCase().includes("pro") ? "Pro" : "Starter";
-  return `${label} includes ${quota} Prospect Discoveries each month`;
+export function normalizeProspectAiPlanLabel(
+  plan: string | null | undefined,
+): "pro" | "starter" | "other" {
+  const normalized = (plan || "").toLowerCase();
+  if (normalized.includes("pro")) return "pro";
+  if (normalized.includes("starter")) return "starter";
+  return "other";
 }
 
+/** Compact two-line catalog quota block (both plans). */
+export function prospectDiscoveriesCatalogLines(): { title: string; lines: string[] } {
+  return {
+    title: "Included with your plan",
+    lines: [
+      "Starter: 100 Prospect Discoveries / month",
+      "Pro: 500 Prospect Discoveries / month",
+    ],
+  };
+}
+
+/** Activation / workspace: emphasize current plan when known. */
+export function prospectDiscoveriesPlanPanel(plan: string | null | undefined): {
+  title: string;
+  primary: string;
+  secondaryLines?: string[];
+} {
+  const label = normalizeProspectAiPlanLabel(plan);
+  if (label === "pro") {
+    return {
+      title: "Included with your Pro plan",
+      primary: "500 Prospect Discoveries / month",
+    };
+  }
+  if (label === "starter") {
+    return {
+      title: "Included with your Starter plan",
+      primary: "100 Prospect Discoveries / month",
+      secondaryLines: ["Pro: 500 Prospect Discoveries / month"],
+    };
+  }
+  const catalog = prospectDiscoveriesCatalogLines();
+  return {
+    title: catalog.title,
+    primary: catalog.lines[0],
+    secondaryLines: catalog.lines.slice(1),
+  };
+}
+
+/** @deprecated Prefer prospectDiscoveriesCatalogLines / prospectDiscoveriesPlanPanel */
+export function prospectDiscoveriesPlanCopy(plan: string | null | undefined): string {
+  return prospectDiscoveriesPlanPanel(plan).primary;
+}
+
+/** @deprecated Prefer prospectDiscoveriesCatalogLines */
 export function prospectDiscoveriesCatalogCopy(): string {
-  return "Starter 100 / Pro 500 Prospect Discoveries included each month";
+  return prospectDiscoveriesCatalogLines().lines.join(" · ");
 }
 
 export function useProspectAiStatus(options?: { enabled?: boolean }) {
