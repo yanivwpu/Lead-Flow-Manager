@@ -933,32 +933,21 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-5 sm:gap-5 sm:px-6 sm:py-6">
-      <header className="space-y-1">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-1">
-            <div className="inline-flex items-center gap-1.5 text-brand-green">
-              <Star className="h-3.5 w-3.5 fill-current" aria-hidden />
-              <span className="text-[11px] font-semibold uppercase tracking-wide">Growth Engine</span>
-            </div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight text-gray-900 text-pretty sm:text-3xl">
-              Prospect AI
-            </h1>
-            <p className="max-w-2xl text-sm leading-relaxed text-gray-600 text-pretty">
-              Find new businesses, let AI qualify them, launch outreach, and close customers from one
-              inbox.
-            </p>
-          </div>
-          <Link href="/app/inbox">
-            <Button variant="outline" size="sm" className="shrink-0 self-start">
-              <Inbox className="mr-2 h-4 w-4" />
-              Open Inbox
-            </Button>
-          </Link>
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-4 sm:gap-3.5 sm:px-6 sm:py-5">
+      <header className="space-y-0.5">
+        <div className="inline-flex items-center gap-1.5 text-brand-green">
+          <Star className="h-3.5 w-3.5 fill-current" aria-hidden />
+          <span className="text-[11px] font-semibold uppercase tracking-wide">Growth Engine</span>
         </div>
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-gray-900 text-pretty sm:text-[1.75rem]">
+          Prospect AI
+        </h1>
+        <p className="max-w-xl text-sm text-gray-600 text-pretty">
+          Your AI employee for customer acquisition.
+        </p>
       </header>
 
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-5">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-3">
         <TabsList className="h-auto w-full flex-wrap justify-start gap-x-4 gap-y-1 border-b border-gray-200 bg-transparent p-0 pb-0">
           {(
             [
@@ -972,7 +961,7 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
             <TabsTrigger
               key={value}
               value={value}
-              className="h-10 rounded-none border-b-2 border-transparent px-0 pb-2.5 text-sm whitespace-nowrap data-[state=active]:border-brand-green data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              className="h-9 rounded-none border-b-2 border-transparent px-0 pb-2 text-sm whitespace-nowrap data-[state=active]:border-brand-green data-[state=active]:bg-transparent data-[state=active]:shadow-none"
             >
               {label}
             </TabsTrigger>

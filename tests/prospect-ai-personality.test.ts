@@ -42,9 +42,9 @@ import { join } from "node:path";
   ]);
   assert.equal(model.idle, false);
   assert.ok(model.lines.some((l) => l.text.includes("Reviewing 2")));
-  assert.ok(model.lines.some((l) => l.text.includes("Analyzing 1 website")));
-  assert.ok(model.lines.some((l) => l.text.includes("Found public contact details for 1")));
-  assert.ok(model.lines.some((l) => l.text.includes("campaign ready")));
+  assert.ok(model.lines.some((l) => /Analyzing 1 website/i.test(l.text)));
+  assert.ok(model.lines.some((l) => /Found public contact details for 1/i.test(l.text)));
+  assert.ok(model.lines.some((l) => /ready for campaign/i.test(l.text)));
 }
 
 // Contact-found requires flags — enrichment completed alone is not enough
@@ -73,8 +73,9 @@ import { join } from "node:path";
     },
   ]);
   assert.equal(idle.idle, true);
-  assert.ok(idle.lines.some((l) => /All caught up/i.test(l.text)));
-  assert.ok(idle.lines.some((l) => /ready for your review/i.test(l.text)));
+  assert.ok(idle.lines.some((l) => /caught up/i.test(l.text)));
+  assert.ok(idle.lines.some((l) => /approval|ready for your review/i.test(l.text)));
+  assert.ok(idle.nextAction && /Approve/i.test(idle.nextAction));
 }
 
 // Qualification emoji/message

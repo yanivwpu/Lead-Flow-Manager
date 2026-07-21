@@ -39,7 +39,6 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import type {
-  ProspectIntelligenceDashboardCounts,
   ProspectIntelligenceJobSummary,
   ProspectIntelligenceListItem,
 } from "@shared/prospectImport";
@@ -1157,12 +1156,6 @@ export function ProspectIntelligencePanel(props: {
     return () => mq.removeEventListener?.("change", apply);
   }, []);
 
-  const dashboardQuery = useQuery({
-    queryKey: ["/api/growth-tools/prospect-intelligence/dashboard"],
-    queryFn: () => fetchJson<ProspectIntelligenceDashboardCounts>("/api/growth-tools/prospect-intelligence/dashboard"),
-    refetchInterval: props.activeAnalysisJob?.status === "running" || bulkAnalysisJobId ? 2000 : false,
-  });
-
   const listQuery = useQuery({
     queryKey: [
       "/api/growth-tools/prospect-intelligence",
@@ -1294,7 +1287,6 @@ export function ProspectIntelligencePanel(props: {
     }
   }, [bulkJobQuery.data?.job?.status]);
 
-  const counts = dashboardQuery.data;
   const rawItems = listQuery.data?.items ?? [];
 
   const lifecycleCounts = useMemo(() => {
@@ -1322,8 +1314,12 @@ export function ProspectIntelligencePanel(props: {
           enrichmentPhoneFound: row.intelligence.enrichmentPhoneFound,
           leadScore: row.intelligence.leadScore,
         })),
+        {
+          failedQualificationCount:
+            recentBulkSummary && !bulkAnalysisJobId ? recentBulkSummary.failed : 0,
+        },
       ),
-    [rawItems],
+    [rawItems, recentBulkSummary, bulkAnalysisJobId],
   );
 
   const filteredItems = useMemo(() => {
@@ -1593,95 +1589,49 @@ export function ProspectIntelligencePanel(props: {
       toast({ title: "Queue failed", description: err.message, variant: "destructive" }),
   });
 
-  const retryFailedMutation = useMutation({
-    mutationFn: (jobId: string) =>
-      fetchJson<{ job: { id: string } }>(
-        `/api/growth-tools/prospect-intelligence/bulk-analyze/${jobId}/retry-failed`,
-        { method: "POST" },
-      ),
-    onSuccess: (data) => {
-      setBulkAnalysisJobId(data.job.id);
-      setRecentBulkSummary(null);
-      toast({ title: "Retrying failed analyses only" });
-    },
-    onError: (err: Error) =>
-      toast({ title: "Retry failed", description: err.message, variant: "destructive" }),
-  });
-
   const bulkJob = bulkJobQuery.data?.job;
 
   return (
-    <section className={props.embedded ? "space-y-5" : "mt-10 space-y-5 border-t pt-8"}>
-      <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
-        <Sparkles className="h-4 w-4 text-brand-green" />
-        {props.embedded ? "Review AI Recommendations" : "Prospect AI Intelligence"}
-      </h3>
-      <p className="text-sm text-gray-600">
-        Classify imported prospects, score fit, draft personalized outreach, then approve in batches
-        and queue controlled Email sends. Manual one-contact send remains available.
-      </p>
+    <section
+      className={cn(
+        props.embedded ? "space-y-3" : "mt-8 space-y-3 border-t pt-6",
+      )}
+      data-testid="pi-review-panel"
+    >
+      {!props.embedded ? (
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+          <Sparkles className="h-4 w-4 text-brand-green" />
+          Prospect AI Intelligence
+        </h3>
+      ) : null}
 
       {props.activeAnalysisJob?.status === "running" ? (
-        <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-900">
+        <div className="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs text-blue-900">
           <p className="flex items-center gap-2 font-medium">
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
             {jobProgressLabel}
           </p>
         </div>
       ) : null}
 
       {bulkJob && (bulkJob.status === "running" || bulkJob.status === "pending") ? (
-        <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-900">
+        <div className="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs text-blue-900">
           <p className="flex items-center gap-2 font-medium">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Bulk analyzing… {bulkJob.progressCurrent} / {bulkJob.progressTotal}
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            AI is reviewing prospects… {bulkJob.progressCurrent}/{bulkJob.progressTotal}
           </p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-4 text-xs">
-            <span>Completed: {bulkJob.completed}</span>
-            <span>Needs review: {bulkJob.needsReview}</span>
-            <span>Failed: {bulkJob.failed}</span>
-            <span>Skipped: {bulkJob.skipped}</span>
-          </div>
-        </div>
-      ) : null}
-
-      {recentBulkSummary && !bulkAnalysisJobId ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm">
-          <p className="font-semibold text-gray-900">
-            Last bulk analysis ({recentBulkSummary.status})
-          </p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-4 text-xs text-gray-600">
-            <span>Completed: {recentBulkSummary.completed}</span>
-            <span>Needs review: {recentBulkSummary.needsReview}</span>
-            <span>Failed: {recentBulkSummary.failed}</span>
-            <span>Skipped: {recentBulkSummary.skipped}</span>
-          </div>
-          {recentBulkSummary.failed > 0 && activeBulkJobQuery.data?.job?.id ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="mt-3"
-              disabled={retryFailedMutation.isPending}
-              onClick={() => retryFailedMutation.mutate(activeBulkJobQuery.data!.job!.id)}
-            >
-              Retry {recentBulkSummary.failed} failed only
-            </Button>
-          ) : null}
         </div>
       ) : null}
 
       {approveHandoff ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-950">
-          <p className="font-semibold">{approveHandoff.approved} prospects approved</p>
-          <p className="mt-1 text-emerald-900/80">
-            Approval does not guarantee outreach eligibility. Queue still re-checks suppression, duplicates, and channel readiness.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 text-sm text-emerald-950">
+          <p className="font-medium">{approveHandoff.approved} approved</p>
+          <div className="mt-2 flex flex-wrap gap-2">
             <Button
               type="button"
               size="sm"
               variant="outline"
+              className="h-8"
               onClick={() => {
                 setLifecycleFilter("campaign_ready");
                 setApproveHandoff(null);
@@ -1692,7 +1642,7 @@ export function ProspectIntelligencePanel(props: {
             <Button
               type="button"
               size="sm"
-              className="bg-brand-green hover:bg-emerald-700"
+              className="h-8 bg-brand-green hover:bg-emerald-700"
               disabled={previewQueueMutation.isPending}
               onClick={() => previewQueueMutation.mutate(approveHandoff.approvedContactIds)}
             >
@@ -1703,40 +1653,13 @@ export function ProspectIntelligencePanel(props: {
       ) : null}
 
       {props.activeAnalysisJob?.status === "completed" ? (
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
-          <p className="text-sm font-semibold text-emerald-900">Analysis complete</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-3 lg:grid-cols-6 text-sm">
-            {[
-              { label: "Analyzed", value: props.activeAnalysisJob.analyzed },
-              { label: "High priority", value: props.activeAnalysisJob.highPriority },
-              { label: "Medium priority", value: props.activeAnalysisJob.mediumPriority },
-              { label: "Low priority", value: props.activeAnalysisJob.lowPriority },
-              { label: "Needs review", value: props.activeAnalysisJob.needsReview },
-              { label: "Errors", value: props.activeAnalysisJob.errors },
-            ].map((row) => (
-              <div key={row.label}>
-                <p className="text-gray-500">{row.label}</p>
-                <p className="font-semibold">{row.value}</p>
-              </div>
-            ))}
-          </div>
+        <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 px-3 py-2 text-xs text-emerald-900">
+          Analysis complete — {props.activeAnalysisJob.analyzed} reviewed
+          {props.activeAnalysisJob.errors
+            ? `, ${props.activeAnalysisJob.errors} errors`
+            : ""}
         </div>
       ) : null}
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {[
-          { label: "AI Reviewed", value: counts?.aiReviewed ?? 0 },
-          { label: "High Priority", value: counts?.highPriority ?? 0 },
-          { label: "Medium Priority", value: counts?.mediumPriority ?? 0 },
-          { label: "Low Priority", value: counts?.lowPriority ?? 0 },
-          { label: "Needs Review", value: counts?.needsReview ?? 0 },
-        ].map((card) => (
-          <div key={card.label} className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-center">
-            <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-            <p className="text-xs text-gray-500">{card.label}</p>
-          </div>
-        ))}
-      </div>
 
       <AiGrowthAssistantCard
         model={assistantModel}
@@ -1744,7 +1667,7 @@ export function ProspectIntelligencePanel(props: {
         className="max-w-xl"
       />
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         {PROSPECT_REVIEW_FILTER_CHIPS.map((chip) => {
           const count = lifecycleCounts[chip.id] ?? 0;
           const active = lifecycleFilter === chip.id;
@@ -1755,7 +1678,7 @@ export function ProspectIntelligencePanel(props: {
               size="sm"
               variant={active ? "default" : "outline"}
               className={cn(
-                "h-8 rounded-full px-3 text-xs font-medium transition-all duration-200",
+                "h-7 rounded-full px-2.5 text-[11px] font-medium transition-all duration-200",
                 active
                   ? "bg-gray-900 text-white shadow-sm hover:bg-gray-800"
                   : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50",
@@ -1766,7 +1689,7 @@ export function ProspectIntelligencePanel(props: {
               {chip.label}
               <span
                 className={cn(
-                  "ms-1.5 tabular-nums",
+                  "ms-1 tabular-nums",
                   active ? "text-white/80" : "text-gray-400",
                 )}
               >
@@ -1777,9 +1700,9 @@ export function ProspectIntelligencePanel(props: {
         })}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Priority" /></SelectTrigger>
+          <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue placeholder="Priority" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All priorities</SelectItem>
             <SelectItem value="high">High</SelectItem>
@@ -1789,7 +1712,7 @@ export function ProspectIntelligencePanel(props: {
           </SelectContent>
         </Select>
         <Select value={businessFilter} onValueChange={setBusinessFilter}>
-          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Segment" /></SelectTrigger>
+          <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue placeholder="Segment" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All segments</SelectItem>
             <SelectItem value="agency">Agency</SelectItem>
@@ -1799,7 +1722,7 @@ export function ProspectIntelligencePanel(props: {
           </SelectContent>
         </Select>
         <Select value={channelFilter} onValueChange={setChannelFilter}>
-          <SelectTrigger className="w-[170px]"><SelectValue placeholder="Channel" /></SelectTrigger>
+          <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue placeholder="Channel" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Any contact info</SelectItem>
             <SelectItem value="has_email">Has Email</SelectItem>
@@ -1809,7 +1732,7 @@ export function ProspectIntelligencePanel(props: {
           </SelectContent>
         </Select>
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Sort" /></SelectTrigger>
+          <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue placeholder="Sort" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="name">Name (stable)</SelectItem>
             <SelectItem value="leadScore">Lead score</SelectItem>
@@ -1820,31 +1743,33 @@ export function ProspectIntelligencePanel(props: {
         </Select>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-gray-50/80 p-3">
-        <Button type="button" size="sm" variant="outline" onClick={selectVisible}>
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-gray-50/70 px-2.5 py-2">
+        <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={selectVisible}>
           Select visible ({items.length})
         </Button>
         <Button
           type="button"
           size="sm"
           variant="outline"
+          className="h-8 text-xs"
           disabled={selectAllFilteredMutation.isPending}
           onClick={() => selectAllFilteredMutation.mutate()}
         >
           {selectAllFilteredMutation.isPending ? "Resolving…" : "Select all filtered"}
         </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={clearSelection}>
+        <Button type="button" size="sm" variant="ghost" className="h-8 text-xs" onClick={clearSelection}>
           Clear
         </Button>
-        <span className="text-sm text-gray-600">
+        <span className="text-xs text-gray-600">
           {selectedCount} selected
           {selectAllFiltered && resolvedFilteredCount != null ? " (server-resolved)" : ""}
         </span>
-        <div className="ml-auto flex flex-wrap gap-2">
+        <div className="ml-auto flex flex-wrap gap-1.5">
           <Button
             type="button"
             size="sm"
             variant="outline"
+            className="h-8 text-xs"
             disabled={!selectedCount || bulkApproveMutation.isPending}
             onClick={() => bulkApproveMutation.mutate()}
           >
@@ -1853,7 +1778,7 @@ export function ProspectIntelligencePanel(props: {
           <Button
             type="button"
             size="sm"
-            className="bg-brand-green hover:bg-emerald-700"
+            className="h-8 bg-brand-green text-xs hover:bg-emerald-700"
             disabled={!selectedCount || previewQueueMutation.isPending}
             onClick={() => previewQueueMutation.mutate(undefined)}
             data-testid="pi-queue-outreach"
@@ -1864,14 +1789,9 @@ export function ProspectIntelligencePanel(props: {
       </div>
 
       {items.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-gradient-to-b from-gray-50/80 to-white px-6 py-14 text-center">
+        <div className="rounded-xl border border-dashed border-gray-200 bg-gradient-to-b from-gray-50/60 to-white px-5 py-8 text-center">
           <p className="text-sm font-medium text-gray-800">
             {prospectReviewEmptyMessage(lifecycleFilter, rawItems.length > 0)}
-          </p>
-          <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-gray-500">
-            {rawItems.length === 0
-              ? "AI works in the background — you only review and approve."
-              : "Switch filters anytime. Prospects stay in the list."}
           </p>
         </div>
       ) : (
