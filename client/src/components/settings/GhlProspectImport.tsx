@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ArrowRight,
-  Brain,
   Check,
   Download,
   Filter,
@@ -60,7 +59,6 @@ import type {
   ProspectImportReason,
   ProspectImportTemplate,
   ProspectImportUndoPreview,
-  ProspectIntelligenceJobSummary,
 } from "@shared/prospectImport";
 import {
   PROSPECT_IMPORT_INTERNAL_TAGS,
@@ -73,7 +71,7 @@ import {
   PROSPECT_IMPORT_DEFAULT_SCAN_SCOPE,
   PROSPECT_IMPORT_DEFAULT_IMPORT_LIMIT,
 } from "@shared/prospectImport";
-import { AnalyzeConfirmDialog, ProspectIntelligencePanel } from "./ProspectIntelligencePanel";
+import { ProspectIntelligencePanel } from "./ProspectIntelligencePanel";
 import { ProspectOutreachQueuePanel } from "./ProspectOutreachQueuePanel";
 
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -162,12 +160,6 @@ export function GhlProspectImport({
   const [undoJob, setUndoJob] = useState<ProspectImportHistoryItem | null>(null);
   const [undoPreview, setUndoPreview] = useState<ProspectImportUndoPreview | null>(null);
   const [appliedTemplateName, setAppliedTemplateName] = useState<string | null>(null);
-  const [analysisJob, setAnalysisJob] = useState<ProspectIntelligenceJobSummary | null>(null);
-  const [analyzeDialog, setAnalyzeDialog] = useState<{
-    importJobId: string;
-    batchName: string;
-    contactCount: number;
-  } | null>(null);
 
   const locationsQuery = useQuery({
     queryKey: ["/api/growth-tools/prospect-import/ghl/locations"],
@@ -247,38 +239,6 @@ export function GhlProspectImport({
       setAppliedTemplateName(null);
       setStep(2);
     }
-  };
-
-  const pollAnalysisJob = useCallback(async (jobId: string) => {
-    try {
-      const data = await fetchJson<{ job: ProspectIntelligenceJobSummary }>(
-        `/api/growth-tools/prospect-intelligence/jobs/${jobId}`,
-      );
-      setAnalysisJob(data.job);
-      if (data.job.status === "running" || data.job.status === "pending") {
-        setTimeout(() => void pollAnalysisJob(jobId), 2000);
-      } else {
-        void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
-        void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-import/dashboard"] });
-      }
-    } catch {
-      /* ignore transient poll errors */
-    }
-  }, [queryClient]);
-
-  useEffect(() => {
-    if (analysisJob?.status === "running" || analysisJob?.status === "pending") {
-      const timer = setTimeout(() => void pollAnalysisJob(analysisJob.id), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [analysisJob, pollAnalysisJob]);
-
-  const openAnalyzeDialog = (job: Pick<ProspectImportJobSummary, "id" | "batchName" | "imported">) => {
-    setAnalyzeDialog({
-      importJobId: job.id,
-      batchName: job.batchName,
-      contactCount: job.imported,
-    });
   };
 
   const canContinueFromStep1 = Boolean(selectedIntegrationId && selectedLocationId);
@@ -402,6 +362,10 @@ export function GhlProspectImport({
       setStep(5);
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-import/history"] });
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-import/dashboard"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["/api/growth-tools/prospect-intelligence/bulk-analyze/active"],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
     },
     onError: (err: Error) => {
       toast({ title: "Import failed", description: err.message, variant: "destructive" });
@@ -1271,24 +1235,12 @@ export function GhlProspectImport({
                 <Check className="h-4 w-4" />
                 Contacts are in your YaBa workspace with tag {internalTag}.
               </p>
-              <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-gray-900">Analyze with AI</p>
-                    <p className="text-xs text-gray-500">
-                      Classify prospects, score WhaChatCRM fit, and draft a personalized first message.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={!activeJob || activeJob.imported < 1}
-                    onClick={() => activeJob && openAnalyzeDialog(activeJob)}
-                  >
-                    <Brain className="mr-2 h-4 w-4" />
-                    Analyze with AI
-                  </Button>
-                </div>
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4 text-sm text-emerald-950">
+                <p className="font-medium">AI qualification started automatically</p>
+                <p className="mt-1 text-emerald-900/80">
+                  Prospects appear in AI Review as Imported → Analyzing → Ready for Approval. Your first
+                  step is Review — no Analyze click needed.
+                </p>
               </div>
             </>
           ) : null}
@@ -1302,33 +1254,18 @@ export function GhlProspectImport({
         <ProspectImportHistoryPanel
           history={historyQuery.data?.history}
           isLoading={historyQuery.isLoading}
-          onAnalyze={openAnalyzeDialog}
           onUndo={(job) => void openUndoDialog(job)}
         />
       ) : null}
 
       {!embedded ? (
         <ProspectIntelligencePanel
-          activeAnalysisJob={analysisJob}
-          onAnalysisJobUpdate={setAnalysisJob}
+          activeAnalysisJob={null}
+          onAnalysisJobUpdate={() => {}}
         />
       ) : null}
 
       {!embedded ? <ProspectOutreachQueuePanel /> : null}
-
-      {analyzeDialog ? (
-        <AnalyzeConfirmDialog
-          open={Boolean(analyzeDialog)}
-          onOpenChange={(open) => !open && setAnalyzeDialog(null)}
-          importJobId={analyzeDialog.importJobId}
-          batchName={analyzeDialog.batchName}
-          contactCount={analyzeDialog.contactCount}
-          onStarted={(job) => {
-            setAnalysisJob(job);
-            void pollAnalysisJob(job.id);
-          }}
-        />
-      ) : null}
 
       <Dialog open={Boolean(undoJob)} onOpenChange={(open) => !open && setUndoJob(null)}>
         <DialogContent>
@@ -1381,12 +1318,10 @@ export function GhlProspectImport({
 export function ProspectImportHistoryPanel({
   history,
   isLoading,
-  onAnalyze,
   onUndo,
 }: {
   history?: ProspectImportHistoryItem[];
   isLoading?: boolean;
-  onAnalyze?: (job: ProspectImportHistoryItem | ProspectImportJobSummary) => void;
   onUndo?: (job: ProspectImportHistoryItem) => void;
 } = {}) {
   const historyQuery = useQuery({
@@ -1443,20 +1378,6 @@ export function ProspectImportHistoryPanel({
                   <TableCell className="text-xs">{job.internalTag || "—"}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
-                      {onAnalyze &&
-                      job.status === "completed" &&
-                      job.undoStatus !== "undone" &&
-                      job.imported > 0 ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onAnalyze(job)}
-                        >
-                          <Brain className="h-3.5 w-3.5 mr-1" />
-                          Analyze
-                        </Button>
-                      ) : null}
                       {onUndo && job.canUndo ? (
                         <Button type="button" variant="ghost" size="sm" onClick={() => onUndo(job)}>
                           <RotateCcw className="h-3.5 w-3.5 mr-1" />

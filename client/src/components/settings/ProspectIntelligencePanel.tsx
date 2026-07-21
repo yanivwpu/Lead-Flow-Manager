@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Brain,
   Check,
   Loader2,
   Mail,
   Pencil,
   RefreshCw,
   Sparkles,
-  AlertTriangle,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -62,7 +60,29 @@ import {
   prospectDisplayStatusLabel,
   resolveProspectDisplayStatus,
 } from "@shared/prospectOutreachLifecycle";
+import {
+  mergeProspectRowsStableOrder,
+  matchesProspectReviewFilter,
+  prospectMatchSummary,
+  prospectReviewCompletionFlash,
+  prospectReviewEmptyMessage,
+  prospectReviewLifecycleLabel,
+  PROSPECT_REVIEW_FILTER_CHIPS,
+  PROSPECT_TIMELINE_STAGES,
+  resolveProspectReviewLifecycle,
+  resolveProspectTimelineStates,
+  type ProspectReviewLifecycle,
+  type ProspectTimelineStageState,
+} from "@shared/prospectReviewUx";
+import {
+  AI_PERSONALITY_ROTATE_MS,
+  buildAiGrowthAssistantModel,
+  resolveAiPersonalityStatus,
+} from "@shared/prospectAiPersonality";
+import { AiGrowthAssistantCard } from "@/components/prospectAi/AiGrowthAssistantCard";
+import { AiPersonalityStatusView } from "@/components/prospectAi/AiPersonalityStatus";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { credentials: "include", ...init });
@@ -71,36 +91,104 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-function priorityBadge(priority?: string, analysisStatus?: string | null) {
-  const analysis = String(analysisStatus || "pending").toLowerCase();
-  if (analysis === "processing") {
-    return <Badge className="bg-sky-600">Analyzing</Badge>;
-  }
-  if (analysis === "failed") {
-    return <Badge variant="destructive">Analysis failed</Badge>;
-  }
-  if (analysis === "pending") {
-    return <Badge variant="outline">AI analysis pending</Badge>;
-  }
-  switch (priority) {
-    case "high":
-      return <Badge className="bg-emerald-600">High</Badge>;
-    case "medium":
-      return <Badge className="bg-amber-500">Medium</Badge>;
-    case "low":
-      return <Badge variant="secondary">Low</Badge>;
-    case "needs_review":
-      return <Badge variant="outline">Needs review</Badge>;
-    default:
-      return <Badge variant="outline">Needs review</Badge>;
-  }
+function reviewUxInput(row: ProspectIntelligenceListItem) {
+  return {
+    analysisStatus: row.intelligence.analysisStatus,
+    reviewStatus: row.intelligence.reviewStatus,
+    needsReview: row.intelligence.needsReview,
+    enrichmentStatus: row.intelligence.enrichmentStatus,
+    outreachStatus: row.intelligence.outreachStatus,
+    outreachSentAt: row.intelligence.outreachSentAt,
+    repliedAt: row.intelligence.repliedAt,
+    queueStatus: row.queueStatus,
+    outcome: row.prospectOutcome,
+  };
 }
 
+function ProspectProgressTimeline({ life }: { life: ProspectReviewLifecycle }) {
+  const states = resolveProspectTimelineStates(life);
+  return (
+    <div
+      className="flex flex-wrap items-center gap-x-2 gap-y-1"
+      data-testid={`pi-timeline-${life}`}
+      aria-label={`Progress: ${prospectReviewLifecycleLabel(life)}`}
+    >
+      {PROSPECT_TIMELINE_STAGES.map((stage, i) => {
+        const state = states[i] as ProspectTimelineStageState;
+        return (
+          <span key={stage.id} className="inline-flex items-center gap-1">
+            {i > 0 ? <span className="text-[10px] text-gray-200 select-none">·</span> : null}
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 text-[10px] font-medium tracking-tight transition-colors duration-300",
+                state === "done" && "text-emerald-700",
+                state === "current" && "text-emerald-800",
+                state === "todo" && "text-gray-400",
+              )}
+            >
+              <span
+                className={cn(
+                  "inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] leading-none",
+                  state === "done" && "bg-emerald-600 text-white",
+                  state === "current" && "bg-emerald-500 text-white pi-timeline-current",
+                  state === "todo" && "border border-gray-300 bg-white text-gray-300",
+                )}
+                aria-hidden
+              >
+                {state === "done" ? "✓" : state === "current" ? "●" : "○"}
+              </span>
+              {stage.label}
+            </span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function MatchStars({ stars }: { stars: number }) {
+  return (
+    <span className="tracking-tight text-amber-500" aria-hidden>
+      {"★".repeat(stars)}
+      <span className="text-gray-300">{"★".repeat(Math.max(0, 5 - stars))}</span>
+    </span>
+  );
+}
+
+function VerifiedChip({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-medium transition-colors duration-300",
+        ok ? "bg-emerald-50 text-emerald-800" : "bg-gray-50 text-gray-400",
+      )}
+    >
+      {ok ? "✓" : "○"} {label}
+    </span>
+  );
+}
+
+function analysisBusy(analysisStatus?: string | null): boolean {
+  const a = String(analysisStatus || "pending").toLowerCase();
+  return a === "processing" || a === "pending";
+}
+
+function enrichmentBusy(enrichmentStatus?: string | null): boolean {
+  const s = String(enrichmentStatus || "none").toLowerCase();
+  return s === "pending" || s === "enriching";
+}
+
+function offerLabel(offer?: string) {
+  if (!offer) return "";
+  return offer.replace(/_/g, " ");
+}
+
+/** Detail-dialog helper: show progress only while busy; otherwise value or em dash. */
 function analysisPendingLabel(analysisStatus?: string | null): string {
   const a = String(analysisStatus || "pending").toLowerCase();
-  if (a === "processing") return "Analyzing…";
-  if (a === "failed") return "Analysis failed";
-  if (a === "pending") return "AI analysis pending";
+  if (a === "processing") return "AI is reviewing this business…";
+  if (a === "failed") return "Qualification failed";
+  if (a === "pending") return "";
   return "";
 }
 
@@ -108,8 +196,11 @@ function cellOrPending(
   value: string | number | null | undefined,
   analysisStatus?: string | null,
 ): string {
-  const pending = analysisPendingLabel(analysisStatus);
-  if (pending && (value === null || value === undefined || value === "")) return pending;
+  const busy = analysisBusy(analysisStatus);
+  if (busy && (value === null || value === undefined || value === "")) return "—";
+  if (String(analysisStatus || "").toLowerCase() === "failed" && (value === null || value === undefined || value === "")) {
+    return "Qualification failed";
+  }
   if (value === null || value === undefined || value === "") return "—";
   return String(value);
 }
@@ -119,14 +210,14 @@ function enrichmentBadge(intel: ProspectIntelligenceListItem["intelligence"]) {
   if (status === "enriching" || status === "pending") {
     return (
       <Badge className="bg-sky-600 text-[10px]" data-testid="pi-enrichment-enriching">
-        Enriching Website
+        Learning about the website…
       </Badge>
     );
   }
   if (status === "completed") {
     return (
       <Badge className="bg-violet-600 text-[10px]" data-testid="pi-enrichment-enhanced">
-        AI Enhanced
+        Website ready
       </Badge>
     );
   }
@@ -140,84 +231,21 @@ function enrichmentBadge(intel: ProspectIntelligenceListItem["intelligence"]) {
   return null;
 }
 
-function offerLabel(offer?: string) {
-  if (!offer) return "—";
-  return offer.replace(/_/g, " ");
-}
-
-type AnalyzeDialogProps = {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  importJobId: string;
-  batchName: string;
-  contactCount: number;
-  onStarted: (job: ProspectIntelligenceJobSummary) => void;
-};
-
-function AnalyzeConfirmDialog({
-  open,
-  onOpenChange,
-  importJobId,
-  batchName,
-  contactCount,
-  onStarted,
-}: AnalyzeDialogProps) {
-  const startMutation = useMutation({
-    mutationFn: () =>
-      fetchJson<{ job: ProspectIntelligenceJobSummary }>(
-        `/api/growth-tools/prospect-import/jobs/${importJobId}/analyze`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
-      ),
-    onSuccess: (data) => {
-      onStarted(data.job);
-      onOpenChange(false);
-      toast({ title: "AI analysis started", description: `Analyzing ${contactCount} prospect(s).` });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Could not start analysis", description: err.message, variant: "destructive" });
-    },
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Analyze with AI</DialogTitle>
-          <DialogDescription>
-            Classify prospects, score fit for WhaChatCRM, and draft a first outreach message. No messages
-            will be sent.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-2 text-sm">
-          <p>
-            <span className="text-gray-500">Batch:</span>{" "}
-            <span className="font-medium">{batchName}</span>
-          </p>
-          <p>
-            <span className="text-gray-500">Prospects to analyze:</span>{" "}
-            <span className="font-medium">{contactCount}</span>
-          </p>
-        </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            className="bg-brand-green hover:bg-emerald-700"
-            disabled={startMutation.isPending || contactCount < 1}
-            onClick={() => startMutation.mutate()}
-          >
-            {startMutation.isPending ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Starting…</>
-            ) : (
-              <><Brain className="mr-2 h-4 w-4" /> Analyze with AI</>
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
+function priorityBadge(priority?: string, analysisStatus?: string | null) {
+  const analysis = String(analysisStatus || "pending").toLowerCase();
+  if (analysis === "processing" || analysis === "pending" || analysis === "failed") {
+    return null;
+  }
+  switch (priority) {
+    case "high":
+      return <Badge className="bg-emerald-600 text-[10px]">High</Badge>;
+    case "medium":
+      return <Badge className="bg-amber-500 text-[10px]">Medium</Badge>;
+    case "low":
+      return <Badge variant="secondary" className="text-[10px]">Low</Badge>;
+    default:
+      return null;
+  }
 }
 
 type DetailDialogProps = {
@@ -490,6 +518,9 @@ function ProspectIntelligenceDetailDialog({
     outreachSentAt: intel?.outreachSentAt,
     repliedAt: intel?.repliedAt,
   });
+  const lifecycle = item
+    ? resolveProspectReviewLifecycle(reviewUxInput(item))
+    : "imported";
 
   const openLinkedConversation = () => {
     if (!item?.contactId || !intel?.outreachConversationId) return;
@@ -502,6 +533,7 @@ function ProspectIntelligenceDetailDialog({
   const applyItemUpdate = (next: ProspectIntelligenceListItem | null | undefined) => {
     if (!next) return;
     onItemUpdated(next);
+    // Patch cache in place — do not invalidate (avoids table reorder).
     queryClient.setQueriesData<{ items: ProspectIntelligenceListItem[] }>(
       { queryKey: ["/api/growth-tools/prospect-intelligence"] },
       (old) => {
@@ -512,7 +544,6 @@ function ProspectIntelligenceDetailDialog({
         };
       },
     );
-    void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
   };
 
   const patchMutation = useMutation({
@@ -541,17 +572,40 @@ function ProspectIntelligenceDetailDialog({
           body: JSON.stringify({ suggestedFirstMessage: editMessage }),
         },
       ),
+    onMutate: async () => {
+      if (!item) return;
+      const optimistic: ProspectIntelligenceListItem = {
+        ...item,
+        intelligence: {
+          ...item.intelligence,
+          reviewStatus: "approved",
+          needsReview: false,
+          enrichmentStatus:
+            String(item.intelligence.enrichmentStatus || "none").toLowerCase() === "completed"
+              ? item.intelligence.enrichmentStatus
+              : "pending",
+        },
+      };
+      applyItemUpdate(optimistic);
+    },
     onSuccess: (data) => {
       if (data.item) {
-        applyItemUpdate(data.item);
+        applyItemUpdate({
+          ...data.item,
+          intelligence: {
+            ...data.item.intelligence,
+            enrichmentStatus:
+              String(data.item.intelligence.enrichmentStatus || "none").toLowerCase() === "none"
+                ? "pending"
+                : data.item.intelligence.enrichmentStatus,
+          },
+        });
         setEditMessage(data.item.intelligence?.suggestedFirstMessage || editMessage);
-      } else {
-        void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
       }
-      toast({ title: "AI result approved" });
     },
     onError: (err: Error) => {
       toast({ title: "Approve failed", description: err.message, variant: "destructive" });
+      void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
     },
   });
 
@@ -682,7 +736,7 @@ function ProspectIntelligenceDetailDialog({
                 <>
                   <p className="font-medium">Analysis failed</p>
                   <p className="mt-0.5 text-xs text-amber-800">
-                    AI analysis did not complete. Use Re-analyze to try again.
+                    AI qualification did not complete. Use Retry qualification to try again.
                   </p>
                 </>
               ) : analysisStatus === "processing" ? (
@@ -736,7 +790,10 @@ function ProspectIntelligenceDetailDialog({
             </p>
             <p data-testid="pi-display-status">
               <span className="text-gray-500">Status:</span>{" "}
-              <span className="font-medium">{prospectDisplayStatusLabel(displayStatus)}</span>
+              <span className="font-medium">{prospectReviewLifecycleLabel(lifecycle)}</span>
+              <span className="text-gray-400 text-xs ms-2">
+                ({prospectDisplayStatusLabel(displayStatus)})
+              </span>
             </p>
             {enrichmentBadge(intel)}
             {String(intel.enrichmentStatus || "").toLowerCase() === "completed" ||
@@ -918,6 +975,7 @@ function ProspectIntelligenceDetailDialog({
           <Button type="button" variant="outline" onClick={() => needsReviewMutation.mutate()}>
             Needs review
           </Button>
+          {String(intel?.analysisStatus || "").toLowerCase() === "failed" ? (
           <Button
             type="button"
             variant="outline"
@@ -925,8 +983,9 @@ function ProspectIntelligenceDetailDialog({
             onClick={() => reanalyzeMutation.mutate()}
           >
             {reanalyzeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-            Re-analyze
+            Retry qualification
           </Button>
+          ) : null}
           {String(intel?.enrichmentStatus || "").toLowerCase() === "failed" ? (
             <Button
               type="button"
@@ -1004,11 +1063,20 @@ export function ProspectIntelligencePanel(props: {
 }) {
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [businessFilter, setBusinessFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [lifecycleFilter, setLifecycleFilter] = useState<
+    "all" | "review" | ProspectReviewLifecycle
+  >("review");
   const [channelFilter, setChannelFilter] = useState<string>("all");
+  /** Stable visual order — never jump rows after analyze/approve/enrich. */
   const [sortBy, setSortBy] = useState<"leadScore" | "priority" | "confidence" | "name" | "action">(
-    "action",
+    "name",
   );
+  const stableOrderRef = useRef<string[]>([]);
+  const prevUxRef = useRef<Map<string, ReturnType<typeof reviewUxInput>>>(new Map());
+  const [rowFlash, setRowFlash] = useState<Record<string, string>>({});
+  const [progressTick, setProgressTick] = useState(0);
+  /** Keep acted-on rows visible even if lifecycle filter would hide them. */
+  const [pinnedVisibleIds, setPinnedVisibleIds] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<ProspectIntelligenceListItem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -1051,13 +1119,12 @@ export function ProspectIntelligencePanel(props: {
         ? { segment: businessFilter }
         : {}),
       ...(businessFilter === "needs_review" ? { needsReviewOnly: true } : {}),
-      ...(statusFilter !== "all" ? { statusFilter } : {}),
       ...(channelFilter === "has_email" ? { hasEmail: true } : {}),
       ...(channelFilter === "has_phone" ? { hasPhone: true } : {}),
       ...(channelFilter === "email_eligible" ? { emailEligible: true } : {}),
       ...(channelFilter === "any_eligible" ? { anyEligibleChannel: true } : {}),
     };
-  }, [priorityFilter, businessFilter, statusFilter, channelFilter]);
+  }, [priorityFilter, businessFilter, channelFilter]);
 
   // Filter changes invalidate frozen allFiltered selection.
   useEffect(() => {
@@ -1066,8 +1133,29 @@ export function ProspectIntelligencePanel(props: {
       setResolvedFilteredIds(null);
       setResolvedFilteredCount(null);
     }
+    // Reset stable order when the user changes filters/sort intentionally.
+    stableOrderRef.current = [];
+    setPinnedVisibleIds(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only clear when filters change
-  }, [priorityFilter, businessFilter, statusFilter, channelFilter]);
+  }, [priorityFilter, businessFilter, lifecycleFilter, channelFilter, sortBy]);
+
+  useEffect(() => {
+    const id = window.setInterval(
+      () => setProgressTick((t) => t + 1),
+      AI_PERSONALITY_ROTATE_MS,
+    );
+    return () => window.clearInterval(id);
+  }, []);
+
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const apply = () => setPrefersReducedMotion(mq.matches);
+    apply();
+    mq.addEventListener?.("change", apply);
+    return () => mq.removeEventListener?.("change", apply);
+  }, []);
 
   const dashboardQuery = useQuery({
     queryKey: ["/api/growth-tools/prospect-intelligence/dashboard"],
@@ -1080,7 +1168,6 @@ export function ProspectIntelligencePanel(props: {
       "/api/growth-tools/prospect-intelligence",
       priorityFilter,
       businessFilter,
-      statusFilter,
       channelFilter,
       sortBy,
     ],
@@ -1089,13 +1176,13 @@ export function ProspectIntelligencePanel(props: {
       if (priorityFilter !== "all") params.set("priority", priorityFilter);
       if (businessFilter !== "all" && businessFilter !== "needs_review") params.set("segment", businessFilter);
       if (businessFilter === "needs_review") params.set("needsReviewOnly", "true");
-      if (statusFilter !== "all") params.set("statusFilter", statusFilter);
       if (channelFilter === "has_email") params.set("hasEmail", "true");
       if (channelFilter === "has_phone") params.set("hasPhone", "true");
       if (channelFilter === "email_eligible") params.set("emailEligible", "true");
       if (channelFilter === "any_eligible") params.set("anyEligibleChannel", "true");
+      // Stable default sort — lifecycle filter applied client-side so rows never vanish mid-action.
       params.set("sortBy", sortBy);
-      params.set("sortDir", sortBy === "name" ? "asc" : sortBy === "action" ? "desc" : "desc");
+      params.set("sortDir", sortBy === "name" ? "asc" : "desc");
       params.set("limit", "500");
       return fetchJson<{ items: ProspectIntelligenceListItem[] }>(
         `/api/growth-tools/prospect-intelligence?${params.toString()}`,
@@ -1106,8 +1193,13 @@ export function ProspectIntelligencePanel(props: {
       const items = query.state.data?.items || [];
       if (
         items.some((r) => {
+          const analysis = String(r.intelligence.analysisStatus || "").toLowerCase();
           const s = String(r.intelligence.enrichmentStatus || "").toLowerCase();
-          return s === "pending" || s === "enriching";
+          return (
+            analysis === "processing" ||
+            s === "pending" ||
+            s === "enriching"
+          );
         })
       ) {
         return 2500;
@@ -1196,17 +1288,100 @@ export function ProspectIntelligencePanel(props: {
         status: job.status,
       });
       if (job.status === "completed") {
-        toast({
-          title: "Bulk analysis complete",
-          description: `${job.completed} analyzed, ${job.skipped} skipped, ${job.failed} failed, ${job.needsReview} needs review`,
-        });
+        // In-row status updates — avoid toast spam.
       }
       setBulkAnalysisJobId(null);
     }
   }, [bulkJobQuery.data?.job?.status]);
 
   const counts = dashboardQuery.data;
-  const items = listQuery.data?.items ?? [];
+  const rawItems = listQuery.data?.items ?? [];
+
+  const lifecycleCounts = useMemo(() => {
+    const map: Record<string, number> = { all: rawItems.length };
+    for (const chip of PROSPECT_REVIEW_FILTER_CHIPS) {
+      if (chip.id === "all") continue;
+      map[chip.id] = 0;
+    }
+    for (const row of rawItems) {
+      const life = resolveProspectReviewLifecycle(reviewUxInput(row));
+      map[life] = (map[life] || 0) + 1;
+      if (matchesProspectReviewFilter(life, "review")) {
+        map.review = (map.review || 0) + 1;
+      }
+    }
+    return map;
+  }, [rawItems]);
+
+  const assistantModel = useMemo(
+    () =>
+      buildAiGrowthAssistantModel(
+        rawItems.map((row) => ({
+          ...reviewUxInput(row),
+          enrichmentEmailFound: row.intelligence.enrichmentEmailFound,
+          enrichmentPhoneFound: row.intelligence.enrichmentPhoneFound,
+          leadScore: row.intelligence.leadScore,
+        })),
+      ),
+    [rawItems],
+  );
+
+  const filteredItems = useMemo(() => {
+    return rawItems.filter((row) => {
+      const life = resolveProspectReviewLifecycle(reviewUxInput(row));
+      return (
+        matchesProspectReviewFilter(life, lifecycleFilter) ||
+        pinnedVisibleIds.has(row.contactId)
+      );
+    });
+  }, [rawItems, lifecycleFilter, pinnedVisibleIds]);
+
+  const items = useMemo(() => {
+    const merged = mergeProspectRowsStableOrder(stableOrderRef.current, filteredItems);
+    stableOrderRef.current = merged.order;
+    return merged.items;
+  }, [filteredItems]);
+
+  // Soft green completion flash when a row finishes a stage (no toast spam).
+  useEffect(() => {
+    const nextFlash: Record<string, string> = {};
+    for (const row of rawItems) {
+      const ux = reviewUxInput(row);
+      const prev = prevUxRef.current.get(row.contactId);
+      const msg = prospectReviewCompletionFlash(prev, ux);
+      if (msg) nextFlash[row.contactId] = msg;
+      prevUxRef.current.set(row.contactId, ux);
+    }
+    if (Object.keys(nextFlash).length) {
+      setRowFlash((prev) => ({ ...prev, ...nextFlash }));
+      const ids = Object.keys(nextFlash);
+      const t = window.setTimeout(() => {
+        setRowFlash((prev) => {
+          const copy = { ...prev };
+          for (const id of ids) delete copy[id];
+          return copy;
+        });
+      }, 2800);
+      return () => window.clearTimeout(t);
+    }
+  }, [rawItems]);
+
+  const patchListRows = (
+    contactIds: string[],
+    patch: (row: ProspectIntelligenceListItem) => ProspectIntelligenceListItem,
+  ) => {
+    const idSet = new Set(contactIds);
+    queryClient.setQueriesData<{ items: ProspectIntelligenceListItem[] }>(
+      { queryKey: ["/api/growth-tools/prospect-intelligence"] },
+      (old) => {
+        if (!old?.items) return old;
+        return {
+          ...old,
+          items: old.items.map((row) => (idSet.has(row.contactId) ? patch(row) : row)),
+        };
+      },
+    );
+  };
 
   const jobProgressLabel = useMemo(() => {
     const job = props.activeAnalysisJob;
@@ -1288,22 +1463,6 @@ export function ProspectIntelligencePanel(props: {
       toast({ title: "Could not select all filtered", description: err.message, variant: "destructive" }),
   });
 
-  const bulkAnalyzeMutation = useMutation({
-    mutationFn: () =>
-      fetchJson<{ job: { id: string } }>("/api/growth-tools/prospect-intelligence/bulk-analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(selectionBody),
-      }),
-    onSuccess: (data) => {
-      setBulkAnalysisJobId(data.job.id);
-      setRecentBulkSummary(null);
-      toast({ title: "Bulk analysis queued" });
-    },
-    onError: (err: Error) =>
-      toast({ title: "Analyze failed", description: err.message, variant: "destructive" }),
-  });
-
   const bulkApproveMutation = useMutation({
     mutationFn: () =>
       fetchJson<{
@@ -1315,13 +1474,45 @@ export function ProspectIntelligencePanel(props: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(selectionBody),
       }),
-    onSuccess: (data) => {
-      toast({
-        title: `Approved ${data.approved}`,
-        description: data.skipped.length ? `${data.skipped.length} skipped` : undefined,
+    onMutate: () => {
+      const ids = Array.from(effectiveSelectedIds);
+      setPinnedVisibleIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.add(id));
+        return next;
       });
-      void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+      patchListRows(ids, (row) => ({
+        ...row,
+        intelligence: {
+          ...row.intelligence,
+          reviewStatus: "approved",
+          needsReview: false,
+          enrichmentStatus:
+            String(row.intelligence.enrichmentStatus || "none").toLowerCase() === "completed"
+              ? row.intelligence.enrichmentStatus
+              : "pending",
+        },
+      }));
+    },
+    onSuccess: (data) => {
       if (data.approvedContactIds?.length) {
+        setPinnedVisibleIds((prev) => {
+          const next = new Set(prev);
+          data.approvedContactIds.forEach((id) => next.add(id));
+          return next;
+        });
+        patchListRows(data.approvedContactIds, (row) => ({
+          ...row,
+          intelligence: {
+            ...row.intelligence,
+            reviewStatus: "approved",
+            needsReview: false,
+            enrichmentStatus:
+              String(row.intelligence.enrichmentStatus || "none").toLowerCase() === "completed"
+                ? row.intelligence.enrichmentStatus
+                : "pending",
+          },
+        }));
         setApproveHandoff({
           approvedContactIds: data.approvedContactIds,
           approved: data.approved,
@@ -1330,26 +1521,16 @@ export function ProspectIntelligencePanel(props: {
         setResolvedFilteredIds(data.approvedContactIds);
         setResolvedFilteredCount(data.approved);
         setSelectedIds(new Set(data.approvedContactIds));
+        // Stay on All so rows do not vanish; user can open Website Intelligence filter.
+        setLifecycleFilter("all");
       } else {
         clearSelection();
         setApproveHandoff(null);
       }
     },
-    onError: (err: Error) =>
-      toast({ title: "Bulk approve failed", description: err.message, variant: "destructive" }),
-  });
-
-  const bulkNeedsReviewMutation = useMutation({
-    mutationFn: () =>
-      fetchJson("/api/growth-tools/prospect-intelligence/bulk-needs-review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(selectionBody),
-      }),
-    onSuccess: () => {
-      toast({ title: "Marked needs review" });
+    onError: (err: Error) => {
+      toast({ title: "Bulk approve failed", description: err.message, variant: "destructive" });
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
-      clearSelection();
     },
   });
 
@@ -1393,7 +1574,18 @@ export function ProspectIntelligencePanel(props: {
       });
       setQueuePreviewOpen(false);
       setApproveHandoff(null);
+      const ids = Array.from(effectiveSelectedIds);
+      setPinnedVisibleIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.add(id));
+        return next;
+      });
+      patchListRows(ids, (row) => ({
+        ...row,
+        queueStatus: "queued",
+      }));
       clearSelection();
+      // Quiet refresh for queue counts — stable order preserves row positions.
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-outreach"] });
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
     },
@@ -1491,11 +1683,11 @@ export function ProspectIntelligencePanel(props: {
               size="sm"
               variant="outline"
               onClick={() => {
-                setStatusFilter("approved");
+                setLifecycleFilter("campaign_ready");
                 setApproveHandoff(null);
               }}
             >
-              View approved
+              View campaign ready
             </Button>
             <Button
               type="button"
@@ -1546,6 +1738,45 @@ export function ProspectIntelligencePanel(props: {
         ))}
       </div>
 
+      <AiGrowthAssistantCard
+        model={assistantModel}
+        prefersReducedMotion={prefersReducedMotion}
+        className="max-w-xl"
+      />
+
+      <div className="flex flex-wrap items-center gap-2">
+        {PROSPECT_REVIEW_FILTER_CHIPS.map((chip) => {
+          const count = lifecycleCounts[chip.id] ?? 0;
+          const active = lifecycleFilter === chip.id;
+          return (
+            <Button
+              key={chip.id}
+              type="button"
+              size="sm"
+              variant={active ? "default" : "outline"}
+              className={cn(
+                "h-8 rounded-full px-3 text-xs font-medium transition-all duration-200",
+                active
+                  ? "bg-gray-900 text-white shadow-sm hover:bg-gray-800"
+                  : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50",
+              )}
+              onClick={() => setLifecycleFilter(chip.id)}
+              data-testid={`pi-filter-${chip.id}`}
+            >
+              {chip.label}
+              <span
+                className={cn(
+                  "ms-1.5 tabular-nums",
+                  active ? "text-white/80" : "text-gray-400",
+                )}
+              >
+                ({count})
+              </span>
+            </Button>
+          );
+        })}
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
           <SelectTrigger className="w-[160px]"><SelectValue placeholder="Priority" /></SelectTrigger>
@@ -1567,19 +1798,6 @@ export function ProspectIntelligencePanel(props: {
             <SelectItem value="needs_review">Needs review</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[170px]"><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="needs_review">Needs Review</SelectItem>
-            <SelectItem value="approved">Approved</SelectItem>
-            <SelectItem value="queued">Queued</SelectItem>
-            <SelectItem value="outreach_sent">Outreach Sent</SelectItem>
-            <SelectItem value="replied">Replied</SelectItem>
-            <SelectItem value="failed">Failed</SelectItem>
-          </SelectContent>
-        </Select>
         <Select value={channelFilter} onValueChange={setChannelFilter}>
           <SelectTrigger className="w-[170px]"><SelectValue placeholder="Channel" /></SelectTrigger>
           <SelectContent>
@@ -1593,11 +1811,11 @@ export function ProspectIntelligencePanel(props: {
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
           <SelectTrigger className="w-[180px]"><SelectValue placeholder="Sort" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="action">Needs action (newest)</SelectItem>
+            <SelectItem value="name">Name (stable)</SelectItem>
             <SelectItem value="leadScore">Lead score</SelectItem>
             <SelectItem value="priority">Priority</SelectItem>
             <SelectItem value="confidence">Confidence</SelectItem>
-            <SelectItem value="name">Name</SelectItem>
+            <SelectItem value="action">Needs action</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -1627,28 +1845,10 @@ export function ProspectIntelligencePanel(props: {
             type="button"
             size="sm"
             variant="outline"
-            disabled={!selectedCount || bulkAnalyzeMutation.isPending}
-            onClick={() => bulkAnalyzeMutation.mutate()}
-          >
-            <Brain className="mr-1 h-3.5 w-3.5" /> Analyze with AI
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
             disabled={!selectedCount || bulkApproveMutation.isPending}
             onClick={() => bulkApproveMutation.mutate()}
           >
-            <Check className="mr-1 h-3.5 w-3.5" /> Bulk Approve
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={!selectedCount || bulkNeedsReviewMutation.isPending}
-            onClick={() => bulkNeedsReviewMutation.mutate()}
-          >
-            Needs Review
+            <Check className="mr-1 h-3.5 w-3.5" /> Approve
           </Button>
           <Button
             type="button"
@@ -1664,155 +1864,157 @@ export function ProspectIntelligencePanel(props: {
       </div>
 
       {items.length === 0 ? (
-        <p className="text-sm text-gray-500">
-          No prospects in AI Review yet. Discover businesses and send them here — analysis starts
-          automatically.
-        </p>
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-gradient-to-b from-gray-50/80 to-white px-6 py-14 text-center">
+          <p className="text-sm font-medium text-gray-800">
+            {prospectReviewEmptyMessage(lifecycleFilter, rawItems.length > 0)}
+          </p>
+          <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-gray-500">
+            {rawItems.length === 0
+              ? "AI works in the background — you only review and approve."
+              : "Switch filters anytime. Prospects stay in the list."}
+          </p>
+        </div>
       ) : (
-        <div className="overflow-auto rounded-xl border">
+        <div className="overflow-auto rounded-xl border border-gray-200/80 shadow-sm shadow-gray-900/[0.02]">
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow className="hover:bg-transparent">
                 <TableHead className="w-10" />
-                <TableHead>Name</TableHead>
-                <TableHead>Business type</TableHead>
-                <TableHead>Score</TableHead>
-                <TableHead>Priority</TableHead>
-                <TableHead>Offer</TableHead>
-                <TableHead>Angle</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Business</TableHead>
+                <TableHead>AI summary</TableHead>
+                <TableHead>Signals</TableHead>
+                <TableHead className="min-w-[240px]">Progress</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((row) => (
-                <TableRow
-                  key={row.contactId}
-                  className="cursor-pointer hover:bg-gray-50"
-                  onClick={() => {
-                    setSelected(row);
-                    setDetailOpen(true);
-                  }}
-                >
-                  <TableCell onClick={(e) => toggleRow(row.contactId, e)}>
-                    <input
-                      type="checkbox"
-                      checked={effectiveSelectedIds.has(row.contactId)}
-                      onChange={() => {}}
-                      aria-label={`Select ${row.name}`}
-                      className="h-4 w-4 rounded border-gray-300"
-                    />
-                  </TableCell>
-                  <TableCell className="font-medium">{row.name}</TableCell>
-                  <TableCell>
-                    {cellOrPending(row.intelligence.businessType, row.intelligence.analysisStatus)}
-                  </TableCell>
-                  <TableCell>
-                    {cellOrPending(row.intelligence.leadScore, row.intelligence.analysisStatus)}
-                  </TableCell>
-                  <TableCell>
-                    {priorityBadge(row.intelligence.priority, row.intelligence.analysisStatus)}
-                  </TableCell>
-                  <TableCell className="max-w-[140px] truncate">
-                    {analysisPendingLabel(row.intelligence.analysisStatus) &&
-                    !row.intelligence.recommendedOffer
-                      ? analysisPendingLabel(row.intelligence.analysisStatus)
-                      : offerLabel(row.intelligence.recommendedOffer)}
-                  </TableCell>
-                  <TableCell className="max-w-[200px] truncate">
-                    {cellOrPending(
-                      row.intelligence.suggestedOutreachAngle,
-                      row.intelligence.analysisStatus,
+              {items.map((row) => {
+                const intel = row.intelligence;
+                const life = resolveProspectReviewLifecycle(reviewUxInput(row));
+                const analyzing =
+                  analysisBusy(intel.analysisStatus) &&
+                  String(intel.analysisStatus).toLowerCase() === "processing";
+                const waitingAnalyze =
+                  String(intel.analysisStatus || "pending").toLowerCase() === "pending";
+                const enriching = enrichmentBusy(intel.enrichmentStatus);
+                const flashMsg = rowFlash[row.contactId];
+                const reviewReady =
+                  !analyzing &&
+                  !waitingAnalyze &&
+                  String(intel.analysisStatus || "").toLowerCase() === "completed";
+                const personality = resolveAiPersonalityStatus({
+                  ux: reviewUxInput(row),
+                  seed: row.contactId,
+                  tick: progressTick,
+                  leadScore: intel.leadScore,
+                });
+                const showActivity =
+                  analyzing || enriching || life === "imported" || reviewReady;
+                const emailFound =
+                  Boolean(intel.enrichmentEmailFound) || isValidProspectEmail(row.email);
+                const phoneFound =
+                  Boolean(intel.enrichmentPhoneFound) || isValidProspectPhone(row.phone);
+                const websiteDone =
+                  String(intel.enrichmentStatus || "").toLowerCase() === "completed";
+                const socialFound = (() => {
+                  const result = (intel.enrichmentResult || {}) as {
+                    publicContacts?: { socialProfiles?: string[] };
+                  };
+                  return (result.publicContacts?.socialProfiles?.length || 0) > 0;
+                })();
+                const match = prospectMatchSummary(intel.leadScore);
+                const offer = offerLabel(intel.recommendedOffer);
+
+                return (
+                  <TableRow
+                    key={row.contactId}
+                    className={cn(
+                      "cursor-pointer transition-all duration-500 hover:bg-gray-50/90",
+                      flashMsg && "pi-row-complete-glow",
                     )}
-                  </TableCell>
-                  <TableCell>
-                    {(() => {
-                      const analysis = String(row.intelligence.analysisStatus || "pending").toLowerCase();
-                      if (analysis === "processing") {
-                        return (
-                          <span className="flex flex-col gap-1 items-start">
-                            <Badge className="bg-sky-600 text-[10px]" data-testid="pi-table-analyzing">
-                              Analyzing
-                            </Badge>
-                            {enrichmentBadge(row.intelligence)}
+                    onClick={() => {
+                      setSelected(row);
+                      setDetailOpen(true);
+                    }}
+                    data-testid={`pi-row-${row.contactId}`}
+                  >
+                    <TableCell onClick={(e) => toggleRow(row.contactId, e)}>
+                      <input
+                        type="checkbox"
+                        checked={effectiveSelectedIds.has(row.contactId)}
+                        onChange={() => {}}
+                        aria-label={`Select ${row.name}`}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium text-gray-900 transition-colors">{row.name}</div>
+                      {row.company ? (
+                        <div className="max-w-[200px] truncate text-xs text-gray-500">
+                          {row.company}
+                        </div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="max-w-[280px]">
+                      {analyzing || waitingAnalyze ? (
+                        <span className="text-xs text-gray-400">AI is working…</span>
+                      ) : reviewReady ? (
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                            <MatchStars stars={match.stars} />
+                            <span className="font-medium text-gray-900">{match.label}</span>
+                            {priorityBadge(intel.priority, intel.analysisStatus)}
+                          </div>
+                          {intel.businessType ? (
+                            <p className="text-xs text-gray-600">{intel.businessType}</p>
+                          ) : null}
+                          {offer ? (
+                            <p className="text-xs text-gray-700">
+                              <span className="text-gray-400">Offer:</span> {offer}
+                            </p>
+                          ) : null}
+                          {intel.suggestedOutreachAngle ? (
+                            <p className="line-clamp-2 text-[11px] leading-snug text-gray-500">
+                              {intel.suggestedOutreachAngle}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {websiteDone || enriching ? (
+                        <div className="flex flex-wrap gap-1">
+                          <VerifiedChip ok={websiteDone} label="Website" />
+                          <VerifiedChip ok={emailFound} label="Email" />
+                          <VerifiedChip ok={phoneFound} label="Phone" />
+                          <VerifiedChip ok={socialFound} label="Social" />
+                        </div>
+                      ) : reviewReady ? (
+                        <span className="text-[11px] text-gray-400">Approve to enrich</span>
+                      ) : (
+                        <span className="text-[11px] text-gray-300">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1.5">
+                        <ProspectProgressTimeline life={life} />
+                        {showActivity && (analyzing || enriching || life === "imported") ? (
+                          <AiPersonalityStatusView
+                            status={personality}
+                            prefersReducedMotion={prefersReducedMotion}
+                          />
+                        ) : null}
+                        {flashMsg ? (
+                          <span className="text-[11px] font-medium text-emerald-700 transition-opacity">
+                            {flashMsg}
                           </span>
-                        );
-                      }
-                      if (analysis === "failed") {
-                        return (
-                          <span className="flex flex-col gap-1 items-start">
-                            <Badge variant="destructive" className="text-[10px]" data-testid="pi-table-failed">
-                              Analysis Failed
-                            </Badge>
-                            {enrichmentBadge(row.intelligence)}
-                          </span>
-                        );
-                      }
-                      if (analysis === "pending") {
-                        return (
-                          <span className="flex flex-col gap-1 items-start" data-testid="pi-table-pending">
-                            <span className="text-xs text-gray-500">Pending</span>
-                            {enrichmentBadge(row.intelligence)}
-                          </span>
-                        );
-                      }
-                      const status = resolveProspectDisplayStatus({
-                        reviewStatus: row.intelligence.reviewStatus,
-                        outreachStatus: row.intelligence.outreachStatus,
-                        outreachSentAt: row.intelligence.outreachSentAt,
-                        repliedAt: row.intelligence.repliedAt,
-                      });
-                      if (status === "replied") {
-                        return (
-                          <span className="flex flex-col gap-1 items-start">
-                            <Badge className="bg-blue-600 text-[10px]" data-testid="pi-table-replied">
-                              Replied
-                            </Badge>
-                            {enrichmentBadge(row.intelligence)}
-                          </span>
-                        );
-                      }
-                      if (status === "outreach_sent") {
-                        return (
-                          <span className="flex flex-col gap-1 items-start">
-                            <Badge className="bg-indigo-600 text-[10px]" data-testid="pi-table-outreach-sent">
-                              Outreach Sent
-                            </Badge>
-                            {enrichmentBadge(row.intelligence)}
-                          </span>
-                        );
-                      }
-                      if (status === "approved") {
-                        return (
-                          <span className="flex flex-col gap-1 items-start">
-                            <Badge className="bg-emerald-600 text-[10px]" data-testid="pi-table-approved">
-                              Approved
-                            </Badge>
-                            {enrichmentBadge(row.intelligence)}
-                          </span>
-                        );
-                      }
-                      if (status === "needs_review" || row.intelligence.needsReview) {
-                        return (
-                          <span className="flex flex-col gap-1 items-start">
-                            <span className="flex items-center gap-1 text-amber-700 text-xs">
-                              <AlertTriangle className="h-3 w-3" /> Needs Review
-                            </span>
-                            {enrichmentBadge(row.intelligence)}
-                          </span>
-                        );
-                      }
-                      return (
-                        <span className="flex flex-col gap-1 items-start">
-                          <span className="text-xs text-gray-500">
-                            {prospectDisplayStatusLabel(status)}
-                          </span>
-                          {enrichmentBadge(row.intelligence)}
-                        </span>
-                      );
-                    })()}
-                  </TableCell>
-                </TableRow>
-              ))}
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -1905,5 +2107,3 @@ export function ProspectIntelligencePanel(props: {
     </section>
   );
 }
-
-export { AnalyzeConfirmDialog };

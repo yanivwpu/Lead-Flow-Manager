@@ -396,8 +396,8 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
         toast({
           title: "Sent to AI Review",
           description: data.analysisStarted
-            ? `${sent} prospects added to AI Review. Analysis has started.`
-            : `${sent} prospects added to AI Review. Select them and click Analyze with AI.`,
+            ? `${sent} prospects added. AI qualification has started automatically.`
+            : `${sent} prospects added to AI Review. Qualification will begin shortly.`,
         });
         setSelectedIds(new Set());
       },
@@ -425,7 +425,8 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
               Discover Businesses
             </h2>
             <p className="mt-1.5 text-sm leading-relaxed text-gray-600 text-pretty">
-              Search by business type and location. Selected results go to AI Review for fit analysis.
+              Search by business type and location. Send results to Review — AI qualifies them
+              automatically using Places, AI Brain, and your Business Profile.
             </p>
           </div>
         </div>
@@ -544,8 +545,8 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
               <AlertDialogHeader>
                 <AlertDialogTitle>Send to AI Review?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Send {selectedIds.size} prospect{selectedIds.size === 1 ? "" : "s"} to AI Review and
-                  analyze them now?
+                  Send {selectedIds.size} prospect{selectedIds.size === 1 ? "" : "s"} to Review.
+                  AI will qualify them automatically — no need to start analysis yourself.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -564,7 +565,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
                       Sending…
                     </>
                   ) : (
-                    "Send & analyze"
+                    "Send to Review"
                   )}
                 </AlertDialogAction>
               </AlertDialogFooter>

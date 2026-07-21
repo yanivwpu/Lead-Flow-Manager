@@ -469,6 +469,20 @@ async function runProspectImportJob(jobId: string): Promise<void> {
       resultErrors: errors,
       resultDetails: { createdContactIds, updatedContactIds, updated },
     });
+
+    // Auto-qualify newly imported contacts — user reviews in AI Review (never Analyze).
+    if (createdContactIds.length > 0) {
+      try {
+        const { enqueueProspectAutoQualification } = await import("./prospectAutoQualify");
+        await enqueueProspectAutoQualification({
+          contactIds: createdContactIds,
+          workspaceUserId: destinationUserId,
+          initiatedByUserId: destinationUserId,
+        });
+      } catch (err) {
+        console.error("[ProspectImport] Auto-qualify enqueue failed:", err);
+      }
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await updateJob(jobId, {

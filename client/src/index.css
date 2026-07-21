@@ -887,3 +887,42 @@ section h2 + p {
 .animate-msg-in {
   animation: msg-in 150ms ease-out both;
 }
+
+/* Prospect AI Review — premium polish (presentation only) */
+@keyframes pi-dot-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.45); }
+  50% { transform: scale(1.15); opacity: 0.95; box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+}
+@keyframes pi-row-glow {
+  0% { background-color: rgba(16, 185, 129, 0.18); }
+  100% { background-color: transparent; }
+}
+@keyframes pi-activity-fade {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1; }
+}
+.pi-timeline-current {
+  animation: pi-dot-pulse 1.6s ease-in-out infinite;
+}
+.pi-row-complete-glow {
+  animation: pi-row-glow 2s ease-out forwards;
+}
+.pi-activity-line {
+  animation: pi-activity-fade 2.4s ease-in-out infinite;
+}
+@keyframes pi-emoji-soft {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.72; transform: scale(1.04); }
+}
+.pi-emoji-active {
+  animation: pi-emoji-soft 2.8s ease-in-out infinite;
+  transform-origin: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pi-timeline-current,
+  .pi-row-complete-glow,
+  .pi-activity-line,
+  .pi-emoji-active {
+    animation: none !important;
+  }
+}

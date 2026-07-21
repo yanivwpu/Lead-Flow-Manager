@@ -546,13 +546,13 @@ export async function listProspectIntelligence(
   const rows = await db.select().from(prospectIntelligence);
   const items: ProspectIntelligenceListItem[] = [];
 
-  // Queue state lookup for statusFilter / eligibility filters
+  // Queue + outcome lookup for Review lifecycle filters (presentation only).
   let queuedContactIds = new Set<string>();
   let failedContactIds = new Set<string>();
-  const needsQueueLookup =
-    !!filters.statusFilter || filters.emailEligible || filters.anyEligibleChannel;
-  if (needsQueueLookup) {
-    const { prospectOutreachQueueItems } = await import("@shared/schema");
+  const queueStatusByContact = new Map<string, string>();
+  const outcomeByContact = new Map<string, string>();
+  {
+    const { prospectOutreachQueueItems, prospectAiOutcomes } = await import("@shared/schema");
     const qRows = await db
       .select({
         contactId: prospectOutreachQueueItems.contactId,
@@ -560,14 +560,40 @@ export async function listProspectIntelligence(
       })
       .from(prospectOutreachQueueItems)
       .where(eq(prospectOutreachQueueItems.workspaceUserId, workspaceUserId));
+    for (const r of qRows) {
+      const st = String(r.status || "");
+      // Prefer active queue states over terminal ones when multiple rows exist.
+      const prev = queueStatusByContact.get(r.contactId);
+      if (
+        !prev ||
+        ["queued", "sending", "paused"].includes(st) ||
+        (!["queued", "sending", "paused"].includes(prev) && st)
+      ) {
+        queueStatusByContact.set(r.contactId, st);
+      }
+    }
     queuedContactIds = new Set(
-      qRows
-        .filter((r) => ["queued", "sending", "paused"].includes(r.status))
-        .map((r) => r.contactId),
+      [...queueStatusByContact.entries()]
+        .filter(([, st]) => ["queued", "sending", "paused"].includes(st))
+        .map(([id]) => id),
     );
     failedContactIds = new Set(
-      qRows.filter((r) => r.status === "failed").map((r) => r.contactId),
+      [...queueStatusByContact.entries()].filter(([, st]) => st === "failed").map(([id]) => id),
     );
+    try {
+      const oRows = await db
+        .select({
+          contactId: prospectAiOutcomes.contactId,
+          outcome: prospectAiOutcomes.prospectOutcome,
+        })
+        .from(prospectAiOutcomes)
+        .where(eq(prospectAiOutcomes.workspaceUserId, workspaceUserId));
+      for (const r of oRows) {
+        outcomeByContact.set(r.contactId, String(r.outcome || ""));
+      }
+    } catch {
+      /* outcomes table may be absent until migration — ignore */
+    }
   }
 
   let connections: Awaited<
@@ -681,6 +707,8 @@ export async function listProspectIntelligence(
       importReason: meta?.importReason ?? null,
       pipelineStage: contact.pipelineStage,
       sourceLabel,
+      queueStatus: queueStatusByContact.get(contact.id) || null,
+      prospectOutcome: outcomeByContact.get(contact.id) || null,
       intelligence: mapIntelligenceRow(row),
     });
   }
@@ -763,6 +791,44 @@ export async function getProspectIntelligenceDetail(
       ? "Google Places discovery"
       : meta?.batchName) ||
     null;
+
+  let queueStatus: string | null = null;
+  let prospectOutcome: string | null = null;
+  try {
+    const { prospectOutreachQueueItems, prospectAiOutcomes } = await import("@shared/schema");
+    const qRows = await db
+      .select({ status: prospectOutreachQueueItems.queueStatus })
+      .from(prospectOutreachQueueItems)
+      .where(
+        and(
+          eq(prospectOutreachQueueItems.workspaceUserId, workspaceUserId),
+          eq(prospectOutreachQueueItems.contactId, contactId),
+        ),
+      )
+      .limit(5);
+    for (const r of qRows) {
+      const st = String(r.status || "");
+      if (["queued", "sending", "paused"].includes(st)) {
+        queueStatus = st;
+        break;
+      }
+      if (!queueStatus) queueStatus = st || null;
+    }
+    const oRows = await db
+      .select({ outcome: prospectAiOutcomes.prospectOutcome })
+      .from(prospectAiOutcomes)
+      .where(
+        and(
+          eq(prospectAiOutcomes.workspaceUserId, workspaceUserId),
+          eq(prospectAiOutcomes.contactId, contactId),
+        ),
+      )
+      .limit(1);
+    prospectOutcome = oRows[0]?.outcome ? String(oRows[0].outcome) : null;
+  } catch {
+    /* optional presentation fields */
+  }
+
   return {
     contactId: contact.id,
     name: contact.name,
@@ -774,6 +840,8 @@ export async function getProspectIntelligenceDetail(
     importReason: meta?.importReason ?? null,
     pipelineStage: contact.pipelineStage,
     sourceLabel,
+    queueStatus,
+    prospectOutcome,
     intelligence: mapIntelligenceRow(rows[0]),
   };
 }

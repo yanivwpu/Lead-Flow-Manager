@@ -366,6 +366,10 @@ export type ProspectIntelligenceListItem = {
   pipelineStage?: string | null;
   /** Discovery / import source label for UI */
   sourceLabel?: string | null;
+  /** Presentation-only campaign queue status (queued | sending | paused | failed | …). */
+  queueStatus?: string | null;
+  /** Presentation-only Won/Lost outcome when set. */
+  prospectOutcome?: string | null;
   intelligence: ProspectIntelligence;
 };
 

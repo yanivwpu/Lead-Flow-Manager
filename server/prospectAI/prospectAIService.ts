@@ -600,21 +600,16 @@ export async function sendDiscoverResultsToReview(
   let analysisStarted = false;
   let analysisJobId: string | null = null;
   if (uniqueContactIds.length > 0) {
-    try {
-      const { createBulkAnalysisJob } = await import(
-        "../prospectImport/prospectBulkAnalysisService"
-      );
-      const job = await createBulkAnalysisJob({
-        contactIds: uniqueContactIds,
-        initiatedByUserId: workspaceUserId,
-        workspaceUserId,
-        selectionMode: "selected",
-      });
-      analysisStarted = true;
-      analysisJobId = job.id;
-    } catch (err) {
-      console.error("[ProspectAI] Failed to enqueue AI analysis after send-to-review:", err);
-    }
+    const { enqueueProspectAutoQualification } = await import(
+      "../prospectImport/prospectAutoQualify"
+    );
+    const result = await enqueueProspectAutoQualification({
+      contactIds: uniqueContactIds,
+      workspaceUserId,
+      initiatedByUserId: workspaceUserId,
+    });
+    analysisStarted = result.analysisStarted;
+    analysisJobId = result.analysisJobId;
   }
 
   return {

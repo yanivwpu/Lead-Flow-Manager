@@ -108,6 +108,19 @@ export async function createBulkAnalysisJob(params: {
         ),
       );
     }
+    try {
+      await db
+        .update(prospectIntelligence)
+        .set({ analysisStatus: "processing", updatedAt: new Date() })
+        .where(
+          and(
+            inArray(prospectIntelligence.contactId, ids),
+            inArray(prospectIntelligence.analysisStatus, ["pending", "failed"]),
+          ),
+        );
+    } catch (err) {
+      console.error("[ProspectBulkAnalysis] Failed to mark merged contacts processing:", err);
+    }
     const refreshed = await db
       .select()
       .from(prospectBulkAnalysisJobs)
@@ -144,6 +157,21 @@ export async function createBulkAnalysisJob(params: {
       }),
     ),
   );
+
+  // Immediate UI: Imported → Analyzing… (status only; rows stay put client-side).
+  try {
+    await db
+      .update(prospectIntelligence)
+      .set({ analysisStatus: "processing", updatedAt: new Date() })
+      .where(
+        and(
+          inArray(prospectIntelligence.contactId, ids),
+          inArray(prospectIntelligence.analysisStatus, ["pending", "failed"]),
+        ),
+      );
+  } catch (err) {
+    console.error("[ProspectBulkAnalysis] Failed to mark contacts processing:", err);
+  }
 
   // Durable worker claims — no setImmediate runner.
   return mapJob(row);
