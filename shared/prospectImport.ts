@@ -341,6 +341,8 @@ export type ProspectIntelligence = {
   outreachConversationId?: string | null;
   outreachMessageId?: string | null;
   repliedAt?: string;
+  errorMessage?: string;
+  createdAt?: string;
 };
 
 export type ProspectIntelligenceListItem = {
@@ -353,6 +355,8 @@ export type ProspectIntelligenceListItem = {
   batchName?: string | null;
   importReason?: string | null;
   pipelineStage?: string | null;
+  /** Discovery / import source label for UI */
+  sourceLabel?: string | null;
   intelligence: ProspectIntelligence;
 };
 
@@ -400,7 +404,7 @@ export type ProspectIntelligenceListFilters = {
   hasPhone?: boolean;
   emailEligible?: boolean;
   anyEligibleChannel?: boolean;
-  sortBy?: "leadScore" | "priority" | "confidence" | "name";
+  sortBy?: "leadScore" | "priority" | "confidence" | "name" | "action" | "createdAt";
   sortDir?: "asc" | "desc";
   limit?: number;
 };

@@ -24,6 +24,7 @@ import {
   ChevronDown,
   Plus,
   Eye,
+  Trophy,
 } from "lucide-react";
 import type { ContactNote } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -79,6 +80,19 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useMarkProspectAiWon, useSetProspectAiOutcome } from "@/lib/prospectAi";
+import { isProspectAiAttributedContact } from "@shared/prospectAI";
 import { MODAL_OVERLAY_BACKDROP } from "@/lib/modalOverlay";
 import { format, parseISO } from "date-fns";
 import { TAG_COLORS, pipelineStageOptions } from "@/lib/data";
@@ -137,6 +151,7 @@ interface Contact {
   source?: string;
   createdAt: string;
   customFields?: Record<string, unknown>;
+  sourceDetails?: Record<string, unknown> | null;
   buyerPreferenceProfile?: unknown;
 }
 
@@ -832,6 +847,34 @@ export function InboxLeadDetailsPanel({
     setAiPaused(false);
     setDismissedHandoffSnoozeId(null);
   }, [contact.id]);
+
+  const isProspectAiContact = useMemo(
+    () => isProspectAiAttributedContact(contact),
+    [contact],
+  );
+  const [markWonOpen, setMarkWonOpen] = useState(false);
+  const markWon = useMarkProspectAiWon();
+  const setOutcome = useSetProspectAiOutcome();
+  const prospectOutcomeQuery = useQuery({
+    queryKey: ["/api/growth-engines/prospect-ai/contacts", contact.id, "outcome"],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/growth-engines/prospect-ai/contacts/${contact.id}/outcome`,
+        { credentials: "include" },
+      );
+      if (!res.ok) return { attributed: false, outcome: null };
+      return res.json() as Promise<{
+        attributed: boolean;
+        outcome: { prospectOutcome?: string } | null;
+      }>;
+    },
+    enabled: isProspectAiContact,
+    staleTime: 30_000,
+  });
+  const showMarkWon =
+    isProspectAiContact || prospectOutcomeQuery.data?.attributed === true;
+  const currentProspectOutcome =
+    prospectOutcomeQuery.data?.outcome?.prospectOutcome || null;
 
   useEffect(() => {
     if (!handoffEventId) {
@@ -2965,6 +3008,121 @@ export function InboxLeadDetailsPanel({
               </div>
             </div>
           )}
+
+          {showMarkWon ? (
+            <div className="mt-2 space-y-1.5" data-testid="prospect-ai-won-actions">
+              {currentProspectOutcome && currentProspectOutcome !== "active" ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge
+                    className={
+                      currentProspectOutcome === "won"
+                        ? "bg-emerald-600 text-[10px]"
+                        : currentProspectOutcome === "lost"
+                          ? "bg-gray-500 text-[10px]"
+                          : "bg-amber-600 text-[10px]"
+                    }
+                  >
+                    {currentProspectOutcome === "won"
+                      ? "Won"
+                      : currentProspectOutcome === "lost"
+                        ? "Lost"
+                        : currentProspectOutcome}
+                  </Badge>
+                  {(["won", "lost", "active"] as const).map((outcome) =>
+                    outcome === currentProspectOutcome ? null : (
+                      <Button
+                        key={outcome}
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px]"
+                        disabled={setOutcome.isPending || markWon.isPending}
+                        onClick={() => {
+                          if (outcome === "won") {
+                            setMarkWonOpen(true);
+                            return;
+                          }
+                          setOutcome.mutate(
+                            { contactId: contact.id, outcome },
+                            {
+                              onSuccess: () => {
+                                void prospectOutcomeQuery.refetch();
+                                toast({
+                                  title:
+                                    outcome === "lost"
+                                      ? "Outcome set to Lost"
+                                      : "Outcome set to Active",
+                                });
+                              },
+                              onError: (err: Error) =>
+                                toast({
+                                  title: "Update failed",
+                                  description: err.message,
+                                  variant: "destructive",
+                                }),
+                            },
+                          );
+                        }}
+                      >
+                        {outcome === "won"
+                          ? "Mark Won"
+                          : outcome === "lost"
+                            ? "Mark Lost"
+                            : "Set Active"}
+                      </Button>
+                    ),
+                  )}
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-7 w-full bg-brand-green text-[11px] hover:bg-brand-green/90"
+                  onClick={() => setMarkWonOpen(true)}
+                  data-testid="prospect-ai-mark-won"
+                >
+                  <Trophy className="mr-1.5 h-3 w-3" />
+                  Mark as Won
+                </Button>
+              )}
+              <AlertDialog open={markWonOpen} onOpenChange={setMarkWonOpen}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Mark as Won</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Mark this Prospect AI contact as a won customer? The conversation stays open in
+                      the inbox.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={markWon.isPending}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={markWon.isPending}
+                      className="bg-brand-green hover:bg-brand-green/90"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        markWon.mutate(contact.id, {
+                          onSuccess: () => {
+                            setMarkWonOpen(false);
+                            void prospectOutcomeQuery.refetch();
+                            toast({ title: "Marked as Won" });
+                          },
+                          onError: (err: Error) =>
+                            toast({
+                              title: "Could not mark as Won",
+                              description: err.message,
+                              variant: "destructive",
+                            }),
+                        });
+                      }}
+                    >
+                      {markWon.isPending ? "Saving…" : "Mark as Won"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          ) : null}
 
           {/* ── STATUS TAGS ──────────────────────────────────────────── */}
           <div>

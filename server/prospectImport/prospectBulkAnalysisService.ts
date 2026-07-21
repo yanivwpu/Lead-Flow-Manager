@@ -70,18 +70,50 @@ export async function createBulkAnalysisJob(params: {
   const workspaceUserId =
     params.workspaceUserId || (await resolveProspectImportDestinationUserId());
 
-  const active = await db
+  // Merge into an existing *pending* job so Discover → Review handoffs keep enqueueing
+  // without dropping contact IDs. If a job is already running, create a new pending job
+  // (worker claims by created_at); do not return the running job without adding IDs.
+  const pendingRows = await db
     .select()
     .from(prospectBulkAnalysisJobs)
     .where(
       and(
         eq(prospectBulkAnalysisJobs.workspaceUserId, workspaceUserId),
-        inArray(prospectBulkAnalysisJobs.status, ["pending", "running"]),
+        eq(prospectBulkAnalysisJobs.status, "pending"),
       ),
     )
+    .orderBy(desc(prospectBulkAnalysisJobs.createdAt))
     .limit(1);
-  if (active[0]) {
-    return mapJob(active[0]);
+
+  if (pendingRows[0]) {
+    const existing = pendingRows[0];
+    const prior = Array.isArray(existing.contactIds)
+      ? (existing.contactIds as string[]).map(String)
+      : [];
+    const merged = Array.from(new Set([...prior, ...ids]));
+    if (merged.length !== prior.length) {
+      await updateJob(existing.id, {
+        contactIds: merged,
+        progressTotal: merged.length,
+      });
+      console.info(
+        JSON.stringify(
+          prospectBulkAnalysisLog("job_contacts_merged", {
+            workspaceId: workspaceUserId,
+            jobId: existing.id,
+            status: "pending",
+            progressTotal: merged.length,
+            added: merged.length - prior.length,
+          }),
+        ),
+      );
+    }
+    const refreshed = await db
+      .select()
+      .from(prospectBulkAnalysisJobs)
+      .where(eq(prospectBulkAnalysisJobs.id, existing.id))
+      .limit(1);
+    return mapJob(refreshed[0] || existing);
   }
 
   const [row] = await db
@@ -212,16 +244,22 @@ export async function processClaimedBulkAnalysisJob(
   job: ProspectBulkAnalysisJobRow,
   workerId: string,
 ): Promise<void> {
-  const contactIds = (Array.isArray(job.contactIds) ? job.contactIds : []) as string[];
   let itemResults: ProspectBulkAnalysisItemResults = {
     ...((job.itemResults || {}) as ProspectBulkAnalysisItemResults),
   };
 
-  for (let i = 0; i < contactIds.length; i++) {
-    const contactId = contactIds[i];
-    if (itemResults[contactId]) {
-      continue; // already processed — resume-safe
-    }
+  // Re-read contactIds each iteration so IDs merged into a pending/running job are not dropped.
+  for (;;) {
+    const freshRows = await db
+      .select()
+      .from(prospectBulkAnalysisJobs)
+      .where(eq(prospectBulkAnalysisJobs.id, job.id))
+      .limit(1);
+    const fresh = freshRows[0];
+    if (!fresh) return;
+    const contactIds = (Array.isArray(fresh.contactIds) ? fresh.contactIds : []) as string[];
+    const contactId = contactIds.find((id) => !itemResults[String(id)]);
+    if (!contactId) break;
 
     if (!(await renewLease(job.id, workerId))) {
       console.info(
@@ -316,10 +354,11 @@ export async function processClaimedBulkAnalysisJob(
     }
 
     const counts = recountBulkAnalysisItemResults(itemResults);
+    const totalNow = contactIds.length;
     await updateJob(job.id, {
       itemResults,
       progressCurrent: counts.processed,
-      progressTotal: contactIds.length,
+      progressTotal: totalNow,
       resultCompleted: counts.completed,
       resultNeedsReview: counts.needsReview,
       resultFailed: counts.failed,
@@ -329,13 +368,19 @@ export async function processClaimedBulkAnalysisJob(
     });
   }
 
+  const finalRows = await db
+    .select()
+    .from(prospectBulkAnalysisJobs)
+    .where(eq(prospectBulkAnalysisJobs.id, job.id))
+    .limit(1);
+  const finalIds = (Array.isArray(finalRows[0]?.contactIds) ? finalRows[0]!.contactIds : []) as string[];
   const finalCounts = recountBulkAnalysisItemResults(itemResults);
   await updateJob(job.id, {
     status: "completed",
     completedAt: new Date(),
     itemResults,
-    progressCurrent: contactIds.length,
-    progressTotal: contactIds.length,
+    progressCurrent: finalIds.length,
+    progressTotal: finalIds.length,
     resultCompleted: finalCounts.completed,
     resultNeedsReview: finalCounts.needsReview,
     resultFailed: finalCounts.failed,

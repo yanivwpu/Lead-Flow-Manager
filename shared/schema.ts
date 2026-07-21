@@ -2484,3 +2484,50 @@ export const prospectAiDiscoveryResults = pgTable(
 );
 
 export type ProspectAiDiscoveryResult = typeof prospectAiDiscoveryResults.$inferSelect;
+
+/** Prospect AI conversion outcomes (Won / Lost / pipeline stages). */
+export const prospectAiOutcomes = pgTable(
+  "prospect_ai_outcomes",
+  {
+    contactId: varchar("contact_id")
+      .primaryKey()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    workspaceUserId: varchar("workspace_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    prospectOutcome: text("prospect_outcome").notNull().default("active"),
+    outcomeUpdatedAt: timestamp("outcome_updated_at").defaultNow(),
+    outcomeUpdatedByUserId: varchar("outcome_updated_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    wonAt: timestamp("won_at"),
+    wonByUserId: varchar("won_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    sourceEngine: text("source_engine").notNull().default("prospect_ai"),
+    discoveryResultId: varchar("discovery_result_id"),
+    discoverySearchId: varchar("discovery_search_id"),
+    prospectIntelligenceContactId: varchar("prospect_intelligence_contact_id"),
+    campaignEnrollmentId: varchar("campaign_enrollment_id"),
+    firstOutreachAt: timestamp("first_outreach_at"),
+    firstReplyAt: timestamp("first_reply_at"),
+    qualifiedAt: timestamp("qualified_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (t) => ({
+    workspaceOutcomeIdx: index("prospect_ai_outcomes_workspace_outcome_idx").on(
+      t.workspaceUserId,
+      t.prospectOutcome,
+    ),
+    workspaceWonAtIdx: index("prospect_ai_outcomes_workspace_won_at_idx").on(
+      t.workspaceUserId,
+      t.wonAt,
+    ),
+    workspaceUpdatedIdx: index("prospect_ai_outcomes_workspace_updated_idx").on(
+      t.workspaceUserId,
+      t.outcomeUpdatedAt,
+    ),
+  }),
+);
+
+export type ProspectAiOutcomeRow = typeof prospectAiOutcomes.$inferSelect;
+export type InsertProspectAiOutcome = typeof prospectAiOutcomes.$inferInsert;

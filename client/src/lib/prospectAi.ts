@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export const PROSPECT_AI_STATUS_KEY = ["/api/growth-engines/prospect-ai/status"] as const;
 export const PROSPECT_AI_ACTIVITY_KEY = ["/api/growth-engines/prospect-ai/activity"] as const;
+export const PROSPECT_AI_WON_STATS_KEY = ["/api/growth-engines/prospect-ai/won/stats"] as const;
 export const PROSPECT_AI_PATH = "/app/prospect-ai" as const;
 
 export type ProspectAiBrainStatus = {
@@ -204,17 +205,22 @@ export function useSendDiscoverToReview(searchId: string | null) {
   return useMutation({
     mutationFn: (resultIds: string[]) => {
       if (!searchId) throw new Error("No discovery search selected");
-      return fetchJson<{ sent?: number }>(
-        `/api/growth-engines/prospect-ai/discover/${searchId}/send-to-review`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ resultIds }),
-        },
-      );
+      return fetchJson<{
+        sent?: number;
+        analysisStarted?: boolean;
+        analysisJobId?: string | null;
+        contactIds?: string[];
+      }>(`/api/growth-engines/prospect-ai/discover/${searchId}/send-to-review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resultIds }),
+      });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["/api/growth-tools/prospect-intelligence/bulk-analyze/active"],
+      });
       void queryClient.invalidateQueries({ queryKey: PROSPECT_AI_ACTIVITY_KEY });
     },
   });
@@ -227,6 +233,90 @@ export function useProspectAiActivity(options?: { enabled?: boolean }) {
     staleTime: 15_000,
     enabled: options?.enabled ?? true,
     retry: false,
+  });
+}
+
+export type ProspectAiWonStats = {
+  outreachSent: number;
+  replied: number;
+  qualified: number;
+  won: number;
+  replyRate: number | null;
+  winRate: number | null;
+  qualifiedToWon: number | null;
+};
+
+export type ProspectAiWonCustomer = {
+  contactId: string;
+  name: string;
+  source: string | null;
+  campaign: string | null;
+  firstOutreachAt: string | null;
+  wonAt: string | null;
+  markedByUserId: string | null;
+  markedByName: string | null;
+  outcome: string;
+};
+
+export function useProspectAiWonStats(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: PROSPECT_AI_WON_STATS_KEY,
+    queryFn: () => fetchJson<ProspectAiWonStats>("/api/growth-engines/prospect-ai/won/stats"),
+    staleTime: 15_000,
+    enabled: options?.enabled ?? true,
+    retry: false,
+  });
+}
+
+export function useProspectAiWonCustomers(
+  filter: "this_month" | "last_30_days" | "all_time" = "all_time",
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: ["/api/growth-engines/prospect-ai/won/customers", filter],
+    queryFn: () =>
+      fetchJson<{ customers: ProspectAiWonCustomer[] }>(
+        `/api/growth-engines/prospect-ai/won/customers?filter=${encodeURIComponent(filter)}`,
+      ),
+    staleTime: 15_000,
+    enabled: options?.enabled ?? true,
+    retry: false,
+  });
+}
+
+export function useMarkProspectAiWon() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (contactId: string) =>
+      fetchJson(`/api/growth-engines/prospect-ai/contacts/${contactId}/mark-won`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: PROSPECT_AI_WON_STATS_KEY });
+      void queryClient.invalidateQueries({
+        queryKey: ["/api/growth-engines/prospect-ai/won/customers"],
+      });
+    },
+  });
+}
+
+export function useSetProspectAiOutcome() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { contactId: string; outcome: string }) =>
+      fetchJson(`/api/growth-engines/prospect-ai/contacts/${params.contactId}/outcome`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outcome: params.outcome }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: PROSPECT_AI_WON_STATS_KEY });
+      void queryClient.invalidateQueries({
+        queryKey: ["/api/growth-engines/prospect-ai/won/customers"],
+      });
+    },
   });
 }
 

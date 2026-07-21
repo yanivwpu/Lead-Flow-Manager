@@ -203,9 +203,12 @@ export function resolveProspectOutreachLifecycleUi(input: {
   email?: string | null;
   outreachConversationId?: string | null;
   hasValidEmail: boolean;
+  analysisStatus?: string | null;
 }): ProspectOutreachLifecycleUi {
   const review = String(input.reviewStatus || "pending").toLowerCase();
   const outreach = normalizeOutreachStatus(input.outreachStatus, input);
+  const analysis = String(input.analysisStatus || "").toLowerCase();
+  const analysisReady = analysis === "completed" || analysis === "needs_review";
   const displayStatus = resolveProspectDisplayStatus({
     reviewStatus: review,
     outreachStatus: outreach,
@@ -218,7 +221,8 @@ export function resolveProspectOutreachLifecycleUi(input: {
   return {
     displayStatus,
     statusLabel: prospectDisplayStatusLabel(displayStatus),
-    showApproveButton: review === "pending" || review === "needs_review",
+    showApproveButton:
+      analysisReady && (review === "pending" || review === "needs_review"),
     showSendOutreach: isApproved && !isOutreachSentOrLater && input.hasValidEmail,
     showViewThread: isOutreachSentOrLater && Boolean(input.outreachConversationId),
     emailGateLabel:

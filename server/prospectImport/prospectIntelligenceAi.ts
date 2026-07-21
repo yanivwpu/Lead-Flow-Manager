@@ -46,6 +46,13 @@ export type ProspectIntelligenceAiInput = {
   jobTitle?: string;
   pipeline?: string;
   stage?: string;
+  /** Local discovery / Places enrichment */
+  businessType?: string;
+  address?: string;
+  rating?: number;
+  reviewCount?: number;
+  discoverySource?: string;
+  providerPlaceId?: string;
 };
 
 function clampLikelihood(value: unknown): number | undefined {
@@ -69,8 +76,18 @@ function pickEnum<T extends string>(value: unknown, allowed: readonly T[]): T | 
   return allowed.includes(v) ? v : undefined;
 }
 
+function readProspectAiMeta(contact: Contact): Record<string, unknown> | null {
+  const sd = (contact.sourceDetails || {}) as Record<string, unknown>;
+  const cf = (contact.customFields || {}) as Record<string, unknown>;
+  const meta = (sd.prospectAi || cf.prospectAi || sd.prospectImport || cf.prospectImport) as
+    | Record<string, unknown>
+    | undefined;
+  return meta && typeof meta === "object" ? meta : null;
+}
+
 export function buildProspectIntelligenceInput(contact: Contact): ProspectIntelligenceAiInput {
   const meta = readProspectImportMetadata(contact);
+  const pai = readProspectAiMeta(contact);
   const email = String(contact.email || "").trim() || undefined;
   const emailDomain = email?.includes("@") ? email.split("@")[1]?.toLowerCase() : undefined;
   const notes = String(contact.notes || "").trim() || undefined;
@@ -79,24 +96,70 @@ export function buildProspectIntelligenceInput(contact: Contact): ProspectIntell
     : undefined;
 
   let websiteUrl: string | undefined;
-  const urlMatch = notes?.match(/https?:\/\/[^\s]+/i);
-  if (urlMatch) websiteUrl = urlMatch[0];
+  const metaWebsite = String(pai?.website || "").trim();
+  if (metaWebsite) {
+    websiteUrl = metaWebsite.startsWith("http") ? metaWebsite : `https://${metaWebsite}`;
+  } else {
+    const urlMatch = notes?.match(/https?:\/\/[^\s]+/i);
+    if (urlMatch) websiteUrl = urlMatch[0];
+  }
+
+  const phone =
+    String(contact.phone || "").trim() ||
+    String(pai?.phone || "").trim() ||
+    undefined;
+
+  const businessType = String(pai?.businessType || "").trim() || undefined;
+  const address = String(pai?.address || "").trim() || undefined;
+  const ratingRaw = pai?.rating;
+  const rating =
+    typeof ratingRaw === "number"
+      ? ratingRaw
+      : ratingRaw != null && String(ratingRaw).trim()
+        ? Number(ratingRaw)
+        : undefined;
+  const reviewCountRaw = pai?.reviewCount;
+  const reviewCount =
+    typeof reviewCountRaw === "number"
+      ? reviewCountRaw
+      : reviewCountRaw != null && String(reviewCountRaw).trim()
+        ? Number(reviewCountRaw)
+        : undefined;
+
+  // Keep structured Places fields even when notes start with "Company:"
+  const contextNotes = [
+    businessType ? `Business type: ${businessType}` : null,
+    address ? `Address: ${address}` : null,
+    rating != null && !Number.isNaN(rating) ? `Google rating: ${rating}` : null,
+    reviewCount != null && !Number.isNaN(reviewCount)
+      ? `Google review count: ${reviewCount}`
+      : null,
+    notes && !notes.startsWith("Company: ") ? notes : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   return {
     name: String(contact.name || "").trim() || "Unknown",
-    company: companyFromNotes,
+    company: companyFromNotes || String(contact.name || "").trim() || undefined,
     email,
-    phone: String(contact.phone || "").trim() || undefined,
+    phone,
     emailDomain,
-    ghlSource: meta?.source,
+    ghlSource: meta?.source || String(pai?.sourceLabel || "").trim() || undefined,
     originalTags: meta?.originalTags ?? [],
     importTag: contact.tag ?? undefined,
-    batchName: meta?.batchName,
-    importReason: meta?.importReason,
-    notes: notes && !notes.startsWith("Company: ") ? notes : undefined,
+    batchName: meta?.batchName || String(pai?.batchName || "").trim() || undefined,
+    importReason: meta?.importReason || String(pai?.importReason || "").trim() || undefined,
+    notes: contextNotes || undefined,
     websiteUrl,
     pipeline: meta?.pipeline,
     stage: meta?.stage,
+    businessType,
+    address,
+    rating: rating != null && !Number.isNaN(rating) ? rating : undefined,
+    reviewCount: reviewCount != null && !Number.isNaN(reviewCount) ? reviewCount : undefined,
+    discoverySource: String(pai?.sourceLabel || pai?.provider || "").trim() || undefined,
+    providerPlaceId: String(pai?.placeId || "").trim() || undefined,
   };
 }
 
@@ -111,6 +174,10 @@ export function hasInsufficientProspectData(input: ProspectIntelligenceAiInput):
     input.websiteUrl,
     input.jobTitle,
     input.importReason,
+    input.businessType,
+    input.address,
+    input.rating != null,
+    input.reviewCount != null,
   ].filter(Boolean);
   return signals.length < 2;
 }

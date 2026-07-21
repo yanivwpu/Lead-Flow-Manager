@@ -71,7 +71,17 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-function priorityBadge(priority?: string) {
+function priorityBadge(priority?: string, analysisStatus?: string | null) {
+  const analysis = String(analysisStatus || "pending").toLowerCase();
+  if (analysis === "processing") {
+    return <Badge className="bg-sky-600">Analyzing</Badge>;
+  }
+  if (analysis === "failed") {
+    return <Badge variant="destructive">Analysis failed</Badge>;
+  }
+  if (analysis === "pending") {
+    return <Badge variant="outline">AI analysis pending</Badge>;
+  }
   switch (priority) {
     case "high":
       return <Badge className="bg-emerald-600">High</Badge>;
@@ -79,9 +89,29 @@ function priorityBadge(priority?: string) {
       return <Badge className="bg-amber-500">Medium</Badge>;
     case "low":
       return <Badge variant="secondary">Low</Badge>;
+    case "needs_review":
+      return <Badge variant="outline">Needs review</Badge>;
     default:
       return <Badge variant="outline">Needs review</Badge>;
   }
+}
+
+function analysisPendingLabel(analysisStatus?: string | null): string {
+  const a = String(analysisStatus || "pending").toLowerCase();
+  if (a === "processing") return "Analyzing…";
+  if (a === "failed") return "Analysis failed";
+  if (a === "pending") return "AI analysis pending";
+  return "";
+}
+
+function cellOrPending(
+  value: string | number | null | undefined,
+  analysisStatus?: string | null,
+): string {
+  const pending = analysisPendingLabel(analysisStatus);
+  if (pending && (value === null || value === undefined || value === "")) return pending;
+  if (value === null || value === undefined || value === "") return "—";
+  return String(value);
 }
 
 function offerLabel(offer?: string) {
@@ -420,7 +450,13 @@ function ProspectIntelligenceDetailDialog({
     repliedAt: intel?.repliedAt,
     email: item?.email,
     outreachConversationId: intel?.outreachConversationId,
+    analysisStatus: intel?.analysisStatus,
   });
+
+  const analysisStatus = String(intel?.analysisStatus || "pending").toLowerCase();
+  const analysisIncomplete =
+    analysisStatus === "pending" || analysisStatus === "processing" || analysisStatus === "failed";
+  const analysisPendingText = analysisPendingLabel(intel?.analysisStatus);
 
   const displayStatus = resolveProspectDisplayStatus({
     reviewStatus: intel?.reviewStatus,
@@ -587,11 +623,39 @@ function ProspectIntelligenceDetailDialog({
             ) : null}
           </DialogTitle>
           <DialogDescription>
-            Internal Prospect Intelligence — {item.batchName || "Imported batch"}
+            {item.sourceLabel || item.batchName || "Imported batch"}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 text-sm">
+          {analysisIncomplete ? (
+            <div
+              className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900"
+              data-testid="pi-analysis-pending-banner"
+            >
+              {analysisStatus === "failed" ? (
+                <>
+                  <p className="font-medium">Analysis failed</p>
+                  <p className="mt-0.5 text-xs text-amber-800">
+                    AI analysis did not complete. Use Re-analyze to try again.
+                  </p>
+                </>
+              ) : analysisStatus === "processing" ? (
+                <>
+                  <p className="font-medium">Analyzing</p>
+                  <p className="mt-0.5 text-xs text-amber-800">AI analysis is in progress.</p>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium">AI analysis has not completed yet.</p>
+                  <p className="mt-0.5 text-xs text-amber-800">
+                    Review status: Pending. Fields will populate when analysis finishes.
+                  </p>
+                </>
+              )}
+            </div>
+          ) : null}
+
           <div className="grid gap-3 sm:grid-cols-2">
             <ProspectContactFieldRow
               kind="email"
@@ -607,14 +671,22 @@ function ProspectIntelligenceDetailDialog({
               contactId={item.contactId}
               onSaved={(patch) => onContactFieldsUpdated(item.contactId, patch)}
             />
+            <p>
+              <span className="text-gray-500">Source:</span>{" "}
+              {item.sourceLabel || item.batchName || "—"}
+            </p>
             <p><span className="text-gray-500">Import tag:</span> {item.importTag || "—"}</p>
             <p><span className="text-gray-500">Import reason:</span> {item.importReason || "—"}</p>
             <p><span className="text-gray-500">Pipeline:</span> {item.pipelineStage || "—"}</p>
-            <p><span className="text-gray-500">Confidence:</span> {intel.confidence ?? "—"}</p>
+            <p><span className="text-gray-500">Confidence:</span> {cellOrPending(intel.confidence, intel.analysisStatus)}</p>
             <p data-testid="pi-review-status">
               <span className="text-gray-500">Review status:</span>{" "}
               <span className={approveUi.isApproved ? "font-medium text-emerald-700" : ""}>
-                {intel.reviewStatus || "pending"}
+                {analysisStatus === "processing"
+                  ? "Analyzing"
+                  : analysisStatus === "failed"
+                    ? "Analysis failed"
+                    : intel.reviewStatus || "pending"}
               </span>
             </p>
             <p data-testid="pi-display-status">
@@ -637,30 +709,42 @@ function ProspectIntelligenceDetailDialog({
 
           <div className="rounded-lg border bg-gray-50 p-3">
             <p className="font-medium text-gray-900">AI Classification</p>
-            <p className="mt-1">Industry: {intel.industry || "—"}</p>
-            <p>Business type: {intel.businessType || "—"}</p>
-            <p>Agency likelihood: {intel.agencyLikelihood ?? "—"}</p>
-            <p>Shopify likelihood: {intel.shopifyMerchantLikelihood ?? "—"}</p>
-            <p>Real estate likelihood: {intel.realEstateLikelihood ?? "—"}</p>
+            <p className="mt-1">Industry: {cellOrPending(intel.industry, intel.analysisStatus)}</p>
+            <p>Business type: {cellOrPending(intel.businessType, intel.analysisStatus)}</p>
+            <p>Agency likelihood: {cellOrPending(intel.agencyLikelihood, intel.analysisStatus)}</p>
+            <p>Shopify likelihood: {cellOrPending(intel.shopifyMerchantLikelihood, intel.analysisStatus)}</p>
+            <p>Real estate likelihood: {cellOrPending(intel.realEstateLikelihood, intel.analysisStatus)}</p>
           </div>
 
           <div className="rounded-lg border bg-blue-50/50 p-3">
             <p className="font-medium text-gray-900">Fit</p>
             <div className="mt-2 flex flex-wrap gap-2">
-              {priorityBadge(intel.priority)}
-              <Badge variant="outline">Score {intel.leadScore ?? 0}</Badge>
-              <Badge variant="outline">Fit {intel.potentialFit || "unknown"}</Badge>
-              <Badge variant="outline">{offerLabel(intel.recommendedOffer)}</Badge>
+              {priorityBadge(intel.priority, intel.analysisStatus)}
+              {analysisIncomplete ? (
+                <Badge variant="outline">{analysisPendingText || "AI analysis pending"}</Badge>
+              ) : (
+                <>
+                  <Badge variant="outline">Score {intel.leadScore ?? 0}</Badge>
+                  <Badge variant="outline">Fit {intel.potentialFit || "unknown"}</Badge>
+                  <Badge variant="outline">{offerLabel(intel.recommendedOffer)}</Badge>
+                </>
+              )}
             </div>
           </div>
 
           <div>
             <p className="font-medium text-gray-900">Suggested outreach angle</p>
-            <p className="mt-1 text-gray-700">{intel.suggestedOutreachAngle || "—"}</p>
+            <p className="mt-1 text-gray-700">
+              {cellOrPending(intel.suggestedOutreachAngle, intel.analysisStatus)}
+            </p>
           </div>
 
           <div>
             <p className="font-medium text-gray-900">Suggested first message</p>
+            {analysisIncomplete ? (
+              <p className="mt-2 text-gray-600">{analysisPendingText || "AI analysis pending"}</p>
+            ) : (
+              <>
             <p className="mt-1 text-xs text-gray-500">
               Save message keeps a draft. Approve AI result also saves the text currently in this box.
             </p>
@@ -671,11 +755,20 @@ function ProspectIntelligenceDetailDialog({
               onChange={(e) => setEditMessage(e.target.value)}
               data-testid="pi-suggested-message"
             />
+              </>
+            )}
           </div>
 
           <div>
             <p className="font-medium text-gray-900">Why AI Recommends This Prospect</p>
             {(() => {
+              if (analysisIncomplete) {
+                return (
+                  <p className="mt-1 text-gray-600">
+                    {analysisPendingText || "AI analysis pending"}
+                  </p>
+                );
+              }
               const raw = (intel.reasoningSummary || "").trim();
               if (!raw) return <p className="mt-1 text-gray-600">—</p>;
               const bullets = raw
@@ -796,7 +889,9 @@ export function ProspectIntelligencePanel(props: {
   const [businessFilter, setBusinessFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [channelFilter, setChannelFilter] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<"leadScore" | "priority" | "confidence" | "name">("leadScore");
+  const [sortBy, setSortBy] = useState<"leadScore" | "priority" | "confidence" | "name" | "action">(
+    "action",
+  );
   const [selected, setSelected] = useState<ProspectIntelligenceListItem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -883,7 +978,7 @@ export function ProspectIntelligencePanel(props: {
       if (channelFilter === "email_eligible") params.set("emailEligible", "true");
       if (channelFilter === "any_eligible") params.set("anyEligibleChannel", "true");
       params.set("sortBy", sortBy);
-      params.set("sortDir", sortBy === "name" ? "asc" : "desc");
+      params.set("sortDir", sortBy === "name" ? "asc" : sortBy === "action" ? "desc" : "desc");
       params.set("limit", "500");
       return fetchJson<{ items: ProspectIntelligenceListItem[] }>(
         `/api/growth-tools/prospect-intelligence?${params.toString()}`,
@@ -1367,8 +1462,9 @@ export function ProspectIntelligencePanel(props: {
           </SelectContent>
         </Select>
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Sort" /></SelectTrigger>
+          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Sort" /></SelectTrigger>
           <SelectContent>
+            <SelectItem value="action">Needs action (newest)</SelectItem>
             <SelectItem value="leadScore">Lead score</SelectItem>
             <SelectItem value="priority">Priority</SelectItem>
             <SelectItem value="confidence">Confidence</SelectItem>
@@ -1439,7 +1535,10 @@ export function ProspectIntelligencePanel(props: {
       </div>
 
       {items.length === 0 ? (
-        <p className="text-sm text-gray-500">No AI-analyzed prospects yet. Run Analyze with AI on an import batch.</p>
+        <p className="text-sm text-gray-500">
+          No prospects in AI Review yet. Discover businesses and send them here — analysis starts
+          automatically.
+        </p>
       ) : (
         <div className="overflow-auto rounded-xl border">
           <Table>
@@ -1475,13 +1574,51 @@ export function ProspectIntelligencePanel(props: {
                     />
                   </TableCell>
                   <TableCell className="font-medium">{row.name}</TableCell>
-                  <TableCell>{row.intelligence.businessType || "—"}</TableCell>
-                  <TableCell>{row.intelligence.leadScore ?? "—"}</TableCell>
-                  <TableCell>{priorityBadge(row.intelligence.priority)}</TableCell>
-                  <TableCell className="max-w-[140px] truncate">{offerLabel(row.intelligence.recommendedOffer)}</TableCell>
-                  <TableCell className="max-w-[200px] truncate">{row.intelligence.suggestedOutreachAngle || "—"}</TableCell>
+                  <TableCell>
+                    {cellOrPending(row.intelligence.businessType, row.intelligence.analysisStatus)}
+                  </TableCell>
+                  <TableCell>
+                    {cellOrPending(row.intelligence.leadScore, row.intelligence.analysisStatus)}
+                  </TableCell>
+                  <TableCell>
+                    {priorityBadge(row.intelligence.priority, row.intelligence.analysisStatus)}
+                  </TableCell>
+                  <TableCell className="max-w-[140px] truncate">
+                    {analysisPendingLabel(row.intelligence.analysisStatus) &&
+                    !row.intelligence.recommendedOffer
+                      ? analysisPendingLabel(row.intelligence.analysisStatus)
+                      : offerLabel(row.intelligence.recommendedOffer)}
+                  </TableCell>
+                  <TableCell className="max-w-[200px] truncate">
+                    {cellOrPending(
+                      row.intelligence.suggestedOutreachAngle,
+                      row.intelligence.analysisStatus,
+                    )}
+                  </TableCell>
                   <TableCell>
                     {(() => {
+                      const analysis = String(row.intelligence.analysisStatus || "pending").toLowerCase();
+                      if (analysis === "processing") {
+                        return (
+                          <Badge className="bg-sky-600 text-[10px]" data-testid="pi-table-analyzing">
+                            Analyzing
+                          </Badge>
+                        );
+                      }
+                      if (analysis === "failed") {
+                        return (
+                          <Badge variant="destructive" className="text-[10px]" data-testid="pi-table-failed">
+                            Analysis Failed
+                          </Badge>
+                        );
+                      }
+                      if (analysis === "pending") {
+                        return (
+                          <span className="text-xs text-gray-500" data-testid="pi-table-pending">
+                            Pending
+                          </span>
+                        );
+                      }
                       const status = resolveProspectDisplayStatus({
                         reviewStatus: row.intelligence.reviewStatus,
                         outreachStatus: row.intelligence.outreachStatus,

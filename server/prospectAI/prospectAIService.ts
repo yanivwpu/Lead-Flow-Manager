@@ -363,9 +363,15 @@ export async function discoverProspects(
 
 function buildContactNotes(row: typeof prospectAiDiscoveryResults.$inferSelect): string {
   const lines: string[] = [`Company: ${row.name}`];
-  if (row.address) lines.push(`Address: ${row.address}`);
-  if (row.website) lines.push(row.website.startsWith("http") ? row.website : `https://${row.website}`);
   if (row.businessType) lines.push(`Type: ${row.businessType}`);
+  if (row.address) lines.push(`Address: ${row.address}`);
+  if (row.phone) lines.push(`Phone: ${row.phone}`);
+  if (row.website) {
+    lines.push(row.website.startsWith("http") ? row.website : `https://${row.website}`);
+  }
+  if (row.rating != null) lines.push(`Google rating: ${row.rating}`);
+  if (row.reviewCount != null) lines.push(`Google review count: ${row.reviewCount}`);
+  lines.push("Source: Google Places discovery");
   return lines.join("\n");
 }
 
@@ -386,7 +392,12 @@ export async function sendDiscoverResultsToReview(
   workspaceUserId: string,
   searchId: string,
   resultIds: unknown,
-): Promise<{ contactIds: string[]; sent: number }> {
+): Promise<{
+  contactIds: string[];
+  sent: number;
+  analysisStarted: boolean;
+  analysisJobId: string | null;
+}> {
   // Quota already consumed at discover time — do not block review handoff.
   await assertActivatedAndEligible(workspaceUserId, { requireQuota: false });
 
@@ -482,11 +493,18 @@ export async function sendDiscoverResultsToReview(
       businessType: row.businessType,
       address: row.address,
       website: row.website,
+      phone: row.phone,
+      email: row.email,
+      rating: row.rating != null ? Number(row.rating) : null,
+      reviewCount: row.reviewCount,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      provider: PROSPECT_AI_IMPORT_PROVIDER,
+      sourceLabel: "Google Places discovery",
       batchName: `Prospect AI: ${searchRows[0].businessType} in ${searchRows[0].location}`,
       importReason: "Local prospect discovery",
       importedAt: now.toISOString(),
       createdByImportJob: true,
-      provider: PROSPECT_AI_IMPORT_PROVIDER,
     };
 
     if (contact && contact.userId === workspaceUserId) {
@@ -567,7 +585,44 @@ export async function sendDiscoverResultsToReview(
   }
 
   const uniqueContactIds = [...new Set(contactIds)];
-  return { contactIds: uniqueContactIds, sent: uniqueContactIds.length };
+
+  // Seed outcome rows (active) for attribution / Won funnel.
+  try {
+    const { ensureProspectOutcomeRow } = await import("./prospectAiOutcomeService");
+    for (const cid of uniqueContactIds) {
+      const c = await storage.getContact(cid);
+      if (c) await ensureProspectOutcomeRow(workspaceUserId, c, workspaceUserId);
+    }
+  } catch (err) {
+    console.error("[ProspectAI] Failed to seed outcome rows:", err);
+  }
+
+  let analysisStarted = false;
+  let analysisJobId: string | null = null;
+  if (uniqueContactIds.length > 0) {
+    try {
+      const { createBulkAnalysisJob } = await import(
+        "../prospectImport/prospectBulkAnalysisService"
+      );
+      const job = await createBulkAnalysisJob({
+        contactIds: uniqueContactIds,
+        initiatedByUserId: workspaceUserId,
+        workspaceUserId,
+        selectionMode: "selected",
+      });
+      analysisStarted = true;
+      analysisJobId = job.id;
+    } catch (err) {
+      console.error("[ProspectAI] Failed to enqueue AI analysis after send-to-review:", err);
+    }
+  }
+
+  return {
+    contactIds: uniqueContactIds,
+    sent: uniqueContactIds.length,
+    analysisStarted,
+    analysisJobId,
+  };
 }
 
 export async function getProspectAiActivity(workspaceUserId: string): Promise<{

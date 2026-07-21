@@ -123,6 +123,8 @@ function mapIntelligenceRow(row: ProspectIntelligenceRow): ProspectIntelligence 
     outreachConversationId: row.outreachConversationId ?? undefined,
     outreachMessageId: row.outreachMessageId ?? undefined,
     repliedAt: row.repliedAt?.toISOString(),
+    errorMessage: row.errorMessage ?? undefined,
+    createdAt: row.createdAt?.toISOString(),
   };
 }
 
@@ -698,6 +700,15 @@ export async function listProspectIntelligence(
     }
 
     const meta = readProspectImportMetadata(contact);
+    const sd = (contact.sourceDetails || {}) as Record<string, unknown>;
+    const cf = (contact.customFields || {}) as Record<string, unknown>;
+    const pai = (sd.prospectAi || cf.prospectAi) as Record<string, unknown> | undefined;
+    const sourceLabel =
+      String(pai?.sourceLabel || "").trim() ||
+      (String(sd.prospectImportProvider || "").trim() === "prospect_ai"
+        ? "Google Places discovery"
+        : meta?.batchName) ||
+      null;
     items.push({
       contactId: contact.id,
       name: contact.name,
@@ -708,11 +719,12 @@ export async function listProspectIntelligence(
       batchName: meta?.batchName ?? null,
       importReason: meta?.importReason ?? null,
       pipelineStage: contact.pipelineStage,
+      sourceLabel,
       intelligence: mapIntelligenceRow(row),
     });
   }
 
-  const sortBy = filters.sortBy ?? "leadScore";
+  const sortBy = filters.sortBy ?? "action";
   const sortDir = filters.sortDir ?? "desc";
   items.sort((a, b) => {
     let cmp = 0;
@@ -726,6 +738,34 @@ export async function listProspectIntelligence(
       case "confidence":
         cmp = (a.intelligence.confidence ?? 0) - (b.intelligence.confidence ?? 0);
         break;
+      case "createdAt": {
+        const at = a.intelligence.createdAt ? Date.parse(a.intelligence.createdAt) : 0;
+        const bt = b.intelligence.createdAt ? Date.parse(b.intelligence.createdAt) : 0;
+        cmp = at - bt;
+        break;
+      }
+      case "action": {
+        // Reconstruct rank from mapped fields (list items don't carry raw row).
+        const rankOf = (item: ProspectIntelligenceListItem): number => {
+          const analysis = String(item.intelligence.analysisStatus || "pending").toLowerCase();
+          const review = String(item.intelligence.reviewStatus || "pending").toLowerCase();
+          const outreach = String(item.intelligence.outreachStatus || "not_sent").toLowerCase();
+          if (analysis === "processing") return 0;
+          if (analysis === "pending") return 1;
+          if (analysis === "failed") return 2;
+          if (review === "needs_review" || item.intelligence.needsReview) return 3;
+          if (review === "pending" && analysis === "completed") return 4;
+          if (review === "approved" && outreach === "not_sent") return 5;
+          if (outreach === "outreach_sent") return 6;
+          if (outreach === "replied") return 7;
+          return 8;
+        };
+        cmp = rankOf(a) - rankOf(b);
+        if (cmp !== 0) return cmp; // action rank always ascending (needs action first)
+        const at = a.intelligence.createdAt ? Date.parse(a.intelligence.createdAt) : 0;
+        const bt = b.intelligence.createdAt ? Date.parse(b.intelligence.createdAt) : 0;
+        return bt - at; // newest first within rank
+      }
       default:
         cmp = (a.intelligence.leadScore ?? 0) - (b.intelligence.leadScore ?? 0);
     }
@@ -753,6 +793,15 @@ export async function getProspectIntelligenceDetail(
   if (!rows[0]) return null;
 
   const meta = readProspectImportMetadata(contact);
+  const sd = (contact.sourceDetails || {}) as Record<string, unknown>;
+  const cf = (contact.customFields || {}) as Record<string, unknown>;
+  const pai = (sd.prospectAi || cf.prospectAi) as Record<string, unknown> | undefined;
+  const sourceLabel =
+    String(pai?.sourceLabel || "").trim() ||
+    (String(sd.prospectImportProvider || "").trim() === "prospect_ai"
+      ? "Google Places discovery"
+      : meta?.batchName) ||
+    null;
   return {
     contactId: contact.id,
     name: contact.name,
@@ -763,6 +812,7 @@ export async function getProspectIntelligenceDetail(
     batchName: meta?.batchName ?? null,
     importReason: meta?.importReason ?? null,
     pipelineStage: contact.pipelineStage,
+    sourceLabel,
     intelligence: mapIntelligenceRow(rows[0]),
   };
 }

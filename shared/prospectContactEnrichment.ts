@@ -88,6 +88,7 @@ export function resolveProspectApproveOutreachUi(input: {
   repliedAt?: string | null;
   email?: string | null;
   outreachConversationId?: string | null;
+  analysisStatus?: string | null;
 }): ProspectApproveOutreachUi {
   const lifecycle = resolveProspectOutreachLifecycleUi({
     reviewStatus: input.reviewStatus,
@@ -97,6 +98,7 @@ export function resolveProspectApproveOutreachUi(input: {
     email: input.email,
     outreachConversationId: input.outreachConversationId,
     hasValidEmail: isValidProspectEmail(input.email),
+    analysisStatus: input.analysisStatus,
   });
   return {
     isApproved: lifecycle.isApproved,

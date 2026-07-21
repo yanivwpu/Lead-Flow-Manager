@@ -195,6 +195,7 @@ interface Contact {
   lastIncomingChannel?: Channel;
   ghlId?: string;
   customFields?: Record<string, unknown>;
+  sourceDetails?: Record<string, unknown> | null;
   buyerPreferenceProfile?: unknown;
 }
 

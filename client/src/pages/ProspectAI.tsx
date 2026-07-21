@@ -21,6 +21,16 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -37,10 +47,13 @@ import {
   useProspectAiActivity,
   useProspectAiDiscover,
   useProspectAiStatus,
+  useProspectAiWonCustomers,
+  useProspectAiWonStats,
   useSendDiscoverToReview,
   type ProspectAiDiscoverResult,
   type ProspectAiStatus,
 } from "@/lib/prospectAi";
+import { formatProspectAiRate } from "@shared/prospectAI";
 import { ProspectAiCardArt } from "@/components/growthEngines/ProspectAiCardArt";
 import { GhlProspectImport, ProspectImportHistoryPanel } from "@/components/settings/GhlProspectImport";
 import { ProspectIntelligencePanel } from "@/components/settings/ProspectIntelligencePanel";
@@ -48,10 +61,10 @@ import { ProspectOutreachQueuePanel } from "@/components/settings/ProspectOutrea
 import type { ProspectIntelligenceJobSummary } from "@shared/prospectImport";
 import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
 
-type WorkspaceTab = "discover" | "review" | "campaign" | "activity";
+type WorkspaceTab = "discover" | "review" | "campaign" | "activity" | "won";
 
 function parseTab(raw: string | null): WorkspaceTab {
-  if (raw === "review" || raw === "campaign" || raw === "activity") return raw;
+  if (raw === "review" || raw === "campaign" || raw === "activity" || raw === "won") return raw;
   return "discover";
 }
 
@@ -353,6 +366,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
   const [results, setResults] = useState<ProspectAiDiscoverResult[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [ghlOpen, setGhlOpen] = useState(false);
+  const [confirmSendOpen, setConfirmSendOpen] = useState(false);
 
   const discover = useProspectAiDiscover();
   const sendToReview = useSendDiscoverToReview(searchId);
@@ -370,6 +384,29 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
+    });
+  };
+
+  const confirmSendToReview = () => {
+    const count = selectedIds.size;
+    sendToReview.mutate([...selectedIds], {
+      onSuccess: (data) => {
+        setConfirmSendOpen(false);
+        const sent = data.sent ?? count;
+        toast({
+          title: "Sent to AI Review",
+          description: data.analysisStarted
+            ? `${sent} prospects added to AI Review. Analysis has started.`
+            : `${sent} prospects added to AI Review. Select them and click Analyze with AI.`,
+        });
+        setSelectedIds(new Set());
+      },
+      onError: (err: Error) =>
+        toast({
+          title: "Send failed",
+          description: err.message,
+          variant: "destructive",
+        }),
     });
   };
 
@@ -493,23 +530,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
               size="sm"
               className="bg-brand-green hover:bg-brand-green/90"
               disabled={!selectedIds.size || sendToReview.isPending || !searchId}
-              onClick={() => {
-                sendToReview.mutate([...selectedIds], {
-                  onSuccess: () => {
-                    toast({
-                      title: "Sent to Review",
-                      description: `${selectedIds.size} prospect(s) ready for AI review`,
-                    });
-                    setSelectedIds(new Set());
-                  },
-                  onError: (err: Error) =>
-                    toast({
-                      title: "Send failed",
-                      description: err.message,
-                      variant: "destructive",
-                    }),
-                });
-              }}
+              onClick={() => setConfirmSendOpen(true)}
               data-testid="prospect-ai-send-to-review"
             >
               {sendToReview.isPending ? (
@@ -518,6 +539,37 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
               Send to AI Review
             </Button>
           </div>
+          <AlertDialog open={confirmSendOpen} onOpenChange={setConfirmSendOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Send to AI Review?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Send {selectedIds.size} prospect{selectedIds.size === 1 ? "" : "s"} to AI Review and
+                  analyze them now?
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={sendToReview.isPending}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={sendToReview.isPending}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    confirmSendToReview();
+                  }}
+                  className="bg-brand-green hover:bg-brand-green/90"
+                >
+                  {sendToReview.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending…
+                    </>
+                  ) : (
+                    "Send & analyze"
+                  )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <div className="overflow-auto rounded-xl border">
             <Table>
               <TableHeader>
@@ -727,20 +779,151 @@ function ActivityTab() {
   );
 }
 
+function formatWonDate(iso?: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString();
+  } catch {
+    return iso;
+  }
+}
+
+function WonTab() {
+  const [filter, setFilter] = useState<"this_month" | "last_30_days" | "all_time">("all_time");
+  const statsQuery = useProspectAiWonStats();
+  const customersQuery = useProspectAiWonCustomers(filter);
+  const stats = statsQuery.data;
+  const customers = customersQuery.data?.customers ?? [];
+
+  return (
+    <div className="space-y-8" data-testid="prospect-ai-won-tab">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: "Outreach Sent", value: stats?.outreachSent ?? 0 },
+          { label: "Replied", value: stats?.replied ?? 0 },
+          { label: "Qualified", value: stats?.qualified ?? 0 },
+          { label: "Won", value: stats?.won ?? 0 },
+        ].map((c) => (
+          <div
+            key={c.label}
+            className="rounded-xl border border-emerald-100 bg-emerald-50/40 px-4 py-3 text-center"
+          >
+            <p className="text-2xl font-semibold text-gray-900">{c.value}</p>
+            <p className="text-xs font-medium text-gray-600">{c.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+        <p>
+          Reply rate:{" "}
+          <span className="font-medium text-gray-900">
+            {formatProspectAiRate(stats?.replyRate ?? null)}
+          </span>
+        </p>
+        <p>
+          Win rate:{" "}
+          <span className="font-medium text-gray-900">
+            {formatProspectAiRate(stats?.winRate ?? null)}
+          </span>
+        </p>
+        <p>
+          Qualified-to-Won:{" "}
+          <span className="font-medium text-gray-900">
+            {formatProspectAiRate(stats?.qualifiedToWon ?? null)}
+          </span>
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-base font-semibold text-gray-900">Won Customers</h3>
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              ["this_month", "This month"],
+              ["last_30_days", "Last 30 days"],
+              ["all_time", "All time"],
+            ] as const
+          ).map(([value, label]) => (
+            <Button
+              key={value}
+              type="button"
+              size="sm"
+              variant={filter === value ? "default" : "outline"}
+              className={filter === value ? "bg-brand-green hover:bg-brand-green/90" : ""}
+              onClick={() => setFilter(value)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {customersQuery.isLoading ? (
+        <div className="flex justify-center py-10">
+          <Loader2 className="h-6 w-6 animate-spin text-brand-green" />
+        </div>
+      ) : customers.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-6 py-10 text-center">
+          <p className="text-sm text-gray-600">
+            No won customers yet. Continue conversations in the Inbox and mark successful prospects as
+            Won.
+          </p>
+          <Link href="/app/inbox">
+            <Button className="mt-4 bg-brand-green hover:bg-brand-green/90" size="sm">
+              <Inbox className="mr-2 h-4 w-4" />
+              Open Inbox
+            </Button>
+          </Link>
+        </div>
+      ) : (
+        <div className="overflow-auto rounded-xl border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Contact / Business</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Campaign</TableHead>
+                <TableHead>First outreach</TableHead>
+                <TableHead>Won date</TableHead>
+                <TableHead>Marked by</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {customers.map((row) => (
+                <TableRow key={row.contactId}>
+                  <TableCell className="font-medium">{row.name}</TableCell>
+                  <TableCell>{row.source || "Prospect AI"}</TableCell>
+                  <TableCell className="max-w-[140px] truncate">{row.campaign || "—"}</TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">
+                    {formatWonDate(row.firstOutreachAt)}
+                  </TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">{formatWonDate(row.wonAt)}</TableCell>
+                  <TableCell>{row.markedByName || "—"}</TableCell>
+                  <TableCell>
+                    <Badge className="bg-emerald-600 text-[10px]">Won</Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Workspace({ status }: { status: ProspectAiStatus }) {
-  const [, setLocation] = useLocation();
   const searchString = useSearch();
   const activeTab = useMemo(
     () => parseTab(new URLSearchParams(searchString).get("tab")),
     [searchString],
   );
+  const [, setLocation] = useLocation();
   const [analysisJob, setAnalysisJob] = useState<ProspectIntelligenceJobSummary | null>(null);
 
   const handleTabChange = (next: string) => {
-    if (next === "close") {
-      setLocation("/app/inbox");
-      return;
-    }
     const params = new URLSearchParams(searchString);
     if (next === "discover") params.delete("tab");
     else params.set("tab", next);
@@ -782,7 +965,7 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
               ["review", "AI Review"],
               ["campaign", "Campaigns"],
               ["activity", "History"],
-              ["close", "Close"],
+              ["won", "Won"],
             ] as const
           ).map(([value, label]) => (
             <TabsTrigger
@@ -810,6 +993,9 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
         </TabsContent>
         <TabsContent value="activity" className="mt-0 focus-visible:outline-none">
           <ActivityTab />
+        </TabsContent>
+        <TabsContent value="won" className="mt-0 focus-visible:outline-none">
+          <WonTab />
         </TabsContent>
       </Tabs>
     </div>
