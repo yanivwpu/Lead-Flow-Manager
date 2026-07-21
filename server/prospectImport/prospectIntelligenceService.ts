@@ -75,6 +75,14 @@ function mapIntelligenceRow(row: ProspectIntelligenceRow): ProspectIntelligence 
     repliedAt: row.repliedAt?.toISOString(),
     errorMessage: row.errorMessage ?? undefined,
     createdAt: row.createdAt?.toISOString(),
+    enrichmentStatus: row.enrichmentStatus ?? undefined,
+    enrichmentProvider: row.enrichmentProvider ?? undefined,
+    websiteAnalyzedAt: row.websiteAnalyzedAt?.toISOString(),
+    websiteUrlUsed: row.websiteUrlUsed ?? undefined,
+    enrichmentEmailFound: row.enrichmentEmailFound ?? undefined,
+    enrichmentPhoneFound: row.enrichmentPhoneFound ?? undefined,
+    enrichmentResult: (row.enrichmentResult as Record<string, unknown>) ?? undefined,
+    enrichmentErrorMessage: row.enrichmentErrorMessage ?? undefined,
   };
 }
 
@@ -825,6 +833,22 @@ export async function approveProspectIntelligence(
     .update(prospectIntelligence)
     .set(messagePatch)
     .where(eq(prospectIntelligence.contactId, contactId));
+
+  // Phase 2: start website enrichment only after human approval (async — never on discover).
+  try {
+    const { enqueueProspectEnrichment } = await import("./prospectEnrichmentService");
+    await enqueueProspectEnrichment({
+      contactId,
+      workspaceUserId: opts?.workspaceUserId || contact.userId,
+      initiatedByUserId: userId,
+      trigger: "approve",
+    });
+  } catch (err) {
+    console.error(
+      "[ProspectEnrichment] enqueue after approve failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
 
   const rows = await db
     .select()

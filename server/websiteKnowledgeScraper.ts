@@ -182,6 +182,47 @@ async function fetchSingleKnowledgePage(
   return { finalUrl, text, truncated };
 }
 
+/**
+ * Public HTML fetch for Prospect enrichment (SSRF-safe).
+ * Returns raw HTML so callers can extract mailto/tel/footer contacts.
+ */
+export async function fetchPublicHtmlPage(
+  startHref: string,
+  signal?: AbortSignal,
+): Promise<{ finalUrl: string; html: string; truncated: boolean }> {
+  const root = assertSafePublicHttpUrl(startHref);
+  root.hash = "";
+  const controller = signal ? null : new AbortController();
+  const active = signal ?? controller!.signal;
+  const tid = controller ? setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS) : null;
+  try {
+    const { url: finalUrl, html, truncated } = await fetchHtmlWithSafeRedirects(root, active);
+    return { finalUrl, html, truncated };
+  } finally {
+    if (tid) clearTimeout(tid);
+  }
+}
+
+/** Soft text extract that keeps header/footer (better for public contact pages). */
+export function htmlToEnrichmentText(html: string, maxLen = 40_000): string {
+  let s = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<[^>]+>/g, " ");
+  s = s
+    .replace(/\s+/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim();
+  return s.slice(0, maxLen);
+}
+
 export type ScrapedPage = {
   url: string;
   text: string;

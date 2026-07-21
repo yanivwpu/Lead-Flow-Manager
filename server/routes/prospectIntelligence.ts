@@ -219,4 +219,56 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
       }
     },
   );
+
+  app.get(
+    "/api/growth-tools/prospect-intelligence/:contactId/enrichment",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const workspaceUserId = await resolveProspectWorkspaceUserId((req.user as { id: string }).id);
+        const item = await prospectIntelligenceService.getProspectIntelligenceDetail(
+          req.params.contactId,
+          workspaceUserId,
+        );
+        if (!item) {
+          res.status(404).json({ error: "Not found" });
+          return;
+        }
+        const intel = item.intelligence;
+        res.json({
+          enrichmentStatus: intel.enrichmentStatus || "none",
+          websiteAnalyzedAt: intel.websiteAnalyzedAt || null,
+          websiteUrlUsed: intel.websiteUrlUsed || null,
+          emailFound: Boolean(intel.enrichmentEmailFound),
+          phoneFound: Boolean(intel.enrichmentPhoneFound),
+          enrichmentResult: intel.enrichmentResult || null,
+          errorMessage: intel.enrichmentErrorMessage || null,
+        });
+      } catch (err) {
+        res.status(400).json({ error: err instanceof Error ? err.message : "Failed" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/growth-tools/prospect-intelligence/:contactId/enrichment/retry",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const userId = (req.user as { id: string }).id;
+        const workspaceUserId = await resolveProspectWorkspaceUserId(userId);
+        const { retryFailedEnrichment } = await import("../prospectImport/prospectEnrichmentService");
+        const job = await retryFailedEnrichment({
+          contactId: req.params.contactId,
+          workspaceUserId,
+          initiatedByUserId: userId,
+        });
+        res.json({ job });
+      } catch (err) {
+        res.status(400).json({
+          error: err instanceof Error ? err.message : "Enrichment retry failed",
+        });
+      }
+    },
+  );
 }

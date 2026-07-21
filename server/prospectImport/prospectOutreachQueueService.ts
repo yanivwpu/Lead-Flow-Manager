@@ -339,6 +339,7 @@ export async function createQueueBatch(params: {
   );
 
   const queuedItemIds: string[] = [];
+  const queuedContactIds: string[] = [];
   const seenRecipients = new Set<string>();
   let delayCursor = Date.now() + 5_000; // first send shortly after queue start
   let queuedCount = 0;
@@ -463,6 +464,7 @@ export async function createQueueBatch(params: {
 
       seenRecipients.add(recipientKey);
       queuedItemIds.push(item.id);
+      queuedContactIds.push(contactId);
       queuedCount += 1;
       delayCursor += computeNextScheduledDelayMs(settings);
 
@@ -502,6 +504,24 @@ export async function createQueueBatch(params: {
       skippedCount: Math.max(0, preview.selectedCount - queuedCount),
     })
     .where(eq(prospectOutreachBatches.id, batch.id));
+
+  // Phase 2: ensure website enrichment for queued prospects (async; skips if already done).
+  if (queuedContactIds.length) {
+    try {
+      const { enqueueProspectEnrichmentForContacts } = await import("./prospectEnrichmentService");
+      await enqueueProspectEnrichmentForContacts({
+        contactIds: queuedContactIds,
+        workspaceUserId,
+        initiatedByUserId: params.createdByUserId,
+        trigger: "queue",
+      });
+    } catch (err) {
+      console.error(
+        "[ProspectEnrichment] enqueue after queue failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
 
   const refreshed = await db
     .select()

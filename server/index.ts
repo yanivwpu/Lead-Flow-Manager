@@ -549,6 +549,12 @@ app.use((req, res, next) => {
   );
   startProspectBulkAnalysisWorker();
 
+  // Prospect website enrichment (Phase 2 — post-approval only)
+  const { startProspectEnrichmentWorker } = await import(
+    "./prospectImport/prospectEnrichmentWorker"
+  );
+  startProspectEnrichmentWorker();
+
   // IndexNow: detect new/changed content and submit to search engines on startup.
   // Uses a persisted state snapshot to submit only newly added blog posts and
   // landing pages. Falls back to submitting all pages when no prior state exists

@@ -2116,6 +2116,20 @@ export const prospectIntelligence = pgTable("prospect_intelligence", {
   /** Set when a real inbound reply arrives on the linked outreach conversation. */
   repliedAt: timestamp("replied_at"),
   analyzedAt: timestamp("analyzed_at"),
+  /**
+   * Prospect website enrichment (Phase 2) — never set on discover.
+   * none → pending → enriching → completed | failed | cancelled
+   */
+  enrichmentStatus: text("enrichment_status").notNull().default("none"),
+  enrichmentProvider: text("enrichment_provider"),
+  enrichmentTriggeredBy: text("enrichment_triggered_by"),
+  websiteAnalyzedAt: timestamp("website_analyzed_at"),
+  websiteUrlUsed: text("website_url_used"),
+  enrichmentEmailFound: boolean("enrichment_email_found").notNull().default(false),
+  enrichmentPhoneFound: boolean("enrichment_phone_found").notNull().default(false),
+  enrichmentResult: jsonb("enrichment_result").notNull().default(sql`'{}'::jsonb`),
+  enrichmentErrorMessage: text("enrichment_error_message"),
+  enrichmentJobId: varchar("enrichment_job_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -2530,4 +2544,53 @@ export const prospectAiOutcomes = pgTable(
 );
 
 export type ProspectAiOutcomeRow = typeof prospectAiOutcomes.$inferSelect;
+
+/** Phase 2 — durable website enrichment jobs (post-approval only). */
+export const prospectEnrichmentJobs = pgTable(
+  "prospect_enrichment_jobs",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    workspaceUserId: varchar("workspace_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    contactId: varchar("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    initiatedByUserId: varchar("initiated_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    status: text("status").notNull().default("pending"),
+    provider: text("provider").notNull().default("website_public"),
+    triggerSource: text("trigger_source").notNull().default("approve"),
+    progressCurrent: integer("progress_current").notNull().default(0),
+    progressTotal: integer("progress_total").notNull().default(4),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at"),
+    result: jsonb("result").notNull().default(sql`'{}'::jsonb`),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at").defaultNow(),
+    startedAt: timestamp("started_at"),
+    completedAt: timestamp("completed_at"),
+    cancelledAt: timestamp("cancelled_at"),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (t) => ({
+    claimIdx: index("prospect_enrichment_jobs_claim_idx").on(
+      t.status,
+      t.leaseExpiresAt,
+      t.createdAt,
+    ),
+    workspaceContactIdx: index("prospect_enrichment_jobs_workspace_contact_idx").on(
+      t.workspaceUserId,
+      t.contactId,
+      t.createdAt,
+    ),
+    contactStatusIdx: index("prospect_enrichment_jobs_contact_status_idx").on(
+      t.contactId,
+      t.status,
+    ),
+  }),
+);
+
+export type ProspectEnrichmentJobRow = typeof prospectEnrichmentJobs.$inferSelect;
 export type InsertProspectAiOutcome = typeof prospectAiOutcomes.$inferInsert;

@@ -114,6 +114,32 @@ function cellOrPending(
   return String(value);
 }
 
+function enrichmentBadge(intel: ProspectIntelligenceListItem["intelligence"]) {
+  const status = String(intel.enrichmentStatus || "none").toLowerCase();
+  if (status === "enriching" || status === "pending") {
+    return (
+      <Badge className="bg-sky-600 text-[10px]" data-testid="pi-enrichment-enriching">
+        Enriching Website
+      </Badge>
+    );
+  }
+  if (status === "completed") {
+    return (
+      <Badge className="bg-violet-600 text-[10px]" data-testid="pi-enrichment-enhanced">
+        AI Enhanced
+      </Badge>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <Badge variant="destructive" className="text-[10px]" data-testid="pi-enrichment-failed">
+        Enrichment failed
+      </Badge>
+    );
+  }
+  return null;
+}
+
 function offerLabel(offer?: string) {
   if (!offer) return "—";
   return offer.replace(/_/g, " ");
@@ -560,6 +586,25 @@ function ProspectIntelligenceDetailDialog({
     },
   });
 
+  const retryEnrichmentMutation = useMutation({
+    mutationFn: () =>
+      fetchJson<{ job: unknown }>(
+        `/api/growth-tools/prospect-intelligence/${item!.contactId}/enrichment/retry`,
+        { method: "POST" },
+      ),
+    onSuccess: async () => {
+      const detail = await fetchJson<ProspectIntelligenceListItem>(
+        `/api/growth-tools/prospect-intelligence/${item!.contactId}`,
+      ).catch(() => null);
+      if (detail?.contactId) applyItemUpdate(detail);
+      else void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+      toast({ title: "Website enrichment restarted" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Enrichment retry failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const openNativeEmailOutreach = () => {
     if (!item || !approveUi.showSendOutreach) return;
     const payload: ProspectOutreachComposePayload = {
@@ -693,6 +738,62 @@ function ProspectIntelligenceDetailDialog({
               <span className="text-gray-500">Status:</span>{" "}
               <span className="font-medium">{prospectDisplayStatusLabel(displayStatus)}</span>
             </p>
+            {enrichmentBadge(intel)}
+            {String(intel.enrichmentStatus || "").toLowerCase() === "completed" ||
+            String(intel.enrichmentStatus || "").toLowerCase() === "failed" ||
+            String(intel.enrichmentStatus || "").toLowerCase() === "enriching" ||
+            String(intel.enrichmentStatus || "").toLowerCase() === "pending" ? (
+              <div
+                className="sm:col-span-2 rounded-lg border border-violet-100 bg-violet-50/50 p-3"
+                data-testid="pi-enrichment-panel"
+              >
+                <p className="font-medium text-violet-900">Website enrichment</p>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs text-violet-900">
+                  {String(intel.enrichmentStatus || "").toLowerCase() === "completed" ? (
+                    <span>✓ Website analyzed</span>
+                  ) : String(intel.enrichmentStatus || "").toLowerCase() === "enriching" ||
+                    String(intel.enrichmentStatus || "").toLowerCase() === "pending" ? (
+                    <span>Enriching website…</span>
+                  ) : (
+                    <span>Analysis failed</span>
+                  )}
+                  <span>
+                    {intel.enrichmentEmailFound ? "✓ Email found" : "No public email"}
+                  </span>
+                  <span>{intel.enrichmentPhoneFound ? "✓ Phone found" : "No phone"}</span>
+                  {intel.websiteAnalyzedAt ? (
+                    <span>
+                      Analyzed{" "}
+                      {format(new Date(intel.websiteAnalyzedAt), "MMM d, yyyy h:mm a")}
+                    </span>
+                  ) : null}
+                </div>
+                {(() => {
+                  const result = (intel.enrichmentResult || {}) as {
+                    websiteIntelligence?: {
+                      businessSummary?: string;
+                      recommendedOutreachAngle?: string;
+                      aiFitInsights?: string;
+                    };
+                    publicContacts?: { emails?: string[]; phones?: string[] };
+                  };
+                  const wi = result.websiteIntelligence;
+                  if (!wi?.businessSummary && !wi?.aiFitInsights) return null;
+                  return (
+                    <div className="mt-2 space-y-1 text-xs text-violet-900/90">
+                      {wi.businessSummary ? <p>{wi.businessSummary}</p> : null}
+                      {wi.aiFitInsights ? <p>Fit: {wi.aiFitInsights}</p> : null}
+                      {wi.recommendedOutreachAngle ? (
+                        <p>Angle: {wi.recommendedOutreachAngle}</p>
+                      ) : null}
+                    </div>
+                  );
+                })()}
+                {intel.enrichmentErrorMessage ? (
+                  <p className="mt-2 text-xs text-red-700">{intel.enrichmentErrorMessage}</p>
+                ) : null}
+              </div>
+            ) : null}
             {intel.outreachSentAt ? (
               <p data-testid="pi-outreach-sent-at">
                 <span className="text-gray-500">Outreach sent:</span>{" "}
@@ -826,6 +927,22 @@ function ProspectIntelligenceDetailDialog({
             {reanalyzeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Re-analyze
           </Button>
+          {String(intel?.enrichmentStatus || "").toLowerCase() === "failed" ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={retryEnrichmentMutation.isPending}
+              onClick={() => retryEnrichmentMutation.mutate()}
+              data-testid="pi-retry-enrichment"
+            >
+              {retryEnrichmentMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              Retry enrichment
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"
@@ -984,7 +1101,19 @@ export function ProspectIntelligencePanel(props: {
         `/api/growth-tools/prospect-intelligence?${params.toString()}`,
       );
     },
-    refetchInterval: props.activeAnalysisJob?.status === "running" || bulkAnalysisJobId ? 2000 : false,
+    refetchInterval: (query) => {
+      if (props.activeAnalysisJob?.status === "running" || bulkAnalysisJobId) return 2000;
+      const items = query.state.data?.items || [];
+      if (
+        items.some((r) => {
+          const s = String(r.intelligence.enrichmentStatus || "").toLowerCase();
+          return s === "pending" || s === "enriching";
+        })
+      ) {
+        return 2500;
+      }
+      return false;
+    },
   });
 
   // Restore active/recent bulk analysis job after refresh/navigation.
@@ -1600,22 +1729,29 @@ export function ProspectIntelligencePanel(props: {
                       const analysis = String(row.intelligence.analysisStatus || "pending").toLowerCase();
                       if (analysis === "processing") {
                         return (
-                          <Badge className="bg-sky-600 text-[10px]" data-testid="pi-table-analyzing">
-                            Analyzing
-                          </Badge>
+                          <span className="flex flex-col gap-1 items-start">
+                            <Badge className="bg-sky-600 text-[10px]" data-testid="pi-table-analyzing">
+                              Analyzing
+                            </Badge>
+                            {enrichmentBadge(row.intelligence)}
+                          </span>
                         );
                       }
                       if (analysis === "failed") {
                         return (
-                          <Badge variant="destructive" className="text-[10px]" data-testid="pi-table-failed">
-                            Analysis Failed
-                          </Badge>
+                          <span className="flex flex-col gap-1 items-start">
+                            <Badge variant="destructive" className="text-[10px]" data-testid="pi-table-failed">
+                              Analysis Failed
+                            </Badge>
+                            {enrichmentBadge(row.intelligence)}
+                          </span>
                         );
                       }
                       if (analysis === "pending") {
                         return (
-                          <span className="text-xs text-gray-500" data-testid="pi-table-pending">
-                            Pending
+                          <span className="flex flex-col gap-1 items-start" data-testid="pi-table-pending">
+                            <span className="text-xs text-gray-500">Pending</span>
+                            {enrichmentBadge(row.intelligence)}
                           </span>
                         );
                       }
@@ -1627,35 +1763,50 @@ export function ProspectIntelligencePanel(props: {
                       });
                       if (status === "replied") {
                         return (
-                          <Badge className="bg-blue-600 text-[10px]" data-testid="pi-table-replied">
-                            Replied
-                          </Badge>
+                          <span className="flex flex-col gap-1 items-start">
+                            <Badge className="bg-blue-600 text-[10px]" data-testid="pi-table-replied">
+                              Replied
+                            </Badge>
+                            {enrichmentBadge(row.intelligence)}
+                          </span>
                         );
                       }
                       if (status === "outreach_sent") {
                         return (
-                          <Badge className="bg-indigo-600 text-[10px]" data-testid="pi-table-outreach-sent">
-                            Outreach Sent
-                          </Badge>
+                          <span className="flex flex-col gap-1 items-start">
+                            <Badge className="bg-indigo-600 text-[10px]" data-testid="pi-table-outreach-sent">
+                              Outreach Sent
+                            </Badge>
+                            {enrichmentBadge(row.intelligence)}
+                          </span>
                         );
                       }
                       if (status === "approved") {
                         return (
-                          <Badge className="bg-emerald-600 text-[10px]" data-testid="pi-table-approved">
-                            Approved
-                          </Badge>
+                          <span className="flex flex-col gap-1 items-start">
+                            <Badge className="bg-emerald-600 text-[10px]" data-testid="pi-table-approved">
+                              Approved
+                            </Badge>
+                            {enrichmentBadge(row.intelligence)}
+                          </span>
                         );
                       }
                       if (status === "needs_review" || row.intelligence.needsReview) {
                         return (
-                          <span className="flex items-center gap-1 text-amber-700 text-xs">
-                            <AlertTriangle className="h-3 w-3" /> Needs Review
+                          <span className="flex flex-col gap-1 items-start">
+                            <span className="flex items-center gap-1 text-amber-700 text-xs">
+                              <AlertTriangle className="h-3 w-3" /> Needs Review
+                            </span>
+                            {enrichmentBadge(row.intelligence)}
                           </span>
                         );
                       }
                       return (
-                        <span className="text-xs text-gray-500">
-                          {prospectDisplayStatusLabel(status)}
+                        <span className="flex flex-col gap-1 items-start">
+                          <span className="text-xs text-gray-500">
+                            {prospectDisplayStatusLabel(status)}
+                          </span>
+                          {enrichmentBadge(row.intelligence)}
                         </span>
                       );
                     })()}

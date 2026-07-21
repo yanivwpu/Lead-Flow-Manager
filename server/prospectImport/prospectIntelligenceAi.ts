@@ -47,6 +47,14 @@ export type ProspectIntelligenceAiInput = {
   reviewCount?: number;
   discoverySource?: string;
   providerPlaceId?: string;
+  /** Phase 2 website enrichment (post-approval) */
+  websiteIntelligenceSummary?: string;
+  websiteProductsServices?: string;
+  websitePainPoints?: string[];
+  websiteFitInsights?: string;
+  publicEmailsFound?: string[];
+  publicPhonesFound?: string[];
+  enrichmentCompleted?: boolean;
 };
 
 function clampLikelihood(value: unknown): number | undefined {
@@ -133,11 +141,25 @@ export function buildProspectIntelligenceInput(contact: Contact): ProspectIntell
     .filter(Boolean)
     .join("\n");
 
+  const sourceDetails = (contact.sourceDetails || {}) as Record<string, unknown>;
+  const customFields = (contact.customFields || {}) as Record<string, unknown>;
+  const enrichment = (sourceDetails.prospectEnrichment || customFields.prospectEnrichment) as
+    | Record<string, unknown>
+    | undefined;
+  const wi = (enrichment?.websiteIntelligence || {}) as Record<string, unknown>;
+  const pc = (enrichment?.publicContacts || {}) as Record<string, unknown>;
+  const publicEmails = Array.isArray(pc.emails)
+    ? pc.emails.filter((x): x is string => typeof x === "string")
+    : [];
+  const publicPhones = Array.isArray(pc.phones)
+    ? pc.phones.filter((x): x is string => typeof x === "string")
+    : [];
+
   return {
     name: String(contact.name || "").trim() || "Unknown",
     company: companyFromNotes || String(contact.name || "").trim() || undefined,
-    email,
-    phone,
+    email: email || publicEmails[0],
+    phone: phone || publicPhones[0],
     emailDomain,
     ghlSource: meta?.source || String(pai?.sourceLabel || "").trim() || undefined,
     originalTags: meta?.originalTags ?? [],
@@ -154,6 +176,17 @@ export function buildProspectIntelligenceInput(contact: Contact): ProspectIntell
     reviewCount: reviewCount != null && !Number.isNaN(reviewCount) ? reviewCount : undefined,
     discoverySource: String(pai?.sourceLabel || pai?.provider || "").trim() || undefined,
     providerPlaceId: String(pai?.placeId || "").trim() || undefined,
+    websiteIntelligenceSummary:
+      typeof wi.businessSummary === "string" ? wi.businessSummary : undefined,
+    websiteProductsServices:
+      typeof wi.productsServices === "string" ? wi.productsServices : undefined,
+    websitePainPoints: Array.isArray(wi.painPoints)
+      ? wi.painPoints.filter((x): x is string => typeof x === "string")
+      : undefined,
+    websiteFitInsights: typeof wi.aiFitInsights === "string" ? wi.aiFitInsights : undefined,
+    publicEmailsFound: publicEmails,
+    publicPhonesFound: publicPhones,
+    enrichmentCompleted: Boolean(enrichment?.websiteAnalyzedAt || wi.businessSummary),
   };
 }
 

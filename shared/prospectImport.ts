@@ -343,6 +343,15 @@ export type ProspectIntelligence = {
   repliedAt?: string;
   errorMessage?: string;
   createdAt?: string;
+  /** Phase 2 website enrichment */
+  enrichmentStatus?: string;
+  enrichmentProvider?: string | null;
+  websiteAnalyzedAt?: string;
+  websiteUrlUsed?: string | null;
+  enrichmentEmailFound?: boolean;
+  enrichmentPhoneFound?: boolean;
+  enrichmentResult?: Record<string, unknown> | null;
+  enrichmentErrorMessage?: string | null;
 };
 
 export type ProspectIntelligenceListItem = {
