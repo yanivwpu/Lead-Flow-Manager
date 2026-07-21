@@ -24,8 +24,8 @@ import {
   hasInsufficientProspectData,
   parseAndValidateProspectIntelligence,
   PROSPECT_INTELLIGENCE_AI_VERSION,
-  type ProspectWorkspaceBusinessContext,
 } from "./prospectIntelligenceAi";
+import { loadProspectAiWorkspaceContext } from "./prospectAiWorkspaceContext";
 import {
   assertInternalImportedProspect,
   isInternalImportedProspect,
@@ -42,56 +42,6 @@ const MAX_AI_RETRIES = 2;
 type AiCompleteFn = (
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
 ) => Promise<{ content: string; usage?: { promptTokens: number; completionTokens: number } }>;
-
-function text(value: unknown): string | undefined {
-  const v = typeof value === "string" ? value.trim() : "";
-  return v || undefined;
-}
-
-async function loadWorkspaceBusinessContext(
-  userId: string,
-): Promise<ProspectWorkspaceBusinessContext> {
-  const knowledge = await storage.getAiBusinessKnowledge(userId);
-  if (!knowledge) return { configured: false };
-
-  const faqs = Array.isArray(knowledge.faqs)
-    ? knowledge.faqs
-        .map((item) => {
-          if (!item || typeof item !== "object") return null;
-          const row = item as Record<string, unknown>;
-          const question = text(row.question);
-          const answer = text(row.answer);
-          return question && answer ? { question, answer } : null;
-        })
-        .filter((item): item is { question: string; answer: string } => Boolean(item))
-        .slice(0, 20)
-    : [];
-
-  const businessName = text(knowledge.businessName);
-  const industry = text(knowledge.industry);
-  const servicesProducts = text(knowledge.servicesProducts);
-  const websiteKnowledgeSummary = text(knowledge.websiteKnowledgeSummary);
-  const about = text(knowledge.aboutText);
-  const configured = Boolean(
-    businessName ||
-      industry ||
-      servicesProducts ||
-      websiteKnowledgeSummary ||
-      about ||
-      faqs.length,
-  );
-
-  return {
-    configured,
-    businessName,
-    industry,
-    servicesProducts,
-    websiteKnowledgeSummary,
-    faqs,
-    // AI Brain has no standalone Executive Summary column yet; derive one from canonical knowledge.
-    executiveSummary: about || websiteKnowledgeSummary || servicesProducts,
-  };
-}
 
 function mapIntelligenceRow(row: ProspectIntelligenceRow): ProspectIntelligence {
   return {
@@ -311,7 +261,10 @@ export async function analyzeProspectContact(params: {
       });
 
     const input = buildProspectIntelligenceInput(contact);
-    const workspaceContext = await loadWorkspaceBusinessContext(contact.userId);
+    const workspaceContext = await loadProspectAiWorkspaceContext(contact.userId, {
+      contactId: contact.id,
+      analysisPath: params.force ? "reanalyze" : "analyze",
+    });
     let intel: ProspectIntelligence;
     let promptTokens = 0;
     let completionTokens = 0;
@@ -324,7 +277,7 @@ export async function analyzeProspectContact(params: {
         {
           role: "system" as const,
           content:
-            "You are Prospect AI, a growth analyst for the current workspace. Use the workspace's existing AI Brain context when provided. Output strict JSON only. Never hallucinate unsupported business facts.",
+            "You are Prospect AI, a growth analyst for the current workspace. Prefer AI Brain business intelligence over Business Profile identity when both exist. Output strict JSON only. Never hallucinate unsupported business facts. Never confuse the prospect's industry with what the sender sells.",
         },
         {
           role: "user" as const,

@@ -17,18 +17,12 @@ import {
   hasConcreteWhachatPositioning,
 } from "@shared/whachatProductPositioning";
 import { readProspectImportMetadata } from "./prospectIntelligenceEligibility";
+import type { ProspectWorkspaceBusinessContext } from "./prospectAiWorkspaceContext";
 
-export const PROSPECT_INTELLIGENCE_AI_VERSION = "v3-ai-brain-context";
+export type { ProspectWorkspaceBusinessContext } from "./prospectAiWorkspaceContext";
 
-export type ProspectWorkspaceBusinessContext = {
-  configured: boolean;
-  businessName?: string;
-  industry?: string;
-  servicesProducts?: string;
-  websiteKnowledgeSummary?: string;
-  faqs?: Array<{ question: string; answer: string }>;
-  executiveSummary?: string;
-};
+/** Bump forces re-analysis to rebuild AI Brain–primary context (not Profile About). */
+export const PROSPECT_INTELLIGENCE_AI_VERSION = "v4-ai-brain-primary";
 
 export type ProspectIntelligenceAiInput = {
   name: string;
@@ -432,11 +426,27 @@ function buildWorkspaceFirstMessage(
 ): string {
   if (!context.configured) return "";
   const name = firstNameFromInput(input);
-  const sender = context.businessName?.trim() || "our team";
-  const value =
-    readableServices(context.servicesProducts) ||
-    context.executiveSummary?.trim().replace(/\s+/g, " ").slice(0, 180) ||
-    "help organizations improve customer acquisition and follow-up";
+  const sender =
+    context.displayName?.trim() ||
+    context.businessName?.trim() ||
+    "our team";
+
+  // Pitch from AI Brain intelligence when primary — never Profile About.
+  const value = context.aiBrainIsPrimary
+    ? readableServices(context.servicesProducts) ||
+      context.executiveSummary?.trim().replace(/\s+/g, " ").slice(0, 180) ||
+      context.websiteKnowledgeSummary?.trim().replace(/\s+/g, " ").slice(0, 180)
+    : context.executiveSummary?.trim().replace(/\s+/g, " ").slice(0, 180) ||
+      context.aboutText?.trim().replace(/\s+/g, " ").slice(0, 180) ||
+      readableServices(context.servicesProducts);
+
+  if (!value) {
+    return `Hi ${name}, I'm reaching out from ${sender}. Would a quick conversation be useful?`.slice(
+      0,
+      400,
+    );
+  }
+
   return `Hi ${name}, I'm reaching out from ${sender}. We ${value.replace(/^[Ww]e\s+/, "")}. Would a quick conversation be useful?`.slice(
     0,
     400,
@@ -474,37 +484,117 @@ function buildWorkspaceContextForPrompt(
   context: ProspectWorkspaceBusinessContext | undefined,
 ): string {
   if (!context) return buildWhachatProductContextForPrompt();
-  if (!context.configured) {
+  if (!context.configured || context.fallbackUsed === "generic") {
     return `WORKSPACE BUSINESS CONTEXT:
-AI Brain is not configured. Perform basic prospect analysis only.
+AI Brain is not configured and Business Profile is incomplete. Perform basic prospect analysis only.
 - Score data completeness, business legitimacy signals, online presence, and outreach readiness.
 - Do not infer fit for a specific product or service.
-- Leave suggestedFirstMessage empty rather than inventing what the workspace sells.`;
+- Leave suggestedFirstMessage empty rather than inventing what the workspace sells.
+- Use qualification-first language only if you must draft outreach.`;
   }
-  return `WORKSPACE BUSINESS CONTEXT (AI Brain is the source of truth):
+
+  if (context.aiBrainIsPrimary) {
+    return `WORKSPACE BUSINESS CONTEXT — HIERARCHY (follow strictly):
+1. AI Brain = PRIMARY source for what the business sells, ideal customers, offers, positioning, tone, and outreach strategy.
+2. Business Profile = complementary IDENTITY only (sender name, company name, website, phone, email). Do NOT redefine the offer from Profile About.
+3. If Profile About conflicts with AI Brain, IGNORE Profile About for fit, offer, angle, and first message.
+
+AI BRAIN BUSINESS INTELLIGENCE (primary — source of truth for offers and outreach):
 ${JSON.stringify(
   {
-    businessName: context.businessName || null,
-    industry: context.industry || null,
     productsAndServices: context.servicesProducts || null,
     websiteKnowledge: context.websiteKnowledgeSummary || null,
+    industry: context.industry || null,
     faqs: context.faqs || [],
+    customInstructions: context.customInstructions || null,
+    salesGoals: context.salesGoals || null,
     executiveSummary: context.executiveSummary || null,
   },
   null,
   2,
 )}
 
-Use this context to assess fit and personalize outreach. Never ask what the workspace sells and never invent details beyond this context.`;
+BUSINESS PROFILE IDENTITY (complementary — sender details only; not offer definition):
+${JSON.stringify(
+  {
+    displayName: context.displayName || null,
+    companyName: context.businessName || null,
+    website: context.website || null,
+    email: context.email || null,
+    phone: context.phone || null,
+    aboutTextSupplemental: context.aboutText || null,
+  },
+  null,
+  2,
+)}
+
+Rules:
+- Assess fit and personalize outreach using AI Brain intelligence above.
+- Use Business Profile for how the sender identifies (name/company/website), not for what they sell when AI Brain is present.
+- Never ask what the workspace sells and never invent details beyond this context.
+- Never pitch Profile About content (e.g. real estate brokerage services) when AI Brain describes a different product (e.g. CRM / SaaS).`;
+  }
+
+  // Profile-only fallback
+  return `WORKSPACE BUSINESS CONTEXT:
+AI Brain intelligence is not configured. Use Business Profile as a cautious fallback for identity and general positioning.
+Do not invent products beyond this Profile data. Prefer qualification-first outreach when Profile About is thin.
+
+BUSINESS PROFILE FALLBACK:
+${JSON.stringify(
+  {
+    displayName: context.displayName || null,
+    companyName: context.businessName || null,
+    website: context.website || null,
+    email: context.email || null,
+    phone: context.phone || null,
+    aboutText: context.aboutText || null,
+    executiveSummary: context.executiveSummary || null,
+  },
+  null,
+  2,
+)}
+
+Never ask what the workspace sells and never invent details beyond this context.`;
+}
+
+function buildWorkflowContextForPrompt(input: ProspectIntelligenceAiInput): string {
+  return `PROSPECT AI WORKFLOW CONTEXT (outbound prospecting):
+${JSON.stringify(
+  {
+    growthEngine: "Prospect AI",
+    mode: "outbound_prospect_evaluation",
+    discoverySource: input.discoverySource || null,
+    discoveryBatch: input.batchName || null,
+    importReason: input.importReason || null,
+    prospectName: input.name || null,
+    prospectCompany: input.company || null,
+    prospectBusinessType: input.businessType || null,
+    prospectAddress: input.address || null,
+    prospectWebsite: input.websiteUrl || null,
+    prospectPhone: input.phone || null,
+    prospectRating: input.rating ?? null,
+    prospectReviewCount: input.reviewCount ?? null,
+    providerPlaceId: input.providerPlaceId || null,
+  },
+  null,
+  2,
+)}
+
+Interpretation:
+- The TARGET is the discovered prospect (prospect fields above).
+- The SENDER's offer and positioning come from WORKSPACE BUSINESS CONTEXT (AI Brain first).
+- Do not confuse the prospect's industry (e.g. real estate office) with what the sender sells.`;
 }
 
 export function buildProspectIntelligencePrompt(
   input: ProspectIntelligenceAiInput,
   workspaceContext?: ProspectWorkspaceBusinessContext,
 ): string {
-  const offerGuidance = workspaceContext
+  const customerWorkspace = Boolean(workspaceContext);
+  const offerGuidance = customerWorkspace
     ? `OFFER GUIDANCE:
-- Use recommendedOffer="general_demo" when the prospect is a plausible fit for the workspace's products/services.
+- Use recommendedOffer="general_demo" when the prospect is a plausible fit for the workspace's products/services from AI Brain (or Profile fallback).
 - Use recommendedOffer="not_a_fit" only when evidence clearly indicates poor fit.
 - Legacy WhachatCRM offer categories are reserved for internal use and must not be selected for customer workspaces.`
     : `OFFER ↔ SEGMENT HINTS:
@@ -514,22 +604,30 @@ export function buildProspectIntelligencePrompt(
 - real_estate_growth_engine → real_estate
 - core_whachatcrm / general_demo → local_service or general`;
 
+  const messageGrounding = workspaceContext?.configured
+    ? `- Ground positioning only in the WORKSPACE BUSINESS CONTEXT above (AI Brain first when present).
+- For needs_review / unknown-fit prospects with minimal data, write a neutral introduction grounded in the workspace offer from AI Brain/Profile — without pretending to know the prospect's intent.`
+    : `- If AI Brain / Business Profile are not configured, leave suggestedFirstMessage empty rather than inventing an offer.
+- Do not default to pitching WhachatCRM for customer workspaces without workspace context.`;
+
   return `Analyze this prospect for acquisition fit, outreach readiness, and classification.
 
 ${buildWorkspaceContextForPrompt(workspaceContext)}
 
+${buildWorkflowContextForPrompt(input)}
+
 STRICT RULES:
-- Never claim facts not supported by the input. Use likelihood scores 0-100 instead of definitive labels.
+- Never claim facts not supported by the input or workspace context. Use likelihood scores 0-100 instead of definitive labels.
 - Do not invent company size, revenue, websites, job titles, or industries.
-- If data is insufficient, set needsReview=true, potentialFit="unknown", priority="needs_review".
+- If prospect data is insufficient, set needsReview=true, potentialFit="unknown", priority="needs_review".
 - Use concise internal language. suggestedFirstMessage max 400 chars.
+- The prospect's business category is about the TARGET, not the sender's product.
 
 OUTREACH MESSAGE RULES (suggestedFirstMessage):
-- Ground positioning only in the WORKSPACE BUSINESS CONTEXT above. If AI Brain is not configured, leave suggestedFirstMessage empty.
+${messageGrounding}
 - Never claim the prospect showed interest in the workspace, its products, messaging, CRM, AI, Shopify, real estate, agency services, or any other topic unless explicit source evidence says so.
 - Never use phrases like "I noticed your interest in...", "I saw you were looking for...", "businesses like yours", "your agency", "your store", "your clients", "your team", or "your real estate business" unless the prospect input explicitly supports that claim.
 - Do not assume the prospect owns or represents a business unless company, businessType, industry, or tags support it.
-- For needs_review / unknown-fit prospects with minimal data, write a neutral introduction that explains WhachatCRM accurately (CRM + unified inbox + AI engagement) and asks whether it is relevant — without pretending to know their business or intent.
 - The recommendedOffer must follow the offer guidance below.
 
 ${offerGuidance}

@@ -7,8 +7,8 @@ import {
   applyOutreachMessageGuardrails,
   buildProspectIntelligencePrompt,
   type ProspectIntelligenceAiInput,
-  type ProspectWorkspaceBusinessContext,
 } from "../server/prospectImport/prospectIntelligenceAi";
+import type { ProspectWorkspaceBusinessContext } from "../server/prospectImport/prospectAiWorkspaceContext";
 import type { ProspectIntelligence } from "@shared/prospectImport";
 
 const input: ProspectIntelligenceAiInput = {
@@ -20,7 +20,12 @@ const input: ProspectIntelligenceAiInput = {
 
 const context: ProspectWorkspaceBusinessContext = {
   configured: true,
+  aiBrainIsPrimary: true,
+  hasAiBrain: true,
+  hasBusinessProfile: true,
+  fallbackUsed: "ai_brain",
   businessName: "Northstar Growth",
+  displayName: "Northstar Growth",
   industry: "Marketing",
   servicesProducts: "help local clinics generate and follow up with qualified consultation leads",
   websiteKnowledgeSummary: "Northstar provides paid media and lead nurture services.",
@@ -29,13 +34,19 @@ const context: ProspectWorkspaceBusinessContext = {
 };
 
 const prompt = buildProspectIntelligencePrompt(input, context);
-assert.match(prompt, /AI Brain is the source of truth/i);
+assert.match(prompt, /AI Brain = PRIMARY/i);
 assert.match(prompt, /Northstar Growth/);
 assert.match(prompt, /ProductsAndServices|productsAndServices/);
 assert.doesNotMatch(prompt, /canonical WhachatCRM capabilities/i);
 assert.doesNotMatch(prompt, /What do you sell/i);
 
-const noBrainPrompt = buildProspectIntelligencePrompt(input, { configured: false });
+const noBrainPrompt = buildProspectIntelligencePrompt(input, {
+  configured: false,
+  aiBrainIsPrimary: false,
+  hasAiBrain: false,
+  hasBusinessProfile: false,
+  fallbackUsed: "generic",
+});
 assert.match(noBrainPrompt, /basic prospect analysis only/i);
 assert.match(noBrainPrompt, /leave suggestedFirstMessage empty/i);
 assert.doesNotMatch(noBrainPrompt, /canonical WhachatCRM capabilities/i);
