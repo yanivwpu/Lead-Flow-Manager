@@ -1,6 +1,7 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, lt } from "drizzle-orm";
 import type { Contact } from "@shared/schema";
 import {
+  prospectBulkAnalysisJobs,
   prospectImportJobs,
   prospectIntelligence,
   prospectIntelligenceJobs,
@@ -13,6 +14,11 @@ import type {
   ProspectIntelligenceListFilters,
   ProspectIntelligenceListItem,
 } from "@shared/prospectImport";
+import {
+  PROSPECT_ANALYSIS_STALE_PROCESSING_MS,
+  claimableAnalysisStatuses,
+  contactOwnedByActiveBulkLease,
+} from "@shared/prospectAnalysisOwnership";
 import { db } from "../../drizzle/db";
 import { aiProvider } from "../aiProvider";
 import { storage } from "../storage";
@@ -209,10 +215,228 @@ function isTransientAiError(err: unknown): boolean {
   return /rate limit|timeout|503|502|429|overloaded/i.test(msg);
 }
 
+export type ProspectAnalysisClaimOutcome =
+  | { outcome: "claimed" }
+  | { outcome: "already_completed"; row: ProspectIntelligenceRow }
+  | { outcome: "already_processing" };
+
+/**
+ * Atomically claim a prospect intelligence row for analysis (pending/failed → processing).
+ * With force, completed rows may also be claimed for re-analyze.
+ * Job creation must never call this — only the worker / analyze entrypoint.
+ */
+export async function claimProspectContactForAnalysis(params: {
+  contactId: string;
+  force?: boolean;
+  importJobId?: string | null;
+  aiModel?: string | null;
+}): Promise<ProspectAnalysisClaimOutcome> {
+  const existingRows = await db
+    .select()
+    .from(prospectIntelligence)
+    .where(eq(prospectIntelligence.contactId, params.contactId))
+    .limit(1);
+  let existing = existingRows[0];
+
+  if (
+    !params.force &&
+    existing &&
+    existing.analysisStatus === "completed" &&
+    existing.aiVersion === PROSPECT_INTELLIGENCE_AI_VERSION &&
+    !existing.errorMessage
+  ) {
+    return { outcome: "already_completed", row: existing };
+  }
+
+  if (existing?.analysisStatus === "processing") {
+    return { outcome: "already_processing" };
+  }
+
+  const now = new Date();
+  if (!existing) {
+    const inserted = await db
+      .insert(prospectIntelligence)
+      .values({
+        contactId: params.contactId,
+        importJobId: params.importJobId ?? null,
+        analysisStatus: "processing",
+        reviewStatus: "pending",
+        aiModel: params.aiModel ?? null,
+        aiVersion: PROSPECT_INTELLIGENCE_AI_VERSION,
+        errorMessage: null,
+        updatedAt: now,
+      })
+      .onConflictDoNothing({ target: prospectIntelligence.contactId })
+      .returning();
+    if (inserted[0]) return { outcome: "claimed" };
+    existing = (
+      await db
+        .select()
+        .from(prospectIntelligence)
+        .where(eq(prospectIntelligence.contactId, params.contactId))
+        .limit(1)
+    )[0];
+    if (existing?.analysisStatus === "processing") {
+      return { outcome: "already_processing" };
+    }
+    if (
+      !params.force &&
+      existing &&
+      existing.analysisStatus === "completed" &&
+      existing.aiVersion === PROSPECT_INTELLIGENCE_AI_VERSION &&
+      !existing.errorMessage
+    ) {
+      return { outcome: "already_completed", row: existing };
+    }
+  }
+
+  const updated = await db
+    .update(prospectIntelligence)
+    .set({
+      analysisStatus: "processing",
+      errorMessage: null,
+      updatedAt: now,
+      ...(params.aiModel ? { aiModel: params.aiModel } : {}),
+      ...(params.importJobId !== undefined
+        ? { importJobId: params.importJobId }
+        : {}),
+    })
+    .where(
+      and(
+        eq(prospectIntelligence.contactId, params.contactId),
+        inArray(prospectIntelligence.analysisStatus, claimableAnalysisStatuses(Boolean(params.force))),
+      ),
+    )
+    .returning();
+
+  if (updated.length) return { outcome: "claimed" };
+
+  const again = (
+    await db
+      .select()
+      .from(prospectIntelligence)
+      .where(eq(prospectIntelligence.contactId, params.contactId))
+      .limit(1)
+  )[0];
+  if (
+    !params.force &&
+    again &&
+    again.analysisStatus === "completed" &&
+    again.aiVersion === PROSPECT_INTELLIGENCE_AI_VERSION &&
+    !again.errorMessage
+  ) {
+    return { outcome: "already_completed", row: again };
+  }
+  return { outcome: "already_processing" };
+}
+
+/** Clear stuck/failed analysis without overwriting a successful completed row. */
+export async function markProspectAnalysisFailed(
+  contactId: string,
+  reason: string,
+): Promise<boolean> {
+  const message = reason.substring(0, 500);
+  const updated = await db
+    .update(prospectIntelligence)
+    .set({
+      analysisStatus: "failed",
+      errorMessage: message,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(prospectIntelligence.contactId, contactId),
+        inArray(prospectIntelligence.analysisStatus, ["pending", "processing"]),
+      ),
+    )
+    .returning({ contactId: prospectIntelligence.contactId });
+  return updated.length > 0;
+}
+
+/**
+ * Heal abandoned `processing` rows (e.g. pre-mark bug leftovers).
+ * Skips contacts still listed on a running bulk job with a valid lease.
+ */
+export async function healAbandonedProcessingAnalysis(params?: {
+  olderThanMs?: number;
+  now?: Date;
+}): Promise<number> {
+  const olderThanMs = params?.olderThanMs ?? PROSPECT_ANALYSIS_STALE_PROCESSING_MS;
+  const now = params?.now ?? new Date();
+  const cutoff = new Date(now.getTime() - olderThanMs);
+
+  const activeJobs = await db
+    .select({
+      status: prospectBulkAnalysisJobs.status,
+      leaseExpiresAt: prospectBulkAnalysisJobs.leaseExpiresAt,
+      contactIds: prospectBulkAnalysisJobs.contactIds,
+    })
+    .from(prospectBulkAnalysisJobs)
+    .where(
+      and(
+        eq(prospectBulkAnalysisJobs.status, "running"),
+        isNotNull(prospectBulkAnalysisJobs.leaseExpiresAt),
+        gt(prospectBulkAnalysisJobs.leaseExpiresAt, now),
+      ),
+    );
+
+  const stale = await db
+    .select({
+      contactId: prospectIntelligence.contactId,
+      updatedAt: prospectIntelligence.updatedAt,
+    })
+    .from(prospectIntelligence)
+    .where(
+      and(
+        eq(prospectIntelligence.analysisStatus, "processing"),
+        lt(prospectIntelligence.updatedAt, cutoff),
+      ),
+    );
+
+  const toHeal = stale
+    .map((r) => r.contactId)
+    .filter(
+      (contactId) =>
+        !contactOwnedByActiveBulkLease({
+          contactId,
+          activeJobs,
+          now,
+        }),
+    );
+  if (!toHeal.length) return 0;
+
+  const healed = await db
+    .update(prospectIntelligence)
+    .set({
+      analysisStatus: "failed",
+      errorMessage: "Abandoned stale processing (auto-heal)",
+      updatedAt: now,
+    })
+    .where(
+      and(
+        inArray(prospectIntelligence.contactId, toHeal),
+        eq(prospectIntelligence.analysisStatus, "processing"),
+      ),
+    )
+    .returning({ contactId: prospectIntelligence.contactId });
+
+  if (healed.length) {
+    console.info(
+      `[ProspectIntelligence] healed ${healed.length} abandoned processing row(s)`,
+    );
+  }
+  return healed.length;
+}
+
 export async function analyzeProspectContact(params: {
   contactId: string;
   importJobId?: string | null;
   force?: boolean;
+  /**
+   * When true, the caller (bulk worker) already atomically claimed this row.
+   * Skips the processing guard / re-claim so the owning worker can run AI.
+   */
+  preClaimed?: boolean;
   completeFn?: AiCompleteFn;
 }): Promise<ProspectIntelligence> {
   if (runningContactAnalysis.has(params.contactId)) {
@@ -223,51 +447,38 @@ export async function analyzeProspectContact(params: {
   if (!contact) throw new Error("Contact not found");
   assertInternalImportedProspect(contact);
 
-  const existingRows = await db
-    .select()
-    .from(prospectIntelligence)
-    .where(eq(prospectIntelligence.contactId, params.contactId))
-    .limit(1);
-  const existing = existingRows[0];
+  const model = aiProvider.getModelConfig("extraction").model;
+  const importJobId =
+    params.importJobId ?? readProspectImportMetadata(contact)?.importJobId ?? null;
 
-  if (
-    !params.force &&
-    existing &&
-    existing.analysisStatus === "completed" &&
-    existing.aiVersion === PROSPECT_INTELLIGENCE_AI_VERSION &&
-    !existing.errorMessage
-  ) {
-    return mapIntelligenceRow(existing);
-  }
-
-  if (existing?.analysisStatus === "processing") {
-    throw new Error("Analysis already in progress for this contact.");
+  if (!params.preClaimed) {
+    const claim = await claimProspectContactForAnalysis({
+      contactId: params.contactId,
+      force: params.force,
+      importJobId,
+      aiModel: model,
+    });
+    if (claim.outcome === "already_completed") {
+      return mapIntelligenceRow(claim.row);
+    }
+    if (claim.outcome === "already_processing") {
+      throw new Error("Analysis already in progress for this contact.");
+    }
+  } else {
+    const existingRows = await db
+      .select()
+      .from(prospectIntelligence)
+      .where(eq(prospectIntelligence.contactId, params.contactId))
+      .limit(1);
+    const existing = existingRows[0];
+    if (!existing || existing.analysisStatus !== "processing") {
+      throw new Error("Analysis claim required before preClaimed analyze.");
+    }
   }
 
   runningContactAnalysis.add(params.contactId);
-  const model = aiProvider.getModelConfig("extraction").model;
 
   try {
-    await db
-      .insert(prospectIntelligence)
-      .values({
-        contactId: params.contactId,
-        importJobId: params.importJobId ?? readProspectImportMetadata(contact)?.importJobId ?? null,
-        analysisStatus: "processing",
-        reviewStatus: "pending",
-        aiModel: model,
-        aiVersion: PROSPECT_INTELLIGENCE_AI_VERSION,
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: prospectIntelligence.contactId,
-        set: {
-          analysisStatus: "processing",
-          errorMessage: null,
-          updatedAt: new Date(),
-        },
-      });
-
     const input = buildProspectIntelligenceInput(contact);
     const workspaceContext = await loadProspectAiWorkspaceContext(contact.userId, {
       contactId: contact.id,
@@ -329,7 +540,7 @@ export async function analyzeProspectContact(params: {
       .update(prospectIntelligence)
       .set({
         ...toDbPatch(intel, {
-          importJobId: params.importJobId ?? readProspectImportMetadata(contact)?.importJobId ?? null,
+          importJobId,
           promptTokens,
           completionTokens,
           rawResult: intel as unknown as Record<string, unknown>,
@@ -338,7 +549,7 @@ export async function analyzeProspectContact(params: {
       })
       .where(eq(prospectIntelligence.contactId, params.contactId));
 
-    await syncContactIntelligence(contact, intel, params.importJobId);
+    await syncContactIntelligence(contact, intel, importJobId);
     return intel;
   } finally {
     runningContactAnalysis.delete(params.contactId);
@@ -1243,6 +1454,9 @@ export const prospectIntelligenceService = {
   patchProspectIntelligence,
   reanalyzeProspectContact,
   analyzeProspectContact,
+  claimProspectContactForAnalysis,
+  markProspectAnalysisFailed,
+  healAbandonedProcessingAnalysis,
   markProspectOutreachSent,
   markProspectOutreachReplied,
   reconcileProspectOutreachConversation,

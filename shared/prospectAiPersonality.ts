@@ -118,7 +118,7 @@ export function resolveAiPersonalityStatus(params: {
     return {
       kind: "imported",
       emoji: "👋",
-      message: "Preparing the prospect…",
+      message: analysis === "failed" ? "Qualification failed — retry available." : "Queued for AI…",
       active: false,
     };
   }

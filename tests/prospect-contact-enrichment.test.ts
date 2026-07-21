@@ -59,9 +59,17 @@ run("marks outreach email as missing until a valid email exists", () => {
 });
 
 run("approve UI: approved status replaces active Approve button", () => {
-  const pending = resolveProspectApproveOutreachUi({ reviewStatus: "pending", email: "a@b.com" });
+  const pending = resolveProspectApproveOutreachUi({
+    reviewStatus: "pending",
+    analysisStatus: "completed",
+    email: "a@b.com",
+  });
   assert.equal(pending.showApproveButton, true);
-  const approved = resolveProspectApproveOutreachUi({ reviewStatus: "approved", email: "a@b.com" });
+  const approved = resolveProspectApproveOutreachUi({
+    reviewStatus: "approved",
+    analysisStatus: "completed",
+    email: "a@b.com",
+  });
   assert.equal(approved.showApproveButton, false);
   assert.equal(approved.isApproved, true);
   assert.equal(approved.showSendOutreach, true);

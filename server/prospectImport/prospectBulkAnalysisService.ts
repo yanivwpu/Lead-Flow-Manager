@@ -1,6 +1,7 @@
 /**
  * Durable bulk AI analysis for Prospect Intelligence.
  * Jobs are claimed via DB lease; worker resumes unfinished contacts using item_results.
+ * Job creation never marks intelligence rows as processing — the worker owns that claim.
  */
 
 import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
@@ -19,7 +20,11 @@ import {
 } from "@shared/prospectBulkSelection";
 import { shouldSkipDefaultBulkReanalyze } from "@shared/prospectOutreachEligibility";
 import { db } from "../../drizzle/db";
-import { analyzeProspectContact } from "./prospectIntelligenceService";
+import {
+  analyzeProspectContact,
+  claimProspectContactForAnalysis,
+  markProspectAnalysisFailed,
+} from "./prospectIntelligenceService";
 import { resolveProspectImportDestinationUserId } from "./prospectImportService";
 import type { ProspectIntelligenceListFilters } from "@shared/prospectImport";
 import crypto from "crypto";
@@ -108,19 +113,6 @@ export async function createBulkAnalysisJob(params: {
         ),
       );
     }
-    try {
-      await db
-        .update(prospectIntelligence)
-        .set({ analysisStatus: "processing", updatedAt: new Date() })
-        .where(
-          and(
-            inArray(prospectIntelligence.contactId, ids),
-            inArray(prospectIntelligence.analysisStatus, ["pending", "failed"]),
-          ),
-        );
-    } catch (err) {
-      console.error("[ProspectBulkAnalysis] Failed to mark merged contacts processing:", err);
-    }
     const refreshed = await db
       .select()
       .from(prospectBulkAnalysisJobs)
@@ -158,22 +150,7 @@ export async function createBulkAnalysisJob(params: {
     ),
   );
 
-  // Immediate UI: Imported → Analyzing… (status only; rows stay put client-side).
-  try {
-    await db
-      .update(prospectIntelligence)
-      .set({ analysisStatus: "processing", updatedAt: new Date() })
-      .where(
-        and(
-          inArray(prospectIntelligence.contactId, ids),
-          inArray(prospectIntelligence.analysisStatus, ["pending", "failed"]),
-        ),
-      );
-  } catch (err) {
-    console.error("[ProspectBulkAnalysis] Failed to mark contacts processing:", err);
-  }
-
-  // Durable worker claims — no setImmediate runner.
+  // Durable worker claims job + per-contact analysis ownership — do not pre-mark processing.
   return mapJob(row);
 }
 
@@ -313,12 +290,12 @@ export async function processClaimedBulkAnalysisJob(
     );
 
     try {
-      const existing = await db
+      const intelRows = await db
         .select()
         .from(prospectIntelligence)
         .where(eq(prospectIntelligence.contactId, contactId))
         .limit(1);
-      const row = existing[0];
+      const row = intelRows[0];
       if (
         row &&
         shouldSkipDefaultBulkReanalyze({
@@ -344,27 +321,78 @@ export async function processClaimedBulkAnalysisJob(
           ),
         );
       } else {
-        const intel = await analyzeProspectContact({
+        const claim = await claimProspectContactForAnalysis({
           contactId,
           force: job.forceReanalyze,
         });
-        const needsReview = Boolean(intel.needsReview || intel.priority === "needs_review");
-        itemResults[contactId] = {
-          status: needsReview ? "needs_review" : "completed",
-          at: new Date().toISOString(),
-        };
-        console.info(
-          JSON.stringify(
-            prospectBulkAnalysisLog("item_completed", {
-              jobId: job.id,
-              contactId,
-              status: needsReview ? "needs_review" : "completed",
-            }),
-          ),
-        );
+
+        if (claim.outcome === "already_completed") {
+          const needsReview = Boolean(
+            claim.row.needsReview || claim.row.priority === "needs_review",
+          );
+          itemResults[contactId] = {
+            status: needsReview ? "needs_review" : "completed",
+            at: new Date().toISOString(),
+            reason: "already_completed",
+          };
+          console.info(
+            JSON.stringify(
+              prospectBulkAnalysisLog("item_completed", {
+                jobId: job.id,
+                contactId,
+                status: needsReview ? "needs_review" : "completed",
+                reason: "already_completed",
+              }),
+            ),
+          );
+        } else if (claim.outcome === "already_processing") {
+          const reason = "Analysis already in progress for this contact.";
+          itemResults[contactId] = {
+            status: "failed",
+            at: new Date().toISOString(),
+            reason,
+          };
+          console.info(
+            JSON.stringify(
+              prospectBulkAnalysisLog("item_failed", {
+                jobId: job.id,
+                contactId,
+                reason,
+              }),
+            ),
+          );
+        } else {
+          const intel = await analyzeProspectContact({
+            contactId,
+            force: job.forceReanalyze,
+            preClaimed: true,
+          });
+          const needsReview = Boolean(intel.needsReview || intel.priority === "needs_review");
+          itemResults[contactId] = {
+            status: needsReview ? "needs_review" : "completed",
+            at: new Date().toISOString(),
+          };
+          console.info(
+            JSON.stringify(
+              prospectBulkAnalysisLog("item_completed", {
+                jobId: job.id,
+                contactId,
+                status: needsReview ? "needs_review" : "completed",
+              }),
+            ),
+          );
+        }
       }
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
+      try {
+        await markProspectAnalysisFailed(contactId, reason);
+      } catch (markErr) {
+        console.error(
+          "[ProspectBulkAnalysis] Failed to clear processing status after item error:",
+          markErr,
+        );
+      }
       itemResults[contactId] = {
         status: "failed",
         at: new Date().toISOString(),

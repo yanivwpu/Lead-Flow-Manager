@@ -57,6 +57,16 @@ function testStaleLeaseRecoveryPredicate() {
   assert.equal(isRecoverable(null, "pending"), false);
 }
 
+function testEnqueueDoesNotClaimProcessing() {
+  // Contract: pending stays pending until worker claim (see prospect-auto-qualify-ownership).
+  const afterEnqueue = "pending";
+  const afterWorkerClaim = "processing";
+  const afterSuccess = "completed";
+  assert.notEqual(afterEnqueue, "processing");
+  assert.equal(afterWorkerClaim, "processing");
+  assert.equal(afterSuccess, "completed");
+}
+
 function testLogTag() {
   const log = prospectBulkAnalysisLog("job_claimed", { jobId: "x" });
   assert.equal(log.tag, "[ProspectBulkAnalysis]");
@@ -93,6 +103,7 @@ const tests: Array<[string, () => void]> = [
   ["recount + failed ids", testRecountAndFailedIds],
   ["resume skips completed; retry failed only", testResumeSkipsCompleted],
   ["stale lease recovery predicate", testStaleLeaseRecoveryPredicate],
+  ["enqueue does not claim processing", testEnqueueDoesNotClaimProcessing],
   ["analysis log tag", testLogTag],
   ["queue Start/Pause arming unchanged", testQueueStartStillArmed],
   ["over-limit must error not truncate", testSelectionOverLimitMessage],

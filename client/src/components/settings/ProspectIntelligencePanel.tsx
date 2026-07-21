@@ -1875,8 +1875,10 @@ export function ProspectIntelligencePanel(props: {
                       ) : null}
                     </TableCell>
                     <TableCell className="max-w-[280px]">
-                      {analyzing || waitingAnalyze ? (
+                      {analyzing ? (
                         <span className="text-xs text-gray-400">AI is working…</span>
+                      ) : waitingAnalyze ? (
+                        <span className="text-xs text-gray-400">Queued for AI…</span>
                       ) : reviewReady ? (
                         <div className="space-y-1">
                           <div className="flex flex-wrap items-center gap-1.5 text-xs">

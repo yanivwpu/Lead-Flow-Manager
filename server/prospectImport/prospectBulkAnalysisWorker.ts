@@ -9,6 +9,7 @@ import {
   processClaimedBulkAnalysisJob,
   recoverStaleBulkAnalysisJobs,
 } from "./prospectBulkAnalysisService";
+import { healAbandonedProcessingAnalysis } from "./prospectIntelligenceService";
 import { prospectBulkAnalysisLog } from "@shared/prospectBulkSelection";
 
 const POLL_INTERVAL_MS = 5_000;
@@ -22,6 +23,7 @@ async function tick(): Promise<void> {
   isRunning = true;
   try {
     await recoverStaleBulkAnalysisJobs();
+    await healAbandonedProcessingAnalysis();
     // Process at most one job per tick (bounded AI concurrency stays serial inside job).
     const job = await claimNextBulkAnalysisJob(workerId);
     if (job) {

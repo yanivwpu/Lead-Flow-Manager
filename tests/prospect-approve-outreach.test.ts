@@ -26,6 +26,7 @@ function run(name: string, fn: () => void) {
 run("unapproved prospect hides Send outreach and shows Approve", () => {
   const ui = resolveProspectApproveOutreachUi({
     reviewStatus: "pending",
+    analysisStatus: "completed",
     email: "info@jivesmedia.com",
   });
   assert.equal(ui.isApproved, false);
@@ -36,6 +37,7 @@ run("unapproved prospect hides Send outreach and shows Approve", () => {
 run("approved + valid email shows Send outreach and hides Approve", () => {
   const ui = resolveProspectApproveOutreachUi({
     reviewStatus: "approved",
+    analysisStatus: "completed",
     email: "info@jivesmedia.com",
   });
   assert.equal(ui.isApproved, true);
@@ -47,6 +49,7 @@ run("approved + valid email shows Send outreach and hides Approve", () => {
 run("approved + missing email shows add-email gate, no Send", () => {
   const ui = resolveProspectApproveOutreachUi({
     reviewStatus: "approved",
+    analysisStatus: "completed",
     email: null,
   });
   assert.equal(ui.showSendOutreach, false);
