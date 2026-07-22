@@ -150,7 +150,7 @@ function AppContent() {
             planName={subscription.limits.planName}
           />
         )}
-        <div className="flex-1 min-h-0 overflow-auto">
+        <div className="flex-1 min-h-0 overflow-auto [scrollbar-gutter:stable]">
           <Suspense fallback={<PageLoader />}>
             <Switch>
               {/* One route w/ optional param so UnifiedInbox is not remounted when opening a thread (was causing list flash / state reset). */}

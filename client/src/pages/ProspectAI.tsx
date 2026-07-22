@@ -71,6 +71,11 @@ import {
   type ProspectActivityFeedKind,
 } from "@shared/prospectAiDisplay";
 import { AiGrowthAssistantCard } from "@/components/prospectAi/AiGrowthAssistantCard";
+import {
+  ProspectAiEmptyState,
+  ProspectAiPageLayout,
+  ProspectAiTabBody,
+} from "@/components/prospectAi/ProspectAiPageLayout";
 import { ProspectAiCardArt } from "@/components/growthEngines/ProspectAiCardArt";
 import { GhlProspectImport, ProspectImportHistoryPanel } from "@/components/settings/GhlProspectImport";
 import { ProspectIntelligencePanel } from "@/components/settings/ProspectIntelligencePanel";
@@ -78,6 +83,7 @@ import { ProspectOutreachQueuePanel } from "@/components/settings/ProspectOutrea
 import type { ProspectIntelligenceJobSummary, ProspectImportHistoryItem } from "@shared/prospectImport";
 import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
 import { cn } from "@/lib/utils";
+import { PROSPECT_AI_TAB_PANEL_CLASS } from "@shared/prospectAiLayout";
 
 type WorkspaceTab = "discover" | "review" | "campaign" | "activity" | "won";
 
@@ -420,7 +426,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
   };
 
   return (
-    <div className="space-y-10">
+    <ProspectAiTabBody className="space-y-10" data-testid="prospect-discover-tab">
       <QuotaMeter status={status} />
       <AiBrainPanel status={status} />
 
@@ -657,7 +663,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
           </div>
         ) : null}
       </div>
-    </div>
+    </ProspectAiTabBody>
   );
 }
 
@@ -725,15 +731,15 @@ function ActivityTab() {
   const loading = activityQuery.isLoading || importHistoryQuery.isLoading;
 
   return (
-    <div className="space-y-4" data-testid="prospect-activity-tab">
+    <ProspectAiTabBody data-testid="prospect-activity-tab">
       <div className="space-y-0.5">
         <h2 className="text-lg font-semibold tracking-tight text-gray-900">Prospect Activity</h2>
         <p className="text-sm text-gray-600">{PROSPECT_AI_PAGE_SUBTITLES.activity}</p>
       </div>
 
-      <AiGrowthAssistantCard model={assistantModel} className="max-w-xl" />
+      <AiGrowthAssistantCard model={assistantModel} className="w-full max-w-xl" />
 
-      <div className="flex max-w-full flex-nowrap gap-1.5 overflow-x-auto pb-0.5">
+      <div className="flex w-full max-w-full flex-nowrap gap-1.5 overflow-x-auto pb-0.5">
         {(
           [
             ["all", "All"],
@@ -760,11 +766,13 @@ function ActivityTab() {
       {loading ? (
         <p className="text-sm text-gray-500">Loading activity…</p>
       ) : timeline.length === 0 ? (
-        <p className="text-sm text-gray-500">No activity yet.</p>
+        <ProspectAiEmptyState data-testid="prospect-activity-empty">
+          <p className="text-sm text-gray-600">No activity yet.</p>
+        </ProspectAiEmptyState>
       ) : (
-        <div className="space-y-6" data-testid="prospect-activity-timeline">
+        <div className="w-full space-y-6" data-testid="prospect-activity-timeline">
           {timeline.map((group) => (
-            <section key={group.dateKey} className="space-y-2">
+            <section key={group.dateKey} className="w-full space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                 {group.dateLabel}
               </h3>
@@ -794,7 +802,7 @@ function ActivityTab() {
         </div>
       )}
 
-      <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
+      <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen} className="w-full">
         <CollapsibleTrigger asChild>
           <Button
             type="button"
@@ -814,7 +822,7 @@ function ActivityTab() {
           />
         </CollapsibleContent>
       </Collapsible>
-    </div>
+    </ProspectAiTabBody>
   );
 }
 
@@ -835,8 +843,8 @@ function WonTab() {
   const customers = customersQuery.data?.customers ?? [];
 
   return (
-    <div className="space-y-8" data-testid="prospect-ai-won-tab">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <ProspectAiTabBody className="space-y-8" data-testid="prospect-ai-won-tab">
+      <div className="grid w-full gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { label: "Outreach Sent", value: stats?.outreachSent ?? 0 },
           { label: "Replied", value: stats?.replied ?? 0 },
@@ -853,7 +861,7 @@ function WonTab() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+      <div className="flex w-full flex-wrap gap-4 text-sm text-gray-600">
         <p>
           Reply rate:{" "}
           <span className="font-medium text-gray-900">
@@ -874,7 +882,7 @@ function WonTab() {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex w-full flex-wrap items-center justify-between gap-3">
         <h3 className="text-base font-semibold text-gray-900">Won Customers</h3>
         <div className="flex flex-wrap gap-2">
           {(
@@ -899,11 +907,11 @@ function WonTab() {
       </div>
 
       {customersQuery.isLoading ? (
-        <div className="flex justify-center py-10">
+        <div className="flex w-full justify-center py-10">
           <Loader2 className="h-6 w-6 animate-spin text-brand-green" />
         </div>
       ) : customers.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-6 py-10 text-center">
+        <ProspectAiEmptyState data-testid="prospect-won-empty">
           <p className="text-sm text-gray-600">
             No won customers yet. Continue conversations in the Inbox and mark successful prospects as
             Won.
@@ -914,9 +922,9 @@ function WonTab() {
               Open Inbox
             </Button>
           </Link>
-        </div>
+        </ProspectAiEmptyState>
       ) : (
-        <div className="overflow-auto rounded-xl border">
+        <div className="w-full min-w-0 overflow-x-auto rounded-xl border">
           <Table>
             <TableHeader>
               <TableRow>
@@ -949,7 +957,7 @@ function WonTab() {
           </Table>
         </div>
       )}
-    </div>
+    </ProspectAiTabBody>
   );
 }
 
@@ -971,8 +979,8 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-4 sm:gap-3.5 sm:px-6 sm:py-5">
-      <header className="space-y-0.5">
+    <ProspectAiPageLayout>
+      <header className="w-full space-y-0.5">
         <div className="inline-flex items-center gap-1.5 text-brand-green">
           <Star className="h-3.5 w-3.5 fill-current" aria-hidden />
           <span className="text-[11px] font-semibold uppercase tracking-wide">Growth Engine</span>
@@ -985,7 +993,7 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
         </p>
       </header>
 
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-3">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full min-w-0 space-y-3">
         <TabsList className="h-auto w-full flex-wrap justify-start gap-x-4 gap-y-1 border-b border-gray-200 bg-transparent p-0 pb-0">
           {(
             [
@@ -1006,33 +1014,36 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
           ))}
         </TabsList>
 
-        <TabsContent value="discover" className="mt-0 focus-visible:outline-none">
+        <TabsContent value="discover" className={PROSPECT_AI_TAB_PANEL_CLASS}>
           <DiscoverTab status={status} />
         </TabsContent>
-        <TabsContent value="review" className="mt-0 focus-visible:outline-none">
+        <TabsContent value="review" className={PROSPECT_AI_TAB_PANEL_CLASS}>
           <ProspectIntelligencePanel
             activeAnalysisJob={analysisJob}
             onAnalysisJobUpdate={setAnalysisJob}
             embedded
           />
         </TabsContent>
-        <TabsContent value="campaign" className="mt-0 focus-visible:outline-none">
+        <TabsContent value="campaign" className={PROSPECT_AI_TAB_PANEL_CLASS}>
           <ProspectOutreachQueuePanel embedded />
         </TabsContent>
-        <TabsContent value="activity" className="mt-0 focus-visible:outline-none">
+        <TabsContent value="activity" className={PROSPECT_AI_TAB_PANEL_CLASS}>
           <ActivityTab />
         </TabsContent>
-        <TabsContent value="won" className="mt-0 focus-visible:outline-none">
+        <TabsContent value="won" className={PROSPECT_AI_TAB_PANEL_CLASS}>
           <WonTab />
         </TabsContent>
       </Tabs>
-    </div>
+    </ProspectAiPageLayout>
   );
 }
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-full bg-gradient-to-b from-gray-50 via-white to-emerald-50/30">
+    <div
+      className="min-h-full w-full min-w-0 bg-gradient-to-b from-gray-50 via-white to-emerald-50/30"
+      data-prospect-ai-layout="shell"
+    >
       {children}
     </div>
   );

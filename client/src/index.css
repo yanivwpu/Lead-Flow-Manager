@@ -50,6 +50,7 @@
   }
   html {
     overflow-y: scroll;
+    scrollbar-gutter: stable;
   }
   html, body, #root {
     height: 100%;
@@ -926,3 +927,49 @@ section h2 + p {
     animation: none !important;
   }
 }
+
+/* ── Prospect AI layout stability ───────────────────────────────────────── */
+.prospect-ai-review-table {
+  table-layout: fixed;
+  width: 100%;
+}
+.prospect-ai-review-table col.prospect-ai-col-checkbox {
+  width: 2.5rem;
+}
+.prospect-ai-review-table col.prospect-ai-col-business {
+  width: 22%;
+}
+.prospect-ai-review-table col.prospect-ai-col-signals {
+  width: 7.5rem;
+}
+.prospect-ai-review-table col.prospect-ai-col-progress {
+  width: 20rem;
+}
+.prospect-ai-progress-col {
+  width: 20rem;
+  min-width: 20rem;
+  max-width: 20rem;
+}
+.prospect-ai-progress-timeline {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.prospect-ai-progress-timeline .prospect-ai-stage-label-full {
+  display: inline;
+}
+.prospect-ai-progress-timeline .prospect-ai-stage-label-short {
+  display: none;
+}
+@media (max-width: 1279px) {
+  .prospect-ai-progress-timeline {
+    gap: 0.25rem;
+  }
+  .prospect-ai-progress-timeline .prospect-ai-stage-label-full {
+    display: none;
+  }
+  .prospect-ai-progress-timeline .prospect-ai-stage-label-short {
+    display: inline;
+  }
+}
+

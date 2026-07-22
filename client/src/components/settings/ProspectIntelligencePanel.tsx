@@ -84,7 +84,14 @@ import {
   PROSPECT_AI_PAGE_SUBTITLES,
   PROSPECT_SELECTION_LABELS,
 } from "@shared/prospectAiDisplay";
+import {
+  PROSPECT_AI_PROGRESS_COL_CLASS,
+  PROSPECT_AI_PROGRESS_TIMELINE_CLASS,
+  PROSPECT_AI_REVIEW_COLGROUP,
+  PROSPECT_AI_REVIEW_TABLE_CLASS,
+} from "@shared/prospectAiLayout";
 import { AiGrowthAssistantCard } from "@/components/prospectAi/AiGrowthAssistantCard";
+import { ProspectAiEmptyState } from "@/components/prospectAi/ProspectAiPageLayout";
 import { AiPersonalityStatusView } from "@/components/prospectAi/AiPersonalityStatus";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -110,18 +117,25 @@ function reviewUxInput(row: ProspectIntelligenceListItem) {
   };
 }
 
+const PROSPECT_TIMELINE_SHORT_LABELS: Record<(typeof PROSPECT_TIMELINE_STAGES)[number]["id"], string> = {
+  imported: "In",
+  ai_review: "AI",
+  website: "Web",
+  campaign: "Camp",
+};
+
 function ProspectProgressTimeline({ life }: { life: ProspectReviewLifecycle }) {
   const states = resolveProspectTimelineStates(life);
   return (
     <div
-      className="flex flex-wrap items-center gap-x-2 gap-y-1"
+      className={PROSPECT_AI_PROGRESS_TIMELINE_CLASS}
       data-testid={`pi-timeline-${life}`}
       aria-label={`Progress: ${prospectReviewLifecycleLabel(life)}`}
     >
       {PROSPECT_TIMELINE_STAGES.map((stage, i) => {
         const state = states[i] as ProspectTimelineStageState;
         return (
-          <span key={stage.id} className="inline-flex items-center gap-1">
+          <span key={stage.id} className="inline-flex shrink-0 items-center gap-1">
             {i > 0 ? <span className="text-[10px] text-gray-200 select-none">·</span> : null}
             <span
               className={cn(
@@ -133,7 +147,7 @@ function ProspectProgressTimeline({ life }: { life: ProspectReviewLifecycle }) {
             >
               <span
                 className={cn(
-                  "inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] leading-none",
+                  "inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[9px] leading-none",
                   state === "done" && "bg-emerald-600 text-white",
                   state === "current" && "bg-emerald-500 text-white pi-timeline-current",
                   state === "todo" && "border border-gray-300 bg-white text-gray-300",
@@ -142,7 +156,10 @@ function ProspectProgressTimeline({ life }: { life: ProspectReviewLifecycle }) {
               >
                 {state === "done" ? "✓" : state === "current" ? "●" : "○"}
               </span>
-              {stage.label}
+              <span className="prospect-ai-stage-label-full">{stage.label}</span>
+              <span className="prospect-ai-stage-label-short" aria-hidden>
+                {PROSPECT_TIMELINE_SHORT_LABELS[stage.id]}
+              </span>
             </span>
           </span>
         );
@@ -1601,9 +1618,11 @@ export function ProspectIntelligencePanel(props: {
   return (
     <section
       className={cn(
+        "w-full min-w-0",
         props.embedded ? "space-y-3" : "mt-8 space-y-3 border-t pt-6",
       )}
       data-testid="pi-review-panel"
+      data-prospect-ai-layout="tab-body"
     >
       {props.embedded ? (
         <div className="space-y-0.5">
@@ -1821,21 +1840,28 @@ export function ProspectIntelligencePanel(props: {
       </div>
 
       {items.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-200 bg-gradient-to-b from-gray-50/60 to-white px-5 py-8 text-center">
+        <ProspectAiEmptyState data-testid="pi-review-empty">
           <p className="text-sm font-medium text-gray-800">
             {prospectReviewEmptyMessage(lifecycleFilter, rawItems.length > 0)}
           </p>
-        </div>
+        </ProspectAiEmptyState>
       ) : (
-        <div className="overflow-auto rounded-xl border border-gray-200/80 shadow-sm shadow-gray-900/[0.02]">
-          <Table>
+        <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-gray-200/80 shadow-sm shadow-gray-900/[0.02]">
+          <Table className={PROSPECT_AI_REVIEW_TABLE_CLASS} data-testid="pi-review-table">
+            <colgroup>
+              <col className={PROSPECT_AI_REVIEW_COLGROUP.checkbox} />
+              <col className={PROSPECT_AI_REVIEW_COLGROUP.business} />
+              <col className={PROSPECT_AI_REVIEW_COLGROUP.summary} />
+              <col className={PROSPECT_AI_REVIEW_COLGROUP.signals} />
+              <col className={PROSPECT_AI_REVIEW_COLGROUP.progress} />
+            </colgroup>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-10" />
                 <TableHead>Business</TableHead>
                 <TableHead>AI summary</TableHead>
                 <TableHead>Signals</TableHead>
-                <TableHead className="min-w-[240px]">Progress</TableHead>
+                <TableHead className={PROSPECT_AI_PROGRESS_COL_CLASS}>Progress</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1902,15 +1928,15 @@ export function ProspectIntelligencePanel(props: {
                         className="h-4 w-4 rounded border-gray-300"
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="min-w-0">
                       <div className="font-medium text-gray-900 transition-colors">{row.name}</div>
                       {row.company ? (
-                        <div className="max-w-[200px] truncate text-xs text-gray-500">
+                        <div className="truncate text-xs text-gray-500">
                           {row.company}
                         </div>
                       ) : null}
                     </TableCell>
-                    <TableCell className="max-w-[280px]">
+                    <TableCell className="min-w-0">
                       {analyzing ? (
                         <span className="text-xs text-gray-400">AI is working…</span>
                       ) : waitingAnalyze ? (
@@ -1923,10 +1949,10 @@ export function ProspectIntelligencePanel(props: {
                             {priorityBadge(rowSummary.priority || undefined, intel.analysisStatus)}
                           </div>
                           {rowSummary.businessType ? (
-                            <p className="text-xs text-gray-600">{rowSummary.businessType}</p>
+                            <p className="truncate text-xs text-gray-600">{rowSummary.businessType}</p>
                           ) : null}
                           {rowSummary.offerLabel ? (
-                            <p className="text-xs text-gray-700">
+                            <p className="truncate text-xs text-gray-700">
                               <span className="text-gray-400">Offer:</span> {rowSummary.offerLabel}
                             </p>
                           ) : null}
@@ -1940,9 +1966,9 @@ export function ProspectIntelligencePanel(props: {
                         <span className="text-xs text-gray-400">—</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="min-w-0 align-top">
                       {websiteDone || enriching ? (
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex flex-col gap-1">
                           <VerifiedChip ok={websiteDone} label="Website" />
                           <VerifiedChip ok={emailFound} label="Email" />
                           <VerifiedChip ok={phoneFound} label="Phone" />
@@ -1954,8 +1980,8 @@ export function ProspectIntelligencePanel(props: {
                         <span className="text-[11px] text-gray-300">—</span>
                       )}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-1.5">
+                    <TableCell className={PROSPECT_AI_PROGRESS_COL_CLASS}>
+                      <div className="flex min-w-0 flex-col gap-1.5">
                         <ProspectProgressTimeline life={life} />
                         {showActivity && (analyzing || enriching || life === "imported") ? (
                           <AiPersonalityStatusView

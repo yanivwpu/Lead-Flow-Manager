@@ -185,8 +185,9 @@ export function ProspectOutreachQueuePanel({
 
   return (
     <section
-      className={embedded ? "space-y-4" : "mt-10 space-y-5 border-t pt-8"}
+      className={embedded ? "w-full min-w-0 space-y-4" : "mt-10 w-full min-w-0 space-y-5 border-t pt-8"}
       data-testid="prospect-outreach-queue"
+      data-prospect-ai-layout="tab-body"
     >
       {embedded ? (
         <div className="space-y-0.5">
