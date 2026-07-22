@@ -60,9 +60,11 @@ import {
   resolveProspectDisplayStatus,
 } from "@shared/prospectOutreachLifecycle";
 import {
+  buildProspectRowAiSummary,
+  isProspectQualificationComplete,
+  isProspectQualificationPending,
   mergeProspectRowsStableOrder,
   matchesProspectReviewFilter,
-  prospectMatchSummary,
   prospectReviewCompletionFlash,
   prospectReviewEmptyMessage,
   prospectReviewLifecycleLabel,
@@ -168,8 +170,7 @@ function VerifiedChip({ ok, label }: { ok: boolean; label: string }) {
 }
 
 function analysisBusy(analysisStatus?: string | null): boolean {
-  const a = String(analysisStatus || "pending").toLowerCase();
-  return a === "processing" || a === "pending";
+  return isProspectQualificationPending(analysisStatus);
 }
 
 function enrichmentBusy(enrichmentStatus?: string | null): boolean {
@@ -231,8 +232,7 @@ function enrichmentBadge(intel: ProspectIntelligenceListItem["intelligence"]) {
 }
 
 function priorityBadge(priority?: string, analysisStatus?: string | null) {
-  const analysis = String(analysisStatus || "pending").toLowerCase();
-  if (analysis === "processing" || analysis === "pending" || analysis === "failed") {
+  if (!isProspectQualificationComplete(analysisStatus)) {
     return null;
   }
   switch (priority) {
@@ -242,6 +242,8 @@ function priorityBadge(priority?: string, analysisStatus?: string | null) {
       return <Badge className="bg-amber-500 text-[10px]">Medium</Badge>;
     case "low":
       return <Badge variant="secondary" className="text-[10px]">Low</Badge>;
+    case "needs_review":
+      return <Badge variant="outline" className="text-[10px]">Needs review</Badge>;
     default:
       return null;
   }
@@ -1189,6 +1191,7 @@ export function ProspectIntelligencePanel(props: {
           const analysis = String(r.intelligence.analysisStatus || "").toLowerCase();
           const s = String(r.intelligence.enrichmentStatus || "").toLowerCase();
           return (
+            analysis === "pending" ||
             analysis === "processing" ||
             s === "pending" ||
             s === "enriching"
@@ -1817,10 +1820,16 @@ export function ProspectIntelligencePanel(props: {
                   String(intel.analysisStatus || "pending").toLowerCase() === "pending";
                 const enriching = enrichmentBusy(intel.enrichmentStatus);
                 const flashMsg = rowFlash[row.contactId];
-                const reviewReady =
-                  !analyzing &&
-                  !waitingAnalyze &&
-                  String(intel.analysisStatus || "").toLowerCase() === "completed";
+                const reviewReady = isProspectQualificationComplete(intel.analysisStatus);
+                const rowSummary = buildProspectRowAiSummary({
+                  analysisStatus: intel.analysisStatus,
+                  leadScore: intel.leadScore,
+                  priority: intel.priority,
+                  businessType: intel.businessType,
+                  recommendedOffer: intel.recommendedOffer,
+                  suggestedOutreachAngle: intel.suggestedOutreachAngle,
+                  reasoningSummary: intel.reasoningSummary,
+                });
                 const personality = resolveAiPersonalityStatus({
                   ux: reviewUxInput(row),
                   seed: row.contactId,
@@ -1841,8 +1850,6 @@ export function ProspectIntelligencePanel(props: {
                   };
                   return (result.publicContacts?.socialProfiles?.length || 0) > 0;
                 })();
-                const match = prospectMatchSummary(intel.leadScore);
-                const offer = offerLabel(intel.recommendedOffer);
 
                 return (
                   <TableRow
@@ -1879,24 +1886,24 @@ export function ProspectIntelligencePanel(props: {
                         <span className="text-xs text-gray-400">AI is working…</span>
                       ) : waitingAnalyze ? (
                         <span className="text-xs text-gray-400">Queued for AI…</span>
-                      ) : reviewReady ? (
-                        <div className="space-y-1">
+                      ) : rowSummary.showSummary ? (
+                        <div className="space-y-1" data-testid={`pi-row-summary-${row.contactId}`}>
                           <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                            <MatchStars stars={match.stars} />
-                            <span className="font-medium text-gray-900">{match.label}</span>
-                            {priorityBadge(intel.priority, intel.analysisStatus)}
+                            <MatchStars stars={rowSummary.matchStars} />
+                            <span className="font-medium text-gray-900">{rowSummary.matchLabel}</span>
+                            {priorityBadge(rowSummary.priority || undefined, intel.analysisStatus)}
                           </div>
-                          {intel.businessType ? (
-                            <p className="text-xs text-gray-600">{intel.businessType}</p>
+                          {rowSummary.businessType ? (
+                            <p className="text-xs text-gray-600">{rowSummary.businessType}</p>
                           ) : null}
-                          {offer ? (
+                          {rowSummary.offerLabel ? (
                             <p className="text-xs text-gray-700">
-                              <span className="text-gray-400">Offer:</span> {offer}
+                              <span className="text-gray-400">Offer:</span> {rowSummary.offerLabel}
                             </p>
                           ) : null}
-                          {intel.suggestedOutreachAngle ? (
+                          {rowSummary.angle ? (
                             <p className="line-clamp-2 text-[11px] leading-snug text-gray-500">
-                              {intel.suggestedOutreachAngle}
+                              {rowSummary.angle}
                             </p>
                           ) : null}
                         </div>

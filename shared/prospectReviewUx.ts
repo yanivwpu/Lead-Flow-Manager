@@ -73,6 +73,71 @@ export type ProspectReviewUxInput = {
   outcome?: string | null;
 };
 
+/** True when AI qualification finished and row summary fields may be shown. */
+export function isProspectQualificationComplete(
+  analysisStatus?: string | null,
+): boolean {
+  const a = String(analysisStatus || "").toLowerCase();
+  return a === "completed" || a === "needs_review";
+}
+
+/** True while qualification has not produced a usable result yet. */
+export function isProspectQualificationPending(
+  analysisStatus?: string | null,
+): boolean {
+  const a = String(analysisStatus || "pending").toLowerCase();
+  return a === "pending" || a === "processing";
+}
+
+export type ProspectRowAiSummary = {
+  showSummary: boolean;
+  matchLabel: string;
+  matchStars: number;
+  priority?: string | null;
+  businessType?: string | null;
+  offerLabel?: string | null;
+  angle?: string | null;
+};
+
+/**
+ * Normalized AI Review table summary from saved qualification fields only.
+ * Do not invent a second AI summary.
+ */
+export function buildProspectRowAiSummary(input: {
+  analysisStatus?: string | null;
+  leadScore?: number | null;
+  priority?: string | null;
+  businessType?: string | null;
+  recommendedOffer?: string | null;
+  suggestedOutreachAngle?: string | null;
+  reasoningSummary?: string | null;
+}): ProspectRowAiSummary {
+  if (!isProspectQualificationComplete(input.analysisStatus)) {
+    return {
+      showSummary: false,
+      matchLabel: "",
+      matchStars: 0,
+    };
+  }
+  const match = prospectMatchSummary(input.leadScore);
+  const offer = String(input.recommendedOffer || "")
+    .trim()
+    .replace(/_/g, " ");
+  const angle =
+    String(input.suggestedOutreachAngle || "").trim() ||
+    String(input.reasoningSummary || "").trim() ||
+    null;
+  return {
+    showSummary: true,
+    matchLabel: match.label,
+    matchStars: match.stars,
+    priority: input.priority ?? null,
+    businessType: String(input.businessType || "").trim() || null,
+    offerLabel: offer || null,
+    angle: angle ? angle.slice(0, 220) : null,
+  };
+}
+
 export function resolveProspectReviewLifecycle(
   input: ProspectReviewUxInput,
 ): ProspectReviewLifecycle {
@@ -90,6 +155,7 @@ export function resolveProspectReviewLifecycle(
 
   const analysis = String(input.analysisStatus || "pending").toLowerCase();
   if (analysis === "processing") return "analyzing";
+  if (analysis === "pending" || analysis === "failed") return "imported";
 
   const review = String(input.reviewStatus || "pending").toLowerCase();
   const enrichment = String(input.enrichmentStatus || "none").toLowerCase();
@@ -99,12 +165,8 @@ export function resolveProspectReviewLifecycle(
     return "campaign_ready";
   }
 
-  if (analysis === "pending") return "imported";
-  if (analysis === "failed" || review === "needs_review" || input.needsReview) {
-    return "imported";
-  }
-
-  if (analysis === "completed" || analysis === "needs_review") {
+  // Qualification finished (including AI "needs_review" outcomes) → Ready for Approval.
+  if (isProspectQualificationComplete(analysis)) {
     return "ready_for_approval";
   }
 

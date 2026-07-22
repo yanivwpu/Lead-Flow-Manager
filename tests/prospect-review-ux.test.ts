@@ -4,6 +4,8 @@
  */
 import assert from "node:assert/strict";
 import {
+  buildProspectRowAiSummary,
+  isProspectQualificationComplete,
   matchesProspectReviewFilter,
   mergeProspectRowsStableOrder,
   prospectAiProgressMessage,
@@ -29,6 +31,29 @@ assert.equal(
   }),
   "ready_for_approval",
 );
+
+// needs_review is a finished qualification outcome — not "still imported"
+assert.equal(
+  resolveProspectReviewLifecycle({
+    analysisStatus: "needs_review",
+    reviewStatus: "needs_review",
+    needsReview: true,
+  }),
+  "ready_for_approval",
+);
+assert.equal(
+  resolveProspectReviewLifecycle({
+    analysisStatus: "completed",
+    reviewStatus: "needs_review",
+    needsReview: true,
+  }),
+  "ready_for_approval",
+);
+
+assert.equal(isProspectQualificationComplete("completed"), true);
+assert.equal(isProspectQualificationComplete("needs_review"), true);
+assert.equal(isProspectQualificationComplete("pending"), false);
+assert.equal(isProspectQualificationComplete("failed"), false);
 
 assert.deepEqual(resolveProspectTimelineStates("analyzing"), [
   "done",
@@ -65,6 +90,14 @@ assert.equal(
   "✓ AI Review complete",
 );
 
+assert.equal(
+  prospectReviewCompletionFlash(
+    { analysisStatus: "pending", reviewStatus: "pending" },
+    { analysisStatus: "needs_review", reviewStatus: "needs_review", needsReview: true },
+  ),
+  "✓ AI Review complete",
+);
+
 assert.ok(prospectAiProgressMessage("analysis", "x", 0).length > 5);
 assert.ok(prospectAiProgressMessage("enrichment", "x", 0).length > 5);
 assert.equal(matchesProspectReviewFilter("ready_for_approval", "review"), true);
@@ -77,9 +110,12 @@ const merged = mergeProspectRowsStableOrder(
     { contactId: "b", name: "B" },
   ],
 );
+assert.deepEqual(merged.order, ["b", "a", "c"]);
 assert.deepEqual(
   merged.items.map((i) => i.contactId),
   ["b", "a", "c"],
 );
+
+assert.equal(buildProspectRowAiSummary({ analysisStatus: "pending" }).showSummary, false);
 
 console.log("prospect-review-ux.test.ts: all assertions passed");

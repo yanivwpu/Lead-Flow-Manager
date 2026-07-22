@@ -215,6 +215,116 @@ function isTransientAiError(err: unknown): boolean {
   return /rate limit|timeout|503|502|429|overloaded/i.test(msg);
 }
 
+// #region agent log
+type QualDebugStage =
+  | "route_entered"
+  | "contact_loaded"
+  | "intel_row_loaded"
+  | "claim"
+  | "workspace_context"
+  | "prompt_built"
+  | "model_call_start"
+  | "model_response"
+  | "json_parse"
+  | "schema_validate"
+  | "db_persist"
+  | "failed";
+
+function agentQualDebugLog(payload: {
+  hypothesisId: string;
+  location: string;
+  message: string;
+  data?: Record<string, unknown>;
+  runId?: string;
+}): void {
+  fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
+    body: JSON.stringify({
+      sessionId: "4bac18",
+      runId: payload.runId || "pre-fix",
+      hypothesisId: payload.hypothesisId,
+      location: payload.location,
+      message: payload.message,
+      data: payload.data || {},
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+}
+
+function extractProviderErrorMeta(err: unknown): {
+  providerStatus?: number | string;
+  providerCode?: string;
+  errorName: string;
+  errorMessage: string;
+  stack?: string;
+} {
+  const errorName = err instanceof Error ? err.name : typeof err;
+  const errorMessage = err instanceof Error ? err.message : String(err);
+  const stack = err instanceof Error ? err.stack : undefined;
+  const anyErr = err as {
+    status?: number;
+    statusCode?: number;
+    code?: string;
+    error?: { code?: string; type?: string; message?: string };
+  };
+  const providerStatus = anyErr?.status ?? anyErr?.statusCode;
+  const providerCode =
+    anyErr?.code || anyErr?.error?.code || anyErr?.error?.type || undefined;
+  return {
+    providerStatus,
+    providerCode: providerCode ? String(providerCode) : undefined,
+    errorName: String(errorName),
+    errorMessage: String(errorMessage).substring(0, 800),
+    stack: stack ? String(stack).substring(0, 2000) : undefined,
+  };
+}
+
+function logProspectQualificationFailed(params: {
+  contactId: string;
+  workspaceId?: string | null;
+  bulkJobId?: string | null;
+  model?: string | null;
+  stage: QualDebugStage | string;
+  err: unknown;
+  hypothesisId?: string;
+}): void {
+  const meta = extractProviderErrorMeta(params.err);
+  const payload = {
+    tag: "[ProspectIntelligence]",
+    event: "prospect_qualification_failed",
+    contactId: params.contactId,
+    workspaceId: params.workspaceId || null,
+    bulkJobId: params.bulkJobId || null,
+    model: params.model || null,
+    stage: params.stage,
+    errorName: meta.errorName,
+    errorMessage: meta.errorMessage,
+    providerStatus: meta.providerStatus ?? null,
+    providerCode: meta.providerCode ?? null,
+    stack: meta.stack ?? null,
+  };
+  console.error(JSON.stringify(payload));
+  agentQualDebugLog({
+    hypothesisId: params.hypothesisId || "FAIL",
+    location: "prospectIntelligenceService.ts:prospect_qualification_failed",
+    message: "prospect_qualification_failed",
+    data: {
+      contactId: params.contactId,
+      workspaceId: params.workspaceId || null,
+      model: params.model || null,
+      stage: params.stage,
+      errorName: meta.errorName,
+      errorMessage: meta.errorMessage,
+      providerStatus: meta.providerStatus ?? null,
+      providerCode: meta.providerCode ?? null,
+      stack: meta.stack ?? null,
+    },
+  });
+}
+// #endregion
+
+
 export type ProspectAnalysisClaimOutcome =
   | { outcome: "claimed" }
   | { outcome: "already_completed"; row: ProspectIntelligenceRow }
@@ -439,120 +549,333 @@ export async function analyzeProspectContact(params: {
   preClaimed?: boolean;
   completeFn?: AiCompleteFn;
 }): Promise<ProspectIntelligence> {
+  let stage: QualDebugStage | string = "contact_loaded";
+  let model = "";
+  let workspaceId: string | null = null;
+
   if (runningContactAnalysis.has(params.contactId)) {
-    throw new Error("Analysis already in progress for this contact.");
+    const err = new Error("Analysis already in progress for this contact.");
+    logProspectQualificationFailed({
+      contactId: params.contactId,
+      stage: "claim",
+      err,
+      hypothesisId: "E",
+    });
+    throw err;
   }
 
-  const contact = await storage.getContact(params.contactId);
-  if (!contact) throw new Error("Contact not found");
-  assertInternalImportedProspect(contact);
-
-  const model = aiProvider.getModelConfig("extraction").model;
-  const importJobId =
-    params.importJobId ?? readProspectImportMetadata(contact)?.importJobId ?? null;
-
-  if (!params.preClaimed) {
-    const claim = await claimProspectContactForAnalysis({
-      contactId: params.contactId,
-      force: params.force,
-      importJobId,
-      aiModel: model,
+  try {
+    const contact = await storage.getContact(params.contactId);
+    if (!contact) throw new Error("Contact not found");
+    workspaceId = contact.userId;
+    // #region agent log
+    agentQualDebugLog({
+      hypothesisId: "E",
+      location: "prospectIntelligenceService.ts:analyzeProspectContact",
+      message: "contact_loaded",
+      data: {
+        contactId: params.contactId,
+        workspaceId,
+        force: Boolean(params.force),
+        preClaimed: Boolean(params.preClaimed),
+        source: contact.source,
+        pipelineStage: contact.pipelineStage,
+      },
     });
-    if (claim.outcome === "already_completed") {
-      return mapIntelligenceRow(claim.row);
-    }
-    if (claim.outcome === "already_processing") {
-      throw new Error("Analysis already in progress for this contact.");
-    }
-  } else {
-    const existingRows = await db
-      .select()
+    // #endregion
+    assertInternalImportedProspect(contact);
+
+    model = aiProvider.getModelConfig("extraction").model;
+    const importJobId =
+      params.importJobId ?? readProspectImportMetadata(contact)?.importJobId ?? null;
+
+    // Prior failure evidence (do not log PII beyond ids)
+    const priorRows = await db
+      .select({
+        analysisStatus: prospectIntelligence.analysisStatus,
+        errorMessage: prospectIntelligence.errorMessage,
+      })
       .from(prospectIntelligence)
       .where(eq(prospectIntelligence.contactId, params.contactId))
       .limit(1);
-    const existing = existingRows[0];
-    if (!existing || existing.analysisStatus !== "processing") {
-      throw new Error("Analysis claim required before preClaimed analyze.");
-    }
-  }
-
-  runningContactAnalysis.add(params.contactId);
-
-  try {
-    const input = buildProspectIntelligenceInput(contact);
-    const workspaceContext = await loadProspectAiWorkspaceContext(contact.userId, {
-      contactId: contact.id,
-      analysisPath: params.force ? "reanalyze" : "analyze",
+    // #region agent log
+    agentQualDebugLog({
+      hypothesisId: "PRIOR",
+      location: "prospectIntelligenceService.ts:prior_error",
+      message: "intel_row_loaded",
+      data: {
+        contactId: params.contactId,
+        analysisStatus: priorRows[0]?.analysisStatus ?? null,
+        priorErrorMessage: (priorRows[0]?.errorMessage || "").substring(0, 500) || null,
+        model,
+      },
     });
-    let intel: ProspectIntelligence;
-    let promptTokens = 0;
-    let completionTokens = 0;
+    // #endregion
+    stage = "claim";
 
-    if (hasInsufficientProspectData(input)) {
-      intel = buildInsufficientDataResult(model, input, workspaceContext);
+    if (!params.preClaimed) {
+      const claim = await claimProspectContactForAnalysis({
+        contactId: params.contactId,
+        force: params.force,
+        importJobId,
+        aiModel: model,
+      });
+      // #region agent log
+      agentQualDebugLog({
+        hypothesisId: "E",
+        location: "prospectIntelligenceService.ts:claim",
+        message: "claim_result",
+        data: { contactId: params.contactId, outcome: claim.outcome },
+      });
+      // #endregion
+      if (claim.outcome === "already_completed") {
+        return mapIntelligenceRow(claim.row);
+      }
+      if (claim.outcome === "already_processing") {
+        throw new Error("Analysis already in progress for this contact.");
+      }
     } else {
-      const completeFn = params.completeFn ?? defaultAiComplete;
-      const messages = [
-        {
-          role: "system" as const,
-          content:
-            "You are Prospect AI, a growth analyst for the current workspace. Prefer AI Brain business intelligence over Business Profile identity when both exist. Output strict JSON only. Never hallucinate unsupported business facts. Never confuse the prospect's industry with what the sender sells.",
-        },
-        {
-          role: "user" as const,
-          content: buildProspectIntelligencePrompt(input, workspaceContext),
-        },
-      ];
-
-      let lastErr: unknown;
-      let parsed: ProspectIntelligence | null = null;
-      for (let attempt = 0; attempt <= MAX_AI_RETRIES; attempt++) {
-        try {
-          const response = await completeFn(messages);
-          promptTokens += response.usage?.promptTokens ?? 0;
-          completionTokens += response.usage?.completionTokens ?? 0;
-          const raw = JSON.parse(response.content || "{}");
-          parsed = parseAndValidateProspectIntelligence(raw, model, input, workspaceContext);
-          break;
-        } catch (err) {
-          lastErr = err;
-          if (!isTransientAiError(err) || attempt === MAX_AI_RETRIES) break;
-          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-        }
+      const existingRows = await db
+        .select()
+        .from(prospectIntelligence)
+        .where(eq(prospectIntelligence.contactId, params.contactId))
+        .limit(1);
+      const existing = existingRows[0];
+      if (!existing || existing.analysisStatus !== "processing") {
+        throw new Error("Analysis claim required before preClaimed analyze.");
       }
-
-      if (!parsed) {
-        const message = lastErr instanceof Error ? lastErr.message : String(lastErr);
-        await db
-          .update(prospectIntelligence)
-          .set({
-            analysisStatus: "failed",
-            errorMessage: message.substring(0, 500),
-            updatedAt: new Date(),
-          })
-          .where(eq(prospectIntelligence.contactId, params.contactId));
-        throw new Error(message);
-      }
-      intel = parsed;
     }
 
-    await db
-      .update(prospectIntelligence)
-      .set({
-        ...toDbPatch(intel, {
-          importJobId,
-          promptTokens,
-          completionTokens,
-          rawResult: intel as unknown as Record<string, unknown>,
-          errorMessage: null,
-        }),
-      })
-      .where(eq(prospectIntelligence.contactId, params.contactId));
+    runningContactAnalysis.add(params.contactId);
 
-    await syncContactIntelligence(contact, intel, importJobId);
-    return intel;
-  } finally {
-    runningContactAnalysis.delete(params.contactId);
+    try {
+      stage = "prompt_built";
+      const input = buildProspectIntelligenceInput(contact);
+      // #region agent log
+      agentQualDebugLog({
+        hypothesisId: "F",
+        location: "prospectIntelligenceService.ts:input",
+        message: "places_data_normalized",
+        data: {
+          contactId: params.contactId,
+          hasName: Boolean(input.name),
+          hasCompany: Boolean(input.company),
+          hasWebsite: Boolean(input.websiteUrl),
+          hasPhone: Boolean(input.phone),
+          hasEmail: Boolean(input.email),
+          businessType: input.businessType || null,
+          insufficient: hasInsufficientProspectData(input),
+        },
+      });
+      // #endregion
+
+      stage = "workspace_context";
+      const workspaceContext = await loadProspectAiWorkspaceContext(contact.userId, {
+        contactId: contact.id,
+        analysisPath: params.force ? "reanalyze" : "analyze",
+      });
+      // #region agent log
+      agentQualDebugLog({
+        hypothesisId: "D",
+        location: "prospectIntelligenceService.ts:workspace_context",
+        message: "workspace_context_loaded",
+        data: {
+          contactId: params.contactId,
+          configured: workspaceContext.configured,
+          hasAiBrain: workspaceContext.hasAiBrain,
+          hasBusinessProfile: workspaceContext.hasBusinessProfile,
+          aiBrainIsPrimary: workspaceContext.aiBrainIsPrimary,
+          fallbackUsed: workspaceContext.fallbackUsed,
+        },
+      });
+      // #endregion
+
+      let intel: ProspectIntelligence;
+      let promptTokens = 0;
+      let completionTokens = 0;
+
+      if (hasInsufficientProspectData(input)) {
+        intel = buildInsufficientDataResult(model, input, workspaceContext);
+        // #region agent log
+        agentQualDebugLog({
+          hypothesisId: "F",
+          location: "prospectIntelligenceService.ts:insufficient",
+          message: "insufficient_data_path",
+          data: { contactId: params.contactId },
+        });
+        // #endregion
+      } else {
+        const completeFn = params.completeFn ?? defaultAiComplete;
+        const messages = [
+          {
+            role: "system" as const,
+            content:
+              "You are Prospect AI, a growth analyst for the current workspace. Prefer AI Brain business intelligence over Business Profile identity when both exist. Output strict JSON only. Never hallucinate unsupported business facts. Never confuse the prospect's industry with what the sender sells.",
+          },
+          {
+            role: "user" as const,
+            content: buildProspectIntelligencePrompt(input, workspaceContext),
+          },
+        ];
+
+        let lastErr: unknown;
+        let parsed: ProspectIntelligence | null = null;
+        for (let attempt = 0; attempt <= MAX_AI_RETRIES; attempt++) {
+          try {
+            stage = "model_call_start";
+            // #region agent log
+            agentQualDebugLog({
+              hypothesisId: "A",
+              location: "prospectIntelligenceService.ts:model_call_start",
+              message: "model_call_started",
+              data: { contactId: params.contactId, model, attempt },
+            });
+            // #endregion
+            const response = await completeFn(messages);
+            promptTokens += response.usage?.promptTokens ?? 0;
+            completionTokens += response.usage?.completionTokens ?? 0;
+            const rawText = response.content || "";
+            stage = "model_response";
+            // #region agent log
+            agentQualDebugLog({
+              hypothesisId: "A",
+              location: "prospectIntelligenceService.ts:model_response",
+              message: "model_response_received",
+              data: {
+                contactId: params.contactId,
+                model,
+                attempt,
+                contentLength: rawText.length,
+                contentPreview: rawText.substring(0, 400),
+                startsWithBrace: rawText.trimStart().startsWith("{"),
+              },
+            });
+            // #endregion
+
+            stage = "json_parse";
+            const raw = JSON.parse(rawText || "{}");
+            // #region agent log
+            agentQualDebugLog({
+              hypothesisId: "B",
+              location: "prospectIntelligenceService.ts:json_parse",
+              message: "json_parsed",
+              data: {
+                contactId: params.contactId,
+                keys: raw && typeof raw === "object" ? Object.keys(raw as object).slice(0, 30) : [],
+              },
+            });
+            // #endregion
+
+            stage = "schema_validate";
+            parsed = parseAndValidateProspectIntelligence(raw, model, input, workspaceContext);
+            // #region agent log
+            agentQualDebugLog({
+              hypothesisId: "C",
+              location: "prospectIntelligenceService.ts:schema_validate",
+              message: "schema_validated",
+              data: {
+                contactId: params.contactId,
+                priority: parsed.priority ?? null,
+                needsReview: Boolean(parsed.needsReview),
+                leadScore: parsed.leadScore ?? null,
+              },
+            });
+            // #endregion
+            break;
+          } catch (err) {
+            lastErr = err;
+            const meta = extractProviderErrorMeta(err);
+            // #region agent log
+            agentQualDebugLog({
+              hypothesisId: stage === "model_call_start" ? "A" : stage === "json_parse" ? "B" : "C",
+              location: "prospectIntelligenceService.ts:attempt_catch",
+              message: "attempt_failed",
+              data: {
+                contactId: params.contactId,
+                stage,
+                attempt,
+                ...meta,
+              },
+            });
+            // #endregion
+            if (!isTransientAiError(err) || attempt === MAX_AI_RETRIES) break;
+            await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+          }
+        }
+
+        if (!parsed) {
+          const message = lastErr instanceof Error ? lastErr.message : String(lastErr);
+          logProspectQualificationFailed({
+            contactId: params.contactId,
+            workspaceId,
+            model,
+            stage,
+            err: lastErr ?? new Error(message),
+            hypothesisId: stage === "model_call_start" ? "A" : stage === "json_parse" ? "B" : "C",
+          });
+          await db
+            .update(prospectIntelligence)
+            .set({
+              analysisStatus: "failed",
+              errorMessage: message.substring(0, 500),
+              updatedAt: new Date(),
+            })
+            .where(eq(prospectIntelligence.contactId, params.contactId));
+          throw new Error(message);
+        }
+        intel = parsed;
+      }
+
+      stage = "db_persist";
+      await db
+        .update(prospectIntelligence)
+        .set({
+          ...toDbPatch(intel, {
+            importJobId,
+            promptTokens,
+            completionTokens,
+            rawResult: intel as unknown as Record<string, unknown>,
+            errorMessage: null,
+          }),
+        })
+        .where(eq(prospectIntelligence.contactId, params.contactId));
+
+      await syncContactIntelligence(contact, intel, importJobId);
+      // #region agent log
+      agentQualDebugLog({
+        hypothesisId: "G",
+        location: "prospectIntelligenceService.ts:db_persist",
+        message: "completed",
+        data: { contactId: params.contactId, analysisStatus: intel.analysisStatus || "completed" },
+      });
+      // #endregion
+      return intel;
+    } finally {
+      runningContactAnalysis.delete(params.contactId);
+    }
+  } catch (err) {
+    // Outer failures (eligibility, claim, context) that did not already log
+    if (!(err instanceof Error && /Analysis already in progress|Contact not found|only available for internal/i.test(err.message))) {
+      // already logged for AI path; still log outer if not from AI failure throw
+    }
+    if (
+      err instanceof Error &&
+      !/^\s*$/.test(err.message) &&
+      stage !== "model_call_start" &&
+      stage !== "model_response" &&
+      stage !== "json_parse" &&
+      stage !== "schema_validate"
+    ) {
+      logProspectQualificationFailed({
+        contactId: params.contactId,
+        workspaceId,
+        model: model || null,
+        stage,
+        err,
+        hypothesisId: "E",
+      });
+    }
+    throw err;
   }
 }
 

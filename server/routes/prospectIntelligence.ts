@@ -130,13 +130,71 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
     async (req, res) => {
       try {
         const workspaceUserId = await resolveProspectWorkspaceUserId((req.user as { id: string }).id);
+        // #region agent log
+        fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
+          body: JSON.stringify({
+            sessionId: "4bac18",
+            runId: "pre-fix",
+            hypothesisId: "ROUTE",
+            location: "prospectIntelligence.ts:reanalyze",
+            message: "route_entered",
+            data: {
+              contactId: req.params.contactId,
+              workspaceUserId,
+              route: "POST /api/growth-tools/prospect-intelligence/:contactId/reanalyze",
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
         const intelligence = await prospectIntelligenceService.reanalyzeProspectContact(
           req.params.contactId,
           workspaceUserId,
         );
+        // #region agent log
+        fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
+          body: JSON.stringify({
+            sessionId: "4bac18",
+            runId: "pre-fix",
+            hypothesisId: "ROUTE",
+            location: "prospectIntelligence.ts:reanalyze_ok",
+            message: "route_success",
+            data: {
+              contactId: req.params.contactId,
+              analysisStatus: intelligence.analysisStatus ?? null,
+              priority: intelligence.priority ?? null,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
         res.json({ intelligence });
       } catch (err) {
         console.error("[ProspectIntelligence] reanalyze error:", err);
+        // #region agent log
+        fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
+          body: JSON.stringify({
+            sessionId: "4bac18",
+            runId: "pre-fix",
+            hypothesisId: "ROUTE",
+            location: "prospectIntelligence.ts:reanalyze_err",
+            message: "route_error",
+            data: {
+              contactId: req.params.contactId,
+              errorName: err instanceof Error ? err.name : typeof err,
+              errorMessage: err instanceof Error ? err.message : String(err),
+              stack: err instanceof Error ? (err.stack || "").substring(0, 2000) : null,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
         res.status(400).json({ error: err instanceof Error ? err.message : "Re-analysis failed" });
       }
     },
