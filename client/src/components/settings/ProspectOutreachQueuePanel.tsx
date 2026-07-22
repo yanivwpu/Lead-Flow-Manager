@@ -6,7 +6,6 @@ import {
   Play,
   RefreshCw,
   Trash2,
-  ListOrdered,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +24,14 @@ import type {
   ProspectOutreachQueueItemSummary,
   ProspectOutreachWorkspaceSettings,
 } from "@shared/prospectBulkOutreach";
+import {
+  PROSPECT_AI_PAGE_SUBTITLES,
+  PROSPECT_CAMPAIGN_METRIC_LABELS,
+  PROSPECT_SENDING_QUEUE_LABEL,
+  buildCampaignsAiAssistantModel,
+  prospectCampaignQueueStatusLabel,
+} from "@shared/prospectAiDisplay";
+import { AiGrowthAssistantCard } from "@/components/prospectAi/AiGrowthAssistantCard";
 import { format } from "date-fns";
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -35,23 +42,24 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 function statusBadge(status: string) {
+  const label = prospectCampaignQueueStatusLabel(status);
   switch (status) {
     case "queued":
-      return <Badge variant="outline">Queued</Badge>;
+      return <Badge variant="outline">{label}</Badge>;
     case "sending":
-      return <Badge className="bg-blue-600">Sending</Badge>;
+      return <Badge className="bg-blue-600">{label}</Badge>;
     case "sent":
-      return <Badge className="bg-emerald-600">Sent</Badge>;
+      return <Badge className="bg-emerald-600">{label}</Badge>;
     case "failed":
-      return <Badge variant="destructive">Failed</Badge>;
+      return <Badge variant="destructive">{label}</Badge>;
     case "paused":
-      return <Badge className="bg-amber-500">Paused</Badge>;
+      return <Badge className="bg-amber-500">{label}</Badge>;
     case "skipped":
-      return <Badge variant="secondary">Skipped</Badge>;
+      return <Badge variant="secondary">{label}</Badge>;
     case "cancelled":
-      return <Badge variant="secondary">Cancelled</Badge>;
+      return <Badge variant="secondary">{label}</Badge>;
     default:
-      return <Badge variant="outline">{status}</Badge>;
+      return <Badge variant="outline">{label}</Badge>;
   }
 }
 
@@ -152,35 +160,49 @@ export function ProspectOutreachQueuePanel({
 
   const cards = useMemo(
     () => [
-      { label: "Queued", value: dash?.queued ?? 0 },
-      { label: "Sending", value: dash?.sending ?? 0 },
-      { label: "Sent today", value: dash?.sentToday ?? 0 },
-      { label: "Outreach Sent", value: dash?.outreachSentTotal ?? 0 },
-      { label: "Replied", value: dash?.replied ?? 0 },
-      { label: "Failed", value: dash?.failed ?? 0 },
-      { label: "Paused", value: dash?.paused ?? 0 },
+      { label: PROSPECT_CAMPAIGN_METRIC_LABELS.queued, value: dash?.queued ?? 0 },
+      { label: PROSPECT_CAMPAIGN_METRIC_LABELS.sending, value: dash?.sending ?? 0 },
+      { label: PROSPECT_CAMPAIGN_METRIC_LABELS.sentToday, value: dash?.sentToday ?? 0 },
+      { label: PROSPECT_CAMPAIGN_METRIC_LABELS.failed, value: dash?.failed ?? 0 },
+      { label: PROSPECT_CAMPAIGN_METRIC_LABELS.paused, value: dash?.paused ?? 0 },
     ],
+    [dash],
+  );
+
+  const assistantModel = useMemo(
+    () =>
+      buildCampaignsAiAssistantModel({
+        queued: dash?.queued,
+        sending: dash?.sending,
+        sentToday: dash?.sentToday,
+        failed: dash?.failed,
+        paused: dash?.paused,
+        queueRunning: dash?.queueRunning,
+        queuePaused: dash?.queuePaused,
+      }),
     [dash],
   );
 
   return (
     <section
-      className={embedded ? "space-y-5" : "mt-10 space-y-5 border-t pt-8"}
+      className={embedded ? "space-y-4" : "mt-10 space-y-5 border-t pt-8"}
       data-testid="prospect-outreach-queue"
     >
-      <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
-        <ListOrdered className="h-4 w-4 text-brand-green" />
-        {embedded ? "Launch Outreach Campaigns" : "Campaign Queue"}
-      </h3>
-      <p className="text-sm text-gray-600">
-        Controlled multi-channel queue (Email enabled for bulk). Analyzing thousands ≠ sending
-        thousands — messages release gradually under mailbox safety limits.
-      </p>
+      {embedded ? (
+        <div className="space-y-0.5">
+          <h2 className="text-lg font-semibold tracking-tight text-gray-900">Campaigns</h2>
+          <p className="text-sm text-gray-600">{PROSPECT_AI_PAGE_SUBTITLES.campaign}</p>
+        </div>
+      ) : (
+        <h3 className="text-base font-semibold text-gray-900">Campaigns</h3>
+      )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <AiGrowthAssistantCard model={assistantModel} className="max-w-xl" />
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {cards.map((card) => (
-          <div key={card.label} className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-center">
-            <p className="text-2xl font-bold text-gray-900">{card.value}</p>
+          <div key={card.label} className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-center">
+            <p className="text-xl font-bold text-gray-900">{card.value}</p>
             <p className="text-xs text-gray-500">{card.label}</p>
           </div>
         ))}
@@ -271,23 +293,28 @@ export function ProspectOutreachQueuePanel({
       </div>
 
       {dash?.queuePaused ? (
-        <p className="text-sm text-amber-700">Queue is paused — no new sends until Resume / Start.</p>
+        <p className="text-sm text-amber-700">
+          {PROSPECT_SENDING_QUEUE_LABEL} is paused — no new sends until Resume / Start.
+        </p>
       ) : null}
       {!dash?.queueRunning && !dash?.queuePaused ? (
         <p className="text-sm text-amber-800" data-testid="po-queue-waiting-start">
-          Queue is armed off — prospects can be queued, but nothing sends until you press Start queue.
+          Sending is armed off — messages can wait in the {PROSPECT_SENDING_QUEUE_LABEL}, but nothing
+          sends until you press Start queue.
         </p>
       ) : null}
 
       <div className="flex flex-wrap gap-2">
-        {[
-          ["all", "All"],
-          ["queued", "Queued"],
-          ["sending", "Sending"],
-          ["sent", "Sent"],
-          ["failed", "Failed"],
-          ["paused", "Paused"],
-        ].map(([value, label]) => (
+        {(
+          [
+            ["all", "All"],
+            ["queued", PROSPECT_SENDING_QUEUE_LABEL],
+            ["sending", "Sending"],
+            ["sent", "Sent"],
+            ["failed", "Failed"],
+            ["paused", "Paused"],
+          ] as const
+        ).map(([value, label]) => (
           <Button
             key={value}
             type="button"

@@ -80,6 +80,10 @@ import {
   buildAiGrowthAssistantModel,
   resolveAiPersonalityStatus,
 } from "@shared/prospectAiPersonality";
+import {
+  PROSPECT_AI_PAGE_SUBTITLES,
+  PROSPECT_SELECTION_LABELS,
+} from "@shared/prospectAiDisplay";
 import { AiGrowthAssistantCard } from "@/components/prospectAi/AiGrowthAssistantCard";
 import { AiPersonalityStatusView } from "@/components/prospectAi/AiPersonalityStatus";
 import { format } from "date-fns";
@@ -1082,7 +1086,7 @@ export function ProspectIntelligencePanel(props: {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAllFiltered, setSelectAllFiltered] = useState(false);
-  /** Frozen server-resolved IDs when Select all filtered is used (not browser rows). */
+  /** Frozen server-resolved IDs when Select all results is used (not browser rows). */
   const [resolvedFilteredIds, setResolvedFilteredIds] = useState<string[] | null>(null);
   const [resolvedFilteredCount, setResolvedFilteredCount] = useState<number | null>(null);
   const [approveHandoff, setApproveHandoff] = useState<{
@@ -1601,12 +1605,17 @@ export function ProspectIntelligencePanel(props: {
       )}
       data-testid="pi-review-panel"
     >
-      {!props.embedded ? (
+      {props.embedded ? (
+        <div className="space-y-0.5">
+          <h2 className="text-lg font-semibold tracking-tight text-gray-900">AI Review</h2>
+          <p className="text-sm text-gray-600">{PROSPECT_AI_PAGE_SUBTITLES.review}</p>
+        </div>
+      ) : (
         <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
           <Sparkles className="h-4 w-4 text-brand-green" />
           Prospect AI Intelligence
         </h3>
-      ) : null}
+      )}
 
       {props.activeAnalysisJob?.status === "running" ? (
         <div className="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs text-blue-900">
@@ -1670,40 +1679,49 @@ export function ProspectIntelligencePanel(props: {
         className="max-w-xl"
       />
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        {PROSPECT_REVIEW_FILTER_CHIPS.map((chip) => {
-          const count = lifecycleCounts[chip.id] ?? 0;
-          const active = lifecycleFilter === chip.id;
-          return (
-            <Button
-              key={chip.id}
-              type="button"
-              size="sm"
-              variant={active ? "default" : "outline"}
-              className={cn(
-                "h-7 rounded-full px-2.5 text-[11px] font-medium transition-all duration-200",
-                active
-                  ? "bg-gray-900 text-white shadow-sm hover:bg-gray-800"
-                  : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50",
-              )}
-              onClick={() => setLifecycleFilter(chip.id)}
-              data-testid={`pi-filter-${chip.id}`}
-            >
-              {chip.label}
-              <span
+      <div className="space-y-1.5">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+          Lifecycle
+        </p>
+        <div className="flex max-w-full flex-nowrap gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {PROSPECT_REVIEW_FILTER_CHIPS.map((chip) => {
+            const count = lifecycleCounts[chip.id] ?? 0;
+            const active = lifecycleFilter === chip.id;
+            return (
+              <Button
+                key={chip.id}
+                type="button"
+                size="sm"
+                variant={active ? "default" : "outline"}
                 className={cn(
-                  "ms-1 tabular-nums",
-                  active ? "text-white/80" : "text-gray-400",
+                  "h-7 shrink-0 rounded-full px-2.5 text-[11px] font-medium transition-all duration-200",
+                  active
+                    ? "bg-gray-900 text-white shadow-sm hover:bg-gray-800"
+                    : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50",
                 )}
+                onClick={() => setLifecycleFilter(chip.id)}
+                data-testid={`pi-filter-${chip.id}`}
               >
-                ({count})
-              </span>
-            </Button>
-          );
-        })}
+                {chip.label}
+                <span
+                  className={cn(
+                    "ms-1 tabular-nums",
+                    active ? "text-white/80" : "text-gray-400",
+                  )}
+                >
+                  ({count})
+                </span>
+              </Button>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="space-y-1.5">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+          Filters
+        </p>
+        <div className="flex flex-wrap items-center gap-1.5">
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
           <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue placeholder="Priority" /></SelectTrigger>
           <SelectContent>
@@ -1744,11 +1762,19 @@ export function ProspectIntelligencePanel(props: {
             <SelectItem value="action">Needs action</SelectItem>
           </SelectContent>
         </Select>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-gray-50/70 px-2.5 py-2">
-        <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={selectVisible}>
-          Select visible ({items.length})
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs"
+          onClick={selectVisible}
+          title={PROSPECT_SELECTION_LABELS.selectPageHint}
+        >
+          {PROSPECT_SELECTION_LABELS.selectPage} ({items.length})
         </Button>
         <Button
           type="button"
@@ -1757,8 +1783,11 @@ export function ProspectIntelligencePanel(props: {
           className="h-8 text-xs"
           disabled={selectAllFilteredMutation.isPending}
           onClick={() => selectAllFilteredMutation.mutate()}
+          title={PROSPECT_SELECTION_LABELS.selectAllResultsHint}
         >
-          {selectAllFilteredMutation.isPending ? "Resolving…" : "Select all filtered"}
+          {selectAllFilteredMutation.isPending
+            ? "Resolving…"
+            : PROSPECT_SELECTION_LABELS.selectAllResults}
         </Button>
         <Button type="button" size="sm" variant="ghost" className="h-8 text-xs" onClick={clearSelection}>
           Clear

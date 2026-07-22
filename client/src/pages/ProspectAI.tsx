@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Brain,
   Check,
+  ChevronDown,
   Inbox,
   Loader2,
   MapPin,
@@ -31,6 +32,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Table,
   TableBody,
   TableCell,
@@ -54,12 +60,24 @@ import {
   type ProspectAiStatus,
 } from "@/lib/prospectAi";
 import { formatProspectAiRate } from "@shared/prospectAI";
+import {
+  PROSPECT_ACTIVITY_EVENT_LABELS,
+  PROSPECT_AI_PAGE_SUBTITLES,
+  PROSPECT_AI_TAB_LABELS,
+  buildActivityAiAssistantModel,
+  buildProspectActivityTimeline,
+  formatProspectActivityTime,
+  mapProspectActivityApiToFeedItems,
+  type ProspectActivityFeedKind,
+} from "@shared/prospectAiDisplay";
+import { AiGrowthAssistantCard } from "@/components/prospectAi/AiGrowthAssistantCard";
 import { ProspectAiCardArt } from "@/components/growthEngines/ProspectAiCardArt";
 import { GhlProspectImport, ProspectImportHistoryPanel } from "@/components/settings/GhlProspectImport";
 import { ProspectIntelligencePanel } from "@/components/settings/ProspectIntelligencePanel";
 import { ProspectOutreachQueuePanel } from "@/components/settings/ProspectOutreachQueuePanel";
-import type { ProspectIntelligenceJobSummary } from "@shared/prospectImport";
+import type { ProspectIntelligenceJobSummary, ProspectImportHistoryItem } from "@shared/prospectImport";
 import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
+import { cn } from "@/lib/utils";
 
 type WorkspaceTab = "discover" | "review" | "campaign" | "activity" | "won";
 
@@ -75,15 +93,6 @@ function resultLabel(row: ProspectAiDiscoverResult): string {
     (typeof row.title === "string" ? row.title : null) ||
     "Untitled prospect"
   );
-}
-
-function formatActivityDate(iso?: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
 }
 
 function QuotaMeter({ status }: { status: ProspectAiStatus }) {
@@ -653,129 +662,158 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
 }
 
 function ActivityTab() {
+  const [kindFilter, setKindFilter] = useState<"all" | ProspectActivityFeedKind>("all");
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const activityQuery = useProspectAiActivity();
-  const { data: outreachDash } = useQuery({
-    queryKey: ["/api/growth-tools/prospect-outreach/dashboard", "activity-summary"],
+  const importHistoryQuery = useQuery({
+    queryKey: ["/api/growth-tools/prospect-import/history", "activity-timeline"],
     queryFn: async () => {
-      const res = await fetch("/api/growth-tools/prospect-outreach/dashboard", {
+      const res = await fetch("/api/growth-tools/prospect-import/history", {
         credentials: "include",
       });
-      if (!res.ok) return null;
-      return res.json() as Promise<{
-        queued?: number;
-        sentToday?: number;
-        outreachSentTotal?: number;
-        replied?: number;
-        failed?: number;
-      }>;
+      if (!res.ok) return { history: [] as ProspectImportHistoryItem[] };
+      return res.json() as Promise<{ history: ProspectImportHistoryItem[] }>;
     },
-    staleTime: 15_000,
+    staleTime: 30_000,
     retry: false,
   });
 
-  const searches = activityQuery.data?.searches ?? [];
-  const events = [
-    ...(activityQuery.data?.events ?? []),
-    ...(activityQuery.data?.campaignEvents ?? []),
-    ...(activityQuery.data?.outreachEvents ?? []),
-  ];
+  const feedItems = useMemo(() => {
+    const data = activityQuery.data;
+    return mapProspectActivityApiToFeedItems({
+      events: data?.events,
+      outreachEvents: data?.outreachEvents,
+      campaignEvents: data?.campaignEvents,
+      imports: importHistoryQuery.data?.history,
+    });
+  }, [activityQuery.data, importHistoryQuery.data?.history]);
+
+  const filteredItems = useMemo(
+    () => (kindFilter === "all" ? feedItems : feedItems.filter((i) => i.kind === kindFilter)),
+    [feedItems, kindFilter],
+  );
+
+  const timeline = useMemo(
+    () => buildProspectActivityTimeline(filteredItems),
+    [filteredItems],
+  );
+
+  const assistantModel = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const isToday = (iso: string) => {
+      const t = Date.parse(iso);
+      return Number.isFinite(t) && t >= start;
+    };
+    const discoveriesToday = (activityQuery.data?.searches ?? [])
+      .filter((s) => s.createdAt && isToday(s.createdAt))
+      .reduce((sum, s) => sum + (s.resultCount ?? 0), 0);
+    const outreachSentToday = feedItems.filter(
+      (i) => i.kind === "outreach" && i.status === "sent" && isToday(i.at),
+    ).length;
+    const campaignEnrollmentsToday = feedItems.filter(
+      (i) => i.kind === "campaign" && isToday(i.at),
+    ).length;
+    return buildActivityAiAssistantModel({
+      discoveriesToday,
+      outreachSentToday,
+      campaignEnrollmentsToday,
+      importBatches: importHistoryQuery.data?.history?.length ?? 0,
+    });
+  }, [activityQuery.data?.searches, feedItems, importHistoryQuery.data?.history?.length]);
+
+  const loading = activityQuery.isLoading || importHistoryQuery.isLoading;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight text-gray-900">Prospect History</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          Discovery searches, imports, campaigns, and completed outreach in one place.
-        </p>
+    <div className="space-y-4" data-testid="prospect-activity-tab">
+      <div className="space-y-0.5">
+        <h2 className="text-lg font-semibold tracking-tight text-gray-900">Prospect Activity</h2>
+        <p className="text-sm text-gray-600">{PROSPECT_AI_PAGE_SUBTITLES.activity}</p>
       </div>
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-800">Discovery searches</h3>
-        {activityQuery.isLoading ? (
-          <p className="text-sm text-gray-500">Loading history…</p>
-        ) : searches.length === 0 ? (
-          <p className="text-sm text-gray-500">No discovery searches yet.</p>
-        ) : (
-          <div className="overflow-auto rounded-xl border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Business type</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Radius</TableHead>
-                  <TableHead>Results</TableHead>
-                  <TableHead>When</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {searches.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-medium">{s.businessType || "—"}</TableCell>
-                    <TableCell>{s.location || "—"}</TableCell>
-                    <TableCell>{s.radiusKm != null ? `${s.radiusKm} km` : "—"}</TableCell>
-                    <TableCell>{s.resultCount ?? "—"}</TableCell>
-                    <TableCell className="text-xs whitespace-nowrap">
-                      {formatActivityDate(s.createdAt)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </section>
+      <AiGrowthAssistantCard model={assistantModel} className="max-w-xl" />
 
-      {(events.length > 0 || outreachDash) && (
-        <section className="space-y-3">
-          <h3 className="text-base font-semibold text-gray-900">Campaign & outreach events</h3>
-          {outreachDash ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              {[
-                { label: "Queued", value: outreachDash.queued ?? 0 },
-                { label: "Sent today", value: outreachDash.sentToday ?? 0 },
-                { label: "Outreach sent", value: outreachDash.outreachSentTotal ?? 0 },
-                { label: "Replied", value: outreachDash.replied ?? 0 },
-                { label: "Failed", value: outreachDash.failed ?? 0 },
-              ].map((c) => (
-                <div key={c.label} className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-center">
-                  <p className="text-xl font-bold text-gray-900">{c.value}</p>
-                  <p className="text-xs text-gray-500">{c.label}</p>
-                </div>
-              ))}
-            </div>
-          ) : null}
-          {events.length > 0 ? (
-            <div className="overflow-auto rounded-xl border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Event</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>When</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {events.map((ev, i) => (
-                    <TableRow key={ev.id || `${ev.type}-${ev.createdAt}-${i}`}>
-                      <TableCell className="font-medium">
-                        {ev.label || ev.description || "—"}
-                      </TableCell>
-                      <TableCell>{ev.type || ev.channel || "—"}</TableCell>
-                      <TableCell>{ev.status || "—"}</TableCell>
-                      <TableCell className="text-xs whitespace-nowrap">
-                        {formatActivityDate(ev.createdAt)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          ) : null}
-        </section>
+      <div className="flex max-w-full flex-nowrap gap-1.5 overflow-x-auto pb-0.5">
+        {(
+          [
+            ["all", "All"],
+            ["discovery", PROSPECT_ACTIVITY_EVENT_LABELS.discovery],
+            ["import", PROSPECT_ACTIVITY_EVENT_LABELS.import],
+            ["campaign", PROSPECT_ACTIVITY_EVENT_LABELS.campaign],
+            ["outreach", PROSPECT_ACTIVITY_EVENT_LABELS.outreach],
+          ] as const
+        ).map(([value, label]) => (
+          <Button
+            key={value}
+            type="button"
+            size="sm"
+            variant={kindFilter === value ? "default" : "outline"}
+            className="h-7 shrink-0 rounded-full px-2.5 text-[11px]"
+            onClick={() => setKindFilter(value)}
+            data-testid={`activity-filter-${value}`}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-gray-500">Loading activity…</p>
+      ) : timeline.length === 0 ? (
+        <p className="text-sm text-gray-500">No activity yet.</p>
+      ) : (
+        <div className="space-y-6" data-testid="prospect-activity-timeline">
+          {timeline.map((group) => (
+            <section key={group.dateKey} className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                {group.dateLabel}
+              </h3>
+              <ul className="space-y-2 border-l border-gray-200 pl-4">
+                {group.items.map((item) => (
+                  <li key={item.id} className="relative">
+                    <span
+                      className="absolute -left-[1.15rem] top-1.5 h-2 w-2 rounded-full bg-brand-green"
+                      aria-hidden
+                    />
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <time className="text-xs tabular-nums text-gray-500">
+                        {formatProspectActivityTime(item.at)}
+                      </time>
+                      <span className="text-sm text-gray-900">{item.title}</span>
+                      {item.status ? (
+                        <Badge variant="outline" className="text-[10px] font-normal">
+                          {item.status}
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
       )}
 
-      <ProspectImportHistoryPanel />
+      <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1 px-2 text-xs text-gray-600"
+            data-testid="activity-details-toggle"
+          >
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", detailsOpen && "rotate-180")} />
+            Import & discovery details
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-6 pt-2">
+          <ProspectImportHistoryPanel
+            history={importHistoryQuery.data?.history ?? []}
+            isLoading={importHistoryQuery.isLoading}
+          />
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }
@@ -951,11 +989,11 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
         <TabsList className="h-auto w-full flex-wrap justify-start gap-x-4 gap-y-1 border-b border-gray-200 bg-transparent p-0 pb-0">
           {(
             [
-              ["discover", "Discover"],
-              ["review", "AI Review"],
-              ["campaign", "Campaigns"],
-              ["activity", "History"],
-              ["won", "Won"],
+              ["discover", PROSPECT_AI_TAB_LABELS.discover],
+              ["review", PROSPECT_AI_TAB_LABELS.review],
+              ["campaign", PROSPECT_AI_TAB_LABELS.campaign],
+              ["activity", PROSPECT_AI_TAB_LABELS.activity],
+              ["won", PROSPECT_AI_TAB_LABELS.won],
             ] as const
           ).map(([value, label]) => (
             <TabsTrigger

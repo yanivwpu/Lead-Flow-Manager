@@ -14,6 +14,8 @@ import {
   prospectReviewEmptyMessage,
   resolveProspectReviewLifecycle,
   resolveProspectTimelineStates,
+  PROSPECT_REVIEW_FILTER_CHIPS,
+  PROSPECT_REVIEW_LIFECYCLE_LABELS,
 } from "../shared/prospectReviewUx";
 
 assert.equal(
@@ -117,5 +119,11 @@ assert.deepEqual(
 );
 
 assert.equal(buildProspectRowAiSummary({ analysisStatus: "pending" }).showSummary, false);
+
+assert.equal(PROSPECT_REVIEW_LIFECYCLE_LABELS.queued, "Campaign Queue");
+assert.equal(
+  PROSPECT_REVIEW_FILTER_CHIPS.find((c) => c.id === "queued")?.label,
+  "Campaign Queue",
+);
 
 console.log("prospect-review-ux.test.ts: all assertions passed");
