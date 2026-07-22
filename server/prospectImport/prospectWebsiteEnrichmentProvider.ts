@@ -21,6 +21,7 @@ import {
 } from "./prospectWebsiteContactExtract";
 import { resolveProspectWebsiteUrl } from "./prospectWebsiteUrl";
 import { loadProspectAiWorkspaceContext } from "./prospectAiWorkspaceContext";
+import { readProspectImportMetadata } from "./prospectIntelligenceEligibility";
 
 export { resolveProspectWebsiteUrl } from "./prospectWebsiteUrl";
 
