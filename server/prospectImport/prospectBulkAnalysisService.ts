@@ -6,6 +6,7 @@
 
 import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import {
+  contacts,
   prospectBulkAnalysisJobs,
   prospectIntelligence,
   type ProspectBulkAnalysisJobRow,
@@ -18,6 +19,13 @@ import {
   PROSPECT_BULK_ANALYSIS_LEASE_MS,
   type ProspectBulkAnalysisItemResults,
 } from "@shared/prospectBulkSelection";
+import {
+  PROSPECT_ANALYSIS_ITEM_TIMEOUT_MS,
+  PROSPECT_ORPHAN_PENDING_AGE_MS,
+  contactIdsCoveredByActiveBulkJobs,
+  extractSqlExecuteId,
+  filterOrphanQualificationContactIds,
+} from "@shared/prospectAnalysisOwnership";
 import { shouldSkipDefaultBulkReanalyze } from "@shared/prospectOutreachEligibility";
 import { db } from "../../drizzle/db";
 import {
@@ -182,8 +190,19 @@ export async function claimNextBulkAnalysisJob(
     RETURNING j.id
   `);
 
-  const id = String((claimed as { rows?: Array<{ id?: string }> }).rows?.[0]?.id || "");
-  if (!id) return null;
+  const id = extractSqlExecuteId(claimed);
+  if (!id) {
+    console.info(
+      JSON.stringify(
+        prospectBulkAnalysisLog("job_claim_empty", {
+          workerId,
+          resultShape: claimed == null ? "null" : Array.isArray(claimed) ? "array" : typeof claimed,
+          hasRows: Boolean((claimed as { rows?: unknown })?.rows),
+        }),
+      ),
+    );
+    return null;
+  }
 
   const rows = await db
     .select()
@@ -239,6 +258,29 @@ async function renewLease(jobId: string, workerId: string): Promise<boolean> {
     )
     .returning({ id: prospectBulkAnalysisJobs.id });
   return updated.length > 0;
+}
+
+async function analyzeContactWithTimeout(params: {
+  contactId: string;
+  force?: boolean;
+}): Promise<Awaited<ReturnType<typeof analyzeProspectContact>>> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      analyzeProspectContact({
+        contactId: params.contactId,
+        force: params.force,
+        preClaimed: true,
+      }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`Analysis timed out after ${PROSPECT_ANALYSIS_ITEM_TIMEOUT_MS}ms`));
+        }, PROSPECT_ANALYSIS_ITEM_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /**
@@ -362,10 +404,17 @@ export async function processClaimedBulkAnalysisJob(
             ),
           );
         } else {
-          const intel = await analyzeProspectContact({
+          console.info(
+            JSON.stringify(
+              prospectBulkAnalysisLog("analysis_started", {
+                jobId: job.id,
+                contactId,
+              }),
+            ),
+          );
+          const intel = await analyzeContactWithTimeout({
             contactId,
             force: job.forceReanalyze,
-            preClaimed: true,
           });
           const needsReview = Boolean(intel.needsReview || intel.priority === "needs_review");
           itemResults[contactId] = {
@@ -374,7 +423,7 @@ export async function processClaimedBulkAnalysisJob(
           };
           console.info(
             JSON.stringify(
-              prospectBulkAnalysisLog("item_completed", {
+              prospectBulkAnalysisLog("analysis_completed", {
                 jobId: job.id,
                 contactId,
                 status: needsReview ? "needs_review" : "completed",
@@ -424,13 +473,40 @@ export async function processClaimedBulkAnalysisJob(
     });
   }
 
+  // Do not mark completed while any contactId lacks an item_result (merge race).
+  // Leave the job pending so the next tick resumes unfinished contacts.
   const finalRows = await db
     .select()
     .from(prospectBulkAnalysisJobs)
     .where(eq(prospectBulkAnalysisJobs.id, job.id))
     .limit(1);
   const finalIds = (Array.isArray(finalRows[0]?.contactIds) ? finalRows[0]!.contactIds : []) as string[];
+  const unfinished = finalIds.map(String).filter((id) => !itemResults[id]);
   const finalCounts = recountBulkAnalysisItemResults(itemResults);
+  if (unfinished.length) {
+    console.info(
+      JSON.stringify(
+        prospectBulkAnalysisLog("job_resume_unfinished", {
+          jobId: job.id,
+          unfinished: unfinished.length,
+        }),
+      ),
+    );
+    await updateJob(job.id, {
+      status: "pending",
+      itemResults,
+      progressCurrent: finalCounts.processed,
+      progressTotal: finalIds.length,
+      resultCompleted: finalCounts.completed,
+      resultNeedsReview: finalCounts.needsReview,
+      resultFailed: finalCounts.failed,
+      resultSkipped: finalCounts.skipped,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    });
+    return;
+  }
+
   await updateJob(job.id, {
     status: "completed",
     completedAt: new Date(),
@@ -443,6 +519,9 @@ export async function processClaimedBulkAnalysisJob(
     resultSkipped: finalCounts.skipped,
     leaseOwner: null,
     leaseExpiresAt: null,
+    ...(finalCounts.failed > 0
+      ? { errorMessage: `${finalCounts.failed} item(s) failed` }
+      : { errorMessage: null }),
   });
 
   console.info(
@@ -457,6 +536,122 @@ export async function processClaimedBulkAnalysisJob(
       }),
     ),
   );
+}
+
+/**
+ * Jobs the claim query should be able to pick (pending/running with free or expired lease).
+ */
+export async function countClaimableBulkAnalysisJobs(now: Date = new Date()): Promise<number> {
+  const rows = await db
+    .select({ id: prospectBulkAnalysisJobs.id })
+    .from(prospectBulkAnalysisJobs)
+    .where(
+      and(
+        inArray(prospectBulkAnalysisJobs.status, ["pending", "running"]),
+        or(
+          isNull(prospectBulkAnalysisJobs.leaseExpiresAt),
+          lt(prospectBulkAnalysisJobs.leaseExpiresAt, now),
+        ),
+      ),
+    );
+  return rows.length;
+}
+
+/**
+ * Re-enqueue pending/failed intelligence rows that are not on any pending/running bulk job.
+ * Idempotent: createBulkAnalysisJob merges into an existing pending job when present.
+ */
+export async function recoverOrphanedPendingQualifications(params?: {
+  olderThanMs?: number;
+  now?: Date;
+}): Promise<{ recoveredContacts: number; jobsTouched: number }> {
+  const olderThanMs = params?.olderThanMs ?? PROSPECT_ORPHAN_PENDING_AGE_MS;
+  const now = params?.now ?? new Date();
+  const cutoff = new Date(now.getTime() - olderThanMs);
+
+  const candidates = await db
+    .select({
+      contactId: prospectIntelligence.contactId,
+      analysisStatus: prospectIntelligence.analysisStatus,
+      updatedAt: prospectIntelligence.updatedAt,
+    })
+    .from(prospectIntelligence)
+    .where(
+      and(
+        inArray(prospectIntelligence.analysisStatus, ["pending", "failed"]),
+        lt(prospectIntelligence.updatedAt, cutoff),
+      ),
+    );
+
+  if (!candidates.length) return { recoveredContacts: 0, jobsTouched: 0 };
+
+  const activeJobs = await db
+    .select({
+      status: prospectBulkAnalysisJobs.status,
+      contactIds: prospectBulkAnalysisJobs.contactIds,
+    })
+    .from(prospectBulkAnalysisJobs)
+    .where(inArray(prospectBulkAnalysisJobs.status, ["pending", "running"]));
+
+  const orphanIds = filterOrphanQualificationContactIds({
+    candidates,
+    activeJobs,
+    now,
+    olderThanMs,
+  });
+  if (!orphanIds.length) return { recoveredContacts: 0, jobsTouched: 0 };
+
+  const contactRows = await db
+    .select({ id: contacts.id, userId: contacts.userId })
+    .from(contacts)
+    .where(inArray(contacts.id, orphanIds));
+
+  const byWorkspace = new Map<string, string[]>();
+  for (const row of contactRows) {
+    const wid = String(row.userId || "");
+    if (!wid) continue;
+    const list = byWorkspace.get(wid) || [];
+    list.push(row.id);
+    byWorkspace.set(wid, list);
+  }
+
+  // Avoid duplicate active coverage if another sweep raced — re-check covered set.
+  const covered = contactIdsCoveredByActiveBulkJobs(activeJobs);
+  let recoveredContacts = 0;
+  let jobsTouched = 0;
+
+  for (const [workspaceUserId, ids] of byWorkspace) {
+    const unique = [...new Set(ids.map(String))].filter((id) => !covered.has(id));
+    if (!unique.length) continue;
+    try {
+      const job = await createBulkAnalysisJob({
+        contactIds: unique,
+        initiatedByUserId: workspaceUserId,
+        workspaceUserId,
+        selectionMode: "selected",
+        force: true,
+      });
+      jobsTouched += 1;
+      recoveredContacts += unique.length;
+      for (const id of unique) covered.add(id);
+      console.info(
+        JSON.stringify(
+          prospectBulkAnalysisLog("orphan_contacts_requeued", {
+            workspaceId: workspaceUserId,
+            jobId: job.id,
+            count: unique.length,
+          }),
+        ),
+      );
+    } catch (err) {
+      console.error(
+        "[ProspectBulkAnalysis] orphan requeue failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  return { recoveredContacts, jobsTouched };
 }
 
 /** Recover stale running jobs by clearing expired leases (claim will pick them up). */
@@ -597,6 +792,8 @@ export const prospectBulkAnalysisService = {
   claimNextBulkAnalysisJob,
   processClaimedBulkAnalysisJob,
   recoverStaleBulkAnalysisJobs,
+  recoverOrphanedPendingQualifications,
+  countClaimableBulkAnalysisJobs,
   retryFailedBulkAnalysisItems,
   runBulkAnalysisJob,
 };

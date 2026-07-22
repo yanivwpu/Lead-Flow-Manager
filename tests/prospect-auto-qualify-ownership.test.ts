@@ -8,6 +8,7 @@ import { join } from "node:path";
 import {
   PROSPECT_ANALYSIS_STALE_PROCESSING_MS,
   PROSPECT_ANALYSIS_STALE_PROCESSING_SQL,
+  PROSPECT_ORPHAN_PENDING_AGE_MS,
   canClaimAnalysisStatus,
   claimableAnalysisStatuses,
   contactOwnedByActiveBulkLease,
@@ -240,6 +241,10 @@ function testStaleHealOwnership() {
   assert.ok(PROSPECT_ANALYSIS_STALE_PROCESSING_SQL.includes("analysis_status = 'processing'"));
 }
 
+function testOrphanSqlDiagnosticsDocumented() {
+  assert.ok(PROSPECT_ORPHAN_PENDING_AGE_MS === 2 * 60_000);
+}
+
 function testWorkerCallsHeal() {
   const src = readFileSync(
     join(process.cwd(), "server/prospectImport/prospectBulkAnalysisWorker.ts"),
@@ -273,6 +278,7 @@ const tests: Array<[string, () => void]> = [
   ["bulk counters mixed success/failure", testMixedBulkCounters],
   ["UI/API failed not indefinitely processing", testUiNoLongerIndefiniteProcessingOnFailure],
   ["stale heal ownership predicates", testStaleHealOwnership],
+  ["orphan age constant", testOrphanSqlDiagnosticsDocumented],
   ["worker tick heals abandoned processing", testWorkerCallsHeal],
   ["panel pending ≠ AI is working", testPanelDoesNotShowWorkingForPending],
 ];

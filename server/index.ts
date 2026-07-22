@@ -433,6 +433,13 @@ app.use((req, res, next) => {
   
   await registerRoutes(httpServer, app);
 
+  // Prospect bulk AI qualification worker — start early so pending jobs resume even if
+  // later startup work (dedup/seeds) is slow. Same process as production `npm start`.
+  const { startProspectBulkAnalysisWorker } = await import(
+    "./prospectImport/prospectBulkAnalysisWorker"
+  );
+  startProspectBulkAnalysisWorker();
+
   // Ensure SSO user exists for LeadConnector integration
   try {
     const ssoUser = await storage.getUserByEmail('yaniv@whachatcrm.com');
@@ -542,12 +549,6 @@ app.use((req, res, next) => {
     "./prospectImport/prospectOutreachQueueWorker"
   );
   startProspectOutreachQueueWorker();
-
-  // Durable Prospect Intelligence bulk AI analysis worker (restart-safe)
-  const { startProspectBulkAnalysisWorker } = await import(
-    "./prospectImport/prospectBulkAnalysisWorker"
-  );
-  startProspectBulkAnalysisWorker();
 
   // Prospect website enrichment (Phase 2 — post-approval only)
   const { startProspectEnrichmentWorker } = await import(

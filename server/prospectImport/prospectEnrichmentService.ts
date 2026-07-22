@@ -21,6 +21,7 @@ import { assertContactInWorkspace } from "./prospectWorkspaceScope";
 import { getProspectEnrichmentProvider } from "./prospectWebsiteEnrichmentProvider";
 import { analyzeProspectContact } from "./prospectIntelligenceService";
 import { isValidProspectEmail, isValidProspectPhone } from "@shared/prospectContactEnrichment";
+import { extractSqlExecuteId } from "@shared/prospectAnalysisOwnership";
 
 function mapJob(row: ProspectEnrichmentJobRow): ProspectEnrichmentJobSummary {
   return {
@@ -189,7 +190,7 @@ export async function claimNextEnrichmentJob(
     RETURNING j.id
   `);
 
-  const id = String((claimed as { rows?: Array<{ id?: string }> }).rows?.[0]?.id || "");
+  const id = extractSqlExecuteId(claimed);
   if (!id) return null;
 
   const rows = await db
