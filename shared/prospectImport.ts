@@ -360,6 +360,8 @@ export type ProspectIntelligenceListItem = {
   company?: string | null;
   email?: string | null;
   phone?: string | null;
+  /** Public website URL when known (presentation; from contact metadata or enrichment). */
+  websiteUrl?: string | null;
   importTag?: string | null;
   batchName?: string | null;
   importReason?: string | null;

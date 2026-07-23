@@ -38,6 +38,7 @@ import {
   readProspectImportMetadata,
   resolvePipelineStageAfterAnalysis,
 } from "./prospectIntelligenceEligibility";
+import { resolveProspectWebsiteUrl } from "./prospectWebsiteUrl";
 import { assertContactInWorkspace } from "./prospectWorkspaceScope";
 
 const runningBatchJobs = new Set<string>();
@@ -1236,6 +1237,7 @@ export async function listProspectIntelligence(
       company: row.companyName ?? meta?.batchName ?? null,
       email: contact.email,
       phone: contact.phone,
+      websiteUrl: resolveProspectWebsiteUrl(contact),
       importTag: contact.tag,
       batchName: meta?.batchName ?? null,
       importReason: meta?.importReason ?? null,
@@ -1369,6 +1371,7 @@ export async function getProspectIntelligenceDetail(
     company: rows[0].companyName ?? null,
     email: contact.email,
     phone: contact.phone,
+    websiteUrl: resolveProspectWebsiteUrl(contact),
     importTag: contact.tag,
     batchName: meta?.batchName ?? null,
     importReason: meta?.importReason ?? null,

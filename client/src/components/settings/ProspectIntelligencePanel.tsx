@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
+  Globe,
   Loader2,
   Mail,
   Pencil,
@@ -13,6 +14,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -90,6 +97,11 @@ import {
   PROSPECT_AI_REVIEW_COLGROUP,
   PROSPECT_AI_REVIEW_TABLE_CLASS,
 } from "@shared/prospectAiLayout";
+import {
+  prospectWebsiteDomain,
+  resolveProspectDisplayWebsiteUrl,
+  resolveProspectWebsiteDetailState,
+} from "@shared/prospectWebsiteDisplay";
 import { AiGrowthAssistantCard } from "@/components/prospectAi/AiGrowthAssistantCard";
 import { ProspectAiEmptyState } from "@/components/prospectAi/ProspectAiPageLayout";
 import { AiPersonalityStatusView } from "@/components/prospectAi/AiPersonalityStatus";
@@ -177,6 +189,41 @@ function MatchStars({ stars }: { stars: number }) {
   );
 }
 
+/** Compact clickable globe — only when a website URL exists (row AI summary). */
+function ProspectWebsiteGlobeIcon({
+  websiteUrl,
+  websiteUrlUsed,
+}: {
+  websiteUrl?: string | null;
+  websiteUrlUsed?: string | null;
+}) {
+  const href = resolveProspectDisplayWebsiteUrl({ websiteUrl, websiteUrlUsed });
+  if (!href) return null;
+  const domain = prospectWebsiteDomain(href) || href;
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+            aria-label={`Open website ${domain}`}
+            data-testid="pi-row-website-icon"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Globe className="h-3.5 w-3.5" aria-hidden />
+          </a>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {domain}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 function VerifiedChip({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span
@@ -224,32 +271,6 @@ function cellOrPending(
   }
   if (value === null || value === undefined || value === "") return "—";
   return String(value);
-}
-
-function enrichmentBadge(intel: ProspectIntelligenceListItem["intelligence"]) {
-  const status = String(intel.enrichmentStatus || "none").toLowerCase();
-  if (status === "enriching" || status === "pending") {
-    return (
-      <Badge className="bg-sky-600 text-[10px]" data-testid="pi-enrichment-enriching">
-        Learning about the website…
-      </Badge>
-    );
-  }
-  if (status === "completed") {
-    return (
-      <Badge className="bg-violet-600 text-[10px]" data-testid="pi-enrichment-enhanced">
-        Website ready
-      </Badge>
-    );
-  }
-  if (status === "failed") {
-    return (
-      <Badge variant="destructive" className="text-[10px]" data-testid="pi-enrichment-failed">
-        Enrichment failed
-      </Badge>
-    );
-  }
-  return null;
 }
 
 function priorityBadge(priority?: string, analysisStatus?: string | null) {
@@ -777,6 +798,117 @@ function ProspectIntelligenceDetailDialog({
             </div>
           ) : null}
 
+          {(() => {
+            const websiteHref = resolveProspectDisplayWebsiteUrl({
+              websiteUrl: item.websiteUrl,
+              websiteUrlUsed: intel.websiteUrlUsed,
+            });
+            const websiteDomain = prospectWebsiteDomain(websiteHref);
+            const websiteState = resolveProspectWebsiteDetailState({
+              websiteUrl: item.websiteUrl,
+              websiteUrlUsed: intel.websiteUrlUsed,
+              enrichmentStatus: intel.enrichmentStatus,
+            });
+            const result = (intel.enrichmentResult || {}) as {
+              publicContacts?: {
+                emails?: string[];
+                phones?: string[];
+                whatsappNumbers?: string[];
+                socialProfiles?: string[];
+                bookingUrls?: string[];
+              };
+              websiteIntelligence?: {
+                businessSummary?: string;
+                recommendedOutreachAngle?: string;
+                aiFitInsights?: string;
+              };
+            };
+            const contacts = result.publicContacts;
+            return (
+              <div
+                className="rounded-lg border border-gray-200 bg-gray-50/60 p-3"
+                data-testid="pi-website-section"
+                data-website-state={websiteState}
+              >
+                <p className="font-medium text-gray-900">Website</p>
+                {websiteState === "no_website" ? (
+                  <p className="mt-1 text-gray-600" data-testid="pi-website-none">
+                    No website available for analysis
+                  </p>
+                ) : (
+                  <div className="mt-1 space-y-1.5">
+                    {websiteHref ? (
+                      <p>
+                        <a
+                          href={websiteHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-brand-green hover:underline"
+                          data-testid="pi-website-link"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {websiteDomain || websiteHref}
+                        </a>
+                      </p>
+                    ) : null}
+                    {websiteState === "not_analyzed" ? (
+                      <p className="text-xs text-gray-500" data-testid="pi-website-status">
+                        Status: Not analyzed yet
+                      </p>
+                    ) : null}
+                    {websiteState === "analyzing" ? (
+                      <p className="text-xs text-gray-500" data-testid="pi-website-status">
+                        Analyzing website…
+                      </p>
+                    ) : null}
+                    {websiteState === "analyzed" ? (
+                      <>
+                        <p className="text-xs text-gray-700" data-testid="pi-website-status">
+                          Website analyzed
+                        </p>
+                        {intel.websiteAnalyzedAt ? (
+                          <p className="text-xs text-gray-500" data-testid="pi-website-analyzed-at">
+                            Analysis date:{" "}
+                            {format(new Date(intel.websiteAnalyzedAt), "MMM d, yyyy h:mm a")}
+                          </p>
+                        ) : null}
+                      </>
+                    ) : null}
+                    {websiteState === "failed" ? (
+                      <p className="text-xs text-gray-600" data-testid="pi-website-status">
+                        Website analysis could not be completed
+                      </p>
+                    ) : null}
+                    {websiteState === "analyzed" && contacts ? (
+                      <div className="mt-2 space-y-0.5 text-xs text-gray-600" data-testid="pi-website-contacts">
+                        {contacts.emails?.length ? (
+                          <p>Email: {contacts.emails.slice(0, 3).join(", ")}</p>
+                        ) : null}
+                        {contacts.phones?.length ? (
+                          <p>Phone: {contacts.phones.slice(0, 3).join(", ")}</p>
+                        ) : null}
+                        {contacts.whatsappNumbers?.length ? (
+                          <p>WhatsApp: {contacts.whatsappNumbers.slice(0, 2).join(", ")}</p>
+                        ) : null}
+                        {contacts.socialProfiles?.length ? (
+                          <p>Social: {contacts.socialProfiles.slice(0, 3).join(", ")}</p>
+                        ) : null}
+                        {contacts.bookingUrls?.length ? (
+                          <p>Booking: {contacts.bookingUrls.slice(0, 2).join(", ")}</p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {websiteState === "analyzed" && result.websiteIntelligence?.businessSummary ? (
+                      <p className="mt-1 text-xs text-gray-600">
+                        {result.websiteIntelligence.businessSummary}
+                      </p>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           <div className="grid gap-3 sm:grid-cols-2">
             <ProspectContactFieldRow
               kind="email"
@@ -817,62 +949,6 @@ function ProspectIntelligenceDetailDialog({
                 ({prospectDisplayStatusLabel(displayStatus)})
               </span>
             </p>
-            {enrichmentBadge(intel)}
-            {String(intel.enrichmentStatus || "").toLowerCase() === "completed" ||
-            String(intel.enrichmentStatus || "").toLowerCase() === "failed" ||
-            String(intel.enrichmentStatus || "").toLowerCase() === "enriching" ||
-            String(intel.enrichmentStatus || "").toLowerCase() === "pending" ? (
-              <div
-                className="sm:col-span-2 rounded-lg border border-violet-100 bg-violet-50/50 p-3"
-                data-testid="pi-enrichment-panel"
-              >
-                <p className="font-medium text-violet-900">Website enrichment</p>
-                <div className="mt-2 flex flex-wrap gap-2 text-xs text-violet-900">
-                  {String(intel.enrichmentStatus || "").toLowerCase() === "completed" ? (
-                    <span>✓ Website analyzed</span>
-                  ) : String(intel.enrichmentStatus || "").toLowerCase() === "enriching" ||
-                    String(intel.enrichmentStatus || "").toLowerCase() === "pending" ? (
-                    <span>Enriching website…</span>
-                  ) : (
-                    <span>Analysis failed</span>
-                  )}
-                  <span>
-                    {intel.enrichmentEmailFound ? "✓ Email found" : "No public email"}
-                  </span>
-                  <span>{intel.enrichmentPhoneFound ? "✓ Phone found" : "No phone"}</span>
-                  {intel.websiteAnalyzedAt ? (
-                    <span>
-                      Analyzed{" "}
-                      {format(new Date(intel.websiteAnalyzedAt), "MMM d, yyyy h:mm a")}
-                    </span>
-                  ) : null}
-                </div>
-                {(() => {
-                  const result = (intel.enrichmentResult || {}) as {
-                    websiteIntelligence?: {
-                      businessSummary?: string;
-                      recommendedOutreachAngle?: string;
-                      aiFitInsights?: string;
-                    };
-                    publicContacts?: { emails?: string[]; phones?: string[] };
-                  };
-                  const wi = result.websiteIntelligence;
-                  if (!wi?.businessSummary && !wi?.aiFitInsights) return null;
-                  return (
-                    <div className="mt-2 space-y-1 text-xs text-violet-900/90">
-                      {wi.businessSummary ? <p>{wi.businessSummary}</p> : null}
-                      {wi.aiFitInsights ? <p>Fit: {wi.aiFitInsights}</p> : null}
-                      {wi.recommendedOutreachAngle ? (
-                        <p>Angle: {wi.recommendedOutreachAngle}</p>
-                      ) : null}
-                    </div>
-                  );
-                })()}
-                {intel.enrichmentErrorMessage ? (
-                  <p className="mt-2 text-xs text-red-700">{intel.enrichmentErrorMessage}</p>
-                ) : null}
-              </div>
-            ) : null}
             {intel.outreachSentAt ? (
               <p data-testid="pi-outreach-sent-at">
                 <span className="text-gray-500">Outreach sent:</span>{" "}
@@ -1021,7 +1097,7 @@ function ProspectIntelligenceDetailDialog({
               ) : (
                 <RefreshCw className="mr-2 h-4 w-4" />
               )}
-              Retry enrichment
+              Retry Website Intelligence
             </Button>
           ) : null}
           <Button
@@ -1938,15 +2014,31 @@ export function ProspectIntelligencePanel(props: {
                     </TableCell>
                     <TableCell className="min-w-0">
                       {analyzing ? (
-                        <span className="text-xs text-gray-400">AI is working…</span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs text-gray-400">AI is working…</span>
+                          <ProspectWebsiteGlobeIcon
+                            websiteUrl={row.websiteUrl}
+                            websiteUrlUsed={intel.websiteUrlUsed}
+                          />
+                        </div>
                       ) : waitingAnalyze ? (
-                        <span className="text-xs text-gray-400">Queued for AI…</span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs text-gray-400">Queued for AI…</span>
+                          <ProspectWebsiteGlobeIcon
+                            websiteUrl={row.websiteUrl}
+                            websiteUrlUsed={intel.websiteUrlUsed}
+                          />
+                        </div>
                       ) : rowSummary.showSummary ? (
                         <div className="space-y-1" data-testid={`pi-row-summary-${row.contactId}`}>
                           <div className="flex flex-wrap items-center gap-1.5 text-xs">
                             <MatchStars stars={rowSummary.matchStars} />
                             <span className="font-medium text-gray-900">{rowSummary.matchLabel}</span>
                             {priorityBadge(rowSummary.priority || undefined, intel.analysisStatus)}
+                            <ProspectWebsiteGlobeIcon
+                              websiteUrl={row.websiteUrl}
+                              websiteUrlUsed={intel.websiteUrlUsed}
+                            />
                           </div>
                           {rowSummary.businessType ? (
                             <p className="truncate text-xs text-gray-600">{rowSummary.businessType}</p>
@@ -1963,7 +2055,13 @@ export function ProspectIntelligencePanel(props: {
                           ) : null}
                         </div>
                       ) : (
-                        <span className="text-xs text-gray-400">—</span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs text-gray-400">—</span>
+                          <ProspectWebsiteGlobeIcon
+                            websiteUrl={row.websiteUrl}
+                            websiteUrlUsed={intel.websiteUrlUsed}
+                          />
+                        </div>
                       )}
                     </TableCell>
                     <TableCell className="min-w-0 align-top">
