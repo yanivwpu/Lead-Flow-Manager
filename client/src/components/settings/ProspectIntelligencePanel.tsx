@@ -583,53 +583,6 @@ function ProspectIntelligenceDetailDialog({
     analysisStatus: intel?.analysisStatus,
   });
 
-  // #region agent log
-  useEffect(() => {
-    if (!open || !item) return;
-    const ux = reviewUxInput(item);
-    const enrichExplain = explainCanEnrichProspect(ux);
-    const qualifiedExplain = explainQualifiedForCampaign(ux);
-    fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
-      body: JSON.stringify({
-        sessionId: "4bac18",
-        runId: "instrument-v2",
-        hypothesisId: "H1-QualifiedBlock",
-        location: "ProspectIntelligencePanel.tsx:detail-eligibility",
-        message: "Detail vs shared Enrich + exact Qualified block",
-        data: {
-          contactId: item.contactId.slice(0, 8),
-          showApproveButtonLegacy: approveUi.showApproveButton,
-          sharedCanEnrich: enrichExplain.ok,
-          enrichCode: enrichExplain.code,
-          enrichMessage: enrichExplain.message,
-          divergeEnrich: approveUi.showApproveButton !== enrichExplain.ok,
-          qualifiedOk: qualifiedExplain.ok,
-          qualifiedCode: qualifiedExplain.code,
-          qualifiedMessage: qualifiedExplain.message,
-          needsHumanReview: needsHumanReview(ux),
-          blockingReasons: listEmailCampaignBlockingReasons(ux).map((b) => b.code),
-          reviewStatus: intel?.reviewStatus,
-          needsReview: intel?.needsReview,
-          analysisStatus: intel?.analysisStatus,
-          enrichmentStatus: intel?.enrichmentStatus,
-          hasEmail: Boolean(item.email),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }, [
-    open,
-    item?.contactId,
-    item?.email,
-    approveUi.showApproveButton,
-    intel?.reviewStatus,
-    intel?.needsReview,
-    intel?.analysisStatus,
-    intel?.enrichmentStatus,
-  ]);
-  // #endregion
 
   const analysisStatus = String(intel?.analysisStatus || "pending").toLowerCase();
   const analysisIncomplete =
@@ -732,26 +685,6 @@ function ProspectIntelligenceDetailDialog({
         });
         setEditMessage(data.item.intelligence?.suggestedFirstMessage || editMessage);
       }
-      // #region agent log
-      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
-        body: JSON.stringify({
-          sessionId: "4bac18",
-          runId: "instrument-v2",
-          hypothesisId: "H2",
-          location: "ProspectIntelligencePanel.tsx:detail-enrich-success",
-          message: "Detail Enrich succeeded — clearing shared selection for contact",
-          data: {
-            contactId: item?.contactId?.slice(0, 8),
-            enrichmentStatus: data.item?.intelligence?.enrichmentStatus,
-            reviewStatus: data.item?.intelligence?.reviewStatus,
-            willClearSelection: Boolean(item?.contactId && onEnrichedContactId),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       if (item?.contactId) onEnrichedContactId?.(item.contactId);
       toast({ title: "1 enrichment job started." });
     },
@@ -835,26 +768,6 @@ function ProspectIntelligenceDetailDialog({
         composeMode: "new",
       }),
     );
-    // #region agent log
-    if (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)) {
-      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
-        body: JSON.stringify({
-          sessionId: "32aec0",
-          runId: "pi-outreach-handoff",
-          hypothesisId: "H-handoff",
-          location: "ProspectIntelligencePanel.tsx:openNativeEmailOutreach",
-          message: "payload_created",
-          data: {
-            contactIdPrefix: item.contactId.slice(0, 8),
-            ...prospectOutreachPayloadDiag(payload),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
     onOpenChange(false);
     setLocation(buildProspectOutreachInboxHref(item.contactId));
   };
@@ -1689,36 +1602,6 @@ export function ProspectIntelligencePanel(props: {
       firstQualified,
       missingEmailCount: missingEmail,
     });
-    // #region agent log
-    fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
-      body: JSON.stringify({
-        sessionId: "4bac18",
-        runId: "instrument-v2",
-        hypothesisId: "H2-H4-QualifiedBlock",
-        location: "ProspectIntelligencePanel.tsx:selectionEligibility",
-        message: "Toolbar selection + exact block reasons",
-        data: {
-          selectedCount: effectiveSelectedIds.size,
-          selectedIdsSize: selectedIds.size,
-          selectAllFiltered,
-          resolvedCount: resolvedFilteredIds?.length ?? null,
-          canEnrich,
-          qualified,
-          firstEnrichCode: firstEnrich?.code ?? null,
-          firstEnrichMessage: firstEnrich?.message ?? null,
-          firstQualifiedCode: firstQualified?.code ?? null,
-          firstQualifiedMessage: firstQualified?.message ?? null,
-          availabilityLine: availability.line,
-          availabilityReason: availability.reason,
-          sendEnabled: effectiveSelectedIds.size > 0 && qualified > 0,
-          enrichEnabled: effectiveSelectedIds.size > 0 && canEnrich > 0,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     return { canEnrich, qualified, missingEmail, firstEnrich, firstQualified, availability };
   }, [rawItems, effectiveSelectedIds, selectedIds.size, selectAllFiltered, resolvedFilteredIds]);
 
@@ -1732,29 +1615,6 @@ export function ProspectIntelligencePanel(props: {
       const had = next.has(contactId);
       if (had) next.delete(contactId);
       else next.add(contactId);
-      // #region agent log
-      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
-        body: JSON.stringify({
-          sessionId: "4bac18",
-          runId: "instrument-v2",
-          hypothesisId: "H3-H5",
-          location: "ProspectIntelligencePanel.tsx:toggleRow",
-          message: "Checkbox toggle selection mutation",
-          data: {
-            contactId: contactId.slice(0, 8),
-            wasSelected: had,
-            action: had ? "remove" : "add",
-            prevSize: base.size,
-            nextSize: next.size,
-            selectAllFilteredBefore: selectAllFiltered,
-            seededFromResolved: Boolean(selectAllFiltered && resolvedFilteredIds?.length),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       return next;
     });
     setSelectAllFiltered(false);
@@ -1933,31 +1793,6 @@ export function ProspectIntelligencePanel(props: {
         },
       ),
     onMutate: (contactIds) => {
-      // #region agent log
-      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
-        body: JSON.stringify({
-          sessionId: "4bac18",
-          hypothesisId: "H4",
-          location: "ProspectIntelligencePanel.tsx:previewQueue-onMutate",
-          message: "Send to Campaign preview payload",
-          data: {
-            explicitIds: contactIds?.length ?? null,
-            selectionBodyKeys: Object.keys(selectionBody),
-            bodyContactIds:
-              "contactIds" in selectionBody
-                ? (selectionBody as { contactIds: string[] }).contactIds.length
-                : null,
-            selectedIdsSize: selectedIds.size,
-            effectiveSize: effectiveSelectedIds.size,
-            selectAllFiltered,
-            qualified: selectionEligibility.qualified,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
     },
     onSuccess: (data) => {
       setQueuePreview(data.preview);
