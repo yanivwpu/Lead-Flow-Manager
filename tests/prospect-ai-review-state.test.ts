@@ -209,6 +209,24 @@ assert.equal(
   }),
   "18 selected · 12 enrichment jobs started · 4 skipped · 2 failed",
 );
+assert.equal(
+  formatProspectBulkActionResult("enrich", {
+    selected: 2,
+    succeeded: 2,
+    skipped: 0,
+    failed: 0,
+  }),
+  "2 enrichment jobs started.",
+);
+assert.equal(
+  formatProspectBulkActionResult("enrich", {
+    selected: 1,
+    succeeded: 1,
+    skipped: 0,
+    failed: 0,
+  }),
+  "1 enrichment job started.",
+);
 
 const pageSrc = readFileSync(join(root, "client/src/pages/ProspectAI.tsx"), "utf8");
 assert.ok(pageSrc.includes("PROSPECT_AI_PRIMARY_TABS"));

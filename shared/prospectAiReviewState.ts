@@ -327,6 +327,17 @@ export function formatProspectBulkActionResult(
   result: ProspectBulkActionResult,
 ): string {
   const verb = action === "enrich" ? "enrichment jobs started" : "sent to Campaigns";
+  // Clean enrich success — short, unambiguous (selection is already cleared).
+  if (
+    action === "enrich" &&
+    result.succeeded > 0 &&
+    result.skipped === 0 &&
+    result.failed === 0 &&
+    !result.detail
+  ) {
+    const n = result.succeeded;
+    return `${n} enrichment ${n === 1 ? "job" : "jobs"} started.`;
+  }
   const parts = [`${result.selected} selected`, `${result.succeeded} ${verb}`];
   if (result.skipped > 0) parts.push(`${result.skipped} skipped`);
   if (result.failed > 0) parts.push(`${result.failed} failed`);

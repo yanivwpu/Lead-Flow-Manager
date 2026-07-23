@@ -672,6 +672,7 @@ function ProspectIntelligenceDetailDialog({
         });
         setEditMessage(data.item.intelligence?.suggestedFirstMessage || editMessage);
       }
+      toast({ title: "1 enrichment job started." });
     },
     onError: (err: Error) => {
       toast({ title: "Enrich failed", description: err.message, variant: "destructive" });
@@ -1629,12 +1630,19 @@ export function ProspectIntelligencePanel(props: {
       }),
     onMutate: () => {
       const ids = Array.from(effectiveSelectedIds);
+      const selectedSnapshot = selectedCount;
+      // Eligible subset only — match what Enrich enables for.
+      const enrichableIds = ids.filter((id) => {
+        const row = rawItems.find((r) => r.contactId === id);
+        return row ? canEnrichProspect(reviewUxInput(row)) : false;
+      });
+
       setPinnedVisibleIds((prev) => {
         const next = new Set(prev);
-        ids.forEach((id) => next.add(id));
+        enrichableIds.forEach((id) => next.add(id));
         return next;
       });
-      patchListRows(ids, (row) => ({
+      patchListRows(enrichableIds, (row) => ({
         ...row,
         intelligence: {
           ...row.intelligence,
@@ -1646,25 +1654,35 @@ export function ProspectIntelligencePanel(props: {
               : "pending",
         },
       }));
-    },
-    onSuccess: (data) => {
-      const skippedCount = Array.isArray(data.skipped) ? data.skipped.length : 0;
-      const selectedForAction = selectedCount || data.approved + skippedCount;
+      // Clear selection immediately so Enrich is not left disabled on selected rows.
+      clearSelection();
+      setWorkFilter("enriching");
+      setAttentionSubFilter("all");
       setBulkResultBanner(
-        formatProspectBulkActionResult("enrich", {
-          selected: selectedForAction,
-          succeeded: data.approved ?? 0,
-          skipped: skippedCount,
-          failed: 0,
-        }),
+        enrichableIds.length > 0
+          ? `Starting ${enrichableIds.length} enrichment ${
+              enrichableIds.length === 1 ? "job" : "jobs"
+            }…`
+          : null,
       );
-      if (data.approvedContactIds?.length) {
+      return { enrichableIds, selectedSnapshot };
+    },
+    onSuccess: (data, _vars, ctx) => {
+      const skippedCount = Array.isArray(data.skipped) ? data.skipped.length : 0;
+      const succeeded = data.approved ?? 0;
+      const selectedForAction =
+        ctx?.selectedSnapshot || selectedCount || succeeded + skippedCount;
+      const startedIds = data.approvedContactIds?.length
+        ? data.approvedContactIds
+        : ctx?.enrichableIds || [];
+
+      if (startedIds.length) {
         setPinnedVisibleIds((prev) => {
           const next = new Set(prev);
-          data.approvedContactIds.forEach((id) => next.add(id));
+          startedIds.forEach((id) => next.add(id));
           return next;
         });
-        patchListRows(data.approvedContactIds, (row) => ({
+        patchListRows(startedIds, (row) => ({
           ...row,
           intelligence: {
             ...row.intelligence,
@@ -1676,21 +1694,27 @@ export function ProspectIntelligencePanel(props: {
                 : "pending",
           },
         }));
-        setSelectAllFiltered(false);
-        setResolvedFilteredIds(data.approvedContactIds);
-        setResolvedFilteredCount(data.approved);
-        setSelectedIds(new Set(data.approvedContactIds));
-      } else {
-        clearSelection();
       }
-    },
-    onError: (err: Error) => {
+
+      clearSelection();
+      setWorkFilter("enriching");
       setBulkResultBanner(
         formatProspectBulkActionResult("enrich", {
-          selected: selectedCount,
+          selected: selectedForAction,
+          succeeded,
+          skipped: skippedCount,
+          failed: 0,
+        }),
+      );
+    },
+    onError: (err: Error, _vars, ctx) => {
+      clearSelection();
+      setBulkResultBanner(
+        formatProspectBulkActionResult("enrich", {
+          selected: ctx?.selectedSnapshot || selectedCount || 1,
           succeeded: 0,
           skipped: 0,
-          failed: selectedCount || 1,
+          failed: ctx?.selectedSnapshot || selectedCount || 1,
           detail: err.message,
         }),
       );
@@ -2005,8 +2029,23 @@ export function ProspectIntelligencePanel(props: {
             }
             onClick={() => bulkApproveMutation.mutate()}
             data-testid="pi-enrich"
+            title={
+              bulkApproveMutation.isPending
+                ? "Enrichment jobs are starting…"
+                : selectedCount > 0 && selectionEligibility.canEnrich === 0
+                  ? "Selected prospects are not eligible to enrich"
+                  : undefined
+            }
           >
-            <Check className="mr-1 h-3.5 w-3.5" /> Enrich
+            {bulkApproveMutation.isPending ? (
+              <>
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> Enriching…
+              </>
+            ) : (
+              <>
+                <Check className="mr-1 h-3.5 w-3.5" /> Enrich
+              </>
+            )}
           </Button>
           <Button
             type="button"
