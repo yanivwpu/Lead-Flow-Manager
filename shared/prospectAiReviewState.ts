@@ -131,6 +131,7 @@ export type ProspectEligibilityExplanation = {
     | "enrichment_in_progress"
     | "enrichment_failed"
     | "enrichment_incomplete"
+    | "missing_website"
     | "missing_email"
     | "not_approved"
     | "review_not_pending";
@@ -139,8 +140,19 @@ export type ProspectEligibilityExplanation = {
 };
 
 /**
+ * Review statuses where Enrich is the human continue/approval action
+ * (including Needs Review — that is a state, not a separate decision step).
+ */
+function isEnrichDecisionReviewStatus(reviewStatus?: string | null): boolean {
+  const review = String(reviewStatus || "pending").toLowerCase();
+  return review === "pending" || review === "needs_review";
+}
+
+/**
  * Exact Enrich block reason — shared by toolbar + detail.
  * Do not invent a second eligibility path.
+ *
+ * Needs Review is advisory workload state: selecting + Enrich is the approval.
  */
 export function explainCanEnrichProspect(
   input: ProspectReviewStateInput,
@@ -168,7 +180,7 @@ export function explainCanEnrichProspect(
     return {
       ok: false,
       code: "qualification_failed",
-      message: "Qualification failed — retry qualification first.",
+      message: "Qualification failed — retry qualification.",
     };
   }
   if (!isProspectQualificationComplete(input.analysisStatus)) {
@@ -180,16 +192,16 @@ export function explainCanEnrichProspect(
   }
 
   const review = String(input.reviewStatus || "pending").toLowerCase();
-  if (input.needsReview === true || review === "needs_review") {
-    return {
-      ok: false,
-      code: "needs_review_decision",
-      message: "This prospect still needs a qualification decision.",
-    };
-  }
 
   if (review === "approved") {
     if (isProspectEnrichmentFailed(input.enrichmentStatus)) {
+      if (!doesEnrichmentApply(input)) {
+        return {
+          ok: false,
+          code: "missing_website",
+          message: "No website available to enrich.",
+        };
+      }
       return { ok: true, code: "ok", message: "" };
     }
     if (isProspectEnrichmentComplete(input.enrichmentStatus)) {
@@ -203,18 +215,19 @@ export function explainCanEnrichProspect(
       return {
         ok: false,
         code: "enrichment_in_progress",
-        message: "Enrichment is already running.",
+        message: "Already enriching.",
       };
     }
     // Approved but enrichment not failed — do not re-trigger via Enrich (matches prior gate).
     return {
       ok: false,
       code: "enrichment_in_progress",
-      message: "Enrichment was already requested.",
+      message: "Already enriching.",
     };
   }
 
-  if (review === "pending") {
+  // pending + needs_review: Enrich = human continue → existing approve/enrich pipeline
+  if (isEnrichDecisionReviewStatus(review) || input.needsReview === true) {
     if (isProspectEnrichmentComplete(input.enrichmentStatus)) {
       return {
         ok: false,
@@ -226,7 +239,16 @@ export function explainCanEnrichProspect(
       return {
         ok: false,
         code: "enrichment_in_progress",
-        message: "Enrichment is already running.",
+        message: "Already enriching.",
+      };
+    }
+    // Website required only when enrichment is the intended next step.
+    // No-website + email can still Enrich (approve) to unlock Campaigns.
+    if (!doesEnrichmentApply(input) && !prospectHasCampaignContact(input)) {
+      return {
+        ok: false,
+        code: "missing_website",
+        message: "No website available to enrich.",
       };
     }
     return { ok: true, code: "ok", message: "" };
@@ -403,33 +425,28 @@ export function summarizeSelectionActionAvailability(input: {
   }
 
   if (!enrichOk && !sendOk) {
+    // Prefer the Enrich blocker when Send says "enrich first" but Enrich itself is impossible.
+    const sendSaysEnrichFirst =
+      input.firstQualified?.code === "enrichment_incomplete" ||
+      /enrich this prospect/i.test(input.firstQualified?.message || "");
     const reason =
-      input.firstQualified?.message ||
+      (sendSaysEnrichFirst && input.firstEnrich && !input.firstEnrich.ok
+        ? input.firstEnrich.message
+        : null) ||
       input.firstEnrich?.message ||
+      input.firstQualified?.message ||
       "Selected prospects are not ready for Enrich or Send.";
     if (n === 1) {
-      if (input.firstQualified && !input.firstQualified.ok) {
-        if (input.firstQualified.code === "missing_email") {
-          return {
-            line: `1 selected · Send unavailable`,
-            reason: `Reason: ${input.firstQualified.message}`,
-          };
-        }
-        return {
-          line: `1 selected · Send unavailable`,
-          reason: `Reason: ${input.firstQualified.message}`,
-        };
-      }
       if (input.firstEnrich && !input.firstEnrich.ok) {
-        if (input.firstEnrich.code === "already_enriched") {
-          return {
-            line: `1 selected · Enrich unavailable`,
-            reason: `Reason: ${input.firstEnrich.message}`,
-          };
-        }
         return {
           line: `1 selected · Enrich unavailable`,
           reason: `Reason: ${input.firstEnrich.message}`,
+        };
+      }
+      if (input.firstQualified && !input.firstQualified.ok) {
+        return {
+          line: `1 selected · Send unavailable`,
+          reason: `Reason: ${input.firstQualified.message}`,
         };
       }
       return {
@@ -454,9 +471,25 @@ export function summarizeSelectionActionAvailability(input: {
             : `${missing} missing a valid email.`,
       };
     }
+    // "Enrich this prospect…" is only honest when Enrich is actually available.
+    const q = input.firstQualified;
+    const sendSaysEnrichFirst =
+      q?.code === "enrichment_incomplete" || /enrich this prospect/i.test(q?.message || "");
+    if (sendSaysEnrichFirst && enrichOk) {
+      return {
+        line: `${n} selected · Send unavailable`,
+        reason: `Reason: Enrich this prospect before sending to Campaigns.`,
+      };
+    }
+    if (sendSaysEnrichFirst && !enrichOk && input.firstEnrich && !input.firstEnrich.ok) {
+      return {
+        line: `${n} selected · Send unavailable`,
+        reason: `Reason: ${input.firstEnrich.message}`,
+      };
+    }
     return {
       line: `${n} selected · Send unavailable`,
-      reason: `Reason: ${input.firstQualified?.message || "Not qualified for Campaigns yet."}`,
+      reason: `Reason: ${q?.message || "Not qualified for Campaigns yet."}`,
     };
   }
 

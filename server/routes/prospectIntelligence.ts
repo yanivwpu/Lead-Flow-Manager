@@ -206,17 +206,20 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
     async (req, res) => {
       try {
         const workspaceUserId = await resolveProspectWorkspaceUserId((req.user as { id: string }).id);
-        const { suggestedFirstMessage, suggestedOutreachAngle, reasoningSummary } = req.body as {
-          suggestedFirstMessage?: string;
-          suggestedOutreachAngle?: string;
-          reasoningSummary?: string;
-        };
+        const { suggestedFirstMessage, suggestedOutreachAngle, reasoningSummary, recommendedOffer } =
+          req.body as {
+            suggestedFirstMessage?: string;
+            suggestedOutreachAngle?: string;
+            reasoningSummary?: string;
+            recommendedOffer?: string;
+          };
         const item = await prospectIntelligenceService.patchProspectIntelligence(
           req.params.contactId,
           {
             suggestedFirstMessage,
             suggestedOutreachAngle,
             reasoningSummary,
+            recommendedOffer,
           },
           workspaceUserId,
         );

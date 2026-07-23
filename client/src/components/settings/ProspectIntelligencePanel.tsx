@@ -134,6 +134,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 function reviewUxInput(row: ProspectIntelligenceListItem) {
+  const offer = String(row.intelligence.recommendedOffer || "").toLowerCase();
   return {
     analysisStatus: row.intelligence.analysisStatus,
     reviewStatus: row.intelligence.reviewStatus,
@@ -147,6 +148,8 @@ function reviewUxInput(row: ProspectIntelligenceListItem) {
     email: row.email,
     websiteUrl: row.websiteUrl,
     websiteUrlUsed: row.intelligence.websiteUrlUsed,
+    /** Existing supported state — no schema change. */
+    notQualified: offer === "not_a_fit",
   };
 }
 
@@ -630,7 +633,7 @@ function ProspectIntelligenceDetailDialog({
   };
 
   const patchMutation = useMutation({
-    mutationFn: (body: { suggestedFirstMessage: string }) =>
+    mutationFn: (body: { suggestedFirstMessage?: string; recommendedOffer?: string }) =>
       fetchJson<ProspectIntelligenceListItem>(
         `/api/growth-tools/prospect-intelligence/${item!.contactId}`,
         {
@@ -639,9 +642,14 @@ function ProspectIntelligenceDetailDialog({
           body: JSON.stringify(body),
         },
       ),
-    onSuccess: (data) => {
+    onSuccess: (data, vars) => {
       applyItemUpdate(data);
-      toast({ title: "Draft message saved" });
+      toast({
+        title:
+          vars.recommendedOffer === "not_a_fit"
+            ? "Marked not qualified"
+            : "Draft message saved",
+      });
     },
   });
 
@@ -707,6 +715,9 @@ function ProspectIntelligenceDetailDialog({
     },
   });
 
+  const detailAlreadyNeedsReview =
+    detailNeedsHumanReview || workState === "needs_review";
+  const detailIsNotQualified = workState === "not_qualified";
   const reanalyzeMutation = useMutation({
     mutationFn: () =>
       fetchJson(`/api/growth-tools/prospect-intelligence/${item!.contactId}/reanalyze`, {
@@ -784,15 +795,18 @@ function ProspectIntelligenceDetailDialog({
               <Badge className="bg-emerald-600" data-testid="pi-approved-badge">
                 {workStateLabel}
               </Badge>
-            ) : null}
-            {detailNeedsHumanReview ? (
+            ) : workState === "needs_review" || detailNeedsHumanReview ? (
               <Badge
                 variant="outline"
                 className="border-amber-300 text-amber-800"
                 data-testid="pi-needs-human-review-badge"
-                title="Advisory — does not block Email campaigns when hard gates pass"
+                title="Needs Review is a state — Enrich continues this prospect"
               >
-                Needs review
+                Needs Review
+              </Badge>
+            ) : workState === "not_qualified" ? (
+              <Badge variant="outline" data-testid="pi-not-qualified-badge">
+                Not Qualified
               </Badge>
             ) : null}
             {detailQualifiedExplain?.ok ? (
@@ -1106,10 +1120,29 @@ function ProspectIntelligenceDetailDialog({
           ) : null}
         </div>
 
-        <DialogFooter className="flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={() => needsReviewMutation.mutate()}>
-            Needs review
-          </Button>
+        <DialogFooter className="flex-wrap gap-2" data-testid="pi-detail-footer">
+          {!detailIsNotQualified ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={patchMutation.isPending}
+              onClick={() => patchMutation.mutate({ recommendedOffer: "not_a_fit" })}
+              data-testid="pi-not-qualified-button"
+            >
+              Not Qualified
+            </Button>
+          ) : null}
+          {/* Needs Review is a badge/state — never an action when already in that state. */}
+          {!detailAlreadyNeedsReview ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => needsReviewMutation.mutate()}
+              data-testid="pi-needs-review-action"
+            >
+              Needs review
+            </Button>
+          ) : null}
           {String(intel?.analysisStatus || "").toLowerCase() === "failed" ? (
           <Button
             type="button"
@@ -1141,6 +1174,7 @@ function ProspectIntelligenceDetailDialog({
             type="button"
             variant="outline"
             onClick={() => patchMutation.mutate({ suggestedFirstMessage: editMessage })}
+            data-testid="pi-save-message"
           >
             Save message
           </Button>

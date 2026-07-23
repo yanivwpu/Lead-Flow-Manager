@@ -19,6 +19,7 @@ import {
   PROSPECT_REVIEW_WORK_FILTER_CHIPS,
   resolveProspectNeedsAttentionReason,
   resolveProspectReviewWorkState,
+  summarizeSelectionActionAvailability,
 } from "../shared/prospectAiReviewState";
 import { resolveProspectTimelineStates } from "../shared/prospectReviewUx";
 import { PROSPECT_AI_PRIMARY_TABS, PROSPECT_AI_TAB_LABELS } from "../shared/prospectAiDisplay";
@@ -343,6 +344,27 @@ assert.equal(
 }
 
 {
+  // Needs Review + website → Enrich enabled (Enrich IS the approval decision)
+  const needsReviewEnrichable = {
+    analysisStatus: "completed",
+    reviewStatus: "needs_review",
+    needsReview: true,
+    enrichmentStatus: "none",
+    email: "a@b.com",
+    websiteUrl: "https://x.com",
+  } as const;
+  assert.equal(canEnrichProspect(needsReviewEnrichable), true);
+  assert.equal(explainCanEnrichProspect(needsReviewEnrichable).ok, true);
+  assert.equal(explainCanEnrichProspect(needsReviewEnrichable).code, "ok");
+  // Same shared resolver for toolbar + detail — identical eligibility
+  assert.deepEqual(
+    explainCanEnrichProspect(needsReviewEnrichable),
+    explainCanEnrichProspect({ ...needsReviewEnrichable }),
+  );
+}
+
+{
+  // Already enriched under Needs Review → Enrich blocked with real reason (not "needs decision")
   const enrichBlocked = explainCanEnrichProspect({
     analysisStatus: "completed",
     reviewStatus: "needs_review",
@@ -352,7 +374,102 @@ assert.equal(
     websiteUrl: "https://x.com",
   });
   assert.equal(enrichBlocked.ok, false);
-  assert.equal(enrichBlocked.code, "needs_review_decision");
+  assert.equal(enrichBlocked.code, "already_enriched");
+}
+
+{
+  // Missing enrichment prerequisite → real blocker, not contradictory "enrich first"
+  const noWebsite = explainCanEnrichProspect({
+    analysisStatus: "completed",
+    reviewStatus: "needs_review",
+    needsReview: true,
+    enrichmentStatus: "none",
+  });
+  assert.equal(noWebsite.ok, false);
+  assert.equal(noWebsite.code, "missing_website");
+  assert.match(noWebsite.message, /No website available to enrich/i);
+
+  const qualFailed = explainCanEnrichProspect({
+    analysisStatus: "failed",
+    reviewStatus: "needs_review",
+    needsReview: true,
+    enrichmentStatus: "none",
+    websiteUrl: "https://x.com",
+  });
+  assert.equal(qualFailed.ok, false);
+  assert.equal(qualFailed.code, "qualification_failed");
+  assert.match(qualFailed.message, /Qualification failed/i);
+
+  const alreadyEnriching = explainCanEnrichProspect({
+    analysisStatus: "completed",
+    reviewStatus: "needs_review",
+    needsReview: true,
+    enrichmentStatus: "pending",
+    websiteUrl: "https://x.com",
+  });
+  assert.equal(alreadyEnriching.ok, false);
+  assert.equal(alreadyEnriching.code, "enrichment_in_progress");
+  assert.match(alreadyEnriching.message, /Already enriching/i);
+}
+
+{
+  // After Enrich (approve) → Enriching work state
+  assert.equal(
+    resolveProspectReviewWorkState({
+      analysisStatus: "completed",
+      reviewStatus: "approved",
+      needsReview: false,
+      enrichmentStatus: "pending",
+      websiteUrl: "https://x.com",
+      email: "a@b.com",
+    }),
+    "enriching",
+  );
+}
+
+{
+  // Send copy: "Enrich this prospect…" only when Enrich is actually available
+  const ux = {
+    analysisStatus: "completed" as const,
+    reviewStatus: "needs_review" as const,
+    needsReview: true,
+    enrichmentStatus: "none" as const,
+    email: "a@b.com",
+    websiteUrl: "https://x.com",
+  };
+  const enrich = explainCanEnrichProspect(ux);
+  const qualified = explainQualifiedForCampaign(ux);
+  assert.equal(enrich.ok, true);
+  assert.equal(qualified.ok, false);
+  assert.equal(qualified.code, "enrichment_incomplete");
+  const avail = summarizeSelectionActionAvailability({
+    selectedCount: 1,
+    enrichableCount: 1,
+    qualifiedCount: 0,
+    firstEnrich: enrich,
+    firstQualified: qualified,
+  });
+  assert.match(avail.reason || "", /Enrich this prospect before sending to Campaigns/i);
+
+  const blockedUx = {
+    analysisStatus: "failed" as const,
+    reviewStatus: "needs_review" as const,
+    needsReview: true,
+    enrichmentStatus: "none" as const,
+    websiteUrl: "https://x.com",
+  };
+  const blockedEnrich = explainCanEnrichProspect(blockedUx);
+  const blockedQualified = explainQualifiedForCampaign(blockedUx);
+  const blockedAvail = summarizeSelectionActionAvailability({
+    selectedCount: 1,
+    enrichableCount: 0,
+    qualifiedCount: 0,
+    firstEnrich: blockedEnrich,
+    firstQualified: blockedQualified,
+  });
+  assert.equal(blockedEnrich.ok, false);
+  assert.match(blockedAvail.reason || "", /Qualification failed/i);
+  assert.ok(!/Enrich this prospect/i.test(blockedAvail.reason || ""));
 }
 
 {
@@ -386,6 +503,14 @@ assert.ok(panelSrc.includes("Enrich") || panelSrc.includes("pi-enrich"));
 assert.ok(panelSrc.includes("pi-selection-reason") || panelSrc.includes("availability.reason"));
 assert.ok(panelSrc.includes("onEnrichedContactId"));
 assert.ok(!panelSrc.includes("pi-campaigns-subfilters"));
+// Needs Review is a badge/state; detail Enrich uses shared canEnrichProspect
+assert.ok(panelSrc.includes("pi-needs-human-review-badge"));
+assert.ok(panelSrc.includes("detailAlreadyNeedsReview"));
+assert.ok(panelSrc.includes("pi-not-qualified-button"));
+assert.ok(panelSrc.includes("canEnrichProspect(reviewUxInput"));
+assert.ok(panelSrc.includes("explainCanEnrichProspect(reviewUxInput"));
+assert.match(panelSrc, /detailCanEnrich[\s\S]*canEnrichProspect/);
+assert.match(panelSrc, /selectionEligibility[\s\S]*explainCanEnrichProspect|explainCanEnrichProspect\(ux\)/);
 
 const campaignsSrc = readFileSync(
   join(root, "client/src/components/settings/ProspectOutreachQueuePanel.tsx"),

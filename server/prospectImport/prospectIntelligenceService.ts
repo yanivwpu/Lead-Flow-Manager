@@ -1499,7 +1499,12 @@ export async function markProspectNeedsReview(
 
 export async function patchProspectIntelligence(
   contactId: string,
-  patch: Partial<Pick<ProspectIntelligence, "suggestedFirstMessage" | "suggestedOutreachAngle" | "reasoningSummary">>,
+  patch: Partial<
+    Pick<
+      ProspectIntelligence,
+      "suggestedFirstMessage" | "suggestedOutreachAngle" | "reasoningSummary" | "recommendedOffer"
+    >
+  >,
   workspaceUserId?: string,
 ): Promise<ProspectIntelligenceListItem | null> {
   const contact = await storage.getContact(contactId);
@@ -1523,6 +1528,10 @@ export async function patchProspectIntelligence(
   }
   if (patch.reasoningSummary !== undefined) {
     dbPatch.reasoningSummary = patch.reasoningSummary;
+  }
+  if (patch.recommendedOffer !== undefined) {
+    const offer = String(patch.recommendedOffer || "").trim();
+    dbPatch.recommendedOffer = offer || null;
   }
 
   await db.update(prospectIntelligence).set(dbPatch).where(eq(prospectIntelligence.contactId, contactId));
