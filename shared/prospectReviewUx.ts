@@ -272,12 +272,18 @@ export function resolveProspectTimelineStates(
   }
 
   let campaign: ProspectTimelineStageState;
-  if (life === "inbox" || life === "won" || life === "campaign") {
+  const queue = String(input.queueStatus || "").toLowerCase();
+  // Campaign active only after successful Send to Campaign transfer
+  if (
+    queue === "sent" ||
+    life === "inbox" ||
+    life === "won" ||
+    life === "campaign"
+  ) {
     campaign = "done";
-  } else if (life === "queued") {
+  } else if (queue === "queued" || queue === "paused" || queue === "sending") {
     campaign = "current";
   } else {
-    // campaign_ready and earlier — Campaign stays empty
     campaign = "todo";
   }
 
@@ -364,6 +370,31 @@ export function prospectReviewEmptyMessage(
       return "No conversations yet.";
     case "won":
       return "No customers won yet.";
+    case "all":
+    default:
+      return "Nothing to show for this filter.";
+  }
+}
+
+/** Empty copy for Review work-state filters. */
+export function prospectReviewWorkEmptyMessage(
+  filter: string,
+  hasAnyProspects: boolean,
+): string {
+  if (!hasAnyProspects) {
+    return "No businesses yet. Discover prospects — AI qualifies them automatically.";
+  }
+  switch (filter) {
+    case "needs_review":
+      return "No prospects need review.";
+    case "enriching":
+      return "No prospects are being enriched.";
+    case "qualified":
+      return "No qualified prospects ready for Campaigns.";
+    case "needs_attention":
+      return "Nothing needs attention.";
+    case "not_qualified":
+      return "No not-qualified prospects.";
     case "all":
     default:
       return "Nothing to show for this filter.";

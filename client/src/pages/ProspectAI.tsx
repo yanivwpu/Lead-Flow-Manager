@@ -6,7 +6,6 @@ import {
   Brain,
   Check,
   ChevronDown,
-  Inbox,
   Loader2,
   MapPin,
   Radar,
@@ -63,6 +62,7 @@ import { formatProspectAiRate } from "@shared/prospectAI";
 import {
   PROSPECT_ACTIVITY_EVENT_LABELS,
   PROSPECT_AI_PAGE_SUBTITLES,
+  PROSPECT_AI_PRIMARY_TABS,
   PROSPECT_AI_TAB_LABELS,
   buildActivityAiAssistantModel,
   buildProspectActivityTimeline,
@@ -70,6 +70,7 @@ import {
   mapProspectActivityApiToFeedItems,
   type ProspectActivityFeedKind,
 } from "@shared/prospectAiDisplay";
+import { isProspectInInboxJourney } from "@shared/prospectAiReviewState";
 import { AiGrowthAssistantCard } from "@/components/prospectAi/AiGrowthAssistantCard";
 import {
   ProspectAiEmptyState,
@@ -80,15 +81,27 @@ import { ProspectAiCardArt } from "@/components/growthEngines/ProspectAiCardArt"
 import { GhlProspectImport, ProspectImportHistoryPanel } from "@/components/settings/GhlProspectImport";
 import { ProspectIntelligencePanel } from "@/components/settings/ProspectIntelligencePanel";
 import { ProspectOutreachQueuePanel } from "@/components/settings/ProspectOutreachQueuePanel";
-import type { ProspectIntelligenceJobSummary, ProspectImportHistoryItem } from "@shared/prospectImport";
+import type {
+  ProspectIntelligenceJobSummary,
+  ProspectImportHistoryItem,
+  ProspectIntelligenceListItem,
+} from "@shared/prospectImport";
 import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
 import { cn } from "@/lib/utils";
 import { PROSPECT_AI_TAB_PANEL_CLASS } from "@shared/prospectAiLayout";
 
-type WorkspaceTab = "discover" | "review" | "campaign" | "activity" | "won";
+type WorkspaceTab = "discover" | "review" | "campaign" | "inbox" | "activity" | "won";
 
 function parseTab(raw: string | null): WorkspaceTab {
-  if (raw === "review" || raw === "campaign" || raw === "activity" || raw === "won") return raw;
+  if (
+    raw === "review" ||
+    raw === "campaign" ||
+    raw === "inbox" ||
+    raw === "activity" ||
+    raw === "won"
+  ) {
+    return raw;
+  }
   return "discover";
 }
 
@@ -409,10 +422,10 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
         setConfirmSendOpen(false);
         const sent = data.sent ?? count;
         toast({
-          title: "Sent to AI Review",
+          title: "Sent to Review",
           description: data.analysisStarted
             ? `${sent} prospects added. AI qualification has started automatically.`
-            : `${sent} prospects added to AI Review. Qualification will begin shortly.`,
+            : `${sent} prospects added to Review. Qualification will begin shortly.`,
         });
         setSelectedIds(new Set());
       },
@@ -552,13 +565,13 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
               {sendToReview.isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Send to AI Review
+              Send to Review
             </Button>
           </div>
           <AlertDialog open={confirmSendOpen} onOpenChange={setConfirmSendOpen}>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Send to AI Review?</AlertDialogTitle>
+                <AlertDialogTitle>Send to Review?</AlertDialogTitle>
                 <AlertDialogDescription>
                   Send {selectedIds.size} prospect{selectedIds.size === 1 ? "" : "s"} to Review.
                   AI will qualify them automatically — no need to start analysis yourself.
@@ -826,6 +839,89 @@ function ActivityTab() {
   );
 }
 
+function InboxTab() {
+  const listQuery = useQuery({
+    queryKey: ["/api/growth-tools/prospect-intelligence", "inbox-tab"],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: "100", sortBy: "createdAt", sortDir: "desc" });
+      const res = await fetch(`/api/growth-tools/prospect-intelligence?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error || "Failed to load inbox conversations");
+      }
+      return res.json() as Promise<{ items: ProspectIntelligenceListItem[] }>;
+    },
+    staleTime: 30_000,
+  });
+
+  const conversations = useMemo(() => {
+    const items = listQuery.data?.items ?? [];
+    return items.filter((row) =>
+      isProspectInInboxJourney({
+        analysisStatus: row.intelligence.analysisStatus,
+        reviewStatus: row.intelligence.reviewStatus,
+        needsReview: row.intelligence.needsReview,
+        enrichmentStatus: row.intelligence.enrichmentStatus,
+        outreachStatus: row.intelligence.outreachStatus,
+        outreachSentAt: row.intelligence.outreachSentAt,
+        repliedAt: row.intelligence.repliedAt,
+        queueStatus: row.queueStatus,
+        outcome: row.prospectOutcome,
+      }),
+    );
+  }, [listQuery.data?.items]);
+
+  return (
+    <ProspectAiTabBody className="space-y-6" data-testid="prospect-inbox-tab">
+      <div className="space-y-0">
+        <h2 className="text-base font-semibold tracking-tight text-gray-900">Inbox</h2>
+        <p className="text-xs text-gray-600">{PROSPECT_AI_PAGE_SUBTITLES.inbox}</p>
+      </div>
+
+      {listQuery.isLoading ? (
+        <div className="flex w-full justify-center py-10">
+          <Loader2 className="h-6 w-6 animate-spin text-brand-green" />
+        </div>
+      ) : conversations.length === 0 ? (
+        <ProspectAiEmptyState data-testid="prospect-inbox-empty">
+          <p className="text-sm text-gray-600">No conversations yet.</p>
+        </ProspectAiEmptyState>
+      ) : (
+        <ul className="w-full divide-y divide-gray-100 rounded-xl border border-gray-200/90 bg-white">
+          {conversations.map((row) => {
+            const conversationId = row.intelligence.outreachConversationId;
+            const href = conversationId
+              ? `/app/inbox/${encodeURIComponent(row.contactId)}?conversation=${encodeURIComponent(conversationId)}`
+              : `/app/inbox/${encodeURIComponent(row.contactId)}`;
+            return (
+              <li
+                key={row.contactId}
+                className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-gray-900">{row.name || "Untitled"}</p>
+                  <p className="truncate text-xs text-gray-500">
+                    {row.company || row.intelligence.companyName || "—"}
+                  </p>
+                </div>
+                <Link
+                  href={href}
+                  className="shrink-0 text-sm font-medium text-brand-green hover:underline"
+                  data-testid={`prospect-inbox-open-${row.contactId}`}
+                >
+                  Open conversation
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </ProspectAiTabBody>
+  );
+}
+
 function formatWonDate(iso?: string | null): string {
   if (!iso) return "—";
   try {
@@ -913,12 +1009,6 @@ function WonTab() {
       ) : customers.length === 0 ? (
         <ProspectAiEmptyState data-testid="prospect-won-empty">
           <p className="text-sm text-gray-600">No customers won yet.</p>
-          <Link href="/app/inbox">
-            <Button className="mt-4 bg-brand-green hover:bg-brand-green/90" size="sm">
-              <Inbox className="mr-2 h-4 w-4" />
-              Open Inbox
-            </Button>
-          </Link>
         </ProspectAiEmptyState>
       ) : (
         <div className="w-full min-w-0 overflow-x-auto rounded-xl border">
@@ -982,31 +1072,38 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
           <Star className="h-3 w-3 fill-current" aria-hidden />
           <span className="text-[10px] font-semibold uppercase tracking-wide">Growth Engine</span>
         </div>
-        <h1 className="font-display text-xl font-semibold tracking-tight text-gray-900 text-pretty sm:text-[1.35rem]">
-          Prospect AI
-        </h1>
-        <p className="max-w-xl text-xs text-gray-600 text-pretty">
-          Your AI employee for customer acquisition.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+          <div className="min-w-0">
+            <h1 className="font-display text-xl font-semibold tracking-tight text-gray-900 text-pretty sm:text-[1.35rem]">
+              Prospect AI
+            </h1>
+            <p className="max-w-xl text-xs text-gray-600 text-pretty">
+              Your AI employee for customer acquisition.
+            </p>
+          </div>
+          <button
+            type="button"
+            className={cn(
+              "shrink-0 pt-1 text-sm text-gray-600 hover:text-gray-900",
+              activeTab === "activity" && "font-medium text-brand-green hover:text-brand-green",
+            )}
+            onClick={() => handleTabChange("activity")}
+            data-testid="prospect-ai-activity-link"
+          >
+            {PROSPECT_AI_TAB_LABELS.activity}
+          </button>
+        </div>
       </header>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full min-w-0 space-y-2">
         <TabsList className="h-auto w-full flex-nowrap justify-start gap-x-4 overflow-x-auto border-b border-gray-200 bg-transparent p-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {(
-            [
-              ["discover", PROSPECT_AI_TAB_LABELS.discover],
-              ["review", PROSPECT_AI_TAB_LABELS.review],
-              ["campaign", PROSPECT_AI_TAB_LABELS.campaign],
-              ["activity", PROSPECT_AI_TAB_LABELS.activity],
-              ["won", PROSPECT_AI_TAB_LABELS.won],
-            ] as const
-          ).map(([value, label]) => (
+          {PROSPECT_AI_PRIMARY_TABS.map((value) => (
             <TabsTrigger
               key={value}
               value={value}
               className="h-8 shrink-0 rounded-none border-b-2 border-transparent px-0 pb-1.5 text-sm whitespace-nowrap data-[state=active]:border-brand-green data-[state=active]:bg-transparent data-[state=active]:shadow-none"
             >
-              {label}
+              {PROSPECT_AI_TAB_LABELS[value]}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -1023,6 +1120,9 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
         </TabsContent>
         <TabsContent value="campaign" className={PROSPECT_AI_TAB_PANEL_CLASS}>
           <ProspectOutreachQueuePanel embedded />
+        </TabsContent>
+        <TabsContent value="inbox" className={PROSPECT_AI_TAB_PANEL_CLASS}>
+          <InboxTab />
         </TabsContent>
         <TabsContent value="activity" className={PROSPECT_AI_TAB_PANEL_CLASS}>
           <ActivityTab />

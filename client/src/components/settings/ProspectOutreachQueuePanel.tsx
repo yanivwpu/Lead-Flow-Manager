@@ -26,8 +26,10 @@ import type {
 } from "@shared/prospectBulkOutreach";
 import {
   PROSPECT_AI_PAGE_SUBTITLES,
+  PROSPECT_CAMPAIGN_CONTROL_LABELS,
   PROSPECT_CAMPAIGN_METRIC_LABELS,
-  PROSPECT_SENDING_QUEUE_LABEL,
+  PROSPECT_CAMPAIGN_STATUS_FILTERS,
+  PROSPECT_READY_TO_SEND_LABEL,
   buildCampaignsAiAssistantModel,
   prospectCampaignQueueStatusLabel,
 } from "@shared/prospectAiDisplay";
@@ -270,7 +272,7 @@ export function ProspectOutreachQueuePanel({
             data-testid="po-queue-start"
           >
             {startMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-            Start queue
+            {PROSPECT_CAMPAIGN_CONTROL_LABELS.startSending}
           </Button>
           <Button
             type="button"
@@ -279,7 +281,7 @@ export function ProspectOutreachQueuePanel({
             onClick={() => pauseMutation.mutate()}
             data-testid="po-queue-pause"
           >
-            <Pause className="mr-2 h-4 w-4" /> Pause
+            <Pause className="mr-2 h-4 w-4" /> {PROSPECT_CAMPAIGN_CONTROL_LABELS.pauseSending}
           </Button>
           <Button
             type="button"
@@ -288,40 +290,32 @@ export function ProspectOutreachQueuePanel({
             onClick={() => resumeMutation.mutate()}
             data-testid="po-queue-resume"
           >
-            <RefreshCw className="mr-2 h-4 w-4" /> Resume
+            <RefreshCw className="mr-2 h-4 w-4" /> {PROSPECT_CAMPAIGN_CONTROL_LABELS.resumeSending}
           </Button>
         </div>
       </div>
 
       {dash?.queuePaused ? (
         <p className="text-sm text-amber-700">
-          {PROSPECT_SENDING_QUEUE_LABEL} is paused — no new sends until Resume / Start.
+          {PROSPECT_READY_TO_SEND_LABEL} is paused — no new sends until{" "}
+          {PROSPECT_CAMPAIGN_CONTROL_LABELS.resumeSending} / {PROSPECT_CAMPAIGN_CONTROL_LABELS.startSending}.
         </p>
       ) : null}
       {!dash?.queueRunning && !dash?.queuePaused ? (
         <p className="text-sm text-amber-800" data-testid="po-queue-waiting-start">
-          Sending is armed off — messages can wait in the {PROSPECT_SENDING_QUEUE_LABEL}, but nothing
-          sends until you press Start queue.
+          Sending is armed off — messages can wait in {PROSPECT_READY_TO_SEND_LABEL}, but nothing
+          sends until you press {PROSPECT_CAMPAIGN_CONTROL_LABELS.startSending}.
         </p>
       ) : null}
 
       <div className="flex flex-wrap gap-2">
-        {(
-          [
-            ["all", "All"],
-            ["queued", "Queued"],
-            ["sending", "Sending"],
-            ["sent", "Sent"],
-            ["failed", "Failed"],
-            ["paused", "Paused"],
-          ] as const
-        ).map(([value, label]) => (
+        {PROSPECT_CAMPAIGN_STATUS_FILTERS.map(({ id, label }) => (
           <Button
-            key={value}
+            key={id}
             type="button"
             size="sm"
-            variant={statusFilter === value ? "default" : "outline"}
-            onClick={() => setStatusFilter(value)}
+            variant={statusFilter === id ? "default" : "outline"}
+            onClick={() => setStatusFilter(id)}
           >
             {label}
           </Button>
@@ -339,7 +333,7 @@ export function ProspectOutreachQueuePanel({
               <TableRow>
                 <TableHead>Prospect</TableHead>
                 <TableHead>Channel</TableHead>
-                <TableHead>Offer / angle</TableHead>
+                <TableHead>Outreach</TableHead>
                 <TableHead>Subject</TableHead>
                 <TableHead>Scheduled</TableHead>
                 <TableHead>Status</TableHead>

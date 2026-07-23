@@ -8,39 +8,52 @@ import type { AiGrowthAssistantModel } from "./prospectAiPersonality";
 /** Top-level Prospect AI workspace tabs (query `?tab=` values). */
 export const PROSPECT_AI_TAB_LABELS = {
   discover: "Discover",
-  review: "AI Review",
+  review: "Review",
   campaign: "Campaigns",
+  inbox: "Inbox",
   activity: "Activity",
   won: "Won",
 } as const;
 
 export type ProspectAiTabId = keyof typeof PROSPECT_AI_TAB_LABELS;
 
+/** Primary journey tabs (Activity is secondary near the page title). */
+export const PROSPECT_AI_PRIMARY_TABS = [
+  "discover",
+  "review",
+  "campaign",
+  "inbox",
+  "won",
+] as const;
+
 /** One short subtitle per top-level page. */
 export const PROSPECT_AI_PAGE_SUBTITLES: Record<ProspectAiTabId, string> = {
   discover: "Find new businesses to grow your pipeline.",
-  review: "Approve the best AI-qualified opportunities.",
-  campaign: "Manage outreach and sending.",
+  review: "Select prospects to enrich, then send qualified ones to Campaigns.",
+  campaign: "Control outreach sending and monitor delivery.",
+  inbox: "Continue conversations and move successful prospects to Won.",
   activity: "Discoveries, imports, outreach, and wins over time.",
   won: "Customers acquired through Prospect AI.",
 };
 
 /**
- * AI Review lifecycle: prospect waiting to enter outreach.
+ * @deprecated Internal lifecycle label — prefer Ready to Send on Campaigns.
  * DB status remains `queued`.
  */
 export const PROSPECT_LIFECYCLE_QUEUE_LABEL = "Campaign Queue";
 
 /**
- * Campaigns operational status: message waiting to send.
- * DB status remains `queued`.
+ * Campaigns: messages waiting to send (DB status `queued`).
  */
-export const PROSPECT_SENDING_QUEUE_LABEL = "Sending Queue";
+export const PROSPECT_READY_TO_SEND_LABEL = "Ready to Send";
+
+/** @deprecated Use PROSPECT_READY_TO_SEND_LABEL */
+export const PROSPECT_SENDING_QUEUE_LABEL = PROSPECT_READY_TO_SEND_LABEL;
 
 /** Campaign queue item / filter display labels (keys = DB queue_status). */
 export const PROSPECT_CAMPAIGN_QUEUE_STATUS_LABELS: Record<string, string> = {
   all: "All",
-  queued: PROSPECT_SENDING_QUEUE_LABEL,
+  queued: "Ready",
   sending: "Sending",
   sent: "Sent",
   failed: "Failed",
@@ -57,13 +70,29 @@ export function prospectCampaignQueueStatusLabel(status: string | null | undefin
 
 /** Operational metric card labels on Campaigns (not Activity). */
 export const PROSPECT_CAMPAIGN_METRIC_LABELS = {
-  queued: PROSPECT_SENDING_QUEUE_LABEL,
+  queued: PROSPECT_READY_TO_SEND_LABEL,
   sending: "Sending",
   sentToday: "Sent today",
   outreachSent: "Outreach Sent",
   replied: "Replied",
   failed: "Failed",
   paused: "Paused",
+} as const;
+
+/** Campaigns page status filters (no dedicated Sending filter). */
+export const PROSPECT_CAMPAIGN_STATUS_FILTERS: Array<{ id: string; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "queued", label: "Ready" },
+  { id: "sent", label: "Sent" },
+  { id: "failed", label: "Failed" },
+  { id: "paused", label: "Paused" },
+];
+
+export const PROSPECT_CAMPAIGN_CONTROL_LABELS = {
+  startSending: "Start Sending",
+  pauseSending: "Pause Sending",
+  resumeSending: "Resume Sending",
+  saveLimits: "Save limits",
 } as const;
 
 export const PROSPECT_SELECTION_LABELS = {
@@ -191,25 +220,25 @@ export function buildCampaignsAiAssistantModel(
   if (queued > 0) {
     lines.push({
       emoji: "📬",
-      text: `${pluralize(queued, "message is", "messages are")} waiting in the ${PROSPECT_SENDING_QUEUE_LABEL}.`,
+      text: `${pluralize(queued, "prospect is", "prospects are")} ready to send.`,
     });
   }
   if (sending > 0) {
     lines.push({
       emoji: "📤",
-      text: `${pluralize(sending, "email is", "emails are")} sending now.`,
+      text: `${pluralize(sending, "message is", "messages are")} currently sending.`,
     });
   }
   if (sentToday > 0 && lines.length < 3) {
     lines.push({
       emoji: "✅",
-      text: `${pluralize(sentToday, "email", "emails")} sent today.`,
+      text: `${sentToday} ${sentToday === 1 ? "was" : "were"} sent today.`,
     });
   }
   if (failed > 0) {
     lines.push({
       emoji: "⚠️",
-      text: `${pluralize(failed, "failure needs", "failures need")} attention.`,
+      text: `${failed} failed and ${failed === 1 ? "needs" : "need"} attention.`,
     });
   } else if (lines.length > 0) {
     lines.push({ emoji: "😊", text: "No failures need attention." });
@@ -225,11 +254,13 @@ export function buildCampaignsAiAssistantModel(
   }
 
   let nextAction: string | null = null;
-  if (failed > 0) nextAction = "Review failed sends";
-  else if (input.queuePaused) nextAction = "Resume the sending queue";
-  else if (queued > 0 && !input.queueRunning) nextAction = "Start the sending queue";
-  else if (queued > 0 && input.queueRunning) nextAction = null;
-  else nextAction = "Approve prospects in AI Review to fill the queue.";
+  if (failed > 0) {
+    nextAction =
+      failed === 1 ? "Review 1 failed message." : `Review ${failed} failed messages.`;
+  } else if (input.queuePaused) nextAction = "Resume Sending.";
+  else if (queued > 0 && !input.queueRunning) nextAction = "Start Sending.";
+  else if (queued > 0 && input.queueRunning) nextAction = "Monitor replies in Inbox.";
+  else nextAction = "Send qualified prospects from Review.";
 
   return {
     idle: queued === 0 && sending === 0 && failed === 0,

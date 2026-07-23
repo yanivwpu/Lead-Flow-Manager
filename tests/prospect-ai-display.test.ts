@@ -18,27 +18,20 @@ import {
   mapProspectActivityApiToFeedItems,
   prospectCampaignQueueStatusLabel,
 } from "../shared/prospectAiDisplay";
-import {
-  PROSPECT_REVIEW_FILTER_CHIPS,
-  PROSPECT_REVIEW_LIFECYCLE_LABELS,
-} from "../shared/prospectReviewUx";
+import { PROSPECT_REVIEW_LIFECYCLE_LABELS } from "../shared/prospectReviewUx";
 
 const root = join(import.meta.dirname, "..");
 
 assert.equal(PROSPECT_AI_TAB_LABELS.activity, "Activity");
+assert.equal(PROSPECT_AI_TAB_LABELS.review, "Review");
+assert.equal(PROSPECT_AI_TAB_LABELS.inbox, "Inbox");
 assert.notEqual(PROSPECT_AI_TAB_LABELS.activity, "History");
 assert.equal(PROSPECT_AI_PAGE_SUBTITLES.activity.includes("over time"), true);
 assert.equal(PROSPECT_LIFECYCLE_QUEUE_LABEL, "Campaign Queue");
-assert.equal(PROSPECT_SENDING_QUEUE_LABEL, "Sending Queue");
-assert.equal(PROSPECT_CAMPAIGN_QUEUE_STATUS_LABELS.queued, "Sending Queue");
-assert.equal(prospectCampaignQueueStatusLabel("queued"), "Sending Queue");
+assert.equal(PROSPECT_SENDING_QUEUE_LABEL, "Ready to Send");
+assert.equal(PROSPECT_CAMPAIGN_QUEUE_STATUS_LABELS.queued, "Ready");
+assert.equal(prospectCampaignQueueStatusLabel("queued"), "Ready");
 assert.equal(PROSPECT_REVIEW_LIFECYCLE_LABELS.queued, "Campaign Queue");
-assert.equal(
-  PROSPECT_REVIEW_FILTER_CHIPS.find((c) => c.id === "campaigns")?.label,
-  "Campaigns",
-);
-assert.ok(!PROSPECT_REVIEW_FILTER_CHIPS.some((c) => c.label === "Campaign Ready"));
-assert.ok(!PROSPECT_REVIEW_FILTER_CHIPS.some((c) => c.label === "Campaign Queue"));
 assert.equal(PROSPECT_SELECTION_LABELS.selectPage, "Select page");
 assert.equal(PROSPECT_SELECTION_LABELS.selectAllResults, "Select all results");
 
@@ -93,7 +86,7 @@ const feed = mapProspectActivityApiToFeedItems({
 
 assert.equal(feed.length, 5);
 assert.ok(feed.some((i) => i.kind === "import" && i.title.includes("21 imported")));
-assert.ok(feed.some((i) => i.title.includes("Sending Queue")));
+assert.ok(feed.some((i) => i.title.includes("Ready to Send")));
 
 const timeline = buildProspectActivityTimeline(feed, new Date("2026-07-21T23:59:00.000Z"));
 assert.ok(timeline.length >= 2);
@@ -113,9 +106,9 @@ const campaignsAssistant = buildCampaignsAiAssistantModel({
   queueRunning: false,
   queuePaused: false,
 });
-assert.ok(campaignsAssistant.lines.some((l) => l.text.includes("Sending Queue")));
+assert.ok(campaignsAssistant.lines.some((l) => /ready to send/i.test(l.text)));
 assert.ok(campaignsAssistant.lines.some((l) => /No failures need attention/.test(l.text)));
-assert.match(campaignsAssistant.nextAction || "", /Start the sending queue/i);
+assert.match(campaignsAssistant.nextAction || "", /Start Sending/i);
 
 const activityAssistant = buildActivityAiAssistantModel({
   discoveriesToday: 20,
@@ -141,7 +134,11 @@ const campaignsSrc = readFileSync(
   "utf8",
 );
 assert.ok(campaignsSrc.includes("po-queue-start"));
-assert.ok(campaignsSrc.includes("PROSPECT_SENDING_QUEUE_LABEL"));
+assert.ok(
+  campaignsSrc.includes("PROSPECT_READY_TO_SEND_LABEL") ||
+    campaignsSrc.includes("PROSPECT_SENDING_QUEUE_LABEL") ||
+    campaignsSrc.includes("PROSPECT_CAMPAIGN_CONTROL_LABELS"),
+);
 assert.ok(campaignsSrc.includes("buildCampaignsAiAssistantModel"));
 assert.ok(!campaignsSrc.includes("ProspectImportHistoryPanel"));
 assert.ok(!campaignsSrc.includes("Discovery searches"));

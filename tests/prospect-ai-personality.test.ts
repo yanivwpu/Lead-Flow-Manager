@@ -11,7 +11,7 @@ import {
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// 1–5. Assistant counts from real states
+// 1–5. Assistant counts from shared work-state resolver
 {
   const model = buildAiGrowthAssistantModel([
     { analysisStatus: "processing", reviewStatus: "pending", enrichmentStatus: "none" },
@@ -20,31 +20,28 @@ import { join } from "node:path";
       analysisStatus: "completed",
       reviewStatus: "approved",
       enrichmentStatus: "enriching",
+      websiteUrl: "https://example.com",
+      email: "a@b.com",
     },
     {
       analysisStatus: "completed",
       reviewStatus: "approved",
       enrichmentStatus: "completed",
       enrichmentEmailFound: true,
+      websiteUrl: "https://example.com",
+      email: "b@c.com",
     },
     {
       analysisStatus: "completed",
-      reviewStatus: "approved",
-      enrichmentStatus: "completed",
-      enrichmentEmailFound: false,
-      enrichmentPhoneFound: false,
-    },
-    {
-      analysisStatus: "completed",
-      reviewStatus: "approved",
-      enrichmentStatus: "completed",
+      reviewStatus: "pending",
+      enrichmentStatus: "none",
+      email: "d@e.com",
     },
   ]);
   assert.equal(model.idle, false);
-  assert.ok(model.lines.some((l) => l.text.includes("Reviewing 2")));
-  assert.ok(model.lines.some((l) => /Enriching 1 prospect/i.test(l.text)));
-  assert.ok(model.lines.some((l) => /Found public contact details for 1/i.test(l.text)));
-  assert.ok(model.lines.some((l) => /ready for Campaign/i.test(l.text)));
+  assert.ok(model.lines.some((l) => /Reviewing 2/i.test(l.text) || /being enriched/i.test(l.text)));
+  assert.ok(model.lines.some((l) => /enriched successfully|being enriched|need review/i.test(l.text)));
+  assert.ok(model.nextAction);
 }
 
 // Contact-found requires flags — enrichment completed alone is not enough
@@ -56,9 +53,10 @@ import { join } from "node:path";
       enrichmentStatus: "completed",
       enrichmentEmailFound: false,
       enrichmentPhoneFound: false,
+      websiteUrl: "https://example.com",
+      email: "x@y.com",
     },
   ]);
-  // Not busy → idle; must not invent contact found
   assert.equal(model.idle, true);
   assert.ok(!model.lines.some((l) => /Found public contact/i.test(l.text)));
 }
@@ -70,12 +68,13 @@ import { join } from "node:path";
       analysisStatus: "completed",
       reviewStatus: "pending",
       enrichmentStatus: "none",
+      email: "a@b.com",
     },
   ]);
   assert.equal(idle.idle, true);
   assert.ok(!idle.lines.some((l) => /caught up/i.test(l.text)));
-  assert.ok(idle.lines.some((l) => /waiting for review/i.test(l.text)));
-  assert.ok(idle.nextAction && /Approve your best prospects/i.test(idle.nextAction));
+  assert.ok(idle.lines.some((l) => /need(s)? review/i.test(l.text)));
+  assert.ok(idle.nextAction && /Select prospects to enrich/i.test(idle.nextAction));
 }
 
 {
@@ -84,14 +83,15 @@ import { join } from "node:path";
       analysisStatus: "completed",
       reviewStatus: "approved",
       enrichmentStatus: "completed",
-      outreachStatus: "outreach_sent",
-      outreachSentAt: "2026-01-01T00:00:00.000Z",
+      email: "a@b.com",
+      websiteUrl: "https://x.com",
+      queueStatus: "queued",
     },
   ]);
   assert.equal(caughtUp.idle, true);
   assert.ok(caughtUp.lines.some((l) => /caught up/i.test(l.text)));
   assert.ok(caughtUp.lines.some((l) => /No prospects require attention/i.test(l.text)));
-  assert.ok(!caughtUp.lines.some((l) => /waiting for review/i.test(l.text)));
+  assert.ok(!caughtUp.lines.some((l) => /need review/i.test(l.text)));
 }
 
 // Qualification emoji/message

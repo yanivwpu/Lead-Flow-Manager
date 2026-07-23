@@ -287,59 +287,6 @@ assert.deepEqual(
 assert.equal(buildProspectRowAiSummary({ analysisStatus: "pending" }).showSummary, false);
 
 assert.equal(PROSPECT_REVIEW_LIFECYCLE_LABELS.queued, "Campaign Queue");
-assert.equal(
-  PROSPECT_REVIEW_FILTER_CHIPS.find((c) => c.id === "campaigns")?.label,
-  "Campaigns",
-);
-assert.ok(!PROSPECT_REVIEW_FILTER_CHIPS.some((c) => c.id === "campaign_ready"));
-assert.ok(!PROSPECT_REVIEW_FILTER_CHIPS.some((c) => c.id === "queued"));
-assert.ok(!PROSPECT_REVIEW_FILTER_CHIPS.some((c) => c.id === "campaign"));
-assert.deepEqual(
-  PROSPECT_REVIEW_FILTER_CHIPS.map((c) => c.label),
-  ["All", "Review", "Enriched", "Campaigns", "Inbox", "Won"],
-);
-
-assert.equal(matchesProspectReviewFilter("campaign_ready", "campaigns"), true);
-assert.equal(matchesProspectReviewFilter("queued", "campaigns"), true);
-assert.equal(matchesProspectReviewFilter("campaign", "campaigns"), true);
-assert.equal(matchesProspectReviewFilter("ready_for_approval", "campaigns"), false);
-assert.equal(matchesProspectReviewFilter("website_intelligence", "website_intelligence"), true);
-
-assert.equal(
-  matchesProspectCampaignsSubFilter(
-    {
-      analysisStatus: "completed",
-      reviewStatus: "approved",
-      enrichmentStatus: "completed",
-    },
-    "ready",
-  ),
-  true,
-);
-assert.equal(
-  matchesProspectCampaignsSubFilter(
-    {
-      analysisStatus: "completed",
-      reviewStatus: "approved",
-      enrichmentStatus: "completed",
-      queueStatus: "queued",
-    },
-    "queued",
-  ),
-  true,
-);
-assert.equal(
-  matchesProspectCampaignsSubFilter(
-    {
-      analysisStatus: "completed",
-      reviewStatus: "approved",
-      enrichmentStatus: "completed",
-      queueStatus: "sending",
-    },
-    "sending",
-  ),
-  true,
-);
 
 const panelSrc = readFileSync(
   join(root, "client/src/components/settings/ProspectIntelligencePanel.tsx"),
@@ -348,7 +295,8 @@ const panelSrc = readFileSync(
 assert.ok(panelSrc.includes("ProspectProgressTimeline ux={reviewUxInput(row)}"));
 assert.ok(panelSrc.includes("resolveProspectTimelineStates(ux)"));
 assert.ok(panelSrc.includes("ProspectWebsiteGlobeIcon"));
-assert.ok(panelSrc.includes("pi-campaigns-subfilters"));
+assert.ok(panelSrc.includes("PROSPECT_REVIEW_WORK_FILTER_CHIPS"));
+assert.ok(!panelSrc.includes("pi-campaigns-subfilters"));
 assert.ok(!panelSrc.includes('label: "Imported"'));
 assert.ok(!panelSrc.includes('website: "Web"'));
 assert.ok(!panelSrc.includes('pi-filter-campaign_ready'));

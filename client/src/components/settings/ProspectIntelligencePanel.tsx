@@ -74,21 +74,27 @@ import {
   isProspectQualificationComplete,
   isProspectQualificationPending,
   mergeProspectRowsStableOrder,
-  matchesProspectCampaignsSubFilter,
-  matchesProspectReviewFilter,
   prospectReviewCompletionFlash,
-  prospectReviewEmptyMessage,
   prospectReviewLifecycleLabel,
-  PROSPECT_CAMPAIGNS_SUB_FILTERS,
-  PROSPECT_REVIEW_FILTER_CHIPS,
+  prospectReviewWorkEmptyMessage,
   PROSPECT_TIMELINE_STAGES,
   resolveProspectReviewLifecycle,
   resolveProspectTimelineStates,
-  type ProspectCampaignsSubFilter,
-  type ProspectReviewLifecycle,
-  type ProspectReviewNavFilter,
   type ProspectTimelineStageState,
 } from "@shared/prospectReviewUx";
+import {
+  canEnrichProspect,
+  formatProspectBulkActionResult,
+  isProspectInCampaigns,
+  isProspectQualifiedForCampaign,
+  matchesProspectReviewWorkFilter,
+  PROSPECT_NEEDS_ATTENTION_SUB_FILTERS,
+  PROSPECT_REVIEW_WORK_FILTER_CHIPS,
+  PROSPECT_REVIEW_WORK_STATE_LABELS,
+  resolveProspectReviewWorkState,
+  type ProspectNeedsAttentionSubFilter,
+  type ProspectReviewWorkFilter,
+} from "@shared/prospectAiReviewState";
 import {
   AI_PERSONALITY_ROTATE_MS,
   buildAiGrowthAssistantModel,
@@ -133,6 +139,9 @@ function reviewUxInput(row: ProspectIntelligenceListItem) {
     repliedAt: row.intelligence.repliedAt,
     queueStatus: row.queueStatus,
     outcome: row.prospectOutcome,
+    email: row.email,
+    websiteUrl: row.websiteUrl,
+    websiteUrlUsed: row.intelligence.websiteUrlUsed,
   };
 }
 
@@ -580,6 +589,8 @@ function ProspectIntelligenceDetailDialog({
   const lifecycle = item
     ? resolveProspectReviewLifecycle(reviewUxInput(item))
     : "imported";
+  const workState = item ? resolveProspectReviewWorkState(reviewUxInput(item)) : "imported";
+  const workStateLabel = PROSPECT_REVIEW_WORK_STATE_LABELS[workState];
 
   const openLinkedConversation = () => {
     if (!item?.contactId || !intel?.outreachConversationId) return;
@@ -663,7 +674,7 @@ function ProspectIntelligenceDetailDialog({
       }
     },
     onError: (err: Error) => {
-      toast({ title: "Approve failed", description: err.message, variant: "destructive" });
+      toast({ title: "Enrich failed", description: err.message, variant: "destructive" });
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
     },
   });
@@ -776,7 +787,7 @@ function ProspectIntelligenceDetailDialog({
             <span>{item.name}</span>
             {approveUi.isApproved ? (
               <Badge className="bg-emerald-600" data-testid="pi-approved-badge">
-                Approved
+                {workStateLabel}
               </Badge>
             ) : null}
           </DialogTitle>
@@ -1018,7 +1029,7 @@ function ProspectIntelligenceDetailDialog({
             ) : (
               <>
             <p className="mt-1 text-xs text-gray-500">
-              Save message keeps a draft. Approve AI result also saves the text currently in this box.
+              Save message keeps a draft. Enrich also saves the text currently in this box.
             </p>
             <Textarea
               className="mt-2"
@@ -1113,7 +1124,7 @@ function ProspectIntelligenceDetailDialog({
               ) : (
                 <RefreshCw className="mr-2 h-4 w-4" />
               )}
-              Retry Website Intelligence
+              Retry Enrichment
             </Button>
           ) : null}
           <Button
@@ -1136,11 +1147,11 @@ function ProspectIntelligenceDetailDialog({
               ) : (
                 <Check className="mr-2 h-4 w-4" />
               )}
-              Approve AI result
+              Enrich
             </Button>
           ) : approveUi.isApproved || approveUi.isOutreachSentOrLater ? (
             <Button type="button" variant="outline" disabled data-testid="pi-approved-button">
-              <Check className="mr-2 h-4 w-4" /> Approved
+              <Check className="mr-2 h-4 w-4" /> {workStateLabel}
             </Button>
           ) : null}
           {approveUi.showSendOutreach ? (
@@ -1177,9 +1188,9 @@ export function ProspectIntelligencePanel(props: {
 }) {
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [businessFilter, setBusinessFilter] = useState<string>("all");
-  const [lifecycleFilter, setLifecycleFilter] = useState<ProspectReviewNavFilter>("review");
-  const [campaignsSubFilter, setCampaignsSubFilter] =
-    useState<ProspectCampaignsSubFilter>("all");
+  const [workFilter, setWorkFilter] = useState<ProspectReviewWorkFilter>("needs_review");
+  const [attentionSubFilter, setAttentionSubFilter] =
+    useState<ProspectNeedsAttentionSubFilter>("all");
   const [channelFilter, setChannelFilter] = useState<string>("all");
   /** Stable visual order — never jump rows after analyze/approve/enrich. */
   const [sortBy, setSortBy] = useState<"leadScore" | "priority" | "confidence" | "name" | "action">(
@@ -1189,7 +1200,7 @@ export function ProspectIntelligencePanel(props: {
   const prevUxRef = useRef<Map<string, ReturnType<typeof reviewUxInput>>>(new Map());
   const [rowFlash, setRowFlash] = useState<Record<string, string>>({});
   const [progressTick, setProgressTick] = useState(0);
-  /** Keep acted-on rows visible even if lifecycle filter would hide them. */
+  /** Keep acted-on rows visible even if work filter would hide them (until in Campaigns). */
   const [pinnedVisibleIds, setPinnedVisibleIds] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<ProspectIntelligenceListItem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -1198,10 +1209,7 @@ export function ProspectIntelligencePanel(props: {
   /** Frozen server-resolved IDs when Select all results is used (not browser rows). */
   const [resolvedFilteredIds, setResolvedFilteredIds] = useState<string[] | null>(null);
   const [resolvedFilteredCount, setResolvedFilteredCount] = useState<number | null>(null);
-  const [approveHandoff, setApproveHandoff] = useState<{
-    approvedContactIds: string[];
-    approved: number;
-  } | null>(null);
+  const [bulkResultBanner, setBulkResultBanner] = useState<string | null>(null);
   const [queuePreviewOpen, setQueuePreviewOpen] = useState(false);
   const [queuePreview, setQueuePreview] = useState<{
     selectedCount: number;
@@ -1251,7 +1259,7 @@ export function ProspectIntelligencePanel(props: {
     stableOrderRef.current = [];
     setPinnedVisibleIds(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only clear when filters change
-  }, [priorityFilter, businessFilter, lifecycleFilter, campaignsSubFilter, channelFilter, sortBy]);
+  }, [priorityFilter, businessFilter, workFilter, attentionSubFilter, channelFilter, sortBy]);
 
   useEffect(() => {
     const id = window.setInterval(
@@ -1405,28 +1413,17 @@ export function ProspectIntelligencePanel(props: {
 
   const rawItems = listQuery.data?.items ?? [];
 
-  const lifecycleCounts = useMemo(() => {
-    const map: Record<string, number> = { all: rawItems.length };
-    for (const chip of PROSPECT_REVIEW_FILTER_CHIPS) {
-      if (chip.id === "all") continue;
+  const workFilterCounts = useMemo(() => {
+    const map: Record<string, number> = { all: 0 };
+    for (const chip of PROSPECT_REVIEW_WORK_FILTER_CHIPS) {
       map[chip.id] = 0;
     }
     for (const row of rawItems) {
-      const life = resolveProspectReviewLifecycle(reviewUxInput(row));
-      if (matchesProspectReviewFilter(life, "review")) {
-        map.review = (map.review || 0) + 1;
-      }
-      if (matchesProspectReviewFilter(life, "website_intelligence")) {
-        map.website_intelligence = (map.website_intelligence || 0) + 1;
-      }
-      if (matchesProspectReviewFilter(life, "campaigns")) {
-        map.campaigns = (map.campaigns || 0) + 1;
-      }
-      if (matchesProspectReviewFilter(life, "inbox")) {
-        map.inbox = (map.inbox || 0) + 1;
-      }
-      if (matchesProspectReviewFilter(life, "won")) {
-        map.won = (map.won || 0) + 1;
+      const ux = reviewUxInput(row);
+      for (const chip of PROSPECT_REVIEW_WORK_FILTER_CHIPS) {
+        if (matchesProspectReviewWorkFilter(ux, chip.id)) {
+          map[chip.id] = (map[chip.id] || 0) + 1;
+        }
       }
     }
     return map;
@@ -1452,20 +1449,33 @@ export function ProspectIntelligencePanel(props: {
   const filteredItems = useMemo(() => {
     return rawItems.filter((row) => {
       const ux = reviewUxInput(row);
-      const life = resolveProspectReviewLifecycle(ux);
-      if (pinnedVisibleIds.has(row.contactId)) return true;
-      if (lifecycleFilter === "campaigns") {
-        if (campaignsSubFilter === "completed") {
-          return matchesProspectCampaignsSubFilter(ux, "completed");
-        }
-        return (
-          matchesProspectReviewFilter(life, "campaigns") &&
-          matchesProspectCampaignsSubFilter(ux, campaignsSubFilter)
-        );
+      if (isProspectInCampaigns(ux) || String(ux.outcome || "").toLowerCase() === "won") {
+        return false;
       }
-      return matchesProspectReviewFilter(life, lifecycleFilter);
+      if (pinnedVisibleIds.has(row.contactId)) return true;
+      return matchesProspectReviewWorkFilter(ux, workFilter, attentionSubFilter);
     });
-  }, [rawItems, lifecycleFilter, campaignsSubFilter, pinnedVisibleIds]);
+  }, [rawItems, workFilter, attentionSubFilter, pinnedVisibleIds]);
+
+  // Drop pins once a row successfully leaves Review (in Campaigns).
+  useEffect(() => {
+    if (pinnedVisibleIds.size === 0) return;
+    const drop: string[] = [];
+    for (const id of pinnedVisibleIds) {
+      const row = rawItems.find((r) => r.contactId === id);
+      if (!row) continue;
+      const ux = reviewUxInput(row);
+      if (isProspectInCampaigns(ux) || String(ux.outcome || "").toLowerCase() === "won") {
+        drop.push(id);
+      }
+    }
+    if (!drop.length) return;
+    setPinnedVisibleIds((prev) => {
+      const next = new Set(prev);
+      drop.forEach((id) => next.delete(id));
+      return next;
+    });
+  }, [rawItems, pinnedVisibleIds]);
 
   const items = useMemo(() => {
     const merged = mergeProspectRowsStableOrder(stableOrderRef.current, filteredItems);
@@ -1542,6 +1552,18 @@ export function ProspectIntelligencePanel(props: {
     if (selectAllFiltered) return new Set(items.map((i) => i.contactId));
     return selectedIds;
   }, [selectAllFiltered, resolvedFilteredIds, items, selectedIds]);
+
+  const selectionEligibility = useMemo(() => {
+    let canEnrich = 0;
+    let qualified = 0;
+    for (const row of rawItems) {
+      if (!effectiveSelectedIds.has(row.contactId)) continue;
+      const ux = reviewUxInput(row);
+      if (canEnrichProspect(ux)) canEnrich += 1;
+      if (isProspectQualifiedForCampaign(ux)) qualified += 1;
+    }
+    return { canEnrich, qualified };
+  }, [rawItems, effectiveSelectedIds]);
 
   const toggleRow = (contactId: string, e: { stopPropagation: () => void }) => {
     e.stopPropagation();
@@ -1626,6 +1648,16 @@ export function ProspectIntelligencePanel(props: {
       }));
     },
     onSuccess: (data) => {
+      const skippedCount = Array.isArray(data.skipped) ? data.skipped.length : 0;
+      const selectedForAction = selectedCount || data.approved + skippedCount;
+      setBulkResultBanner(
+        formatProspectBulkActionResult("enrich", {
+          selected: selectedForAction,
+          succeeded: data.approved ?? 0,
+          skipped: skippedCount,
+          failed: 0,
+        }),
+      );
       if (data.approvedContactIds?.length) {
         setPinnedVisibleIds((prev) => {
           const next = new Set(prev);
@@ -1644,23 +1676,25 @@ export function ProspectIntelligencePanel(props: {
                 : "pending",
           },
         }));
-        setApproveHandoff({
-          approvedContactIds: data.approvedContactIds,
-          approved: data.approved,
-        });
         setSelectAllFiltered(false);
         setResolvedFilteredIds(data.approvedContactIds);
         setResolvedFilteredCount(data.approved);
         setSelectedIds(new Set(data.approvedContactIds));
-        // Stay on All so rows do not vanish; user can open Website Intelligence filter.
-        setLifecycleFilter("all");
       } else {
         clearSelection();
-        setApproveHandoff(null);
       }
     },
     onError: (err: Error) => {
-      toast({ title: "Bulk approve failed", description: err.message, variant: "destructive" });
+      setBulkResultBanner(
+        formatProspectBulkActionResult("enrich", {
+          selected: selectedCount,
+          succeeded: 0,
+          skipped: 0,
+          failed: selectedCount || 1,
+          detail: err.message,
+        }),
+      );
+      toast({ title: "Enrich failed", description: err.message, variant: "destructive" });
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
     },
   });
@@ -1683,13 +1717,31 @@ export function ProspectIntelligencePanel(props: {
       setQueuePreview(data.preview);
       setQueuePreviewOpen(true);
     },
-    onError: (err: Error) =>
-      toast({ title: "Preview failed", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => {
+      setBulkResultBanner(
+        formatProspectBulkActionResult("send_to_campaign", {
+          selected: selectedCount,
+          succeeded: 0,
+          skipped: 0,
+          failed: selectedCount || 1,
+          detail: err.message,
+        }),
+      );
+      toast({ title: "Preview failed", description: err.message, variant: "destructive" });
+    },
   });
 
   const confirmQueueMutation = useMutation({
     mutationFn: () =>
-      fetchJson<{ preview?: { willQueue?: number } }>("/api/growth-tools/prospect-outreach/queue", {
+      fetchJson<{
+        preview?: {
+          selectedCount?: number;
+          willQueue?: number;
+          notBulkEligible?: number;
+          skips?: unknown[];
+        };
+        queuedItemIds?: string[];
+      }>("/api/growth-tools/prospect-outreach/queue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1699,18 +1751,26 @@ export function ProspectIntelligencePanel(props: {
         }),
       }),
     onSuccess: (data) => {
-      toast({
-        title: `Queued ${data.preview?.willQueue ?? "prospects"}`,
-        description: "Start the queue to send gradually. Scanning ≠ blasting.",
-      });
+      const selectedForAction = data.preview?.selectedCount ?? selectedCount;
+      const succeeded = data.preview?.willQueue ?? data.queuedItemIds?.length ?? 0;
+      const skipped = Math.max(0, selectedForAction - succeeded);
+      setBulkResultBanner(
+        formatProspectBulkActionResult("send_to_campaign", {
+          selected: selectedForAction,
+          succeeded,
+          skipped,
+          failed: 0,
+        }),
+      );
       setQueuePreviewOpen(false);
-      setApproveHandoff(null);
       const ids = Array.from(effectiveSelectedIds);
+      // Remove from Review pin — do not keep queued rows visible via pin.
       setPinnedVisibleIds((prev) => {
         const next = new Set(prev);
-        ids.forEach((id) => next.add(id));
+        ids.forEach((id) => next.delete(id));
         return next;
       });
+      // Patch only on success (not optimistic before confirm).
       patchListRows(ids, (row) => ({
         ...row,
         queueStatus: "queued",
@@ -1720,8 +1780,18 @@ export function ProspectIntelligencePanel(props: {
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-outreach"] });
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
     },
-    onError: (err: Error) =>
-      toast({ title: "Queue failed", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => {
+      setBulkResultBanner(
+        formatProspectBulkActionResult("send_to_campaign", {
+          selected: selectedCount,
+          succeeded: 0,
+          skipped: 0,
+          failed: selectedCount || 1,
+          detail: err.message,
+        }),
+      );
+      toast({ title: "Queue failed", description: err.message, variant: "destructive" });
+    },
   });
 
   const bulkJob = bulkJobQuery.data?.job;
@@ -1737,7 +1807,7 @@ export function ProspectIntelligencePanel(props: {
     >
       {props.embedded ? (
         <div className="space-y-0">
-          <h2 className="text-base font-semibold tracking-tight text-gray-900">AI Review</h2>
+          <h2 className="text-base font-semibold tracking-tight text-gray-900">Review</h2>
           <p className="text-xs text-gray-600">{PROSPECT_AI_PAGE_SUBTITLES.review}</p>
         </div>
       ) : (
@@ -1765,36 +1835,6 @@ export function ProspectIntelligencePanel(props: {
         </div>
       ) : null}
 
-      {approveHandoff ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-950">
-          <p className="font-medium">{approveHandoff.approved} approved</p>
-          <div className="mt-1.5 flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8"
-              onClick={() => {
-                setLifecycleFilter("campaigns");
-                setCampaignsSubFilter("ready");
-                setApproveHandoff(null);
-              }}
-            >
-              View Campaigns
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 bg-brand-green hover:bg-emerald-700"
-              disabled={previewQueueMutation.isPending}
-              onClick={() => previewQueueMutation.mutate(approveHandoff.approvedContactIds)}
-            >
-              Queue {approveHandoff.approved} for campaign
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
       {props.activeAnalysisJob?.status === "completed" ? (
         <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 px-3 py-1.5 text-xs text-emerald-900">
           Analysis complete — {props.activeAnalysisJob.analyzed} reviewed
@@ -1812,9 +1852,9 @@ export function ProspectIntelligencePanel(props: {
 
       <div className="space-y-1">
         <div className="flex max-w-full flex-nowrap gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {PROSPECT_REVIEW_FILTER_CHIPS.map((chip) => {
-            const count = lifecycleCounts[chip.id] ?? 0;
-            const active = lifecycleFilter === chip.id;
+          {PROSPECT_REVIEW_WORK_FILTER_CHIPS.map((chip) => {
+            const count = workFilterCounts[chip.id] ?? 0;
+            const active = workFilter === chip.id;
             return (
               <Button
                 key={chip.id}
@@ -1828,8 +1868,8 @@ export function ProspectIntelligencePanel(props: {
                     : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50",
                 )}
                 onClick={() => {
-                  setLifecycleFilter(chip.id);
-                  if (chip.id !== "campaigns") setCampaignsSubFilter("all");
+                  setWorkFilter(chip.id);
+                  if (chip.id !== "needs_attention") setAttentionSubFilter("all");
                 }}
                 data-testid={`pi-filter-${chip.id}`}
               >
@@ -1846,13 +1886,13 @@ export function ProspectIntelligencePanel(props: {
             );
           })}
         </div>
-        {lifecycleFilter === "campaigns" ? (
+        {workFilter === "needs_attention" ? (
           <div
             className="flex max-w-full flex-nowrap gap-1 overflow-x-auto pb-0.5"
-            data-testid="pi-campaigns-subfilters"
+            data-testid="pi-attention-subfilters"
           >
-            {PROSPECT_CAMPAIGNS_SUB_FILTERS.map((sub) => {
-              const active = campaignsSubFilter === sub.id;
+            {PROSPECT_NEEDS_ATTENTION_SUB_FILTERS.map((sub) => {
+              const active = attentionSubFilter === sub.id;
               return (
                 <Button
                   key={sub.id}
@@ -1860,8 +1900,8 @@ export function ProspectIntelligencePanel(props: {
                   size="sm"
                   variant={active ? "secondary" : "ghost"}
                   className="h-6 shrink-0 rounded-full px-2 text-[10px] font-medium"
-                  onClick={() => setCampaignsSubFilter(sub.id)}
-                  data-testid={`pi-campaigns-sub-${sub.id}`}
+                  onClick={() => setAttentionSubFilter(sub.id)}
+                  data-testid={`pi-attention-sub-${sub.id}`}
                 >
                   {sub.label}
                 </Button>
@@ -1942,7 +1982,14 @@ export function ProspectIntelligencePanel(props: {
           Clear
         </Button>
         <span className="text-xs text-gray-600">
-          {selectedCount} selected
+          {selectedCount > 0 &&
+          (selectionEligibility.canEnrich > 0 || selectionEligibility.qualified > 0) &&
+          !(
+            selectionEligibility.canEnrich === selectedCount ||
+            selectionEligibility.qualified === selectedCount
+          )
+            ? `${selectedCount} selected · ${selectionEligibility.canEnrich} can be enriched · ${selectionEligibility.qualified} qualified`
+            : `${selectedCount} selected`}
           {selectAllFiltered && resolvedFilteredCount != null ? " (server-resolved)" : ""}
         </span>
         <div className="ml-auto flex flex-wrap gap-1.5">
@@ -1951,16 +1998,25 @@ export function ProspectIntelligencePanel(props: {
             size="sm"
             variant="outline"
             className="h-8 text-xs"
-            disabled={!selectedCount || bulkApproveMutation.isPending}
+            disabled={
+              !selectedCount ||
+              selectionEligibility.canEnrich === 0 ||
+              bulkApproveMutation.isPending
+            }
             onClick={() => bulkApproveMutation.mutate()}
+            data-testid="pi-enrich"
           >
-            <Check className="mr-1 h-3.5 w-3.5" /> Approve
+            <Check className="mr-1 h-3.5 w-3.5" /> Enrich
           </Button>
           <Button
             type="button"
             size="sm"
             className="h-8 bg-brand-green text-xs hover:bg-emerald-700"
-            disabled={!selectedCount || previewQueueMutation.isPending}
+            disabled={
+              !selectedCount ||
+              selectionEligibility.qualified === 0 ||
+              previewQueueMutation.isPending
+            }
             onClick={() => previewQueueMutation.mutate(undefined)}
             data-testid="pi-queue-outreach"
           >
@@ -1969,10 +2025,16 @@ export function ProspectIntelligencePanel(props: {
         </div>
       </div>
 
+      {bulkResultBanner ? (
+        <p className="text-xs text-gray-700" data-testid="pi-bulk-result-banner">
+          {bulkResultBanner}
+        </p>
+      ) : null}
+
       {items.length === 0 ? (
         <ProspectAiEmptyState data-testid="pi-review-empty">
           <p className="text-sm font-medium text-gray-800">
-            {prospectReviewEmptyMessage(lifecycleFilter, rawItems.length > 0)}
+            {prospectReviewWorkEmptyMessage(workFilter, rawItems.length > 0)}
           </p>
         </ProspectAiEmptyState>
       ) : (
