@@ -732,9 +732,9 @@ function ActivityTab() {
 
   return (
     <ProspectAiTabBody data-testid="prospect-activity-tab">
-      <div className="space-y-0.5">
-        <h2 className="text-lg font-semibold tracking-tight text-gray-900">Prospect Activity</h2>
-        <p className="text-sm text-gray-600">{PROSPECT_AI_PAGE_SUBTITLES.activity}</p>
+      <div className="space-y-0">
+        <h2 className="text-base font-semibold tracking-tight text-gray-900">Prospect Activity</h2>
+        <p className="text-xs text-gray-600">{PROSPECT_AI_PAGE_SUBTITLES.activity}</p>
       </div>
 
       <AiGrowthAssistantCard model={assistantModel} className="w-full max-w-xl" />
@@ -912,10 +912,7 @@ function WonTab() {
         </div>
       ) : customers.length === 0 ? (
         <ProspectAiEmptyState data-testid="prospect-won-empty">
-          <p className="text-sm text-gray-600">
-            No won customers yet. Continue conversations in the Inbox and mark successful prospects as
-            Won.
-          </p>
+          <p className="text-sm text-gray-600">No customers won yet.</p>
           <Link href="/app/inbox">
             <Button className="mt-4 bg-brand-green hover:bg-brand-green/90" size="sm">
               <Inbox className="mr-2 h-4 w-4" />
@@ -980,21 +977,21 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
 
   return (
     <ProspectAiPageLayout>
-      <header className="w-full space-y-0.5">
-        <div className="inline-flex items-center gap-1.5 text-brand-green">
-          <Star className="h-3.5 w-3.5 fill-current" aria-hidden />
-          <span className="text-[11px] font-semibold uppercase tracking-wide">Growth Engine</span>
+      <header className="w-full space-y-0">
+        <div className="inline-flex items-center gap-1 text-brand-green">
+          <Star className="h-3 w-3 fill-current" aria-hidden />
+          <span className="text-[10px] font-semibold uppercase tracking-wide">Growth Engine</span>
         </div>
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-gray-900 text-pretty sm:text-[1.75rem]">
+        <h1 className="font-display text-xl font-semibold tracking-tight text-gray-900 text-pretty sm:text-[1.35rem]">
           Prospect AI
         </h1>
-        <p className="max-w-xl text-sm text-gray-600 text-pretty">
+        <p className="max-w-xl text-xs text-gray-600 text-pretty">
           Your AI employee for customer acquisition.
         </p>
       </header>
 
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full min-w-0 space-y-3">
-        <TabsList className="h-auto w-full flex-wrap justify-start gap-x-4 gap-y-1 border-b border-gray-200 bg-transparent p-0 pb-0">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full min-w-0 space-y-2">
+        <TabsList className="h-auto w-full flex-nowrap justify-start gap-x-4 overflow-x-auto border-b border-gray-200 bg-transparent p-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {(
             [
               ["discover", PROSPECT_AI_TAB_LABELS.discover],
@@ -1007,7 +1004,7 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
             <TabsTrigger
               key={value}
               value={value}
-              className="h-9 rounded-none border-b-2 border-transparent px-0 pb-2 text-sm whitespace-nowrap data-[state=active]:border-brand-green data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              className="h-8 shrink-0 rounded-none border-b-2 border-transparent px-0 pb-1.5 text-sm whitespace-nowrap data-[state=active]:border-brand-green data-[state=active]:bg-transparent data-[state=active]:shadow-none"
             >
               {label}
             </TabsTrigger>

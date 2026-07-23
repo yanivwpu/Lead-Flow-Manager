@@ -42,9 +42,9 @@ import { join } from "node:path";
   ]);
   assert.equal(model.idle, false);
   assert.ok(model.lines.some((l) => l.text.includes("Reviewing 2")));
-  assert.ok(model.lines.some((l) => /Analyzing 1 website/i.test(l.text)));
+  assert.ok(model.lines.some((l) => /Enriching 1 prospect/i.test(l.text)));
   assert.ok(model.lines.some((l) => /Found public contact details for 1/i.test(l.text)));
-  assert.ok(model.lines.some((l) => /ready for campaign/i.test(l.text)));
+  assert.ok(model.lines.some((l) => /ready for Campaign/i.test(l.text)));
 }
 
 // Contact-found requires flags — enrichment completed alone is not enough
@@ -63,7 +63,7 @@ import { join } from "node:path";
   assert.ok(!model.lines.some((l) => /Found public contact/i.test(l.text)));
 }
 
-// Idle only when no background work
+// Idle only when no background work — never claim “caught up” while reviews wait
 {
   const idle = buildAiGrowthAssistantModel([
     {
@@ -73,9 +73,25 @@ import { join } from "node:path";
     },
   ]);
   assert.equal(idle.idle, true);
-  assert.ok(idle.lines.some((l) => /caught up/i.test(l.text)));
-  assert.ok(idle.lines.some((l) => /approval|ready for your review/i.test(l.text)));
-  assert.ok(idle.nextAction && /Approve/i.test(idle.nextAction));
+  assert.ok(!idle.lines.some((l) => /caught up/i.test(l.text)));
+  assert.ok(idle.lines.some((l) => /waiting for review/i.test(l.text)));
+  assert.ok(idle.nextAction && /Approve your best prospects/i.test(idle.nextAction));
+}
+
+{
+  const caughtUp = buildAiGrowthAssistantModel([
+    {
+      analysisStatus: "completed",
+      reviewStatus: "approved",
+      enrichmentStatus: "completed",
+      outreachStatus: "outreach_sent",
+      outreachSentAt: "2026-01-01T00:00:00.000Z",
+    },
+  ]);
+  assert.equal(caughtUp.idle, true);
+  assert.ok(caughtUp.lines.some((l) => /caught up/i.test(l.text)));
+  assert.ok(caughtUp.lines.some((l) => /No prospects require attention/i.test(l.text)));
+  assert.ok(!caughtUp.lines.some((l) => /waiting for review/i.test(l.text)));
 }
 
 // Qualification emoji/message

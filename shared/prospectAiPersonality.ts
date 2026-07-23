@@ -199,6 +199,7 @@ function pluralize(n: number, one: string, many: string): string {
 /**
  * Build assistant card from current list items (no invented activity).
  * Contact-found lines require stored enrichment flags.
+ * Idle copy is always truthful — never “caught up” while work is waiting.
  */
 export function buildAiGrowthAssistantModel(
   items: AiGrowthAssistantItemInput[],
@@ -209,6 +210,8 @@ export function buildAiGrowthAssistantModel(
   let contactFound = 0;
   let campaignReady = 0;
   let readyForReview = 0;
+  let enrichedLane = 0;
+  let campaignsLane = 0;
   const failed = Math.max(0, options?.failedQualificationCount ?? 0);
 
   for (const item of items) {
@@ -234,47 +237,72 @@ export function buildAiGrowthAssistantModel(
     if (life === "ready_for_approval") {
       readyForReview += 1;
     }
+    if (life === "website_intelligence") {
+      enrichedLane += 1;
+    }
+    if (life === "campaign_ready" || life === "queued" || life === "campaign") {
+      campaignsLane += 1;
+    }
   }
 
   const busy = qualifying > 0 || enriching > 0;
+  const needsAttention =
+    readyForReview > 0 || campaignReady > 0 || enrichedLane > 0 || failed > 0 || busy;
 
   const resolveNextAction = (): string | null => {
     if (readyForReview > 0) {
-      return `Approve ${pluralize(readyForReview, "business", "businesses")}`;
+      return "Approve your best prospects.";
     }
-    if (campaignReady > 0 && !busy) {
-      return `Launch campaign for ${pluralize(campaignReady, "ready prospect", "ready prospects")}`;
+    if (campaignReady > 0) {
+      return "Launch your next campaign.";
+    }
+    if (enrichedLane > 0 && !busy) {
+      return "Check enriched prospects.";
     }
     if (busy) return null;
-    if (items.length === 0) return "Discover businesses to get started";
+    if (items.length === 0) return "Discover businesses to get started.";
+    if (!needsAttention) return "Discover more businesses when ready.";
     return null;
   };
 
   if (!busy) {
-    const lines: AiGrowthAssistantLine[] = [{ emoji: "😊", text: "Everything is caught up." }];
-    if (readyForReview > 0) {
-      lines.push({
-        emoji: "😊",
-        text: `Waiting for your approval on ${pluralize(readyForReview, "prospect", "prospects")}.`,
-      });
+    const lines: AiGrowthAssistantLine[] = [];
+
+    if (items.length === 0) {
+      lines.push({ emoji: "👋", text: "No prospects in AI Review yet." });
+      lines.push({ emoji: "✨", text: "Discover businesses to get started." });
+    } else if (!needsAttention) {
+      lines.push({ emoji: "😊", text: "Everything is caught up." });
+      lines.push({ emoji: "✨", text: "No prospects require attention." });
+    } else {
+      if (readyForReview > 0) {
+        lines.push({
+          emoji: "😊",
+          text: `${pluralize(readyForReview, "prospect", "prospects")} waiting for review.`,
+        });
+      }
+      if (enrichedLane > 0) {
+        lines.push({
+          emoji: "🔍",
+          text: `${pluralize(enrichedLane, "prospect is", "prospects are")} enriched.`,
+        });
+      }
+      if (campaignsLane > 0) {
+        lines.push({
+          emoji: "🎯",
+          text: `${pluralize(campaignsLane, "prospect", "prospects")} in Campaigns.`,
+        });
+      } else if (readyForReview > 0 || enrichedLane > 0) {
+        lines.push({ emoji: "🎯", text: "Nothing is waiting in Campaigns." });
+      }
+      if (failed > 0) {
+        lines.push({
+          emoji: "⚠️",
+          text: `${pluralize(failed, "qualification failed", "qualifications failed")} — open a row to retry.`,
+        });
+      }
     }
-    if (campaignReady > 0) {
-      lines.push({
-        emoji: "🎯",
-        text: `${pluralize(campaignReady, "prospect is", "prospects are")} ready for campaign.`,
-      });
-    }
-    if (failed > 0) {
-      lines.push({
-        emoji: "⚠️",
-        text: `${pluralize(failed, "qualification failed", "qualifications failed")} — open a row to retry.`,
-      });
-    }
-    if (readyForReview === 0 && campaignReady === 0 && items.length === 0) {
-      lines.push({ emoji: "👋", text: "No reviews waiting. Discover businesses to begin." });
-    } else if (readyForReview === 0 && campaignReady === 0 && failed === 0 && items.length > 0) {
-      lines.push({ emoji: "✨", text: "No reviews waiting." });
-    }
+
     return {
       idle: true,
       title: "AI Growth Assistant",
@@ -288,13 +316,13 @@ export function buildAiGrowthAssistantModel(
   if (qualifying > 0) {
     lines.push({
       emoji: "🤔",
-      text: `Reviewing ${pluralize(qualifying, "business", "businesses")}`,
+      text: `Reviewing ${pluralize(qualifying, "prospect", "prospects")}`,
     });
   }
   if (enriching > 0) {
     lines.push({
       emoji: "🔍",
-      text: `Analyzing ${pluralize(enriching, "website", "websites")}`,
+      text: `Enriching ${pluralize(enriching, "prospect", "prospects")}`,
     });
   }
   if (contactFound > 0) {
@@ -306,13 +334,13 @@ export function buildAiGrowthAssistantModel(
   if (campaignReady > 0) {
     lines.push({
       emoji: "🎯",
-      text: `${campaignReady} ${campaignReady === 1 ? "is" : "are"} ready for campaign`,
+      text: `${pluralize(campaignReady, "prospect is", "prospects are")} ready for Campaign`,
     });
   }
   if (readyForReview > 0) {
     lines.push({
       emoji: "😊",
-      text: `${pluralize(readyForReview, "prospect", "prospects")} ready for your review`,
+      text: `${pluralize(readyForReview, "prospect", "prospects")} waiting for review`,
     });
   }
   if (failed > 0) {

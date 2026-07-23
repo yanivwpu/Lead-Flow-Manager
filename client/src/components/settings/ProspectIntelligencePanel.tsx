@@ -68,6 +68,9 @@ import {
 } from "@shared/prospectOutreachLifecycle";
 import {
   buildProspectRowAiSummary,
+  isProspectEnrichmentComplete,
+  isProspectEnrichmentFailed,
+  isProspectEnrichmentInProgress,
   isProspectQualificationComplete,
   isProspectQualificationPending,
   mergeProspectRowsStableOrder,
@@ -142,11 +145,18 @@ const PROSPECT_TIMELINE_SHORT_LABELS: Record<(typeof PROSPECT_TIMELINE_STAGES)[n
 function ProspectProgressTimeline({ ux }: { ux: ReturnType<typeof reviewUxInput> }) {
   const life = resolveProspectReviewLifecycle(ux);
   const states = resolveProspectTimelineStates(ux);
+  const enrichment = String(ux.enrichmentStatus || "none").toLowerCase();
+  const legacyEnriched =
+    !isProspectEnrichmentComplete(enrichment) &&
+    !isProspectEnrichmentFailed(enrichment) &&
+    !isProspectEnrichmentInProgress(enrichment) &&
+    (life === "inbox" || life === "won" || life === "campaign" || life === "queued");
   return (
     <div
       className={PROSPECT_AI_PROGRESS_TIMELINE_CLASS}
       data-testid={`pi-timeline-${life}`}
       aria-label={`Progress: ${prospectReviewLifecycleLabel(life)}`}
+      title={legacyEnriched ? "Created before Website Intelligence." : undefined}
     >
       {PROSPECT_TIMELINE_STAGES.map((stage, i) => {
         const state = states[i] as ProspectTimelineStageState;
@@ -1720,15 +1730,15 @@ export function ProspectIntelligencePanel(props: {
     <section
       className={cn(
         "w-full min-w-0",
-        props.embedded ? "space-y-3" : "mt-8 space-y-3 border-t pt-6",
+        props.embedded ? "space-y-2" : "mt-8 space-y-3 border-t pt-6",
       )}
       data-testid="pi-review-panel"
       data-prospect-ai-layout="tab-body"
     >
       {props.embedded ? (
-        <div className="space-y-0.5">
-          <h2 className="text-lg font-semibold tracking-tight text-gray-900">AI Review</h2>
-          <p className="text-sm text-gray-600">{PROSPECT_AI_PAGE_SUBTITLES.review}</p>
+        <div className="space-y-0">
+          <h2 className="text-base font-semibold tracking-tight text-gray-900">AI Review</h2>
+          <p className="text-xs text-gray-600">{PROSPECT_AI_PAGE_SUBTITLES.review}</p>
         </div>
       ) : (
         <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
@@ -1738,7 +1748,7 @@ export function ProspectIntelligencePanel(props: {
       )}
 
       {props.activeAnalysisJob?.status === "running" ? (
-        <div className="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs text-blue-900">
+        <div className="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-1.5 text-xs text-blue-900">
           <p className="flex items-center gap-2 font-medium">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             {jobProgressLabel}
@@ -1747,7 +1757,7 @@ export function ProspectIntelligencePanel(props: {
       ) : null}
 
       {bulkJob && (bulkJob.status === "running" || bulkJob.status === "pending") ? (
-        <div className="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs text-blue-900">
+        <div className="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-1.5 text-xs text-blue-900">
           <p className="flex items-center gap-2 font-medium">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             AI is reviewing prospects… {bulkJob.progressCurrent}/{bulkJob.progressTotal}
@@ -1756,20 +1766,21 @@ export function ProspectIntelligencePanel(props: {
       ) : null}
 
       {approveHandoff ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 text-sm text-emerald-950">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-950">
           <p className="font-medium">{approveHandoff.approved} approved</p>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-1.5 flex flex-wrap gap-2">
             <Button
               type="button"
               size="sm"
               variant="outline"
               className="h-8"
               onClick={() => {
-                setLifecycleFilter("campaign_ready");
+                setLifecycleFilter("campaigns");
+                setCampaignsSubFilter("ready");
                 setApproveHandoff(null);
               }}
             >
-              View campaign ready
+              View Campaigns
             </Button>
             <Button
               type="button"
@@ -1785,7 +1796,7 @@ export function ProspectIntelligencePanel(props: {
       ) : null}
 
       {props.activeAnalysisJob?.status === "completed" ? (
-        <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 px-3 py-2 text-xs text-emerald-900">
+        <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 px-3 py-1.5 text-xs text-emerald-900">
           Analysis complete — {props.activeAnalysisJob.analyzed} reviewed
           {props.activeAnalysisJob.errors
             ? `, ${props.activeAnalysisJob.errors} errors`
@@ -1799,10 +1810,7 @@ export function ProspectIntelligencePanel(props: {
         className="max-w-xl"
       />
 
-      <div className="space-y-1.5">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-          Lifecycle
-        </p>
+      <div className="space-y-1">
         <div className="flex max-w-full flex-nowrap gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {PROSPECT_REVIEW_FILTER_CHIPS.map((chip) => {
             const count = lifecycleCounts[chip.id] ?? 0;
@@ -1863,11 +1871,7 @@ export function ProspectIntelligencePanel(props: {
         ) : null}
       </div>
 
-      <div className="space-y-1.5">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-          Filters
-        </p>
-        <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
           <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue placeholder="Priority" /></SelectTrigger>
           <SelectContent>
@@ -1908,10 +1912,9 @@ export function ProspectIntelligencePanel(props: {
             <SelectItem value="action">Needs action</SelectItem>
           </SelectContent>
         </Select>
-        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-gray-50/70 px-2.5 py-2">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-gray-50/70 px-2.5 py-1.5">
         <Button
           type="button"
           size="sm"
@@ -2024,8 +2027,6 @@ export function ProspectIntelligencePanel(props: {
                   Boolean(intel.enrichmentEmailFound) || isValidProspectEmail(row.email);
                 const phoneFound =
                   Boolean(intel.enrichmentPhoneFound) || isValidProspectPhone(row.phone);
-                const websiteDone =
-                  String(intel.enrichmentStatus || "").toLowerCase() === "completed";
                 const socialFound = (() => {
                   const result = (intel.enrichmentResult || {}) as {
                     publicContacts?: { socialProfiles?: string[] };
@@ -2081,8 +2082,8 @@ export function ProspectIntelligencePanel(props: {
                           />
                         </div>
                       ) : rowSummary.showSummary ? (
-                        <div className="space-y-1" data-testid={`pi-row-summary-${row.contactId}`}>
-                          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                        <div className="space-y-0.5" data-testid={`pi-row-summary-${row.contactId}`}>
+                          <div className="flex flex-wrap items-center gap-1.5 text-xs leading-tight">
                             <MatchStars stars={rowSummary.matchStars} />
                             <span className="font-medium text-gray-900">{rowSummary.matchLabel}</span>
                             {priorityBadge(rowSummary.priority || undefined, intel.analysisStatus)}
@@ -2092,22 +2093,23 @@ export function ProspectIntelligencePanel(props: {
                             />
                           </div>
                           {rowSummary.businessType ? (
-                            <p className="truncate text-xs text-gray-600">{rowSummary.businessType}</p>
+                            <p className="truncate text-xs leading-tight text-gray-600">
+                              {rowSummary.businessType}
+                            </p>
                           ) : null}
                           {rowSummary.offerLabel ? (
-                            <p className="truncate text-xs text-gray-700">
-                              <span className="text-gray-400">Offer:</span> {rowSummary.offerLabel}
+                            <p className="truncate text-xs leading-tight text-gray-700">
+                              {rowSummary.offerLabel}
                             </p>
                           ) : null}
                           {rowSummary.angle ? (
-                            <p className="line-clamp-2 text-[11px] leading-snug text-gray-500">
+                            <p className="line-clamp-1 text-xs leading-tight text-gray-500">
                               {rowSummary.angle}
                             </p>
                           ) : null}
                         </div>
                       ) : (
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs text-gray-400">—</span>
                           <ProspectWebsiteGlobeIcon
                             websiteUrl={row.websiteUrl}
                             websiteUrlUsed={intel.websiteUrlUsed}
@@ -2116,16 +2118,20 @@ export function ProspectIntelligencePanel(props: {
                       )}
                     </TableCell>
                     <TableCell className="min-w-0 align-top">
-                      {websiteDone || enriching ? (
-                        <div className="flex flex-col gap-1">
-                          <VerifiedChip ok={websiteDone} label="Website" />
-                          <VerifiedChip ok={emailFound} label="Email" />
-                          <VerifiedChip ok={phoneFound} label="Phone" />
-                          <VerifiedChip ok={socialFound} label="Social" />
-                        </div>
-                      ) : (
-                        <span className="text-[11px] text-gray-300">—</span>
-                      )}
+                      {(() => {
+                        const signals: Array<{ ok: boolean; label: string }> = [];
+                        if (emailFound) signals.push({ ok: true, label: "Email" });
+                        if (phoneFound) signals.push({ ok: true, label: "Phone" });
+                        if (socialFound) signals.push({ ok: true, label: "Social" });
+                        if (signals.length === 0) return null;
+                        return (
+                          <div className="flex flex-col gap-0.5">
+                            {signals.map((s) => (
+                              <VerifiedChip key={s.label} ok={s.ok} label={s.label} />
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className={PROSPECT_AI_PROGRESS_COL_CLASS}>
                       <div className="flex min-w-0 flex-col gap-1.5">

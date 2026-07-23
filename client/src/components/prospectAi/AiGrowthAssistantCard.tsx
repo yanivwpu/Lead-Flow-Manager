@@ -19,7 +19,7 @@ export function AiGrowthAssistantCard({
   return (
     <aside
       className={cn(
-        "rounded-xl border border-violet-100/80 bg-gradient-to-r from-violet-50/80 via-white to-emerald-50/30 px-3 py-2 shadow-sm shadow-violet-900/[0.02]",
+        "rounded-xl border border-violet-100/80 bg-gradient-to-r from-violet-50/80 via-white to-emerald-50/30 px-3 py-1.5 shadow-sm shadow-violet-900/[0.02]",
         className,
       )}
       data-testid="pi-ai-growth-assistant"
@@ -34,7 +34,7 @@ export function AiGrowthAssistantCard({
         />
         <span>{model.title}</span>
       </div>
-      <ul className="mt-1 space-y-0.5">
+      <ul className="mt-0.5 space-y-0">
         {model.lines.map((line) => (
           <li
             key={`${line.emoji}-${line.text}`}
@@ -51,7 +51,7 @@ export function AiGrowthAssistantCard({
       </ul>
       {model.nextAction ? (
         <p
-          className="mt-1.5 border-t border-violet-100/80 pt-1.5 text-[11px] font-medium text-violet-900"
+          className="mt-1 border-t border-violet-100/80 pt-1 text-[11px] font-medium text-violet-900"
           data-testid="pi-ai-assistant-next-action"
         >
           <span className="text-violet-500 font-normal">Next: </span>

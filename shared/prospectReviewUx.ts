@@ -79,7 +79,7 @@ export const PROSPECT_CAMPAIGNS_SUB_FILTERS: Array<{
   { id: "ready", label: "Ready" },
   { id: "queued", label: "Queued" },
   { id: "sending", label: "Sending" },
-  { id: "completed", label: "Completed" },
+  { id: "completed", label: "Sent" },
 ];
 
 /**
@@ -208,7 +208,7 @@ export function buildProspectRowAiSummary(input: {
     priority: input.priority ?? null,
     businessType: String(input.businessType || "").trim() || null,
     offerLabel: offer || null,
-    angle: angle ? angle.slice(0, 220) : null,
+    angle: angle ? angle.slice(0, 140) : null,
   };
 }
 
@@ -271,17 +271,6 @@ export function resolveProspectTimelineStates(
     aiReview = "todo";
   }
 
-  let enriched: ProspectTimelineStageState;
-  if (isProspectEnrichmentFailed(enrichment)) {
-    enriched = "failed";
-  } else if (isProspectEnrichmentComplete(enrichment)) {
-    enriched = "done";
-  } else if (isProspectEnrichmentInProgress(enrichment)) {
-    enriched = "current";
-  } else {
-    enriched = "todo";
-  }
-
   let campaign: ProspectTimelineStageState;
   if (life === "inbox" || life === "won" || life === "campaign") {
     campaign = "done";
@@ -290,6 +279,24 @@ export function resolveProspectTimelineStates(
   } else {
     // campaign_ready and earlier — Campaign stays empty
     campaign = "todo";
+  }
+
+  let enriched: ProspectTimelineStageState;
+  if (isProspectEnrichmentFailed(enrichment)) {
+    enriched = "failed";
+  } else if (isProspectEnrichmentComplete(enrichment)) {
+    enriched = "done";
+  } else if (isProspectEnrichmentInProgress(enrichment)) {
+    enriched = "current";
+  } else if (
+    // Legacy: reached Campaign/Inbox before Website Intelligence existed —
+    // treat Enriched as done so the timeline does not look broken.
+    campaign === "done" ||
+    campaign === "current"
+  ) {
+    enriched = "done";
+  } else {
+    enriched = "todo";
   }
 
   return [aiReview, enriched, campaign];
@@ -310,7 +317,7 @@ export function matchesProspectReviewFilter(
 
 /**
  * Narrow Campaigns lane by internal workflow state.
- * Completed = outreach already sent (Inbox lifecycle) — only used when browsing Campaigns history via sub-filter.
+ * Sent (id `completed`) = outreach already sent — Campaigns history sub-filter only.
  */
 export function matchesProspectCampaignsSubFilter(
   input: ProspectReviewUxInput,
@@ -350,13 +357,13 @@ export function prospectReviewEmptyMessage(
     case "review":
       return "No businesses waiting for review.";
     case "website_intelligence":
-      return "No prospects waiting for enrichment.";
+      return "No enriched prospects yet.";
     case "campaigns":
-      return "No prospects in campaigns yet.";
+      return "No outreach campaigns yet.";
     case "inbox":
-      return "No outreach in Inbox yet.";
+      return "No conversations yet.";
     case "won":
-      return "No won customers yet.";
+      return "No customers won yet.";
     case "all":
     default:
       return "Nothing to show for this filter.";

@@ -19,9 +19,9 @@ export type ProspectAiTabId = keyof typeof PROSPECT_AI_TAB_LABELS;
 /** One short subtitle per top-level page. */
 export const PROSPECT_AI_PAGE_SUBTITLES: Record<ProspectAiTabId, string> = {
   discover: "Find new businesses to grow your pipeline.",
-  review: "Review AI-qualified prospects and approve the best opportunities.",
-  campaign: "Manage active outreach and sending queues.",
-  activity: "See discoveries, imports, outreach, and customer activity over time.",
+  review: "Approve the best AI-qualified opportunities.",
+  campaign: "Manage outreach and sending.",
+  activity: "Discoveries, imports, outreach, and wins over time.",
   won: "Customers acquired through Prospect AI.",
 };
 
@@ -229,7 +229,7 @@ export function buildCampaignsAiAssistantModel(
   else if (input.queuePaused) nextAction = "Resume the sending queue";
   else if (queued > 0 && !input.queueRunning) nextAction = "Start the sending queue";
   else if (queued > 0 && input.queueRunning) nextAction = null;
-  else nextAction = "Approve prospects in AI Review to fill the queue";
+  else nextAction = "Approve prospects in AI Review to fill the queue.";
 
   return {
     idle: queued === 0 && sending === 0 && failed === 0,

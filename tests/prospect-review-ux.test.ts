@@ -18,6 +18,7 @@ import {
   prospectReviewEmptyMessage,
   resolveProspectReviewLifecycle,
   resolveProspectTimelineStates,
+  PROSPECT_CAMPAIGNS_SUB_FILTERS,
   PROSPECT_REVIEW_FILTER_CHIPS,
   PROSPECT_REVIEW_LIFECYCLE_LABELS,
   PROSPECT_TIMELINE_STAGES,
@@ -197,12 +198,40 @@ assert.deepEqual(
   ["done", "done", "done"],
 );
 
+// Legacy Inbox (no Website Intelligence) — Enriched still reads complete
+assert.deepEqual(
+  resolveProspectTimelineStates({
+    analysisStatus: "completed",
+    reviewStatus: "approved",
+    enrichmentStatus: "none",
+    outreachStatus: "outreach_sent",
+    outreachSentAt: "2026-01-01T00:00:00.000Z",
+  }),
+  ["done", "done", "done"],
+);
+
 assert.equal(prospectMatchSummary(91).label, "Excellent Match");
 assert.equal(prospectMatchSummary(91).stars, 5);
 
 assert.equal(
   prospectReviewEmptyMessage("review", true),
   "No businesses waiting for review.",
+);
+assert.equal(
+  prospectReviewEmptyMessage("campaigns", true),
+  "No outreach campaigns yet.",
+);
+assert.equal(
+  prospectReviewEmptyMessage("inbox", true),
+  "No conversations yet.",
+);
+assert.equal(
+  prospectReviewEmptyMessage("won", true),
+  "No customers won yet.",
+);
+assert.equal(
+  PROSPECT_CAMPAIGNS_SUB_FILTERS.find((s) => s.id === "completed")?.label,
+  "Sent",
 );
 
 assert.equal(

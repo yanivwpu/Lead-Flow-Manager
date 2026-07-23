@@ -185,14 +185,14 @@ export function ProspectOutreachQueuePanel({
 
   return (
     <section
-      className={embedded ? "w-full min-w-0 space-y-4" : "mt-10 w-full min-w-0 space-y-5 border-t pt-8"}
+      className={embedded ? "w-full min-w-0 space-y-2.5" : "mt-10 w-full min-w-0 space-y-5 border-t pt-8"}
       data-testid="prospect-outreach-queue"
       data-prospect-ai-layout="tab-body"
     >
       {embedded ? (
-        <div className="space-y-0.5">
-          <h2 className="text-lg font-semibold tracking-tight text-gray-900">Campaigns</h2>
-          <p className="text-sm text-gray-600">{PROSPECT_AI_PAGE_SUBTITLES.campaign}</p>
+        <div className="space-y-0">
+          <h2 className="text-base font-semibold tracking-tight text-gray-900">Campaigns</h2>
+          <p className="text-xs text-gray-600">{PROSPECT_AI_PAGE_SUBTITLES.campaign}</p>
         </div>
       ) : (
         <h3 className="text-base font-semibold text-gray-900">Campaigns</h3>
@@ -311,7 +311,7 @@ export function ProspectOutreachQueuePanel({
             ["all", "All"],
             ["queued", "Queued"],
             ["sending", "Sending"],
-            ["sent", "Completed"],
+            ["sent", "Sent"],
             ["failed", "Failed"],
             ["paused", "Paused"],
           ] as const
@@ -330,7 +330,7 @@ export function ProspectOutreachQueuePanel({
 
       {items.length === 0 ? (
         <p className="text-sm text-gray-500">
-          No queue items yet. Approve prospects, then use Send to Campaign from Review.
+          No outreach campaigns yet.
         </p>
       ) : (
         <div className="overflow-auto rounded-xl border">
