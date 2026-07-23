@@ -84,14 +84,19 @@ import {
 } from "@shared/prospectReviewUx";
 import {
   canEnrichProspect,
+  explainCanEnrichProspect,
+  explainQualifiedForCampaign,
   formatProspectBulkActionResult,
   isProspectInCampaigns,
   isProspectQualifiedForCampaign,
+  listEmailCampaignBlockingReasons,
   matchesProspectReviewWorkFilter,
+  needsHumanReview,
   PROSPECT_NEEDS_ATTENTION_SUB_FILTERS,
   PROSPECT_REVIEW_WORK_FILTER_CHIPS,
   PROSPECT_REVIEW_WORK_STATE_LABELS,
   resolveProspectReviewWorkState,
+  summarizeSelectionActionAvailability,
   type ProspectNeedsAttentionSubFilter,
   type ProspectReviewWorkFilter,
 } from "@shared/prospectAiReviewState";
@@ -322,6 +327,8 @@ type DetailDialogProps = {
   onOpenChange: (open: boolean) => void;
   onContactFieldsUpdated: (contactId: string, patch: { email?: string | null; phone?: string | null }) => void;
   onItemUpdated: (item: ProspectIntelligenceListItem) => void;
+  /** Remove contact from bulk selection after detail Enrich (shared selection store). */
+  onEnrichedContactId?: (contactId: string) => void;
 };
 
 type ContactFieldKind = "email" | "phone";
@@ -554,6 +561,7 @@ function ProspectIntelligenceDetailDialog({
   onOpenChange,
   onContactFieldsUpdated,
   onItemUpdated,
+  onEnrichedContactId,
 }: DetailDialogProps) {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
@@ -575,6 +583,54 @@ function ProspectIntelligenceDetailDialog({
     analysisStatus: intel?.analysisStatus,
   });
 
+  // #region agent log
+  useEffect(() => {
+    if (!open || !item) return;
+    const ux = reviewUxInput(item);
+    const enrichExplain = explainCanEnrichProspect(ux);
+    const qualifiedExplain = explainQualifiedForCampaign(ux);
+    fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
+      body: JSON.stringify({
+        sessionId: "4bac18",
+        runId: "instrument-v2",
+        hypothesisId: "H1-QualifiedBlock",
+        location: "ProspectIntelligencePanel.tsx:detail-eligibility",
+        message: "Detail vs shared Enrich + exact Qualified block",
+        data: {
+          contactId: item.contactId.slice(0, 8),
+          showApproveButtonLegacy: approveUi.showApproveButton,
+          sharedCanEnrich: enrichExplain.ok,
+          enrichCode: enrichExplain.code,
+          enrichMessage: enrichExplain.message,
+          divergeEnrich: approveUi.showApproveButton !== enrichExplain.ok,
+          qualifiedOk: qualifiedExplain.ok,
+          qualifiedCode: qualifiedExplain.code,
+          qualifiedMessage: qualifiedExplain.message,
+          needsHumanReview: needsHumanReview(ux),
+          blockingReasons: listEmailCampaignBlockingReasons(ux).map((b) => b.code),
+          reviewStatus: intel?.reviewStatus,
+          needsReview: intel?.needsReview,
+          analysisStatus: intel?.analysisStatus,
+          enrichmentStatus: intel?.enrichmentStatus,
+          hasEmail: Boolean(item.email),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  }, [
+    open,
+    item?.contactId,
+    item?.email,
+    approveUi.showApproveButton,
+    intel?.reviewStatus,
+    intel?.needsReview,
+    intel?.analysisStatus,
+    intel?.enrichmentStatus,
+  ]);
+  // #endregion
+
   const analysisStatus = String(intel?.analysisStatus || "pending").toLowerCase();
   const analysisIncomplete =
     analysisStatus === "pending" || analysisStatus === "processing" || analysisStatus === "failed";
@@ -591,6 +647,10 @@ function ProspectIntelligenceDetailDialog({
     : "imported";
   const workState = item ? resolveProspectReviewWorkState(reviewUxInput(item)) : "imported";
   const workStateLabel = PROSPECT_REVIEW_WORK_STATE_LABELS[workState];
+  const detailCanEnrich = item ? canEnrichProspect(reviewUxInput(item)) : false;
+  const detailEnrichExplain = item ? explainCanEnrichProspect(reviewUxInput(item)) : null;
+  const detailQualifiedExplain = item ? explainQualifiedForCampaign(reviewUxInput(item)) : null;
+  const detailNeedsHumanReview = item ? needsHumanReview(reviewUxInput(item)) : false;
 
   const openLinkedConversation = () => {
     if (!item?.contactId || !intel?.outreachConversationId) return;
@@ -672,6 +732,27 @@ function ProspectIntelligenceDetailDialog({
         });
         setEditMessage(data.item.intelligence?.suggestedFirstMessage || editMessage);
       }
+      // #region agent log
+      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
+        body: JSON.stringify({
+          sessionId: "4bac18",
+          runId: "instrument-v2",
+          hypothesisId: "H2",
+          location: "ProspectIntelligencePanel.tsx:detail-enrich-success",
+          message: "Detail Enrich succeeded — clearing shared selection for contact",
+          data: {
+            contactId: item?.contactId?.slice(0, 8),
+            enrichmentStatus: data.item?.intelligence?.enrichmentStatus,
+            reviewStatus: data.item?.intelligence?.reviewStatus,
+            willClearSelection: Boolean(item?.contactId && onEnrichedContactId),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      if (item?.contactId) onEnrichedContactId?.(item.contactId);
       toast({ title: "1 enrichment job started." });
     },
     onError: (err: Error) => {
@@ -789,6 +870,21 @@ function ProspectIntelligenceDetailDialog({
             {approveUi.isApproved ? (
               <Badge className="bg-emerald-600" data-testid="pi-approved-badge">
                 {workStateLabel}
+              </Badge>
+            ) : null}
+            {detailNeedsHumanReview ? (
+              <Badge
+                variant="outline"
+                className="border-amber-300 text-amber-800"
+                data-testid="pi-needs-human-review-badge"
+                title="Advisory — does not block Email campaigns when hard gates pass"
+              >
+                Needs review
+              </Badge>
+            ) : null}
+            {detailQualifiedExplain?.ok ? (
+              <Badge className="bg-brand-green" data-testid="pi-email-campaign-ready-badge">
+                Ready for Email campaign
               </Badge>
             ) : null}
           </DialogTitle>
@@ -1135,13 +1231,14 @@ function ProspectIntelligenceDetailDialog({
           >
             Save message
           </Button>
-          {approveUi.showApproveButton ? (
+          {detailCanEnrich ? (
             <Button
               type="button"
               className="bg-brand-green hover:bg-emerald-700"
               disabled={approveMutation.isPending}
               onClick={() => approveMutation.mutate()}
               data-testid="pi-approve-button"
+              title={detailEnrichExplain?.ok ? undefined : detailEnrichExplain?.message}
             >
               {approveMutation.isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1150,10 +1247,23 @@ function ProspectIntelligenceDetailDialog({
               )}
               Enrich
             </Button>
-          ) : approveUi.isApproved || approveUi.isOutreachSentOrLater ? (
-            <Button type="button" variant="outline" disabled data-testid="pi-approved-button">
+          ) : approveUi.isApproved ||
+            approveUi.isOutreachSentOrLater ||
+            detailEnrichExplain?.code === "already_enriched" ||
+            detailEnrichExplain?.code === "enrichment_in_progress" ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled
+              data-testid="pi-approved-button"
+              title={detailEnrichExplain?.message || detailQualifiedExplain?.message || undefined}
+            >
               <Check className="mr-2 h-4 w-4" /> {workStateLabel}
             </Button>
+          ) : detailEnrichExplain && !detailEnrichExplain.ok ? (
+            <p className="text-xs text-gray-500" data-testid="pi-enrich-blocked-reason">
+              Enrich unavailable: {detailEnrichExplain.message}
+            </p>
           ) : null}
           {approveUi.showSendOutreach ? (
             <Button
@@ -1557,24 +1667,109 @@ export function ProspectIntelligencePanel(props: {
   const selectionEligibility = useMemo(() => {
     let canEnrich = 0;
     let qualified = 0;
+    let missingEmail = 0;
+    let firstEnrich: ReturnType<typeof explainCanEnrichProspect> | null = null;
+    let firstQualified: ReturnType<typeof explainQualifiedForCampaign> | null = null;
     for (const row of rawItems) {
       if (!effectiveSelectedIds.has(row.contactId)) continue;
       const ux = reviewUxInput(row);
-      if (canEnrichProspect(ux)) canEnrich += 1;
-      if (isProspectQualifiedForCampaign(ux)) qualified += 1;
+      const enrichEx = explainCanEnrichProspect(ux);
+      const qualEx = explainQualifiedForCampaign(ux);
+      if (!firstEnrich) firstEnrich = enrichEx;
+      if (!firstQualified) firstQualified = qualEx;
+      if (enrichEx.ok) canEnrich += 1;
+      if (qualEx.ok) qualified += 1;
+      if (qualEx.code === "missing_email") missingEmail += 1;
     }
-    return { canEnrich, qualified };
-  }, [rawItems, effectiveSelectedIds]);
+    const availability = summarizeSelectionActionAvailability({
+      selectedCount: effectiveSelectedIds.size,
+      enrichableCount: canEnrich,
+      qualifiedCount: qualified,
+      firstEnrich,
+      firstQualified,
+      missingEmailCount: missingEmail,
+    });
+    // #region agent log
+    fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
+      body: JSON.stringify({
+        sessionId: "4bac18",
+        runId: "instrument-v2",
+        hypothesisId: "H2-H4-QualifiedBlock",
+        location: "ProspectIntelligencePanel.tsx:selectionEligibility",
+        message: "Toolbar selection + exact block reasons",
+        data: {
+          selectedCount: effectiveSelectedIds.size,
+          selectedIdsSize: selectedIds.size,
+          selectAllFiltered,
+          resolvedCount: resolvedFilteredIds?.length ?? null,
+          canEnrich,
+          qualified,
+          firstEnrichCode: firstEnrich?.code ?? null,
+          firstEnrichMessage: firstEnrich?.message ?? null,
+          firstQualifiedCode: firstQualified?.code ?? null,
+          firstQualifiedMessage: firstQualified?.message ?? null,
+          availabilityLine: availability.line,
+          availabilityReason: availability.reason,
+          sendEnabled: effectiveSelectedIds.size > 0 && qualified > 0,
+          enrichEnabled: effectiveSelectedIds.size > 0 && canEnrich > 0,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    return { canEnrich, qualified, missingEmail, firstEnrich, firstQualified, availability };
+  }, [rawItems, effectiveSelectedIds, selectedIds.size, selectAllFiltered, resolvedFilteredIds]);
 
   const toggleRow = (contactId: string, e: { stopPropagation: () => void }) => {
     e.stopPropagation();
+    setSelectedIds((prev) => {
+      // When leaving select-all mode, seed from resolved IDs so uncheck removes instead of adds.
+      const base =
+        selectAllFiltered && resolvedFilteredIds ? new Set(resolvedFilteredIds) : new Set(prev);
+      const next = new Set(base);
+      const had = next.has(contactId);
+      if (had) next.delete(contactId);
+      else next.add(contactId);
+      // #region agent log
+      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
+        body: JSON.stringify({
+          sessionId: "4bac18",
+          runId: "instrument-v2",
+          hypothesisId: "H3-H5",
+          location: "ProspectIntelligencePanel.tsx:toggleRow",
+          message: "Checkbox toggle selection mutation",
+          data: {
+            contactId: contactId.slice(0, 8),
+            wasSelected: had,
+            action: had ? "remove" : "add",
+            prevSize: base.size,
+            nextSize: next.size,
+            selectAllFilteredBefore: selectAllFiltered,
+            seededFromResolved: Boolean(selectAllFiltered && resolvedFilteredIds?.length),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      return next;
+    });
+    setSelectAllFiltered(false);
+    setResolvedFilteredIds(null);
+    setResolvedFilteredCount(null);
+  };
+
+  const removeContactFromSelection = (contactId: string) => {
     setSelectAllFiltered(false);
     setResolvedFilteredIds(null);
     setResolvedFilteredCount(null);
     setSelectedIds((prev) => {
+      if (!prev.has(contactId)) return prev;
       const next = new Set(prev);
-      if (next.has(contactId)) next.delete(contactId);
-      else next.add(contactId);
+      next.delete(contactId);
       return next;
     });
   };
@@ -1737,6 +1932,33 @@ export function ProspectIntelligencePanel(props: {
           ),
         },
       ),
+    onMutate: (contactIds) => {
+      // #region agent log
+      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
+        body: JSON.stringify({
+          sessionId: "4bac18",
+          hypothesisId: "H4",
+          location: "ProspectIntelligencePanel.tsx:previewQueue-onMutate",
+          message: "Send to Campaign preview payload",
+          data: {
+            explicitIds: contactIds?.length ?? null,
+            selectionBodyKeys: Object.keys(selectionBody),
+            bodyContactIds:
+              "contactIds" in selectionBody
+                ? (selectionBody as { contactIds: string[] }).contactIds.length
+                : null,
+            selectedIdsSize: selectedIds.size,
+            effectiveSize: effectiveSelectedIds.size,
+            selectAllFiltered,
+            qualified: selectionEligibility.qualified,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+    },
     onSuccess: (data) => {
       setQueuePreview(data.preview);
       setQueuePreviewOpen(true);
@@ -2005,16 +2227,16 @@ export function ProspectIntelligencePanel(props: {
         <Button type="button" size="sm" variant="ghost" className="h-8 text-xs" onClick={clearSelection}>
           Clear
         </Button>
-        <span className="text-xs text-gray-600">
-          {selectedCount > 0 &&
-          (selectionEligibility.canEnrich > 0 || selectionEligibility.qualified > 0) &&
-          !(
-            selectionEligibility.canEnrich === selectedCount ||
-            selectionEligibility.qualified === selectedCount
-          )
-            ? `${selectedCount} selected · ${selectionEligibility.canEnrich} can be enriched · ${selectionEligibility.qualified} qualified`
-            : `${selectedCount} selected`}
-          {selectAllFiltered && resolvedFilteredCount != null ? " (server-resolved)" : ""}
+        <span className="min-w-0 text-xs text-gray-600">
+          <span data-testid="pi-selection-summary">
+            {selectionEligibility.availability.line}
+            {selectAllFiltered && resolvedFilteredCount != null ? " (server-resolved)" : ""}
+          </span>
+          {selectionEligibility.availability.reason ? (
+            <span className="mt-0.5 block text-[11px] text-amber-800" data-testid="pi-selection-reason">
+              {selectionEligibility.availability.reason}
+            </span>
+          ) : null}
         </span>
         <div className="ml-auto flex flex-wrap gap-1.5">
           <Button
@@ -2033,7 +2255,8 @@ export function ProspectIntelligencePanel(props: {
               bulkApproveMutation.isPending
                 ? "Enrichment jobs are starting…"
                 : selectedCount > 0 && selectionEligibility.canEnrich === 0
-                  ? "Selected prospects are not eligible to enrich"
+                  ? selectionEligibility.firstEnrich?.message ||
+                    "Selected prospects are not eligible to enrich"
                   : undefined
             }
           >
@@ -2058,6 +2281,12 @@ export function ProspectIntelligencePanel(props: {
             }
             onClick={() => previewQueueMutation.mutate(undefined)}
             data-testid="pi-queue-outreach"
+            title={
+              selectedCount > 0 && selectionEligibility.qualified === 0
+                ? selectionEligibility.firstQualified?.message ||
+                  "Selected prospects are not qualified for Campaigns"
+                : undefined
+            }
           >
             <Mail className="mr-1 h-3.5 w-3.5" /> Send to Campaign
           </Button>
@@ -2320,7 +2549,11 @@ export function ProspectIntelligencePanel(props: {
         item={selected}
         open={detailOpen}
         onOpenChange={setDetailOpen}
-        onItemUpdated={(next) => setSelected(next)}
+        onItemUpdated={(next) => {
+          setSelected(next);
+          patchListRows([next.contactId], () => next);
+        }}
+        onEnrichedContactId={removeContactFromSelection}
         onContactFieldsUpdated={(contactId, patch) => {
           setSelected((prev) =>
             prev && prev.contactId === contactId ? { ...prev, ...patch } : prev,

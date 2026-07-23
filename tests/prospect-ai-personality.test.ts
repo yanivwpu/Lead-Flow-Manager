@@ -61,7 +61,7 @@ import { join } from "node:path";
   assert.ok(!model.lines.some((l) => /Found public contact/i.test(l.text)));
 }
 
-// Idle only when no background work — never claim “caught up” while reviews wait
+// Idle — pending review but Email-campaign-ready (no website + valid email)
 {
   const idle = buildAiGrowthAssistantModel([
     {
@@ -73,8 +73,27 @@ import { join } from "node:path";
   ]);
   assert.equal(idle.idle, true);
   assert.ok(!idle.lines.some((l) => /caught up/i.test(l.text)));
-  assert.ok(idle.lines.some((l) => /need(s)? review/i.test(l.text)));
-  assert.ok(idle.nextAction && /Select prospects to enrich/i.test(idle.nextAction));
+  assert.ok(
+    idle.lines.some((l) => /enriched successfully|need(s)? review/i.test(l.text)) ||
+      (idle.nextAction && /Send .* Campaigns/i.test(idle.nextAction)),
+  );
+  assert.ok(idle.nextAction && /Send .* Campaigns|Select prospects to enrich/i.test(idle.nextAction));
+}
+
+// Still needs Enrich when website exists and enrichment not done
+{
+  const needsEnrich = buildAiGrowthAssistantModel([
+    {
+      analysisStatus: "completed",
+      reviewStatus: "pending",
+      enrichmentStatus: "none",
+      email: "a@b.com",
+      websiteUrl: "https://example.com",
+    },
+  ]);
+  assert.equal(needsEnrich.idle, true);
+  assert.ok(needsEnrich.lines.some((l) => /need(s)? review/i.test(l.text)));
+  assert.ok(needsEnrich.nextAction && /Select prospects to enrich/i.test(needsEnrich.nextAction));
 }
 
 {

@@ -5,12 +5,17 @@
 import assert from "node:assert/strict";
 import {
   canEnrichProspect,
+  explainCanEnrichProspect,
+  explainQualifiedForCampaign,
   formatProspectBulkActionResult,
   isProspectInCampaigns,
   isProspectInInboxJourney,
   isProspectQualifiedForCampaign,
   isProspectVisibleInReview,
+  isQualifiedForEmailCampaign,
+  listEmailCampaignBlockingReasons,
   matchesProspectReviewWorkFilter,
+  needsHumanReview,
   PROSPECT_REVIEW_WORK_FILTER_CHIPS,
   resolveProspectNeedsAttentionReason,
   resolveProspectReviewWorkState,
@@ -228,6 +233,140 @@ assert.equal(
   "1 enrichment job started.",
 );
 
+{
+  const blocked = explainQualifiedForCampaign({
+    analysisStatus: "completed",
+    reviewStatus: "needs_review",
+    needsReview: true,
+    enrichmentStatus: "completed",
+    email: "a@b.com",
+    websiteUrl: "https://x.com",
+  });
+  // needsReview is advisory — must NOT block Email campaign when hard gates pass
+  assert.equal(blocked.ok, true);
+  assert.equal(blocked.code, "ok");
+  assert.equal(
+    needsHumanReview({
+      analysisStatus: "completed",
+      reviewStatus: "needs_review",
+      needsReview: true,
+      enrichmentStatus: "completed",
+      email: "a@b.com",
+    }),
+    true,
+  );
+}
+
+{
+  // Missing phone must not block Email campaign (phone is not in hard gates)
+  const ok = isQualifiedForEmailCampaign({
+    analysisStatus: "completed",
+    reviewStatus: "approved",
+    needsReview: true,
+    enrichmentStatus: "completed",
+    email: "sales@example.com",
+    websiteUrl: "https://example.com",
+  });
+  assert.equal(ok, true);
+  assert.deepEqual(
+    listEmailCampaignBlockingReasons({
+      analysisStatus: "completed",
+      reviewStatus: "approved",
+      needsReview: true,
+      enrichmentStatus: "completed",
+      email: "sales@example.com",
+      websiteUrl: "https://example.com",
+    }),
+    [],
+  );
+}
+
+{
+  const noEmail = explainQualifiedForCampaign({
+    analysisStatus: "completed",
+    reviewStatus: "approved",
+    enrichmentStatus: "completed",
+    websiteUrl: "https://x.com",
+  });
+  assert.equal(noEmail.ok, false);
+  assert.equal(noEmail.code, "missing_email");
+  assert.match(noEmail.message, /No valid email/i);
+}
+
+{
+  const dismissed = explainQualifiedForCampaign({
+    analysisStatus: "completed",
+    reviewStatus: "approved",
+    enrichmentStatus: "completed",
+    email: "a@b.com",
+    notQualified: true,
+  });
+  assert.equal(dismissed.ok, false);
+  assert.equal(dismissed.code, "not_qualified");
+}
+
+{
+  const qualFailed = explainQualifiedForCampaign({
+    analysisStatus: "failed",
+    reviewStatus: "pending",
+    email: "a@b.com",
+  });
+  assert.equal(qualFailed.ok, false);
+  assert.equal(qualFailed.code, "qualification_failed");
+}
+
+{
+  // Enrichment failed but email available → Email campaign still allowed
+  const enrichFailWithEmail = explainQualifiedForCampaign({
+    analysisStatus: "completed",
+    reviewStatus: "approved",
+    enrichmentStatus: "failed",
+    email: "a@b.com",
+    websiteUrl: "https://x.com",
+  });
+  assert.equal(enrichFailWithEmail.ok, true);
+}
+
+{
+  // Enrichment failed and no email → block
+  const enrichFailNoEmail = explainQualifiedForCampaign({
+    analysisStatus: "completed",
+    reviewStatus: "approved",
+    enrichmentStatus: "failed",
+    websiteUrl: "https://x.com",
+  });
+  assert.equal(enrichFailNoEmail.ok, false);
+  assert.ok(
+    enrichFailNoEmail.code === "enrichment_failed" ||
+      enrichFailNoEmail.code === "missing_email",
+  );
+}
+
+{
+  const enrichBlocked = explainCanEnrichProspect({
+    analysisStatus: "completed",
+    reviewStatus: "needs_review",
+    needsReview: true,
+    enrichmentStatus: "completed",
+    email: "a@b.com",
+    websiteUrl: "https://x.com",
+  });
+  assert.equal(enrichBlocked.ok, false);
+  assert.equal(enrichBlocked.code, "needs_review_decision");
+}
+
+{
+  const already = explainCanEnrichProspect({
+    analysisStatus: "completed",
+    reviewStatus: "approved",
+    enrichmentStatus: "completed",
+    email: "a@b.com",
+    websiteUrl: "https://x.com",
+  });
+  assert.equal(already.ok, false);
+  assert.equal(already.code, "already_enriched");
+}
+
 const pageSrc = readFileSync(join(root, "client/src/pages/ProspectAI.tsx"), "utf8");
 assert.ok(pageSrc.includes("PROSPECT_AI_PRIMARY_TABS"));
 assert.ok(pageSrc.includes("InboxTab") || pageSrc.includes('value="inbox"'));
@@ -244,6 +383,8 @@ assert.ok(panelSrc.includes("PROSPECT_REVIEW_WORK_FILTER_CHIPS"));
 assert.ok(!panelSrc.includes("PROSPECT_REVIEW_FILTER_CHIPS"));
 assert.ok(!panelSrc.includes("Approve to enrich"));
 assert.ok(panelSrc.includes("Enrich") || panelSrc.includes("pi-enrich"));
+assert.ok(panelSrc.includes("pi-selection-reason") || panelSrc.includes("availability.reason"));
+assert.ok(panelSrc.includes("onEnrichedContactId"));
 assert.ok(!panelSrc.includes("pi-campaigns-subfilters"));
 
 const campaignsSrc = readFileSync(
