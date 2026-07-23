@@ -25,7 +25,7 @@ export const PROSPECT_AI_REVIEW_TABLE_CLASS =
 export const PROSPECT_AI_PROGRESS_COL_CLASS =
   "prospect-ai-progress-col w-[20rem] min-w-[20rem] max-w-[20rem]";
 
-/** Compact progress timeline: never wrap Campaign under Website. */
+/** Compact progress timeline: never wrap Campaign under Enriched. */
 export const PROSPECT_AI_PROGRESS_TIMELINE_CLASS =
   "prospect-ai-progress-timeline flex max-w-full flex-nowrap items-center gap-x-1.5 overflow-x-auto whitespace-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 

@@ -309,9 +309,9 @@ export function ProspectOutreachQueuePanel({
         {(
           [
             ["all", "All"],
-            ["queued", PROSPECT_SENDING_QUEUE_LABEL],
+            ["queued", "Queued"],
             ["sending", "Sending"],
-            ["sent", "Sent"],
+            ["sent", "Completed"],
             ["failed", "Failed"],
             ["paused", "Paused"],
           ] as const

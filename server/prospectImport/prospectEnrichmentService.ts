@@ -21,6 +21,7 @@ import { assertContactInWorkspace } from "./prospectWorkspaceScope";
 import { getProspectEnrichmentProvider } from "./prospectWebsiteEnrichmentProvider";
 import { analyzeProspectContact } from "./prospectIntelligenceService";
 import { isValidProspectEmail, isValidProspectPhone } from "@shared/prospectContactEnrichment";
+import { shouldApplyScrapedProspectEmail } from "./prospectWebsiteContactExtract";
 import { extractSqlExecuteId } from "@shared/prospectAnalysisOwnership";
 
 function mapJob(row: ProspectEnrichmentJobRow): ProspectEnrichmentJobSummary {
@@ -231,7 +232,7 @@ async function applyEnrichmentToContact(
   const foundEmail = result.publicContacts.emails.find((e) => isValidProspectEmail(e));
   const foundPhone = result.publicContacts.phones.find((p) => isValidProspectPhone(p));
 
-  if (foundEmail && !isValidProspectEmail(contact.email)) {
+  if (foundEmail && shouldApplyScrapedProspectEmail(contact.email, foundEmail)) {
     patch.email = foundEmail;
   }
   if (foundPhone && !isValidProspectPhone(contact.phone)) {

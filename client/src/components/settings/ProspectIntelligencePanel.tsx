@@ -71,15 +71,19 @@ import {
   isProspectQualificationComplete,
   isProspectQualificationPending,
   mergeProspectRowsStableOrder,
+  matchesProspectCampaignsSubFilter,
   matchesProspectReviewFilter,
   prospectReviewCompletionFlash,
   prospectReviewEmptyMessage,
   prospectReviewLifecycleLabel,
+  PROSPECT_CAMPAIGNS_SUB_FILTERS,
   PROSPECT_REVIEW_FILTER_CHIPS,
   PROSPECT_TIMELINE_STAGES,
   resolveProspectReviewLifecycle,
   resolveProspectTimelineStates,
+  type ProspectCampaignsSubFilter,
   type ProspectReviewLifecycle,
+  type ProspectReviewNavFilter,
   type ProspectTimelineStageState,
 } from "@shared/prospectReviewUx";
 import {
@@ -130,14 +134,14 @@ function reviewUxInput(row: ProspectIntelligenceListItem) {
 }
 
 const PROSPECT_TIMELINE_SHORT_LABELS: Record<(typeof PROSPECT_TIMELINE_STAGES)[number]["id"], string> = {
-  imported: "In",
   ai_review: "AI",
-  website: "Web",
+  enriched: "Enr",
   campaign: "Camp",
 };
 
-function ProspectProgressTimeline({ life }: { life: ProspectReviewLifecycle }) {
-  const states = resolveProspectTimelineStates(life);
+function ProspectProgressTimeline({ ux }: { ux: ReturnType<typeof reviewUxInput> }) {
+  const life = resolveProspectReviewLifecycle(ux);
+  const states = resolveProspectTimelineStates(ux);
   return (
     <div
       className={PROSPECT_AI_PROGRESS_TIMELINE_CLASS}
@@ -155,6 +159,7 @@ function ProspectProgressTimeline({ life }: { life: ProspectReviewLifecycle }) {
                 state === "done" && "text-emerald-700",
                 state === "current" && "text-emerald-800",
                 state === "todo" && "text-gray-400",
+                state === "failed" && "text-red-600",
               )}
             >
               <span
@@ -163,10 +168,11 @@ function ProspectProgressTimeline({ life }: { life: ProspectReviewLifecycle }) {
                   state === "done" && "bg-emerald-600 text-white",
                   state === "current" && "bg-emerald-500 text-white pi-timeline-current",
                   state === "todo" && "border border-gray-300 bg-white text-gray-300",
+                  state === "failed" && "bg-red-500 text-white",
                 )}
                 aria-hidden
               >
-                {state === "done" ? "✓" : state === "current" ? "●" : "○"}
+                {state === "done" ? "✓" : state === "current" ? "●" : state === "failed" ? "!" : "○"}
               </span>
               <span className="prospect-ai-stage-label-full">{stage.label}</span>
               <span className="prospect-ai-stage-label-short" aria-hidden>
@@ -1161,9 +1167,9 @@ export function ProspectIntelligencePanel(props: {
 }) {
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [businessFilter, setBusinessFilter] = useState<string>("all");
-  const [lifecycleFilter, setLifecycleFilter] = useState<
-    "all" | "review" | ProspectReviewLifecycle
-  >("review");
+  const [lifecycleFilter, setLifecycleFilter] = useState<ProspectReviewNavFilter>("review");
+  const [campaignsSubFilter, setCampaignsSubFilter] =
+    useState<ProspectCampaignsSubFilter>("all");
   const [channelFilter, setChannelFilter] = useState<string>("all");
   /** Stable visual order — never jump rows after analyze/approve/enrich. */
   const [sortBy, setSortBy] = useState<"leadScore" | "priority" | "confidence" | "name" | "action">(
@@ -1235,7 +1241,7 @@ export function ProspectIntelligencePanel(props: {
     stableOrderRef.current = [];
     setPinnedVisibleIds(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only clear when filters change
-  }, [priorityFilter, businessFilter, lifecycleFilter, channelFilter, sortBy]);
+  }, [priorityFilter, businessFilter, lifecycleFilter, campaignsSubFilter, channelFilter, sortBy]);
 
   useEffect(() => {
     const id = window.setInterval(
@@ -1397,9 +1403,20 @@ export function ProspectIntelligencePanel(props: {
     }
     for (const row of rawItems) {
       const life = resolveProspectReviewLifecycle(reviewUxInput(row));
-      map[life] = (map[life] || 0) + 1;
       if (matchesProspectReviewFilter(life, "review")) {
         map.review = (map.review || 0) + 1;
+      }
+      if (matchesProspectReviewFilter(life, "website_intelligence")) {
+        map.website_intelligence = (map.website_intelligence || 0) + 1;
+      }
+      if (matchesProspectReviewFilter(life, "campaigns")) {
+        map.campaigns = (map.campaigns || 0) + 1;
+      }
+      if (matchesProspectReviewFilter(life, "inbox")) {
+        map.inbox = (map.inbox || 0) + 1;
+      }
+      if (matchesProspectReviewFilter(life, "won")) {
+        map.won = (map.won || 0) + 1;
       }
     }
     return map;
@@ -1424,13 +1441,21 @@ export function ProspectIntelligencePanel(props: {
 
   const filteredItems = useMemo(() => {
     return rawItems.filter((row) => {
-      const life = resolveProspectReviewLifecycle(reviewUxInput(row));
-      return (
-        matchesProspectReviewFilter(life, lifecycleFilter) ||
-        pinnedVisibleIds.has(row.contactId)
-      );
+      const ux = reviewUxInput(row);
+      const life = resolveProspectReviewLifecycle(ux);
+      if (pinnedVisibleIds.has(row.contactId)) return true;
+      if (lifecycleFilter === "campaigns") {
+        if (campaignsSubFilter === "completed") {
+          return matchesProspectCampaignsSubFilter(ux, "completed");
+        }
+        return (
+          matchesProspectReviewFilter(life, "campaigns") &&
+          matchesProspectCampaignsSubFilter(ux, campaignsSubFilter)
+        );
+      }
+      return matchesProspectReviewFilter(life, lifecycleFilter);
     });
-  }, [rawItems, lifecycleFilter, pinnedVisibleIds]);
+  }, [rawItems, lifecycleFilter, campaignsSubFilter, pinnedVisibleIds]);
 
   const items = useMemo(() => {
     const merged = mergeProspectRowsStableOrder(stableOrderRef.current, filteredItems);
@@ -1794,7 +1819,10 @@ export function ProspectIntelligencePanel(props: {
                     ? "bg-gray-900 text-white shadow-sm hover:bg-gray-800"
                     : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50",
                 )}
-                onClick={() => setLifecycleFilter(chip.id)}
+                onClick={() => {
+                  setLifecycleFilter(chip.id);
+                  if (chip.id !== "campaigns") setCampaignsSubFilter("all");
+                }}
                 data-testid={`pi-filter-${chip.id}`}
               >
                 {chip.label}
@@ -1810,6 +1838,29 @@ export function ProspectIntelligencePanel(props: {
             );
           })}
         </div>
+        {lifecycleFilter === "campaigns" ? (
+          <div
+            className="flex max-w-full flex-nowrap gap-1 overflow-x-auto pb-0.5"
+            data-testid="pi-campaigns-subfilters"
+          >
+            {PROSPECT_CAMPAIGNS_SUB_FILTERS.map((sub) => {
+              const active = campaignsSubFilter === sub.id;
+              return (
+                <Button
+                  key={sub.id}
+                  type="button"
+                  size="sm"
+                  variant={active ? "secondary" : "ghost"}
+                  className="h-6 shrink-0 rounded-full px-2 text-[10px] font-medium"
+                  onClick={() => setCampaignsSubFilter(sub.id)}
+                  data-testid={`pi-campaigns-sub-${sub.id}`}
+                >
+                  {sub.label}
+                </Button>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
       <div className="space-y-1.5">
@@ -2072,15 +2123,13 @@ export function ProspectIntelligencePanel(props: {
                           <VerifiedChip ok={phoneFound} label="Phone" />
                           <VerifiedChip ok={socialFound} label="Social" />
                         </div>
-                      ) : reviewReady ? (
-                        <span className="text-[11px] text-gray-400">Approve to enrich</span>
                       ) : (
                         <span className="text-[11px] text-gray-300">—</span>
                       )}
                     </TableCell>
                     <TableCell className={PROSPECT_AI_PROGRESS_COL_CLASS}>
                       <div className="flex min-w-0 flex-col gap-1.5">
-                        <ProspectProgressTimeline life={life} />
+                        <ProspectProgressTimeline ux={reviewUxInput(row)} />
                         {showActivity && (analyzing || enriching || life === "imported") ? (
                           <AiPersonalityStatusView
                             status={personality}

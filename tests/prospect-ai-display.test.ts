@@ -34,9 +34,11 @@ assert.equal(PROSPECT_CAMPAIGN_QUEUE_STATUS_LABELS.queued, "Sending Queue");
 assert.equal(prospectCampaignQueueStatusLabel("queued"), "Sending Queue");
 assert.equal(PROSPECT_REVIEW_LIFECYCLE_LABELS.queued, "Campaign Queue");
 assert.equal(
-  PROSPECT_REVIEW_FILTER_CHIPS.find((c) => c.id === "queued")?.label,
-  "Campaign Queue",
+  PROSPECT_REVIEW_FILTER_CHIPS.find((c) => c.id === "campaigns")?.label,
+  "Campaigns",
 );
+assert.ok(!PROSPECT_REVIEW_FILTER_CHIPS.some((c) => c.label === "Campaign Ready"));
+assert.ok(!PROSPECT_REVIEW_FILTER_CHIPS.some((c) => c.label === "Campaign Queue"));
 assert.equal(PROSPECT_SELECTION_LABELS.selectPage, "Select page");
 assert.equal(PROSPECT_SELECTION_LABELS.selectAllResults, "Select all results");
 

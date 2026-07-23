@@ -51,13 +51,21 @@ function mergeContacts(...parts: ProspectPublicContacts[]): ProspectPublicContac
   const socialProfiles = new Set<string>();
   const bookingUrls = new Set<string>();
   const contactPageUrls = new Set<string>();
+  const emailExtractions: NonNullable<ProspectPublicContacts["emailExtractions"]> = [];
+  const seenExtraction = new Set<string>();
   for (const p of parts) {
-    p.emails.forEach((e) => emails.add(e));
+    p.emails.forEach((e) => emails.add(e.toLowerCase()));
     p.phones.forEach((e) => phones.add(e));
     p.whatsappNumbers.forEach((e) => whatsappNumbers.add(e));
     p.socialProfiles.forEach((e) => socialProfiles.add(e));
     p.bookingUrls.forEach((e) => bookingUrls.add(e));
     p.contactPageUrls.forEach((e) => contactPageUrls.add(e));
+    for (const ex of p.emailExtractions || []) {
+      const key = ex.email.toLowerCase();
+      if (seenExtraction.has(key)) continue;
+      seenExtraction.add(key);
+      emailExtractions.push({ ...ex, email: key });
+    }
   }
   return {
     emails: [...emails],
@@ -66,6 +74,7 @@ function mergeContacts(...parts: ProspectPublicContacts[]): ProspectPublicContac
     socialProfiles: [...socialProfiles],
     bookingUrls: [...bookingUrls],
     contactPageUrls: [...contactPageUrls],
+    emailExtractions: emailExtractions.length ? emailExtractions : undefined,
   };
 }
 
