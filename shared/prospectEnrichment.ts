@@ -38,7 +38,7 @@ export type ProspectPublicContacts = {
   /** Optional extraction trace — stored in jsonb enrichment_result only (no migration). */
   emailExtractions?: Array<{
     email: string;
-    method: "mailto" | "standard_text" | "obfuscated_text";
+    method: "cloudflare_cfemail" | "mailto" | "standard_text" | "obfuscated_text";
     sourceUrl?: string;
   }>;
 };

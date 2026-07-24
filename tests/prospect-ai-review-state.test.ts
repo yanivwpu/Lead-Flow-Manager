@@ -39,7 +39,7 @@ assert.equal(PROSPECT_AI_TAB_LABELS.activity, "Activity");
 
 assert.deepEqual(
   PROSPECT_REVIEW_WORK_FILTER_CHIPS.map((c) => c.label),
-  ["All", "Needs Review", "Qualified"],
+  ["All", "Needs Review", "Qualified", "Not Qualified"],
 );
 
 // Needs Review → can Enrich
@@ -208,7 +208,7 @@ assert.equal(
 );
 
 {
-  // Needs Review filter = anyone not Ready to Send (presentation grouping)
+  // Needs Review filter = anyone not Ready to Send and not Not Qualified
   const enrichingRow = {
     analysisStatus: "completed" as const,
     reviewStatus: "approved" as const,
@@ -234,11 +234,20 @@ assert.equal(
     email: "a@b.com",
     websiteUrl: "https://x.com",
   };
+  const rejectedRow = {
+    analysisStatus: "completed" as const,
+    reviewStatus: "pending" as const,
+    notQualified: true as const,
+    email: "a@b.com",
+  };
 
   assert.equal(matchesProspectReviewWorkFilter(enrichingRow, "needs_review"), true);
   assert.equal(matchesProspectReviewWorkFilter(attentionRow, "needs_review"), true);
   assert.equal(matchesProspectReviewWorkFilter(pendingReviewRow, "needs_review"), true);
   assert.equal(matchesProspectReviewWorkFilter(readyRow, "needs_review"), false);
+  assert.equal(matchesProspectReviewWorkFilter(rejectedRow, "needs_review"), false);
+  assert.equal(matchesProspectReviewWorkFilter(rejectedRow, "not_qualified"), true);
+  assert.equal(matchesProspectReviewWorkFilter(rejectedRow, "qualified"), false);
   assert.equal(matchesProspectReviewWorkFilter(readyRow, "qualified"), true);
   assert.equal(matchesProspectReviewWorkFilter(enrichingRow, "qualified"), false);
 
@@ -263,6 +272,7 @@ assert.equal(
     "Missing Email",
   );
   assert.equal(resolveProspectNeedsReviewBadge(readyRow), null);
+  assert.equal(resolveProspectNeedsReviewBadge(rejectedRow), null);
   assert.equal(
     resolveProspectNeedsReviewBadge({
       analysisStatus: "completed",
@@ -724,6 +734,8 @@ const campaignsSrc = readFileSync(
 );
 assert.ok(campaignsSrc.includes("PROSPECT_CAMPAIGN_STATUS_FILTERS"));
 assert.ok(campaignsSrc.includes("PROSPECT_CAMPAIGN_CONTROL_LABELS.startSending"));
+assert.ok(campaignsSrc.includes("groupProspectCampaignBatches"));
+assert.ok(campaignsSrc.includes("po-campaign-batches"));
 assert.ok(!campaignsSrc.includes('["sending", "Sending"]'));
 
 console.log("prospect-ai-review-state.test.ts: all assertions passed");

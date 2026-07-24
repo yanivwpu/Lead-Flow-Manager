@@ -3,10 +3,11 @@
  * Never invent/synthesize emails (info@, hello@, sales@, etc.).
  *
  * Email pipeline (deterministic, no LLM):
- * 1. mailto links
- * 2. standard visible-text / HTML email regex (after entity decode)
- * 3. obfuscated visible-text normalization
- * 4. validation + case-insensitive dedupe
+ * 1. Cloudflare email-protection (`data-cfemail` / cdn-cgi links)
+ * 2. mailto links
+ * 3. standard visible-text / HTML email regex (after entity decode)
+ * 4. obfuscated visible-text normalization
+ * 5. validation + case-insensitive dedupe
  */
 
 import type { ProspectPublicContacts } from "@shared/prospectEnrichment";
@@ -46,7 +47,34 @@ const IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp|ico)(\?|$)/i;
 const DOMAIN_RE =
   /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
 
-export type ProspectEmailExtractionMethod = "mailto" | "standard_text" | "obfuscated_text";
+export type ProspectEmailExtractionMethod =
+  | "cloudflare_cfemail"
+  | "mailto"
+  | "standard_text"
+  | "obfuscated_text";
+
+/** Cloudflare Email Address Obfuscation — XOR decode of `data-cfemail` hex. */
+export function decodeCloudflareCfEmail(encoded: string): string | null {
+  const hex = String(encoded || "").trim().toLowerCase();
+  if (!/^[0-9a-f]{4,256}$/.test(hex) || hex.length % 2 !== 0) return null;
+  try {
+    const key = parseInt(hex.slice(0, 2), 16);
+    if (!Number.isFinite(key)) return null;
+    let out = "";
+    for (let i = 2; i < hex.length; i += 2) {
+      const code = parseInt(hex.slice(i, i + 2), 16) ^ key;
+      if (!Number.isFinite(code) || code < 32 || code > 126) return null;
+      out += String.fromCharCode(code);
+    }
+    return out.includes("@") ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+const CF_EMAIL_ATTR_RE = /data-cfemail=["']([0-9a-fA-F]+)["']/gi;
+const CF_EMAIL_HREF_RE =
+  /\/cdn-cgi\/l\/email-protection(?:#|%23)([0-9a-fA-F]{4,})/gi;
 
 export type ProspectExtractedEmail = {
   email: string;
@@ -220,7 +248,7 @@ function pushEmail(
   bag.push({ email, method, sourceUrl: sourceUrl || undefined });
 }
 
-/** Extract emails with method metadata (mailto → standard → obfuscated). */
+/** Extract emails with method metadata (Cloudflare → mailto → standard → obfuscated). */
 export function extractEmailsFromHtml(
   html: string,
   pageUrl?: string,
@@ -230,6 +258,17 @@ export function extractEmailsFromHtml(
   const found: ProspectExtractedEmail[] = [];
   const seen = new Set<string>();
   let m: RegExpExecArray | null;
+
+  CF_EMAIL_ATTR_RE.lastIndex = 0;
+  while ((m = CF_EMAIL_ATTR_RE.exec(html)) !== null) {
+    const plain = decodeCloudflareCfEmail(m[1]);
+    if (plain) pushEmail(found, seen, plain, "cloudflare_cfemail", pageUrl);
+  }
+  CF_EMAIL_HREF_RE.lastIndex = 0;
+  while ((m = CF_EMAIL_HREF_RE.exec(html)) !== null) {
+    const plain = decodeCloudflareCfEmail(m[1]);
+    if (plain) pushEmail(found, seen, plain, "cloudflare_cfemail", pageUrl);
+  }
 
   MAILTO_RE.lastIndex = 0;
   while ((m = MAILTO_RE.exec(decoded)) !== null) {
@@ -248,6 +287,47 @@ export function extractEmailsFromHtml(
     if (normalized) pushEmail(found, seen, normalized, "obfuscated_text", pageUrl);
   }
 
+  return found;
+}
+
+const CONTACT_PATH_HINT =
+  /(?:^|\/)(?:contact(?:-us)?|get-in-touch|reach-us|about(?:-us)?|team|support)(?:\/|$|\?)/i;
+
+/**
+ * Discover same-origin contact/about URLs linked from a page (footer/nav).
+ * Does not invent paths — only follows hrefs present in HTML.
+ */
+export function discoverContactUrlsFromHtml(html: string, pageUrl: string): string[] {
+  let base: URL;
+  try {
+    base = new URL(pageUrl);
+  } catch {
+    return [];
+  }
+  const found: string[] = [];
+  const seen = new Set<string>();
+  const hrefRe = /href\s*=\s*["']([^"'#]+)["']/gi;
+  let m: RegExpExecArray | null;
+  while ((m = hrefRe.exec(html)) !== null) {
+    const raw = m[1].trim();
+    if (!raw || raw.startsWith("mailto:") || raw.startsWith("tel:") || raw.startsWith("javascript:")) {
+      continue;
+    }
+    let abs: URL;
+    try {
+      abs = new URL(raw, base);
+    } catch {
+      continue;
+    }
+    if (abs.protocol !== "http:" && abs.protocol !== "https:") continue;
+    if (abs.host !== base.host) continue;
+    if (!CONTACT_PATH_HINT.test(abs.pathname)) continue;
+    const key = abs.origin + abs.pathname.replace(/\/$/, "").toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    found.push(abs.origin + abs.pathname + abs.search);
+    if (found.length >= 5) break;
+  }
   return found;
 }
 

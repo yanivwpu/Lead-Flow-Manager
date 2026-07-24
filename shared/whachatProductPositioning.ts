@@ -15,11 +15,14 @@ export const WHACHAT_PARTNER_COMMISSION_COPY =
  * Outreach must choose a small subset of these capabilities per prospect.
  */
 export const WHACHAT_CANONICAL_CAPABILITIES = [
-  "Multi-channel unified inbox across WhatsApp, Instagram, Facebook Messenger, email, Telegram, web chat, and other supported channels",
-  "AI Copilot that analyzes conversations, helps qualify leads, summarizes context, recommends next actions, and assists with responses",
-  "AI-powered lead qualification and lead scoring",
-  "Contact management and CRM pipeline/stage organization",
-  "Automated follow-up, nurture campaigns, workflows, and messaging automation",
+  "AI-powered prospect discovery and lead sourcing",
+  "AI lead qualification and lead scoring",
+  "Outreach automation for first-touch and follow-up sequences",
+  "Official WhatsApp Business API messaging",
+  "Email and other messaging channels (Instagram, Facebook Messenger, Telegram, web chat, and more)",
+  "Unified customer conversations in one inbox",
+  "CRM follow-up, pipeline organization, and workflow automation",
+  "Turning conversations into customers with AI Copilot assistance on replies and next actions",
   "Team collaboration for managing customer conversations",
   "Appointment and booking workflows",
   "Industry-specific capabilities and Growth Engines",
@@ -54,64 +57,64 @@ const SEGMENT_CONTEXT: Record<WhachatPositioningSegment, WhachatPositioningConte
   agency: {
     segment: "agency",
     priorityBenefits: [
-      "unified multi-channel client communication",
-      "CRM + pipeline organization",
-      "AI-powered lead qualification and follow-up",
-      "automation for client conversations",
+      "AI lead qualification for inbound/client leads",
+      "outreach automation across WhatsApp and messaging channels",
+      "unified client conversations in one inbox",
+      "CRM follow-up and pipeline organization",
     ],
     positioningSentence:
-      "WhachatCRM is a unified inbox and CRM that helps agencies manage client conversations across WhatsApp, Instagram, Facebook Messenger, email, and more from one place, with AI-powered lead qualification, follow-up, and automation.",
+      "WhachatCRM is an AI-powered CRM that helps agencies discover and qualify leads, automate outreach, and manage client conversations across WhatsApp Business API, email, and other messaging channels — turning conversations into customers.",
     optionalCloser: "We also offer agency and white-label opportunities.",
-    avoidTopics: ["MLS", "inventory matching", "abandoned cart"],
+    avoidTopics: ["MLS", "inventory matching", "abandoned cart", "analytics dashboard", "insights platform"],
   },
   ghl_agency: {
     segment: "ghl_agency",
     priorityBenefits: [
       "multi-channel client messaging in one inbox",
+      "AI qualification and automated outreach/follow-up",
       "CRM for agencies managing multiple clients",
-      "AI qualification and automated follow-up",
       "agency/white-label opportunity",
     ],
     positioningSentence:
-      "WhachatCRM is a unified inbox and CRM built for agencies that manage client conversations across WhatsApp, Instagram, Facebook Messenger, email, and more — with AI-powered lead qualification, follow-up, and automation that fits a client-service stack.",
+      "WhachatCRM is an AI-powered CRM built for agencies that qualify leads and manage client conversations across WhatsApp Business API, email, Instagram, Messenger, and more — with outreach automation and follow-up that fits a client-service stack.",
     optionalCloser: "We also offer agency and white-label opportunities for GHL and digital agencies.",
-    avoidTopics: ["MLS", "Shopify storefront", "abandoned cart"],
+    avoidTopics: ["MLS", "Shopify storefront", "abandoned cart", "analytics dashboard", "insights platform"],
   },
   shopify: {
     segment: "shopify",
     priorityBenefits: [
       "customer conversations in one inbox",
-      "Shopify/customer messaging context",
+      "WhatsApp + email messaging for shoppers",
       "follow-up and customer engagement workflows",
       "AI assistance for replies and qualification",
     ],
     positioningSentence:
-      "WhachatCRM is a multi-channel CRM and unified inbox that helps Shopify brands manage customer conversations across WhatsApp, Instagram, Messenger, email, and web chat — with AI assistance for follow-up and customer engagement.",
-    avoidTopics: ["MLS", "white-label agency", "partner commission"],
+      "WhachatCRM is an AI-powered CRM and unified inbox that helps Shopify brands manage customer conversations across WhatsApp Business API, Instagram, Messenger, email, and web chat — with outreach automation and AI help for follow-up.",
+    avoidTopics: ["MLS", "white-label agency", "partner commission", "analytics dashboard"],
   },
   real_estate: {
     segment: "real_estate",
     priorityBenefits: [
       "multi-channel lead communication",
-      "CRM and follow-up",
-      "AI lead qualification",
+      "AI lead qualification and outreach automation",
+      "CRM and follow-up workflows",
       "Real Estate Growth Engine / MLS inventory matching when relevant",
     ],
     positioningSentence:
-      "WhachatCRM is a multi-channel CRM and unified inbox for real estate teams — manage leads across WhatsApp, Instagram, Messenger, and email, with AI lead qualification, follow-up automation, and a Real Estate Growth Engine that supports MLS/inventory matching workflows.",
-    avoidTopics: ["Shopify", "abandoned cart", "white-label agency"],
+      "WhachatCRM is an AI-powered CRM for real estate teams — qualify leads, automate outreach, and manage conversations across WhatsApp Business API, Instagram, Messenger, and email, with a Real Estate Growth Engine that supports MLS/inventory matching workflows.",
+    avoidTopics: ["Shopify", "abandoned cart", "white-label agency", "analytics dashboard"],
   },
   local_service: {
     segment: "local_service",
     priorityBenefits: [
       "never losing customer inquiries across channels",
-      "faster response",
-      "lead qualification and follow-up",
+      "faster response via WhatsApp and messaging",
+      "lead qualification and outreach follow-up",
       "booking + simple CRM organization",
     ],
     positioningSentence:
-      "WhachatCRM is a multi-channel CRM and unified inbox that helps local businesses capture customer inquiries from WhatsApp, Instagram, Messenger, email, and web chat in one place — with AI help to qualify leads, follow up, and organize bookings in a simple CRM.",
-    avoidTopics: ["MLS", "Shopify", "white-label", "partner commission"],
+      "WhachatCRM is an AI-powered CRM that helps local businesses capture inquiries from WhatsApp Business API, Instagram, Messenger, email, and web chat in one place — with AI help to qualify leads, automate follow-up, and organize bookings.",
+    avoidTopics: ["MLS", "Shopify", "white-label", "partner commission", "analytics dashboard"],
   },
   partner: {
     segment: "partner",
@@ -122,21 +125,21 @@ const SEGMENT_CONTEXT: Record<WhachatPositioningSegment, WhachatPositioningConte
       "complements existing services/audience",
     ],
     positioningSentence:
-      `WhachatCRM is a multi-channel CRM and AI-powered customer engagement platform for agencies, local businesses, ecommerce, and real estate — and our partner program pays ${WHACHAT_PARTNER_COMMISSION_COPY}.`,
+      `WhachatCRM is an AI-powered CRM for prospecting, lead qualification, outreach automation, and customer conversations across WhatsApp Business API, email, and messaging channels — and our partner program pays ${WHACHAT_PARTNER_COMMISSION_COPY}.`,
     optionalCloser: "It can complement the audience or services you already serve.",
-    avoidTopics: ["MLS deep dive", "Shopify-only pitch"],
+    avoidTopics: ["MLS deep dive", "Shopify-only pitch", "analytics dashboard"],
   },
   general: {
     segment: "general",
     priorityBenefits: [
-      "multi-channel unified inbox",
-      "CRM pipeline organization",
-      "AI Copilot for qualification and replies",
-      "follow-up automation",
+      "AI prospecting and lead qualification",
+      "outreach automation",
+      "WhatsApp Business API + email messaging",
+      "unified conversations and CRM follow-up",
     ],
     positioningSentence:
-      "WhachatCRM is a multi-channel CRM, unified inbox, and AI-powered customer engagement platform — manage conversations across WhatsApp, Instagram, Facebook Messenger, email, and more, with AI Copilot for lead qualification, follow-up, and CRM organization.",
-    avoidTopics: [],
+      "WhachatCRM is an AI-powered CRM for prospecting, lead qualification, outreach automation, and customer conversations — built around the official WhatsApp Business API together with email and other messaging channels.",
+    avoidTopics: ["analytics dashboard", "insights platform"],
   },
 };
 
@@ -149,6 +152,12 @@ export const WEAK_WHACHAT_POSITIONING_PHRASES = [
   "AI support",
   "a messaging platform",
   "unified messaging",
+  "insights and analytics",
+  "our insights and analytics",
+  "analytics can further enhance",
+  "enhance your offerings",
+  "analytics platform",
+  "insights platform",
 ] as const;
 
 export function resolveWhachatPositioningSegment(input: {
@@ -248,10 +257,24 @@ Avoid unless clearly relevant: ${ctx.avoidTopics.length ? ctx.avoidTopics.join("
     .join("\n\n");
 
   return `PRODUCT: ${WHACHAT_PRODUCT_NAME}
-WhachatCRM is a multi-channel CRM, unified inbox, and AI-powered customer engagement platform.
+WhachatCRM is an AI-powered CRM for prospecting, lead qualification, outreach automation, and customer conversations — built around the official WhatsApp Business API together with email and other messaging channels.
 
-CANONICAL CAPABILITIES (choose 2–4 most relevant for THIS prospect — do not list everything):
+CANONICAL CAPABILITIES (choose only the 1–2 most relevant for THIS prospect — do not dump the full list):
 ${capabilities}
+
+OUTREACH REASONING ORDER (required):
+1. Understand the prospect's actual business / core offer from the input.
+2. Infer one plausible pain point worth solving (only if evidence supports it; otherwise stay neutral).
+3. Select only the 1–2 WhachatCRM capabilities most relevant to that prospect.
+4. Write a short natural message connecting their likely pain to those capabilities.
+5. Never paste a generic feature list into every message.
+
+NEVER default to describing WhachatCRM as:
+- an analytics product
+- an insights platform
+- "insights and analytics"
+- vague "enhance your offerings" without naming a real capability
+unless the prospect's actual use case genuinely supports analytics/reporting.
 
 NEVER describe WhachatCRM ONLY as:
 - "AI support"
@@ -260,14 +283,14 @@ NEVER describe WhachatCRM ONLY as:
 - "a platform for unified messaging and AI support"
 - vague "streamline communication / streamline your operations" without saying what the product does
 
-WRITING RULES FOR suggestedFirstMessage:
-- Be specific enough that the recipient understands what WhachatCRM actually does.
+WRITING RULES FOR suggestedFirstMessage / suggestedOutreachAngle / reasoningSummary:
+- Be specific enough that the recipient understands what WhachatCRM actually does for THEM.
 - Do not hallucinate capabilities.
 - Do not claim the prospect has a problem unless input evidence supports it.
 - Keep first-touch cold outreach concise and human.
 - Avoid generic AI-sales fluff (revolutionize, game-changing, cutting-edge, leverage synergies).
 - End with a low-friction, relevant question.
-- The selected recommendedOffer MUST materially shape the message (partner → revenue opportunity; agency_white_label → agency/client-service + white-label; real_estate → RE Growth Engine; shopify_app → commerce messaging; core → operational CRM/inbox value).
+- The selected recommendedOffer MUST materially shape the message (partner → revenue opportunity; agency_white_label → agency/client-service + white-label; real_estate → RE Growth Engine; shopify_app → commerce messaging; core → operational CRM/inbox + outreach value).
 
 TAILOR BY SEGMENT / OFFER:
 ${bySegment}`;
@@ -299,7 +322,7 @@ export function hasConcreteWhachatPositioning(message: string): boolean {
   if (new RegExp(WHACHAT_PARTNER_COMMISSION_COPY.replace(/%/g, "\\%"), "i").test(text)) {
     return true;
   }
-  return /\b(CRM|unified inbox|multi-channel|multi channel|lead qualification|follow-up|follow up|Growth Engine|white-?label|partner program)\b/i.test(
+  return /\b(CRM|unified inbox|multi-channel|multi channel|lead qualification|outreach automation|WhatsApp|follow-up|follow up|Growth Engine|white-?label|partner program|prospecting)\b/i.test(
     text,
   );
 }

@@ -6,7 +6,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  decodeCloudflareCfEmail,
   decodeHtmlEntitiesForEmailExtract,
+  discoverContactUrlsFromHtml,
   extractEmailsFromHtml,
   extractPublicContactsFromHtml,
   normalizeObfuscatedEmailCandidate,
@@ -104,6 +106,33 @@ const missedBefore = extractPublicContactsFromHtml(
 );
 assert.ok(missedBefore.emails.includes("cs@marketing1on1.com"));
 assert.ok(missedBefore.emailExtractions?.some((e) => e.method === "obfuscated_text"));
+
+// Cloudflare Email Address Obfuscation (common on footers — e.g. Insight Goat-style sites)
+{
+  // Encode hello@example.com with key 0x2a for a deterministic fixture
+  const key = 0x2a;
+  const plain = "hello@example.com";
+  let hex = key.toString(16).padStart(2, "0");
+  for (const ch of plain) {
+    hex += (ch.charCodeAt(0) ^ key).toString(16).padStart(2, "0");
+  }
+  assert.equal(decodeCloudflareCfEmail(hex), plain);
+
+  const cfHtml = `
+    <footer>
+      <a href="/cdn-cgi/l/email-protection#${hex}">
+        <span class="__cf_email__" data-cfemail="${hex}">[email&#160;protected]</span>
+      </a>
+      <a href="/contact-us">Contact</a>
+    </footer>
+  `;
+  const cfContacts = extractPublicContactsFromHtml(cfHtml, "https://example.com/");
+  assert.ok(cfContacts.emails.includes("hello@example.com"));
+  assert.ok(cfContacts.emailExtractions?.some((e) => e.method === "cloudflare_cfemail"));
+
+  const discovered = discoverContactUrlsFromHtml(cfHtml, "https://example.com/");
+  assert.ok(discovered.some((u) => /contact-us/i.test(u)));
+}
 
 const panelSrc = readFileSync(
   join(root, "client/src/components/settings/ProspectIntelligencePanel.tsx"),

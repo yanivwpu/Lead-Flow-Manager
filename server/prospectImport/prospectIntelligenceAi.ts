@@ -445,8 +445,33 @@ export function applyOutreachMessageGuardrails(
   if (!workspaceContext) {
     const weak = detectWeakWhachatPositioning(message);
     const namesProduct = /whachat\s*crm/i.test(message);
-    if (weak.length > 0 || (namesProduct && !hasConcreteWhachatPositioning(message))) {
+    const analyticsDefault =
+      /\b(insights and analytics|analytics can further enhance|enhance your offerings)\b/i.test(
+        message,
+      );
+    if (
+      weak.length > 0 ||
+      analyticsDefault ||
+      (namesProduct && !hasConcreteWhachatPositioning(message))
+    ) {
       guarded.suggestedFirstMessage = buildTailoredFirstMessage(input, guarded);
+    }
+    if (
+      guarded.suggestedOutreachAngle &&
+      /\b(insights and analytics|analytics platform|insights platform|enhance your offerings)\b/i.test(
+        guarded.suggestedOutreachAngle,
+      )
+    ) {
+      const ctx = buildWhachatPositioningForProspect({
+        recommendedOffer: guarded.recommendedOffer,
+        industry: guarded.industry,
+        businessType: guarded.businessType,
+        agencyLikelihood: guarded.agencyLikelihood,
+        shopifyMerchantLikelihood: guarded.shopifyMerchantLikelihood,
+        realEstateLikelihood: guarded.realEstateLikelihood,
+        localBusinessLikelihood: guarded.localBusinessLikelihood,
+      });
+      guarded.suggestedOutreachAngle = ctx.positioningSentence;
     }
   }
 
@@ -656,8 +681,11 @@ STRICT RULES:
 - Use concise internal language. suggestedFirstMessage max 400 chars.
 - The prospect's business category is about the TARGET, not the sender's product.
 
-OUTREACH MESSAGE RULES (suggestedFirstMessage):
+OUTREACH MESSAGE RULES (suggestedFirstMessage + suggestedOutreachAngle + reasoningSummary):
 ${messageGrounding}
+- Reason in this order: (1) prospect's actual business, (2) one plausible pain if evidenced, (3) pick only 1–2 WhachatCRM capabilities, (4) connect pain → capability in a short natural message.
+- WhachatCRM is an AI-powered CRM for prospecting, lead qualification, outreach automation, and customer conversations (WhatsApp Business API + email/messaging) — NOT an analytics/insights product by default.
+- Do NOT default to phrases like "insights and analytics", "enhance your offerings", or generic analytics positioning unless the prospect's use case genuinely supports it.
 - Never claim the prospect showed interest in the workspace, its products, messaging, CRM, AI, Shopify, real estate, agency services, or any other topic unless explicit source evidence says so.
 - Never use phrases like "I noticed your interest in...", "I saw you were looking for...", "businesses like yours", "your agency", "your store", "your clients", "your team", or "your real estate business" unless the prospect input explicitly supports that claim.
 - Do not assume the prospect owns or represents a business unless company, businessType, industry, or tags support it.

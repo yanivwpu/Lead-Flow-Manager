@@ -130,21 +130,18 @@ export function isProspectEnrichmentInProgress(
   return e === "pending" || e === "enriching";
 }
 
-/** Queued, sending, or later outreach — not Campaign Ready. */
+/** Queued / enrolled in Campaigns — requires a real queue row, not outreach_sent alone. */
 export function isProspectCampaignEnrolled(input: ProspectReviewUxInput): boolean {
-  const outcome = String(input.outcome || "").toLowerCase();
-  if (outcome === "won") return true;
-  const outreach = String(input.outreachStatus || "not_sent").toLowerCase();
-  if (
-    outreach === "replied" ||
-    outreach === "outreach_sent" ||
-    input.repliedAt ||
-    input.outreachSentAt
-  ) {
-    return true;
-  }
   const queue = String(input.queueStatus || "").toLowerCase();
-  return queue === "sending" || queue === "queued" || queue === "paused";
+  return (
+    queue === "queued" ||
+    queue === "sending" ||
+    queue === "paused" ||
+    queue === "sent" ||
+    queue === "failed" ||
+    queue === "skipped" ||
+    queue === "cancelled"
+  );
 }
 
 /** True when AI qualification finished and row summary fields may be shown. */
@@ -273,12 +270,12 @@ export function resolveProspectTimelineStates(
 
   let campaign: ProspectTimelineStageState;
   const queue = String(input.queueStatus || "").toLowerCase();
-  // Campaign active only after successful Send to Campaign transfer
+  // Campaign ✓ only when a real Campaigns/queue record exists (not outreach_sent alone).
   if (
     queue === "sent" ||
-    life === "inbox" ||
-    life === "won" ||
-    life === "campaign"
+    queue === "failed" ||
+    queue === "skipped" ||
+    queue === "cancelled"
   ) {
     campaign = "done";
   } else if (queue === "queued" || queue === "paused" || queue === "sending") {
@@ -389,12 +386,12 @@ export function prospectReviewWorkEmptyMessage(
       return "No prospects need review.";
     case "qualified":
       return "No qualified prospects ready for Campaigns.";
+    case "not_qualified":
+      return "No not-qualified prospects.";
     case "enriching":
       return "No prospects are being enriched.";
     case "needs_attention":
       return "Nothing needs attention.";
-    case "not_qualified":
-      return "No not-qualified prospects.";
     case "all":
     default:
       return "Nothing to show for this filter.";

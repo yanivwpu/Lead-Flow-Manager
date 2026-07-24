@@ -17,6 +17,7 @@ import {
 import { aiProvider } from "../aiProvider";
 import {
   detectWebsiteSignals,
+  discoverContactUrlsFromHtml,
   extractPublicContactsFromHtml,
 } from "./prospectWebsiteContactExtract";
 import { resolveProspectWebsiteUrl } from "./prospectWebsiteUrl";
@@ -116,6 +117,7 @@ async function summarizeWebsiteWithAi(params: {
   const system = `You are Prospect AI enrichment. Summarize ONLY from the scraped website text and provided structured facts.
 Never invent emails, phones, or facts not present.
 Prefer AI Brain workspace context for why the sender's offer fits — do not confuse prospect industry with what the sender sells.
+For recommendedOutreachAngle / whyWhachatRelevant / aiFitInsights: reason prospect business → pain → 1–2 relevant WhachatCRM capabilities (prospecting, qualification, outreach automation, WhatsApp Business API, messaging channels, unified conversations, CRM follow-up). Do NOT default to analytics/insights positioning.
 Return strict JSON only.`;
 
   const user = JSON.stringify(
@@ -244,12 +246,15 @@ export const websitePublicEnrichmentProvider: ProspectEnrichmentProvider = {
 
     await onProgress?.(2, total);
     const guided = buildGuidedUrls(websiteUrl);
+    const pageQueue = [...guided];
+    const queuedUrls = new Set(pageQueue.map((p) => p.url.toLowerCase()));
     const pageResults: Array<{ url: string; status: string; reason?: string }> = [];
     let combinedText = "";
     let allHtml = "";
     let contacts = mergeContacts();
 
-    for (const page of guided.slice(0, 8)) {
+    for (let i = 0; i < pageQueue.length && i < 8; i++) {
+      const page = pageQueue[i]!;
       try {
         const { finalUrl, html } = await fetchPublicHtmlPage(page.url);
         allHtml += `\n${html}`;
@@ -258,6 +263,16 @@ export const websitePublicEnrichmentProvider: ProspectEnrichmentProvider = {
         const text = htmlToEnrichmentText(html, 12_000);
         combinedText += `\n\n--- ${page.key} — ${finalUrl} ---\n${text}`;
         pageResults.push({ url: finalUrl, status: "scanned" });
+
+        // After homepage (or listed URL), follow footer/nav contact links present in HTML.
+        if (page.key === "home" || page.key === "listed") {
+          for (const discovered of discoverContactUrlsFromHtml(html, finalUrl)) {
+            const key = discovered.toLowerCase();
+            if (queuedUrls.has(key)) continue;
+            queuedUrls.add(key);
+            pageQueue.push({ key: "discovered_contact", url: discovered });
+          }
+        }
       } catch (err) {
         pageResults.push({
           url: page.url,

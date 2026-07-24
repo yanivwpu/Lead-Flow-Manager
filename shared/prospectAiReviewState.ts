@@ -37,14 +37,18 @@ export type ProspectNeedsAttentionSubFilter =
   | "missing_website"
   | "missing_email";
 
-/** Primary Review filters only: All · Needs Review · Qualified. */
+/** Primary Review filters: All · Needs Review · Qualified · Not Qualified. */
 export const PROSPECT_REVIEW_WORK_FILTER_CHIPS: Array<{
-  id: Extract<ProspectReviewWorkFilter, "all" | "needs_review" | "qualified">;
+  id: Extract<
+    ProspectReviewWorkFilter,
+    "all" | "needs_review" | "qualified" | "not_qualified"
+  >;
   label: string;
 }> = [
   { id: "all", label: "All" },
   { id: "needs_review", label: "Needs Review" },
   { id: "qualified", label: "Qualified" },
+  { id: "not_qualified", label: "Not Qualified" },
 ];
 
 /** @deprecated Needs Attention is folded into Needs Review. */
@@ -87,18 +91,15 @@ export type ProspectNeedsReviewBadge = {
 };
 
 /**
- * Clear reason badge for prospects that are not Campaign-ready.
- * Qualified rows return null (Ready to Send — no action badge).
+ * Clear reason badge for prospects that still need action under Needs Review.
+ * Qualified and Not Qualified rows return null (they have their own primary filters).
  */
 export function resolveProspectNeedsReviewBadge(
   input: ProspectReviewStateInput,
 ): ProspectNeedsReviewBadge | null {
   if (!isProspectVisibleInReview(input)) return null;
+  if (input.notQualified === true) return null;
   if (isProspectQualifiedForCampaign(input)) return null;
-
-  if (input.notQualified === true) {
-    return { code: "not_qualified", label: "Not Qualified" };
-  }
 
   const analysis = String(input.analysisStatus || "pending").toLowerCase();
   if (analysis === "failed") {
@@ -141,7 +142,6 @@ export function resolveProspectNeedsReviewBadge(
       if (b.code === "enrichment_in_progress") {
         return { code: "enriching", label: "Enriching" };
       }
-      // Website present but not enriched yet — still actionable Needs Review
       return { code: "needs_review", label: "Needs Review" };
     }
     if (b.code === "qualification_failed") {
@@ -219,6 +219,7 @@ export type ProspectEligibilityExplanation = {
     | "not_qualified"
     | "in_campaigns"
     | "won"
+    | "already_contacted"
     | "qualification_failed"
     | "qualification_incomplete"
     | "needs_review_decision"
@@ -751,10 +752,11 @@ export function isProspectVisibleInReview(input: ProspectReviewStateInput): bool
 /**
  * Primary filters:
  * - all → every Review-visible prospect
- * - needs_review → not Ready to Send (action needed, in progress, or blocked)
+ * - needs_review → still needs a decision/fix/action (not Qualified, not Not Qualified)
  * - qualified → Ready to Send to Campaign exclusively
+ * - not_qualified → explicit final rejection
  *
- * Deprecated filters (`enriching`, `needs_attention`, `not_qualified`) kept for tests/URLs.
+ * Deprecated filters (`enriching`, `needs_attention`) kept for tests/URLs.
  */
 export function matchesProspectReviewWorkFilter(
   input: ProspectReviewStateInput,
@@ -765,18 +767,22 @@ export function matchesProspectReviewWorkFilter(
 
   if (filter === "all") return true;
 
+  if (filter === "not_qualified") {
+    return input.notQualified === true;
+  }
+
   if (filter === "qualified") {
-    return isQualifiedForEmailCampaign(input);
+    return input.notQualified !== true && isQualifiedForEmailCampaign(input);
   }
 
   if (filter === "needs_review") {
+    if (input.notQualified === true) return false;
     return !isQualifiedForEmailCampaign(input);
   }
 
   // Deprecated primary chips — exact internal state match
   const state = resolveProspectReviewWorkState(input);
   if (filter === "enriching") return state === "enriching";
-  if (filter === "not_qualified") return state === "not_qualified";
   if (filter === "needs_attention") {
     if (state !== "needs_attention") return false;
     if (attentionSub === "all") return true;
@@ -826,6 +832,7 @@ export type ProspectReviewAssistantCounts = {
   needsReview: number;
   enriching: number;
   qualified: number;
+  notQualified: number;
   needsAttention: number;
   qualificationFailed: number;
   enrichmentFailed: number;
@@ -841,6 +848,7 @@ export function countProspectReviewWorkStates(
     needsReview: 0,
     enriching: 0,
     qualified: 0,
+    notQualified: 0,
     needsAttention: 0,
     qualificationFailed: 0,
     enrichmentFailed: 0,
@@ -850,13 +858,13 @@ export function countProspectReviewWorkStates(
   };
   for (const item of items) {
     if (!isProspectVisibleInReview(item)) continue;
-    // Chip-aligned: Needs Review = not Campaign-ready; Qualified = Ready to Send
-    if (isQualifiedForEmailCampaign(item)) {
+    if (item.notQualified === true) {
+      counts.notQualified += 1;
+    } else if (isQualifiedForEmailCampaign(item)) {
       counts.qualified += 1;
     } else {
       counts.needsReview += 1;
     }
-    // Transient / detail breakdowns for assistant progress lines (not primary chips)
     const state = resolveProspectReviewWorkState(item);
     if (state === "enriching") counts.enriching += 1;
     else if (state === "analyzing") counts.analyzing += 1;

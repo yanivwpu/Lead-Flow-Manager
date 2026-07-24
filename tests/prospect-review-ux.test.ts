@@ -177,7 +177,7 @@ assert.deepEqual(
   ["done", "done", "current"],
 );
 
-// Sending / inbox → Campaign complete
+// Sending → Campaign current (actively in Campaigns)
 assert.deepEqual(
   resolveProspectTimelineStates({
     analysisStatus: "completed",
@@ -185,8 +185,21 @@ assert.deepEqual(
     enrichmentStatus: "completed",
     queueStatus: "sending",
   }),
+  ["done", "done", "current"],
+);
+
+// Sent queue row → Campaign complete
+assert.deepEqual(
+  resolveProspectTimelineStates({
+    analysisStatus: "completed",
+    reviewStatus: "approved",
+    enrichmentStatus: "completed",
+    queueStatus: "sent",
+  }),
   ["done", "done", "done"],
 );
+
+// outreach_sent alone must NOT mark Campaign ✓ (no traceable Campaigns row)
 assert.deepEqual(
   resolveProspectTimelineStates({
     analysisStatus: "completed",
@@ -195,10 +208,10 @@ assert.deepEqual(
     outreachStatus: "outreach_sent",
     outreachSentAt: "2026-01-01T00:00:00.000Z",
   }),
-  ["done", "done", "done"],
+  ["done", "done", "todo"],
 );
 
-// Legacy Inbox (no Website Intelligence) — Enriched still reads complete
+// Legacy outreach without Website Intelligence — Enriched may still complete; Campaign stays empty
 assert.deepEqual(
   resolveProspectTimelineStates({
     analysisStatus: "completed",
@@ -207,7 +220,7 @@ assert.deepEqual(
     outreachStatus: "outreach_sent",
     outreachSentAt: "2026-01-01T00:00:00.000Z",
   }),
-  ["done", "done", "done"],
+  ["done", "todo", "todo"],
 );
 
 assert.equal(prospectMatchSummary(91).label, "Excellent Match");

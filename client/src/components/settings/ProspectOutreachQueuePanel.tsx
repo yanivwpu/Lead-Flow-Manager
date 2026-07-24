@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ChevronDown,
+  ChevronRight,
   Loader2,
   Pause,
   Play,
@@ -25,6 +27,11 @@ import type {
   ProspectOutreachWorkspaceSettings,
 } from "@shared/prospectBulkOutreach";
 import {
+  formatProspectCampaignBatchSummary,
+  formatProspectCampaignBatchTitle,
+  groupProspectCampaignBatches,
+} from "@shared/prospectCampaignBatches";
+import {
   PROSPECT_AI_PAGE_SUBTITLES,
   PROSPECT_CAMPAIGN_CONTROL_LABELS,
   PROSPECT_CAMPAIGN_METRIC_LABELS,
@@ -35,6 +42,7 @@ import {
 } from "@shared/prospectAiDisplay";
 import { AiGrowthAssistantCard } from "@/components/prospectAi/AiGrowthAssistantCard";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { credentials: "include", ...init });
@@ -82,14 +90,11 @@ export function ProspectOutreachQueuePanel({
   });
 
   const listQuery = useQuery({
-    queryKey: ["/api/growth-tools/prospect-outreach/queue", statusFilter],
-    queryFn: () => {
-      const params = new URLSearchParams();
-      if (statusFilter !== "all") params.set("status", statusFilter);
-      return fetchJson<{ items: ProspectOutreachQueueItemSummary[] }>(
-        `/api/growth-tools/prospect-outreach/queue?${params.toString()}`,
-      );
-    },
+    queryKey: ["/api/growth-tools/prospect-outreach/queue", "all"],
+    queryFn: () =>
+      fetchJson<{ items: ProspectOutreachQueueItemSummary[] }>(
+        "/api/growth-tools/prospect-outreach/queue",
+      ),
     refetchInterval: 5000,
   });
 
@@ -157,8 +162,46 @@ export function ProspectOutreachQueuePanel({
   });
 
   const dash = dashboardQuery.data;
-  const items = listQuery.data?.items ?? [];
+  const allItems = listQuery.data?.items ?? [];
   const settings = dash?.settings;
+
+  const visibleItems = useMemo(() => {
+    if (statusFilter === "all") return allItems;
+    return allItems.filter((row) => row.queueStatus === statusFilter);
+  }, [allItems, statusFilter]);
+
+  const batches = useMemo(
+    () =>
+      groupProspectCampaignBatches({
+        visibleItems,
+        allItemsForCounts: allItems,
+      }),
+    [visibleItems, allItems],
+  );
+
+  const [expandedBatchIds, setExpandedBatchIds] = useState<Set<string>>(new Set());
+  const [expandedInitialized, setExpandedInitialized] = useState(false);
+
+  useEffect(() => {
+    if (expandedInitialized || batches.length === 0) return;
+    // Current/active batch(es) default expanded; older batches stay collapsed.
+    const next = new Set<string>();
+    for (const batch of batches) {
+      if (batch.hasActiveItems) next.add(batch.batchId);
+    }
+    if (next.size === 0 && batches[0]) next.add(batches[0].batchId);
+    setExpandedBatchIds(next);
+    setExpandedInitialized(true);
+  }, [batches, expandedInitialized]);
+
+  const toggleBatch = (batchId: string) => {
+    setExpandedBatchIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(batchId)) next.delete(batchId);
+      else next.add(batchId);
+      return next;
+    });
+  };
 
   const cards = useMemo(
     () => [
@@ -322,81 +365,133 @@ export function ProspectOutreachQueuePanel({
         ))}
       </div>
 
-      {items.length === 0 ? (
+      {batches.length === 0 ? (
         <p className="text-sm text-gray-500">
           No outreach campaigns yet.
         </p>
       ) : (
-        <div className="overflow-auto rounded-xl border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Prospect</TableHead>
-                <TableHead>Channel</TableHead>
-                <TableHead>Outreach</TableHead>
-                <TableHead>Subject</TableHead>
-                <TableHead>Scheduled</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Attempts</TableHead>
-                <TableHead>Error</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell className="font-medium">
-                    {row.prospectName || row.contactId.slice(0, 8)}
-                    <p className="text-xs text-gray-500">{row.recipientIdentity}</p>
-                  </TableCell>
-                  <TableCell className="capitalize">{row.selectedChannel}</TableCell>
-                  <TableCell className="max-w-[160px] truncate text-xs">
-                    {row.recommendedOffer || "—"}
-                    {row.outreachAngle ? (
-                      <p className="truncate text-gray-500">{row.outreachAngle}</p>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="max-w-[180px] truncate text-xs">
-                    {row.subjectSnapshot || "—"}
-                  </TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">
-                    {row.scheduledAt
-                      ? format(new Date(row.scheduledAt), "MMM d, h:mm a")
-                      : "—"}
-                  </TableCell>
-                  <TableCell>{statusBadge(row.queueStatus)}</TableCell>
-                  <TableCell>{row.attempts}</TableCell>
-                  <TableCell className="max-w-[140px] truncate text-xs text-red-600">
-                    {row.lastError || ""}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {["queued", "paused", "failed"].includes(row.queueStatus) ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => removeMutation.mutate(row.id)}
-                        title="Remove before send"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    ) : null}
-                    {row.queueStatus === "failed" ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => retryMutation.mutate(row.id)}
-                        title="Retry"
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                      </Button>
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <div className="space-y-2" data-testid="po-campaign-batches">
+          {batches.map((batch) => {
+            const expanded = expandedBatchIds.has(batch.batchId);
+            return (
+              <div
+                key={batch.batchId}
+                className="overflow-hidden rounded-xl border border-gray-200 bg-white"
+                data-testid={`po-campaign-batch-${batch.batchId}`}
+              >
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-gray-50"
+                  onClick={() => toggleBatch(batch.batchId)}
+                  aria-expanded={expanded}
+                >
+                  {expanded ? (
+                    <ChevronDown className="h-4 w-4 shrink-0 text-gray-500" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 shrink-0 text-gray-500" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-gray-900">
+                      {formatProspectCampaignBatchTitle(batch.transferredAt)}
+                      <span className="ms-1.5 font-normal text-gray-500">
+                        · {batch.counts.total}{" "}
+                        {batch.counts.total === 1 ? "prospect" : "prospects"}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {formatProspectCampaignBatchSummary(batch.counts)}
+                      {statusFilter !== "all" && batch.items.length !== batch.counts.total ? (
+                        <span className="ms-1 text-amber-700">
+                          · showing {batch.items.length} matching filter
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </button>
+                {expanded ? (
+                  <div className={cn("border-t", batch.items.length === 0 && "p-3")}>
+                    {batch.items.length === 0 ? (
+                      <p className="text-xs text-gray-500">
+                        No prospects in this batch match the current filter.
+                      </p>
+                    ) : (
+                      <div className="overflow-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Prospect</TableHead>
+                              <TableHead>Channel</TableHead>
+                              <TableHead>Outreach</TableHead>
+                              <TableHead>Subject</TableHead>
+                              <TableHead>Scheduled</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Attempts</TableHead>
+                              <TableHead>Error</TableHead>
+                              <TableHead />
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {batch.items.map((row) => (
+                              <TableRow key={row.id}>
+                                <TableCell className="font-medium">
+                                  {row.prospectName || row.contactId.slice(0, 8)}
+                                  <p className="text-xs text-gray-500">{row.recipientIdentity}</p>
+                                </TableCell>
+                                <TableCell className="capitalize">{row.selectedChannel}</TableCell>
+                                <TableCell className="max-w-[160px] truncate text-xs">
+                                  {row.recommendedOffer || "—"}
+                                  {row.outreachAngle ? (
+                                    <p className="truncate text-gray-500">{row.outreachAngle}</p>
+                                  ) : null}
+                                </TableCell>
+                                <TableCell className="max-w-[180px] truncate text-xs">
+                                  {row.subjectSnapshot || "—"}
+                                </TableCell>
+                                <TableCell className="text-xs whitespace-nowrap">
+                                  {row.scheduledAt
+                                    ? format(new Date(row.scheduledAt), "MMM d, h:mm a")
+                                    : "—"}
+                                </TableCell>
+                                <TableCell>{statusBadge(row.queueStatus)}</TableCell>
+                                <TableCell>{row.attempts}</TableCell>
+                                <TableCell className="max-w-[140px] truncate text-xs text-red-600">
+                                  {row.lastError || ""}
+                                </TableCell>
+                                <TableCell className="whitespace-nowrap">
+                                  {["queued", "paused", "failed"].includes(row.queueStatus) ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => removeMutation.mutate(row.id)}
+                                      title="Remove before send"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  ) : null}
+                                  {row.queueStatus === "failed" ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => retryMutation.mutate(row.id)}
+                                      title="Retry"
+                                    >
+                                      <RefreshCw className="h-4 w-4" />
+                                    </Button>
+                                  ) : null}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       )}
     </section>

@@ -164,7 +164,44 @@ const needsReviewUnknown: ProspectIntelligence = {
   const guarded = applyOutreachMessageGuardrails(needsReviewUnknown, input);
   assert.doesNotMatch(guarded.suggestedFirstMessage || "", /noticed your interest/i);
   assert.doesNotMatch(guarded.suggestedFirstMessage || "", /businesses like yours/i);
-  assert.match(guarded.suggestedFirstMessage || "", /WhachatCRM|multi-channel CRM|unified inbox/i);
+  assert.match(guarded.suggestedFirstMessage || "", /WhachatCRM|multi-channel CRM|unified inbox|WhatsApp|outreach|CRM/i);
+}
+
+// Analytics/insights must not be the default WhachatCRM positioning
+{
+  const agencyInput: ProspectIntelligenceAiInput = {
+    name: "Jamie",
+    company: "Ollie Marketing",
+    businessType: "digital marketing agency",
+    email: "jamie@ollie.example",
+    emailDomain: "ollie.example",
+    originalTags: ["agency"],
+    agencyLikelihood: 80,
+  };
+  const guarded = applyOutreachMessageGuardrails(
+    {
+      potentialFit: "high",
+      leadScore: 80,
+      priority: "high",
+      recommendedOffer: "agency_white_label",
+      agencyLikelihood: 80,
+      businessType: "digital marketing agency",
+      suggestedOutreachAngle: "I believe our insights and analytics can further enhance your offerings.",
+      suggestedFirstMessage:
+        "Hi Jamie, I believe our insights and analytics can further enhance your offerings.",
+      reasoningSummary: "Agency fit.",
+      needsReview: false,
+      confidence: 80,
+    },
+    agencyInput,
+  );
+  assert.doesNotMatch(guarded.suggestedFirstMessage || "", /insights and analytics/i);
+  assert.doesNotMatch(guarded.suggestedFirstMessage || "", /enhance your offerings/i);
+  assert.doesNotMatch(guarded.suggestedOutreachAngle || "", /insights and analytics/i);
+  assert.match(
+    guarded.suggestedFirstMessage || "",
+    /WhachatCRM|WhatsApp|outreach|qualification|CRM|inbox|conversations/i,
+  );
 }
 
 console.log("prospect-intelligence-outreach.test.ts: OK");
