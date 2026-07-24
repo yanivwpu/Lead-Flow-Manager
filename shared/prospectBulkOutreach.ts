@@ -107,6 +107,12 @@ export type ProspectOutreachEligibilityReason =
   | "already_replied"
   | "needs_review"
   | "not_approved"
+  | "not_qualified"
+  | "already_in_campaign"
+  | "qualification_failed"
+  | "enrichment_in_progress"
+  | "enrichment_required"
+  | "enrichment_failed"
   | "analysis_incomplete"
   | "duplicate_queued"
   | "duplicate_recipient"
@@ -137,17 +143,30 @@ export function prospectOutreachEligibilityReasonLabel(
     case "already_replied":
       return "Already replied";
     case "needs_review":
-      return "Needs review";
+      // Advisory only — should not appear as a Campaign blocker after gate fix.
+      return "Needs attention";
     case "not_approved":
-      return "Not approved yet";
-    case "analysis_incomplete":
-      return "AI analysis incomplete";
+      return "Not ready for Campaign";
+    case "not_qualified":
+      return "Not qualified";
+    case "already_in_campaign":
     case "duplicate_queued":
+      return "Already in Campaigns";
     case "duplicate_recipient":
     case "dedup_key_collision":
-      return "Already queued (duplicate)";
+      return "Already in Campaigns";
+    case "analysis_incomplete":
+      return "AI Review is still in progress";
+    case "qualification_failed":
+      return "AI Review failed";
+    case "enrichment_in_progress":
+      return "Enrichment still in progress";
+    case "enrichment_required":
+      return "Enrichment required";
+    case "enrichment_failed":
+      return "Enrichment failed";
     case "missing_message_snapshot":
-      return "Missing approved message";
+      return "Missing campaign message";
     case "suppressed":
       return prospectSuppressionDetailLabel(detail, detail);
     case "opted_out":
@@ -159,10 +178,26 @@ export function prospectOutreachEligibilityReasonLabel(
     case "existing_conversation_only":
       return "Channel not available for cold outreach";
     case "not_enabled_for_bulk":
-      return "No bulk-enabled channel available";
+      return "Email sending is not available";
     default:
-      return "Not eligible for bulk outreach";
+      return "Not ready for Campaign";
   }
+}
+
+/** Group preview skips by human-readable reason for the Send to Campaign modal. */
+export function groupCampaignSkipReasons(
+  skips: Array<{ reason?: string | null; reasonLabel?: string | null; detail?: string | null }>,
+): Array<{ label: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const s of skips) {
+    const label =
+      (s.reasonLabel && String(s.reasonLabel).trim()) ||
+      prospectOutreachEligibilityReasonLabel(s.reason, s.detail);
+    counts.set(label, (counts.get(label) || 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 }
 
 export type ProspectChannelEligibility = {

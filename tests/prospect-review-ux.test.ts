@@ -292,7 +292,10 @@ const panelSrc = readFileSync(
   join(root, "client/src/components/settings/ProspectIntelligencePanel.tsx"),
   "utf8",
 );
-assert.ok(panelSrc.includes("ProspectProgressTimeline ux={reviewUxInput(row)}"));
+assert.ok(
+  panelSrc.includes("ProspectProgressTimeline ux={ux}") ||
+    panelSrc.includes("ProspectProgressTimeline ux={reviewUxInput(row)}"),
+);
 assert.ok(panelSrc.includes("resolveProspectTimelineStates(ux)"));
 assert.ok(panelSrc.includes("ProspectWebsiteGlobeIcon"));
 assert.ok(panelSrc.includes("PROSPECT_REVIEW_WORK_FILTER_CHIPS"));

@@ -49,7 +49,7 @@ import type {
   ProspectIntelligenceJobSummary,
   ProspectIntelligenceListItem,
 } from "@shared/prospectImport";
-import { prospectOutreachEligibilityReasonLabel } from "@shared/prospectBulkOutreach";
+import { groupCampaignSkipReasons } from "@shared/prospectBulkOutreach";
 import {
   buildProspectOutreachInboxHref,
   buildProspectOutreachSubject,
@@ -92,12 +92,12 @@ import {
   listEmailCampaignBlockingReasons,
   matchesProspectReviewWorkFilter,
   needsHumanReview,
-  PROSPECT_NEEDS_ATTENTION_SUB_FILTERS,
   PROSPECT_REVIEW_WORK_FILTER_CHIPS,
   PROSPECT_REVIEW_WORK_STATE_LABELS,
+  resolveProspectNeedsReviewBadge,
   resolveProspectReviewWorkState,
   summarizeSelectionActionAvailability,
-  type ProspectNeedsAttentionSubFilter,
+  type ProspectNeedsReviewBadge,
   type ProspectReviewWorkFilter,
 } from "@shared/prospectAiReviewState";
 import {
@@ -274,6 +274,26 @@ function VerifiedChip({ ok, label }: { ok: boolean; label: string }) {
     >
       {ok ? "✓" : "○"} {label}
     </span>
+  );
+}
+
+function NeedsReviewReasonBadge({ badge }: { badge: ProspectNeedsReviewBadge }) {
+  const tone =
+    badge.code === "enriching" || badge.code === "analyzing"
+      ? "border-sky-200 bg-sky-50 text-sky-800"
+      : badge.code === "ai_review_failed" || badge.code === "enrichment_failed"
+        ? "border-rose-200 bg-rose-50 text-rose-800"
+        : badge.code === "not_qualified"
+          ? "border-gray-200 bg-gray-50 text-gray-600"
+          : "border-amber-200 bg-amber-50 text-amber-900";
+  return (
+    <Badge
+      variant="outline"
+      className={cn("mt-1 px-1.5 py-0 text-[10px] font-medium", tone)}
+      data-testid={`pi-needs-review-badge-${badge.code}`}
+    >
+      {badge.label}
+    </Badge>
   );
 }
 
@@ -1216,8 +1236,6 @@ export function ProspectIntelligencePanel(props: {
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [businessFilter, setBusinessFilter] = useState<string>("all");
   const [workFilter, setWorkFilter] = useState<ProspectReviewWorkFilter>("needs_review");
-  const [attentionSubFilter, setAttentionSubFilter] =
-    useState<ProspectNeedsAttentionSubFilter>("all");
   const [channelFilter, setChannelFilter] = useState<string>("all");
   /** Stable visual order — never jump rows after analyze/approve/enrich. */
   const [sortBy, setSortBy] = useState<"leadScore" | "priority" | "confidence" | "name" | "action">(
@@ -1286,7 +1304,7 @@ export function ProspectIntelligencePanel(props: {
     stableOrderRef.current = [];
     setPinnedVisibleIds(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only clear when filters change
-  }, [priorityFilter, businessFilter, workFilter, attentionSubFilter, channelFilter, sortBy]);
+  }, [priorityFilter, businessFilter, workFilter, channelFilter, sortBy]);
 
   useEffect(() => {
     const id = window.setInterval(
@@ -1480,9 +1498,9 @@ export function ProspectIntelligencePanel(props: {
         return false;
       }
       if (pinnedVisibleIds.has(row.contactId)) return true;
-      return matchesProspectReviewWorkFilter(ux, workFilter, attentionSubFilter);
+      return matchesProspectReviewWorkFilter(ux, workFilter);
     });
-  }, [rawItems, workFilter, attentionSubFilter, pinnedVisibleIds]);
+  }, [rawItems, workFilter, pinnedVisibleIds]);
 
   // Drop pins once a row successfully leaves Review (in Campaigns).
   useEffect(() => {
@@ -1963,65 +1981,37 @@ export function ProspectIntelligencePanel(props: {
         className="max-w-xl"
       />
 
-      <div className="space-y-1">
-        <div className="flex max-w-full flex-nowrap gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {PROSPECT_REVIEW_WORK_FILTER_CHIPS.map((chip) => {
-            const count = workFilterCounts[chip.id] ?? 0;
-            const active = workFilter === chip.id;
-            return (
-              <Button
-                key={chip.id}
-                type="button"
-                size="sm"
-                variant={active ? "default" : "outline"}
+      <div className="flex max-w-full flex-nowrap gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {PROSPECT_REVIEW_WORK_FILTER_CHIPS.map((chip) => {
+          const count = workFilterCounts[chip.id] ?? 0;
+          const active = workFilter === chip.id;
+          return (
+            <Button
+              key={chip.id}
+              type="button"
+              size="sm"
+              variant={active ? "default" : "outline"}
+              className={cn(
+                "h-7 shrink-0 rounded-full px-2.5 text-[11px] font-medium transition-all duration-200",
+                active
+                  ? "bg-gray-900 text-white shadow-sm hover:bg-gray-800"
+                  : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50",
+              )}
+              onClick={() => setWorkFilter(chip.id)}
+              data-testid={`pi-filter-${chip.id}`}
+            >
+              {chip.label}
+              <span
                 className={cn(
-                  "h-7 shrink-0 rounded-full px-2.5 text-[11px] font-medium transition-all duration-200",
-                  active
-                    ? "bg-gray-900 text-white shadow-sm hover:bg-gray-800"
-                    : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50",
+                  "ms-1 tabular-nums",
+                  active ? "text-white/80" : "text-gray-400",
                 )}
-                onClick={() => {
-                  setWorkFilter(chip.id);
-                  if (chip.id !== "needs_attention") setAttentionSubFilter("all");
-                }}
-                data-testid={`pi-filter-${chip.id}`}
               >
-                {chip.label}
-                <span
-                  className={cn(
-                    "ms-1 tabular-nums",
-                    active ? "text-white/80" : "text-gray-400",
-                  )}
-                >
-                  ({count})
-                </span>
-              </Button>
-            );
-          })}
-        </div>
-        {workFilter === "needs_attention" ? (
-          <div
-            className="flex max-w-full flex-nowrap gap-1 overflow-x-auto pb-0.5"
-            data-testid="pi-attention-subfilters"
-          >
-            {PROSPECT_NEEDS_ATTENTION_SUB_FILTERS.map((sub) => {
-              const active = attentionSubFilter === sub.id;
-              return (
-                <Button
-                  key={sub.id}
-                  type="button"
-                  size="sm"
-                  variant={active ? "secondary" : "ghost"}
-                  className="h-6 shrink-0 rounded-full px-2 text-[10px] font-medium"
-                  onClick={() => setAttentionSubFilter(sub.id)}
-                  data-testid={`pi-attention-sub-${sub.id}`}
-                >
-                  {sub.label}
-                </Button>
-              );
-            })}
-          </div>
-        ) : null}
+                ({count})
+              </span>
+            </Button>
+          );
+        })}
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
@@ -2197,7 +2187,8 @@ export function ProspectIntelligencePanel(props: {
             <TableBody>
               {items.map((row) => {
                 const intel = row.intelligence;
-                const life = resolveProspectReviewLifecycle(reviewUxInput(row));
+                const ux = reviewUxInput(row);
+                const life = resolveProspectReviewLifecycle(ux);
                 const analyzing =
                   analysisBusy(intel.analysisStatus) &&
                   String(intel.analysisStatus).toLowerCase() === "processing";
@@ -2206,6 +2197,7 @@ export function ProspectIntelligencePanel(props: {
                 const enriching = enrichmentBusy(intel.enrichmentStatus);
                 const flashMsg = rowFlash[row.contactId];
                 const reviewReady = isProspectQualificationComplete(intel.analysisStatus);
+                const needsReviewBadge = resolveProspectNeedsReviewBadge(ux);
                 const rowSummary = buildProspectRowAiSummary({
                   analysisStatus: intel.analysisStatus,
                   leadScore: intel.leadScore,
@@ -2216,7 +2208,7 @@ export function ProspectIntelligencePanel(props: {
                   reasoningSummary: intel.reasoningSummary,
                 });
                 const personality = resolveAiPersonalityStatus({
-                  ux: reviewUxInput(row),
+                  ux,
                   seed: row.contactId,
                   tick: progressTick,
                   leadScore: intel.leadScore,
@@ -2262,6 +2254,9 @@ export function ProspectIntelligencePanel(props: {
                         <div className="truncate text-xs text-gray-500">
                           {row.company}
                         </div>
+                      ) : null}
+                      {needsReviewBadge ? (
+                        <NeedsReviewReasonBadge badge={needsReviewBadge} />
                       ) : null}
                     </TableCell>
                     <TableCell className="min-w-0">
@@ -2335,7 +2330,7 @@ export function ProspectIntelligencePanel(props: {
                     </TableCell>
                     <TableCell className={PROSPECT_AI_PROGRESS_COL_CLASS}>
                       <div className="flex min-w-0 flex-col gap-1.5">
-                        <ProspectProgressTimeline ux={reviewUxInput(row)} />
+                        <ProspectProgressTimeline ux={ux} />
                         {showActivity && (analyzing || enriching || life === "imported") ? (
                           <AiPersonalityStatusView
                             status={personality}
@@ -2358,41 +2353,43 @@ export function ProspectIntelligencePanel(props: {
       )}
 
       <Dialog open={queuePreviewOpen} onOpenChange={setQueuePreviewOpen}>
-        <DialogContent>
+        <DialogContent data-testid="pi-send-campaign-dialog">
           <DialogHeader>
-            <DialogTitle>Queue outreach confirmation</DialogTitle>
-            <DialogDescription>
-              Preferred channel: Auto (Email is the only bulk-enabled channel today). Snapshots of
-              approved subject/body are frozen at queue time.
+            <DialogTitle>Send to Campaign</DialogTitle>
+            <DialogDescription className="sr-only">
+              Confirm sending selected prospects to Campaigns
             </DialogDescription>
           </DialogHeader>
           {queuePreview ? (
-            <div className="space-y-3 text-sm">
+            <div className="space-y-3 text-sm" data-testid="pi-send-campaign-summary">
               <p>
                 <strong>{queuePreview.selectedCount}</strong> selected
               </p>
-              <ul className="list-disc pl-5 text-gray-700">
-                {Object.entries(queuePreview.eligibleByChannel || {}).map(([ch, n]) => (
-                  <li key={ch}>
-                    {n} {ch} eligible
-                  </li>
-                ))}
-                {queuePreview.notBulkEligible > 0 ? (
-                  <li>{queuePreview.notBulkEligible} not currently bulk-send eligible</li>
-                ) : null}
-                {queuePreview.skips.slice(0, 8).map((s) => (
-                  <li key={s.contactId}>
-                    {s.name || s.contactId.slice(0, 8)} —{" "}
-                    {s.reasonLabel || prospectOutreachEligibilityReasonLabel(s.reason, s.detail)}
-                  </li>
-                ))}
-                {queuePreview.skips.length > 8 ? (
-                  <li>+{queuePreview.skips.length - 8} more skips</li>
-                ) : null}
-              </ul>
-              <p className="font-medium text-emerald-800">
-                {queuePreview.willQueue} will be queued
-              </p>
+              {queuePreview.willQueue > 0 ? (
+                <p className="text-emerald-800" data-testid="pi-send-campaign-ready">
+                  ✓ {queuePreview.willQueue} ready for Campaign
+                </p>
+              ) : null}
+              {queuePreview.skips.length > 0 ? (
+                <div className="space-y-1.5" data-testid="pi-send-campaign-skips">
+                  <p className="text-amber-800">
+                    ⚠ {queuePreview.skips.length} won&apos;t be sent
+                  </p>
+                  <p className="text-xs font-medium text-gray-600">Not being sent:</p>
+                  <ul className="list-disc space-y-0.5 pl-5 text-gray-700">
+                    {groupCampaignSkipReasons(queuePreview.skips).map((g) => (
+                      <li key={g.label}>
+                        {g.count} {g.label}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {queuePreview.willQueue > 0 ? (
+                <p className="text-xs text-gray-600">
+                  The current email subject and message will be saved for these prospects.
+                </p>
+              ) : null}
             </div>
           ) : null}
           <DialogFooter>
@@ -2409,7 +2406,7 @@ export function ProspectIntelligencePanel(props: {
               {confirmQueueMutation.isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Queue {queuePreview?.willQueue ?? 0} prospects
+              Send {queuePreview?.willQueue ?? 0} to Campaign
             </Button>
           </DialogFooter>
         </DialogContent>

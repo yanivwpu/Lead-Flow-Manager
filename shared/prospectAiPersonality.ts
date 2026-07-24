@@ -223,7 +223,6 @@ export function buildAiGrowthAssistantModel(
     bulkFailed > 0;
 
   const resolveNextAction = (): string | null => {
-    if (counts.needsReview > 0) return "Select prospects to enrich.";
     if (counts.enrichmentFailed > 0 || counts.qualificationFailed > 0) {
       return `Review ${counts.enrichmentFailed + counts.qualificationFailed} failed ${
         counts.enrichmentFailed + counts.qualificationFailed === 1 ? "item" : "items"
@@ -234,6 +233,12 @@ export function buildAiGrowthAssistantModel(
         counts.needsAttention === 1 ? "item that needs" : "items that need"
       } attention.`;
     }
+    // needsReview chip includes enriching/analyzing — only prompt Enrich when humans can act
+    const waitingForEnrich = Math.max(
+      0,
+      counts.needsReview - counts.enriching - counts.analyzing - counts.needsAttention,
+    );
+    if (waitingForEnrich > 0) return "Select prospects to enrich.";
     if (counts.qualified > 0) {
       return `Send ${counts.qualified} qualified ${
         counts.qualified === 1 ? "prospect" : "prospects"
@@ -253,10 +258,14 @@ export function buildAiGrowthAssistantModel(
     lines.push({ emoji: "😊", text: "Everything is caught up." });
     lines.push({ emoji: "✨", text: "No prospects require attention." });
   } else {
-    if (counts.needsReview > 0) {
+    const needsReviewLine = Math.max(
+      0,
+      counts.needsReview - counts.enriching - counts.analyzing,
+    );
+    if (needsReviewLine > 0) {
       lines.push({
         emoji: "😊",
-        text: `${pluralize(counts.needsReview, "prospect needs", "prospects need")} review.`,
+        text: `${pluralize(needsReviewLine, "prospect needs", "prospects need")} review.`,
       });
     }
     if (counts.enriching > 0) {

@@ -387,10 +387,10 @@ export function prospectReviewWorkEmptyMessage(
   switch (filter) {
     case "needs_review":
       return "No prospects need review.";
-    case "enriching":
-      return "No prospects are being enriched.";
     case "qualified":
       return "No qualified prospects ready for Campaigns.";
+    case "enriching":
+      return "No prospects are being enriched.";
     case "needs_attention":
       return "Nothing needs attention.";
     case "not_qualified":

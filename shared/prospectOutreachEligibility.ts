@@ -7,6 +7,10 @@
 import { isValidProspectEmail, isValidProspectPhone } from "./prospectContactEnrichment";
 import { normalizeOutreachStatus } from "./prospectOutreachLifecycle";
 import {
+  listEmailCampaignBlockingReasons,
+  type ProspectEmailCampaignBlockCode,
+} from "./prospectAiReviewState";
+import {
   PROSPECT_BULK_SEND_ENABLED_CHANNELS,
   type ProspectChannelEligibility,
   type ProspectOutreachChannel,
@@ -23,6 +27,13 @@ export type ProspectOutreachEligibilityInput = {
   repliedAt?: string | Date | null;
   analysisStatus?: string | null;
   needsReview?: boolean | null;
+  /** Website enrichment status — used by shared Email campaign hard gates. */
+  enrichmentStatus?: string | null;
+  websiteUrl?: string | null;
+  websiteUrlUsed?: string | null;
+  notQualified?: boolean | null;
+  queueStatus?: string | null;
+  outcome?: string | null;
   email?: string | null;
   phone?: string | null;
   whatsappId?: string | null;
@@ -51,7 +62,10 @@ export type ProspectOutreachEligibilityInput = {
   preferredChannel?: ProspectOutreachPreferredChannel;
   /** Channels allowed for bulk send this phase (defaults to production list). */
   bulkEnabledChannels?: readonly ProspectOutreachChannel[];
-  /** When true, allow queue even if review not approved (rare; default false). */
+  /**
+   * @deprecated Unused — Email Campaign eligibility no longer requires reviewStatus approved.
+   * Kept for call-site compatibility.
+   */
   allowUnapproved?: boolean;
 };
 
@@ -386,10 +400,9 @@ function lifecycleGate(
     return "analysis_incomplete";
   }
 
-  const review = String(input.reviewStatus || "pending").toLowerCase();
-  if (input.needsReview === true || review === "needs_review") return "needs_review";
-  if (!input.allowUnapproved && review !== "approved") return "not_approved";
-
+  // Needs Review / pending reviewStatus are advisory for Email campaigns.
+  // Do NOT require reviewStatus === "approved" here — Qualified + Send share
+  // email hard gates (enrichment, email, not-qualified, etc.) instead.
   if (input.alreadyQueued) return "duplicate_queued";
   return null;
 }
@@ -454,7 +467,30 @@ export function resolveProspectOutreachEligibility(
     };
   }
 
-  const preferred = input.preferredChannel || "auto";
+  // Same Email campaign hard gates as Review → Qualified (shared resolver).
+  // Only apply on Email / Auto bulk paths — not when testing other preferred channels.
+  const preferredForGates = input.preferredChannel || "auto";
+  if (preferredForGates === "auto" || preferredForGates === "email") {
+    const campaignGate = emailCampaignHardGateReason(input);
+    if (campaignGate) {
+      for (const ch of CHANNEL_PRIORITY) {
+        channels[ch] = {
+          ...channels[ch],
+          eligible: false,
+          reason: campaignGate.reason,
+          detail: campaignGate.detail,
+        };
+      }
+      return {
+        channels,
+        selectedChannel: null,
+        anyEligible: false,
+        summaryReason: campaignGate.reason,
+      };
+    }
+  }
+
+  const preferred = preferredForGates;
   const selectedChannel = pickChannel(channels, preferred);
   return {
     channels,
@@ -464,6 +500,62 @@ export function resolveProspectOutreachEligibility(
       ? "eligible"
       : resolveNoChannelSummaryReason(channels, preferred),
   };
+}
+
+/** Map shared Email campaign hard-gate codes → outreach eligibility reasons. */
+function emailCampaignHardGateReason(
+  input: ProspectOutreachEligibilityInput,
+): { reason: ProspectOutreachEligibilityReason; detail?: string } | null {
+  const blocks = listEmailCampaignBlockingReasons({
+    analysisStatus: input.analysisStatus,
+    reviewStatus: input.reviewStatus,
+    needsReview: input.needsReview,
+    enrichmentStatus: input.enrichmentStatus,
+    email: input.email,
+    websiteUrl: input.websiteUrl,
+    websiteUrlUsed: input.websiteUrlUsed,
+    notQualified: input.notQualified,
+    queueStatus: input.queueStatus,
+    outcome: input.outcome,
+    outreachStatus: input.outreachStatus,
+    outreachSentAt:
+      input.outreachSentAt instanceof Date
+        ? input.outreachSentAt.toISOString()
+        : input.outreachSentAt,
+    repliedAt:
+      input.repliedAt instanceof Date ? input.repliedAt.toISOString() : input.repliedAt,
+  });
+  if (!blocks.length) return null;
+  return mapEmailCampaignBlockToOutreachReason(blocks[0]!.code);
+}
+
+export function mapEmailCampaignBlockToOutreachReason(
+  code: ProspectEmailCampaignBlockCode,
+): { reason: ProspectOutreachEligibilityReason; detail?: string } {
+  switch (code) {
+    case "missing_email":
+      return { reason: "missing_identity", detail: "missing_email" };
+    case "not_qualified":
+      return { reason: "not_qualified" };
+    case "in_campaigns":
+      return { reason: "already_in_campaign" };
+    case "won":
+      return { reason: "already_in_campaign" };
+    case "already_contacted":
+      return { reason: "already_outreach_sent" };
+    case "qualification_failed":
+      return { reason: "qualification_failed" };
+    case "qualification_incomplete":
+      return { reason: "analysis_incomplete" };
+    case "enrichment_in_progress":
+      return { reason: "enrichment_in_progress" };
+    case "enrichment_incomplete":
+      return { reason: "enrichment_required" };
+    case "enrichment_failed":
+      return { reason: "enrichment_failed" };
+    default:
+      return { reason: "policy_blocked" };
+  }
 }
 
 /**

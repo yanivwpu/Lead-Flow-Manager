@@ -26,6 +26,7 @@ import { normalizeOutreachStatus } from "@shared/prospectOutreachLifecycle";
 import { db } from "../../drizzle/db";
 import { messages, prospectIntelligence, prospectOutreachQueueItems } from "@shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
+import { resolveProspectWebsiteUrl } from "./prospectWebsiteUrl";
 
 export type WorkspaceChannelConnections = {
   emailConnected: boolean;
@@ -299,6 +300,10 @@ export async function resolveProspectOutreachEligibilityForContact(params: {
     repliedAt: pi?.repliedAt,
     analysisStatus: pi?.analysisStatus,
     needsReview: pi?.needsReview,
+    enrichmentStatus: pi?.enrichmentStatus,
+    websiteUrl: resolveProspectWebsiteUrl(params.contact),
+    websiteUrlUsed: pi?.websiteUrlUsed,
+    notQualified: String(pi?.recommendedOffer || "").toLowerCase() === "not_a_fit",
     email: params.contact.email,
     phone: params.contact.phone,
     whatsappId: params.contact.whatsappId,

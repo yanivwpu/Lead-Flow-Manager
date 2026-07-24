@@ -127,25 +127,39 @@ function testSmsRequiresConsentAndProvider() {
 }
 
 function testLifecycleSkips() {
-  for (const reason of ["already_outreach_sent", "already_replied", "needs_review"] as const) {
-    const outreachStatus =
-      reason === "already_outreach_sent"
-        ? "outreach_sent"
-        : reason === "already_replied"
-          ? "replied"
-          : "not_sent";
+  for (const reason of ["already_outreach_sent", "already_replied"] as const) {
+    const outreachStatus = reason === "already_outreach_sent" ? "outreach_sent" : "replied";
     const result = resolveProspectOutreachEligibility({
       email: "a@example.com",
       emailConnected: true,
-      reviewStatus: reason === "needs_review" ? "needs_review" : "approved",
-      needsReview: reason === "needs_review",
+      reviewStatus: "approved",
+      needsReview: false,
       outreachStatus,
       analysisStatus: "completed",
+      enrichmentStatus: "completed",
       preferredChannel: "email",
     });
     assert.equal(result.anyEligible, false, reason);
     assert.equal(result.summaryReason, reason);
   }
+}
+
+function testNeedsReviewIsNotCampaignBlocker() {
+  const result = resolveProspectOutreachEligibility({
+    email: "a@example.com",
+    emailConnected: true,
+    reviewStatus: "needs_review",
+    needsReview: true,
+    outreachStatus: "not_sent",
+    analysisStatus: "completed",
+    enrichmentStatus: "completed",
+    websiteUrl: "https://example.com",
+    preferredChannel: "email",
+  });
+  assert.equal(result.anyEligible, true);
+  assert.equal(result.selectedChannel, "email");
+  assert.notEqual(result.summaryReason, "needs_review");
+  assert.notEqual(result.summaryReason, "not_approved");
 }
 
 function testDedupKeyAndSnapshotNormalization() {
@@ -252,14 +266,20 @@ function testHumanReadableReasonLabels() {
     prospectOutreachEligibilityReasonLabel("missing_identity", "missing_email"),
     "Missing email",
   );
-  assert.equal(prospectOutreachEligibilityReasonLabel("needs_review"), "Needs review");
+  assert.equal(prospectOutreachEligibilityReasonLabel("needs_review"), "Needs attention");
+  assert.equal(prospectOutreachEligibilityReasonLabel("not_qualified"), "Not qualified");
+  assert.equal(prospectOutreachEligibilityReasonLabel("already_in_campaign"), "Already in Campaigns");
   assert.equal(
     prospectOutreachEligibilityReasonLabel("already_outreach_sent"),
     "Already contacted",
   );
   assert.equal(
+    prospectOutreachEligibilityReasonLabel("enrichment_in_progress"),
+    "Enrichment still in progress",
+  );
+  assert.equal(
     prospectOutreachEligibilityReasonLabel("not_enabled_for_bulk"),
-    "No bulk-enabled channel available",
+    "Email sending is not available",
   );
 }
 
@@ -354,7 +374,8 @@ const tests: Array<[string, () => void]> = [
   ["7 WhatsApp number alone ≠ cold eligible", testWhatsAppPhoneAloneNotColdEligible],
   ["8 Messenger identity ≠ unrestricted bulk", testMessengerIdentityNotUnrestrictedBulk],
   ["9 SMS respects consent/provider hooks", testSmsRequiresConsentAndProvider],
-  ["11-13 lifecycle skips Sent/Replied/Needs Review", testLifecycleSkips],
+  ["11-12 lifecycle skips Sent/Replied", testLifecycleSkips],
+  ["needsReview advisory is not a Campaign blocker", testNeedsReviewIsNotCampaignBlocker],
   ["14-15 duplicate recipient normalization + dedup", testDedupKeyAndSnapshotNormalization],
   ["delay jitter within safe range", testDelayJitterRange],
   ["production bulk channel = email only", testOnlyEmailBulkEnabledByDefault],
