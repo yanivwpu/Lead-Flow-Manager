@@ -29,7 +29,7 @@ export function PrivacyPolicy() {
         </Link>
 
         <h1 className="text-3xl font-display font-bold text-gray-900 mb-2">Privacy Policy</h1>
-        <p className="text-sm text-gray-500 mb-8">Last updated: July 15, 2026</p>
+        <p className="text-sm text-gray-500 mb-8">Last updated: July 23, 2026</p>
 
         <div className="prose prose-gray max-w-none">
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">1. Introduction</h2>
@@ -189,33 +189,44 @@ export function PrivacyPolicy() {
           </p>
 
           <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">5.1 What Google data we access</h3>
+          <p className="text-gray-600 mb-4">
+            Connecting Gmail authorizes WhachatCRM to access the following categories of Google account and Gmail data for the
+            mailbox you choose. Access is limited to providing the email features you enable in the product.
+          </p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
             <li>
-              <strong>Basic Google account identity</strong> via OpenID Connect scopes used to identify the authorized account
-              (for example account email and basic profile information needed to display the connected mailbox).
+              <strong>Basic Google account identity</strong> via OpenID Connect (for example account email and basic profile
+              information needed to identify and display the connected mailbox).
             </li>
             <li>
-              <strong>Gmail read access</strong> (<code className="text-sm">gmail.readonly</code>): email messages and related
-              metadata (subject, body, participants, thread identifiers, timestamps, and related headers) for the mailbox you
+              <strong>Gmail read access:</strong> WhachatCRM may access Gmail messages and related message/thread data (such as
+              subject, body content, participants, thread identifiers, timestamps, and related headers) for the mailbox you
               authorize.
             </li>
             <li>
-              <strong>Gmail send access</strong> (<code className="text-sm">gmail.send</code>): the ability to send new emails and
-              replies through the authenticated user&apos;s connected Gmail account.
+              <strong>Gmail send access:</strong> WhachatCRM may send emails and replies through your connected Gmail / Google
+              Workspace account when you initiate or configure sending in the product.
+            </li>
+            <li>
+              <strong>Gmail modify access:</strong> WhachatCRM may modify mailbox state only for supported user-requested email
+              management actions — including moving messages to Trash — when you use those features in WhachatCRM.
             </li>
           </ul>
 
           <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">5.2 Why we need that data and what features it enables</h3>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
             <li>
-              <strong>gmail.readonly</strong> is used as an email client feature to synchronize and display email messages and
-              conversation history, receive and process inbound replies, maintain thread context, and manage email conversations
-              in the WhachatCRM unified inbox / CRM.
+              <strong>Gmail read access</strong> is used so WhachatCRM can synchronize email conversations into your workspace,
+              display email conversations, detect and process replies, and provide inbox / conversation functionality you request
+              — including the unified inbox alongside related CRM records.
             </li>
             <li>
-              <strong>gmail.send</strong> is used to send new emails and replies through the authenticated user&apos;s connected
-              Gmail account — including one-to-one inbox replies and user-configured email outreach you choose to run from
-              WhachatCRM.
+              <strong>Gmail send access</strong> is used to send new emails and replies through your connected Gmail account —
+              including one-to-one inbox replies and user-configured email outreach you choose to run from WhachatCRM.
+            </li>
+            <li>
+              <strong>Gmail modify access</strong> is used only for supported email-management actions you request in the product
+              (for example, moving a message to Gmail Trash). It is not used to alter mailbox content for unrelated purposes.
             </li>
           </ul>
 
@@ -232,7 +243,12 @@ export function PrivacyPolicy() {
             <li>
               If you use AI-assisted features on a conversation that includes email content, relevant conversation context may be
               processed by our AI service providers solely to generate the requested suggestion, summary, or draft for your
-              workspace. See Section 9.
+              workspace. See Section 9 and Section 10.
+            </li>
+            <li>
+              <strong>Google Workspace API data is not used to develop, improve, or train generalized AI or machine learning
+              models.</strong>{" "}
+              Any AI functionality in WhachatCRM does not use Google Workspace API data for generalized AI/ML model training.
             </li>
             <li>
               We do not use Google user data for advertising. We do not sell Google user data. We do not use Google user data to
@@ -241,7 +257,7 @@ export function PrivacyPolicy() {
             <li>
               We do not transfer Google user data to third parties except as needed to provide or secure the Service (for example,
               hosting infrastructure or AI subprocessors operating the feature you enable), to comply with law, or as directed by
-              you / with your consent through product configuration.
+              you / with your consent through product configuration — consistent with Google&apos;s Limited Use requirements.
             </li>
             <li>
               Human access to Google user data is limited to circumstances such as: providing support when you request it;
@@ -399,8 +415,9 @@ export function PrivacyPolicy() {
               workspace. Provider handling of that data is governed by their terms and our configuration with them.
             </li>
             <li>
-              We do not claim specific third-party model-training practices in this Policy. We do not use Google user data for
-              advertising or to create advertising profiles.
+              <strong>Google Workspace API data is not used to develop, improve, or train generalized AI or machine learning
+              models.</strong>{" "}
+              We do not use Google user data for advertising or to create advertising profiles.
             </li>
             <li>
               AI outputs may be imperfect; your team remains responsible for reviewing messages before they are sent where

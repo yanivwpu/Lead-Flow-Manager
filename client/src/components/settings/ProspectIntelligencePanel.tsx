@@ -101,6 +101,13 @@ import {
   type ProspectReviewWorkFilter,
 } from "@shared/prospectAiReviewState";
 import {
+  assertEnrichIdsNonEmpty,
+  buildBulkApproveRequestBody,
+  formatEnrichmentStartedMessage,
+  planEnrichActionUi,
+  snapshotEnrichContactIds,
+} from "@shared/prospectEnrichAction";
+import {
   AI_PERSONALITY_ROTATE_MS,
   buildAiGrowthAssistantModel,
   resolveAiPersonalityStatus,
@@ -330,8 +337,12 @@ type DetailDialogProps = {
   onOpenChange: (open: boolean) => void;
   onContactFieldsUpdated: (contactId: string, patch: { email?: string | null; phone?: string | null }) => void;
   onItemUpdated: (item: ProspectIntelligenceListItem) => void;
-  /** Remove contact from bulk selection after detail Enrich (shared selection store). */
-  onEnrichedContactId?: (contactId: string) => void;
+  /** Shared with toolbar — same Enrich action function. */
+  onStartEnrichment: (
+    contactIds: string[],
+    opts?: { suggestedFirstMessage?: string },
+  ) => void;
+  enrichPending?: boolean;
 };
 
 type ContactFieldKind = "email" | "phone";
@@ -564,7 +575,8 @@ function ProspectIntelligenceDetailDialog({
   onOpenChange,
   onContactFieldsUpdated,
   onItemUpdated,
-  onEnrichedContactId,
+  onStartEnrichment,
+  enrichPending,
 }: DetailDialogProps) {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
@@ -653,55 +665,6 @@ function ProspectIntelligenceDetailDialog({
     },
   });
 
-  const approveMutation = useMutation({
-    mutationFn: () =>
-      fetchJson<{ item?: ProspectIntelligenceListItem }>(
-        `/api/growth-tools/prospect-intelligence/${item!.contactId}/approve`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ suggestedFirstMessage: editMessage }),
-        },
-      ),
-    onMutate: async () => {
-      if (!item) return;
-      const optimistic: ProspectIntelligenceListItem = {
-        ...item,
-        intelligence: {
-          ...item.intelligence,
-          reviewStatus: "approved",
-          needsReview: false,
-          enrichmentStatus:
-            String(item.intelligence.enrichmentStatus || "none").toLowerCase() === "completed"
-              ? item.intelligence.enrichmentStatus
-              : "pending",
-        },
-      };
-      applyItemUpdate(optimistic);
-    },
-    onSuccess: (data) => {
-      if (data.item) {
-        applyItemUpdate({
-          ...data.item,
-          intelligence: {
-            ...data.item.intelligence,
-            enrichmentStatus:
-              String(data.item.intelligence.enrichmentStatus || "none").toLowerCase() === "none"
-                ? "pending"
-                : data.item.intelligence.enrichmentStatus,
-          },
-        });
-        setEditMessage(data.item.intelligence?.suggestedFirstMessage || editMessage);
-      }
-      if (item?.contactId) onEnrichedContactId?.(item.contactId);
-      toast({ title: "1 enrichment job started." });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Enrich failed", description: err.message, variant: "destructive" });
-      void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
-    },
-  });
-
   const needsReviewMutation = useMutation({
     mutationFn: () =>
       fetchJson<{ item?: ProspectIntelligenceListItem }>(
@@ -718,6 +681,7 @@ function ProspectIntelligenceDetailDialog({
   const detailAlreadyNeedsReview =
     detailNeedsHumanReview || workState === "needs_review";
   const detailIsNotQualified = workState === "not_qualified";
+  const detailEnrichBusy = Boolean(enrichPending);
   const reanalyzeMutation = useMutation({
     mutationFn: () =>
       fetchJson(`/api/growth-tools/prospect-intelligence/${item!.contactId}/reanalyze`, {
@@ -1182,12 +1146,17 @@ function ProspectIntelligenceDetailDialog({
             <Button
               type="button"
               className="bg-brand-green hover:bg-emerald-700"
-              disabled={approveMutation.isPending}
-              onClick={() => approveMutation.mutate()}
+              disabled={detailEnrichBusy}
+              onClick={() => {
+                if (!item?.contactId) return;
+                onStartEnrichment([item.contactId], {
+                  suggestedFirstMessage: editMessage,
+                });
+              }}
               data-testid="pi-approve-button"
               title={detailEnrichExplain?.ok ? undefined : detailEnrichExplain?.message}
             >
-              {approveMutation.isPending ? (
+              {detailEnrichBusy ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Check className="mr-2 h-4 w-4" />
@@ -1656,18 +1625,6 @@ export function ProspectIntelligencePanel(props: {
     setResolvedFilteredCount(null);
   };
 
-  const removeContactFromSelection = (contactId: string) => {
-    setSelectAllFiltered(false);
-    setResolvedFilteredIds(null);
-    setResolvedFilteredCount(null);
-    setSelectedIds((prev) => {
-      if (!prev.has(contactId)) return prev;
-      const next = new Set(prev);
-      next.delete(contactId);
-      return next;
-    });
-  };
-
   const selectVisible = () => {
     setSelectAllFiltered(false);
     setResolvedFilteredIds(null);
@@ -1707,65 +1664,57 @@ export function ProspectIntelligencePanel(props: {
   });
 
   const bulkApproveMutation = useMutation({
-    mutationFn: () =>
-      fetchJson<{
+    mutationFn: async (vars: {
+      idsToEnrich: string[];
+      suggestedFirstMessage?: string;
+    }) => {
+      const idsToEnrich = snapshotEnrichContactIds(vars.idsToEnrich);
+      assertEnrichIdsNonEmpty(idsToEnrich);
+      // Single-contact path preserves draft message via /approve.
+      if (idsToEnrich.length === 1 && vars.suggestedFirstMessage !== undefined) {
+        const contactId = idsToEnrich[0]!;
+        const data = await fetchJson<{ item?: ProspectIntelligenceListItem }>(
+          `/api/growth-tools/prospect-intelligence/${contactId}/approve`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ suggestedFirstMessage: vars.suggestedFirstMessage }),
+          },
+        );
+        return {
+          approved: data.item ? 1 : 0,
+          approvedContactIds: data.item ? [contactId] : ([] as string[]),
+          skipped: [] as unknown[],
+          item: data.item,
+        };
+      }
+      const body = buildBulkApproveRequestBody(idsToEnrich);
+      const data = await fetchJson<{
         approved: number;
         approvedContactIds: string[];
         skipped: unknown[];
       }>("/api/growth-tools/prospect-intelligence/bulk-approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(selectionBody),
-      }),
-    onMutate: () => {
-      const ids = Array.from(effectiveSelectedIds);
-      const selectedSnapshot = selectedCount;
-      // Eligible subset only — match what Enrich enables for.
-      const enrichableIds = ids.filter((id) => {
-        const row = rawItems.find((r) => r.contactId === id);
-        return row ? canEnrichProspect(reviewUxInput(row)) : false;
+        body: JSON.stringify(body),
       });
-
-      setPinnedVisibleIds((prev) => {
-        const next = new Set(prev);
-        enrichableIds.forEach((id) => next.add(id));
-        return next;
-      });
-      patchListRows(enrichableIds, (row) => ({
-        ...row,
-        intelligence: {
-          ...row.intelligence,
-          reviewStatus: "approved",
-          needsReview: false,
-          enrichmentStatus:
-            String(row.intelligence.enrichmentStatus || "none").toLowerCase() === "completed"
-              ? row.intelligence.enrichmentStatus
-              : "pending",
-        },
-      }));
-      // Clear selection immediately so Enrich is not left disabled on selected rows.
-      clearSelection();
-      setWorkFilter("enriching");
-      setAttentionSubFilter("all");
-      setBulkResultBanner(
-        enrichableIds.length > 0
-          ? `Starting ${enrichableIds.length} enrichment ${
-              enrichableIds.length === 1 ? "job" : "jobs"
-            }…`
-          : null,
-      );
-      return { enrichableIds, selectedSnapshot };
+      return { ...data, item: undefined as ProspectIntelligenceListItem | undefined };
     },
-    onSuccess: (data, _vars, ctx) => {
+    // Intentionally no onMutate clearSelection / setWorkFilter — that raced the request body.
+    onSuccess: (data, vars) => {
       const skippedCount = Array.isArray(data.skipped) ? data.skipped.length : 0;
       const succeeded = data.approved ?? 0;
-      const selectedForAction =
-        ctx?.selectedSnapshot || selectedCount || succeeded + skippedCount;
+      const selectedForAction = vars.idsToEnrich.length;
       const startedIds = data.approvedContactIds?.length
         ? data.approvedContactIds
-        : ctx?.enrichableIds || [];
+        : succeeded > 0
+          ? vars.idsToEnrich
+          : [];
 
-      if (startedIds.length) {
+      // Only treat as started when at least one job was accepted.
+      const ui = planEnrichActionUi(succeeded > 0 ? "success" : "failure");
+
+      if (ui.patchRowsToEnriching && startedIds.length) {
         setPinnedVisibleIds((prev) => {
           const next = new Set(prev);
           startedIds.forEach((id) => next.add(id));
@@ -1783,27 +1732,58 @@ export function ProspectIntelligencePanel(props: {
                 : "pending",
           },
         }));
+        if (data.item) {
+          setSelected((prev) =>
+            prev && startedIds.includes(prev.contactId)
+              ? {
+                  ...data.item!,
+                  intelligence: {
+                    ...data.item!.intelligence,
+                    enrichmentStatus:
+                      String(data.item!.intelligence.enrichmentStatus || "none").toLowerCase() ===
+                      "none"
+                        ? "pending"
+                        : data.item!.intelligence.enrichmentStatus,
+                  },
+                }
+              : prev,
+          );
+        }
       }
 
-      clearSelection();
-      setWorkFilter("enriching");
-      setBulkResultBanner(
-        formatProspectBulkActionResult("enrich", {
-          selected: selectedForAction,
-          succeeded,
-          skipped: skippedCount,
-          failed: 0,
-        }),
-      );
+      if (ui.clearSelection) clearSelection();
+      // Do NOT switch to Enriching filter — leave user on current Review filter.
+
+      if (succeeded > 0 && skippedCount === 0) {
+        const msg = formatEnrichmentStartedMessage(succeeded);
+        setBulkResultBanner(msg);
+        toast({ title: msg });
+      } else {
+        setBulkResultBanner(
+          formatProspectBulkActionResult("enrich", {
+            selected: selectedForAction,
+            succeeded,
+            skipped: skippedCount,
+            failed: succeeded === 0 ? selectedForAction : 0,
+          }),
+        );
+        if (succeeded === 0) {
+          toast({
+            title: "Enrich failed",
+            description: "No enrichment jobs started for the selection.",
+            variant: "destructive",
+          });
+        }
+      }
     },
-    onError: (err: Error, _vars, ctx) => {
-      clearSelection();
+    onError: (err: Error, vars) => {
+      // Preserve selection + current filter (Needs Review). Do not clear or switch tabs.
       setBulkResultBanner(
         formatProspectBulkActionResult("enrich", {
-          selected: ctx?.selectedSnapshot || selectedCount || 1,
+          selected: vars.idsToEnrich.length || 1,
           succeeded: 0,
           skipped: 0,
-          failed: ctx?.selectedSnapshot || selectedCount || 1,
+          failed: vars.idsToEnrich.length || 1,
           detail: err.message,
         }),
       );
@@ -1811,7 +1791,25 @@ export function ProspectIntelligencePanel(props: {
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
     },
   });
-
+  /** Shared Enrich action — toolbar and detail both call this. */
+  const startProspectEnrichment = (
+    contactIds: string[],
+    opts?: { suggestedFirstMessage?: string },
+  ) => {
+    const idsToEnrich = snapshotEnrichContactIds(contactIds);
+    if (!idsToEnrich.length) {
+      toast({
+        title: "Enrich failed",
+        description: "No prospects selected.",
+        variant: "destructive",
+      });
+      return;
+    }
+    bulkApproveMutation.mutate({
+      idsToEnrich,
+      suggestedFirstMessage: opts?.suggestedFirstMessage,
+    });
+  };
   const previewQueueMutation = useMutation({
     mutationFn: (contactIds?: string[]) =>
       fetchJson<{ preview: typeof queuePreview }>(
@@ -2118,7 +2116,10 @@ export function ProspectIntelligencePanel(props: {
               selectionEligibility.canEnrich === 0 ||
               bulkApproveMutation.isPending
             }
-            onClick={() => bulkApproveMutation.mutate()}
+            onClick={() => {
+              const idsToEnrich = snapshotEnrichContactIds(effectiveSelectedIds);
+              startProspectEnrichment(idsToEnrich);
+            }}
             data-testid="pi-enrich"
             title={
               bulkApproveMutation.isPending
@@ -2422,7 +2423,8 @@ export function ProspectIntelligencePanel(props: {
           setSelected(next);
           patchListRows([next.contactId], () => next);
         }}
-        onEnrichedContactId={removeContactFromSelection}
+        onStartEnrichment={startProspectEnrichment}
+        enrichPending={bulkApproveMutation.isPending}
         onContactFieldsUpdated={(contactId, patch) => {
           setSelected((prev) =>
             prev && prev.contactId === contactId ? { ...prev, ...patch } : prev,

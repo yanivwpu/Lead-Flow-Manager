@@ -501,7 +501,7 @@ assert.ok(!panelSrc.includes("PROSPECT_REVIEW_FILTER_CHIPS"));
 assert.ok(!panelSrc.includes("Approve to enrich"));
 assert.ok(panelSrc.includes("Enrich") || panelSrc.includes("pi-enrich"));
 assert.ok(panelSrc.includes("pi-selection-reason") || panelSrc.includes("availability.reason"));
-assert.ok(panelSrc.includes("onEnrichedContactId"));
+assert.ok(panelSrc.includes("onStartEnrichment") || panelSrc.includes("startProspectEnrichment"));
 assert.ok(!panelSrc.includes("pi-campaigns-subfilters"));
 // Needs Review is a badge/state; detail Enrich uses shared canEnrichProspect
 assert.ok(panelSrc.includes("pi-needs-human-review-badge"));
@@ -509,9 +509,9 @@ assert.ok(panelSrc.includes("detailAlreadyNeedsReview"));
 assert.ok(panelSrc.includes("pi-not-qualified-button"));
 assert.ok(panelSrc.includes("canEnrichProspect(reviewUxInput"));
 assert.ok(panelSrc.includes("explainCanEnrichProspect(reviewUxInput"));
-assert.match(panelSrc, /detailCanEnrich[\s\S]*canEnrichProspect/);
-assert.match(panelSrc, /selectionEligibility[\s\S]*explainCanEnrichProspect|explainCanEnrichProspect\(ux\)/);
-
+assert.ok(panelSrc.includes("detailCanEnrich"));
+assert.ok(panelSrc.includes("explainCanEnrichProspect(ux)"));
+assert.ok(!panelSrc.includes('setWorkFilter("enriching")'));
 const campaignsSrc = readFileSync(
   join(root, "client/src/components/settings/ProspectOutreachQueuePanel.tsx"),
   "utf8",

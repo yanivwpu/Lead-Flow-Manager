@@ -1214,14 +1214,11 @@ export async function bulkApproveProspects(params: {
       skipped.push({ contactId, reason: "analysis_incomplete" });
       continue;
     }
-    if (pi.needsReview || pi.reviewStatus === "needs_review") {
-      skipped.push({ contactId, reason: "needs_review" });
-      continue;
-    }
     if (pi.analysisStatus !== "completed" && pi.analysisStatus !== "needs_review") {
       skipped.push({ contactId, reason: "analysis_incomplete" });
       continue;
     }
+    // Needs Review is enrichable — Enrich IS the human approval (do not skip).
     if (pi.outreachStatus === "replied" || pi.outreachStatus === "outreach_sent") {
       skipped.push({ contactId, reason: `already_${pi.outreachStatus}` });
       continue;

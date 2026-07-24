@@ -7201,6 +7201,11 @@ export async function registerRoutes(
     }
   });
 
+  // Native email channel routes MUST register before /api/integrations/:id/*
+  // or POST /api/integrations/email/sync is captured as id="email" → "Integration not found".
+  console.error("[EmailRouteBootProbe] before_register");
+  registerEmailChannelRoutes(app);
+
   // Update an integration
   app.patch("/api/integrations/:id", async (req, res) => {
     try {
@@ -7420,7 +7425,9 @@ export async function registerRoutes(
     }
   });
 
-  // Trigger a sync for an integration
+  // Trigger a sync for a CRM integration (HubSpot, etc.).
+  // Native Gmail Sync now uses POST /api/integrations/email/sync (registered above via
+  // registerEmailChannelRoutes). That specific path must win over this :id param route.
   app.post("/api/integrations/:id/sync", async (req, res) => {
     try {
       if (!req.user) {
@@ -11439,8 +11446,7 @@ export async function registerRoutes(
   registerProspectImportRoutes(app);
   registerProspectIntelligenceRoutes(app);
   registerProspectBulkOutreachRoutes(app);
-  console.error("[EmailRouteBootProbe] before_register");
-  registerEmailChannelRoutes(app);
+  // Email channel routes registered earlier (before /api/integrations/:id/*).
   registerGmailPubSubWebhookRoutes(app);
   registerPublicListingRoutes(app);
   registerPublicAgentPageRoutes(app);
