@@ -10,6 +10,9 @@ import {
   formatProspectCampaignBatchSummary,
   formatProspectCampaignBatchTitle,
   groupProspectCampaignBatches,
+  isProspectCampaignActiveItem,
+  isProspectCampaignHistoryItem,
+  partitionProspectCampaignItems,
 } from "../shared/prospectCampaignBatches";
 
 function item(
@@ -33,13 +36,14 @@ const batchA = [
     batchId: "b1",
     queueStatus: "queued",
     createdAt: "2026-07-24T15:00:00.000Z",
-    prospectName: "A",
+    prospectName: "ADMEN",
   }),
   item({
     id: "i2",
     batchId: "b1",
     queueStatus: "sent",
     createdAt: "2026-07-24T15:01:00.000Z",
+    sentAt: "2026-07-24T15:05:00.000Z",
     prospectName: "B",
   }),
   item({
@@ -57,6 +61,7 @@ const batchB = [
     batchId: "b2",
     queueStatus: "sent",
     createdAt: "2026-07-20T10:00:00.000Z",
+    sentAt: "2026-07-20T10:05:00.000Z",
     prospectName: "D",
   }),
 ];
@@ -64,46 +69,70 @@ const batchB = [
 const all = [...batchA, ...batchB];
 
 {
+  assert.equal(isProspectCampaignActiveItem(batchA[0]!), true);
+  assert.equal(isProspectCampaignHistoryItem(batchA[0]!), false);
+  assert.equal(isProspectCampaignHistoryItem(batchA[1]!), true);
+  assert.equal(isProspectCampaignActiveItem(batchA[2]!), true);
+}
+
+{
+  const { activeItems, historyItems } = partitionProspectCampaignItems({ items: all });
+  assert.equal(activeItems.length, 2);
+  assert.ok(activeItems.some((r) => r.prospectName === "ADMEN"));
+  assert.ok(activeItems.some((r) => r.prospectName === "C"));
+  assert.equal(historyItems.length, 2);
+  assert.ok(historyItems.every((r) => r.queueStatus === "sent"));
+  assert.ok(!historyItems.some((r) => r.prospectName === "ADMEN"));
+}
+
+{
+  const { historyItems } = partitionProspectCampaignItems({ items: all });
+  const groups = groupProspectCampaignBatches({
+    visibleItems: historyItems,
+    allItemsForCounts: historyItems,
+  });
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0]!.batchId, "b1");
+  assert.equal(groups[0]!.counts.total, 1);
+  assert.equal(groups[0]!.counts.sent, 1);
+  assert.equal(groups[0]!.counts.ready, 0);
+  assert.equal(groups[0]!.items.length, 1);
+  assert.equal(groups[0]!.items[0]!.prospectName, "B");
+  assert.equal(groups[0]!.hasActiveItems, false);
+  assert.equal(groups[1]!.batchId, "b2");
+}
+
+{
+  // Ready items must never leak into history grouping even if passed accidentally
   const groups = groupProspectCampaignBatches({
     visibleItems: all,
     allItemsForCounts: all,
   });
-  assert.equal(groups.length, 2);
-  assert.equal(groups[0]!.batchId, "b1");
-  assert.equal(groups[0]!.counts.total, 3);
-  assert.equal(groups[0]!.counts.ready, 1);
-  assert.equal(groups[0]!.counts.sent, 1);
-  assert.equal(groups[0]!.counts.failed, 1);
-  assert.equal(groups[0]!.hasActiveItems, true);
-  assert.equal(groups[1]!.batchId, "b2");
-  assert.equal(groups[1]!.hasActiveItems, false);
+  assert.ok(groups.every((g) => g.items.every((r) => r.queueStatus === "sent")));
+  assert.ok(!groups.some((g) => g.items.some((r) => r.prospectName === "ADMEN")));
 }
 
-{
-  // Status filter: header counts stay full-batch; rows are filtered
-  const groups = groupProspectCampaignBatches({
-    visibleItems: all.filter((r) => r.queueStatus === "sent"),
-    allItemsForCounts: all,
-  });
-  assert.equal(groups.length, 2);
-  const g1 = groups.find((g) => g.batchId === "b1")!;
-  assert.equal(g1.counts.ready, 1);
-  assert.equal(g1.counts.sent, 1);
-  assert.equal(g1.items.length, 1);
-  assert.equal(g1.items[0]!.queueStatus, "sent");
-}
-
-assert.match(formatProspectCampaignBatchSummary(batchA.length ? {
-  ready: 1, sent: 1, failed: 1, paused: 0, sending: 0, other: 0, total: 3,
-} : { ready: 0, sent: 0, failed: 0, paused: 0, sending: 0, other: 0, total: 0 }), /Ready 1/);
+assert.match(
+  formatProspectCampaignBatchSummary({
+    ready: 0,
+    sent: 2,
+    failed: 0,
+    paused: 0,
+    sending: 0,
+    other: 0,
+    total: 2,
+  }),
+  /Sent 2/,
+);
 assert.ok(formatProspectCampaignBatchTitle("2026-07-24T15:00:00.000Z").length > 5);
 
 const panelSrc = readFileSync(
   join(import.meta.dirname, "..", "client/src/components/settings/ProspectOutreachQueuePanel.tsx"),
   "utf8",
 );
+assert.ok(panelSrc.includes("partitionProspectCampaignItems"));
+assert.ok(panelSrc.includes("po-campaign-active"));
+assert.ok(panelSrc.includes("po-campaign-history"));
 assert.ok(panelSrc.includes("groupProspectCampaignBatches"));
-assert.ok(panelSrc.includes("po-campaign-batches"));
-assert.ok(!panelSrc.includes("Do not expose internal queue IDs") || true);
 
 console.log("prospect-campaign-batches.test.ts: all assertions passed");

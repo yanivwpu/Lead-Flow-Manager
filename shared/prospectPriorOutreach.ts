@@ -1,10 +1,16 @@
 /**
  * Pure helpers: detect prior Prospect Intelligence outreach evidence.
- * Used so stuck review_status=approved / outreach_status=not_sent cannot hide
- * an already-sent manual PI email conversation.
+ * Used so stuck review_status / outreach_status cannot hide an already-sent
+ * manual PI email conversation — and so stale flags alone do not block Send.
+ *
+ * Already contacted requires a real artifact:
+ * - successful queue send, or
+ * - linked outreachMessageId, or
+ * - "Idea for …" email thread with outbound, or
+ * - linked conversation that has outbound evidence
+ *
+ * outreachStatus / outreachSentAt alone are NOT sufficient.
  */
-
-import { normalizeOutreachStatus } from "./prospectOutreachLifecycle";
 
 const IDEA_FOR_SUBJECT_RE = /^idea for\b/i;
 
@@ -13,6 +19,7 @@ export type PriorProspectOutreachEvidenceInput = {
   outreachConversationId?: string | null;
   outreachMessageId?: string | null;
   outreachSentAt?: string | Date | null;
+  repliedAt?: string | Date | null;
   /**
    * Existing email conversations for the contact.
    * hasOutbound=true means at least one outbound message on the thread.
@@ -43,6 +50,7 @@ export type PriorProspectOutreachEvidenceResult = {
 /**
  * Block bulk queue when the prospect already received PI outreach,
  * even if outreach_status was stuck on not_sent (lifecycle bug / missed mark).
+ * Do not block on stale outreach_sent / outreachSentAt alone.
  */
 export function detectPriorProspectOutreach(
   input: PriorProspectOutreachEvidenceInput,
@@ -51,42 +59,17 @@ export function detectPriorProspectOutreach(
     return { alreadyContacted: false, reason: "ok" };
   }
 
-  const outreach = normalizeOutreachStatus(input.outreachStatus, {
-    outreachSentAt: input.outreachSentAt,
-    repliedAt: null,
-  });
-  if (outreach === "replied") {
-    return {
-      alreadyContacted: true,
-      reason: "already_replied",
-      conversationId: input.outreachConversationId,
-    };
-  }
-  if (outreach === "outreach_sent") {
-    return {
-      alreadyContacted: true,
-      reason: "already_outreach_sent",
-      conversationId: input.outreachConversationId,
-    };
-  }
-
-  if (input.outreachConversationId) {
-    return {
-      alreadyContacted: true,
-      reason: "outreach_conversation_linked",
-      conversationId: input.outreachConversationId,
-    };
-  }
-  if (input.outreachMessageId || input.outreachSentAt) {
-    return {
-      alreadyContacted: true,
-      reason: "already_outreach_sent",
-      conversationId: input.outreachConversationId,
-    };
-  }
-
   if (input.hasSuccessfulQueueSend) {
     return { alreadyContacted: true, reason: "queue_already_sent" };
+  }
+
+  if (String(input.outreachMessageId || "").trim()) {
+    const outreach = String(input.outreachStatus || "").toLowerCase();
+    return {
+      alreadyContacted: true,
+      reason: outreach === "replied" || input.repliedAt ? "already_replied" : "already_outreach_sent",
+      conversationId: input.outreachConversationId || null,
+    };
   }
 
   for (const conv of input.emailConversations || []) {
@@ -101,6 +84,25 @@ export function detectPriorProspectOutreach(
     }
   }
 
+  const linked = String(input.outreachConversationId || "").trim();
+  if (linked) {
+    const match = (input.emailConversations || []).find(
+      (c) => String(c.id || "") === linked && c.hasOutbound === true,
+    );
+    if (match) {
+      const outreach = String(input.outreachStatus || "").toLowerCase();
+      return {
+        alreadyContacted: true,
+        reason:
+          outreach === "replied" || input.repliedAt
+            ? "already_replied"
+            : "outreach_conversation_linked",
+        conversationId: linked,
+      };
+    }
+  }
+
+  // Stale PI flags alone — not already contacted
   return { alreadyContacted: false, reason: "ok" };
 }
 

@@ -199,7 +199,7 @@ assert.deepEqual(
   ["done", "done", "done"],
 );
 
-// outreach_sent alone must NOT mark Campaign ✓ (no traceable Campaigns row)
+// outreach_sent alone must NOT mark Campaign ✓ (no traceable Campaigns/send row)
 assert.deepEqual(
   resolveProspectTimelineStates({
     analysisStatus: "completed",
@@ -211,7 +211,21 @@ assert.deepEqual(
   ["done", "done", "todo"],
 );
 
-// Legacy outreach without Website Intelligence — Enriched may still complete; Campaign stays empty
+// Traceable historical Inbox send (message id) → Campaign complete
+assert.deepEqual(
+  resolveProspectTimelineStates({
+    analysisStatus: "completed",
+    reviewStatus: "approved",
+    enrichmentStatus: "completed",
+    outreachStatus: "outreach_sent",
+    outreachSentAt: "2026-01-01T00:00:00.000Z",
+    outreachMessageId: "msg-1",
+    outreachConversationId: "conv-1",
+  }),
+  ["done", "done", "done"],
+);
+
+// Legacy outreach without Website Intelligence or send artifacts — Campaign stays empty
 assert.deepEqual(
   resolveProspectTimelineStates({
     analysisStatus: "completed",

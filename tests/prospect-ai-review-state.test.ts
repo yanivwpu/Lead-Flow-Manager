@@ -158,7 +158,7 @@ assert.equal(
   false,
 );
 
-// Inbox = reply only, not outreach_sent
+// Inbox = real thread only — not outreach_sent / replied flags alone
 assert.equal(
   isProspectInInboxJourney({
     outreachStatus: "outreach_sent",
@@ -170,6 +170,23 @@ assert.equal(
   isProspectInInboxJourney({
     outreachStatus: "replied",
     repliedAt: "2026-01-02",
+  }),
+  false,
+);
+assert.equal(
+  isProspectInInboxJourney({
+    outreachStatus: "replied",
+    repliedAt: "2026-01-02",
+    outreachConversationId: "conv-1",
+  }),
+  true,
+);
+assert.equal(
+  isProspectInInboxJourney({
+    outreachStatus: "outreach_sent",
+    outreachSentAt: "2026-01-01",
+    outreachMessageId: "msg-1",
+    outreachConversationId: "conv-1",
   }),
   true,
 );
@@ -625,7 +642,35 @@ assert.equal(
       code: "enrichment_in_progress",
     },
     {
-      name: "already contacted",
+      name: "already contacted (traceable message)",
+      input: {
+        analysisStatus: "completed",
+        reviewStatus: "approved",
+        enrichmentStatus: "completed",
+        email: "a@b.com",
+        websiteUrl: "https://x.com",
+        outreachStatus: "outreach_sent",
+        outreachSentAt: "2026-01-01",
+        outreachMessageId: "msg-1",
+      },
+      expectOk: false,
+      code: "already_contacted",
+    },
+    {
+      name: "already contacted (server priorOutreachDetected)",
+      input: {
+        analysisStatus: "completed",
+        reviewStatus: "approved",
+        enrichmentStatus: "completed",
+        email: "a@b.com",
+        websiteUrl: "https://x.com",
+        priorOutreachDetected: true,
+      },
+      expectOk: false,
+      code: "already_contacted",
+    },
+    {
+      name: "stale outreach_sent alone is still Qualified",
       input: {
         analysisStatus: "completed",
         reviewStatus: "approved",
@@ -635,8 +680,7 @@ assert.equal(
         outreachStatus: "outreach_sent",
         outreachSentAt: "2026-01-01",
       },
-      expectOk: false,
-      code: "already_contacted",
+      expectOk: true,
     },
   ];
 

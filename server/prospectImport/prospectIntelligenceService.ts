@@ -216,8 +216,7 @@ function isTransientAiError(err: unknown): boolean {
   return /rate limit|timeout|503|502|429|overloaded/i.test(msg);
 }
 
-// #region agent log
-type QualDebugStage =
+type QualFailureStage =
   | "route_entered"
   | "contact_loaded"
   | "intel_row_loaded"
@@ -230,28 +229,6 @@ type QualDebugStage =
   | "schema_validate"
   | "db_persist"
   | "failed";
-
-function agentQualDebugLog(payload: {
-  hypothesisId: string;
-  location: string;
-  message: string;
-  data?: Record<string, unknown>;
-  runId?: string;
-}): void {
-  fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
-    body: JSON.stringify({
-      sessionId: "4bac18",
-      runId: payload.runId || "pre-fix",
-      hypothesisId: payload.hypothesisId,
-      location: payload.location,
-      message: payload.message,
-      data: payload.data || {},
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-}
 
 function extractProviderErrorMeta(err: unknown): {
   providerStatus?: number | string;
@@ -286,7 +263,7 @@ function logProspectQualificationFailed(params: {
   workspaceId?: string | null;
   bulkJobId?: string | null;
   model?: string | null;
-  stage: QualDebugStage | string;
+  stage: QualFailureStage | string;
   err: unknown;
   hypothesisId?: string;
 }): void {
@@ -306,24 +283,7 @@ function logProspectQualificationFailed(params: {
     stack: meta.stack ?? null,
   };
   console.error(JSON.stringify(payload));
-  agentQualDebugLog({
-    hypothesisId: params.hypothesisId || "FAIL",
-    location: "prospectIntelligenceService.ts:prospect_qualification_failed",
-    message: "prospect_qualification_failed",
-    data: {
-      contactId: params.contactId,
-      workspaceId: params.workspaceId || null,
-      model: params.model || null,
-      stage: params.stage,
-      errorName: meta.errorName,
-      errorMessage: meta.errorMessage,
-      providerStatus: meta.providerStatus ?? null,
-      providerCode: meta.providerCode ?? null,
-      stack: meta.stack ?? null,
-    },
-  });
 }
-// #endregion
 
 
 export type ProspectAnalysisClaimOutcome =
@@ -550,7 +510,7 @@ export async function analyzeProspectContact(params: {
   preClaimed?: boolean;
   completeFn?: AiCompleteFn;
 }): Promise<ProspectIntelligence> {
-  let stage: QualDebugStage | string = "contact_loaded";
+  let stage: QualFailureStage | string = "contact_loaded";
   let model = "";
   let workspaceId: string | null = null;
 
@@ -569,21 +529,6 @@ export async function analyzeProspectContact(params: {
     const contact = await storage.getContact(params.contactId);
     if (!contact) throw new Error("Contact not found");
     workspaceId = contact.userId;
-    // #region agent log
-    agentQualDebugLog({
-      hypothesisId: "E",
-      location: "prospectIntelligenceService.ts:analyzeProspectContact",
-      message: "contact_loaded",
-      data: {
-        contactId: params.contactId,
-        workspaceId,
-        force: Boolean(params.force),
-        preClaimed: Boolean(params.preClaimed),
-        source: contact.source,
-        pipelineStage: contact.pipelineStage,
-      },
-    });
-    // #endregion
     assertInternalImportedProspect(contact);
 
     model = aiProvider.getModelConfig("extraction").model;
@@ -599,19 +544,6 @@ export async function analyzeProspectContact(params: {
       .from(prospectIntelligence)
       .where(eq(prospectIntelligence.contactId, params.contactId))
       .limit(1);
-    // #region agent log
-    agentQualDebugLog({
-      hypothesisId: "PRIOR",
-      location: "prospectIntelligenceService.ts:prior_error",
-      message: "intel_row_loaded",
-      data: {
-        contactId: params.contactId,
-        analysisStatus: priorRows[0]?.analysisStatus ?? null,
-        priorErrorMessage: (priorRows[0]?.errorMessage || "").substring(0, 500) || null,
-        model,
-      },
-    });
-    // #endregion
     stage = "claim";
 
     if (!params.preClaimed) {
@@ -621,14 +553,6 @@ export async function analyzeProspectContact(params: {
         importJobId,
         aiModel: model,
       });
-      // #region agent log
-      agentQualDebugLog({
-        hypothesisId: "E",
-        location: "prospectIntelligenceService.ts:claim",
-        message: "claim_result",
-        data: { contactId: params.contactId, outcome: claim.outcome },
-      });
-      // #endregion
       if (claim.outcome === "already_completed") {
         return mapIntelligenceRow(claim.row);
       }
@@ -652,44 +576,12 @@ export async function analyzeProspectContact(params: {
     try {
       stage = "prompt_built";
       const input = buildProspectIntelligenceInput(contact);
-      // #region agent log
-      agentQualDebugLog({
-        hypothesisId: "F",
-        location: "prospectIntelligenceService.ts:input",
-        message: "places_data_normalized",
-        data: {
-          contactId: params.contactId,
-          hasName: Boolean(input.name),
-          hasCompany: Boolean(input.company),
-          hasWebsite: Boolean(input.websiteUrl),
-          hasPhone: Boolean(input.phone),
-          hasEmail: Boolean(input.email),
-          businessType: input.businessType || null,
-          insufficient: hasInsufficientProspectData(input),
-        },
-      });
-      // #endregion
 
       stage = "workspace_context";
       const workspaceContext = await loadProspectAiWorkspaceContext(contact.userId, {
         contactId: contact.id,
         analysisPath: params.force ? "reanalyze" : "analyze",
       });
-      // #region agent log
-      agentQualDebugLog({
-        hypothesisId: "D",
-        location: "prospectIntelligenceService.ts:workspace_context",
-        message: "workspace_context_loaded",
-        data: {
-          contactId: params.contactId,
-          configured: workspaceContext.configured,
-          hasAiBrain: workspaceContext.hasAiBrain,
-          hasBusinessProfile: workspaceContext.hasBusinessProfile,
-          aiBrainIsPrimary: workspaceContext.aiBrainIsPrimary,
-          fallbackUsed: workspaceContext.fallbackUsed,
-        },
-      });
-      // #endregion
 
       let intel: ProspectIntelligence;
       let promptTokens = 0;
@@ -697,14 +589,6 @@ export async function analyzeProspectContact(params: {
 
       if (hasInsufficientProspectData(input)) {
         intel = buildInsufficientDataResult(model, input, workspaceContext);
-        // #region agent log
-        agentQualDebugLog({
-          hypothesisId: "F",
-          location: "prospectIntelligenceService.ts:insufficient",
-          message: "insufficient_data_path",
-          data: { contactId: params.contactId },
-        });
-        // #endregion
       } else {
         const completeFn = params.completeFn ?? defaultAiComplete;
         const messages = [
@@ -724,81 +608,20 @@ export async function analyzeProspectContact(params: {
         for (let attempt = 0; attempt <= MAX_AI_RETRIES; attempt++) {
           try {
             stage = "model_call_start";
-            // #region agent log
-            agentQualDebugLog({
-              hypothesisId: "A",
-              location: "prospectIntelligenceService.ts:model_call_start",
-              message: "model_call_started",
-              data: { contactId: params.contactId, model, attempt },
-            });
-            // #endregion
             const response = await completeFn(messages);
             promptTokens += response.usage?.promptTokens ?? 0;
             completionTokens += response.usage?.completionTokens ?? 0;
             const rawText = response.content || "";
             stage = "model_response";
-            // #region agent log
-            agentQualDebugLog({
-              hypothesisId: "A",
-              location: "prospectIntelligenceService.ts:model_response",
-              message: "model_response_received",
-              data: {
-                contactId: params.contactId,
-                model,
-                attempt,
-                contentLength: rawText.length,
-                contentPreview: rawText.substring(0, 400),
-                startsWithBrace: rawText.trimStart().startsWith("{"),
-              },
-            });
-            // #endregion
 
             stage = "json_parse";
             const raw = JSON.parse(rawText || "{}");
-            // #region agent log
-            agentQualDebugLog({
-              hypothesisId: "B",
-              location: "prospectIntelligenceService.ts:json_parse",
-              message: "json_parsed",
-              data: {
-                contactId: params.contactId,
-                keys: raw && typeof raw === "object" ? Object.keys(raw as object).slice(0, 30) : [],
-              },
-            });
-            // #endregion
 
             stage = "schema_validate";
             parsed = parseAndValidateProspectIntelligence(raw, model, input, workspaceContext);
-            // #region agent log
-            agentQualDebugLog({
-              hypothesisId: "C",
-              location: "prospectIntelligenceService.ts:schema_validate",
-              message: "schema_validated",
-              data: {
-                contactId: params.contactId,
-                priority: parsed.priority ?? null,
-                needsReview: Boolean(parsed.needsReview),
-                leadScore: parsed.leadScore ?? null,
-              },
-            });
-            // #endregion
             break;
           } catch (err) {
             lastErr = err;
-            const meta = extractProviderErrorMeta(err);
-            // #region agent log
-            agentQualDebugLog({
-              hypothesisId: stage === "model_call_start" ? "A" : stage === "json_parse" ? "B" : "C",
-              location: "prospectIntelligenceService.ts:attempt_catch",
-              message: "attempt_failed",
-              data: {
-                contactId: params.contactId,
-                stage,
-                attempt,
-                ...meta,
-              },
-            });
-            // #endregion
             if (!isTransientAiError(err) || attempt === MAX_AI_RETRIES) break;
             await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
           }
@@ -842,14 +665,6 @@ export async function analyzeProspectContact(params: {
         .where(eq(prospectIntelligence.contactId, params.contactId));
 
       await syncContactIntelligence(contact, intel, importJobId);
-      // #region agent log
-      agentQualDebugLog({
-        hypothesisId: "G",
-        location: "prospectIntelligenceService.ts:db_persist",
-        message: "completed",
-        data: { contactId: params.contactId, analysisStatus: intel.analysisStatus || "completed" },
-      });
-      // #endregion
       return intel;
     } finally {
       runningContactAnalysis.delete(params.contactId);
@@ -1141,6 +956,13 @@ export async function listProspectIntelligence(
     connections = await loadWorkspaceChannelConnections(workspaceUserId);
   }
 
+  // Shared prior-outreach truth (same detectPrior path as Send preview) for Qualified / Campaign ✓.
+  const { batchLoadPriorOutreachFlags } = await import("./prospectOutreachEligibilityService");
+  const candidateContactIds = rows
+    .map((r) => r.contactId)
+    .filter((id) => contactMap.has(id));
+  const priorByContact = await batchLoadPriorOutreachFlags(candidateContactIds);
+
   for (const row of rows) {
     const contact = contactMap.get(row.contactId);
     if (!contact) continue;
@@ -1231,6 +1053,7 @@ export async function listProspectIntelligence(
         ? "Google Places discovery"
         : meta?.batchName) ||
       null;
+    const prior = priorByContact.get(contact.id);
     items.push({
       contactId: contact.id,
       name: contact.name,
@@ -1245,6 +1068,7 @@ export async function listProspectIntelligence(
       sourceLabel,
       queueStatus: queueStatusByContact.get(contact.id) || null,
       prospectOutcome: outcomeByContact.get(contact.id) || null,
+      priorOutreachDetected: prior?.priorOutreachDetected === true,
       intelligence: mapIntelligenceRow(row),
     });
   }
@@ -1365,6 +1189,10 @@ export async function getProspectIntelligenceDetail(
     /* optional presentation fields */
   }
 
+  const { batchLoadPriorOutreachFlags } = await import("./prospectOutreachEligibilityService");
+  const priorMap = await batchLoadPriorOutreachFlags([contactId]);
+  const prior = priorMap.get(contactId);
+
   return {
     contactId: contact.id,
     name: contact.name,
@@ -1379,6 +1207,7 @@ export async function getProspectIntelligenceDetail(
     sourceLabel,
     queueStatus,
     prospectOutcome,
+    priorOutreachDetected: prior?.priorOutreachDetected === true,
     intelligence: mapIntelligenceRow(rows[0]),
   };
 }
@@ -1551,6 +1380,96 @@ export async function reanalyzeProspectContact(
   if (!contact) throw new Error("Contact not found");
   if (workspaceUserId) assertContactInWorkspace(contact, workspaceUserId);
   return analyzeProspectContact({ contactId, force: true });
+}
+
+/**
+ * Link real prior outbound history onto PI without fabricating approval.
+ * Safe when reviewStatus is needs_review / pending:
+ * - fills missing conversationId / messageId / outreachSentAt when evidence exists
+ * - only advances outreachStatus → outreach_sent when review is already approved
+ * Never changes reviewStatus / needsReview / approvedAt.
+ */
+export async function linkProspectPriorOutreachHistory(params: {
+  contactId: string;
+  conversationId: string;
+  messageId?: string | null;
+  source?: string;
+}): Promise<{ updated: boolean; reason: string; outreachStatus?: string }> {
+  const { contactId, conversationId } = params;
+  const rows = await db
+    .select()
+    .from(prospectIntelligence)
+    .where(eq(prospectIntelligence.contactId, contactId))
+    .limit(1);
+  const row = rows[0];
+  if (!row) {
+    return { updated: false, reason: "no_pi_record" };
+  }
+
+  let messageId = params.messageId || null;
+  if (!messageId && !row.outreachMessageId) {
+    const { messages } = await import("@shared/schema");
+    const outs = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(eq(messages.conversationId, conversationId), eq(messages.direction, "outbound")))
+      .limit(1);
+    messageId = outs[0]?.id || null;
+  }
+
+  const patch: Partial<typeof prospectIntelligence.$inferInsert> = {
+    updatedAt: new Date(),
+  };
+  let changed = false;
+
+  if (!row.outreachConversationId && conversationId) {
+    patch.outreachConversationId = conversationId;
+    changed = true;
+  }
+  if (!row.outreachMessageId && messageId) {
+    patch.outreachMessageId = messageId;
+    changed = true;
+  }
+  if (!row.outreachSentAt) {
+    patch.outreachSentAt = new Date();
+    changed = true;
+  }
+
+  const review = String(row.reviewStatus || "").toLowerCase();
+  const outreach = String(row.outreachStatus || "").toLowerCase();
+  if (review === "approved" && outreach === "not_sent") {
+    patch.outreachStatus = "outreach_sent";
+    changed = true;
+  }
+
+  if (!changed) {
+    return {
+      updated: false,
+      reason: "already_linked",
+      outreachStatus: row.outreachStatus,
+    };
+  }
+
+  await db.update(prospectIntelligence).set(patch).where(eq(prospectIntelligence.contactId, contactId));
+
+  console.info(
+    JSON.stringify({
+      tag: "[ProspectOutreachLifecycle]",
+      event: "prior_outreach_linked",
+      contactId,
+      conversationId,
+      messageId: messageId || row.outreachMessageId || null,
+      outreachStatus: patch.outreachStatus || row.outreachStatus,
+      reviewStatus: row.reviewStatus,
+      source: params.source || "prior_outreach_link",
+    }),
+  );
+
+  return {
+    updated: true,
+    reason: "prior_outreach_linked",
+    outreachStatus: String(patch.outreachStatus || row.outreachStatus),
+  };
 }
 
 /**
@@ -1793,6 +1712,7 @@ export const prospectIntelligenceService = {
   markProspectAnalysisFailed,
   healAbandonedProcessingAnalysis,
   markProspectOutreachSent,
+  linkProspectPriorOutreachHistory,
   markProspectOutreachReplied,
   reconcileProspectOutreachConversation,
 };

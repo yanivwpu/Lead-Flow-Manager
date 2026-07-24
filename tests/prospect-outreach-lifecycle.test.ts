@@ -68,6 +68,7 @@ run("4. after outreach_sent hide first Send, show View conversation", () => {
     outreachSentAt: new Date().toISOString(),
     email: "info@jivesmedia.com",
     outreachConversationId: "conv-outreach-1",
+    outreachMessageId: "msg-outreach-1",
   });
   assert.equal(ui.showSendOutreach, false);
   assert.equal(ui.showViewThread, true);
@@ -81,6 +82,19 @@ run("4. after outreach_sent hide first Send, show View conversation", () => {
     }),
     "outreach_sent",
   );
+});
+
+run("4b. outreach_sent without message/queue artifacts does not claim sent", () => {
+  const ui = resolveProspectApproveOutreachUi({
+    reviewStatus: "approved",
+    outreachStatus: "outreach_sent",
+    outreachSentAt: new Date().toISOString(),
+    email: "info@example.com",
+  });
+  assert.equal(ui.isOutreachSentOrLater, false);
+  assert.equal(ui.showViewThread, false);
+  assert.equal(ui.statusLabel, "Approved");
+  assert.equal(ui.showSendOutreach, true);
 });
 
 run("5. inbound reply on exact linked conversation → replied", () => {
@@ -154,11 +168,21 @@ run("8. calendar/system email does not mark replied", () => {
 
 run("9. display status priority replied > outreach_sent > approved > needs_review > pending", () => {
   assert.equal(
-    resolveProspectDisplayStatus({ reviewStatus: "approved", outreachStatus: "replied" }),
+    resolveProspectDisplayStatus({
+      reviewStatus: "approved",
+      outreachStatus: "replied",
+      outreachMessageId: "m1",
+      outreachConversationId: "c1",
+    }),
     "replied",
   );
   assert.equal(
-    resolveProspectDisplayStatus({ reviewStatus: "approved", outreachStatus: "outreach_sent" }),
+    resolveProspectDisplayStatus({
+      reviewStatus: "approved",
+      outreachStatus: "outreach_sent",
+      outreachMessageId: "m1",
+      outreachConversationId: "c1",
+    }),
     "outreach_sent",
   );
   assert.equal(
@@ -172,6 +196,15 @@ run("9. display status priority replied > outreach_sent > approved > needs_revie
   assert.equal(
     resolveProspectDisplayStatus({ reviewStatus: "pending", outreachStatus: "not_sent" }),
     "pending",
+  );
+  // Stale outreach_sent without artifacts falls back to review status
+  assert.equal(
+    resolveProspectDisplayStatus({
+      reviewStatus: "approved",
+      outreachStatus: "outreach_sent",
+      outreachSentAt: new Date().toISOString(),
+    }),
+    "approved",
   );
 });
 

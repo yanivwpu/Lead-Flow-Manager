@@ -916,23 +916,6 @@ export function UnifiedInbox() {
           ...data,
         }),
       );
-      // #region agent log
-      if (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)) {
-        fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32aec0" },
-          body: JSON.stringify({
-            sessionId: "32aec0",
-            runId: "pi-outreach-handoff",
-            hypothesisId: "H-handoff",
-            location: "UnifiedInbox.tsx:outreachHandoff",
-            message: event,
-            data: { contactIdPrefix: selectedContactId.slice(0, 8), ...data },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-      }
-      // #endregion
     };
 
     const loadOutreachPayload = (): ProspectOutreachComposePayload | null => {

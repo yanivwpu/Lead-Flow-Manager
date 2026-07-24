@@ -3,6 +3,12 @@
  * Presentation only; does not change backend pipeline statuses.
  */
 
+import {
+  hasTraceableProspectCampaignHistory,
+  hasTraceableProspectInboxThread,
+  hasTraceableProspectOutreachSend,
+} from "./prospectTraceableOutreach";
+
 export const PROSPECT_REVIEW_LIFECYCLE = [
   "imported",
   "analyzing",
@@ -106,8 +112,18 @@ export type ProspectReviewUxInput = {
   outreachStatus?: string | null;
   outreachSentAt?: string | Date | null;
   repliedAt?: string | Date | null;
+  outreachMessageId?: string | null;
+  outreachConversationId?: string | null;
   queueStatus?: string | null;
   outcome?: string | null;
+  /** Server-confirmed outbound on a linked thread (optional). */
+  hasOutboundMessage?: boolean | null;
+  hasInboxThread?: boolean | null;
+  /**
+   * Server-derived prior outreach (same detectPriorProspectOutreach path as Send preview).
+   * True when a real outbound / queue send / linked message exists — not stale PI flags alone.
+   */
+  priorOutreachDetected?: boolean | null;
 };
 
 /** Website Intelligence finished successfully (not URL presence). */
@@ -130,18 +146,9 @@ export function isProspectEnrichmentInProgress(
   return e === "pending" || e === "enriching";
 }
 
-/** Queued / enrolled in Campaigns — requires a real queue row, not outreach_sent alone. */
+/** Queued / enrolled in Campaigns — queue row OR traceable historical send. */
 export function isProspectCampaignEnrolled(input: ProspectReviewUxInput): boolean {
-  const queue = String(input.queueStatus || "").toLowerCase();
-  return (
-    queue === "queued" ||
-    queue === "sending" ||
-    queue === "paused" ||
-    queue === "sent" ||
-    queue === "failed" ||
-    queue === "skipped" ||
-    queue === "cancelled"
-  );
+  return hasTraceableProspectCampaignHistory(input);
 }
 
 /** True when AI qualification finished and row summary fields may be shown. */
@@ -215,14 +222,18 @@ export function resolveProspectReviewLifecycle(
   const outcome = String(input.outcome || "").toLowerCase();
   if (outcome === "won") return "won";
 
-  const outreach = String(input.outreachStatus || "not_sent").toLowerCase();
-  if (outreach === "replied" || outreach === "outreach_sent" || input.repliedAt || input.outreachSentAt) {
-    return "inbox";
+  // Inbox only with a real conversation/thread — not stale outreach_sent alone.
+  if (hasTraceableProspectInboxThread(input)) {
+    const outreach = String(input.outreachStatus || "not_sent").toLowerCase();
+    if (outreach === "replied" || input.repliedAt) return "inbox";
+    if (hasTraceableProspectOutreachSend(input)) return "inbox";
   }
 
   const queue = String(input.queueStatus || "").toLowerCase();
   if (queue === "sending") return "campaign";
   if (queue === "queued" || queue === "paused") return "queued";
+  // Historical Inbox send (no queue) still counts as past the Review lane
+  if (hasTraceableProspectOutreachSend(input) && !queue) return "inbox";
 
   const analysis = String(input.analysisStatus || "pending").toLowerCase();
   if (analysis === "processing") return "analyzing";
@@ -232,13 +243,10 @@ export function resolveProspectReviewLifecycle(
   const enrichment = String(input.enrichmentStatus || "none").toLowerCase();
 
   if (review === "approved") {
-    // Enriched only after successful Website Intelligence — not URL presence.
     if (isProspectEnrichmentComplete(enrichment)) return "campaign_ready";
-    // pending / enriching / failed / none → still in enrichment lane
     return "website_intelligence";
   }
 
-  // Qualification finished (including AI "needs_review" outcomes) → Ready for Approval.
   if (isProspectQualificationComplete(analysis)) {
     return "ready_for_approval";
   }
@@ -270,16 +278,17 @@ export function resolveProspectTimelineStates(
 
   let campaign: ProspectTimelineStageState;
   const queue = String(input.queueStatus || "").toLowerCase();
-  // Campaign ✓ only when a real Campaigns/queue record exists (not outreach_sent alone).
-  if (
-    queue === "sent" ||
-    queue === "failed" ||
-    queue === "skipped" ||
-    queue === "cancelled"
-  ) {
-    campaign = "done";
-  } else if (queue === "queued" || queue === "paused" || queue === "sending") {
-    campaign = "current";
+  // Campaign ✓ when queue history OR a traceable outbound send exists (findable history).
+  if (hasTraceableProspectCampaignHistory(input)) {
+    if (
+      queue === "queued" ||
+      queue === "paused" ||
+      queue === "sending"
+    ) {
+      campaign = "current";
+    } else {
+      campaign = "done";
+    }
   } else {
     campaign = "todo";
   }

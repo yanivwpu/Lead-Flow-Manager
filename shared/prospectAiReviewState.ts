@@ -5,6 +5,11 @@
 
 import { isValidProspectEmail } from "./prospectContactEnrichment";
 import {
+  hasTraceableProspectCampaignHistory,
+  hasTraceableProspectInboxThread,
+  hasTraceableProspectOutreachSend,
+} from "./prospectTraceableOutreach";
+import {
   isProspectEnrichmentComplete,
   isProspectEnrichmentFailed,
   isProspectEnrichmentInProgress,
@@ -186,24 +191,14 @@ export function prospectHasCampaignContact(input: { email?: string | null }): bo
   return isValidProspectEmail(input.email);
 }
 
-/** Successfully transferred into Campaigns (leave Review). */
+/** Successfully transferred into Campaigns / has findable campaign history. */
 export function isProspectInCampaigns(input: ProspectReviewUxInput): boolean {
-  const queue = String(input.queueStatus || "").toLowerCase();
-  return (
-    queue === "queued" ||
-    queue === "sending" ||
-    queue === "paused" ||
-    queue === "sent" ||
-    queue === "failed"
-  );
+  return hasTraceableProspectCampaignHistory(input);
 }
 
-/** Inbox journey: reply/conversation only — not every outreach_sent. */
+/** Inbox journey: real conversation/thread only — not stale outreach_sent alone. */
 export function isProspectInInboxJourney(input: ProspectReviewStateInput): boolean {
-  const outreach = String(input.outreachStatus || "").toLowerCase();
-  if (outreach === "replied" || input.repliedAt) return true;
-  if (input.hasInboxThread === true) return true;
-  return false;
+  return hasTraceableProspectInboxThread(input);
 }
 
 /** Enrichment applies when a website URL exists. */
@@ -384,14 +379,11 @@ export type ProspectEmailCampaignBlockCode =
   | "enrichment_incomplete"
   | "missing_email";
 
-/** Prior outreach already sent or replied — hard campaign blocker. */
+/** Prior outreach already sent — hard campaign blocker (traceable artifacts only). */
 export function isProspectAlreadyContactedForCampaign(
-  input: ProspectReviewUxInput,
+  input: ProspectReviewStateInput,
 ): boolean {
-  const outreach = String(input.outreachStatus || "").toLowerCase();
-  if (outreach === "replied" || outreach === "outreach_sent") return true;
-  if (input.repliedAt || input.outreachSentAt) return true;
-  return false;
+  return hasTraceableProspectOutreachSend(input);
 }
 
 /**
@@ -409,7 +401,15 @@ export function listEmailCampaignBlockingReasons(
       message: "Not qualified",
     });
   }
-  if (isProspectInCampaigns(input)) {
+  // Prior real outreach first — historical Inbox sends are "Already contacted",
+  // not "Already in Campaigns" (no queue enrollment required).
+  if (isProspectAlreadyContactedForCampaign(input)) {
+    blocks.push({
+      code: "already_contacted",
+      message: "Already contacted",
+    });
+  }
+  if (isProspectInCampaigns(input) && !isProspectAlreadyContactedForCampaign(input)) {
     blocks.push({
       code: "in_campaigns",
       message: "Already in Campaigns",
@@ -417,12 +417,6 @@ export function listEmailCampaignBlockingReasons(
   }
   if (String(input.outcome || "").toLowerCase() === "won") {
     blocks.push({ code: "won", message: "Already Won" });
-  }
-  if (isProspectAlreadyContactedForCampaign(input)) {
-    blocks.push({
-      code: "already_contacted",
-      message: "Already contacted",
-    });
   }
 
   const analysis = String(input.analysisStatus || "").toLowerCase();

@@ -30,6 +30,7 @@ import {
   formatProspectCampaignBatchSummary,
   formatProspectCampaignBatchTitle,
   groupProspectCampaignBatches,
+  partitionProspectCampaignItems,
 } from "@shared/prospectCampaignBatches";
 import {
   PROSPECT_AI_PAGE_SUBTITLES,
@@ -165,31 +166,42 @@ export function ProspectOutreachQueuePanel({
   const allItems = listQuery.data?.items ?? [];
   const settings = dash?.settings;
 
-  const visibleItems = useMemo(() => {
-    if (statusFilter === "all") return allItems;
-    return allItems.filter((row) => row.queueStatus === statusFilter);
-  }, [allItems, statusFilter]);
+  const { activeItems: allActiveItems, historyItems: allHistoryItems } = useMemo(
+    () => partitionProspectCampaignItems({ items: allItems }),
+    [allItems],
+  );
+
+  const activeItems = useMemo(() => {
+    if (statusFilter === "all") return allActiveItems;
+    if (statusFilter === "sent") return [];
+    return allActiveItems.filter((row) => row.queueStatus === statusFilter);
+  }, [allActiveItems, statusFilter]);
+
+  const historyVisibleItems = useMemo(() => {
+    if (statusFilter === "all" || statusFilter === "sent") return allHistoryItems;
+    return [];
+  }, [allHistoryItems, statusFilter]);
 
   const batches = useMemo(
     () =>
       groupProspectCampaignBatches({
-        visibleItems,
-        allItemsForCounts: allItems,
+        visibleItems: historyVisibleItems,
+        allItemsForCounts: allHistoryItems,
       }),
-    [visibleItems, allItems],
+    [historyVisibleItems, allHistoryItems],
   );
+
+  const showActiveSection = statusFilter !== "sent";
+  const showHistorySection = statusFilter === "all" || statusFilter === "sent";
 
   const [expandedBatchIds, setExpandedBatchIds] = useState<Set<string>>(new Set());
   const [expandedInitialized, setExpandedInitialized] = useState(false);
 
   useEffect(() => {
     if (expandedInitialized || batches.length === 0) return;
-    // Current/active batch(es) default expanded; older batches stay collapsed.
+    // Newest send-history batch expanded; older stay collapsed.
     const next = new Set<string>();
-    for (const batch of batches) {
-      if (batch.hasActiveItems) next.add(batch.batchId);
-    }
-    if (next.size === 0 && batches[0]) next.add(batches[0].batchId);
+    if (batches[0]) next.add(batches[0].batchId);
     setExpandedBatchIds(next);
     setExpandedInitialized(true);
   }, [batches, expandedInitialized]);
@@ -202,6 +214,82 @@ export function ProspectOutreachQueuePanel({
       return next;
     });
   };
+
+  const renderQueueRow = (row: ProspectOutreachQueueItemSummary) => (
+    <TableRow key={row.id}>
+      <TableCell className="font-medium">
+        {row.prospectName || row.contactId.slice(0, 8)}
+        <p className="text-xs text-gray-500">{row.recipientIdentity}</p>
+      </TableCell>
+      <TableCell className="capitalize">{row.selectedChannel}</TableCell>
+      <TableCell className="max-w-[160px] truncate text-xs">
+        {row.recommendedOffer || "—"}
+        {row.outreachAngle ? (
+          <p className="truncate text-gray-500">{row.outreachAngle}</p>
+        ) : null}
+      </TableCell>
+      <TableCell className="max-w-[180px] truncate text-xs">
+        {row.subjectSnapshot || "—"}
+      </TableCell>
+      <TableCell className="text-xs whitespace-nowrap">
+        {row.scheduledAt ? format(new Date(row.scheduledAt), "MMM d, h:mm a") : "—"}
+      </TableCell>
+      <TableCell>{statusBadge(row.queueStatus)}</TableCell>
+      <TableCell>{row.attempts}</TableCell>
+      <TableCell className="max-w-[140px] truncate text-xs text-red-600">
+        {row.lastError || ""}
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        {row.historySource === "inbox_outreach" ? (
+          <span className="text-[10px] text-gray-400">Inbox send</span>
+        ) : null}
+        {row.historySource !== "inbox_outreach" &&
+        ["queued", "paused", "failed"].includes(row.queueStatus) ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => removeMutation.mutate(row.id)}
+            title="Remove before send"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        ) : null}
+        {row.historySource !== "inbox_outreach" && row.queueStatus === "failed" ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => retryMutation.mutate(row.id)}
+            title="Retry"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        ) : null}
+      </TableCell>
+    </TableRow>
+  );
+
+  const queueTable = (rows: ProspectOutreachQueueItemSummary[]) => (
+    <div className="overflow-auto rounded-xl border border-gray-200 bg-white">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Prospect</TableHead>
+            <TableHead>Channel</TableHead>
+            <TableHead>Outreach</TableHead>
+            <TableHead>Subject</TableHead>
+            <TableHead>Scheduled</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Attempts</TableHead>
+            <TableHead>Error</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>{rows.map(renderQueueRow)}</TableBody>
+      </Table>
+    </div>
+  );
 
   const cards = useMemo(
     () => [
@@ -365,133 +453,109 @@ export function ProspectOutreachQueuePanel({
         ))}
       </div>
 
-      {batches.length === 0 ? (
-        <p className="text-sm text-gray-500">
-          No outreach campaigns yet.
-        </p>
+      {allActiveItems.length === 0 && allHistoryItems.length === 0 ? (
+        <p className="text-sm text-gray-500">No outreach campaigns yet.</p>
       ) : (
-        <div className="space-y-2" data-testid="po-campaign-batches">
-          {batches.map((batch) => {
-            const expanded = expandedBatchIds.has(batch.batchId);
-            return (
-              <div
-                key={batch.batchId}
-                className="overflow-hidden rounded-xl border border-gray-200 bg-white"
-                data-testid={`po-campaign-batch-${batch.batchId}`}
-              >
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-gray-50"
-                  onClick={() => toggleBatch(batch.batchId)}
-                  aria-expanded={expanded}
-                >
-                  {expanded ? (
-                    <ChevronDown className="h-4 w-4 shrink-0 text-gray-500" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 shrink-0 text-gray-500" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-gray-900">
-                      {formatProspectCampaignBatchTitle(batch.transferredAt)}
-                      <span className="ms-1.5 font-normal text-gray-500">
-                        · {batch.counts.total}{" "}
-                        {batch.counts.total === 1 ? "prospect" : "prospects"}
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {formatProspectCampaignBatchSummary(batch.counts)}
-                      {statusFilter !== "all" && batch.items.length !== batch.counts.total ? (
-                        <span className="ms-1 text-amber-700">
-                          · showing {batch.items.length} matching filter
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                </button>
-                {expanded ? (
-                  <div className={cn("border-t", batch.items.length === 0 && "p-3")}>
-                    {batch.items.length === 0 ? (
-                      <p className="text-xs text-gray-500">
-                        No prospects in this batch match the current filter.
-                      </p>
-                    ) : (
-                      <div className="overflow-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Prospect</TableHead>
-                              <TableHead>Channel</TableHead>
-                              <TableHead>Outreach</TableHead>
-                              <TableHead>Subject</TableHead>
-                              <TableHead>Scheduled</TableHead>
-                              <TableHead>Status</TableHead>
-                              <TableHead>Attempts</TableHead>
-                              <TableHead>Error</TableHead>
-                              <TableHead />
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {batch.items.map((row) => (
-                              <TableRow key={row.id}>
-                                <TableCell className="font-medium">
-                                  {row.prospectName || row.contactId.slice(0, 8)}
-                                  <p className="text-xs text-gray-500">{row.recipientIdentity}</p>
-                                </TableCell>
-                                <TableCell className="capitalize">{row.selectedChannel}</TableCell>
-                                <TableCell className="max-w-[160px] truncate text-xs">
-                                  {row.recommendedOffer || "—"}
-                                  {row.outreachAngle ? (
-                                    <p className="truncate text-gray-500">{row.outreachAngle}</p>
-                                  ) : null}
-                                </TableCell>
-                                <TableCell className="max-w-[180px] truncate text-xs">
-                                  {row.subjectSnapshot || "—"}
-                                </TableCell>
-                                <TableCell className="text-xs whitespace-nowrap">
-                                  {row.scheduledAt
-                                    ? format(new Date(row.scheduledAt), "MMM d, h:mm a")
-                                    : "—"}
-                                </TableCell>
-                                <TableCell>{statusBadge(row.queueStatus)}</TableCell>
-                                <TableCell>{row.attempts}</TableCell>
-                                <TableCell className="max-w-[140px] truncate text-xs text-red-600">
-                                  {row.lastError || ""}
-                                </TableCell>
-                                <TableCell className="whitespace-nowrap">
-                                  {["queued", "paused", "failed"].includes(row.queueStatus) ? (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => removeMutation.mutate(row.id)}
-                                      title="Remove before send"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  ) : null}
-                                  {row.queueStatus === "failed" ? (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => retryMutation.mutate(row.id)}
-                                      title="Retry"
-                                    >
-                                      <RefreshCw className="h-4 w-4" />
-                                    </Button>
-                                  ) : null}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-                  </div>
-                ) : null}
+        <div className="space-y-6" data-testid="po-campaign-sections">
+          {showActiveSection ? (
+            <div className="space-y-2" data-testid="po-campaign-active">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Active sending</h3>
+                <p className="text-xs text-gray-500">
+                  Ready, Sending, Failed, and Paused — actionable until resolved or sent.
+                </p>
               </div>
-            );
-          })}
+              {activeItems.length === 0 ? (
+                <p className="text-sm text-gray-500">
+                  {statusFilter === "all"
+                    ? "No active prospects in the send queue."
+                    : "No prospects match this filter in the active queue."}
+                </p>
+              ) : (
+                queueTable(activeItems)
+              )}
+            </div>
+          ) : null}
+
+          {showHistorySection ? (
+            <div className="space-y-2" data-testid="po-campaign-history">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Campaign history</h3>
+                <p className="text-xs text-gray-500">
+                  Sent outreach grouped by campaign run. Expand a batch to inspect prospects.
+                </p>
+              </div>
+              {batches.length === 0 ? (
+                <p className="text-sm text-gray-500">No sent campaigns yet.</p>
+              ) : (
+                <div className="space-y-2" data-testid="po-campaign-batches">
+                  {batches.map((batch) => {
+                    const expanded = expandedBatchIds.has(batch.batchId);
+                    return (
+                      <div
+                        key={batch.batchId}
+                        className="overflow-hidden rounded-xl border border-gray-200 bg-white"
+                        data-testid={`po-campaign-batch-${batch.batchId}`}
+                      >
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-gray-50"
+                          onClick={() => toggleBatch(batch.batchId)}
+                          aria-expanded={expanded}
+                        >
+                          {expanded ? (
+                            <ChevronDown className="h-4 w-4 shrink-0 text-gray-500" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 shrink-0 text-gray-500" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium text-gray-900">
+                              {formatProspectCampaignBatchTitle(batch.transferredAt)}
+                              <span className="ms-1.5 font-normal text-gray-500">
+                                · {batch.counts.total}{" "}
+                                {batch.counts.total === 1 ? "prospect" : "prospects"}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {formatProspectCampaignBatchSummary(batch.counts)}
+                            </div>
+                          </div>
+                        </button>
+                        {expanded ? (
+                          <div className={cn("border-t", batch.items.length === 0 && "p-3")}>
+                            {batch.items.length === 0 ? (
+                              <p className="p-3 text-xs text-gray-500">
+                                No sent prospects in this batch match the current filter.
+                              </p>
+                            ) : (
+                              <div className="overflow-auto">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Prospect</TableHead>
+                                      <TableHead>Channel</TableHead>
+                                      <TableHead>Outreach</TableHead>
+                                      <TableHead>Subject</TableHead>
+                                      <TableHead>Scheduled</TableHead>
+                                      <TableHead>Status</TableHead>
+                                      <TableHead>Attempts</TableHead>
+                                      <TableHead>Error</TableHead>
+                                      <TableHead />
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>{batch.items.map(renderQueueRow)}</TableBody>
+                                </Table>
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
       )}
     </section>

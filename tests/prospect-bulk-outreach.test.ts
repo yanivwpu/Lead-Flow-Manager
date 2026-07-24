@@ -347,6 +347,14 @@ function testManualOutreachBlocksBulkQueueEvenIfStatusStuckApproved() {
     emailConversations: [],
   });
   assert.equal(clean.alreadyContacted, false);
+
+  // Stale outreach_sent alone must not block
+  const staleOnly = detectPriorProspectOutreach({
+    outreachStatus: "outreach_sent",
+    outreachSentAt: "2026-01-01T00:00:00.000Z",
+    emailConversations: [],
+  });
+  assert.equal(staleOnly.alreadyContacted, false);
 }
 
 function testAutoDoesNotPickProhibitedChannel() {

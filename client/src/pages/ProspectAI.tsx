@@ -867,6 +867,8 @@ function InboxTab() {
         outreachStatus: row.intelligence.outreachStatus,
         outreachSentAt: row.intelligence.outreachSentAt,
         repliedAt: row.intelligence.repliedAt,
+        outreachMessageId: row.intelligence.outreachMessageId,
+        outreachConversationId: row.intelligence.outreachConversationId,
         queueStatus: row.queueStatus,
         outcome: row.prospectOutcome,
       }),

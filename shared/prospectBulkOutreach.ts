@@ -274,6 +274,11 @@ export type ProspectOutreachQueueItemSummary = {
   conversationId?: string | null;
   messageId?: string | null;
   createdAt: string;
+  /**
+   * queue = Send to Campaign batch row.
+   * inbox_outreach = pre-queue / native Inbox send with linked message (historical).
+   */
+  historySource?: "queue" | "inbox_outreach";
 };
 
 export type ProspectOutreachQueueDashboard = {

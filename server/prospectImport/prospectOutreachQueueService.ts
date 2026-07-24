@@ -109,6 +109,7 @@ function mapQueueItem(
     conversationId: row.conversationId,
     messageId: row.messageId,
     createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
+    historySource: "queue",
   };
 }
 
@@ -195,7 +196,7 @@ export async function previewQueueBatch(params: {
       });
       continue;
     }
-    const { result } = await resolveProspectOutreachEligibilityForContact({
+    const { result, priorOutreach } = await resolveProspectOutreachEligibilityForContact({
       contact,
       workspaceUserId,
       preferredChannel: preferred,
@@ -561,7 +562,80 @@ export async function listQueueItems(params?: {
     .orderBy(desc(prospectOutreachQueueItems.createdAt))
     .limit(limit);
 
-  return rows.map((r) => mapQueueItem(r.item, r.name));
+  const queueItems = rows.map((r) => mapQueueItem(r.item, r.name));
+  const queuedContactIds = new Set(queueItems.map((i) => i.contactId));
+
+  // Also include pre-queue Inbox outreach that has a linked message (findable history).
+  // Status filters other than "all"/"sent" exclude these historical rows.
+  const includeHistorical =
+    !params?.status || params.status === "sent";
+
+  let historical: ProspectOutreachQueueItemSummary[] = [];
+  if (includeHistorical) {
+    const { batchLoadPriorOutreachFlags } = await import(
+      "./prospectOutreachEligibilityService"
+    );
+    const piRows = await db
+      .select({
+        contactId: prospectIntelligence.contactId,
+        outreachStatus: prospectIntelligence.outreachStatus,
+        outreachSentAt: prospectIntelligence.outreachSentAt,
+        outreachMessageId: prospectIntelligence.outreachMessageId,
+        outreachConversationId: prospectIntelligence.outreachConversationId,
+        recommendedOffer: prospectIntelligence.recommendedOffer,
+        outreachAngle: prospectIntelligence.suggestedOutreachAngle,
+        name: contacts.name,
+        email: contacts.email,
+      })
+      .from(prospectIntelligence)
+      .innerJoin(contacts, eq(contacts.id, prospectIntelligence.contactId))
+      .where(eq(contacts.userId, workspaceUserId))
+      .limit(500);
+
+    const priorByContact = await batchLoadPriorOutreachFlags(piRows.map((r) => r.contactId));
+
+    for (const row of piRows) {
+      if (queuedContactIds.has(row.contactId)) continue;
+      const prior = priorByContact.get(row.contactId);
+      if (!prior?.priorOutreachDetected) continue;
+
+      const sentAt =
+        prior.sentAt ||
+        row.outreachSentAt?.toISOString() ||
+        new Date().toISOString();
+      const dayKey = sentAt.slice(0, 10);
+      const subject =
+        prior.subject ||
+        (row.name ? `Idea for ${row.name}` : "Inbox outreach");
+      historical.push({
+        id: `inbox-outreach:${row.contactId}`,
+        batchId: `inbox-outreach:${dayKey}`,
+        workspaceUserId,
+        contactId: row.contactId,
+        prospectName: row.name,
+        selectedChannel: "email",
+        recipientIdentity: String(row.email || "").trim() || "—",
+        subjectSnapshot: subject,
+        recommendedOffer: row.recommendedOffer,
+        outreachAngle: row.outreachAngle,
+        queueStatus: "sent",
+        attempts: 1,
+        lastError: null,
+        scheduledAt: null,
+        startedAt: null,
+        sentAt,
+        conversationId: prior.conversationId || row.outreachConversationId,
+        messageId: prior.messageId || row.outreachMessageId,
+        createdAt: sentAt,
+        historySource: "inbox_outreach",
+      });
+    }
+  }
+
+  const merged = [...queueItems, ...historical].sort((a, b) =>
+    String(b.createdAt).localeCompare(String(a.createdAt)),
+  );
+  return merged.slice(0, limit);
 }
 
 export async function getQueueDashboard(

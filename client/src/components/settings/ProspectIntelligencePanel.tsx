@@ -150,6 +150,8 @@ function reviewUxInput(row: ProspectIntelligenceListItem) {
     outreachStatus: row.intelligence.outreachStatus,
     outreachSentAt: row.intelligence.outreachSentAt,
     repliedAt: row.intelligence.repliedAt,
+    outreachMessageId: row.intelligence.outreachMessageId,
+    outreachConversationId: row.intelligence.outreachConversationId,
     queueStatus: row.queueStatus,
     outcome: row.prospectOutcome,
     email: row.email,
@@ -157,6 +159,8 @@ function reviewUxInput(row: ProspectIntelligenceListItem) {
     websiteUrlUsed: row.intelligence.websiteUrlUsed,
     /** Existing supported state — no schema change. */
     notQualified: offer === "not_a_fit",
+    /** Same server prior-outreach truth as Send preview. */
+    priorOutreachDetected: row.priorOutreachDetected === true,
   };
 }
 
@@ -615,6 +619,8 @@ function ProspectIntelligenceDetailDialog({
     repliedAt: intel?.repliedAt,
     email: item?.email,
     outreachConversationId: intel?.outreachConversationId,
+    outreachMessageId: intel?.outreachMessageId,
+    queueStatus: item?.queueStatus,
     analysisStatus: intel?.analysisStatus,
   });
 
@@ -629,6 +635,9 @@ function ProspectIntelligenceDetailDialog({
     outreachStatus: intel?.outreachStatus,
     outreachSentAt: intel?.outreachSentAt,
     repliedAt: intel?.repliedAt,
+    outreachMessageId: intel?.outreachMessageId,
+    outreachConversationId: intel?.outreachConversationId,
+    queueStatus: item?.queueStatus,
   });
   const lifecycle = item
     ? resolveProspectReviewLifecycle(reviewUxInput(item))
@@ -984,7 +993,7 @@ function ProspectIntelligenceDetailDialog({
                 ({prospectDisplayStatusLabel(displayStatus)})
               </span>
             </p>
-            {intel.outreachSentAt ? (
+            {intel.outreachSentAt && approveUi.isOutreachSentOrLater ? (
               <p data-testid="pi-outreach-sent-at">
                 <span className="text-gray-500">Outreach sent:</span>{" "}
                 {format(new Date(intel.outreachSentAt), "MMM d, yyyy h:mm a")}
@@ -1089,7 +1098,9 @@ function ProspectIntelligenceDetailDialog({
                 <p className="mt-1 text-emerald-800">
                   {displayStatus === "replied"
                     ? "Prospect replied on the linked outreach thread."
-                    : "First outreach email was sent. Continue the conversation from Inbox."}
+                    : item?.queueStatus
+                      ? "First outreach email was sent via Campaigns. Continue the conversation from Inbox."
+                      : "First outreach email was sent. Continue the conversation from Inbox."}
                 </p>
               ) : approveUi.showSendOutreach ? (
                 <p className="mt-1 text-emerald-800">

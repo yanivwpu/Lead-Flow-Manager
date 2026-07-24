@@ -3,6 +3,11 @@
  * review_status (AI approval) stays separate from outreach_status (sent/replied).
  */
 
+import {
+  hasTraceableProspectInboxThread,
+  hasTraceableProspectOutreachSend,
+} from "./prospectTraceableOutreach";
+
 export const PROSPECT_OUTREACH_STATUSES = [
   "not_sent",
   "outreach_sent",
@@ -42,10 +47,18 @@ export function resolveProspectDisplayStatus(input: {
   outreachStatus?: string | null;
   outreachSentAt?: string | Date | null;
   repliedAt?: string | Date | null;
+  outreachMessageId?: string | null;
+  outreachConversationId?: string | null;
+  queueStatus?: string | null;
+  hasOutboundMessage?: boolean | null;
 }): ProspectDisplayStatus {
+  const traceable = hasTraceableProspectOutreachSend(input);
   const outreach = normalizeOutreachStatus(input.outreachStatus, input);
-  if (outreach === "replied") return "replied";
-  if (outreach === "outreach_sent") return "outreach_sent";
+  // Only surface Outreach Sent / Replied when a real send/thread artifact exists.
+  if (traceable || hasTraceableProspectInboxThread(input)) {
+    if (outreach === "replied" || input.repliedAt) return "replied";
+    if (outreach === "outreach_sent" || traceable) return "outreach_sent";
+  }
 
   const review = String(input.reviewStatus || "pending").toLowerCase();
   if (review === "approved") return "approved";
@@ -202,6 +215,9 @@ export function resolveProspectOutreachLifecycleUi(input: {
   repliedAt?: string | Date | null;
   email?: string | null;
   outreachConversationId?: string | null;
+  outreachMessageId?: string | null;
+  queueStatus?: string | null;
+  hasOutboundMessage?: boolean | null;
   hasValidEmail: boolean;
   analysisStatus?: string | null;
 }): ProspectOutreachLifecycleUi {
@@ -209,30 +225,29 @@ export function resolveProspectOutreachLifecycleUi(input: {
   const outreach = normalizeOutreachStatus(input.outreachStatus, input);
   const analysis = String(input.analysisStatus || "").toLowerCase();
   const analysisReady = analysis === "completed" || analysis === "needs_review";
-  const displayStatus = resolveProspectDisplayStatus({
-    reviewStatus: review,
-    outreachStatus: outreach,
-    outreachSentAt: input.outreachSentAt,
-    repliedAt: input.repliedAt,
-  });
+  const traceableSend = hasTraceableProspectOutreachSend(input);
+  const displayStatus = resolveProspectDisplayStatus(input);
   const isApproved = review === "approved";
-  const isOutreachSentOrLater = outreach === "outreach_sent" || outreach === "replied";
+  // UI "sent" claims require traceable artifacts — not outreachStatus alone.
+  const sentOrLater =
+    traceableSend || (hasTraceableProspectInboxThread(input) && outreach === "replied");
 
   return {
     displayStatus,
     statusLabel: prospectDisplayStatusLabel(displayStatus),
     showApproveButton:
       analysisReady && (review === "pending" || review === "needs_review"),
-    showSendOutreach: isApproved && !isOutreachSentOrLater && input.hasValidEmail,
-    showViewThread: isOutreachSentOrLater && Boolean(input.outreachConversationId),
+    showSendOutreach: isApproved && !sentOrLater && input.hasValidEmail,
+    showViewThread:
+      sentOrLater && Boolean(String(input.outreachConversationId || "").trim()),
     emailGateLabel:
-      isApproved && !isOutreachSentOrLater && !input.hasValidEmail
+      isApproved && !sentOrLater && !input.hasValidEmail
         ? "Add email to send outreach"
         : !input.hasValidEmail
           ? "Email unavailable"
           : null,
-    isApproved: isApproved || isOutreachSentOrLater,
-    isOutreachSentOrLater,
+    isApproved: isApproved || sentOrLater,
+    isOutreachSentOrLater: sentOrLater,
     reviewStatus: review,
     outreachStatus: outreach,
   };

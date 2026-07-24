@@ -372,6 +372,11 @@ export type ProspectIntelligenceListItem = {
   queueStatus?: string | null;
   /** Presentation-only Won/Lost outcome when set. */
   prospectOutcome?: string | null;
+  /**
+   * Server-backed: real prior outreach exists (queue sent, linked message, or Idea-for outbound).
+   * Same truth as Send preview — drives Qualified / Already contacted.
+   */
+  priorOutreachDetected?: boolean | null;
   intelligence: ProspectIntelligence;
 };
 

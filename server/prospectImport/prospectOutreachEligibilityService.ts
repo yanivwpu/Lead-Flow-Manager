@@ -24,9 +24,168 @@ import {
 } from "@shared/prospectPriorOutreach";
 import { normalizeOutreachStatus } from "@shared/prospectOutreachLifecycle";
 import { db } from "../../drizzle/db";
-import { messages, prospectIntelligence, prospectOutreachQueueItems } from "@shared/schema";
+import {
+  conversations,
+  messages,
+  prospectIntelligence,
+  prospectOutreachQueueItems,
+} from "@shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { resolveProspectWebsiteUrl } from "./prospectWebsiteUrl";
+
+/** Presentation + eligibility flags for list / Campaigns historical rows. */
+export type PriorOutreachListFlags = {
+  priorOutreachDetected: boolean;
+  conversationId: string | null;
+  messageId: string | null;
+  sentAt: string | null;
+  subject: string | null;
+};
+
+/**
+ * Batch version of loadPriorProspectOutreachEvidence for Review list / Campaigns.
+ * Uses the same detectPriorProspectOutreach rules (not stale PI flags alone).
+ */
+export async function batchLoadPriorOutreachFlags(
+  contactIds: string[],
+): Promise<Map<string, PriorOutreachListFlags>> {
+  const out = new Map<string, PriorOutreachListFlags>();
+  const empty = (): PriorOutreachListFlags => ({
+    priorOutreachDetected: false,
+    conversationId: null,
+    messageId: null,
+    sentAt: null,
+    subject: null,
+  });
+  for (const id of contactIds) out.set(id, empty());
+  if (!contactIds.length) return out;
+
+  const uniqueIds = [...new Set(contactIds)];
+
+  const piRows = await db
+    .select({
+      contactId: prospectIntelligence.contactId,
+      outreachStatus: prospectIntelligence.outreachStatus,
+      outreachConversationId: prospectIntelligence.outreachConversationId,
+      outreachMessageId: prospectIntelligence.outreachMessageId,
+      outreachSentAt: prospectIntelligence.outreachSentAt,
+    })
+    .from(prospectIntelligence)
+    .where(inArray(prospectIntelligence.contactId, uniqueIds));
+
+  const piByContact = new Map(piRows.map((r) => [r.contactId, r]));
+
+  const sentQueue = await db
+    .select({
+      contactId: prospectOutreachQueueItems.contactId,
+      sentAt: prospectOutreachQueueItems.sentAt,
+      conversationId: prospectOutreachQueueItems.conversationId,
+      messageId: prospectOutreachQueueItems.messageId,
+    })
+    .from(prospectOutreachQueueItems)
+    .where(
+      and(
+        inArray(prospectOutreachQueueItems.contactId, uniqueIds),
+        eq(prospectOutreachQueueItems.queueStatus, "sent"),
+      ),
+    );
+
+  const queueSentByContact = new Map<string, (typeof sentQueue)[0]>();
+  for (const row of sentQueue) {
+    if (!queueSentByContact.has(row.contactId)) queueSentByContact.set(row.contactId, row);
+  }
+
+  const emailConvs = await db
+    .select({
+      id: conversations.id,
+      contactId: conversations.contactId,
+      subject: conversations.subject,
+      lastMessageAt: conversations.lastMessageAt,
+    })
+    .from(conversations)
+    .where(and(inArray(conversations.contactId, uniqueIds), eq(conversations.channel, "email")));
+
+  const ideaOrLinkedIds: string[] = [];
+  const convsByContact = new Map<string, typeof emailConvs>();
+  for (const c of emailConvs) {
+    const list = convsByContact.get(c.contactId) || [];
+    list.push(c);
+    convsByContact.set(c.contactId, list);
+    const pi = piByContact.get(c.contactId);
+    const linked = String(pi?.outreachConversationId || "") === c.id;
+    if (linked || isProspectIntelligenceOutreachSubject(c.subject)) {
+      ideaOrLinkedIds.push(c.id);
+    }
+  }
+
+  const outboundByConv = new Set<string>();
+  const firstOutboundMsgByConv = new Map<string, string>();
+  if (ideaOrLinkedIds.length) {
+    const outboundRows = await db
+      .select({
+        id: messages.id,
+        conversationId: messages.conversationId,
+      })
+      .from(messages)
+      .where(
+        and(inArray(messages.conversationId, ideaOrLinkedIds), eq(messages.direction, "outbound")),
+      );
+    for (const m of outboundRows) {
+      outboundByConv.add(m.conversationId);
+      if (!firstOutboundMsgByConv.has(m.conversationId)) {
+        firstOutboundMsgByConv.set(m.conversationId, m.id);
+      }
+    }
+  }
+
+  for (const contactId of uniqueIds) {
+    const pi = piByContact.get(contactId);
+    const queueSent = queueSentByContact.get(contactId);
+    const emailConversations = (convsByContact.get(contactId) || []).map((c) => ({
+      id: c.id,
+      subject: c.subject,
+      hasOutbound: outboundByConv.has(c.id),
+      lastMessageAt: c.lastMessageAt?.getTime?.() ?? 0,
+    }));
+    emailConversations.sort((a, b) => a.lastMessageAt - b.lastMessageAt);
+
+    const prior = detectPriorProspectOutreach({
+      outreachStatus: pi?.outreachStatus,
+      outreachConversationId: pi?.outreachConversationId,
+      outreachMessageId: pi?.outreachMessageId,
+      outreachSentAt: pi?.outreachSentAt,
+      emailConversations,
+      hasSuccessfulQueueSend: Boolean(queueSent),
+    });
+
+    if (!prior.alreadyContacted) continue;
+
+    const convId =
+      prior.conversationId ||
+      queueSent?.conversationId ||
+      pi?.outreachConversationId ||
+      null;
+    const matchConv = emailConversations.find((c) => c.id === convId);
+    const flags: PriorOutreachListFlags = {
+      priorOutreachDetected: true,
+      conversationId: convId,
+      messageId:
+        pi?.outreachMessageId ||
+        queueSent?.messageId ||
+        (convId ? firstOutboundMsgByConv.get(convId) || null : null),
+      sentAt:
+        pi?.outreachSentAt?.toISOString?.() ||
+        queueSent?.sentAt?.toISOString?.() ||
+        (matchConv?.lastMessageAt
+          ? new Date(matchConv.lastMessageAt).toISOString()
+          : null),
+      subject: matchConv?.subject || null,
+    };
+    out.set(contactId, flags);
+  }
+
+  return out;
+}
 
 export type WorkspaceChannelConnections = {
   emailConnected: boolean;
@@ -267,25 +426,18 @@ export async function resolveProspectOutreachEligibilityForContact(params: {
     priorOutreach = { alreadyContacted: false, reason: "ok" };
   }
 
-  // Heal stuck Approved / not_sent when a prior PI outreach conversation exists.
-  if (
-    priorOutreach.alreadyContacted &&
-    priorOutreach.conversationId &&
-    pi &&
-    normalizeOutreachStatus(pi.outreachStatus, {
-      outreachSentAt: pi.outreachSentAt,
-      repliedAt: pi.repliedAt,
-    }) === "not_sent"
-  ) {
+  // Link real outbound history without fabricating approval / weakening review gates.
+  // markProspectOutreachSent requires approved — use linkage-only heal for needs_review.
+  if (priorOutreach.alreadyContacted && priorOutreach.conversationId && pi) {
     try {
-      const { markProspectOutreachSent } = await import("./prospectIntelligenceService");
-      await markProspectOutreachSent({
+      const { linkProspectPriorOutreachHistory } = await import("./prospectIntelligenceService");
+      await linkProspectPriorOutreachHistory({
         contactId: params.contact.id,
         conversationId: priorOutreach.conversationId,
         source: "queue_eligibility_prior_outreach_reconcile",
       });
     } catch {
-      /* non-fatal — still block queue */
+      /* non-fatal — still block queue when already contacted */
     }
   }
 
