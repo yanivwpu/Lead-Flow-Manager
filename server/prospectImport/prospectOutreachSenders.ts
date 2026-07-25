@@ -149,7 +149,13 @@ async function resolveLiveCampaignMailbox(params: {
     });
   }
 
-  return { ok: false, reason: formatSenderNotConnectedDiagnostic(failureClass) };
+  return {
+    ok: false,
+    reason: formatSenderNotConnectedDiagnostic(
+      failureClass,
+      failureClass === "decrypt" ? avail.decryptField || "access_token" : null,
+    ),
+  };
 }
 
 export const emailProspectOutreachSender: ProspectOutreachSender = {

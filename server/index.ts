@@ -545,6 +545,13 @@ app.use((req, res, next) => {
   startFlowJobWorker();
 
   // Controlled Prospect Intelligence bulk outreach queue worker
+  try {
+    const { logEmailCryptoBootDiag } = await import("./emailChannel/credentials");
+    logEmailCryptoBootDiag();
+  } catch (err) {
+    console.error("[EmailCryptoBoot] diagnostic failed (non-fatal):", err);
+  }
+
   const { startProspectOutreachQueueWorker } = await import(
     "./prospectImport/prospectOutreachQueueWorker"
   );

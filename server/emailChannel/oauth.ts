@@ -213,6 +213,14 @@ export async function getValidMailboxAccessToken(mailboxId: string): Promise<{
   accessToken: string;
   mailbox: NonNullable<Awaited<ReturnType<typeof getEmailMailboxById>>>;
 }> {
+  const { runMailboxTokenSingleFlight } = await import("./credentials");
+  return runMailboxTokenSingleFlight(mailboxId, () => getValidMailboxAccessTokenUnlocked(mailboxId));
+}
+
+async function getValidMailboxAccessTokenUnlocked(mailboxId: string): Promise<{
+  accessToken: string;
+  mailbox: NonNullable<Awaited<ReturnType<typeof getEmailMailboxById>>>;
+}> {
   const mailbox = await getEmailMailboxById(mailboxId);
   if (!mailbox) throw new Error("Mailbox not found");
 
@@ -223,6 +231,9 @@ export async function getValidMailboxAccessToken(mailboxId: string): Promise<{
     lastSyncAt: mailbox.lastSyncAt,
     hasRefreshToken: Boolean(mailbox.refreshTokenEncrypted),
   };
+
+  const expiresAt = mailbox.tokenExpiresAt?.getTime() ?? 0;
+  const needsRefresh = !expiresAt || expiresAt < Date.now() + 60_000;
 
   let accessToken: string;
   try {
@@ -238,9 +249,6 @@ export async function getValidMailboxAccessToken(mailboxId: string): Promise<{
     }
     throw err;
   }
-
-  const expiresAt = mailbox.tokenExpiresAt?.getTime() ?? 0;
-  const needsRefresh = !expiresAt || expiresAt < Date.now() + 60_000;
 
   if (needsRefresh) {
     if (!mailbox.refreshTokenEncrypted) {
@@ -272,10 +280,11 @@ export async function getValidMailboxAccessToken(mailboxId: string): Promise<{
     try {
       const refreshed = await provider.refreshAccessToken(refreshToken);
       accessToken = refreshed.accessToken;
+      const newCipher = encryptEmailCredential(refreshed.accessToken);
       await updateEmailMailbox(mailbox.id, {
-        accessTokenEncrypted: encryptEmailCredential(refreshed.accessToken),
+        accessTokenEncrypted: newCipher,
         tokenExpiresAt: refreshed.expiresAt ?? null,
-        syncStatus: mailbox.syncStatus === "needs_reconnect" ? "connected" : mailbox.syncStatus,
+        syncStatus: "connected",
         syncError: null,
       });
     } catch (err) {
@@ -291,6 +300,9 @@ export async function getValidMailboxAccessToken(mailboxId: string): Promise<{
       });
       throw new Error("Mailbox needs reconnect");
     }
+  } else if (mailbox.syncStatus === "needs_reconnect" || mailbox.syncStatus === "error") {
+    // Successful decrypt without refresh — clear sticky failure from a prior flaky probe.
+    await setMailboxSyncStatus(mailbox.id, "connected", { syncError: null });
   }
 
   const fresh = (await getEmailMailboxById(mailboxId))!;

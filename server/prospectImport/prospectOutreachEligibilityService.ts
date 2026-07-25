@@ -36,8 +36,10 @@ import type { ProspectSenderProbeFailureClass } from "@shared/prospectSenderProb
 import {
   classifyEmailSenderProbeError,
   classifyMailboxSyncStatusNotSendable,
+  extractDecryptFieldFromError,
   prospectSenderProbeDiagLog,
   safeProbeErrorMessage,
+  type ProspectSenderProbeDecryptField,
 } from "@shared/prospectSenderProbeDiagnostics";
 
 /** Presentation + eligibility flags for list / Campaigns historical rows. */
@@ -199,6 +201,7 @@ export type WorkspaceChannelConnections = {
   emailMailboxId: string | null;
   /** Non-secret probe classifier when emailConnected is false. */
   emailFailureClass?: ProspectSenderProbeFailureClass | null;
+  emailDecryptField?: ProspectSenderProbeDecryptField | null;
   smsConnected: boolean;
   whatsappConnected: boolean;
   facebookConnected: boolean;
@@ -218,6 +221,7 @@ export async function resolveEmailSenderForBulkOutreach(
   emailMailboxId: string | null;
   failureClass?: ProspectSenderProbeFailureClass | null;
   failureStage?: "primary_probe" | null;
+  decryptField?: ProspectSenderProbeDecryptField | null;
 }> {
   const mailbox = await getPrimaryEmailMailbox(workspaceUserId).catch(() => null);
   if (!mailbox) {
@@ -235,6 +239,7 @@ export async function resolveEmailSenderForBulkOutreach(
       emailMailboxId: null,
       failureClass: "no_mailbox",
       failureStage: "primary_probe",
+      decryptField: null,
     };
   }
 
@@ -257,20 +262,29 @@ export async function resolveEmailSenderForBulkOutreach(
       emailMailboxId: null,
       failureClass,
       failureStage: "primary_probe",
+      decryptField: null,
     };
   }
 
   try {
     const { getValidMailboxAccessToken } = await import("../emailChannel/oauth");
     const { mailbox: fresh } = await getValidMailboxAccessToken(mailbox.id);
-    return { emailConnected: true, emailMailboxId: fresh.id, failureClass: null, failureStage: null };
+    return {
+      emailConnected: true,
+      emailMailboxId: fresh.id,
+      failureClass: null,
+      failureStage: null,
+      decryptField: null,
+    };
   } catch (err) {
     const failureClass = classifyEmailSenderProbeError(err);
+    const decryptField = extractDecryptFieldFromError(err);
     console.info(
       JSON.stringify(
         prospectSenderProbeDiagLog({
           stage: "primary_probe",
           failureClass,
+          decryptField,
           workspaceIdPrefix: workspaceUserId.slice(0, 8),
           mailboxIdPrefix: mailbox.id.slice(0, 8),
           syncStatus: mailbox.syncStatus,
@@ -284,6 +298,7 @@ export async function resolveEmailSenderForBulkOutreach(
       emailMailboxId: null,
       failureClass,
       failureStage: "primary_probe",
+      decryptField,
     };
   }
 }
@@ -307,6 +322,7 @@ export async function loadWorkspaceChannelConnections(
     emailConnected: email.emailConnected,
     emailMailboxId: email.emailMailboxId,
     emailFailureClass: email.failureClass ?? null,
+    emailDecryptField: email.decryptField ?? null,
     smsConnected: connected("sms"),
     whatsappConnected: connected("whatsapp"),
     facebookConnected: connected("facebook"),
@@ -551,7 +567,9 @@ export async function resolveProspectOutreachEligibilityForContact(params: {
   ) {
     result.channels.email = {
       ...result.channels.email,
-      detail: connections.emailFailureClass,
+      detail: connections.emailDecryptField
+        ? `${connections.emailFailureClass}:${connections.emailDecryptField}`
+        : connections.emailFailureClass,
     };
   }
   return { result, mailboxId: connections.emailMailboxId, input, priorOutreach };

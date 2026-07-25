@@ -15,6 +15,10 @@ export const PROSPECT_SENDER_PROBE_FAILURE_CLASSES = [
 export type ProspectSenderProbeFailureClass =
   (typeof PROSPECT_SENDER_PROBE_FAILURE_CLASSES)[number];
 
+export const PROSPECT_SENDER_PROBE_DECRYPT_FIELDS = ["access_token", "refresh_token"] as const;
+export type ProspectSenderProbeDecryptField =
+  (typeof PROSPECT_SENDER_PROBE_DECRYPT_FIELDS)[number];
+
 export const PROSPECT_SENDER_PROBE_STAGES = [
   "eligibility",
   "preferred_probe",
@@ -35,10 +39,11 @@ export function isSenderNotConnectedReason(reason: string | null | undefined): b
 export function parseSenderNotConnectedDiagnostic(lastError: string | null | undefined): {
   baseReason: typeof SENDER_NOT_CONNECTED;
   failureClass: ProspectSenderProbeFailureClass | null;
+  decryptField: ProspectSenderProbeDecryptField | null;
 } {
   const raw = String(lastError || "").trim();
   if (!isSenderNotConnectedReason(raw)) {
-    return { baseReason: SENDER_NOT_CONNECTED, failureClass: null };
+    return { baseReason: SENDER_NOT_CONNECTED, failureClass: null, decryptField: null };
   }
   const parts = raw.split(":");
   const maybeClass = (parts[1] || "").trim().toLowerCase();
@@ -47,13 +52,26 @@ export function parseSenderNotConnectedDiagnostic(lastError: string | null | und
   )
     ? (maybeClass as ProspectSenderProbeFailureClass)
     : null;
-  return { baseReason: SENDER_NOT_CONNECTED, failureClass };
+  const maybeField = (parts[2] || "").trim().toLowerCase();
+  const decryptField = (PROSPECT_SENDER_PROBE_DECRYPT_FIELDS as readonly string[]).includes(
+    maybeField,
+  )
+    ? (maybeField as ProspectSenderProbeDecryptField)
+    : null;
+  return { baseReason: SENDER_NOT_CONNECTED, failureClass, decryptField };
 }
 
 /** Persistable lastError / pause reason — UI strips suffix via formatProspectQueueItemError. */
 export function formatSenderNotConnectedDiagnostic(
   failureClass: ProspectSenderProbeFailureClass,
+  decryptField?: ProspectSenderProbeDecryptField | null,
 ): string {
+  if (failureClass === "decrypt" && decryptField) {
+    return `${SENDER_NOT_CONNECTED}:${failureClass}:${decryptField}`;
+  }
+  if (failureClass === "decrypt") {
+    return `${SENDER_NOT_CONNECTED}:decrypt:access_token`;
+  }
   return `${SENDER_NOT_CONNECTED}:${failureClass}`;
 }
 
@@ -89,9 +107,54 @@ export function classifyMailboxSyncStatusNotSendable(
   return "other_probe_failure";
 }
 
+export function extractDecryptFieldFromError(
+  err: unknown,
+): ProspectSenderProbeDecryptField | null {
+  if (err && typeof err === "object" && "field" in err) {
+    const field = String((err as { field?: string }).field || "").toLowerCase();
+    if ((PROSPECT_SENDER_PROBE_DECRYPT_FIELDS as readonly string[]).includes(field)) {
+      return field as ProspectSenderProbeDecryptField;
+    }
+  }
+  return null;
+}
+
+/**
+ * One safe in-process re-probe decision for decrypt-only infra pauses.
+ * Does not implement the probe — caller supplies reprobe().
+ */
+export async function decideSenderDecryptInfraPause(params: {
+  failureClass: ProspectSenderProbeFailureClass;
+  decryptField?: ProspectSenderProbeDecryptField | null;
+  mailboxId?: string | null;
+  reprobe: (mailboxId: string) => Promise<void>;
+}): Promise<{ pause: boolean; recovered: boolean; persistReason: string }> {
+  const field =
+    params.failureClass === "decrypt"
+      ? params.decryptField || ("access_token" as const)
+      : null;
+  const persistReason = formatSenderNotConnectedDiagnostic(params.failureClass, field);
+
+  if (params.failureClass !== "decrypt" || !params.mailboxId) {
+    return { pause: true, recovered: false, persistReason };
+  }
+
+  try {
+    await params.reprobe(params.mailboxId);
+    return { pause: false, recovered: true, persistReason };
+  } catch {
+    return {
+      pause: true,
+      recovered: false,
+      persistReason: formatSenderNotConnectedDiagnostic("decrypt", field || "access_token"),
+    };
+  }
+}
+
 export type ProspectSenderProbeDiagInput = {
   stage: ProspectSenderProbeStage;
   failureClass: ProspectSenderProbeFailureClass;
+  decryptField?: ProspectSenderProbeDecryptField | null;
   workspaceIdPrefix?: string | null;
   mailboxIdPrefix?: string | null;
   queueItemIdPrefix?: string | null;
@@ -101,6 +164,7 @@ export type ProspectSenderProbeDiagInput = {
   /** Safe, truncated message — never tokens */
   errMsgSafe?: string | null;
   preferredMailboxIdPrefix?: string | null;
+  recoveredAfterReprobe?: boolean;
 };
 
 /** Structured log payload for console.info(JSON.stringify(...)). */
@@ -112,6 +176,7 @@ export function prospectSenderProbeDiagLog(
     event: "sender_probe_failed",
     stage: input.stage,
     failureClass: input.failureClass,
+    decryptField: input.decryptField || null,
     workspaceIdPrefix: input.workspaceIdPrefix || null,
     mailboxIdPrefix: input.mailboxIdPrefix || null,
     queueItemIdPrefix: input.queueItemIdPrefix || null,
@@ -122,6 +187,7 @@ export function prospectSenderProbeDiagLog(
     errMsgSafe: input.errMsgSafe
       ? String(input.errMsgSafe).replace(/\s+/g, " ").trim().slice(0, 160)
       : null,
+    recoveredAfterReprobe: input.recoveredAfterReprobe ?? null,
   };
 }
 

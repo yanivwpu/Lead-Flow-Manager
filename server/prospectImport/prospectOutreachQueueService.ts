@@ -4,7 +4,7 @@
  * Sending goes through existing channelService / EmailProspectOutreachSender.
  */
 
-import { and, desc, eq, inArray, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import {
   contacts,
   prospectIntelligence,
@@ -34,11 +34,14 @@ import {
   type ProspectOutreachWorkspaceSettings,
 } from "@shared/prospectBulkOutreach";
 import {
+  decideSenderDecryptInfraPause,
   formatSenderNotConnectedDiagnostic,
   isSenderNotConnectedReason,
   parseSenderNotConnectedDiagnostic,
   prospectSenderProbeDiagLog,
+  type ProspectSenderProbeDecryptField,
   type ProspectSenderProbeFailureClass,
+  PROSPECT_SENDER_PROBE_DECRYPT_FIELDS,
   PROSPECT_SENDER_PROBE_FAILURE_CLASSES,
 } from "@shared/prospectSenderProbeDiagnostics";
 import { buildProspectOutreachSubject } from "@shared/prospectContactEnrichment";
@@ -55,11 +58,23 @@ import { getProspectOutreachSender } from "./prospectOutreachSenders";
 function failureClassFromEligibilityDetail(
   detail: string | null | undefined,
 ): ProspectSenderProbeFailureClass {
-  const d = String(detail || "").trim().toLowerCase();
-  if ((PROSPECT_SENDER_PROBE_FAILURE_CLASSES as readonly string[]).includes(d)) {
-    return d as ProspectSenderProbeFailureClass;
+  const raw = String(detail || "").trim().toLowerCase();
+  const maybeClass = raw.split(":")[0] || raw;
+  if ((PROSPECT_SENDER_PROBE_FAILURE_CLASSES as readonly string[]).includes(maybeClass)) {
+    return maybeClass as ProspectSenderProbeFailureClass;
   }
   return "other_probe_failure";
+}
+
+function decryptFieldFromEligibilityDetail(
+  detail: string | null | undefined,
+): ProspectSenderProbeDecryptField | null {
+  const raw = String(detail || "").trim().toLowerCase();
+  const maybeField = raw.split(":")[1] || "";
+  if ((PROSPECT_SENDER_PROBE_DECRYPT_FIELDS as readonly string[]).includes(maybeField)) {
+    return maybeField as ProspectSenderProbeDecryptField;
+  }
+  return null;
 }
 function mapSettings(
   row: typeof prospectOutreachSettings.$inferSelect | undefined,
@@ -714,12 +729,66 @@ export async function getQueueDashboard(
 /**
  * After Start/Resume: restagger Ready (queued) items from now so processing
  * begins promptly and respects min/max delay. Clears stale lastError from
- * prior infra pauses. Does not send mail.
+ * prior infra pauses. Rebinds stale senderMailboxId to current primary.
+ * Does not send mail.
  */
+export async function rebindStaleQueuedSenderMailboxes(params: {
+  workspaceUserId: string;
+  primaryMailboxId: string;
+}): Promise<{ updated: number }> {
+  const result = await db
+    .update(prospectOutreachQueueItems)
+    .set({
+      senderMailboxId: params.primaryMailboxId,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(prospectOutreachQueueItems.workspaceUserId, params.workspaceUserId),
+        eq(prospectOutreachQueueItems.queueStatus, "queued"),
+        eq(prospectOutreachQueueItems.selectedChannel, "email"),
+        or(
+          isNull(prospectOutreachQueueItems.senderMailboxId),
+          eq(prospectOutreachQueueItems.senderMailboxId, ""),
+          ne(prospectOutreachQueueItems.senderMailboxId, params.primaryMailboxId),
+        ),
+      ),
+    )
+    .returning({ id: prospectOutreachQueueItems.id });
+  return { updated: result.length };
+}
+
 export async function rescheduleQueuedOutreachItems(
   workspaceUserId: string,
-): Promise<{ rescheduled: number; firstScheduledAt: string | null }> {
+): Promise<{ rescheduled: number; firstScheduledAt: string | null; rebound: number }> {
   const settings = await getOutreachSettings(workspaceUserId);
+
+  let rebound = 0;
+  try {
+    const { getPrimaryEmailMailbox } = await import("../emailChannel/mailboxStore");
+    const primary = await getPrimaryEmailMailbox(workspaceUserId);
+    if (primary?.id) {
+      const bind = await rebindStaleQueuedSenderMailboxes({
+        workspaceUserId,
+        primaryMailboxId: primary.id,
+      });
+      rebound = bind.updated;
+      if (rebound > 0) {
+        console.info(
+          JSON.stringify(
+            prospectBulkOutreachLog("sender_mailbox_rebound", {
+              workspaceId: workspaceUserId,
+              primaryMailboxIdPrefix: primary.id.slice(0, 8),
+              updated: rebound,
+            }),
+          ),
+        );
+      }
+    }
+  } catch (err) {
+    console.error("[ProspectBulkOutreach] sender mailbox rebind failed (non-fatal):", err);
+  }
+
   const items = await db
     .select({
       id: prospectOutreachQueueItems.id,
@@ -734,7 +803,7 @@ export async function rescheduleQueuedOutreachItems(
     .orderBy(prospectOutreachQueueItems.scheduledAt);
 
   if (!items.length) {
-    return { rescheduled: 0, firstScheduledAt: null };
+    return { rescheduled: 0, firstScheduledAt: null, rebound };
   }
 
   const fromMs = Date.now();
@@ -763,6 +832,7 @@ export async function rescheduleQueuedOutreachItems(
   return {
     rescheduled: items.length,
     firstScheduledAt: new Date(stamps[0]!).toISOString(),
+    rebound,
   };
 }
 
@@ -1166,29 +1236,58 @@ export async function processClaimedQueueItem(
         const failureClass = failureClassFromEligibilityDetail(
           eligibility.channels[channel]?.detail,
         );
-        const persistReason = formatSenderNotConnectedDiagnostic(failureClass);
+        const decryptField =
+          decryptFieldFromEligibilityDetail(eligibility.channels[channel]?.detail) ||
+          (failureClass === "decrypt" ? ("access_token" as const) : null);
+
+        let primaryMailboxId: string | null = null;
+        try {
+          const { getPrimaryEmailMailbox } = await import("../emailChannel/mailboxStore");
+          primaryMailboxId = (await getPrimaryEmailMailbox(item.workspaceUserId))?.id ?? null;
+        } catch {
+          primaryMailboxId = item.senderMailboxId || null;
+        }
+
+        const { getValidMailboxAccessToken } = await import("../emailChannel/oauth");
+        const decision = await decideSenderDecryptInfraPause({
+          failureClass,
+          decryptField,
+          mailboxId: primaryMailboxId,
+          reprobe: async (mailboxId) => {
+            await getValidMailboxAccessToken(mailboxId);
+          },
+        });
+
         console.info(
           JSON.stringify(
             prospectBulkOutreachLog("sender_probe_failed", {
               ...prospectSenderProbeDiagLog({
                 stage: "eligibility",
                 failureClass,
+                decryptField,
                 workspaceIdPrefix: item.workspaceUserId.slice(0, 8),
                 queueItemIdPrefix: item.id.slice(0, 8),
                 contactIdPrefix: item.contactId.slice(0, 8),
-                mailboxIdPrefix: item.senderMailboxId?.slice(0, 8) ?? null,
+                mailboxIdPrefix: (primaryMailboxId || item.senderMailboxId)?.slice(0, 8) ?? null,
+                recoveredAfterReprobe: decision.recovered,
               }),
               attempts: item.attempts,
-              persistReason,
+              persistReason: decision.persistReason,
             }),
           ),
         );
-        await pauseQueue(item.workspaceUserId);
-        await releaseClaimedItemAfterInfraPause(item, persistReason);
-        return { ok: false, reason: persistReason };
+
+        if (decision.recovered && !decision.pause) {
+          // One safe decrypt re-probe succeeded — continue to prepare/send.
+        } else {
+          await pauseQueue(item.workspaceUserId);
+          await releaseClaimedItemAfterInfraPause(item, decision.persistReason);
+          return { ok: false, reason: decision.persistReason };
+        }
+      } else {
+        await markItemFailed(item, reason, false);
+        return { ok: false, reason };
       }
-      await markItemFailed(item, reason, false);
-      return { ok: false, reason };
     }
   }
 
@@ -1207,33 +1306,63 @@ export async function processClaimedQueueItem(
       isSenderNotConnectedReason(msg) ||
       /reconnect|not connected|No connected email mailbox/i.test(msg);
     if (shouldPause) {
-      const persistReason = isSenderNotConnectedReason(msg)
-        ? formatSenderNotConnectedDiagnostic(
-            senderDiag.failureClass || "other_probe_failure",
-          )
-        : /No connected email mailbox/i.test(msg)
-          ? formatSenderNotConnectedDiagnostic("no_mailbox")
-          : msg;
+      let failureClass =
+        senderDiag.failureClass ||
+        (/No connected email mailbox/i.test(msg) ? "no_mailbox" : "other_probe_failure");
+      let decryptField = senderDiag.decryptField;
+      if (failureClass === "decrypt" && !decryptField) decryptField = "access_token";
+
+      let primaryMailboxId: string | null = item.senderMailboxId || null;
+      try {
+        const { getPrimaryEmailMailbox } = await import("../emailChannel/mailboxStore");
+        primaryMailboxId =
+          (await getPrimaryEmailMailbox(item.workspaceUserId))?.id ?? primaryMailboxId;
+      } catch {
+        /* keep snapshot */
+      }
+
+      const { getValidMailboxAccessToken } = await import("../emailChannel/oauth");
+      const decision = await decideSenderDecryptInfraPause({
+        failureClass,
+        decryptField,
+        mailboxId: primaryMailboxId,
+        reprobe: async (mailboxId) => {
+          await getValidMailboxAccessToken(mailboxId);
+        },
+      });
+
       console.info(
         JSON.stringify(
           prospectBulkOutreachLog("sender_probe_failed", {
             ...prospectSenderProbeDiagLog({
               stage: "prepare",
-              failureClass: parseSenderNotConnectedDiagnostic(persistReason).failureClass ||
-                "other_probe_failure",
+              failureClass,
+              decryptField,
               workspaceIdPrefix: item.workspaceUserId.slice(0, 8),
               queueItemIdPrefix: item.id.slice(0, 8),
               contactIdPrefix: item.contactId.slice(0, 8),
-              mailboxIdPrefix: item.senderMailboxId?.slice(0, 8) ?? null,
+              mailboxIdPrefix: primaryMailboxId?.slice(0, 8) ?? null,
               errMsgSafe: String(msg).slice(0, 160),
+              recoveredAfterReprobe: decision.recovered,
             }),
             attempts: item.attempts,
-            persistReason,
+            persistReason: decision.persistReason,
           }),
         ),
       );
+
+      if (decision.recovered && !decision.pause) {
+        // Rare: prepare threw decrypt but immediate re-probe OK — fail this claim softly
+        // so the worker can reclaim without global pause.
+        await db
+          .update(prospectOutreachQueueItems)
+          .set({ queueStatus: "queued", startedAt: null, lastError: null, updatedAt: new Date() })
+          .where(eq(prospectOutreachQueueItems.id, item.id));
+        return null;
+      }
+
       await pauseQueue(item.workspaceUserId);
-      await releaseClaimedItemAfterInfraPause(item, persistReason);
+      await releaseClaimedItemAfterInfraPause(item, decision.persistReason);
       return null;
     }
     await markItemFailed(item, msg, false);
@@ -1266,26 +1395,53 @@ export async function processClaimedQueueItem(
       let persistError = sendResult.error || "paused";
       if (isSenderNotConnectedReason(persistError)) {
         const parsed = parseSenderNotConnectedDiagnostic(persistError);
-        persistError = formatSenderNotConnectedDiagnostic(
-          parsed.failureClass || "other_probe_failure",
-        );
+        const failureClass = parsed.failureClass || "other_probe_failure";
+        const decryptField =
+          parsed.decryptField || (failureClass === "decrypt" ? "access_token" : null);
+
+        const { getValidMailboxAccessToken } = await import("../emailChannel/oauth");
+        const decision = await decideSenderDecryptInfraPause({
+          failureClass,
+          decryptField,
+          mailboxId: prepared.mailboxId,
+          reprobe: async (mailboxId) => {
+            await getValidMailboxAccessToken(mailboxId);
+          },
+        });
+        persistError = decision.persistReason;
+
         console.info(
           JSON.stringify(
             prospectBulkOutreachLog("sender_probe_failed", {
               ...prospectSenderProbeDiagLog({
                 stage: "send",
-                failureClass: parsed.failureClass || "other_probe_failure",
+                failureClass,
+                decryptField,
                 workspaceIdPrefix: item.workspaceUserId.slice(0, 8),
                 queueItemIdPrefix: item.id.slice(0, 8),
                 contactIdPrefix: item.contactId.slice(0, 8),
                 mailboxIdPrefix: prepared.mailboxId.slice(0, 8),
                 errMsgSafe: String(sendResult.error || "").slice(0, 160),
+                recoveredAfterReprobe: decision.recovered,
               }),
               attempts: itemWithAttempt.attempts,
               persistReason: persistError,
             }),
           ),
         );
+
+        if (decision.recovered && !decision.pause) {
+          await db
+            .update(prospectOutreachQueueItems)
+            .set({
+              queueStatus: "queued",
+              startedAt: null,
+              lastError: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(prospectOutreachQueueItems.id, item.id));
+          return { ok: false, reason: "reprobe_recovered_requeue" };
+        }
       } else {
         console.info(
           JSON.stringify(
@@ -1541,6 +1697,7 @@ export const prospectOutreachQueueService = {
   recoverStuckSendingItems,
   listWorkspaceIdsWithDueQueue,
   rescheduleQueuedOutreachItems,
+  rebindStaleQueuedSenderMailboxes,
   bulkApproveProspects,
   bulkMarkNeedsReview,
 };

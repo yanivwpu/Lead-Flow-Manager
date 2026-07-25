@@ -50,19 +50,24 @@ function testMailboxSyncStatus() {
 
 function testPersistAndParse() {
   const persisted = formatSenderNotConnectedDiagnostic("decrypt");
-  assert.equal(persisted, "sender_not_connected:decrypt");
+  assert.equal(persisted, "sender_not_connected:decrypt:access_token");
   assert.equal(isSenderNotConnectedReason(persisted), true);
   assert.equal(isSenderNotConnectedReason("sender_not_connected"), true);
   assert.equal(isSenderNotConnectedReason("missing_identity"), false);
   assert.deepEqual(parseSenderNotConnectedDiagnostic(persisted), {
     baseReason: "sender_not_connected",
     failureClass: "decrypt",
+    decryptField: "access_token",
   });
 }
 
 function testUiStripsSuffix() {
   assert.equal(
     formatProspectQueueItemError("sender_not_connected:decrypt"),
+    "Connect an email account before starting the campaign",
+  );
+  assert.equal(
+    formatProspectQueueItemError("sender_not_connected:decrypt:access_token"),
     "Connect an email account before starting the campaign",
   );
   assert.equal(
@@ -118,6 +123,12 @@ function testInfraPausePersistsClassifierSuffix() {
   assert.equal(release.lastError, "sender_not_connected:token_refresh");
   assert.equal(release.attempts, 0);
   assert.equal(release.queueStatus, "queued");
+
+  const decryptRelease = nextQueueItemAfterInfraPause({
+    currentAttempts: 0,
+    reason: formatSenderNotConnectedDiagnostic("decrypt", "access_token"),
+  });
+  assert.equal(decryptRelease.lastError, "sender_not_connected:decrypt:access_token");
 }
 
 const tests: Array<[string, () => void]> = [
