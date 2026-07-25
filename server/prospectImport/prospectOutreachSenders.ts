@@ -2,6 +2,10 @@
  * Channel-agnostic ProspectOutreachSender interface.
  * Email is the only production bulk sender in Phase 2.
  * Do not fake WhatsApp/SMS/Messenger senders.
+ *
+ * Outbound mailbox source of truth: email_mailboxes via
+ * resolveEmailSenderForBulkOutreach / getPrimaryEmailMailbox
+ * (same store as Settings Sync + Inbox).
  */
 
 import type { ProspectOutreachChannel } from "@shared/prospectBulkOutreach";
@@ -35,7 +39,7 @@ export interface ProspectOutreachSender {
     workspaceUserId: string;
     senderMailboxId?: string | null;
     recipientIdentity: string;
-  }): Promise<{ ok: boolean; reason?: string; pauseQueue?: boolean }>;
+  }): Promise<{ ok: boolean; reason?: string; pauseQueue?: boolean; mailboxId?: string | null }>;
   prepare(input: ProspectOutreachSendPrepareInput): Promise<{
     subject: string;
     body: string;
@@ -44,45 +48,73 @@ export interface ProspectOutreachSender {
   send(input: ProspectOutreachSendPrepareInput & { mailboxId: string; subject: string }): Promise<ProspectOutreachSendResult>;
 }
 
+/**
+ * Resolve the live sendable mailbox for campaign outbound.
+ * Prefer the queue snapshot when it still probes successfully; otherwise fall
+ * back to the current primary (Settings / Sync / Inbox source of truth).
+ */
+async function resolveLiveCampaignMailbox(params: {
+  workspaceUserId: string;
+  preferredMailboxId?: string | null;
+}): Promise<{ ok: true; mailboxId: string } | { ok: false; reason: string }> {
+  const { resolveEmailSenderForBulkOutreach } = await import(
+    "./prospectOutreachEligibilityService"
+  );
+  const { getValidMailboxAccessToken } = await import("../emailChannel/oauth");
+  const { isEmailMailboxSyncStatusSendable } = await import("@shared/emailMailboxAvailability");
+
+  const preferredId = String(params.preferredMailboxId || "").trim();
+  if (preferredId) {
+    const mailbox = await getEmailMailboxById(preferredId);
+    if (
+      mailbox &&
+      mailbox.workspaceUserId === params.workspaceUserId &&
+      isEmailMailboxSyncStatusSendable(mailbox.syncStatus)
+    ) {
+      try {
+        await getValidMailboxAccessToken(mailbox.id);
+        return { ok: true, mailboxId: mailbox.id };
+      } catch {
+        /* fall through to live primary */
+      }
+    }
+  }
+
+  const avail = await resolveEmailSenderForBulkOutreach(params.workspaceUserId);
+  if (avail.emailConnected && avail.emailMailboxId) {
+    return { ok: true, mailboxId: avail.emailMailboxId };
+  }
+  return { ok: false, reason: "sender_not_connected" };
+}
+
 export const emailProspectOutreachSender: ProspectOutreachSender = {
   channel: "email",
 
   async canSend(input) {
-    const { resolveEmailSenderForBulkOutreach } = await import(
-      "./prospectOutreachEligibilityService"
-    );
-    // When a specific mailbox is specified, probe that id; else primary for workspace.
-    if (input.senderMailboxId) {
-      const mailbox = await getEmailMailboxById(input.senderMailboxId);
-      if (!mailbox) {
-        return { ok: false, reason: "sender_not_connected", pauseQueue: true };
-      }
-      const { isEmailMailboxSyncStatusSendable } = await import("@shared/emailMailboxAvailability");
-      if (!isEmailMailboxSyncStatusSendable(mailbox.syncStatus)) {
-        return { ok: false, reason: "sender_not_connected", pauseQueue: true };
-      }
-      try {
-        const { getValidMailboxAccessToken } = await import("../emailChannel/oauth");
-        await getValidMailboxAccessToken(mailbox.id);
-      } catch {
-        return { ok: false, reason: "sender_not_connected", pauseQueue: true };
-      }
-    } else {
-      const avail = await resolveEmailSenderForBulkOutreach(input.workspaceUserId);
-      if (!avail.emailConnected) {
-        return { ok: false, reason: "sender_not_connected", pauseQueue: true };
-      }
-    }
     if (!String(input.recipientIdentity || "").includes("@")) {
       return { ok: false, reason: "missing_identity" };
     }
-    return { ok: true };
+    const live = await resolveLiveCampaignMailbox({
+      workspaceUserId: input.workspaceUserId,
+      preferredMailboxId: input.senderMailboxId,
+    });
+    if (!live.ok) {
+      return { ok: false, reason: live.reason, pauseQueue: true };
+    }
+    return { ok: true, mailboxId: live.mailboxId };
   },
 
   async prepare(input) {
-    const mailbox = input.senderMailboxId
-      ? await getEmailMailboxById(input.senderMailboxId)
-      : await getPrimaryEmailMailbox(input.workspaceUserId);
+    const live = await resolveLiveCampaignMailbox({
+      workspaceUserId: input.workspaceUserId,
+      preferredMailboxId: input.senderMailboxId,
+    });
+    if (!live.ok) {
+      throw new Error("No connected email mailbox");
+    }
+    const mailbox =
+      (await getEmailMailboxById(live.mailboxId)) ||
+      (await getPrimaryEmailMailbox(input.workspaceUserId));
     if (!mailbox) throw new Error("No connected email mailbox");
     const subject =
       String(input.subjectSnapshot || "").trim() ||
@@ -110,7 +142,7 @@ export const emailProspectOutreachSender: ProspectOutreachSender = {
         forceChannel: "email",
         suppressFallback: true,
         emailRich: {
-          mailboxId: input.mailboxId,
+          mailboxId: gate.mailboxId || input.mailboxId,
           subject: input.subject,
           textBody: input.messageSnapshot,
           replyMode: "new",

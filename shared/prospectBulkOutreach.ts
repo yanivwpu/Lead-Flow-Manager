@@ -93,6 +93,41 @@ export function isProspectOutreachQueueArmed(settings: {
   return settings.queueRunning === true && settings.paused !== true;
 }
 
+/**
+ * Global campaign control flags.
+ * Pause/Start/Resume are settings-level — they must NOT bulk-rewrite Ready (queued) rows.
+ * Worker stoppage is enforced by isProspectOutreachQueueArmed alone.
+ */
+export function nextProspectQueueControlFlags(
+  intent: "start" | "pause" | "resume",
+  current: { queueRunning?: boolean | null; paused?: boolean | null },
+): { queueRunning: boolean; paused: boolean } {
+  if (intent === "pause") {
+    return {
+      queueRunning: current.queueRunning === true,
+      paused: true,
+    };
+  }
+  // start + resume: arm and clear pause
+  return { queueRunning: true, paused: false };
+}
+
+/**
+ * After an infra fail-closed pause (e.g. sender_not_connected), the claimed
+ * in-flight row returns to Ready — siblings stay untouched.
+ * Attempts are left as-is (claim no longer increments; only real sends do).
+ */
+export function nextQueueItemAfterInfraPause(params: {
+  currentAttempts: number;
+  reason: string;
+}): { queueStatus: "queued"; attempts: number; lastError: string } {
+  return {
+    queueStatus: "queued",
+    attempts: Math.max(0, params.currentAttempts || 0),
+    lastError: String(params.reason || "paused").substring(0, 500),
+  };
+}
+
 export type ProspectOutreachEligibilityReason =
   | "eligible"
   | "missing_identity"
@@ -136,7 +171,7 @@ export function prospectOutreachEligibilityReasonLabel(
           ? "Missing phone"
           : "Missing contact identity";
     case "sender_not_connected":
-      return "Email sender not connected";
+      return "Connect an email account before starting the campaign";
     case "already_outreach_sent":
     case "already_contacted":
       return "Already contacted";
@@ -183,6 +218,54 @@ export function prospectOutreachEligibilityReasonLabel(
       return "Not ready for Campaign";
   }
 }
+
+/** Human-readable Campaigns row error — never show raw machine codes in the UI. */
+export function formatProspectQueueItemError(lastError?: string | null): string {
+  const raw = String(lastError || "").trim();
+  if (!raw) return "";
+  const permanent = /^permanent:\s*(.+)$/i.exec(raw);
+  const code = String(permanent?.[1] || raw).trim();
+  const known = [
+    "sender_not_connected",
+    "missing_identity",
+    "already_outreach_sent",
+    "already_contacted",
+    "already_replied",
+    "needs_review",
+    "not_approved",
+    "not_qualified",
+    "already_in_campaign",
+    "duplicate_queued",
+    "duplicate_recipient",
+    "dedup_key_collision",
+    "analysis_incomplete",
+    "qualification_failed",
+    "enrichment_in_progress",
+    "enrichment_required",
+    "enrichment_failed",
+    "missing_message_snapshot",
+    "suppressed",
+    "opted_out",
+    "missing_consent",
+    "template_required",
+    "unsupported_for_cold_outreach",
+    "existing_conversation_only",
+    "not_enabled_for_bulk",
+    "contact_not_found",
+  ];
+  const lower = code.toLowerCase();
+  if (known.includes(lower) || known.includes(lower.split(/[:\s]/)[0] || "")) {
+    return prospectOutreachEligibilityReasonLabel(lower.split(/[:\s]/)[0] || lower);
+  }
+  // Provider/oauth messages — keep short, no stack dumps
+  if (/not connected|reconnect|mailbox|oauth|unauthorized/i.test(code)) {
+    return "Connect an email account before starting the campaign";
+  }
+  return code.length > 120 ? `${code.slice(0, 117)}…` : code;
+}
+
+export const PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE =
+  "Connect an email account before starting the campaign.";
 
 /** Group preview skips by human-readable reason for the Send to Campaign modal. */
 export function groupCampaignSkipReasons(

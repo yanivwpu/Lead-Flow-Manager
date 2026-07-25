@@ -41,6 +41,7 @@ import {
   buildCampaignsAiAssistantModel,
   prospectCampaignQueueStatusLabel,
 } from "@shared/prospectAiDisplay";
+import { formatProspectQueueItemError } from "@shared/prospectBulkOutreach";
 import { AiGrowthAssistantCard } from "@/components/prospectAi/AiGrowthAssistantCard";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -237,7 +238,7 @@ export function ProspectOutreachQueuePanel({
       <TableCell>{statusBadge(row.queueStatus)}</TableCell>
       <TableCell>{row.attempts}</TableCell>
       <TableCell className="max-w-[140px] truncate text-xs text-red-600">
-        {row.lastError || ""}
+        {formatProspectQueueItemError(row.lastError) || ""}
       </TableCell>
       <TableCell className="whitespace-nowrap">
         {row.historySource === "inbox_outreach" ? (

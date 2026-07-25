@@ -7,6 +7,8 @@ import {
   buildQueueDedupKey,
   computeNextScheduledDelayMs,
   isProspectOutreachQueueArmed,
+  nextProspectQueueControlFlags,
+  nextQueueItemAfterInfraPause,
   normalizeRecipientIdentity,
   prospectBulkOutreachLog,
   prospectOutreachEligibilityReasonLabel,
@@ -260,7 +262,7 @@ function testAutoSelectsEmailWhenConnectedLikeProduction() {
 function testHumanReadableReasonLabels() {
   assert.equal(
     prospectOutreachEligibilityReasonLabel("sender_not_connected"),
-    "Email sender not connected",
+    "Connect an email account before starting the campaign",
   );
   assert.equal(
     prospectOutreachEligibilityReasonLabel("missing_identity", "missing_email"),
@@ -311,6 +313,17 @@ function testQueueArmedOnlyAfterStart() {
   assert.equal(isProspectOutreachQueueArmed({ queueRunning: true, paused: false }), true);
   // 3. Pause stops remaining
   assert.equal(isProspectOutreachQueueArmed({ queueRunning: true, paused: true }), false);
+}
+
+function testStartClearsPauseWithoutBulkPausingReady() {
+  const started = nextProspectQueueControlFlags("start", { queueRunning: false, paused: true });
+  assert.deepEqual(started, { queueRunning: true, paused: false });
+  const released = nextQueueItemAfterInfraPause({
+    currentAttempts: 0,
+    reason: "sender_not_connected",
+  });
+  assert.equal(released.queueStatus, "queued");
+  assert.equal(released.attempts, 0);
 }
 
 function testManualOutreachBlocksBulkQueueEvenIfStatusStuckApproved() {
@@ -395,6 +408,7 @@ const tests: Array<[string, () => void]> = [
   ["human-readable eligibility labels", testHumanReadableReasonLabels],
   ["sticky needs_reconnect is sendable candidate", testStickyNeedsReconnectStatusIsSendableCandidate],
   ["queue without Start sends zero; Start arms; Pause stops", testQueueArmedOnlyAfterStart],
+  ["Start clears pause; infra release stays Ready with attempts 0", testStartClearsPauseWithoutBulkPausingReady],
   ["manual PI outreach blocks bulk queue even if status stuck", testManualOutreachBlocksBulkQueueEvenIfStatusStuckApproved],
 ];
 

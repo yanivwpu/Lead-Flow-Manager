@@ -19,6 +19,8 @@ import {
   buildQueueDedupKey,
   computeNextScheduledDelayMs,
   isProspectOutreachQueueArmed,
+  nextProspectQueueControlFlags,
+  nextQueueItemAfterInfraPause,
   normalizeRecipientIdentity,
   prospectBulkOutreachLog,
   prospectOutreachEligibilityReasonLabel,
@@ -692,22 +694,21 @@ export async function getQueueDashboard(
 }
 
 export async function pauseQueue(workspaceUserId: string): Promise<ProspectOutreachWorkspaceSettings> {
-  // Keep queueRunning true so Resume continues; only Pause clears new claims.
-  const settings = await updateOutreachSettings(workspaceUserId, { paused: true });
-  await db
-    .update(prospectOutreachQueueItems)
-    .set({ queueStatus: "paused", updatedAt: new Date() })
-    .where(
-      and(
-        eq(prospectOutreachQueueItems.workspaceUserId, workspaceUserId),
-        eq(prospectOutreachQueueItems.queueStatus, "queued"),
-      ),
-    );
+  // Global pause only — stop new claims via isProspectOutreachQueueArmed.
+  // Do NOT bulk-rewrite Ready (queued) rows to paused; that made Start look like
+  // it paused the entire campaign when the first infra failure called pauseQueue.
+  const current = await getOutreachSettings(workspaceUserId);
+  const flags = nextProspectQueueControlFlags("pause", current);
+  const settings = await updateOutreachSettings(workspaceUserId, {
+    paused: flags.paused,
+    queueRunning: flags.queueRunning,
+  });
   console.info(
     JSON.stringify(
       prospectBulkOutreachLog("queue_paused", {
         workspaceId: workspaceUserId,
         status: "paused",
+        reason: "global_pause_only",
       }),
     ),
   );
@@ -715,10 +716,19 @@ export async function pauseQueue(workspaceUserId: string): Promise<ProspectOutre
 }
 
 export async function resumeQueue(workspaceUserId: string): Promise<ProspectOutreachWorkspaceSettings> {
+  const { resolveEmailSenderForBulkOutreach } = await import("./prospectOutreachEligibilityService");
+  const { PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE } = await import("@shared/prospectBulkOutreach");
+  const email = await resolveEmailSenderForBulkOutreach(workspaceUserId);
+  if (!email.emailConnected || !email.emailMailboxId) {
+    throw new Error(PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE);
+  }
+
+  const flags = nextProspectQueueControlFlags("resume", {});
   const settings = await updateOutreachSettings(workspaceUserId, {
-    paused: false,
-    queueRunning: true,
+    paused: flags.paused,
+    queueRunning: flags.queueRunning,
   });
+  // Re-arm any rows left in item-level paused from older Pause behavior / infra paths.
   await db
     .update(prospectOutreachQueueItems)
     .set({ queueStatus: "queued", updatedAt: new Date() })
@@ -742,6 +752,7 @@ export async function resumeQueue(workspaceUserId: string): Promise<ProspectOutr
       prospectBulkOutreachLog("queue_resumed", {
         workspaceId: workspaceUserId,
         status: "running",
+        emailMailboxId: email.emailMailboxId,
       }),
     ),
   );
@@ -749,11 +760,20 @@ export async function resumeQueue(workspaceUserId: string): Promise<ProspectOutr
 }
 
 export async function startQueue(workspaceUserId: string): Promise<ProspectOutreachWorkspaceSettings> {
+  // Fail closed before arming: never claim/send without a live outbound mailbox.
+  const { resolveEmailSenderForBulkOutreach } = await import("./prospectOutreachEligibilityService");
+  const { PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE } = await import("@shared/prospectBulkOutreach");
+  const email = await resolveEmailSenderForBulkOutreach(workspaceUserId);
+  if (!email.emailConnected || !email.emailMailboxId) {
+    throw new Error(PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE);
+  }
+
+  const flags = nextProspectQueueControlFlags("start", {});
   const settings = await updateOutreachSettings(workspaceUserId, {
-    queueRunning: true,
-    paused: false,
+    queueRunning: flags.queueRunning,
+    paused: flags.paused,
   });
-  // Re-arm any items left paused from an earlier Pause.
+  // Re-arm any items left paused from an earlier Pause / infra fail-closed path.
   await db
     .update(prospectOutreachQueueItems)
     .set({ queueStatus: "queued", updatedAt: new Date() })
@@ -778,10 +798,32 @@ export async function startQueue(workspaceUserId: string): Promise<ProspectOutre
         workspaceId: workspaceUserId,
         status: "running",
         reason: "start_queue",
+        emailMailboxId: email.emailMailboxId,
       }),
     ),
   );
   return settings;
+}
+
+/** Put a claimed in-flight item back to Ready after infra pause — no sibling mutation. */
+async function releaseClaimedItemAfterInfraPause(
+  item: ProspectOutreachQueueItemRow,
+  reason: string,
+): Promise<void> {
+  const next = nextQueueItemAfterInfraPause({
+    currentAttempts: item.attempts || 0,
+    reason,
+  });
+  await db
+    .update(prospectOutreachQueueItems)
+    .set({
+      queueStatus: next.queueStatus,
+      attempts: next.attempts,
+      lastError: next.lastError,
+      startedAt: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(prospectOutreachQueueItems.id, item.id));
 }
 
 export async function removeQueueItem(params: {
@@ -912,7 +954,7 @@ export async function claimNextDueQueueItem(
     .set({
       queueStatus: "sending",
       startedAt: item.startedAt || now,
-      attempts: (item.attempts || 0) + 1,
+      // Attempts increment only when an actual send is attempted (see processClaimedQueueItem).
       updatedAt: now,
     })
     .where(
@@ -1045,14 +1087,7 @@ export async function processClaimedQueueItem(
     if (reason === "sender_not_connected" || reason === "suppressed" || reason === "opted_out") {
       if (reason === "sender_not_connected") {
         await pauseQueue(item.workspaceUserId);
-        await db
-          .update(prospectOutreachQueueItems)
-          .set({
-            queueStatus: "paused",
-            lastError: reason,
-            updatedAt: new Date(),
-          })
-          .where(eq(prospectOutreachQueueItems.id, item.id));
+        await releaseClaimedItemAfterInfraPause(item, reason);
         return { ok: false, reason };
       }
       await markItemFailed(item, reason, false);
@@ -1070,10 +1105,24 @@ export async function processClaimedQueueItem(
     contactName: contact.name,
   }).catch(async (err) => {
     const msg = err instanceof Error ? err.message : String(err);
-    await markItemFailed(item, msg, /reconnect|not connected/i.test(msg));
+    const shouldPause = /reconnect|not connected/i.test(msg);
+    if (shouldPause) {
+      await pauseQueue(item.workspaceUserId);
+      await releaseClaimedItemAfterInfraPause(item, msg);
+      return null;
+    }
+    await markItemFailed(item, msg, false);
     return null;
   });
   if (!prepared) return { ok: false, reason: "prepare_failed" };
+
+  // Count a real send attempt only once we're past gates/prepare and calling the sender.
+  const attemptNumber = (item.attempts || 0) + 1;
+  await db
+    .update(prospectOutreachQueueItems)
+    .set({ attempts: attemptNumber, updatedAt: new Date() })
+    .where(eq(prospectOutreachQueueItems.id, item.id));
+  const itemWithAttempt = { ...item, attempts: attemptNumber };
 
   const sendResult = await sender.send({
     workspaceUserId: item.workspaceUserId,
@@ -1090,14 +1139,7 @@ export async function processClaimedQueueItem(
   if (!sendResult.success) {
     if (sendResult.pauseQueue) {
       await pauseQueue(item.workspaceUserId);
-      await db
-        .update(prospectOutreachQueueItems)
-        .set({
-          queueStatus: "paused",
-          lastError: (sendResult.error || "paused").substring(0, 500),
-          updatedAt: new Date(),
-        })
-        .where(eq(prospectOutreachQueueItems.id, item.id));
+      await releaseClaimedItemAfterInfraPause(itemWithAttempt, sendResult.error || "paused");
     } else {
       const { isPermanentEmailSendFailure } = await import("@shared/prospectEmailSuppression");
       const permanent = isPermanentEmailSendFailure(sendResult.error);
@@ -1115,13 +1157,13 @@ export async function processClaimedQueueItem(
           console.error("[ProspectOutreach] permanent-failure suppression failed", err);
         }
         // Terminal — never silent requeue for permanent recipient failures.
-        await markItemFailed(item, `permanent:${sendResult.error || "send_failed"}`, false);
+        await markItemFailed(itemWithAttempt, `permanent:${sendResult.error || "send_failed"}`, false);
         await db
           .update(prospectOutreachQueueItems)
-          .set({ attempts: item.maxAttempts, updatedAt: new Date() })
+          .set({ attempts: itemWithAttempt.maxAttempts, updatedAt: new Date() })
           .where(eq(prospectOutreachQueueItems.id, item.id));
       } else {
-        await markItemFailed(item, sendResult.error || "send_failed", false);
+        await markItemFailed(itemWithAttempt, sendResult.error || "send_failed", false);
       }
     }
     console.info(
@@ -1132,7 +1174,7 @@ export async function processClaimedQueueItem(
           queueItemId: item.id,
           contactId: item.contactId,
           selectedChannel: channel,
-          attempts: item.attempts,
+          attempts: attemptNumber,
           status: sendResult.pauseQueue ? "paused" : "failed",
           reason: sendResult.error,
           duration: Date.now() - started,
@@ -1173,7 +1215,7 @@ export async function processClaimedQueueItem(
         prospectIntelligenceId: item.contactId,
         contactId: item.contactId,
         selectedChannel: channel,
-        attempts: item.attempts,
+        attempts: attemptNumber,
         status: "sent",
         duration: Date.now() - started,
       }),
@@ -1190,14 +1232,7 @@ async function markItemFailed(
 ): Promise<void> {
   if (pause) {
     await pauseQueue(item.workspaceUserId);
-    await db
-      .update(prospectOutreachQueueItems)
-      .set({
-        queueStatus: "paused",
-        lastError: error.substring(0, 500),
-        updatedAt: new Date(),
-      })
-      .where(eq(prospectOutreachQueueItems.id, item.id));
+    await releaseClaimedItemAfterInfraPause(item, error);
     return;
   }
 
