@@ -10,6 +10,14 @@
 
 import type { ProspectOutreachChannel } from "@shared/prospectBulkOutreach";
 import { buildProspectOutreachSubject } from "@shared/prospectContactEnrichment";
+import {
+  classifyEmailSenderProbeError,
+  classifyMailboxSyncStatusNotSendable,
+  formatSenderNotConnectedDiagnostic,
+  prospectSenderProbeDiagLog,
+  safeProbeErrorMessage,
+  type ProspectSenderProbeFailureClass,
+} from "@shared/prospectSenderProbeDiagnostics";
 import { channelService } from "../channelService";
 import { getEmailMailboxById, getPrimaryEmailMailbox } from "../emailChannel/mailboxStore";
 
@@ -48,6 +56,33 @@ export interface ProspectOutreachSender {
   send(input: ProspectOutreachSendPrepareInput & { mailboxId: string; subject: string }): Promise<ProspectOutreachSendResult>;
 }
 
+function logSenderProbeFailure(input: {
+  stage: "preferred_probe" | "primary_probe" | "prepare" | "send";
+  failureClass: ProspectSenderProbeFailureClass;
+  workspaceUserId: string;
+  mailboxId?: string | null;
+  preferredMailboxId?: string | null;
+  syncStatus?: string | null;
+  err?: unknown;
+}): void {
+  console.info(
+    JSON.stringify(
+      prospectSenderProbeDiagLog({
+        stage: input.stage,
+        failureClass: input.failureClass,
+        workspaceIdPrefix: input.workspaceUserId.slice(0, 8),
+        mailboxIdPrefix: input.mailboxId ? input.mailboxId.slice(0, 8) : null,
+        preferredMailboxIdPrefix: input.preferredMailboxId
+          ? input.preferredMailboxId.slice(0, 8)
+          : null,
+        syncStatus: input.syncStatus || null,
+        errName: input.err instanceof Error ? input.err.name : input.err ? "unknown" : null,
+        errMsgSafe: input.err ? safeProbeErrorMessage(input.err) : null,
+      }),
+    ),
+  );
+}
+
 /**
  * Resolve the live sendable mailbox for campaign outbound.
  * Prefer the queue snapshot when it still probes successfully; otherwise fall
@@ -56,6 +91,7 @@ export interface ProspectOutreachSender {
 async function resolveLiveCampaignMailbox(params: {
   workspaceUserId: string;
   preferredMailboxId?: string | null;
+  stage?: "prepare" | "send";
 }): Promise<{ ok: true; mailboxId: string } | { ok: false; reason: string }> {
   const { resolveEmailSenderForBulkOutreach } = await import(
     "./prospectOutreachEligibilityService"
@@ -66,16 +102,32 @@ async function resolveLiveCampaignMailbox(params: {
   const preferredId = String(params.preferredMailboxId || "").trim();
   if (preferredId) {
     const mailbox = await getEmailMailboxById(preferredId);
-    if (
-      mailbox &&
-      mailbox.workspaceUserId === params.workspaceUserId &&
-      isEmailMailboxSyncStatusSendable(mailbox.syncStatus)
-    ) {
-      try {
-        await getValidMailboxAccessToken(mailbox.id);
-        return { ok: true, mailboxId: mailbox.id };
-      } catch {
-        /* fall through to live primary */
+    if (mailbox && mailbox.workspaceUserId === params.workspaceUserId) {
+      if (!isEmailMailboxSyncStatusSendable(mailbox.syncStatus)) {
+        logSenderProbeFailure({
+          stage: "preferred_probe",
+          failureClass: classifyMailboxSyncStatusNotSendable(mailbox.syncStatus),
+          workspaceUserId: params.workspaceUserId,
+          mailboxId: mailbox.id,
+          preferredMailboxId: preferredId,
+          syncStatus: mailbox.syncStatus,
+        });
+      } else {
+        try {
+          await getValidMailboxAccessToken(mailbox.id);
+          return { ok: true, mailboxId: mailbox.id };
+        } catch (err) {
+          logSenderProbeFailure({
+            stage: "preferred_probe",
+            failureClass: classifyEmailSenderProbeError(err),
+            workspaceUserId: params.workspaceUserId,
+            mailboxId: mailbox.id,
+            preferredMailboxId: preferredId,
+            syncStatus: mailbox.syncStatus,
+            err,
+          });
+          /* fall through to live primary */
+        }
       }
     }
   }
@@ -84,7 +136,20 @@ async function resolveLiveCampaignMailbox(params: {
   if (avail.emailConnected && avail.emailMailboxId) {
     return { ok: true, mailboxId: avail.emailMailboxId };
   }
-  return { ok: false, reason: "sender_not_connected" };
+
+  const failureClass: ProspectSenderProbeFailureClass =
+    avail.failureClass || "other_probe_failure";
+  // primary_probe already logs inside resolveEmailSenderForBulkOutreach; add prepare/send stage context.
+  if (params.stage === "prepare" || params.stage === "send") {
+    logSenderProbeFailure({
+      stage: params.stage,
+      failureClass,
+      workspaceUserId: params.workspaceUserId,
+      preferredMailboxId: preferredId || null,
+    });
+  }
+
+  return { ok: false, reason: formatSenderNotConnectedDiagnostic(failureClass) };
 }
 
 export const emailProspectOutreachSender: ProspectOutreachSender = {
@@ -97,6 +162,7 @@ export const emailProspectOutreachSender: ProspectOutreachSender = {
     const live = await resolveLiveCampaignMailbox({
       workspaceUserId: input.workspaceUserId,
       preferredMailboxId: input.senderMailboxId,
+      stage: "send",
     });
     if (!live.ok) {
       return { ok: false, reason: live.reason, pauseQueue: true };
@@ -108,14 +174,25 @@ export const emailProspectOutreachSender: ProspectOutreachSender = {
     const live = await resolveLiveCampaignMailbox({
       workspaceUserId: input.workspaceUserId,
       preferredMailboxId: input.senderMailboxId,
+      stage: "prepare",
     });
     if (!live.ok) {
-      throw new Error("No connected email mailbox");
+      // Preserve classifier in thrown message for infra-pause lastError persistence.
+      throw new Error(live.reason);
     }
     const mailbox =
       (await getEmailMailboxById(live.mailboxId)) ||
       (await getPrimaryEmailMailbox(input.workspaceUserId));
-    if (!mailbox) throw new Error("No connected email mailbox");
+    if (!mailbox) {
+      const reason = formatSenderNotConnectedDiagnostic("no_mailbox");
+      logSenderProbeFailure({
+        stage: "prepare",
+        failureClass: "no_mailbox",
+        workspaceUserId: input.workspaceUserId,
+        preferredMailboxId: input.senderMailboxId,
+      });
+      throw new Error(reason);
+    }
     const subject =
       String(input.subjectSnapshot || "").trim() ||
       buildProspectOutreachSubject(input.contactName || "there");

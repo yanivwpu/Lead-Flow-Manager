@@ -32,6 +32,13 @@ import {
 } from "@shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { resolveProspectWebsiteUrl } from "./prospectWebsiteUrl";
+import type { ProspectSenderProbeFailureClass } from "@shared/prospectSenderProbeDiagnostics";
+import {
+  classifyEmailSenderProbeError,
+  classifyMailboxSyncStatusNotSendable,
+  prospectSenderProbeDiagLog,
+  safeProbeErrorMessage,
+} from "@shared/prospectSenderProbeDiagnostics";
 
 /** Presentation + eligibility flags for list / Campaigns historical rows. */
 export type PriorOutreachListFlags = {
@@ -190,6 +197,8 @@ export async function batchLoadPriorOutreachFlags(
 export type WorkspaceChannelConnections = {
   emailConnected: boolean;
   emailMailboxId: string | null;
+  /** Non-secret probe classifier when emailConnected is false. */
+  emailFailureClass?: ProspectSenderProbeFailureClass | null;
   smsConnected: boolean;
   whatsappConnected: boolean;
   facebookConnected: boolean;
@@ -204,21 +213,78 @@ export type WorkspaceChannelConnections = {
  */
 export async function resolveEmailSenderForBulkOutreach(
   workspaceUserId: string,
-): Promise<{ emailConnected: boolean; emailMailboxId: string | null }> {
+): Promise<{
+  emailConnected: boolean;
+  emailMailboxId: string | null;
+  failureClass?: ProspectSenderProbeFailureClass | null;
+  failureStage?: "primary_probe" | null;
+}> {
   const mailbox = await getPrimaryEmailMailbox(workspaceUserId).catch(() => null);
-  if (!mailbox) return { emailConnected: false, emailMailboxId: null };
+  if (!mailbox) {
+    console.info(
+      JSON.stringify(
+        prospectSenderProbeDiagLog({
+          stage: "primary_probe",
+          failureClass: "no_mailbox",
+          workspaceIdPrefix: workspaceUserId.slice(0, 8),
+        }),
+      ),
+    );
+    return {
+      emailConnected: false,
+      emailMailboxId: null,
+      failureClass: "no_mailbox",
+      failureStage: "primary_probe",
+    };
+  }
 
   const { isEmailMailboxSyncStatusSendable } = await import("@shared/emailMailboxAvailability");
   if (!isEmailMailboxSyncStatusSendable(mailbox.syncStatus)) {
-    return { emailConnected: false, emailMailboxId: null };
+    const failureClass = classifyMailboxSyncStatusNotSendable(mailbox.syncStatus);
+    console.info(
+      JSON.stringify(
+        prospectSenderProbeDiagLog({
+          stage: "primary_probe",
+          failureClass,
+          workspaceIdPrefix: workspaceUserId.slice(0, 8),
+          mailboxIdPrefix: mailbox.id.slice(0, 8),
+          syncStatus: mailbox.syncStatus,
+        }),
+      ),
+    );
+    return {
+      emailConnected: false,
+      emailMailboxId: null,
+      failureClass,
+      failureStage: "primary_probe",
+    };
   }
 
   try {
     const { getValidMailboxAccessToken } = await import("../emailChannel/oauth");
     const { mailbox: fresh } = await getValidMailboxAccessToken(mailbox.id);
-    return { emailConnected: true, emailMailboxId: fresh.id };
-  } catch {
-    return { emailConnected: false, emailMailboxId: null };
+    return { emailConnected: true, emailMailboxId: fresh.id, failureClass: null, failureStage: null };
+  } catch (err) {
+    const failureClass = classifyEmailSenderProbeError(err);
+    console.info(
+      JSON.stringify(
+        prospectSenderProbeDiagLog({
+          stage: "primary_probe",
+          failureClass,
+          workspaceIdPrefix: workspaceUserId.slice(0, 8),
+          mailboxIdPrefix: mailbox.id.slice(0, 8),
+          syncStatus: mailbox.syncStatus,
+          errName: err instanceof Error ? err.name : "unknown",
+          errMsgSafe: safeProbeErrorMessage(err),
+        }),
+      ),
+    );
+    return {
+      emailConnected: false,
+      emailMailboxId: null,
+      failureClass,
+      failureStage: "primary_probe",
+    };
   }
 }
 
@@ -240,6 +306,7 @@ export async function loadWorkspaceChannelConnections(
   return {
     emailConnected: email.emailConnected,
     emailMailboxId: email.emailMailboxId,
+    emailFailureClass: email.failureClass ?? null,
     smsConnected: connected("sms"),
     whatsappConnected: connected("whatsapp"),
     facebookConnected: connected("facebook"),
@@ -476,6 +543,17 @@ export async function resolveProspectOutreachEligibilityForContact(params: {
   };
 
   const result = resolveProspectOutreachEligibility(input);
+  // Attach non-secret probe classifier so queue pause can persist sender_not_connected:<class>.
+  if (
+    result.channels.email.reason === "sender_not_connected" &&
+    connections.emailFailureClass &&
+    !result.channels.email.detail
+  ) {
+    result.channels.email = {
+      ...result.channels.email,
+      detail: connections.emailFailureClass,
+    };
+  }
   return { result, mailboxId: connections.emailMailboxId, input, priorOutreach };
 }
 

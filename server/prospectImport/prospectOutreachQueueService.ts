@@ -33,6 +33,14 @@ import {
   type ProspectOutreachQueuePreview,
   type ProspectOutreachWorkspaceSettings,
 } from "@shared/prospectBulkOutreach";
+import {
+  formatSenderNotConnectedDiagnostic,
+  isSenderNotConnectedReason,
+  parseSenderNotConnectedDiagnostic,
+  prospectSenderProbeDiagLog,
+  type ProspectSenderProbeFailureClass,
+  PROSPECT_SENDER_PROBE_FAILURE_CLASSES,
+} from "@shared/prospectSenderProbeDiagnostics";
 import { buildProspectOutreachSubject } from "@shared/prospectContactEnrichment";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
@@ -44,6 +52,15 @@ import {
 } from "./prospectOutreachEligibilityService";
 import { getProspectOutreachSender } from "./prospectOutreachSenders";
 
+function failureClassFromEligibilityDetail(
+  detail: string | null | undefined,
+): ProspectSenderProbeFailureClass {
+  const d = String(detail || "").trim().toLowerCase();
+  if ((PROSPECT_SENDER_PROBE_FAILURE_CLASSES as readonly string[]).includes(d)) {
+    return d as ProspectSenderProbeFailureClass;
+  }
+  return "other_probe_failure";
+}
 function mapSettings(
   row: typeof prospectOutreachSettings.$inferSelect | undefined,
 ): ProspectOutreachWorkspaceSettings {
@@ -224,7 +241,7 @@ export async function previewQueueBatch(params: {
         reason === "suppressed" ||
         reason === "opted_out" ||
         reason === "analysis_incomplete" ||
-        reason === "sender_not_connected" ||
+        isSenderNotConnectedReason(reason) ||
         reason === "missing_identity" ||
         reason === "missing_message_snapshot"
       ) {
@@ -1144,11 +1161,31 @@ export async function processClaimedQueueItem(
         .where(eq(prospectOutreachQueueItems.id, item.id));
       return { ok: false, reason };
     }
-    if (reason === "sender_not_connected" || reason === "suppressed" || reason === "opted_out") {
-      if (reason === "sender_not_connected") {
+    if (isSenderNotConnectedReason(reason) || reason === "suppressed" || reason === "opted_out") {
+      if (isSenderNotConnectedReason(reason)) {
+        const failureClass = failureClassFromEligibilityDetail(
+          eligibility.channels[channel]?.detail,
+        );
+        const persistReason = formatSenderNotConnectedDiagnostic(failureClass);
+        console.info(
+          JSON.stringify(
+            prospectBulkOutreachLog("sender_probe_failed", {
+              ...prospectSenderProbeDiagLog({
+                stage: "eligibility",
+                failureClass,
+                workspaceIdPrefix: item.workspaceUserId.slice(0, 8),
+                queueItemIdPrefix: item.id.slice(0, 8),
+                contactIdPrefix: item.contactId.slice(0, 8),
+                mailboxIdPrefix: item.senderMailboxId?.slice(0, 8) ?? null,
+              }),
+              attempts: item.attempts,
+              persistReason,
+            }),
+          ),
+        );
         await pauseQueue(item.workspaceUserId);
-        await releaseClaimedItemAfterInfraPause(item, reason);
-        return { ok: false, reason };
+        await releaseClaimedItemAfterInfraPause(item, persistReason);
+        return { ok: false, reason: persistReason };
       }
       await markItemFailed(item, reason, false);
       return { ok: false, reason };
@@ -1165,10 +1202,38 @@ export async function processClaimedQueueItem(
     contactName: contact.name,
   }).catch(async (err) => {
     const msg = err instanceof Error ? err.message : String(err);
-    const shouldPause = /reconnect|not connected/i.test(msg);
+    const senderDiag = parseSenderNotConnectedDiagnostic(msg);
+    const shouldPause =
+      isSenderNotConnectedReason(msg) ||
+      /reconnect|not connected|No connected email mailbox/i.test(msg);
     if (shouldPause) {
+      const persistReason = isSenderNotConnectedReason(msg)
+        ? formatSenderNotConnectedDiagnostic(
+            senderDiag.failureClass || "other_probe_failure",
+          )
+        : /No connected email mailbox/i.test(msg)
+          ? formatSenderNotConnectedDiagnostic("no_mailbox")
+          : msg;
+      console.info(
+        JSON.stringify(
+          prospectBulkOutreachLog("sender_probe_failed", {
+            ...prospectSenderProbeDiagLog({
+              stage: "prepare",
+              failureClass: parseSenderNotConnectedDiagnostic(persistReason).failureClass ||
+                "other_probe_failure",
+              workspaceIdPrefix: item.workspaceUserId.slice(0, 8),
+              queueItemIdPrefix: item.id.slice(0, 8),
+              contactIdPrefix: item.contactId.slice(0, 8),
+              mailboxIdPrefix: item.senderMailboxId?.slice(0, 8) ?? null,
+              errMsgSafe: String(msg).slice(0, 160),
+            }),
+            attempts: item.attempts,
+            persistReason,
+          }),
+        ),
+      );
       await pauseQueue(item.workspaceUserId);
-      await releaseClaimedItemAfterInfraPause(item, msg);
+      await releaseClaimedItemAfterInfraPause(item, persistReason);
       return null;
     }
     await markItemFailed(item, msg, false);
@@ -1198,8 +1263,43 @@ export async function processClaimedQueueItem(
 
   if (!sendResult.success) {
     if (sendResult.pauseQueue) {
+      let persistError = sendResult.error || "paused";
+      if (isSenderNotConnectedReason(persistError)) {
+        const parsed = parseSenderNotConnectedDiagnostic(persistError);
+        persistError = formatSenderNotConnectedDiagnostic(
+          parsed.failureClass || "other_probe_failure",
+        );
+        console.info(
+          JSON.stringify(
+            prospectBulkOutreachLog("sender_probe_failed", {
+              ...prospectSenderProbeDiagLog({
+                stage: "send",
+                failureClass: parsed.failureClass || "other_probe_failure",
+                workspaceIdPrefix: item.workspaceUserId.slice(0, 8),
+                queueItemIdPrefix: item.id.slice(0, 8),
+                contactIdPrefix: item.contactId.slice(0, 8),
+                mailboxIdPrefix: prepared.mailboxId.slice(0, 8),
+                errMsgSafe: String(sendResult.error || "").slice(0, 160),
+              }),
+              attempts: itemWithAttempt.attempts,
+              persistReason: persistError,
+            }),
+          ),
+        );
+      } else {
+        console.info(
+          JSON.stringify(
+            prospectBulkOutreachLog("infra_pause_after_send_gate", {
+              stage: "send",
+              queueItemIdPrefix: item.id.slice(0, 8),
+              error: String(sendResult.error || "").slice(0, 160),
+              attempts: itemWithAttempt.attempts,
+            }),
+          ),
+        );
+      }
       await pauseQueue(item.workspaceUserId);
-      await releaseClaimedItemAfterInfraPause(itemWithAttempt, sendResult.error || "paused");
+      await releaseClaimedItemAfterInfraPause(itemWithAttempt, persistError);
     } else {
       const { isPermanentEmailSendFailure } = await import("@shared/prospectEmailSuppression");
       const permanent = isPermanentEmailSendFailure(sendResult.error);

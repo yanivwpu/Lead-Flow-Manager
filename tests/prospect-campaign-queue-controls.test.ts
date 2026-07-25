@@ -84,6 +84,10 @@ import {
     formatProspectQueueItemError("sender_not_connected"),
     "Connect an email account before starting the campaign",
   );
+  assert.equal(
+    formatProspectQueueItemError("sender_not_connected:decrypt"),
+    "Connect an email account before starting the campaign",
+  );
   assert.match(PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE, /Connect an email account/i);
 
   const panelSrc = readFileSync(
