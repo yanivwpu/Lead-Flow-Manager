@@ -43,6 +43,7 @@ import {
 import { storage } from "./storage";
 import { evaluateAutomationSendGuard } from "./automationSendGuard";
 import { devLog } from "./devLog";
+import { toPublicIntegration } from "@shared/integrationPublic";
 import {
   insertChatSchema,
   insertRegisteredPhoneSchema,
@@ -4978,16 +4979,6 @@ export async function registerRoutes(
     return decrypted;
   }
   
-  function maskIntegrationConfig(config: Record<string, any>): Record<string, any> {
-    const masked: Record<string, any> = { ...config };
-    for (const key of SENSITIVE_CONFIG_KEYS) {
-      if (masked[key] && typeof masked[key] === 'string') {
-        masked[key] = '••••••••';
-      }
-    }
-    return masked;
-  }
-
   function calendlyErrorMessage(
     data: { message?: string; title?: string; details?: { message?: string }[] } | undefined,
     fallback: string
@@ -5117,11 +5108,10 @@ export async function registerRoutes(
       }
       
       const userIntegrations = await storage.getIntegrations(req.user.id);
-      // Mask sensitive fields before returning to client
-      const safeIntegrations = userIntegrations.map(i => ({
-        ...i,
-        config: maskIntegrationConfig(i.config as Record<string, any>),
-      }));
+      // Never return raw accessToken / refreshToken columns to the client
+      const safeIntegrations = userIntegrations.map((i) =>
+        toPublicIntegration(i as unknown as Record<string, unknown>),
+      );
       res.json(safeIntegrations);
     } catch (error) {
       console.error("Error fetching integrations:", error);
@@ -6636,10 +6626,7 @@ export async function registerRoutes(
           sampleOrders = [];
         }
 
-        const safe = {
-          ...row,
-          config: maskIntegrationConfig(row.config as Record<string, any>),
-        };
+        const safe = toPublicIntegration(row as unknown as Record<string, unknown>);
 
         return res.status(201).json({
           ok: true,
@@ -7190,8 +7177,7 @@ export async function registerRoutes(
 
       // Return with masked config (+ webhook setup info for Meta channels)
       res.status(201).json({
-        ...integration,
-        config: maskIntegrationConfig(finalConfig),
+        ...toPublicIntegration(integration as unknown as Record<string, unknown>),
         ...(metaWebhookConfig ? { webhookSetup: metaWebhookConfig } : {}),
         ...(type === "calendly" ? calendlyExtra : {}),
       });
@@ -7259,11 +7245,8 @@ export async function registerRoutes(
         console.log(`[Integration] ${channel} channelSettings config updated for user ${req.user.id} — pageId: ${channelConfig.pageId}`);
       }
 
-      // Return with masked config
-      res.json({
-        ...updated,
-        config: maskIntegrationConfig(updated?.config as Record<string, any> || {}),
-      });
+      // Return with masked config — never raw tokens
+      res.json(toPublicIntegration((updated || integration) as unknown as Record<string, unknown>));
     } catch (error) {
       console.error("Error updating integration:", error);
       res.status(500).json({ error: "Failed to update integration" });
