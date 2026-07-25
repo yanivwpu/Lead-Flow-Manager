@@ -42,6 +42,11 @@ import {
   prospectCampaignQueueStatusLabel,
 } from "@shared/prospectAiDisplay";
 import { formatProspectQueueItemError } from "@shared/prospectBulkOutreach";
+import { selectNextQueuedCampaignItem } from "@shared/prospectCampaignCountdown";
+import {
+  CampaignSendActivityStatusLine,
+  NextQueuedCountdownSuffix,
+} from "@/components/settings/CampaignSendCountdown";
 import { AiGrowthAssistantCard } from "@/components/prospectAi/AiGrowthAssistantCard";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -53,11 +58,23 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-function statusBadge(status: string) {
+function statusBadge(
+  status: string,
+  opts?: { isNextQueued?: boolean; scheduledAt?: string | null },
+) {
   const label = prospectCampaignQueueStatusLabel(status);
+  const countdown =
+    status === "queued" && opts?.isNextQueued ? (
+      <NextQueuedCountdownSuffix scheduledAt={opts.scheduledAt} enabled />
+    ) : null;
   switch (status) {
     case "queued":
-      return <Badge variant="outline">{label}</Badge>;
+      return (
+        <div className="flex flex-col items-start gap-0">
+          <Badge variant="outline">{label}</Badge>
+          {countdown}
+        </div>
+      );
     case "sending":
       return <Badge className="bg-blue-600">{label}</Badge>;
     case "sent":
@@ -174,6 +191,11 @@ export function ProspectOutreachQueuePanel({
     [allItems],
   );
 
+  const nextQueuedId = useMemo(
+    () => selectNextQueuedCampaignItem(allActiveItems)?.id ?? null,
+    [allActiveItems],
+  );
+
   const activeItems = useMemo(() => {
     if (statusFilter === "all") return allActiveItems;
     if (statusFilter === "sent") return [];
@@ -237,7 +259,12 @@ export function ProspectOutreachQueuePanel({
       <TableCell className="text-xs whitespace-nowrap">
         {row.scheduledAt ? format(new Date(row.scheduledAt), "MMM d, h:mm a") : "—"}
       </TableCell>
-      <TableCell>{statusBadge(row.queueStatus)}</TableCell>
+      <TableCell>
+        {statusBadge(row.queueStatus, {
+          isNextQueued: row.id === nextQueuedId,
+          scheduledAt: row.scheduledAt,
+        })}
+      </TableCell>
       <TableCell>{row.attempts}</TableCell>
       <TableCell className="max-w-[140px] truncate text-xs text-red-600">
         {formatProspectQueueItemError(row.lastError) || ""}
@@ -428,6 +455,12 @@ export function ProspectOutreachQueuePanel({
           </Button>
         </div>
       </div>
+
+      <CampaignSendActivityStatusLine
+        queueRunning={dash?.queueRunning}
+        queuePaused={dash?.queuePaused}
+        items={allActiveItems}
+      />
 
       {dash?.queuePaused ? (
         <p className="text-sm text-amber-700">

@@ -68,8 +68,9 @@ import {
   type ConversationReEngagement,
 } from "@shared/reEngagement";
 import { buildInboxItemsForContact } from "@shared/inboxRowModel";
+import { collectHiddenColdOutreachConversationIds } from "@shared/prospectColdOutreachInbox";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, type InsertConversationWindow, type ConversationWindow, growthEngineSetupTasks } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, prospectIntelligence, type InsertConversationWindow, type ConversationWindow, growthEngineSetupTasks } from "@shared/schema";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray, lt, count } from "drizzle-orm";
 import { getEffectiveTaskPayoutDollars, type TaskPayoutFields } from "./salespersonTaskPayout";
@@ -2908,6 +2909,22 @@ export class DbStorage implements IStorage {
       .orderBy(desc(contacts.updatedAt))
       .limit(limit);
 
+    // Cold Prospect AI outreach: hide linked email threads until first inbound reply.
+    // Conversation-scoped via prospect_intelligence — Contacts page / CRM creation unchanged.
+    const contactIds = userContacts.map((c) => c.id);
+    let hiddenColdOutreachConversationIds = new Set<string>();
+    if (contactIds.length > 0) {
+      const piSignals = await db
+        .select({
+          outreachConversationId: prospectIntelligence.outreachConversationId,
+          outreachStatus: prospectIntelligence.outreachStatus,
+          repliedAt: prospectIntelligence.repliedAt,
+        })
+        .from(prospectIntelligence)
+        .where(inArray(prospectIntelligence.contactId, contactIds));
+      hiddenColdOutreachConversationIds = collectHiddenColdOutreachConversationIds(piSignals);
+    }
+
     const inboxItems: InboxItem[] = [];
 
     for (const contact of userContacts) {
@@ -2915,7 +2932,11 @@ export class DbStorage implements IStorage {
         .where(eq(conversations.contactId, contact.id))
         .orderBy(desc(conversations.lastMessageAt));
 
-      const built = buildInboxItemsForContact({ contact, conversations: convs });
+      const built = buildInboxItemsForContact({
+        contact,
+        conversations: convs,
+        hiddenColdOutreachConversationIds,
+      });
       for (const row of built) {
         let lastEmailMessageId: string | null = null;
         if (

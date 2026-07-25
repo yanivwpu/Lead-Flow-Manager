@@ -4,9 +4,12 @@
  * - Email: one row per conversation/thread (never collapse siblings).
  * - Chat-style channels (whatsapp, facebook, instagram, telegram, sms, …):
  *   one row per contact using the newest non-email conversation.
+ * - Cold Prospect AI outreach email threads awaiting first reply may be omitted
+ *   via hiddenColdOutreachConversationIds (conversation-scoped).
  */
 
 import { selectPrimaryConversation } from "./inboxPrimaryConversation";
+import { toHiddenConversationIdSet } from "./prospectColdOutreachInbox";
 
 export type InboxRowContactLike = {
   id: string;
@@ -58,14 +61,27 @@ export function buildInboxItemsForContact<
 >(params: {
   contact: C;
   conversations: readonly V[];
+  /**
+   * Conversation ids for cold Prospect AI outreach awaiting first inbound reply.
+   * Only email rows matching these ids are omitted. Non-email channels are never
+   * hidden by this set. If every conversation is hidden this way, no empty CRM
+   * fallback row is emitted.
+   */
+  hiddenColdOutreachConversationIds?: ReadonlySet<string> | readonly string[] | null;
 }): BuiltInboxRow<C, V>[] {
   const { contact, conversations } = params;
-  const contactUnreadTotal = conversations.reduce(
-    (sum, c) => sum + Math.max(0, c.unreadCount || 0),
-    0,
-  );
+  const hidden = toHiddenConversationIdSet(params.hiddenColdOutreachConversationIds);
 
-  const emailConvs = conversations.filter((c) => isEmailConversationChannel(c.channel));
+  const isHiddenColdOutreachEmail = (conv: V): boolean =>
+    isEmailConversationChannel(conv.channel) && hidden.has(conv.id);
+
+  const contactUnreadTotal = conversations.reduce((sum, c) => {
+    if (isHiddenColdOutreachEmail(c)) return sum;
+    return sum + Math.max(0, c.unreadCount || 0);
+  }, 0);
+
+  const emailConvsAll = conversations.filter((c) => isEmailConversationChannel(c.channel));
+  const emailConvs = emailConvsAll.filter((c) => !isHiddenColdOutreachEmail(c));
   const nonEmailConvs = conversations.filter((c) => !isEmailConversationChannel(c.channel));
 
   const items: BuiltInboxRow<C, V>[] = [];
@@ -95,18 +111,28 @@ export function buildInboxItemsForContact<
       contactUnreadTotal,
     });
   } else if (emailConvs.length === 0) {
-    // Contact with no conversations — keep CRM-openable row.
-    const channel =
-      contact.primaryChannelOverride || contact.primaryChannel || "whatsapp";
-    items.push({
-      contact,
-      conversation: null,
-      channel,
-      lastMessage: "",
-      lastMessageAt: null,
-      unreadCount: 0,
-      contactUnreadTotal: 0,
-    });
+    const onlyHiddenColdOutreach =
+      conversations.length > 0 &&
+      emailConvsAll.length > 0 &&
+      emailConvsAll.every((c) => isHiddenColdOutreachEmail(c));
+    // Contact with only a hidden cold-outreach thread must stay out of Inbox.
+    if (onlyHiddenColdOutreach) {
+      return items;
+    }
+    // Contact with no conversations — keep CRM-openable row (unchanged).
+    if (conversations.length === 0) {
+      const channel =
+        contact.primaryChannelOverride || contact.primaryChannel || "whatsapp";
+      items.push({
+        contact,
+        conversation: null,
+        channel,
+        lastMessage: "",
+        lastMessageAt: null,
+        unreadCount: 0,
+        contactUnreadTotal: 0,
+      });
+    }
   }
 
   return items;
