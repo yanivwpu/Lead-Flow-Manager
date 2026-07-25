@@ -416,6 +416,38 @@ export function normalizeRecipientIdentity(
   return v.replace(/\s+/g, "");
 }
 
+/**
+ * Stagger schedule timestamps for a Ready queue starting from `fromMs`.
+ * Used by Start/Resume so overdue items become due again with configured delays.
+ * When `deterministicDelaysMs` is provided (tests), jitter is not used.
+ */
+export function buildStaggeredQueueSchedule(params: {
+  itemCount: number;
+  fromMs: number;
+  minDelaySeconds: number;
+  maxDelaySeconds: number;
+  firstDelayMs?: number;
+  deterministicDelaysMs?: number[];
+}): number[] {
+  const count = Math.max(0, params.itemCount);
+  const minMs = Math.max(5, params.minDelaySeconds) * 1000;
+  const maxMs = Math.max(minMs, params.maxDelaySeconds * 1000);
+  const first = Math.max(0, params.firstDelayMs ?? 5_000);
+  const out: number[] = [];
+  let cursor = params.fromMs + first;
+  for (let i = 0; i < count; i++) {
+    out.push(cursor);
+    if (params.deterministicDelaysMs && params.deterministicDelaysMs[i] != null) {
+      cursor += Math.max(0, params.deterministicDelaysMs[i]!);
+    } else {
+      const span = maxMs - minMs;
+      const jitter = span <= 0 ? 0 : Math.floor(Math.random() * (span + 1));
+      cursor += minMs + jitter;
+    }
+  }
+  return out;
+}
+
 export function computeNextScheduledDelayMs(settings: {
   minDelaySeconds: number;
   maxDelaySeconds: number;

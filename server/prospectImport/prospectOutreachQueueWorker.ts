@@ -1,6 +1,9 @@
 /**
  * DB-polled worker for controlled prospect outreach queue.
  * Matches flowJobWorker pattern — gradual sends, pause-aware, crash-safe.
+ *
+ * Start/Resume arm DB flags and call wakeProspectOutreachQueueWorker() so
+ * processing does not wait for the next poll tick alone.
  */
 
 import {
@@ -66,6 +69,15 @@ export function startProspectOutreachQueueWorker(): void {
     ),
   );
   scheduleNext();
+}
+
+/**
+ * Ensure the poll loop is running and run an immediate tick.
+ * Called from Start Sending / Resume Sending after arming the queue.
+ */
+export function wakeProspectOutreachQueueWorker(): void {
+  startProspectOutreachQueueWorker();
+  void processDueOutreach();
 }
 
 export function stopProspectOutreachQueueWorker(): void {

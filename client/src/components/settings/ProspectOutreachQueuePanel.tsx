@@ -127,9 +127,11 @@ export function ProspectOutreachQueuePanel({
     mutationFn: () =>
       fetchJson("/api/growth-tools/prospect-outreach/queue/resume", { method: "POST" }),
     onSuccess: () => {
-      toast({ title: "Queue resumed" });
+      toast({ title: "Sending resumed — queue will process under daily limits" });
       invalidate();
     },
+    onError: (err: Error) =>
+      toast({ title: "Resume failed", description: err.message, variant: "destructive" }),
   });
 
   const removeMutation = useMutation({

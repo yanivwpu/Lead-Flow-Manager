@@ -10,6 +10,7 @@ import {
   isProspectOutreachQueueArmed,
   nextProspectQueueControlFlags,
   nextQueueItemAfterInfraPause,
+  buildStaggeredQueueSchedule,
   PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE,
 } from "../shared/prospectBulkOutreach";
 
@@ -73,6 +74,9 @@ import {
   assert.ok(src.includes("nextQueueItemAfterInfraPause"));
   assert.ok(src.includes("PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE"));
   assert.ok(src.includes("resolveEmailSenderForBulkOutreach"));
+  assert.ok(src.includes("rescheduleQueuedOutreachItems"));
+  assert.ok(src.includes("wakeProspectOutreachQueueWorker"));
+  assert.ok(src.includes("armQueueAndWake"));
 }
 
 {
@@ -87,6 +91,41 @@ import {
     "utf8",
   );
   assert.ok(panelSrc.includes("formatProspectQueueItemError"));
+}
+
+// Resume semantics: clear pause + restagger so first item is soon due
+{
+  const fromMs = Date.parse("2026-07-25T04:00:00.000Z");
+  const stamps = buildStaggeredQueueSchedule({
+    itemCount: 12,
+    fromMs,
+    minDelaySeconds: 90,
+    maxDelaySeconds: 180,
+    firstDelayMs: 0,
+    deterministicDelaysMs: Array(12).fill(90_000),
+  });
+  assert.equal(stamps.length, 12);
+  assert.equal(stamps[0], fromMs);
+  assert.equal(stamps[1], fromMs + 90_000);
+  // First item eligible immediately on Resume
+  assert.equal(stamps[0]! - fromMs, 0);
+  assert.equal(stamps[11]! - stamps[10]!, 90_000);
+
+  const afterResume = nextProspectQueueControlFlags("resume", {
+    queueRunning: true,
+    paused: true,
+  });
+  assert.equal(isProspectOutreachQueueArmed(afterResume), true);
+}
+
+// Worker wake export exists
+{
+  const workerSrc = readFileSync(
+    join(import.meta.dirname, "..", "server/prospectImport/prospectOutreachQueueWorker.ts"),
+    "utf8",
+  );
+  assert.ok(workerSrc.includes("export function wakeProspectOutreachQueueWorker"));
+  assert.ok(workerSrc.includes("processDueOutreach"));
 }
 
 console.log("prospect-campaign-queue-controls.test.ts: all assertions passed");

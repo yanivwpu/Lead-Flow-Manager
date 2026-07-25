@@ -17,6 +17,7 @@ import {
 import {
   PROSPECT_OUTREACH_DEFAULT_SETTINGS,
   buildQueueDedupKey,
+  buildStaggeredQueueSchedule,
   computeNextScheduledDelayMs,
   isProspectOutreachQueueArmed,
   nextProspectQueueControlFlags,
@@ -693,6 +694,82 @@ export async function getQueueDashboard(
   };
 }
 
+/**
+ * After Start/Resume: restagger Ready (queued) items from now so processing
+ * begins promptly and respects min/max delay. Clears stale lastError from
+ * prior infra pauses. Does not send mail.
+ */
+export async function rescheduleQueuedOutreachItems(
+  workspaceUserId: string,
+): Promise<{ rescheduled: number; firstScheduledAt: string | null }> {
+  const settings = await getOutreachSettings(workspaceUserId);
+  const items = await db
+    .select({
+      id: prospectOutreachQueueItems.id,
+    })
+    .from(prospectOutreachQueueItems)
+    .where(
+      and(
+        eq(prospectOutreachQueueItems.workspaceUserId, workspaceUserId),
+        eq(prospectOutreachQueueItems.queueStatus, "queued"),
+      ),
+    )
+    .orderBy(prospectOutreachQueueItems.scheduledAt);
+
+  if (!items.length) {
+    return { rescheduled: 0, firstScheduledAt: null };
+  }
+
+  const fromMs = Date.now();
+  const stamps = buildStaggeredQueueSchedule({
+    itemCount: items.length,
+    fromMs,
+    minDelaySeconds: settings.minDelaySeconds,
+    maxDelaySeconds: settings.maxDelaySeconds,
+    /** First Ready item is due immediately so wake() can claim on the same tick. */
+    firstDelayMs: 0,
+  });
+
+  for (let i = 0; i < items.length; i++) {
+    const at = new Date(stamps[i]!);
+    await db
+      .update(prospectOutreachQueueItems)
+      .set({
+        scheduledAt: at,
+        lastError: null,
+        startedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(prospectOutreachQueueItems.id, items[i]!.id));
+  }
+
+  return {
+    rescheduled: items.length,
+    firstScheduledAt: new Date(stamps[0]!).toISOString(),
+  };
+}
+
+async function armQueueAndWake(workspaceUserId: string, reason: "start_queue" | "resume_queue") {
+  const schedule = await rescheduleQueuedOutreachItems(workspaceUserId);
+  console.info(
+    JSON.stringify(
+      prospectBulkOutreachLog("queue_resumed", {
+        workspaceId: workspaceUserId,
+        status: "running",
+        reason,
+        rescheduled: schedule.rescheduled,
+        firstScheduledAt: schedule.firstScheduledAt,
+      }),
+    ),
+  );
+  try {
+    const { wakeProspectOutreachQueueWorker } = await import("./prospectOutreachQueueWorker");
+    wakeProspectOutreachQueueWorker();
+  } catch (err) {
+    console.error("[ProspectBulkOutreach] wake worker failed (non-fatal):", err);
+  }
+}
+
 export async function pauseQueue(workspaceUserId: string): Promise<ProspectOutreachWorkspaceSettings> {
   // Global pause only — stop new claims via isProspectOutreachQueueArmed.
   // Do NOT bulk-rewrite Ready (queued) rows to paused; that made Start look like
@@ -747,15 +824,7 @@ export async function resumeQueue(workspaceUserId: string): Promise<ProspectOutr
         inArray(prospectOutreachBatches.status, ["paused", "queued"]),
       ),
     );
-  console.info(
-    JSON.stringify(
-      prospectBulkOutreachLog("queue_resumed", {
-        workspaceId: workspaceUserId,
-        status: "running",
-        emailMailboxId: email.emailMailboxId,
-      }),
-    ),
-  );
+  await armQueueAndWake(workspaceUserId, "resume_queue");
   return settings;
 }
 
@@ -792,16 +861,7 @@ export async function startQueue(workspaceUserId: string): Promise<ProspectOutre
         inArray(prospectOutreachBatches.status, ["queued", "paused"]),
       ),
     );
-  console.info(
-    JSON.stringify(
-      prospectBulkOutreachLog("queue_resumed", {
-        workspaceId: workspaceUserId,
-        status: "running",
-        reason: "start_queue",
-        emailMailboxId: email.emailMailboxId,
-      }),
-    ),
-  );
+  await armQueueAndWake(workspaceUserId, "start_queue");
   return settings;
 }
 
@@ -1380,6 +1440,7 @@ export const prospectOutreachQueueService = {
   processClaimedQueueItem,
   recoverStuckSendingItems,
   listWorkspaceIdsWithDueQueue,
+  rescheduleQueuedOutreachItems,
   bulkApproveProspects,
   bulkMarkNeedsReview,
 };
