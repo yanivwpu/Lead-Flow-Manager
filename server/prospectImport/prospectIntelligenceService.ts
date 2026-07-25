@@ -67,6 +67,7 @@ function mapIntelligenceRow(row: ProspectIntelligenceRow): ProspectIntelligence 
     recommendedOffer: row.recommendedOffer ?? undefined,
     suggestedOutreachAngle: row.suggestedOutreachAngle ?? undefined,
     suggestedFirstMessage: row.suggestedFirstMessage ?? undefined,
+    suggestedOutreachSubject: row.suggestedOutreachSubject ?? undefined,
     reasoningSummary: row.reasoningSummary ?? undefined,
     needsReview: row.needsReview ?? undefined,
     confidence: row.confidence ?? undefined,
@@ -150,6 +151,7 @@ function toDbPatch(
     recommendedOffer: intel.recommendedOffer ?? null,
     suggestedOutreachAngle: intel.suggestedOutreachAngle ?? null,
     suggestedFirstMessage: intel.suggestedFirstMessage ?? null,
+    suggestedOutreachSubject: intel.suggestedOutreachSubject ?? null,
     reasoningSummary: intel.reasoningSummary ?? null,
     needsReview: Boolean(intel.needsReview),
     confidence: intel.confidence ?? null,
@@ -1244,7 +1246,11 @@ export async function getProspectIntelligenceDashboardCounts(
 export async function approveProspectIntelligence(
   contactId: string,
   userId: string,
-  opts?: { suggestedFirstMessage?: string; workspaceUserId?: string },
+  opts?: {
+    suggestedFirstMessage?: string;
+    suggestedOutreachSubject?: string;
+    workspaceUserId?: string;
+  },
 ): Promise<ProspectIntelligenceListItem | null> {
   const contact = await storage.getContact(contactId);
   if (!contact) throw new Error("Contact not found");
@@ -1261,6 +1267,9 @@ export async function approveProspectIntelligence(
   // Approval retains the current edited outreach draft when provided (Save message not required).
   if (opts?.suggestedFirstMessage !== undefined) {
     messagePatch.suggestedFirstMessage = opts.suggestedFirstMessage;
+  }
+  if (opts?.suggestedOutreachSubject !== undefined) {
+    messagePatch.suggestedOutreachSubject = opts.suggestedOutreachSubject;
   }
 
   await db
@@ -1331,7 +1340,11 @@ export async function patchProspectIntelligence(
   patch: Partial<
     Pick<
       ProspectIntelligence,
-      "suggestedFirstMessage" | "suggestedOutreachAngle" | "reasoningSummary" | "recommendedOffer"
+      | "suggestedFirstMessage"
+      | "suggestedOutreachSubject"
+      | "suggestedOutreachAngle"
+      | "reasoningSummary"
+      | "recommendedOffer"
     >
   >,
   workspaceUserId?: string,
@@ -1351,6 +1364,9 @@ export async function patchProspectIntelligence(
   const dbPatch: Partial<typeof prospectIntelligence.$inferInsert> = { updatedAt: new Date() };
   if (patch.suggestedFirstMessage !== undefined) {
     dbPatch.suggestedFirstMessage = patch.suggestedFirstMessage;
+  }
+  if (patch.suggestedOutreachSubject !== undefined) {
+    dbPatch.suggestedOutreachSubject = String(patch.suggestedOutreachSubject || "").slice(0, 200);
   }
   if (patch.suggestedOutreachAngle !== undefined) {
     dbPatch.suggestedOutreachAngle = patch.suggestedOutreachAngle;
@@ -1526,8 +1542,39 @@ export async function markProspectOutreachSent(params: {
     return { updated: false, reason: "lifecycle_not_eligible", outreachStatus: row.outreachStatus };
   }
 
-  // Idempotent: already sent/replied — keep original conversation link.
+  // Idempotent: already sent/replied — keep original conversation link, but heal
+  // missing outreachConversationId / messageId (Max Zuz–style inbox hide leak).
   if (row.outreachStatus === "outreach_sent" || row.outreachStatus === "replied") {
+    const heal: Partial<typeof prospectIntelligence.$inferInsert> = {};
+    if (!row.outreachConversationId && conversationId) {
+      heal.outreachConversationId = conversationId;
+    }
+    if (messageId && !row.outreachMessageId) {
+      heal.outreachMessageId = messageId;
+    }
+    if (Object.keys(heal).length > 0) {
+      heal.updatedAt = new Date();
+      await db
+        .update(prospectIntelligence)
+        .set(heal)
+        .where(eq(prospectIntelligence.contactId, contactId));
+      console.info(
+        JSON.stringify({
+          tag: "[ProspectOutreachLifecycle]",
+          event: "outreach_marked_sent",
+          reason: "idempotent_healed_linkage",
+          contactId,
+          conversationId: heal.outreachConversationId || row.outreachConversationId || conversationId,
+          messageId: heal.outreachMessageId || row.outreachMessageId || messageId || null,
+          outreachStatus: row.outreachStatus,
+        }),
+      );
+      return {
+        updated: true,
+        reason: "idempotent_healed_linkage",
+        outreachStatus: row.outreachStatus,
+      };
+    }
     console.info(
       JSON.stringify({
         tag: "[ProspectOutreachLifecycle]",

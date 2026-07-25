@@ -2916,7 +2916,7 @@ export function UnifiedInbox() {
                     selected: isSelected,
                     overdue: isOverdue && !bookedAppt,
                   }),
-                  item.channel === "email" && "group/email-row",
+                  isEmailRow && "group/email-row",
                 )}
                 data-testid={`inbox-item-${rowId}`}
               >
@@ -2927,7 +2927,7 @@ export function UnifiedInbox() {
                     size="sm"
                     className="shrink-0"
                   />
-                  <div className={cn(INBOX_ROW_BODY, "relative")}>
+                  <div className={INBOX_ROW_BODY}>
                     <div className={INBOX_ROW_LINE1}>
                       <span
                         className={cn(
@@ -2937,6 +2937,39 @@ export function UnifiedInbox() {
                       >
                         {item.contact.name}
                       </span>
+                      {isEmailRow && item.lastEmailMessageId ? (
+                        <button
+                          type="button"
+                          title="Move latest email to Trash"
+                          aria-label="Move latest email to Trash"
+                          data-testid={`button-trash-email-row-${rowId}`}
+                          disabled={
+                            trashEmailMutation.isPending &&
+                            emailTrashTarget?.messageId === item.lastEmailMessageId
+                          }
+                          className={cn(
+                            "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-gray-400 opacity-0 pointer-events-none transition-opacity duration-150 hover:text-red-600 group-hover/email-row:opacity-100 group-hover/email-row:pointer-events-auto",
+                            trashEmailMutation.isPending &&
+                              emailTrashTarget?.messageId === item.lastEmailMessageId &&
+                              "opacity-100 pointer-events-auto",
+                          )}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setEmailTrashTarget({
+                              messageId: item.lastEmailMessageId!,
+                              source: "list",
+                            });
+                          }}
+                        >
+                          {trashEmailMutation.isPending &&
+                          emailTrashTarget?.messageId === item.lastEmailMessageId ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      ) : null}
                       <span className={INBOX_ROW_TIME}>{formatTime(item.lastMessageAt)}</span>
                       {rowUnread > 0 ? (
                         <span className={INBOX_ROW_UNREAD_BADGE}>{rowUnread}</span>
@@ -3007,39 +3040,6 @@ export function UnifiedInbox() {
                         </span>
                       ) : null}
                     </div>
-                    {item.channel === "email" && item.lastEmailMessageId ? (
-                      <button
-                        type="button"
-                        title="Delete latest email"
-                        aria-label="Delete latest email"
-                        data-testid={`button-trash-email-row-${rowId}`}
-                        disabled={
-                          trashEmailMutation.isPending &&
-                          emailTrashTarget?.messageId === item.lastEmailMessageId
-                        }
-                        className={cn(
-                          "absolute bottom-0 right-0 z-10 inline-flex h-4 w-4 items-center justify-center rounded text-gray-400 opacity-0 pointer-events-none transition-opacity duration-150 hover:text-red-600 group-hover/email-row:opacity-100 group-hover/email-row:pointer-events-auto",
-                          trashEmailMutation.isPending &&
-                            emailTrashTarget?.messageId === item.lastEmailMessageId &&
-                            "opacity-100 pointer-events-auto",
-                        )}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setEmailTrashTarget({
-                            messageId: item.lastEmailMessageId!,
-                            source: "list",
-                          });
-                        }}
-                      >
-                        {trashEmailMutation.isPending &&
-                        emailTrashTarget?.messageId === item.lastEmailMessageId ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                    ) : null}
                   </div>
                 </div>
               </div>

@@ -70,7 +70,7 @@ import {
 import { buildInboxItemsForContact } from "@shared/inboxRowModel";
 import { collectHiddenColdOutreachConversationIds } from "@shared/prospectColdOutreachInbox";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, prospectIntelligence, type InsertConversationWindow, type ConversationWindow, growthEngineSetupTasks } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, prospectIntelligence, prospectOutreachQueueItems, type InsertConversationWindow, type ConversationWindow, growthEngineSetupTasks } from "@shared/schema";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray, lt, count } from "drizzle-orm";
 import { getEffectiveTaskPayoutDollars, type TaskPayoutFields } from "./salespersonTaskPayout";
@@ -2910,7 +2910,8 @@ export class DbStorage implements IStorage {
       .limit(limit);
 
     // Cold Prospect AI outreach: hide linked email threads until first inbound reply.
-    // Conversation-scoped via prospect_intelligence — Contacts page / CRM creation unchanged.
+    // Conversation-scoped via prospect_intelligence + queue conversationId fallback
+    // (covers missing/stale PI.outreachConversationId after successful campaign send).
     const contactIds = userContacts.map((c) => c.id);
     let hiddenColdOutreachConversationIds = new Set<string>();
     if (contactIds.length > 0) {
@@ -2919,10 +2920,41 @@ export class DbStorage implements IStorage {
           outreachConversationId: prospectIntelligence.outreachConversationId,
           outreachStatus: prospectIntelligence.outreachStatus,
           repliedAt: prospectIntelligence.repliedAt,
+          contactId: prospectIntelligence.contactId,
         })
         .from(prospectIntelligence)
         .where(inArray(prospectIntelligence.contactId, contactIds));
-      hiddenColdOutreachConversationIds = collectHiddenColdOutreachConversationIds(piSignals);
+
+      const queueSentRows = await db
+        .select({
+          conversationId: prospectOutreachQueueItems.conversationId,
+          contactId: prospectOutreachQueueItems.contactId,
+        })
+        .from(prospectOutreachQueueItems)
+        .where(
+          and(
+            inArray(prospectOutreachQueueItems.contactId, contactIds),
+            eq(prospectOutreachQueueItems.queueStatus, "sent"),
+          ),
+        );
+
+      const piByContact = new Map(
+        piSignals.map((row) => [row.contactId, row] as const),
+      );
+      const queueSentSignals = queueSentRows.map((row) => {
+        const pi = piByContact.get(row.contactId);
+        return {
+          conversationId: row.conversationId,
+          contactId: row.contactId,
+          repliedAt: pi?.repliedAt ?? null,
+          outreachStatus: pi?.outreachStatus ?? null,
+        };
+      });
+
+      hiddenColdOutreachConversationIds = collectHiddenColdOutreachConversationIds(
+        piSignals,
+        queueSentSignals,
+      );
     }
 
     const inboxItems: InboxItem[] = [];

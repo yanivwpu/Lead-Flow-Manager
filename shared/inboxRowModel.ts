@@ -9,7 +9,10 @@
  */
 
 import { selectPrimaryConversation } from "./inboxPrimaryConversation";
-import { toHiddenConversationIdSet } from "./prospectColdOutreachInbox";
+import {
+  shouldHideColdOutreachEmailConversation,
+  toHiddenConversationIdSet,
+} from "./prospectColdOutreachInbox";
 
 export type InboxRowContactLike = {
   id: string;
@@ -73,7 +76,12 @@ export function buildInboxItemsForContact<
   const hidden = toHiddenConversationIdSet(params.hiddenColdOutreachConversationIds);
 
   const isHiddenColdOutreachEmail = (conv: V): boolean =>
-    isEmailConversationChannel(conv.channel) && hidden.has(conv.id);
+    shouldHideColdOutreachEmailConversation({
+      channel: conv.channel,
+      conversationId: conv.id,
+      lastMessageDirection: conv.lastMessageDirection,
+      hiddenIds: hidden,
+    });
 
   const contactUnreadTotal = conversations.reduce((sum, c) => {
     if (isHiddenColdOutreachEmail(c)) return sum;

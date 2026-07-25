@@ -3,10 +3,14 @@
  * Run: npx tsx tests/prospect-cold-outreach-inbox.test.ts
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { buildInboxItemsForContact } from "../shared/inboxRowModel";
 import {
   collectHiddenColdOutreachConversationIds,
   isColdProspectOutreachAwaitingReply,
+  isQueueSentColdOutreachAwaitingReply,
+  shouldHideColdOutreachEmailConversation,
 } from "../shared/prospectColdOutreachInbox";
 
 const contact = {
@@ -24,6 +28,18 @@ const coldOutbound = {
   unreadCount: 0,
   lastMessagePreview: "Initial outreach…",
   externalThreadId: "gmail-thread-1",
+};
+
+/** Max Zuz–style: Idea for subject, queue-linked conversation, PI missing conversationId. */
+const maxZuzLike = {
+  id: "conv-max-zuz",
+  channel: "email",
+  subject: "Idea for Max Zuz",
+  lastMessageAt: "2026-07-25T18:30:00.000Z",
+  lastMessageDirection: "outbound",
+  unreadCount: 0,
+  lastMessagePreview: "Initial outreach sent",
+  externalThreadId: "gmail-thread-max",
 };
 
 const manualEmail = {
@@ -121,6 +137,77 @@ run("cold Prospect AI outbound-only email hidden", () => {
   assert.equal(rows.length, 0);
 });
 
+run("Max Zuz–like: queue conversationId hides when PI.outreachConversationId missing", () => {
+  const hidden = collectHiddenColdOutreachConversationIds(
+    [
+      {
+        outreachConversationId: null,
+        outreachStatus: "outreach_sent",
+        repliedAt: null,
+      },
+    ],
+    [
+      {
+        conversationId: maxZuzLike.id,
+        contactId: "contact-max",
+        outreachStatus: "outreach_sent",
+        repliedAt: null,
+      },
+    ],
+  );
+  assert.ok(hidden.has(maxZuzLike.id));
+  const rows = buildInboxItemsForContact({
+    contact: { ...contact, id: "contact-max" },
+    conversations: [maxZuzLike],
+    hiddenColdOutreachConversationIds: hidden,
+  });
+  assert.equal(rows.length, 0, "Max-like outbound cold thread must not leak into Inbox");
+});
+
+run("Max Zuz–like: stuck not_sent + queue sent still hides", () => {
+  assert.equal(
+    isQueueSentColdOutreachAwaitingReply({
+      conversationId: maxZuzLike.id,
+      outreachStatus: "not_sent",
+      repliedAt: null,
+    }),
+    true,
+  );
+  const hidden = collectHiddenColdOutreachConversationIds([], [
+    {
+      conversationId: maxZuzLike.id,
+      outreachStatus: "not_sent",
+      repliedAt: null,
+    },
+  ]);
+  assert.ok(hidden.has(maxZuzLike.id));
+});
+
+run("inbound reply surfaces even if hide set is stale", () => {
+  assert.equal(
+    shouldHideColdOutreachEmailConversation({
+      channel: "email",
+      conversationId: maxZuzLike.id,
+      lastMessageDirection: "inbound",
+      hiddenIds: new Set([maxZuzLike.id]),
+    }),
+    false,
+  );
+  const withInbound = {
+    ...maxZuzLike,
+    lastMessageDirection: "inbound",
+    unreadCount: 1,
+    lastMessagePreview: "Thanks — interested",
+  };
+  const rows = buildInboxItemsForContact({
+    contact: { ...contact, id: "contact-max" },
+    conversations: [withInbound],
+    hiddenColdOutreachConversationIds: [maxZuzLike.id],
+  });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]!.conversation?.id, maxZuzLike.id);
+});
+
 run("same conversation visible after inbound reply (PI cleared hide)", () => {
   const hidden = collectHiddenColdOutreachConversationIds([
     {
@@ -148,7 +235,6 @@ run("same conversation visible after inbound reply (PI cleared hide)", () => {
 });
 
 run("outbound history preserved — same conversation id after reply", () => {
-  // Simulate: one conversation still has outbound history; visibility toggles via hide set only.
   const beforeHide = new Set([coldOutbound.id]);
   const afterReplyHide = new Set<string>();
   const before = buildInboxItemsForContact({
@@ -179,7 +265,7 @@ run("manual outbound email remains visible", () => {
 });
 
 run("non-email channels unaffected", () => {
-  const hidden = new Set([coldOutbound.id, whatsapp.id]); // even if WA id wrongly listed
+  const hidden = new Set([coldOutbound.id, whatsapp.id]);
   const rows = buildInboxItemsForContact({
     contact,
     conversations: [coldOutbound, whatsapp],
@@ -222,6 +308,13 @@ run("no duplicate conversation/contact rows after reply", () => {
   assert.equal(rows.length, 1);
   const keys = rows.map((r) => r.conversation?.id || r.contact.id);
   assert.equal(new Set(keys).size, keys.length);
+});
+
+run("storage merges queue conversationId into cold hide set", () => {
+  const storageSrc = readFileSync(join(process.cwd(), "server/storage.ts"), "utf8");
+  assert.ok(storageSrc.includes("prospectOutreachQueueItems"));
+  assert.ok(storageSrc.includes("queueSentSignals"));
+  assert.ok(storageSrc.includes("collectHiddenColdOutreachConversationIds"));
 });
 
 console.log("\nAll prospect-cold-outreach-inbox tests passed.");
