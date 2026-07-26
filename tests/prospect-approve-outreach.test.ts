@@ -62,15 +62,19 @@ run("inbox href targets contact email compose=new", () => {
   assert.ok(!href.includes("conversation="));
 });
 
-run("outreach subject uses prospect name", () => {
-  assert.equal(buildProspectOutreachSubject("Jives Media"), "Idea for Jives Media");
+run("outreach subject uses prospect name without rigid Idea for template", () => {
+  const subject = buildProspectOutreachSubject("Jives Media");
+  assert.ok(subject.length > 0);
+  assert.ok(!/^Idea for /i.test(subject));
+  assert.ok(/Jives Media|jives/i.test(subject) || subject.includes("question") || subject.includes("introduction") || subject.includes("Connecting") || subject.includes("Thought") || subject.includes("×"));
 });
 
 run("title-cases lowercase prospect names in outreach subject", () => {
   assert.equal(titleCaseProspectName("jives media"), "Jives Media");
-  assert.equal(buildProspectOutreachSubject("jives media"), "Idea for Jives Media");
-  assert.equal(buildProspectOutreachSubject("Jives Media"), "Idea for Jives Media");
-  assert.equal(buildProspectOutreachSubject("  jives   media "), "Idea for Jives Media");
+  const a = buildProspectOutreachSubject("jives media");
+  const b = buildProspectOutreachSubject("Jives Media");
+  assert.equal(a, b);
+  assert.ok(!/^Idea for /i.test(a));
   assert.notEqual(buildProspectOutreachSubject("jives media"), "Idea for jives media");
 });
 

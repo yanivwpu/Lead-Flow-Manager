@@ -364,7 +364,7 @@ type DetailDialogProps = {
   /** Shared with toolbar — same Enrich action function. */
   onStartEnrichment: (
     contactIds: string[],
-    opts?: { suggestedFirstMessage?: string },
+    opts?: { suggestedFirstMessage?: string; suggestedOutreachSubject?: string },
   ) => void;
   enrichPending?: boolean;
 };
@@ -605,12 +605,26 @@ function ProspectIntelligenceDetailDialog({
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [editMessage, setEditMessage] = useState("");
+  const [editSubject, setEditSubject] = useState("");
   const intel = item?.intelligence;
 
   useEffect(() => {
     if (!open || !item) return;
     setEditMessage(item.intelligence?.suggestedFirstMessage || "");
-  }, [open, item?.contactId, item?.intelligence?.suggestedFirstMessage]);
+    setEditSubject(
+      item.intelligence?.suggestedOutreachSubject ||
+        buildProspectOutreachSubject(item.name, {
+          offer: item.intelligence?.recommendedOffer,
+          angle: item.intelligence?.suggestedOutreachAngle,
+        }),
+    );
+  }, [
+    open,
+    item?.contactId,
+    item?.intelligence?.suggestedFirstMessage,
+    item?.intelligence?.suggestedOutreachSubject,
+    item?.name,
+  ]);
 
   const approveUi = resolveProspectApproveOutreachUi({
     reviewStatus: intel?.reviewStatus,
@@ -674,7 +688,11 @@ function ProspectIntelligenceDetailDialog({
   };
 
   const patchMutation = useMutation({
-    mutationFn: (body: { suggestedFirstMessage?: string; recommendedOffer?: string }) =>
+    mutationFn: (body: {
+      suggestedFirstMessage?: string;
+      suggestedOutreachSubject?: string;
+      recommendedOffer?: string;
+    }) =>
       fetchJson<ProspectIntelligenceListItem>(
         `/api/growth-tools/prospect-intelligence/${item!.contactId}`,
         {
@@ -753,7 +771,7 @@ function ProspectIntelligenceDetailDialog({
     const payload: ProspectOutreachComposePayload = {
       contactId: item.contactId,
       source: "prospect_intelligence",
-      subject: buildProspectOutreachSubject(item.name),
+      subject: editSubject || item.intelligence?.suggestedOutreachSubject || buildProspectOutreachSubject(item.name),
       body: editMessage || item.intelligence?.suggestedFirstMessage || "",
       createdAt: Date.now(),
     };
@@ -1040,6 +1058,21 @@ function ProspectIntelligenceDetailDialog({
           </div>
 
           <div>
+            <p className="font-medium text-gray-900">Email Subject</p>
+            {analysisIncomplete ? (
+              <p className="mt-2 text-gray-600">{analysisPendingText || "AI analysis pending"}</p>
+            ) : (
+              <Input
+                className="mt-2"
+                value={editSubject}
+                onChange={(e) => setEditSubject(e.target.value)}
+                data-testid="pi-email-subject"
+                placeholder="Email subject"
+              />
+            )}
+          </div>
+
+          <div>
             <p className="font-medium text-gray-900">Suggested first message</p>
             {analysisIncomplete ? (
               <p className="mt-2 text-gray-600">{analysisPendingText || "AI analysis pending"}</p>
@@ -1168,7 +1201,12 @@ function ProspectIntelligenceDetailDialog({
           <Button
             type="button"
             variant="outline"
-            onClick={() => patchMutation.mutate({ suggestedFirstMessage: editMessage })}
+            onClick={() =>
+              patchMutation.mutate({
+                suggestedFirstMessage: editMessage,
+                suggestedOutreachSubject: editSubject,
+              })
+            }
             data-testid="pi-save-message"
           >
             Save message
@@ -1182,6 +1220,7 @@ function ProspectIntelligenceDetailDialog({
                 if (!item?.contactId) return;
                 onStartEnrichment([item.contactId], {
                   suggestedFirstMessage: editMessage,
+                  suggestedOutreachSubject: editSubject,
                 });
               }}
               data-testid="pi-approve-button"
@@ -1696,18 +1735,26 @@ export function ProspectIntelligencePanel(props: {
     mutationFn: async (vars: {
       idsToEnrich: string[];
       suggestedFirstMessage?: string;
+      suggestedOutreachSubject?: string;
     }) => {
       const idsToEnrich = snapshotEnrichContactIds(vars.idsToEnrich);
       assertEnrichIdsNonEmpty(idsToEnrich);
-      // Single-contact path preserves draft message via /approve.
-      if (idsToEnrich.length === 1 && vars.suggestedFirstMessage !== undefined) {
+      // Single-contact path preserves draft message/subject via /approve.
+      if (
+        idsToEnrich.length === 1 &&
+        (vars.suggestedFirstMessage !== undefined ||
+          vars.suggestedOutreachSubject !== undefined)
+      ) {
         const contactId = idsToEnrich[0]!;
         const data = await fetchJson<{ item?: ProspectIntelligenceListItem }>(
           `/api/growth-tools/prospect-intelligence/${contactId}/approve`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ suggestedFirstMessage: vars.suggestedFirstMessage }),
+            body: JSON.stringify({
+              suggestedFirstMessage: vars.suggestedFirstMessage,
+              suggestedOutreachSubject: vars.suggestedOutreachSubject,
+            }),
           },
         );
         return {
@@ -1823,7 +1870,7 @@ export function ProspectIntelligencePanel(props: {
   /** Shared Enrich action — toolbar and detail both call this. */
   const startProspectEnrichment = (
     contactIds: string[],
-    opts?: { suggestedFirstMessage?: string },
+    opts?: { suggestedFirstMessage?: string; suggestedOutreachSubject?: string },
   ) => {
     const idsToEnrich = snapshotEnrichContactIds(contactIds);
     if (!idsToEnrich.length) {
@@ -1837,6 +1884,7 @@ export function ProspectIntelligencePanel(props: {
     bulkApproveMutation.mutate({
       idsToEnrich,
       suggestedFirstMessage: opts?.suggestedFirstMessage,
+      suggestedOutreachSubject: opts?.suggestedOutreachSubject,
     });
   };
   const previewQueueMutation = useMutation({

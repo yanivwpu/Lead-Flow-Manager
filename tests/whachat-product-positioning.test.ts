@@ -34,9 +34,10 @@ run("prompt includes canonical product context (not one-line undersell)", () => 
     name: "Test",
     originalTags: [],
   });
-  assert.match(prompt, /multi-channel CRM/i);
+  assert.match(prompt, /AI-powered CRM/i);
   assert.match(prompt, /AI Copilot/i);
   assert.match(prompt, /canonical capabilities/i);
+  assert.match(prompt, /PROSPECT AI OUTREACH INSTRUCTIONS/i);
   assert.doesNotMatch(
     prompt,
     /Analyze this imported prospect for WhaChatCRM \(unified WhatsApp\/Instagram\/Messenger inbox \+ AI/,
@@ -70,7 +71,7 @@ run("1. digital marketing agency — CRM + multi-channel, not AI support alone",
   const guarded = applyOutreachMessageGuardrails(result, input);
   const msg = guarded.suggestedFirstMessage || "";
   assert.equal(detectWeakWhachatPositioning(msg).length, 0);
-  assert.match(msg, /unified inbox and CRM|multi-channel CRM/i);
+  assert.match(msg, /AI-powered CRM|unified inbox|multi-channel/i);
   assert.match(msg, /WhatsApp|Instagram|Messenger|email/i);
   assert.doesNotMatch(msg, /only as AI support|platform for unified messaging and AI support/i);
   assert.ok(hasConcreteWhachatPositioning(msg));

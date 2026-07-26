@@ -148,9 +148,10 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
     async (req, res) => {
       try {
         const workspaceUserId = await resolveProspectWorkspaceUserId((req.user as { id: string }).id);
-        const { suggestedFirstMessage, suggestedOutreachAngle, reasoningSummary, recommendedOffer } =
+        const { suggestedFirstMessage, suggestedOutreachSubject, suggestedOutreachAngle, reasoningSummary, recommendedOffer } =
           req.body as {
             suggestedFirstMessage?: string;
+            suggestedOutreachSubject?: string;
             suggestedOutreachAngle?: string;
             reasoningSummary?: string;
             recommendedOffer?: string;
@@ -159,6 +160,7 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
           req.params.contactId,
           {
             suggestedFirstMessage,
+            suggestedOutreachSubject,
             suggestedOutreachAngle,
             reasoningSummary,
             recommendedOffer,
@@ -185,11 +187,16 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
           typeof req.body?.suggestedFirstMessage === "string"
             ? req.body.suggestedFirstMessage
             : undefined;
+        const suggestedOutreachSubject =
+          typeof req.body?.suggestedOutreachSubject === "string"
+            ? req.body.suggestedOutreachSubject
+            : undefined;
         const item = await prospectIntelligenceService.approveProspectIntelligence(
           req.params.contactId,
           userId,
           {
             suggestedFirstMessage,
+            suggestedOutreachSubject,
             workspaceUserId,
           },
         );

@@ -326,6 +326,8 @@ export type ProspectIntelligence = {
   recommendedOffer?: ProspectIntelligenceRecommendedOffer | string;
   suggestedOutreachAngle?: string;
   suggestedFirstMessage?: string;
+  /** Per-prospect email subject for Campaign queue/send. */
+  suggestedOutreachSubject?: string;
   reasoningSummary?: string;
   needsReview?: boolean;
   confidence?: number;

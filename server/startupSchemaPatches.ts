@@ -577,6 +577,15 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
         ON prospect_enrichment_jobs (contact_id, status)`,
     ].join(";\n"),
   },
+  {
+    tag: "0069_prospect_outreach_instructions",
+    sql: [
+      `ALTER TABLE prospect_outreach_settings
+        ADD COLUMN IF NOT EXISTS outreach_instructions jsonb NOT NULL DEFAULT '{}'::jsonb`,
+      `ALTER TABLE prospect_intelligence
+        ADD COLUMN IF NOT EXISTS suggested_outreach_subject text`,
+    ].join(";\n"),
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {

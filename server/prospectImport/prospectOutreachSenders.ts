@@ -9,7 +9,7 @@
  */
 
 import type { ProspectOutreachChannel } from "@shared/prospectBulkOutreach";
-import { buildProspectOutreachSubject } from "@shared/prospectContactEnrichment";
+import { resolveProspectOutreachSubject } from "@shared/prospectOutreachInstructions";
 import {
   classifyEmailSenderProbeError,
   classifyMailboxSyncStatusNotSendable,
@@ -201,7 +201,9 @@ export const emailProspectOutreachSender: ProspectOutreachSender = {
     }
     const subject =
       String(input.subjectSnapshot || "").trim() ||
-      buildProspectOutreachSubject(input.contactName || "there");
+      resolveProspectOutreachSubject({
+        prospectName: input.contactName || "there",
+      });
     const body = String(input.messageSnapshot || "").trim();
     if (!body) throw new Error("Approved message snapshot is empty");
     return { subject, body, mailboxId: mailbox.id };

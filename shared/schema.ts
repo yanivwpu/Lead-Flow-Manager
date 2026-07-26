@@ -2093,6 +2093,8 @@ export const prospectIntelligence = pgTable("prospect_intelligence", {
   recommendedOffer: text("recommended_offer"),
   suggestedOutreachAngle: text("suggested_outreach_angle"),
   suggestedFirstMessage: text("suggested_first_message"),
+  /** Per-prospect email subject — edited in Review; snapshotted at queue time. */
+  suggestedOutreachSubject: text("suggested_outreach_subject"),
   reasoningSummary: text("reasoning_summary"),
   needsReview: boolean("needs_review").notNull().default(false),
   confidence: integer("confidence"),
@@ -2173,6 +2175,11 @@ export const prospectOutreachSettings = pgTable("prospect_outreach_settings", {
   /** Explicit Start arm — queueing alone must not send. Default false. */
   queueRunning: boolean("queue_running").notNull().default(false),
   paused: boolean("paused").notNull().default(false),
+  /**
+   * Campaign Outreach Instructions (workspace-level).
+   * Shape: { customInstructions, tone, length, personalize }. Empty {} = not configured.
+   */
+  outreachInstructions: jsonb("outreach_instructions").notNull().default(sql`'{}'::jsonb`),
   updatedAt: timestamp("updated_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 });

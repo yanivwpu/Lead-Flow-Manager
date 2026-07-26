@@ -44,7 +44,13 @@ import {
   PROSPECT_SENDER_PROBE_DECRYPT_FIELDS,
   PROSPECT_SENDER_PROBE_FAILURE_CLASSES,
 } from "@shared/prospectSenderProbeDiagnostics";
-import { buildProspectOutreachSubject } from "@shared/prospectContactEnrichment";
+import {
+  isOutreachInstructionsConfigured,
+  normalizeOutreachInstructionsForSave,
+  parseOutreachInstructions,
+  PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
+  resolveProspectOutreachSubject,
+} from "@shared/prospectOutreachInstructions";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
 import { resolveProspectImportDestinationUserId } from "./prospectImportService";
@@ -88,8 +94,11 @@ function mapSettings(
       hourlySendLimit: PROSPECT_OUTREACH_DEFAULT_SETTINGS.hourlySendLimit,
       queueRunning: PROSPECT_OUTREACH_DEFAULT_SETTINGS.queueRunning,
       paused: PROSPECT_OUTREACH_DEFAULT_SETTINGS.paused,
+      outreachInstructions: { ...PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS },
+      outreachInstructionsConfigured: false,
     };
   }
+  const rawInstructions = (row as { outreachInstructions?: unknown }).outreachInstructions;
   return {
     preferredChannel: row.preferredChannel as ProspectOutreachPreferredChannel,
     dailySendLimit: row.dailySendLimit,
@@ -98,6 +107,8 @@ function mapSettings(
     hourlySendLimit: row.hourlySendLimit,
     queueRunning: row.queueRunning ?? false,
     paused: row.paused,
+    outreachInstructions: parseOutreachInstructions(rawInstructions),
+    outreachInstructionsConfigured: isOutreachInstructionsConfigured(rawInstructions),
     updatedAt: row.updatedAt?.toISOString(),
   };
 }
@@ -162,10 +173,12 @@ export async function getOutreachSettings(
 
 export async function updateOutreachSettings(
   workspaceUserId: string,
-  patch: Partial<ProspectOutreachWorkspaceSettings>,
+  patch: Partial<ProspectOutreachWorkspaceSettings> & {
+    outreachInstructions?: unknown;
+  },
 ): Promise<ProspectOutreachWorkspaceSettings> {
   const current = await getOutreachSettings(workspaceUserId);
-  const next = {
+  const nextCore = {
     preferredChannel: patch.preferredChannel ?? current.preferredChannel,
     dailySendLimit: Math.max(1, Math.min(200, patch.dailySendLimit ?? current.dailySendLimit)),
     hourlySendLimit: Math.max(1, Math.min(30, patch.hourlySendLimit ?? current.hourlySendLimit)),
@@ -178,19 +191,36 @@ export async function updateOutreachSettings(
     paused: patch.paused ?? current.paused,
   };
 
+  const shouldPersistInstructions = patch.outreachInstructions !== undefined;
+  const nextInstructions = shouldPersistInstructions
+    ? normalizeOutreachInstructionsForSave(patch.outreachInstructions)
+    : current.outreachInstructions;
+
   await db
     .insert(prospectOutreachSettings)
     .values({
       workspaceUserId,
-      ...next,
+      ...nextCore,
+      ...(shouldPersistInstructions ? { outreachInstructions: nextInstructions } : {}),
       updatedAt: new Date(),
     })
     .onConflictDoUpdate({
       target: prospectOutreachSettings.workspaceUserId,
-      set: { ...next, updatedAt: new Date() },
+      set: {
+        ...nextCore,
+        ...(shouldPersistInstructions ? { outreachInstructions: nextInstructions } : {}),
+        updatedAt: new Date(),
+      },
     });
 
-  return { ...next, updatedAt: new Date().toISOString() };
+  return {
+    ...nextCore,
+    outreachInstructions: nextInstructions,
+    outreachInstructionsConfigured: shouldPersistInstructions
+      ? true
+      : current.outreachInstructionsConfigured,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export async function previewQueueBatch(params: {
@@ -468,7 +498,12 @@ export async function createQueueBatch(params: {
       continue;
     }
 
-    const subjectSnapshot = buildProspectOutreachSubject(contact.name);
+    const subjectSnapshot = resolveProspectOutreachSubject({
+      savedSubject: pi?.suggestedOutreachSubject,
+      prospectName: contact.name,
+      recommendedOffer: pi?.recommendedOffer,
+      outreachAngle: pi?.suggestedOutreachAngle,
+    });
     const dedupKey = buildQueueDedupKey({
       workspaceUserId,
       contactId,
@@ -619,6 +654,7 @@ export async function listQueueItems(params?: {
         outreachConversationId: prospectIntelligence.outreachConversationId,
         recommendedOffer: prospectIntelligence.recommendedOffer,
         outreachAngle: prospectIntelligence.suggestedOutreachAngle,
+        suggestedOutreachSubject: prospectIntelligence.suggestedOutreachSubject,
         name: contacts.name,
         email: contacts.email,
       })
@@ -641,7 +677,12 @@ export async function listQueueItems(params?: {
       const dayKey = sentAt.slice(0, 10);
       const subject =
         prior.subject ||
-        (row.name ? `Idea for ${row.name}` : "Inbox outreach");
+        resolveProspectOutreachSubject({
+          savedSubject: row.suggestedOutreachSubject,
+          prospectName: row.name,
+          recommendedOffer: row.recommendedOffer,
+          outreachAngle: row.outreachAngle,
+        });
       historical.push({
         id: `inbox-outreach:${row.contactId}`,
         batchId: `inbox-outreach:${dayKey}`,

@@ -115,10 +115,8 @@ export function resolveProspectApproveOutreachUi(input: {
   };
 }
 
-export function buildProspectOutreachSubject(name?: string | null): string {
-  const clean = titleCaseProspectName(name) || "Your Business";
-  return `Idea for ${clean}`;
-}
+/** @deprecated Prefer import from prospectOutreachInstructions — re-exported for callers. */
+export { buildProspectOutreachSubject } from "./prospectOutreachInstructions";
 
 /** Title-case prospect/business names for outreach subject lines. */
 export function titleCaseProspectName(name?: string | null): string {

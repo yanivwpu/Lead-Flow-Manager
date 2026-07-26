@@ -16,6 +16,10 @@ import {
   detectWeakWhachatPositioning,
   hasConcreteWhachatPositioning,
 } from "@shared/whachatProductPositioning";
+import {
+  buildProspectOutreachSubject,
+  formatOutreachInstructionsForPrompt,
+} from "@shared/prospectOutreachInstructions";
 import { readProspectImportMetadata } from "./prospectIntelligenceEligibility";
 import type { ProspectWorkspaceBusinessContext } from "./prospectAiWorkspaceContext";
 
@@ -419,7 +423,7 @@ export function applyOutreachMessageGuardrails(
       : buildNeutralFirstMessage(input);
     guarded.suggestedOutreachAngle =
       "Neutral introduction — limited prospect data available; qualify before pitching a specific offer.";
-    return guarded;
+    return ensureOutreachSubject(guarded, input);
   }
 
   const message = guarded.suggestedFirstMessage || "";
@@ -439,7 +443,7 @@ export function applyOutreachMessageGuardrails(
           "Neutral introduction — original draft contained unsupported assumptions.";
       }
     }
-    return guarded;
+    return ensureOutreachSubject(guarded, input);
   }
 
   if (!workspaceContext) {
@@ -475,7 +479,27 @@ export function applyOutreachMessageGuardrails(
     }
   }
 
-  return guarded;
+  return ensureOutreachSubject(guarded, input);
+}
+
+function ensureOutreachSubject(
+  result: ProspectIntelligence,
+  input: ProspectIntelligenceAiInput,
+): ProspectIntelligence {
+  const existing = String(result.suggestedOutreachSubject || "").trim();
+  if (existing) {
+    return {
+      ...result,
+      suggestedOutreachSubject: existing.slice(0, 200),
+    };
+  }
+  return {
+    ...result,
+    suggestedOutreachSubject: buildProspectOutreachSubject(input.name || input.company, {
+      offer: result.recommendedOffer,
+      angle: result.suggestedOutreachAngle,
+    }),
+  };
 }
 
 function buildWorkspaceFirstMessage(
@@ -668,9 +692,16 @@ export function buildProspectIntelligencePrompt(
     : `- If AI Brain / Business Profile are not configured, leave suggestedFirstMessage empty rather than inventing an offer.
 - Do not default to pitching WhachatCRM for customer workspaces without workspace context.`;
 
+  const lengthHint =
+    workspaceContext?.outreachInstructions?.length === "medium"
+      ? "suggestedFirstMessage max 400 chars (medium length — a short paragraph is fine)."
+      : "suggestedFirstMessage max 280 chars when length=short; never exceed 400.";
+
   return `Analyze this prospect for acquisition fit, outreach readiness, and classification.
 
 ${buildWorkspaceContextForPrompt(workspaceContext)}
+
+${formatOutreachInstructionsForPrompt(workspaceContext?.outreachInstructions)}
 
 ${buildWorkflowContextForPrompt(input)}
 
@@ -678,18 +709,19 @@ STRICT RULES:
 - Never claim facts not supported by the input or workspace context. Use likelihood scores 0-100 instead of definitive labels.
 - Do not invent company size, revenue, websites, job titles, or industries.
 - If prospect data is insufficient, set needsReview=true, potentialFit="unknown", priority="needs_review".
-- Use concise internal language. suggestedFirstMessage max 400 chars.
+- Use concise internal language. ${lengthHint}
 - The prospect's business category is about the TARGET, not the sender's product.
 
-OUTREACH MESSAGE RULES (suggestedFirstMessage + suggestedOutreachAngle + reasoningSummary):
+OUTREACH MESSAGE RULES (suggestedFirstMessage + suggestedOutreachAngle + suggestedOutreachSubject + reasoningSummary):
 ${messageGrounding}
-- Reason in this order: (1) prospect's actual business, (2) one plausible pain if evidenced, (3) pick only 1–2 WhachatCRM capabilities, (4) connect pain → capability in a short natural message.
+- Reason in this order: (1) prospect's actual business, (2) one plausible pain if evidenced, (3) pick only 1–2 relevant capabilities from workspace context, (4) connect pain → capability in a short natural message.
 - WhachatCRM is an AI-powered CRM for prospecting, lead qualification, outreach automation, and customer conversations (WhatsApp Business API + email/messaging) — NOT an analytics/insights product by default.
 - Do NOT default to phrases like "insights and analytics", "enhance your offerings", or generic analytics positioning unless the prospect's use case genuinely supports it.
 - Never claim the prospect showed interest in the workspace, its products, messaging, CRM, AI, Shopify, real estate, agency services, or any other topic unless explicit source evidence says so.
 - Never use phrases like "I noticed your interest in...", "I saw you were looking for...", "businesses like yours", "your agency", "your store", "your clients", "your team", or "your real estate business" unless the prospect input explicitly supports that claim.
 - Do not assume the prospect owns or represents a business unless company, businessType, industry, or tags support it.
 - The recommendedOffer must follow the offer guidance below.
+- suggestedOutreachSubject: write a natural, varied email subject (not "Idea for {Business}", not Re:/Fwd:, no emojis unless requested, no clickbait). Examples of style: "Quick introduction, {Business}", "{Business} × WhachatCRM", "Quick question about your lead conversations".
 
 ${offerGuidance}
 
@@ -712,6 +744,7 @@ Return JSON only with this schema:
   "priority": "high" | "medium" | "low" | "needs_review",
   "recommendedOffer": "partner_program" | "shopify_app" | "real_estate_growth_engine" | "core_whachatcrm" | "agency_white_label" | "general_demo" | "not_a_fit",
   "suggestedOutreachAngle": string,
+  "suggestedOutreachSubject": string,
   "suggestedFirstMessage": string,
   "reasoningSummary": string,
   "needsReview": boolean,
@@ -732,6 +765,7 @@ export function buildInsufficientDataResult(
     priority: "needs_review",
     recommendedOffer: "general_demo",
     suggestedOutreachAngle: "Insufficient data — manual review required before outreach.",
+    suggestedOutreachSubject: "",
     suggestedFirstMessage: "",
     reasoningSummary:
       "Insufficient business information to classify this prospect reliably. Only name-level data was available.",
@@ -793,6 +827,7 @@ export function parseAndValidateProspectIntelligence(
     priority,
     recommendedOffer,
     suggestedOutreachAngle: asString(data.suggestedOutreachAngle, 500),
+    suggestedOutreachSubject: asString(data.suggestedOutreachSubject, 200),
     suggestedFirstMessage: asString(data.suggestedFirstMessage, 400),
     reasoningSummary: asString(data.reasoningSummary, 800),
     needsReview,

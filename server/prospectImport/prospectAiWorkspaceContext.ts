@@ -42,6 +42,11 @@ export type ProspectWorkspaceBusinessContext = {
   salesGoals?: string;
   /** Derived from intelligence when Brain is primary; from Profile About when Profile fallback. */
   executiveSummary?: string;
+  /**
+   * Prospect AI Campaign Outreach Instructions — separate from AI Brain customInstructions.
+   * Applied only during Prospect AI subject/message generation.
+   */
+  outreachInstructions?: import("@shared/prospectOutreachInstructions").ProspectOutreachInstructions | null;
 };
 
 function text(value: unknown): string | undefined {
@@ -246,6 +251,15 @@ export async function loadProspectAiWorkspaceContext(
 ): Promise<ProspectWorkspaceBusinessContext> {
   const knowledge = await storage.getAiBusinessKnowledge(workspaceUserId);
   const context = assembleProspectAiWorkspaceContext(knowledge ?? null);
+
+  try {
+    const { getOutreachSettings } = await import("./prospectOutreachQueueService");
+    const settings = await getOutreachSettings(workspaceUserId);
+    context.outreachInstructions = settings.outreachInstructions;
+  } catch {
+    context.outreachInstructions = null;
+  }
+
   logProspectAiContextPrecedence({
     workspaceUserId,
     contactId: opts?.contactId,

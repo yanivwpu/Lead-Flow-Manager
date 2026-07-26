@@ -4,6 +4,8 @@
  */
 
 import { prospectSuppressionDetailLabel } from "./prospectEmailSuppression";
+import type { ProspectOutreachInstructions } from "./prospectOutreachInstructions";
+import { PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS } from "./prospectOutreachInstructions";
 
 export const PROSPECT_OUTREACH_CHANNELS = [
   "email",
@@ -71,6 +73,8 @@ export const PROSPECT_OUTREACH_DEFAULT_SETTINGS = {
    */
   queueRunning: false,
   paused: false,
+  outreachInstructions: PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
+  outreachInstructionsConfigured: false,
 } as const;
 
 export type ProspectOutreachWorkspaceSettings = {
@@ -82,6 +86,10 @@ export type ProspectOutreachWorkspaceSettings = {
   /** Explicit Start arm — default false. */
   queueRunning: boolean;
   paused: boolean;
+  /** Campaign Outreach Instructions (AI Growth Assistant). */
+  outreachInstructions: ProspectOutreachInstructions;
+  /** True after the workspace has saved instructions at least once. */
+  outreachInstructionsConfigured: boolean;
   updatedAt?: string;
 };
 
