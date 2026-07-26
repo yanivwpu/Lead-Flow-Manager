@@ -1,6 +1,6 @@
 /**
  * Prospect enrichment job orchestration (Phase 2).
- * Enqueue only after approve / campaign queue — never on discover.
+ * Enqueue after approve / campaign queue / post-AI qualification — never on Discover/Places.
  */
 
 import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
@@ -21,7 +21,7 @@ import { assertContactInWorkspace } from "./prospectWorkspaceScope";
 import { getProspectEnrichmentProvider } from "./prospectWebsiteEnrichmentProvider";
 import { analyzeProspectContact } from "./prospectIntelligenceService";
 import { isValidProspectEmail, isValidProspectPhone } from "@shared/prospectContactEnrichment";
-import { shouldApplyScrapedProspectEmail } from "./prospectWebsiteContactExtract";
+import { shouldApplyScrapedProspectEmail, selectBestProspectEmail } from "./prospectWebsiteContactExtract";
 import { extractSqlExecuteId } from "@shared/prospectAnalysisOwnership";
 
 function mapJob(row: ProspectEnrichmentJobRow): ProspectEnrichmentJobSummary {
@@ -61,8 +61,8 @@ async function patchIntelligenceEnrichment(
 }
 
 /**
- * Enqueue website enrichment after human approval or campaign queue.
- * No-ops if already completed/running, or contact missing.
+ * Enqueue website enrichment after human approval, campaign queue, or post-AI qualification.
+ * Never on Discover / Places (no discovery quota). No-ops if already completed/running.
  */
 export async function enqueueProspectEnrichment(params: {
   contactId: string;
@@ -83,7 +83,8 @@ export async function enqueueProspectEnrichment(params: {
   const pi = piRows[0];
   if (!pi) return null;
 
-  // Never enrich until approved (or explicitly queued — queue implies prior approval path).
+  // Approve / manual retry require human approval first.
+  // queue + post_qualify may scrape website contacts before Enrich click.
   const review = String(pi.reviewStatus || "").toLowerCase();
   if (params.trigger === "approve" || params.trigger === "manual") {
     if (review !== "approved") {
@@ -229,7 +230,10 @@ async function applyEnrichmentToContact(
   if (!contact || contact.userId !== workspaceUserId) return;
 
   const patch: Record<string, unknown> = {};
-  const foundEmail = result.publicContacts.emails.find((e) => isValidProspectEmail(e));
+  const foundEmail = selectBestProspectEmail(result.publicContacts.emails, {
+    websiteUrl: result.websiteUrl,
+    extractions: result.publicContacts.emailExtractions,
+  });
   const foundPhone = result.publicContacts.phones.find((p) => isValidProspectPhone(p));
 
   if (foundEmail && shouldApplyScrapedProspectEmail(contact.email, foundEmail)) {

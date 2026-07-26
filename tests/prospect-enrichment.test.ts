@@ -84,8 +84,9 @@ function testEnrichmentNeverOnDiscoverPhilosophy() {
   // Documented contract: discover → pending intelligence only; enrichment statuses start at none.
   const enrichmentStatuses = ["none", "pending", "enriching", "completed", "failed", "cancelled"];
   assert.ok(enrichmentStatuses.includes("none"));
-  const triggers = ["approve", "queue", "manual"];
+  const triggers = ["approve", "queue", "manual", "post_qualify"];
   assert.ok(!triggers.includes("discover"));
+  assert.ok(triggers.includes("post_qualify"));
 }
 
 testExtractPublicContactsOnly();

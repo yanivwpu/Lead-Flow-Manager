@@ -19,6 +19,7 @@ import {
   detectWebsiteSignals,
   discoverContactUrlsFromHtml,
   extractPublicContactsFromHtml,
+  selectBestProspectEmail,
 } from "./prospectWebsiteContactExtract";
 import { resolveProspectWebsiteUrl } from "./prospectWebsiteUrl";
 import { loadProspectAiWorkspaceContext } from "./prospectAiWorkspaceContext";
@@ -296,6 +297,18 @@ export const websitePublicEnrichmentProvider: ProspectEnrichmentProvider = {
     websiteIntelligence.pagesScanned = pageResults;
 
     await onProgress?.(4, total);
+
+    // Prefer business-domain / mailto contact emails over vendor noise.
+    const bestEmail = selectBestProspectEmail(contacts.emails, {
+      websiteUrl,
+      extractions: contacts.emailExtractions,
+    });
+    if (bestEmail) {
+      contacts = {
+        ...contacts,
+        emails: [bestEmail, ...contacts.emails.filter((e) => e.toLowerCase() !== bestEmail)],
+      };
+    }
 
     // Prefer discovered public email/phone; never invent. Keep existing contact phone if found none.
     const emailFound = contacts.emails.length > 0;

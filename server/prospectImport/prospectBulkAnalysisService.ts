@@ -430,6 +430,28 @@ export async function processClaimedBulkAnalysisJob(
               }),
             ),
           );
+
+          // Website contact scrape after AI qualify (no Places / no discovery quota).
+          // Populates emails in Review before the human Enrich click when a website exists.
+          try {
+            const { storage } = await import("../storage");
+            const { resolveProspectWebsiteUrl } = await import("./prospectWebsiteUrl");
+            const { enqueueProspectEnrichment } = await import("./prospectEnrichmentService");
+            const contact = await storage.getContact(contactId);
+            if (contact && resolveProspectWebsiteUrl(contact)) {
+              await enqueueProspectEnrichment({
+                contactId,
+                workspaceUserId: job.workspaceUserId,
+                initiatedByUserId: job.initiatedByUserId || job.workspaceUserId,
+                trigger: "post_qualify",
+              });
+            }
+          } catch (enrichErr) {
+            console.error(
+              "[ProspectBulkAnalysis] post_qualify enrichment enqueue failed:",
+              enrichErr instanceof Error ? enrichErr.message : enrichErr,
+            );
+          }
         }
       }
     } catch (err) {

@@ -42,7 +42,8 @@ const OBFUSCATED_CANDIDATE_RE = new RegExp(
   "gi",
 );
 
-const NOISE_EMAILS = /^(noreply|no-reply|donotreply|mailer-daemon|postmaster)@/i;
+const NOISE_EMAILS =
+  /^(noreply|no-reply|donotreply|do-not-reply|mailer-daemon|postmaster|privacy|abuse|webmaster|mailer)@/i;
 const IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp|ico)(\?|$)/i;
 const DOMAIN_RE =
   /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
@@ -433,6 +434,87 @@ export function isInventedMailboxGuess(email: string, foundEmails: string[]): bo
   const e = email.trim().toLowerCase();
   if (foundEmails.map((x) => x.toLowerCase()).includes(e)) return false;
   return /^(info|hello|sales|support|contact|admin|office)@/.test(e);
+}
+
+/**
+ * Rank scraped emails for CRM persistence.
+ * Prefer same-domain as the business website, then mailto/contact mailboxes.
+ * Reject noise / role mailboxes that should not be outreach targets.
+ */
+export function scoreProspectEmailCandidate(
+  email: string,
+  opts?: {
+    websiteUrl?: string | null;
+    method?: ProspectEmailExtractionMethod | string | null;
+  },
+): number {
+  const normalized = normalizeExtractedEmail(email);
+  if (!normalized || !isValidProspectEmail(normalized)) return -Infinity;
+  if (NOISE_EMAILS.test(normalized)) return -Infinity;
+
+  const at = normalized.lastIndexOf("@");
+  const local = normalized.slice(0, at);
+  const emailDomain = normalized.slice(at + 1);
+  const siteHost = hostnameFromPageUrl(opts?.websiteUrl);
+  let score = 0;
+
+  if (siteHost) {
+    if (emailDomain === siteHost || emailDomain.endsWith(`.${siteHost}`) || siteHost.endsWith(`.${emailDomain}`)) {
+      score += 100;
+    } else {
+      // Third-party / vendor domains rank far below business-domain mail.
+      score -= 40;
+    }
+  }
+
+  const method = String(opts?.method || "").toLowerCase();
+  if (method === "mailto") score += 40;
+  else if (method === "cloudflare_cfemail") score += 35;
+  else if (method === "standard_text") score += 20;
+  else if (method === "obfuscated_text") score += 10;
+
+  if (local === "info") score += 25;
+  else if (local === "hello" || local === "hi") score += 20;
+  else if (local === "contact" || local === "contacts") score += 18;
+  else if (local === "office" || local === "team") score += 12;
+  else if (local.includes(".")) score += 8; // first.last style on-domain
+
+  return score;
+}
+
+/**
+ * Pick the best scraped email for the contact record.
+ * Returns null when none are usable.
+ */
+export function selectBestProspectEmail(
+  emails: string[],
+  opts?: {
+    websiteUrl?: string | null;
+    extractions?: Array<{ email: string; method?: string | null }>;
+  },
+): string | null {
+  const methodByEmail = new Map<string, string>();
+  for (const ex of opts?.extractions || []) {
+    const key = normalizeExtractedEmail(ex.email);
+    if (!key) continue;
+    if (!methodByEmail.has(key)) methodByEmail.set(key, String(ex.method || ""));
+  }
+
+  let best: string | null = null;
+  let bestScore = -Infinity;
+  for (const raw of emails) {
+    const normalized = normalizeExtractedEmail(raw);
+    if (!normalized) continue;
+    const score = scoreProspectEmailCandidate(normalized, {
+      websiteUrl: opts?.websiteUrl,
+      method: methodByEmail.get(normalized),
+    });
+    if (score > bestScore) {
+      bestScore = score;
+      best = normalized;
+    }
+  }
+  return bestScore > -Infinity ? best : null;
 }
 
 /**

@@ -25,7 +25,7 @@ export const PROSPECT_ENRICHMENT_JOB_STATUSES = [
 ] as const;
 export type ProspectEnrichmentJobStatus = (typeof PROSPECT_ENRICHMENT_JOB_STATUSES)[number];
 
-export const PROSPECT_ENRICHMENT_TRIGGERS = ["approve", "queue", "manual"] as const;
+export const PROSPECT_ENRICHMENT_TRIGGERS = ["approve", "queue", "manual", "post_qualify"] as const;
 export type ProspectEnrichmentTrigger = (typeof PROSPECT_ENRICHMENT_TRIGGERS)[number];
 
 export type ProspectPublicContacts = {
