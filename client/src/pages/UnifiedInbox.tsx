@@ -2486,6 +2486,59 @@ export function UnifiedInbox() {
     return result;
   }, [inbox, searchQuery, filterTab, user?.id, selectedChannels]);
 
+  // #region agent log
+  useEffect(() => {
+    const emailRows = filteredInbox.filter((item) =>
+      isEmailConversationChannel(item.channel),
+    );
+    const withId = emailRows.filter((item) => !!item.lastEmailMessageId).length;
+    const sample = emailRows.slice(0, 8).map((item) => {
+      const dateStr = item.lastMessageAt;
+      let formatted = "";
+      if (dateStr) {
+        const date = new Date(dateStr);
+        const now = new Date();
+        const diffDays = Math.floor(
+          (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24),
+        );
+        if (diffDays === 0) formatted = "time";
+        else if (diffDays === 1) formatted = "Yesterday";
+        else if (diffDays < 7) formatted = "weekday";
+        else formatted = "MMM d";
+      }
+      return {
+        rowId: inboxRowKey(item),
+        channel: item.channel,
+        hasLastEmailMessageId: !!item.lastEmailMessageId,
+          timeBucket: formatted,
+          timeInLine1: false,
+          layout: "absolute-top-right-time",
+      };
+    });
+    fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "4bac18",
+      },
+      body: JSON.stringify({
+        sessionId: "4bac18",
+        runId: "pre-fix",
+        hypothesisId: "H2",
+        location: "UnifiedInbox.tsx:filteredInbox-effect",
+        message: "email row trash data summary",
+        data: {
+          emailRowCount: emailRows.length,
+          withLastEmailMessageId: withId,
+          missingLastEmailMessageId: emailRows.length - withId,
+          sample,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  }, [filteredInbox]);
+  // #endregion
+
   const showInboxEmptyNoChannels =
     filteredInbox.length === 0 &&
     !!activationStatus &&
@@ -2913,6 +2966,90 @@ export function UnifiedInbox() {
                     ),
                   );
                 }}
+                onMouseEnter={(e) => {
+                  // #region agent log
+                  if (!isEmailRow) return;
+                  const rowEl = e.currentTarget;
+                  const trash = rowEl.querySelector(
+                    `[data-testid="button-trash-email-row-${rowId}"]`,
+                  ) as HTMLElement | null;
+                  const actionsPlaceholder = rowEl.querySelector(
+                    `[data-testid="inbox-row-email-actions-${rowId}"]`,
+                  ) as HTMLElement | null;
+                  const timeEl = rowEl.querySelector(
+                    `[data-testid="inbox-row-time-${rowId}"]`,
+                  ) as HTMLElement | null;
+                  const line1 = rowEl.querySelector(
+                    `[data-testid="inbox-row-line1-${rowId}"]`,
+                  ) as HTMLElement | null;
+                  const rowCs = getComputedStyle(rowEl);
+                  const trashCs = trash ? getComputedStyle(trash) : null;
+                  const timeCs = timeEl ? getComputedStyle(timeEl) : null;
+                  const rowRect = rowEl.getBoundingClientRect();
+                  const timeRect = timeEl?.getBoundingClientRect();
+                  const trashRect = trash?.getBoundingClientRect();
+                  const timeInLine1 = !!(
+                    line1 &&
+                    timeEl &&
+                    line1.contains(timeEl)
+                  );
+                  fetch(
+                    "http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2",
+                    {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "X-Debug-Session-Id": "4bac18",
+                      },
+                      body: JSON.stringify({
+                        sessionId: "4bac18",
+                        runId: "post-fix",
+                        hypothesisId: "H-layout",
+                        location: "UnifiedInbox.tsx:row-mouseenter",
+                        message: "email row hover DOM probe",
+                        data: {
+                          rowId,
+                          channel: item.channel,
+                          hasLastEmailMessageId: !!item.lastEmailMessageId,
+                          hasGroupClass: rowEl.classList.contains("group"),
+                          outerPosition: rowCs.position,
+                          outerOverflow: rowCs.overflow,
+                          timePosition: timeCs?.position ?? null,
+                          timeInLine1,
+                          actionsSlotExists: !!(trash || actionsPlaceholder),
+                          trashExists: !!trash,
+                          trashOpacity: trashCs?.opacity ?? null,
+                          trashPointerEvents: trashCs?.pointerEvents ?? null,
+                          trashPosition: trashCs?.position ?? null,
+                          timeText: timeEl?.textContent ?? null,
+                          timeTopFromRow: timeRect
+                            ? Math.round(timeRect.top - rowRect.top)
+                            : null,
+                          timeRightFromRow: timeRect
+                            ? Math.round(rowRect.right - timeRect.right)
+                            : null,
+                          trashBottomFromRow: trashRect
+                            ? Math.round(rowRect.bottom - trashRect.bottom)
+                            : null,
+                          trashRightFromRow: trashRect
+                            ? Math.round(rowRect.right - trashRect.right)
+                            : null,
+                          timeAndTrashOverlap:
+                            timeRect && trashRect
+                              ? !(
+                                  timeRect.right < trashRect.left ||
+                                  timeRect.left > trashRect.right ||
+                                  timeRect.bottom < trashRect.top ||
+                                  timeRect.top > trashRect.bottom
+                                )
+                              : null,
+                        },
+                        timestamp: Date.now(),
+                      }),
+                    },
+                  ).catch(() => {});
+                  // #endregion
+                }}
                 className={cn(
                   inboxConversationRowChromeClassName({
                     selected: isSelected,
@@ -2931,7 +3068,10 @@ export function UnifiedInbox() {
                     className="shrink-0"
                   />
                   <div className={INBOX_ROW_BODY}>
-                    <div className={INBOX_ROW_LINE1}>
+                    <div
+                      className={INBOX_ROW_LINE1}
+                      data-testid={`inbox-row-line1-${rowId}`}
+                    >
                       <span
                         className={cn(
                           INBOX_ROW_NAME,
@@ -2940,7 +3080,6 @@ export function UnifiedInbox() {
                       >
                         {item.contact.name}
                       </span>
-                      <span className={INBOX_ROW_TIME}>{formatTime(item.lastMessageAt)}</span>
                       {rowUnread > 0 ? (
                         <span className={INBOX_ROW_UNREAD_BADGE}>{rowUnread}</span>
                       ) : null}
@@ -3011,55 +3150,53 @@ export function UnifiedInbox() {
                       ) : null}
                     </div>
                   </div>
-                  {isEmailRow ? (
-                    <div
-                      className={INBOX_ROW_EMAIL_ACTIONS}
-                      data-testid={`inbox-row-email-actions-${rowId}`}
-                      onClick={(e) => {
-                        // Never let action clicks select/navigate the row.
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                    >
-                      {item.lastEmailMessageId ? (
-                        <button
-                          type="button"
-                          title="Move latest email to Trash"
-                          aria-label="Move latest email to Trash"
-                          data-testid={`button-trash-email-row-${rowId}`}
-                          disabled={
-                            trashEmailMutation.isPending &&
-                            emailTrashTarget?.messageId === item.lastEmailMessageId
-                          }
-                          className={cn(
-                            INBOX_ROW_EMAIL_TRASH_BUTTON,
-                            trashEmailMutation.isPending &&
-                              emailTrashTarget?.messageId === item.lastEmailMessageId &&
-                              "opacity-100 pointer-events-auto",
-                          )}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setEmailTrashTarget({
-                              messageId: item.lastEmailMessageId!,
-                              source: "list",
-                            });
-                          }}
-                        >
-                          {trashEmailMutation.isPending &&
-                          emailTrashTarget?.messageId === item.lastEmailMessageId ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-3.5 w-3.5" />
-                          )}
-                        </button>
-                      ) : (
-                        // Reserve width so email rows never jump when message id is missing.
-                        <span className="inline-block h-4 w-4" aria-hidden />
-                      )}
-                    </div>
-                  ) : null}
                 </div>
+                <span
+                  className={INBOX_ROW_TIME}
+                  data-testid={`inbox-row-time-${rowId}`}
+                >
+                  {formatTime(item.lastMessageAt)}
+                </span>
+                {isEmailRow && item.lastEmailMessageId ? (
+                  <button
+                    type="button"
+                    title="Move latest email to Trash"
+                    aria-label="Move latest email to Trash"
+                    data-testid={`button-trash-email-row-${rowId}`}
+                    data-inbox-email-actions={`inbox-row-email-actions-${rowId}`}
+                    disabled={
+                      trashEmailMutation.isPending &&
+                      emailTrashTarget?.messageId === item.lastEmailMessageId
+                    }
+                    className={cn(
+                      INBOX_ROW_EMAIL_TRASH_BUTTON,
+                      trashEmailMutation.isPending &&
+                        emailTrashTarget?.messageId === item.lastEmailMessageId &&
+                        "opacity-100 pointer-events-auto",
+                    )}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setEmailTrashTarget({
+                        messageId: item.lastEmailMessageId!,
+                        source: "list",
+                      });
+                    }}
+                  >
+                    {trashEmailMutation.isPending &&
+                    emailTrashTarget?.messageId === item.lastEmailMessageId ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                ) : isEmailRow ? (
+                  <span
+                    className={INBOX_ROW_EMAIL_ACTIONS}
+                    data-testid={`inbox-row-email-actions-${rowId}`}
+                    aria-hidden
+                  />
+                ) : null}
               </div>
               );
             })
