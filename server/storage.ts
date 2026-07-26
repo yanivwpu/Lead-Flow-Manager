@@ -69,6 +69,7 @@ import {
 } from "@shared/reEngagement";
 import { buildInboxItemsForContact } from "@shared/inboxRowModel";
 import { collectHiddenColdOutreachConversationIds } from "@shared/prospectColdOutreachInbox";
+import { resolveLastEmailMessageIdForInboxRow } from "@shared/inboxEmailTrash";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, prospectIntelligence, prospectOutreachQueueItems, type InsertConversationWindow, type ConversationWindow, growthEngineSetupTasks } from "@shared/schema";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
@@ -2975,13 +2976,17 @@ export class DbStorage implements IStorage {
           row.channel === "email" &&
           row.conversation?.id
         ) {
+          // Prefer newest local message that has a Gmail provider id (trash-email requires it).
           const latest = await db
-            .select({ id: messages.id })
+            .select({
+              id: messages.id,
+              externalMessageId: messages.externalMessageId,
+            })
             .from(messages)
             .where(eq(messages.conversationId, row.conversation.id))
             .orderBy(desc(messages.sentAt), desc(messages.createdAt))
-            .limit(1);
-          lastEmailMessageId = latest[0]?.id ?? null;
+            .limit(10);
+          lastEmailMessageId = resolveLastEmailMessageIdForInboxRow(latest);
         }
         inboxItems.push({
           contact: row.contact,

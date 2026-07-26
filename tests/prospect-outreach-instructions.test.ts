@@ -10,9 +10,12 @@ import {
   formatOutreachInstructionsForPrompt,
   isOutreachInstructionsConfigured,
   normalizeOutreachInstructionsForSave,
+  OutreachInstructionsValidationError,
   parseOutreachInstructions,
   PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
+  PROSPECT_OUTREACH_LANGUAGES,
   resolveProspectOutreachSubject,
+  validateOutreachLinkUrl,
 } from "../shared/prospectOutreachInstructions";
 import { PROSPECT_OUTREACH_DEFAULT_SETTINGS } from "../shared/prospectBulkOutreach";
 import { resolveProspectApproveOutreachUi } from "../shared/prospectContactEnrichment";
@@ -27,23 +30,36 @@ function run(name: string, fn: () => void) {
   }
 }
 
-run("tone/length/personalize defaults", () => {
+run("tone/length/personalize/language/link defaults", () => {
   const d = PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS;
   assert.equal(d.tone, "professional");
   assert.equal(d.length, "short");
   assert.equal(d.personalize, true);
   assert.equal(d.customInstructions, "");
+  assert.equal(d.language, "auto");
+  assert.equal(d.linkUrl, "");
+  assert.equal(d.includeLinkNaturally, true);
   assert.equal(PROSPECT_OUTREACH_DEFAULT_SETTINGS.outreachInstructionsConfigured, false);
 });
 
-run("Outreach Instructions save/load parse", () => {
+run("old {} settings parse with language=auto and empty link", () => {
+  const parsed = parseOutreachInstructions({});
+  assert.equal(parsed.language, "auto");
+  assert.equal(parsed.linkUrl, "");
+  assert.equal(parsed.includeLinkNaturally, true);
   assert.equal(isOutreachInstructionsConfigured({}), false);
+});
+
+run("Outreach Instructions save/load parse including language", () => {
   assert.equal(isOutreachInstructionsConfigured(null), false);
   const saved = normalizeOutreachInstructionsForSave({
     customInstructions: "Keep it short",
     tone: "friendly",
     length: "medium",
     personalize: false,
+    language: "spanish",
+    linkUrl: "https://example.com/offer",
+    includeLinkNaturally: true,
   });
   assert.equal(isOutreachInstructionsConfigured(saved), true);
   const parsed = parseOutreachInstructions(saved);
@@ -51,17 +67,115 @@ run("Outreach Instructions save/load parse", () => {
   assert.equal(parsed.tone, "friendly");
   assert.equal(parsed.length, "medium");
   assert.equal(parsed.personalize, false);
+  assert.equal(parsed.language, "spanish");
+  assert.equal(parsed.linkUrl, "https://example.com/offer");
+  assert.equal(parsed.includeLinkNaturally, true);
 });
 
-run("invalid tone/length fall back to defaults", () => {
-  const parsed = parseOutreachInstructions({ tone: "loud", length: "essay", personalize: "yes" });
+run("english/spanish/hebrew/arabic language values accepted", () => {
+  for (const language of PROSPECT_OUTREACH_LANGUAGES) {
+    const saved = normalizeOutreachInstructionsForSave({ language });
+    assert.equal(saved.language, language);
+  }
+});
+
+run("invalid tone/length/language fall back to defaults", () => {
+  const parsed = parseOutreachInstructions({
+    tone: "loud",
+    length: "essay",
+    personalize: "yes",
+    language: "klingon",
+  });
   assert.equal(parsed.tone, "professional");
   assert.equal(parsed.length, "short");
   assert.equal(parsed.personalize, true);
+  assert.equal(parsed.language, "auto");
+});
+
+run("valid https URL saved; empty URL allowed; invalid rejected", () => {
+  assert.deepEqual(validateOutreachLinkUrl(""), { ok: true, linkUrl: "" });
+  assert.deepEqual(validateOutreachLinkUrl("  https://www.whachatcrm.com/realtor-growth-engine  "), {
+    ok: true,
+    linkUrl: "https://www.whachatcrm.com/realtor-growth-engine",
+  });
+  assert.equal(validateOutreachLinkUrl("not-a-url").ok, false);
+  assert.equal(validateOutreachLinkUrl("ftp://example.com").ok, false);
+
+  const saved = normalizeOutreachInstructionsForSave({
+    linkUrl: "https://www.whachatcrm.com/realtor-growth-engine",
+    includeLinkNaturally: true,
+  });
+  assert.equal(saved.linkUrl, "https://www.whachatcrm.com/realtor-growth-engine");
+
+  const emptyOk = normalizeOutreachInstructionsForSave({ linkUrl: "   " });
+  assert.equal(emptyOk.linkUrl, "");
+
+  assert.throws(
+    () => normalizeOutreachInstructionsForSave({ linkUrl: "javascript:alert(1)" }),
+    (err: unknown) => err instanceof OutreachInstructionsValidationError,
+  );
+});
+
+run("exact URL preserved in save (no rewrite)", () => {
+  const url = "https://www.whachatcrm.com/realtor-growth-engine?ref=qa";
+  const saved = normalizeOutreachInstructionsForSave({ linkUrl: url });
+  assert.equal(saved.linkUrl, url);
+});
+
+run("URL passed into AI prompt only when includeLinkNaturally=true", () => {
+  const url = "https://www.whachatcrm.com/realtor-growth-engine";
+  const withLink = formatOutreachInstructionsForPrompt({
+    ...PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
+    language: "english",
+    linkUrl: url,
+    includeLinkNaturally: true,
+  });
+  assert.ok(withLink.includes(url));
+  assert.ok(withLink.includes("naturally in the outreach message body"));
+  assert.ok(withLink.includes("Never put the configured campaign URL in the subject"));
+
+  const disabled = formatOutreachInstructionsForPrompt({
+    ...PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
+    linkUrl: url,
+    includeLinkNaturally: false,
+  });
+  assert.ok(!disabled.includes(url));
+  assert.ok(disabled.includes("automatic inclusion is disabled"));
+
+  const empty = formatOutreachInstructionsForPrompt({
+    ...PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
+    linkUrl: "",
+    includeLinkNaturally: true,
+  });
+  assert.ok(!empty.includes("https://"));
+  assert.ok(empty.includes("No campaign link configured"));
+});
+
+run("language instruction reaches subject/message prompt", () => {
+  const spanish = formatOutreachInstructionsForPrompt({
+    ...PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
+    language: "spanish",
+  });
+  assert.ok(spanish.includes("Language: spanish"));
+  assert.ok(spanish.includes("Write the customer-facing subject and message in Spanish."));
+
+  const auto = formatOutreachInstructionsForPrompt({
+    ...PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
+    language: "auto",
+  });
+  assert.ok(auto.includes("reliably inferred"));
+  assert.ok(auto.includes("Do not guess language from a business name alone"));
+
+  const hebrew = formatOutreachInstructionsForPrompt({
+    ...PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
+    language: "hebrew",
+  });
+  assert.ok(hebrew.includes("Hebrew"));
 });
 
 run("saved custom instructions are passed into subject/message generation prompt", () => {
   const block = formatOutreachInstructionsForPrompt({
+    ...PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
     customInstructions: "Avoid Idea for subjects. Focus on lead response speed.",
     tone: "direct",
     length: "short",
@@ -111,6 +225,17 @@ run("Campaign AI Assistant Configure vs Edit wiring", () => {
   assert.ok(!panel.includes("Discover"));
 });
 
+run("modal exposes language + optional link controls", () => {
+  const modal = readFileSync(
+    join(process.cwd(), "client/src/components/prospectAi/OutreachInstructionsModal.tsx"),
+    "utf8",
+  );
+  assert.ok(modal.includes("pi-outreach-language"));
+  assert.ok(modal.includes("pi-outreach-link-url"));
+  assert.ok(modal.includes("pi-outreach-include-link"));
+  assert.ok(modal.includes("validateOutreachLinkUrl"));
+});
+
 run("Review detail exposes editable Email Subject", () => {
   const panel = readFileSync(
     join(process.cwd(), "client/src/components/settings/ProspectIntelligencePanel.tsx"),
@@ -151,7 +276,7 @@ run("missing-email prospect remains non-sendable", () => {
   assert.ok(ui.emailGateLabel);
 });
 
-run("migration 0069 is additive", () => {
+run("migration 0069 is additive (no new migration required for language/link)", () => {
   const sql = readFileSync(
     join(process.cwd(), "migrations/0069_prospect_outreach_instructions.sql"),
     "utf8",
@@ -168,6 +293,17 @@ run("prompt includes outreach instructions helper", () => {
   );
   assert.ok(ai.includes("formatOutreachInstructionsForPrompt"));
   assert.ok(ai.includes("suggestedOutreachSubject"));
+});
+
+run("no campaign worker/timing changes in this feature", () => {
+  const worker = readFileSync(
+    join(process.cwd(), "server/prospectImport/prospectOutreachQueueWorker.ts"),
+    "utf8",
+  );
+  assert.ok(worker.includes("processDueQueueItems") || worker.includes("queue"));
+  // Language/link live only in shared outreach instructions + modal — not worker.
+  assert.ok(!worker.includes("includeLinkNaturally"));
+  assert.ok(!worker.includes("PROSPECT_OUTREACH_LANGUAGES"));
 });
 
 console.log("\nAll prospect-outreach-instructions tests passed.");

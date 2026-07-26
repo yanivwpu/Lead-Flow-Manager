@@ -11,11 +11,33 @@ export type ProspectOutreachTone = (typeof PROSPECT_OUTREACH_TONES)[number];
 export const PROSPECT_OUTREACH_LENGTHS = ["short", "medium"] as const;
 export type ProspectOutreachLength = (typeof PROSPECT_OUTREACH_LENGTHS)[number];
 
+export const PROSPECT_OUTREACH_LANGUAGES = [
+  "auto",
+  "english",
+  "spanish",
+  "hebrew",
+  "arabic",
+] as const;
+export type ProspectOutreachLanguage = (typeof PROSPECT_OUTREACH_LANGUAGES)[number];
+
+export const PROSPECT_OUTREACH_LANGUAGE_LABELS: Record<ProspectOutreachLanguage, string> = {
+  auto: "Auto (match prospect)",
+  english: "English",
+  spanish: "Spanish",
+  hebrew: "Hebrew",
+  arabic: "Arabic",
+};
+
 export type ProspectOutreachInstructions = {
   customInstructions: string;
   tone: ProspectOutreachTone;
   length: ProspectOutreachLength;
   personalize: boolean;
+  language: ProspectOutreachLanguage;
+  /** Exact user URL (trimmed). Empty = no link. */
+  linkUrl: string;
+  /** When true and linkUrl is set, instruct AI to include the URL once in the message body. */
+  includeLinkNaturally: boolean;
 };
 
 export const PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS: ProspectOutreachInstructions = {
@@ -23,6 +45,9 @@ export const PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS: ProspectOutreachInstructio
   tone: "professional",
   length: "short",
   personalize: true,
+  language: "auto",
+  linkUrl: "",
+  includeLinkNaturally: true,
 };
 
 /** True when the workspace has saved instructions (jsonb is not empty {}). */
@@ -31,6 +56,30 @@ export function isOutreachInstructionsConfigured(raw: unknown): boolean {
   return Object.keys(raw as Record<string, unknown>).length > 0;
 }
 
+export type OutreachLinkValidation =
+  | { ok: true; linkUrl: string }
+  | { ok: false; error: string };
+
+/**
+ * Validate optional campaign link. Empty is allowed.
+ * Preserves the exact trimmed URL (no rewriting / tracking params).
+ */
+export function validateOutreachLinkUrl(raw: unknown): OutreachLinkValidation {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) return { ok: true, linkUrl: "" };
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return { ok: false, error: "Enter a valid http:// or https:// URL." };
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return { ok: false, error: "URL must start with http:// or https://" };
+  }
+  return { ok: true, linkUrl: trimmed };
+}
+
+/** Lenient parse for stored jsonb / API reads — invalid language/URL fall back safely. */
 export function parseOutreachInstructions(raw: unknown): ProspectOutreachInstructions {
   const src =
     raw && typeof raw === "object" && !Array.isArray(raw)
@@ -42,12 +91,22 @@ export function parseOutreachInstructions(raw: unknown): ProspectOutreachInstruc
   const lengthRaw = String(src.length || "")
     .trim()
     .toLowerCase();
+  const languageRaw = String(src.language || "")
+    .trim()
+    .toLowerCase();
   const tone = (PROSPECT_OUTREACH_TONES as readonly string[]).includes(toneRaw)
     ? (toneRaw as ProspectOutreachTone)
     : PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS.tone;
   const length = (PROSPECT_OUTREACH_LENGTHS as readonly string[]).includes(lengthRaw)
     ? (lengthRaw as ProspectOutreachLength)
     : PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS.length;
+  const language = (PROSPECT_OUTREACH_LANGUAGES as readonly string[]).includes(languageRaw)
+    ? (languageRaw as ProspectOutreachLanguage)
+    : PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS.language;
+
+  const linkCheck = validateOutreachLinkUrl(src.linkUrl);
+  const linkUrl = linkCheck.ok ? linkCheck.linkUrl : "";
+
   return {
     customInstructions: String(src.customInstructions ?? "").slice(0, 4000),
     tone,
@@ -56,14 +115,44 @@ export function parseOutreachInstructions(raw: unknown): ProspectOutreachInstruc
       typeof src.personalize === "boolean"
         ? src.personalize
         : PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS.personalize,
+    language,
+    linkUrl,
+    includeLinkNaturally:
+      typeof src.includeLinkNaturally === "boolean"
+        ? src.includeLinkNaturally
+        : PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS.includeLinkNaturally,
   };
 }
 
-/** Normalize a PATCH body into a persistable jsonb object (always full shape). */
+export class OutreachInstructionsValidationError extends Error {
+  readonly code = "invalid_outreach_instructions";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "OutreachInstructionsValidationError";
+  }
+}
+
+/**
+ * Normalize a PATCH body into a persistable jsonb object (always full shape).
+ * Rejects non-empty invalid URLs (empty URL is allowed).
+ */
 export function normalizeOutreachInstructionsForSave(
   raw: unknown,
 ): ProspectOutreachInstructions {
-  return parseOutreachInstructions(raw);
+  const parsed = parseOutreachInstructions(raw);
+  const src =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const linkCheck = validateOutreachLinkUrl(src.linkUrl ?? parsed.linkUrl);
+  if (!linkCheck.ok) {
+    throw new OutreachInstructionsValidationError(linkCheck.error);
+  }
+  return {
+    ...parsed,
+    linkUrl: linkCheck.linkUrl,
+  };
 }
 
 /**
@@ -124,6 +213,22 @@ export function resolveProspectOutreachSubject(params: {
   });
 }
 
+function languageInstructionLine(language: ProspectOutreachLanguage): string {
+  switch (language) {
+    case "english":
+      return "Write the customer-facing subject and message in English.";
+    case "spanish":
+      return "Write the customer-facing subject and message in Spanish.";
+    case "hebrew":
+      return "Write the customer-facing subject and message in Hebrew as natural Hebrew text (not transliteration).";
+    case "arabic":
+      return "Write the customer-facing subject and message in Arabic as natural Arabic text (not transliteration).";
+    case "auto":
+    default:
+      return "Use a reliably inferred prospect/business language when available; otherwise use English. Do not guess language from a business name alone.";
+  }
+}
+
 /** Prompt block for Prospect AI generation — separate from AI Brain instructions. */
 export function formatOutreachInstructionsForPrompt(
   instructions: ProspectOutreachInstructions | null | undefined,
@@ -133,13 +238,26 @@ export function formatOutreachInstructionsForPrompt(
     ? "Personalize using prospect/company information when available."
     : "Keep copy general; minimize prospect-specific assumptions.";
   const custom = i.customInstructions.trim();
+  const linkLines =
+    i.linkUrl && i.includeLinkNaturally
+      ? `- Include this exact URL once, naturally in the outreach message body where it fits (not at the awkward start, not repeated). Do not put the URL in the subject. Do not shorten, rewrite, or add tracking parameters:\n${i.linkUrl}`
+      : i.linkUrl && !i.includeLinkNaturally
+        ? "- A campaign link is saved but automatic inclusion is disabled — do not insert a URL unless the custom instructions explicitly ask for it."
+        : "- No campaign link configured — do not invent or insert a URL.";
+
   return `PROSPECT AI OUTREACH INSTRUCTIONS (Campaign settings — guide subject + message style only):
+- Language: ${i.language}
+- ${languageInstructionLine(i.language)}
 - Tone: ${i.tone}
 - Length: ${i.length}
 - ${personalizeLine}
 ${custom ? `- Custom instructions from the workspace:\n${custom}` : "- No custom free-text instructions saved."}
+${linkLines}
 Rules:
 - Follow these instructions for suggestedOutreachAngle, suggestedOutreachSubject, and suggestedFirstMessage.
+- Customer-facing subject and message must follow the language instruction; outreach angle may stay internal/English if needed.
+- Preserve proper names, business names, brand names, product names, and URLs appropriately (do not translate URLs).
+- Never put the configured campaign URL in the subject line.
 - Do NOT invent unsupported claims, fake interest, Re:/Fwd: subjects, clickbait, spammy wording, or emojis unless explicitly requested.
 - Do NOT override safety/compliance or invent what the workspace sells beyond WORKSPACE BUSINESS CONTEXT.
 - Prefer natural, varied email subjects — never default every prospect to "Idea for {Business}".`;

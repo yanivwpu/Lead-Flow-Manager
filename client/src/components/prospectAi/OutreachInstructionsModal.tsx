@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -21,8 +22,11 @@ import {
 import type { ProspectOutreachInstructions } from "@shared/prospectOutreachInstructions";
 import {
   PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
+  PROSPECT_OUTREACH_LANGUAGE_LABELS,
+  PROSPECT_OUTREACH_LANGUAGES,
   PROSPECT_OUTREACH_LENGTHS,
   PROSPECT_OUTREACH_TONES,
+  validateOutreachLinkUrl,
 } from "@shared/prospectOutreachInstructions";
 
 type Props = {
@@ -43,6 +47,7 @@ export function OutreachInstructionsModal({
   const [draft, setDraft] = useState<ProspectOutreachInstructions>({
     ...PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
   });
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -50,7 +55,21 @@ export function OutreachInstructionsModal({
       ...PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
       ...(initial || {}),
     });
+    setLinkError(null);
   }, [open, initial]);
+
+  const handleSave = () => {
+    const linkCheck = validateOutreachLinkUrl(draft.linkUrl);
+    if (!linkCheck.ok) {
+      setLinkError(linkCheck.error);
+      return;
+    }
+    setLinkError(null);
+    onSave({
+      ...draft,
+      linkUrl: linkCheck.linkUrl,
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -78,7 +97,30 @@ export function OutreachInstructionsModal({
             />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label>Language</Label>
+              <Select
+                value={draft.language}
+                onValueChange={(value) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    language: value as ProspectOutreachInstructions["language"],
+                  }))
+                }
+              >
+                <SelectTrigger data-testid="pi-outreach-language">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROSPECT_OUTREACH_LANGUAGES.map((language) => (
+                    <SelectItem key={language} value={language}>
+                      {PROSPECT_OUTREACH_LANGUAGE_LABELS[language]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1.5">
               <Label>Tone</Label>
               <Select
@@ -137,6 +179,38 @@ export function OutreachInstructionsModal({
             />
             <span>Personalize using prospect information</span>
           </label>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="pi-outreach-link">Include link (optional)</Label>
+            <Input
+              id="pi-outreach-link"
+              type="url"
+              inputMode="url"
+              value={draft.linkUrl}
+              onChange={(e) => {
+                setLinkError(null);
+                setDraft((prev) => ({ ...prev, linkUrl: e.target.value }));
+              }}
+              placeholder="https://example.com/your-offer"
+              data-testid="pi-outreach-link-url"
+            />
+            {linkError ? (
+              <p className="text-xs text-red-600" data-testid="pi-outreach-link-error">
+                {linkError}
+              </p>
+            ) : null}
+          </div>
+
+          <label className="flex items-start gap-2 text-sm text-gray-800">
+            <Checkbox
+              checked={draft.includeLinkNaturally}
+              onCheckedChange={(checked) =>
+                setDraft((prev) => ({ ...prev, includeLinkNaturally: checked === true }))
+              }
+              data-testid="pi-outreach-include-link"
+            />
+            <span>Let AI include this link naturally in the message</span>
+          </label>
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
@@ -152,7 +226,7 @@ export function OutreachInstructionsModal({
             type="button"
             className="bg-brand-green hover:bg-emerald-700"
             disabled={saving}
-            onClick={() => onSave(draft)}
+            onClick={handleSave}
             data-testid="pi-outreach-instructions-save"
           >
             {saving ? "Saving…" : "Save Instructions"}

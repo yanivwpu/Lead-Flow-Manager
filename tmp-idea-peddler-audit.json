@@ -1,0 +1,142 @@
+﻿npx : (node:15800) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as 
+aliases for 'verify-full'.
+At C:\Users\ssamm\AppData\Local\Temp\ps-script-440d5adf-d562-4881-a55a-227e2a68dc65.ps1:105 char:1
++ npx tsx scripts/audit-idea-peddler-decrypt.ts 2>&1 | Out-File -Encodi ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:15800) Wa... 'verify-full'.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq 
+semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{
+  "note": "READ-ONLY ΓÇö no decrypt, no token mutation. Compare mailbox.updatedAt vs sentAt for refresh timing.",
+  "auditProcessKeyFingerprints": {
+    "EMAIL_ENCRYPTION_KEY": {
+      "present": false,
+      "length": null,
+      "sha256Prefix8": null
+    },
+    "effective": {
+      "source": "SESSION_SECRET",
+      "present": true,
+      "length": 88,
+      "sha256Prefix8": "48bd69bf"
+    },
+    "warning": "This audit process key fingerprint may differ from Railway app replicas. Do not treat local decrypt ability as production truth."
+  },
+  "workspaceIdPrefix": "51f64011",
+  "queue": {
+    "queueRunning": true,
+    "paused": true,
+    "armed": false
+  },
+  "ideaPeddler": [
+    {
+      "idPrefix": "f439f9e7",
+      "name": "Idea Peddler",
+      "queueStatus": "queued",
+      "attempts": 0,
+      "lastError": "sender_not_connected:decrypt",
+      "lastErrorUi": "Connect an email account before starting the campaign",
+      "failureClass": "decrypt",
+      "senderMailboxPrefix": "00c6cb02",
+      "scheduledAt": "2026-07-25T19:14:36.011Z",
+      "startedAt": null,
+      "sentAt": null,
+      "updatedAt": "2026-07-25T19:14:37.035Z",
+      "inferredStage": "eligibility_or_prepare_before_attempt_increment"
+    }
+  ],
+  "parsedDiag": {
+    "baseReason": "sender_not_connected",
+    "failureClass": "decrypt"
+  },
+  "recentSentBeforeFailure": [
+    {
+      "name": "HMG Creative",
+      "sentAt": "2026-07-25T19:12:05.105Z",
+      "mailboxPrefix": "00c6cb02",
+      "msBeforeIdeaUpdate": 151930
+    },
+    {
+      "name": "Direction",
+      "sentAt": "2026-07-25T19:09:48.441Z",
+      "mailboxPrefix": "00c6cb02",
+      "msBeforeIdeaUpdate": 288594
+    },
+    {
+      "name": "Digitech SEO Austin & Web Design",
+      "sentAt": "2026-07-25T19:08:19.813Z",
+      "mailboxPrefix": "00c6cb02",
+      "msBeforeIdeaUpdate": 377222
+    },
+    {
+      "name": "Delicious Digital Marketing",
+      "sentAt": "2026-07-25T19:05:56.846Z",
+      "mailboxPrefix": "00c6cb02",
+      "msBeforeIdeaUpdate": 520189
+    },
+    {
+      "name": "Blank Box Digital Marketing",
+      "sentAt": "2026-07-25T05:43:54.217Z",
+      "mailboxPrefix": "00c6cb02",
+      "msBeforeIdeaUpdate": 48642818
+    },
+    {
+      "name": "Blackhawk Digital Marketing",
+      "sentAt": "2026-07-25T05:41:09.686Z",
+      "mailboxPrefix": "00c6cb02",
+      "msBeforeIdeaUpdate": 48807349
+    },
+    {
+      "name": "(un)Common Logic",
+      "sentAt": "2026-07-25T05:11:08.837Z",
+      "mailboxPrefix": "00c6cb02",
+      "msBeforeIdeaUpdate": 50608198
+    },
+    {
+      "name": "ADMEN",
+      "sentAt": "2026-07-24T22:25:47.202Z",
+      "mailboxPrefix": "00c6cb02",
+      "msBeforeIdeaUpdate": 74929833
+    }
+  ],
+  "mailboxes": [
+    {
+      "idPrefix": "00c6cb02",
+      "email": "yahabegood@gmail.com",
+      "syncStatus": "connected",
+      "syncErrorPreview": null,
+      "isPrimary": true,
+      "sendableByStatus": true,
+      "hasAccessCiphertext": true,
+      "hasRefreshCiphertext": true,
+      "accessCipherLen": 574,
+      "refreshCipherLen": 272,
+      "accessFormatOk": true,
+      "refreshFormatOk": true,
+      "accessIvPrefix8": "b6745a72",
+      "refreshIvPrefix8": "f23d2396",
+      "tokenExpiresAt": "2026-07-25T19:33:44.906Z",
+      "tokenExpiresInMsFromNow": 479731,
+      "wouldNeedRefreshNow": false,
+      "lastSyncAt": "2026-07-25T19:25:35.772Z",
+      "updatedAt": "2026-07-25T19:25:35.785Z",
+      "createdAt": "2026-07-24T04:03:40.739Z"
+    }
+  ],
+  "hypothesesHints": {
+    "H1_access_decrypt": "If EmailChannelHealthDiag stage=token_read_access encryptedField=access_token around failure time",
+    "H2_refresh_decrypt": "If stage=token_read_refresh and mailbox.wouldNeedRefreshNow was true near failure",
+    "H3_multi_replica_key": "Successful sends then decrypt on same ciphertext ΓçÆ different process key OR access ciphertext rewritten between sends",
+    "H4_refresh_rewrite": "If mailbox.updatedAt is between last successful sentAt and Idea Peddler updatedAt, refresh likely rewrote accessTokenEncrypted",
+    "H5_format_corruption": "accessFormatOk/refreshFormatOk false would indicate truncated/non-AES blob"
+  }
+}

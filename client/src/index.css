@@ -960,8 +960,7 @@ section h2 + p {
 }
 .prospect-ai-progress-timeline .prospect-ai-stage-label-short {
   display: none;
-}
-@media (max-width: 1279px) {
+}@media (max-width: 1279px) {
   .prospect-ai-progress-timeline {
     gap: 0.25rem;
   }
@@ -971,5 +970,15 @@ section h2 + p {
   .prospect-ai-progress-timeline .prospect-ai-stage-label-short {
     display: inline;
   }
+}
+
+/*
+ * Unified Inbox — Gmail list-row trash visibility.
+ * Do not rely solely on Tailwind `group-hover:opacity-*` (can miss in production CSS).
+ * Layout (absolute top-right time / bottom-right trash) is unchanged; this only toggles opacity.
+ */
+[data-inbox-email-row="true"]:hover [data-inbox-email-trash="true"] {
+  opacity: 1 !important;
+  pointer-events: auto !important;
 }
 
