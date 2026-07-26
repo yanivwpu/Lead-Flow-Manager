@@ -124,6 +124,8 @@ export type ProspectReviewUxInput = {
    * True when a real outbound / queue send / linked message exists — not stale PI flags alone.
    */
   priorOutreachDetected?: boolean | null;
+  /** Last qualification failure reason (analysisStatus=failed). */
+  errorMessage?: string | null;
 };
 
 /** Website Intelligence finished successfully (not URL presence). */
@@ -470,6 +472,11 @@ export function prospectReviewCompletionFlash(
   return null;
 }
 
+/**
+ * Keep relative order of rows already on screen (avoid jumpiness mid-analyze).
+ * Newly appeared contactIds are prepended so a fresh Send-to-Review batch
+ * lands at the top of the work queue instead of the bottom.
+ */
 export function mergeProspectRowsStableOrder<T extends { contactId: string }>(
   previousOrder: string[],
   nextItems: T[],
@@ -478,6 +485,15 @@ export function mergeProspectRowsStableOrder<T extends { contactId: string }>(
   const order: string[] = [];
   const items: T[] = [];
 
+  const known = new Set(previousOrder);
+  // New rows first (discovery → Review batches).
+  for (const row of nextItems) {
+    if (!known.has(row.contactId) && byId.has(row.contactId)) {
+      order.push(row.contactId);
+      items.push(row);
+      byId.delete(row.contactId);
+    }
+  }
   for (const id of previousOrder) {
     const row = byId.get(id);
     if (row) {
@@ -486,6 +502,7 @@ export function mergeProspectRowsStableOrder<T extends { contactId: string }>(
       byId.delete(id);
     }
   }
+  // Any remaining (should be rare) keep server order at end.
   for (const row of nextItems) {
     if (byId.has(row.contactId)) {
       order.push(row.contactId);

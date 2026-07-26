@@ -305,10 +305,11 @@ const merged = mergeProspectRowsStableOrder(
     { contactId: "b", name: "B" },
   ],
 );
-assert.deepEqual(merged.order, ["b", "a", "c"]);
+// New ids prepend; prior relative order preserved.
+assert.deepEqual(merged.order, ["c", "b", "a"]);
 assert.deepEqual(
   merged.items.map((i) => i.contactId),
-  ["b", "a", "c"],
+  ["c", "b", "a"],
 );
 
 assert.equal(buildProspectRowAiSummary({ analysisStatus: "pending" }).showSummary, false);

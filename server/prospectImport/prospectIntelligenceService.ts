@@ -630,7 +630,8 @@ export async function analyzeProspectContact(params: {
         }
 
         if (!parsed) {
-          const message = lastErr instanceof Error ? lastErr.message : String(lastErr);
+          const { formatProspectAiProviderFailureMessage } = await import("@shared/openaiApiKey");
+          const message = formatProspectAiProviderFailureMessage(lastErr ?? "Qualification failed");
           logProspectQualificationFailed({
             contactId: params.contactId,
             workspaceId,
@@ -1077,6 +1078,7 @@ export async function listProspectIntelligence(
 
   const sortBy = filters.sortBy ?? "action";
   const sortDir = filters.sortDir ?? "desc";
+  const { compareProspectReviewActionOrder } = await import("@shared/prospectReviewSort");
   items.sort((a, b) => {
     let cmp = 0;
     switch (sortBy) {
@@ -1096,26 +1098,26 @@ export async function listProspectIntelligence(
         break;
       }
       case "action": {
-        // Reconstruct rank from mapped fields (list items don't carry raw row).
-        const rankOf = (item: ProspectIntelligenceListItem): number => {
-          const analysis = String(item.intelligence.analysisStatus || "pending").toLowerCase();
-          const review = String(item.intelligence.reviewStatus || "pending").toLowerCase();
-          const outreach = String(item.intelligence.outreachStatus || "not_sent").toLowerCase();
-          if (analysis === "processing") return 0;
-          if (analysis === "pending") return 1;
-          if (analysis === "failed") return 2;
-          if (review === "needs_review" || item.intelligence.needsReview) return 3;
-          if (review === "pending" && analysis === "completed") return 4;
-          if (review === "approved" && outreach === "not_sent") return 5;
-          if (outreach === "outreach_sent") return 6;
-          if (outreach === "replied") return 7;
-          return 8;
-        };
-        cmp = rankOf(a) - rankOf(b);
-        if (cmp !== 0) return cmp; // action rank always ascending (needs action first)
-        const at = a.intelligence.createdAt ? Date.parse(a.intelligence.createdAt) : 0;
-        const bt = b.intelligence.createdAt ? Date.parse(b.intelligence.createdAt) : 0;
-        return bt - at; // newest first within rank
+        // Work queue: analyzing / pending / failed / needs review first; newest within rank.
+        // Rank order is always ascending regardless of sortDir.
+        return compareProspectReviewActionOrder(
+          {
+            analysisStatus: a.intelligence.analysisStatus,
+            reviewStatus: a.intelligence.reviewStatus,
+            outreachStatus: a.intelligence.outreachStatus,
+            needsReview: a.intelligence.needsReview,
+            createdAt: a.intelligence.createdAt,
+            updatedAt: a.intelligence.updatedAt,
+          },
+          {
+            analysisStatus: b.intelligence.analysisStatus,
+            reviewStatus: b.intelligence.reviewStatus,
+            outreachStatus: b.intelligence.outreachStatus,
+            needsReview: b.intelligence.needsReview,
+            createdAt: b.intelligence.createdAt,
+            updatedAt: b.intelligence.updatedAt,
+          },
+        );
       }
       default:
         cmp = (a.intelligence.leadScore ?? 0) - (b.intelligence.leadScore ?? 0);

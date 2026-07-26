@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { resolveOpenAiApiKey } from "@shared/openaiApiKey";
 
 export type AIProviderType = "openai" | "anthropic" | "google";
 export type AIModelCapability = "reply" | "extraction" | "summarization" | "automation";
@@ -23,15 +24,28 @@ const DEFAULT_MODEL_REGISTRY: AIModelRegistry = {
   automation: { provider: "openai", model: "gpt-4o", maxTokens: 1000 },
 };
 
+function buildOpenAiClient(): OpenAI {
+  const resolved = resolveOpenAiApiKey();
+  if (!resolved.ok) {
+    // Construct with a placeholder; complete() will throw the actionable reason.
+    return new OpenAI({
+      apiKey: "missing-openai-key",
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
+  }
+  return new OpenAI({
+    apiKey: resolved.apiKey,
+    baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  });
+}
+
 export class AIProvider {
   private openaiClient: OpenAI;
   private modelRegistry: AIModelRegistry;
+  private keyResolutionLogged = false;
 
   constructor() {
-    this.openaiClient = new OpenAI({
-      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-    });
+    this.openaiClient = buildOpenAiClient();
     this.modelRegistry = { ...DEFAULT_MODEL_REGISTRY };
   }
 
@@ -41,6 +55,44 @@ export class AIProvider {
 
   setModelConfig(capability: AIModelCapability, config: AIProviderConfig): void {
     this.modelRegistry[capability] = config;
+  }
+
+  private ensureOpenAiKey(): void {
+    const resolved = resolveOpenAiApiKey();
+    if (!this.keyResolutionLogged) {
+      this.keyResolutionLogged = true;
+      console.log("[AIProvider] OpenAI key resolution", {
+        ok: resolved.ok,
+        source: resolved.ok ? resolved.source : undefined,
+        reason: resolved.ok ? undefined : resolved.reason,
+      });
+      // #region agent log
+      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
+        body: JSON.stringify({
+          sessionId: "4bac18",
+          hypothesisId: "H-key-resolve",
+          location: "server/aiProvider.ts:ensureOpenAiKey",
+          message: "openai key resolution",
+          data: {
+            ok: resolved.ok,
+            source: resolved.ok ? resolved.source : null,
+            reasonPrefix: resolved.ok ? null : String(resolved.reason).slice(0, 80),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+    }
+    if (!resolved.ok) {
+      throw new Error(resolved.reason);
+    }
+    // Rebuild client if env was corrected after boot (e.g. tests).
+    this.openaiClient = new OpenAI({
+      apiKey: resolved.apiKey,
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
   }
 
   async complete(
@@ -55,6 +107,7 @@ export class AIProvider {
     const config = this.getModelConfig(capability);
     
     if (config.provider === "openai") {
+      this.ensureOpenAiKey();
       return this.openaiComplete(config, messages, options);
     }
     

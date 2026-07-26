@@ -161,6 +161,7 @@ function reviewUxInput(row: ProspectIntelligenceListItem) {
     notQualified: offer === "not_a_fit",
     /** Same server prior-outreach truth as Send preview. */
     priorOutreachDetected: row.priorOutreachDetected === true,
+    errorMessage: row.intelligence.errorMessage,
   };
 }
 
@@ -840,8 +841,9 @@ function ProspectIntelligenceDetailDialog({
               {analysisStatus === "failed" ? (
                 <>
                   <p className="font-medium">Analysis failed</p>
-                  <p className="mt-0.5 text-xs text-amber-800">
-                    AI qualification did not complete. Use Retry qualification to try again.
+                  <p className="mt-0.5 text-xs text-amber-800" data-testid="pi-analysis-failed-reason">
+                    {String(intel?.errorMessage || "").trim() ||
+                      "AI qualification did not complete. Use Retry qualification to try again."}
                   </p>
                 </>
               ) : analysisStatus === "processing" ? (
@@ -1287,9 +1289,9 @@ export function ProspectIntelligencePanel(props: {
   const [businessFilter, setBusinessFilter] = useState<string>("all");
   const [workFilter, setWorkFilter] = useState<ProspectReviewWorkFilter>("needs_review");
   const [channelFilter, setChannelFilter] = useState<string>("all");
-  /** Stable visual order — never jump rows after analyze/approve/enrich. */
+  /** Work-queue default: actionable / newest first. Stable merge preserves mid-action order. */
   const [sortBy, setSortBy] = useState<"leadScore" | "priority" | "confidence" | "name" | "action">(
-    "name",
+    "action",
   );
   const stableOrderRef = useRef<string[]>([]);
   const prevUxRef = useRef<Map<string, ReturnType<typeof reviewUxInput>>>(new Map());
@@ -2107,11 +2109,11 @@ export function ProspectIntelligencePanel(props: {
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
           <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue placeholder="Sort" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="name">Name (stable)</SelectItem>
+            <SelectItem value="action">Needs action (default)</SelectItem>
+            <SelectItem value="name">Name</SelectItem>
             <SelectItem value="leadScore">Lead score</SelectItem>
             <SelectItem value="priority">Priority</SelectItem>
             <SelectItem value="confidence">Confidence</SelectItem>
-            <SelectItem value="action">Needs action</SelectItem>
           </SelectContent>
         </Select>
       </div>

@@ -56,6 +56,7 @@ console.log("ENV CHECK:", {
   DATABASE_URL: !!process.env.DATABASE_URL,
   STRIPE_KEY: !!process.env.STRIPE_SECRET_KEY,
   OPENAI: !!process.env.OPENAI_API_KEY,
+  AI_INTEGRATIONS_OPENAI: !!process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   REDIS: !!process.env.REDIS_URL,
   APP_URL: !!process.env.APP_URL
 });

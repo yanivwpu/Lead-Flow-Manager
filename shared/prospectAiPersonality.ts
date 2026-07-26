@@ -118,11 +118,21 @@ export function resolveAiPersonalityStatus(params: {
     return pickRotated(QUALIFY_ROTATION, params.seed, tick);
   }
 
+  if (analysis === "failed") {
+    return {
+      kind: "imported",
+      emoji: "👋",
+      message:
+        String(params.ux.errorMessage || "").trim() || "Qualification failed — retry available.",
+      active: false,
+    };
+  }
+
   if (life === "imported" || analysis === "pending") {
     return {
       kind: "imported",
       emoji: "👋",
-      message: analysis === "failed" ? "Qualification failed — retry available." : "Queued for AI…",
+      message: "Queued for AI…",
       active: false,
     };
   }
