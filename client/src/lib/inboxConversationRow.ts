@@ -121,10 +121,21 @@ export const INBOX_ROW_OUTER_BASE =
   "box-border h-[75px] px-3 py-1.5 border-b border-l-2 border-l-transparent cursor-pointer overflow-hidden transition-colors bg-transparent hover:bg-gray-100/70";
 
 export const INBOX_ROW_INNER =
-  "flex h-full min-h-0 items-center gap-2.5 overflow-hidden";
+  "flex h-full min-h-0 items-center gap-2.5";
 
 export const INBOX_ROW_BODY =
   "flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden";
+
+/**
+ * Dedicated right-side action slot for email rows (trash).
+ * Outside BODY/LINE overflow-hidden so the control is never clipped.
+ * Fixed width reserves space whether the icon is opacity-0 or visible.
+ */
+export const INBOX_ROW_EMAIL_ACTIONS =
+  "relative z-20 flex h-5 w-4 shrink-0 items-center justify-center self-start overflow-visible";
+
+export const INBOX_ROW_EMAIL_TRASH_BUTTON =
+  "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-gray-400 opacity-0 transition-opacity duration-150 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none";
 
 /** Line 1 — name / time / unread */
 export const INBOX_ROW_LINE1 =
