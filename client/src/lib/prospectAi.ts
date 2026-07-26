@@ -2,6 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export const PROSPECT_AI_STATUS_KEY = ["/api/growth-engines/prospect-ai/status"] as const;
 export const PROSPECT_AI_ACTIVITY_KEY = ["/api/growth-engines/prospect-ai/activity"] as const;
+export const PROSPECT_AI_ACTIVE_DISCOVERY_KEY = [
+  "/api/growth-engines/prospect-ai/discover/active",
+] as const;
 export const PROSPECT_AI_WON_STATS_KEY = ["/api/growth-engines/prospect-ai/won/stats"] as const;
 export const PROSPECT_AI_PATH = "/app/prospect-ai" as const;
 
@@ -178,7 +181,12 @@ export function useActivateProspectAi() {
 export function useProspectAiDiscover() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { businessType: string; location: string; radiusKm?: number }) =>
+    mutationFn: (body: {
+      businessType: string;
+      location: string;
+      radiusKm?: number;
+      replaceActiveBatch?: boolean;
+    }) =>
       fetchJson<ProspectAiDiscoverResponse>("/api/growth-engines/prospect-ai/discover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -196,6 +204,33 @@ export function useProspectAiDiscover() {
       });
       void queryClient.invalidateQueries({ queryKey: PROSPECT_AI_ACTIVITY_KEY });
       void queryClient.invalidateQueries({ queryKey: PROSPECT_AI_STATUS_KEY });
+      void queryClient.invalidateQueries({ queryKey: PROSPECT_AI_ACTIVE_DISCOVERY_KEY });
+    },
+  });
+}
+
+export function useActiveDiscoveryBatch(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: PROSPECT_AI_ACTIVE_DISCOVERY_KEY,
+    queryFn: () =>
+      fetchJson<ProspectAiDiscoverResponse>("/api/growth-engines/prospect-ai/discover/active"),
+    staleTime: 10_000,
+    enabled: options?.enabled ?? true,
+    retry: false,
+  });
+}
+
+export function useDiscardDiscoverySearch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (searchId: string) =>
+      fetchJson<{ discarded: true; searchId: string }>(
+        `/api/growth-engines/prospect-ai/discover/${encodeURIComponent(searchId)}/discard`,
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: PROSPECT_AI_ACTIVE_DISCOVERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: PROSPECT_AI_ACTIVITY_KEY });
     },
   });
 }
@@ -222,6 +257,7 @@ export function useSendDiscoverToReview(searchId: string | null) {
         queryKey: ["/api/growth-tools/prospect-intelligence/bulk-analyze/active"],
       });
       void queryClient.invalidateQueries({ queryKey: PROSPECT_AI_ACTIVITY_KEY });
+      void queryClient.invalidateQueries({ queryKey: PROSPECT_AI_ACTIVE_DISCOVERY_KEY });
     },
   });
 }

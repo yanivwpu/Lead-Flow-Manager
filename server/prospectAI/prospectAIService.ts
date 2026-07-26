@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import type { SubscriptionPlan } from "@shared/schema";
 import {
   campaignEnrollments,
@@ -18,7 +18,13 @@ import {
   type ProspectAiQuotaSnapshot,
   type ProspectAiStatusResponse,
 } from "@shared/prospectAI";
+import {
+  PROSPECT_AI_DISCOVERY_STATUS_DISCARDED,
+  selectActiveUnsentDiscoverySearch,
+} from "@shared/prospectAiDiscoveryBatch";
 import { db } from "../../drizzle/db";
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
 import { storage } from "../storage";
 import { subscriptionService } from "../subscriptionService";
 import { getBusinessProfileForUser } from "../businessProfileService";
@@ -40,7 +46,8 @@ export class ProspectAiError extends Error {
       | "invalid_input"
       | "provider_unavailable"
       | "not_found"
-      | "forbidden",
+      | "forbidden"
+      | "active_batch_exists",
     public readonly status = 400,
   ) {
     super(message);
@@ -257,6 +264,150 @@ function mapResultRow(row: typeof prospectAiDiscoveryResults.$inferSelect) {
   };
 }
 
+function mapSearchSummary(search: typeof prospectAiDiscoverySearches.$inferSelect) {
+  return {
+    id: search.id,
+    businessType: search.businessType,
+    location: search.location,
+    radiusKm: numOrNull(search.radiusKm),
+    createdAt: toIso(search.createdAt),
+    resultCount: search.resultCount,
+    status: search.status,
+  };
+}
+
+/**
+ * Latest non-discarded discovery search that still has unsent results.
+ * Read-only — does not increment quota.
+ */
+export async function getActiveUnsentDiscoveryBatch(workspaceUserId: string): Promise<{
+  search: ReturnType<typeof mapSearchSummary> | null;
+  results: ReturnType<typeof mapResultRow>[];
+  quota: ProspectAiQuotaSnapshot;
+}> {
+  const { plan } = await assertActivatedAndEligible(workspaceUserId, { requireQuota: false });
+  const quota = await buildQuotaSnapshot(workspaceUserId, plan);
+
+  const searches = await db
+    .select()
+    .from(prospectAiDiscoverySearches)
+    .where(eq(prospectAiDiscoverySearches.workspaceUserId, workspaceUserId))
+    .orderBy(desc(prospectAiDiscoverySearches.createdAt))
+    .limit(30);
+
+  const unsentCountBySearchId = new Map<string, number>();
+  for (const search of searches) {
+    if (String(search.status || "").toLowerCase() === PROSPECT_AI_DISCOVERY_STATUS_DISCARDED) {
+      unsentCountBySearchId.set(search.id, 0);
+      continue;
+    }
+    const [row] = await db
+      .select({ total: count() })
+      .from(prospectAiDiscoveryResults)
+      .where(
+        and(
+          eq(prospectAiDiscoveryResults.searchId, search.id),
+          eq(prospectAiDiscoveryResults.workspaceUserId, workspaceUserId),
+          isNull(prospectAiDiscoveryResults.sentToReviewAt),
+        ),
+      );
+    unsentCountBySearchId.set(search.id, Number(row?.total ?? 0));
+  }
+
+  const activeSearch = selectActiveUnsentDiscoverySearch(searches, unsentCountBySearchId);
+  if (!activeSearch) {
+    // #region agent log
+    try {
+      appendFileSync(
+        join(process.cwd(), "debug-4bac18.log"),
+        `${JSON.stringify({
+          sessionId: "4bac18",
+          runId: "post-fix",
+          hypothesisId: "H3",
+          location: "prospectAIService.ts:getActiveUnsentDiscoveryBatch",
+          message: "no active unsent discovery batch",
+          data: { searchCount: searches.length, used: quota.used },
+          timestamp: Date.now(),
+        })}\n`,
+      );
+    } catch {
+      /* ignore */
+    }
+    // #endregion
+    return { search: null, results: [], quota };
+  }
+
+  const resultRows = await db
+    .select()
+    .from(prospectAiDiscoveryResults)
+    .where(
+      and(
+        eq(prospectAiDiscoveryResults.searchId, activeSearch.id),
+        eq(prospectAiDiscoveryResults.workspaceUserId, workspaceUserId),
+        isNull(prospectAiDiscoveryResults.sentToReviewAt),
+      ),
+    )
+    .orderBy(desc(prospectAiDiscoveryResults.createdAt));
+
+  // #region agent log
+  try {
+    appendFileSync(
+      join(process.cwd(), "debug-4bac18.log"),
+      `${JSON.stringify({
+        sessionId: "4bac18",
+        runId: "post-fix",
+        hypothesisId: "H2-H3",
+        location: "prospectAIService.ts:getActiveUnsentDiscoveryBatch",
+        message: "restored active unsent discovery batch",
+        data: {
+          searchIdPrefix: String(activeSearch.id).slice(0, 8),
+          businessType: activeSearch.businessType,
+          location: activeSearch.location,
+          unsentCount: resultRows.length,
+          used: quota.used,
+          chargedQuota: false,
+        },
+        timestamp: Date.now(),
+      })}\n`,
+    );
+  } catch {
+    /* ignore */
+  }
+  // #endregion
+
+  return {
+    search: mapSearchSummary(activeSearch),
+    results: resultRows.map(mapResultRow),
+    quota,
+  };
+}
+
+/** Mark a discovery search discarded so it is no longer restored (quota not refunded). */
+export async function discardDiscoverySearch(
+  workspaceUserId: string,
+  searchId: string,
+): Promise<{ discarded: true; searchId: string }> {
+  await assertActivatedAndEligible(workspaceUserId, { requireQuota: false });
+  const id = String(searchId || "").trim();
+  if (!id) {
+    throw new ProspectAiError("searchId is required", "invalid_input", 400);
+  }
+  const updated = await db
+    .update(prospectAiDiscoverySearches)
+    .set({ status: PROSPECT_AI_DISCOVERY_STATUS_DISCARDED })
+    .where(
+      and(
+        eq(prospectAiDiscoverySearches.id, id),
+        eq(prospectAiDiscoverySearches.workspaceUserId, workspaceUserId),
+      ),
+    )
+    .returning({ id: prospectAiDiscoverySearches.id });
+  if (!updated[0]) {
+    throw new ProspectAiError("Discovery search not found", "not_found", 404);
+  }
+  return { discarded: true, searchId: updated[0].id };
+}
+
 export async function discoverProspects(
   workspaceUserId: string,
   body: unknown,
@@ -276,6 +427,24 @@ export async function discoverProspects(
   const validated = validateDiscoverInput(body);
   if (!validated.ok) {
     throw new ProspectAiError(validated.error, "invalid_input", 400);
+  }
+
+  const replaceActiveBatch =
+    body &&
+    typeof body === "object" &&
+    !Array.isArray(body) &&
+    (body as { replaceActiveBatch?: unknown }).replaceActiveBatch === true;
+
+  const active = await getActiveUnsentDiscoveryBatch(workspaceUserId);
+  if (active.search && active.results.length > 0) {
+    if (!replaceActiveBatch) {
+      throw new ProspectAiError(
+        `You have ${active.results.length} discovered prospects not yet sent to Review. Send them to Review or clear results before running a new discovery.`,
+        "active_batch_exists",
+        409,
+      );
+    }
+    await discardDiscoverySearch(workspaceUserId, active.search.id);
   }
 
   const { plan, quota } = await assertActivatedAndEligible(workspaceUserId);

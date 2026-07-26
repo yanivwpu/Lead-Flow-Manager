@@ -3,7 +3,9 @@ import { requireAuth } from "../auth";
 import {
   ProspectAiError,
   activateProspectAi,
+  discardDiscoverySearch,
   discoverProspects,
+  getActiveUnsentDiscoveryBatch,
   getProspectAiActivity,
   getProspectAiStatus,
   sendDiscoverResultsToReview,
@@ -73,6 +75,35 @@ export function registerProspectAiRoutes(app: Express): void {
         res.json(result);
       } catch (err) {
         handleProspectAiError(err, res, "discover");
+      }
+    },
+  );
+
+  app.get(
+    "/api/growth-engines/prospect-ai/discover/active",
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const result = await getActiveUnsentDiscoveryBatch(workspaceUserId(req));
+        res.json(result);
+      } catch (err) {
+        handleProspectAiError(err, res, "discover-active");
+      }
+    },
+  );
+
+  app.post(
+    "/api/growth-engines/prospect-ai/discover/:searchId/discard",
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const result = await discardDiscoverySearch(
+          workspaceUserId(req),
+          String(req.params.searchId || ""),
+        );
+        res.json(result);
+      } catch (err) {
+        handleProspectAiError(err, res, "discover-discard");
       }
     },
   );

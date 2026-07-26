@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -49,6 +49,8 @@ import {
   PROSPECT_AI_PATH,
   prospectDiscoveriesPlanPanel,
   useActivateProspectAi,
+  useActiveDiscoveryBatch,
+  useDiscardDiscoverySearch,
   useProspectAiActivity,
   useProspectAiDiscover,
   useProspectAiStatus,
@@ -395,9 +397,61 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [ghlOpen, setGhlOpen] = useState(false);
   const [confirmSendOpen, setConfirmSendOpen] = useState(false);
+  const [confirmReplaceOpen, setConfirmReplaceOpen] = useState(false);
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+  const [restoredFromBatch, setRestoredFromBatch] = useState(false);
 
   const discover = useProspectAiDiscover();
   const sendToReview = useSendDiscoverToReview(searchId);
+  const discardBatch = useDiscardDiscoverySearch();
+  const activeBatchQuery = useActiveDiscoveryBatch({ enabled: status.activated !== false });
+
+  useEffect(() => {
+    const data = activeBatchQuery.data;
+    if (!data) return;
+    const nextResults = data.results ?? [];
+    const nextSearchId = data.search?.id ?? null;
+    // #region agent log
+    fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "4bac18",
+      },
+      body: JSON.stringify({
+        sessionId: "4bac18",
+        runId: "post-fix",
+        hypothesisId: "H1-H3",
+        location: "ProspectAI.tsx:DiscoverTab-restore",
+        message: "Discover tab applied active batch restore",
+        data: {
+          restoredCount: nextResults.length,
+          hasSearchId: !!nextSearchId,
+          businessType: data.search?.businessType ?? null,
+          location: data.search?.location ?? null,
+          quotaUsed: data.quota?.used ?? null,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    if (nextResults.length === 0) {
+      if (restoredFromBatch || searchId) {
+        setSearchId(null);
+        setResults([]);
+        setSelectedIds(new Set());
+        setRestoredFromBatch(false);
+      }
+      return;
+    }
+    setSearchId(nextSearchId);
+    setResults(nextResults);
+    setSelectedIds(new Set(nextResults.map((r) => r.id)));
+    setRestoredFromBatch(true);
+    if (data.search?.businessType) setBusinessType(String(data.search.businessType));
+    if (data.search?.location) setLocation(String(data.search.location));
+    if (data.search?.radiusKm != null) setRadiusKm(String(data.search.radiusKm));
+  }, [activeBatchQuery.data]);
 
   const allSelected = results.length > 0 && selectedIds.size === results.length;
 
@@ -415,9 +469,52 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
     });
   };
 
+  const runDiscover = (replaceActiveBatch: boolean) => {
+    const body: {
+      businessType: string;
+      location: string;
+      radiusKm?: number;
+      replaceActiveBatch?: boolean;
+    } = {
+      businessType: businessType.trim(),
+      location: location.trim(),
+    };
+    const radius = Number(radiusKm);
+    if (radiusKm.trim() && Number.isFinite(radius) && radius > 0) {
+      body.radiusKm = radius;
+    }
+    if (replaceActiveBatch) body.replaceActiveBatch = true;
+    discover.mutate(body, {
+      onSuccess: (data) => {
+        setConfirmReplaceOpen(false);
+        setSearchId(data.search.id);
+        setResults(data.results ?? []);
+        setSelectedIds(new Set((data.results ?? []).map((r) => r.id)));
+        setRestoredFromBatch(false);
+        toast({
+          title: "Discovery complete",
+          description: `${data.results?.length ?? 0} prospects found`,
+        });
+      },
+      onError: (err: Error) => {
+        const msg = err.message || "";
+        if (/not yet sent to Review/i.test(msg) || /active_batch/i.test(msg)) {
+          setConfirmReplaceOpen(true);
+          return;
+        }
+        toast({
+          title: "Discovery failed",
+          description: msg,
+          variant: "destructive",
+        });
+      },
+    });
+  };
+
   const confirmSendToReview = () => {
     const count = selectedIds.size;
-    sendToReview.mutate([...selectedIds], {
+    const sentIds = [...selectedIds];
+    sendToReview.mutate(sentIds, {
       onSuccess: (data) => {
         setConfirmSendOpen(false);
         const sent = data.sent ?? count;
@@ -427,11 +524,41 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
             ? `${sent} prospects added. AI qualification has started automatically.`
             : `${sent} prospects added to Review. Qualification will begin shortly.`,
         });
-        setSelectedIds(new Set());
+        const remaining = results.filter((r) => !sentIds.includes(r.id));
+        setResults(remaining);
+        setSelectedIds(new Set(remaining.map((r) => r.id)));
+        if (remaining.length === 0) {
+          setSearchId(null);
+          setRestoredFromBatch(false);
+        }
+        void activeBatchQuery.refetch();
       },
       onError: (err: Error) =>
         toast({
           title: "Send failed",
+          description: err.message,
+          variant: "destructive",
+        }),
+    });
+  };
+
+  const confirmClearResults = () => {
+    if (!searchId) return;
+    discardBatch.mutate(searchId, {
+      onSuccess: () => {
+        setConfirmClearOpen(false);
+        setSearchId(null);
+        setResults([]);
+        setSelectedIds(new Set());
+        setRestoredFromBatch(false);
+        toast({
+          title: "Results cleared",
+          description: "Discovery quota is unchanged.",
+        });
+      },
+      onError: (err: Error) =>
+        toast({
+          title: "Could not clear results",
           description: err.message,
           variant: "destructive",
         }),
@@ -499,31 +626,11 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
                 discover.isPending || !businessType.trim() || !location.trim() || status.remaining < 1
               }
               onClick={() => {
-                const body: { businessType: string; location: string; radiusKm?: number } = {
-                  businessType: businessType.trim(),
-                  location: location.trim(),
-                };
-                const radius = Number(radiusKm);
-                if (radiusKm.trim() && Number.isFinite(radius) && radius > 0) {
-                  body.radiusKm = radius;
+                if (results.length > 0 && searchId) {
+                  setConfirmReplaceOpen(true);
+                  return;
                 }
-                discover.mutate(body, {
-                  onSuccess: (data) => {
-                    setSearchId(data.search.id);
-                    setResults(data.results ?? []);
-                    setSelectedIds(new Set((data.results ?? []).map((r) => r.id)));
-                    toast({
-                      title: "Discovery complete",
-                      description: `${data.results?.length ?? 0} prospects found`,
-                    });
-                  },
-                  onError: (err: Error) =>
-                    toast({
-                      title: "Discovery failed",
-                      description: err.message,
-                      variant: "destructive",
-                    }),
-                });
+                runDiscover(false);
               }}
               data-testid="prospect-ai-discover"
             >
@@ -544,10 +651,14 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
       </div>
 
       {results.length > 0 ? (
-        <div className="space-y-3">
+        <div className="space-y-3" data-testid="prospect-discover-results">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-gray-600">
-              <span className="font-semibold text-gray-900">{results.length}</span> results
+              <span className="font-semibold text-gray-900">{results.length}</span> discovered
+              prospects
+              {restoredFromBatch ? (
+                <span className="text-amber-800"> · Not yet sent to Review</span>
+              ) : null}
               {selectedIds.size > 0 ? (
                 <>
                   {" · "}
@@ -555,18 +666,29 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
                 </>
               ) : null}
             </p>
-            <Button
-              size="sm"
-              className="bg-brand-green hover:bg-brand-green/90"
-              disabled={!selectedIds.size || sendToReview.isPending || !searchId}
-              onClick={() => setConfirmSendOpen(true)}
-              data-testid="prospect-ai-send-to-review"
-            >
-              {sendToReview.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
-              Send to Review
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!searchId || discardBatch.isPending}
+                onClick={() => setConfirmClearOpen(true)}
+                data-testid="prospect-ai-clear-results"
+              >
+                Clear results
+              </Button>
+              <Button
+                size="sm"
+                className="bg-brand-green hover:bg-brand-green/90"
+                disabled={!selectedIds.size || sendToReview.isPending || !searchId}
+                onClick={() => setConfirmSendOpen(true)}
+                data-testid="prospect-ai-send-to-review"
+              >
+                {sendToReview.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Send to Review
+              </Button>
+            </div>
           </div>
           <AlertDialog open={confirmSendOpen} onOpenChange={setConfirmSendOpen}>
             <AlertDialogContent>
@@ -595,6 +717,52 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
                   ) : (
                     "Send to Review"
                   )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <AlertDialog open={confirmClearOpen} onOpenChange={setConfirmClearOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Clear discovery results?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Remove these unsent prospects from Discover. This does not refund discovery quota.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={discardBatch.isPending}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={discardBatch.isPending}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    confirmClearResults();
+                  }}
+                >
+                  {discardBatch.isPending ? "Clearing…" : "Clear results"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <AlertDialog open={confirmReplaceOpen} onOpenChange={setConfirmReplaceOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Replace unsent results?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  You still have {results.length} discovered prospects not sent to Review. Running a
+                  new discovery will clear them (quota is not refunded).
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={discover.isPending}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={discover.isPending}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    runDiscover(true);
+                  }}
+                  className="bg-brand-green hover:bg-brand-green/90"
+                >
+                  {discover.isPending ? "Discovering…" : "Replace & discover"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
