@@ -1,6 +1,6 @@
 import { db } from "../drizzle/db";
 import { templates, templateAssets } from "../shared/schema";
-import { rgeW4NoReplyConditions, RGE_W4_DELAY_HOURS, RGE_W4_WORKFLOW_NAME, RGE_NO_REPLY_ANCHOR, RGE_W5_DELAY_HOURS, RGE_W6_DELAY_HOURS } from "../shared/rgeNoReplyWorkflows";
+import { rgeW4NoReplyConditions, RGE_W4_DELAY_HOURS, RGE_W4_WORKFLOW_NAME, RGE_W5_WORKFLOW_NAME, RGE_W6_WORKFLOW_NAME, RGE_NO_REPLY_ANCHOR, RGE_W5_DELAY_HOURS, RGE_W6_DELAY_HOURS, RGE_MSG_FOLLOWUP_24H_TITLE, RGE_MSG_FOLLOWUP_3D_TITLE, RGE_MSG_FOLLOWUP_7D_TITLE } from "../shared/rgeNoReplyWorkflows";
 import { eq, and } from "drizzle-orm";
 
 export async function seedRealtorTemplate() {
@@ -110,19 +110,19 @@ export async function seedRealtorTemplate() {
           },
           {
             key: "followup_24h",
-            title: "Follow-up 24h",
+            title: RGE_MSG_FOLLOWUP_24H_TITLE,
             body: "Hi {{firstName}}, just checking in! I wanted to make sure you got my previous message. Is there anything I can help you with regarding properties in {{city}}?",
             variables: ["firstName", "city"],
           },
           {
             key: "followup_3d",
-            title: "Follow-up 3d",
+            title: RGE_MSG_FOLLOWUP_3D_TITLE,
             body: "Hey {{firstName}}, I've been keeping an eye on new listings in {{city}} and thought of you. Would you like me to send you some options that match your criteria?",
             variables: ["firstName", "city"],
           },
           {
             key: "followup_7d",
-            title: "Follow-up 7d",
+            title: RGE_MSG_FOLLOWUP_7D_TITLE,
             body: "Hi {{firstName}}, it's been a week since we last chatted. The market is moving fast in {{city}}. If you're still interested, I'd love to reconnect and show you what's available. No pressure at all!",
             variables: ["firstName", "city"],
           },
@@ -188,7 +188,7 @@ export async function seedRealtorTemplate() {
           },
           {
             key: "W5",
-            name: "No Response Follow-Up (3d)",
+            name: RGE_W5_WORKFLOW_NAME,
             enabledByDefault: true,
             trigger: { type: "no_reply", delayHours: RGE_W5_DELAY_HOURS, anchor: RGE_NO_REPLY_ANCHOR },
             conditions: [{ type: "stage_not_in", stages: ["Closed", "Unqualified"] }],
@@ -198,7 +198,7 @@ export async function seedRealtorTemplate() {
           },
           {
             key: "W6",
-            name: "No Response Follow-Up (7d) + Nurture",
+            name: RGE_W6_WORKFLOW_NAME,
             enabledByDefault: true,
             trigger: { type: "no_reply", delayHours: RGE_W6_DELAY_HOURS, anchor: RGE_NO_REPLY_ANCHOR },
             conditions: [{ type: "stage_not_in", stages: ["Closed", "Unqualified"] }],
@@ -334,6 +334,14 @@ export async function seedRealtorTemplate() {
             wf.name = RGE_W4_WORKFLOW_NAME;
             patched = true;
           }
+          if (key === "W5" && wf.name !== RGE_W5_WORKFLOW_NAME) {
+            wf.name = RGE_W5_WORKFLOW_NAME;
+            patched = true;
+          }
+          if (key === "W6" && wf.name !== RGE_W6_WORKFLOW_NAME) {
+            wf.name = RGE_W6_WORKFLOW_NAME;
+            patched = true;
+          }
         }
         if (patched) {
           await db
@@ -341,6 +349,37 @@ export async function seedRealtorTemplate() {
             .set({ definition: { ...def, workflows } })
             .where(eq(templateAssets.id, existingAsset.id));
           console.log(`[Seed] Patched RGE no-reply timing/anchor on workflows asset for ${templateId}`);
+        } else {
+          console.log(`[Seed] Asset ${asset.assetType} already exists for ${templateId}.`);
+        }
+      } else {
+        console.log(`[Seed] Asset ${asset.assetType} already exists for ${templateId}.`);
+      }
+    } else if (asset.assetType === "message_templates") {
+      const def = existingAsset.definition as {
+        templates?: { key?: string; title?: string; body?: string; variables?: string[] }[];
+      };
+      const templates = def?.templates;
+      if (Array.isArray(templates)) {
+        let patched = false;
+        const titleByKey: Record<string, string> = {
+          followup_24h: RGE_MSG_FOLLOWUP_24H_TITLE,
+          followup_3d: RGE_MSG_FOLLOWUP_3D_TITLE,
+          followup_7d: RGE_MSG_FOLLOWUP_7D_TITLE,
+        };
+        for (const tpl of templates) {
+          const want = tpl.key ? titleByKey[tpl.key] : undefined;
+          if (want && tpl.title !== want) {
+            tpl.title = want;
+            patched = true;
+          }
+        }
+        if (patched) {
+          await db
+            .update(templateAssets)
+            .set({ definition: { ...def, templates } })
+            .where(eq(templateAssets.id, existingAsset.id));
+          console.log(`[Seed] Patched RGE follow-up message template titles for ${templateId}`);
         } else {
           console.log(`[Seed] Asset ${asset.assetType} already exists for ${templateId}.`);
         }

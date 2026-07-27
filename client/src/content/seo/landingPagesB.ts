@@ -457,7 +457,7 @@ export const automationTemplatesConfig: SeoLandingPageConfig = {
       title: "Real estate buyer and seller templates",
       paragraphs: [
         "Buyer follow-up sequences re-engage portal leads and WhatsApp inquiries. Seller nurture tracks listing appointments and market updates. Appointment reminders reduce no-shows for showings.",
-        "No-reply workflows follow up when conversations go quiet — with stage conditions that exclude closed or unqualified leads.",
+        "No-reply workflows follow up when conversations go quiet — with stage conditions that exclude closed or unqualified leads, and channel-aware delivery so follow-ups stay actionable.",
       ],
       image: {
         ...S.inventoryHealth,

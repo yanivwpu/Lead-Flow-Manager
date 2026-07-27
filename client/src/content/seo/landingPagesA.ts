@@ -82,7 +82,7 @@ export const crmWithMlsIntegrationConfig: SeoLandingPageConfig = {
       id: "automation",
       title: "Automation that follows qualification",
       paragraphs: [
-        "Growth Engine workflows launch when a lead is qualified — buyer follow-up, appointment reminders, and no-reply sequences. W2 scores every inbound message; W4–W6 follow up when conversations go quiet.",
+        "Growth Engine workflows launch when a lead is qualified — buyer follow-up, appointment reminders, and channel-aware no-reply nurture. W2 scores every inbound message; W4–W6 re-engage when conversations go quiet while the thread is still actionable.",
       ],
       image: {
         ...S.automationWorkflows,
@@ -261,7 +261,7 @@ export const realEstateCrmConfig: SeoLandingPageConfig = {
       id: "growth-engine",
       title: "Follow-up automation with Growth Engine",
       paragraphs: [
-        "The Realtor Growth Engine (RGE) ships preset workflows for buyer follow-up, seller nurture, appointment reminders, and no-reply sequences. Install templates, customize copy, and enroll contacts from the inbox sidebar.",
+        "The Realtor Growth Engine (RGE) ships preset workflows for buyer follow-up, seller nurture, appointment reminders, and multi-step automated nurture. Install templates, customize copy, and enroll contacts from the inbox sidebar.",
       ],
       image: {
         ...S.automationWorkflows,

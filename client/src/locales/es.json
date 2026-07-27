@@ -774,7 +774,7 @@
       },
       "f5": {
         "title": "Hace seguimiento automático si los leads se enfrían",
-        "desc": "Secuencias de varios días mantienen a los leads tibios activos — en el día 1, 3 y 7."
+        "desc": "Nutrición automatizada en varios pasos con re-engagement al día siguiente y seguimiento según el canal, mientras la conversación sigue siendo actionable."
       },
       "f6": {
         "title": "Mantiene todo organizado en tu CRM",
@@ -808,7 +808,7 @@
       },
       "s6": {
         "title": "Los leads fríos se nutren automáticamente",
-        "desc": "Los leads que se callan reciben seguimientos en el día 1, 3 y 7. Nada se pierde."
+        "desc": "Los leads en silencio reciben re-engagement al día siguiente y luego nutrición en varios pasos — con seguimiento según el canal para que siga siendo actionable. Nada se pierde."
       }
     },
     "builtFor": {

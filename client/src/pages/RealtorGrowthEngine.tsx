@@ -1411,7 +1411,7 @@ export function RealtorGrowthEngine() {
       { Icon: Sparkles, t: "AI lead qualification", d: "Inbound messages are interpreted, scored, and routed with guardrails." },
       { Icon: Target, t: "Buyer / seller scoring", d: "Intent and readiness update automatically from the conversation." },
       { Icon: Calendar, t: "Booking intent detection", d: "Tour and call language triggers the right next action and handoff." },
-      { Icon: Clock, t: "No-reply nurture sequence", d: "Timed follow-ups re-engage quiet leads without manual chasing." },
+      { Icon: Clock, t: "Multi-step automated nurture", d: "Next-day re-engagement and channel-aware follow-up while the conversation is still actionable." },
       { Icon: Send, t: "WhatsApp template follow-up", d: "Structured sends when the channel requires templates outside the reply window." },
       { Icon: LayoutGrid, t: "Pipeline stages + tags", d: "Stages, tags, and context stay aligned with automation outcomes." },
       { Icon: ClipboardCheck, t: "Tasks + follow-up creation", d: "Hot handoffs and exceptions become actionable work for your team." },
@@ -1424,7 +1424,7 @@ export function RealtorGrowthEngine() {
       "Qualifies buyers and sellers using budget, financing, and timeline from the conversation.",
       "Detects booking intent and moves the thread toward a showing or call.",
       "Schedules showings or calls when your calendar is connected.",
-      "Follows up automatically when leads go quiet — next-day re-engagement, then 3-day and 7-day nurture.",
+      "Follows up automatically when leads go quiet — next-day re-engagement, then multi-step nurture with channel-aware delivery.",
       "Updates CRM stage, score, tags, and next step so your pipeline stays honest.",
     ];
 
@@ -2340,14 +2340,14 @@ export function RealtorGrowthEngine() {
       timing: "Next-day re-engagement (managed)",
     },
     W5: {
-      summary: "Second follow-up attempt for leads who still haven't responded after about 3 days of silence from their last message. Suggests new listings matching their criteria to re-engage interest. Meta channels skip free-form sends when the messaging window is closed unless an approved template is configured.",
-      triggers: "No reply detected (3 days)",
-      timing: "72 hours after last customer message",
+      summary: "Second re-engagement for leads who are still quiet after the next-day follow-up. Suggests new listings matching their criteria. Meta channels skip free-form sends when the messaging window is closed unless an approved template is configured.",
+      triggers: "No reply after last customer message",
+      timing: "Multi-step nurture (about 3 days of silence)",
     },
     W6: {
-      summary: "Final follow-up after about 7 days of silence from the customer's last message. Moves the lead to 'Nurture / Follow-Up' pipeline stage for long-term re-engagement. Sends a low-pressure message about market updates on eligible channels.",
-      triggers: "No reply detected (7 days)",
-      timing: "168 hours (7 days) after last customer message",
+      summary: "Later nurture step after continued silence from the customer's last message. Moves the lead to 'Nurture / Follow-Up' for long-term re-engagement. Sends a low-pressure market update on eligible channels.",
+      triggers: "No reply after last customer message",
+      timing: "Multi-step nurture (about a week of silence)",
     },
     W7: {
       summary: "Safety workflow that detects opt-out or disinterest. Tags as 'Do Not Contact', moves to 'Unqualified' stage, and sends a polite close message. Prevents further automated outreach.",

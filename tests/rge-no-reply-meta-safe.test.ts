@@ -183,7 +183,7 @@ const w4: Workflow = {
 const w5: Workflow = {
   ...w4,
   id: "wf-w5",
-  name: "No Response Follow-Up (3d)",
+  name: "Quiet Lead Nurture",
   triggerConditions: {
     type: "no_reply",
     delayHours: 72,

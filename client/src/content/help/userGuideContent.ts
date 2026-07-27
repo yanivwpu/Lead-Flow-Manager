@@ -182,7 +182,7 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
       "Conditions — channel, score, time windows, stage exclusions",
       "AI actions — draft messages or update scores mid-workflow",
       "Appointment reminders — reduce no-shows for showings and calls",
-      "Follow-up automation — no-reply sequences when leads go quiet",
+      "Follow-up automation — next-day re-engagement and multi-step nurture when leads go quiet",
     ],
     image: S.automationWorkflows,
   },

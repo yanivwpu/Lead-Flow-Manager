@@ -160,7 +160,7 @@ A [unified inbox](/whatsapp-crm) for WhatsApp, Facebook Messenger, Instagram, an
 
 ### Lead nurturing
 
-Timed follow-ups (such as 24-hour, 3-day, and 7-day no-reply paths) help ensure quiet leads do not disappear.
+Timed follow-ups — next-day re-engagement plus multi-step nurture — help ensure quiet leads do not disappear, with channel-aware delivery while the conversation is still actionable.
 
 ### Pipeline management
 
@@ -411,7 +411,7 @@ When a new inquiry arrives—via WhatsApp, Messenger, Instagram, or a form—a w
 
 ### Follow-up sequences
 
-If a lead stops responding, automated nurture can re-engage at intervals such as 24 hours, 3 days, and 7 days—reducing the "forgot to follow up" problem.
+If a lead stops responding, automated nurture can re-engage with next-day follow-up and later multi-step sequences—channel-aware so outreach stays actionable—reducing the "forgot to follow up" problem.
 
 ### Appointment reminders
 
@@ -559,7 +559,7 @@ AI can suggest replies, assist with qualification, support lead scoring, recomme
 
 ### What kind of follow-up automation is included?
 
-Pre-built workflows can handle new lead greetings, no-reply nurture (e.g., 24h / 3d / 7d), appointment intent, and re-engagement—reducing missed follow-ups.
+Pre-built workflows can handle new lead greetings, no-reply nurture (next-day re-engagement plus multi-step follow-up), appointment intent, and re-engagement—reducing missed follow-ups.
 
 ### Who is the Realtor Growth Engine best for?
 

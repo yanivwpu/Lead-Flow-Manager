@@ -17,10 +17,25 @@ export const RGE_NO_REPLY_ANCHOR = "last_inbound" as const;
 
 /** Product-facing W4 name (internal templateKey remains W4). */
 export const RGE_W4_WORKFLOW_NAME = "Re-engagement Follow-Up";
+export const RGE_W5_WORKFLOW_NAME = "Quiet Lead Nurture";
+export const RGE_W6_WORKFLOW_NAME = "Week Nurture Follow-Up";
 export const RGE_W4_LEGACY_WORKFLOW_NAMES = [
   "No Response Follow-Up (24h)",
   "Re-engagement Follow-Up",
 ] as const;
+export const RGE_W5_LEGACY_WORKFLOW_NAMES = [
+  "No Response Follow-Up (3d)",
+  "Quiet Lead Nurture",
+] as const;
+export const RGE_W6_LEGACY_WORKFLOW_NAMES = [
+  "No Response Follow-Up (7d) + Nurture",
+  "Week Nurture Follow-Up",
+] as const;
+
+/** User-facing CRM message template titles (keys stay followup_24h / followup_3d / followup_7d). */
+export const RGE_MSG_FOLLOWUP_24H_TITLE = "Next-Day Re-engagement";
+export const RGE_MSG_FOLLOWUP_3D_TITLE = "Quiet Lead Nurture";
+export const RGE_MSG_FOLLOWUP_7D_TITLE = "Week Nurture Follow-Up";
 
 /** Pipeline stages where W4 re-engagement follow-up must not run. */
 export const RGE_W4_EXCLUDED_PIPELINE_STAGES = [

@@ -15,7 +15,7 @@
 import "dotenv/config";
 import { eq, and } from "drizzle-orm";
 import { db } from "../drizzle/db";
-import { templateAssets, workflows } from "../shared/schema";
+import { templateAssets, userTemplateData, workflows } from "../shared/schema";
 import {
   RGE_NO_REPLY_ANCHOR,
   RGE_TEMPLATE_ID,
@@ -24,7 +24,14 @@ import {
   RGE_W4_LEGACY_WORKFLOW_NAMES,
   RGE_W4_WORKFLOW_NAME,
   RGE_W5_DELAY_HOURS,
+  RGE_W5_LEGACY_WORKFLOW_NAMES,
+  RGE_W5_WORKFLOW_NAME,
   RGE_W6_DELAY_HOURS,
+  RGE_W6_LEGACY_WORKFLOW_NAMES,
+  RGE_W6_WORKFLOW_NAME,
+  RGE_MSG_FOLLOWUP_24H_TITLE,
+  RGE_MSG_FOLLOWUP_3D_TITLE,
+  RGE_MSG_FOLLOWUP_7D_TITLE,
   rgeW4NoReplyConditions,
 } from "../shared/rgeNoReplyWorkflows";
 
@@ -81,11 +88,16 @@ async function main() {
     let namePatch: string | undefined;
     if (key === "W4") {
       nextTc.rgeConditions = rgeW4NoReplyConditions();
-      if (
-        (RGE_W4_LEGACY_WORKFLOW_NAMES as readonly string[]).includes(row.name) ||
-        row.name === "No Response Follow-Up (24h)"
-      ) {
+      if ((RGE_W4_LEGACY_WORKFLOW_NAMES as readonly string[]).includes(row.name)) {
         namePatch = RGE_W4_WORKFLOW_NAME;
+      }
+    } else if (key === "W5") {
+      if ((RGE_W5_LEGACY_WORKFLOW_NAMES as readonly string[]).includes(row.name)) {
+        namePatch = RGE_W5_WORKFLOW_NAME;
+      }
+    } else if (key === "W6") {
+      if ((RGE_W6_LEGACY_WORKFLOW_NAMES as readonly string[]).includes(row.name)) {
+        namePatch = RGE_W6_WORKFLOW_NAME;
       }
     }
 
@@ -156,6 +168,10 @@ async function main() {
         if (key === "W4") {
           wf.name = RGE_W4_WORKFLOW_NAME;
           wf.conditions = rgeW4NoReplyConditions();
+        } else if (key === "W5") {
+          wf.name = RGE_W5_WORKFLOW_NAME;
+        } else if (key === "W6") {
+          wf.name = RGE_W6_WORKFLOW_NAME;
         }
         changed = true;
       }
@@ -171,12 +187,44 @@ async function main() {
     }
   }
 
+  const msgTitleByKey: Record<string, string> = {
+    msg_followup_24h: RGE_MSG_FOLLOWUP_24H_TITLE,
+    msg_followup_3d: RGE_MSG_FOLLOWUP_3D_TITLE,
+    msg_followup_7d: RGE_MSG_FOLLOWUP_7D_TITLE,
+  };
+  const msgRows = await db
+    .select()
+    .from(userTemplateData)
+    .where(
+      and(
+        eq(userTemplateData.templateId, RGE_TEMPLATE_ID),
+        eq(userTemplateData.assetType, "message_templates"),
+      ),
+    );
+  let patchedMessageTitles = 0;
+  for (const row of msgRows) {
+    const want = msgTitleByKey[row.assetKey];
+    if (!want) continue;
+    const def = (row.definition || {}) as { title?: string; key?: string; body?: string };
+    const legacyTitles = ["Follow-up 24h", "Follow-up 3d", "Follow-up 7d", want];
+    if (def.title === want) continue;
+    if (!legacyTitles.includes(String(def.title || ""))) continue;
+    if (!dryRun) {
+      await db
+        .update(userTemplateData)
+        .set({ definition: { ...def, title: want } })
+        .where(eq(userTemplateData.id, row.id));
+    }
+    patchedMessageTitles++;
+  }
+
   console.log(
     JSON.stringify(
       {
         dryRun,
         patchedInstalledWorkflows: patchedWorkflows,
         patchedTemplateAsset: patchedAsset,
+        patchedMessageTitles,
         report,
       },
       null,

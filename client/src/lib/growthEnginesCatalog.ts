@@ -85,7 +85,7 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     summary: "Turn inbound chats into qualified tours — automatically.",
     benefits: [
       "Instant AI replies and qualification",
-      "Booking intent + no-reply nurture",
+      "Booking intent + channel-aware nurture",
       "Pipeline, tags, and tasks kept in sync",
     ],
     status: "available",
