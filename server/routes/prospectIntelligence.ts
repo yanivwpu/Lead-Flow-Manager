@@ -84,6 +84,10 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
           segment: req.query.segment as ProspectIntelligenceListFilters["segment"],
           needsReviewOnly: req.query.needsReviewOnly === "true",
           importJobId: typeof req.query.importJobId === "string" ? req.query.importJobId : undefined,
+          discoverySearchId:
+            typeof req.query.discoverySearchId === "string" ? req.query.discoverySearchId : undefined,
+          reviewBatchKey:
+            typeof req.query.reviewBatchKey === "string" ? req.query.reviewBatchKey : undefined,
           statusFilter: req.query.statusFilter as ProspectIntelligenceListFilters["statusFilter"],
           hasEmail: req.query.hasEmail === "true" ? true : undefined,
           hasPhone: req.query.hasPhone === "true" ? true : undefined,
@@ -101,6 +105,21 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
       } catch (err) {
         console.error("[ProspectIntelligence] list error:", err);
         res.status(500).json({ error: "Failed to list prospect intelligence" });
+      }
+    },
+  );
+
+  app.get(
+    "/api/growth-tools/prospect-intelligence/batches",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const workspaceUserId = await resolveProspectWorkspaceUserId((req.user as { id: string }).id);
+        const result = await prospectIntelligenceService.listProspectReviewBatches(workspaceUserId);
+        res.json(result);
+      } catch (err) {
+        console.error("[ProspectIntelligence] batches error:", err);
+        res.status(500).json({ error: "Failed to list review batches" });
       }
     },
   );

@@ -102,6 +102,18 @@ export const PROSPECT_SELECTION_LABELS = {
   selectAllResultsHint: "Select every prospect matching the current filters.",
 } as const;
 
+/** Contextual Select-all copy when a discovery/import batch filter is active. */
+export function formatProspectSelectAllLabel(params: {
+  count: number;
+  batchActive: boolean;
+}): string {
+  const n = Math.max(0, Math.floor(params.count));
+  if (params.batchActive) {
+    return `Select all ${n} in this discovery`;
+  }
+  return `Select all ${n} matching filters`;
+}
+
 /** Activity feed event kinds derived from existing APIs (no invented types). */
 export type ProspectActivityFeedKind =
   | "discovery"

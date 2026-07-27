@@ -389,6 +389,8 @@ function ActivationScreen({
 function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
   const statusQuery = useProspectAiStatus();
   const status = statusQuery.data ?? initialStatus;
+  const [, setNavLocation] = useLocation();
+  const searchString = useSearch();
   const [businessType, setBusinessType] = useState("");
   const [location, setLocation] = useState("");
   const [radiusKm, setRadiusKm] = useState("");
@@ -411,30 +413,6 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
     if (!data) return;
     const nextResults = data.results ?? [];
     const nextSearchId = data.search?.id ?? null;
-    // #region agent log
-    fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "4bac18",
-      },
-      body: JSON.stringify({
-        sessionId: "4bac18",
-        runId: "post-fix",
-        hypothesisId: "H1-H3",
-        location: "ProspectAI.tsx:DiscoverTab-restore",
-        message: "Discover tab applied active batch restore",
-        data: {
-          restoredCount: nextResults.length,
-          hasSearchId: !!nextSearchId,
-          businessType: data.search?.businessType ?? null,
-          location: data.search?.location ?? null,
-          quotaUsed: data.quota?.used ?? null,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     if (nextResults.length === 0) {
       if (restoredFromBatch || searchId) {
         setSearchId(null);
@@ -514,6 +492,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
   const confirmSendToReview = () => {
     const count = selectedIds.size;
     const sentIds = [...selectedIds];
+    const batchSearchId = searchId;
     sendToReview.mutate(sentIds, {
       onSuccess: (data) => {
         setConfirmSendOpen(false);
@@ -532,6 +511,17 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
           setRestoredFromBatch(false);
         }
         void activeBatchQuery.refetch();
+        // Open Review filtered to this discovery batch only.
+        const key =
+          data.reviewBatchKey ||
+          (batchSearchId ? `discovery:${batchSearchId}` : null) ||
+          (data.searchId ? `discovery:${data.searchId}` : null);
+        if (key) {
+          const params = new URLSearchParams(searchString);
+          params.set("tab", "review");
+          params.set("batch", key);
+          setNavLocation(`${PROSPECT_AI_PATH}?${params.toString()}`);
+        }
       },
       onError: (err: Error) =>
         toast({

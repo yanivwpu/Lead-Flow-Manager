@@ -245,6 +245,12 @@ export function useSendDiscoverToReview(searchId: string | null) {
         analysisStarted?: boolean;
         analysisJobId?: string | null;
         contactIds?: string[];
+        searchId?: string;
+        reviewBatchKey?: string;
+        batchLabel?: string;
+        businessType?: string | null;
+        location?: string | null;
+        radiusKm?: number | null;
       }>(`/api/growth-engines/prospect-ai/discover/${searchId}/send-to-review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -253,6 +259,9 @@ export function useSendDiscoverToReview(searchId: string | null) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["/api/growth-tools/prospect-intelligence/batches"],
+      });
       void queryClient.invalidateQueries({
         queryKey: ["/api/growth-tools/prospect-intelligence/bulk-analyze/active"],
       });

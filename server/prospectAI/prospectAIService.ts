@@ -23,8 +23,6 @@ import {
   selectActiveUnsentDiscoverySearch,
 } from "@shared/prospectAiDiscoveryBatch";
 import { db } from "../../drizzle/db";
-import { appendFileSync } from "node:fs";
-import { join } from "node:path";
 import { storage } from "../storage";
 import { subscriptionService } from "../subscriptionService";
 import { getBusinessProfileForUser } from "../businessProfileService";
@@ -316,24 +314,6 @@ export async function getActiveUnsentDiscoveryBatch(workspaceUserId: string): Pr
 
   const activeSearch = selectActiveUnsentDiscoverySearch(searches, unsentCountBySearchId);
   if (!activeSearch) {
-    // #region agent log
-    try {
-      appendFileSync(
-        join(process.cwd(), "debug-4bac18.log"),
-        `${JSON.stringify({
-          sessionId: "4bac18",
-          runId: "post-fix",
-          hypothesisId: "H3",
-          location: "prospectAIService.ts:getActiveUnsentDiscoveryBatch",
-          message: "no active unsent discovery batch",
-          data: { searchCount: searches.length, used: quota.used },
-          timestamp: Date.now(),
-        })}\n`,
-      );
-    } catch {
-      /* ignore */
-    }
-    // #endregion
     return { search: null, results: [], quota };
   }
 
@@ -348,32 +328,6 @@ export async function getActiveUnsentDiscoveryBatch(workspaceUserId: string): Pr
       ),
     )
     .orderBy(desc(prospectAiDiscoveryResults.createdAt));
-
-  // #region agent log
-  try {
-    appendFileSync(
-      join(process.cwd(), "debug-4bac18.log"),
-      `${JSON.stringify({
-        sessionId: "4bac18",
-        runId: "post-fix",
-        hypothesisId: "H2-H3",
-        location: "prospectAIService.ts:getActiveUnsentDiscoveryBatch",
-        message: "restored active unsent discovery batch",
-        data: {
-          searchIdPrefix: String(activeSearch.id).slice(0, 8),
-          businessType: activeSearch.businessType,
-          location: activeSearch.location,
-          unsentCount: resultRows.length,
-          used: quota.used,
-          chargedQuota: false,
-        },
-        timestamp: Date.now(),
-      })}\n`,
-    );
-  } catch {
-    /* ignore */
-  }
-  // #endregion
 
   return {
     search: mapSearchSummary(activeSearch),
@@ -566,6 +520,12 @@ export async function sendDiscoverResultsToReview(
   sent: number;
   analysisStarted: boolean;
   analysisJobId: string | null;
+  searchId: string;
+  reviewBatchKey: string;
+  batchLabel: string;
+  businessType: string;
+  location: string;
+  radiusKm: number | null;
 }> {
   // Quota already consumed at discover time — do not block review handoff.
   await assertActivatedAndEligible(workspaceUserId, { requireQuota: false });
@@ -786,6 +746,12 @@ export async function sendDiscoverResultsToReview(
     sent: uniqueContactIds.length,
     analysisStarted,
     analysisJobId,
+    searchId,
+    reviewBatchKey: `discovery:${searchId}`,
+    batchLabel: `Prospect AI: ${searchRows[0].businessType} in ${searchRows[0].location}`,
+    businessType: searchRows[0].businessType,
+    location: searchRows[0].location,
+    radiusKm: searchRows[0].radiusKm != null ? Number(searchRows[0].radiusKm) : null,
   };
 }
 

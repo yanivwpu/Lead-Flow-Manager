@@ -44,11 +44,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import type {
   ProspectIntelligenceJobSummary,
   ProspectIntelligenceListItem,
 } from "@shared/prospectImport";
+import {
+  formatProspectSelectAllLabel,
+  PROSPECT_AI_PAGE_SUBTITLES,
+  PROSPECT_SELECTION_LABELS,
+} from "@shared/prospectAiDisplay";
+import {
+  encodeProspectReviewBatchKey,
+  parseProspectReviewBatchKey,
+  type ProspectReviewBatchOption,
+} from "@shared/prospectReviewBatch";
+import { PROSPECT_AI_PATH } from "@/lib/prospectAi";
 import { groupCampaignSkipReasons } from "@shared/prospectBulkOutreach";
 import {
   buildProspectOutreachInboxHref,
@@ -112,10 +123,6 @@ import {
   buildAiGrowthAssistantModel,
   resolveAiPersonalityStatus,
 } from "@shared/prospectAiPersonality";
-import {
-  PROSPECT_AI_PAGE_SUBTITLES,
-  PROSPECT_SELECTION_LABELS,
-} from "@shared/prospectAiDisplay";
 import {
   PROSPECT_AI_PROGRESS_COL_CLASS,
   PROSPECT_AI_PROGRESS_TIMELINE_CLASS,
@@ -1285,10 +1292,20 @@ export function ProspectIntelligencePanel(props: {
   /** When true, omit outer top border (Prospect AI workspace tabs). */
   embedded?: boolean;
 }) {
+  const searchString = useSearch();
+  const [, setNavLocation] = useLocation();
+  const urlBatchKey = useMemo(() => {
+    const raw = new URLSearchParams(searchString).get("batch");
+    const parsed = parseProspectReviewBatchKey(raw);
+    if (parsed.kind === "all") return "all";
+    return encodeProspectReviewBatchKey(parsed.kind, parsed.id);
+  }, [searchString]);
+
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [businessFilter, setBusinessFilter] = useState<string>("all");
   const [workFilter, setWorkFilter] = useState<ProspectReviewWorkFilter>("needs_review");
   const [channelFilter, setChannelFilter] = useState<string>("all");
+  const [batchFilter, setBatchFilter] = useState<string>(urlBatchKey);
   /** Work-queue default: actionable / newest first. Stable merge preserves mid-action order. */
   const [sortBy, setSortBy] = useState<"leadScore" | "priority" | "confidence" | "name" | "action">(
     "action",
@@ -1331,6 +1348,20 @@ export function ProspectIntelligencePanel(props: {
   } | null>(null);
   const queryClient = useQueryClient();
 
+  useEffect(() => {
+    setBatchFilter(urlBatchKey);
+  }, [urlBatchKey]);
+
+  const applyBatchFilter = (next: string) => {
+    setBatchFilter(next);
+    const params = new URLSearchParams(searchString);
+    if (!params.get("tab")) params.set("tab", "review");
+    if (!next || next === "all") params.delete("batch");
+    else params.set("batch", next);
+    const q = params.toString();
+    setNavLocation(q ? `${PROSPECT_AI_PATH}?${q}` : PROSPECT_AI_PATH);
+  };
+
   const currentFiltersPayload = useMemo(() => {
     return {
       ...(priorityFilter !== "all" ? { priority: priorityFilter } : {}),
@@ -1342,8 +1373,9 @@ export function ProspectIntelligencePanel(props: {
       ...(channelFilter === "has_phone" ? { hasPhone: true } : {}),
       ...(channelFilter === "email_eligible" ? { emailEligible: true } : {}),
       ...(channelFilter === "any_eligible" ? { anyEligibleChannel: true } : {}),
+      ...(batchFilter !== "all" ? { reviewBatchKey: batchFilter } : {}),
     };
-  }, [priorityFilter, businessFilter, channelFilter]);
+  }, [priorityFilter, businessFilter, channelFilter, batchFilter]);
 
   // Filter changes invalidate frozen allFiltered selection.
   useEffect(() => {
@@ -1356,7 +1388,7 @@ export function ProspectIntelligencePanel(props: {
     stableOrderRef.current = [];
     setPinnedVisibleIds(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only clear when filters change
-  }, [priorityFilter, businessFilter, workFilter, channelFilter, sortBy]);
+  }, [priorityFilter, businessFilter, workFilter, channelFilter, batchFilter, sortBy]);
 
   useEffect(() => {
     const id = window.setInterval(
@@ -1376,12 +1408,22 @@ export function ProspectIntelligencePanel(props: {
     return () => mq.removeEventListener?.("change", apply);
   }, []);
 
+  const batchesQuery = useQuery({
+    queryKey: ["/api/growth-tools/prospect-intelligence/batches"],
+    queryFn: () =>
+      fetchJson<{ batches: ProspectReviewBatchOption[]; latestDiscoveryKey: string | null }>(
+        "/api/growth-tools/prospect-intelligence/batches",
+      ),
+    staleTime: 15_000,
+  });
+
   const listQuery = useQuery({
     queryKey: [
       "/api/growth-tools/prospect-intelligence",
       priorityFilter,
       businessFilter,
       channelFilter,
+      batchFilter,
       sortBy,
     ],
     queryFn: () => {
@@ -1393,6 +1435,7 @@ export function ProspectIntelligencePanel(props: {
       if (channelFilter === "has_phone") params.set("hasPhone", "true");
       if (channelFilter === "email_eligible") params.set("emailEligible", "true");
       if (channelFilter === "any_eligible") params.set("anyEligibleChannel", "true");
+      if (batchFilter !== "all") params.set("reviewBatchKey", batchFilter);
       // Stable default sort — lifecycle filter applied client-side so rows never vanish mid-action.
       params.set("sortBy", sortBy);
       params.set("sortDir", sortBy === "name" ? "asc" : "desc");
@@ -1509,6 +1552,19 @@ export function ProspectIntelligencePanel(props: {
   }, [bulkJobQuery.data?.job?.status]);
 
   const rawItems = listQuery.data?.items ?? [];
+
+  const activeBatchOption = useMemo(() => {
+    if (batchFilter === "all") return null;
+    return batchesQuery.data?.batches.find((b) => b.key === batchFilter) ?? null;
+  }, [batchFilter, batchesQuery.data?.batches]);
+
+  const latestDiscoveryBatch = useMemo(() => {
+    const key = batchesQuery.data?.latestDiscoveryKey;
+    if (!key) return null;
+    return batchesQuery.data?.batches.find((b) => b.key === key) ?? null;
+  }, [batchesQuery.data?.batches, batchesQuery.data?.latestDiscoveryKey]);
+
+  const batchActive = batchFilter !== "all";
 
   const workFilterCounts = useMemo(() => {
     const map: Record<string, number> = { all: 0 };
@@ -1720,13 +1776,30 @@ export function ProspectIntelligencePanel(props: {
         },
       ),
     onSuccess: (data) => {
+      const cacheEntries = queryClient.getQueriesData<{ items: ProspectIntelligenceListItem[] }>({
+        queryKey: ["/api/growth-tools/prospect-intelligence"],
+      });
+      const cacheItems =
+        cacheEntries.find(([, d]) => d?.items?.length)?.[1]?.items ?? rawItems;
+      const intersected = data.selection.contactIds.filter((id) => {
+        const row = cacheItems.find((r) => r.contactId === id);
+        if (!row) return false;
+        const ux = reviewUxInput(row);
+        if (isProspectInCampaigns(ux) || String(ux.outcome || "").toLowerCase() === "won") {
+          return false;
+        }
+        return matchesProspectReviewWorkFilter(ux, workFilter);
+      });
       setSelectAllFiltered(true);
       setSelectedIds(new Set());
-      setResolvedFilteredIds(data.selection.contactIds);
-      setResolvedFilteredCount(data.selection.count);
+      setResolvedFilteredIds(intersected);
+      setResolvedFilteredCount(intersected.length);
       toast({
-        title: `${data.selection.count} prospects selected`,
-        description: "Server-resolved filtered set (not just visible rows).",
+        title: `${intersected.length} prospects selected`,
+        description: formatProspectSelectAllLabel({
+          count: intersected.length,
+          batchActive,
+        }),
       });
     },
     onError: (err: Error) =>
@@ -2042,6 +2115,58 @@ export function ProspectIntelligencePanel(props: {
         className="max-w-xl"
       />
 
+      {latestDiscoveryBatch && batchFilter === "all" ? (
+        <div
+          className="flex flex-wrap items-center gap-2 text-xs text-gray-600"
+          data-testid="pi-latest-discovery-shortcut"
+        >
+          <span>
+            Latest discovery: {latestDiscoveryBatch.prospectCount}{" "}
+            {latestDiscoveryBatch.prospectCount === 1 ? "prospect" : "prospects"}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => applyBatchFilter(latestDiscoveryBatch.key)}
+          >
+            View batch
+          </Button>
+        </div>
+      ) : null}
+
+      {batchActive && activeBatchOption ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-100 bg-emerald-50/40 px-3 py-1.5 text-xs text-emerald-900"
+          data-testid="pi-batch-banner"
+        >
+          <div className="min-w-0">
+            <p className="font-medium">
+              {activeBatchOption.prospectCount}{" "}
+              {activeBatchOption.prospectCount === 1 ? "prospect" : "prospects"}
+              {activeBatchOption.kind === "discovery" ? " discovered" : ""}
+            </p>
+            <p className="text-emerald-800">
+              {activeBatchOption.label}
+              {activeBatchOption.detail ? ` · ${activeBatchOption.detail}` : ""}
+            </p>
+            <p className="text-emerald-700/80">
+              Viewing this {activeBatchOption.kind === "discovery" ? "discovery" : "import batch"}
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 shrink-0 text-xs text-emerald-900 hover:bg-emerald-100/60"
+            onClick={() => applyBatchFilter("all")}
+          >
+            Show all prospects
+          </Button>
+        </div>
+      ) : null}
+
       <div className="flex max-w-full flex-nowrap gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {PROSPECT_REVIEW_WORK_FILTER_CHIPS.map((chip) => {
           const count = workFilterCounts[chip.id] ?? 0;
@@ -2076,6 +2201,21 @@ export function ProspectIntelligencePanel(props: {
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
+        <Select value={batchFilter} onValueChange={applyBatchFilter}>
+          <SelectTrigger className="h-8 w-[200px] text-xs" data-testid="pi-batch-filter">
+            <SelectValue placeholder="Batch" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All prospects</SelectItem>
+            {(batchesQuery.data?.batches ?? []).map((batch) => (
+              <SelectItem key={batch.key} value={batch.key}>
+                {batch.label}
+                {batch.isLatestDiscovery ? " (latest)" : ""}
+                {batch.prospectCount > 0 ? ` · ${batch.prospectCount}` : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
           <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue placeholder="Priority" /></SelectTrigger>
           <SelectContent>
@@ -2140,7 +2280,10 @@ export function ProspectIntelligencePanel(props: {
         >
           {selectAllFilteredMutation.isPending
             ? "Resolving…"
-            : PROSPECT_SELECTION_LABELS.selectAllResults}
+            : formatProspectSelectAllLabel({
+                count: workFilterCounts[workFilter] ?? items.length,
+                batchActive,
+              })}
         </Button>
         <Button type="button" size="sm" variant="ghost" className="h-8 text-xs" onClick={clearSelection}>
           Clear

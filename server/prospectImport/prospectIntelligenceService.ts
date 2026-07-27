@@ -1,6 +1,8 @@
-import { and, desc, eq, gt, inArray, isNotNull, lt } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import type { Contact } from "@shared/schema";
 import {
+  prospectAiDiscoveryResults,
+  prospectAiDiscoverySearches,
   prospectBulkAnalysisJobs,
   prospectImportJobs,
   prospectIntelligence,
@@ -14,6 +16,15 @@ import type {
   ProspectIntelligenceListFilters,
   ProspectIntelligenceListItem,
 } from "@shared/prospectImport";
+import {
+  encodeProspectReviewBatchKey,
+  formatDiscoveryBatchLabel,
+  formatImportBatchLabel,
+  parseProspectReviewBatchKey,
+  readContactDiscoverySearchId,
+  readContactImportJobIdFromMeta,
+  type ProspectReviewBatchOption,
+} from "@shared/prospectReviewBatch";
 import {
   PROSPECT_ANALYSIS_STALE_PROCESSING_MS,
   claimableAnalysisStatuses,
@@ -267,7 +278,6 @@ function logProspectQualificationFailed(params: {
   model?: string | null;
   stage: QualFailureStage | string;
   err: unknown;
-  hypothesisId?: string;
 }): void {
   const meta = extractProviderErrorMeta(params.err);
   const payload = {
@@ -522,7 +532,6 @@ export async function analyzeProspectContact(params: {
       contactId: params.contactId,
       stage: "claim",
       err,
-      hypothesisId: "E",
     });
     throw err;
   }
@@ -638,7 +647,6 @@ export async function analyzeProspectContact(params: {
             model,
             stage,
             err: lastErr ?? new Error(message),
-            hypothesisId: stage === "model_call_start" ? "A" : stage === "json_parse" ? "B" : "C",
           });
           await db
             .update(prospectIntelligence)
@@ -691,7 +699,6 @@ export async function analyzeProspectContact(params: {
         model: model || null,
         stage,
         err,
-        hypothesisId: "E",
       });
     }
     throw err;
@@ -899,6 +906,44 @@ export async function listProspectIntelligence(
   const rows = await db.select().from(prospectIntelligence);
   const items: ProspectIntelligenceListItem[] = [];
 
+  // Resolve unified batch filter → discoverySearchId / importJobId.
+  const batchRef = parseProspectReviewBatchKey(filters.reviewBatchKey);
+  let filterDiscoverySearchId =
+    batchRef.kind === "discovery"
+      ? batchRef.id
+      : String(filters.discoverySearchId || "").trim() || null;
+  let filterImportJobId =
+    batchRef.kind === "import"
+      ? batchRef.id
+      : String(filters.importJobId || "").trim() || null;
+  if (batchRef.kind === "all" && filters.reviewBatchKey === "all") {
+    filterDiscoverySearchId = null;
+    filterImportJobId = null;
+  }
+
+  // Fallback membership via discovery_results.contact_id when meta is missing.
+  const discoveryContactIds = new Set<string>();
+  if (filterDiscoverySearchId) {
+    try {
+      const linked = await db
+        .select({ contactId: prospectAiDiscoveryResults.contactId })
+        .from(prospectAiDiscoveryResults)
+        .where(
+          and(
+            eq(prospectAiDiscoveryResults.workspaceUserId, workspaceUserId),
+            eq(prospectAiDiscoveryResults.searchId, filterDiscoverySearchId),
+            isNotNull(prospectAiDiscoveryResults.contactId),
+          ),
+        );
+      for (const r of linked) {
+        const id = String(r.contactId || "").trim();
+        if (id) discoveryContactIds.add(id);
+      }
+    } catch {
+      /* table may be absent in older envs */
+    }
+  }
+
   // Queue + outcome lookup for Review lifecycle filters (presentation only).
   let queuedContactIds = new Set<string>();
   let failedContactIds = new Set<string>();
@@ -969,7 +1014,19 @@ export async function listProspectIntelligence(
   for (const row of rows) {
     const contact = contactMap.get(row.contactId);
     if (!contact) continue;
-    if (filters.importJobId && row.importJobId !== filters.importJobId) continue;
+
+    if (filterImportJobId) {
+      const metaImportId = readContactImportJobIdFromMeta(contact);
+      const rowImportId = String(row.importJobId || "").trim() || null;
+      if (rowImportId !== filterImportJobId && metaImportId !== filterImportJobId) continue;
+    }
+
+    if (filterDiscoverySearchId) {
+      const metaSearchId = readContactDiscoverySearchId(contact);
+      const linked = discoveryContactIds.has(row.contactId);
+      if (metaSearchId !== filterDiscoverySearchId && !linked) continue;
+    }
+
     if (filters.priority && row.priority !== filters.priority) continue;
     if (filters.businessType && row.businessType !== filters.businessType) continue;
     if (filters.recommendedOffer && row.recommendedOffer !== filters.recommendedOffer) continue;
@@ -1745,11 +1802,133 @@ export async function reconcileProspectOutreachConversation(params: {
   });
 }
 
+/**
+ * Batches available for the Review Batch filter.
+ * Discovery batches: searches with ≥1 result linked to a contact.
+ * Import batches: prospect_import_jobs with ≥1 intelligence row.
+ */
+export async function listProspectReviewBatches(
+  workspaceUserId: string,
+): Promise<{ batches: ProspectReviewBatchOption[]; latestDiscoveryKey: string | null }> {
+  if (!workspaceUserId) throw new Error("workspaceUserId is required");
+
+  const batches: ProspectReviewBatchOption[] = [];
+
+  try {
+    const searches = await db
+      .select({
+        id: prospectAiDiscoverySearches.id,
+        businessType: prospectAiDiscoverySearches.businessType,
+        location: prospectAiDiscoverySearches.location,
+        radiusKm: prospectAiDiscoverySearches.radiusKm,
+        createdAt: prospectAiDiscoverySearches.createdAt,
+        resultCount: prospectAiDiscoverySearches.resultCount,
+      })
+      .from(prospectAiDiscoverySearches)
+      .where(eq(prospectAiDiscoverySearches.workspaceUserId, workspaceUserId))
+      .orderBy(desc(prospectAiDiscoverySearches.createdAt))
+      .limit(40);
+
+    for (const search of searches) {
+      const [countRow] = await db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(prospectAiDiscoveryResults)
+        .where(
+          and(
+            eq(prospectAiDiscoveryResults.searchId, search.id),
+            eq(prospectAiDiscoveryResults.workspaceUserId, workspaceUserId),
+            isNotNull(prospectAiDiscoveryResults.contactId),
+          ),
+        );
+      const prospectCount = Number(countRow?.total ?? 0);
+      if (prospectCount <= 0) continue;
+      const createdAt = search.createdAt?.toISOString?.() ?? null;
+      const label = formatDiscoveryBatchLabel({
+        businessType: search.businessType,
+        location: search.location,
+        createdAt,
+        resultCount: prospectCount,
+      });
+      const radius =
+        search.radiusKm != null && Number.isFinite(Number(search.radiusKm))
+          ? `${Number(search.radiusKm)} km`
+          : null;
+      batches.push({
+        key: encodeProspectReviewBatchKey("discovery", search.id),
+        kind: "discovery",
+        id: search.id,
+        label,
+        detail: [radius, `${prospectCount} prospect${prospectCount === 1 ? "" : "s"}`]
+          .filter(Boolean)
+          .join(" · "),
+        prospectCount,
+        createdAt,
+        businessType: search.businessType,
+        location: search.location,
+        radiusKm: search.radiusKm != null ? Number(search.radiusKm) : null,
+        batchName: `Prospect AI: ${search.businessType} in ${search.location}`,
+      });
+    }
+  } catch {
+    /* discovery tables may be absent */
+  }
+
+  try {
+    const jobs = await db
+      .select({
+        id: prospectImportJobs.id,
+        batchName: prospectImportJobs.batchName,
+        createdAt: prospectImportJobs.createdAt,
+      })
+      .from(prospectImportJobs)
+      .where(eq(prospectImportJobs.destinationUserId, workspaceUserId))
+      .orderBy(desc(prospectImportJobs.createdAt))
+      .limit(30);
+
+    for (const job of jobs) {
+      const [countRow] = await db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(prospectIntelligence)
+        .where(eq(prospectIntelligence.importJobId, job.id));
+      const prospectCount = Number(countRow?.total ?? 0);
+      if (prospectCount <= 0) continue;
+      const createdAt = job.createdAt?.toISOString?.() ?? null;
+      batches.push({
+        key: encodeProspectReviewBatchKey("import", job.id),
+        kind: "import",
+        id: job.id,
+        label: formatImportBatchLabel({ batchName: job.batchName, createdAt }),
+        detail: `${prospectCount} prospect${prospectCount === 1 ? "" : "s"}`,
+        prospectCount,
+        createdAt,
+        batchName: job.batchName,
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+
+  batches.sort((a, b) => {
+    const at = a.createdAt ? Date.parse(a.createdAt) : 0;
+    const bt = b.createdAt ? Date.parse(b.createdAt) : 0;
+    return bt - at;
+  });
+
+  const latestDiscovery = batches.find((b) => b.kind === "discovery") || null;
+  if (latestDiscovery) latestDiscovery.isLatestDiscovery = true;
+
+  return {
+    batches,
+    latestDiscoveryKey: latestDiscovery?.key ?? null,
+  };
+}
+
 export const prospectIntelligenceService = {
   getImportJobContactIds,
   createProspectIntelligenceJob,
   getProspectIntelligenceJob,
   listProspectIntelligence,
+  listProspectReviewBatches,
   getProspectIntelligenceDetail,
   getProspectIntelligenceDashboardCounts,
   approveProspectIntelligence,

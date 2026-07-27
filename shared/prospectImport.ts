@@ -420,6 +420,13 @@ export type ProspectIntelligenceListFilters = {
   segment?: "agency" | "shopify" | "real_estate" | "affiliate" | "local_business" | "saas";
   needsReviewOnly?: boolean;
   importJobId?: string;
+  /** Google Places discovery search id (`prospect_ai_discovery_searches.id`). */
+  discoverySearchId?: string;
+  /**
+   * Unified Review batch key: `discovery:<uuid>` | `import:<uuid>` | `all`.
+   * When set, takes precedence over bare importJobId / discoverySearchId for filtering.
+   */
+  reviewBatchKey?: string;
   /** Distinct from review_status / outreach_status — may also match queue state. */
   statusFilter?: ProspectIntelligenceStatusFilter;
   hasEmail?: boolean;
