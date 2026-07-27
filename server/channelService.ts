@@ -1477,7 +1477,13 @@ class ChannelService {
     // The conversation is effectively "Snoozed" and a human should take over.
     if (handoffTriggered) {
       void import("./automationNoReply").then(({ onInboundMessageForNoReplyTimers }) =>
-        onInboundMessageForNoReplyTimers(contact.id).catch(() => {})
+        onInboundMessageForNoReplyTimers({
+          userId,
+          contactId: contact.id,
+          conversationId: conversation.id,
+          channel,
+          reschedule: false,
+        }).catch(() => {})
       );
       scheduleHubSpotAutoSync(userId, contact.id);
       return buildInboundResult({
@@ -1572,7 +1578,13 @@ class ChannelService {
     }
 
     void import("./automationNoReply").then(({ onInboundMessageForNoReplyTimers }) =>
-      onInboundMessageForNoReplyTimers(contact.id).catch(() => {})
+      onInboundMessageForNoReplyTimers({
+        userId,
+        contactId: contact.id,
+        conversationId: conversation.id,
+        channel,
+        reschedule: true,
+      }).catch(() => {})
     );
 
     scheduleHubSpotAutoSync(userId, contact.id);

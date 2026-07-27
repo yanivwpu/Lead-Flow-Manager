@@ -2359,9 +2359,9 @@ export const noReplyJobs = pgTable("no_reply_jobs", {
   runAt: timestamp("run_at").notNull(),
   status: varchar("status").notNull().default("pending"), // pending | running | completed | failed | cancelled | skipped
   idempotencyKey: text("idempotency_key").notNull().unique(),
-  /** Monotonic anchor: schedule no-reply relative to this outbound moment */
+  /** Silence anchor used at fire time (outbound moment for last_outbound; inbound moment for last_inbound). */
   anchorOutboundAt: timestamp("anchor_outbound_at").notNull(),
-  /** contact.lastIncomingAt when job was scheduled (secondary guard) */
+  /** contact.lastIncomingAt snapshot; for last_inbound jobs equals the silence anchor */
   snapshotLastInboundAt: timestamp("snapshot_last_inbound_at"),
   scheduledReason: text("scheduled_reason"),
   stuckRecoveries: integer("stuck_recoveries").notNull().default(0),

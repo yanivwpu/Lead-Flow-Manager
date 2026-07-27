@@ -17,13 +17,14 @@ const w4Conditions = rgeW4NoReplyConditions();
 const w4Workflow: Workflow = {
   id: "wf-w4",
   userId: "user-1",
-  name: "No Response Follow-Up (24h)",
+  name: "Re-engagement Follow-Up",
   description: null,
   isActive: true,
   triggerType: "no_reply",
   triggerConditions: {
     type: "no_reply",
-    delayHours: 24,
+    delayHours: 20,
+    anchor: "last_inbound",
     templateId: "realtor-growth-engine",
     templateKey: "W4",
     rgeConditions: w4Conditions,
@@ -72,10 +73,14 @@ type FakeNoReplyJob = {
 const originalGetUserLimits = subscriptionService.getUserLimits.bind(subscriptionService);
 const originalGetContact = storage.getContact.bind(storage);
 const originalCancelPending = storage.cancelPendingNoReplyJobsForContact.bind(storage);
+const originalCancelPendingWf = storage.cancelPendingNoReplyJobsForContactWorkflows.bind(storage);
 const originalGetActiveWorkflows = storage.getActiveWorkflowsByTrigger.bind(storage);
 const originalCreateNoReplyJob = storage.createNoReplyJob.bind(storage);
+const originalGetByKey = storage.getNoReplyJobByIdempotencyKey.bind(storage);
+const originalRequeue = storage.requeueNoReplyJob.bind(storage);
 
 const createdJobs: FakeNoReplyJob[] = [];
+const byKey = new Map<string, any>();
 
 (subscriptionService as any).getUserLimits = async () => ({ workflowsEnabled: true });
 (storage as any).getContact = async () => ({
@@ -84,14 +89,19 @@ const createdJobs: FakeNoReplyJob[] = [];
   lastIncomingAt: new Date("2026-06-18T00:12:10Z"),
 });
 (storage as any).cancelPendingNoReplyJobsForContact = async () => 0;
+(storage as any).cancelPendingNoReplyJobsForContactWorkflows = async () => 0;
 (storage as any).getActiveWorkflowsByTrigger = async () => [w4Workflow];
-(storage as any).createNoReplyJob = async (job: { workflowId: string; contactId: string; status: string }) => {
+(storage as any).getNoReplyJobByIdempotencyKey = async (key: string) => byKey.get(key);
+(storage as any).requeueNoReplyJob = async () => undefined;
+(storage as any).createNoReplyJob = async (job: { workflowId: string; contactId: string; status: string; idempotencyKey: string }) => {
   createdJobs.push({
     workflowId: job.workflowId,
     contactId: job.contactId,
     status: job.status,
   });
-  return { ...job, id: `nr_${createdJobs.length}`, createdAt: new Date() };
+  const row = { ...job, id: `nr_${createdJobs.length}`, createdAt: new Date() };
+  byKey.set(job.idempotencyKey, row);
+  return row;
 };
 
 try {
@@ -111,6 +121,9 @@ try {
   (subscriptionService as any).getUserLimits = originalGetUserLimits;
   (storage as any).getContact = originalGetContact;
   (storage as any).cancelPendingNoReplyJobsForContact = originalCancelPending;
+  (storage as any).cancelPendingNoReplyJobsForContactWorkflows = originalCancelPendingWf;
   (storage as any).getActiveWorkflowsByTrigger = originalGetActiveWorkflows;
   (storage as any).createNoReplyJob = originalCreateNoReplyJob;
+  (storage as any).getNoReplyJobByIdempotencyKey = originalGetByKey;
+  (storage as any).requeueNoReplyJob = originalRequeue;
 }

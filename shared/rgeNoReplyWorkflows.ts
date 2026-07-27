@@ -3,7 +3,26 @@
  * Installed workflows store conditions under `triggerConditions.rgeConditions`.
  */
 
-/** Pipeline stages where W4 24h follow-up must not run. */
+export const RGE_TEMPLATE_ID = "realtor-growth-engine";
+
+/** Canonical Meta-safe delays (hours after last customer inbound). */
+export const RGE_W4_DELAY_HOURS = 20;
+export const RGE_W5_DELAY_HOURS = 72;
+export const RGE_W6_DELAY_HOURS = 168;
+
+/** Prior seed default for W4 — used by repair to detect uncustomized installs. */
+export const RGE_W4_LEGACY_DELAY_HOURS = 24;
+
+export const RGE_NO_REPLY_ANCHOR = "last_inbound" as const;
+
+/** Product-facing W4 name (internal templateKey remains W4). */
+export const RGE_W4_WORKFLOW_NAME = "Re-engagement Follow-Up";
+export const RGE_W4_LEGACY_WORKFLOW_NAMES = [
+  "No Response Follow-Up (24h)",
+  "Re-engagement Follow-Up",
+] as const;
+
+/** Pipeline stages where W4 re-engagement follow-up must not run. */
 export const RGE_W4_EXCLUDED_PIPELINE_STAGES = [
   "Closed",
   "Unqualified",

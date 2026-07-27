@@ -527,6 +527,18 @@ export interface IStorage {
 
   // No-reply workflow jobs
   cancelPendingNoReplyJobsForContact(contactId: string): Promise<number>;
+  cancelPendingNoReplyJobsForContactWorkflows(contactId: string, workflowIds: string[]): Promise<number>;
+  getNoReplyJobByIdempotencyKey(idempotencyKey: string): Promise<NoReplyJob | undefined>;
+  requeueNoReplyJob(
+    id: string,
+    patch: {
+      runAt: Date;
+      conversationId?: string | null;
+      anchorOutboundAt: Date;
+      snapshotLastInboundAt: Date | null;
+      scheduledReason: string;
+    },
+  ): Promise<NoReplyJob | undefined>;
   createNoReplyJob(job: InsertNoReplyJob): Promise<NoReplyJob>;
   recoverStuckNoReplyJobs(): Promise<{ requeued: number; failedTerminal: number }>;
   claimPendingNoReplyJobs(limit?: number): Promise<NoReplyJob[]>;
@@ -4266,6 +4278,62 @@ export class DbStorage implements IStorage {
       );
     }
     return updated.length;
+  }
+
+  async cancelPendingNoReplyJobsForContactWorkflows(
+    contactId: string,
+    workflowIds: string[],
+  ): Promise<number> {
+    if (workflowIds.length === 0) return 0;
+    const updated = await db
+      .update(noReplyJobs)
+      .set({ status: "cancelled", updatedAt: new Date(), lastError: "outbound_reschedule" })
+      .where(
+        and(
+          eq(noReplyJobs.contactId, contactId),
+          eq(noReplyJobs.status, "pending"),
+          inArray(noReplyJobs.workflowId, workflowIds),
+        ),
+      )
+      .returning({ id: noReplyJobs.id });
+    return updated.length;
+  }
+
+  async getNoReplyJobByIdempotencyKey(idempotencyKey: string): Promise<NoReplyJob | undefined> {
+    const [row] = await db
+      .select()
+      .from(noReplyJobs)
+      .where(eq(noReplyJobs.idempotencyKey, idempotencyKey))
+      .limit(1);
+    return row;
+  }
+
+  async requeueNoReplyJob(
+    id: string,
+    patch: {
+      runAt: Date;
+      conversationId?: string | null;
+      anchorOutboundAt: Date;
+      snapshotLastInboundAt: Date | null;
+      scheduledReason: string;
+    },
+  ): Promise<NoReplyJob | undefined> {
+    const [row] = await db
+      .update(noReplyJobs)
+      .set({
+        status: "pending",
+        runAt: patch.runAt,
+        conversationId: patch.conversationId ?? null,
+        anchorOutboundAt: patch.anchorOutboundAt,
+        snapshotLastInboundAt: patch.snapshotLastInboundAt,
+        scheduledReason: patch.scheduledReason,
+        lockedAt: null,
+        lastError: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(noReplyJobs.id, id))
+      .returning();
+    return row;
   }
 
   async createNoReplyJob(job: InsertNoReplyJob): Promise<NoReplyJob> {

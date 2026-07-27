@@ -22,6 +22,27 @@ import { bucketFromNumericScore, systemTagForQualification } from "@shared/leadQ
 import { channelService } from "./channelService";
 import { isLegacyCalendlyWorkflowChat } from "./userTwilio";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
+import { evaluateAutomationChannelSendPolicy } from "@shared/automationChannelSendPolicy";
+
+/** Outcome of a workflow message send (no-reply / nurture diagnostics). */
+export type WorkflowSendOutcome =
+  | "sent"
+  | "skipped_customer_replied"
+  | "skipped_stage"
+  | "skipped_meta_window"
+  | "template_required"
+  | "failed_provider"
+  | "failed_internal"
+  | "guard_skipped"
+  | "none";
+
+type SendMessageTemplateResult =
+  | { ok: true; mode: "free_form" | "template" }
+  | {
+      ok: false;
+      outcome: Exclude<WorkflowSendOutcome, "sent" | "none" | "skipped_customer_replied" | "skipped_stage">;
+      detail?: string;
+    };
 
 export interface WorkflowAction {
   type:
@@ -280,8 +301,20 @@ async function executeSendMessageTemplateAction(params: {
   templateKey: string;
   chat?: Chat | null;
   throttleW3Booking?: boolean;
-}): Promise<boolean> {
-  const { workflow, contact, conversationId, templateKey, chat, throttleW3Booking } = params;
+  /** Optional Meta WhatsApp template mapping from the workflow action. */
+  whatsappTemplateName?: string | null;
+  whatsappTemplateLanguage?: string | null;
+}): Promise<SendMessageTemplateResult> {
+  const {
+    workflow,
+    contact,
+    conversationId,
+    templateKey,
+    chat,
+    throttleW3Booking,
+    whatsappTemplateName,
+    whatsappTemplateLanguage,
+  } = params;
   if (!contact?.id) {
     console.warn(
       JSON.stringify({
@@ -292,7 +325,7 @@ async function executeSendMessageTemplateAction(params: {
         templateKey,
       })
     );
-    return false;
+    return { ok: false, outcome: "failed_internal", detail: "no_contact" };
   }
   if (!conversationId) {
     console.warn(
@@ -305,10 +338,11 @@ async function executeSendMessageTemplateAction(params: {
         templateKey,
       })
     );
-    return false;
+    return { ok: false, outcome: "failed_internal", detail: "no_conversation_id" };
   }
-  const tc = workflow.triggerConditions as { templateId?: string };
+  const tc = workflow.triggerConditions as { templateId?: string; templateKey?: string };
   const templateId = tc?.templateId || "realtor-growth-engine";
+  const workflowKey = tc?.templateKey ?? null;
   const row = await storage.getUserTemplateDataByKey(
     workflow.userId,
     templateId,
@@ -328,7 +362,7 @@ async function executeSendMessageTemplateAction(params: {
         templateId,
       })
     );
-    return false;
+    return { ok: false, outcome: "failed_internal", detail: "template_missing_or_empty" };
   }
 
   const needsSchedulingLink = messageTemplateExpectsSchedulingLink(templateKey, rawBody);
@@ -339,7 +373,7 @@ async function executeSendMessageTemplateAction(params: {
       const lastMs = readW3CalendlySentAtMs(contact, chat);
       const now = Date.now();
       if (!Number.isNaN(lastMs) && now - lastMs < W3_CALENDLY_PROMPT_THROTTLE_MS) {
-        return false;
+        return { ok: false, outcome: "guard_skipped", detail: "w3_throttle" };
       }
     }
 
@@ -363,7 +397,7 @@ async function executeSendMessageTemplateAction(params: {
           templateKey,
         })
       );
-      return false;
+      return { ok: false, outcome: "failed_internal", detail: "scheduling_url_missing" };
     }
 
     logRgeBookingPrompt("variablesInjected", {
@@ -394,7 +428,7 @@ async function executeSendMessageTemplateAction(params: {
         templateKey,
       })
     );
-    return false;
+    return { ok: false, outcome: "failed_internal", detail: "scheduling_url_not_in_outbound_body" };
   }
 
   if (!content.trim()) {
@@ -407,8 +441,126 @@ async function executeSendMessageTemplateAction(params: {
         templateKey,
       })
     );
-    return false;
+    return { ok: false, outcome: "failed_internal", detail: "empty_after_interpolation" };
   }
+
+  const conv = await storage.getConversation(conversationId);
+  const channel = (conv?.channel || "").toLowerCase();
+  const policy = evaluateAutomationChannelSendPolicy({
+    channel,
+    windowExpiresAt: conv?.windowExpiresAt,
+    whatsappTemplateName,
+    whatsappTemplateLanguage,
+  });
+
+  console.log(
+    JSON.stringify({
+      tag: "[WorkflowAction]",
+      event: "channel_send_policy",
+      workflowKey,
+      templateKey,
+      channel: channel || null,
+      decision: policy.decision,
+      reason: "reason" in policy ? policy.reason : null,
+      windowExpiresAt: policy.windowExpiresAt?.toISOString?.() ?? null,
+      effectiveFreeFormDeadline: policy.effectiveFreeFormDeadline?.toISOString?.() ?? null,
+    }),
+  );
+
+  if (policy.decision === "skip") {
+    return { ok: false, outcome: "template_required", detail: policy.reason };
+  }
+
+  if (policy.decision === "template") {
+    // Explicit Meta template mapping only — never invent template names.
+    try {
+      const { getWhatsAppAvailability } = await import("./whatsappService");
+      const { sendMetaWhatsAppTemplate } = await import("./userMeta");
+      const wa = await getWhatsAppAvailability(workflow.userId);
+      if (wa.provider !== "meta") {
+        console.warn(
+          JSON.stringify({
+            tag: "[WorkflowAction]",
+            event: "send_message_template_skipped",
+            reason: "meta_window_closed_template_required",
+            detail: "meta_provider_required_for_template",
+            templateKey,
+          }),
+        );
+        return { ok: false, outcome: "template_required", detail: "meta_provider_required" };
+      }
+      const phone = contact.phone?.startsWith("+")
+        ? contact.phone
+        : contact.phone
+          ? `+${contact.phone}`
+          : "";
+      if (!phone) {
+        return { ok: false, outcome: "failed_internal", detail: "no_phone" };
+      }
+      const dedupKey = `wf_msg_tpl_meta:${workflow.id}:${templateKey}:${contact.id}:${policy.whatsappTemplateName}`;
+      const { withAutomationSendGuard } = await import("./automationSendGuard");
+      const out = await withAutomationSendGuard(
+        {
+          userId: workflow.userId,
+          contactId: contact.id,
+          conversationId,
+          source: "workflow",
+          idempotencyKey: dedupKey,
+          allowReEngagementTemplateSend: true,
+        },
+        async () => {
+          const messageRow = await storage.createMessage({
+            conversationId,
+            contactId: contact.id,
+            userId: workflow.userId,
+            direction: "outbound",
+            content,
+            contentType: "template",
+            templateId: policy.whatsappTemplateName,
+            status: "pending",
+          });
+          try {
+            const sendResult = await sendMetaWhatsAppTemplate(
+              workflow.userId,
+              phone,
+              policy.whatsappTemplateName,
+              policy.whatsappTemplateLanguage || "en",
+              undefined,
+            );
+            await storage.updateMessage(messageRow.id, {
+              status: "sent",
+              externalMessageId: sendResult.messageId,
+              sentAt: new Date(),
+            });
+            await storage.updateConversation(conversationId, {
+              lastMessageAt: new Date(),
+              lastMessagePreview: content.slice(0, 100),
+              lastMessageDirection: "outbound",
+            });
+            return { success: true as const, messageId: messageRow.id };
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            await storage.updateMessage(messageRow.id, {
+              status: "failed",
+              errorMessage: msg.slice(0, 480),
+            });
+            return { success: false as const, error: msg };
+          }
+        },
+      );
+      if (!out.ok) {
+        return { ok: false, outcome: "guard_skipped", detail: out.reason };
+      }
+      if (!out.result.success) {
+        return { ok: false, outcome: "failed_provider", detail: out.result.error };
+      }
+      return { ok: true, mode: "template" };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, outcome: "failed_internal", detail: msg };
+    }
+  }
+
   const dedupKey = `wf_msg_tpl:${workflow.id}:${templateKey}:${contact.id}:${content.slice(0, 80)}`;
   const { withAutomationSendGuard } = await import("./automationSendGuard");
   const out = await withAutomationSendGuard({
@@ -419,10 +571,11 @@ async function executeSendMessageTemplateAction(params: {
     idempotencyKey: dedupKey,
   }, async () => {
     let forceChannel: Channel | undefined;
-    const conv = await storage.getConversation(conversationId);
     if (conv?.channel && conv.channel !== "calendly") {
       forceChannel = conv.channel as Channel;
     }
+    // Window already checked via evaluateAutomationChannelSendPolicy; still leave
+    // inbox-style enforcement off so we own the skip/template decision above.
     return channelService.sendMessage({
       userId: workflow.userId,
       contactId: contact.id,
@@ -434,7 +587,7 @@ async function executeSendMessageTemplateAction(params: {
   });
   if (!out.ok) {
     console.log(JSON.stringify({ tag: "[WorkflowAction]", event: "send_message_template_guarded_skip", templateKey, reason: out.reason }));
-    return false;
+    return { ok: false, outcome: "guard_skipped", detail: out.reason };
   }
   if (!out.result.success) {
     console.warn(
@@ -445,7 +598,7 @@ async function executeSendMessageTemplateAction(params: {
         error: out.result.error,
       })
     );
-    return false;
+    return { ok: false, outcome: "failed_provider", detail: out.result.error };
   }
 
   if (needsSchedulingLink && throttleW3Booking && chat && contact?.id) {
@@ -469,7 +622,7 @@ async function executeSendMessageTemplateAction(params: {
       .catch(() => {});
   }
 
-  return true;
+  return { ok: true, mode: "free_form" };
 }
 
 export async function executeWorkflowActions(
@@ -478,14 +631,20 @@ export async function executeWorkflowActions(
   triggerData: any = {},
   contact?: Contact,
   conversationId?: string
-): Promise<{ success: boolean; actionsExecuted: WorkflowAction[]; blockedReason?: string }> {
+): Promise<{
+  success: boolean;
+  actionsExecuted: WorkflowAction[];
+  blockedReason?: string;
+  sendOutcome?: WorkflowSendOutcome;
+}> {
   const actions = workflow.actions as any[];
   const executedActions: WorkflowAction[] = [];
+  let sendOutcome: WorkflowSendOutcome = "none";
   
   try {
     const blockedReason = await blockGrowthEngineWorkflowIfNotEntitled(workflow, chat, conversationId, triggerData);
     if (blockedReason) {
-      return { success: false, actionsExecuted: [], blockedReason };
+      return { success: false, actionsExecuted: [], blockedReason, sendOutcome: "none" };
     }
     for (const action of actions) {
       if (action.type === "apply_tag" && typeof action.tag === "string" && action.tag) {
@@ -601,9 +760,32 @@ export async function executeWorkflowActions(
           contact,
           conversationId,
           templateKey: action.templateKey,
+          whatsappTemplateName:
+            typeof action.whatsappTemplateName === "string" ? action.whatsappTemplateName : null,
+          whatsappTemplateLanguage:
+            typeof action.whatsappTemplateLanguage === "string" ? action.whatsappTemplateLanguage : null,
         });
-        if (sent) {
+        if (sent.ok) {
+          sendOutcome = "sent";
           executedActions.push({ type: "message_template", value: action.templateKey });
+        } else {
+          sendOutcome = sent.outcome;
+          // Nurture honesty: do not apply follow-up tags / stage moves after a failed or window-skipped send.
+          await storage.logWorkflowExecution({
+            workflowId: workflow.id,
+            chatId: chat?.id ?? null,
+            conversationId: conversationId ?? null,
+            triggerData,
+            actionsExecuted: executedActions,
+            status: sent.outcome === "failed_provider" || sent.outcome === "failed_internal" ? "failed" : "partial",
+            errorMessage: sent.detail || sent.outcome,
+          });
+          return {
+            success: false,
+            actionsExecuted: executedActions,
+            blockedReason: sent.detail || sent.outcome,
+            sendOutcome,
+          };
         }
         continue;
       }
@@ -744,7 +926,7 @@ export async function executeWorkflowActions(
       status: "success",
     });
     
-    return { success: true, actionsExecuted: executedActions };
+    return { success: true, actionsExecuted: executedActions, sendOutcome };
   } catch (error: any) {
     console.error("Workflow execution error:", error);
     await storage.logWorkflowExecution({
@@ -756,7 +938,7 @@ export async function executeWorkflowActions(
       status: "failed",
       errorMessage: error.message,
     });
-    return { success: false, actionsExecuted: executedActions };
+    return { success: false, actionsExecuted: executedActions, sendOutcome: "failed_internal" };
   }
 }
 
@@ -926,7 +1108,7 @@ async function executeW3CalendlyKeywordResponse(
     throttleW3Booking: true,
   });
 
-  if (sent && contact.id) {
+  if (sent.ok && contact.id) {
     const fresh = await storage.getContact(contact.id);
     const prev = ((fresh?.customFields as Record<string, unknown> | null) || {}) as Record<string, unknown>;
     await storage

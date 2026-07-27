@@ -1424,7 +1424,7 @@ export function RealtorGrowthEngine() {
       "Qualifies buyers and sellers using budget, financing, and timeline from the conversation.",
       "Detects booking intent and moves the thread toward a showing or call.",
       "Schedules showings or calls when your calendar is connected.",
-      "Follows up automatically when leads go cold on a 24h / 72h / 7d cadence.",
+      "Follows up automatically when leads go quiet — next-day re-engagement, then 3-day and 7-day nurture.",
       "Updates CRM stage, score, tags, and next step so your pipeline stays honest.",
     ];
 
@@ -2077,7 +2077,7 @@ export function RealtorGrowthEngine() {
                 <div className="space-y-1.5 p-2">
                   <div className="rounded-lg border border-gray-100 bg-gray-50 p-2">
                     <div className="mb-0.5 flex items-center justify-between">
-                      <span className="text-[9px] font-semibold text-gray-800">24h Follow-up</span>
+                      <span className="text-[9px] font-semibold text-gray-800">Re-engagement</span>
                       <Badge className="border-0 bg-emerald-100 px-1 py-0 text-[7px] text-emerald-700">Approved</Badge>
                     </div>
                     <p className="text-[8px] text-gray-500">
@@ -2335,19 +2335,19 @@ export function RealtorGrowthEngine() {
       timing: "Immediate on keyword detection",
     },
     W4: {
-      summary: "Sends a friendly follow-up if a lead hasn't replied within 24 hours. Runs for active leads (Open, Proposal, qualified stages, nurture, etc.) except Closed, Unqualified, Lost, or Do Not Contact. Tags as 'Follow-Up Needed'.",
-      triggers: "No reply detected",
-      timing: "24 hours after last message",
+      summary: "Sends a friendly re-engagement follow-up when a lead goes quiet after their last message. Timing is managed for channel-safe delivery (especially WhatsApp). Runs for active leads except Closed, Unqualified, Lost, or Do Not Contact. Tags as 'Follow-Up Needed'.",
+      triggers: "No reply after last customer message",
+      timing: "Next-day re-engagement (managed)",
     },
     W5: {
-      summary: "Second follow-up attempt for leads who still haven't responded after 3 days. Suggests new listings matching their criteria to re-engage interest.",
+      summary: "Second follow-up attempt for leads who still haven't responded after about 3 days of silence from their last message. Suggests new listings matching their criteria to re-engage interest. Meta channels skip free-form sends when the messaging window is closed unless an approved template is configured.",
       triggers: "No reply detected (3 days)",
-      timing: "72 hours after last message",
+      timing: "72 hours after last customer message",
     },
     W6: {
-      summary: "Final follow-up after 7 days of silence. Moves the lead to 'Nurture / Follow-Up' pipeline stage for long-term re-engagement. Sends a low-pressure message about market updates.",
+      summary: "Final follow-up after about 7 days of silence from the customer's last message. Moves the lead to 'Nurture / Follow-Up' pipeline stage for long-term re-engagement. Sends a low-pressure message about market updates on eligible channels.",
       triggers: "No reply detected (7 days)",
-      timing: "168 hours (7 days) after last message",
+      timing: "168 hours (7 days) after last customer message",
     },
     W7: {
       summary: "Safety workflow that detects opt-out or disinterest. Tags as 'Do Not Contact', moves to 'Unqualified' stage, and sends a polite close message. Prevents further automated outreach.",
@@ -2370,8 +2370,6 @@ export function RealtorGrowthEngine() {
       "financingQuestion", "budgetQuestion", "timelineQuestion", "lenderQuestion",
     ],
     W3: ["appointmentIntentKeywords", "bookingLink"],
-    W4: ["followUpDelayHours"],
-    W5: ["followUpDelayHours"],
   };
 
   const GLOBAL_PREF_DEFAULTS: Record<string, any> = {
@@ -2402,8 +2400,6 @@ export function RealtorGrowthEngine() {
       lenderQuestion: "If helpful, I can also connect you with a lender for pre-approval guidance.",
     },
     W3: { appointmentIntentKeywords: "call, book, available, tour, showing, visit, schedule", bookingLink: "https://calendly.com/your-profile/showing" },
-    W4: { followUpDelayHours: 24 },
-    W5: { followUpDelayHours: 72 },
   };
 
   const DashboardView = () => {

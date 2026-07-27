@@ -1,6 +1,6 @@
 import { db } from "../drizzle/db";
 import { templates, templateAssets } from "../shared/schema";
-import { rgeW4NoReplyConditions } from "../shared/rgeNoReplyWorkflows";
+import { rgeW4NoReplyConditions, RGE_W4_DELAY_HOURS, RGE_W4_WORKFLOW_NAME, RGE_NO_REPLY_ANCHOR, RGE_W5_DELAY_HOURS, RGE_W6_DELAY_HOURS } from "../shared/rgeNoReplyWorkflows";
 import { eq, and } from "drizzle-orm";
 
 export async function seedRealtorTemplate() {
@@ -177,9 +177,9 @@ export async function seedRealtorTemplate() {
           },
           {
             key: "W4",
-            name: "No Response Follow-Up (24h)",
+            name: RGE_W4_WORKFLOW_NAME,
             enabledByDefault: true,
-            trigger: { type: "no_reply", delayHours: 24 },
+            trigger: { type: "no_reply", delayHours: RGE_W4_DELAY_HOURS, anchor: RGE_NO_REPLY_ANCHOR },
             conditions: rgeW4NoReplyConditions(),
             actions: [
               { type: "send_message_template", templateKey: "followup_24h" },
@@ -190,7 +190,7 @@ export async function seedRealtorTemplate() {
             key: "W5",
             name: "No Response Follow-Up (3d)",
             enabledByDefault: true,
-            trigger: { type: "no_reply", delayHours: 72 },
+            trigger: { type: "no_reply", delayHours: RGE_W5_DELAY_HOURS, anchor: RGE_NO_REPLY_ANCHOR },
             conditions: [{ type: "stage_not_in", stages: ["Closed", "Unqualified"] }],
             actions: [
               { type: "send_message_template", templateKey: "followup_3d" },
@@ -200,7 +200,7 @@ export async function seedRealtorTemplate() {
             key: "W6",
             name: "No Response Follow-Up (7d) + Nurture",
             enabledByDefault: true,
-            trigger: { type: "no_reply", delayHours: 168 },
+            trigger: { type: "no_reply", delayHours: RGE_W6_DELAY_HOURS, anchor: RGE_NO_REPLY_ANCHOR },
             conditions: [{ type: "stage_not_in", stages: ["Closed", "Unqualified"] }],
             actions: [
               { type: "send_message_template", templateKey: "followup_7d" },
@@ -298,20 +298,49 @@ export async function seedRealtorTemplate() {
       await db.insert(templateAssets).values(asset);
       console.log(`[Seed] Created asset: ${asset.assetType} for ${templateId}`);
     } else if (asset.assetType === "workflows") {
-      const def = existingAsset.definition as { workflows?: { key?: string; conditions?: unknown[] }[] };
+      const def = existingAsset.definition as {
+        workflows?: {
+          key?: string;
+          name?: string;
+          conditions?: unknown[];
+          trigger?: { type?: string; delayHours?: number; anchor?: string };
+        }[];
+      };
       const workflows = def?.workflows;
       if (Array.isArray(workflows)) {
+        let patched = false;
         const w4 = workflows.find((w) => w?.key === "W4");
         const nextConditions = rgeW4NoReplyConditions();
         const legacyStageIn = Array.isArray(w4?.conditions) &&
           w4!.conditions.some((c) => (c as { type?: string })?.type === "stage_in");
         if (w4 && legacyStageIn) {
           w4.conditions = nextConditions;
+          patched = true;
+        }
+        for (const key of ["W4", "W5", "W6"] as const) {
+          const wf = workflows.find((w) => w?.key === key);
+          if (!wf?.trigger || wf.trigger.type !== "no_reply") continue;
+          const wantDelay =
+            key === "W4" ? RGE_W4_DELAY_HOURS : key === "W5" ? RGE_W5_DELAY_HOURS : RGE_W6_DELAY_HOURS;
+          if (wf.trigger.delayHours !== wantDelay || wf.trigger.anchor !== RGE_NO_REPLY_ANCHOR) {
+            wf.trigger = {
+              ...wf.trigger,
+              delayHours: wantDelay,
+              anchor: RGE_NO_REPLY_ANCHOR,
+            };
+            patched = true;
+          }
+          if (key === "W4" && wf.name !== RGE_W4_WORKFLOW_NAME) {
+            wf.name = RGE_W4_WORKFLOW_NAME;
+            patched = true;
+          }
+        }
+        if (patched) {
           await db
             .update(templateAssets)
             .set({ definition: { ...def, workflows } })
             .where(eq(templateAssets.id, existingAsset.id));
-          console.log(`[Seed] Patched W4 workflow conditions on existing workflows asset for ${templateId}`);
+          console.log(`[Seed] Patched RGE no-reply timing/anchor on workflows asset for ${templateId}`);
         } else {
           console.log(`[Seed] Asset ${asset.assetType} already exists for ${templateId}.`);
         }
