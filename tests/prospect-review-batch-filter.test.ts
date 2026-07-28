@@ -61,11 +61,11 @@ run("discovery/import labels are human-readable", () => {
 });
 
 run("select-all copy is batch-aware", () => {
-  assert.equal(formatSelectAllInBatchLabel(20, true), "Select all 20 in this discovery");
-  assert.equal(formatSelectAllInBatchLabel(32, false), "Select all 32 matching filters");
+  assert.equal(formatSelectAllInBatchLabel(20, true), "Select entire batch (20)");
+  assert.equal(formatSelectAllInBatchLabel(32, false), "Select all matching (32)");
   assert.equal(
     formatProspectSelectAllLabel({ count: 20, batchActive: true }),
-    "Select all 20 in this discovery",
+    "Select entire batch (20)",
   );
 });
 
@@ -183,7 +183,7 @@ run("Review API/list/panel wire reviewBatchKey + batches endpoint", () => {
   );
   assert.match(panel, /reviewBatchKey/);
   assert.match(panel, /applyBatchFilter/);
-  assert.match(panel, /Select all/);
+  assert.match(panel, /formatProspectSelectAllLabel|Select entire batch|Select all matching/);
   assert.match(panel, /pi-batch-filter|Batch/);
 });
 

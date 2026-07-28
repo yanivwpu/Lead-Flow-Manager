@@ -33,7 +33,9 @@ assert.equal(PROSPECT_CAMPAIGN_QUEUE_STATUS_LABELS.queued, "Ready");
 assert.equal(prospectCampaignQueueStatusLabel("queued"), "Ready");
 assert.equal(PROSPECT_REVIEW_LIFECYCLE_LABELS.queued, "Campaign Queue");
 assert.equal(PROSPECT_SELECTION_LABELS.selectPage, "Select page");
-assert.equal(PROSPECT_SELECTION_LABELS.selectAllResults, "Select all results");
+assert.equal(PROSPECT_SELECTION_LABELS.selectAllResults, "Select all matching");
+assert.equal(PROSPECT_SELECTION_LABELS.clearSelection, "Clear selection");
+assert.equal(PROSPECT_SELECTION_LABELS.selectEntireBatch, "Select entire batch");
 
 const feed = mapProspectActivityApiToFeedItems({
   events: [
@@ -134,11 +136,9 @@ const campaignsSrc = readFileSync(
   "utf8",
 );
 assert.ok(campaignsSrc.includes("po-queue-start"));
-assert.ok(
-  campaignsSrc.includes("PROSPECT_READY_TO_SEND_LABEL") ||
-    campaignsSrc.includes("PROSPECT_SENDING_QUEUE_LABEL") ||
-    campaignsSrc.includes("PROSPECT_CAMPAIGN_CONTROL_LABELS"),
-);
+assert.ok(campaignsSrc.includes("PROSPECT_READY_TO_SEND_LABEL"));
+assert.ok(campaignsSrc.includes("PROSPECT_CAMPAIGN_CONTROL_LABELS"));
+assert.ok(!campaignsSrc.includes("PROSPECT_SENDING_QUEUE_LABEL"));
 assert.ok(campaignsSrc.includes("buildCampaignsAiAssistantModel"));
 assert.ok(!campaignsSrc.includes("ProspectImportHistoryPanel"));
 assert.ok(!campaignsSrc.includes("Discovery searches"));
@@ -147,12 +147,18 @@ const reviewSrc = readFileSync(
   join(root, "client/src/components/settings/ProspectIntelligencePanel.tsx"),
   "utf8",
 );
-assert.ok(reviewSrc.includes("PROSPECT_SELECTION_LABELS.selectPage"));
-assert.ok(reviewSrc.includes("PROSPECT_SELECTION_LABELS.selectAllResults"));
-assert.ok(!reviewSrc.includes("Select visible"));
+assert.ok(reviewSrc.includes('data-testid="pi-header-select-visible"'));
+assert.ok(reviewSrc.includes("formatProspectSelectAllLabel"));
+assert.ok(reviewSrc.includes("PROSPECT_SELECTION_LABELS.clearSelection"));
+assert.ok(!/\bPROSPECT_SELECTION_LABELS\.selectPage\b/.test(reviewSrc));
+// aria-label may say "Select visible prospects"; forbid bare UI copy "Select visible"
+assert.ok(!/>Select visible</.test(reviewSrc));
+assert.ok(!reviewSrc.includes('"Select visible"'));
 assert.ok(!reviewSrc.includes("Select all filtered"));
-assert.ok(reviewSrc.includes("Lifecycle"));
-assert.ok(reviewSrc.includes("Filters"));
+assert.ok(reviewSrc.includes("Lifecycle") || reviewSrc.includes("prospectReviewLifecycleLabel"));
+assert.ok(reviewSrc.includes("pi-filter-row"));
+assert.ok(!reviewSrc.includes("server-resolved"));
+assert.ok(!reviewSrc.includes("(server-resolved)"));
 
 // DB status keys unchanged in shared lifecycle resolver input
 assert.ok(

@@ -28,6 +28,41 @@ export type ProspectEnrichmentJobStatus = (typeof PROSPECT_ENRICHMENT_JOB_STATUS
 export const PROSPECT_ENRICHMENT_TRIGGERS = ["approve", "queue", "manual", "post_qualify"] as const;
 export type ProspectEnrichmentTrigger = (typeof PROSPECT_ENRICHMENT_TRIGGERS)[number];
 
+/** Safe failure classes stored in enrichment_result / enrichment_error_message (no stack traces). */
+export const PROSPECT_ENRICHMENT_FAILURE_CLASSES = [
+  "website_timeout",
+  "website_fetch_failed",
+  "all_pages_failed",
+  "no_website",
+  "social_profile_only",
+] as const;
+export type ProspectEnrichmentFailureClass = (typeof PROSPECT_ENRICHMENT_FAILURE_CLASSES)[number];
+
+/**
+ * Derived outcome classes — represented via enrichmentStatus + enrichment_result JSON
+ * (no DB migration required).
+ */
+export const PROSPECT_ENRICHMENT_OUTCOME_CLASSES = [
+  "not_started",
+  "queued",
+  "running",
+  "completed_email_found",
+  "completed_no_email",
+  "failed_timeout",
+  "failed_fetch",
+  "no_website",
+  "social_profile_only",
+] as const;
+export type ProspectEnrichmentOutcomeClass = (typeof PROSPECT_ENRICHMENT_OUTCOME_CLASSES)[number];
+
+export const PROSPECT_ENRICHMENT_FAILURE_LABELS: Record<ProspectEnrichmentFailureClass, string> = {
+  website_timeout: "Website timed out",
+  website_fetch_failed: "Website could not be reached",
+  all_pages_failed: "Website pages could not be loaded",
+  no_website: "No public website found",
+  social_profile_only: "Social profile only",
+};
+
 export type ProspectPublicContacts = {
   emails: string[];
   phones: string[];
@@ -70,6 +105,12 @@ export type ProspectEnrichmentResult = {
   websiteIntelligence: ProspectWebsiteIntelligence;
   emailFound: boolean;
   phoneFound: boolean;
+  /** True when at least one page returned usable HTML. */
+  crawlSucceeded?: boolean;
+  failureClass?: ProspectEnrichmentFailureClass | null;
+  outcomeClass?: ProspectEnrichmentOutcomeClass | null;
+  /** Social URLs preserved when the crawl target was official or recovery ran. */
+  socialProfilesPreserved?: string[];
 };
 
 export type ProspectEnrichmentJobSummary = {

@@ -51,8 +51,10 @@ import type {
 } from "@shared/prospectImport";
 import {
   formatProspectSelectAllLabel,
+  formatProspectReviewSelectionSummary,
   PROSPECT_AI_PAGE_SUBTITLES,
   PROSPECT_SELECTION_LABELS,
+  shouldShowSelectEntireScopeAction,
 } from "@shared/prospectAiDisplay";
 import {
   encodeProspectReviewBatchKey,
@@ -95,9 +97,11 @@ import {
 } from "@shared/prospectReviewUx";
 import {
   canEnrichProspect,
+  enrichActionLabel,
   explainCanEnrichProspect,
   explainQualifiedForCampaign,
   formatProspectBulkActionResult,
+  isProspectEnrichmentRetryable,
   isProspectInCampaigns,
   isProspectQualifiedForCampaign,
   listEmailCampaignBlockingReasons,
@@ -111,6 +115,8 @@ import {
   type ProspectNeedsReviewBadge,
   type ProspectReviewWorkFilter,
 } from "@shared/prospectAiReviewState";
+import { resolveMissingEmailDetail } from "@shared/prospectEnrichmentOutcome";
+import { classifyProspectWebsiteUrl } from "@shared/prospectWebsiteClassification";
 import {
   assertEnrichIdsNonEmpty,
   buildBulkApproveRequestBody,
@@ -164,6 +170,9 @@ function reviewUxInput(row: ProspectIntelligenceListItem) {
     email: row.email,
     websiteUrl: row.websiteUrl,
     websiteUrlUsed: row.intelligence.websiteUrlUsed,
+    enrichmentEmailFound: row.intelligence.enrichmentEmailFound,
+    enrichmentErrorMessage: row.intelligence.enrichmentErrorMessage,
+    enrichmentResult: (row.intelligence.enrichmentResult || null) as Record<string, unknown> | null,
     /** Existing supported state — no schema change. */
     notQualified: offer === "not_a_fit",
     /** Same server prior-outreach truth as Send preview. */
@@ -289,7 +298,13 @@ function VerifiedChip({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
-function NeedsReviewReasonBadge({ badge }: { badge: ProspectNeedsReviewBadge }) {
+function NeedsReviewReasonBadge({
+  badge,
+  detail,
+}: {
+  badge: ProspectNeedsReviewBadge;
+  detail?: string | null;
+}) {
   const tone =
     badge.code === "enriching" || badge.code === "analyzing"
       ? "border-sky-200 bg-sky-50 text-sky-800"
@@ -298,14 +313,25 @@ function NeedsReviewReasonBadge({ badge }: { badge: ProspectNeedsReviewBadge }) 
         : badge.code === "not_qualified"
           ? "border-gray-200 bg-gray-50 text-gray-600"
           : "border-amber-200 bg-amber-50 text-amber-900";
+  const title = detail ? `${badge.label}: ${detail}` : badge.label;
   return (
-    <Badge
-      variant="outline"
-      className={cn("mt-1 px-1.5 py-0 text-[10px] font-medium", tone)}
-      data-testid={`pi-needs-review-badge-${badge.code}`}
-    >
-      {badge.label}
-    </Badge>
+    <span className="mt-1 inline-flex max-w-full flex-col gap-0.5" title={title}>
+      <Badge
+        variant="outline"
+        className={cn("w-fit px-1.5 py-0 text-[10px] font-medium", tone)}
+        data-testid={`pi-needs-review-badge-${badge.code}`}
+      >
+        {badge.label}
+      </Badge>
+      {detail ? (
+        <span
+          className="truncate text-[10px] leading-tight text-gray-500"
+          data-testid="pi-missing-email-detail"
+        >
+          {detail}
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -378,6 +404,104 @@ type DetailDialogProps = {
 };
 
 type ContactFieldKind = "email" | "phone";
+
+function ProspectWebsiteFieldEditor(props: {
+  contactId: string;
+  currentUrl?: string | null;
+  onSaved: (websiteUrl: string) => void;
+}) {
+  const { contactId, currentUrl, onSaved } = props;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(currentUrl || ""));
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editing) setDraft(String(currentUrl || ""));
+  }, [currentUrl, editing]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (nextRaw: string) => {
+      const trimmed = nextRaw.trim();
+      if (!trimmed) throw new Error("Enter a website URL");
+      const res = await fetch(`/api/growth-tools/prospect-intelligence/${contactId}/website`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ websiteUrl: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((data as { error?: string }).error || "Could not save website");
+      }
+      return data as { websiteUrl: string };
+    },
+    onSuccess: (data) => {
+      setEditing(false);
+      setLocalError(null);
+      onSaved(data.websiteUrl);
+      toast({ title: "Website saved — Retry Enrichment when ready" });
+    },
+    onError: (err: Error) => {
+      setLocalError(err.message);
+    },
+  });
+
+  if (!editing) {
+    return (
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-7 px-2 text-xs"
+        onClick={() => setEditing(true)}
+        data-testid="pi-website-edit"
+      >
+        <Pencil className="mr-1 h-3 w-3" /> Edit
+      </Button>
+    );
+  }
+
+  return (
+    <div className="flex min-w-0 flex-1 flex-col items-end gap-1" onClick={(e) => e.stopPropagation()}>
+      <div className="flex w-full max-w-sm items-center gap-1">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="https://example.com"
+          className="h-8 text-xs"
+          data-testid="pi-website-edit-input"
+        />
+        <Button
+          type="button"
+          size="sm"
+          className="h-8"
+          disabled={saveMutation.isPending}
+          onClick={() => saveMutation.mutate(draft)}
+          data-testid="pi-website-save"
+        >
+          {saveMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-8"
+          onClick={() => {
+            setEditing(false);
+            setLocalError(null);
+          }}
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      {localError ? (
+        <p className="text-[11px] text-rose-700" data-testid="pi-website-edit-error">
+          {localError}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 function ProspectContactFieldRow(props: {
   kind: ContactFieldKind;
@@ -670,6 +794,11 @@ function ProspectIntelligenceDetailDialog({
   const detailEnrichExplain = item ? explainCanEnrichProspect(reviewUxInput(item)) : null;
   const detailQualifiedExplain = item ? explainQualifiedForCampaign(reviewUxInput(item)) : null;
   const detailNeedsHumanReview = item ? needsHumanReview(reviewUxInput(item)) : false;
+  const detailRetryable = item ? isProspectEnrichmentRetryable(reviewUxInput(item)) : false;
+  const detailEnrichLabel = item ? enrichActionLabel(reviewUxInput(item)) : "Enrich";
+  const missingEmailDetail = item
+    ? resolveMissingEmailDetail(reviewUxInput(item))
+    : null;
 
   const openLinkedConversation = () => {
     if (!item?.contactId || !intel?.outreachConversationId) return;
@@ -875,6 +1004,7 @@ function ProspectIntelligenceDetailDialog({
               websiteUrlUsed: intel.websiteUrlUsed,
             });
             const websiteDomain = prospectWebsiteDomain(websiteHref);
+            const websiteKind = classifyProspectWebsiteUrl(websiteHref);
             const websiteState = resolveProspectWebsiteDetailState({
               websiteUrl: item.websiteUrl,
               websiteUrlUsed: intel.websiteUrlUsed,
@@ -893,6 +1023,7 @@ function ProspectIntelligenceDetailDialog({
                 recommendedOutreachAngle?: string;
                 aiFitInsights?: string;
               };
+              failureClass?: string;
             };
             const contacts = result.publicContacts;
             return (
@@ -900,28 +1031,51 @@ function ProspectIntelligenceDetailDialog({
                 className="rounded-lg border border-gray-200 bg-gray-50/60 p-3"
                 data-testid="pi-website-section"
                 data-website-state={websiteState}
+                data-website-kind={websiteKind}
               >
-                <p className="font-medium text-gray-900">Website</p>
-                {websiteState === "no_website" ? (
-                  <p className="mt-1 text-gray-600" data-testid="pi-website-none">
-                    No website available for analysis
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-medium text-gray-900">Website</p>
+                  <ProspectWebsiteFieldEditor
+                    contactId={item.contactId}
+                    currentUrl={item.websiteUrl || intel.websiteUrlUsed}
+                    onSaved={(nextUrl) => {
+                      onContactFieldsUpdated(item.contactId, {});
+                      onItemUpdated({
+                        ...item,
+                        websiteUrl: nextUrl,
+                        intelligence: {
+                          ...item.intelligence,
+                          enrichmentStatus: "failed",
+                          enrichmentErrorMessage: "Website updated — ready to retry",
+                          websiteUrlUsed: null,
+                        },
+                      });
+                    }}
+                  />
+                </div>
+                {websiteKind === "social" ? (
+                  <p className="mt-1 text-xs text-amber-800" data-testid="pi-website-social-only">
+                    Social profile only — add an official business website to enrich.
                   </p>
-                ) : (
+                ) : null}
+                {websiteState === "no_website" && websiteKind !== "social" ? (
+                  <p className="mt-1 text-gray-600" data-testid="pi-website-none">
+                    No public website found
+                  </p>
+                ) : websiteHref ? (
                   <div className="mt-1 space-y-1.5">
-                    {websiteHref ? (
-                      <p>
-                        <a
-                          href={websiteHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-medium text-brand-green hover:underline"
-                          data-testid="pi-website-link"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {websiteDomain || websiteHref}
-                        </a>
-                      </p>
-                    ) : null}
+                    <p>
+                      <a
+                        href={websiteHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-brand-green hover:underline"
+                        data-testid="pi-website-link"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {websiteDomain || websiteHref}
+                      </a>
+                    </p>
                     {websiteState === "not_analyzed" ? (
                       <p className="text-xs text-gray-500" data-testid="pi-website-status">
                         Status: Not analyzed yet
@@ -947,7 +1101,9 @@ function ProspectIntelligenceDetailDialog({
                     ) : null}
                     {websiteState === "failed" ? (
                       <p className="text-xs text-gray-600" data-testid="pi-website-status">
-                        Website analysis could not be completed
+                        {intel.enrichmentErrorMessage ||
+                          missingEmailDetail?.reason ||
+                          "Website analysis could not be completed"}
                       </p>
                     ) : null}
                     {websiteState === "analyzed" && contacts ? (
@@ -975,7 +1131,12 @@ function ProspectIntelligenceDetailDialog({
                       </p>
                     ) : null}
                   </div>
-                )}
+                ) : null}
+                {missingEmailDetail?.reason && !isValidProspectEmail(item.email) ? (
+                  <p className="mt-2 text-xs text-gray-600" data-testid="pi-detail-missing-email-reason">
+                    Missing Email — {missingEmailDetail.reason}
+                  </p>
+                ) : null}
               </div>
             );
           })()}
@@ -1191,11 +1352,11 @@ function ProspectIntelligenceDetailDialog({
             Retry qualification
           </Button>
           ) : null}
-          {String(intel?.enrichmentStatus || "").toLowerCase() === "failed" ? (
+          {detailRetryable ? (
             <Button
               type="button"
               variant="outline"
-              disabled={retryEnrichmentMutation.isPending}
+              disabled={retryEnrichmentMutation.isPending || detailEnrichBusy}
               onClick={() => retryEnrichmentMutation.mutate()}
               data-testid="pi-retry-enrichment"
             >
@@ -1220,7 +1381,7 @@ function ProspectIntelligenceDetailDialog({
           >
             Save message
           </Button>
-          {detailCanEnrich ? (
+          {detailCanEnrich && !detailRetryable ? (
             <Button
               type="button"
               className="bg-brand-green hover:bg-emerald-700"
@@ -1240,9 +1401,9 @@ function ProspectIntelligenceDetailDialog({
               ) : (
                 <Check className="mr-2 h-4 w-4" />
               )}
-              Enrich
+              {detailEnrichLabel}
             </Button>
-          ) : approveUi.isApproved ||
+          ) : detailCanEnrich && detailRetryable ? null : approveUi.isApproved ||
             approveUi.isOutreachSentOrLater ||
             detailEnrichExplain?.code === "already_enriched" ||
             detailEnrichExplain?.code === "enrichment_in_progress" ? (
@@ -1253,7 +1414,17 @@ function ProspectIntelligenceDetailDialog({
               data-testid="pi-approved-button"
               title={detailEnrichExplain?.message || detailQualifiedExplain?.message || undefined}
             >
-              <Check className="mr-2 h-4 w-4" /> {workStateLabel}
+              <Check className="mr-2 h-4 w-4" />{" "}
+              {detailEnrichExplain?.code === "already_enriched"
+                ? "Enriched"
+                : detailEnrichExplain?.code === "enrichment_in_progress"
+                  ? "Enriching…"
+                  : detailEnrichExplain?.code === "missing_website" ||
+                      detailEnrichExplain?.code === "social_profile_only"
+                    ? detailEnrichExplain.code === "social_profile_only"
+                      ? "Social profile only"
+                      : "No website"
+                    : workStateLabel}
             </Button>
           ) : detailEnrichExplain && !detailEnrichExplain.ok ? (
             <p className="text-xs text-gray-500" data-testid="pi-enrich-blocked-reason">
@@ -1320,7 +1491,7 @@ export function ProspectIntelligencePanel(props: {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAllFiltered, setSelectAllFiltered] = useState(false);
-  /** Frozen server-resolved IDs when Select all results is used (not browser rows). */
+  /** Frozen IDs when Select entire scope is used (not only browser-visible rows). */
   const [resolvedFilteredIds, setResolvedFilteredIds] = useState<string[] | null>(null);
   const [resolvedFilteredCount, setResolvedFilteredCount] = useState<number | null>(null);
   const [bulkResultBanner, setBulkResultBanner] = useState<string | null>(null);
@@ -1710,8 +1881,13 @@ export function ProspectIntelligencePanel(props: {
     let canEnrich = 0;
     let qualified = 0;
     let missingEmail = 0;
+    let alreadyEnriched = 0;
+    let unavailable = 0;
+    let notQualified = 0;
+    let needsReview = 0;
     let firstEnrich: ReturnType<typeof explainCanEnrichProspect> | null = null;
     let firstQualified: ReturnType<typeof explainQualifiedForCampaign> | null = null;
+    let retryCount = 0;
     for (const row of rawItems) {
       if (!effectiveSelectedIds.has(row.contactId)) continue;
       const ux = reviewUxInput(row);
@@ -1719,9 +1895,29 @@ export function ProspectIntelligencePanel(props: {
       const qualEx = explainQualifiedForCampaign(ux);
       if (!firstEnrich) firstEnrich = enrichEx;
       if (!firstQualified) firstQualified = qualEx;
-      if (enrichEx.ok) canEnrich += 1;
+      if (enrichEx.ok) {
+        canEnrich += 1;
+        if (enrichEx.code === "retry_available" || isProspectEnrichmentRetryable(ux)) {
+          retryCount += 1;
+        }
+      } else if (enrichEx.code === "already_enriched") {
+        alreadyEnriched += 1;
+      } else {
+        unavailable += 1;
+      }
       if (qualEx.ok) qualified += 1;
       if (qualEx.code === "missing_email") missingEmail += 1;
+      if (ux.notQualified === true) notQualified += 1;
+      else if (!qualEx.ok && !enrichEx.ok) {
+        /* counted in unavailable / needs review below */
+      }
+      if (
+        ux.notQualified !== true &&
+        !qualEx.ok &&
+        matchesProspectReviewWorkFilter(ux, "needs_review")
+      ) {
+        needsReview += 1;
+      }
     }
     const availability = summarizeSelectionActionAvailability({
       selectedCount: effectiveSelectedIds.size,
@@ -1730,8 +1926,34 @@ export function ProspectIntelligencePanel(props: {
       firstEnrich,
       firstQualified,
       missingEmailCount: missingEmail,
+      alreadyEnrichedCount: alreadyEnriched,
+      unavailableCount: unavailable,
+      notQualifiedCount: notQualified,
+      needsReviewCount: needsReview,
     });
-    return { canEnrich, qualified, missingEmail, firstEnrich, firstQualified, availability };
+    const readable = formatProspectReviewSelectionSummary({
+      selectedCount: effectiveSelectedIds.size,
+      enrichableCount: canEnrich,
+      alreadyEnrichedCount: alreadyEnriched,
+      unavailableCount: unavailable,
+      qualifiedCount: qualified,
+      notQualifiedCount: notQualified,
+      needsReviewCount: needsReview,
+    });
+    return {
+      canEnrich,
+      qualified,
+      missingEmail,
+      alreadyEnriched,
+      unavailable,
+      notQualified,
+      needsReview,
+      retryCount,
+      firstEnrich,
+      firstQualified,
+      availability,
+      readable,
+    };
   }, [rawItems, effectiveSelectedIds, selectedIds.size, selectAllFiltered, resolvedFilteredIds]);
 
   const toggleRow = (contactId: string, e: { stopPropagation: () => void }) => {
@@ -1751,6 +1973,13 @@ export function ProspectIntelligencePanel(props: {
     setResolvedFilteredCount(null);
   };
 
+  const clearSelection = () => {
+    setSelectAllFiltered(false);
+    setResolvedFilteredIds(null);
+    setResolvedFilteredCount(null);
+    setSelectedIds(new Set());
+  };
+
   const selectVisible = () => {
     setSelectAllFiltered(false);
     setResolvedFilteredIds(null);
@@ -1758,12 +1987,44 @@ export function ProspectIntelligencePanel(props: {
     setSelectedIds(new Set(items.map((i) => i.contactId)));
   };
 
-  const clearSelection = () => {
-    setSelectAllFiltered(false);
-    setResolvedFilteredIds(null);
-    setResolvedFilteredCount(null);
-    setSelectedIds(new Set());
+  const clearVisibleSelection = () => {
+    const visible = new Set(items.map((i) => i.contactId));
+    if (selectAllFiltered && resolvedFilteredIds) {
+      const remaining = resolvedFilteredIds.filter((id) => !visible.has(id));
+      if (remaining.length === 0) {
+        clearSelection();
+        return;
+      }
+      setSelectAllFiltered(false);
+      setResolvedFilteredIds(null);
+      setResolvedFilteredCount(null);
+      setSelectedIds(new Set(remaining));
+      return;
+    }
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of visible) next.delete(id);
+      return next;
+    });
   };
+
+  const visibleSelectedCount = useMemo(
+    () => items.filter((row) => effectiveSelectedIds.has(row.contactId)).length,
+    [items, effectiveSelectedIds],
+  );
+  const allVisibleSelected = items.length > 0 && visibleSelectedCount === items.length;
+  const someVisibleSelected = visibleSelectedCount > 0 && !allVisibleSelected;
+
+  const toggleVisibleHeaderCheckbox = () => {
+    if (allVisibleSelected) clearVisibleSelection();
+    else selectVisible();
+  };
+
+  const matchingScopeCount = workFilterCounts[workFilter] ?? items.length;
+  const showSelectEntireScope = shouldShowSelectEntireScopeAction({
+    visibleCount: items.length,
+    matchingCount: matchingScopeCount,
+  });
 
   const selectAllFilteredMutation = useMutation({
     mutationFn: () =>
@@ -1942,16 +2203,21 @@ export function ProspectIntelligencePanel(props: {
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
     },
   });
-  /** Shared Enrich action — toolbar and detail both call this. */
+  /** Shared Enrich action — toolbar and detail both call this. Only eligible IDs are sent. */
   const startProspectEnrichment = (
     contactIds: string[],
     opts?: { suggestedFirstMessage?: string; suggestedOutreachSubject?: string },
   ) => {
-    const idsToEnrich = snapshotEnrichContactIds(contactIds);
+    const snapped = snapshotEnrichContactIds(contactIds);
+    const idsToEnrich = snapped.filter((id) => {
+      const row = rawItems.find((r) => r.contactId === id);
+      if (!row) return false;
+      return canEnrichProspect(reviewUxInput(row));
+    });
     if (!idsToEnrich.length) {
       toast({
         title: "Enrich failed",
-        description: "No prospects selected.",
+        description: "No eligible prospects in the selection.",
         variant: "destructive",
       });
       return;
@@ -2167,42 +2433,13 @@ export function ProspectIntelligencePanel(props: {
         </div>
       ) : null}
 
-      <div className="flex max-w-full flex-nowrap gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {PROSPECT_REVIEW_WORK_FILTER_CHIPS.map((chip) => {
-          const count = workFilterCounts[chip.id] ?? 0;
-          const active = workFilter === chip.id;
-          return (
-            <Button
-              key={chip.id}
-              type="button"
-              size="sm"
-              variant={active ? "default" : "outline"}
-              className={cn(
-                "h-7 shrink-0 rounded-full px-2.5 text-[11px] font-medium transition-all duration-200",
-                active
-                  ? "bg-gray-900 text-white shadow-sm hover:bg-gray-800"
-                  : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50",
-              )}
-              onClick={() => setWorkFilter(chip.id)}
-              data-testid={`pi-filter-${chip.id}`}
-            >
-              {chip.label}
-              <span
-                className={cn(
-                  "ms-1 tabular-nums",
-                  active ? "text-white/80" : "text-gray-400",
-                )}
-              >
-                ({count})
-              </span>
-            </Button>
-          );
-        })}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-1.5">
+      {/* Dataset filters first — then status tabs within that dataset */}
+      <div
+        className="flex flex-wrap items-center gap-1.5"
+        data-testid="pi-filter-row"
+      >
         <Select value={batchFilter} onValueChange={applyBatchFilter}>
-          <SelectTrigger className="h-8 w-[200px] text-xs" data-testid="pi-batch-filter">
+          <SelectTrigger className="h-8 w-[200px] max-w-full text-xs" data-testid="pi-batch-filter">
             <SelectValue placeholder="Batch" />
           </SelectTrigger>
           <SelectContent>
@@ -2217,7 +2454,7 @@ export function ProspectIntelligencePanel(props: {
           </SelectContent>
         </Select>
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-          <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue placeholder="Priority" /></SelectTrigger>
+          <SelectTrigger className="h-8 w-[140px] max-w-full text-xs"><SelectValue placeholder="Priority" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All priorities</SelectItem>
             <SelectItem value="high">High</SelectItem>
@@ -2227,7 +2464,7 @@ export function ProspectIntelligencePanel(props: {
           </SelectContent>
         </Select>
         <Select value={businessFilter} onValueChange={setBusinessFilter}>
-          <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue placeholder="Segment" /></SelectTrigger>
+          <SelectTrigger className="h-8 w-[150px] max-w-full text-xs"><SelectValue placeholder="Segment" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All segments</SelectItem>
             <SelectItem value="agency">Agency</SelectItem>
@@ -2237,7 +2474,7 @@ export function ProspectIntelligencePanel(props: {
           </SelectContent>
         </Select>
         <Select value={channelFilter} onValueChange={setChannelFilter}>
-          <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue placeholder="Channel" /></SelectTrigger>
+          <SelectTrigger className="h-8 w-[150px] max-w-full text-xs"><SelectValue placeholder="Contact info" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Any contact info</SelectItem>
             <SelectItem value="has_email">Has Email</SelectItem>
@@ -2247,7 +2484,9 @@ export function ProspectIntelligencePanel(props: {
           </SelectContent>
         </Select>
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-          <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue placeholder="Sort" /></SelectTrigger>
+          <SelectTrigger className="h-8 w-[150px] max-w-full text-xs" data-testid="pi-action-status-sort">
+            <SelectValue placeholder="Action/status" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="action">Needs action (default)</SelectItem>
             <SelectItem value="name">Name</SelectItem>
@@ -2258,48 +2497,93 @@ export function ProspectIntelligencePanel(props: {
         </Select>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-gray-50/70 px-2.5 py-1.5">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-8 text-xs"
-          onClick={selectVisible}
-          title={PROSPECT_SELECTION_LABELS.selectPageHint}
-        >
-          {PROSPECT_SELECTION_LABELS.selectPage} ({items.length})
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-8 text-xs"
-          disabled={selectAllFilteredMutation.isPending}
-          onClick={() => selectAllFilteredMutation.mutate()}
-          title={PROSPECT_SELECTION_LABELS.selectAllResultsHint}
-        >
-          {selectAllFilteredMutation.isPending
-            ? "Resolving…"
-            : formatProspectSelectAllLabel({
-                count: workFilterCounts[workFilter] ?? items.length,
-                batchActive,
-              })}
-        </Button>
-        <Button type="button" size="sm" variant="ghost" className="h-8 text-xs" onClick={clearSelection}>
-          Clear
-        </Button>
-        <span className="min-w-0 text-xs text-gray-600">
-          <span data-testid="pi-selection-summary">
-            {selectionEligibility.availability.line}
-            {selectAllFiltered && resolvedFilteredCount != null ? " (server-resolved)" : ""}
-          </span>
-          {selectionEligibility.availability.reason ? (
-            <span className="mt-0.5 block text-[11px] text-amber-800" data-testid="pi-selection-reason">
-              {selectionEligibility.availability.reason}
-            </span>
+      <div
+        className="flex max-w-full flex-nowrap gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        data-testid="pi-status-tabs"
+        role="tablist"
+        aria-label="Review status"
+      >
+        {PROSPECT_REVIEW_WORK_FILTER_CHIPS.map((chip) => {
+          const count = workFilterCounts[chip.id] ?? 0;
+          const active = workFilter === chip.id;
+          return (
+            <button
+              key={chip.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              className={cn(
+                "inline-flex h-6 shrink-0 items-center rounded-md px-2 text-[11px] font-medium transition-colors duration-150",
+                active
+                  ? "bg-gray-900 text-white"
+                  : "bg-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+              )}
+              onClick={() => setWorkFilter(chip.id)}
+              data-testid={`pi-filter-${chip.id}`}
+            >
+              {chip.label}
+              <span
+                className={cn(
+                  "ms-1 tabular-nums",
+                  active ? "text-white/75" : "text-gray-400",
+                )}
+              >
+                ({count})
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div
+        className="flex flex-col gap-2 rounded-lg border bg-gray-50/70 px-2.5 py-1.5 sm:flex-row sm:flex-wrap sm:items-center"
+        data-testid="pi-selection-toolbar"
+      >
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+          {showSelectEntireScope ? (
+            <button
+              type="button"
+              className="h-auto p-0 text-xs font-medium text-brand-green hover:underline disabled:opacity-50"
+              disabled={selectAllFilteredMutation.isPending}
+              onClick={() => selectAllFilteredMutation.mutate()}
+              title={PROSPECT_SELECTION_LABELS.selectAllResultsHint}
+              data-testid="pi-select-entire-scope"
+            >
+              {selectAllFilteredMutation.isPending
+                ? "Resolving…"
+                : formatProspectSelectAllLabel({
+                    count: matchingScopeCount,
+                    batchActive,
+                  })}
+            </button>
           ) : null}
-        </span>
-        <div className="ml-auto flex flex-wrap gap-1.5">
+          {selectedCount > 0 ? (
+            <button
+              type="button"
+              className="h-auto p-0 text-xs text-gray-500 hover:text-gray-800 hover:underline"
+              onClick={clearSelection}
+              data-testid="pi-clear-selection"
+            >
+              {PROSPECT_SELECTION_LABELS.clearSelection}
+            </button>
+          ) : null}
+          <div className="min-w-0 text-xs text-gray-600">
+            <p data-testid="pi-selection-summary" className="font-medium text-gray-800">
+              {selectionEligibility.readable.headline}
+            </p>
+            {selectionEligibility.readable.detail || selectionEligibility.availability.detail ? (
+              <p className="text-[11px] text-gray-500" data-testid="pi-selection-detail">
+                {selectionEligibility.readable.detail || selectionEligibility.availability.detail}
+              </p>
+            ) : null}
+            {selectionEligibility.availability.reason && selectedCount > 0 && selectionEligibility.canEnrich === 0 && selectionEligibility.qualified === 0 ? (
+              <p className="mt-0.5 text-[11px] text-amber-800" data-testid="pi-selection-reason">
+                {selectionEligibility.availability.reason}
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1.5 sm:ml-auto">
           <Button
             type="button"
             size="sm"
@@ -2330,7 +2614,15 @@ export function ProspectIntelligencePanel(props: {
               </>
             ) : (
               <>
-                <Check className="mr-1 h-3.5 w-3.5" /> Enrich
+                <Check className="mr-1 h-3.5 w-3.5" />{" "}
+                {selectionEligibility.retryCount > 0 &&
+                selectionEligibility.retryCount === selectionEligibility.canEnrich
+                  ? selectionEligibility.canEnrich > 0
+                    ? `Retry Enrichment ${selectionEligibility.canEnrich}`
+                    : "Retry Enrichment"
+                  : selectionEligibility.canEnrich > 0
+                    ? `Enrich ${selectionEligibility.canEnrich}`
+                    : "Enrich"}
               </>
             )}
           </Button>
@@ -2343,7 +2635,14 @@ export function ProspectIntelligencePanel(props: {
               selectionEligibility.qualified === 0 ||
               previewQueueMutation.isPending
             }
-            onClick={() => previewQueueMutation.mutate(undefined)}
+            onClick={() => {
+              const qualifiedIds = Array.from(effectiveSelectedIds).filter((id) => {
+                const row = rawItems.find((r) => r.contactId === id);
+                if (!row) return false;
+                return explainQualifiedForCampaign(reviewUxInput(row)).ok;
+              });
+              previewQueueMutation.mutate(qualifiedIds.length ? qualifiedIds : undefined);
+            }}
             data-testid="pi-queue-outreach"
             title={
               selectedCount > 0 && selectionEligibility.qualified === 0
@@ -2352,7 +2651,10 @@ export function ProspectIntelligencePanel(props: {
                 : undefined
             }
           >
-            <Mail className="mr-1 h-3.5 w-3.5" /> Send to Campaign
+            <Mail className="mr-1 h-3.5 w-3.5" />{" "}
+            {selectionEligibility.qualified > 0
+              ? `Send ${selectionEligibility.qualified} to Campaign`
+              : "Send to Campaign"}
           </Button>
         </div>
       </div>
@@ -2381,7 +2683,20 @@ export function ProspectIntelligencePanel(props: {
             </colgroup>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-10" />
+                <TableHead className="w-10">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someVisibleSelected;
+                    }}
+                    onChange={toggleVisibleHeaderCheckbox}
+                    aria-label="Select all rows on this page"
+                    className="h-4 w-4 rounded border-gray-300"
+                    data-testid="pi-header-select-visible"
+                    title={PROSPECT_SELECTION_LABELS.selectPageHint}
+                  />
+                </TableHead>
                 <TableHead>Business</TableHead>
                 <TableHead>AI summary</TableHead>
                 <TableHead>Signals</TableHead>
@@ -2460,7 +2775,16 @@ export function ProspectIntelligencePanel(props: {
                         </div>
                       ) : null}
                       {needsReviewBadge ? (
-                        <NeedsReviewReasonBadge badge={needsReviewBadge} />
+                        <NeedsReviewReasonBadge
+                          badge={needsReviewBadge}
+                          detail={
+                            needsReviewBadge.code === "missing_email" ||
+                            needsReviewBadge.code === "enrichment_failed" ||
+                            needsReviewBadge.code === "missing_website"
+                              ? resolveMissingEmailDetail(ux)?.reason
+                              : null
+                          }
+                        />
                       ) : null}
                     </TableCell>
                     <TableCell className="min-w-0">

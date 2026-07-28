@@ -23,6 +23,9 @@ import { analyzeProspectContact } from "./prospectIntelligenceService";
 import { isValidProspectEmail, isValidProspectPhone } from "@shared/prospectContactEnrichment";
 import { shouldApplyScrapedProspectEmail, selectBestProspectEmail } from "./prospectWebsiteContactExtract";
 import { extractSqlExecuteId } from "@shared/prospectAnalysisOwnership";
+import { userFacingEnrichmentErrorMessage } from "@shared/prospectEnrichmentOutcome";
+import { classifyProspectWebsiteUrl } from "@shared/prospectWebsiteClassification";
+import { resolveProspectOfficialWebsiteUrl, resolveProspectSocialProfileUrls } from "./prospectWebsiteUrl";
 
 function mapJob(row: ProspectEnrichmentJobRow): ProspectEnrichmentJobSummary {
   return {
@@ -83,14 +86,29 @@ export async function enqueueProspectEnrichment(params: {
   const pi = piRows[0];
   if (!pi) return null;
 
-  // Approve / manual retry require human approval first.
-  // queue + post_qualify may scrape website contacts before Enrich click.
+  // Approve requires human approval. Manual retry may run for pending/needs_review
+  // when a prior enrichment attempt already happened (post_qualify / empty complete).
   const review = String(pi.reviewStatus || "").toLowerCase();
-  if (params.trigger === "approve" || params.trigger === "manual") {
-    if (review !== "approved") {
-      return null;
-    }
+  if (params.trigger === "approve") {
+    if (review !== "approved") return null;
   }
+  if (params.trigger === "manual") {
+    if (!["approved", "pending", "needs_review"].includes(review)) return null;
+  }
+
+  // Never create a duplicate active job.
+  const activeRows = await db
+    .select()
+    .from(prospectEnrichmentJobs)
+    .where(
+      and(
+        eq(prospectEnrichmentJobs.contactId, params.contactId),
+        inArray(prospectEnrichmentJobs.status, ["pending", "running"]),
+      ),
+    )
+    .orderBy(desc(prospectEnrichmentJobs.createdAt))
+    .limit(1);
+  if (activeRows[0]) return mapJob(activeRows[0]);
 
   if (!params.force) {
     const status = String(pi.enrichmentStatus || "none").toLowerCase();
@@ -251,6 +269,9 @@ async function applyEnrichmentToContact(
     websiteAnalyzedAt: result.websiteAnalyzedAt,
     publicContacts: result.publicContacts,
     websiteIntelligence: result.websiteIntelligence,
+    failureClass: result.failureClass ?? null,
+    outcomeClass: result.outcomeClass ?? null,
+    socialProfilesPreserved: result.socialProfilesPreserved || result.publicContacts.socialProfiles || [],
   };
   patch.sourceDetails = { ...sd, prospectEnrichment: enrichmentMeta };
   patch.customFields = { ...cf, prospectEnrichment: enrichmentMeta };
@@ -299,6 +320,36 @@ export async function processClaimedEnrichmentJob(
     });
 
     await applyEnrichmentToContact(job.contactId, job.workspaceUserId, result);
+
+    const failureClass = result.failureClass || null;
+    const crawlFailed = result.crawlSucceeded === false || Boolean(failureClass);
+    const safeError = crawlFailed
+      ? userFacingEnrichmentErrorMessage(failureClass, result.websiteIntelligence?.businessSummary)
+      : null;
+
+    if (crawlFailed) {
+      await patchIntelligenceEnrichment(job.contactId, {
+        enrichmentStatus: "failed",
+        enrichmentProvider: result.provider,
+        websiteAnalyzedAt: result.websiteAnalyzedAt ? new Date(result.websiteAnalyzedAt) : new Date(),
+        websiteUrlUsed: result.websiteUrl || null,
+        enrichmentEmailFound: false,
+        enrichmentPhoneFound: result.phoneFound,
+        enrichmentResult: result as unknown as Record<string, unknown>,
+        enrichmentErrorMessage: safeError,
+        enrichmentJobId: job.id,
+      });
+      await updateJob(job.id, {
+        status: "failed",
+        completedAt: new Date(),
+        progressCurrent: job.progressTotal ?? 4,
+        result: result as unknown as Record<string, unknown>,
+        errorMessage: safeError,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+      });
+      return;
+    }
 
     await patchIntelligenceEnrichment(job.contactId, {
       enrichmentStatus: "completed",
@@ -361,16 +412,25 @@ export async function processClaimedEnrichmentJob(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const safe = userFacingEnrichmentErrorMessage(
+      /abort|timeout/i.test(message) ? "website_timeout" : "website_fetch_failed",
+      message,
+    );
     await updateJob(job.id, {
       status: "failed",
       completedAt: new Date(),
-      errorMessage: message.slice(0, 500),
+      errorMessage: safe,
       leaseOwner: null,
       leaseExpiresAt: null,
     });
     await patchIntelligenceEnrichment(job.contactId, {
       enrichmentStatus: "failed",
-      enrichmentErrorMessage: message.slice(0, 500),
+      enrichmentErrorMessage: safe,
+      enrichmentResult: {
+        failureClass: /abort|timeout/i.test(message) ? "website_timeout" : "website_fetch_failed",
+        outcomeClass: /abort|timeout/i.test(message) ? "failed_timeout" : "failed_fetch",
+        crawlSucceeded: false,
+      },
     });
     console.error("[ProspectEnrichment] job failed:", job.id, message);
   }
@@ -393,16 +453,112 @@ export async function getEnrichmentJob(
   return rows[0] ? mapJob(rows[0]) : null;
 }
 
+/**
+ * Retry enrichment after failure or completed-without-email (official website required).
+ * Does not call Places / discovery quota. Reuses the same contact.
+ */
 export async function retryFailedEnrichment(params: {
   contactId: string;
   workspaceUserId: string;
   initiatedByUserId: string;
 }): Promise<ProspectEnrichmentJobSummary | null> {
+  const contact = await storage.getContact(params.contactId);
+  if (!contact) return null;
+  assertContactInWorkspace(contact, params.workspaceUserId);
+
+  const piRows = await db
+    .select()
+    .from(prospectIntelligence)
+    .where(eq(prospectIntelligence.contactId, params.contactId))
+    .limit(1);
+  const pi = piRows[0];
+  if (!pi) return null;
+
+  const status = String(pi.enrichmentStatus || "none").toLowerCase();
+  const emailFound = pi.enrichmentEmailFound === true || isValidProspectEmail(contact.email);
+  const hasOfficial = Boolean(resolveProspectOfficialWebsiteUrl(contact));
+
+  // Failed without official website (social-only / no-website) → not retryable until URL fixed.
+  // Completed with email → do not re-crawl.
+  const canRetry =
+    hasOfficial &&
+    ((status === "failed") || (status === "completed" && !emailFound));
+  if (!canRetry) return null;
+
   return enqueueProspectEnrichment({
     ...params,
     trigger: "manual",
     force: true,
   });
+}
+
+/**
+ * Persist a manually corrected official website and reopen enrichment eligibility.
+ * Preserves existing valid email. Does not create contacts or charge discovery quota.
+ */
+export async function saveProspectOfficialWebsite(params: {
+  contactId: string;
+  workspaceUserId: string;
+  websiteUrl: string;
+}): Promise<{ websiteUrl: string }> {
+  const contact = await storage.getContact(params.contactId);
+  if (!contact) throw new Error("Contact not found");
+  assertContactInWorkspace(contact, params.workspaceUserId);
+
+  const trimmed = String(params.websiteUrl || "").trim();
+  if (!trimmed) throw new Error("Enter a website URL");
+  const withProto = trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
+  let href: string;
+  try {
+    href = new URL(withProto).href;
+  } catch {
+    throw new Error("Enter a valid website URL");
+  }
+  if (classifyProspectWebsiteUrl(href) !== "official") {
+    throw new Error("Enter an official business website (not a social profile)");
+  }
+
+  const sd = { ...(contact.sourceDetails as Record<string, unknown> | null) };
+  const cf = { ...(contact.customFields as Record<string, unknown> | null) };
+  const paiSd = { ...((sd.prospectAi as Record<string, unknown>) || {}) };
+  const paiCf = { ...((cf.prospectAi as Record<string, unknown>) || {}) };
+  const priorWebsite = String(paiSd.website || paiCf.website || sd.website || "").trim();
+  const preservedSocial = [
+    ...resolveProspectSocialProfileUrls(contact),
+    ...(classifyProspectWebsiteUrl(priorWebsite) === "social" ? [priorWebsite] : []),
+  ];
+
+  paiSd.website = href;
+  paiSd.websiteManual = true;
+  paiCf.website = href;
+  paiCf.websiteManual = true;
+  if (preservedSocial.length) {
+    const socials = Array.from(new Set(preservedSocial.map((u) => String(u).trim()).filter(Boolean)));
+    paiSd.socialProfiles = socials;
+    paiCf.socialProfiles = socials;
+  }
+
+  await storage.updateContact(params.contactId, {
+    sourceDetails: { ...sd, prospectAi: paiSd, website: href, websiteManual: true },
+    customFields: { ...cf, prospectAi: paiCf, website: href, websiteManual: true },
+  });
+
+  // Reopen enrichment: mark failed with clear reason so Retry Enrichment is available.
+  await patchIntelligenceEnrichment(params.contactId, {
+    enrichmentStatus: "failed",
+    enrichmentErrorMessage: "Website updated — ready to retry",
+    websiteUrlUsed: null,
+    enrichmentEmailFound: isValidProspectEmail(contact.email) ? true : false,
+    enrichmentResult: {
+      failureClass: "website_fetch_failed",
+      outcomeClass: "failed_fetch",
+      crawlSucceeded: false,
+      websiteUrl: href,
+      note: "website_manual_update",
+    },
+  });
+
+  return { websiteUrl: href };
 }
 
 export const prospectEnrichmentService = {
@@ -413,4 +569,5 @@ export const prospectEnrichmentService = {
   recoverStaleEnrichmentJobs,
   getEnrichmentJob,
   retryFailedEnrichment,
+  saveProspectOfficialWebsite,
 };

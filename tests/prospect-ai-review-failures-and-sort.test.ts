@@ -267,10 +267,12 @@ run("Review panel defaults to action sort", () => {
   assert.match(panel, /pi-analysis-failed-reason/);
 });
 
-run("aiProvider resolves OpenAI key via shared helper", () => {
+run("aiProvider resolves OpenAI key via shared helper (no debug ingest)", () => {
   const src = readFileSync(join(root, "server/aiProvider.ts"), "utf8");
   assert.match(src, /resolveOpenAiApiKey/);
   assert.match(src, /ensureOpenAiKey/);
+  assert.equal(src.includes("7693/ingest"), false);
+  assert.equal(src.includes("#region agent log"), false);
 });
 
 console.log("prospect-ai-review-failures-and-sort.test.ts: all assertions passed");

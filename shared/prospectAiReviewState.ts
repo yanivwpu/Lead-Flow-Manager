@@ -16,6 +16,14 @@ import {
   isProspectQualificationComplete,
   type ProspectReviewUxInput,
 } from "./prospectReviewUx";
+import {
+  prospectHasOfficialWebsiteUrl,
+  prospectWebsiteIsSocialOnly,
+  readEnrichmentFailureClass,
+  resolveMissingEmailDetail,
+  resolveProspectEnrichmentOutcomeClass,
+} from "./prospectEnrichmentOutcome";
+import { classifyProspectWebsiteUrl } from "./prospectWebsiteClassification";
 
 export type ProspectReviewWorkState =
   | "needs_review"
@@ -172,6 +180,9 @@ export type ProspectReviewStateInput = ProspectReviewUxInput & {
   email?: string | null;
   websiteUrl?: string | null;
   websiteUrlUsed?: string | null;
+  enrichmentEmailFound?: boolean | null;
+  enrichmentErrorMessage?: string | null;
+  enrichmentResult?: Record<string, unknown> | null;
   /** Intentional low-fit / dismissed — separate from Needs Attention. */
   notQualified?: boolean | null;
   /** Existing Unified Inbox thread (when known from list payload). */
@@ -201,9 +212,57 @@ export function isProspectInInboxJourney(input: ProspectReviewStateInput): boole
   return hasTraceableProspectInboxThread(input);
 }
 
-/** Enrichment applies when a website URL exists. */
+/** Enrichment applies when an official (non-social) website URL exists. */
 export function doesEnrichmentApply(input: ProspectReviewStateInput): boolean {
-  return prospectHasWebsiteUrl(input);
+  return prospectHasOfficialWebsiteUrl(input);
+}
+
+export function prospectEnrichmentHadPriorAttempt(input: ProspectReviewStateInput): boolean {
+  const s = String(input.enrichmentStatus || "none").toLowerCase();
+  return s === "completed" || s === "failed" || s === "cancelled";
+}
+
+export function prospectEnrichmentEmailSatisfied(input: ProspectReviewStateInput): boolean {
+  return input.enrichmentEmailFound === true || prospectHasCampaignContact(input);
+}
+
+/**
+ * Retry Enrichment when prior attempt failed, or completed without email and an
+ * official website is available. Social-only / no-website → not retryable.
+ */
+export function isProspectEnrichmentRetryable(input: ProspectReviewStateInput): boolean {
+  if (input.notQualified === true) return false;
+  if (isProspectInCampaigns(input)) return false;
+  if (isProspectEnrichmentInProgress(input.enrichmentStatus)) return false;
+  if (!doesEnrichmentApply(input)) return false;
+  if (prospectEnrichmentEmailSatisfied(input) && isProspectEnrichmentComplete(input.enrichmentStatus)) {
+    return false;
+  }
+  const status = String(input.enrichmentStatus || "none").toLowerCase();
+  if (status === "failed") return true;
+  if (status === "completed" && !prospectEnrichmentEmailSatisfied(input)) return true;
+  // Legacy false-completed (all pages failed) treated as retryable via outcome helpers.
+  const outcome = resolveProspectEnrichmentOutcomeClass(input);
+  return (
+    outcome === "failed_timeout" ||
+    outcome === "failed_fetch" ||
+    outcome === "completed_no_email"
+  );
+}
+
+export function enrichActionLabel(input: ProspectReviewStateInput): "Enrich" | "Retry Enrichment" {
+  if (isProspectEnrichmentRetryable(input) || prospectEnrichmentHadPriorAttempt(input)) {
+    if (isProspectEnrichmentComplete(input.enrichmentStatus) && prospectEnrichmentEmailSatisfied(input)) {
+      return "Enrich";
+    }
+    if (
+      isProspectEnrichmentFailed(input.enrichmentStatus) ||
+      (isProspectEnrichmentComplete(input.enrichmentStatus) && !prospectEnrichmentEmailSatisfied(input))
+    ) {
+      return "Retry Enrichment";
+    }
+  }
+  return "Enrich";
 }
 
 export type ProspectEligibilityExplanation = {
@@ -223,9 +282,11 @@ export type ProspectEligibilityExplanation = {
     | "enrichment_failed"
     | "enrichment_incomplete"
     | "missing_website"
+    | "social_profile_only"
     | "missing_email"
     | "not_approved"
-    | "review_not_pending";
+    | "review_not_pending"
+    | "retry_available";
   /** Short user-facing reason. */
   message: string;
 };
@@ -237,6 +298,21 @@ export type ProspectEligibilityExplanation = {
 function isEnrichDecisionReviewStatus(reviewStatus?: string | null): boolean {
   const review = String(reviewStatus || "pending").toLowerCase();
   return review === "pending" || review === "needs_review";
+}
+
+function explainEnrichBlockedByWebsite(input: ProspectReviewStateInput): ProspectEligibilityExplanation {
+  if (prospectWebsiteIsSocialOnly(input) || classifyProspectWebsiteUrl(input.websiteUrl || input.websiteUrlUsed) === "social") {
+    return {
+      ok: false,
+      code: "social_profile_only",
+      message: "Social profile only — add an official website to enrich.",
+    };
+  }
+  return {
+    ok: false,
+    code: "missing_website",
+    message: "No website available to enrich.",
+  };
 }
 
 /**
@@ -282,34 +358,7 @@ export function explainCanEnrichProspect(
     };
   }
 
-  const review = String(input.reviewStatus || "pending").toLowerCase();
-
-  if (review === "approved") {
-    if (isProspectEnrichmentFailed(input.enrichmentStatus)) {
-      if (!doesEnrichmentApply(input)) {
-        return {
-          ok: false,
-          code: "missing_website",
-          message: "No website available to enrich.",
-        };
-      }
-      return { ok: true, code: "ok", message: "" };
-    }
-    if (isProspectEnrichmentComplete(input.enrichmentStatus)) {
-      return {
-        ok: false,
-        code: "already_enriched",
-        message: "This prospect is already enriched.",
-      };
-    }
-    if (isProspectEnrichmentInProgress(input.enrichmentStatus)) {
-      return {
-        ok: false,
-        code: "enrichment_in_progress",
-        message: "Already enriching.",
-      };
-    }
-    // Approved but enrichment not failed — do not re-trigger via Enrich (matches prior gate).
+  if (isProspectEnrichmentInProgress(input.enrichmentStatus)) {
     return {
       ok: false,
       code: "enrichment_in_progress",
@@ -317,30 +366,56 @@ export function explainCanEnrichProspect(
     };
   }
 
-  // pending + needs_review: Enrich = human continue → existing approve/enrich pipeline
-  if (isEnrichDecisionReviewStatus(review) || input.needsReview === true) {
-    if (isProspectEnrichmentComplete(input.enrichmentStatus)) {
+  const review = String(input.reviewStatus || "pending").toLowerCase();
+
+  // Completed with email found → permanently enriched for Enrich action.
+  if (
+    isProspectEnrichmentComplete(input.enrichmentStatus) &&
+    prospectEnrichmentEmailSatisfied(input)
+  ) {
+    return {
+      ok: false,
+      code: "already_enriched",
+      message: "This prospect is already enriched.",
+    };
+  }
+
+  // Failed or completed-without-email + official website → Retry Enrichment.
+  if (isProspectEnrichmentRetryable(input)) {
+    return { ok: true, code: "retry_available", message: "" };
+  }
+
+  // Failed / completed empty without official website.
+  if (
+    isProspectEnrichmentFailed(input.enrichmentStatus) ||
+    (isProspectEnrichmentComplete(input.enrichmentStatus) && !prospectEnrichmentEmailSatisfied(input))
+  ) {
+    return explainEnrichBlockedByWebsite(input);
+  }
+
+  if (review === "approved") {
+    // Approved but enrichment not started — only Enrich when website applies or email exists.
+    if (!doesEnrichmentApply(input) && !prospectHasCampaignContact(input)) {
+      return explainEnrichBlockedByWebsite(input);
+    }
+    if (!doesEnrichmentApply(input) && prospectHasCampaignContact(input)) {
+      // Email already present, no website — nothing left to enrich.
       return {
         ok: false,
         code: "already_enriched",
         message: "This prospect is already enriched.",
       };
     }
-    if (isProspectEnrichmentInProgress(input.enrichmentStatus)) {
-      return {
-        ok: false,
-        code: "enrichment_in_progress",
-        message: "Already enriching.",
-      };
-    }
+    // Approved + none/cancelled with website → Enrich once.
+    return { ok: true, code: "ok", message: "" };
+  }
+
+  // pending + needs_review: Enrich = human continue → existing approve/enrich pipeline
+  if (isEnrichDecisionReviewStatus(review) || input.needsReview === true) {
     // Website required only when enrichment is the intended next step.
     // No-website + email can still Enrich (approve) to unlock Campaigns.
     if (!doesEnrichmentApply(input) && !prospectHasCampaignContact(input)) {
-      return {
-        ok: false,
-        code: "missing_website",
-        message: "No website available to enrich.",
-      };
+      return explainEnrichBlockedByWebsite(input);
     }
     return { ok: true, code: "ok", message: "" };
   }
@@ -517,110 +592,94 @@ export function summarizeSelectionActionAvailability(input: {
   firstQualified?: ProspectEligibilityExplanation | null;
   /** Counts of non-enrichable / non-qualified with shared reason codes. */
   missingEmailCount?: number;
-}): { line: string; reason: string | null } {
+  alreadyEnrichedCount?: number;
+  unavailableCount?: number;
+  notQualifiedCount?: number;
+  needsReviewCount?: number;
+}): { line: string; detail: string | null; reason: string | null } {
   const n = input.selectedCount;
-  if (n <= 0) return { line: "0 selected", reason: null };
+  if (n <= 0) return { line: "0 selected", detail: null, reason: null };
 
   const enrichOk = input.enrichableCount > 0;
   const sendOk = input.qualifiedCount > 0;
+  const already = input.alreadyEnrichedCount ?? 0;
+  const unavailable =
+    input.unavailableCount ?? Math.max(0, n - input.enrichableCount - already);
+  const notQualified = input.notQualifiedCount ?? 0;
+  const needsReview = input.needsReviewCount ?? 0;
 
-  if (enrichOk && sendOk) {
-    return {
-      line: `${n} selected · ${input.enrichableCount} can be enriched · ${input.qualifiedCount} qualified`,
-      reason: null,
-    };
+  const enrichParts = [`${input.enrichableCount} can be enriched`];
+  if (already > 0) enrichParts.push(`${already} already enriched`);
+  if (unavailable > 0) enrichParts.push(`${unavailable} unavailable`);
+
+  const campaignParts: string[] = [];
+  if (input.qualifiedCount > 0) {
+    campaignParts.push(`${input.qualifiedCount} ready for campaign`);
+  }
+  if (notQualified > 0) campaignParts.push(`${notQualified} not qualified`);
+  if (needsReview > 0) campaignParts.push(`${needsReview} need review`);
+
+  const enrichMixed =
+    n > 1 && (already > 0 || unavailable > 0 || input.enrichableCount !== n);
+  const detail = enrichMixed
+    ? enrichParts.join(" · ")
+    : campaignParts.length > 0
+      ? campaignParts.join(" · ")
+      : n > 1
+        ? enrichParts.join(" · ")
+        : null;
+
+  // Single-select edge copy for blocked actions (kept compact, human-readable).
+  if (n === 1 && !enrichOk && !sendOk) {
+    if (input.firstEnrich?.code === "already_enriched" && input.firstQualified?.ok) {
+      return { line: "1 selected", detail: "Ready for campaign", reason: null };
+    }
+    if (input.firstEnrich && !input.firstEnrich.ok) {
+      return {
+        line: "1 selected",
+        detail: null,
+        reason: input.firstEnrich.message,
+      };
+    }
+    if (input.firstQualified && !input.firstQualified.ok) {
+      return {
+        line: "1 selected",
+        detail: null,
+        reason: input.firstQualified.message,
+      };
+    }
   }
 
-  if (!enrichOk && !sendOk) {
-    // Prefer the Enrich blocker when Send says "enrich first" but Enrich itself is impossible.
+  if (n === 1 && !enrichOk && sendOk && input.firstEnrich?.code === "already_enriched") {
+    return { line: "1 selected", detail: "Ready for campaign", reason: null };
+  }
+
+  if (n === 1 && enrichOk && !sendOk) {
     const sendSaysEnrichFirst =
       input.firstQualified?.code === "enrichment_incomplete" ||
       /enrich this prospect/i.test(input.firstQualified?.message || "");
-    const reason =
-      (sendSaysEnrichFirst && input.firstEnrich && !input.firstEnrich.ok
-        ? input.firstEnrich.message
-        : null) ||
-      input.firstEnrich?.message ||
-      input.firstQualified?.message ||
-      "Selected prospects are not ready for Enrich or Send.";
-    if (n === 1) {
-      if (input.firstEnrich && !input.firstEnrich.ok) {
-        if (input.firstEnrich.code === "already_enriched" && input.firstQualified?.ok) {
-          return { line: `1 selected · Ready for Campaign`, reason: null };
-        }
-        if (input.firstEnrich.code === "already_enriched") {
-          return { line: `1 selected · Enrich unavailable`, reason: null };
-        }
-        return {
-          line: `1 selected · Enrich unavailable`,
-          reason: `Reason: ${input.firstEnrich.message}`,
-        };
-      }
-      if (input.firstQualified && !input.firstQualified.ok) {
-        return {
-          line: `1 selected · Send unavailable`,
-          reason: `Reason: ${input.firstQualified.message}`,
-        };
-      }
-      return {
-        line: `1 selected · Actions unavailable`,
-        reason: `Reason: ${reason}`,
-      };
-    }
     return {
-      line: `${n} selected · 0 can be enriched · 0 qualified`,
-      reason: `Reason: ${reason}`,
+      line: "1 selected",
+      detail: "1 can be enriched",
+      reason: sendSaysEnrichFirst
+        ? "Enrich this prospect before sending to Campaigns."
+        : input.firstQualified?.message || null,
     };
   }
 
-  if (!sendOk) {
-    const missing = input.missingEmailCount ?? 0;
-    if (n > 1 && input.qualifiedCount >= 0 && missing > 0) {
-      return {
-        line: `${n} selected · ${input.qualifiedCount} qualified`,
-        reason:
-          missing === 1
-            ? "1 missing a valid email."
-            : `${missing} missing a valid email.`,
-      };
-    }
-    // "Enrich this prospect…" is only honest when Enrich is actually available.
-    const q = input.firstQualified;
-    const sendSaysEnrichFirst =
-      q?.code === "enrichment_incomplete" || /enrich this prospect/i.test(q?.message || "");
-    if (sendSaysEnrichFirst && enrichOk) {
-      return {
-        line: `${n} selected · Send unavailable`,
-        reason: `Reason: Enrich this prospect before sending to Campaigns.`,
-      };
-    }
-    if (sendSaysEnrichFirst && !enrichOk && input.firstEnrich && !input.firstEnrich.ok) {
-      return {
-        line: `${n} selected · Send unavailable`,
-        reason: `Reason: ${input.firstEnrich.message}`,
-      };
-    }
+  if (!enrichOk && !sendOk && n > 1) {
     return {
-      line: `${n} selected · Send unavailable`,
-      reason: `Reason: ${q?.message || "Not qualified for Campaigns yet."}`,
+      line: `${n} selected`,
+      detail: detail || enrichParts.join(" · "),
+      reason: input.firstEnrich?.message || input.firstQualified?.message || null,
     };
   }
 
-  if (!enrichOk) {
-    // Already enriched is expected once Send is the next step — no "fix it" copy.
-    if (input.firstEnrich?.code === "already_enriched") {
-      return {
-        line: `${n} selected · ${input.qualifiedCount} qualified`,
-        reason: null,
-      };
-    }
-    return {
-      line: `${n} selected · ${input.qualifiedCount} qualified`,
-      reason: `Reason: ${input.firstEnrich?.message || "Enrich unavailable for this selection."}`,
-    };
-  }
-
-  return { line: `${n} selected`, reason: null };
+  return {
+    line: `${n} selected`,
+    detail,
+    reason: null,
+  };
 }
 
 export type ProspectNeedsAttentionReason =

@@ -292,10 +292,45 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
           workspaceUserId,
           initiatedByUserId: userId,
         });
+        if (!job) {
+          res.status(400).json({
+            error: "Enrichment retry is not available for this prospect right now.",
+          });
+          return;
+        }
         res.json({ job });
       } catch (err) {
         res.status(400).json({
           error: err instanceof Error ? err.message : "Enrichment retry failed",
+        });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/growth-tools/prospect-intelligence/:contactId/website",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const userId = (req.user as { id: string }).id;
+        const workspaceUserId = await resolveProspectWorkspaceUserId(userId);
+        const websiteUrl = String((req.body as { websiteUrl?: string })?.websiteUrl || "").trim();
+        const { saveProspectOfficialWebsite } = await import(
+          "../prospectImport/prospectEnrichmentService"
+        );
+        const saved = await saveProspectOfficialWebsite({
+          contactId: req.params.contactId,
+          workspaceUserId,
+          websiteUrl,
+        });
+        const item = await prospectIntelligenceService.getProspectIntelligenceDetail(
+          req.params.contactId,
+          workspaceUserId,
+        );
+        res.json({ ...saved, item });
+      } catch (err) {
+        res.status(400).json({
+          error: err instanceof Error ? err.message : "Could not save website",
         });
       }
     },

@@ -101,14 +101,15 @@ const panelSrc = readFileSync(
 assert.ok(panelSrc.includes("ProspectWebsiteGlobeIcon"));
 assert.ok(panelSrc.includes('data-testid="pi-row-website-icon"'));
 assert.ok(panelSrc.includes('data-testid="pi-website-section"'));
-assert.ok(panelSrc.includes("No website available for analysis"));
+assert.ok(panelSrc.includes("No public website found"));
 assert.ok(panelSrc.includes("Website analysis could not be completed"));
 assert.ok(panelSrc.includes("Status: Not analyzed yet"));
-assert.ok(panelSrc.includes("Retry Website Intelligence"));
-assert.ok(!panelSrc.includes("enrichmentErrorMessage"));
+assert.ok(panelSrc.includes("pi-website-edit"));
+assert.ok(panelSrc.includes("enrichmentErrorMessage"));
 assert.ok(panelSrc.includes("target=\"_blank\""));
 assert.ok(panelSrc.includes("rel=\"noopener noreferrer\""));
 assert.ok(panelSrc.includes("prospectWebsiteDomain"));
+assert.ok(panelSrc.includes("Social profile only"));
 
 const serviceSrc = readFileSync(
   join(root, "server/prospectImport/prospectIntelligenceService.ts"),

@@ -21,11 +21,65 @@ import {
   extractPublicContactsFromHtml,
   selectBestProspectEmail,
 } from "./prospectWebsiteContactExtract";
-import { resolveProspectWebsiteUrl } from "./prospectWebsiteUrl";
+import {
+  resolveProspectSocialProfileUrls,
+} from "./prospectWebsiteUrl";
+import { recoverOfficialWebsiteForEnrichment } from "./prospectOfficialWebsiteRecovery";
 import { loadProspectAiWorkspaceContext } from "./prospectAiWorkspaceContext";
 import { readProspectImportMetadata } from "./prospectIntelligenceEligibility";
+import { classifyAllPagesFailed } from "@shared/prospectEnrichmentOutcome";
+import type { ProspectEnrichmentFailureClass } from "@shared/prospectEnrichment";
 
-export { resolveProspectWebsiteUrl } from "./prospectWebsiteUrl";
+export {
+  resolveProspectWebsiteUrl,
+  resolveProspectOfficialWebsiteUrl,
+  resolveProspectSocialProfileUrls,
+} from "./prospectWebsiteUrl";
+
+function emptyPublicContacts(socialProfiles: string[] = []): ProspectPublicContacts {
+  return {
+    emails: [],
+    phones: [],
+    whatsappNumbers: [],
+    socialProfiles,
+    bookingUrls: [],
+    contactPageUrls: [],
+  };
+}
+
+function failureResult(params: {
+  websiteUrl: string | null;
+  failureClass: ProspectEnrichmentFailureClass;
+  socialProfiles?: string[];
+  pagesScanned?: Array<{ url: string; status: string; reason?: string }>;
+  phoneFound?: boolean;
+  summary?: string;
+}): ProspectEnrichmentResult {
+  const outcomeClass =
+    params.failureClass === "website_timeout"
+      ? "failed_timeout"
+      : params.failureClass === "no_website"
+        ? "no_website"
+        : params.failureClass === "social_profile_only"
+          ? "social_profile_only"
+          : "failed_fetch";
+  return {
+    provider: "website_public",
+    websiteUrl: params.websiteUrl,
+    websiteAnalyzedAt: new Date().toISOString(),
+    publicContacts: emptyPublicContacts(params.socialProfiles || []),
+    websiteIntelligence: {
+      businessSummary: params.summary,
+      pagesScanned: params.pagesScanned || [],
+    },
+    emailFound: false,
+    phoneFound: Boolean(params.phoneFound),
+    crawlSucceeded: false,
+    failureClass: params.failureClass,
+    outcomeClass,
+    socialProfilesPreserved: params.socialProfiles || [],
+  };
+}
 
 const GUIDED_PATHS = [
   { key: "home", path: "/" },
@@ -222,28 +276,32 @@ export const websitePublicEnrichmentProvider: ProspectEnrichmentProvider = {
     const total = 4;
     await onProgress?.(1, total);
 
-    const websiteUrl = resolveProspectWebsiteUrl(contact);
-    if (!websiteUrl) {
-      return {
-        provider: "website_public",
+    const recovered = await recoverOfficialWebsiteForEnrichment(contact);
+    const socialProfiles = recovered.socialProfiles.length
+      ? recovered.socialProfiles
+      : resolveProspectSocialProfileUrls(contact);
+    const phoneOnContact = Boolean(String(contact.phone || "").trim());
+
+    if (!recovered.websiteUrl) {
+      if (socialProfiles.length || recovered.reason === "social_only") {
+        return failureResult({
+          websiteUrl: socialProfiles[0] || null,
+          failureClass: "social_profile_only",
+          socialProfiles,
+          phoneFound: phoneOnContact,
+          summary: "Social profile only — add an official website to enrich contacts.",
+        });
+      }
+      return failureResult({
         websiteUrl: null,
-        websiteAnalyzedAt: new Date().toISOString(),
-        publicContacts: {
-          emails: [],
-          phones: [],
-          whatsappNumbers: [],
-          socialProfiles: [],
-          bookingUrls: [],
-          contactPageUrls: [],
-        },
-        websiteIntelligence: {
-          businessSummary: "No public website URL available for this prospect.",
-          pagesScanned: [],
-        },
-        emailFound: false,
-        phoneFound: Boolean(String(contact.phone || "").trim()),
-      };
+        failureClass: "no_website",
+        socialProfiles,
+        phoneFound: phoneOnContact,
+        summary: "No public website URL available for this prospect.",
+      });
     }
+
+    const websiteUrl = recovered.websiteUrl;
 
     await onProgress?.(2, total);
     const guided = buildGuidedUrls(websiteUrl);
@@ -252,7 +310,7 @@ export const websitePublicEnrichmentProvider: ProspectEnrichmentProvider = {
     const pageResults: Array<{ url: string; status: string; reason?: string }> = [];
     let combinedText = "";
     let allHtml = "";
-    let contacts = mergeContacts();
+    let contacts = mergeContacts(emptyPublicContacts(socialProfiles));
 
     for (let i = 0; i < pageQueue.length && i < 8; i++) {
       const page = pageQueue[i]!;
@@ -284,6 +342,19 @@ export const websitePublicEnrichmentProvider: ProspectEnrichmentProvider = {
       if (combinedText.length > 90_000) break;
     }
 
+    const anyScanned = pageResults.some((p) => p.status === "scanned");
+    if (!anyScanned || !String(allHtml || "").trim()) {
+      const failureClass = classifyAllPagesFailed(pageResults);
+      return failureResult({
+        websiteUrl,
+        failureClass,
+        socialProfiles,
+        pagesScanned: pageResults,
+        phoneFound: phoneOnContact,
+        summary: "Website pages could not be loaded for enrichment.",
+      });
+    }
+
     await onProgress?.(3, total);
     const signals = detectWebsiteSignals(allHtml);
     const websiteIntelligence = await summarizeWebsiteWithAi({
@@ -312,7 +383,7 @@ export const websitePublicEnrichmentProvider: ProspectEnrichmentProvider = {
 
     // Prefer discovered public email/phone; never invent. Keep existing contact phone if found none.
     const emailFound = contacts.emails.length > 0;
-    const phoneFound = contacts.phones.length > 0 || Boolean(String(contact.phone || "").trim());
+    const phoneFound = contacts.phones.length > 0 || phoneOnContact;
 
     return {
       provider: "website_public",
@@ -322,6 +393,10 @@ export const websitePublicEnrichmentProvider: ProspectEnrichmentProvider = {
       websiteIntelligence,
       emailFound,
       phoneFound,
+      crawlSucceeded: true,
+      failureClass: null,
+      outcomeClass: emailFound ? "completed_email_found" : "completed_no_email",
+      socialProfilesPreserved: socialProfiles,
     };
   },
 };

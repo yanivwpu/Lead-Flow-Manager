@@ -1339,11 +1339,23 @@ export async function approveProspectIntelligence(
   // Phase 2: start website enrichment only after human approval (async — never on discover).
   try {
     const { enqueueProspectEnrichment } = await import("./prospectEnrichmentService");
+    const latest = await db
+      .select()
+      .from(prospectIntelligence)
+      .where(eq(prospectIntelligence.contactId, contactId))
+      .limit(1);
+    const status = String(latest[0]?.enrichmentStatus || "none").toLowerCase();
+    const emailFound =
+      latest[0]?.enrichmentEmailFound === true ||
+      Boolean(String(contact.email || "").includes("@"));
+    const forceRetry =
+      status === "failed" || (status === "completed" && !emailFound);
     await enqueueProspectEnrichment({
       contactId,
       workspaceUserId: opts?.workspaceUserId || contact.userId,
       initiatedByUserId: userId,
       trigger: "approve",
+      force: forceRetry,
     });
   } catch (err) {
     console.error(

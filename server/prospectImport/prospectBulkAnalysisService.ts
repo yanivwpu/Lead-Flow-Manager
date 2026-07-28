@@ -435,10 +435,10 @@ export async function processClaimedBulkAnalysisJob(
           // Populates emails in Review before the human Enrich click when a website exists.
           try {
             const { storage } = await import("../storage");
-            const { resolveProspectWebsiteUrl } = await import("./prospectWebsiteUrl");
+            const { resolveProspectOfficialWebsiteUrl } = await import("./prospectWebsiteUrl");
             const { enqueueProspectEnrichment } = await import("./prospectEnrichmentService");
             const contact = await storage.getContact(contactId);
-            if (contact && resolveProspectWebsiteUrl(contact)) {
+            if (contact && resolveProspectOfficialWebsiteUrl(contact)) {
               await enqueueProspectEnrichment({
                 contactId,
                 workspaceUserId: job.workspaceUserId,

@@ -96,8 +96,12 @@ export const PROSPECT_CAMPAIGN_CONTROL_LABELS = {
 } as const;
 
 export const PROSPECT_SELECTION_LABELS = {
+  /** @deprecated Prefer table header checkbox — kept for older copy references. */
   selectPage: "Select page",
-  selectAllResults: "Select all results",
+  selectAllResults: "Select all matching",
+  selectEntireBatch: "Select entire batch",
+  selectAllMatching: "Select all matching",
+  clearSelection: "Clear selection",
   selectPageHint: "Select rows currently shown on this page.",
   selectAllResultsHint: "Select every prospect matching the current filters.",
 } as const;
@@ -109,9 +113,69 @@ export function formatProspectSelectAllLabel(params: {
 }): string {
   const n = Math.max(0, Math.floor(params.count));
   if (params.batchActive) {
-    return `Select all ${n} in this discovery`;
+    return `Select entire batch (${n})`;
   }
-  return `Select all ${n} matching filters`;
+  return `Select all matching (${n})`;
+}
+
+/** True when batch/filter scope exceeds the visible page — show Select entire batch. */
+export function shouldShowSelectEntireScopeAction(params: {
+  visibleCount: number;
+  matchingCount: number;
+}): boolean {
+  const visible = Math.max(0, Math.floor(params.visibleCount));
+  const matching = Math.max(0, Math.floor(params.matchingCount));
+  return matching > visible && matching > 0;
+}
+
+/**
+ * Human-readable selection summary for the Review toolbar.
+ * Headline + compact eligibility detail — no "server-resolved" jargon.
+ */
+export function formatProspectReviewSelectionSummary(params: {
+  selectedCount: number;
+  enrichableCount?: number;
+  alreadyEnrichedCount?: number;
+  unavailableCount?: number;
+  qualifiedCount?: number;
+  notQualifiedCount?: number;
+  needsReviewCount?: number;
+}): { headline: string; detail: string | null } {
+  const n = Math.max(0, Math.floor(params.selectedCount));
+  if (n <= 0) return { headline: "0 selected", detail: null };
+
+  const enrichable = Math.max(0, Math.floor(params.enrichableCount ?? 0));
+  const already = Math.max(0, Math.floor(params.alreadyEnrichedCount ?? 0));
+  const unavailable = Math.max(0, Math.floor(params.unavailableCount ?? 0));
+  const qualified = Math.max(0, Math.floor(params.qualifiedCount ?? 0));
+  const notQualified = Math.max(0, Math.floor(params.notQualifiedCount ?? 0));
+  const needsReview = Math.max(0, Math.floor(params.needsReviewCount ?? 0));
+
+  const enrichParts: string[] = [];
+  if (enrichable > 0 || already > 0 || unavailable > 0) {
+    if (enrichable > 0 || already > 0 || unavailable > 0) {
+      enrichParts.push(`${enrichable} can be enriched`);
+      if (already > 0) enrichParts.push(`${already} already enriched`);
+      if (unavailable > 0) enrichParts.push(`${unavailable} unavailable`);
+    }
+  }
+
+  const campaignParts: string[] = [];
+  if (qualified > 0) campaignParts.push(`${qualified} ready for campaign`);
+  if (notQualified > 0) campaignParts.push(`${notQualified} not qualified`);
+  if (needsReview > 0) campaignParts.push(`${needsReview} need review`);
+
+  // Prefer enrichment breakdown when mixed enrichment states; else campaign readiness.
+  const enrichMixed = enrichable + already + unavailable > 0 && enrichable !== n;
+  const detail = enrichMixed
+    ? enrichParts.join(" · ")
+    : campaignParts.length
+      ? campaignParts.join(" · ")
+      : enrichParts.length
+        ? enrichParts.join(" · ")
+        : null;
+
+  return { headline: `${n} selected`, detail };
 }
 
 /** Activity feed event kinds derived from existing APIs (no invented types). */

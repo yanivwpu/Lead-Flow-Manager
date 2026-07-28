@@ -77,9 +77,9 @@ export function formatImportBatchLabel(params: {
 
 export function formatSelectAllInBatchLabel(count: number, batchActive: boolean): string {
   if (batchActive) {
-    return `Select all ${count} in this discovery`;
+    return `Select entire batch (${count})`;
   }
-  return `Select all ${count} matching filters`;
+  return `Select all matching (${count})`;
 }
 
 /** Read Places discovery search id from contact JSON meta. */
