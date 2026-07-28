@@ -87,6 +87,8 @@ function mapIntelligenceRow(row: ProspectIntelligenceRow): ProspectIntelligence 
     aiVersion: row.aiVersion ?? undefined,
     analysisStatus: (row.analysisStatus as ProspectIntelligence["analysisStatus"]) ?? undefined,
     reviewStatus: (row.reviewStatus as ProspectIntelligence["reviewStatus"]) ?? undefined,
+    approvedAt: row.approvedAt?.toISOString(),
+    approvedByUserId: row.approvedByUserId ?? undefined,
     outreachStatus: (row.outreachStatus as ProspectIntelligence["outreachStatus"]) ?? undefined,
     outreachSentAt: row.outreachSentAt?.toISOString(),
     outreachConversationId: row.outreachConversationId ?? undefined,
@@ -96,6 +98,7 @@ function mapIntelligenceRow(row: ProspectIntelligenceRow): ProspectIntelligence 
     createdAt: row.createdAt?.toISOString(),
     enrichmentStatus: row.enrichmentStatus ?? undefined,
     enrichmentProvider: row.enrichmentProvider ?? undefined,
+    enrichmentTriggeredBy: row.enrichmentTriggeredBy ?? undefined,
     websiteAnalyzedAt: row.websiteAnalyzedAt?.toISOString(),
     websiteUrlUsed: row.websiteUrlUsed ?? undefined,
     enrichmentEmailFound: row.enrichmentEmailFound ?? undefined,
@@ -662,21 +665,43 @@ export async function analyzeProspectContact(params: {
       }
 
       stage = "db_persist";
+      const existingRows = await db
+        .select()
+        .from(prospectIntelligence)
+        .where(eq(prospectIntelligence.contactId, params.contactId))
+        .limit(1);
+      const existing = existingRows[0];
+      const patch = toDbPatch(intel, {
+        importJobId,
+        promptTokens,
+        completionTokens,
+        rawResult: intel as unknown as Record<string, unknown>,
+        errorMessage: null,
+      });
+      // Never silently reset an explicit human/legacy qualification decision.
+      if (existing) {
+        const existingOffer = String(existing.recommendedOffer || "").toLowerCase();
+        const hadApproval =
+          String(existing.reviewStatus || "").toLowerCase() === "approved" ||
+          String(existing.reviewStatus || "").toLowerCase() === "qualified" ||
+          Boolean(existing.approvedAt) ||
+          Boolean(existing.approvedByUserId) ||
+          String(existing.enrichmentTriggeredBy || "").toLowerCase() === "approve";
+        if (existingOffer === "not_a_fit") {
+          patch.recommendedOffer = "not_a_fit";
+          patch.needsReview = false;
+        } else if (hadApproval) {
+          patch.reviewStatus = "approved";
+          patch.needsReview = false;
+        }
+      }
       await db
         .update(prospectIntelligence)
-        .set({
-          ...toDbPatch(intel, {
-            importJobId,
-            promptTokens,
-            completionTokens,
-            rawResult: intel as unknown as Record<string, unknown>,
-            errorMessage: null,
-          }),
-        })
+        .set(patch)
         .where(eq(prospectIntelligence.contactId, params.contactId));
 
-      await syncContactIntelligence(contact, intel, importJobId);
-      return intel;
+      await syncContactIntelligence(contact, { ...intel, reviewStatus: patch.reviewStatus as ProspectIntelligence["reviewStatus"], needsReview: patch.needsReview, recommendedOffer: patch.recommendedOffer ?? intel.recommendedOffer }, importJobId);
+      return { ...intel, reviewStatus: patch.reviewStatus as ProspectIntelligence["reviewStatus"], needsReview: patch.needsReview, recommendedOffer: (patch.recommendedOffer as ProspectIntelligence["recommendedOffer"]) ?? intel.recommendedOffer };
     } finally {
       runningContactAnalysis.delete(params.contactId);
     }

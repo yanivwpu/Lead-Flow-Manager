@@ -336,6 +336,9 @@ export type ProspectIntelligence = {
   aiVersion?: string;
   analysisStatus?: ProspectIntelligenceAnalysisStatus;
   reviewStatus?: ProspectIntelligenceReviewStatus;
+  /** Set when human Approve / manual Qualified decision is recorded. */
+  approvedAt?: string;
+  approvedByUserId?: string | null;
   /** Separate from AI review — not_sent → outreach_sent → replied. */
   outreachStatus?: ProspectIntelligenceOutreachStatus;
   /** ISO timestamp when native outreach email was successfully sent. */
@@ -348,6 +351,7 @@ export type ProspectIntelligence = {
   /** Phase 2 website enrichment */
   enrichmentStatus?: string;
   enrichmentProvider?: string | null;
+  enrichmentTriggeredBy?: string | null;
   websiteAnalyzedAt?: string;
   websiteUrlUsed?: string | null;
   enrichmentEmailFound?: boolean;

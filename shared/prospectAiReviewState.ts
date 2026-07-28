@@ -193,11 +193,39 @@ export type ProspectReviewStateInput = ProspectReviewUxInput & {
   enrichmentEmailFound?: boolean | null;
   enrichmentErrorMessage?: string | null;
   enrichmentResult?: Record<string, unknown> | null;
+  enrichmentTriggeredBy?: string | null;
+  /** Human Approve / Qualified timestamp (legacy-compatible). */
+  approvedAt?: string | Date | null;
+  approvedByUserId?: string | null;
   /** Intentional low-fit / dismissed — separate from Needs Attention. */
   notQualified?: boolean | null;
   /** Existing Unified Inbox thread (when known from list payload). */
   hasInboxThread?: boolean | null;
 };
+
+/**
+ * Evidence of an explicit Qualified/approved decision (current or legacy).
+ * Enrichment/email alone is never enough.
+ */
+export function hasLegacyProspectApprovalEvidence(
+  input: Pick<
+    ProspectReviewStateInput,
+    "reviewStatus" | "approvedAt" | "approvedByUserId" | "enrichmentTriggeredBy"
+  >,
+): boolean {
+  const review = String(input.reviewStatus || "").toLowerCase();
+  if (review === "approved" || review === "qualified") return true;
+  if (input.approvedAt) return true;
+  if (input.approvedByUserId) return true;
+  if (String(input.enrichmentTriggeredBy || "").toLowerCase() === "approve") return true;
+  return false;
+}
+
+/** Human (or Enrich-approve) Qualified decision — independent of campaign/email readiness. */
+export function isProspectDecisionQualified(input: ProspectReviewStateInput): boolean {
+  if (input.notQualified === true) return false;
+  return hasLegacyProspectApprovalEvidence(input);
+}
 
 export function prospectHasWebsiteUrl(input: {
   websiteUrl?: string | null;
@@ -301,12 +329,6 @@ export type ProspectEligibilityExplanation = {
   /** Short user-facing reason. */
   message: string;
 };
-
-/** Human (or Enrich-approve) Qualified decision — independent of campaign/email readiness. */
-export function isProspectDecisionQualified(input: ProspectReviewStateInput): boolean {
-  if (input.notQualified === true) return false;
-  return String(input.reviewStatus || "").toLowerCase() === "approved";
-}
 
 /** True website enrichment completed — not merely a manual email on the contact. */
 export function wasProspectWebsiteEnriched(input: ProspectReviewStateInput): boolean {
@@ -823,12 +845,11 @@ export function resolveProspectReviewWorkState(
   if (analysis === "processing") return "analyzing";
   if (analysis === "pending") return "imported";
 
-  const review = String(input.reviewStatus || "pending").toLowerCase();
-  if (review === "approved") {
+  if (isProspectDecisionQualified(input)) {
     if (isProspectEnrichmentInProgress(input.enrichmentStatus)) {
       return "enriching";
     }
-    // Human Qualified decision — independent of campaign/email readiness.
+    // Human/legacy Qualified decision — independent of campaign/email readiness.
     return "qualified";
   }
 
