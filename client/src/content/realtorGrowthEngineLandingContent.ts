@@ -487,10 +487,12 @@ export const RGE_LANDING = {
       size: "compact" as const,
     },
     agentPage: {
-      ...S.agentPagePublic,
-      alt: "WhachatCRM public Agent Page for real estate agents",
+      src: "/images/screenshots/agent-page-public-live.png",
+      alt: "WhachatCRM public Agent Page showing agent profile, market areas, CTAs, and property inventory",
       caption: "Public Agent Page for brand presence, lead capture, and inventory where enabled.",
-      size: "content" as const,
+      width: 829,
+      height: 595,
+      size: "hero" as const,
     },
     agentSettings: {
       ...S.agentPageSettings,
