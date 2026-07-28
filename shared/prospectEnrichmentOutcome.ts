@@ -9,11 +9,71 @@ import {
   type ProspectEnrichmentOutcomeClass,
   type ProspectEnrichmentResult,
 } from "./prospectEnrichment";
+import { isValidProspectEmail } from "./prospectContactEnrichment";
 import {
   classifyProspectWebsiteUrl,
   pickOfficialWebsiteUrl,
   isSocialProfileUrl,
 } from "./prospectWebsiteClassification";
+
+/**
+ * Decide how to finalize an enrichment job after the website provider returns.
+ * Crawl failure + valid contact email (manual or prior) → soft-complete, not hard-fail.
+ */
+export function resolveEnrichmentFinalizeDecision(input: {
+  crawlSucceeded?: boolean | null;
+  failureClass?: ProspectEnrichmentFailureClass | string | null;
+  providerEmailFound?: boolean | null;
+  contactEmail?: string | null;
+}): {
+  enrichmentStatus: "completed" | "failed";
+  enrichmentEmailFound: boolean;
+  softCompleteWithExistingEmail: boolean;
+  outcomeClass: ProspectEnrichmentOutcomeClass;
+  enrichmentErrorMessage: string | null;
+} {
+  const failureClass = (input.failureClass || null) as ProspectEnrichmentFailureClass | null;
+  const crawlFailed = input.crawlSucceeded === false || Boolean(failureClass);
+  const contactHasEmail = isValidProspectEmail(input.contactEmail);
+  const providerEmailFound = input.providerEmailFound === true;
+
+  if (crawlFailed) {
+    if (contactHasEmail) {
+      return {
+        enrichmentStatus: "completed",
+        enrichmentEmailFound: true,
+        softCompleteWithExistingEmail: true,
+        outcomeClass: "completed_email_present_website_failed",
+        enrichmentErrorMessage: null,
+      };
+    }
+    const safe = userFacingEnrichmentErrorMessage(failureClass);
+    const outcomeClass: ProspectEnrichmentOutcomeClass =
+      failureClass === "website_timeout"
+        ? "failed_timeout"
+        : failureClass === "no_website"
+          ? "no_website"
+          : failureClass === "social_profile_only"
+            ? "social_profile_only"
+            : "failed_fetch";
+    return {
+      enrichmentStatus: "failed",
+      enrichmentEmailFound: false,
+      softCompleteWithExistingEmail: false,
+      outcomeClass,
+      enrichmentErrorMessage: safe,
+    };
+  }
+
+  const emailFound = providerEmailFound || contactHasEmail;
+  return {
+    enrichmentStatus: "completed",
+    enrichmentEmailFound: emailFound,
+    softCompleteWithExistingEmail: false,
+    outcomeClass: emailFound ? "completed_email_found" : "completed_no_email",
+    enrichmentErrorMessage: null,
+  };
+}
 
 export type ProspectEnrichmentOutcomeInput = {
   enrichmentStatus?: string | null;
@@ -128,6 +188,33 @@ export function resolveProspectEnrichmentOutcomeClass(
     }
   }
 
+  // Completed takes precedence — soft-complete keeps crawl failure metadata but must not look failed.
+  if (status === "completed") {
+    const er = (input.enrichmentResult || {}) as Partial<ProspectEnrichmentResult> & {
+      websiteCrawlFailed?: boolean;
+    };
+    const emailOk =
+      input.enrichmentEmailFound === true || isValidProspectEmail(input.email);
+    if (
+      er.outcomeClass === "completed_email_present_website_failed" ||
+      er.websiteCrawlFailed === true ||
+      (emailOk &&
+        (failure === "website_timeout" ||
+          failure === "website_fetch_failed" ||
+          failure === "all_pages_failed"))
+    ) {
+      return "completed_email_present_website_failed";
+    }
+    if (emailOk) return "completed_email_found";
+    // Legacy: completed with every page failed and no email → surface as fetch failure.
+    if (failure === "website_timeout") return "failed_timeout";
+    if (failure === "website_fetch_failed" || failure === "all_pages_failed") return "failed_fetch";
+    if (failure === "no_website") return "no_website";
+    if (failure === "social_profile_only") return "social_profile_only";
+    if (!hasOfficial) return socialOnly ? "social_profile_only" : "no_website";
+    return "completed_no_email";
+  }
+
   if (status === "failed" || failure) {
     if (failure === "no_website") return "no_website";
     if (failure === "social_profile_only") return "social_profile_only";
@@ -137,12 +224,6 @@ export function resolveProspectEnrichmentOutcomeClass(
       if (!hasOfficial) return socialOnly ? "social_profile_only" : "no_website";
       return "failed_fetch";
     }
-  }
-
-  if (status === "completed") {
-    if (input.enrichmentEmailFound === true) return "completed_email_found";
-    if (!hasOfficial) return socialOnly ? "social_profile_only" : "no_website";
-    return "completed_no_email";
   }
 
   return "not_started";

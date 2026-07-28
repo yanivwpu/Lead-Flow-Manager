@@ -23,7 +23,10 @@ import { analyzeProspectContact } from "./prospectIntelligenceService";
 import { isValidProspectEmail, isValidProspectPhone } from "@shared/prospectContactEnrichment";
 import { shouldApplyScrapedProspectEmail, selectBestProspectEmail } from "./prospectWebsiteContactExtract";
 import { extractSqlExecuteId } from "@shared/prospectAnalysisOwnership";
-import { userFacingEnrichmentErrorMessage } from "@shared/prospectEnrichmentOutcome";
+import {
+  resolveEnrichmentFinalizeDecision,
+  userFacingEnrichmentErrorMessage,
+} from "@shared/prospectEnrichmentOutcome";
 import { classifyProspectWebsiteUrl } from "@shared/prospectWebsiteClassification";
 import { resolveProspectOfficialWebsiteUrl, resolveProspectSocialProfileUrls } from "./prospectWebsiteUrl";
 
@@ -322,12 +325,20 @@ export async function processClaimedEnrichmentJob(
     await applyEnrichmentToContact(job.contactId, job.workspaceUserId, result);
 
     const failureClass = result.failureClass || null;
-    const crawlFailed = result.crawlSucceeded === false || Boolean(failureClass);
-    const safeError = crawlFailed
-      ? userFacingEnrichmentErrorMessage(failureClass, result.websiteIntelligence?.businessSummary)
-      : null;
+    const decision = resolveEnrichmentFinalizeDecision({
+      crawlSucceeded: result.crawlSucceeded,
+      failureClass,
+      providerEmailFound: result.emailFound,
+      contactEmail: contact.email,
+    });
+    const storedResult: ProspectEnrichmentResult = {
+      ...result,
+      emailFound: decision.enrichmentEmailFound,
+      outcomeClass: decision.outcomeClass,
+      websiteCrawlFailed: decision.softCompleteWithExistingEmail ? true : result.crawlSucceeded === false,
+    };
 
-    if (crawlFailed) {
+    if (decision.enrichmentStatus === "failed") {
       await patchIntelligenceEnrichment(job.contactId, {
         enrichmentStatus: "failed",
         enrichmentProvider: result.provider,
@@ -335,16 +346,16 @@ export async function processClaimedEnrichmentJob(
         websiteUrlUsed: result.websiteUrl || null,
         enrichmentEmailFound: false,
         enrichmentPhoneFound: result.phoneFound,
-        enrichmentResult: result as unknown as Record<string, unknown>,
-        enrichmentErrorMessage: safeError,
+        enrichmentResult: storedResult as unknown as Record<string, unknown>,
+        enrichmentErrorMessage: decision.enrichmentErrorMessage,
         enrichmentJobId: job.id,
       });
       await updateJob(job.id, {
         status: "failed",
         completedAt: new Date(),
         progressCurrent: job.progressTotal ?? 4,
-        result: result as unknown as Record<string, unknown>,
-        errorMessage: safeError,
+        result: storedResult as unknown as Record<string, unknown>,
+        errorMessage: decision.enrichmentErrorMessage,
         leaseOwner: null,
         leaseExpiresAt: null,
       });
@@ -356,12 +367,25 @@ export async function processClaimedEnrichmentJob(
       enrichmentProvider: result.provider,
       websiteAnalyzedAt: result.websiteAnalyzedAt ? new Date(result.websiteAnalyzedAt) : new Date(),
       websiteUrlUsed: result.websiteUrl || null,
-      enrichmentEmailFound: result.emailFound,
+      enrichmentEmailFound: decision.enrichmentEmailFound,
       enrichmentPhoneFound: result.phoneFound,
-      enrichmentResult: result as unknown as Record<string, unknown>,
+      enrichmentResult: storedResult as unknown as Record<string, unknown>,
       enrichmentErrorMessage: null,
       enrichmentJobId: job.id,
     });
+
+    // Soft-complete (manual/existing email + website unreachable): do not re-run AI qualification.
+    if (decision.softCompleteWithExistingEmail) {
+      await updateJob(job.id, {
+        status: "completed",
+        completedAt: new Date(),
+        progressCurrent: job.progressTotal ?? 4,
+        result: storedResult as unknown as Record<string, unknown>,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+      });
+      return;
+    }
 
     // Re-run AI analysis with website intelligence now on the contact.
     try {
@@ -412,10 +436,43 @@ export async function processClaimedEnrichmentJob(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const safe = userFacingEnrichmentErrorMessage(
-      /abort|timeout/i.test(message) ? "website_timeout" : "website_fetch_failed",
-      message,
-    );
+    const failureClass = /abort|timeout/i.test(message) ? "website_timeout" : "website_fetch_failed";
+    const decision = resolveEnrichmentFinalizeDecision({
+      crawlSucceeded: false,
+      failureClass,
+      providerEmailFound: false,
+      contactEmail: contact.email,
+    });
+    const storedResult = {
+      failureClass,
+      outcomeClass: decision.outcomeClass,
+      crawlSucceeded: false,
+      websiteCrawlFailed: decision.softCompleteWithExistingEmail,
+    };
+
+    if (decision.enrichmentStatus === "completed") {
+      await patchIntelligenceEnrichment(job.contactId, {
+        enrichmentStatus: "completed",
+        enrichmentEmailFound: true,
+        enrichmentErrorMessage: null,
+        enrichmentResult: storedResult,
+      });
+      await updateJob(job.id, {
+        status: "completed",
+        completedAt: new Date(),
+        result: storedResult,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+      });
+      console.warn(
+        "[ProspectEnrichment] crawl threw but contact already has email; soft-completed:",
+        job.id,
+        message,
+      );
+      return;
+    }
+
+    const safe = decision.enrichmentErrorMessage || userFacingEnrichmentErrorMessage(failureClass, message);
     await updateJob(job.id, {
       status: "failed",
       completedAt: new Date(),
@@ -426,11 +483,8 @@ export async function processClaimedEnrichmentJob(
     await patchIntelligenceEnrichment(job.contactId, {
       enrichmentStatus: "failed",
       enrichmentErrorMessage: safe,
-      enrichmentResult: {
-        failureClass: /abort|timeout/i.test(message) ? "website_timeout" : "website_fetch_failed",
-        outcomeClass: /abort|timeout/i.test(message) ? "failed_timeout" : "failed_fetch",
-        crawlSucceeded: false,
-      },
+      enrichmentEmailFound: false,
+      enrichmentResult: storedResult,
     });
     console.error("[ProspectEnrichment] job failed:", job.id, message);
   }

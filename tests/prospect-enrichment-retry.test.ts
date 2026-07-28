@@ -57,13 +57,47 @@ function baseUx(over: Record<string, unknown> = {}) {
 }
 
 {
-  // Timeout / failed → retry available with official website
-  const failed = baseUx({ enrichmentStatus: "failed", enrichmentErrorMessage: "website_timeout" });
-  assert.equal(isProspectEnrichmentRetryable(failed), true);
-  assert.equal(canEnrichProspect(failed), true);
-  assert.equal(enrichActionLabel(failed), "Retry Enrichment");
-  assert.equal(explainCanEnrichProspect(failed).code, "retry_available");
+  // Soft-complete: crawl failed but manual/contact email present → not failed_fetch
+  const soft = baseUx({
+    enrichmentStatus: "completed",
+    enrichmentEmailFound: true,
+    email: "owner@jackcodengroup.com",
+    websiteUrl: "http://www.jackcodengroup.com/",
+    enrichmentResult: {
+      crawlSucceeded: false,
+      failureClass: "website_fetch_failed",
+      outcomeClass: "completed_email_present_website_failed",
+      websiteCrawlFailed: true,
+    },
+  });
+  assert.equal(
+    resolveProspectEnrichmentOutcomeClass(soft),
+    "completed_email_present_website_failed",
+  );
+  assert.equal(isProspectEnrichmentRetryable(soft), false);
+  assert.equal(canEnrichProspect(soft), false);
+  assert.equal(explainCanEnrichProspect(soft).code, "already_enriched");
 }
+
+{
+  // Hard-fail: crawl failed and no email → failed_fetch + retry
+  const hard = baseUx({
+    enrichmentStatus: "failed",
+    enrichmentEmailFound: false,
+    email: null,
+    websiteUrl: "http://www.jackcodengroup.com/",
+    enrichmentErrorMessage: "Website could not be reached",
+    enrichmentResult: {
+      crawlSucceeded: false,
+      failureClass: "website_fetch_failed",
+      outcomeClass: "failed_fetch",
+    },
+  });
+  assert.equal(resolveProspectEnrichmentOutcomeClass(hard), "failed_fetch");
+  assert.equal(isProspectEnrichmentRetryable(hard), true);
+  assert.equal(enrichActionLabel(hard), "Retry Enrichment");
+}
+
 
 {
   // Completed / no-email + valid website → retry available
@@ -247,7 +281,8 @@ function baseUx(over: Record<string, unknown> = {}) {
     "utf8",
   );
   assert.ok(enrichmentSvc.includes('enrichmentStatus: "failed"'));
-  assert.ok(enrichmentSvc.includes("crawlFailed"));
+  assert.ok(enrichmentSvc.includes("resolveEnrichmentFinalizeDecision"));
+  assert.ok(enrichmentSvc.includes("softCompleteWithExistingEmail"));
 }
 
 console.log("prospect-enrichment-retry.test.ts: all assertions passed");

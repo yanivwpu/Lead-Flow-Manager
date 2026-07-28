@@ -48,6 +48,8 @@ export const PROSPECT_ENRICHMENT_OUTCOME_CLASSES = [
   "running",
   "completed_email_found",
   "completed_no_email",
+  /** Website crawl failed, but contact already had a valid (e.g. manual) email. */
+  "completed_email_present_website_failed",
   "failed_timeout",
   "failed_fetch",
   "no_website",
@@ -109,6 +111,8 @@ export type ProspectEnrichmentResult = {
   crawlSucceeded?: boolean;
   failureClass?: ProspectEnrichmentFailureClass | null;
   outcomeClass?: ProspectEnrichmentOutcomeClass | null;
+  /** True when crawl failed but contact already had a valid email (soft-complete). */
+  websiteCrawlFailed?: boolean;
   /** Social URLs preserved when the crawl target was official or recovery ran. */
   socialProfilesPreserved?: string[];
 };
