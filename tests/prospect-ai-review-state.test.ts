@@ -8,6 +8,7 @@ import {
   explainCanEnrichProspect,
   explainQualifiedForCampaign,
   formatProspectBulkActionResult,
+  isProspectDecisionQualified,
   isProspectInCampaigns,
   isProspectInInboxJourney,
   isProspectQualifiedForCampaign,
@@ -225,7 +226,7 @@ assert.equal(
 );
 
 {
-  // Needs Review filter = anyone not Ready to Send and not Not Qualified
+  // Needs Review filter = no Qualified / Not Qualified decision yet
   const enrichingRow = {
     analysisStatus: "completed" as const,
     reviewStatus: "approved" as const,
@@ -258,7 +259,8 @@ assert.equal(
     email: "a@b.com",
   };
 
-  assert.equal(matchesProspectReviewWorkFilter(enrichingRow, "needs_review"), true);
+  assert.equal(matchesProspectReviewWorkFilter(enrichingRow, "needs_review"), false);
+  assert.equal(matchesProspectReviewWorkFilter(enrichingRow, "qualified"), true);
   assert.equal(matchesProspectReviewWorkFilter(attentionRow, "needs_review"), true);
   assert.equal(matchesProspectReviewWorkFilter(pendingReviewRow, "needs_review"), true);
   assert.equal(matchesProspectReviewWorkFilter(readyRow, "needs_review"), false);
@@ -266,9 +268,10 @@ assert.equal(
   assert.equal(matchesProspectReviewWorkFilter(rejectedRow, "not_qualified"), true);
   assert.equal(matchesProspectReviewWorkFilter(rejectedRow, "qualified"), false);
   assert.equal(matchesProspectReviewWorkFilter(readyRow, "qualified"), true);
-  assert.equal(matchesProspectReviewWorkFilter(enrichingRow, "qualified"), false);
 
-  assert.equal(resolveProspectNeedsReviewBadge(enrichingRow)?.label, "Enriching");
+  // Approved + enriching + email is campaign-ready — no Needs Review badge
+  assert.equal(resolveProspectNeedsReviewBadge(enrichingRow), null);
+  assert.equal(resolveProspectReviewWorkState(enrichingRow), "enriching");
   assert.equal(resolveProspectNeedsReviewBadge(attentionRow)?.label, "AI Review Failed");
   assert.equal(
     resolveProspectNeedsReviewBadge({
@@ -339,9 +342,9 @@ assert.equal(
     email: "a@b.com",
     websiteUrl: "https://example.com",
   });
-  // needsReview is advisory — must NOT block Email campaign when hard gates pass
-  assert.equal(blocked.ok, true);
-  assert.equal(blocked.code, "ok");
+  // needsReview without Qualified decision blocks campaign send
+  assert.equal(blocked.ok, false);
+  assert.equal(blocked.code, "not_approved");
   assert.equal(
     needsHumanReview({
       analysisStatus: "completed",
@@ -537,7 +540,7 @@ assert.equal(
   const qualified = explainQualifiedForCampaign(ux);
   assert.equal(enrich.ok, true);
   assert.equal(qualified.ok, false);
-  assert.equal(qualified.code, "enrichment_incomplete");
+  assert.equal(qualified.code, "not_approved");
   const avail = summarizeSelectionActionAvailability({
     selectedCount: 1,
     enrichableCount: 1,
@@ -545,7 +548,7 @@ assert.equal(
     firstEnrich: enrich,
     firstQualified: qualified,
   });
-  assert.match(avail.reason || "", /Enrich this prospect before sending to Campaigns/i);
+  assert.match(avail.reason || "", /Mark as Qualified to send campaigns/i);
   assert.equal(avail.line, "1 selected");
 
   const blockedUx = {
@@ -582,10 +585,10 @@ assert.equal(
 }
 
 {
-  // Invariant: every Qualified prospect must be Send-eligible (shared hard gates).
+  // Campaign hard gates: Qualified decision required; email unlocks without enrichment.
   const cases: Array<{ name: string; input: Parameters<typeof isQualifiedForEmailCampaign>[0]; expectOk: boolean; code?: string }> = [
     {
-      name: "enriched + email + needsReview advisory",
+      name: "enriched + email + needsReview without Qualified decision",
       input: {
         analysisStatus: "completed",
         reviewStatus: "needs_review",
@@ -594,14 +597,26 @@ assert.equal(
         email: "a@b.com",
         websiteUrl: "https://example.com",
       },
-      expectOk: true,
+      expectOk: false,
+      code: "not_approved",
     },
     {
-      name: "enriched + email + missing phone (no phone field = ok)",
+      name: "enriched + email + Qualified decision",
       input: {
         analysisStatus: "completed",
         reviewStatus: "approved",
         enrichmentStatus: "completed",
+        email: "a@b.com",
+        websiteUrl: "https://example.com",
+      },
+      expectOk: true,
+    },
+    {
+      name: "Qualified + manual email + website without enrichment",
+      input: {
+        analysisStatus: "completed",
+        reviewStatus: "approved",
+        enrichmentStatus: "none",
         email: "a@b.com",
         websiteUrl: "https://example.com",
       },
@@ -631,7 +646,18 @@ assert.equal(
       code: "not_qualified",
     },
     {
-      name: "enrichment in progress",
+      name: "enrichment in progress without email",
+      input: {
+        analysisStatus: "completed",
+        reviewStatus: "approved",
+        enrichmentStatus: "pending",
+        websiteUrl: "https://example.com",
+      },
+      expectOk: false,
+      code: "missing_email",
+    },
+    {
+      name: "enrichment in progress with email is still campaign-eligible",
       input: {
         analysisStatus: "completed",
         reviewStatus: "approved",
@@ -639,8 +665,7 @@ assert.equal(
         email: "a@b.com",
         websiteUrl: "https://example.com",
       },
-      expectOk: false,
-      code: "enrichment_in_progress",
+      expectOk: true,
     },
     {
       name: "already contacted (traceable message)",
@@ -671,7 +696,7 @@ assert.equal(
       code: "already_contacted",
     },
     {
-      name: "stale outreach_sent alone is still Qualified",
+      name: "stale outreach_sent alone is still campaign-eligible",
       input: {
         analysisStatus: "completed",
         reviewStatus: "approved",
@@ -691,8 +716,7 @@ assert.equal(
     assert.equal(qualified, c.expectOk, c.name);
     assert.equal(explain.ok, c.expectOk, c.name);
     if (c.expectOk) {
-      assert.equal(resolveProspectReviewWorkState(c.input), "qualified", c.name);
-      // Qualified ⇒ Send hard gates empty
+      assert.equal(isProspectDecisionQualified(c.input), true, c.name);
       assert.equal(listEmailCampaignBlockingReasons(c.input).length, 0, c.name);
     } else {
       assert.ok(listEmailCampaignBlockingReasons(c.input).length > 0, c.name);
@@ -700,10 +724,10 @@ assert.equal(
     }
   }
 
-  // Direct invariant: random Qualified-shaped inputs must never be blocked by needsReview alone
+  // Advisory needsReview alone never blocks once Qualified decision + email exist
   const advisoryQualified = {
     analysisStatus: "completed" as const,
-    reviewStatus: "needs_review" as const,
+    reviewStatus: "approved" as const,
     needsReview: true,
     enrichmentStatus: "completed" as const,
     email: "ready@example.com",
@@ -755,14 +779,18 @@ assert.ok(panelSrc.includes("onStartEnrichment") || panelSrc.includes("startPros
 assert.ok(!panelSrc.includes("pi-campaigns-subfilters"));
 // Needs Review is a badge/state; detail Enrich uses shared canEnrichProspect
 assert.ok(panelSrc.includes("pi-needs-human-review-badge"));
-assert.ok(panelSrc.includes("detailAlreadyNeedsReview"));
-assert.ok(panelSrc.includes("pi-not-qualified-button"));
+assert.ok(panelSrc.includes("pi-qualification-controls"));
+assert.ok(panelSrc.includes("pi-qualify-qualified"));
+assert.ok(panelSrc.includes("pi-qualify-not-qualified"));
 assert.ok(panelSrc.includes("canEnrichProspect(reviewUxInput"));
 assert.ok(panelSrc.includes("explainCanEnrichProspect(reviewUxInput"));
 assert.ok(panelSrc.includes("detailCanEnrich"));
 assert.ok(panelSrc.includes("explainCanEnrichProspect(ux)"));
+assert.ok(panelSrc.includes("enrichDisabledActionLabel"));
 assert.ok(!panelSrc.includes('setWorkFilter("enriching")'));
 assert.ok(!panelSrc.includes("attentionSubFilter"));
+assert.ok(!panelSrc.includes("detailAlreadyNeedsReview"));
+assert.ok(!panelSrc.includes('data-testid="pi-not-qualified-button"'));
 // Send to Campaign modal — human copy, not queue jargon
 assert.ok(panelSrc.includes("Send to Campaign"));
 assert.ok(panelSrc.includes("Send {queuePreview?.willQueue ?? 0} to Campaign") || panelSrc.includes("to Campaign"));

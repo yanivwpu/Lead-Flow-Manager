@@ -1385,25 +1385,93 @@ export async function markProspectNeedsReview(
   if (workspaceUserId) assertContactInWorkspace(contact, workspaceUserId);
   assertInternalImportedProspect(contact);
 
+  const rows = await db
+    .select()
+    .from(prospectIntelligence)
+    .where(eq(prospectIntelligence.contactId, contactId))
+    .limit(1);
+  if (!rows[0]) throw new Error("Prospect intelligence not found");
+
+  const clearNotAFit = String(rows[0].recommendedOffer || "").toLowerCase() === "not_a_fit";
+
   await db
     .update(prospectIntelligence)
     .set({
       reviewStatus: "needs_review",
       needsReview: true,
       priority: "needs_review",
+      ...(clearNotAFit ? { recommendedOffer: "general_demo" } : {}),
       updatedAt: new Date(),
     })
     .where(eq(prospectIntelligence.contactId, contactId));
+
+  const updated = await db
+    .select()
+    .from(prospectIntelligence)
+    .where(eq(prospectIntelligence.contactId, contactId))
+    .limit(1);
+  if (updated[0]) {
+    const intel = mapIntelligenceRow(updated[0]);
+    await syncContactIntelligence(contact, intel, updated[0].importJobId);
+  }
+}
+
+export type ProspectQualificationDecision = "qualified" | "needs_review" | "not_qualified";
+
+/**
+ * Manual human qualification override — does not re-run AI, does not enqueue enrichment,
+ * does not consume discovery quota. Preserves contact email/website.
+ */
+export async function setProspectQualificationDecision(
+  contactId: string,
+  decision: ProspectQualificationDecision,
+  opts?: { userId?: string; workspaceUserId?: string },
+): Promise<ProspectIntelligenceListItem | null> {
+  const contact = await storage.getContact(contactId);
+  if (!contact) throw new Error("Contact not found");
+  if (opts?.workspaceUserId) assertContactInWorkspace(contact, opts.workspaceUserId);
+  assertInternalImportedProspect(contact);
 
   const rows = await db
     .select()
     .from(prospectIntelligence)
     .where(eq(prospectIntelligence.contactId, contactId))
     .limit(1);
-  if (rows[0]) {
-    const intel = mapIntelligenceRow(rows[0]);
-    await syncContactIntelligence(contact, intel, rows[0].importJobId);
+  if (!rows[0]) throw new Error("Prospect intelligence not found");
+
+  const currentOffer = String(rows[0].recommendedOffer || "").trim();
+  const clearNotAFit = currentOffer.toLowerCase() === "not_a_fit";
+  const dbPatch: Partial<typeof prospectIntelligence.$inferInsert> = { updatedAt: new Date() };
+
+  if (decision === "qualified") {
+    dbPatch.reviewStatus = "approved";
+    dbPatch.needsReview = false;
+    dbPatch.approvedAt = new Date();
+    if (opts?.userId) dbPatch.approvedByUserId = opts.userId;
+    if (clearNotAFit) dbPatch.recommendedOffer = "general_demo";
+  } else if (decision === "needs_review") {
+    dbPatch.reviewStatus = "needs_review";
+    dbPatch.needsReview = true;
+    dbPatch.priority = "needs_review";
+    if (clearNotAFit) dbPatch.recommendedOffer = "general_demo";
+  } else {
+    dbPatch.recommendedOffer = "not_a_fit";
+    dbPatch.needsReview = false;
   }
+
+  await db
+    .update(prospectIntelligence)
+    .set(dbPatch)
+    .where(eq(prospectIntelligence.contactId, contactId));
+
+  const detail = await getProspectIntelligenceDetail(
+    contactId,
+    opts?.workspaceUserId || contact.userId,
+  );
+  if (detail && contact) {
+    await syncContactIntelligence(contact, detail.intelligence, rows[0].importJobId);
+  }
+  return detail;
 }
 
 export async function patchProspectIntelligence(
@@ -1945,6 +2013,7 @@ export const prospectIntelligenceService = {
   getProspectIntelligenceDashboardCounts,
   approveProspectIntelligence,
   markProspectNeedsReview,
+  setProspectQualificationDecision,
   patchProspectIntelligence,
   reanalyzeProspectContact,
   analyzeProspectContact,

@@ -283,17 +283,134 @@ export function requiresNeutralOutreachMode(result: ProspectIntelligence): boole
   return isUnknownLabel(result.industry) && isUnknownLabel(result.businessType);
 }
 
-function firstNameFromInput(input: ProspectIntelligenceAiInput): string {
-  const part = input.name.trim().split(/\s+/)[0];
-  return part || "there";
+/** Business / org tokens — never treat these as a contact person's first name. */
+const BUSINESS_NAME_TOKEN_RE =
+  /\b(llc|llp|inc|corp|ltd|co|company|group|agency|realty|realtor|brokers?|brokerage|homes?|properties|associates|partners|studios?|salon|clinic|dental|law|pllc|pc|gmbh|sarl|spa|holdings?|enterprises?|solutions?|services?|consulting|investments?|management|marketing|media|digital|tech|technologies|software|systems?)\b/i;
+
+/**
+ * Verified outreach recipient first name only.
+ * Never uses workspace owner, sender profile, account name, or business/trade name.
+ * Falls back to "there" when no person name is verified.
+ */
+export function resolveOutreachRecipientFirstName(
+  input: Pick<ProspectIntelligenceAiInput, "name" | "company" | "jobTitle">,
+  workspaceContext?: Pick<
+    ProspectWorkspaceBusinessContext,
+    "displayName" | "businessName"
+  > | null,
+): string {
+  const rawName = String(input.name || "").trim();
+  if (!rawName || /^unknown$/i.test(rawName)) return "there";
+
+  const company = String(input.company || "").trim();
+  const senderFirstNames = collectSenderFirstNames(workspaceContext);
+
+  if (company && rawName.toLowerCase() === company.toLowerCase()) {
+    return "there";
+  }
+
+  if (BUSINESS_NAME_TOKEN_RE.test(rawName)) {
+    return "there";
+  }
+
+  if (/\d|www\.|\.com|\.net|\.org|\.io\b/i.test(rawName)) {
+    return "there";
+  }
+
+  const parts = rawName.split(/\s+/).filter(Boolean);
+  if (parts.length === 0 || parts.length > 3) {
+    return "there";
+  }
+  if (!parts.every((p) => /^[A-Za-z][A-Za-z'-]*$/.test(p))) {
+    return "there";
+  }
+
+  const first = parts[0]!;
+  if (senderFirstNames.has(first.toLowerCase())) {
+    // Contact name collides with workspace sender — do not greet the sender.
+    return "there";
+  }
+
+  // Job title alone in the name field is not a person name.
+  const job = String(input.jobTitle || "").trim().toLowerCase();
+  if (job && rawName.toLowerCase() === job) {
+    return "there";
+  }
+
+  return first;
 }
 
-export function buildNeutralFirstMessage(input: ProspectIntelligenceAiInput): string {
-  return buildTailoredFirstMessage(input, {
-    recommendedOffer: "general_demo",
-    potentialFit: "unknown",
-    needsReview: true,
-  });
+function collectSenderFirstNames(
+  workspaceContext?: Pick<
+    ProspectWorkspaceBusinessContext,
+    "displayName" | "businessName"
+  > | null,
+): Set<string> {
+  const out = new Set<string>();
+  for (const raw of [workspaceContext?.displayName, workspaceContext?.businessName]) {
+    const first = String(raw || "")
+      .trim()
+      .split(/\s+/)[0];
+    if (first && /^[A-Za-z][A-Za-z'-]*$/.test(first)) {
+      out.add(first.toLowerCase());
+    }
+  }
+  return out;
+}
+
+function firstNameFromInput(
+  input: ProspectIntelligenceAiInput,
+  workspaceContext?: ProspectWorkspaceBusinessContext | null,
+): string {
+  return resolveOutreachRecipientFirstName(input, workspaceContext);
+}
+
+/** Rewrite a leading "Hi Name," so it never greets the sender or an unverified name. */
+export function applyRecipientGreetingGuard(
+  message: string,
+  input: ProspectIntelligenceAiInput,
+  workspaceContext?: ProspectWorkspaceBusinessContext | null,
+): string {
+  const text = String(message || "");
+  if (!text.trim()) return text;
+  const recipient = resolveOutreachRecipientFirstName(input, workspaceContext);
+  const greeting = recipient === "there" ? "Hi there," : `Hi ${recipient},`;
+  const matched = text.match(/^(\s*)Hi\s+([^,\n]+)(,)?(\s*)/i);
+  if (!matched) {
+    // No personal greeting — leave as-is (allowed).
+    return text;
+  }
+  const greeted = String(matched[2] || "").trim();
+  if (!greeted) return text;
+
+  const senderNames = collectSenderFirstNames(workspaceContext);
+  const greetedFirst = greeted.split(/\s+/)[0]?.toLowerCase() || "";
+  const usesSender = Boolean(greetedFirst && senderNames.has(greetedFirst));
+  const usesUnverifiedPerson =
+    recipient === "there" && !/^there$/i.test(greeted) && !/^team$/i.test(greeted);
+  const mismatchesVerified =
+    recipient !== "there" && greetedFirst !== recipient.toLowerCase();
+
+  if (!usesSender && !usesUnverifiedPerson && !mismatchesVerified) {
+    return text;
+  }
+
+  return text.replace(/^(\s*)Hi\s+[^,\n]+(,)?(\s*)/i, `$1${greeting} `).replace(/\s+/g, " ").trim();
+}
+
+export function buildNeutralFirstMessage(
+  input: ProspectIntelligenceAiInput,
+  workspaceContext?: ProspectWorkspaceBusinessContext | null,
+): string {
+  return buildTailoredFirstMessage(
+    input,
+    {
+      recommendedOffer: "general_demo",
+      potentialFit: "unknown",
+      needsReview: true,
+    },
+    workspaceContext,
+  );
 }
 
 /** Deterministic, offer-aware first message when AI undersells or data is thin. */
@@ -311,8 +428,10 @@ export function buildTailoredFirstMessage(
     | "potentialFit"
     | "needsReview"
   >,
+  workspaceContext?: ProspectWorkspaceBusinessContext | null,
 ): string {
-  const name = firstNameFromInput(input);
+  const name = firstNameFromInput(input, workspaceContext);
+  const greeting = name === "there" ? "Hi there," : `Hi ${name},`;
   const ctx = buildWhachatPositioningForProspect({
     recommendedOffer: result.recommendedOffer,
     industry: result.industry,
@@ -334,7 +453,7 @@ export function buildTailoredFirstMessage(
         : "Would it be useful if I shared how this could fit what you do?";
 
   const parts = [
-    `Hi ${name}, I'm reaching out from WhachatCRM.`,
+    `${greeting} I'm reaching out from WhachatCRM.`,
     ctx.positioningSentence,
     ctx.optionalCloser,
     question,
@@ -420,7 +539,7 @@ export function applyOutreachMessageGuardrails(
   if (requiresNeutralOutreachMode(guarded)) {
     guarded.suggestedFirstMessage = workspaceContext
       ? buildWorkspaceFirstMessage(input, workspaceContext)
-      : buildNeutralFirstMessage(input);
+      : buildNeutralFirstMessage(input, workspaceContext);
     guarded.suggestedOutreachAngle =
       "Neutral introduction — limited prospect data available; qualify before pitching a specific offer.";
     return ensureOutreachSubject(guarded, input);
@@ -431,7 +550,7 @@ export function applyOutreachMessageGuardrails(
   if (violations.length > 0) {
     guarded.suggestedFirstMessage = workspaceContext
       ? buildWorkspaceFirstMessage(input, workspaceContext)
-      : buildTailoredFirstMessage(input, guarded);
+      : buildTailoredFirstMessage(input, guarded, workspaceContext);
     if (guarded.suggestedOutreachAngle) {
       const angleViolations = detectUnsupportedOutreachClaims(
         guarded.suggestedOutreachAngle,
@@ -458,7 +577,7 @@ export function applyOutreachMessageGuardrails(
       analyticsDefault ||
       (namesProduct && !hasConcreteWhachatPositioning(message))
     ) {
-      guarded.suggestedFirstMessage = buildTailoredFirstMessage(input, guarded);
+      guarded.suggestedFirstMessage = buildTailoredFirstMessage(input, guarded, workspaceContext);
     }
     if (
       guarded.suggestedOutreachAngle &&
@@ -477,6 +596,14 @@ export function applyOutreachMessageGuardrails(
       });
       guarded.suggestedOutreachAngle = ctx.positioningSentence;
     }
+  }
+
+  if (guarded.suggestedFirstMessage) {
+    guarded.suggestedFirstMessage = applyRecipientGreetingGuard(
+      guarded.suggestedFirstMessage,
+      input,
+      workspaceContext,
+    );
   }
 
   return ensureOutreachSubject(guarded, input);
@@ -507,7 +634,8 @@ function buildWorkspaceFirstMessage(
   context: ProspectWorkspaceBusinessContext,
 ): string {
   if (!context.configured) return "";
-  const name = firstNameFromInput(input);
+  const name = firstNameFromInput(input, context);
+  const greeting = name === "there" ? "Hi there," : `Hi ${name},`;
   const sender =
     context.displayName?.trim() ||
     context.businessName?.trim() ||
@@ -523,13 +651,13 @@ function buildWorkspaceFirstMessage(
       readableServices(context.servicesProducts);
 
   if (!value) {
-    return `Hi ${name}, I'm reaching out from ${sender}. Would a quick conversation be useful?`.slice(
+    return `${greeting} I'm reaching out from ${sender}. Would a quick conversation be useful?`.slice(
       0,
       400,
     );
   }
 
-  return `Hi ${name}, I'm reaching out from ${sender}. We ${value.replace(/^[Ww]e\s+/, "")}. Would a quick conversation be useful?`.slice(
+  return `${greeting} I'm reaching out from ${sender}. We ${value.replace(/^[Ww]e\s+/, "")}. Would a quick conversation be useful?`.slice(
     0,
     400,
   );
@@ -715,6 +843,11 @@ STRICT RULES:
 OUTREACH MESSAGE RULES (suggestedFirstMessage + suggestedOutreachAngle + suggestedOutreachSubject + reasoningSummary):
 ${messageGrounding}
 - Reason in this order: (1) prospect's actual business, (2) one plausible pain if evidenced, (3) pick only 1–2 relevant capabilities from workspace context, (4) connect pain → capability in a short natural message.
+- RECIPIENT GREETING (critical):
+  - Greet only a verified contact person's first name from the prospect input (a real person name distinct from the business/trade name).
+  - NEVER greet the workspace owner, logged-in user, sender profile displayName, Business Profile name, or account name as the recipient.
+  - NEVER invent or infer a person's name from the business name (e.g. "Real Brokers Miami" must not become "Hi Real," or a guessed owner name).
+  - If no verified contact person name exists, use "Hi there," or begin without a personal greeting. Keep the business name for context elsewhere, not in the Hi-line.
 - WhachatCRM is an AI-powered CRM for prospecting, lead qualification, outreach automation, and customer conversations (WhatsApp Business API + email/messaging) — NOT an analytics/insights product by default.
 - Do NOT default to phrases like "insights and analytics", "enhance your offerings", or generic analytics positioning unless the prospect's use case genuinely supports it.
 - Never claim the prospect showed interest in the workspace, its products, messaging, CRM, AI, Shopify, real estate, agency services, or any other topic unless explicit source evidence says so.

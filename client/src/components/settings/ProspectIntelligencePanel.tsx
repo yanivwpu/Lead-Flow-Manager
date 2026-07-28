@@ -98,9 +98,11 @@ import {
 import {
   canEnrichProspect,
   enrichActionLabel,
+  enrichDisabledActionLabel,
   explainCanEnrichProspect,
   explainQualifiedForCampaign,
   formatProspectBulkActionResult,
+  isProspectDecisionQualified,
   isProspectEnrichmentRetryable,
   isProspectInCampaigns,
   isProspectQualifiedForCampaign,
@@ -395,6 +397,8 @@ type DetailDialogProps = {
   onOpenChange: (open: boolean) => void;
   onContactFieldsUpdated: (contactId: string, patch: { email?: string | null; phone?: string | null }) => void;
   onItemUpdated: (item: ProspectIntelligenceListItem) => void;
+  /** After manual qualification — parent may switch Review filter tabs. */
+  onQualificationChanged?: (decision: "qualified" | "needs_review" | "not_qualified") => void;
   /** Shared with toolbar — same Enrich action function. */
   onStartEnrichment: (
     contactIds: string[],
@@ -731,6 +735,7 @@ function ProspectIntelligenceDetailDialog({
   onOpenChange,
   onContactFieldsUpdated,
   onItemUpdated,
+  onQualificationChanged,
   onStartEnrichment,
   enrichPending,
 }: DetailDialogProps) {
@@ -849,22 +854,41 @@ function ProspectIntelligenceDetailDialog({
     },
   });
 
-  const needsReviewMutation = useMutation({
-    mutationFn: () =>
+  const qualificationMutation = useMutation({
+    mutationFn: (decision: "qualified" | "needs_review" | "not_qualified") =>
       fetchJson<{ item?: ProspectIntelligenceListItem }>(
-        `/api/growth-tools/prospect-intelligence/${item!.contactId}/needs-review`,
-        { method: "POST" },
-      ),
-    onSuccess: (data) => {
+        `/api/growth-tools/prospect-intelligence/${item!.contactId}/qualification`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ decision }),
+        },
+      ).then((data) => ({ data, decision })),
+    onSuccess: ({ data, decision }) => {
       if (data.item) applyItemUpdate(data.item);
       else void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
-      toast({ title: "Marked needs review" });
+      onQualificationChanged?.(decision);
+      toast({
+        title:
+          decision === "qualified"
+            ? "Marked Qualified"
+            : decision === "not_qualified"
+              ? "Marked Not Qualified"
+              : "Marked Needs Review",
+      });
     },
+    onError: (err: Error) =>
+      toast({ title: "Could not update qualification", description: err.message, variant: "destructive" }),
   });
 
-  const detailAlreadyNeedsReview =
-    detailNeedsHumanReview || workState === "needs_review";
   const detailIsNotQualified = workState === "not_qualified";
+  const detailIsDecisionQualified = item ? isProspectDecisionQualified(reviewUxInput(item)) : false;
+  const detailQualificationDecision: "qualified" | "needs_review" | "not_qualified" =
+    detailIsNotQualified
+      ? "not_qualified"
+      : detailIsDecisionQualified
+        ? "qualified"
+        : "needs_review";
   const detailEnrichBusy = Boolean(enrichPending);
   const reanalyzeMutation = useMutation({
     mutationFn: () =>
@@ -1319,28 +1343,46 @@ function ProspectIntelligenceDetailDialog({
         </div>
 
         <DialogFooter className="flex-wrap gap-2" data-testid="pi-detail-footer">
-          {!detailIsNotQualified ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={patchMutation.isPending}
-              onClick={() => patchMutation.mutate({ recommendedOffer: "not_a_fit" })}
-              data-testid="pi-not-qualified-button"
-            >
-              Not Qualified
-            </Button>
-          ) : null}
-          {/* Needs Review is a badge/state — never an action when already in that state. */}
-          {!detailAlreadyNeedsReview ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => needsReviewMutation.mutate()}
-              data-testid="pi-needs-review-action"
-            >
-              Needs review
-            </Button>
-          ) : null}
+          <div
+            className="flex flex-wrap items-center gap-1.5"
+            data-testid="pi-qualification-controls"
+            role="group"
+            aria-label="Qualification decision"
+          >
+            {(
+              [
+                { id: "qualified" as const, label: "Qualified", testId: "pi-qualify-qualified" },
+                { id: "needs_review" as const, label: "Needs Review", testId: "pi-qualify-needs-review" },
+                { id: "not_qualified" as const, label: "Not Qualified", testId: "pi-qualify-not-qualified" },
+              ] as const
+            ).map((btn) => {
+              const active = detailQualificationDecision === btn.id;
+              return (
+                <Button
+                  key={btn.id}
+                  type="button"
+                  variant={active ? "default" : "outline"}
+                  className={active ? "bg-brand-green hover:bg-emerald-700" : undefined}
+                  disabled={qualificationMutation.isPending}
+                  onClick={() => {
+                    if (active) return;
+                    qualificationMutation.mutate(btn.id);
+                  }}
+                  data-testid={btn.testId}
+                  aria-pressed={active}
+                  title={
+                    active
+                      ? `Current: ${btn.label}`
+                      : `Mark as ${btn.label} (manual override — does not re-run AI)`
+                  }
+                >
+                  {active ? <Check className="mr-1.5 h-3.5 w-3.5" /> : null}
+                  {btn.label}
+                  {active ? " ✓" : ""}
+                </Button>
+              );
+            })}
+          </div>
           {String(intel?.analysisStatus || "").toLowerCase() === "failed" ? (
           <Button
             type="button"
@@ -1359,9 +1401,10 @@ function ProspectIntelligenceDetailDialog({
               disabled={retryEnrichmentMutation.isPending || detailEnrichBusy}
               onClick={() => retryEnrichmentMutation.mutate()}
               data-testid="pi-retry-enrichment"
+              title="Retry website enrichment"
             >
               {retryEnrichmentMutation.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4" />
               ) : (
                 <RefreshCw className="mr-2 h-4 w-4" />
               )}
@@ -1403,32 +1446,26 @@ function ProspectIntelligenceDetailDialog({
               )}
               {detailEnrichLabel}
             </Button>
-          ) : detailCanEnrich && detailRetryable ? null : approveUi.isApproved ||
-            approveUi.isOutreachSentOrLater ||
-            detailEnrichExplain?.code === "already_enriched" ||
-            detailEnrichExplain?.code === "enrichment_in_progress" ? (
+          ) : detailCanEnrich && detailRetryable ? null : detailEnrichExplain && !detailEnrichExplain.ok ? (
             <Button
               type="button"
               variant="outline"
               disabled
-              data-testid="pi-approved-button"
-              title={detailEnrichExplain?.message || detailQualifiedExplain?.message || undefined}
+              data-testid="pi-enrich-disabled-button"
+              title={detailEnrichExplain.message || detailQualifiedExplain?.message || undefined}
             >
               <Check className="mr-2 h-4 w-4" />{" "}
-              {detailEnrichExplain?.code === "already_enriched"
-                ? "Enriched"
-                : detailEnrichExplain?.code === "enrichment_in_progress"
-                  ? "Enriching…"
-                  : detailEnrichExplain?.code === "missing_website" ||
-                      detailEnrichExplain?.code === "social_profile_only"
-                    ? detailEnrichExplain.code === "social_profile_only"
-                      ? "Social profile only"
-                      : "No website"
-                    : workStateLabel}
+              {item ? enrichDisabledActionLabel(reviewUxInput(item)) : workStateLabel}
             </Button>
-          ) : detailEnrichExplain && !detailEnrichExplain.ok ? (
-            <p className="text-xs text-gray-500" data-testid="pi-enrich-blocked-reason">
-              Enrich unavailable: {detailEnrichExplain.message}
+          ) : null}
+          {detailEnrichExplain && !detailEnrichExplain.ok && !detailCanEnrich ? (
+            <p className="basis-full text-xs text-gray-500" data-testid="pi-enrich-blocked-reason">
+              {detailEnrichExplain.message}
+            </p>
+          ) : null}
+          {!detailQualifiedExplain?.ok && detailIsDecisionQualified === false ? (
+            <p className="basis-full text-xs text-gray-500" data-testid="pi-campaign-blocked-reason">
+              {detailQualifiedExplain?.message || "Mark as Qualified to send campaigns."}
             </p>
           ) : null}
           {approveUi.showSendOutreach ? (
@@ -1900,7 +1937,7 @@ export function ProspectIntelligencePanel(props: {
         if (enrichEx.code === "retry_available" || isProspectEnrichmentRetryable(ux)) {
           retryCount += 1;
         }
-      } else if (enrichEx.code === "already_enriched") {
+      } else if (enrichEx.code === "already_enriched" || enrichEx.code === "email_added") {
         alreadyEnriched += 1;
       } else {
         unavailable += 1;
@@ -2947,6 +2984,11 @@ export function ProspectIntelligencePanel(props: {
         onItemUpdated={(next) => {
           setSelected(next);
           patchListRows([next.contactId], () => next);
+        }}
+        onQualificationChanged={(decision) => {
+          if (decision === "qualified") setWorkFilter("qualified");
+          else if (decision === "not_qualified") setWorkFilter("not_qualified");
+          else setWorkFilter("needs_review");
         }}
         onStartEnrichment={startProspectEnrichment}
         enrichPending={bulkApproveMutation.isPending}

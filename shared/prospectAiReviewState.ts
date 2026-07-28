@@ -112,7 +112,10 @@ export function resolveProspectNeedsReviewBadge(
 ): ProspectNeedsReviewBadge | null {
   if (!isProspectVisibleInReview(input)) return null;
   if (input.notQualified === true) return null;
-  if (isProspectQualifiedForCampaign(input)) return null;
+  // Qualified decision rows keep campaign-ready null; still show enriching / missing email.
+  if (isProspectDecisionQualified(input) && isProspectQualifiedForCampaign(input)) {
+    return null;
+  }
 
   const analysis = String(input.analysisStatus || "pending").toLowerCase();
   if (analysis === "failed") {
@@ -141,6 +144,13 @@ export function resolveProspectNeedsReviewBadge(
   }
   if (attention === "enrichment_failed") {
     return { code: "enrichment_failed", label: "Enrichment Failed" };
+  }
+
+  if (isProspectDecisionQualified(input)) {
+    if (!prospectHasCampaignContact(input)) {
+      return { code: "missing_email", label: "Missing Email" };
+    }
+    return null;
   }
 
   const blocks = listEmailCampaignBlockingReasons(input);
@@ -278,6 +288,7 @@ export type ProspectEligibilityExplanation = {
     | "qualification_incomplete"
     | "needs_review_decision"
     | "already_enriched"
+    | "email_added"
     | "enrichment_in_progress"
     | "enrichment_failed"
     | "enrichment_incomplete"
@@ -290,6 +301,46 @@ export type ProspectEligibilityExplanation = {
   /** Short user-facing reason. */
   message: string;
 };
+
+/** Human (or Enrich-approve) Qualified decision — independent of campaign/email readiness. */
+export function isProspectDecisionQualified(input: ProspectReviewStateInput): boolean {
+  if (input.notQualified === true) return false;
+  return String(input.reviewStatus || "").toLowerCase() === "approved";
+}
+
+/** True website enrichment completed — not merely a manual email on the contact. */
+export function wasProspectWebsiteEnriched(input: ProspectReviewStateInput): boolean {
+  if (!isProspectEnrichmentComplete(input.enrichmentStatus)) return false;
+  if (input.enrichmentEmailFound === true) return true;
+  if (String(input.websiteUrlUsed || "").trim()) return true;
+  const result = input.enrichmentResult;
+  if (result && typeof result === "object" && Object.keys(result).length > 0) return true;
+  return false;
+}
+
+/**
+ * Disabled Enrich control label — never show "Enriched" for manual-email-only.
+ */
+export function enrichDisabledActionLabel(input: ProspectReviewStateInput): string {
+  const ex = explainCanEnrichProspect(input);
+  if (ex.ok) return enrichActionLabel(input);
+  switch (ex.code) {
+    case "already_enriched":
+      return "Enriched";
+    case "email_added":
+      return "Email Added";
+    case "enrichment_in_progress":
+      return "Enriching…";
+    case "missing_website":
+      return "No website";
+    case "social_profile_only":
+      return "Social profile only";
+    case "not_qualified":
+      return "Not Qualified";
+    default:
+      return enrichActionLabel(input);
+  }
+}
 
 /**
  * Review statuses where Enrich is the human continue/approval action
@@ -328,7 +379,7 @@ export function explainCanEnrichProspect(
     return {
       ok: false,
       code: "not_qualified",
-      message: "This prospect is marked not qualified.",
+      message: "Mark as Qualified to enrich.",
     };
   }
   if (isProspectInCampaigns(input)) {
@@ -399,11 +450,11 @@ export function explainCanEnrichProspect(
       return explainEnrichBlockedByWebsite(input);
     }
     if (!doesEnrichmentApply(input) && prospectHasCampaignContact(input)) {
-      // Email already present, no website — nothing left to enrich.
+      // Manual/discovery email present, no official website — not website-enriched.
       return {
         ok: false,
-        code: "already_enriched",
-        message: "This prospect is already enriched.",
+        code: "email_added",
+        message: "Email already on file — no official website to enrich.",
       };
     }
     // Approved + none/cancelled with website → Enrich once.
@@ -444,6 +495,7 @@ export function needsHumanReview(input: ProspectReviewStateInput): boolean {
 
 export type ProspectEmailCampaignBlockCode =
   | "not_qualified"
+  | "not_approved"
   | "in_campaigns"
   | "won"
   | "already_contacted"
@@ -463,7 +515,7 @@ export function isProspectAlreadyContactedForCampaign(
 
 /**
  * True blockers only for Email campaign entry (not advisory needsReview).
- * Used by Review → Qualified AND Send to Campaign (same resolver).
+ * Human Qualified decision is required; valid email unlocks send without enrichment.
  */
 export function listEmailCampaignBlockingReasons(
   input: ProspectReviewStateInput,
@@ -474,6 +526,24 @@ export function listEmailCampaignBlockingReasons(
     blocks.push({
       code: "not_qualified",
       message: "Not qualified",
+    });
+  }
+
+  const analysis = String(input.analysisStatus || "").toLowerCase();
+  if (analysis === "failed") {
+    blocks.push({
+      code: "qualification_failed",
+      message: "AI Review failed",
+    });
+  } else if (!isProspectQualificationComplete(input.analysisStatus)) {
+    blocks.push({
+      code: "qualification_incomplete",
+      message: "AI Review is still in progress",
+    });
+  } else if (input.notQualified !== true && !isProspectDecisionQualified(input)) {
+    blocks.push({
+      code: "not_approved",
+      message: "Mark as Qualified to send campaigns.",
     });
   }
   // Prior real outreach first — historical Inbox sends are "Already contacted",
@@ -494,59 +564,30 @@ export function listEmailCampaignBlockingReasons(
     blocks.push({ code: "won", message: "Already Won" });
   }
 
-  const analysis = String(input.analysisStatus || "").toLowerCase();
-  if (analysis === "failed") {
-    blocks.push({
-      code: "qualification_failed",
-      message: "AI Review failed",
-    });
-  } else if (!isProspectQualificationComplete(input.analysisStatus)) {
-    blocks.push({
-      code: "qualification_incomplete",
-      message: "AI Review is still in progress",
-    });
-  }
-
-  const enrichment = String(input.enrichmentStatus || "none").toLowerCase();
   const hasEmail = prospectHasCampaignContact(input);
-  const enrichmentRequested =
-    enrichment === "pending" ||
-    enrichment === "enriching" ||
-    enrichment === "completed" ||
-    enrichment === "failed";
 
-  if (isProspectEnrichmentInProgress(input.enrichmentStatus)) {
-    blocks.push({
-      code: "enrichment_in_progress",
-      message: "Enrichment still in progress",
-    });
-  } else if (isProspectEnrichmentFailed(input.enrichmentStatus)) {
-    // Fatal only when required campaign data is still unavailable.
-    if (!hasEmail) {
-      blocks.push({
-        code: "enrichment_failed",
-        message: "Enrichment failed",
-      });
-    }
-  } else if (doesEnrichmentApply(input)) {
-    if (enrichmentRequested && !isProspectEnrichmentComplete(input.enrichmentStatus)) {
-      blocks.push({
-        code: "enrichment_incomplete",
-        message: "Enrichment required",
-      });
-    } else if (!enrichmentRequested && !isProspectEnrichmentComplete(input.enrichmentStatus)) {
-      blocks.push({
-        code: "enrichment_incomplete",
-        message: "Enrich this prospect before sending to Campaigns.",
-      });
-    }
-  }
-
+  // Valid email unlocks campaign send — do not require enrichment when email exists.
   if (!hasEmail) {
     blocks.push({
       code: "missing_email",
       message: "Missing email",
     });
+    if (isProspectEnrichmentInProgress(input.enrichmentStatus)) {
+      blocks.push({
+        code: "enrichment_in_progress",
+        message: "Enrichment still in progress",
+      });
+    } else if (isProspectEnrichmentFailed(input.enrichmentStatus)) {
+      blocks.push({
+        code: "enrichment_failed",
+        message: "Enrichment failed",
+      });
+    } else if (doesEnrichmentApply(input) && !isProspectEnrichmentComplete(input.enrichmentStatus)) {
+      blocks.push({
+        code: "enrichment_incomplete",
+        message: "Enrich this prospect before sending to Campaigns.",
+      });
+    }
   }
 
   return blocks;
@@ -631,7 +672,11 @@ export function summarizeSelectionActionAvailability(input: {
 
   // Single-select edge copy for blocked actions (kept compact, human-readable).
   if (n === 1 && !enrichOk && !sendOk) {
-    if (input.firstEnrich?.code === "already_enriched" && input.firstQualified?.ok) {
+    if (
+      (input.firstEnrich?.code === "already_enriched" ||
+        input.firstEnrich?.code === "email_added") &&
+      input.firstQualified?.ok
+    ) {
       return { line: "1 selected", detail: "Ready for campaign", reason: null };
     }
     if (input.firstEnrich && !input.firstEnrich.ok) {
@@ -650,7 +695,13 @@ export function summarizeSelectionActionAvailability(input: {
     }
   }
 
-  if (n === 1 && !enrichOk && sendOk && input.firstEnrich?.code === "already_enriched") {
+  if (
+    n === 1 &&
+    !enrichOk &&
+    sendOk &&
+    (input.firstEnrich?.code === "already_enriched" ||
+      input.firstEnrich?.code === "email_added")
+  ) {
     return { line: "1 selected", detail: "Ready for campaign", reason: null };
   }
 
@@ -768,27 +819,21 @@ export function resolveProspectReviewWorkState(
   if (isProspectInCampaigns(input)) return "in_campaigns";
   if (input.notQualified === true) return "not_qualified";
 
-  const attention = resolveProspectNeedsAttentionReason(input);
-  if (attention) return "needs_attention";
-
-  if (isProspectQualifiedForCampaign(input)) return "qualified";
-
   const analysis = String(input.analysisStatus || "pending").toLowerCase();
   if (analysis === "processing") return "analyzing";
   if (analysis === "pending") return "imported";
 
   const review = String(input.reviewStatus || "pending").toLowerCase();
   if (review === "approved") {
-    if (
-      isProspectEnrichmentInProgress(input.enrichmentStatus) ||
-      (!isProspectEnrichmentComplete(input.enrichmentStatus) &&
-        doesEnrichmentApply(input))
-    ) {
+    if (isProspectEnrichmentInProgress(input.enrichmentStatus)) {
       return "enriching";
     }
-    // No website path already qualified or needs_attention above
-    return "enriching";
+    // Human Qualified decision — independent of campaign/email readiness.
+    return "qualified";
   }
+
+  const attention = resolveProspectNeedsAttentionReason(input);
+  if (attention) return "needs_attention";
 
   if (isProspectQualificationComplete(input.analysisStatus)) return "needs_review";
 
@@ -805,8 +850,8 @@ export function isProspectVisibleInReview(input: ProspectReviewStateInput): bool
 /**
  * Primary filters:
  * - all → every Review-visible prospect
- * - needs_review → still needs a decision/fix/action (not Qualified, not Not Qualified)
- * - qualified → Ready to Send to Campaign exclusively
+ * - needs_review → no human Qualified / Not Qualified decision yet
+ * - qualified → human Qualified decision (reviewStatus approved; may still lack email)
  * - not_qualified → explicit final rejection
  *
  * Deprecated filters (`enriching`, `needs_attention`) kept for tests/URLs.
@@ -825,12 +870,13 @@ export function matchesProspectReviewWorkFilter(
   }
 
   if (filter === "qualified") {
-    return input.notQualified !== true && isQualifiedForEmailCampaign(input);
+    return isProspectDecisionQualified(input);
   }
 
   if (filter === "needs_review") {
     if (input.notQualified === true) return false;
-    return !isQualifiedForEmailCampaign(input);
+    if (isProspectDecisionQualified(input)) return false;
+    return true;
   }
 
   // Deprecated primary chips — exact internal state match
@@ -913,7 +959,7 @@ export function countProspectReviewWorkStates(
     if (!isProspectVisibleInReview(item)) continue;
     if (item.notQualified === true) {
       counts.notQualified += 1;
-    } else if (isQualifiedForEmailCampaign(item)) {
+    } else if (isProspectDecisionQualified(item)) {
       counts.qualified += 1;
     } else {
       counts.needsReview += 1;

@@ -249,6 +249,41 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
     },
   );
 
+  app.post(
+    "/api/growth-tools/prospect-intelligence/:contactId/qualification",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const userId = (req.user as { id: string }).id;
+        const workspaceUserId = await resolveProspectWorkspaceUserId(userId);
+        const decision = String(req.body?.decision || "").trim().toLowerCase();
+        if (
+          decision !== "qualified" &&
+          decision !== "needs_review" &&
+          decision !== "not_qualified"
+        ) {
+          res.status(400).json({
+            error: "decision must be qualified, needs_review, or not_qualified",
+          });
+          return;
+        }
+        const item = await prospectIntelligenceService.setProspectQualificationDecision(
+          req.params.contactId,
+          decision,
+          { userId, workspaceUserId },
+        );
+        if (!item) {
+          res.status(404).json({ error: "Not found" });
+          return;
+        }
+        res.json({ item });
+      } catch (err) {
+        console.error("[ProspectIntelligence] qualification error:", err);
+        res.status(400).json({ error: err instanceof Error ? err.message : "Update failed" });
+      }
+    },
+  );
+
   app.get(
     "/api/growth-tools/prospect-intelligence/:contactId/enrichment",
     requireProspectImportAccess,

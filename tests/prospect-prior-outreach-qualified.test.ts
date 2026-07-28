@@ -21,8 +21,8 @@ import {
 
 const baseQualified = {
   analysisStatus: "completed" as const,
-  reviewStatus: "needs_review" as const,
-  needsReview: true,
+  reviewStatus: "approved" as const,
+  needsReview: false,
   enrichmentStatus: "completed" as const,
   email: "a@b.com",
   websiteUrl: "https://example.com",
