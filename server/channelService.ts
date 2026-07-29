@@ -1315,7 +1315,15 @@ class ChannelService {
       throw err;
     }
 
-    console.log(`[Inbound] DB write success — messageId: ${message.id}, conversationId: ${conversation.id}, contactId: ${contact.id}, preview: "${content.substring(0, 80)}"`);
+    if (channel === "email") {
+      console.log(
+        `[Inbound] DB write success — messageId: ${message.id}, conversationId: ${conversation.id}, contactId: ${contact.id}, channel=email, textLen=${(content || "").length}, textRedacted=true`,
+      );
+    } else {
+      console.log(
+        `[Inbound] DB write success — messageId: ${message.id}, conversationId: ${conversation.id}, contactId: ${contact.id}, preview: "${content.substring(0, 80)}"`,
+      );
+    }
 
     if (channel === "webchat" && (content || "").trim()) {
       const { syncWebchatContactIdentity } = await import("./webchatLeadService");
@@ -1336,7 +1344,15 @@ class ChannelService {
       lastMessageDirection: 'inbound',
       unreadCount: (conversation.unreadCount || 0) + 1,
     });
-    console.log(`[Inbound] Conversation/thread updated — conversationId: ${conversation.id}, unreadCount: ${(conversation.unreadCount || 0) + 1}, preview: "${content.substring(0, 60)}"`);
+    if (channel === "email") {
+      console.log(
+        `[Inbound] Conversation/thread updated — conversationId: ${conversation.id}, unreadCount: ${(conversation.unreadCount || 0) + 1}, channel=email, textLen=${(content || "").length}, textRedacted=true`,
+      );
+    } else {
+      console.log(
+        `[Inbound] Conversation/thread updated — conversationId: ${conversation.id}, unreadCount: ${(conversation.unreadCount || 0) + 1}, preview: "${content.substring(0, 60)}"`,
+      );
+    }
 
     if (!isCommerceInbound) {
       notifyUser(userId, {
@@ -1460,12 +1476,17 @@ class ChannelService {
         console.info("[HANDOFF_TRIGGERED]", {
           contactId: contact.id,
           matchedKeyword,
-          message: (content || "").slice(0, 500),
+          channel,
+          ...(channel === "email"
+            ? { textLen: (content || "").length, textRedacted: true }
+            : { message: (content || "").slice(0, 500) }),
         });
 
         await this.logActivity(userId, contact.id, conversation.id, "ai_handoff", {
           matchedKeyword,
-          message: (content || "").slice(0, 500),
+          ...(channel === "email"
+            ? { textLen: (content || "").length, textRedacted: true }
+            : { message: (content || "").slice(0, 500) }),
           reason: handoff.reason || "handoff_keyword_match",
         });
       }

@@ -54,7 +54,9 @@ export function DataDeletion() {
               <a className="text-brand-green hover:underline">Privacy Policy</a>
             </Link>{" "}
             without undue delay for active production systems, subject to verification and technical complexity. Some records may
-            be retained where required for legal, tax, or fraud-prevention reasons, as explained in the Privacy Policy.
+            be retained where required for legal, tax, or fraud-prevention reasons, as explained in the Privacy Policy. AI-assisted
+            features use the OpenAI API as described in the Privacy Policy; account deletion does not change OpenAI&apos;s
+            handling of data already processed under their terms.
           </p>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">Shopify merchants</h2>

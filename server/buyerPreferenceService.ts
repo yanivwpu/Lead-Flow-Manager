@@ -40,9 +40,12 @@ import {
   type BuyerPreferenceMergeOptions,
 } from "@shared/buyerPreferenceMerge";
 import { formatBuyerPreferenceSummaryForAi, normalizeForDisplay } from "@shared/buyerPreferenceDisplay";
+import { shouldSkipAutomaticBuyerPreferenceLlmForChannel } from "@shared/buyerPreferenceLlmGate";
 import { aiProvider } from "./aiProvider";
 import { storage } from "./storage";
 import { channelService } from "./channelService";
+
+export { shouldSkipAutomaticBuyerPreferenceLlmForChannel };
 
 const RGE_TEMPLATE_ID = "realtor-growth-engine";
 const DEBOUNCE_MS = 7 * 60 * 1000;
@@ -53,7 +56,23 @@ const lastExtractionByContact = new Map<string, number>();
 
 function debugBuyerPreferenceLog(event: string, payload: Record<string, unknown>): void {
   if (process.env.DEBUG_BUYER_PREFS !== "1") return;
-  console.log(JSON.stringify({ tag: "[BuyerPreference]", event, ...payload }));
+  const safe: Record<string, unknown> = { ...payload };
+  for (const key of [
+    "message",
+    "inboundText",
+    "rawPreview",
+    "transcript",
+    "prompt",
+    "suggestion",
+    "content",
+  ]) {
+    if (typeof safe[key] === "string") {
+      safe[`${key}Len`] = (safe[key] as string).length;
+      safe[`${key}Redacted`] = true;
+      delete safe[key];
+    }
+  }
+  console.log(JSON.stringify({ tag: "[BuyerPreference]", event, ...safe }));
 }
 
 /** @deprecated Alias — routes to [BuyerMatchingTrace] in verbose mode. */
@@ -756,7 +775,11 @@ export async function processInboundBuyerPreferencesOnMessage(params: {
 async function loadConversationForExtraction(
   contactId: string,
   limit = 16,
-): Promise<Array<{ role: string; content: string }>> {
+): Promise<{
+  history: Array<{ role: string; content: string }>;
+  conversationId: string | null;
+  channel: string | null;
+}> {
   const bundle = await storage.getContactWithConversations(contactId);
   const conversations = bundle?.conversations ?? [];
   const sorted = [...conversations].sort((a, b) => {
@@ -765,12 +788,18 @@ async function loadConversationForExtraction(
     return bt - at;
   });
   const primary = sorted[0];
-  if (!primary) return [];
+  if (!primary) {
+    return { history: [], conversationId: null, channel: null };
+  }
   const messages = await storage.getMessages(primary.id, limit);
-  return messages.map((m) => ({
-    role: m.direction === "inbound" ? "user" : "assistant",
-    content: m.content || "",
-  }));
+  return {
+    history: messages.map((m) => ({
+      role: m.direction === "inbound" ? "user" : "assistant",
+      content: m.content || "",
+    })),
+    conversationId: primary.id,
+    channel: primary.channel ?? null,
+  };
 }
 
 async function extractPreferencesWithLlm(
@@ -926,7 +955,25 @@ export async function runBuyerPreferenceExtraction(
     return;
   }
 
-  const history = await loadConversationForExtraction(contactId);
+  const loaded = await loadConversationForExtraction(contactId);
+  const { history, conversationId: latestConversationId, channel: latestChannel } = loaded;
+
+  // Limited Use: never auto-send Gmail thread bodies to OpenAI via background extraction.
+  if (shouldSkipAutomaticBuyerPreferenceLlmForChannel(latestChannel)) {
+    logTrigger("extraction_skipped", {
+      contactId,
+      userId,
+      triggerSource,
+      reason: "email_channel_no_automatic_llm",
+      channel: "email",
+      conversationId: latestConversationId,
+      historyMessages: history.length,
+      textLen: text.length,
+      note: "Skipped OpenAI buyer-preference extraction because the latest conversation is email",
+    });
+    return;
+  }
+
   if (!history.length && !text) {
     logTrigger("extraction_skipped", {
       contactId,
@@ -945,6 +992,7 @@ export async function runBuyerPreferenceExtraction(
     gateReason: gate.reason,
     textLen: text.length,
     historyMessages: history.length,
+    channel: latestChannel,
     ...gate.debug,
   });
 

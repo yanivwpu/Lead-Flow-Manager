@@ -70,7 +70,8 @@ export async function persistNormalizedEmailMessage(params: {
         tag: "[ContactIdentityAudit]",
         event: "calendar_invite_skipped",
         direction: normalized.direction,
-        subjectPrefix: String(normalized.subject || "").slice(0, 40),
+        subjectLen: String(normalized.subject || "").length,
+        subjectRedacted: true,
         fromDomain: String(normalized.from.email || "").split("@")[1] || null,
       }),
     );

@@ -213,10 +213,15 @@ export function TermsOfUse() {
 
           <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">7.6 Artificial intelligence (AI) features</h3>
           <p className="text-gray-600 mb-4">
-            Certain features may generate drafts, summaries, scores, or suggestions using AI. AI outputs can be incorrect or inappropriate.
-            <strong> You are responsible for reviewing content before sending</strong> when human oversight is required by law or
+            Certain features may generate drafts, summaries, scores, or suggestions using the <strong>OpenAI API</strong> (not
+            self-hosted or offline models). AI outputs can be incorrect or inappropriate.{" "}
+            <strong>You are responsible for reviewing content before sending</strong> when human oversight is required by law or
             by your policies. WhachatCRM does not warrant that AI outputs are accurate, complete, or fit for any particular legal
-            purpose.
+            purpose. Use of Google Workspace / Gmail data with AI features is described in our{" "}
+            <Link href="/privacy-policy">
+              <a className="text-brand-green hover:underline">Privacy Policy</a>
+            </Link>
+            .
           </p>
 
           <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">7.7 Shopify merchants</h3>

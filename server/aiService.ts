@@ -107,7 +107,10 @@ export class AIService {
         confidence: result.confidence || 0.7,
       };
     } catch (error) {
-      console.error("[AI] Error generating suggestion:", error);
+      console.error(
+        "[AI] Error generating suggestion:",
+        error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+      );
       return { suggestion: "", confidence: 0 };
     }
   }
@@ -169,7 +172,10 @@ Return only valid JSON.`;
         status: result.status || "new"
       };
     } catch (error) {
-      console.error("[AI] Error extracting lead data:", error);
+      console.error(
+        "[AI] Error extracting lead data:",
+        error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+      );
       return { score: 25, status: "new" };
     }
   }
@@ -200,7 +206,10 @@ Return JSON: { "question": "your question" } or { "question": null }`;
       const result = JSON.parse(response || "{}");
       return result.question || null;
     } catch (error) {
-      console.error("[AI] Error generating qualifying question:", error);
+      console.error(
+        "[AI] Error generating qualifying question:",
+        error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+      );
       return null;
     }
   }
@@ -250,7 +259,10 @@ Return JSON with:
         description: result.description || plainEnglishInput
       };
     } catch (error) {
-      console.error("[AI] Error generating automation:", error);
+      console.error(
+        "[AI] Error generating automation:",
+        error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+      );
       return {
         triggers: [],
         actions: [],
@@ -284,7 +296,10 @@ Return JSON: { "summary": "your summary" }`;
       const result = JSON.parse(response || "{}");
       return result.summary || "Unable to generate summary.";
     } catch (error) {
-      console.error("[AI] Error summarizing conversation:", error);
+      console.error(
+        "[AI] Error summarizing conversation:",
+        error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+      );
       return "Unable to generate summary.";
     }
   }
@@ -386,7 +401,10 @@ Write a short natural summary. Only attribute intent to the prospect when Lead (
       }
       return summary || "Prospect has replied. Review the thread for details.";
     } catch (error) {
-      console.error('[AI] Error generating AI memory:', error);
+      console.error(
+        "[AI] Error generating AI memory:",
+        error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+      );
       return "Prospect has replied. Review the thread for details.";
     }
   }
@@ -452,7 +470,10 @@ Return JSON only: { "summary": "..." }`;
         "Unable to summarize this website content."
       );
     } catch (e) {
-      console.error("[AI] website knowledge summarize failed", e);
+      console.error(
+        "[AI] website knowledge summarize failed",
+        e instanceof Error ? e.message.slice(0, 240) : String(e).slice(0, 240),
+      );
       return body.slice(0, 4000);
     }
   }

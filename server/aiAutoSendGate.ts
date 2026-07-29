@@ -239,7 +239,8 @@ export function evaluateFullAutoSend(params: {
     bypassed: bypassed.length ? bypassed : undefined,
     inboundCount,
     confidence,
-    preview: lastInbound.slice(0, 120),
+    textLen: lastInbound.length,
+    textRedacted: true,
   });
 
   return { allowed: true, reason: "strong_intent_override", missingRequiredLen: missingLen, inboundCount };

@@ -42,7 +42,6 @@ function buildOpenAiClient(): OpenAI {
 export class AIProvider {
   private openaiClient: OpenAI;
   private modelRegistry: AIModelRegistry;
-  private keyResolutionLogged = false;
 
   constructor() {
     this.openaiClient = buildOpenAiClient();
@@ -59,32 +58,6 @@ export class AIProvider {
 
   private ensureOpenAiKey(): void {
     const resolved = resolveOpenAiApiKey();
-    if (!this.keyResolutionLogged) {
-      this.keyResolutionLogged = true;
-      console.log("[AIProvider] OpenAI key resolution", {
-        ok: resolved.ok,
-        source: resolved.ok ? resolved.source : undefined,
-        reason: resolved.ok ? undefined : resolved.reason,
-      });
-      // #region agent log
-      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4bac18" },
-        body: JSON.stringify({
-          sessionId: "4bac18",
-          hypothesisId: "H-key-resolve",
-          location: "server/aiProvider.ts:ensureOpenAiKey",
-          message: "openai key resolution",
-          data: {
-            ok: resolved.ok,
-            source: resolved.ok ? resolved.source : null,
-            reasonPrefix: resolved.ok ? null : String(resolved.reason).slice(0, 80),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-    }
     if (!resolved.ok) {
       throw new Error(resolved.reason);
     }
@@ -139,7 +112,12 @@ export class AIProvider {
       }
       return content;
     } catch (error) {
-      console.error(`[AIProvider] Error with ${config.provider}/${config.model}:`, error);
+      // Do not log prompt/response bodies (may include Gmail-derived conversation text).
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error(
+        `[AIProvider] Error with ${config.provider}/${config.model}:`,
+        errMsg.slice(0, 240),
+      );
       throw error;
     }
   }

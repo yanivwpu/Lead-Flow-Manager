@@ -10797,7 +10797,10 @@ export async function registerRoutes(
                 contactId: conv.contactId,
                 routingDecision: aiRouting.decision,
                 reason: aiRouting.reason,
-                message: lastInbound.slice(0, 500),
+                channel: messagingChannel,
+                ...(messagingChannel === "email"
+                  ? { textLen: lastInbound.length, textRedacted: true }
+                  : { message: lastInbound.slice(0, 500) }),
               });
               await storage.createActivityEvent({
                 userId,
@@ -10807,7 +10810,9 @@ export async function registerRoutes(
                 eventData: {
                   routingDecision: aiRouting.decision,
                   routingReason: aiRouting.reason,
-                  message: lastInbound.slice(0, 500),
+                  ...(messagingChannel === "email"
+                    ? { textLen: lastInbound.length, textRedacted: true }
+                    : { message: lastInbound.slice(0, 500) }),
                   reason: "ai_routing_assign_agent",
                 },
                 actorType: "system",

@@ -29,7 +29,7 @@ export function PrivacyPolicy() {
         </Link>
 
         <h1 className="text-3xl font-display font-bold text-gray-900 mb-2">Privacy Policy</h1>
-        <p className="text-sm text-gray-500 mb-8">Last updated: July 23, 2026</p>
+        <p className="text-sm text-gray-500 mb-8">Last updated: July 29, 2026</p>
 
         <div className="prose prose-gray max-w-none">
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">1. Introduction</h2>
@@ -242,13 +242,24 @@ export function PrivacyPolicy() {
             </li>
             <li>
               If you use AI-assisted features on a conversation that includes email content, relevant conversation context may be
-              processed by our AI service providers solely to generate the requested suggestion, summary, or draft for your
-              workspace. See Section 9 and Section 10.
+              processed by <strong>OpenAI</strong> (via the OpenAI API) solely to generate the requested suggestion, summary, or
+              draft for your workspace. See Section 6 and Section 10.
             </li>
             <li>
-              <strong>Google Workspace API data is not used to develop, improve, or train generalized AI or machine learning
-              models.</strong>{" "}
+              WhachatCRM uses the OpenAI API to power AI-assisted features such as email reply suggestions, conversation
+              summaries, prospect intelligence, workflow assistance, and customer-requested content generation.
+            </li>
+            <li>
+              Google Workspace API data is processed only to provide the functionality requested by the user.{" "}
+              <strong>
+                Google Workspace API data is not used to develop, improve, or train generalized artificial intelligence or machine
+                learning models.
+              </strong>{" "}
               Any AI functionality in WhachatCRM does not use Google Workspace API data for generalized AI/ML model training.
+            </li>
+            <li>
+              The use of raw or derived user data received from Google Workspace APIs adheres to the Google API Services User Data
+              Policy, including the Limited Use requirements.
             </li>
             <li>
               We do not use Google user data for advertising. We do not sell Google user data. We do not use Google user data to
@@ -256,8 +267,8 @@ export function PrivacyPolicy() {
             </li>
             <li>
               We do not transfer Google user data to third parties except as needed to provide or secure the Service (for example,
-              hosting infrastructure or AI subprocessors operating the feature you enable), to comply with law, or as directed by
-              you / with your consent through product configuration — consistent with Google&apos;s Limited Use requirements.
+              hosting infrastructure or OpenAI operating the AI feature you enable), to comply with law, or as directed by you /
+              with your consent through product configuration — consistent with Google&apos;s Limited Use requirements.
             </li>
             <li>
               Human access to Google user data is limited to circumstances such as: providing support when you request it;
@@ -319,8 +330,12 @@ export function PrivacyPolicy() {
               operate the integration features you enable.
             </li>
             <li>
-              <strong>AI service providers:</strong> Where AI-assisted features are enabled, relevant inputs may be processed by
-              our configured AI providers solely to generate the requested outputs for your workspace.
+              <strong>OpenAI:</strong> WhachatCRM uses the OpenAI API to power AI-assisted features such as email reply
+              suggestions, conversation summaries, prospect intelligence, workflow assistance, and customer-requested content
+              generation. Where those features are enabled, relevant inputs (which may include synced Gmail conversation context
+              for the conversation you are working on) may be processed by OpenAI solely to generate the requested outputs for
+              your workspace. Google Workspace API data is processed only to provide the functionality requested by the user and
+              is not used to develop, improve, or train generalized artificial intelligence or machine learning models.
             </li>
             <li>
               <strong>Analytics:</strong> We use privacy-preserving analytics tooling on our marketing site (see Section 11) to
@@ -341,7 +356,7 @@ export function PrivacyPolicy() {
             </li>
             <li>
               <strong>Service providers:</strong> Hosting, payment processing, email delivery, security vendors, and (where
-              applicable) subprocessors supporting AI-assisted features — solely to provide the service.
+              applicable) OpenAI for AI-assisted features — solely to provide the service.
             </li>
             <li>
               <strong>Legal requirements:</strong> When required by law or to protect rights, safety, and integrity.
@@ -410,14 +425,24 @@ export function PrivacyPolicy() {
           </p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
             <li>
-              When AI features are used, relevant conversation context (which may include synced email content for that
-              conversation) may be sent to our configured AI service providers to generate the requested output for your
-              workspace. Provider handling of that data is governed by their terms and our configuration with them.
+              WhachatCRM uses the OpenAI API to power AI-assisted features such as email reply suggestions, conversation
+              summaries, prospect intelligence, workflow assistance, and customer-requested content generation. WhachatCRM does
+              not operate self-hosted or offline AI models for these features.
             </li>
             <li>
-              <strong>Google Workspace API data is not used to develop, improve, or train generalized AI or machine learning
-              models.</strong>{" "}
-              We do not use Google user data for advertising or to create advertising profiles.
+              When AI features are used, relevant conversation context (which may include synced email content for that
+              conversation) may be sent to OpenAI to generate the requested output for your workspace. Provider handling of that
+              data is governed by OpenAI&apos;s terms and our configuration with them.
+            </li>
+            <li>
+              Google Workspace API data is processed only to provide the functionality requested by the user.{" "}
+              <strong>
+                Google Workspace API data is not used to develop, improve, or train generalized artificial intelligence or machine
+                learning models.
+              </strong>{" "}
+              The use of raw or derived user data received from Google Workspace APIs adheres to the Google API Services User Data
+              Policy, including the Limited Use requirements. We do not use Google user data for advertising or to create
+              advertising profiles.
             </li>
             <li>
               AI outputs may be imperfect; your team remains responsible for reviewing messages before they are sent where

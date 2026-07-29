@@ -163,10 +163,25 @@ function parseBudgetMaxFromText(text: string): number | null {
   return Math.round(n);
 }
 
-function truncateMessage(text: string | null | undefined, max = 500): string | null {
-  if (!text) return null;
-  const t = text.trim();
-  return t.length <= max ? t : `${t.slice(0, max)}…`;
+/** Never emit message bodies / AI suggestion text — length metadata only (Gmail Limited Use). */
+function redactTraceContentFields<T extends Record<string, unknown>>(payload: T): T {
+  const out: Record<string, unknown> = { ...payload };
+  if (typeof out.message === "string") {
+    out.messageLen = out.message.length;
+    out.messageRedacted = true;
+    delete out.message;
+  }
+  if (typeof out.aiSuggestionPreview === "string") {
+    out.aiSuggestionPreviewLen = out.aiSuggestionPreview.length;
+    out.aiSuggestionPreviewRedacted = true;
+    delete out.aiSuggestionPreview;
+  }
+  if (typeof out.inboundText === "string") {
+    out.inboundTextLen = out.inboundText.length;
+    out.inboundTextRedacted = true;
+    delete out.inboundText;
+  }
+  return out as T;
 }
 
 /** Compare profile snapshots across layers. */
@@ -598,21 +613,26 @@ function shouldEmitVerboseStep(payload: BuyerMatchingTracePayload): boolean {
 /** Emit trace — warnings always; full steps only in debug mode. */
 export function logBuyerMatchingTrace(payload: BuyerMatchingTracePayload): void {
   const mismatches = payload.mismatches ?? [];
-  const body = {
+  const body = redactTraceContentFields({
     tag: BUYER_MATCHING_TRACE_TAG,
     event: mismatches.length > 0 ? "warning" : payload.event ?? "step",
     ...payload,
-    message: truncateMessage(payload.message),
-    aiSuggestionPreview: truncateMessage(payload.aiSuggestionPreview, 300),
+    // Lengths captured before redaction; never emit raw text.
+    messageLen:
+      typeof payload.message === "string" ? payload.message.length : undefined,
+    aiSuggestionPreviewLen:
+      typeof payload.aiSuggestionPreview === "string"
+        ? Math.min(payload.aiSuggestionPreview.length, 300)
+        : undefined,
     mismatches: mismatches.length ? mismatches : undefined,
     loggedAt: payload.loggedAt ?? new Date().toISOString(),
-  };
+  } as Record<string, unknown>);
 
-  if (hasWarnings(body)) {
+  if (hasWarnings(body as BuyerMatchingTracePayload)) {
     console.warn(JSON.stringify(body));
     return;
   }
-  if (shouldEmitVerboseStep(body)) {
+  if (shouldEmitVerboseStep(body as BuyerMatchingTracePayload)) {
     console.info(JSON.stringify(body));
   }
 }

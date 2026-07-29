@@ -358,7 +358,11 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       const inbound = history.filter((m) => m.role === "user").map((m) => m.content || "");
       return (inbound[inbound.length - 1] || "").trim();
     })();
-    console.info("[AI-AUTO-CLIENT]", { mode: "auto", latestMessage: lastInboundText.slice(0, 500) });
+    const logSafeInbound =
+      String(channel || "").toLowerCase() === "email"
+        ? { textLen: lastInboundText.length, textRedacted: true as const }
+        : { latestMessage: lastInboundText.slice(0, 500) };
+    console.info("[AI-AUTO-CLIENT]", { mode: "auto", channel: channel || null, ...logSafeInbound });
     if (lastInboundText) {
       const routing = resolveAiRouting({
         inbound: lastInboundText,
@@ -370,7 +374,8 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
           contactId: contactId || "unknown",
           matchedKeyword: "routing_assign_agent",
           routingReason: routing.reason,
-          message: lastInboundText.slice(0, 500),
+          channel: channel || null,
+          ...logSafeInbound,
         });
         setAutoPhase("waiting");
         autoReplyInFlightRef.current = false;
@@ -440,7 +445,8 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
         else if (!onAutoSend) clientReason = "missing_onAutoSend_callback";
         console.info("[AI-AUTO-CLIENT]", {
           mode: "auto",
-          latestMessage: lastInboundText.slice(0, 500),
+          channel: channel || null,
+          ...logSafeInbound,
           autoSendAllowed: allowed,
           reason: clientReason,
           serverReason: reason,
@@ -486,7 +492,8 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       } else {
         console.info("[AI-AUTO-CLIENT]", {
           mode: "auto",
-          latestMessage: lastInboundText.slice(0, 500),
+          channel: channel || null,
+          ...logSafeInbound,
           autoSendAllowed: false,
           reason: "suggest_reply_request_failed",
           httpStatus: res.status,
@@ -500,7 +507,8 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     } catch {
       console.info("[AI-AUTO-CLIENT]", {
         mode: "auto",
-        latestMessage: lastInboundText.slice(0, 500),
+        channel: channel || null,
+        ...logSafeInbound,
         autoSendAllowed: false,
         reason: "suggest_reply_exception",
         suggestionLength: 0,
@@ -514,7 +522,16 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
         autoReplyInFlightRef.current = false;
       }
     }
-  }, [conversationId, aiEnabled, contactContext, contactId, handoffKeywords, onAutoSend, applyComposerText]);
+  }, [
+    conversationId,
+    aiEnabled,
+    contactContext,
+    contactId,
+    channel,
+    handoffKeywords,
+    onAutoSend,
+    applyComposerText,
+  ]);
 
   // Watch messages: when in auto mode and last message is from lead → auto-reply
   const lastMsg = messages[messages.length - 1];
