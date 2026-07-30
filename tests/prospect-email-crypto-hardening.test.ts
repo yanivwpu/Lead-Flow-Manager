@@ -7,10 +7,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   assertEmailEncryptionConfigured,
+  buildEmailCryptoKeyDiagSnapshot,
   clearMailboxTokenSingleFlightForTests,
   decryptEmailCredential,
   emailEncryptionKeySourceDiag,
   encryptEmailCredential,
+  logEmailCryptoBootDiag,
+  probeMailboxTokensDecryptReadOnly,
   runMailboxTokenSingleFlight,
 } from "../server/emailChannel/credentials";
 import {
@@ -83,7 +86,7 @@ async function main() {
     assert.equal(parsed.decryptField, "access_token");
     assert.equal(
       formatProspectQueueItemError(persisted),
-      "Connect an email account before starting the campaign",
+      "Reconnect your email account before resuming",
     );
   });
 
@@ -164,6 +167,51 @@ async function main() {
   await run("boot crypto diag is invoked from server index", () => {
     const indexSrc = readFileSync(join(process.cwd(), "server/index.ts"), "utf8");
     assert.ok(indexSrc.includes("logEmailCryptoBootDiag"));
+  });
+
+  await run("EmailCryptoBoot snapshot has safe identity fields only", () => {
+    process.env.NODE_ENV = "production";
+    process.env.EMAIL_ENCRYPTION_KEY = "prod-email-encryption-key-32bytes!!";
+    const snap = buildEmailCryptoKeyDiagSnapshot();
+    assert.equal(snap.keySource, "EMAIL_ENCRYPTION_KEY");
+    assert.equal(snap.emailEncryptionKeyPresent, true);
+    assert.equal(snap.productionFailClosed, true);
+    assert.ok(snap.keyFp8 && snap.keyFp8.length === 8);
+    assert.ok(snap.processId);
+    assert.ok(snap.instanceId);
+    assert.ok(snap.serviceProcessId.includes("pid="));
+    assert.ok(!JSON.stringify(snap).includes("prod-email-encryption-key"));
+  });
+
+  await run("read-only decrypt probe does not return plaintext", () => {
+    process.env.NODE_ENV = "production";
+    process.env.EMAIL_ENCRYPTION_KEY = "prod-email-encryption-key-32bytes!!";
+    const access = encryptEmailCredential("ya29.access-probe-token");
+    const refresh = encryptEmailCredential("1//refresh-probe-token");
+    const ok = probeMailboxTokensDecryptReadOnly({
+      accessTokenEncrypted: access,
+      refreshTokenEncrypted: refresh,
+    });
+    assert.equal(ok.accessTokenDecryptable, true);
+    assert.equal(ok.refreshTokenDecryptable, true);
+    assert.equal(ok.decryptFailureField, null);
+
+    const bad = probeMailboxTokensDecryptReadOnly({
+      accessTokenEncrypted: "00000000000000000000000000000000:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:bbbb",
+      refreshTokenEncrypted: refresh,
+    });
+    assert.equal(bad.accessTokenDecryptable, false);
+    assert.equal(bad.refreshTokenDecryptable, true);
+    assert.equal(bad.decryptFailureField, "access_token");
+  });
+
+  await run("admin email-crypto route is wired with requireAdmin", () => {
+    const routesSrc = readFileSync(join(process.cwd(), "server/routes.ts"), "utf8");
+    assert.ok(routesSrc.includes('/api/admin/diagnostics/email-crypto'));
+    assert.ok(routesSrc.includes("getEmailCryptoAdminDiagnostics"));
+    assert.ok(routesSrc.includes("requireAdmin"));
+    // Ensure boot logger still callable
+    logEmailCryptoBootDiag();
   });
 
   // restore env

@@ -3,8 +3,15 @@
  * Production requires EMAIL_ENCRYPTION_KEY (no SESSION_SECRET / Meta / Twilio fallback).
  */
 import crypto from "crypto";
+import os from "os";
 
 const ALGORITHM = "aes-256-gcm";
+
+/** Stable per-process id so repeated admin probes can detect multi-instance key drift. */
+const EMAIL_CRYPTO_INSTANCE_ID =
+  String(process.env.RAILWAY_REPLICA_ID || "").trim() ||
+  String(process.env.RAILWAY_DEPLOYMENT_ID || "").trim() ||
+  `${os.hostname()}-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
 
 export type EmailCredentialField = "access_token" | "refresh_token";
 
@@ -140,18 +147,101 @@ export function logEmailChannelHealthDiag(input: EmailChannelHealthDiagInput): v
   );
 }
 
-/** Boot-time non-secret crypto readiness line. */
-export function logEmailCryptoBootDiag(): void {
+export type EmailCryptoKeyDiagSnapshot = {
+  nodeEnv: string | null;
+  keySource: string | null;
+  keyFp8: string | null;
+  productionFailClosed: boolean;
+  emailEncryptionKeyPresent: boolean;
+  processId: string;
+  instanceId: string;
+  serviceProcessId: string;
+};
+
+/** Non-secret process identity for multi-instance keyFp8 comparison. */
+export function getEmailCryptoProcessIdentity(): {
+  processId: string;
+  instanceId: string;
+  serviceProcessId: string;
+} {
+  const processId = String(process.pid);
+  const serviceName =
+    String(process.env.RAILWAY_SERVICE_NAME || "").trim() ||
+    String(process.env.RAILWAY_SERVICE_ID || "").trim() ||
+    "app";
+  const instanceId = EMAIL_CRYPTO_INSTANCE_ID;
+  return {
+    processId,
+    instanceId,
+    serviceProcessId: `${serviceName}/pid=${processId}/instance=${instanceId}`,
+  };
+}
+
+/** Safe key/runtime snapshot — never includes secrets, lengths, tokens, or ciphertext. */
+export function buildEmailCryptoKeyDiagSnapshot(): EmailCryptoKeyDiagSnapshot {
   const keyDiag = emailEncryptionKeySourceDiag();
+  const identity = getEmailCryptoProcessIdentity();
+  const emailEncryptionKeyPresent = Boolean(String(process.env.EMAIL_ENCRYPTION_KEY || "").trim());
+  return {
+    nodeEnv: process.env.NODE_ENV || null,
+    keySource: keyDiag.source,
+    keyFp8: keyDiag.sha256Prefix8,
+    productionFailClosed: keyDiag.productionFailClosed,
+    emailEncryptionKeyPresent,
+    processId: identity.processId,
+    instanceId: identity.instanceId,
+    serviceProcessId: identity.serviceProcessId,
+  };
+}
+
+/**
+ * Read-only decrypt probe — does not refresh tokens, does not mutate mailbox rows,
+ * does not return plaintext/ciphertext. Uses decryptEmailCredential (no syncStatus writes).
+ */
+export function probeMailboxTokensDecryptReadOnly(params: {
+  accessTokenEncrypted?: string | null;
+  refreshTokenEncrypted?: string | null;
+}): {
+  accessTokenDecryptable: boolean;
+  refreshTokenDecryptable: boolean;
+  decryptFailureField: "access_token" | "refresh_token" | null;
+} {
+  const tryDecrypt = (cipher: string | null | undefined): boolean => {
+    const raw = String(cipher || "").trim();
+    if (!raw) return false;
+    try {
+      const plain = decryptEmailCredential(raw);
+      // Discard immediately — length check only to avoid unused-var elision of crypto work.
+      return plain.length > 0;
+    } catch {
+      return false;
+    }
+  };
+
+  const hasAccess = Boolean(String(params.accessTokenEncrypted || "").trim());
+  const hasRefresh = Boolean(String(params.refreshTokenEncrypted || "").trim());
+  const accessTokenDecryptable = hasAccess ? tryDecrypt(params.accessTokenEncrypted) : false;
+  const refreshTokenDecryptable = hasRefresh ? tryDecrypt(params.refreshTokenEncrypted) : false;
+
+  let decryptFailureField: "access_token" | "refresh_token" | null = null;
+  if (hasAccess && !accessTokenDecryptable) decryptFailureField = "access_token";
+  else if (hasRefresh && !refreshTokenDecryptable) decryptFailureField = "refresh_token";
+
+  return { accessTokenDecryptable, refreshTokenDecryptable, decryptFailureField };
+}
+
+/** Boot-time non-secret crypto readiness line — one structured log, no secrets. */
+export function logEmailCryptoBootDiag(): void {
+  const snap = buildEmailCryptoKeyDiagSnapshot();
   console.info(
     JSON.stringify({
       tag: "[EmailCryptoBoot]",
-      event: "email_crypto_ready",
-      keySource: keyDiag.source,
-      keyFp8: keyDiag.sha256Prefix8,
-      present: keyDiag.present,
-      productionFailClosed: keyDiag.productionFailClosed,
-      nodeEnv: process.env.NODE_ENV || null,
+      serviceProcessId: snap.serviceProcessId,
+      nodeEnv: snap.nodeEnv,
+      keySource: snap.keySource,
+      keyFp8: snap.keyFp8,
+      productionFailClosed: snap.productionFailClosed,
+      emailEncryptionKeyPresent: snap.emailEncryptionKeyPresent,
     }),
   );
 }

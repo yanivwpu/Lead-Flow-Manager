@@ -8115,6 +8115,35 @@ export async function registerRoutes(
   };
 
   /**
+   * Read-only Gmail encryption key consistency probe.
+   * Returns keySource/keyFp8/instanceId + decryptability flags — never secrets/tokens/ciphertext.
+   * Optional ?workspaceUserId= ; defaults to Prospect AI import destination workspace.
+   */
+  app.get("/api/admin/diagnostics/email-crypto", requireAdmin, async (req, res) => {
+    try {
+      const { getEmailCryptoAdminDiagnostics } = await import(
+        "./emailChannel/emailCryptoAdminDiagnostics"
+      );
+      let workspaceUserId =
+        typeof req.query.workspaceUserId === "string" && req.query.workspaceUserId.trim()
+          ? req.query.workspaceUserId.trim()
+          : "";
+      if (!workspaceUserId) {
+        const { resolveProspectImportDestinationUserId } = await import(
+          "./prospectImport/prospectImportService"
+        );
+        workspaceUserId = await resolveProspectImportDestinationUserId();
+      }
+      const diagnostics = await getEmailCryptoAdminDiagnostics(workspaceUserId);
+      res.json(diagnostics);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("[admin] email-crypto diagnostics failed", msg);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  /**
    * Preflight-only matrix: validates optional `WA_MATRIX_*` public URLs (HTTPS, MIME, length, no CDN/proxy).
    * Does not call Graph. Set env URLs to exercise image / PDF / video / carousel-style image checks.
    */
