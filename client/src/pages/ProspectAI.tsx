@@ -61,6 +61,8 @@ import {
   type ProspectAiDiscoverResult,
   type ProspectAiDiscoveryExcludedSample,
   type ProspectAiStatus,
+  milesToRadiusKm,
+  radiusKmToMilesDisplay,
 } from "@/lib/prospectAi";
 import { formatProspectAiRate } from "@shared/prospectAI";
 import {
@@ -140,6 +142,10 @@ function QuotaMeter({ status }: { status: ProspectAiStatus }) {
             <span className="font-semibold tabular-nums text-gray-900">{used}</span>
             {" of "}
             <span className="tabular-nums">{monthlyQuota}</span> used this month
+            <span className="text-gray-500">
+              {" · "}
+              <span className="tabular-nums text-gray-700">{remaining}</span> remaining
+            </span>
           </p>
           <p className="mt-0.5 text-xs text-gray-500">Resets each billing month</p>
         </div>
@@ -147,7 +153,11 @@ function QuotaMeter({ status }: { status: ProspectAiStatus }) {
           {status.plan || "Plan"}
         </Badge>
       </div>
-      <Progress value={pct} className="mt-3 h-2" />
+      <Progress
+        value={pct}
+        className="mt-3 h-2"
+        aria-label={`${used} of ${monthlyQuota} Prospect Discoveries used`}
+      />
       {exhausted ? (
         <p className="mt-3 text-sm text-amber-900">
           You’ve used all of your monthly Prospect Discoveries.
@@ -395,7 +405,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
   const searchString = useSearch();
   const [businessType, setBusinessType] = useState("");
   const [location, setLocation] = useState("");
-  const [radiusKm, setRadiusKm] = useState("");
+  const [radiusMiles, setRadiusMiles] = useState("");
   const [targetCount, setTargetCount] = useState<25 | 50 | 100 | 250>(50);
   const [locationExpansion, setLocationExpansion] = useState<"exact" | "nearby" | "metro">(
     "nearby",
@@ -443,7 +453,9 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
     if (data.diagnostics?.excludedSamples) setExcluded(data.diagnostics.excludedSamples);
     if (data.search?.businessType) setBusinessType(String(data.search.businessType));
     if (data.search?.location) setLocation(String(data.search.location));
-    if (data.search?.radiusKm != null) setRadiusKm(String(data.search.radiusKm));
+    if (data.search?.radiusKm != null) {
+      setRadiusMiles(radiusKmToMilesDisplay(Number(data.search.radiusKm)));
+    }
   }, [activeBatchQuery.data]);
 
   const readyResults = useMemo(
@@ -525,9 +537,9 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
       idempotencyKey: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       signal: controller.signal,
     };
-    const radius = Number(radiusKm);
-    if (radiusKm.trim() && Number.isFinite(radius) && radius > 0) {
-      body.radiusKm = radius;
+    const radius = Number(radiusMiles);
+    if (radiusMiles.trim() && Number.isFinite(radius) && radius > 0) {
+      body.radiusKm = milesToRadiusKm(radius);
     }
     if (replaceActiveBatch) body.replaceActiveBatch = true;
     discover.mutate(body, {
@@ -657,51 +669,53 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-green/10 text-brand-green">
             <Radar className="h-5 w-5" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold tracking-tight text-gray-900 text-pretty sm:text-xl sm:font-bold">
               Discover Businesses
             </h2>
             <p className="mt-1.5 text-sm leading-relaxed text-gray-600 text-pretty">
-              Target is net-new businesses available for Review — duplicates, existing CRM matches, and
-              closed/invalid listings are excluded before they count.
+              Find net-new businesses ready for Review. Existing CRM matches, duplicates, and invalid
+              listings do not count toward your target.
             </p>
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="min-w-0">
             <Label htmlFor="pai-business-type">Business Type</Label>
             <Input
               id="pai-business-type"
-              className="mt-1.5"
+              className="mt-1.5 h-10"
               placeholder="e.g. Dental clinics"
               value={businessType}
               onChange={(e) => setBusinessType(e.target.value)}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <Label htmlFor="pai-location">Location</Label>
             <Input
               id="pai-location"
-              className="mt-1.5"
+              className="mt-1.5 h-10"
               placeholder="e.g. Austin, TX"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
             />
           </div>
-          <div>
-            <Label htmlFor="pai-radius">Radius (km, optional)</Label>
+          <div className="min-w-0">
+            <Label htmlFor="pai-radius">Search Radius (miles)</Label>
             <Input
               id="pai-radius"
               type="number"
               min={1}
-              className="mt-1.5"
-              placeholder="Optional"
-              value={radiusKm}
-              onChange={(e) => setRadiusKm(e.target.value)}
+              step="any"
+              className="mt-1.5 h-10"
+              placeholder="e.g. 10"
+              value={radiusMiles}
+              onChange={(e) => setRadiusMiles(e.target.value)}
+              data-testid="prospect-ai-search-radius-miles"
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <Label htmlFor="pai-target">Target new prospects</Label>
             <select
               id="pai-target"
@@ -711,12 +725,12 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
               data-testid="prospect-ai-target-count"
             >
               <option value={25}>25</option>
-              <option value={50}>50 (default)</option>
+              <option value={50}>50</option>
               <option value={100}>100</option>
               <option value={250}>250</option>
             </select>
           </div>
-          <div>
+          <div className="min-w-0">
             <Label htmlFor="pai-geo">Location coverage</Label>
             <select
               id="pai-geo"
@@ -728,42 +742,51 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
               data-testid="prospect-ai-location-expansion"
             >
               <option value="exact">Exact location only</option>
-              <option value="nearby">Nearby areas (default)</option>
+              <option value="nearby">Nearby cities (Recommended)</option>
               <option value="metro">Metro area</option>
             </select>
           </div>
-          <div className="flex items-end gap-2">
-            <Button
-              className="w-full bg-brand-green hover:bg-brand-green/90"
-              disabled={
-                discover.isPending || !businessType.trim() || !location.trim() || status.remaining < 1
-              }
-              onClick={() => {
-                if (results.length > 0 && searchId) {
-                  setConfirmReplaceOpen(true);
-                  return;
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end lg:block">
+            <div className="min-w-0 flex-1">
+              <Label htmlFor="pai-discover" className="invisible hidden select-none lg:inline-block">
+                Discover Prospects
+              </Label>
+              <Button
+                id="pai-discover"
+                className="mt-0 h-10 w-full bg-brand-green hover:bg-brand-green/90 lg:mt-1.5"
+                disabled={
+                  discover.isPending ||
+                  !businessType.trim() ||
+                  !location.trim() ||
+                  status.remaining < 1
                 }
-                runDiscover(false);
-              }}
-              data-testid="prospect-ai-discover"
-            >
-              {discover.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Searching Google Places…
-                </>
-              ) : (
-                <>
-                  <Search className="mr-2 h-4 w-4" />
-                  Discover Prospects
-                </>
-              )}
-            </Button>
+                onClick={() => {
+                  if (results.length > 0 && searchId) {
+                    setConfirmReplaceOpen(true);
+                    return;
+                  }
+                  runDiscover(false);
+                }}
+                data-testid="prospect-ai-discover"
+              >
+                {discover.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Searching Google Places…
+                  </>
+                ) : (
+                  <>
+                    <Search className="mr-2 h-4 w-4" />
+                    Discover Prospects
+                  </>
+                )}
+              </Button>
+            </div>
             {discover.isPending ? (
               <Button
                 type="button"
                 variant="outline"
-                className="shrink-0"
+                className="h-10 w-full shrink-0 sm:w-auto lg:mt-1.5 lg:w-full"
                 onClick={cancelDiscover}
                 data-testid="prospect-ai-discover-cancel"
               >
@@ -779,10 +802,6 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
             streamed yet; Cancel stops further Google requests.
           </p>
         ) : null}
-        <p className="mt-3 text-xs text-gray-500">
-          Uses your monthly Prospect Discoveries quota ({status.remaining} remaining). Only net-new
-          businesses saved for Review count — duplicates and rejected listings do not.
-        </p>
       </div>
 
       {results.length > 0 || (diagnostics && (diagnostics.rawResults ?? 0) > 0) ? (

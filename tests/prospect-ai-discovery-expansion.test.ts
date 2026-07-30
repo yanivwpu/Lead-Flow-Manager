@@ -158,6 +158,10 @@ import { runProspectAiDiscoveryOrchestrator } from "../server/prospectAI/discove
   assert.ok(ui.includes("prospect-ai-target-count"));
   assert.ok(ui.includes("prospect-ai-location-expansion"));
   assert.ok(ui.includes("prospect-discover-diagnostics"));
+  assert.ok(ui.includes("Search Radius (miles)"));
+  assert.ok(ui.includes("Nearby cities (Recommended)"));
+  assert.ok(ui.includes("Find net-new businesses ready for Review"));
+  assert.ok(!ui.includes("Uses your monthly Prospect Discoveries quota"));
 }
 
 console.log("prospect-ai-discovery-expansion.test.ts: all assertions passed");

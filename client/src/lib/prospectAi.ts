@@ -289,6 +289,21 @@ export function discoveryAttentionLabel(reason: string | null | undefined): stri
   }
 }
 
+/** US Discover UI uses miles; API/Google Places still expect kilometers. */
+export const KM_PER_MILE = 1.609344;
+
+export function milesToRadiusKm(miles: number): number {
+  return miles * KM_PER_MILE;
+}
+
+/** Format stored radiusKm for the miles input (trim trailing zeros). */
+export function radiusKmToMilesDisplay(radiusKm: number): string {
+  if (!Number.isFinite(radiusKm) || radiusKm <= 0) return "";
+  const miles = radiusKm / KM_PER_MILE;
+  const rounded = Math.round(miles * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
 export function useActiveDiscoveryBatch(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: PROSPECT_AI_ACTIVE_DISCOVERY_KEY,
