@@ -71,7 +71,11 @@ export function registerProspectAiRoutes(app: Express): void {
     requireAuth,
     async (req: Request, res: Response) => {
       try {
-        const result = await discoverProspects(workspaceUserId(req), req.body);
+        // Client abort disconnects the socket; check between provider pages.
+        const isCancelled = () => Boolean(req.aborted || req.socket?.destroyed);
+        const result = await discoverProspects(workspaceUserId(req), req.body, undefined, {
+          isCancelled,
+        });
         res.json(result);
       } catch (err) {
         handleProspectAiError(err, res, "discover");
