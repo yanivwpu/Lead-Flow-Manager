@@ -22,6 +22,9 @@ import {
 
 export type ProspectOutreachEligibilityInput = {
   reviewStatus?: string | null;
+  approvedAt?: string | Date | null;
+  approvedByUserId?: string | null;
+  enrichmentTriggeredBy?: string | null;
   outreachStatus?: string | null;
   outreachSentAt?: string | Date | null;
   repliedAt?: string | Date | null;
@@ -511,12 +514,16 @@ function emailCampaignHardGateReason(
     reviewStatus: input.reviewStatus,
     needsReview: input.needsReview,
     enrichmentStatus: input.enrichmentStatus,
+    enrichmentTriggeredBy: input.enrichmentTriggeredBy,
     email: input.email,
     websiteUrl: input.websiteUrl,
     websiteUrlUsed: input.websiteUrlUsed,
     notQualified: input.notQualified,
     queueStatus: input.queueStatus,
     outcome: input.outcome,
+    approvedAt:
+      input.approvedAt instanceof Date ? input.approvedAt.toISOString() : input.approvedAt,
+    approvedByUserId: input.approvedByUserId,
     outreachStatus: input.outreachStatus,
     outreachSentAt:
       input.outreachSentAt instanceof Date

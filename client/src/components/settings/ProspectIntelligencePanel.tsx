@@ -996,6 +996,59 @@ function ProspectIntelligenceDetailDialog({
         </DialogHeader>
 
         <div className="space-y-4 text-sm">
+          <div
+            className="grid gap-2 rounded-lg border border-gray-200 bg-gray-50/80 px-3 py-2 sm:grid-cols-2"
+            data-testid="pi-qualification-enrichment-split"
+          >
+            <div data-testid="pi-qualification-summary">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                Qualification
+              </p>
+              <p className="mt-0.5 font-medium text-gray-900">
+                {detailQualificationDecision === "qualified"
+                  ? "Qualified"
+                  : detailQualificationDecision === "not_qualified"
+                    ? "Not Qualified"
+                    : "Needs Review"}
+              </p>
+              {String(intel.recommendedOffer || "").toLowerCase() === "not_a_fit" &&
+              detailQualificationDecision !== "not_qualified" ? (
+                <p className="mt-0.5 text-xs text-gray-500" data-testid="pi-ai-not-fit-note">
+                  AI suggested not a fit — human decision takes precedence.
+                </p>
+              ) : null}
+            </div>
+            <div data-testid="pi-enrichment-summary">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                Contact enrichment
+              </p>
+              <p className="mt-0.5 font-medium text-gray-900">
+                {String(intel.enrichmentStatus || "").toLowerCase() === "completed"
+                  ? "Complete"
+                  : String(intel.enrichmentStatus || "").toLowerCase() === "failed"
+                    ? "Failed"
+                    : isProspectEnrichmentInProgress(intel.enrichmentStatus)
+                      ? "In progress"
+                      : "Not run"}
+              </p>
+              {String(intel.enrichmentStatus || "").toLowerCase() === "completed" ||
+              Boolean(String(item.email || "").trim()) ||
+              Boolean(String(item.phone || "").trim()) ? (
+                <p
+                  className="mt-0.5 text-xs text-gray-500"
+                  data-testid="pi-enrichment-independent-hint"
+                  title="Contact data found. Qualification is a separate decision."
+                >
+                  Contact data found. Qualification is a separate decision.
+                </p>
+              ) : (
+                <p className="mt-0.5 text-xs text-gray-500">
+                  Qualification is separate from enrichment.
+                </p>
+              )}
+            </div>
+          </div>
+
           {analysisIncomplete ? (
             <div
               className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900"

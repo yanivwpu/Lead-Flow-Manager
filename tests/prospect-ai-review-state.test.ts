@@ -394,15 +394,28 @@ assert.equal(
 }
 
 {
+  // Human Not Qualified (no approval evidence) blocks campaign
   const dismissed = explainQualifiedForCampaign({
     analysisStatus: "completed",
-    reviewStatus: "approved",
+    reviewStatus: "pending",
     enrichmentStatus: "completed",
     email: "a@b.com",
     notQualified: true,
   });
   assert.equal(dismissed.ok, false);
   assert.equal(dismissed.code, "not_qualified");
+}
+
+{
+  // AI not_a_fit cannot override prior human Approve
+  const approvedWins = explainQualifiedForCampaign({
+    analysisStatus: "completed",
+    reviewStatus: "approved",
+    enrichmentStatus: "completed",
+    email: "a@b.com",
+    notQualified: true,
+  });
+  assert.equal(approvedWins.ok, true);
 }
 
 {
@@ -634,7 +647,19 @@ assert.equal(
       code: "missing_email",
     },
     {
-      name: "not qualified + email",
+      name: "not qualified + email (human reject, no approval evidence)",
+      input: {
+        analysisStatus: "completed",
+        reviewStatus: "pending",
+        enrichmentStatus: "completed",
+        email: "a@b.com",
+        notQualified: true,
+      },
+      expectOk: false,
+      code: "not_qualified",
+    },
+    {
+      name: "AI not_a_fit cannot override approved decision",
       input: {
         analysisStatus: "completed",
         reviewStatus: "approved",
@@ -642,8 +667,7 @@ assert.equal(
         email: "a@b.com",
         notQualified: true,
       },
-      expectOk: false,
-      code: "not_qualified",
+      expectOk: true,
     },
     {
       name: "enrichment in progress without email",

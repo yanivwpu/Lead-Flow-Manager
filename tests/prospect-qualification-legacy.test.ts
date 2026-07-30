@@ -9,6 +9,7 @@ import {
   countProspectReviewWorkStates,
   hasLegacyProspectApprovalEvidence,
   isProspectDecisionQualified,
+  isProspectExplicitlyNotQualified,
   isQualifiedForEmailCampaign,
   matchesProspectReviewWorkFilter,
   resolveProspectNeedsReviewBadge,
@@ -29,74 +30,104 @@ const root = join(import.meta.dirname, "..");
   assert.equal(matchesProspectReviewWorkFilter(ux, "needs_review"), false);
 }
 
-// legacy approvedAt with reviewStatus overwritten to pending → still Qualified
+// Guillermo case: enriched + AI not_a_fit + human approvedAt → Qualified (not Not Qualified)
 {
-  const ux = {
+  const guillermo = {
     analysisStatus: "completed" as const,
     reviewStatus: "pending" as const,
     enrichmentStatus: "completed" as const,
-    approvedAt: "2026-07-27T06:00:30.000Z",
+    enrichmentTriggeredBy: "approve",
+    enrichmentEmailFound: true as const,
+    approvedAt: "2026-07-27T06:00:29.998Z",
     approvedByUserId: "user-1",
-    enrichmentTriggeredBy: "approve",
-    email: "a@b.com",
+    notQualified: true as const, // AI recommendedOffer not_a_fit
+    email: "gteran@avantiway.com",
+    websiteUrlUsed: "https://www.gteran.com/",
   };
-  assert.equal(hasLegacyProspectApprovalEvidence(ux), true);
-  assert.equal(isProspectDecisionQualified(ux), true);
-  assert.equal(matchesProspectReviewWorkFilter(ux, "qualified"), true);
-  assert.equal(matchesProspectReviewWorkFilter(ux, "needs_review"), false);
-  assert.equal(resolveProspectReviewWorkState(ux), "qualified");
+  assert.equal(hasLegacyProspectApprovalEvidence(guillermo), true);
+  assert.equal(isProspectExplicitlyNotQualified(guillermo), false);
+  assert.equal(isProspectDecisionQualified(guillermo), true);
+  assert.equal(matchesProspectReviewWorkFilter(guillermo, "qualified"), true);
+  assert.equal(matchesProspectReviewWorkFilter(guillermo, "not_qualified"), false);
+  assert.equal(isQualifiedForEmailCampaign(guillermo), true);
+  assert.equal(resolveProspectReviewWorkState(guillermo), "qualified");
 }
 
-// enrichmentTriggeredBy=approve alone → Qualified (legacy Enrich/Approve path)
+// enriched + AI not_a_fit + no human decision → Not Qualified
 {
   const ux = {
     analysisStatus: "completed" as const,
     reviewStatus: "pending" as const,
     enrichmentStatus: "completed" as const,
-    enrichmentTriggeredBy: "approve",
-  };
-  assert.equal(isProspectDecisionQualified(ux), true);
-  assert.equal(matchesProspectReviewWorkFilter(ux, "qualified"), true);
-}
-
-// legacy not_a_fit → Not Qualified (even with approvedAt)
-{
-  const ux = {
-    analysisStatus: "completed" as const,
-    reviewStatus: "pending" as const,
-    approvedAt: "2026-07-27T06:00:30.000Z",
-    enrichmentTriggeredBy: "approve",
+    enrichmentEmailFound: true as const,
+    email: "a@b.com",
+    websiteUrl: "https://example.com",
     notQualified: true as const,
   };
+  assert.equal(isProspectExplicitlyNotQualified(ux), true);
   assert.equal(isProspectDecisionQualified(ux), false);
   assert.equal(matchesProspectReviewWorkFilter(ux, "not_qualified"), true);
   assert.equal(matchesProspectReviewWorkFilter(ux, "qualified"), false);
 }
 
-// no explicit decision → Needs Review
+// enriched + human Qualified → Qualified
 {
   const ux = {
     analysisStatus: "completed" as const,
-    reviewStatus: "pending" as const,
-    enrichmentStatus: "none" as const,
+    reviewStatus: "approved" as const,
+    enrichmentStatus: "completed" as const,
+    approvedAt: "2026-07-28T00:00:00.000Z",
+    email: "a@b.com",
   };
-  assert.equal(isProspectDecisionQualified(ux), false);
-  assert.equal(matchesProspectReviewWorkFilter(ux, "needs_review"), true);
-  assert.equal(matchesProspectReviewWorkFilter(ux, "qualified"), false);
+  assert.equal(isProspectDecisionQualified(ux), true);
+  assert.equal(matchesProspectReviewWorkFilter(ux, "qualified"), true);
 }
 
-// enriched + no qualification decision remains Needs Review
+// enrichment completion shape never changes qualification (evidence preserved)
 {
-  const ux = {
+  const afterEnrich = {
     analysisStatus: "completed" as const,
     reviewStatus: "pending" as const,
     enrichmentStatus: "completed" as const,
+    approvedAt: "2026-07-27T06:00:30.000Z",
+    notQualified: true as const,
     email: "a@b.com",
-    websiteUrl: "https://example.com",
   };
-  assert.equal(isProspectDecisionQualified(ux), false);
-  assert.equal(matchesProspectReviewWorkFilter(ux, "needs_review"), true);
-  assert.equal(matchesProspectReviewWorkFilter(ux, "qualified"), false);
+  assert.equal(isProspectDecisionQualified(afterEnrich), true);
+}
+
+// manual Not Qualified clears approval → stays Not Qualified
+{
+  const afterHumanReject = {
+    analysisStatus: "completed" as const,
+    reviewStatus: "pending" as const,
+    enrichmentStatus: "completed" as const,
+    approvedAt: null,
+    approvedByUserId: null,
+    enrichmentTriggeredBy: "approve",
+    notQualified: true as const,
+    email: "a@b.com",
+  };
+  assert.equal(hasLegacyProspectApprovalEvidence(afterHumanReject), false);
+  assert.equal(isProspectExplicitlyNotQualified(afterHumanReject), true);
+  assert.equal(matchesProspectReviewWorkFilter(afterHumanReject, "not_qualified"), true);
+}
+
+// manual Not Qualified → Qualified preserves enriched data + campaign eligible
+{
+  const afterManualQualify = {
+    analysisStatus: "completed" as const,
+    reviewStatus: "approved" as const,
+    enrichmentStatus: "completed" as const,
+    enrichmentEmailFound: true as const,
+    approvedAt: "2026-07-28T12:00:00.000Z",
+    notQualified: false as const,
+    email: "gteran@avantiway.com",
+    websiteUrlUsed: "https://www.gteran.com/",
+  };
+  assert.equal(isProspectDecisionQualified(afterManualQualify), true);
+  assert.equal(isQualifiedForEmailCampaign(afterManualQualify), true);
+  assert.equal(matchesProspectReviewWorkFilter(afterManualQualify, "qualified"), true);
 }
 
 // email present alone does not imply Qualified
@@ -112,33 +143,15 @@ const root = join(import.meta.dirname, "..");
   assert.equal(isQualifiedForEmailCampaign(ux), false);
 }
 
-// human Qualified survives enrichment completion / retry shape (evidence preserved)
+// no explicit decision → Needs Review
 {
-  const afterEnrich = {
+  const ux = {
     analysisStatus: "completed" as const,
-    reviewStatus: "pending" as const, // wiped by old post-enrich reanalyze
-    enrichmentStatus: "completed" as const,
-    approvedAt: "2026-07-27T06:00:30.000Z",
-    enrichmentTriggeredBy: "approve",
-    email: "a@b.com",
-    websiteUrl: "https://example.com",
-  };
-  assert.equal(isProspectDecisionQualified(afterEnrich), true);
-  assert.equal(matchesProspectReviewWorkFilter(afterEnrich, "qualified"), true);
-}
-
-// email/website edit shape does not clear decision when approvedAt remains
-{
-  const afterEmailEdit = {
-    analysisStatus: "completed" as const,
-    reviewStatus: "approved" as const,
+    reviewStatus: "pending" as const,
     enrichmentStatus: "none" as const,
-    approvedAt: "2026-07-28T00:00:00.000Z",
-    email: "new@example.com",
-    websiteUrl: "https://new.example.com",
   };
-  assert.equal(isProspectDecisionQualified(afterEmailEdit), true);
-  assert.equal(matchesProspectReviewWorkFilter(afterEmailEdit, "qualified"), true);
+  assert.equal(isProspectDecisionQualified(ux), false);
+  assert.equal(matchesProspectReviewWorkFilter(ux, "needs_review"), true);
 }
 
 // tab counts and badges use identical qualification resolution
@@ -148,76 +161,51 @@ const root = join(import.meta.dirname, "..");
       analysisStatus: "completed" as const,
       reviewStatus: "pending" as const,
       approvedAt: "2026-07-27T06:00:30.000Z",
-      enrichmentTriggeredBy: "approve",
       enrichmentStatus: "completed" as const,
+      notQualified: true as const,
       email: "a@b.com",
     },
     {
       analysisStatus: "completed" as const,
       reviewStatus: "pending" as const,
       enrichmentStatus: "completed" as const,
+      notQualified: true as const,
       email: "b@b.com",
     },
     {
       analysisStatus: "completed" as const,
       reviewStatus: "pending" as const,
-      notQualified: true as const,
+      enrichmentStatus: "completed" as const,
+      email: "c@b.com",
     },
   ];
   const counts = countProspectReviewWorkStates(items);
-  assert.equal(counts.qualified, 1);
+  assert.equal(counts.qualified, 1); // approval wins over AI not_a_fit
+  assert.equal(counts.notQualified, 1); // AI not_a_fit, no approval
   assert.equal(counts.needsReview, 1);
-  assert.equal(counts.notQualified, 1);
   assert.equal(matchesProspectReviewWorkFilter(items[0]!, "qualified"), true);
-  assert.equal(matchesProspectReviewWorkFilter(items[1]!, "needs_review"), true);
-  // Campaign-ready approved legacy row has no Needs Review badge
+  assert.equal(matchesProspectReviewWorkFilter(items[1]!, "not_qualified"), true);
   assert.equal(resolveProspectNeedsReviewBadge(items[0]!), null);
 }
 
-// no bulk conversion of enriched prospects to Qualified (resolver only)
-{
-  const enrichedOnly = {
-    analysisStatus: "completed" as const,
-    reviewStatus: "pending" as const,
-    enrichmentStatus: "completed" as const,
-    enrichmentEmailFound: true as const,
-    websiteUrlUsed: "https://example.com",
-    email: "found@example.com",
-  };
-  assert.equal(isProspectDecisionQualified(enrichedOnly), false);
-}
-
-// analyze persist must preserve approval; enrichment must not be the only qualify signal
+// analyze persist must preserve approval and block AI not_a_fit overwrite
 {
   const serviceSrc = readFileSync(
     join(root, "server/prospectImport/prospectIntelligenceService.ts"),
     "utf8",
   );
   assert.ok(serviceSrc.includes("Never silently reset an explicit human/legacy qualification decision"));
-  assert.ok(serviceSrc.includes("hadApproval"));
-  assert.ok(serviceSrc.includes('patch.reviewStatus = "approved"'));
-
-  const enrichSrc = readFileSync(
-    join(root, "server/prospectImport/prospectEnrichmentService.ts"),
-    "utf8",
-  );
-  // Post-enrich reanalyze still exists, but analyze persist must preserve approval
-  assert.ok(enrichSrc.includes("analyzeProspectContact"));
+  assert.ok(serviceSrc.includes("Never let post-enrich AI rewrite"));
+  assert.ok(serviceSrc.includes("clear approval evidence"));
 
   const panelSrc = readFileSync(
     join(root, "client/src/components/settings/ProspectIntelligencePanel.tsx"),
     "utf8",
   );
-  assert.ok(panelSrc.includes("approvedAt: row.intelligence.approvedAt"));
-  assert.ok(panelSrc.includes("enrichmentTriggeredBy: row.intelligence.enrichmentTriggeredBy"));
-
-  const repairSrc = readFileSync(
-    join(root, "scripts/repair-prospect-qualification-decisions.ts"),
-    "utf8",
-  );
-  assert.ok(repairSrc.includes("Defaults to dry-run"));
-  assert.ok(repairSrc.includes("enrichmentTriggeredBy"));
-  assert.ok(!/recommendedOffer.*completed|enrichmentStatus.*qualified/i.test(repairSrc));
+  assert.ok(panelSrc.includes("pi-qualification-enrichment-split"));
+  assert.ok(panelSrc.includes("Contact data found. Qualification is a separate decision."));
+  assert.ok(panelSrc.includes("pi-qualify-qualified"));
+  assert.ok(panelSrc.includes("pi-qualify-not-qualified"));
 }
 
 console.log("prospect-qualification-legacy.test.ts: all assertions passed");

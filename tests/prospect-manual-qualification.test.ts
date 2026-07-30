@@ -156,11 +156,11 @@ const root = join(import.meta.dirname, "..");
   );
 }
 
-// Enrichment state independent from qualification — Not Qualified blocks enrich
+// Enrichment state independent from qualification — human Not Qualified blocks enrich
 {
   const ux = {
     analysisStatus: "completed" as const,
-    reviewStatus: "approved" as const,
+    reviewStatus: "pending" as const,
     enrichmentStatus: "none" as const,
     notQualified: true as const,
     websiteUrl: "https://example.com",

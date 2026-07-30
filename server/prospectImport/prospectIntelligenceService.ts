@@ -687,12 +687,19 @@ export async function analyzeProspectContact(params: {
           Boolean(existing.approvedAt) ||
           Boolean(existing.approvedByUserId) ||
           String(existing.enrichmentTriggeredBy || "").toLowerCase() === "approve";
-        if (existingOffer === "not_a_fit") {
+        if (existingOffer === "not_a_fit" && !hadApproval) {
           patch.recommendedOffer = "not_a_fit";
           patch.needsReview = false;
         } else if (hadApproval) {
           patch.reviewStatus = "approved";
           patch.needsReview = false;
+          // Never let post-enrich AI rewrite a human/legacy Approve into not_a_fit.
+          if (String(patch.recommendedOffer || "").toLowerCase() === "not_a_fit") {
+            patch.recommendedOffer =
+              existingOffer && existingOffer !== "not_a_fit"
+                ? existing.recommendedOffer
+                : "general_demo";
+          }
         }
       }
       await db
@@ -1479,9 +1486,17 @@ export async function setProspectQualificationDecision(
     dbPatch.needsReview = true;
     dbPatch.priority = "needs_review";
     if (clearNotAFit) dbPatch.recommendedOffer = "general_demo";
+    // Needs Review supersedes prior approval evidence for filter purposes.
+    dbPatch.approvedAt = null;
+    dbPatch.approvedByUserId = null;
   } else {
+    // Latest human rejection — clear approval evidence so AI not_a_fit alone isn't confused
+    // with an older Approve that was later overridden.
     dbPatch.recommendedOffer = "not_a_fit";
     dbPatch.needsReview = false;
+    dbPatch.reviewStatus = "pending";
+    dbPatch.approvedAt = null;
+    dbPatch.approvedByUserId = null;
   }
 
   await db

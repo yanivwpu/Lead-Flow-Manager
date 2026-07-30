@@ -526,6 +526,9 @@ export async function resolveProspectOutreachEligibilityForContact(params: {
 
   const input: ProspectOutreachEligibilityInput = {
     reviewStatus: pi?.reviewStatus,
+    approvedAt: pi?.approvedAt,
+    approvedByUserId: pi?.approvedByUserId,
+    enrichmentTriggeredBy: pi?.enrichmentTriggeredBy,
     outreachStatus: priorOutreach.alreadyContacted
       ? priorOutreach.reason === "already_replied"
         ? "replied"

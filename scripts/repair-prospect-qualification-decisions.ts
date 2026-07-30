@@ -1,10 +1,12 @@
 /**
  * Repair Prospect AI Review qualification decisions wiped by post-enrichment reanalyze.
  *
- * Restores reviewStatus=approved ONLY when clear legacy approval evidence exists:
+ * Restores reviewStatus=approved when clear legacy approval evidence exists:
  * - approvedAt set, and/or
- * - approvedByUserId set, and/or
- * - enrichmentTriggeredBy = "approve"
+ * - approvedByUserId set
+ *
+ * Also clears AI `not_a_fit` overwrites when approval evidence remains
+ * (human Approve must win over later AI not_a_fit).
  *
  * Does NOT qualify prospects merely because they are enriched or have email.
  * Idempotent. Defaults to dry-run.
@@ -15,7 +17,7 @@
  */
 import "dotenv/config";
 import { writeFileSync } from "fs";
-import { and, eq, ilike, ne, or, sql } from "drizzle-orm";
+import { and, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import { contacts, prospectIntelligence } from "../shared/schema";
 
@@ -24,12 +26,13 @@ const MIAMI_ONLY = process.argv.includes("--miami");
 
 async function main() {
   const where = and(
-    ne(prospectIntelligence.reviewStatus, "approved"),
-    sql`lower(coalesce(${prospectIntelligence.recommendedOffer}, '')) <> 'not_a_fit'`,
     or(
       sql`${prospectIntelligence.approvedAt} is not null`,
       sql`${prospectIntelligence.approvedByUserId} is not null`,
-      eq(prospectIntelligence.enrichmentTriggeredBy, "approve"),
+    ),
+    or(
+      sql`lower(coalesce(${prospectIntelligence.reviewStatus}, '')) <> 'approved'`,
+      sql`lower(coalesce(${prospectIntelligence.recommendedOffer}, '')) = 'not_a_fit'`,
     ),
     MIAMI_ONLY
       ? or(
@@ -64,16 +67,23 @@ async function main() {
     if (String(r.enrichmentTriggeredBy || "").toLowerCase() === "approve") {
       reasons.push("enrichmentTriggeredBy_approve");
     }
+    const offer = String(r.recommendedOffer || "").toLowerCase();
+    if (offer === "not_a_fit") reasons.push("clear_ai_not_a_fit_overwrite");
+    if (String(r.reviewStatus || "").toLowerCase() !== "approved") {
+      reasons.push("restore_reviewStatus_approved");
+    }
     return {
       contactId: r.contactId,
       name: r.name,
       before: {
         reviewStatus: r.reviewStatus,
+        recommendedOffer: r.recommendedOffer,
         needsReview: r.needsReview,
         enrichmentStatus: r.enrichmentStatus,
       },
       after: {
         reviewStatus: "approved",
+        recommendedOffer: offer === "not_a_fit" ? "general_demo" : r.recommendedOffer,
         needsReview: false,
       },
       reasons,
@@ -107,20 +117,16 @@ async function main() {
 
   let updated = 0;
   for (const row of plan) {
+    const clearOffer = String(row.before.recommendedOffer || "").toLowerCase() === "not_a_fit";
     await db
       .update(prospectIntelligence)
       .set({
         reviewStatus: "approved",
         needsReview: false,
+        ...(clearOffer ? { recommendedOffer: "general_demo" } : {}),
         updatedAt: new Date(),
       })
-      .where(
-        and(
-          eq(prospectIntelligence.contactId, row.contactId),
-          ne(prospectIntelligence.reviewStatus, "approved"),
-          sql`lower(coalesce(${prospectIntelligence.recommendedOffer}, '')) <> 'not_a_fit'`,
-        ),
-      );
+      .where(eq(prospectIntelligence.contactId, row.contactId));
     updated += 1;
   }
 

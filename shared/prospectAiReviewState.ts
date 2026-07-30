@@ -111,7 +111,7 @@ export function resolveProspectNeedsReviewBadge(
   input: ProspectReviewStateInput,
 ): ProspectNeedsReviewBadge | null {
   if (!isProspectVisibleInReview(input)) return null;
-  if (input.notQualified === true) return null;
+  if (isProspectExplicitlyNotQualified(input)) return null;
   // Qualified decision rows keep campaign-ready null; still show enriching / missing email.
   if (isProspectDecisionQualified(input) && isProspectQualifiedForCampaign(input)) {
     return null;
@@ -206,6 +206,8 @@ export type ProspectReviewStateInput = ProspectReviewUxInput & {
 /**
  * Evidence of an explicit Qualified/approved decision (current or legacy).
  * Enrichment/email alone is never enough.
+ * `enrichmentTriggeredBy=approve` is not sufficient alone — human Needs Review /
+ * Not Qualified clears approvedAt so later overrides stick.
  */
 export function hasLegacyProspectApprovalEvidence(
   input: Pick<
@@ -217,13 +219,27 @@ export function hasLegacyProspectApprovalEvidence(
   if (review === "approved" || review === "qualified") return true;
   if (input.approvedAt) return true;
   if (input.approvedByUserId) return true;
-  if (String(input.enrichmentTriggeredBy || "").toLowerCase() === "approve") return true;
   return false;
 }
 
-/** Human (or Enrich-approve) Qualified decision — independent of campaign/email readiness. */
+/**
+ * Explicit Not Qualified for filters/work-state.
+ * AI `not_a_fit` alone qualifies when there is no human/legacy approval evidence.
+ * If approval evidence remains, human Approve wins over a later AI not_a_fit overwrite.
+ * Human Not Qualified clears approval evidence so rejection sticks.
+ */
+export function isProspectExplicitlyNotQualified(input: ProspectReviewStateInput): boolean {
+  if (input.notQualified !== true) return false;
+  if (hasLegacyProspectApprovalEvidence(input)) return false;
+  return true;
+}
+
+/**
+ * Human (or Enrich-approve) Qualified decision — independent of campaign/email readiness.
+ * Precedence: human/legacy approval > AI not_a_fit > undecided.
+ */
 export function isProspectDecisionQualified(input: ProspectReviewStateInput): boolean {
-  if (input.notQualified === true) return false;
+  if (isProspectExplicitlyNotQualified(input)) return false;
   return hasLegacyProspectApprovalEvidence(input);
 }
 
@@ -269,7 +285,7 @@ export function prospectEnrichmentEmailSatisfied(input: ProspectReviewStateInput
  * official website is available. Social-only / no-website → not retryable.
  */
 export function isProspectEnrichmentRetryable(input: ProspectReviewStateInput): boolean {
-  if (input.notQualified === true) return false;
+  if (isProspectExplicitlyNotQualified(input)) return false;
   if (isProspectInCampaigns(input)) return false;
   if (isProspectEnrichmentInProgress(input.enrichmentStatus)) return false;
   if (!doesEnrichmentApply(input)) return false;
@@ -397,7 +413,7 @@ function explainEnrichBlockedByWebsite(input: ProspectReviewStateInput): Prospec
 export function explainCanEnrichProspect(
   input: ProspectReviewStateInput,
 ): ProspectEligibilityExplanation {
-  if (input.notQualified === true) {
+  if (isProspectExplicitlyNotQualified(input)) {
     return {
       ok: false,
       code: "not_qualified",
@@ -544,7 +560,7 @@ export function listEmailCampaignBlockingReasons(
 ): Array<{ code: ProspectEmailCampaignBlockCode; message: string }> {
   const blocks: Array<{ code: ProspectEmailCampaignBlockCode; message: string }> = [];
 
-  if (input.notQualified === true) {
+  if (isProspectExplicitlyNotQualified(input)) {
     blocks.push({
       code: "not_qualified",
       message: "Not qualified",
@@ -562,7 +578,10 @@ export function listEmailCampaignBlockingReasons(
       code: "qualification_incomplete",
       message: "AI Review is still in progress",
     });
-  } else if (input.notQualified !== true && !isProspectDecisionQualified(input)) {
+  } else if (
+    !isProspectExplicitlyNotQualified(input) &&
+    !isProspectDecisionQualified(input)
+  ) {
     blocks.push({
       code: "not_approved",
       message: "Mark as Qualified to send campaigns.",
@@ -773,7 +792,7 @@ export type ProspectNeedsAttentionReason =
 export function resolveProspectNeedsAttentionReason(
   input: ProspectReviewStateInput,
 ): ProspectNeedsAttentionReason {
-  if (input.notQualified === true) return null;
+  if (isProspectExplicitlyNotQualified(input)) return null;
   if (isProspectInCampaigns(input)) return null;
   if (String(input.outcome || "").toLowerCase() === "won") return null;
 
@@ -839,7 +858,7 @@ export function resolveProspectReviewWorkState(
 ): ProspectReviewWorkState {
   if (String(input.outcome || "").toLowerCase() === "won") return "in_campaigns";
   if (isProspectInCampaigns(input)) return "in_campaigns";
-  if (input.notQualified === true) return "not_qualified";
+  if (isProspectExplicitlyNotQualified(input)) return "not_qualified";
 
   const analysis = String(input.analysisStatus || "pending").toLowerCase();
   if (analysis === "processing") return "analyzing";
@@ -887,7 +906,7 @@ export function matchesProspectReviewWorkFilter(
   if (filter === "all") return true;
 
   if (filter === "not_qualified") {
-    return input.notQualified === true;
+    return isProspectExplicitlyNotQualified(input);
   }
 
   if (filter === "qualified") {
@@ -895,7 +914,7 @@ export function matchesProspectReviewWorkFilter(
   }
 
   if (filter === "needs_review") {
-    if (input.notQualified === true) return false;
+    if (isProspectExplicitlyNotQualified(input)) return false;
     if (isProspectDecisionQualified(input)) return false;
     return true;
   }
@@ -978,7 +997,7 @@ export function countProspectReviewWorkStates(
   };
   for (const item of items) {
     if (!isProspectVisibleInReview(item)) continue;
-    if (item.notQualified === true) {
+    if (isProspectExplicitlyNotQualified(item)) {
       counts.notQualified += 1;
     } else if (isProspectDecisionQualified(item)) {
       counts.qualified += 1;
