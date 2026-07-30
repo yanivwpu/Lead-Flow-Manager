@@ -34,7 +34,53 @@ export type ProspectAiDiscoverResult = {
   website?: string | null;
   phone?: string | null;
   email?: string | null;
+  disposition?: "ready" | "needs_attention" | string | null;
+  attentionReason?: string | null;
+  group?: "ready" | "needs_attention" | string | null;
   [key: string]: unknown;
+};
+
+export type ProspectAiDiscoveryExcludedSample = {
+  name?: string;
+  disposition?: string;
+  reason?: string | null;
+  matchType?: string | null;
+  existingRecordId?: string | null;
+  existingRecordLabel?: string | null;
+  providerPlaceId?: string | null;
+};
+
+export type ProspectAiDiscoveryDiagnostics = {
+  runId?: string | null;
+  targetCount?: number;
+  locationExpansion?: string;
+  expandedLocations?: string[];
+  queryVariationsAttempted?: string[];
+  pagesFetched?: number;
+  providerCalls?: number;
+  rawResults?: number;
+  uniqueInRun?: number;
+  duplicatesInRun?: number;
+  alreadyInWorkspace?: number;
+  rejectedInvalid?: number;
+  rejectedClosed?: number;
+  rejectedQuality?: number;
+  rejectedRelevance?: number;
+  needsAttention?: number;
+  usableNeedsAttention?: number;
+  possibleDuplicates?: number;
+  readyForReview?: number;
+  saved?: number;
+  netNewUsable?: number;
+  quotaConsumed?: number;
+  stopReason?: string;
+  resultsPerQuery?: Array<{
+    textQuery: string;
+    pages: number;
+    returned: number;
+    uniqueAdded: number;
+  }>;
+  excludedSamples?: ProspectAiDiscoveryExcludedSample[];
 };
 
 export type ProspectAiDiscoverResponse = {
@@ -52,6 +98,8 @@ export type ProspectAiDiscoverResponse = {
     used: number;
     remaining: number;
   };
+  diagnostics?: ProspectAiDiscoveryDiagnostics | null;
+  excluded?: ProspectAiDiscoveryExcludedSample[];
 };
 
 export type ProspectAiActivitySearch = {
@@ -185,13 +233,20 @@ export function useProspectAiDiscover() {
       businessType: string;
       location: string;
       radiusKm?: number;
+      targetCount?: number;
+      locationExpansion?: "exact" | "nearby" | "metro";
       replaceActiveBatch?: boolean;
-    }) =>
-      fetchJson<ProspectAiDiscoverResponse>("/api/growth-engines/prospect-ai/discover", {
+      idempotencyKey?: string;
+      signal?: AbortSignal;
+    }) => {
+      const { signal, ...payload } = body;
+      return fetchJson<ProspectAiDiscoverResponse>("/api/growth-engines/prospect-ai/discover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
+        body: JSON.stringify(payload),
+        signal,
+      });
+    },
     onSuccess: (data) => {
       queryClient.setQueryData(PROSPECT_AI_STATUS_KEY, (prev: ProspectAiStatus | undefined) => {
         if (!prev) return prev;
@@ -207,6 +262,31 @@ export function useProspectAiDiscover() {
       void queryClient.invalidateQueries({ queryKey: PROSPECT_AI_ACTIVE_DISCOVERY_KEY });
     },
   });
+}
+
+export function discoveryAttentionLabel(reason: string | null | undefined): string {
+  switch (String(reason || "")) {
+    case "social_profile_as_website":
+      return "Website appears to be a social profile";
+    case "uncertain_category":
+    case "category_uncertain":
+      return "Category uncertain for this search";
+    case "uncertain_industry_relevance":
+      return "Industry relevance uncertain";
+    case "limited_business_details":
+      return "Limited business details";
+    case "likely_duplicate":
+      return "Possible duplicate";
+    case "possible_existing_workspace_match":
+      return "Possible match to an existing workspace record";
+    case "possible_branch_duplicate":
+    case "possible_branch":
+      return "Possible branch or related location";
+    case "industry_mismatch":
+      return "May not match the requested industry";
+    default:
+      return reason ? String(reason).replace(/_/g, " ") : "Needs a closer look";
+  }
 }
 
 export function useActiveDiscoveryBatch(options?: { enabled?: boolean }) {

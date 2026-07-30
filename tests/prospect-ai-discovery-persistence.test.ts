@@ -97,8 +97,11 @@ run("Discover UI restores active batch and supports clear/replace", () => {
 
 run("restore must not call Places discover endpoint", () => {
   assert.ok(hooksSrc.includes('"/api/growth-engines/prospect-ai/discover/active"'));
-  // Active is GET; Places-backed discover remains POST /discover only.
-  assert.ok(serviceSrc.includes("discoveryProvider.discover"));
+  // Active is GET; production discover uses orchestrator (injected providers still use .discover).
+  assert.ok(
+    serviceSrc.includes("runProspectAiDiscoveryOrchestrator") ||
+      serviceSrc.includes("provider.discover"),
+  );
   assert.ok(
     !hooksSrc.includes('fetchJson<ProspectAiDiscoverResponse>("/api/growth-engines/prospect-ai/discover/active", {\n        method: "POST"'),
   );

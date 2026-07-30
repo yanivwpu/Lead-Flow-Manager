@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -57,7 +57,9 @@ import {
   useProspectAiWonCustomers,
   useProspectAiWonStats,
   useSendDiscoverToReview,
+  discoveryAttentionLabel,
   type ProspectAiDiscoverResult,
+  type ProspectAiDiscoveryExcludedSample,
   type ProspectAiStatus,
 } from "@/lib/prospectAi";
 import { formatProspectAiRate } from "@shared/prospectAI";
@@ -394,14 +396,25 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
   const [businessType, setBusinessType] = useState("");
   const [location, setLocation] = useState("");
   const [radiusKm, setRadiusKm] = useState("");
+  const [targetCount, setTargetCount] = useState<25 | 50 | 100 | 250>(50);
+  const [locationExpansion, setLocationExpansion] = useState<"exact" | "nearby" | "metro">(
+    "nearby",
+  );
   const [searchId, setSearchId] = useState<string | null>(null);
   const [results, setResults] = useState<ProspectAiDiscoverResult[]>([]);
+  const [diagnostics, setDiagnostics] = useState<import("@/lib/prospectAi").ProspectAiDiscoveryDiagnostics | null>(null);
+  const [excluded, setExcluded] = useState<ProspectAiDiscoveryExcludedSample[]>([]);
+  const [resultFilter, setResultFilter] = useState<
+    "ready" | "needs_attention" | "possible_duplicate" | "already_exists" | "rejected"
+  >("ready");
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [ghlOpen, setGhlOpen] = useState(false);
   const [confirmSendOpen, setConfirmSendOpen] = useState(false);
   const [confirmReplaceOpen, setConfirmReplaceOpen] = useState(false);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [restoredFromBatch, setRestoredFromBatch] = useState(false);
+  const discoverAbortRef = useRef<AbortController | null>(null);
 
   const discover = useProspectAiDiscover();
   const sendToReview = useSendDiscoverToReview(searchId);
@@ -426,16 +439,56 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
     setResults(nextResults);
     setSelectedIds(new Set(nextResults.map((r) => r.id)));
     setRestoredFromBatch(true);
+    if (data.diagnostics) setDiagnostics(data.diagnostics);
+    if (data.diagnostics?.excludedSamples) setExcluded(data.diagnostics.excludedSamples);
     if (data.search?.businessType) setBusinessType(String(data.search.businessType));
     if (data.search?.location) setLocation(String(data.search.location));
     if (data.search?.radiusKm != null) setRadiusKm(String(data.search.radiusKm));
   }, [activeBatchQuery.data]);
 
-  const allSelected = results.length > 0 && selectedIds.size === results.length;
+  const readyResults = useMemo(
+    () => results.filter((r) => r.disposition !== "needs_attention"),
+    [results],
+  );
+  const needsAttentionResults = useMemo(
+    () => results.filter((r) => r.disposition === "needs_attention"),
+    [results],
+  );
+  const alreadyExistsSamples = useMemo(
+    () => excluded.filter((e) => e.disposition === "already_exists"),
+    [excluded],
+  );
+  const rejectedSamples = useMemo(
+    () => excluded.filter((e) => e.disposition === "rejected"),
+    [excluded],
+  );
+  const possibleDuplicateSamples = useMemo(
+    () => excluded.filter((e) => e.disposition === "possible_duplicate"),
+    [excluded],
+  );
+  const visibleRows = useMemo(() => {
+    if (resultFilter === "ready") return readyResults;
+    if (resultFilter === "needs_attention") return needsAttentionResults;
+    return [];
+  }, [resultFilter, readyResults, needsAttentionResults]);
+
+  const allSelected =
+    visibleRows.length > 0 && visibleRows.every((r) => selectedIds.has(r.id));
 
   const toggleAll = () => {
-    if (allSelected) setSelectedIds(new Set());
-    else setSelectedIds(new Set(results.map((r) => r.id)));
+    if (allSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const r of visibleRows) next.delete(r.id);
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const r of visibleRows) next.add(r.id);
+        return next;
+      });
+    }
   };
 
   const toggleOne = (id: string) => {
@@ -447,15 +500,30 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
     });
   };
 
+  const cancelDiscover = () => {
+    discoverAbortRef.current?.abort();
+  };
+
   const runDiscover = (replaceActiveBatch: boolean) => {
+    discoverAbortRef.current?.abort();
+    const controller = new AbortController();
+    discoverAbortRef.current = controller;
     const body: {
       businessType: string;
       location: string;
       radiusKm?: number;
+      targetCount?: number;
+      locationExpansion?: "exact" | "nearby" | "metro";
       replaceActiveBatch?: boolean;
+      idempotencyKey?: string;
+      signal?: AbortSignal;
     } = {
       businessType: businessType.trim(),
       location: location.trim(),
+      targetCount,
+      locationExpansion,
+      idempotencyKey: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      signal: controller.signal,
     };
     const radius = Number(radiusKm);
     if (radiusKm.trim() && Number.isFinite(radius) && radius > 0) {
@@ -468,16 +536,40 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
         setSearchId(data.search.id);
         setResults(data.results ?? []);
         setSelectedIds(new Set((data.results ?? []).map((r) => r.id)));
+        setDiagnostics(data.diagnostics ?? null);
+        setExcluded(data.excluded ?? data.diagnostics?.excludedSamples ?? []);
+        setResultFilter("ready");
         setRestoredFromBatch(false);
+        const saved = data.diagnostics?.netNewUsable ?? data.results?.length ?? 0;
+        const target = data.diagnostics?.targetCount ?? targetCount;
+        const stop = data.diagnostics?.stopReason;
         toast({
-          title: "Discovery complete",
-          description: `${data.results?.length ?? 0} prospects found`,
+          title: stop === "user_cancelled" ? "Discovery cancelled" : "Discovery complete",
+          description:
+            stop === "user_cancelled"
+              ? `${saved} new prospect${saved === 1 ? "" : "s"} saved before cancel.`
+              : `${saved} new prospects ready for Review from ${data.diagnostics?.rawResults ?? "—"} raw results (target ${target}).`,
         });
       },
       onError: (err: Error) => {
         const msg = err.message || "";
+        if (err.name === "AbortError" || /aborted|cancel/i.test(msg)) {
+          toast({
+            title: "Discovery cancelled",
+            description: "Stopped requesting more Google results. Quota is only used for saved prospects.",
+          });
+          return;
+        }
         if (/not yet sent to Review/i.test(msg) || /active_batch/i.test(msg)) {
           setConfirmReplaceOpen(true);
+          return;
+        }
+        if (/already running/i.test(msg) || /concurrent/i.test(msg)) {
+          toast({
+            title: "Discovery already running",
+            description: msg,
+            variant: "destructive",
+          });
           return;
         }
         toast({
@@ -570,14 +662,14 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
               Discover Businesses
             </h2>
             <p className="mt-1.5 text-sm leading-relaxed text-gray-600 text-pretty">
-              Search by business type and location. Send results to Review — AI qualifies them
-              automatically using Places, AI Brain, and your Business Profile.
+              Target is net-new businesses available for Review — duplicates, existing CRM matches, and
+              closed/invalid listings are excluded before they count.
             </p>
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="sm:col-span-1 lg:col-span-1">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div>
             <Label htmlFor="pai-business-type">Business Type</Label>
             <Input
               id="pai-business-type"
@@ -587,7 +679,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
               onChange={(e) => setBusinessType(e.target.value)}
             />
           </div>
-          <div className="sm:col-span-1 lg:col-span-1">
+          <div>
             <Label htmlFor="pai-location">Location</Label>
             <Input
               id="pai-location"
@@ -609,7 +701,38 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
               onChange={(e) => setRadiusKm(e.target.value)}
             />
           </div>
-          <div className="flex items-end">
+          <div>
+            <Label htmlFor="pai-target">Target new prospects</Label>
+            <select
+              id="pai-target"
+              className="mt-1.5 flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={targetCount}
+              onChange={(e) => setTargetCount(Number(e.target.value) as 25 | 50 | 100 | 250)}
+              data-testid="prospect-ai-target-count"
+            >
+              <option value={25}>25</option>
+              <option value={50}>50 (default)</option>
+              <option value={100}>100</option>
+              <option value={250}>250</option>
+            </select>
+          </div>
+          <div>
+            <Label htmlFor="pai-geo">Location coverage</Label>
+            <select
+              id="pai-geo"
+              className="mt-1.5 flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={locationExpansion}
+              onChange={(e) =>
+                setLocationExpansion(e.target.value as "exact" | "nearby" | "metro")
+              }
+              data-testid="prospect-ai-location-expansion"
+            >
+              <option value="exact">Exact location only</option>
+              <option value="nearby">Nearby areas (default)</option>
+              <option value="metro">Metro area</option>
+            </select>
+          </div>
+          <div className="flex items-end gap-2">
             <Button
               className="w-full bg-brand-green hover:bg-brand-green/90"
               disabled={
@@ -627,7 +750,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
               {discover.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Discovering…
+                  Searching Google Places…
                 </>
               ) : (
                 <>
@@ -636,16 +759,149 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
                 </>
               )}
             </Button>
+            {discover.isPending ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0"
+                onClick={cancelDiscover}
+                data-testid="prospect-ai-discover-cancel"
+              >
+                Cancel
+              </Button>
+            ) : null}
           </div>
         </div>
+        {discover.isPending ? (
+          <p className="mt-3 text-xs text-amber-800" data-testid="prospect-discover-progress">
+            Preparing search → Searching Google Places → Checking pages → Removing duplicates →
+            Checking your workspace → Validating → Saving new prospects. Live per-page counts are not
+            streamed yet; Cancel stops further Google requests.
+          </p>
+        ) : null}
+        <p className="mt-3 text-xs text-gray-500">
+          Uses your monthly Prospect Discoveries quota ({status.remaining} remaining). Only net-new
+          businesses saved for Review count — duplicates and rejected listings do not.
+        </p>
       </div>
 
-      {results.length > 0 ? (
+      {results.length > 0 || (diagnostics && (diagnostics.rawResults ?? 0) > 0) ? (
         <div className="space-y-3" data-testid="prospect-discover-results">
+          {diagnostics ? (
+            <div
+              className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-4 py-3 text-sm text-gray-700"
+              data-testid="prospect-discover-diagnostics"
+            >
+              <p className="font-medium text-gray-900">
+                {diagnostics.netNewUsable ?? diagnostics.saved ?? results.length} new prospects ready
+                for Review
+                {diagnostics.rawResults != null
+                  ? ` from ${diagnostics.rawResults} raw results`
+                  : ""}
+                .
+              </p>
+              <ul className="mt-2 grid gap-1 text-xs text-gray-600 sm:grid-cols-2">
+                <li>Target requested: {diagnostics.targetCount ?? targetCount}</li>
+                <li>Ready for Review: {diagnostics.readyForReview ?? readyResults.length}</li>
+                <li>
+                  Usable Needs Attention:{" "}
+                  {diagnostics.usableNeedsAttention ??
+                    diagnostics.needsAttention ??
+                    needsAttentionResults.length}
+                </li>
+                <li>
+                  Possible Duplicates: {diagnostics.possibleDuplicates ?? possibleDuplicateSamples.length}
+                </li>
+                <li>Already Exists: {diagnostics.alreadyInWorkspace ?? 0}</li>
+                <li>
+                  Rejected:{" "}
+                  {(diagnostics.rejectedClosed ?? 0) +
+                    (diagnostics.rejectedInvalid ?? 0) +
+                    (diagnostics.rejectedQuality ?? 0) +
+                    (diagnostics.rejectedRelevance ?? 0)}
+                </li>
+                <li>
+                  Quota consumed:{" "}
+                  {diagnostics.quotaConsumed ?? diagnostics.netNewUsable ?? diagnostics.saved ?? results.length}
+                </li>
+                <li>
+                  Search completed:{" "}
+                  {(diagnostics.stopReason || "unknown")
+                    .replace(/_/g, " ")
+                    .replace(/\b\w/g, (c) => c.toUpperCase())}
+                </li>
+              </ul>
+              <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
+                <CollapsibleTrigger
+                  className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-emerald-800 hover:underline"
+                  data-testid="prospect-discover-search-details"
+                >
+                  Search details
+                  <ChevronDown className={cn("h-3.5 w-3.5 transition", detailsOpen && "rotate-180")} />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2 space-y-1 text-xs text-gray-600">
+                  {diagnostics.expandedLocations?.length ? (
+                    <p>Areas searched: {diagnostics.expandedLocations.join(", ")}</p>
+                  ) : null}
+                  <p>
+                    Used {diagnostics.queryVariationsAttempted?.length ?? 0} query variations across{" "}
+                    {diagnostics.pagesFetched ?? 0} Google Places pages (
+                    {diagnostics.providerCalls ?? 0} calls).
+                  </p>
+                  <p>
+                    Qualification and email enrichment happen after Send to Review — they are not
+                    included in this discovered count.
+                  </p>
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-2" data-testid="prospect-discover-groups">
+            {(
+              [
+                ["ready", `Ready for Review (${readyResults.length})`],
+                [
+                  "needs_attention",
+                  `Usable Needs Attention (${
+                    diagnostics?.usableNeedsAttention ?? needsAttentionResults.length
+                  })`,
+                ],
+                [
+                  "possible_duplicate",
+                  `Possible Duplicates (${
+                    diagnostics?.possibleDuplicates ?? possibleDuplicateSamples.length
+                  })`,
+                ],
+                [
+                  "already_exists",
+                  `Already Exists (${diagnostics?.alreadyInWorkspace ?? alreadyExistsSamples.length})`,
+                ],
+                [
+                  "rejected",
+                  `Rejected (${
+                    (diagnostics?.rejectedClosed ?? 0) +
+                    (diagnostics?.rejectedInvalid ?? 0) +
+                    (diagnostics?.rejectedQuality ?? 0) +
+                    (diagnostics?.rejectedRelevance ?? 0)
+                  })`,
+                ],
+              ] as const
+            ).map(([key, label]) => (
+              <Button
+                key={key}
+                type="button"
+                size="sm"
+                variant={resultFilter === key ? "default" : "outline"}
+                className={resultFilter === key ? "bg-brand-green hover:bg-brand-green/90" : ""}
+                onClick={() => setResultFilter(key)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-gray-600">
-              <span className="font-semibold text-gray-900">{results.length}</span> discovered
-              prospects
+              <span className="font-semibold text-gray-900">{results.length}</span> saved for Review
               {restoredFromBatch ? (
                 <span className="text-amber-800"> · Not yet sent to Review</span>
               ) : null}
@@ -757,45 +1013,116 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <div className="overflow-auto rounded-xl border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-10">
-                    <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Select all" />
-                  </TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Contact</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {results.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedIds.has(row.id)}
-                        onCheckedChange={() => toggleOne(row.id)}
-                        aria-label={`Select ${resultLabel(row)}`}
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">{resultLabel(row)}</TableCell>
-                    <TableCell>{row.businessType || "—"}</TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center gap-1 text-sm text-gray-600">
-                        <MapPin className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-                        {row.address || row.location || "—"}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-sm text-gray-600">
-                      {row.email || row.phone || row.website || "—"}
-                    </TableCell>
+          {resultFilter === "already_exists" ||
+          resultFilter === "rejected" ||
+          resultFilter === "possible_duplicate" ? (
+            <div className="overflow-auto rounded-xl border" data-testid="prospect-discover-excluded">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Why</TableHead>
+                    <TableHead>Match / details</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {(resultFilter === "already_exists"
+                    ? alreadyExistsSamples
+                    : resultFilter === "possible_duplicate"
+                      ? possibleDuplicateSamples
+                      : rejectedSamples
+                  ).map((row, idx) => (
+                      <TableRow key={`${row.providerPlaceId || row.name}-${idx}`}>
+                        <TableCell className="font-medium">{row.name || "—"}</TableCell>
+                        <TableCell className="text-sm text-gray-600">
+                          {discoveryAttentionLabel(row.reason)}
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-600">
+                          {row.existingRecordLabel
+                            ? `Matches: ${row.existingRecordLabel}${
+                                row.matchType ? ` (${row.matchType.replace(/_/g, " ")})` : ""
+                              }`
+                            : row.matchType
+                              ? row.matchType.replace(/_/g, " ")
+                              : resultFilter === "possible_duplicate"
+                                ? "Not counted toward quota — confirm later if distinct"
+                                : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ),
+                  )}
+                  {(resultFilter === "already_exists"
+                    ? alreadyExistsSamples
+                    : resultFilter === "possible_duplicate"
+                      ? possibleDuplicateSamples
+                      : rejectedSamples
+                  ).length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-sm text-gray-500">
+                        None in this run
+                        {resultFilter === "already_exists" &&
+                        (diagnostics?.alreadyInWorkspace ?? 0) >
+                          alreadyExistsSamples.length
+                          ? ` (${diagnostics?.alreadyInWorkspace} matched; sample list capped)`
+                          : ""}
+                        .
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="overflow-auto rounded-xl border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={allSelected}
+                        onCheckedChange={toggleAll}
+                        aria-label="Select all"
+                      />
+                    </TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Contact</TableHead>
+                    {resultFilter === "needs_attention" ? <TableHead>Reason</TableHead> : null}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleRows.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(row.id)}
+                          onCheckedChange={() => toggleOne(row.id)}
+                          aria-label={`Select ${resultLabel(row)}`}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{resultLabel(row)}</TableCell>
+                      <TableCell>{row.businessType || "—"}</TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center gap-1 text-sm text-gray-600">
+                          <MapPin className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                          {row.address || row.location || "—"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-600">
+                        {row.email || row.phone || row.website || "—"}
+                      </TableCell>
+                      {resultFilter === "needs_attention" ? (
+                        <TableCell className="text-sm text-amber-800">
+                          {discoveryAttentionLabel(row.attentionReason)}
+                        </TableCell>
+                      ) : null}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </div>
       ) : null}
 

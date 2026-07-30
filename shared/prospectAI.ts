@@ -24,7 +24,20 @@ export const PROSPECT_AI_MONTHLY_QUOTAS = {
 
 export const PROSPECT_AI_MAX_RADIUS_KM = 50;
 export const PROSPECT_AI_MIN_RADIUS_KM = 0.5;
+/** @deprecated Prefer PROSPECT_AI_PLACES_PAGE_SIZE — Google Places hard max is 20. */
 export const PROSPECT_AI_DEFAULT_PAGE_SIZE = 20;
+
+export {
+  PROSPECT_AI_DISCOVERY_TARGET_OPTIONS,
+  PROSPECT_AI_DEFAULT_DISCOVERY_TARGET,
+  PROSPECT_AI_LOCATION_EXPANSION_MODES,
+  PROSPECT_AI_DEFAULT_LOCATION_EXPANSION,
+  PROSPECT_AI_PLACES_PAGE_SIZE,
+  type ProspectAiDiscoveryTargetCount,
+  type ProspectAiLocationExpansionMode,
+  type ProspectAiDiscoveryRunDiagnostics,
+  type ProspectAiDiscoveryStopReason,
+} from "./prospectAiDiscoveryPlan";
 
 export const PROSPECT_AI_ACTIVITY_EVENT_TYPES = [
   "discovery",
@@ -56,6 +69,10 @@ export type ProspectAiDiscoverRequest = {
   businessType: string;
   location: string;
   radiusKm?: number;
+  /** Unique prospects to aim for before qualification (25 | 50 | 100 | 250). */
+  targetCount?: number;
+  /** exact | nearby | metro — default nearby. */
+  locationExpansion?: "exact" | "nearby" | "metro";
 };
 
 export type ProspectAiNormalizedProspect = {

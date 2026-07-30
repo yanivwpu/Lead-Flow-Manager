@@ -4,6 +4,11 @@ export type ProspectDiscoveryQuery = {
   businessType: string;
   location: string;
   radiusKm?: number;
+  /** Desired unique usable prospects before qualification. */
+  targetCount?: number;
+  locationExpansion?: "exact" | "nearby" | "metro";
+  /** Cap saves by remaining monthly quota. */
+  quotaRemaining?: number;
 };
 
 export type ProspectDiscoveryProviderResult = {

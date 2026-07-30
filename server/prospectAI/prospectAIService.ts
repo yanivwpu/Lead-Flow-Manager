@@ -33,6 +33,35 @@ import {
   buildProspectDedupIndex,
   findProspectDuplicate,
 } from "../prospectImport/prospectImportDedup";
+import {
+  normalizeDiagnosticsRecord,
+  parseDiscoveryDiagnostics,
+  serializeDiscoveryDiagnostics,
+} from "@shared/prospectAiDiscoveryDiagnostics";
+
+/** In-process concurrent Discover guard (same workspace). */
+const activeDiscoveryRuns = new Map<string, { startedAt: number; runKey: string }>();
+const DISCOVERY_RUN_STALE_MS = 15 * 60 * 1000;
+
+function acquireDiscoveryRunLock(
+  workspaceUserId: string,
+  runKey: string,
+): () => void {
+  const now = Date.now();
+  const existing = activeDiscoveryRuns.get(workspaceUserId);
+  if (existing && now - existing.startedAt < DISCOVERY_RUN_STALE_MS) {
+    throw new ProspectAiError(
+      "A discovery search is already running for this workspace. Wait for it to finish.",
+      "concurrent_discovery",
+      409,
+    );
+  }
+  activeDiscoveryRuns.set(workspaceUserId, { startedAt: now, runKey });
+  return () => {
+    const cur = activeDiscoveryRuns.get(workspaceUserId);
+    if (cur?.runKey === runKey) activeDiscoveryRuns.delete(workspaceUserId);
+  };
+}
 
 export class ProspectAiError extends Error {
   constructor(
@@ -45,7 +74,8 @@ export class ProspectAiError extends Error {
       | "provider_unavailable"
       | "not_found"
       | "forbidden"
-      | "active_batch_exists",
+      | "active_batch_exists"
+      | "concurrent_discovery",
     public readonly status = 400,
   ) {
     super(message);
@@ -242,6 +272,9 @@ async function assertActivatedAndEligible(
 }
 
 function mapResultRow(row: typeof prospectAiDiscoveryResults.$inferSelect) {
+  const raw = (row.rawPayload || {}) as Record<string, unknown>;
+  const disposition =
+    raw.disposition === "needs_attention" ? "needs_attention" : "ready";
   return {
     id: row.id,
     name: row.name,
@@ -259,6 +292,9 @@ function mapResultRow(row: typeof prospectAiDiscoveryResults.$inferSelect) {
     reviewCount: row.reviewCount,
     contactId: row.contactId,
     sentToReviewAt: toIso(row.sentToReviewAt),
+    disposition,
+    attentionReason: raw.attentionReason != null ? String(raw.attentionReason) : null,
+    group: disposition === "needs_attention" ? "needs_attention" : "ready",
   };
 }
 
@@ -282,6 +318,7 @@ export async function getActiveUnsentDiscoveryBatch(workspaceUserId: string): Pr
   search: ReturnType<typeof mapSearchSummary> | null;
   results: ReturnType<typeof mapResultRow>[];
   quota: ProspectAiQuotaSnapshot;
+  diagnostics: ReturnType<typeof parseDiscoveryDiagnostics>;
 }> {
   const { plan } = await assertActivatedAndEligible(workspaceUserId, { requireQuota: false });
   const quota = await buildQuotaSnapshot(workspaceUserId, plan);
@@ -314,7 +351,7 @@ export async function getActiveUnsentDiscoveryBatch(workspaceUserId: string): Pr
 
   const activeSearch = selectActiveUnsentDiscoverySearch(searches, unsentCountBySearchId);
   if (!activeSearch) {
-    return { search: null, results: [], quota };
+    return { search: null, results: [], quota, diagnostics: null };
   }
 
   const resultRows = await db
@@ -329,10 +366,13 @@ export async function getActiveUnsentDiscoveryBatch(workspaceUserId: string): Pr
     )
     .orderBy(desc(prospectAiDiscoveryResults.createdAt));
 
+  const diagnostics = parseDiscoveryDiagnostics(activeSearch.errorMessage);
+
   return {
     search: mapSearchSummary(activeSearch),
     results: resultRows.map(mapResultRow),
     quota,
+    diagnostics,
   };
 }
 
@@ -366,6 +406,7 @@ export async function discoverProspects(
   workspaceUserId: string,
   body: unknown,
   provider?: ProspectDiscoveryProvider,
+  opts?: { isCancelled?: () => boolean },
 ): Promise<{
   search: {
     id: string;
@@ -377,6 +418,8 @@ export async function discoverProspects(
   };
   results: ReturnType<typeof mapResultRow>[];
   quota: ProspectAiQuotaSnapshot;
+  diagnostics: Record<string, unknown> | null;
+  excluded?: Array<Record<string, unknown>>;
 }> {
   const validated = validateDiscoverInput(body);
   if (!validated.ok) {
@@ -389,99 +432,212 @@ export async function discoverProspects(
     !Array.isArray(body) &&
     (body as { replaceActiveBatch?: unknown }).replaceActiveBatch === true;
 
-  const active = await getActiveUnsentDiscoveryBatch(workspaceUserId);
-  if (active.search && active.results.length > 0) {
-    if (!replaceActiveBatch) {
-      throw new ProspectAiError(
-        `You have ${active.results.length} discovered prospects not yet sent to Review. Send them to Review or clear results before running a new discovery.`,
-        "active_batch_exists",
-        409,
-      );
-    }
-    await discardDiscoverySearch(workspaceUserId, active.search.id);
-  }
+  const idempotencyKey =
+    body &&
+    typeof body === "object" &&
+    !Array.isArray(body) &&
+    typeof (body as { idempotencyKey?: unknown }).idempotencyKey === "string"
+      ? String((body as { idempotencyKey: string }).idempotencyKey).slice(0, 80)
+      : `auto-${Date.now()}`;
 
-  const { plan, quota } = await assertActivatedAndEligible(workspaceUserId);
-  const discoveryProvider = provider ?? getProspectDiscoveryProvider();
-
-  let prospects;
+  const releaseLock = acquireDiscoveryRunLock(workspaceUserId, idempotencyKey);
   try {
-    const result = await discoveryProvider.discover({
-      businessType: validated.businessType,
-      location: validated.location,
-      radiusKm: validated.radiusKm,
-    });
-    prospects = result.prospects;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Discovery provider failed";
-    // Never leak API keys if somehow present in error text.
-    const safe = message.replace(/AIza[0-9A-Za-z_-]{10,}/g, "[redacted]");
-    throw new ProspectAiError(safe, "provider_unavailable", 502);
-  }
+    const active = await getActiveUnsentDiscoveryBatch(workspaceUserId);
+    if (active.search && active.results.length > 0) {
+      if (!replaceActiveBatch) {
+        throw new ProspectAiError(
+          `You have ${active.results.length} discovered prospects not yet sent to Review. Send them to Review or clear results before running a new discovery.`,
+          "active_batch_exists",
+          409,
+        );
+      }
+      await discardDiscoverySearch(workspaceUserId, active.search.id);
+    }
 
-  const capped = prospects.slice(0, quota.remaining);
+    const { plan, quota } = await assertActivatedAndEligible(workspaceUserId);
+    const discoveryProvider = provider ?? getProspectDiscoveryProvider();
 
-  const [search] = await db
-    .insert(prospectAiDiscoverySearches)
-    .values({
-      workspaceUserId,
-      createdByUserId: workspaceUserId,
-      businessType: validated.businessType,
-      location: validated.location,
-      radiusKm: validated.radiusKm != null ? String(validated.radiusKm) : null,
-      provider: discoveryProvider.id,
-      status: "completed",
-      resultCount: capped.length,
-    })
-    .returning();
+    type SavedProspect = {
+      providerPlaceId: string;
+      name: string;
+      businessType: string | null;
+      address: string | null;
+      phone: string | null;
+      website: string | null;
+      email: string | null;
+      latitude: number | null;
+      longitude: number | null;
+      rating: number | null;
+      reviewCount: number | null;
+      discoveryQuery?: string;
+      discoveryLocation?: string;
+      disposition?: "ready" | "needs_attention";
+      attentionReason?: string | null;
+      discoveryQueries?: string[];
+      discoveryLocations?: string[];
+      providerPlaceIds?: string[];
+      alternateNames?: string[];
+      alternatePhones?: string[];
+      alternateWebsites?: string[];
+    };
 
-  let inserted: (typeof prospectAiDiscoveryResults.$inferSelect)[] = [];
-  if (capped.length > 0) {
-    inserted = await db
-      .insert(prospectAiDiscoveryResults)
-      .values(
-        capped.map((p) => ({
-          searchId: search.id,
-          workspaceUserId,
-          provider: discoveryProvider.id,
-          providerPlaceId: p.providerPlaceId,
-          name: p.name,
-          businessType: p.businessType,
-          address: p.address,
-          phone: p.phone,
-          website: p.website,
-          email: p.email,
-          latitude: p.latitude,
-          longitude: p.longitude,
-          rating: p.rating != null ? String(p.rating) : null,
-          reviewCount: p.reviewCount,
-          rawPayload: {
+    let prospects: SavedProspect[] = [];
+    let diagnostics: Record<string, unknown> | null = null;
+    try {
+      if (provider) {
+        // Tests / injected providers — single discover() call (may ignore expansion).
+        const result = await provider.discover({
+          businessType: validated.businessType,
+          location: validated.location,
+          radiusKm: validated.radiusKm,
+          targetCount: validated.targetCount,
+          locationExpansion: validated.locationExpansion,
+          quotaRemaining: quota.remaining,
+        });
+        prospects = result.prospects.map((p) => ({
+          ...p,
+          disposition: "ready" as const,
+          attentionReason: null,
+        }));
+        diagnostics = (result.meta as Record<string, unknown> | undefined) || null;
+      } else {
+        const { runProspectAiDiscoveryOrchestrator } = await import("./discoveryOrchestrator");
+        const { loadDiscoveryWorkspaceIndex } = await import("./discoveryWorkspaceIndex");
+        const workspaceIndex = await loadDiscoveryWorkspaceIndex(workspaceUserId);
+        const orchestrated = await runProspectAiDiscoveryOrchestrator({
+          businessType: validated.businessType,
+          location: validated.location,
+          radiusKm: validated.radiusKm,
+          targetCount: validated.targetCount,
+          locationExpansion: validated.locationExpansion,
+          quotaRemaining: quota.remaining,
+          isCancelled: opts?.isCancelled,
+          workspaceIndex,
+        });
+        prospects = orchestrated.prospects;
+        diagnostics = orchestrated.diagnostics as unknown as Record<string, unknown>;
+      }
+    } catch (err) {
+      if (err instanceof ProspectAiError) throw err;
+      const message = err instanceof Error ? err.message : "Discovery provider failed";
+      const safe = message.replace(/AIza[0-9A-Za-z_-]{10,}/g, "[redacted]");
+      throw new ProspectAiError(safe, "provider_unavailable", 502);
+    }
+
+    // Only net-new usable rows are persisted → only they consume monthly quota.
+    const capped = prospects.slice(0, quota.remaining);
+    const safeDiagnostics = diagnostics
+      ? normalizeDiagnosticsRecord({
+          ...diagnostics,
+          targetCount: diagnostics.targetCount ?? validated.targetCount,
+          locationExpansion: diagnostics.locationExpansion ?? validated.locationExpansion,
+          provider: diagnostics.provider ?? discoveryProvider.id,
+          saved: capped.length,
+          netNewUsable: capped.length,
+          quotaConsumed: capped.length,
+          readyForReview:
+            diagnostics.readyForReview ??
+            capped.filter((p) => p.disposition !== "needs_attention").length,
+          usableNeedsAttention:
+            diagnostics.usableNeedsAttention ??
+            capped.filter((p) => p.disposition === "needs_attention").length,
+          needsAttention:
+            diagnostics.usableNeedsAttention ??
+            diagnostics.needsAttention ??
+            capped.filter((p) => p.disposition === "needs_attention").length,
+          possibleDuplicates: diagnostics.possibleDuplicates ?? 0,
+        })
+      : null;
+
+    const [search] = await db
+      .insert(prospectAiDiscoverySearches)
+      .values({
+        workspaceUserId,
+        createdByUserId: workspaceUserId,
+        businessType: validated.businessType,
+        location: validated.location,
+        radiusKm: validated.radiusKm != null ? String(validated.radiusKm) : null,
+        provider: discoveryProvider.id,
+        status: "completed",
+        resultCount: capped.length,
+        // Persist run diagnostics without a schema migration.
+        errorMessage: safeDiagnostics
+          ? serializeDiscoveryDiagnostics({ ...safeDiagnostics, runId: null })
+          : null,
+      })
+      .returning();
+
+    let inserted: (typeof prospectAiDiscoveryResults.$inferSelect)[] = [];
+    if (capped.length > 0) {
+      inserted = await db
+        .insert(prospectAiDiscoveryResults)
+        .values(
+          capped.map((p) => ({
+            searchId: search.id,
+            workspaceUserId,
+            provider: discoveryProvider.id,
             providerPlaceId: p.providerPlaceId,
             name: p.name,
             businessType: p.businessType,
             address: p.address,
-            hasPhone: Boolean(p.phone),
-            hasWebsite: Boolean(p.website),
-          },
-        })),
-      )
-      .returning();
+            phone: p.phone,
+            website: p.website,
+            email: p.email,
+            latitude: p.latitude,
+            longitude: p.longitude,
+            rating: p.rating != null ? String(p.rating) : null,
+            reviewCount: p.reviewCount,
+            rawPayload: {
+              providerPlaceId: p.providerPlaceId,
+              name: p.name,
+              businessType: p.businessType,
+              address: p.address,
+              hasPhone: Boolean(p.phone),
+              hasWebsite: Boolean(p.website),
+              hasEmail: Boolean(p.email),
+              discoveryQuery: p.discoveryQuery ?? null,
+              discoveryLocation: p.discoveryLocation ?? null,
+              discoveryQueries: p.discoveryQueries ?? [],
+              discoveryLocations: p.discoveryLocations ?? [],
+              providerPlaceIds: p.providerPlaceIds ?? [p.providerPlaceId],
+              alternateNames: p.alternateNames ?? [],
+              alternatePhones: p.alternatePhones ?? [],
+              alternateWebsites: p.alternateWebsites ?? [],
+              disposition: p.disposition ?? "ready",
+              attentionReason: p.attentionReason ?? null,
+            },
+          })),
+        )
+        .returning();
+    }
+
+    const nextQuota = await buildQuotaSnapshot(workspaceUserId, plan);
+    const diagnosticsOut = safeDiagnostics
+      ? {
+          ...safeDiagnostics,
+          runId: search.id,
+          saved: inserted.length,
+          netNewUsable: inserted.length,
+        }
+      : null;
+
+    return {
+      search: {
+        id: search.id,
+        businessType: search.businessType,
+        location: search.location,
+        radiusKm: numOrNull(search.radiusKm),
+        createdAt: toIso(search.createdAt),
+        resultCount: search.resultCount,
+      },
+      results: inserted.map(mapResultRow),
+      quota: nextQuota,
+      diagnostics: diagnosticsOut,
+      excluded: (safeDiagnostics?.excludedSamples || []) as Array<Record<string, unknown>>,
+    };
+  } finally {
+    releaseLock();
   }
-
-  const nextQuota = await buildQuotaSnapshot(workspaceUserId, plan);
-
-  return {
-    search: {
-      id: search.id,
-      businessType: search.businessType,
-      location: search.location,
-      radiusKm: numOrNull(search.radiusKm),
-      createdAt: toIso(search.createdAt),
-      resultCount: search.resultCount,
-    },
-    results: inserted.map(mapResultRow),
-    quota: nextQuota,
-  };
 }
 
 function buildContactNotes(row: typeof prospectAiDiscoveryResults.$inferSelect): string {
@@ -537,8 +693,8 @@ export async function sendDiscoverResultsToReview(
   if (ids.length === 0) {
     throw new ProspectAiError("resultIds must be a non-empty array", "invalid_input", 400);
   }
-  if (ids.length > 100) {
-    throw new ProspectAiError("Too many resultIds (max 100)", "invalid_input", 400);
+  if (ids.length > 250) {
+    throw new ProspectAiError("Too many resultIds (max 250)", "invalid_input", 400);
   }
 
   const searchRows = await db

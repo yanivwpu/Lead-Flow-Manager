@@ -1,8 +1,5 @@
-import {
-  PROSPECT_AI_DEFAULT_PAGE_SIZE,
-  PROSPECT_AI_MAX_RADIUS_KM,
-  type ProspectAiNormalizedProspect,
-} from "@shared/prospectAI";
+import { PROSPECT_AI_PLACES_PAGE_SIZE } from "@shared/prospectAiDiscoveryPlan";
+import type { ProspectAiNormalizedProspect } from "@shared/prospectAI";
 import { normalizeProspectList } from "../normalize";
 import type {
   FetchLike,
@@ -26,11 +23,12 @@ const FIELD_MASK = [
   "places.rating",
   "places.userRatingCount",
   "places.businessStatus",
+  "nextPageToken",
 ].join(",");
 
 type GeocodeResult = { latitude: number; longitude: number } | null;
 
-type PlacesApiPlace = {
+export type PlacesApiPlace = {
   id?: string;
   name?: string;
   displayName?: { text?: string };
@@ -126,10 +124,71 @@ export async function geocodeLocation(
 
 function radiusMeters(radiusKm: number | undefined): number | null {
   if (radiusKm == null || !Number.isFinite(radiusKm)) return null;
-  const clamped = Math.min(Math.max(radiusKm, 0.5), PROSPECT_AI_MAX_RADIUS_KM);
+  const clamped = Math.min(Math.max(radiusKm, 0.5), 50);
   return Math.round(clamped * 1000);
 }
 
+export async function fetchPlacesTextSearchPage(params: {
+  apiKey: string;
+  textQuery: string;
+  pageSize?: number;
+  pageToken?: string;
+  locationBias?: {
+    circle: { center: { latitude: number; longitude: number }; radius: number };
+  } | null;
+  fetchFn?: FetchLike;
+}): Promise<{ places: PlacesApiPlace[]; nextPageToken?: string }> {
+  const fetchFn = params.fetchFn ?? fetch;
+  const body: Record<string, unknown> = {
+    textQuery: params.textQuery,
+    pageSize: Math.min(
+      Math.max(params.pageSize ?? PROSPECT_AI_PLACES_PAGE_SIZE, 1),
+      PROSPECT_AI_PLACES_PAGE_SIZE,
+    ),
+  };
+  if (params.pageToken) body.pageToken = params.pageToken;
+  if (params.locationBias) body.locationBias = params.locationBias;
+
+  const res = await fetchFn(PLACES_TEXT_SEARCH_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "X-Goog-Api-Key": params.apiKey,
+      "X-Goog-FieldMask": FIELD_MASK,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const errJson = (await res.json()) as { error?: { message?: string } };
+      detail = errJson?.error?.message || "";
+    } catch {
+      /* ignore */
+    }
+    throw new Error(
+      detail
+        ? `Google Places search failed (${res.status}): ${detail}`
+        : `Google Places search failed (${res.status})`,
+    );
+  }
+
+  const data = (await res.json()) as {
+    places?: PlacesApiPlace[];
+    nextPageToken?: string;
+  };
+  return {
+    places: Array.isArray(data.places) ? data.places : [],
+    nextPageToken: data.nextPageToken ? String(data.nextPageToken) : undefined,
+  };
+}
+
+/**
+ * Legacy single-query discover (page 1 only). Production discoverProspects uses
+ * runProspectAiDiscoveryOrchestrator for pagination + query expansion.
+ */
 export class GooglePlacesDiscoveryProvider implements ProspectDiscoveryProvider {
   readonly id = "google_places" as const;
 
@@ -138,17 +197,14 @@ export class GooglePlacesDiscoveryProvider implements ProspectDiscoveryProvider 
   async discover(query: ProspectDiscoveryQuery): Promise<ProspectDiscoveryProviderResult> {
     const apiKey = readPlacesApiKey();
     const textQuery = `${query.businessType} in ${query.location}`.trim();
-
-    const body: Record<string, unknown> = {
-      textQuery,
-      pageSize: PROSPECT_AI_DEFAULT_PAGE_SIZE,
-    };
-
     const meters = radiusMeters(query.radiusKm);
+    let locationBias: {
+      circle: { center: { latitude: number; longitude: number }; radius: number };
+    } | null = null;
     if (meters != null) {
       const geo = await geocodeLocation(query.location, apiKey, this.fetchFn);
       if (geo) {
-        body.locationBias = {
+        locationBias = {
           circle: {
             center: { latitude: geo.latitude, longitude: geo.longitude },
             radius: meters,
@@ -157,36 +213,14 @@ export class GooglePlacesDiscoveryProvider implements ProspectDiscoveryProvider 
       }
     }
 
-    const res = await this.fetchFn(PLACES_TEXT_SEARCH_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "X-Goog-Api-Key": apiKey,
-        "X-Goog-FieldMask": FIELD_MASK,
-      },
-      body: JSON.stringify(body),
+    const page = await fetchPlacesTextSearchPage({
+      apiKey,
+      textQuery,
+      pageSize: PROSPECT_AI_PLACES_PAGE_SIZE,
+      locationBias,
+      fetchFn: this.fetchFn,
     });
-
-    if (!res.ok) {
-      let detail = "";
-      try {
-        const errJson = (await res.json()) as { error?: { message?: string } };
-        detail = errJson?.error?.message || "";
-      } catch {
-        /* ignore */
-      }
-      // Never include the API key in error messages.
-      throw new Error(
-        detail
-          ? `Google Places search failed (${res.status}): ${detail}`
-          : `Google Places search failed (${res.status})`,
-      );
-    }
-
-    const data = (await res.json()) as { places?: PlacesApiPlace[] };
-    const places = Array.isArray(data.places) ? data.places : [];
-    const candidates = places
+    const candidates = page.places
       .filter((p) => !p.businessStatus || p.businessStatus === "OPERATIONAL")
       .map(mapPlacesApiPlaceToCandidate);
     const prospects = normalizeProspectList(candidates);
@@ -195,9 +229,10 @@ export class GooglePlacesDiscoveryProvider implements ProspectDiscoveryProvider 
       prospects,
       meta: {
         provider: this.id,
-        requested: places.length,
+        requested: page.places.length,
         returned: prospects.length,
-        usedLocationBias: Boolean(body.locationBias),
+        usedLocationBias: Boolean(locationBias),
+        hasNextPageToken: Boolean(page.nextPageToken),
       },
     };
   }

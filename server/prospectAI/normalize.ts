@@ -1,4 +1,8 @@
 import type { ProspectAiNormalizedProspect } from "@shared/prospectAI";
+import {
+  normalizeDiscoveryTargetCount,
+  normalizeLocationExpansionMode,
+} from "@shared/prospectAiDiscoveryPlan";
 
 const MAX_NAME = 200;
 const MAX_TEXT = 500;
@@ -93,7 +97,14 @@ export function normalizeProspectList(
 }
 
 export type DiscoverInputValidation =
-  | { ok: true; businessType: string; location: string; radiusKm?: number }
+  | {
+      ok: true;
+      businessType: string;
+      location: string;
+      radiusKm?: number;
+      targetCount: number;
+      locationExpansion: "exact" | "nearby" | "metro";
+    }
   | { ok: false; error: string };
 
 export function validateDiscoverInput(body: unknown): DiscoverInputValidation {
@@ -116,8 +127,11 @@ export function validateDiscoverInput(body: unknown): DiscoverInputValidation {
     return { ok: false, error: "location is too long" };
   }
 
+  const targetCount = normalizeDiscoveryTargetCount(b.targetCount);
+  const locationExpansion = normalizeLocationExpansionMode(b.locationExpansion);
+
   if (b.radiusKm === undefined || b.radiusKm === null || b.radiusKm === "") {
-    return { ok: true, businessType, location };
+    return { ok: true, businessType, location, targetCount, locationExpansion };
   }
 
   const radiusKm = typeof b.radiusKm === "number" ? b.radiusKm : Number(b.radiusKm);
@@ -127,5 +141,5 @@ export function validateDiscoverInput(body: unknown): DiscoverInputValidation {
   if (radiusKm < 0.5 || radiusKm > 50) {
     return { ok: false, error: "radiusKm must be between 0.5 and 50" };
   }
-  return { ok: true, businessType, location, radiusKm };
+  return { ok: true, businessType, location, radiusKm, targetCount, locationExpansion };
 }
