@@ -73,6 +73,10 @@ import {
   assert.ok(src.includes("releaseClaimedItemAfterInfraPause"));
   assert.ok(src.includes("nextQueueItemAfterInfraPause"));
   assert.ok(src.includes("PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE"));
+  assert.ok(src.includes("PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE"));
+  assert.ok(src.includes("assertLiveEmailSenderForCampaignArm"));
+  assert.ok(src.includes("classifyProspectOutreachFailureScope"));
+  assert.ok(src.includes("markItemFailed(item, reason, false)"));
   assert.ok(src.includes("resolveEmailSenderForBulkOutreach"));
   assert.ok(src.includes("rescheduleQueuedOutreachItems"));
   assert.ok(src.includes("wakeProspectOutreachQueueWorker"));
@@ -86,7 +90,7 @@ import {
   );
   assert.equal(
     formatProspectQueueItemError("sender_not_connected:decrypt"),
-    "Connect an email account before starting the campaign",
+    "Reconnect your email account before resuming",
   );
   assert.match(PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE, /Connect an email account/i);
 
@@ -95,6 +99,9 @@ import {
     "utf8",
   );
   assert.ok(panelSrc.includes("formatProspectQueueItemError"));
+  assert.ok(panelSrc.includes("po-queue-sender-blocker"));
+  assert.ok(panelSrc.includes("queueArmed"));
+  assert.ok(panelSrc.includes("globalSenderBlocker"));
 }
 
 // Resume semantics: clear pause + restagger so first item is soon due

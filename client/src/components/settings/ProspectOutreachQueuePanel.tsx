@@ -42,8 +42,12 @@ import {
   buildCampaignsAiAssistantModel,
   prospectCampaignQueueStatusLabel,
 } from "@shared/prospectAiDisplay";
-import { formatProspectQueueItemError } from "@shared/prospectBulkOutreach";
+import {
+  formatProspectQueueItemError,
+  PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE,
+} from "@shared/prospectBulkOutreach";
 import { selectNextQueuedCampaignItem } from "@shared/prospectCampaignCountdown";
+import { isSenderNotConnectedFailure } from "@shared/prospectOutreachFailureScope";
 import {
   CampaignSendActivityStatusLine,
   NextQueuedCountdownSuffix,
@@ -218,10 +222,24 @@ export function ProspectOutreachQueuePanel({
     [allItems],
   );
 
-  const nextQueuedId = useMemo(
-    () => selectNextQueuedCampaignItem(allActiveItems)?.id ?? null,
-    [allActiveItems],
-  );
+  const queueArmed = dash?.queueRunning === true && dash?.queuePaused !== true;
+  const queuePaused = dash?.queuePaused === true;
+  const queueIdle = !dash?.queueRunning && !dash?.queuePaused;
+  const hasReadyRows = allActiveItems.some((r) => r.queueStatus === "queued");
+  const globalSenderBlocker = useMemo(() => {
+    if (!queuePaused) return false;
+    return allActiveItems.some(
+      (r) =>
+        (r.queueStatus === "queued" || r.queueStatus === "paused") &&
+        isSenderNotConnectedFailure(r.lastError),
+    );
+  }, [allActiveItems, queuePaused]);
+
+  const nextQueuedId = useMemo(() => {
+    // Do not show "Sending shortly…" on a Ready row while the campaign is paused.
+    if (queuePaused || !queueArmed) return null;
+    return selectNextQueuedCampaignItem(allActiveItems)?.id ?? null;
+  }, [allActiveItems, queueArmed, queuePaused]);
 
   const activeItems = useMemo(() => {
     if (statusFilter === "all") return allActiveItems;
@@ -508,34 +526,54 @@ export function ProspectOutreachQueuePanel({
           Save limits
         </Button>
         <div className="ml-auto flex flex-wrap gap-2">
-          <Button
-            type="button"
-            className="bg-brand-green hover:bg-emerald-700"
-            disabled={startMutation.isPending}
-            onClick={() => startMutation.mutate()}
-            data-testid="po-queue-start"
-          >
-            {startMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-            {PROSPECT_CAMPAIGN_CONTROL_LABELS.startSending}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={pauseMutation.isPending}
-            onClick={() => pauseMutation.mutate()}
-            data-testid="po-queue-pause"
-          >
-            <Pause className="mr-2 h-4 w-4" /> {PROSPECT_CAMPAIGN_CONTROL_LABELS.pauseSending}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={resumeMutation.isPending}
-            onClick={() => resumeMutation.mutate()}
-            data-testid="po-queue-resume"
-          >
-            <RefreshCw className="mr-2 h-4 w-4" /> {PROSPECT_CAMPAIGN_CONTROL_LABELS.resumeSending}
-          </Button>
+          {queueIdle && hasReadyRows ? (
+            <Button
+              type="button"
+              className="bg-brand-green hover:bg-emerald-700"
+              disabled={startMutation.isPending}
+              onClick={() => startMutation.mutate()}
+              data-testid="po-queue-start"
+            >
+              {startMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="mr-2 h-4 w-4" />
+              )}
+              {PROSPECT_CAMPAIGN_CONTROL_LABELS.startSending}
+            </Button>
+          ) : null}
+          {queueArmed ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pauseMutation.isPending}
+              onClick={() => pauseMutation.mutate()}
+              data-testid="po-queue-pause"
+            >
+              <Pause className="mr-2 h-4 w-4" /> {PROSPECT_CAMPAIGN_CONTROL_LABELS.pauseSending}
+            </Button>
+          ) : null}
+          {queuePaused ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={resumeMutation.isPending}
+              onClick={() => resumeMutation.mutate()}
+              data-testid="po-queue-resume"
+              title={
+                globalSenderBlocker
+                  ? PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE
+                  : undefined
+              }
+            >
+              {resumeMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              {PROSPECT_CAMPAIGN_CONTROL_LABELS.resumeSending}
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -545,13 +583,20 @@ export function ProspectOutreachQueuePanel({
         items={allActiveItems}
       />
 
-      {dash?.queuePaused ? (
+      {globalSenderBlocker ? (
+        <p className="text-sm text-amber-800" data-testid="po-queue-sender-blocker">
+          {PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE}{" "}
+          <a href="/app/settings?tab=channels" className="font-medium underline underline-offset-2">
+            Open Channel Settings
+          </a>
+        </p>
+      ) : queuePaused ? (
         <p className="text-sm text-amber-700">
           {PROSPECT_READY_TO_SEND_LABEL} is paused — no new sends until{" "}
-          {PROSPECT_CAMPAIGN_CONTROL_LABELS.resumeSending} / {PROSPECT_CAMPAIGN_CONTROL_LABELS.startSending}.
+          {PROSPECT_CAMPAIGN_CONTROL_LABELS.resumeSending}.
         </p>
       ) : null}
-      {!dash?.queueRunning && !dash?.queuePaused ? (
+      {queueIdle && hasReadyRows ? (
         <p className="text-sm text-amber-800" data-testid="po-queue-waiting-start">
           Sending is armed off — messages can wait in {PROSPECT_READY_TO_SEND_LABEL}, but nothing
           sends until you press {PROSPECT_CAMPAIGN_CONTROL_LABELS.startSending}.

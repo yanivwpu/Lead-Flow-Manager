@@ -231,10 +231,26 @@ export function prospectOutreachEligibilityReasonLabel(
 export function formatProspectQueueItemError(lastError?: string | null): string {
   const raw = String(lastError || "").trim();
   if (!raw) return "";
-  const permanent = /^permanent:\s*(.+)$/i.exec(raw);
-  const code = String(permanent?.[1] || raw).trim();
+  // Strip transient retry prefix for display.
+  const unprefixed = raw.replace(/^retry:/i, "").trim();
+  const permanent = /^permanent:\s*(.+)$/i.exec(unprefixed);
+  const code = String(permanent?.[1] || unprefixed).trim();
+  const lower = code.toLowerCase();
+
+  // Campaign-wide sender auth — reconnect copy when diagnostics say the mailbox existed but is broken.
+  if (
+    /^sender_not_connected\b/i.test(lower) ||
+    /not connected|reconnect|mailbox|oauth|unauthorized/i.test(code)
+  ) {
+    if (
+      /decrypt|token_refresh|api_auth|needs_reconnect|mailbox_disconnected/i.test(lower)
+    ) {
+      return "Reconnect your email account before resuming";
+    }
+    return "Connect an email account before starting the campaign";
+  }
+
   const known = [
-    "sender_not_connected",
     "missing_identity",
     "already_outreach_sent",
     "already_contacted",
@@ -261,19 +277,18 @@ export function formatProspectQueueItemError(lastError?: string | null): string 
     "not_enabled_for_bulk",
     "contact_not_found",
   ];
-  const lower = code.toLowerCase();
   if (known.includes(lower) || known.includes(lower.split(/[:\s]/)[0] || "")) {
     return prospectOutreachEligibilityReasonLabel(lower.split(/[:\s]/)[0] || lower);
-  }
-  // Provider/oauth messages — keep short, no stack dumps
-  if (/not connected|reconnect|mailbox|oauth|unauthorized/i.test(code)) {
-    return "Connect an email account before starting the campaign";
   }
   return code.length > 120 ? `${code.slice(0, 117)}…` : code;
 }
 
 export const PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE =
   "Connect an email account before starting the campaign.";
+
+/** Resume/Start when mailbox probe fails after a prior connection existed. */
+export const PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE =
+  "Reconnect your email account before resuming. Open Channel Settings to reconnect Gmail.";
 
 /** Group preview skips by human-readable reason for the Send to Campaign modal. */
 export function groupCampaignSkipReasons(

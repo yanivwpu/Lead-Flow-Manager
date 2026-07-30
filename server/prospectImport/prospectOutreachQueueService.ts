@@ -45,6 +45,13 @@ import {
   PROSPECT_SENDER_PROBE_FAILURE_CLASSES,
 } from "@shared/prospectSenderProbeDiagnostics";
 import {
+  classifyProspectOutreachFailureScope,
+  isProspectScopedOutreachFailure,
+  isTransientOutreachFailure,
+  prospectTransientRetryDelayMs,
+  shouldGloballyPauseProspectCampaign,
+} from "@shared/prospectOutreachFailureScope";
+import {
   isOutreachInstructionsConfigured,
   normalizeOutreachInstructionsForSave,
   parseOutreachInstructions,
@@ -920,13 +927,123 @@ export async function pauseQueue(workspaceUserId: string): Promise<ProspectOutre
   return settings;
 }
 
-export async function resumeQueue(workspaceUserId: string): Promise<ProspectOutreachWorkspaceSettings> {
+async function assertLiveEmailSenderForCampaignArm(workspaceUserId: string): Promise<void> {
   const { resolveEmailSenderForBulkOutreach } = await import("./prospectOutreachEligibilityService");
-  const { PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE } = await import("@shared/prospectBulkOutreach");
+  const {
+    PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE,
+    PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE,
+  } = await import("@shared/prospectBulkOutreach");
   const email = await resolveEmailSenderForBulkOutreach(workspaceUserId);
-  if (!email.emailConnected || !email.emailMailboxId) {
-    throw new Error(PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE);
+  if (email.emailConnected && email.emailMailboxId) return;
+  const cls = String(email.failureClass || "").toLowerCase();
+  if (
+    cls === "decrypt" ||
+    cls === "token_refresh" ||
+    cls === "api_auth" ||
+    cls === "mailbox_disconnected" ||
+    cls === "needs_reconnect"
+  ) {
+    throw new Error(PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE);
   }
+  throw new Error(PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE);
+}
+
+/**
+ * Confirm campaign-wide sender failure, pause once, release claimed row to Ready with lastError.
+ * Returns "continue" when a decrypt re-probe proves the mailbox is live again.
+ */
+async function handleSenderNotConnectedInfraPause(params: {
+  item: ProspectOutreachQueueItemRow;
+  stage: "eligibility" | "prepare" | "send";
+  failureClass: ProspectSenderProbeFailureClass;
+  decryptField?: ProspectSenderProbeDecryptField | null;
+  errMsgSafe?: string | null;
+  mailboxId?: string | null;
+}): Promise<"continue" | string> {
+  const { item, stage, failureClass } = params;
+  let decryptField = params.decryptField;
+  if (failureClass === "decrypt" && !decryptField) decryptField = "access_token";
+
+  let primaryMailboxId: string | null = params.mailboxId || item.senderMailboxId || null;
+  try {
+    const { getPrimaryEmailMailbox } = await import("../emailChannel/mailboxStore");
+    primaryMailboxId =
+      (await getPrimaryEmailMailbox(item.workspaceUserId))?.id ?? primaryMailboxId;
+  } catch {
+    /* keep snapshot */
+  }
+
+  // If live primary probe still works, this is not a campaign-wide disconnect —
+  // do not pause; let prepare/send use the live mailbox.
+  if (stage === "eligibility" || stage === "prepare") {
+    try {
+      const { resolveEmailSenderForBulkOutreach } = await import(
+        "./prospectOutreachEligibilityService"
+      );
+      const live = await resolveEmailSenderForBulkOutreach(item.workspaceUserId);
+      if (live.emailConnected && live.emailMailboxId) {
+        console.info(
+          JSON.stringify(
+            prospectBulkOutreachLog("sender_probe_live_ok_skip_pause", {
+              stage,
+              workspaceIdPrefix: item.workspaceUserId.slice(0, 8),
+              queueItemIdPrefix: item.id.slice(0, 8),
+              contactIdPrefix: item.contactId.slice(0, 8),
+              mailboxIdPrefix: live.emailMailboxId.slice(0, 8),
+              priorFailureClass: failureClass,
+            }),
+          ),
+        );
+        return "continue";
+      }
+    } catch {
+      /* fall through to pause decision */
+    }
+  }
+
+  const { getValidMailboxAccessToken } = await import("../emailChannel/oauth");
+  const decision = await decideSenderDecryptInfraPause({
+    failureClass,
+    decryptField,
+    mailboxId: primaryMailboxId,
+    reprobe: async (mailboxId) => {
+      await getValidMailboxAccessToken(mailboxId);
+    },
+  });
+
+  console.info(
+    JSON.stringify(
+      prospectBulkOutreachLog("sender_probe_failed", {
+        ...prospectSenderProbeDiagLog({
+          stage,
+          failureClass,
+          decryptField,
+          workspaceIdPrefix: item.workspaceUserId.slice(0, 8),
+          queueItemIdPrefix: item.id.slice(0, 8),
+          contactIdPrefix: item.contactId.slice(0, 8),
+          mailboxIdPrefix: primaryMailboxId?.slice(0, 8) ?? null,
+          errMsgSafe: params.errMsgSafe ? String(params.errMsgSafe).slice(0, 160) : null,
+          recoveredAfterReprobe: decision.recovered,
+        }),
+        attempts: item.attempts,
+        persistReason: decision.persistReason,
+        scope: "campaign",
+      }),
+    ),
+  );
+
+  if (decision.recovered && !decision.pause) {
+    return "continue";
+  }
+
+  await pauseQueue(item.workspaceUserId);
+  await releaseClaimedItemAfterInfraPause(item, decision.persistReason);
+  return decision.persistReason;
+}
+
+export async function resumeQueue(workspaceUserId: string): Promise<ProspectOutreachWorkspaceSettings> {
+  // Refuse to clear pause when mailbox still cannot send — prevents resume/pause loops.
+  await assertLiveEmailSenderForCampaignArm(workspaceUserId);
 
   const flags = nextProspectQueueControlFlags("resume", {});
   const settings = await updateOutreachSettings(workspaceUserId, {
@@ -958,12 +1075,7 @@ export async function resumeQueue(workspaceUserId: string): Promise<ProspectOutr
 
 export async function startQueue(workspaceUserId: string): Promise<ProspectOutreachWorkspaceSettings> {
   // Fail closed before arming: never claim/send without a live outbound mailbox.
-  const { resolveEmailSenderForBulkOutreach } = await import("./prospectOutreachEligibilityService");
-  const { PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE } = await import("@shared/prospectBulkOutreach");
-  const email = await resolveEmailSenderForBulkOutreach(workspaceUserId);
-  if (!email.emailConnected || !email.emailMailboxId) {
-    throw new Error(PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE);
-  }
+  await assertLiveEmailSenderForCampaignArm(workspaceUserId);
 
   const flags = nextProspectQueueControlFlags("start", {});
   const settings = await updateOutreachSettings(workspaceUserId, {
@@ -1263,7 +1375,8 @@ export async function processClaimedQueueItem(
     ignoreAlreadyQueued: true,
   });
   if (!eligibility.channels[channel]?.eligible) {
-    const reason = eligibility.channels[channel]?.reason || eligibility.summaryReason || "eligibility_rejected";
+    const reason =
+      eligibility.channels[channel]?.reason || eligibility.summaryReason || "eligibility_rejected";
     // Already contacted handled above; skip soft lifecycle duplicates
     if (reason === "already_outreach_sent" || reason === "already_replied") {
       await db
@@ -1272,63 +1385,34 @@ export async function processClaimedQueueItem(
         .where(eq(prospectOutreachQueueItems.id, item.id));
       return { ok: false, reason };
     }
-    if (isSenderNotConnectedReason(reason) || reason === "suppressed" || reason === "opted_out") {
-      if (isSenderNotConnectedReason(reason)) {
-        const failureClass = failureClassFromEligibilityDetail(
-          eligibility.channels[channel]?.detail,
-        );
-        const decryptField =
+
+    // Campaign-wide sender disconnect — pause once after confirming live primary is down.
+    if (isSenderNotConnectedReason(reason)) {
+      const handled = await handleSenderNotConnectedInfraPause({
+        item,
+        stage: "eligibility",
+        failureClass: failureClassFromEligibilityDetail(eligibility.channels[channel]?.detail),
+        decryptField:
           decryptFieldFromEligibilityDetail(eligibility.channels[channel]?.detail) ||
-          (failureClass === "decrypt" ? ("access_token" as const) : null);
-
-        let primaryMailboxId: string | null = null;
-        try {
-          const { getPrimaryEmailMailbox } = await import("../emailChannel/mailboxStore");
-          primaryMailboxId = (await getPrimaryEmailMailbox(item.workspaceUserId))?.id ?? null;
-        } catch {
-          primaryMailboxId = item.senderMailboxId || null;
-        }
-
-        const { getValidMailboxAccessToken } = await import("../emailChannel/oauth");
-        const decision = await decideSenderDecryptInfraPause({
-          failureClass,
-          decryptField,
-          mailboxId: primaryMailboxId,
-          reprobe: async (mailboxId) => {
-            await getValidMailboxAccessToken(mailboxId);
-          },
-        });
-
-        console.info(
-          JSON.stringify(
-            prospectBulkOutreachLog("sender_probe_failed", {
-              ...prospectSenderProbeDiagLog({
-                stage: "eligibility",
-                failureClass,
-                decryptField,
-                workspaceIdPrefix: item.workspaceUserId.slice(0, 8),
-                queueItemIdPrefix: item.id.slice(0, 8),
-                contactIdPrefix: item.contactId.slice(0, 8),
-                mailboxIdPrefix: (primaryMailboxId || item.senderMailboxId)?.slice(0, 8) ?? null,
-                recoveredAfterReprobe: decision.recovered,
-              }),
-              attempts: item.attempts,
-              persistReason: decision.persistReason,
-            }),
-          ),
-        );
-
-        if (decision.recovered && !decision.pause) {
-          // One safe decrypt re-probe succeeded — continue to prepare/send.
-        } else {
-          await pauseQueue(item.workspaceUserId);
-          await releaseClaimedItemAfterInfraPause(item, decision.persistReason);
-          return { ok: false, reason: decision.persistReason };
-        }
+          (failureClassFromEligibilityDetail(eligibility.channels[channel]?.detail) === "decrypt"
+            ? ("access_token" as const)
+            : null),
+        errMsgSafe: reason,
+      });
+      if (handled === "continue") {
+        // Live mailbox recovered — proceed to prepare/send.
       } else {
-        await markItemFailed(item, reason, false);
-        return { ok: false, reason };
+        return { ok: false, reason: handled };
       }
+    } else if (shouldGloballyPauseProspectCampaign(reason)) {
+      // Daily/hourly limit or other true campaign blocker — pause once, leave row Ready.
+      await pauseQueue(item.workspaceUserId);
+      await releaseClaimedItemAfterInfraPause(item, reason);
+      return { ok: false, reason };
+    } else {
+      // Prospect-specific (missing email, suppressed, not qualified, …) — fail row, keep campaign running.
+      await markItemFailed(item, reason, false);
+      return { ok: false, reason };
     }
   }
 
@@ -1343,67 +1427,26 @@ export async function processClaimedQueueItem(
   }).catch(async (err) => {
     const msg = err instanceof Error ? err.message : String(err);
     const senderDiag = parseSenderNotConnectedDiagnostic(msg);
-    const shouldPause =
-      isSenderNotConnectedReason(msg) ||
-      /reconnect|not connected|No connected email mailbox/i.test(msg);
-    if (shouldPause) {
-      let failureClass =
+    const scope = classifyProspectOutreachFailureScope(msg);
+    if (scope === "campaign" || isSenderNotConnectedReason(msg)) {
+      const failureClass =
         senderDiag.failureClass ||
         (/No connected email mailbox/i.test(msg) ? "no_mailbox" : "other_probe_failure");
-      let decryptField = senderDiag.decryptField;
-      if (failureClass === "decrypt" && !decryptField) decryptField = "access_token";
-
-      let primaryMailboxId: string | null = item.senderMailboxId || null;
-      try {
-        const { getPrimaryEmailMailbox } = await import("../emailChannel/mailboxStore");
-        primaryMailboxId =
-          (await getPrimaryEmailMailbox(item.workspaceUserId))?.id ?? primaryMailboxId;
-      } catch {
-        /* keep snapshot */
-      }
-
-      const { getValidMailboxAccessToken } = await import("../emailChannel/oauth");
-      const decision = await decideSenderDecryptInfraPause({
+      const handled = await handleSenderNotConnectedInfraPause({
+        item,
+        stage: "prepare",
         failureClass,
-        decryptField,
-        mailboxId: primaryMailboxId,
-        reprobe: async (mailboxId) => {
-          await getValidMailboxAccessToken(mailboxId);
-        },
+        decryptField: senderDiag.decryptField,
+        errMsgSafe: msg,
+        mailboxId: item.senderMailboxId,
       });
-
-      console.info(
-        JSON.stringify(
-          prospectBulkOutreachLog("sender_probe_failed", {
-            ...prospectSenderProbeDiagLog({
-              stage: "prepare",
-              failureClass,
-              decryptField,
-              workspaceIdPrefix: item.workspaceUserId.slice(0, 8),
-              queueItemIdPrefix: item.id.slice(0, 8),
-              contactIdPrefix: item.contactId.slice(0, 8),
-              mailboxIdPrefix: primaryMailboxId?.slice(0, 8) ?? null,
-              errMsgSafe: String(msg).slice(0, 160),
-              recoveredAfterReprobe: decision.recovered,
-            }),
-            attempts: item.attempts,
-            persistReason: decision.persistReason,
-          }),
-        ),
-      );
-
-      if (decision.recovered && !decision.pause) {
-        // Rare: prepare threw decrypt but immediate re-probe OK — fail this claim softly
-        // so the worker can reclaim without global pause.
+      if (handled === "continue") {
         await db
           .update(prospectOutreachQueueItems)
           .set({ queueStatus: "queued", startedAt: null, lastError: null, updatedAt: new Date() })
           .where(eq(prospectOutreachQueueItems.id, item.id));
         return null;
       }
-
-      await pauseQueue(item.workspaceUserId);
-      await releaseClaimedItemAfterInfraPause(item, decision.persistReason);
       return null;
     }
     await markItemFailed(item, msg, false);
@@ -1432,46 +1475,25 @@ export async function processClaimedQueueItem(
   });
 
   if (!sendResult.success) {
-    if (sendResult.pauseQueue) {
-      let persistError = sendResult.error || "paused";
-      if (isSenderNotConnectedReason(persistError)) {
+    const sendErr = sendResult.error || "send_failed";
+    const scope = classifyProspectOutreachFailureScope(sendErr);
+    const pauseRequested =
+      sendResult.pauseQueue === true || shouldGloballyPauseProspectCampaign(sendErr);
+
+    if (pauseRequested && scope === "campaign") {
+      let persistError = sendErr;
+      if (isSenderNotConnectedReason(persistError) || /decrypt|oauth|not connected/i.test(persistError)) {
         const parsed = parseSenderNotConnectedDiagnostic(persistError);
         const failureClass = parsed.failureClass || "other_probe_failure";
-        const decryptField =
-          parsed.decryptField || (failureClass === "decrypt" ? "access_token" : null);
-
-        const { getValidMailboxAccessToken } = await import("../emailChannel/oauth");
-        const decision = await decideSenderDecryptInfraPause({
+        const handled = await handleSenderNotConnectedInfraPause({
+          item: itemWithAttempt,
+          stage: "send",
           failureClass,
-          decryptField,
+          decryptField: parsed.decryptField,
+          errMsgSafe: sendErr,
           mailboxId: prepared.mailboxId,
-          reprobe: async (mailboxId) => {
-            await getValidMailboxAccessToken(mailboxId);
-          },
         });
-        persistError = decision.persistReason;
-
-        console.info(
-          JSON.stringify(
-            prospectBulkOutreachLog("sender_probe_failed", {
-              ...prospectSenderProbeDiagLog({
-                stage: "send",
-                failureClass,
-                decryptField,
-                workspaceIdPrefix: item.workspaceUserId.slice(0, 8),
-                queueItemIdPrefix: item.id.slice(0, 8),
-                contactIdPrefix: item.contactId.slice(0, 8),
-                mailboxIdPrefix: prepared.mailboxId.slice(0, 8),
-                errMsgSafe: String(sendResult.error || "").slice(0, 160),
-                recoveredAfterReprobe: decision.recovered,
-              }),
-              attempts: itemWithAttempt.attempts,
-              persistReason: persistError,
-            }),
-          ),
-        );
-
-        if (decision.recovered && !decision.pause) {
+        if (handled === "continue") {
           await db
             .update(prospectOutreachQueueItems)
             .set({
@@ -1483,44 +1505,48 @@ export async function processClaimedQueueItem(
             .where(eq(prospectOutreachQueueItems.id, item.id));
           return { ok: false, reason: "reprobe_recovered_requeue" };
         }
+        persistError = handled;
       } else {
         console.info(
           JSON.stringify(
             prospectBulkOutreachLog("infra_pause_after_send_gate", {
               stage: "send",
               queueItemIdPrefix: item.id.slice(0, 8),
-              error: String(sendResult.error || "").slice(0, 160),
+              error: String(sendErr).slice(0, 160),
               attempts: itemWithAttempt.attempts,
+              scope: "campaign",
             }),
           ),
         );
+        await pauseQueue(item.workspaceUserId);
+        await releaseClaimedItemAfterInfraPause(itemWithAttempt, persistError);
       }
-      await pauseQueue(item.workspaceUserId);
-      await releaseClaimedItemAfterInfraPause(itemWithAttempt, persistError);
+    } else if (scope === "transient" || isTransientOutreachFailure(sendErr)) {
+      await scheduleTransientRetry(itemWithAttempt, sendErr);
     } else {
       const { isPermanentEmailSendFailure } = await import("@shared/prospectEmailSuppression");
-      const permanent = isPermanentEmailSendFailure(sendResult.error);
+      const permanent = isPermanentEmailSendFailure(sendErr);
       if (permanent) {
         try {
           const { applyProspectEmailSuppression } = await import("./prospectEmailSuppressionService");
           await applyProspectEmailSuppression({
             contactId: item.contactId,
             reason: "invalid_recipient",
-            detail: (sendResult.error || "permanent_send_failure").substring(0, 300),
+            detail: sendErr.substring(0, 300),
             bouncedEmail: item.recipientIdentity,
             source: "prospect_queue_permanent_send_failure",
           });
         } catch (err) {
           console.error("[ProspectOutreach] permanent-failure suppression failed", err);
         }
-        // Terminal — never silent requeue for permanent recipient failures.
-        await markItemFailed(itemWithAttempt, `permanent:${sendResult.error || "send_failed"}`, false);
+        await markItemFailed(itemWithAttempt, `permanent:${sendErr}`, false);
         await db
           .update(prospectOutreachQueueItems)
           .set({ attempts: itemWithAttempt.maxAttempts, updatedAt: new Date() })
           .where(eq(prospectOutreachQueueItems.id, item.id));
       } else {
-        await markItemFailed(itemWithAttempt, sendResult.error || "send_failed", false);
+        // Prospect-scoped — fail this row only; do not pause the campaign.
+        await markItemFailed(itemWithAttempt, sendErr, false);
       }
     }
     console.info(
@@ -1587,18 +1613,22 @@ async function markItemFailed(
   error: string,
   pause: boolean,
 ): Promise<void> {
-  if (pause) {
+  if (pause && shouldGloballyPauseProspectCampaign(error)) {
     await pauseQueue(item.workspaceUserId);
     await releaseClaimedItemAfterInfraPause(item, error);
     return;
   }
+  if (pause && isProspectScopedOutreachFailure(error)) {
+    // Never promote a prospect-scoped failure into a global pause.
+    pause = false;
+  }
 
-  const terminal = item.attempts >= item.maxAttempts;
   await db
     .update(prospectOutreachQueueItems)
     .set({
-      queueStatus: terminal ? "failed" : "failed",
+      queueStatus: "failed",
       lastError: error.substring(0, 500),
+      startedAt: null,
       updatedAt: new Date(),
     })
     .where(eq(prospectOutreachQueueItems.id, item.id));
@@ -1607,6 +1637,42 @@ async function markItemFailed(
     .update(prospectOutreachBatches)
     .set({ failedCount: sql`${prospectOutreachBatches.failedCount} + 1` })
     .where(eq(prospectOutreachBatches.id, item.batchId));
+}
+
+/** Requeue with backoff for transient provider failures — campaign stays armed. */
+async function scheduleTransientRetry(
+  item: ProspectOutreachQueueItemRow,
+  error: string,
+): Promise<void> {
+  const attempts = item.attempts || 0;
+  const maxAttempts = item.maxAttempts || 3;
+  if (attempts >= maxAttempts) {
+    await markItemFailed(item, error, false);
+    return;
+  }
+  const delayMs = prospectTransientRetryDelayMs(attempts);
+  const scheduledAt = new Date(Date.now() + delayMs);
+  await db
+    .update(prospectOutreachQueueItems)
+    .set({
+      queueStatus: "queued",
+      lastError: `retry:${error}`.substring(0, 500),
+      scheduledAt,
+      startedAt: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(prospectOutreachQueueItems.id, item.id));
+  console.info(
+    JSON.stringify(
+      prospectBulkOutreachLog("transient_retry_scheduled", {
+        queueItemIdPrefix: item.id.slice(0, 8),
+        contactIdPrefix: item.contactId.slice(0, 8),
+        attempts,
+        delayMs,
+        error: String(error).slice(0, 120),
+      }),
+    ),
+  );
 }
 
 /**

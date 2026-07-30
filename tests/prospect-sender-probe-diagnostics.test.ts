@@ -64,14 +64,18 @@ function testPersistAndParse() {
 function testUiStripsSuffix() {
   assert.equal(
     formatProspectQueueItemError("sender_not_connected:decrypt"),
-    "Connect an email account before starting the campaign",
+    "Reconnect your email account before resuming",
   );
   assert.equal(
     formatProspectQueueItemError("sender_not_connected:decrypt:access_token"),
-    "Connect an email account before starting the campaign",
+    "Reconnect your email account before resuming",
   );
   assert.equal(
     formatProspectQueueItemError("sender_not_connected:token_refresh"),
+    "Reconnect your email account before resuming",
+  );
+  assert.equal(
+    formatProspectQueueItemError("sender_not_connected"),
     "Connect an email account before starting the campaign",
   );
 }

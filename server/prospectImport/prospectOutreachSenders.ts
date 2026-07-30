@@ -237,10 +237,14 @@ export const emailProspectOutreachSender: ProspectOutreachSender = {
 
       if (!result.success) {
         const err = result.error || "email_send_failed";
-        const pauseQueue =
-          /not connected|reconnect|mailbox|oauth|unauthorized|401|403/i.test(err) ||
-          /hourly email send limit|daily email send limit/i.test(err);
-        return { success: false, error: err, pauseQueue };
+        const { shouldGloballyPauseProspectCampaign } = await import(
+          "@shared/prospectOutreachFailureScope"
+        );
+        return {
+          success: false,
+          error: err,
+          pauseQueue: shouldGloballyPauseProspectCampaign(err),
+        };
       }
 
       return {
@@ -251,9 +255,14 @@ export const emailProspectOutreachSender: ProspectOutreachSender = {
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const pauseQueue =
-        /hourly email send limit|daily email send limit|not connected|reconnect/i.test(message);
-      return { success: false, error: message, pauseQueue };
+      const { shouldGloballyPauseProspectCampaign } = await import(
+        "@shared/prospectOutreachFailureScope"
+      );
+      return {
+        success: false,
+        error: message,
+        pauseQueue: shouldGloballyPauseProspectCampaign(message),
+      };
     }
   },
 };
