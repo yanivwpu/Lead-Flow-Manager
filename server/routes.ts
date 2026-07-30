@@ -8106,11 +8106,18 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
-  // Admin middleware — accepts session OR persistent token header
+  // Admin middleware — Sales Admin session (isAdmin) OR persistent x-admin-token.
+  // Does NOT accept normal WhachatCRM owner login (req.user) — that never sets isAdmin.
   const requireAdmin = async (req: any, res: any, next: any) => {
-    if ((req.session as any)?.isAdmin === true) return next();
-    const token = req.headers['x-admin-token'] as string;
-    if (token && await verifyAdminToken(token)) return next();
+    const { isAdminAuthorized } = await import("@shared/adminAccess");
+    const ok = await isAdminAuthorized(
+      {
+        sessionIsAdmin: (req.session as { isAdmin?: boolean } | undefined)?.isAdmin === true,
+        adminToken: req.headers["x-admin-token"] as string | undefined,
+      },
+      verifyAdminToken,
+    );
+    if (ok) return next();
     return res.status(401).json({ error: "Admin authentication required" });
   };
 

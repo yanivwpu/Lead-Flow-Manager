@@ -74,6 +74,7 @@ import {
 } from "@/lib/salesPayoutTotals";
 import { AdminGhlTab } from "@/components/admin/AdminGhlTab";
 import { AdminActivationTab } from "@/components/admin/AdminActivationTab";
+import { AdminEmailCryptoTab } from "@/components/admin/AdminEmailCryptoTab";
 
 /** Centered compact admin form dialogs (~520–600px; scroll inside body only). */
 const ADMIN_FORM_MODAL_CLASS =
@@ -1049,6 +1050,15 @@ export function Admin() {
                 <BarChart3 className="h-4 w-4 shrink-0" />
                 <span className="hidden sm:inline">Activation</span>
                 <span className="sm:hidden">Act</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="email-crypto"
+                className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4"
+                data-testid="tab-email-crypto"
+              >
+                <Lock className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">Email crypto</span>
+                <span className="sm:hidden">Crypto</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -2059,6 +2069,10 @@ export function Admin() {
 
           <TabsContent value="activation">
             <AdminActivationTab enabled={isLoggedIn} />
+          </TabsContent>
+
+          <TabsContent value="email-crypto">
+            <AdminEmailCryptoTab />
           </TabsContent>
         </Tabs>
       </main>
