@@ -774,6 +774,8 @@ export const salespeople = pgTable("salespeople", {
   setupTaskEarningsTotal: numeric("setup_task_earnings_total", { precision: 10, scale: 2 }).notNull().default("0"),
   agreementAcceptedAt: timestamp("agreement_accepted_at"), // null = not accepted yet
   agreementVersion: text("agreement_version"), // version they accepted, e.g. "2026-01-03"
+  /** Optional bcrypt hash — set via Sales Portal password reset; login still accepts loginCode. */
+  passwordHash: text("password_hash"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -858,6 +860,28 @@ export const partners = pgTable("partners", {
   agreementVersion: text("agreement_version"), // version they accepted, e.g. "2026-01-03"
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+/**
+ * Password-reset tokens for Partner Portal and Sales Portal.
+ * Store only token hashes; accountType prevents cross-portal token reuse.
+ */
+export const portalPasswordResetTokens = pgTable(
+  "portal_password_reset_tokens",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    accountType: text("account_type").notNull(), // partner | salesperson
+    accountId: varchar("account_id").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at").notNull(),
+    usedAt: timestamp("used_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => [
+    index("portal_password_reset_tokens_account_idx").on(t.accountType, t.accountId),
+  ],
+);
+
+export type PortalPasswordResetToken = typeof portalPasswordResetTokens.$inferSelect;
 
 // Commissions for both partners and salespeople
 export const commissions = pgTable("commissions", {

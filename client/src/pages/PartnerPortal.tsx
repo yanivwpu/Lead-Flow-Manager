@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -476,6 +477,15 @@ export function PartnerPortal() {
                   )}
                 </button>
               </div>
+              <p className="mt-1.5 text-right text-sm">
+                <Link
+                  href="/partner-portal/forgot-password"
+                  className="text-brand-green hover:underline"
+                  data-testid="link-partner-forgot-password"
+                >
+                  Forgot password?
+                </Link>
+              </p>
             </div>
 
             <Button 

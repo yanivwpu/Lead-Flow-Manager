@@ -49,6 +49,18 @@ const Admin = lazy(() => import("@/pages/Admin").then(m => ({ default: m.Admin }
 const QrLanding = lazy(() => import("@/pages/QrLanding").then(m => ({ default: m.QrLanding })));
 const SalesPortal = lazy(() => import("@/pages/SalesPortal").then(m => ({ default: m.SalesPortal })));
 const PartnerPortal = lazy(() => import("@/pages/PartnerPortal").then(m => ({ default: m.PartnerPortal })));
+const PartnerForgotPassword = lazy(() =>
+  import("@/pages/PortalForgotPassword").then((m) => ({ default: m.PartnerForgotPassword })),
+);
+const SalesForgotPassword = lazy(() =>
+  import("@/pages/PortalForgotPassword").then((m) => ({ default: m.SalesForgotPassword })),
+);
+const PartnerResetPassword = lazy(() =>
+  import("@/pages/PortalResetPassword").then((m) => ({ default: m.PartnerResetPassword })),
+);
+const SalesResetPassword = lazy(() =>
+  import("@/pages/PortalResetPassword").then((m) => ({ default: m.SalesResetPassword })),
+);
 const PartnerProgram = lazy(() => import("@/pages/PartnerProgram").then(m => ({ default: m.PartnerProgram })));
 const GoHighLevelAgencies = lazy(() =>
   import("@/pages/GoHighLevelAgencies").then((m) => ({ default: m.GoHighLevelAgencies })),
@@ -164,9 +176,13 @@ function MarketingRoutes() {
       <Route path="/blog" component={Blog} />
       <Route path="/demo-scan" component={QrLanding} />
       <Route path="/sales-admin" component={Admin} />
+      <Route path="/sales-portal/forgot-password" component={SalesForgotPassword} />
+      <Route path="/sales-portal/reset-password" component={SalesResetPassword} />
       <Route path="/sales-portal" component={SalesPortal} />
       <Route path="/partner-program" component={PartnerProgram} />
       <Route path="/go-high-level-agencies" component={GoHighLevelAgencies} />
+      <Route path="/partner-portal/forgot-password" component={PartnerForgotPassword} />
+      <Route path="/partner-portal/reset-password" component={PartnerResetPassword} />
       <Route path="/partner-portal" component={PartnerPortal} />
       <Route path="/realtor-growth-engine" component={RealtorLanding} />
       <Route path="/widget-frame/:widgetId" component={WidgetFrame} />

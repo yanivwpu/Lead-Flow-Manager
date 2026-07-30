@@ -44,6 +44,7 @@ import {
   Eye, EyeOff, ClipboardList, BarChart3,
 } from "lucide-react";
 import { NoIndexHelmet } from "@/components/NoIndexHelmet";
+import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -739,6 +740,54 @@ export function Admin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/partners'] });
     }
+  });
+
+  const sendPartnerPasswordReset = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await adminFetch(`/api/admin/partners/${id}/send-password-reset`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to send password reset email");
+      return data as { message?: string };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Password reset email sent",
+        description: data.message || "The partner will receive a secure reset link.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not send reset email",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const sendSalespersonPasswordReset = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await adminFetch(`/api/admin/salespeople/${id}/send-password-reset`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to send password reset email");
+      return data as { message?: string };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Password reset email sent",
+        description: data.message || "The salesperson will receive a secure reset link.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not send reset email",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const createSalesperson = useMutation({
@@ -2252,6 +2301,18 @@ export function Admin() {
             </div>
           )}
           <DialogFooter className={cn(ADMIN_FORM_MODAL_FOOTER, "sm:justify-end")}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!editingPartner || sendPartnerPasswordReset.isPending}
+              onClick={() => {
+                if (editingPartner) sendPartnerPasswordReset.mutate(editingPartner.id);
+              }}
+              data-testid="button-partner-send-password-reset"
+            >
+              {sendPartnerPasswordReset.isPending ? "Sending…" : "Send password reset email"}
+            </Button>
             <Button type="button" variant="outline" size="sm" onClick={() => setEditingPartner(null)}>
               Cancel
             </Button>
@@ -2537,6 +2598,18 @@ export function Admin() {
             </div>
           )}
           <DialogFooter className={cn(ADMIN_FORM_MODAL_FOOTER, "sm:justify-end")}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!editingPerson || sendSalespersonPasswordReset.isPending}
+              onClick={() => {
+                if (editingPerson) sendSalespersonPasswordReset.mutate(editingPerson.id);
+              }}
+              data-testid="button-salesperson-send-password-reset"
+            >
+              {sendSalespersonPasswordReset.isPending ? "Sending…" : "Send password reset email"}
+            </Button>
             <Button type="button" variant="outline" size="sm" onClick={() => setEditingPerson(null)}>
               Cancel
             </Button>

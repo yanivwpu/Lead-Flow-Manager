@@ -397,7 +397,11 @@ const NOINDEX_EXACT_PATHS = new Set([
   "/reset-password",
   "/sales-admin",
   "/sales-portal",
+  "/sales-portal/forgot-password",
+  "/sales-portal/reset-password",
   "/partner-portal",
+  "/partner-portal/forgot-password",
+  "/partner-portal/reset-password",
   "/demo-scan",
   "/post-checkout",
 ]);

@@ -8121,6 +8121,9 @@ export async function registerRoutes(
     return res.status(401).json({ error: "Admin authentication required" });
   };
 
+  const { registerPortalPasswordResetRoutes } = await import("./routes/portalPasswordResetRoutes");
+  registerPortalPasswordResetRoutes(app, requireAdmin);
+
   /**
    * Read-only Gmail encryption key consistency probe.
    * Returns keySource/keyFp8/instanceId + decryptability flags — never secrets/tokens/ciphertext.
@@ -9145,22 +9148,23 @@ export async function registerRoutes(
   // Salesperson Portal: Login
   app.post("/api/sales-portal/login", async (req, res) => {
     try {
-      const { email, loginCode } = req.body;
-      
-      if (!email || !loginCode) {
-        return res.status(400).json({ error: "Email and login code required" });
+      const { email, loginCode, password } = req.body;
+      const credential = String(loginCode || password || "").trim();
+
+      if (!email || !credential) {
+        return res.status(400).json({ error: "Email and login code (or password) required" });
       }
 
       const normalizedEmail = email.toLowerCase().trim();
-      const normalizedCode = loginCode.trim();
-      
+      const normalizedCode = credential;
+
       // Special handling for demo salesperson account - auto-create/fix
       const DEMO_SALES_EMAIL = 'demo@sales.com';
       const DEMO_SALES_CODE = '123456';
-      
+
       if (normalizedEmail === DEMO_SALES_EMAIL && normalizedCode === DEMO_SALES_CODE) {
         let salesperson = await storage.getSalespersonByEmail(DEMO_SALES_EMAIL);
-        
+
         if (!salesperson) {
           // Create demo salesperson if it doesn't exist
           salesperson = await storage.createSalesperson({
@@ -9179,10 +9183,10 @@ export async function registerRoutes(
           salesperson = await storage.updateSalesperson(salesperson.id, { role: "both" }) || salesperson;
           console.log('[SALES] Demo salesperson role upgraded to both for portal testing');
         }
-        
+
         (req.session as any).salespersonId = salesperson.id;
-        return res.json({ 
-          success: true, 
+        return res.json({
+          success: true,
           salesperson: {
             id: salesperson.id,
             name: salesperson.name,
@@ -9191,8 +9195,20 @@ export async function registerRoutes(
         });
       }
 
-      const salesperson = await storage.getSalespersonByEmailAndCode(normalizedEmail, normalizedCode);
-      
+      // Path 1: exact email + login_code match (works when password_hash is NULL or set).
+      // Never compares the code against password_hash.
+      let salesperson = await storage.getSalespersonByEmailAndCode(normalizedEmail, normalizedCode);
+
+      // Path 2: bcrypt password login only when a bcrypt password_hash exists.
+      if (!salesperson) {
+        const { isBcryptPasswordHash } = await import("./portalPasswordReset");
+        const byEmail = await storage.getSalespersonByEmail(normalizedEmail);
+        if (isBcryptPasswordHash(byEmail?.passwordHash)) {
+          const ok = await bcrypt.compare(credential, byEmail!.passwordHash!);
+          if (ok) salesperson = byEmail;
+        }
+      }
+
       if (!salesperson) {
         return res.status(401).json({ error: "Invalid email or login code" });
       }
@@ -9202,8 +9218,8 @@ export async function registerRoutes(
       }
 
       (req.session as any).salespersonId = salesperson.id;
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         salesperson: {
           id: salesperson.id,
           name: salesperson.name,

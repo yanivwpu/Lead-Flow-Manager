@@ -135,6 +135,66 @@ export async function sendPasswordResetEmail(email: string, resetToken: string):
   });
 }
 
+export async function sendPartnerPortalPasswordResetEmail(
+  email: string,
+  resetToken: string,
+): Promise<boolean> {
+  const resetUrl = `${APP_URL}/partner-portal/reset-password?token=${encodeURIComponent(resetToken)}`;
+  const body = [
+    emailParagraph(
+      "We received a request to reset your WhachatCRM Partner Portal password.",
+    ),
+    emailParagraph(
+      "Use the secure link below to choose a new password. This link will expire in 60 minutes.",
+    ),
+    emailButton(resetUrl, "Reset password"),
+    emailParagraph("If you did not request this change, you can ignore this email."),
+    emailParagraph("Having trouble with the button? Copy and paste this link into your browser:"),
+    emailInfoBox(
+      `<span style="font-family: monospace; font-size: 12px; color: #64748b; word-break: break-all;">${escapeHtml(resetUrl)}</span>`,
+    ),
+  ].join("");
+
+  return sendEmail({
+    to: email,
+    subject: "Reset your WhachatCRM Partner Portal password",
+    html: renderBrandedEmail({
+      title: "Reset your Partner Portal password",
+      bodyHtml: body,
+    }),
+  });
+}
+
+export async function sendSalesPortalPasswordResetEmail(
+  email: string,
+  resetToken: string,
+): Promise<boolean> {
+  const resetUrl = `${APP_URL}/sales-portal/reset-password?token=${encodeURIComponent(resetToken)}`;
+  const body = [
+    emailParagraph(
+      "We received a request to reset your WhachatCRM Sales Portal password.",
+    ),
+    emailParagraph(
+      "Use the secure link below to choose a new password. This link will expire in 60 minutes.",
+    ),
+    emailButton(resetUrl, "Reset password"),
+    emailParagraph("If you did not request this change, you can ignore this email."),
+    emailParagraph("Having trouble with the button? Copy and paste this link into your browser:"),
+    emailInfoBox(
+      `<span style="font-family: monospace; font-size: 12px; color: #64748b; word-break: break-all;">${escapeHtml(resetUrl)}</span>`,
+    ),
+  ].join("");
+
+  return sendEmail({
+    to: email,
+    subject: "Reset your WhachatCRM Sales Portal password",
+    html: renderBrandedEmail({
+      title: "Reset your Sales Portal password",
+      bodyHtml: body,
+    }),
+  });
+}
+
 export async function sendContactFormEmail(
   name: string,
   email: string,

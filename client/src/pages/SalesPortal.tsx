@@ -1,4 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -527,15 +528,14 @@ export function SalesPortal() {
             </div>
 
             <div>
-              <Label htmlFor="loginCode">Login Code (6 digits)</Label>
+              <Label htmlFor="loginCode">Password or login code</Label>
               <div className="relative">
                 <Input
                   id="loginCode"
                   type={showCode ? "text" : "password"}
                   value={loginCode}
                   onChange={(e) => setLoginCode(e.target.value)}
-                  placeholder="123456"
-                  maxLength={6}
+                  placeholder="Your password or 6-digit code"
                   required
                   className="pr-10"
                   data-testid="input-portal-code"
@@ -552,6 +552,15 @@ export function SalesPortal() {
                   )}
                 </button>
               </div>
+              <p className="mt-1.5 text-right text-sm">
+                <Link
+                  href="/sales-portal/forgot-password"
+                  className="text-brand-green hover:underline"
+                  data-testid="link-sales-forgot-password"
+                >
+                  Forgot password?
+                </Link>
+              </p>
             </div>
 
             <Button 

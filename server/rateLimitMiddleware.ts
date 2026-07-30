@@ -48,6 +48,16 @@ const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 export const RATE_LIMIT_RULES: RateLimitRule[] = [
   { id: "auth", match: (path) => path.startsWith("/api/auth"), limit: 30, windowMs: 15 * 60 * 1000 },
   {
+    id: "portal-password-reset",
+    match: (path) =>
+      path === "/api/partner-portal/forgot-password" ||
+      path === "/api/partner-portal/reset-password" ||
+      path === "/api/sales-portal/forgot-password" ||
+      path === "/api/sales-portal/reset-password",
+    limit: 20,
+    windowMs: 15 * 60 * 1000,
+  },
+  {
     id: "public-contact",
     match: (path) => path === "/api/contact",
     limit: 30,
