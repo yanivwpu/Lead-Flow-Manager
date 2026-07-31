@@ -182,6 +182,7 @@ function reviewUxInput(row: ProspectIntelligenceListItem) {
     enrichmentTriggeredBy: row.intelligence.enrichmentTriggeredBy,
     approvedAt: row.intelligence.approvedAt,
     approvedByUserId: row.intelligence.approvedByUserId,
+    qualificationSource: row.intelligence.qualificationSource,
     outreachStatus: row.intelligence.outreachStatus,
     outreachSentAt: row.intelligence.outreachSentAt,
     repliedAt: row.intelligence.repliedAt,
@@ -195,6 +196,8 @@ function reviewUxInput(row: ProspectIntelligenceListItem) {
     enrichmentEmailFound: row.intelligence.enrichmentEmailFound,
     enrichmentErrorMessage: row.intelligence.enrichmentErrorMessage,
     enrichmentResult: (row.intelligence.enrichmentResult || null) as Record<string, unknown> | null,
+    suggestedFirstMessage: row.intelligence.suggestedFirstMessage,
+    suggestedOutreachSubject: row.intelligence.suggestedOutreachSubject,
     /** Existing supported state — no schema change. */
     notQualified: offer === "not_a_fit",
     /** Same server prior-outreach truth as Send preview. */
@@ -329,13 +332,15 @@ function NeedsReviewReasonBadge({
   detail?: string | null;
 }) {
   const tone =
-    badge.code === "enriching" || badge.code === "analyzing"
-      ? "border-sky-200 bg-sky-50 text-sky-800"
-      : badge.code === "ai_review_failed" || badge.code === "enrichment_failed"
-        ? "border-rose-200 bg-rose-50 text-rose-800"
-        : badge.code === "not_qualified"
-          ? "border-gray-200 bg-gray-50 text-gray-600"
-          : "border-amber-200 bg-amber-50 text-amber-900";
+    badge.code === "qualified"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      : badge.code === "enriching" || badge.code === "analyzing"
+        ? "border-sky-200 bg-sky-50 text-sky-800"
+        : badge.code === "ai_review_failed" || badge.code === "enrichment_failed"
+          ? "border-rose-200 bg-rose-50 text-rose-800"
+          : badge.code === "not_qualified"
+            ? "border-gray-200 bg-gray-50 text-gray-600"
+            : "border-amber-200 bg-amber-50 text-amber-900";
   const title = detail ? `${badge.label}: ${detail}` : badge.label;
   return (
     <span className="mt-1 inline-flex max-w-full flex-col gap-0.5" title={title}>
@@ -1574,9 +1579,12 @@ function ProspectIntelligenceDetailDialog({
               {detailEnrichExplain.message}
             </p>
           ) : null}
-          {!detailQualifiedExplain?.ok && detailIsDecisionQualified === false ? (
+          {!detailQualifiedExplain?.ok ? (
             <p className="basis-full text-xs text-gray-500" data-testid="pi-campaign-blocked-reason">
-              {detailQualifiedExplain?.message || "Mark as Qualified to send campaigns."}
+              {detailQualifiedExplain?.message ||
+                (detailIsDecisionQualified
+                  ? "Campaign send is blocked for this prospect."
+                  : "Resolve Needs Review or mark Qualified to send.")}
             </p>
           ) : null}
           {approveUi.showSendOutreach ? (
@@ -1622,7 +1630,7 @@ export function ProspectIntelligencePanel(props: {
 
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [businessFilter, setBusinessFilter] = useState<string>("all");
-  const [workFilter, setWorkFilter] = useState<ProspectReviewWorkFilter>("needs_review");
+  const [workFilter, setWorkFilter] = useState<ProspectReviewWorkFilter>("all");
   const [channelFilter, setChannelFilter] = useState<string>("all");
   const [batchFilter, setBatchFilter] = useState<string>(urlBatchKey);
   /** Work-queue default: actionable / newest first. Stable merge preserves mid-action order. */
@@ -2054,16 +2062,10 @@ export function ProspectIntelligencePanel(props: {
         unavailable += 1;
       }
       if (qualEx.ok) qualified += 1;
-      if (qualEx.code === "missing_email") missingEmail += 1;
-      if (ux.notQualified === true) notQualified += 1;
-      else if (!qualEx.ok && !enrichEx.ok) {
-        /* counted in unavailable / needs review below */
-      }
-      if (
-        ux.notQualified !== true &&
-        !qualEx.ok &&
-        matchesProspectReviewWorkFilter(ux, "needs_review")
-      ) {
+      if (isProspectDecisionQualified(ux) && qualEx.code === "missing_email") missingEmail += 1;
+      else if (!qualEx.ok && qualEx.code === "missing_email") missingEmail += 1;
+      if (ux.notQualified === true && !isProspectDecisionQualified(ux)) notQualified += 1;
+      if (matchesProspectReviewWorkFilter(ux, "needs_review")) {
         needsReview += 1;
       }
     }
@@ -2087,6 +2089,7 @@ export function ProspectIntelligencePanel(props: {
       qualifiedCount: qualified,
       notQualifiedCount: notQualified,
       needsReviewCount: needsReview,
+      missingEmailCount: missingEmail,
     });
     return {
       canEnrich,

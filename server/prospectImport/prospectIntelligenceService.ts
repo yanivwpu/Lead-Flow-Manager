@@ -56,6 +56,12 @@ import {
 } from "./prospectIntelligenceEligibility";
 import { resolveProspectWebsiteUrl } from "./prospectWebsiteUrl";
 import { assertContactInWorkspace } from "./prospectWorkspaceScope";
+import {
+  buildQualificationSourcePatch,
+  hasHumanQualificationLock,
+  readProspectQualificationSource,
+  shouldAutoQualifyFromAiResult,
+} from "@shared/prospectAutoQualify";
 
 const runningBatchJobs = new Set<string>();
 const runningContactAnalysis = new Set<string>();
@@ -95,6 +101,10 @@ function mapIntelligenceRow(row: ProspectIntelligenceRow): ProspectIntelligence 
     reviewStatus: (row.reviewStatus as ProspectIntelligence["reviewStatus"]) ?? undefined,
     approvedAt: row.approvedAt?.toISOString(),
     approvedByUserId: row.approvedByUserId ?? undefined,
+    qualificationSource:
+      readProspectQualificationSource(
+        (row.rawResult as Record<string, unknown> | null | undefined) || null,
+      ) ?? undefined,
     outreachStatus: (row.outreachStatus as ProspectIntelligence["outreachStatus"]) ?? undefined,
     outreachSentAt: row.outreachSentAt?.toISOString(),
     outreachConversationId: row.outreachConversationId ?? undefined,
@@ -707,44 +717,127 @@ export async function analyzeProspectContact(params: {
         .where(eq(prospectIntelligence.contactId, params.contactId))
         .limit(1);
       const existing = existingRows[0];
+      const existingRaw =
+        existing?.rawResult && typeof existing.rawResult === "object"
+          ? (existing.rawResult as Record<string, unknown>)
+          : {};
+      const humanLocked = existing
+        ? hasHumanQualificationLock({
+            approvedByUserId: existing.approvedByUserId,
+            reviewStatus: existing.reviewStatus,
+            recommendedOffer: existing.recommendedOffer,
+            enrichmentTriggeredBy: existing.enrichmentTriggeredBy,
+            rawResult: existingRaw,
+          })
+        : false;
+
+      let rawResult: Record<string, unknown> = {
+        ...(intel as unknown as Record<string, unknown>),
+      };
       const patch = toDbPatch(intel, {
         importJobId,
         promptTokens,
         completionTokens,
-        rawResult: intel as unknown as Record<string, unknown>,
+        rawResult,
         errorMessage: null,
       });
-      // Never silently reset an explicit human/legacy qualification decision.
-      if (existing) {
+
+      // Manual decisions always override later AI reanalysis.
+      if (existing && humanLocked) {
         const existingOffer = String(existing.recommendedOffer || "").toLowerCase();
-        const hadApproval =
-          String(existing.reviewStatus || "").toLowerCase() === "approved" ||
-          String(existing.reviewStatus || "").toLowerCase() === "qualified" ||
-          Boolean(existing.approvedAt) ||
-          Boolean(existing.approvedByUserId) ||
-          String(existing.enrichmentTriggeredBy || "").toLowerCase() === "approve";
-        if (existingOffer === "not_a_fit" && !hadApproval) {
+        const src = readProspectQualificationSource(existingRaw);
+        if (src === "manual_not_qualified" || existingOffer === "not_a_fit") {
           patch.recommendedOffer = "not_a_fit";
           patch.needsReview = false;
-        } else if (hadApproval) {
-          patch.reviewStatus = "approved";
-          patch.needsReview = false;
-          // Never let post-enrich AI rewrite a human/legacy Approve into not_a_fit.
+          patch.reviewStatus = existing.reviewStatus || "pending";
+          patch.approvedAt = null;
+          patch.approvedByUserId = null;
+          rawResult = buildQualificationSourcePatch("manual_not_qualified", {
+            ...rawResult,
+            ...existingRaw,
+          });
+        } else if (src === "manual_needs_review" || String(existing.reviewStatus).toLowerCase() === "needs_review") {
+          patch.reviewStatus = "needs_review";
+          patch.needsReview = true;
+          patch.approvedAt = null;
+          patch.approvedByUserId = null;
           if (String(patch.recommendedOffer || "").toLowerCase() === "not_a_fit") {
             patch.recommendedOffer =
               existingOffer && existingOffer !== "not_a_fit"
                 ? existing.recommendedOffer
                 : "general_demo";
           }
+          rawResult = buildQualificationSourcePatch("manual_needs_review", {
+            ...rawResult,
+            ...existingRaw,
+          });
+        } else {
+          // Manual Qualified
+          patch.reviewStatus = "approved";
+          patch.needsReview = false;
+          patch.approvedAt = existing.approvedAt ?? new Date();
+          patch.approvedByUserId = existing.approvedByUserId;
+          if (String(patch.recommendedOffer || "").toLowerCase() === "not_a_fit") {
+            patch.recommendedOffer =
+              existingOffer && existingOffer !== "not_a_fit"
+                ? existing.recommendedOffer
+                : "general_demo";
+          }
+          rawResult = buildQualificationSourcePatch("manual", {
+            ...rawResult,
+            ...existingRaw,
+          });
+        }
+        patch.rawResult = rawResult;
+      } else {
+        // Auto-qualify immediately after successful AI Review (not enrichment/outreach).
+        const websiteUrl = resolveProspectWebsiteUrl(contact) || undefined;
+        const autoOk = shouldAutoQualifyFromAiResult({
+          analysisStatus: intel.analysisStatus,
+          needsReview: intel.needsReview,
+          priority: intel.priority,
+          recommendedOffer: intel.recommendedOffer,
+          potentialFit: intel.potentialFit,
+          confidence: intel.confidence,
+          name: contact.name,
+          company: intel.companyName,
+          companyName: intel.companyName,
+          businessType: intel.businessType,
+          industry: intel.industry,
+          websiteUrl,
+        });
+        if (autoOk) {
+          patch.reviewStatus = "approved";
+          patch.needsReview = false;
+          patch.approvedAt = new Date();
+          // System decision — no user id.
+          patch.approvedByUserId = null;
+          rawResult = buildQualificationSourcePatch("auto_ai", rawResult);
+          patch.rawResult = rawResult;
+        } else if (String(intel.recommendedOffer || "").toLowerCase() === "not_a_fit") {
+          patch.reviewStatus = "pending";
+          patch.needsReview = false;
+          patch.approvedAt = null;
+          patch.approvedByUserId = null;
+          rawResult = buildQualificationSourcePatch("auto_ai_reject", rawResult);
+          patch.rawResult = rawResult;
+        } else {
+          // Genuine exception → Needs Review
+          patch.reviewStatus = "needs_review";
+          patch.needsReview = true;
+          patch.approvedAt = null;
+          patch.approvedByUserId = null;
+          patch.rawResult = rawResult;
         }
       }
+
       await db
         .update(prospectIntelligence)
         .set(patch)
         .where(eq(prospectIntelligence.contactId, params.contactId));
 
-      await syncContactIntelligence(contact, { ...intel, reviewStatus: patch.reviewStatus as ProspectIntelligence["reviewStatus"], needsReview: patch.needsReview, recommendedOffer: patch.recommendedOffer ?? intel.recommendedOffer }, importJobId);
-      return { ...intel, reviewStatus: patch.reviewStatus as ProspectIntelligence["reviewStatus"], needsReview: patch.needsReview, recommendedOffer: (patch.recommendedOffer as ProspectIntelligence["recommendedOffer"]) ?? intel.recommendedOffer };
+      await syncContactIntelligence(contact, { ...intel, reviewStatus: patch.reviewStatus as ProspectIntelligence["reviewStatus"], needsReview: patch.needsReview, recommendedOffer: patch.recommendedOffer ?? intel.recommendedOffer, approvedAt: patch.approvedAt instanceof Date ? patch.approvedAt.toISOString() : intel.approvedAt, qualificationSource: readProspectQualificationSource((patch.rawResult as Record<string, unknown>) || null) }, importJobId);
+      return { ...intel, reviewStatus: patch.reviewStatus as ProspectIntelligence["reviewStatus"], needsReview: patch.needsReview, recommendedOffer: (patch.recommendedOffer as ProspectIntelligence["recommendedOffer"]) ?? intel.recommendedOffer, approvedAt: patch.approvedAt instanceof Date ? patch.approvedAt.toISOString() : intel.approvedAt, qualificationSource: readProspectQualificationSource((patch.rawResult as Record<string, unknown>) || null) };
     } finally {
       runningContactAnalysis.delete(params.contactId);
     }
@@ -1521,6 +1614,10 @@ export async function setProspectQualificationDecision(
   const currentOffer = String(rows[0].recommendedOffer || "").trim();
   const clearNotAFit = currentOffer.toLowerCase() === "not_a_fit";
   const dbPatch: Partial<typeof prospectIntelligence.$inferInsert> = { updatedAt: new Date() };
+  const existingRaw =
+    rows[0].rawResult && typeof rows[0].rawResult === "object"
+      ? (rows[0].rawResult as Record<string, unknown>)
+      : {};
 
   if (decision === "qualified") {
     dbPatch.reviewStatus = "approved";
@@ -1528,6 +1625,7 @@ export async function setProspectQualificationDecision(
     dbPatch.approvedAt = new Date();
     if (opts?.userId) dbPatch.approvedByUserId = opts.userId;
     if (clearNotAFit) dbPatch.recommendedOffer = "general_demo";
+    dbPatch.rawResult = buildQualificationSourcePatch("manual", existingRaw);
   } else if (decision === "needs_review") {
     dbPatch.reviewStatus = "needs_review";
     dbPatch.needsReview = true;
@@ -1536,6 +1634,7 @@ export async function setProspectQualificationDecision(
     // Needs Review supersedes prior approval evidence for filter purposes.
     dbPatch.approvedAt = null;
     dbPatch.approvedByUserId = null;
+    dbPatch.rawResult = buildQualificationSourcePatch("manual_needs_review", existingRaw);
   } else {
     // Latest human rejection — clear approval evidence so AI not_a_fit alone isn't confused
     // with an older Approve that was later overridden.
@@ -1544,6 +1643,7 @@ export async function setProspectQualificationDecision(
     dbPatch.reviewStatus = "pending";
     dbPatch.approvedAt = null;
     dbPatch.approvedByUserId = null;
+    dbPatch.rawResult = buildQualificationSourcePatch("manual_not_qualified", existingRaw);
   }
 
   await db

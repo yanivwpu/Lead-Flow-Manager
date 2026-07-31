@@ -406,7 +406,7 @@ export function prospectReviewWorkEmptyMessage(
     case "needs_review":
       return "No prospects need review.";
     case "qualified":
-      return "No qualified prospects ready for Campaigns.";
+      return "No qualified prospects in this view.";
     case "not_qualified":
       return "No not-qualified prospects.";
     case "enriching":

@@ -39,6 +39,7 @@ const root = join(import.meta.dirname, "..");
     notQualified: false,
     reviewStatus: "approved" as const,
     enrichmentStatus: "none" as const,
+    suggestedFirstMessage: "Hi there,",
   };
   assert.equal(isProspectDecisionQualified(afterManualQualify), true);
   assert.equal(matchesProspectReviewWorkFilter(afterManualQualify, "qualified"), true);
@@ -57,6 +58,7 @@ const root = join(import.meta.dirname, "..");
       reviewStatus: "approved" as const,
       enrichmentStatus: "none" as const,
       email: "a@b.com",
+      suggestedFirstMessage: "Hi there,",
     },
     {
       analysisStatus: "completed" as const,
@@ -83,6 +85,7 @@ const root = join(import.meta.dirname, "..");
     reviewStatus: "approved" as const,
     enrichmentStatus: "none" as const,
     email: "manual@broker.com",
+    suggestedFirstMessage: "Hi there,",
     websiteUrl: "https://broker.example",
   };
   assert.equal(explainQualifiedForCampaign(ux).ok, true);
@@ -127,6 +130,7 @@ const root = join(import.meta.dirname, "..");
     enrichmentStatus: "none" as const,
     notQualified: true as const,
     email: "x@y.com",
+    suggestedFirstMessage: "Hi there,",
   };
   assert.equal(resolveProspectReviewWorkState(pendingNotFit), "not_qualified");
   const manual = {
@@ -142,6 +146,7 @@ const root = join(import.meta.dirname, "..");
       reviewStatus: "approved",
       enrichmentStatus: "none",
       email: "x@y.com",
+      suggestedFirstMessage: "Hi there,",
     }),
     "Email Added",
   );
@@ -151,6 +156,7 @@ const root = join(import.meta.dirname, "..");
       reviewStatus: "approved",
       enrichmentStatus: "none",
       email: "x@y.com",
+      suggestedFirstMessage: "Hi there,",
     }).code,
     "email_added",
   );
@@ -179,6 +185,7 @@ const root = join(import.meta.dirname, "..");
       enrichmentStatus: "completed",
       enrichmentEmailFound: true,
       email: "a@b.com",
+      suggestedFirstMessage: "Hi there,",
       websiteUrl: "https://example.com",
       websiteUrlUsed: "https://example.com",
     }),
@@ -190,6 +197,7 @@ const root = join(import.meta.dirname, "..");
       reviewStatus: "approved",
       enrichmentStatus: "none",
       email: "manual@only.com",
+      suggestedFirstMessage: "Hi there,",
     }),
     "Email Added",
   );
@@ -206,8 +214,8 @@ const root = join(import.meta.dirname, "..");
     websiteUrl: "https://shop.example.com",
   };
   assert.equal(explainQualifiedForCampaign(ux).ok, false);
-  assert.equal(explainQualifiedForCampaign(ux).code, "not_approved");
-  assert.match(explainQualifiedForCampaign(ux).message, /Mark as Qualified/i);
+  assert.equal(explainQualifiedForCampaign(ux).code, "needs_review");
+  assert.match(explainQualifiedForCampaign(ux).message, /Needs review/i);
 }
 
 // Panel wires manual qualification controls (no AI re-run / quota on click)

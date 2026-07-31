@@ -40,7 +40,7 @@ assert.equal(PROSPECT_AI_TAB_LABELS.activity, "Activity");
 
 assert.deepEqual(
   PROSPECT_REVIEW_WORK_FILTER_CHIPS.map((c) => c.label),
-  ["All", "Needs Review", "Qualified", "Not Qualified"],
+  ["All", "Needs Review", "Not Qualified"],
 );
 
 // Needs Review → can Enrich
@@ -100,6 +100,7 @@ assert.equal(
     reviewStatus: "approved",
     enrichmentStatus: "completed",
     email: "a@b.com",
+    suggestedFirstMessage: "Hi there,",
     websiteUrl: "https://example.com",
   }),
   true,
@@ -112,6 +113,7 @@ assert.equal(
     reviewStatus: "approved",
     enrichmentStatus: "none",
     email: "a@b.com",
+    suggestedFirstMessage: "Hi there,",
   }),
   true,
 );
@@ -155,6 +157,7 @@ assert.equal(
     enrichmentStatus: "completed",
     queueStatus: "queued",
     email: "a@b.com",
+    suggestedFirstMessage: "Hi there,",
   }),
   false,
 );
@@ -218,6 +221,7 @@ assert.equal(
       reviewStatus: "approved",
       enrichmentStatus: "completed",
       email: "a@b.com",
+      suggestedFirstMessage: "Hi there,",
       websiteUrl: "https://example.com",
     },
     "qualified",
@@ -233,6 +237,7 @@ assert.equal(
     enrichmentStatus: "enriching" as const,
     websiteUrl: "https://example.com",
     email: "a@b.com",
+    suggestedFirstMessage: "Hi there,",
   };
   const attentionRow = {
     analysisStatus: "failed" as const,
@@ -243,6 +248,7 @@ assert.equal(
     reviewStatus: "pending" as const,
     enrichmentStatus: "none" as const,
     email: "a@b.com",
+    suggestedFirstMessage: "Hi there,",
     websiteUrl: "https://example.com",
   };
   const readyRow = {
@@ -250,6 +256,7 @@ assert.equal(
     reviewStatus: "approved" as const,
     enrichmentStatus: "completed" as const,
     email: "a@b.com",
+    suggestedFirstMessage: "Hi there,",
     websiteUrl: "https://example.com",
   };
   const rejectedRow = {
@@ -269,8 +276,11 @@ assert.equal(
   assert.equal(matchesProspectReviewWorkFilter(rejectedRow, "qualified"), false);
   assert.equal(matchesProspectReviewWorkFilter(readyRow, "qualified"), true);
 
-  // Approved + enriching + email is campaign-ready — no Needs Review badge
-  assert.equal(resolveProspectNeedsReviewBadge(enrichingRow), null);
+  // Approved + enriching + email is Qualified (enrichment is separate from status badge)
+  assert.deepEqual(resolveProspectNeedsReviewBadge(enrichingRow), {
+    code: "qualified",
+    label: "Qualified",
+  });
   assert.equal(resolveProspectReviewWorkState(enrichingRow), "enriching");
   assert.equal(resolveProspectNeedsReviewBadge(attentionRow)?.label, "AI Review Failed");
   assert.equal(
@@ -280,7 +290,7 @@ assert.equal(
       enrichmentStatus: "failed",
       websiteUrl: "https://example.com",
     })?.label,
-    "Website lookup failed",
+    "Missing Email",
   );
   assert.equal(
     resolveProspectNeedsReviewBadge({
@@ -291,8 +301,11 @@ assert.equal(
     })?.label,
     "Missing Email",
   );
-  assert.equal(resolveProspectNeedsReviewBadge(readyRow), null);
-  assert.equal(resolveProspectNeedsReviewBadge(rejectedRow), null);
+  assert.deepEqual(resolveProspectNeedsReviewBadge(readyRow), {
+    code: "qualified",
+    label: "Qualified",
+  });
+  assert.deepEqual(resolveProspectNeedsReviewBadge(rejectedRow), { code: "not_qualified", label: "Not Qualified" });
   assert.equal(
     resolveProspectNeedsReviewBadge({
       analysisStatus: "completed",
@@ -344,7 +357,7 @@ assert.equal(
   });
   // needsReview without Qualified decision blocks campaign send
   assert.equal(blocked.ok, false);
-  assert.equal(blocked.code, "not_approved");
+  assert.equal(blocked.code, "needs_review");
   assert.equal(
     needsHumanReview({
       analysisStatus: "completed",
@@ -365,6 +378,7 @@ assert.equal(
     needsReview: true,
     enrichmentStatus: "completed",
     email: "sales@example.com",
+    suggestedFirstMessage: "Hi there,",
     websiteUrl: "https://example.com",
   });
   assert.equal(ok, true);
@@ -375,6 +389,7 @@ assert.equal(
       needsReview: true,
       enrichmentStatus: "completed",
       email: "sales@example.com",
+      suggestedFirstMessage: "Hi there,",
       websiteUrl: "https://example.com",
     }),
     [],
@@ -390,7 +405,7 @@ assert.equal(
   });
   assert.equal(noEmail.ok, false);
   assert.equal(noEmail.code, "missing_email");
-  assert.match(noEmail.message, /Missing email/i);
+  assert.match(noEmail.message, /Email required|Missing email/i);
 }
 
 {
@@ -413,6 +428,7 @@ assert.equal(
     reviewStatus: "approved",
     enrichmentStatus: "completed",
     email: "a@b.com",
+    suggestedFirstMessage: "Hi there,",
     notQualified: true,
   });
   assert.equal(approvedWins.ok, true);
@@ -423,6 +439,7 @@ assert.equal(
     analysisStatus: "failed",
     reviewStatus: "pending",
     email: "a@b.com",
+    suggestedFirstMessage: "Hi there,",
   });
   assert.equal(qualFailed.ok, false);
   assert.equal(qualFailed.code, "qualification_failed");
@@ -435,6 +452,7 @@ assert.equal(
     reviewStatus: "approved",
     enrichmentStatus: "failed",
     email: "a@b.com",
+    suggestedFirstMessage: "Hi there,",
     websiteUrl: "https://example.com",
   });
   assert.equal(enrichFailWithEmail.ok, true);
@@ -534,6 +552,7 @@ assert.equal(
       enrichmentStatus: "pending",
       websiteUrl: "https://example.com",
       email: "a@b.com",
+      suggestedFirstMessage: "Hi there,",
     }),
     "enriching",
   );
@@ -553,7 +572,7 @@ assert.equal(
   const qualified = explainQualifiedForCampaign(ux);
   assert.equal(enrich.ok, true);
   assert.equal(qualified.ok, false);
-  assert.equal(qualified.code, "not_approved");
+  assert.equal(qualified.code, "needs_review");
   const avail = summarizeSelectionActionAvailability({
     selectedCount: 1,
     enrichableCount: 1,
@@ -561,7 +580,7 @@ assert.equal(
     firstEnrich: enrich,
     firstQualified: qualified,
   });
-  assert.match(avail.reason || "", /Mark as Qualified to send campaigns/i);
+  assert.match(avail.reason || "", /Needs review/i);
   assert.equal(avail.line, "1 selected");
 
   const blockedUx = {
@@ -591,6 +610,7 @@ assert.equal(
     reviewStatus: "approved",
     enrichmentStatus: "completed",
     email: "a@b.com",
+    suggestedFirstMessage: "Hi there,",
     websiteUrl: "https://example.com",
   });
   assert.equal(already.ok, false);
@@ -611,7 +631,7 @@ assert.equal(
         websiteUrl: "https://example.com",
       },
       expectOk: false,
-      code: "not_approved",
+      code: "needs_review",
     },
     {
       name: "enriched + email + Qualified decision",
@@ -620,6 +640,7 @@ assert.equal(
         reviewStatus: "approved",
         enrichmentStatus: "completed",
         email: "a@b.com",
+        suggestedFirstMessage: "Hi there,",
         websiteUrl: "https://example.com",
       },
       expectOk: true,
@@ -631,6 +652,7 @@ assert.equal(
         reviewStatus: "approved",
         enrichmentStatus: "none",
         email: "a@b.com",
+        suggestedFirstMessage: "Hi there,",
         websiteUrl: "https://example.com",
       },
       expectOk: true,
@@ -653,6 +675,7 @@ assert.equal(
         reviewStatus: "pending",
         enrichmentStatus: "completed",
         email: "a@b.com",
+        suggestedFirstMessage: "Hi there,",
         notQualified: true,
       },
       expectOk: false,
@@ -665,6 +688,7 @@ assert.equal(
         reviewStatus: "approved",
         enrichmentStatus: "completed",
         email: "a@b.com",
+        suggestedFirstMessage: "Hi there,",
         notQualified: true,
       },
       expectOk: true,
@@ -687,6 +711,7 @@ assert.equal(
         reviewStatus: "approved",
         enrichmentStatus: "pending",
         email: "a@b.com",
+        suggestedFirstMessage: "Hi there,",
         websiteUrl: "https://example.com",
       },
       expectOk: true,
@@ -698,6 +723,7 @@ assert.equal(
         reviewStatus: "approved",
         enrichmentStatus: "completed",
         email: "a@b.com",
+        suggestedFirstMessage: "Hi there,",
         websiteUrl: "https://example.com",
         outreachStatus: "outreach_sent",
         outreachSentAt: "2026-01-01",
@@ -713,6 +739,7 @@ assert.equal(
         reviewStatus: "approved",
         enrichmentStatus: "completed",
         email: "a@b.com",
+        suggestedFirstMessage: "Hi there,",
         websiteUrl: "https://example.com",
         priorOutreachDetected: true,
       },
@@ -726,6 +753,7 @@ assert.equal(
         reviewStatus: "approved",
         enrichmentStatus: "completed",
         email: "a@b.com",
+        suggestedFirstMessage: "Hi there,",
         websiteUrl: "https://example.com",
         outreachStatus: "outreach_sent",
         outreachSentAt: "2026-01-01",
@@ -755,6 +783,7 @@ assert.equal(
     needsReview: true,
     enrichmentStatus: "completed" as const,
     email: "ready@example.com",
+    suggestedFirstMessage: "Hi there,",
     websiteUrl: "https://shop.example.com",
   };
   assert.equal(isQualifiedForEmailCampaign(advisoryQualified), true);

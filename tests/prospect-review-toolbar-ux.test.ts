@@ -92,7 +92,7 @@ const panelSrc = readFileSync(
     needsReviewCount: 2,
   });
   assert.equal(campaignSummary.headline, "20 selected");
-  assert.match(campaignSummary.detail || "", /11 ready for campaign/);
+  assert.match(campaignSummary.detail || "", /11 ready for Campaign/i);
   assert.match(campaignSummary.detail || "", /7 not qualified/);
   assert.match(campaignSummary.detail || "", /2 need review/);
 
@@ -108,16 +108,19 @@ const panelSrc = readFileSync(
 }
 
 {
-  // summarizeSelectionActionAvailability stays human-readable
+  // summarizeSelectionActionAvailability prefers campaign eligibility when present
   const avail = summarizeSelectionActionAvailability({
     selectedCount: 20,
     enrichableCount: 4,
     qualifiedCount: 11,
     alreadyEnrichedCount: 11,
     unavailableCount: 5,
+    needsReviewCount: 2,
+    notQualifiedCount: 7,
   });
   assert.equal(avail.line, "20 selected");
-  assert.match(avail.detail || "", /4 can be enriched/);
+  assert.match(avail.detail || "", /11 ready for Campaign/i);
+  assert.match(avail.detail || "", /2 need review/);
   assert.equal(avail.reason, null);
 }
 

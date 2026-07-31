@@ -29,7 +29,7 @@ export const PROSPECT_AI_PRIMARY_TABS = [
 /** One short subtitle per top-level page. */
 export const PROSPECT_AI_PAGE_SUBTITLES: Record<ProspectAiTabId, string> = {
   discover: "Find new businesses to grow your pipeline.",
-  review: "Select prospects to enrich, then send qualified ones to Campaigns.",
+  review: "AI qualifies fits automatically — review exceptions, then send to Campaigns.",
   campaign: "Control outreach sending and monitor delivery.",
   inbox: "Continue conversations and move successful prospects to Won.",
   activity: "Discoveries, imports, outreach, and wins over time.",
@@ -140,6 +140,7 @@ export function formatProspectReviewSelectionSummary(params: {
   qualifiedCount?: number;
   notQualifiedCount?: number;
   needsReviewCount?: number;
+  missingEmailCount?: number;
 }): { headline: string; detail: string | null } {
   const n = Math.max(0, Math.floor(params.selectedCount));
   if (n <= 0) return { headline: "0 selected", detail: null };
@@ -150,28 +151,26 @@ export function formatProspectReviewSelectionSummary(params: {
   const qualified = Math.max(0, Math.floor(params.qualifiedCount ?? 0));
   const notQualified = Math.max(0, Math.floor(params.notQualifiedCount ?? 0));
   const needsReview = Math.max(0, Math.floor(params.needsReviewCount ?? 0));
+  const missingEmail = Math.max(0, Math.floor(params.missingEmailCount ?? 0));
+
+  const campaignParts: string[] = [];
+  if (qualified > 0) campaignParts.push(`${qualified} ready for Campaign`);
+  if (missingEmail > 0) campaignParts.push(`${missingEmail} missing email`);
+  if (needsReview > 0) campaignParts.push(`${needsReview} need review`);
+  if (notQualified > 0) campaignParts.push(`${notQualified} not qualified`);
 
   const enrichParts: string[] = [];
   if (enrichable > 0 || already > 0 || unavailable > 0) {
-    if (enrichable > 0 || already > 0 || unavailable > 0) {
-      enrichParts.push(`${enrichable} can be enriched`);
-      if (already > 0) enrichParts.push(`${already} already enriched`);
-      if (unavailable > 0) enrichParts.push(`${unavailable} unavailable`);
-    }
+    enrichParts.push(`${enrichable} can be enriched`);
+    if (already > 0) enrichParts.push(`${already} already enriched`);
+    if (unavailable > 0) enrichParts.push(`${unavailable} unavailable`);
   }
 
-  const campaignParts: string[] = [];
-  if (qualified > 0) campaignParts.push(`${qualified} ready for campaign`);
-  if (notQualified > 0) campaignParts.push(`${notQualified} not qualified`);
-  if (needsReview > 0) campaignParts.push(`${needsReview} need review`);
-
-  // Prefer enrichment breakdown when mixed enrichment states; else campaign readiness.
-  const enrichMixed = enrichable + already + unavailable > 0 && enrichable !== n;
-  const detail = enrichMixed
-    ? enrichParts.join(" · ")
-    : campaignParts.length
+  // Prefer campaign eligibility when any campaign-related breakdown exists.
+  const detail =
+    campaignParts.length > 0
       ? campaignParts.join(" · ")
-      : enrichParts.length
+      : enrichParts.length > 0
         ? enrichParts.join(" · ")
         : null;
 

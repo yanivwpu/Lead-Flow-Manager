@@ -336,9 +336,14 @@ export type ProspectIntelligence = {
   aiVersion?: string;
   analysisStatus?: ProspectIntelligenceAnalysisStatus;
   reviewStatus?: ProspectIntelligenceReviewStatus;
-  /** Set when human Approve / manual Qualified decision is recorded. */
+  /** Set when auto or manual Qualified decision is recorded. */
   approvedAt?: string;
   approvedByUserId?: string | null;
+  /**
+   * Decision provenance stored in rawResult (no DB migration):
+   * auto_ai | manual | manual_needs_review | manual_not_qualified | auto_ai_reject
+   */
+  qualificationSource?: string | null;
   /** Separate from AI review — not_sent → outreach_sent → replied. */
   outreachStatus?: ProspectIntelligenceOutreachStatus;
   /** ISO timestamp when native outreach email was successfully sent. */
