@@ -3004,6 +3004,12 @@ export function ProspectIntelligencePanel(props: {
                     <TableCell className={PROSPECT_AI_PROGRESS_COL_CLASS}>
                       <div className="flex min-w-0 flex-col gap-1">
                         {(() => {
+                          const rowDecision: "qualified" | "needs_review" | "not_qualified" =
+                            ux.notQualified === true && !isProspectDecisionQualified(ux)
+                              ? "not_qualified"
+                              : isProspectDecisionQualified(ux)
+                                ? "qualified"
+                                : "needs_review";
                           const progress = resolveProspectProgressState({
                             analysisStatus: intel.analysisStatus,
                             enrichmentStatus: intel.enrichmentStatus,
@@ -3013,6 +3019,9 @@ export function ProspectIntelligencePanel(props: {
                             email: row.email,
                             websiteUrl: row.websiteUrl,
                             priorOutreachDetected: row.priorOutreachDetected,
+                            decision: rowDecision,
+                            notQualified: ux.notQualified === true,
+                            readyForCampaign: explainQualifiedForCampaign(ux).ok,
                           });
                           return (
                             <span

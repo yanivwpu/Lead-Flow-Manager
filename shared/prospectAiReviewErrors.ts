@@ -168,14 +168,22 @@ export function resolveProspectDetailPrimaryStatus(input: {
       testId: "pi-not-qualified-badge",
     };
   }
-  if (input.readyForCampaign === true || input.decision === "qualified") {
-    if (input.readyForCampaign === true) {
-      return {
-        code: "ready_for_campaign",
-        label: "Ready for Campaign",
-        testId: "pi-email-campaign-ready-badge",
-      };
-    }
+  if (input.decision === "needs_review") {
+    return {
+      code: "needs_review",
+      label: "Needs Review",
+      testId: "pi-needs-human-review-badge",
+    };
+  }
+  // Ready for Campaign only when decision is Qualified (never overrides Needs/Not Qualified).
+  if (input.decision === "qualified" && input.readyForCampaign === true) {
+    return {
+      code: "ready_for_campaign",
+      label: "Ready for Campaign",
+      testId: "pi-email-campaign-ready-badge",
+    };
+  }
+  if (input.decision === "qualified") {
     return {
       code: "qualified",
       label: "Qualified",
@@ -218,6 +226,7 @@ export type ProspectProgressStateCode =
   | "queued"
   | "reviewing"
   | "needs_review"
+  | "not_qualified"
   | "ready_to_enrich"
   | "enriching"
   | "enriched"
@@ -229,6 +238,7 @@ export const PROSPECT_PROGRESS_STATE_LABELS: Record<ProspectProgressStateCode, s
   queued: "Queued",
   reviewing: "Reviewing",
   needs_review: "Needs Review",
+  not_qualified: "Not Qualified",
   ready_to_enrich: "Ready to Enrich",
   enriching: "Enriching",
   enriched: "Enriched",
@@ -246,11 +256,18 @@ export function resolveProspectProgressState(input: {
   email?: string | null;
   websiteUrl?: string | null;
   priorOutreachDetected?: boolean | null;
+  /** When set, Ready for Campaign requires a Qualified decision. */
+  decision?: "qualified" | "needs_review" | "not_qualified" | null;
+  /** Prefer shared campaign gate when provided. */
+  readyForCampaign?: boolean | null;
+  notQualified?: boolean | null;
 }): { code: ProspectProgressStateCode; label: string } {
   const analysis = String(input.analysisStatus || "pending").toLowerCase();
   const enrichment = String(input.enrichmentStatus || "none").toLowerCase();
   const queue = String(input.queueStatus || "").toLowerCase();
   const outreach = String(input.outreachStatus || "").toLowerCase();
+  const decision = input.decision || null;
+  const notQualified = input.notQualified === true || decision === "not_qualified";
 
   if (
     input.priorOutreachDetected === true ||
@@ -271,25 +288,38 @@ export function resolveProspectProgressState(input: {
     return { code: "queued", label: PROSPECT_PROGRESS_STATE_LABELS.queued };
   }
 
+  // Qualification outcome beats enrichment/email heuristics.
+  if (notQualified) {
+    return { code: "not_qualified", label: PROSPECT_PROGRESS_STATE_LABELS.not_qualified };
+  }
+  if (decision === "needs_review") {
+    return { code: "needs_review", label: PROSPECT_PROGRESS_STATE_LABELS.needs_review };
+  }
+
   if (enrichment === "pending" || enrichment === "enriching") {
     return { code: "enriching", label: PROSPECT_PROGRESS_STATE_LABELS.enriching };
   }
   if (enrichment === "failed") {
     return { code: "failed", label: PROSPECT_PROGRESS_STATE_LABELS.failed };
   }
+
+  const review = String(input.reviewStatus || "pending").toLowerCase();
+  const isQualifiedDecision =
+    decision === "qualified" || review === "approved" || review === "qualified";
+
+  // Ready for Campaign only when Qualified + campaign-ready (never for Needs/Not Qualified).
+  if (isQualifiedDecision && input.readyForCampaign === true) {
+    return {
+      code: "ready_for_campaign",
+      label: PROSPECT_PROGRESS_STATE_LABELS.ready_for_campaign,
+    };
+  }
+
   if (enrichment === "completed") {
-    const hasEmail = Boolean(String(input.email || "").trim());
-    if (hasEmail) {
-      return {
-        code: "ready_for_campaign",
-        label: PROSPECT_PROGRESS_STATE_LABELS.ready_for_campaign,
-      };
-    }
     return { code: "enriched", label: PROSPECT_PROGRESS_STATE_LABELS.enriched };
   }
 
-  const review = String(input.reviewStatus || "pending").toLowerCase();
-  if (review === "needs_review" || analysis === "needs_review") {
+  if (review === "needs_review" || analysis === "needs_review" || decision === "needs_review") {
     return { code: "needs_review", label: PROSPECT_PROGRESS_STATE_LABELS.needs_review };
   }
 
@@ -298,12 +328,9 @@ export function resolveProspectProgressState(input: {
     return { code: "ready_to_enrich", label: PROSPECT_PROGRESS_STATE_LABELS.ready_to_enrich };
   }
 
-  if (String(input.email || "").trim()) {
-    return {
-      code: "ready_for_campaign",
-      label: PROSPECT_PROGRESS_STATE_LABELS.ready_for_campaign,
-    };
+  if (!isQualifiedDecision) {
+    return { code: "needs_review", label: PROSPECT_PROGRESS_STATE_LABELS.needs_review };
   }
 
-  return { code: "needs_review", label: PROSPECT_PROGRESS_STATE_LABELS.needs_review };
+  return { code: "enriched", label: PROSPECT_PROGRESS_STATE_LABELS.enriched };
 }
