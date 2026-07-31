@@ -199,7 +199,12 @@ export function buildProspectRowAiSummary(input: {
       matchStars: 0,
     };
   }
-  const match = prospectMatchSummary(input.leadScore);
+  const offerRaw = String(input.recommendedOffer || "").trim().toLowerCase();
+  const notAFit = offerRaw === "not_a_fit";
+  // Never show Excellent/Strong Match alongside not_a_fit (safety net for legacy rows).
+  const match = notAFit
+    ? { stars: 1, label: "Not a fit" }
+    : prospectMatchSummary(input.leadScore);
   const offer = String(input.recommendedOffer || "")
     .trim()
     .replace(/_/g, " ");
@@ -212,7 +217,7 @@ export function buildProspectRowAiSummary(input: {
     showSummary: true,
     matchLabel: match.label || "AI Review complete",
     matchStars: match.stars,
-    priority: input.priority ?? null,
+    priority: notAFit ? "low" : input.priority ?? null,
     businessType,
     offerLabel: offer || null,
     // Successful AI Review always shows a summary line — never leave the cell blank.

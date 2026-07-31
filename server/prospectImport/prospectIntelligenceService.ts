@@ -628,7 +628,7 @@ export async function analyzeProspectContact(params: {
           {
             role: "system" as const,
             content:
-              "You are Prospect AI, a growth analyst for the current workspace. Prefer AI Brain business intelligence over Business Profile identity when both exist. Output strict JSON only. Never hallucinate unsupported business facts. Never confuse the prospect's industry with what the sender sells.",
+              "You are Prospect AI, a growth analyst for the current workspace. Prefer AI Brain business intelligence over Business Profile identity when both exist. Output strict JSON only. Never hallucinate unsupported business facts. Fit means ICP/campaign suitability for the workspace offer — not whether the business exists. Never pitch the prospect's industry as the sender's product. A selected discovery business type is intentional targeting for any vertical; do not mark those prospects not_a_fit merely because industries differ or because they lack CRM/automation.",
           },
           {
             role: "user" as const,

@@ -83,6 +83,22 @@ function simulatePollRefresh(params: {
   assert.match(summary.angle || "", /partner fit/i);
 }
 
+// Legacy safety: never show Excellent/Strong Match beside not_a_fit.
+{
+  const summary = buildProspectRowAiSummary({
+    analysisStatus: "completed",
+    leadScore: 91,
+    priority: "high",
+    businessType: "real estate brokerage",
+    recommendedOffer: "not_a_fit",
+    suggestedOutreachAngle: "Skip outreach",
+  });
+  assert.equal(summary.matchLabel, "Not a fit");
+  assert.equal(summary.matchStars, 1);
+  assert.equal(summary.priority, "low");
+  assert.equal(summary.offerLabel, "not a fit");
+}
+
 // Regression: pending row with empty summary → poll returns needs_review data → summary appears
 // without changing stable order / without navigation.
 {

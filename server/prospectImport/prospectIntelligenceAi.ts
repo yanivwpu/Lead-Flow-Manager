@@ -26,7 +26,7 @@ import type { ProspectWorkspaceBusinessContext } from "./prospectAiWorkspaceCont
 export type { ProspectWorkspaceBusinessContext } from "./prospectAiWorkspaceContext";
 
 /** Bump forces re-analysis to rebuild AI Brain–primary context (not Profile About). */
-export const PROSPECT_INTELLIGENCE_AI_VERSION = "v4-ai-brain-primary";
+export const PROSPECT_INTELLIGENCE_AI_VERSION = "v6-generic-icp-prior";
 
 export type ProspectIntelligenceAiInput = {
   name: string;
@@ -254,16 +254,291 @@ export function hasShopifyEvidence(
   return false;
 }
 
+const REAL_ESTATE_ICP_RE =
+  /real[\s-]?estate|realtor|broker(?:age)?|realty|property\s*manag|mls\b/i;
+
+/** Segment evidence for outreach phrase guards only — not a fit-prior shortcut. */
 export function hasRealEstateEvidence(
   input: ProspectIntelligenceAiInput,
   result: ProspectIntelligence,
 ): boolean {
   if ((result.realEstateLikelihood ?? 0) >= 50) return true;
   const tags = input.originalTags.map((t) => t.toLowerCase());
-  if (tags.some((t) => /real[\s-]?estate|realtor|broker/.test(t))) return true;
-  if ((result.businessType || "").toLowerCase().includes("real estate")) return true;
-  if ((input.importReason || "").toLowerCase().includes("real estate")) return true;
+  if (tags.some((t) => REAL_ESTATE_ICP_RE.test(t))) return true;
+  if (REAL_ESTATE_ICP_RE.test(String(result.businessType || ""))) return true;
+  if (REAL_ESTATE_ICP_RE.test(String(input.businessType || ""))) return true;
+  if (REAL_ESTATE_ICP_RE.test(String(input.importReason || ""))) return true;
+  if (REAL_ESTATE_ICP_RE.test(String(input.batchName || ""))) return true;
+  if (REAL_ESTATE_ICP_RE.test(String(input.company || ""))) return true;
+  if (REAL_ESTATE_ICP_RE.test(String(input.name || ""))) return true;
   return false;
+}
+
+const ICP_TOKEN_STOPWORDS = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "your",
+  "our",
+  "from",
+  "that",
+  "this",
+  "into",
+  "about",
+  "help",
+  "grow",
+  "growth",
+  "using",
+  "their",
+  "them",
+  "they",
+  "are",
+  "was",
+  "were",
+  "have",
+  "has",
+  "been",
+  "will",
+  "can",
+  "not",
+  "any",
+  "all",
+  "business",
+  "businesses",
+  "company",
+  "companies",
+  "service",
+  "services",
+  "product",
+  "products",
+  "solution",
+  "solutions",
+  "client",
+  "clients",
+  "customer",
+  "customers",
+  "local",
+  "online",
+  "software",
+  "platform",
+  "tool",
+  "tools",
+  "team",
+  "teams",
+  "prospect",
+  "prospects",
+  "ai",
+  "crm",
+]);
+
+/** Significant tokens for generic ICP / vertical overlap (industry-agnostic). */
+export function significantIcpTokens(text: string): Set<string> {
+  const tokens = String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 3 && !ICP_TOKEN_STOPWORDS.has(t));
+  return new Set(tokens);
+}
+
+function tokenOverlapCount(a: Set<string>, b: Set<string>): number {
+  let n = 0;
+  for (const t of a) {
+    if (b.has(t)) n += 1;
+  }
+  return n;
+}
+
+/** Prospect came from intentional local discovery (any selected business type). */
+export function isLocalDiscoverySearchInput(input: ProspectIntelligenceAiInput): boolean {
+  const src = String(input.discoverySource || "").toLowerCase();
+  if (src === "google_places" || src === "prospect_ai" || src.includes("places")) return true;
+  if (/^prospect\s*ai:/i.test(String(input.batchName || ""))) return true;
+  if (/local\s+prospect\s+discovery/i.test(String(input.importReason || ""))) return true;
+  return false;
+}
+
+/**
+ * Positive fit prior from the user's selected discovery / search intent.
+ * Industry-agnostic: dental clinics, med spas, roofers, realtors, etc.
+ * Does NOT hardcode real estate (or any single vertical).
+ */
+export function hasDiscoverySearchIntentPrior(input: ProspectIntelligenceAiInput): boolean {
+  const selectedType = String(input.businessType || "").trim();
+  const batch = String(input.batchName || "").trim();
+  if (isLocalDiscoverySearchInput(input) && (selectedType || /^prospect\s*ai:\s*.+\s+in\s+/i.test(batch))) {
+    return true;
+  }
+  // Non-discovery imports that still encode a deliberate segment batch + type.
+  if (selectedType && batch) return true;
+  return false;
+}
+
+/** @deprecated Prefer hasDiscoverySearchIntentPrior — kept as a stable alias. */
+export function hasDiscoveryIcpPrior(input: ProspectIntelligenceAiInput): boolean {
+  return hasDiscoverySearchIntentPrior(input);
+}
+
+/**
+ * Positive prior when prospect vertical overlaps workspace AI Brain / Profile ICP.
+ * Uses token overlap — not WhachatCRM- or Realtor-specific rules.
+ */
+export function hasWorkspaceIcpAlignmentPrior(
+  input: ProspectIntelligenceAiInput,
+  result: ProspectIntelligence,
+  workspace?: ProspectWorkspaceBusinessContext | null,
+): boolean {
+  if (!workspace?.configured) return false;
+  const workspaceTokens = significantIcpTokens(
+    [
+      workspace.industry,
+      workspace.servicesProducts,
+      workspace.salesGoals,
+      workspace.executiveSummary,
+      workspace.customInstructions,
+      workspace.aboutText,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+  const prospectTokens = significantIcpTokens(
+    [
+      input.businessType,
+      result.businessType,
+      result.industry,
+      input.batchName,
+      input.company,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+  if (workspaceTokens.size === 0 || prospectTokens.size === 0) return false;
+  return tokenOverlapCount(workspaceTokens, prospectTokens) >= 1;
+}
+
+/**
+ * Decisive reject / Brain contradiction — blocks rewriting not_a_fit → fit.
+ * Soft "different industry than seller" or "no CRM/automation" is NOT strong reject.
+ */
+export function hasStrongFitRejectEvidence(
+  result: ProspectIntelligence,
+  workspace?: ProspectWorkspaceBusinessContext | null,
+): boolean {
+  const blob = `${result.reasoningSummary || ""} ${result.suggestedOutreachAngle || ""}`;
+  if (
+    /job\s*board|directory\s*only|residential\s*consumer|permanently\s*closed|competitor|not\s*a\s*business|personal\s*blog|outside\s*(of\s+)?(our\s+)?(icp|ideal\s*customer)|unrelated\s*(vertical|industry|segment)|does\s*not\s*match\s*(our\s*)?(ideal|target|icp)|wrong\s*target\s*segment|explicitly\s*excluded|not\s+our\s+(ideal|target)\s+customer/i.test(
+      blob,
+    )
+  ) {
+    return true;
+  }
+
+  // AI Brain / sales goals cited as the reason this prospect is outside ICP.
+  if (
+    workspace?.configured &&
+    /\b(ai\s*brain|ideal\s*customer|sales\s*goals?|our\s*icp|target\s*customer)\b/i.test(blob) &&
+    /\b(not\s*a\s*fit|outside|unrelated|do\s*not\s*(?:target|sell|contact)|exclude[sd]?)\b/i.test(blob)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Keep leadScore, potentialFit, recommendedOffer, and needsReview consistent.
+ * Fit = ICP/campaign suitability — not "business exists / looks legitimate".
+ */
+export function reconcileFitScoreAndOffer(
+  result: ProspectIntelligence,
+  input?: ProspectIntelligenceAiInput,
+  workspace?: ProspectWorkspaceBusinessContext | null,
+): ProspectIntelligence {
+  const next = { ...result };
+  let score = typeof next.leadScore === "number" ? next.leadScore : 0;
+  let offer = String(next.recommendedOffer || "general_demo").toLowerCase();
+  let fit = String(next.potentialFit || "unknown").toLowerCase() as ProspectIntelligencePotentialFit;
+  let needsReview = Boolean(next.needsReview);
+  let priority = String(next.priority || "medium").toLowerCase() as ProspectIntelligencePriority;
+
+  const searchIntentPrior = input ? hasDiscoverySearchIntentPrior(input) : false;
+  const workspaceIcpPrior = input
+    ? hasWorkspaceIcpAlignmentPrior(input, next, workspace)
+    : false;
+  // Positive prior = intentional search targeting OR workspace ICP overlap (any vertical).
+  const icpPrior = searchIntentPrior || workspaceIcpPrior;
+  const strongRejectEvidence = hasStrongFitRejectEvidence(next, workspace);
+
+  // High ICP-looking scores must not coexist with not_a_fit.
+  if (offer === "not_a_fit" && score >= 55) {
+    if (icpPrior && !strongRejectEvidence) {
+      // Selected search type / workspace ICP → default to fit unless strong counter-evidence.
+      offer = "general_demo";
+      if (fit === "low" || fit === "unknown") {
+        fit = score >= 70 ? "high" : "medium";
+      }
+      if (priority === "needs_review" && score >= 55 && !needsReview) {
+        priority = score >= 70 ? "high" : "medium";
+      }
+      if (/not\s*a\s*fit|poor\s*fit|wrong\s*industry|different\s*industry/i.test(String(next.reasoningSummary || ""))) {
+        next.reasoningSummary = [
+          "Matches the selected discovery / workspace ICP target segment.",
+          String(next.reasoningSummary || "").trim(),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .slice(0, 800);
+      }
+    } else {
+      // Decisive reject (or high score without ICP prior) — crush score so Match ≠ Excellent.
+      score = Math.min(score, 35);
+      fit = "low";
+      priority = "low";
+      needsReview = false;
+    }
+  }
+
+  // Align potentialFit bands to leadScore (never contradict).
+  if (offer !== "not_a_fit") {
+    if (score >= 70 && (fit === "low" || fit === "unknown")) fit = "high";
+    else if (score >= 55 && score < 70 && fit === "low") fit = "medium";
+    else if (score > 0 && score < 40 && fit === "high") fit = "low";
+  }
+
+  // needsReview only for insufficient/conflicting info — not a soft not_a_fit.
+  if (offer === "not_a_fit") {
+    needsReview = false;
+    if (priority === "needs_review") priority = "low";
+    fit = "low";
+    if (score > 35) score = 35;
+  }
+
+  // Clear industry + website + discovery type → do not leave needs_review as a soft reject.
+  const hasClearPresence =
+    Boolean(String(input?.websiteUrl || "").trim()) &&
+    (Boolean(String(input?.businessType || "").trim()) ||
+      Boolean(String(next.businessType || "").trim()) ||
+      Boolean(String(next.industry || "").trim()));
+  if (needsReview && hasClearPresence && score >= 55 && offer !== "not_a_fit" && fit !== "unknown") {
+    needsReview = false;
+    if (priority === "needs_review") {
+      priority = score >= 70 ? "high" : "medium";
+    }
+  }
+
+  next.leadScore = score;
+  next.recommendedOffer = offer as ProspectIntelligenceRecommendedOffer;
+  next.potentialFit = fit;
+  next.needsReview = needsReview;
+  next.priority = priority;
+  next.analysisStatus = needsReview ? "needs_review" : "completed";
+  // Keep reviewStatus advisory; human qualification is separate.
+  if (needsReview) next.reviewStatus = "needs_review";
+  else if (next.reviewStatus === "needs_review" && !needsReview) next.reviewStatus = "pending";
+
+  return next;
 }
 
 export function hasBusinessEvidence(
@@ -697,8 +972,8 @@ function buildWorkspaceContextForPrompt(
   if (!context.configured || context.fallbackUsed === "generic") {
     return `WORKSPACE BUSINESS CONTEXT:
 AI Brain is not configured and Business Profile is incomplete. Perform basic prospect analysis only.
-- Score data completeness, business legitimacy signals, online presence, and outreach readiness.
-- Do not infer fit for a specific product or service.
+- leadScore still means ICP/campaign readiness once a product context exists; without it, keep scores moderate and avoid Excellent Match claims.
+- Do not treat "looks like a real business" alone as high fit.
 - Leave suggestedFirstMessage empty rather than inventing what the workspace sells.
 - Use qualification-first language only if you must draft outreach.`;
   }
@@ -742,7 +1017,9 @@ Rules:
 - Assess fit and personalize outreach using AI Brain intelligence above.
 - Use Business Profile for how the sender identifies (name/company/website), not for what they sell when AI Brain is present.
 - Never ask what the workspace sells and never invent details beyond this context.
-- Never pitch Profile About content (e.g. real estate brokerage services) when AI Brain describes a different product (e.g. CRM / SaaS).`;
+- Never pitch Profile About content when AI Brain describes a different product/offer.
+- Fit = whether the prospect is a buyer for the workspace offer / ICP — not whether prospect and sender share the same industry label.
+- Selected discovery business type is intentional targeting. Missing tools/CRM/automation at the prospect is usually an opportunity, not a reject reason.`;
   }
 
   // Profile-only fallback
@@ -794,7 +1071,9 @@ ${JSON.stringify(
 Interpretation:
 - The TARGET is the discovered prospect (prospect fields above).
 - The SENDER's offer and positioning come from WORKSPACE BUSINESS CONTEXT (AI Brain first).
-- Do not confuse the prospect's industry (e.g. real estate office) with what the sender sells.`;
+- Do not pitch the prospect's product as if the sender sells it.
+- prospectBusinessType / discovery batch is a strong positive search-intent prior for ANY vertical the user selected (dental clinics, med spas, roofers, realtors, agencies, etc.). Default to FIT unless strong counter-evidence.
+- Lack of visible CRM/automation/software at the prospect is typically an opportunity signal, not a reason for not_a_fit.`;
 }
 
 export function buildProspectIntelligencePrompt(
@@ -804,8 +1083,8 @@ export function buildProspectIntelligencePrompt(
   const customerWorkspace = Boolean(workspaceContext);
   const offerGuidance = customerWorkspace
     ? `OFFER GUIDANCE:
-- Use recommendedOffer="general_demo" when the prospect is a plausible fit for the workspace's products/services from AI Brain (or Profile fallback).
-- Use recommendedOffer="not_a_fit" only when evidence clearly indicates poor fit.
+- Use recommendedOffer="general_demo" when the prospect is a plausible ICP/campaign fit for the workspace's products/services from AI Brain (or Profile fallback).
+- Use recommendedOffer="not_a_fit" ONLY with strong counter-evidence the prospect is outside ICP (job board, residential consumer, competitor, permanently closed, clearly unrelated vertical). Not merely "different industry than sender".
 - Legacy WhachatCRM offer categories are reserved for internal use and must not be selected for customer workspaces.`
     : `OFFER ↔ SEGMENT HINTS:
 - partner_program → partner
@@ -832,6 +1111,17 @@ ${buildWorkspaceContextForPrompt(workspaceContext)}
 ${formatOutreachInstructionsForPrompt(workspaceContext?.outreachInstructions)}
 
 ${buildWorkflowContextForPrompt(input)}
+
+FIT / SCORE CONTRACT (critical — keep fields consistent):
+- Fit = suitability as an ICP/campaign prospect for the WORKSPACE offer (AI Brain / Profile), NOT "business exists" or "looks legitimate".
+- leadScore (0–100) = ICP/campaign fit only. It MUST align with potentialFit and recommendedOffer.
+- When leadScore ≥ 70: recommendedOffer MUST NOT be not_a_fit; use general_demo (or the matching segment offer). potentialFit should be high or medium.
+- When recommendedOffer="not_a_fit": leadScore MUST be ≤ 35, potentialFit="low", needsReview=false (reject is decisive).
+- Positive prior sources (industry-agnostic): selected discovery business type, discovery batch, workspace AI Brain / Business Profile ICP, and configured offer. Selected Growth Engine context applies only when present for that workspace.
+- If the user searched a business type, prospects of that type default to FIT unless strong counter-evidence (job board, residential consumer, competitor, permanently closed, clearly outside the workspace ICP).
+- Do NOT mark not_a_fit merely because prospect industry ≠ seller industry (seller often sells TO that industry). Missing CRM/automation is usually an opportunity, not a reject.
+- needsReview=true ONLY when information is genuinely insufficient OR signals conflict — not for businesses with a clear website and clear industry classification.
+- Match language in reasoningSummary must not contradict the offer (never say "excellent fit" with not_a_fit).
 
 STRICT RULES:
 - Never claim facts not supported by the input or workspace context. Use likelihood scores 0-100 instead of definitive labels.
@@ -980,11 +1270,13 @@ export function parseAndValidateProspectIntelligence(
     result.reasoningSummary = "AI response missing reasoning summary.";
   }
 
+  const reconciled = reconcileFitScoreAndOffer(result, input, workspaceContext);
+
   if (input) {
-    return applyOutreachMessageGuardrails(result, input, workspaceContext);
+    return applyOutreachMessageGuardrails(reconciled, input, workspaceContext);
   }
 
-  return result;
+  return reconciled;
 }
 
 export function countByPriority(priority: ProspectIntelligencePriority | undefined): {

@@ -258,10 +258,11 @@ function testPanelDoesNotShowWorkingForPending() {
     join(process.cwd(), "client/src/components/settings/ProspectIntelligencePanel.tsx"),
     "utf8",
   );
-  assert.ok(src.includes("Queued for AI…"));
+  // Concise Progress copy — pending must not reuse the processing "Reviewing…" branch
+  assert.ok(src.includes("Queued…"));
   assert.ok(src.includes("{analyzing ? ("));
   assert.ok(src.includes("waitingAnalyze ? ("));
-  // Must not collapse pending+processing into one "AI is working" branch
+  // Must not collapse pending+processing into one working branch
   assert.ok(!src.includes("analyzing || waitingAnalyze"));
 }
 
