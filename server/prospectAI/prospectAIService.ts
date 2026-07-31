@@ -771,6 +771,11 @@ export async function sendDiscoverResultsToReview(
       contact = dup?.contact ?? null;
     }
 
+    const rawPayload = (row.rawPayload || {}) as Record<string, unknown>;
+    const attentionReason =
+      rawPayload.attentionReason != null ? String(rawPayload.attentionReason) : null;
+    const discoveryDisposition =
+      rawPayload.disposition === "needs_attention" ? "needs_attention" : "ready";
     const prospectMeta = {
       placeId: row.providerPlaceId,
       discoverySearchId: searchId,
@@ -782,6 +787,8 @@ export async function sendDiscoverResultsToReview(
       email: row.email,
       rating: row.rating != null ? Number(row.rating) : null,
       reviewCount: row.reviewCount,
+      disposition: discoveryDisposition,
+      attentionReason,
       latitude: row.latitude,
       longitude: row.longitude,
       provider: PROSPECT_AI_IMPORT_PROVIDER,

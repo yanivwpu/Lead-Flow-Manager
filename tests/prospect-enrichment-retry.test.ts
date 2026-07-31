@@ -159,7 +159,10 @@ function baseUx(over: Record<string, unknown> = {}) {
   assert.equal(resolveProspectEnrichmentOutcomeClass(social), "social_profile_only");
   assert.equal(isProspectEnrichmentRetryable(social), false);
   assert.equal(explainCanEnrichProspect(social).code, "social_profile_only");
-  assert.match(resolveMissingEmailDetail(social)?.reason || "", /Social profile only/i);
+  assert.match(
+    resolveMissingEmailDetail(social)?.reason || "",
+    /social profile/i,
+  );
 }
 
 {

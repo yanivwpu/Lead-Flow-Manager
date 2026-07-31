@@ -69,8 +69,12 @@ export function resolveOpenAiApiKey(env: NodeJS.ProcessEnv = process.env): Resol
 }
 
 /**
- * Map provider errors to a safe, actionable message for prospect_intelligence.error_message.
+ * Map provider errors to a stored diagnostic for prospect_intelligence.error_message.
  * Strips leaked key material from OpenAI 401 messages.
+ *
+ * IMPORTANT: This string may still mention env var names for admins/ops.
+ * Never show it raw to regular users — use `userFacingProspectAiReviewError`
+ * from `shared/prospectAiReviewErrors.ts` in Review UI.
  */
 export function formatProspectAiProviderFailureMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err ?? "");

@@ -1,0 +1,70 @@
+{
+  "count": 4,
+  "socialCount": 1,
+  "allPagesFailed": 1,
+  "summary": [
+    {
+      "name": "DREAM LAND GROUP REAL ESTATE",
+      "contactId": "56effebd-1903-4e89-bff6-18cbf5cda04d",
+      "host": "www.facebook.com",
+      "websiteUrlUsed": "https://www.facebook.com/miamirealestateopportunities/",
+      "phoneOnContact": true,
+      "enrichmentPhoneFound": true,
+      "emailsStored": [],
+      "pagesScannedOk": 8,
+      "pagesFailed": 0,
+      "failReasons": [],
+      "isSocial": true,
+      "reviewStatus": "pending",
+      "websiteAnalyzedAt": "2026-07-27T06:00:52.157Z"
+    },
+    {
+      "name": "Real Brokers Miami – Real Estate Concierge",
+      "contactId": "f0fd59de-06ff-4701-83e7-5d1d382c506a",
+      "host": "realbrokersmiami.com",
+      "websiteUrlUsed": "https://realbrokersmiami.com/",
+      "phoneOnContact": true,
+      "enrichmentPhoneFound": true,
+      "emailsStored": [],
+      "pagesScannedOk": 0,
+      "pagesFailed": 7,
+      "failReasons": [
+        "This operation was aborted",
+        "HTTP 404"
+      ],
+      "isSocial": false,
+      "reviewStatus": "pending",
+      "websiteAnalyzedAt": "2026-07-27T06:00:43.624Z"
+    },
+    {
+      "name": "miami marketing co.",
+      "contactId": "c96da188-5441-44d0-a417-96ec9114246c",
+      "host": "",
+      "websiteUrlUsed": null,
+      "phoneOnContact": true,
+      "enrichmentPhoneFound": true,
+      "emailsStored": [],
+      "pagesScannedOk": 0,
+      "pagesFailed": 0,
+      "failReasons": [],
+      "isSocial": false,
+      "reviewStatus": "approved",
+      "websiteAnalyzedAt": "2026-07-24T06:03:00.458Z"
+    },
+    {
+      "name": "trueba media llc | miami digital marketing agency",
+      "contactId": "78b74fc8-1ee0-4a26-b285-7c8440cc15e3",
+      "host": "",
+      "websiteUrlUsed": null,
+      "phoneOnContact": true,
+      "enrichmentPhoneFound": true,
+      "emailsStored": [],
+      "pagesScannedOk": 0,
+      "pagesFailed": 0,
+      "failReasons": [],
+      "isSocial": false,
+      "reviewStatus": "approved",
+      "websiteAnalyzedAt": "2026-07-23T03:29:58.161Z"
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
+  ChevronDown,
   Globe,
   Loader2,
   Mail,
@@ -98,7 +99,6 @@ import {
 import {
   canEnrichProspect,
   enrichActionLabel,
-  enrichDisabledActionLabel,
   explainCanEnrichProspect,
   explainQualifiedForCampaign,
   formatProspectBulkActionResult,
@@ -108,16 +108,33 @@ import {
   isProspectQualifiedForCampaign,
   listEmailCampaignBlockingReasons,
   matchesProspectReviewWorkFilter,
-  needsHumanReview,
   PROSPECT_REVIEW_WORK_FILTER_CHIPS,
   PROSPECT_REVIEW_WORK_STATE_LABELS,
   resolveProspectNeedsReviewBadge,
+  resolveProspectNeedsReviewBadgeDetail,
   resolveProspectReviewWorkState,
   summarizeSelectionActionAvailability,
   type ProspectNeedsReviewBadge,
   type ProspectReviewWorkFilter,
 } from "@shared/prospectAiReviewState";
-import { resolveMissingEmailDetail } from "@shared/prospectEnrichmentOutcome";
+import {
+  isProspectAiReviewRetryable,
+  resolveProspectDetailPrimaryStatus,
+  resolveProspectProgressState,
+  sanitizeProspectAiReviewTechnicalDetails,
+  userFacingProspectAiReviewError,
+} from "@shared/prospectAiReviewErrors";
+import {
+  resolveMissingEmailDetail,
+  userFacingEnrichmentErrorMessage,
+  readEnrichmentFailureClass,
+} from "@shared/prospectEnrichmentOutcome";
+import { useAuth } from "@/lib/auth-context";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { classifyProspectWebsiteUrl } from "@shared/prospectWebsiteClassification";
 import {
   assertEnrichIdsNonEmpty,
@@ -183,6 +200,7 @@ function reviewUxInput(row: ProspectIntelligenceListItem) {
     /** Same server prior-outreach truth as Send preview. */
     priorOutreachDetected: row.priorOutreachDetected === true,
     errorMessage: row.intelligence.errorMessage,
+    discoveryAttentionReason: row.discoveryAttentionReason,
   };
 }
 
@@ -744,8 +762,11 @@ function ProspectIntelligenceDetailDialog({
 }: DetailDialogProps) {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "owner";
   const [editMessage, setEditMessage] = useState("");
   const [editSubject, setEditSubject] = useState("");
+  const [techDetailsOpen, setTechDetailsOpen] = useState(false);
   const intel = item?.intelligence;
 
   useEffect(() => {
@@ -801,7 +822,6 @@ function ProspectIntelligenceDetailDialog({
   const detailCanEnrich = item ? canEnrichProspect(reviewUxInput(item)) : false;
   const detailEnrichExplain = item ? explainCanEnrichProspect(reviewUxInput(item)) : null;
   const detailQualifiedExplain = item ? explainQualifiedForCampaign(reviewUxInput(item)) : null;
-  const detailNeedsHumanReview = item ? needsHumanReview(reviewUxInput(item)) : false;
   const detailRetryable = item ? isProspectEnrichmentRetryable(reviewUxInput(item)) : false;
   const detailEnrichLabel = item ? enrichActionLabel(reviewUxInput(item)) : "Enrich";
   const missingEmailDetail = item
@@ -966,29 +986,36 @@ function ProspectIntelligenceDetailDialog({
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-2">
             <span>{item.name}</span>
-            {approveUi.isApproved ? (
-              <Badge className="bg-emerald-600" data-testid="pi-approved-badge">
-                {workStateLabel}
-              </Badge>
-            ) : workState === "needs_review" || detailNeedsHumanReview ? (
-              <Badge
-                variant="outline"
-                className="border-amber-300 text-amber-800"
-                data-testid="pi-needs-human-review-badge"
-                title="Needs Review is a state — Enrich continues this prospect"
-              >
-                Needs Review
-              </Badge>
-            ) : workState === "not_qualified" ? (
-              <Badge variant="outline" data-testid="pi-not-qualified-badge">
-                Not Qualified
-              </Badge>
-            ) : null}
-            {detailQualifiedExplain?.ok ? (
-              <Badge className="bg-brand-green" data-testid="pi-email-campaign-ready-badge">
-                Ready for Email campaign
-              </Badge>
-            ) : null}
+            {(() => {
+              const primary = resolveProspectDetailPrimaryStatus({
+                analysisStatus: intel.analysisStatus,
+                decision: detailQualificationDecision,
+                readyForCampaign: detailQualifiedExplain?.ok === true,
+              });
+              const tone =
+                primary.code === "ai_review_failed"
+                  ? "border-rose-300 text-rose-800"
+                  : primary.code === "ready_for_campaign" || primary.code === "qualified"
+                    ? undefined
+                    : primary.code === "needs_review"
+                      ? "border-amber-300 text-amber-800"
+                      : undefined;
+              const solid =
+                primary.code === "ready_for_campaign"
+                  ? "bg-brand-green"
+                  : primary.code === "qualified"
+                    ? "bg-emerald-600"
+                    : undefined;
+              return (
+                <Badge
+                  variant={solid ? "default" : "outline"}
+                  className={solid || tone}
+                  data-testid={primary.testId}
+                >
+                  {primary.label}
+                </Badge>
+              );
+            })()}
           </DialogTitle>
           <DialogDescription>
             {item.sourceLabel || item.batchName || "Imported batch"}
@@ -1026,7 +1053,7 @@ function ProspectIntelligenceDetailDialog({
                 {String(intel.enrichmentStatus || "").toLowerCase() === "completed"
                   ? "Complete"
                   : String(intel.enrichmentStatus || "").toLowerCase() === "failed"
-                    ? "Failed"
+                    ? "Some info unavailable"
                     : isProspectEnrichmentInProgress(intel.enrichmentStatus)
                       ? "In progress"
                       : "Not run"}
@@ -1056,22 +1083,53 @@ function ProspectIntelligenceDetailDialog({
             >
               {analysisStatus === "failed" ? (
                 <>
-                  <p className="font-medium">Analysis failed</p>
+                  <p className="font-medium">AI Review couldn't be completed</p>
                   <p className="mt-0.5 text-xs text-amber-800" data-testid="pi-analysis-failed-reason">
-                    {String(intel?.errorMessage || "").trim() ||
-                      "AI qualification did not complete. Use Retry qualification to try again."}
+                    {userFacingProspectAiReviewError(intel?.errorMessage)}
                   </p>
+                  {isProspectAiReviewRetryable(intel?.errorMessage) ? (
+                    <p className="mt-1 text-xs text-amber-700">Use Retry Qualification to try again.</p>
+                  ) : (
+                    <p className="mt-1 text-xs text-amber-700">
+                      This failure looks permanent — edit the prospect details or mark Not Qualified.
+                    </p>
+                  )}
+                  {isAdmin && String(intel?.errorMessage || "").trim() ? (
+                    <Collapsible
+                      open={techDetailsOpen}
+                      onOpenChange={setTechDetailsOpen}
+                      className="mt-2"
+                    >
+                      <CollapsibleTrigger
+                        className="inline-flex items-center gap-1 text-xs font-medium text-amber-900/80 hover:underline"
+                        data-testid="pi-analysis-technical-details"
+                      >
+                        Technical details
+                        <ChevronDown
+                          className={cn("h-3.5 w-3.5 transition", techDetailsOpen && "rotate-180")}
+                        />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <pre
+                          className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded border border-amber-200/80 bg-white/70 p-2 text-[10px] text-amber-950"
+                          data-testid="pi-analysis-technical-details-body"
+                        >
+                          {sanitizeProspectAiReviewTechnicalDetails(intel?.errorMessage)}
+                        </pre>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  ) : null}
                 </>
               ) : analysisStatus === "processing" ? (
                 <>
-                  <p className="font-medium">Analyzing</p>
-                  <p className="mt-0.5 text-xs text-amber-800">AI analysis is in progress.</p>
+                  <p className="font-medium">Reviewing</p>
+                  <p className="mt-0.5 text-xs text-amber-800">AI Review is in progress.</p>
                 </>
               ) : (
                 <>
-                  <p className="font-medium">AI analysis has not completed yet.</p>
+                  <p className="font-medium">AI Review has not completed yet.</p>
                   <p className="mt-0.5 text-xs text-amber-800">
-                    Review status: Pending. Fields will populate when analysis finishes.
+                    Fields will populate when analysis finishes.
                   </p>
                 </>
               )}
@@ -1181,9 +1239,17 @@ function ProspectIntelligenceDetailDialog({
                     ) : null}
                     {websiteState === "failed" ? (
                       <p className="text-xs text-gray-600" data-testid="pi-website-status">
-                        {intel.enrichmentErrorMessage ||
-                          missingEmailDetail?.reason ||
-                          "Website analysis could not be completed"}
+                        {userFacingEnrichmentErrorMessage(
+                          readEnrichmentFailureClass({
+                            enrichmentStatus: intel.enrichmentStatus,
+                            enrichmentErrorMessage: intel.enrichmentErrorMessage,
+                            enrichmentResult: (intel.enrichmentResult ||
+                              null) as Record<string, unknown> | null,
+                            websiteUrl: item.websiteUrl,
+                            websiteUrlUsed: intel.websiteUrlUsed,
+                          }),
+                          missingEmailDetail?.reason || intel.enrichmentErrorMessage,
+                        )}
                       </p>
                     ) : null}
                     {websiteState === "analyzed" && contacts ? (
@@ -1405,50 +1471,50 @@ function ProspectIntelligenceDetailDialog({
             role="group"
             aria-label="Qualification decision"
           >
-            {(
-              [
-                { id: "qualified" as const, label: "Qualified", testId: "pi-qualify-qualified" },
-                { id: "needs_review" as const, label: "Needs Review", testId: "pi-qualify-needs-review" },
-                { id: "not_qualified" as const, label: "Not Qualified", testId: "pi-qualify-not-qualified" },
-              ] as const
-            ).map((btn) => {
-              const active = detailQualificationDecision === btn.id;
-              return (
-                <Button
-                  key={btn.id}
-                  type="button"
-                  variant={active ? "default" : "outline"}
-                  className={active ? "bg-brand-green hover:bg-emerald-700" : undefined}
-                  disabled={qualificationMutation.isPending}
-                  onClick={() => {
-                    if (active) return;
-                    qualificationMutation.mutate(btn.id);
-                  }}
-                  data-testid={btn.testId}
-                  aria-pressed={active}
-                  title={
-                    active
-                      ? `Current: ${btn.label}`
-                      : `Mark as ${btn.label} (manual override — does not re-run AI)`
-                  }
-                >
-                  {active ? <Check className="mr-1.5 h-3.5 w-3.5" /> : null}
-                  {btn.label}
-                  {active ? " ✓" : ""}
-                </Button>
-              );
-            })}
+            <Button
+              type="button"
+              variant={detailQualificationDecision === "qualified" ? "default" : "outline"}
+              className={
+                detailQualificationDecision === "qualified"
+                  ? "bg-brand-green hover:bg-emerald-700"
+                  : undefined
+              }
+              disabled={qualificationMutation.isPending}
+              onClick={() => qualificationMutation.mutate("qualified")}
+              data-testid="pi-qualify-qualified"
+              title="Mark as Qualified (manual override — does not re-run AI)"
+            >
+              <Check className="mr-1.5 h-3.5 w-3.5" />
+              Qualified
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={qualificationMutation.isPending}
+              onClick={() => qualificationMutation.mutate("not_qualified")}
+              data-testid="pi-qualify-not-qualified"
+              title="Mark as Not Qualified (manual override — does not re-run AI)"
+            >
+              <X className="mr-1.5 h-3.5 w-3.5" />
+              Not Qualified
+            </Button>
           </div>
           {String(intel?.analysisStatus || "").toLowerCase() === "failed" ? (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={reanalyzeMutation.isPending}
-            onClick={() => reanalyzeMutation.mutate()}
-          >
-            {reanalyzeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-            Retry qualification
-          </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={reanalyzeMutation.isPending}
+              onClick={() => reanalyzeMutation.mutate()}
+              data-testid="pi-retry-review"
+              title="Retry AI qualification"
+            >
+              {reanalyzeMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              Retry Qualification
+            </Button>
           ) : null}
           {detailRetryable ? (
             <Button
@@ -1501,17 +1567,6 @@ function ProspectIntelligenceDetailDialog({
                 <Check className="mr-2 h-4 w-4" />
               )}
               {detailEnrichLabel}
-            </Button>
-          ) : detailCanEnrich && detailRetryable ? null : detailEnrichExplain && !detailEnrichExplain.ok ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled
-              data-testid="pi-enrich-disabled-button"
-              title={detailEnrichExplain.message || detailQualifiedExplain?.message || undefined}
-            >
-              <Check className="mr-2 h-4 w-4" />{" "}
-              {item ? enrichDisabledActionLabel(reviewUxInput(item)) : workStateLabel}
             </Button>
           ) : null}
           {detailEnrichExplain && !detailEnrichExplain.ok && !detailCanEnrich ? (
@@ -2578,10 +2633,10 @@ export function ProspectIntelligencePanel(props: {
         </Select>
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
           <SelectTrigger className="h-8 w-[150px] max-w-full text-xs" data-testid="pi-action-status-sort">
-            <SelectValue placeholder="Action/status" />
+            <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="action">Needs action (default)</SelectItem>
+            <SelectItem value="action">Status (default)</SelectItem>
             <SelectItem value="name">Name</SelectItem>
             <SelectItem value="leadScore">Lead score</SelectItem>
             <SelectItem value="priority">Priority</SelectItem>
@@ -2870,20 +2925,14 @@ export function ProspectIntelligencePanel(props: {
                       {needsReviewBadge ? (
                         <NeedsReviewReasonBadge
                           badge={needsReviewBadge}
-                          detail={
-                            needsReviewBadge.code === "missing_email" ||
-                            needsReviewBadge.code === "enrichment_failed" ||
-                            needsReviewBadge.code === "missing_website"
-                              ? resolveMissingEmailDetail(ux)?.reason
-                              : null
-                          }
+                          detail={resolveProspectNeedsReviewBadgeDetail(ux, needsReviewBadge)}
                         />
                       ) : null}
                     </TableCell>
                     <TableCell className="min-w-0">
                       {analyzing ? (
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs text-gray-400">AI is working…</span>
+                          <span className="text-xs text-gray-400">Reviewing…</span>
                           <ProspectWebsiteGlobeIcon
                             websiteUrl={row.websiteUrl}
                             websiteUrlUsed={intel.websiteUrlUsed}
@@ -2891,7 +2940,7 @@ export function ProspectIntelligencePanel(props: {
                         </div>
                       ) : waitingAnalyze ? (
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs text-gray-400">Queued for AI…</span>
+                          <span className="text-xs text-gray-400">Queued…</span>
                           <ProspectWebsiteGlobeIcon
                             websiteUrl={row.websiteUrl}
                             websiteUrlUsed={intel.websiteUrlUsed}
@@ -2950,9 +2999,38 @@ export function ProspectIntelligencePanel(props: {
                       })()}
                     </TableCell>
                     <TableCell className={PROSPECT_AI_PROGRESS_COL_CLASS}>
-                      <div className="flex min-w-0 flex-col gap-1.5">
+                      <div className="flex min-w-0 flex-col gap-1">
+                        {(() => {
+                          const progress = resolveProspectProgressState({
+                            analysisStatus: intel.analysisStatus,
+                            enrichmentStatus: intel.enrichmentStatus,
+                            reviewStatus: intel.reviewStatus,
+                            queueStatus: row.queueStatus,
+                            outreachStatus: intel.outreachStatus,
+                            email: row.email,
+                            websiteUrl: row.websiteUrl,
+                            priorOutreachDetected: row.priorOutreachDetected,
+                          });
+                          return (
+                            <span
+                              className={cn(
+                                "text-[11px] font-medium",
+                                progress.code === "failed" && "text-red-600",
+                                (progress.code === "reviewing" || progress.code === "enriching") &&
+                                  "text-emerald-800",
+                                progress.code !== "failed" &&
+                                  progress.code !== "reviewing" &&
+                                  progress.code !== "enriching" &&
+                                  "text-gray-700",
+                              )}
+                              data-testid={`pi-progress-state-${progress.code}`}
+                            >
+                              {progress.label}
+                            </span>
+                          );
+                        })()}
                         <ProspectProgressTimeline ux={ux} />
-                        {showActivity && (analyzing || enriching || life === "imported") ? (
+                        {showActivity && (analyzing || enriching) ? (
                           <AiPersonalityStatusView
                             status={personality}
                             prefersReducedMotion={prefersReducedMotion}

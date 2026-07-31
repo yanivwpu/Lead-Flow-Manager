@@ -327,9 +327,33 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
     async (req, res) => {
       try {
         const workspaceUserId = await workspaceFromReq(req);
+        console.info(
+          JSON.stringify({
+            tag: "[ProspectBulkOutreach]",
+            event: "resume_request_received",
+            workspaceIdPrefix: workspaceUserId.slice(0, 8),
+          }),
+        );
         const settings = await prospectOutreachQueueService.resumeQueue(workspaceUserId);
+        console.info(
+          JSON.stringify({
+            tag: "[ProspectBulkOutreach]",
+            event: "resume_request_ok",
+            workspaceIdPrefix: workspaceUserId.slice(0, 8),
+            queueRunning: settings.queueRunning,
+            paused: settings.paused,
+            armed: settings.queueRunning === true && settings.paused !== true,
+          }),
+        );
         res.json({ settings });
       } catch (err) {
+        console.info(
+          JSON.stringify({
+            tag: "[ProspectBulkOutreach]",
+            event: "resume_request_failed",
+            error: err instanceof Error ? err.message.slice(0, 160) : "Resume failed",
+          }),
+        );
         res.status(400).json({ error: err instanceof Error ? err.message : "Resume failed" });
       }
     },

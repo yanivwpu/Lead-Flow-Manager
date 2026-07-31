@@ -1,0 +1,50 @@
+{
+  "count": 1,
+  "out": [
+    {
+      "contactId": "6a25c2bb-2c23-42f7-9c93-c424a53149bd",
+      "name": "Guillermo Teran Group Real Estate",
+      "emailPresent": true,
+      "phonePresent": true,
+      "reviewStatus": "pending",
+      "recommendedOffer": "not_a_fit",
+      "needsReview": false,
+      "potentialFit": "medium",
+      "priority": "medium",
+      "reasoningSummary": "The prospect is a dedicated real estate agency, which typically does not align with the AI-powered outreach capabilities available in WhachatCRM for SaaS products.",
+      "approvedAt": "2026-07-27T06:00:29.998Z",
+      "approvedByUserId": "51f64011-eb3a-48a4-bb10-031abd3c0cdc",
+      "enrichmentTriggeredBy": "approve",
+      "enrichmentStatus": "completed",
+      "enrichmentEmailFound": true,
+      "websiteUrlUsed": "https://www.gteran.com/",
+      "websiteAnalyzedAt": "2026-07-27T06:01:26.410Z",
+      "analyzedAt": "2026-07-27T06:20:26.304Z",
+      "updatedAt": "2026-07-27T06:20:26.305Z",
+      "createdAt": "2026-07-26T16:16:43.866Z",
+      "analysisStatus": "completed",
+      "enrichmentPublicEmails": [
+        "gteran@avantiway.com",
+        "dirianateran@goapmc.com",
+        "danaelugo@avantiway.com",
+        "soniaramirez@avantiway.com",
+        "gabrielaestrada@avantiway.com"
+      ],
+      "enrichmentHasSocial": true,
+      "contactEmailMatchesEnrichment": true,
+      "emailLikelySource": "enrichment",
+      "hasLegacyApproval": true,
+      "decisionQualified": true,
+      "campaignEligible": true,
+      "workState": "qualified",
+      "uiFilter": "qualified",
+      "verdict": "B_or_conflict_human_approved_but_not_a_fit_wins_today",
+      "sourceDetailsKeys": [
+        "prospectAi",
+        "prospectImport",
+        "prospectEnrichment",
+        "prospectImportProvider"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "failedWithEmailOnContact": 2,
+  "bugPatternCounts": {
+    "manual_or_existing_email_ignored_on_failed_enrich": 2
+  },
+  "sample": [
+    {
+      "contactId": "59010894-6850-420f-b93b-ba83abecc5cb",
+      "name": "Miami Real Estate - The Coden Ferraro Group",
+      "hasValidEmail": true,
+      "enrichmentEmailFound": false,
+      "enrichmentErrorMessage": "Website could not be reached",
+      "failureClass": "website_fetch_failed",
+      "outcomeClass": "failed_fetch",
+      "crawlSucceeded": false,
+      "websiteUrlUsed": "http://www.jackcodengroup.com/",
+      "enrichmentTriggeredBy": "approve",
+      "reviewStatus": "approved",
+      "updatedAt": "2026-07-28T15:25:18.298Z",
+      "bugPattern": "manual_or_existing_email_ignored_on_failed_enrich"
+    },
+    {
+      "contactId": "e871ff6e-79e1-4e6d-b69f-280cc0038206",
+      "name": "Jose Fuentes Real Estate Broker Fortune Christie's International",
+      "hasValidEmail": true,
+      "enrichmentEmailFound": false,
+      "enrichmentErrorMessage": "Website could not be reached",
+      "failureClass": "website_fetch_failed",
+      "outcomeClass": "failed_fetch",
+      "crawlSucceeded": false,
+      "websiteUrlUsed": "https://beacons.ai/mrdreammaker_",
+      "enrichmentTriggeredBy": "manual",
+      "reviewStatus": "approved",
+      "updatedAt": "2026-07-28T15:16:16.608Z",
+      "bugPattern": "manual_or_existing_email_ignored_on_failed_enrich"
+    }
+  ],
+  "recentFailedJobs": [
+    {
+      "jobId": "ac928f2a-25b9-4c5d-b209-92830b3b79d2",
+      "contactId": "59010894-6850-420f-b93b-ba83abecc5cb",
+      "errorMessage": "Website could not be reached",
+      "triggerSource": "approve",
+      "failureClass": "website_fetch_failed",
+      "outcomeClass": "failed_fetch",
+      "crawlSucceeded": false,
+      "emailFound": false,
+      "completedAt": "2026-07-28T15:25:18.302Z"
+    },
+    {
+      "jobId": "9452ba0f-7252-489b-9f9b-d1e58fa676b0",
+      "contactId": "e871ff6e-79e1-4e6d-b69f-280cc0038206",
+      "errorMessage": "Website could not be reached",
+      "triggerSource": "manual",
+      "failureClass": "website_fetch_failed",
+      "outcomeClass": "failed_fetch",
+      "crawlSucceeded": false,
+      "emailFound": false,
+      "completedAt": "2026-07-28T15:16:16.612Z"
+    },
+    {
+      "jobId": "2300926a-96d7-4587-85ab-8f9331a76ce9",
+      "contactId": "e871ff6e-79e1-4e6d-b69f-280cc0038206",
+      "errorMessage": "Website could not be reached",
+      "triggerSource": "approve",
+      "failureClass": "website_fetch_failed",
+      "outcomeClass": "failed_fetch",
+      "crawlSucceeded": false,
+      "emailFound": false,
+      "completedAt": "2026-07-28T15:16:01.397Z"
+    },
+    {
+      "jobId": "f13fba6f-3636-469f-9b87-35ef5a7b1c85",
+      "contactId": "eed38913-5586-460a-99c9-896c2e5b07ec",
+      "errorMessage": "readProspectImportMetadata is not defined",
+      "triggerSource": "approve",
+      "failureClass": null,
+      "outcomeClass": null,
+      "crawlSucceeded": null,
+      "emailFound": null,
+      "completedAt": "2026-07-22T04:45:42.773Z"
+    },
+    {
+      "jobId": "41398556-5893-46a2-92b1-e107e5fddce3",
+      "contactId": "168b7333-96cc-480a-bff5-5b806162c885",
+      "errorMessage": "readProspectImportMetadata is not defined",
+      "triggerSource": "approve",
+      "failureClass": null,
+      "outcomeClass": null,
+      "crawlSucceeded": null,
+      "emailFound": null,
+      "completedAt": "2026-07-22T04:45:33.559Z"
+    }
+  ]
+}

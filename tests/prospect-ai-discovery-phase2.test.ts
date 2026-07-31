@@ -562,9 +562,11 @@ function mockFetch(pages: Array<unknown[]>) {
   assert.ok(ui.includes("prospect-discover-groups"));
   assert.ok(ui.includes("prospect-ai-discover-cancel"));
   assert.ok(ui.includes("Ready for Review"));
-  assert.ok(ui.includes("Usable Needs Attention"));
+  assert.ok(!ui.includes("Usable Needs Attention"));
   assert.ok(ui.includes("Possible Duplicates"));
+  assert.ok(ui.includes("Already Exists"));
   assert.ok(ui.includes("Quota consumed"));
+  assert.ok(ui.includes("Review notes after send") || ui.includes("Review note"));
 }
 
 console.log("prospect-ai-discovery-phase2.test.ts: all assertions passed");

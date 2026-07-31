@@ -415,7 +415,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
   const [diagnostics, setDiagnostics] = useState<import("@/lib/prospectAi").ProspectAiDiscoveryDiagnostics | null>(null);
   const [excluded, setExcluded] = useState<ProspectAiDiscoveryExcludedSample[]>([]);
   const [resultFilter, setResultFilter] = useState<
-    "ready" | "needs_attention" | "possible_duplicate" | "already_exists" | "rejected"
+    "ready" | "possible_duplicate" | "already_exists" | "rejected"
   >("ready");
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -458,12 +458,11 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
     }
   }, [activeBatchQuery.data]);
 
-  const readyResults = useMemo(
-    () => results.filter((r) => r.disposition !== "needs_attention"),
-    [results],
-  );
-  const needsAttentionResults = useMemo(
-    () => results.filter((r) => r.disposition === "needs_attention"),
+  // Discovery stays discovery-focused: usable needs-attention folds into Ready for Review.
+  // Review stage carries the reason for user judgement.
+  const readyResults = useMemo(() => results, [results]);
+  const needsAttentionCount = useMemo(
+    () => results.filter((r) => r.disposition === "needs_attention").length,
     [results],
   );
   const alreadyExistsSamples = useMemo(
@@ -480,9 +479,8 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
   );
   const visibleRows = useMemo(() => {
     if (resultFilter === "ready") return readyResults;
-    if (resultFilter === "needs_attention") return needsAttentionResults;
     return [];
-  }, [resultFilter, readyResults, needsAttentionResults]);
+  }, [resultFilter, readyResults]);
 
   const allSelected =
     visibleRows.length > 0 && visibleRows.every((r) => selectedIds.has(r.id));
@@ -821,13 +819,17 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
               </p>
               <ul className="mt-2 grid gap-1 text-xs text-gray-600 sm:grid-cols-2">
                 <li>Target requested: {diagnostics.targetCount ?? targetCount}</li>
-                <li>Ready for Review: {diagnostics.readyForReview ?? readyResults.length}</li>
-                <li>
-                  Usable Needs Attention:{" "}
-                  {diagnostics.usableNeedsAttention ??
-                    diagnostics.needsAttention ??
-                    needsAttentionResults.length}
-                </li>
+                <li>Ready for Review: {readyResults.length}</li>
+                {needsAttentionCount > 0 ||
+                (diagnostics.usableNeedsAttention ?? diagnostics.needsAttention ?? 0) > 0 ? (
+                  <li>
+                    Review notes after send:{" "}
+                    {diagnostics.usableNeedsAttention ??
+                      diagnostics.needsAttention ??
+                      needsAttentionCount}{" "}
+                    (category / website / details)
+                  </li>
+                ) : null}
                 <li>
                   Possible Duplicates: {diagnostics.possibleDuplicates ?? possibleDuplicateSamples.length}
                 </li>
@@ -879,12 +881,6 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
             {(
               [
                 ["ready", `Ready for Review (${readyResults.length})`],
-                [
-                  "needs_attention",
-                  `Usable Needs Attention (${
-                    diagnostics?.usableNeedsAttention ?? needsAttentionResults.length
-                  })`,
-                ],
                 [
                   "possible_duplicate",
                   `Possible Duplicates (${
@@ -1107,7 +1103,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
                     <TableHead>Type</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead>Contact</TableHead>
-                    {resultFilter === "needs_attention" ? <TableHead>Reason</TableHead> : null}
+                    {needsAttentionCount > 0 ? <TableHead>Review note</TableHead> : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1131,9 +1127,11 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
                       <TableCell className="text-sm text-gray-600">
                         {row.email || row.phone || row.website || "—"}
                       </TableCell>
-                      {resultFilter === "needs_attention" ? (
+                      {needsAttentionCount > 0 ? (
                         <TableCell className="text-sm text-amber-800">
-                          {discoveryAttentionLabel(row.attentionReason)}
+                          {row.disposition === "needs_attention"
+                            ? discoveryAttentionLabel(row.attentionReason)
+                            : "—"}
                         </TableCell>
                       ) : null}
                     </TableRow>

@@ -1265,7 +1265,22 @@ export async function claimNextDueQueueItem(
     )
     .returning();
 
-  return claimed[0] || null;
+  const row = claimed[0] || null;
+  if (row) {
+    console.info(
+      JSON.stringify(
+        prospectBulkOutreachLog("queue_claimed", {
+          workspaceId: workspaceUserId,
+          queueItemId: row.id,
+          contactId: row.contactId,
+          batchId: row.batchId,
+          status: "sending",
+          scheduledAt: row.scheduledAt?.toISOString() ?? null,
+        }),
+      ),
+    );
+  }
+  return row;
 }
 
 export async function processClaimedQueueItem(

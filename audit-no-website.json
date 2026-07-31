@@ -1,0 +1,58 @@
+[
+  {
+    "name": "miami marketing co.",
+    "resolvedWebsite": null,
+    "websiteUrlUsed": null,
+    "enrichmentStatus": "completed",
+    "enrichmentErrorMessage": null,
+    "reviewStatus": "approved",
+    "analysisStatus": "needs_review",
+    "enrichmentResult": {
+      "provider": "website_public",
+      "emailFound": false,
+      "phoneFound": true,
+      "websiteUrl": null,
+      "publicContacts": {
+        "emails": [],
+        "phones": [],
+        "bookingUrls": [],
+        "socialProfiles": [],
+        "contactPageUrls": [],
+        "whatsappNumbers": []
+      },
+      "websiteAnalyzedAt": "2026-07-24T06:03:00.458Z",
+      "websiteIntelligence": {
+        "pagesScanned": [],
+        "businessSummary": "No public website URL available for this prospect."
+      }
+    }
+  },
+  {
+    "name": "trueba media llc | miami digital marketing agency",
+    "resolvedWebsite": null,
+    "websiteUrlUsed": null,
+    "enrichmentStatus": "completed",
+    "enrichmentErrorMessage": null,
+    "reviewStatus": "approved",
+    "analysisStatus": "needs_review",
+    "enrichmentResult": {
+      "provider": "website_public",
+      "emailFound": false,
+      "phoneFound": true,
+      "websiteUrl": null,
+      "publicContacts": {
+        "emails": [],
+        "phones": [],
+        "bookingUrls": [],
+        "socialProfiles": [],
+        "contactPageUrls": [],
+        "whatsappNumbers": []
+      },
+      "websiteAnalyzedAt": "2026-07-23T03:29:58.161Z",
+      "websiteIntelligence": {
+        "pagesScanned": [],
+        "businessSummary": "No public website URL available for this prospect."
+      }
+    }
+  }
+]

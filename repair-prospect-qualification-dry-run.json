@@ -1,0 +1,241 @@
+{
+  "mode": "apply",
+  "miamiOnly": true,
+  "count": 13,
+  "plan": [
+    {
+      "contactId": "f0fd59de-06ff-4701-83e7-5d1d382c506a",
+      "name": "Real Brokers Miami – Real Estate Concierge",
+      "before": {
+        "reviewStatus": "pending",
+        "needsReview": false,
+        "enrichmentStatus": "completed"
+      },
+      "after": {
+        "reviewStatus": "approved",
+        "needsReview": false
+      },
+      "reasons": [
+        "approvedAt_set",
+        "approvedByUserId_set",
+        "enrichmentTriggeredBy_approve"
+      ]
+    },
+    {
+      "contactId": "df5ae68c-f2c9-4180-8b22-3bfaa81bce5c",
+      "name": "Blackbook Properties",
+      "before": {
+        "reviewStatus": "pending",
+        "needsReview": false,
+        "enrichmentStatus": "completed"
+      },
+      "after": {
+        "reviewStatus": "approved",
+        "needsReview": false
+      },
+      "reasons": [
+        "approvedAt_set",
+        "approvedByUserId_set",
+        "enrichmentTriggeredBy_approve"
+      ]
+    },
+    {
+      "contactId": "00b9bae8-df10-4cf2-8a0d-0e88867066b4",
+      "name": "Lauren Hershey",
+      "before": {
+        "reviewStatus": "pending",
+        "needsReview": false,
+        "enrichmentStatus": "completed"
+      },
+      "after": {
+        "reviewStatus": "approved",
+        "needsReview": false
+      },
+      "reasons": [
+        "approvedAt_set",
+        "approvedByUserId_set",
+        "enrichmentTriggeredBy_approve"
+      ]
+    },
+    {
+      "contactId": "cc563331-a180-41ba-86b8-c355adcd3ee2",
+      "name": "LG Realty Group Inc. Miami Luxury Real Estate",
+      "before": {
+        "reviewStatus": "pending",
+        "needsReview": false,
+        "enrichmentStatus": "completed"
+      },
+      "after": {
+        "reviewStatus": "approved",
+        "needsReview": false
+      },
+      "reasons": [
+        "approvedAt_set",
+        "approvedByUserId_set",
+        "enrichmentTriggeredBy_approve"
+      ]
+    },
+    {
+      "contactId": "8885cd62-1e29-4418-85a4-215fda902a1a",
+      "name": "The World Realty",
+      "before": {
+        "reviewStatus": "pending",
+        "needsReview": false,
+        "enrichmentStatus": "completed"
+      },
+      "after": {
+        "reviewStatus": "approved",
+        "needsReview": false
+      },
+      "reasons": [
+        "approvedAt_set",
+        "approvedByUserId_set",
+        "enrichmentTriggeredBy_approve"
+      ]
+    },
+    {
+      "contactId": "4bb986aa-2819-4b85-b8d7-0a2d6428cb93",
+      "name": "Louis Urbina, PA - Realtor Associate at Avanti Way Realty in Miami, FL",
+      "before": {
+        "reviewStatus": "pending",
+        "needsReview": false,
+        "enrichmentStatus": "completed"
+      },
+      "after": {
+        "reviewStatus": "approved",
+        "needsReview": false
+      },
+      "reasons": [
+        "approvedAt_set",
+        "approvedByUserId_set",
+        "enrichmentTriggeredBy_approve"
+      ]
+    },
+    {
+      "contactId": "d2304466-29ba-4274-bd6c-ccb9aba3b091",
+      "name": "Nancy Batchelor Team",
+      "before": {
+        "reviewStatus": "pending",
+        "needsReview": false,
+        "enrichmentStatus": "completed"
+      },
+      "after": {
+        "reviewStatus": "approved",
+        "needsReview": false
+      },
+      "reasons": [
+        "approvedAt_set",
+        "approvedByUserId_set",
+        "enrichmentTriggeredBy_approve"
+      ]
+    },
+    {
+      "contactId": "cf93030e-4037-4320-99c1-6be83660876d",
+      "name": "Coldwell Banker Realty: Oliver Ruiz",
+      "before": {
+        "reviewStatus": "pending",
+        "needsReview": false,
+        "enrichmentStatus": "completed"
+      },
+      "after": {
+        "reviewStatus": "approved",
+        "needsReview": false
+      },
+      "reasons": [
+        "approvedAt_set",
+        "approvedByUserId_set",
+        "enrichmentTriggeredBy_approve"
+      ]
+    },
+    {
+      "contactId": "17cf958b-b292-40df-aeb9-8928e2a75d82",
+      "name": "Milton Andrade, REALTOR - Compass",
+      "before": {
+        "reviewStatus": "pending",
+        "needsReview": false,
+        "enrichmentStatus": "completed"
+      },
+      "after": {
+        "reviewStatus": "approved",
+        "needsReview": false
+      },
+      "reasons": [
+        "approvedAt_set",
+        "approvedByUserId_set",
+        "enrichmentTriggeredBy_approve"
+      ]
+    },
+    {
+      "contactId": "ca268e7a-7fad-4c63-8530-bc5821bee12f",
+      "name": "Home Miami, Team / Brokered by eXp Realty | Luz Abreu Real Estate Broker Associate",
+      "before": {
+        "reviewStatus": "pending",
+        "needsReview": false,
+        "enrichmentStatus": "completed"
+      },
+      "after": {
+        "reviewStatus": "approved",
+        "needsReview": false
+      },
+      "reasons": [
+        "approvedAt_set",
+        "approvedByUserId_set",
+        "enrichmentTriggeredBy_approve"
+      ]
+    },
+    {
+      "contactId": "a4920205-d144-43ad-b08c-05ca9a2188cb",
+      "name": "David Freed Realtor | Miami Is Home | Keller Williams Realty",
+      "before": {
+        "reviewStatus": "pending",
+        "needsReview": false,
+        "enrichmentStatus": "completed"
+      },
+      "after": {
+        "reviewStatus": "approved",
+        "needsReview": false
+      },
+      "reasons": [
+        "approvedAt_set",
+        "approvedByUserId_set",
+        "enrichmentTriggeredBy_approve"
+      ]
+    },
+    {
+      "contactId": "56effebd-1903-4e89-bff6-18cbf5cda04d",
+      "name": "DREAM LAND GROUP REAL ESTATE",
+      "before": {
+        "reviewStatus": "pending",
+        "needsReview": false,
+        "enrichmentStatus": "completed"
+      },
+      "after": {
+        "reviewStatus": "approved",
+        "needsReview": false
+      },
+      "reasons": [
+        "approvedAt_set",
+        "approvedByUserId_set",
+        "enrichmentTriggeredBy_approve"
+      ]
+    },
+    {
+      "contactId": "b35835d1-9cda-4473-9b27-3d2c630d608a",
+      "name": "Chariff Realty Group Commercial Miami Real Estate",
+      "before": {
+        "reviewStatus": "pending",
+        "needsReview": false,
+        "enrichmentStatus": "completed"
+      },
+      "after": {
+        "reviewStatus": "approved",
+        "needsReview": false
+      },
+      "reasons": [
+        "approvedAt_set",
+        "approvedByUserId_set",
+        "enrichmentTriggeredBy_approve"
+      ]
+    }
+  ]
+}

@@ -264,30 +264,8 @@ export function useProspectAiDiscover() {
   });
 }
 
-export function discoveryAttentionLabel(reason: string | null | undefined): string {
-  switch (String(reason || "")) {
-    case "social_profile_as_website":
-      return "Website appears to be a social profile";
-    case "uncertain_category":
-    case "category_uncertain":
-      return "Category uncertain for this search";
-    case "uncertain_industry_relevance":
-      return "Industry relevance uncertain";
-    case "limited_business_details":
-      return "Limited business details";
-    case "likely_duplicate":
-      return "Possible duplicate";
-    case "possible_existing_workspace_match":
-      return "Possible match to an existing workspace record";
-    case "possible_branch_duplicate":
-    case "possible_branch":
-      return "Possible branch or related location";
-    case "industry_mismatch":
-      return "May not match the requested industry";
-    default:
-      return reason ? String(reason).replace(/_/g, " ") : "Needs a closer look";
-  }
-}
+/** @deprecated Prefer shared `discoveryAttentionLabel` — kept for existing client imports. */
+export { discoveryAttentionLabel } from "@shared/prospectAiDiscoveryQuality";
 
 /** US Discover UI uses miles; API/Google Places still expect kilometers. */
 export const KM_PER_MILE = 1.609344;

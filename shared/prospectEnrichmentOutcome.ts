@@ -339,10 +339,16 @@ export function userFacingEnrichmentErrorMessage(
     return PROSPECT_ENRICHMENT_FAILURE_LABELS[failureClass];
   }
   const safe = String(fallback || "").trim();
-  if (!safe) return "Website enrichment failed";
-  // Strip stack-ish content
-  if (/at\s+\S+\s+\(|Error:|Exception/i.test(safe) && safe.length > 120) {
-    return "Website enrichment failed";
+  if (!safe) {
+    return "Some business information couldn't be collected.";
+  }
+  // Never leak stacks, env vars, or provider internals to users.
+  if (
+    /at\s+\S+\s+\(|Error:|Exception|OPENAI|API[_ ]?KEY|sk-|ECONN|ETIMEDOUT|HTTP\s*\d{3}/i.test(
+      safe,
+    )
+  ) {
+    return "Some business information couldn't be collected.";
   }
   return safe.slice(0, 160);
 }

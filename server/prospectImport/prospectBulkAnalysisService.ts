@@ -27,6 +27,7 @@ import {
   filterOrphanQualificationContactIds,
 } from "@shared/prospectAnalysisOwnership";
 import { shouldSkipDefaultBulkReanalyze } from "@shared/prospectOutreachEligibility";
+import { isProspectAiTransientProviderError } from "@shared/prospectAiReviewErrors";
 import { db } from "../../drizzle/db";
 import {
   analyzeProspectContact,
@@ -260,7 +261,7 @@ async function renewLease(jobId: string, workerId: string): Promise<boolean> {
   return updated.length > 0;
 }
 
-async function analyzeContactWithTimeout(params: {
+async function analyzeContactOnceWithTimeout(params: {
   contactId: string;
   force?: boolean;
 }): Promise<Awaited<ReturnType<typeof analyzeProspectContact>>> {
@@ -280,6 +281,64 @@ async function analyzeContactWithTimeout(params: {
     ]);
   } finally {
     if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Run AI analysis with a wall-clock budget.
+ * On transient timeout / provider flake:
+ * 1) wait briefly in case a raced in-flight call already completed
+ * 2) otherwise reclaim + retry once before failing the row
+ * (Inner analyzeProspectContact already retries provider/parse errors.)
+ */
+async function analyzeContactWithTimeout(params: {
+  contactId: string;
+  force?: boolean;
+}): Promise<Awaited<ReturnType<typeof analyzeProspectContact>>> {
+  try {
+    return await analyzeContactOnceWithTimeout(params);
+  } catch (err) {
+    if (!isProspectAiTransientProviderError(err)) throw err;
+
+    // Timeout path: Promise.race abandons the in-flight call — it may still finish.
+    await new Promise((r) => setTimeout(r, 1500));
+    const settled = await db
+      .select({ analysisStatus: prospectIntelligence.analysisStatus })
+      .from(prospectIntelligence)
+      .where(eq(prospectIntelligence.contactId, params.contactId))
+      .limit(1);
+    const status = String(settled[0]?.analysisStatus || "").toLowerCase();
+    if (status === "completed" || status === "needs_review") {
+      return analyzeProspectContact({
+        contactId: params.contactId,
+        force: false,
+      });
+    }
+
+    const claim = await claimProspectContactForAnalysis({
+      contactId: params.contactId,
+      force: true,
+    });
+    if (claim.outcome === "already_completed") {
+      return analyzeProspectContact({
+        contactId: params.contactId,
+        force: false,
+      });
+    }
+    if (claim.outcome === "already_processing") {
+      // Still owned by the abandoned in-flight call — surface failure; heal/orphan retry later.
+      throw err;
+    }
+
+    console.info(
+      JSON.stringify(
+        prospectBulkAnalysisLog("item_transient_retry", {
+          contactId: params.contactId,
+          reason: err instanceof Error ? err.message.substring(0, 200) : String(err),
+        }),
+      ),
+    );
+    return analyzeContactOnceWithTimeout({ ...params, force: true });
   }
 }
 

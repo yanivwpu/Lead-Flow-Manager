@@ -77,6 +77,32 @@ export function countsTowardDiscoveryTarget(params: {
   return false;
 }
 
+/** Friendly Review/Discover reason copy for discovery attention codes. */
+export function discoveryAttentionLabel(reason: string | null | undefined): string {
+  switch (String(reason || "")) {
+    case "social_profile_as_website":
+      return "Website appears to be a social profile";
+    case "uncertain_category":
+    case "category_uncertain":
+      return "Category uncertain";
+    case "uncertain_industry_relevance":
+      return "Industry uncertain";
+    case "limited_business_details":
+      return "Missing business details";
+    case "likely_duplicate":
+      return "Possible duplicate";
+    case "possible_existing_workspace_match":
+      return "Possible match to an existing record";
+    case "possible_branch_duplicate":
+    case "possible_branch":
+      return "Possible branch or related location";
+    case "industry_mismatch":
+      return "May not match the requested industry";
+    default:
+      return reason ? String(reason).replace(/_/g, " ") : "Needs a closer look";
+  }
+}
+
 const FREE_EMAIL_DOMAINS = new Set([
   "gmail.com",
   "yahoo.com",

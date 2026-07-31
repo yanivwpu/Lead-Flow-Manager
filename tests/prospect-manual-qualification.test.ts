@@ -218,12 +218,15 @@ const root = join(import.meta.dirname, "..");
   );
   assert.ok(panelSrc.includes("pi-qualification-controls"));
   assert.ok(panelSrc.includes("pi-qualify-qualified"));
-  assert.ok(panelSrc.includes("pi-qualify-needs-review"));
   assert.ok(panelSrc.includes("pi-qualify-not-qualified"));
+  // Needs Review is status (header badge via primary resolver), not a footer action button
+  assert.ok(!panelSrc.includes("pi-qualify-needs-review"));
+  assert.ok(panelSrc.includes("resolveProspectDetailPrimaryStatus"));
   assert.ok(panelSrc.includes("/qualification"));
   assert.ok(panelSrc.includes("onQualificationChanged"));
-  assert.ok(panelSrc.includes("enrichDisabledActionLabel"));
   assert.ok(panelSrc.includes("does not re-run AI"));
+  assert.ok(panelSrc.includes("Retry Qualification"));
+  assert.ok(!panelSrc.includes("pi-enrich-disabled-button"));
   // Old hide-current-state buttons removed
   assert.ok(!panelSrc.includes("detailAlreadyNeedsReview"));
   assert.ok(!panelSrc.includes('data-testid="pi-not-qualified-button"'));

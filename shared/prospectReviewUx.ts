@@ -207,14 +207,16 @@ export function buildProspectRowAiSummary(input: {
     String(input.suggestedOutreachAngle || "").trim() ||
     String(input.reasoningSummary || "").trim() ||
     null;
+  const businessType = String(input.businessType || "").trim() || null;
   return {
     showSummary: true,
-    matchLabel: match.label,
+    matchLabel: match.label || "AI Review complete",
     matchStars: match.stars,
     priority: input.priority ?? null,
-    businessType: String(input.businessType || "").trim() || null,
+    businessType,
     offerLabel: offer || null,
-    angle: angle ? angle.slice(0, 140) : null,
+    // Successful AI Review always shows a summary line — never leave the cell blank.
+    angle: (angle || "AI Review complete — open for details.").slice(0, 140),
   };
 }
 
@@ -270,7 +272,10 @@ export function resolveProspectTimelineStates(
   const life = resolveProspectReviewLifecycle(input);
 
   let aiReview: ProspectTimelineStageState;
-  if (isProspectQualificationComplete(input.analysisStatus)) {
+  const analysisStatus = String(input.analysisStatus || "pending").toLowerCase();
+  if (analysisStatus === "failed") {
+    aiReview = "failed";
+  } else if (isProspectQualificationComplete(input.analysisStatus)) {
     aiReview = "done";
   } else if (life === "analyzing" || life === "imported") {
     aiReview = "current";

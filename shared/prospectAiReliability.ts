@@ -1,0 +1,436 @@
+/**
+ * Prospect AI Review + Enrichment reliability helpers.
+ * Pure classification / pipeline transition logic — no I/O.
+ */
+
+import {
+  isProspectAiTransientProviderError,
+  classifyProspectAiReviewError,
+  sanitizeProspectAiReviewTechnicalDetails,
+  userFacingProspectAiReviewError,
+} from "./prospectAiReviewErrors";
+import {
+  PROSPECT_ENRICHMENT_FAILURE_LABELS,
+  type ProspectEnrichmentFailureClass,
+} from "./prospectEnrichment";
+import {
+  readEnrichmentFailureClass,
+  resolveMissingEmailDetail,
+  type ProspectEnrichmentOutcomeInput,
+} from "./prospectEnrichmentOutcome";
+
+/** Granular AI Review failure kinds for ops + auto-retry decisions. */
+export const PROSPECT_AI_REVIEW_FAILURE_KINDS = [
+  "configuration",
+  "temporary_provider",
+  "timeout",
+  "rate_limit",
+  "validation",
+  "bad_prompt",
+  "missing_data",
+  "race_condition",
+  "unexpected_exception",
+  "unknown",
+] as const;
+export type ProspectAiReviewFailureKind = (typeof PROSPECT_AI_REVIEW_FAILURE_KINDS)[number];
+
+export type ProspectAiReviewFailureClassification = {
+  kind: ProspectAiReviewFailureKind;
+  /** Safe for automatic server retries before marking failed. */
+  autoRetryable: boolean;
+  /** Safe for user-visible Retry Qualification. */
+  userRetryable: boolean;
+  userMessage: string;
+  technicalMessage: string;
+};
+
+/**
+ * Classify a stored / thrown AI Review error into an ops kind + retry policy.
+ */
+export function classifyProspectAiReviewFailure(
+  err: unknown,
+  stage?: string | null,
+): ProspectAiReviewFailureClassification {
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  const stageKey = String(stage || "").toLowerCase();
+  const info = classifyProspectAiReviewError(raw);
+  const technicalMessage = sanitizeProspectAiReviewTechnicalDetails(raw) || raw.slice(0, 500);
+
+  if (/already in progress|abandoned stale processing/i.test(raw)) {
+    return {
+      kind: "race_condition",
+      autoRetryable: false,
+      userRetryable: true,
+      userMessage: info.userMessage,
+      technicalMessage,
+    };
+  }
+
+  if (/insufficient|missing (website|email|business)|no usable prospect data/i.test(raw)) {
+    return {
+      kind: "missing_data",
+      autoRetryable: false,
+      userRetryable: false,
+      userMessage: "Not enough business details for AI Review yet.",
+      technicalMessage,
+    };
+  }
+
+  if (
+    /misconfigured|API key is missing|authentication failed|Incorrect API key|invalid[_ ]api[_ ]key|Resend key|OPENAI_API_KEY|AI_INTEGRATIONS/i.test(
+      raw,
+    )
+  ) {
+    return {
+      kind: "configuration",
+      autoRetryable: false,
+      userRetryable: true,
+      userMessage: info.userMessage,
+      technicalMessage,
+    };
+  }
+
+  if (/rate limit|429/i.test(raw)) {
+    return {
+      kind: "rate_limit",
+      autoRetryable: true,
+      userRetryable: true,
+      userMessage: info.userMessage,
+      technicalMessage,
+    };
+  }
+
+  if (/timeout|timed out|ETIMEDOUT|AbortError/i.test(raw) || stageKey.includes("timeout")) {
+    return {
+      kind: "timeout",
+      autoRetryable: true,
+      userRetryable: true,
+      userMessage: info.userMessage,
+      technicalMessage,
+    };
+  }
+
+  if (/JSON\.parse|Unexpected token|not valid JSON|parsing failed/i.test(raw)) {
+    return {
+      kind: "validation",
+      autoRetryable: true,
+      userRetryable: true,
+      userMessage: info.userMessage,
+      technicalMessage,
+    };
+  }
+
+  if (/schema|required field|invalid response|bad prompt/i.test(raw) || stageKey === "schema_validate") {
+    return {
+      kind: "bad_prompt",
+      autoRetryable: true,
+      userRetryable: true,
+      userMessage: info.userMessage,
+      technicalMessage,
+    };
+  }
+
+  if (
+    /503|502|500|overloaded|temporar|unavailable|ECONNRESET|fetch failed|network|socket hang up/i.test(
+      raw,
+    )
+  ) {
+    return {
+      kind: "temporary_provider",
+      autoRetryable: true,
+      userRetryable: true,
+      userMessage: info.userMessage,
+      technicalMessage,
+    };
+  }
+
+  if (isProspectAiTransientProviderError(err)) {
+    return {
+      kind: "temporary_provider",
+      autoRetryable: true,
+      userRetryable: true,
+      userMessage: info.userMessage,
+      technicalMessage,
+    };
+  }
+
+  if (/Error:|Exception|TypeError|ReferenceError/i.test(raw)) {
+    return {
+      kind: "unexpected_exception",
+      autoRetryable: false,
+      userRetryable: true,
+      userMessage: userFacingProspectAiReviewError(raw),
+      technicalMessage,
+    };
+  }
+
+  return {
+    kind: "unknown",
+    autoRetryable: info.retryable && !/permanently|unsupported/i.test(raw),
+    userRetryable: info.retryable,
+    userMessage: info.userMessage,
+    technicalMessage,
+  };
+}
+
+/** Count classified failures for a batch of error messages (audit / ops). */
+export function summarizeProspectAiReviewFailureKinds(
+  errors: Array<{ errorMessage?: string | null; stage?: string | null }>,
+): Record<ProspectAiReviewFailureKind, number> {
+  const counts = Object.fromEntries(
+    PROSPECT_AI_REVIEW_FAILURE_KINDS.map((k) => [k, 0]),
+  ) as Record<ProspectAiReviewFailureKind, number>;
+  for (const row of errors) {
+    const kind = classifyProspectAiReviewFailure(row.errorMessage, row.stage).kind;
+    counts[kind] += 1;
+  }
+  return counts;
+}
+
+/** Pipeline stages for Discover → Campaign eligibility (presentation / tests). */
+export const PROSPECT_AI_PIPELINE_STAGES = [
+  "discover_saved",
+  "sent_to_review",
+  "queued",
+  "ai_review_started",
+  "ai_review_failed",
+  "ai_review_retry",
+  "ai_review_completed",
+  "enrichment_started",
+  "enrichment_completed",
+  "enrichment_failed",
+  "campaign_eligible",
+  "campaign_blocked",
+] as const;
+export type ProspectAiPipelineStage = (typeof PROSPECT_AI_PIPELINE_STAGES)[number];
+
+/**
+ * Pure transition log for one prospect through Review reliability paths.
+ * Used by tests to document Discover → Retry → Enrichment → Campaign eligibility.
+ */
+export function traceProspectAiReliabilityPipeline(events: {
+  discovered?: boolean;
+  sentToReview?: boolean;
+  analysisStatus?: string | null;
+  retriedQualification?: boolean;
+  enrichmentStatus?: string | null;
+  hasEmail?: boolean;
+  campaignEligible?: boolean;
+}): ProspectAiPipelineStage[] {
+  const log: ProspectAiPipelineStage[] = [];
+  if (events.discovered !== false) log.push("discover_saved");
+  if (events.sentToReview !== false) log.push("sent_to_review");
+
+  const analysis = String(events.analysisStatus || "pending").toLowerCase();
+  if (analysis === "pending") log.push("queued");
+  if (analysis === "processing" || analysis === "failed" || analysis === "completed" || analysis === "needs_review") {
+    log.push("ai_review_started");
+  }
+  if (analysis === "failed") {
+    log.push("ai_review_failed");
+    if (events.retriedQualification) {
+      log.push("ai_review_retry");
+    }
+  }
+  if (analysis === "completed" || analysis === "needs_review") {
+    if (events.retriedQualification) log.push("ai_review_retry");
+    log.push("ai_review_completed");
+  }
+
+  const enrichment = String(events.enrichmentStatus || "none").toLowerCase();
+  if (enrichment === "pending" || enrichment === "enriching") {
+    log.push("enrichment_started");
+  }
+  if (enrichment === "completed") log.push("enrichment_completed");
+  if (enrichment === "failed") log.push("enrichment_failed");
+
+  if (events.campaignEligible === true) log.push("campaign_eligible");
+  else if (events.campaignEligible === false) log.push("campaign_blocked");
+
+  return log;
+}
+
+/**
+ * Enrichment may run after AI success (post_qualify) or via human Enrich.
+ * It must not require a human Qualified decision; AI failure blocks human Enrich.
+ */
+export function explainProspectEnrichmentIndependence(): {
+  canRunBeforeAiReview: boolean;
+  shouldRunBeforeAiReview: boolean;
+  canAiFailWhileEnrichmentSucceeds: boolean;
+  canEnrichmentFailWhileAiSucceeds: boolean;
+  intentional: boolean;
+  rationale: string;
+} {
+  return {
+    canRunBeforeAiReview: false,
+    shouldRunBeforeAiReview: false,
+    canAiFailWhileEnrichmentSucceeds: true,
+    canEnrichmentFailWhileAiSucceeds: true,
+    intentional: true,
+    rationale:
+      "Enrichment is website contact lookup; AI Review is qualification. post_qualify enrichment runs after AI success. Post-enrich force re-AI can fail without rolling back enrichment. Human Enrich requires AI complete (not failed).",
+  };
+}
+
+export type ProspectEnrichmentFailureInfo = {
+  failureClass: ProspectEnrichmentFailureClass | "unknown";
+  userMessage: string;
+  /** Show Retry Enrichment. */
+  retryable: boolean;
+  permanent: boolean;
+};
+
+/** Friendly enrichment failure + whether Retry Enrichment applies. */
+export function classifyProspectEnrichmentFailure(
+  input: ProspectEnrichmentOutcomeInput,
+): ProspectEnrichmentFailureInfo {
+  const failureClass = readEnrichmentFailureClass(input);
+  const detail = resolveMissingEmailDetail(input);
+  if (failureClass === "no_website" || detail?.code === "no_website") {
+    return {
+      failureClass: "no_website",
+      userMessage: PROSPECT_ENRICHMENT_FAILURE_LABELS.no_website,
+      retryable: false,
+      permanent: true,
+    };
+  }
+  if (failureClass === "social_profile_only" || detail?.code === "social_profile_only") {
+    return {
+      failureClass: "social_profile_only",
+      userMessage: PROSPECT_ENRICHMENT_FAILURE_LABELS.social_profile_only,
+      retryable: false,
+      permanent: true,
+    };
+  }
+  if (failureClass === "website_timeout" || detail?.code === "website_timeout") {
+    return {
+      failureClass: "website_timeout",
+      userMessage: PROSPECT_ENRICHMENT_FAILURE_LABELS.website_timeout,
+      retryable: true,
+      permanent: false,
+    };
+  }
+  if (
+    failureClass === "website_fetch_failed" ||
+    failureClass === "all_pages_failed" ||
+    detail?.code === "website_fetch_failed"
+  ) {
+    return {
+      failureClass: failureClass || "website_fetch_failed",
+      userMessage:
+        PROSPECT_ENRICHMENT_FAILURE_LABELS[failureClass || "website_fetch_failed"] ||
+        "Website couldn't be reached.",
+      retryable: true,
+      permanent: false,
+    };
+  }
+  if (detail?.code === "no_email_on_website") {
+    return {
+      failureClass: "unknown",
+      userMessage: "No public email found on the website.",
+      retryable: true,
+      permanent: false,
+    };
+  }
+  const status = String(input.enrichmentStatus || "").toLowerCase();
+  if (status === "failed") {
+    return {
+      failureClass: "unknown",
+      userMessage: "Some business information couldn't be collected.",
+      retryable: true,
+      permanent: false,
+    };
+  }
+  return {
+    failureClass: "unknown",
+    userMessage: "Some business information couldn't be collected.",
+    retryable: false,
+    permanent: false,
+  };
+}
+
+/** After successful AI Review, prior failure fields must be cleared. */
+export function prospectAiReviewSuccessClearsFailure(patch: {
+  analysisStatus?: string | null;
+  errorMessage?: string | null;
+  rawResult?: Record<string, unknown> | null;
+}): boolean {
+  const status = String(patch.analysisStatus || "").toLowerCase();
+  if (status !== "completed" && status !== "needs_review") return false;
+  if (patch.errorMessage != null && String(patch.errorMessage).trim() !== "") return false;
+  const raw = patch.rawResult || {};
+  if (raw.failureKind != null || raw.aiReviewFailureKind != null) return false;
+  return true;
+}
+
+/**
+ * Columns wiped when AI Review terminates as failed (after retries exhausted)
+ * or when a new analysis attempt is claimed.
+ * Prevents a prior success / partial normalize from surviving under failed/processing.
+ */
+export const PROSPECT_AI_REVIEW_OUTPUT_CLEAR_FIELDS = [
+  "industry",
+  "businessType",
+  "companyName",
+  "jobTitle",
+  "agencyLikelihood",
+  "shopifyMerchantLikelihood",
+  "realEstateLikelihood",
+  "localBusinessLikelihood",
+  "saasLikelihood",
+  "potentialFit",
+  "leadScore",
+  "priority",
+  "recommendedOffer",
+  "suggestedOutreachAngle",
+  "suggestedFirstMessage",
+  "suggestedOutreachSubject",
+  "reasoningSummary",
+  "confidence",
+  "needsReview",
+] as const;
+
+/** DB patch fragment: clear normalized AI outputs (snake not needed — drizzle property names). */
+export function prospectAiReviewOutputClearPatch(): Record<string, null | boolean> {
+  return {
+    industry: null,
+    businessType: null,
+    companyName: null,
+    jobTitle: null,
+    agencyLikelihood: null,
+    shopifyMerchantLikelihood: null,
+    realEstateLikelihood: null,
+    localBusinessLikelihood: null,
+    saasLikelihood: null,
+    potentialFit: null,
+    leadScore: null,
+    priority: null,
+    recommendedOffer: null,
+    suggestedOutreachAngle: null,
+    suggestedFirstMessage: null,
+    suggestedOutreachSubject: null,
+    reasoningSummary: null,
+    confidence: null,
+    needsReview: false,
+  };
+}
+
+/** True when a failed-attempt persist patch does not keep AI summary outputs. */
+export function prospectAiReviewFailedPersistIsClean(patch: Record<string, unknown>): boolean {
+  if (String(patch.analysisStatus || "").toLowerCase() !== "failed") return false;
+  for (const key of PROSPECT_AI_REVIEW_OUTPUT_CLEAR_FIELDS) {
+    const v = patch[key];
+    if (key === "needsReview") {
+      if (v === true) return false;
+      continue;
+    }
+    if (v != null && v !== "") return false;
+  }
+  const raw = (patch.rawResult || {}) as Record<string, unknown>;
+  // Must not retain a prior successful intel payload / model text under failed.
+  if (raw.leadScore != null || raw.reasoningSummary != null || raw.suggestedOutreachAngle != null) {
+    return false;
+  }
+  return true;
+}

@@ -24,6 +24,11 @@ import {
   resolveProspectEnrichmentOutcomeClass,
 } from "./prospectEnrichmentOutcome";
 import { classifyProspectWebsiteUrl } from "./prospectWebsiteClassification";
+import {
+  discoveryAttentionLabel,
+  isUsableNeedsAttentionReason,
+} from "./prospectAiDiscoveryQuality";
+import { userFacingProspectAiReviewError } from "./prospectAiReviewErrors";
 
 export type ProspectReviewWorkState =
   | "needs_review"
@@ -96,7 +101,8 @@ export type ProspectNeedsReviewBadgeCode =
   | "missing_information"
   | "not_qualified"
   | "analyzing"
-  | "needs_review";
+  | "needs_review"
+  | "discovery_attention";
 
 export type ProspectNeedsReviewBadge = {
   code: ProspectNeedsReviewBadgeCode;
@@ -122,14 +128,22 @@ export function resolveProspectNeedsReviewBadge(
     return { code: "ai_review_failed", label: "AI Review Failed" };
   }
   if (analysis === "processing") {
-    return { code: "analyzing", label: "Analyzing…" };
+    return { code: "analyzing", label: "Reviewing" };
   }
 
   if (isProspectEnrichmentInProgress(input.enrichmentStatus)) {
     return { code: "enriching", label: "Enriching" };
   }
   if (isProspectEnrichmentFailed(input.enrichmentStatus)) {
-    return { code: "enrichment_failed", label: "Enrichment Failed" };
+    return { code: "enrichment_failed", label: "Website lookup failed" };
+  }
+
+  const discoveryReason = String(input.discoveryAttentionReason || "").trim();
+  if (isUsableNeedsAttentionReason(discoveryReason) && !isProspectDecisionQualified(input)) {
+    return {
+      code: "discovery_attention",
+      label: discoveryAttentionLabel(discoveryReason),
+    };
   }
 
   const attention = resolveProspectNeedsAttentionReason(input);
@@ -143,7 +157,7 @@ export function resolveProspectNeedsReviewBadge(
     return { code: "ai_review_failed", label: "AI Review Failed" };
   }
   if (attention === "enrichment_failed") {
-    return { code: "enrichment_failed", label: "Enrichment Failed" };
+    return { code: "enrichment_failed", label: "Website lookup failed" };
   }
 
   if (isProspectDecisionQualified(input)) {
@@ -171,7 +185,7 @@ export function resolveProspectNeedsReviewBadge(
       return { code: "ai_review_failed", label: "AI Review Failed" };
     }
     if (b.code === "qualification_incomplete") {
-      return { code: "analyzing", label: "Analyzing…" };
+      return { code: "analyzing", label: "Reviewing" };
     }
   }
 
@@ -201,7 +215,31 @@ export type ProspectReviewStateInput = ProspectReviewUxInput & {
   notQualified?: boolean | null;
   /** Existing Unified Inbox thread (when known from list payload). */
   hasInboxThread?: boolean | null;
+  /** Discovery attention reason carried into Review (customFields.prospectAi). */
+  discoveryAttentionReason?: string | null;
 };
+
+/** Detail line under Needs Review badges (friendly, never technical). */
+export function resolveProspectNeedsReviewBadgeDetail(
+  input: ProspectReviewStateInput,
+  badge: ProspectNeedsReviewBadge | null,
+): string | null {
+  if (!badge) return null;
+  if (badge.code === "ai_review_failed") {
+    return userFacingProspectAiReviewError(input.errorMessage);
+  }
+  if (
+    badge.code === "missing_email" ||
+    badge.code === "enrichment_failed" ||
+    badge.code === "missing_website"
+  ) {
+    return resolveMissingEmailDetail(input)?.reason ?? null;
+  }
+  if (badge.code === "discovery_attention") {
+    return "Resolve in Review — edit category, website, or details as needed.";
+  }
+  return null;
+}
 
 /**
  * Evidence of an explicit Qualified/approved decision (current or legacy).
@@ -292,8 +330,23 @@ export function isProspectEnrichmentRetryable(input: ProspectReviewStateInput): 
   if (prospectEnrichmentEmailSatisfied(input) && isProspectEnrichmentComplete(input.enrichmentStatus)) {
     return false;
   }
+  // Permanent: no official website / social-only — edit website instead of retrying.
+  const failure = readEnrichmentFailureClass(input);
+  if (failure === "no_website" || failure === "social_profile_only") return false;
+  const detail = resolveMissingEmailDetail(input);
+  if (detail && detail.canRetry === false && (detail.code === "no_website" || detail.code === "social_profile_only")) {
+    return false;
+  }
   const status = String(input.enrichmentStatus || "none").toLowerCase();
-  if (status === "failed") return true;
+  if (status === "failed") {
+    // Temporary website/provider failures are retryable.
+    return (
+      failure == null ||
+      failure === "website_timeout" ||
+      failure === "website_fetch_failed" ||
+      failure === "all_pages_failed"
+    );
+  }
   if (status === "completed" && !prospectEnrichmentEmailSatisfied(input)) return true;
   // Legacy false-completed (all pages failed) treated as retryable via outcome helpers.
   const outcome = resolveProspectEnrichmentOutcomeClass(input);

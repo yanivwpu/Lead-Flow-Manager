@@ -122,8 +122,8 @@ export function resolveAiPersonalityStatus(params: {
     return {
       kind: "imported",
       emoji: "👋",
-      message:
-        String(params.ux.errorMessage || "").trim() || "Qualification failed — retry available.",
+      // Never surface raw provider / env diagnostics in the Progress column.
+      message: "AI Review couldn't be completed. Retry Qualification.",
       active: false,
     };
   }

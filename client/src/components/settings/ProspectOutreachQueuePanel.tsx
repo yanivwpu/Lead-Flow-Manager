@@ -152,7 +152,14 @@ export function ProspectOutreachQueuePanel({
       fetchJson("/api/growth-tools/prospect-outreach/queue/resume", { method: "POST" }),
     onSuccess: () => {
       toast({ title: "Sending resumed — queue will process under daily limits" });
+      // Invalidate this browser only — other clients catch up via 5s refetchInterval.
+      // Resume arms the queue; rows stay Ready/queued until the worker marks them Sent.
       invalidate();
+      if (import.meta.env.DEV) {
+        console.info("[ProspectBulkOutreach] ui_refetch_after_resume", {
+          queryPrefix: "/api/growth-tools/prospect-outreach",
+        });
+      }
     },
     onError: (err: Error) =>
       toast({ title: "Resume failed", description: err.message, variant: "destructive" }),

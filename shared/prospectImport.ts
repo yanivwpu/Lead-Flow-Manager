@@ -383,6 +383,11 @@ export type ProspectIntelligenceListItem = {
    * Same truth as Send preview — drives Qualified / Already contacted.
    */
   priorOutreachDetected?: boolean | null;
+  /**
+   * Discovery attention reason carried from Prospect AI Discover → Review
+   * (contact customFields/sourceDetails.prospectAi.attentionReason).
+   */
+  discoveryAttentionReason?: string | null;
   intelligence: ProspectIntelligence;
 };
 

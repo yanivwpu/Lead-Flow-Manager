@@ -30,6 +30,11 @@ import {
   claimableAnalysisStatuses,
   contactOwnedByActiveBulkLease,
 } from "@shared/prospectAnalysisOwnership";
+import { isProspectAiTransientProviderError } from "@shared/prospectAiReviewErrors";
+import {
+  classifyProspectAiReviewFailure,
+  prospectAiReviewOutputClearPatch,
+} from "@shared/prospectAiReliability";
 import { db } from "../../drizzle/db";
 import { aiProvider } from "../aiProvider";
 import { storage } from "../storage";
@@ -55,7 +60,8 @@ import { assertContactInWorkspace } from "./prospectWorkspaceScope";
 const runningBatchJobs = new Set<string>();
 const runningContactAnalysis = new Set<string>();
 const ANALYSIS_CONCURRENCY = 1;
-const MAX_AI_RETRIES = 2;
+/** Attempts after the first failure (total tries = MAX_AI_RETRIES + 1). */
+const MAX_AI_RETRIES = 3;
 
 type AiCompleteFn = (
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
@@ -227,11 +233,6 @@ async function defaultAiComplete(
   return result;
 }
 
-function isTransientAiError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return /rate limit|timeout|503|502|429|overloaded/i.test(msg);
-}
-
 type QualFailureStage =
   | "route_entered"
   | "contact_loaded"
@@ -381,6 +382,9 @@ export async function claimProspectContactForAnalysis(params: {
     .set({
       analysisStatus: "processing",
       errorMessage: null,
+      // Drop prior AI outputs so a retry never shows a stale summary mid-flight.
+      ...prospectAiReviewOutputClearPatch(),
+      rawResult: {},
       updatedAt: now,
       ...(params.aiModel ? { aiModel: params.aiModel } : {}),
       ...(params.importJobId !== undefined
@@ -422,11 +426,19 @@ export async function markProspectAnalysisFailed(
   reason: string,
 ): Promise<boolean> {
   const message = reason.substring(0, 500);
+  const classified = classifyProspectAiReviewFailure(message);
   const updated = await db
     .update(prospectIntelligence)
     .set({
       analysisStatus: "failed",
       errorMessage: message,
+      ...prospectAiReviewOutputClearPatch(),
+      rawResult: {
+        aiReviewFailureKind: classified.kind,
+        aiReviewFailureStage: "mark_failed",
+        autoRetryable: classified.autoRetryable,
+        userRetryable: classified.userRetryable,
+      },
       updatedAt: new Date(),
     })
     .where(
@@ -496,6 +508,13 @@ export async function healAbandonedProcessingAnalysis(params?: {
     .set({
       analysisStatus: "failed",
       errorMessage: "Abandoned stale processing (auto-heal)",
+      ...prospectAiReviewOutputClearPatch(),
+      rawResult: {
+        aiReviewFailureKind: "race_condition",
+        aiReviewFailureStage: "stale_processing_heal",
+        autoRetryable: false,
+        userRetryable: true,
+      },
       updatedAt: now,
     })
     .where(
@@ -636,14 +655,21 @@ export async function analyzeProspectContact(params: {
             break;
           } catch (err) {
             lastErr = err;
-            if (!isTransientAiError(err) || attempt === MAX_AI_RETRIES) break;
-            await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+            const classified = classifyProspectAiReviewFailure(err, stage);
+            const transient =
+              classified.autoRetryable || isProspectAiTransientProviderError(err);
+            if (!transient || attempt === MAX_AI_RETRIES) {
+              break;
+            }
+            // Exponential-ish backoff: 500ms, 1s, 2s, 3s…
+            await new Promise((r) => setTimeout(r, Math.min(3000, 500 * 2 ** attempt)));
           }
         }
 
         if (!parsed) {
           const { formatProspectAiProviderFailureMessage } = await import("@shared/openaiApiKey");
           const message = formatProspectAiProviderFailureMessage(lastErr ?? "Qualification failed");
+          const classified = classifyProspectAiReviewFailure(lastErr ?? message, stage);
           logProspectQualificationFailed({
             contactId: params.contactId,
             workspaceId,
@@ -656,6 +682,16 @@ export async function analyzeProspectContact(params: {
             .set({
               analysisStatus: "failed",
               errorMessage: message.substring(0, 500),
+              // Never keep a prior/partial AI summary under a failed attempt.
+              ...prospectAiReviewOutputClearPatch(),
+              // Ops diagnostics only — UI uses userFacingProspectAiReviewError(errorMessage).
+              // Do not store raw model text from failed parse attempts.
+              rawResult: {
+                aiReviewFailureKind: classified.kind,
+                aiReviewFailureStage: stage,
+                autoRetryable: classified.autoRetryable,
+                userRetryable: classified.userRetryable,
+              },
               updatedAt: new Date(),
             })
             .where(eq(prospectIntelligence.contactId, params.contactId));
@@ -1145,6 +1181,10 @@ export async function listProspectIntelligence(
         ? "Google Places discovery"
         : meta?.batchName) ||
       null;
+    const discoveryAttentionReason =
+      pai?.attentionReason != null && String(pai.attentionReason).trim()
+        ? String(pai.attentionReason).trim()
+        : null;
     const prior = priorByContact.get(contact.id);
     items.push({
       contactId: contact.id,
@@ -1161,6 +1201,7 @@ export async function listProspectIntelligence(
       queueStatus: queueStatusByContact.get(contact.id) || null,
       prospectOutcome: outcomeByContact.get(contact.id) || null,
       priorOutreachDetected: prior?.priorOutreachDetected === true,
+      discoveryAttentionReason,
       intelligence: mapIntelligenceRow(row),
     });
   }
@@ -1286,6 +1327,11 @@ export async function getProspectIntelligenceDetail(
   const priorMap = await batchLoadPriorOutreachFlags([contactId]);
   const prior = priorMap.get(contactId);
 
+  const discoveryAttentionReason =
+    pai?.attentionReason != null && String(pai.attentionReason).trim()
+      ? String(pai.attentionReason).trim()
+      : null;
+
   return {
     contactId: contact.id,
     name: contact.name,
@@ -1301,6 +1347,7 @@ export async function getProspectIntelligenceDetail(
     queueStatus,
     prospectOutcome,
     priorOutreachDetected: prior?.priorOutreachDetected === true,
+    discoveryAttentionReason,
     intelligence: mapIntelligenceRow(rows[0]),
   };
 }

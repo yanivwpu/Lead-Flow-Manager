@@ -280,7 +280,7 @@ assert.equal(
       enrichmentStatus: "failed",
       websiteUrl: "https://example.com",
     })?.label,
-    "Enrichment Failed",
+    "Website lookup failed",
   );
   assert.equal(
     resolveProspectNeedsReviewBadge({
@@ -801,16 +801,18 @@ assert.ok(panelSrc.includes("Enrich") || panelSrc.includes("pi-enrich"));
 assert.ok(panelSrc.includes("pi-selection-reason") || panelSrc.includes("availability.reason"));
 assert.ok(panelSrc.includes("onStartEnrichment") || panelSrc.includes("startProspectEnrichment"));
 assert.ok(!panelSrc.includes("pi-campaigns-subfilters"));
-// Needs Review is a badge/state; detail Enrich uses shared canEnrichProspect
-assert.ok(panelSrc.includes("pi-needs-human-review-badge"));
+// Needs Review is a badge/state via primary status resolver; detail Enrich uses shared canEnrichProspect
+assert.ok(panelSrc.includes("resolveProspectDetailPrimaryStatus"));
 assert.ok(panelSrc.includes("pi-qualification-controls"));
 assert.ok(panelSrc.includes("pi-qualify-qualified"));
 assert.ok(panelSrc.includes("pi-qualify-not-qualified"));
+assert.ok(!panelSrc.includes("pi-qualify-needs-review"));
 assert.ok(panelSrc.includes("canEnrichProspect(reviewUxInput"));
 assert.ok(panelSrc.includes("explainCanEnrichProspect(reviewUxInput"));
 assert.ok(panelSrc.includes("detailCanEnrich"));
 assert.ok(panelSrc.includes("explainCanEnrichProspect(ux)"));
-assert.ok(panelSrc.includes("enrichDisabledActionLabel"));
+assert.ok(panelSrc.includes("pi-enrich-blocked-reason"));
+assert.ok(!panelSrc.includes("pi-enrich-disabled-button"));
 assert.ok(!panelSrc.includes('setWorkFilter("enriching")'));
 assert.ok(!panelSrc.includes("attentionSubFilter"));
 assert.ok(!panelSrc.includes("detailAlreadyNeedsReview"));

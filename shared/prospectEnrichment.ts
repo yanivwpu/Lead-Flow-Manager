@@ -58,11 +58,11 @@ export const PROSPECT_ENRICHMENT_OUTCOME_CLASSES = [
 export type ProspectEnrichmentOutcomeClass = (typeof PROSPECT_ENRICHMENT_OUTCOME_CLASSES)[number];
 
 export const PROSPECT_ENRICHMENT_FAILURE_LABELS: Record<ProspectEnrichmentFailureClass, string> = {
-  website_timeout: "Website timed out",
-  website_fetch_failed: "Website could not be reached",
-  all_pages_failed: "Website pages could not be loaded",
-  no_website: "No public website found",
-  social_profile_only: "Social profile only",
+  website_timeout: "Website timed out — some business information couldn't be collected.",
+  website_fetch_failed: "Website couldn't be reached.",
+  all_pages_failed: "Website pages couldn't be loaded — some business information couldn't be collected.",
+  no_website: "No public website found.",
+  social_profile_only: "Website looks like a social profile — some business information couldn't be collected.",
 };
 
 export type ProspectPublicContacts = {

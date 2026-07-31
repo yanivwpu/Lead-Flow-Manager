@@ -1,0 +1,336 @@
+﻿npx : (node:12448) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as 
+aliases for 'verify-full'.
+At C:\Users\ssamm\AppData\Local\Temp\ps-script-9dd79fb6-379b-4e1d-8b6a-2305479f04e6.ps1:108 char:1
++ npx tsx scripts/audit-miami-missing-email-enrichment.ts --name="DREAM ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:12448) Wa... 'verify-full'.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq 
+semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"tag":"[ProspectEnrichment]","event":"emails_extracted","sourceUrl":"https://www.realbrokersmiami.com/","count":1,"methods":["mailto"]}
+{
+  "count": 2,
+  "reports": [
+    {
+      "name": "DREAM LAND GROUP REAL ESTATE",
+      "contactId": "56effebd-1903-4e89-bff6-18cbf5cda04d",
+      "contactsEmail": null,
+      "enrichmentStatus": "completed",
+      "enrichmentEmailFound": false,
+      "enrichmentPhoneFound": true,
+      "enrichmentErrorMessage": null,
+      "websiteUrlUsed": "https://www.facebook.com/miamirealestateopportunities/",
+      "resolvedWebsiteFromContact": "https://www.facebook.com/miamirealestateopportunities/",
+      "websiteAnalyzedAt": "2026-07-27T06:00:52.157Z",
+      "reviewStatus": "pending",
+      "analysisStatus": "completed",
+      "needsReview": false,
+      "enrichmentJob": {
+        "id": "3b6768aa-821f-44a8-a3cf-ee737e51d119",
+        "status": "completed",
+        "provider": "website_public",
+        "errorMessage": null,
+        "progressCurrent": 4,
+        "progressTotal": 4,
+        "createdAt": "2026-07-27T06:00:29.432Z",
+        "updatedAt": "2026-07-27T06:00:57.670Z"
+      },
+      "storedEnrichmentResultSummary": {
+        "provider": "website_public",
+        "websiteUrl": "https://www.facebook.com/miamirealestateopportunities/",
+        "emailFound": false,
+        "phoneFound": true,
+        "emailsInResult": [],
+        "bestFromStoredResult": null,
+        "wouldApplyToContactEmail": null,
+        "pagesScanned": [
+          {
+            "url": "https://www.facebook.com/miamirealestateopportunities/",
+            "status": "scanned"
+          },
+          {
+            "url": "https://www.facebook.com/",
+            "status": "scanned"
+          },
+          {
+            "url": "https://www.facebook.com/login/?next=https%3A%2F%2Fwww.facebook.com%2Fcontact",
+            "status": "scanned"
+          },
+          {
+            "url": "https://www.facebook.com/contactus/",
+            "status": "scanned"
+          },
+          {
+            "url": "https://www.meta.com/about/?utm_source=about.facebook.com&utm_medium=redirect",
+            "status": "scanned"
+          },
+          {
+            "url": "https://www.facebook.com/login/?next=https%3A%2F%2Fwww.facebook.com%2Fabout-us",
+            "status": "scanned"
+          },
+          {
+            "url": "https://www.facebook.com/login/?next=https%3A%2F%2Fwww.facebook.com%2Fteam",
+            "status": "scanned"
+          },
+          {
+            "url": "https://www.facebook.com/login/?next=https%3A%2F%2Fwww.facebook.com%2Fservices",
+            "status": "scanned"
+          }
+        ],
+        "contactPageUrls": []
+      },
+      "badge": {
+        "code": "missing_email",
+        "label": "Missing Email"
+      },
+      "canEnrichNow": false,
+      "enrichExplain": {
+        "ok": false,
+        "code": "already_enriched",
+        "message": "This prospect is already enriched."
+      },
+      "liveCrawl": {
+        "origin": "https://www.facebook.com",
+        "homepageOk": true,
+        "homepageHasAnyEmailPattern": false,
+        "pagesVisited": [
+          {
+            "path": "/",
+            "requestedUrl": "https://www.facebook.com/",
+            "ok": true,
+            "finalUrl": "https://www.facebook.com/",
+            "htmlLen": 426319,
+            "mailtoCount": 0,
+            "emails": [],
+            "bestEmail": null,
+            "emailExtractions": []
+          },
+          {
+            "path": "/contact",
+            "requestedUrl": "https://www.facebook.com/contact",
+            "ok": true,
+            "finalUrl": "https://www.facebook.com/contact",
+            "htmlLen": 309220,
+            "mailtoCount": 0,
+            "emails": [],
+            "bestEmail": null,
+            "emailExtractions": []
+          },
+          {
+            "path": "/contact-us",
+            "requestedUrl": "https://www.facebook.com/contact-us",
+            "ok": true,
+            "finalUrl": "https://www.facebook.com/contactus/",
+            "htmlLen": 524288,
+            "mailtoCount": 0,
+            "emails": [],
+            "bestEmail": null,
+            "emailExtractions": []
+          },
+          {
+            "path": "/about",
+            "requestedUrl": "https://www.facebook.com/about",
+            "ok": true,
+            "finalUrl": "https://www.meta.com/about/?utm_source=about.facebook.com&utm_medium=redirect",
+            "htmlLen": 236897,
+            "mailtoCount": 0,
+            "emails": [],
+            "bestEmail": null,
+            "emailExtractions": []
+          },
+          {
+            "path": "/about-us",
+            "requestedUrl": "https://www.facebook.com/about-us",
+            "ok": true,
+            "finalUrl": "https://www.facebook.com/about-us",
+            "htmlLen": 308541,
+            "mailtoCount": 0,
+            "emails": [],
+            "bestEmail": null,
+            "emailExtractions": []
+          },
+          {
+            "path": "/team",
+            "requestedUrl": "https://www.facebook.com/team",
+            "ok": true,
+            "finalUrl": "https://www.facebook.com/team",
+            "htmlLen": 308520,
+            "mailtoCount": 0,
+            "emails": [],
+            "bestEmail": null,
+            "emailExtractions": []
+          },
+          {
+            "path": "/services",
+            "requestedUrl": "https://www.facebook.com/services",
+            "ok": true,
+            "finalUrl": "https://www.facebook.com/services",
+            "htmlLen": 308524,
+            "mailtoCount": 0,
+            "emails": [],
+            "bestEmail": null,
+            "emailExtractions": []
+          }
+        ],
+        "allEmailsFound": [],
+        "bestAcrossPages": null
+      }
+    },
+    {
+      "name": "Real Brokers Miami ΓÇô Real Estate Concierge",
+      "contactId": "f0fd59de-06ff-4701-83e7-5d1d382c506a",
+      "contactsEmail": null,
+      "enrichmentStatus": "completed",
+      "enrichmentEmailFound": false,
+      "enrichmentPhoneFound": true,
+      "enrichmentErrorMessage": null,
+      "websiteUrlUsed": "https://realbrokersmiami.com/",
+      "resolvedWebsiteFromContact": "https://realbrokersmiami.com/",
+      "websiteAnalyzedAt": "2026-07-27T06:00:43.624Z",
+      "reviewStatus": "pending",
+      "analysisStatus": "completed",
+      "needsReview": false,
+      "enrichmentJob": {
+        "id": "6b6582bd-a826-4d2c-acce-c418859b3be8",
+        "status": "completed",
+        "provider": "website_public",
+        "errorMessage": null,
+        "progressCurrent": 4,
+        "progressTotal": 4,
+        "createdAt": "2026-07-27T06:00:29.351Z",
+        "updatedAt": "2026-07-27T06:00:43.676Z"
+      },
+      "storedEnrichmentResultSummary": {
+        "provider": "website_public",
+        "websiteUrl": "https://realbrokersmiami.com/",
+        "emailFound": false,
+        "phoneFound": true,
+        "emailsInResult": [],
+        "bestFromStoredResult": null,
+        "wouldApplyToContactEmail": null,
+        "pagesScanned": [
+          {
+            "url": "https://realbrokersmiami.com/",
+            "reason": "This operation was aborted",
+            "status": "failed"
+          },
+          {
+            "url": "https://realbrokersmiami.com/contact",
+            "reason": "HTTP 404",
+            "status": "failed"
+          },
+          {
+            "url": "https://realbrokersmiami.com/contact-us",
+            "reason": "HTTP 404",
+            "status": "failed"
+          },
+          {
+            "url": "https://realbrokersmiami.com/about",
+            "reason": "HTTP 404",
+            "status": "failed"
+          },
+          {
+            "url": "https://realbrokersmiami.com/about-us",
+            "reason": "HTTP 404",
+            "status": "failed"
+          },
+          {
+            "url": "https://realbrokersmiami.com/team",
+            "reason": "HTTP 404",
+            "status": "failed"
+          },
+          {
+            "url": "https://realbrokersmiami.com/services",
+            "reason": "HTTP 404",
+            "status": "failed"
+          }
+        ],
+        "contactPageUrls": []
+      },
+      "badge": {
+        "code": "missing_email",
+        "label": "Missing Email"
+      },
+      "canEnrichNow": false,
+      "enrichExplain": {
+        "ok": false,
+        "code": "already_enriched",
+        "message": "This prospect is already enriched."
+      },
+      "liveCrawl": {
+        "origin": "https://realbrokersmiami.com",
+        "homepageOk": true,
+        "homepageHasAnyEmailPattern": true,
+        "pagesVisited": [
+          {
+            "path": "/",
+            "requestedUrl": "https://realbrokersmiami.com/",
+            "ok": true,
+            "finalUrl": "https://www.realbrokersmiami.com/",
+            "htmlLen": 203201,
+            "mailtoCount": 1,
+            "emails": [
+              "info@realbrokers.miami"
+            ],
+            "bestEmail": "info@realbrokers.miami",
+            "emailExtractions": [
+              {
+                "email": "info@realbrokers.miami",
+                "method": "mailto",
+                "sourceUrl": "https://www.realbrokersmiami.com/"
+              }
+            ]
+          },
+          {
+            "path": "/contact",
+            "requestedUrl": "https://realbrokersmiami.com/contact",
+            "ok": false,
+            "error": "HTTP 404"
+          },
+          {
+            "path": "/contact-us",
+            "requestedUrl": "https://realbrokersmiami.com/contact-us",
+            "ok": false,
+            "error": "HTTP 404"
+          },
+          {
+            "path": "/about",
+            "requestedUrl": "https://realbrokersmiami.com/about",
+            "ok": false,
+            "error": "HTTP 404"
+          },
+          {
+            "path": "/about-us",
+            "requestedUrl": "https://realbrokersmiami.com/about-us",
+            "ok": false,
+            "error": "HTTP 404"
+          },
+          {
+            "path": "/team",
+            "requestedUrl": "https://realbrokersmiami.com/team",
+            "ok": false,
+            "error": "HTTP 404"
+          },
+          {
+            "path": "/services",
+            "requestedUrl": "https://realbrokersmiami.com/services",
+            "ok": false,
+            "error": "HTTP 404"
+          }
+        ],
+        "allEmailsFound": [
+          "info@realbrokers.miami"
+        ],
+        "bestAcrossPages": "info@realbrokers.miami"
+      }
+    }
+  ]
+}
