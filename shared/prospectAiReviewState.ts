@@ -132,6 +132,8 @@ export type ProspectReviewStateInput = ProspectReviewUxInput & {
   /** From rawResult.qualificationSource when present. */
   qualificationSource?: string | null;
   rawResult?: Record<string, unknown> | null;
+  /** AI priority — may be stale `needs_review` after auto-qualify. */
+  priority?: string | null;
 };
 
 /** True when subject or first message exists for Campaign queue. */
@@ -705,6 +707,28 @@ export function isProspectQualifiedForCampaign(input: ProspectReviewStateInput):
   return isQualifiedForEmailCampaign(input);
 }
 
+/**
+ * Qualified decision but not yet Campaign Ready (missing email, outreach, etc.).
+ * Still Qualified — not a Needs Review / Not Qualified outcome.
+ */
+export function isProspectQualifiedCampaignBlocked(
+  input: ProspectReviewStateInput,
+): boolean {
+  if (!isProspectVisibleInReview(input)) return false;
+  if (!isProspectDecisionQualified(input)) return false;
+  return !isProspectQualifiedForCampaign(input);
+}
+
+/** Primary campaign-block code for a Qualified-but-blocked row (for assistant counts). */
+export function resolveQualifiedCampaignBlockCode(
+  input: ProspectReviewStateInput,
+): ProspectEmailCampaignBlockCode | null {
+  if (!isProspectQualifiedCampaignBlocked(input)) return null;
+  const code = explainQualifiedForCampaign(input).code;
+  if (code === "ok") return null;
+  return code as ProspectEmailCampaignBlockCode;
+}
+
 /** Summarize why toolbar Enrich / Send are disabled for the current selection. */
 export function summarizeSelectionActionAvailability(input: {
   selectedCount: number;
@@ -1063,4 +1087,63 @@ export function countProspectReviewWorkStates(
     }
   }
   return counts;
+}
+
+/**
+ * Single presentation resolver for tabs, row badge, AI summary priority,
+ * progress decision, and campaign eligibility. Qualification ≠ campaign readiness.
+ */
+export type ProspectReviewPresentation = {
+  decision: "qualified" | "needs_review" | "not_qualified";
+  decisionQualified: boolean;
+  awaitingHumanReview: boolean;
+  campaignReady: boolean;
+  campaignBlockCode: ProspectEligibilityExplanation["code"] | null;
+  rowBadge: ProspectNeedsReviewBadge | null;
+  /** Priority safe for AI summary / chips — never `needs_review` when Qualified. */
+  displayPriority: string | null;
+  suppressNeedsReviewChip: boolean;
+  inAllTab: boolean;
+  inNeedsReviewTab: boolean;
+  inNotQualifiedTab: boolean;
+};
+
+export function resolveProspectReviewPresentation(
+  input: ProspectReviewStateInput,
+): ProspectReviewPresentation {
+  const notQualified = isProspectExplicitlyNotQualified(input);
+  const decisionQualified = isProspectDecisionQualified(input);
+  const awaitingHumanReview = isProspectAwaitingHumanReview(input);
+  const decision: ProspectReviewPresentation["decision"] = notQualified
+    ? "not_qualified"
+    : decisionQualified
+      ? "qualified"
+      : "needs_review";
+  const campaign = explainQualifiedForCampaign(input);
+  const rawPriority = String(input.priority || "").toLowerCase();
+  let displayPriority: string | null = input.priority ?? null;
+  if (notQualified) {
+    displayPriority = "low";
+  } else if (decisionQualified && rawPriority === "needs_review") {
+    displayPriority = null;
+  }
+  const staleNeedsReviewPresentation =
+    decisionQualified &&
+    (rawPriority === "needs_review" ||
+      input.needsReview === true ||
+      String(input.analysisStatus || "").toLowerCase() === "needs_review");
+
+  return {
+    decision,
+    decisionQualified,
+    awaitingHumanReview,
+    campaignReady: campaign.ok,
+    campaignBlockCode: campaign.ok ? null : campaign.code,
+    rowBadge: resolveProspectNeedsReviewBadge(input),
+    displayPriority,
+    suppressNeedsReviewChip: staleNeedsReviewPresentation,
+    inAllTab: matchesProspectReviewWorkFilter(input, "all"),
+    inNeedsReviewTab: matchesProspectReviewWorkFilter(input, "needs_review"),
+    inNotQualifiedTab: matchesProspectReviewWorkFilter(input, "not_qualified"),
+  };
 }

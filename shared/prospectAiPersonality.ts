@@ -7,6 +7,12 @@ import type { ProspectReviewLifecycle } from "./prospectReviewUx";
 import { resolveProspectReviewLifecycle, type ProspectReviewUxInput } from "./prospectReviewUx";
 import {
   countProspectReviewWorkStates,
+  isProspectDecisionQualified,
+  isProspectQualifiedCampaignBlocked,
+  isProspectQualifiedForCampaign,
+  isProspectVisibleInReview,
+  resolveQualifiedCampaignBlockCode,
+  type ProspectEmailCampaignBlockCode,
   type ProspectReviewStateInput,
 } from "./prospectAiReviewState";
 
@@ -186,11 +192,28 @@ export type AiGrowthAssistantLine = {
   text: string;
 };
 
+export type AiGrowthAssistantBlockerLine = {
+  code: ProspectEmailCampaignBlockCode | string;
+  count: number;
+  text: string;
+};
+
+export type AiGrowthAssistantCta = {
+  /** Filter table to Qualified-but-not-Campaign-Ready rows (not a new tab). */
+  kind: "review_campaign_blocked";
+  label: string;
+  count: number;
+};
+
 export type AiGrowthAssistantModel = {
   idle: boolean;
   title: string;
   titleEmoji: string;
   lines: AiGrowthAssistantLine[];
+  /** Bullet breakdown of campaign blockers among Qualified rows. */
+  blockerLines?: AiGrowthAssistantBlockerLine[];
+  /** Primary clickable action (Review N blocked Qualified prospects). */
+  cta?: AiGrowthAssistantCta | null;
   /** Concise next step from real counts — never invented. */
   nextAction?: string | null;
 };
@@ -210,6 +233,56 @@ function pluralize(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
+function blockerLabel(code: string, count: number): string {
+  switch (code) {
+    case "missing_email":
+      return count === 1 ? "1 missing email address" : `${count} missing email addresses`;
+    case "outreach_needed":
+      return count === 1
+        ? "1 outreach generation failed"
+        : `${count} outreach generation failed`;
+    case "enrichment_failed":
+      return count === 1 ? "1 enrichment failed" : `${count} enrichment failed`;
+    case "enrichment_in_progress":
+      return count === 1 ? "1 still enriching" : `${count} still enriching`;
+    case "qualification_failed":
+      return count === 1 ? "1 AI Review failed" : `${count} AI Review failed`;
+    default:
+      return `${count} need attention (${code.replace(/_/g, " ")})`;
+  }
+}
+
+function countQualifiedCampaignBlockers(
+  items: AiGrowthAssistantItemInput[],
+): AiGrowthAssistantBlockerLine[] {
+  const tallies = new Map<string, number>();
+  for (const item of items) {
+    const code = resolveQualifiedCampaignBlockCode(item);
+    if (!code) continue;
+    tallies.set(code, (tallies.get(code) || 0) + 1);
+  }
+  const order: ProspectEmailCampaignBlockCode[] = [
+    "missing_email",
+    "outreach_needed",
+    "enrichment_failed",
+    "enrichment_in_progress",
+    "enrichment_incomplete",
+    "qualification_failed",
+    "qualification_incomplete",
+  ];
+  const lines: AiGrowthAssistantBlockerLine[] = [];
+  for (const code of order) {
+    const count = tallies.get(code) || 0;
+    if (count <= 0) continue;
+    lines.push({ code, count, text: blockerLabel(code, count) });
+    tallies.delete(code);
+  }
+  for (const [code, count] of tallies) {
+    if (count > 0) lines.push({ code, count, text: blockerLabel(code, count) });
+  }
+  return lines;
+}
+
 /**
  * Build Review assistant from shared work-state counts (no invented activity).
  */
@@ -225,12 +298,31 @@ export function buildAiGrowthAssistantModel(
   ).length;
   const bulkFailed = Math.max(0, options?.failedQualificationCount ?? 0);
   const busy = counts.analyzing > 0 || counts.enriching > 0;
+  const decisionQualified = items.filter(
+    (p) => isProspectVisibleInReview(p) && isProspectDecisionQualified(p),
+  ).length;
+  const campaignReady = items.filter(
+    (p) => isProspectVisibleInReview(p) && isProspectQualifiedForCampaign(p),
+  ).length;
+  const campaignBlocked = items.filter((p) => isProspectQualifiedCampaignBlocked(p)).length;
+  const blockerLines = countQualifiedCampaignBlockers(items);
+
   const workWaiting =
     counts.needsReview > 0 ||
-    counts.qualified > 0 ||
+    decisionQualified > 0 ||
     counts.needsAttention > 0 ||
     busy ||
-    bulkFailed > 0;
+    bulkFailed > 0 ||
+    campaignBlocked > 0;
+
+  let cta: AiGrowthAssistantCta | null = null;
+  if (!busy && campaignBlocked > 0) {
+    cta = {
+      kind: "review_campaign_blocked",
+      count: campaignBlocked,
+      label: `Review ${campaignBlocked} prospect${campaignBlocked === 1 ? "" : "s"}`,
+    };
+  }
 
   const resolveNextAction = (): string | null => {
     if (counts.enrichmentFailed > 0 || counts.qualificationFailed > 0) {
@@ -238,23 +330,24 @@ export function buildAiGrowthAssistantModel(
         counts.enrichmentFailed + counts.qualificationFailed === 1 ? "item" : "items"
       }.`;
     }
+    if (busy) return null;
+    if (campaignBlocked > 0) {
+      return `Review ${campaignBlocked} prospect${campaignBlocked === 1 ? "" : "s"}.`;
+    }
+    if (campaignReady > 0 && campaignReady === decisionQualified && decisionQualified > 0) {
+      return `Send all ${campaignReady} to Campaign.`;
+    }
+    if (campaignReady > 0) {
+      return `Send ${campaignReady} to Campaign.`;
+    }
+    if (counts.needsReview > 0) {
+      return "Open Needs Review and decide fit for the remaining rows.";
+    }
     if (counts.needsAttention > 0) {
       return `Review ${counts.needsAttention} ${
         counts.needsAttention === 1 ? "item that needs" : "items that need"
       } attention.`;
     }
-    // needsReview chip includes enriching/analyzing — only prompt Enrich when humans can act
-    const waitingForEnrich = Math.max(
-      0,
-      counts.needsReview - counts.enriching - counts.analyzing - counts.needsAttention,
-    );
-    if (waitingForEnrich > 0) return "Select prospects to enrich.";
-    if (counts.qualified > 0) {
-      return `Send ${counts.qualified} qualified ${
-        counts.qualified === 1 ? "prospect" : "prospects"
-      } to Campaigns.`;
-    }
-    if (busy) return null;
     if (items.length === 0) return "Discover businesses to get started.";
     return "Discover more businesses when ready.";
   };
@@ -267,15 +360,11 @@ export function buildAiGrowthAssistantModel(
   } else if (!workWaiting) {
     lines.push({ emoji: "😊", text: "Everything is caught up." });
     lines.push({ emoji: "✨", text: "No prospects require attention." });
-  } else {
-    const needsReviewLine = Math.max(
-      0,
-      counts.needsReview - counts.enriching - counts.analyzing,
-    );
-    if (needsReviewLine > 0) {
+  } else if (busy && decisionQualified === 0) {
+    if (counts.analyzing > 0) {
       lines.push({
-        emoji: "😊",
-        text: `${pluralize(needsReviewLine, "prospect needs", "prospects need")} review.`,
+        emoji: "🤔",
+        text: `Reviewing ${pluralize(counts.analyzing, "prospect", "prospects")}`,
       });
     }
     if (counts.enriching > 0) {
@@ -284,40 +373,7 @@ export function buildAiGrowthAssistantModel(
         text: `${counts.enriching} ${counts.enriching === 1 ? "is" : "are"} being enriched.`,
       });
     }
-    if (counts.qualified > 0) {
-      lines.push({
-        emoji: "✅",
-        text: `${counts.qualified} ${
-          counts.qualified === 1 ? "was" : "were"
-        } enriched successfully.`,
-      });
-    }
-    if (counts.enrichmentFailed > 0 || counts.qualificationFailed > 0) {
-      const n = counts.enrichmentFailed + counts.qualificationFailed;
-      lines.push({
-        emoji: "⚠️",
-        text: `${n} failed and can be retried.`,
-      });
-    }
-    if (counts.missingWebsite > 0) {
-      lines.push({
-        emoji: "🌐",
-        text: `${pluralize(counts.missingWebsite, "prospect has", "prospects have")} no website available.`,
-      });
-    }
-    if (counts.missingEmail > 0) {
-      lines.push({
-        emoji: "📧",
-        text: `${pluralize(counts.missingEmail, "prospect is", "prospects are")} missing required contact info.`,
-      });
-    }
-    if (busy && counts.analyzing > 0) {
-      lines.push({
-        emoji: "🤔",
-        text: `Reviewing ${pluralize(counts.analyzing, "prospect", "prospects")}`,
-      });
-    }
-    if (contactFound > 0 && busy) {
+    if (contactFound > 0) {
       lines.push({
         emoji: "📧",
         text: `Found public contact details for ${pluralize(contactFound, "prospect", "prospects")}`,
@@ -329,6 +385,63 @@ export function buildAiGrowthAssistantModel(
         text: `${pluralize(bulkFailed, "qualification failed", "qualifications failed")} — open a row to retry.`,
       });
     }
+  } else {
+    if (campaignReady > 0 && campaignBlocked === 0 && decisionQualified === campaignReady) {
+      lines.push({
+        emoji: "✅",
+        text: `All ${campaignReady} prospects are Campaign Ready.`,
+      });
+    } else if (campaignReady > 0) {
+      lines.push({
+        emoji: "✅",
+        text: `${campaignReady} prospect${campaignReady === 1 ? " is" : "s are"} ready for Campaign.`,
+      });
+    }
+
+    if (campaignBlocked > 0) {
+      lines.push({
+        emoji: "⚠️",
+        text:
+          campaignReady > 0
+            ? `${campaignBlocked} qualified prospect${
+                campaignBlocked === 1 ? " needs" : "s need"
+              } attention before they can be sent.`
+            : `${campaignBlocked} qualified prospect${
+                campaignBlocked === 1 ? " needs" : "s need"
+              } attention before Campaign.`,
+      });
+    } else if (decisionQualified > 0 && campaignReady === 0) {
+      lines.push({
+        emoji: "✅",
+        text: `${pluralize(decisionQualified, "prospect", "prospects")} qualified`,
+      });
+    }
+
+    if (counts.needsReview > 0) {
+      lines.push({
+        emoji: "😊",
+        text: `${pluralize(counts.needsReview, "prospect needs", "prospects need")} human review.`,
+      });
+    }
+    if (counts.enrichmentFailed > 0 || counts.qualificationFailed > 0 || bulkFailed > 0) {
+      const n = counts.enrichmentFailed + counts.qualificationFailed + bulkFailed;
+      lines.push({
+        emoji: "⚠️",
+        text: `${n} failed and can be retried.`,
+      });
+    }
+    if (busy && counts.analyzing > 0) {
+      lines.push({
+        emoji: "🤔",
+        text: `Reviewing ${pluralize(counts.analyzing, "prospect", "prospects")}`,
+      });
+    }
+    if (counts.enriching > 0) {
+      lines.push({
+        emoji: "🔍",
+        text: `${counts.enriching} ${counts.enriching === 1 ? "is" : "are"} being enriched.`,
+      });
+    }
   }
 
   return {
@@ -336,6 +449,8 @@ export function buildAiGrowthAssistantModel(
     title: "AI Growth Assistant",
     titleEmoji: "🧠",
     lines: lines.slice(0, 5),
+    blockerLines: campaignBlocked > 0 ? blockerLines : [],
+    cta,
     nextAction: resolveNextAction(),
   };
 }
