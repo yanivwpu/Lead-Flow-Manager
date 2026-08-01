@@ -63,7 +63,10 @@ import {
   type ProspectReviewBatchOption,
 } from "@shared/prospectReviewBatch";
 import { PROSPECT_AI_PATH } from "@/lib/prospectAi";
-import { groupCampaignSkipReasons } from "@shared/prospectBulkOutreach";
+import {
+  formatSendToCampaignConfirmCopy,
+  groupCampaignSkipReasons,
+} from "@shared/prospectBulkOutreach";
 import {
   buildProspectOutreachInboxHref,
   buildProspectOutreachSubject,
@@ -105,6 +108,7 @@ import {
   isProspectDecisionQualified,
   isProspectEnrichmentRetryable,
   isProspectInCampaigns,
+  isProspectQualifiedCampaignBlocked,
   isProspectQualifiedForCampaign,
   listEmailCampaignBlockingReasons,
   matchesProspectReviewWorkFilter,
@@ -112,6 +116,7 @@ import {
   PROSPECT_REVIEW_WORK_STATE_LABELS,
   resolveProspectNeedsReviewBadge,
   resolveProspectNeedsReviewBadgeDetail,
+  resolveProspectReviewPresentation,
   resolveProspectReviewWorkState,
   summarizeSelectionActionAvailability,
   type ProspectNeedsReviewBadge,
@@ -178,6 +183,7 @@ function reviewUxInput(row: ProspectIntelligenceListItem) {
     analysisStatus: row.intelligence.analysisStatus,
     reviewStatus: row.intelligence.reviewStatus,
     needsReview: row.intelligence.needsReview,
+    priority: row.intelligence.priority,
     enrichmentStatus: row.intelligence.enrichmentStatus,
     enrichmentTriggeredBy: row.intelligence.enrichmentTriggeredBy,
     approvedAt: row.intelligence.approvedAt,
@@ -399,8 +405,16 @@ function cellOrPending(
   return String(value);
 }
 
-function priorityBadge(priority?: string, analysisStatus?: string | null) {
+function priorityBadge(
+  priority?: string,
+  analysisStatus?: string | null,
+  opts?: { decisionQualified?: boolean },
+) {
   if (!isProspectQualificationComplete(analysisStatus)) {
+    return null;
+  }
+  // Stale AI priority must never contradict a Qualified decision.
+  if (opts?.decisionQualified && String(priority || "").toLowerCase() === "needs_review") {
     return null;
   }
   switch (priority) {
@@ -1358,7 +1372,9 @@ function ProspectIntelligenceDetailDialog({
           <div className="rounded-lg border bg-blue-50/50 p-3">
             <p className="font-medium text-gray-900">Fit</p>
             <div className="mt-2 flex flex-wrap gap-2">
-              {priorityBadge(intel.priority, intel.analysisStatus)}
+              {priorityBadge(intel.priority, intel.analysisStatus, {
+                decisionQualified: detailIsDecisionQualified,
+              })}
               {analysisIncomplete ? (
                 <Badge variant="outline">{analysisPendingText || "AI analysis pending"}</Badge>
               ) : (
@@ -1643,6 +1659,11 @@ export function ProspectIntelligencePanel(props: {
   const [progressTick, setProgressTick] = useState(0);
   /** Keep acted-on rows visible even if work filter would hide them (until in Campaigns). */
   const [pinnedVisibleIds, setPinnedVisibleIds] = useState<Set<string>>(new Set());
+  /**
+   * Assistant focus: Qualified but not Campaign Ready (missing email / outreach).
+   * Not a Review tab — temporary table filter only.
+   */
+  const [campaignBlockedFocus, setCampaignBlockedFocus] = useState(false);
   const [selected, setSelected] = useState<ProspectIntelligenceListItem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -1698,6 +1719,9 @@ export function ProspectIntelligencePanel(props: {
       ...(businessFilter === "needs_review" ? { needsReviewOnly: true } : {}),
       ...(channelFilter === "has_email" ? { hasEmail: true } : {}),
       ...(channelFilter === "has_phone" ? { hasPhone: true } : {}),
+      ...(channelFilter === "missing_email" ? { missingEmail: true } : {}),
+      ...(channelFilter === "missing_phone" ? { missingPhone: true } : {}),
+      ...(channelFilter === "missing_website" ? { missingWebsite: true } : {}),
       ...(channelFilter === "email_eligible" ? { emailEligible: true } : {}),
       ...(channelFilter === "any_eligible" ? { anyEligibleChannel: true } : {}),
       ...(batchFilter !== "all" ? { reviewBatchKey: batchFilter } : {}),
@@ -1714,6 +1738,7 @@ export function ProspectIntelligencePanel(props: {
     // Reset stable order when the user changes filters/sort intentionally.
     stableOrderRef.current = [];
     setPinnedVisibleIds(new Set());
+    setCampaignBlockedFocus(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only clear when filters change
   }, [priorityFilter, businessFilter, workFilter, channelFilter, batchFilter, sortBy]);
 
@@ -1760,6 +1785,9 @@ export function ProspectIntelligencePanel(props: {
       if (businessFilter === "needs_review") params.set("needsReviewOnly", "true");
       if (channelFilter === "has_email") params.set("hasEmail", "true");
       if (channelFilter === "has_phone") params.set("hasPhone", "true");
+      if (channelFilter === "missing_email") params.set("missingEmail", "true");
+      if (channelFilter === "missing_phone") params.set("missingPhone", "true");
+      if (channelFilter === "missing_website") params.set("missingWebsite", "true");
       if (channelFilter === "email_eligible") params.set("emailEligible", "true");
       if (channelFilter === "any_eligible") params.set("anyEligibleChannel", "true");
       if (batchFilter !== "all") params.set("reviewBatchKey", batchFilter);
@@ -1932,10 +1960,23 @@ export function ProspectIntelligencePanel(props: {
       if (isProspectInCampaigns(ux) || String(ux.outcome || "").toLowerCase() === "won") {
         return false;
       }
+      if (campaignBlockedFocus) {
+        // Assistant "Review N" focus — Qualified campaign blockers only.
+        return isProspectQualifiedCampaignBlocked(ux);
+      }
       if (pinnedVisibleIds.has(row.contactId)) return true;
       return matchesProspectReviewWorkFilter(ux, workFilter);
     });
-  }, [rawItems, workFilter, pinnedVisibleIds]);
+  }, [rawItems, workFilter, pinnedVisibleIds, campaignBlockedFocus]);
+
+  // Auto-clear assistant focus when every blocked row is fixed / sent.
+  useEffect(() => {
+    if (!campaignBlockedFocus) return;
+    const stillBlocked = rawItems.some((row) =>
+      isProspectQualifiedCampaignBlocked(reviewUxInput(row)),
+    );
+    if (!stillBlocked) setCampaignBlockedFocus(false);
+  }, [rawItems, campaignBlockedFocus]);
 
   // Drop pins once a row successfully leaves Review (in Campaigns).
   useEffect(() => {
@@ -2530,7 +2571,36 @@ export function ProspectIntelligencePanel(props: {
         model={assistantModel}
         prefersReducedMotion={prefersReducedMotion}
         className="max-w-xl"
+        campaignBlockedFocusActive={campaignBlockedFocus}
+        onReviewCampaignBlocked={() => {
+          setWorkFilter("all");
+          setCampaignBlockedFocus(true);
+          stableOrderRef.current = [];
+          setPinnedVisibleIds(new Set());
+        }}
+        onClearCampaignBlockedFocus={() => setCampaignBlockedFocus(false)}
       />
+      {campaignBlockedFocus ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-1.5 text-xs text-amber-950"
+          data-testid="pi-campaign-blocked-focus-banner"
+        >
+          <span>
+            Showing {assistantModel.cta?.count ?? items.length} qualified prospect
+            {(assistantModel.cta?.count ?? items.length) === 1 ? "" : "s"} that need attention
+            before Campaign.
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => setCampaignBlockedFocus(false)}
+          >
+            Show all
+          </Button>
+        </div>
+      ) : null}
 
       {latestDiscoveryBatch && batchFilter === "all" ? (
         <div
@@ -2629,7 +2699,10 @@ export function ProspectIntelligencePanel(props: {
           <SelectContent>
             <SelectItem value="all">Any contact info</SelectItem>
             <SelectItem value="has_email">Has Email</SelectItem>
+            <SelectItem value="missing_email">Missing email</SelectItem>
             <SelectItem value="has_phone">Has Phone</SelectItem>
+            <SelectItem value="missing_phone">Missing phone</SelectItem>
+            <SelectItem value="missing_website">Missing website</SelectItem>
             <SelectItem value="email_eligible">Email eligible</SelectItem>
             <SelectItem value="any_eligible">Any eligible channel</SelectItem>
           </SelectContent>
@@ -2867,15 +2940,22 @@ export function ProspectIntelligencePanel(props: {
                 const enriching = enrichmentBusy(intel.enrichmentStatus);
                 const flashMsg = rowFlash[row.contactId];
                 const reviewReady = isProspectQualificationComplete(intel.analysisStatus);
-                const needsReviewBadge = resolveProspectNeedsReviewBadge(ux);
+                const presentation = resolveProspectReviewPresentation(ux);
+                const needsReviewBadge = presentation.rowBadge;
+                const rowDecisionQualified = presentation.decisionQualified;
                 const rowSummary = buildProspectRowAiSummary({
                   analysisStatus: intel.analysisStatus,
                   leadScore: intel.leadScore,
-                  priority: intel.priority,
+                  // Use sanitized display priority (null = suppress stale needs_review).
+                  priority: presentation.displayPriority,
                   businessType: intel.businessType,
                   recommendedOffer: intel.recommendedOffer,
                   suggestedOutreachAngle: intel.suggestedOutreachAngle,
                   reasoningSummary: intel.reasoningSummary,
+                  decisionQualified: rowDecisionQualified,
+                  reviewStatus: intel.reviewStatus,
+                  approvedAt: intel.approvedAt,
+                  notQualified: ux.notQualified,
                 });
                 const personality = resolveAiPersonalityStatus({
                   ux,
@@ -2954,7 +3034,9 @@ export function ProspectIntelligencePanel(props: {
                           <div className="flex flex-wrap items-center gap-1.5 text-xs leading-tight">
                             <MatchStars stars={rowSummary.matchStars} />
                             <span className="font-medium text-gray-900">{rowSummary.matchLabel}</span>
-                            {priorityBadge(rowSummary.priority || undefined, intel.analysisStatus)}
+                            {priorityBadge(rowSummary.priority || undefined, intel.analysisStatus, {
+                              decisionQualified: rowDecisionQualified,
+                            })}
                             <ProspectWebsiteGlobeIcon
                               websiteUrl={row.websiteUrl}
                               websiteUrlUsed={intel.websiteUrlUsed}
@@ -3004,12 +3086,6 @@ export function ProspectIntelligencePanel(props: {
                     <TableCell className={PROSPECT_AI_PROGRESS_COL_CLASS}>
                       <div className="flex min-w-0 flex-col gap-1">
                         {(() => {
-                          const rowDecision: "qualified" | "needs_review" | "not_qualified" =
-                            ux.notQualified === true && !isProspectDecisionQualified(ux)
-                              ? "not_qualified"
-                              : isProspectDecisionQualified(ux)
-                                ? "qualified"
-                                : "needs_review";
                           const progress = resolveProspectProgressState({
                             analysisStatus: intel.analysisStatus,
                             enrichmentStatus: intel.enrichmentStatus,
@@ -3019,9 +3095,9 @@ export function ProspectIntelligencePanel(props: {
                             email: row.email,
                             websiteUrl: row.websiteUrl,
                             priorOutreachDetected: row.priorOutreachDetected,
-                            decision: rowDecision,
+                            decision: presentation.decision,
                             notQualified: ux.notQualified === true,
-                            readyForCampaign: explainQualifiedForCampaign(ux).ok,
+                            readyForCampaign: presentation.campaignReady,
                           });
                           return (
                             <span
@@ -3097,8 +3173,8 @@ export function ProspectIntelligencePanel(props: {
                 </div>
               ) : null}
               {queuePreview.willQueue > 0 ? (
-                <p className="text-xs text-gray-600">
-                  The current email subject and message will be saved for these prospects.
+                <p className="text-xs text-gray-600" data-testid="pi-send-campaign-confirm-copy">
+                  {formatSendToCampaignConfirmCopy(queuePreview.willQueue)}
                 </p>
               ) : null}
             </div>

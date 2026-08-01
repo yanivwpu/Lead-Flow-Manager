@@ -306,6 +306,16 @@ export function groupCampaignSkipReasons(
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 }
 
+/**
+ * Confirmation copy for Send to Campaign preview — saves drafts + moves to Campaigns;
+ * does not send email immediately.
+ */
+export function formatSendToCampaignConfirmCopy(eligibleCount: number): string {
+  const n = Math.max(0, Math.floor(Number(eligibleCount) || 0));
+  const who = n === 1 ? "this 1 prospect" : `these ${n} prospects`;
+  return `The current personalized email subject and message will be saved for ${who} and moved to the Campaigns tab, where you can review, edit, and start sending.`;
+}
+
 export type ProspectChannelEligibility = {
   channel: ProspectOutreachChannel;
   eligible: boolean;
