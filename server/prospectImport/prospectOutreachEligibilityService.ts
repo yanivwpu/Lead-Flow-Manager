@@ -559,6 +559,8 @@ export async function resolveProspectOutreachEligibilityForContact(params: {
     suppressionDetail: suppression.detail || suppression.reason || null,
     alreadyQueued,
     preferredChannel: params.preferredChannel || "auto",
+    suggestedFirstMessage: pi?.suggestedFirstMessage,
+    suggestedOutreachSubject: pi?.suggestedOutreachSubject,
   };
 
   const result = resolveProspectOutreachEligibility(input);

@@ -70,6 +70,9 @@ export type ProspectOutreachEligibilityInput = {
    * Kept for call-site compatibility.
    */
   allowUnapproved?: boolean;
+  /** Required for shared Email campaign hard gate (same as Review toolbar). */
+  suggestedFirstMessage?: string | null;
+  suggestedOutreachSubject?: string | null;
 };
 
 function channelResult(
@@ -509,7 +512,8 @@ export function resolveProspectOutreachEligibility(
 function emailCampaignHardGateReason(
   input: ProspectOutreachEligibilityInput,
 ): { reason: ProspectOutreachEligibilityReason; detail?: string } | null {
-  const blocks = listEmailCampaignBlockingReasons({
+  // Same fields as Review toolbar / explainQualifiedForCampaign.
+  const gateInput = {
     analysisStatus: input.analysisStatus,
     reviewStatus: input.reviewStatus,
     needsReview: input.needsReview,
@@ -531,7 +535,10 @@ function emailCampaignHardGateReason(
         : input.outreachSentAt,
     repliedAt:
       input.repliedAt instanceof Date ? input.repliedAt.toISOString() : input.repliedAt,
-  });
+    suggestedFirstMessage: input.suggestedFirstMessage,
+    suggestedOutreachSubject: input.suggestedOutreachSubject,
+  };
+  const blocks = listEmailCampaignBlockingReasons(gateInput);
   if (!blocks.length) return null;
   return mapEmailCampaignBlockToOutreachReason(blocks[0]!.code);
 }
@@ -560,6 +567,11 @@ export function mapEmailCampaignBlockToOutreachReason(
       return { reason: "enrichment_required" };
     case "enrichment_failed":
       return { reason: "enrichment_failed" };
+    case "outreach_needed":
+      return { reason: "missing_message_snapshot" };
+    case "needs_review":
+    case "not_approved":
+      return { reason: "not_approved" };
     default:
       return { reason: "policy_blocked" };
   }
