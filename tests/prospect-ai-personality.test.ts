@@ -82,10 +82,28 @@ import { join } from "node:path";
     model.lines.some((l) => /1 qualified prospect is missing an email address/i.test(l.text)),
   );
   assert.ok(!model.lines.some((l) => /need attention/i.test(l.text)));
-  assert.equal(model.cta?.kind, "review_campaign_blocked");
-  assert.equal(model.cta?.label, "Review 1 prospect");
+  assert.equal(model.cta, null);
   assert.deepEqual(model.blockerLines, []);
-  assert.ok(model.nextAction && /Review 1 prospect/i.test(model.nextAction));
+  // Ready rows take priority for nextAction; blockers stay in informational lines.
+  assert.ok(model.nextAction && /Send 1 to Campaign/i.test(model.nextAction));
+}
+
+// Missing-email-only set guides toward Contact Info filter (no Review-N CTA)
+{
+  const model = buildAiGrowthAssistantModel([
+    {
+      analysisStatus: "completed",
+      reviewStatus: "approved",
+      approvedAt: "2026-07-01T00:00:00.000Z",
+      email: null,
+      suggestedFirstMessage: "Hi",
+    },
+  ]);
+  assert.equal(model.cta, null);
+  assert.ok(
+    model.lines.some((l) => /missing an email address/i.test(l.text)),
+  );
+  assert.ok(model.nextAction && /Contact Info → Missing email/i.test(model.nextAction));
 }
 
 {
@@ -168,15 +186,21 @@ assert.equal(shouldAnimateAiEmoji(false, false), false);
   assert.deepEqual(a, b);
 }
 
-// Panel wires Review CTA to campaign-blocked focus (not a new tab)
+// Assistant is informational only — no temporary focus / Review-N navigation
 {
   const panel = readFileSync(
     join(process.cwd(), "client/src/components/settings/ProspectIntelligencePanel.tsx"),
     "utf8",
   );
-  assert.ok(panel.includes("onReviewCampaignBlocked"));
-  assert.ok(panel.includes("campaignBlockedFocus"));
-  assert.ok(panel.includes("isProspectQualifiedCampaignBlocked"));
+  const card = readFileSync(
+    join(process.cwd(), "client/src/components/prospectAi/AiGrowthAssistantCard.tsx"),
+    "utf8",
+  );
+  assert.ok(!panel.includes("onReviewCampaignBlocked"));
+  assert.ok(!panel.includes("campaignBlockedFocus"));
+  assert.ok(!panel.includes("pi-campaign-blocked-focus-banner"));
+  assert.ok(!card.includes("onReviewCampaignBlocked"));
+  assert.ok(!card.includes("pi-ai-assistant-review-blocked"));
   assert.ok(!/PROSPECT_REVIEW_WORK_FILTER_CHIPS[\s\S]*campaign_blocked/.test(panel));
 }
 

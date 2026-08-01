@@ -108,7 +108,6 @@ import {
   isProspectDecisionQualified,
   isProspectEnrichmentRetryable,
   isProspectInCampaigns,
-  isProspectQualifiedCampaignBlocked,
   isProspectQualifiedForCampaign,
   listEmailCampaignBlockingReasons,
   matchesProspectReviewWorkFilter,
@@ -1659,11 +1658,6 @@ export function ProspectIntelligencePanel(props: {
   const [progressTick, setProgressTick] = useState(0);
   /** Keep acted-on rows visible even if work filter would hide them (until in Campaigns). */
   const [pinnedVisibleIds, setPinnedVisibleIds] = useState<Set<string>>(new Set());
-  /**
-   * Assistant focus: Qualified but not Campaign Ready (missing email / outreach).
-   * Not a Review tab — temporary table filter only.
-   */
-  const [campaignBlockedFocus, setCampaignBlockedFocus] = useState(false);
   const [selected, setSelected] = useState<ProspectIntelligenceListItem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -1954,23 +1948,10 @@ export function ProspectIntelligencePanel(props: {
       if (isProspectInCampaigns(ux) || String(ux.outcome || "").toLowerCase() === "won") {
         return false;
       }
-      if (campaignBlockedFocus) {
-        // Assistant "Review N" focus — Qualified campaign blockers only.
-        return isProspectQualifiedCampaignBlocked(ux);
-      }
       if (pinnedVisibleIds.has(row.contactId)) return true;
       return matchesProspectReviewWorkFilter(ux, workFilter);
     });
-  }, [rawItems, workFilter, pinnedVisibleIds, campaignBlockedFocus]);
-
-  // Auto-clear assistant focus when every blocked row is fixed / sent.
-  useEffect(() => {
-    if (!campaignBlockedFocus) return;
-    const stillBlocked = rawItems.some((row) =>
-      isProspectQualifiedCampaignBlocked(reviewUxInput(row)),
-    );
-    if (!stillBlocked) setCampaignBlockedFocus(false);
-  }, [rawItems, campaignBlockedFocus]);
+  }, [rawItems, workFilter, pinnedVisibleIds]);
 
   // Drop pins once a row successfully leaves Review (in Campaigns).
   useEffect(() => {
@@ -2565,36 +2546,7 @@ export function ProspectIntelligencePanel(props: {
         model={assistantModel}
         prefersReducedMotion={prefersReducedMotion}
         className="max-w-xl"
-        campaignBlockedFocusActive={campaignBlockedFocus}
-        onReviewCampaignBlocked={() => {
-          setWorkFilter("all");
-          setCampaignBlockedFocus(true);
-          stableOrderRef.current = [];
-          setPinnedVisibleIds(new Set());
-        }}
-        onClearCampaignBlockedFocus={() => setCampaignBlockedFocus(false)}
       />
-      {campaignBlockedFocus ? (
-        <div
-          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-1.5 text-xs text-amber-950"
-          data-testid="pi-campaign-blocked-focus-banner"
-        >
-          <span>
-            Showing {assistantModel.cta?.count ?? items.length} qualified prospect
-            {(assistantModel.cta?.count ?? items.length) === 1 ? "" : "s"} not yet ready for
-            Campaign.
-          </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs"
-            onClick={() => setCampaignBlockedFocus(false)}
-          >
-            Show all
-          </Button>
-        </div>
-      ) : null}
 
       {batchActive && activeBatchOption ? (
         <div

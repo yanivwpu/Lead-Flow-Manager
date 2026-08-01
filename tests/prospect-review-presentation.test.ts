@@ -165,10 +165,8 @@ run("assistant summary separates Qualified from Campaign ready", () => {
   );
   assert.ok(!model.lines.some((l) => /need attention/i.test(l.text)));
   assert.deepEqual(model.blockerLines, []);
-  assert.equal(model.cta?.kind, "review_campaign_blocked");
-  assert.equal(model.cta?.count, 1);
-  assert.match(model.cta?.label || "", /Review 1 prospect/);
-  assert.ok(model.nextAction && /Review 1 prospect/i.test(model.nextAction));
+  assert.equal(model.cta, null);
+  assert.ok(model.nextAction && /Send 2 to Campaign/i.test(model.nextAction));
   assert.ok(!model.lines.some((l) => /enriched successfully/i.test(l.text)));
 });
 
@@ -213,7 +211,7 @@ run("assistant blocker bullets mix missing email + outreach", () => {
       suggestedOutreachSubject: "",
     },
   ]);
-  assert.equal(model.cta?.count, 2);
+  assert.equal(model.cta, null);
   assert.ok(model.lines.some((l) => /missing an email address/i.test(l.text)));
   assert.ok(model.lines.some((l) => /still needs? outreach copy/i.test(l.text)));
   assert.ok(!model.lines.some((l) => /need attention/i.test(l.text)));

@@ -198,23 +198,16 @@ export type AiGrowthAssistantBlockerLine = {
   text: string;
 };
 
-export type AiGrowthAssistantCta = {
-  /** Filter table to Qualified-but-not-Campaign-Ready rows (not a new tab). */
-  kind: "review_campaign_blocked";
-  label: string;
-  count: number;
-};
-
 export type AiGrowthAssistantModel = {
   idle: boolean;
   title: string;
   titleEmoji: string;
   lines: AiGrowthAssistantLine[];
-  /** Bullet breakdown of campaign blockers among Qualified rows. */
+  /** @deprecated Kept empty — blockers are rendered in `lines`. */
   blockerLines?: AiGrowthAssistantBlockerLine[];
-  /** Primary clickable action (Review N blocked Qualified prospects). */
-  cta?: AiGrowthAssistantCta | null;
-  /** Concise next step from real counts — never invented. */
+  /** @deprecated Informational assistant — no clickable CTA / focus mode. */
+  cta?: null;
+  /** Concise guidance toward existing filters/actions — never invents a second nav. */
   nextAction?: string | null;
 };
 
@@ -334,38 +327,31 @@ export function buildAiGrowthAssistantModel(
     bulkFailed > 0 ||
     campaignBlocked > 0;
 
-  let cta: AiGrowthAssistantCta | null = null;
-  if (!busy && campaignBlocked > 0) {
-    cta = {
-      kind: "review_campaign_blocked",
-      count: campaignBlocked,
-      label: `Review ${campaignBlocked} prospect${campaignBlocked === 1 ? "" : "s"}`,
-    };
-  }
-
   const resolveNextAction = (): string | null => {
-    if (counts.enrichmentFailed > 0 || counts.qualificationFailed > 0) {
-      return `Review ${counts.enrichmentFailed + counts.qualificationFailed} failed ${
-        counts.enrichmentFailed + counts.qualificationFailed === 1 ? "item" : "items"
-      }.`;
-    }
     if (busy) return null;
-    if (campaignBlocked > 0) {
-      return `Review ${campaignBlocked} prospect${campaignBlocked === 1 ? "" : "s"}.`;
-    }
     if (campaignReady > 0 && campaignReady === decisionQualified && decisionQualified > 0) {
       return `Send all ${campaignReady} to Campaign.`;
     }
     if (campaignReady > 0) {
       return `Send ${campaignReady} to Campaign.`;
     }
+    const primaryBlocker = blockerLines[0]?.code;
+    if (primaryBlocker === "missing_email") {
+      return "Use Contact Info → Missing email to work through them.";
+    }
+    if (
+      primaryBlocker === "qualification_failed" ||
+      counts.qualificationFailed > 0 ||
+      counts.enrichmentFailed > 0 ||
+      bulkFailed > 0
+    ) {
+      return "Open failed rows to retry AI review.";
+    }
+    if (campaignBlocked > 0) {
+      return "Use Contact Info and Status filters to clear Campaign blockers.";
+    }
     if (counts.needsReview > 0) {
       return "Open Needs Review and decide fit for the remaining rows.";
-    }
-    if (counts.needsAttention > 0) {
-      return `Review ${counts.needsAttention} ${
-        counts.needsAttention === 1 ? "item that needs" : "items that need"
-      } attention.`;
     }
     if (items.length === 0) return "Discover businesses to get started.";
     return "Discover more businesses when ready.";
@@ -467,9 +453,8 @@ export function buildAiGrowthAssistantModel(
     title: "AI Growth Assistant",
     titleEmoji: "🧠",
     lines: lines.slice(0, 5),
-    // Specific blockers already appear in `lines` — keep empty to avoid duplicate UI.
     blockerLines: [],
-    cta,
+    cta: null,
     nextAction: resolveNextAction(),
   };
 }
