@@ -1196,7 +1196,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
 
                       {!publicationStats.workspacePublishEnabled && (
                         <p className="text-xs text-amber-700 leading-snug">
-                          Turn on &quot;Publish listings publicly&quot; in Business Profile before publishing to your
+                          Turn on &quot;Publish listings publicly&quot; in Agent Page settings before publishing to your
                           Agent Page.
                         </p>
                       )}

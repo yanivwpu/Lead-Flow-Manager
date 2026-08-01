@@ -143,6 +143,7 @@ export async function patchAgentPageSettings(
     agentPageMarketArea?: string | null;
     agentPagePreferredLeadCapture?: AgentPageLeadCapture;
     agentPageShowHomeValueCta?: boolean;
+    publishListingsPublicly?: boolean;
     publicWebsite?: string | null;
     facebookUrl?: string | null;
     instagramUrl?: string | null;
@@ -154,6 +155,9 @@ export async function patchAgentPageSettings(
     updatedAt: new Date(),
   };
   if (patch.agentPageEnabled !== undefined) set.agentPageEnabled = patch.agentPageEnabled;
+  if (patch.publishListingsPublicly !== undefined) {
+    set.publishListingsPublicly = patch.publishListingsPublicly;
+  }
   if (patch.agentPageSlug !== undefined) {
     set.agentPageSlug = patch.agentPageSlug
       ? normalizeAgentPageSlug(patch.agentPageSlug)

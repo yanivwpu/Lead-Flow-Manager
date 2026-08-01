@@ -8,6 +8,7 @@ import {
   isAgentPageSlugConflictError,
   prepareAgentPageSettingsPatch,
 } from "../agentPage/agentPageSettingsPatch";
+import { isRgeInstalledForUser } from "../buyerPreferenceService";
 
 export function registerAgentPageSettingsRoutes(app: Express): void {
   app.get("/api/agent-page", async (req, res) => {
@@ -40,6 +41,16 @@ export function registerAgentPageSettingsRoutes(app: Express): void {
       }
 
       const patch = prepared.patch;
+      // Listing publication master switch is RGE-only (UI lives in Realtor Growth Engine).
+      if (patch.publishListingsPublicly !== undefined) {
+        const rgeInstalled = await isRgeInstalledForUser(req.user.id);
+        if (!rgeInstalled) {
+          return res.status(403).json({
+            error: "Publish listings publicly requires Realtor Growth Engine",
+            code: "rge_required",
+          });
+        }
+      }
       await patchAgentPageSettings(req.user.id, {
         agentPageEnabled: patch.agentPageEnabled,
         agentPageSlug: patch.agentPageSlug,
@@ -48,6 +59,7 @@ export function registerAgentPageSettingsRoutes(app: Express): void {
         agentPageMarketArea: patch.agentPageMarketArea,
         agentPagePreferredLeadCapture: patch.agentPagePreferredLeadCapture,
         agentPageShowHomeValueCta: patch.agentPageShowHomeValueCta,
+        publishListingsPublicly: patch.publishListingsPublicly,
         publicWebsite: patch.publicWebsite,
         facebookUrl: patch.facebookUrl,
         instagramUrl: patch.instagramUrl,

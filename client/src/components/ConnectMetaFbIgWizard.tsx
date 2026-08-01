@@ -133,6 +133,7 @@ export function ConnectMetaFbIgWizard({
   const [pages, setPages] = useState<MetaPage[]>([]);
   const [pagesLoading, setPagesLoading] = useState(false);
   const [pagesError, setPagesError] = useState<string | null>(null);
+  const [missingPageHelpOpen, setMissingPageHelpOpen] = useState(false);
   const [redirectLoading, setRedirectLoading] = useState(false);
   const [selectedPage, setSelectedPage] = useState<MetaPage | null>(null);
   const [connectResult, setConnectResult] = useState<ConnectPageResult | null>(null);
@@ -342,7 +343,7 @@ export function ConnectMetaFbIgWizard({
           )}
           {stage === "page_select" && !pagesLoading && pages.length > 0 && (
             <DialogDescription className="text-sm text-gray-500">
-              Select which {channelNoun} to connect.
+              Select which {channelNoun} to connect to this workspace.
             </DialogDescription>
           )}
         </DialogHeader>
@@ -419,8 +420,19 @@ export function ConnectMetaFbIgWizard({
               <div className="space-y-3">
                 <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-lg">
                   <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                  <div className="text-xs text-amber-800 space-y-1.5">
-                    <p>No Facebook Pages found. Make sure you manage at least one Facebook Page and approved all requested permissions when prompted.</p>
+                  <div className="text-xs text-amber-800 space-y-2">
+                    <p className="font-medium">No authorized Facebook Pages were returned.</p>
+                    <p>
+                      Meta only shows Pages that were shared with WhachatCRM during Facebook
+                      authorization. Managing a Page in Facebook does not automatically make it
+                      available here.
+                    </p>
+                    <p>
+                      Reconnect and grant access to the missing Page, or choose{" "}
+                      <span className="font-medium">&quot;All current and future Pages&quot;</span>{" "}
+                      during Facebook authorization. Granting access does not connect every Page —
+                      only the Page you select next will be connected to this workspace.
+                    </p>
                   </div>
                 </div>
                 <Button
@@ -430,11 +442,19 @@ export function ConnectMetaFbIgWizard({
                   data-testid="button-try-again"
                 >
                   <RefreshCcw className="h-4 w-4 mr-2" />
-                  {channel === "instagram" ? "Reconnect with Instagram" : "Reconnect with Facebook"}
+                  Authorize additional Facebook Pages
                 </Button>
               </div>
             ) : (
               <>
+                <div className="space-y-1.5">
+                  <p className="text-xs text-gray-600">
+                    Only Facebook Pages authorized for WhachatCRM appear here.
+                  </p>
+                  <p className="text-xs text-gray-500" data-testid="meta-authorized-page-count">
+                    Showing {pages.length} authorized Page{pages.length === 1 ? "" : "s"}.
+                  </p>
+                </div>
                 <div className="space-y-2 max-h-72 overflow-y-auto">
                   {pages.map((page) => (
                     <button
@@ -469,15 +489,44 @@ export function ConnectMetaFbIgWizard({
                     </button>
                   ))}
                 </div>
-                <p className="text-[10px] text-gray-400">
-                  Can't see your {channelNoun}?{" "}
+                <div className="space-y-2 pt-1">
                   <button
-                    className="text-blue-500 hover:underline"
-                    onClick={() => setStage("idle")}
+                    type="button"
+                    className="text-xs font-medium text-blue-600 hover:underline"
+                    onClick={() => setMissingPageHelpOpen((open) => !open)}
+                    data-testid="button-missing-page-help"
                   >
-                    {channel === "instagram" ? "Reconnect with Instagram" : "Reconnect with Facebook"}
+                    Missing a Page?
                   </button>
-                </p>
+                  {missingPageHelpOpen && (
+                    <div
+                      className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2 text-xs text-gray-600 leading-relaxed"
+                      data-testid="missing-page-help-panel"
+                    >
+                      <p>
+                        Your Facebook account may manage additional Pages that have not been shared
+                        with WhachatCRM. Authorize additional Pages and grant access to the missing
+                        Page, or choose{" "}
+                        <span className="font-medium">&quot;All current and future Pages&quot;</span>{" "}
+                        during Facebook authorization.
+                      </p>
+                      <p>
+                        Granting access to multiple Pages does not connect all of them to this
+                        workspace. Only the Page you select here will be connected.
+                      </p>
+                    </div>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setStage("idle")}
+                    data-testid="button-authorize-additional-pages"
+                  >
+                    <RefreshCcw className="h-3.5 w-3.5 mr-2" />
+                    Authorize additional Facebook Pages
+                  </Button>
+                </div>
               </>
             )}
           </div>

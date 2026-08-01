@@ -178,6 +178,8 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
     },
     onSuccess: (payload) => {
       queryClient.setQueryData(["/api/agent-page"], payload);
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory/listings/publication-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/business-profile"] });
       leadCaptureMutating.current = false;
       setLeadCaptureDraft(null);
       toast({ title: "Agent page settings saved" });
@@ -533,9 +535,30 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                   {publishStatusLabel}
                 </span>
               </div>
+              <div
+                className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 bg-gray-50/80 p-3"
+                data-testid="publish-listings-publicly-toggle"
+              >
+                <div className="space-y-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900">Publish listings publicly</p>
+                  <p className="text-xs text-muted-foreground leading-snug">
+                    Master switch for public Agent Page and /share listing pages. Each listing must also be
+                    published individually and pass MLS internet-display rules before a share URL is live.
+                  </p>
+                </div>
+                <Switch
+                  checked={data.publishListingsPublicly}
+                  disabled={saveMutation.isPending}
+                  onCheckedChange={(checked) => {
+                    if (checked === data.publishListingsPublicly) return;
+                    saveMutation.mutate({ publishListingsPublicly: checked });
+                  }}
+                  aria-label="Publish listings publicly"
+                />
+              </div>
               {!data.publishListingsPublicly && (
                 <p className="text-xs text-amber-700 leading-snug">
-                  Turn on &quot;Publish listings publicly&quot; in Business Profile for a live public page.
+                  Turn on &quot;Publish listings publicly&quot; above for a live public page.
                 </p>
               )}
               {data.publishListingsPublicly && data.agentPageEnabled && !data.agentPageSlug && (

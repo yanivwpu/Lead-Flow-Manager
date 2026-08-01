@@ -3239,29 +3239,75 @@ export async function registerRoutes(
             }
 
             const matchedConfig = matchSetting.config as any;
-            devLog(`[FB-WEBHOOK] matched userId=${matchSetting.userId} pageId=${matchedConfig?.pageId} senderId=${senderId} mid=${messageId}`);
-            devLog(`[Meta Webhook] [Stage 3-FB] MATCHED: channelSettings id=${matchSetting.id}, userId=${matchSetting.userId}, savedPageId=${matchedConfig?.pageId}`);
-
-            // Resolve sender display name + profile picture via Graph API in one call
-            let contactName = senderId;
-            let fbProfilePic: string | undefined;
-            try {
-              const nameResp = await fetch(
-                `https://graph.facebook.com/v19.0/${senderId}?fields=name,profile_pic&access_token=${encodeURIComponent(matchedConfig.accessToken)}`
-              );
-              const nameData = (await nameResp.json()) as any;
-              if (nameResp.ok && nameData.name) {
-                contactName = nameData.name as string;
-                devLog(`[Meta Webhook] [Stage 3-FB] Resolved sender name: "${contactName}"`);
-              } else {
-                devLog(`[Meta Webhook] [Stage 3-FB] Could not resolve sender name (${nameData?.error?.message || 'no name field'}) — using PSID`);
-              }
-              if (nameResp.ok && typeof nameData.profile_pic === 'string') {
-                fbProfilePic = nameData.profile_pic as string;
-              }
-            } catch {
-              devLog(`[Meta Webhook] [Stage 3-FB] Name lookup failed — using PSID as contactName`);
+            // Token belongs to the matched workspace row for this Page ID only
+            // (matched above by recipientId / entry pageId === config.pageId).
+            const pageAccessToken: string =
+              typeof matchedConfig?.accessToken === "string" ? matchedConfig.accessToken : "";
+            const matchedPageId =
+              matchedConfig?.pageId != null ? String(matchedConfig.pageId) : null;
+            if (
+              matchedPageId &&
+              recipientId &&
+              matchedPageId !== String(recipientId) &&
+              matchedPageId !== String(fbPageId)
+            ) {
+              console.warn("[FB-WEBHOOK] pageId mismatch after match — dropping message", {
+                matchedPageId,
+                recipientId,
+                fbPageId,
+                userId: matchSetting.userId,
+              });
+              continue;
             }
+            devLog(`[FB-WEBHOOK] matched userId=${matchSetting.userId} pageId=${matchedPageId} senderId=${senderId} mid=${messageId}`);
+            devLog(`[Meta Webhook] [Stage 3-FB] MATCHED: channelSettings id=${matchSetting.id}, userId=${matchSetting.userId}, savedPageId=${matchedPageId}`);
+
+            const {
+              shouldLookupFacebookSenderProfile,
+              buildFacebookContactNamePatch,
+              resolveFacebookDisplayNameSource,
+              mergeFacebookDisplayNameSource,
+              readFacebookDisplayNameSource,
+            } = await import("@shared/facebookContactNaming");
+            const { fetchFacebookSenderProfile } = await import("./facebookSenderProfile");
+
+            const existingFbContact = await storage.getContactByChannelId(
+              matchSetting.userId,
+              "facebook",
+              senderId,
+            );
+            const existingSource = resolveFacebookDisplayNameSource({
+              name: existingFbContact?.name,
+              senderPsid: senderId,
+              sourceDetails: existingFbContact?.sourceDetails,
+            });
+            const needsProfileLookup = shouldLookupFacebookSenderProfile({
+              name: existingFbContact?.name,
+              senderPsid: senderId,
+              sourceDetails: existingFbContact?.sourceDetails,
+            });
+
+            // Start Graph lookup without blocking message persistence.
+            const profilePromise =
+              needsProfileLookup && pageAccessToken
+                ? fetchFacebookSenderProfile(senderId, pageAccessToken, {
+                    pageIdForLog: matchedPageId,
+                    userIdForLog: matchSetting.userId,
+                  }).catch((err) => {
+                    console.warn("[Meta Webhook] [FB PROFILE] lookup rejected", {
+                      senderId,
+                      pageId: matchedPageId,
+                      error: err instanceof Error ? err.message : String(err),
+                    });
+                    return null;
+                  })
+                : Promise.resolve(null);
+
+            // Persist immediately with existing display name or PSID fallback.
+            const contactName =
+              existingSource === "psid"
+                ? senderId
+                : (existingFbContact?.name || senderId).trim() || senderId;
 
             // Derive content and media info
             const firstAttachment = attachments[0] as any | undefined;
@@ -3271,17 +3317,18 @@ export async function registerRoutes(
 
             devLog(`[Inbound] [Stage 4-FB] Handing off to processIncomingMessage — channel: facebook, from: ${senderId} ("${contactName}"), content: "${content.substring(0, 60)}", hasMedia: ${!!attachmentMediaUrl}`);
             directJobs.push(
-              metaCs.processIncomingMessage({
-                userId: matchSetting.userId,
-                channel: 'facebook',
-                channelContactId: senderId,
-                contactName,
-                content,
-                contentType,
-                mediaUrl: attachmentMediaUrl,
-                attachmentType: firstAttachment?.type,
-                externalMessageId: messageId,
-              }).then(async (result) => {
+              (async () => {
+                const result = await metaCs.processIncomingMessage({
+                  userId: matchSetting.userId,
+                  channel: 'facebook',
+                  channelContactId: senderId,
+                  contactName,
+                  content,
+                  contentType,
+                  mediaUrl: attachmentMediaUrl,
+                  attachmentType: firstAttachment?.type,
+                  externalMessageId: messageId,
+                });
                 if (!result.success || !result.contact || !result.conversation || !result.message) {
                   console.error("[inbound-processing] Facebook processing returned incomplete state", {
                     messageId,
@@ -3292,17 +3339,59 @@ export async function registerRoutes(
                 }
                 devLog(`[FB-WEBHOOK] message saved contactId=${result.contact.id} conversationId=${result.conversation.id} dbMessageId=${result.message.id}`);
                 devLog(`[Inbound] [Stage 10-FB] Pipeline complete — channel: facebook, mid=${messageId}, contactId=${result.contact.id}, conversationId=${result.conversation.id}, dbMessageId=${result.message.id}, isNew=${result.isNewConversation}`);
-                // Update avatar if we got one from the Graph API call and it's due for refresh
-                const { shouldRefreshAvatar } = await import("./avatarService");
-                if (shouldRefreshAvatar(result.contact)) {
-                  if (fbProfilePic) {
-                    storage.updateContact(result.contact.id, { avatar: fbProfilePic, avatarFetchedAt: new Date() }).catch(() => {});
-                  } else {
-                    const { fetchFacebookAvatar } = await import("./avatarService");
-                    fetchFacebookAvatar(result.contact.id, senderId, matchedConfig.accessToken).catch(() => {});
+
+                // Stamp PSID provenance on new/fallback contacts (does not block ingest).
+                if (
+                  resolveFacebookDisplayNameSource({
+                    name: result.contact.name,
+                    senderPsid: senderId,
+                    sourceDetails: result.contact.sourceDetails,
+                  }) === "psid" &&
+                  !readFacebookDisplayNameSource(result.contact.sourceDetails)
+                ) {
+                  await storage
+                    .updateContact(result.contact.id, {
+                      sourceDetails: mergeFacebookDisplayNameSource(
+                        result.contact.sourceDetails,
+                        "psid",
+                      ),
+                    })
+                    .catch(() => {});
+                }
+
+                // Enrich after persist — failures never roll back the message.
+                const fbProfile = await profilePromise;
+                const namePatch = buildFacebookContactNamePatch(
+                  result.contact.name,
+                  senderId,
+                  fbProfile?.displayName,
+                  result.contact.sourceDetails,
+                );
+                const contactPatch: Record<string, unknown> = { ...(namePatch || {}) };
+                if (fbProfile?.profilePic) {
+                  const { shouldRefreshAvatar } = await import("./avatarService");
+                  if (shouldRefreshAvatar(result.contact) || namePatch) {
+                    contactPatch.avatar = fbProfile.profilePic;
+                    contactPatch.avatarFetchedAt = new Date();
                   }
                 }
-              }).catch((err: any) => {
+                if (Object.keys(contactPatch).length > 0) {
+                  await storage.updateContact(result.contact.id, contactPatch).catch((err) => {
+                    console.warn("[Meta Webhook] [FB PROFILE] contact update failed", {
+                      contactId: result.contact!.id,
+                      senderId,
+                      pageId: matchedPageId,
+                      error: err instanceof Error ? err.message : String(err),
+                    });
+                  });
+                } else if (pageAccessToken) {
+                  const { shouldRefreshAvatar } = await import("./avatarService");
+                  if (shouldRefreshAvatar(result.contact)) {
+                    const { fetchFacebookAvatar } = await import("./avatarService");
+                    fetchFacebookAvatar(result.contact.id, senderId, pageAccessToken).catch(() => {});
+                  }
+                }
+              })().catch((err: any) => {
                 console.error(`[FB-WEBHOOK] processIncomingMessage FAILED mid=${messageId}`, err?.message || err, err?.stack);
                 console.error(`[Inbound] [Stage 10-FB] processIncomingMessage FAILED — mid=${messageId}, error:`, err?.message || err);
               })
@@ -5199,7 +5288,6 @@ export async function registerRoutes(
       const {
         newFacebookReconnectCorrelationId,
         logFacebookReconnectDiag,
-        facebookTokenFingerprint,
       } = await import("./metaFacebookReconnectDiag");
       const correlationId = newFacebookReconnectCorrelationId();
 
@@ -5213,7 +5301,7 @@ export async function registerRoutes(
       };
       delete (req.session as any).metaOAuthState;
 
-      // Never log full metaOAuthPending (contains tokens). Page IDs/names + fingerprints only.
+      // Never log full metaOAuthPending (contains tokens). Authorized page IDs/names only.
       logFacebookReconnectDiag("oauth_callback", {
         correlationId,
         userId: sessionState.userId,
@@ -5223,16 +5311,21 @@ export async function registerRoutes(
           pageId: p.id ?? null,
           pageName: typeof p.name === "string" ? p.name.slice(0, 80) : null,
           tokenPresent: Boolean(p.accessToken),
-          tokenFingerprint: facebookTokenFingerprint(p.accessToken),
         })),
-        userTokenPresent: Boolean(userAccessToken),
-        userTokenFingerprint: facebookTokenFingerprint(userAccessToken),
       });
 
       console.log(`[Meta OAuth] callback success for user ${sessionState.userId} — ${pages.length} page(s) fetched`);
       return res.redirect(`/app/settings?meta_oauth=ready&channel=${encodeURIComponent(channel)}`);
     } catch (err: any) {
       console.error("[Meta OAuth] callback error:", err);
+      try {
+        const { logFacebookReconnectDiag } = await import("./metaFacebookReconnectDiag");
+        logFacebookReconnectDiag("oauth_callback_error", {
+          error: String(err?.message || err).slice(0, 200),
+        });
+      } catch {
+        /* ignore diag failures */
+      }
       return res.redirect(`/app/settings?meta_oauth=error&reason=${encodeURIComponent(err.message || "unknown")}`);
     }
   }
@@ -5297,7 +5390,7 @@ export async function registerRoutes(
         newFacebookReconnectCorrelationId,
         logFacebookReconnectDiag,
         facebookTokenFingerprint,
-        sanitizeMetaError,
+        graphErrorForDiag,
       } = await import("./metaFacebookReconnectDiag");
       const correlationId = pending.correlationId || newFacebookReconnectCorrelationId();
       const channel = pending.channel as "facebook" | "instagram";
@@ -5363,8 +5456,6 @@ export async function registerRoutes(
         pageId: page.id,
         pageName: result.pageName || page.name,
         webhookVerifyToken: verifyTokenRaw,
-        // Diagnostic correlation only — does not affect connect success/failure.
-        reconnectDiagCorrelationId: correlationId,
       };
       if (process.env.META_APP_ID?.trim()) {
         channelConfig.metaAppId = process.env.META_APP_ID.trim();
@@ -5381,17 +5472,6 @@ export async function registerRoutes(
         config: { ...channelConfig, accessToken: "[REDACTED]" },
       };
       console.log(`[MetaOAuth] Step 5a: DB upsertChannelSetting userId=${req.user.id} channel=${channel}`, JSON.stringify(channelSavePayload));
-      logFacebookReconnectDiag("database_save", {
-        correlationId,
-        userId: req.user.id,
-        channel,
-        pageId: page.id,
-        pageName: result.pageName || page.name,
-        selectedTokenFingerprint: facebookTokenFingerprint(page.accessToken),
-        webhookSubscribed: result.steps.webhookSubscribed,
-        subscribedAppsAttempted: result.subscriptionDiag?.attempted ?? null,
-        subscribedAppsSucceeded: result.subscriptionDiag?.succeeded ?? null,
-      });
       await storage.upsertChannelSetting(req.user.id, channel, {
         isConnected: true,
         isEnabled: true,
@@ -5400,7 +5480,7 @@ export async function registerRoutes(
       console.log(`[MetaOAuth] Step 5a: upsertChannelSetting OK`);
 
       // #region agent log
-      // Immediate post-save DB readback + Graph probe (diagnostic only; does not alter response).
+      // Post-save Graph validation — log only on mismatch / Meta error (not every success).
       {
         const saved = await storage.getChannelSetting(req.user.id, channel);
         const savedCfg = (saved?.config || {}) as Record<string, unknown>;
@@ -5408,30 +5488,13 @@ export async function registerRoutes(
         const storedPageId = savedCfg.pageId != null ? String(savedCfg.pageId) : null;
         const storedPageName =
           typeof savedCfg.pageName === "string" ? savedCfg.pageName.slice(0, 80) : null;
-        const tokenPresent = Boolean(savedTok);
-        const tokenFingerprint = facebookTokenFingerprint(savedTok);
-        logFacebookReconnectDiag("database_readback", {
-          correlationId,
-          userId: req.user.id,
-          channel,
-          storedPageId,
-          storedPageName,
-          tokenPresent,
-          tokenFingerprint,
-          isConnected: saved?.isConnected ?? null,
-          pageIdMatchesSelected: storedPageId === String(page.id),
-          tokenFingerprintMatchesSelected:
-            tokenFingerprint === facebookTokenFingerprint(page.accessToken),
-        });
-
         let graphReturnedPageId: string | null = null;
         let graphReturnedPageName: string | null = null;
         let idExactMatch: boolean | null = null;
-        let metaError: ReturnType<typeof sanitizeMetaError> | null = null;
+        let graphError: ReturnType<typeof graphErrorForDiag> = null;
         let httpStatus: number | null = null;
         try {
           const GRAPH_V = "https://graph.facebook.com/v19.0";
-          // Token only in request — never logged.
           const probeResp = await fetch(
             `${GRAPH_V}/${encodeURIComponent(String(storedPageId || page.id))}` +
               `?fields=id,name&access_token=${encodeURIComponent(savedTok || String(page.accessToken || ""))}`,
@@ -5446,32 +5509,36 @@ export async function registerRoutes(
               ? graphReturnedPageId === storedPageId
               : null;
           if (probeJson?.error || !probeResp.ok) {
-            metaError = sanitizeMetaError(probeResp.status, probeJson);
+            graphError = graphErrorForDiag(probeResp.status, probeJson);
           }
         } catch (e: any) {
-          metaError = {
+          graphError = {
             httpStatus: null,
             code: null,
-            errorSubcode: null,
+            error_subcode: null,
             type: "probe_exception",
-            fbtraceId: null,
             message: String(e?.message || e).slice(0, 160),
+            fbtrace_id: null,
           };
         }
-        logFacebookReconnectDiag("post_save_graph_probe", {
-          correlationId,
-          userId: req.user.id,
-          channel,
-          storedPageId,
-          storedPageName,
-          tokenPresent,
-          tokenFingerprint,
-          graphReturnedPageId,
-          graphReturnedPageName,
-          idExactMatch,
-          httpStatus,
-          metaError,
-        });
+        const pageIdMatchesSelected = storedPageId === String(page.id);
+        if (graphError || idExactMatch === false || !pageIdMatchesSelected || !savedTok) {
+          logFacebookReconnectDiag("post_save_graph_probe_failure", {
+            correlationId,
+            userId: req.user.id,
+            channel,
+            storedPageId,
+            storedPageName,
+            tokenPresent: Boolean(savedTok),
+            tokenFingerprint: facebookTokenFingerprint(savedTok),
+            graphReturnedPageId,
+            graphReturnedPageName,
+            idExactMatch,
+            pageIdMatchesSelected,
+            httpStatus,
+            graphError,
+          });
+        }
       }
       // #endregion
 
@@ -6239,6 +6306,13 @@ export async function registerRoutes(
           const tokenSource = "channel_settings.page_access_token";
 
           try {
+            const {
+              classifyFacebookPageGraphError,
+              facebookPageHealthUserMessage,
+            } = await import("@shared/facebookPageHealthMessage");
+            const { graphErrorForDiag, logFacebookReconnectDiag, facebookTokenFingerprint } =
+              await import("./metaFacebookReconnectDiag");
+
             const [tokenRes, pageRes, subRes] = await Promise.all([
               appId && appSecret
                 ? fetchMetaGraphJsonWithRetries({
@@ -6280,11 +6354,19 @@ export async function registerRoutes(
                 const required = REQUIRED_SCOPES[s.channel] ?? [];
                 const missing = required.filter((sc: string) => !(entry.checks.tokenScopes ?? []).includes(sc));
                 entry.checks.missingScopes = missing;
-                if (!entry.checks.tokenValid) entry.issues.push("Access token is invalid or expired");
-                if (missing.length) entry.issues.push(`Missing permissions: ${missing.join(", ")}`);
+                if (!entry.checks.tokenValid) {
+                  const tokMsg = facebookPageHealthUserMessage("invalid_token");
+                  entry.issues.push(`${tokMsg.issue} ${tokMsg.recovery}`);
+                }
+                if (missing.length) {
+                  const permMsg = facebookPageHealthUserMessage("missing_permissions");
+                  entry.issues.push(
+                    `${permMsg.issue} Missing: ${missing.join(", ")}. ${permMsg.recovery}`,
+                  );
+                }
               } else {
                 entry.checks.tokenValid = false;
-                entry.issues.push("Token debug response missing data");
+                entry.issues.push("Token debug response missing data. Reconnect with Facebook in Settings.");
               }
             } else if (appId && appSecret) {
               if (tokenRes.outcome === "timeout" || tokenRes.outcome === "network") {
@@ -6292,7 +6374,8 @@ export async function registerRoutes(
                 entry.checks.tokenValid = null;
               } else {
                 entry.checks.tokenValid = false;
-                entry.issues.push("Access token verification failed");
+                const tokMsg = facebookPageHealthUserMessage("invalid_token");
+                entry.issues.push(`${tokMsg.issue} ${tokMsg.recovery}`);
               }
             } else {
               entry.checks.tokenValid = null;
@@ -6301,28 +6384,51 @@ export async function registerRoutes(
               );
             }
 
-            // ── Page probe (same user token) — source of truth when introspection is flaky ──
+            // ── Page probe (same Page token) — classify Meta errors for accurate UX ──
+            const pageErrBody =
+              pageRes.json && typeof pageRes.json === "object" ? pageRes.json : null;
+            const pageGraphError = !pageRes.ok
+              ? graphErrorForDiag(pageRes.status, pageErrBody, pageRes.errorText ?? null)
+              : null;
+
             const pageJson = pageRes.ok && pageRes.json && typeof pageRes.json === "object" ? (pageRes.json as any) : null;
             const pageTransient = !pageRes.ok && (pageRes.outcome === "timeout" || pageRes.outcome === "network");
             if (pageJson && (pageJson.id || pageJson.name)) {
               entry.checks.pageAccessible = true;
             } else if (pageTransient) {
               entry.checks.pageAccessible = null;
-              entry.warnings.push("Meta Page API temporarily unreachable.");
+              const tmp = facebookPageHealthUserMessage("temporary_failure");
+              entry.warnings.push(`${tmp.issue} ${tmp.recovery}`);
             } else {
               entry.checks.pageAccessible = false;
-              entry.issues.push("Page is not accessible (revoked or unpublished)");
+              const kind = classifyFacebookPageGraphError(
+                pageGraphError
+                  ? {
+                      httpStatus: pageGraphError.httpStatus,
+                      code: pageGraphError.code,
+                      error_subcode: pageGraphError.error_subcode,
+                      type: pageGraphError.type,
+                      message: pageGraphError.message,
+                    }
+                  : { httpStatus: pageRes.status },
+                pageRes.outcome,
+              );
+              const mapped = facebookPageHealthUserMessage(kind);
+              entry.issues.push(`${mapped.issue} ${mapped.recovery}`);
             }
 
             // ── Webhook subscription ──
             const subJson = subRes.ok && subRes.json && typeof subRes.json === "object" ? (subRes.json as any) : null;
+            const subErrBody =
+              subRes.json && typeof subRes.json === "object" ? subRes.json : null;
             let subscriptionTransient = false;
             if (subJson?.data !== undefined) {
               const fields: string[] = (subJson.data ?? []).flatMap((x: any) => x.subscribed_fields ?? []);
               entry.checks.subscriptionFields = fields;
               entry.checks.subscriptionOk = fields.includes("messages");
               if (!entry.checks.subscriptionOk) {
-                entry.issues.push('Webhook not subscribed to "messages" field');
+                const subMsg = facebookPageHealthUserMessage("subscription_failure");
+                entry.issues.push(`${subMsg.issue} ${subMsg.recovery}`);
               }
             } else {
               entry.checks.subscriptionOk = null;
@@ -6330,37 +6436,20 @@ export async function registerRoutes(
               if (subscriptionTransient) {
                 entry.warnings.push("Could not verify webhook subscription (Meta API timeout).");
               } else {
-                entry.issues.push("Could not verify webhook subscription");
+                const subMsg = facebookPageHealthUserMessage("subscription_failure");
+                entry.issues.push(`${subMsg.issue} ${subMsg.recovery}`);
               }
             }
 
-            // #region agent log
-            {
-              const {
-                logFacebookReconnectDiag,
-                facebookTokenFingerprint,
-                sanitizeMetaError,
-              } = await import("./metaFacebookReconnectDiag");
-              const pageErrBody =
-                (!pageRes.ok && pageRes.json && typeof pageRes.json === "object"
-                  ? pageRes.json
-                  : null) ||
-                (pageJson && pageJson.error ? pageJson : null);
-              const subErrBody =
-                !subRes.ok && subRes.json && typeof subRes.json === "object" ? subRes.json : null;
-              const correlationId =
-                typeof cfg?.reconnectDiagCorrelationId === "string"
-                  ? cfg.reconnectDiagCorrelationId
-                  : null;
-              logFacebookReconnectDiag("channel_health_page_probe", {
-                correlationId,
+            // Operational failure log only — avoid noisy success spam on every Inbox poll.
+            if (!pageRes.ok || entry.checks.pageAccessible === false || entry.checks.subscriptionOk === false) {
+              logFacebookReconnectDiag("channel_health_failure", {
                 userId: req.user.id,
                 channel: s.channel,
                 storedPageId: pageId,
                 storedPageName: cfg?.pageName ?? null,
                 tokenPresent: Boolean(accessToken),
                 tokenFingerprint: facebookTokenFingerprint(accessToken),
-                tokenSource,
                 graphReturnedPageId: pageJson?.id != null ? String(pageJson.id) : null,
                 graphReturnedPageName:
                   typeof pageJson?.name === "string" ? pageJson.name.slice(0, 80) : null,
@@ -6369,23 +6458,14 @@ export async function registerRoutes(
                 httpStatus: pageRes.status,
                 outcome: pageRes.outcome,
                 pageAccessible: entry.checks.pageAccessible,
-                metaError: pageErrBody ? sanitizeMetaError(pageRes.status, pageErrBody) : null,
-                conflatedUiIssue:
-                  entry.checks.pageAccessible === false
-                    ? "Page is not accessible (revoked or unpublished)"
-                    : null,
-                tokenValid: entry.checks.tokenValid,
+                graphError: pageGraphError,
                 subscriptionOk: entry.checks.subscriptionOk,
-                subscriptionFields: entry.checks.subscriptionFields,
-                subscribedAppsGetAttempted: true,
                 subscribedAppsGetHttpStatus: subRes.status,
-                subscribedAppsGetOutcome: subRes.outcome,
-                subscribedAppsGetMetaError: subErrBody
-                  ? sanitizeMetaError(subRes.status, subErrBody)
+                subscribedAppsGetMetaError: !subRes.ok
+                  ? graphErrorForDiag(subRes.status, subErrBody, subRes.errorText ?? null)
                   : null,
               });
             }
-            // #endregion
 
             // If Graph debug_token flaked but Page API accepts the same token, treat session as valid (degraded).
             if (

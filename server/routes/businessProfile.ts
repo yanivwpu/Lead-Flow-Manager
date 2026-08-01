@@ -5,6 +5,7 @@ import {
   getBusinessProfileForUser,
 } from "../businessProfileService";
 import { storage } from "../storage";
+import { isRgeInstalledForUser } from "../buyerPreferenceService";
 
 export function registerBusinessProfileRoutes(app: Express): void {
   app.get("/api/business-profile", async (req: Request, res: Response) => {
@@ -27,6 +28,16 @@ export function registerBusinessProfileRoutes(app: Express): void {
       }
 
       const patch = parsed.data;
+      // Master switch is managed in RGE Agent Page settings; block non-RGE API writes.
+      if (patch.publishListingsPublicly !== undefined) {
+        const rgeInstalled = await isRgeInstalledForUser(req.user.id);
+        if (!rgeInstalled) {
+          return res.status(403).json({
+            error: "Publish listings publicly requires Realtor Growth Engine",
+            code: "rge_required",
+          });
+        }
+      }
       const knowledgeUpdates = businessProfileKnowledgePatch({
         displayName: patch.displayName ?? undefined,
         businessName: patch.businessName ?? undefined,

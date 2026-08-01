@@ -47,6 +47,8 @@ export async function fetchMetaGraphJsonWithRetries(args: {
   let lastStatus = 0;
   let lastOutcome: MetaJsonFetchOutcome = "network";
   let lastErr = "";
+  /** Preserve Graph JSON on non-2xx so callers can read error.code / fbtrace_id. */
+  let lastJson: unknown | null = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const t0 = Date.now();
@@ -55,6 +57,7 @@ export async function fetchMetaGraphJsonWithRetries(args: {
       const latencyMs = Date.now() - t0;
       lastStatus = r.status;
       const json = (await r.json().catch(() => null)) as unknown | null;
+      lastJson = json;
       if (r.ok) {
         console.log(
           `[META_HEALTHCHECK] ${JSON.stringify({
@@ -135,7 +138,7 @@ export async function fetchMetaGraphJsonWithRetries(args: {
   return {
     ok: false,
     status: lastStatus,
-    json: null,
+    json: lastJson,
     outcome: lastOutcome,
     attempts: maxAttempts,
     totalLatencyMs: Date.now() - tAll,

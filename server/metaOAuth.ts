@@ -549,18 +549,18 @@ export async function connectPage(
             }
           : null,
       });
-      logFacebookReconnectDiag("subscribed_apps_attempt", {
-        correlationId,
-        userId: diag?.userId || userId,
-        channel,
-        pageId: page.id,
-        pageName: page.name,
-        subscribedAppsAttempted: true,
-        subscribedAppsSucceeded: attemptSucceeded,
-        subscribedFieldsRequested: subscribedFields,
-        httpStatus: subResp.status,
-        metaError,
-      });
+      if (!attemptSucceeded) {
+        logFacebookReconnectDiag("subscribed_apps_attempt_failure", {
+          correlationId,
+          userId: diag?.userId || userId,
+          channel,
+          pageId: page.id,
+          pageName: page.name,
+          subscribedFieldsRequested: subscribedFields,
+          httpStatus: subResp.status,
+          metaError,
+        });
+      }
       if (attemptSucceeded) {
         result.steps.webhookSubscribed = true;
         result.subscriptionDiag!.succeeded = true;
@@ -574,20 +574,18 @@ export async function connectPage(
         );
       }
     }
-    logFacebookReconnectDiag("subscribed_apps_summary", {
-      correlationId,
-      userId: diag?.userId || userId,
-      channel,
-      pageId: page.id,
-      pageName: page.name,
-      subscribedAppsAttempted: result.subscriptionDiag!.attempted,
-      subscribedAppsSucceeded: result.subscriptionDiag!.succeeded,
-      attemptsCount: result.subscriptionDiag!.attempts.length,
-      subscribedFieldsRequestedFinal:
-        result.subscriptionDiag!.attempts.find((a) => a.success === true)?.subscribedFields ??
-        result.subscriptionDiag!.attempts[result.subscriptionDiag!.attempts.length - 1]?.subscribedFields ??
-        null,
-    });
+    if (!result.subscriptionDiag!.succeeded) {
+      logFacebookReconnectDiag("subscribed_apps_summary_failure", {
+        correlationId,
+        userId: diag?.userId || userId,
+        channel,
+        pageId: page.id,
+        pageName: page.name,
+        subscribedAppsAttempted: result.subscriptionDiag!.attempted,
+        subscribedAppsSucceeded: false,
+        attemptsCount: result.subscriptionDiag!.attempts.length,
+      });
+    }
   } catch (e: any) {
     result.warnings.push("Webhook subscription failed: " + (e.message || "unknown error"));
     logFacebookReconnectDiag("subscribed_apps_exception", {

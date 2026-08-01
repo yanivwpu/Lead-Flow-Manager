@@ -429,6 +429,20 @@ export function registerContactRoutes(app: Express): void {
         await clearActiveAppointmentsForContact(req.user.id, req.params.id);
       }
 
+      // Facebook: user-edited names are stamped so Meta profile enrichment never overwrites them.
+      if (
+        contact.facebookId &&
+        typeof body.name === "string" &&
+        body.name.trim() &&
+        body.name.trim() !== (contact.name || "").trim()
+      ) {
+        const { mergeFacebookDisplayNameSource } = await import("@shared/facebookContactNaming");
+        body.sourceDetails = mergeFacebookDisplayNameSource(
+          body.sourceDetails ?? contact.sourceDetails,
+          "manual",
+        );
+      }
+
       const updated = await storage.updateContact(req.params.id, body);
 
       // Phase 1 + Phase 5: Diff-checked outbound sync to GHL.
