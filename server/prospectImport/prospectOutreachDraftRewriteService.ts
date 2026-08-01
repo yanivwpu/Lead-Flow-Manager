@@ -1,5 +1,6 @@
 /**
  * Apply Campaign AI Instructions as a rewrite layer on queued draft snapshots.
+ * Always preserves Platform Outreach Writing Standard quality.
  */
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../drizzle/db";
@@ -10,7 +11,12 @@ import {
   buildOutreachDraftRewriteUserPrompt,
   parseOutreachDraftRewriteResponse,
 } from "@shared/prospectOutreachDraftRewrite";
+import {
+  formatOutreachProspectIntelligenceForPrompt,
+  formatOutreachSenderContextForPrompt,
+} from "@shared/prospectOutreachWritingStandard";
 import { aiProvider } from "../aiProvider";
+import { loadProspectAiWorkspaceContext } from "./prospectAiWorkspaceContext";
 
 const REWRITE_CONCURRENCY = 3;
 
@@ -60,10 +66,33 @@ export async function rewriteQueuedOutreachDrafts(params: {
     .select({
       item: prospectOutreachQueueItems,
       name: contacts.name,
+      companyName: prospectIntelligence.companyName,
+      industry: prospectIntelligence.industry,
+      businessType: prospectIntelligence.businessType,
+      outreachAngle: prospectIntelligence.suggestedOutreachAngle,
+      reasoningSummary: prospectIntelligence.reasoningSummary,
     })
     .from(prospectOutreachQueueItems)
     .leftJoin(contacts, eq(contacts.id, prospectOutreachQueueItems.contactId))
+    .leftJoin(
+      prospectIntelligence,
+      eq(prospectIntelligence.contactId, prospectOutreachQueueItems.contactId),
+    )
     .where(and(...conditions));
+
+  const workspace = await loadProspectAiWorkspaceContext(params.workspaceUserId, {
+    analysisPath: "outreach_draft_rewrite",
+  });
+  const workspaceContextBlock = formatOutreachSenderContextForPrompt({
+    displayName: workspace.displayName,
+    businessName: workspace.businessName,
+    email: workspace.email,
+    website: workspace.website,
+    phone: workspace.phone,
+    executiveSummary: workspace.executiveSummary,
+    servicesProducts: workspace.servicesProducts,
+    configured: workspace.configured,
+  });
 
   let rewritten = 0;
   let skipped = 0;
@@ -77,6 +106,15 @@ export async function rewriteQueuedOutreachDrafts(params: {
       return;
     }
     try {
+      const prospectIntelligenceBlock = formatOutreachProspectIntelligenceForPrompt({
+        prospectName: row.name,
+        companyName: row.companyName,
+        industry: row.industry,
+        businessType: row.businessType,
+        outreachAngle: row.outreachAngle,
+        reasoningSummary: row.reasoningSummary,
+        recipientIdentity: row.item.recipientIdentity,
+      });
       const raw = await aiProvider.complete(
         "extraction",
         [
@@ -88,6 +126,8 @@ export async function rewriteQueuedOutreachDrafts(params: {
               subject,
               message,
               instructions: params.instructions,
+              workspaceContextBlock,
+              prospectIntelligenceBlock,
             }),
           },
         ],

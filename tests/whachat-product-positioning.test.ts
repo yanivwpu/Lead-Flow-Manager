@@ -37,7 +37,8 @@ run("prompt includes canonical product context (not one-line undersell)", () => 
   assert.match(prompt, /AI-powered CRM/i);
   assert.match(prompt, /AI Copilot/i);
   assert.match(prompt, /canonical capabilities/i);
-  assert.match(prompt, /PROSPECT AI OUTREACH INSTRUCTIONS/i);
+  assert.match(prompt, /CAMPAIGN INSTRUCTIONS/i);
+  assert.match(prompt, /PLATFORM OUTREACH WRITING STANDARD/i);
   assert.doesNotMatch(
     prompt,
     /Analyze this imported prospect for WhaChatCRM \(unified WhatsApp\/Instagram\/Messenger inbox \+ AI/,

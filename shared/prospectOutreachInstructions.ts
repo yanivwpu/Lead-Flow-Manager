@@ -229,36 +229,41 @@ function languageInstructionLine(language: ProspectOutreachLanguage): string {
   }
 }
 
-/** Prompt block for Prospect AI generation — separate from AI Brain instructions. */
+/**
+ * Campaign-specific customization block.
+ * Platform Outreach Writing Standard always applies first — this only sets WHAT to emphasize
+ * (objective, offer, CTA, tone, length, link, include/avoid), not basic professional writing craft.
+ */
 export function formatOutreachInstructionsForPrompt(
   instructions: ProspectOutreachInstructions | null | undefined,
 ): string {
   const i = instructions || PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS;
   const personalizeLine = i.personalize
-    ? "Personalize using prospect/company information when available."
-    : "Keep copy general; minimize prospect-specific assumptions.";
+    ? "Emphasize personalization using verified prospect/company facts when available."
+    : "Keep copy more general; minimize prospect-specific assumptions.";
   const custom = i.customInstructions.trim();
   const linkLines =
     i.linkUrl && i.includeLinkNaturally
-      ? `- Include this exact URL once, naturally in the outreach message body where it fits (not at the awkward start, not repeated). Do not put the URL in the subject. Do not shorten, rewrite, or add tracking parameters:\n${i.linkUrl}`
+      ? `- Include link: YES. Introduce this exact URL naturally in the body once (never raw/unintroduced; never in the subject). Do not invent, shorten, rewrite, or add tracking:\n${i.linkUrl}`
       : i.linkUrl && !i.includeLinkNaturally
-        ? "- A campaign link is saved but automatic inclusion is disabled — do not insert a URL unless the custom instructions explicitly ask for it."
-        : "- No campaign link configured — do not invent or insert a URL.";
+        ? "- Include link: NO (saved URL must not appear). Do not insert this or any other URL. On rewrite/regeneration, REMOVE any URLs left over from previous drafts."
+        : "- Include link: NO campaign link configured. Do not invent or insert a URL. On rewrite/regeneration, REMOVE any URLs left over from previous drafts.";
 
-  return `PROSPECT AI OUTREACH INSTRUCTIONS (Campaign settings — guide subject + message style only):
+  return `CAMPAIGN INSTRUCTIONS (customize WHAT to emphasize — do not replace the Platform Outreach Writing Standard):
+Use these only for campaign objective, product/offer emphasis, CTA preference, tone, length, optional link, and words/topics to include or avoid.
 - Language: ${i.language}
 - ${languageInstructionLine(i.language)}
-- Tone: ${i.tone}
-- Length: ${i.length}
+- Tone preference: ${i.tone}
+- Length preference: ${i.length}
 - ${personalizeLine}
-${custom ? `- Custom instructions from the workspace:\n${custom}` : "- No custom free-text instructions saved."}
+${custom ? `- Campaign emphasis / include-avoid from the workspace:\n${custom}` : "- No campaign free-text emphasis saved — still write a high-quality outreach email using the Platform Writing Standard + workspace + prospect context."}
 ${linkLines}
 Rules:
-- Follow these instructions for suggestedOutreachAngle, suggestedOutreachSubject, and suggestedFirstMessage.
+- Apply these preferences on top of the Platform Outreach Writing Standard (never instead of it).
+- If any Campaign Instruction conflicts with safety, factual accuracy, verified sender identity, or no-unsupported-claims rules, keep the global standard.
 - Customer-facing subject and message must follow the language instruction; outreach angle may stay internal/English if needed.
-- Preserve proper names, business names, brand names, product names, and URLs appropriately (do not translate URLs).
-- Never put the configured campaign URL in the subject line.
+- Preserve proper names, business names, brand names, and product names appropriately (do not translate URLs when a link is allowed).
+- Never put a campaign URL in the subject line.
 - Do NOT invent unsupported claims, fake interest, Re:/Fwd: subjects, clickbait, spammy wording, or emojis unless explicitly requested.
-- Do NOT override safety/compliance or invent what the workspace sells beyond WORKSPACE BUSINESS CONTEXT.
-- Prefer natural, varied email subjects — never default every prospect to "Idea for {Business}".`;
+- Do NOT invent what the workspace sells beyond WORKSPACE BUSINESS CONTEXT.`;
 }

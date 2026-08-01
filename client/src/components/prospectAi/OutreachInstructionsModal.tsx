@@ -75,16 +75,17 @@ export function OutreachInstructionsModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg" data-testid="pi-outreach-instructions-modal">
         <DialogHeader>
-          <DialogTitle>AI Outreach Instructions</DialogTitle>
+          <DialogTitle>Campaign AI Instructions</DialogTitle>
           <DialogDescription>
-            Tell AI Brain how you want your Prospect AI outreach written. These instructions will
-            guide future email subjects and messages.
+            Tell AI WHAT to emphasize for this campaign (offer, CTA, include/avoid). Professional
+            writing quality is applied automatically by the platform writing standard — even if you
+            leave these blank.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-1">
           <div className="space-y-1.5">
-            <Label htmlFor="pi-outreach-custom">Custom instructions</Label>
+            <Label htmlFor="pi-outreach-custom">What to emphasize</Label>
             <Textarea
               id="pi-outreach-custom"
               rows={5}
@@ -92,7 +93,7 @@ export function OutreachInstructionsModal({
               onChange={(e) =>
                 setDraft((prev) => ({ ...prev, customInstructions: e.target.value }))
               }
-              placeholder="Keep outreach short and conversational. Introduce WhachatCRM without sounding salesy. For marketing agencies, focus on automating lead conversations. Avoid generic 'Idea for...' subject lines."
+              placeholder="Emphasize free trial. Mention Realtor Growth Engine for brokerages. CTA: book a 10-minute walkthrough. Avoid talking about AI jargon."
               data-testid="pi-outreach-custom-instructions"
             />
           </div>

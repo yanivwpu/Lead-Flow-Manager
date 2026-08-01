@@ -20,6 +20,7 @@ import {
   buildProspectOutreachSubject,
   formatOutreachInstructionsForPrompt,
 } from "@shared/prospectOutreachInstructions";
+import { formatPlatformOutreachWritingStandardForPrompt } from "@shared/prospectOutreachWritingStandard";
 import { readProspectImportMetadata } from "./prospectIntelligenceEligibility";
 import type { ProspectWorkspaceBusinessContext } from "./prospectAiWorkspaceContext";
 
@@ -1106,11 +1107,20 @@ export function buildProspectIntelligencePrompt(
 
   return `Analyze this prospect for acquisition fit, outreach readiness, and classification.
 
+Assemble customer-facing outreach in this order:
+1) Platform Outreach Writing Standard
+2) Workspace / AI Brain context
+3) Prospect intelligence
+4) Campaign-specific instructions
+5) Final personalized draft (suggestedOutreachSubject + suggestedFirstMessage)
+
+${formatPlatformOutreachWritingStandardForPrompt()}
+
 ${buildWorkspaceContextForPrompt(workspaceContext)}
 
-${formatOutreachInstructionsForPrompt(workspaceContext?.outreachInstructions)}
-
 ${buildWorkflowContextForPrompt(input)}
+
+${formatOutreachInstructionsForPrompt(workspaceContext?.outreachInstructions)}
 
 FIT / SCORE CONTRACT (critical — keep fields consistent):
 - Fit = suitability as an ICP/campaign prospect for the WORKSPACE offer (AI Brain / Profile), NOT "business exists" or "looks legitimate".
@@ -1132,7 +1142,8 @@ STRICT RULES:
 
 OUTREACH MESSAGE RULES (suggestedFirstMessage + suggestedOutreachAngle + suggestedOutreachSubject + reasoningSummary):
 ${messageGrounding}
-- Reason in this order: (1) prospect's actual business, (2) one plausible pain if evidenced, (3) pick only 1–2 relevant capabilities from workspace context, (4) connect pain → capability in a short natural message.
+- Obey the Platform Outreach Writing Standard above for every customer-facing subject and message.
+- Reason in this order: (1) prospect's actual business, (2) one plausible pain if evidenced, (3) pick only 1–2 relevant capabilities from workspace context, (4) connect pain → capability with benefit-first wording, (5) friendly CTA + professional closing using workspace sender identity.
 - RECIPIENT GREETING (critical):
   - Greet only a verified contact person's first name from the prospect input (a real person name distinct from the business/trade name).
   - NEVER greet the workspace owner, logged-in user, sender profile displayName, Business Profile name, or account name as the recipient.
@@ -1144,7 +1155,7 @@ ${messageGrounding}
 - Never use phrases like "I noticed your interest in...", "I saw you were looking for...", "businesses like yours", "your agency", "your store", "your clients", "your team", or "your real estate business" unless the prospect input explicitly supports that claim.
 - Do not assume the prospect owns or represents a business unless company, businessType, industry, or tags support it.
 - The recommendedOffer must follow the offer guidance below.
-- suggestedOutreachSubject: write a natural, varied email subject (not "Idea for {Business}", not Re:/Fwd:, no emojis unless requested, no clickbait). Examples of style: "Quick introduction, {Business}", "{Business} × WhachatCRM", "Quick question about your lead conversations".
+- suggestedOutreachSubject: write a natural, varied email subject (not "Idea for {Business}", not Re:/Fwd:, no emojis unless requested, no clickbait).
 
 ${offerGuidance}
 

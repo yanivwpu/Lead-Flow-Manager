@@ -131,8 +131,9 @@ run("URL passed into AI prompt only when includeLinkNaturally=true", () => {
     includeLinkNaturally: true,
   });
   assert.ok(withLink.includes(url));
-  assert.ok(withLink.includes("naturally in the outreach message body"));
-  assert.ok(withLink.includes("Never put the configured campaign URL in the subject"));
+  assert.ok(withLink.includes("Include link: YES"));
+  assert.ok(withLink.includes("exact URL naturally"));
+  assert.ok(withLink.includes("Never put a campaign URL in the subject"));
 
   const disabled = formatOutreachInstructionsForPrompt({
     ...PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
@@ -140,7 +141,8 @@ run("URL passed into AI prompt only when includeLinkNaturally=true", () => {
     includeLinkNaturally: false,
   });
   assert.ok(!disabled.includes(url));
-  assert.ok(disabled.includes("automatic inclusion is disabled"));
+  assert.ok(disabled.includes("Include link: NO"));
+  assert.ok(disabled.includes("REMOVE any URLs left over from previous drafts"));
 
   const empty = formatOutreachInstructionsForPrompt({
     ...PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
@@ -148,7 +150,8 @@ run("URL passed into AI prompt only when includeLinkNaturally=true", () => {
     includeLinkNaturally: true,
   });
   assert.ok(!empty.includes("https://"));
-  assert.ok(empty.includes("No campaign link configured"));
+  assert.ok(empty.includes("Include link: NO campaign link configured"));
+  assert.ok(empty.includes("REMOVE any URLs left over from previous drafts"));
 });
 
 run("language instruction reaches subject/message prompt", () => {
@@ -181,10 +184,10 @@ run("saved custom instructions are passed into subject/message generation prompt
     length: "short",
     personalize: true,
   });
-  assert.ok(block.includes("PROSPECT AI OUTREACH INSTRUCTIONS"));
+  assert.ok(block.includes("CAMPAIGN INSTRUCTIONS"));
   assert.ok(block.includes("Avoid Idea for subjects"));
-  assert.ok(block.includes("Tone: direct"));
-  assert.ok(block.includes("suggestedOutreachSubject"));
+  assert.ok(block.includes("Tone preference: direct"));
+  assert.ok(block.includes("WHAT to emphasize"));
   assert.ok(!block.includes("AI BRAIN"));
 });
 
@@ -256,14 +259,14 @@ run("edited subject persists into queue/send snapshot path", () => {
   assert.ok(queue.includes("outreachInstructions"));
 });
 
-run("changing global instructions does not overwrite existing prospect content (no auto rewrite)", () => {
+run("changing campaign instructions rewrites queued drafts via writing-standard rewrite layer", () => {
   const queue = readFileSync(
     join(process.cwd(), "server/prospectImport/prospectOutreachQueueService.ts"),
     "utf8",
   );
-  // Settings update only persists instructions — no bulk rewrite of PI rows.
   assert.ok(queue.includes("normalizeOutreachInstructionsForSave"));
-  assert.ok(!/update\(prospectIntelligence\).*outreachInstructions/s.test(queue));
+  // Saving Campaign Instructions rewrites queued/paused drafts (preserves Platform Writing Standard).
+  assert.ok(queue.includes("rewriteQueuedOutreachDrafts"));
 });
 
 run("missing-email prospect remains non-sendable", () => {

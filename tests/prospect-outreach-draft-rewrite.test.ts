@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  buildOutreachDraftRewriteSystemPrompt,
   buildOutreachDraftRewriteUserPrompt,
   parseOutreachDraftRewriteResponse,
 } from "../shared/prospectOutreachDraftRewrite";
 import { PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS } from "../shared/prospectOutreachInstructions";
+import { PLATFORM_OUTREACH_WRITING_STANDARD_HEADING } from "../shared/prospectOutreachWritingStandard";
 
 {
   const parsed = parseOutreachDraftRewriteResponse(
@@ -17,6 +19,10 @@ import { PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS } from "../shared/prospectOutre
 }
 
 {
+  assert.ok(
+    buildOutreachDraftRewriteSystemPrompt().includes(PLATFORM_OUTREACH_WRITING_STANDARD_HEADING),
+  );
+
   const prompt = buildOutreachDraftRewriteUserPrompt({
     prospectName: "Luca Jacoli",
     subject: "Quick introduction, Luca Jacoli",
@@ -33,9 +39,9 @@ import { PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS } from "../shared/prospectOutre
   assert.match(prompt, /free trial/i);
   assert.match(prompt, /Don't mention AI/i);
   assert.match(prompt, /Luca Jacoli/);
-  // Rewrite layer keeps prospect facts from the existing draft + campaign guidance.
   assert.match(prompt, /LA brokerage/);
-  assert.match(prompt, /campaign instructions|Rewrite the subject/i);
+  assert.match(prompt, /CAMPAIGN INSTRUCTIONS/);
+  assert.match(prompt, /Platform Outreach Writing Standard/i);
 }
 
 {
