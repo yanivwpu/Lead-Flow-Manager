@@ -578,6 +578,7 @@ function AIBrainContent() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/ai/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/workspace-intelligence"] });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to save settings. Please try again.", variant: "destructive" });
@@ -597,6 +598,7 @@ function AIBrainContent() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/ai/business-knowledge"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/workspace-intelligence"] });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to save. Please try again.", variant: "destructive" });
@@ -674,6 +676,7 @@ function AIBrainContent() {
       setWkScanId(null);
       setWkPageResults(null);
       queryClient.invalidateQueries({ queryKey: ["/api/ai/business-knowledge"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/workspace-intelligence"] });
       toast({
         title: "Saved to AI Brain",
         description: "This summary is now included in Copilot suggestions and auto replies.",
@@ -698,6 +701,7 @@ function AIBrainContent() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/ai/business-knowledge"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/workspace-intelligence"] });
       toast({ title: "Knowledge updated", description: "Your edited summary has been saved." });
     },
     onError: (e: Error) => {
@@ -721,6 +725,7 @@ function AIBrainContent() {
       setWkPageResults(null);
       setWkPhase("idle");
       queryClient.invalidateQueries({ queryKey: ["/api/ai/business-knowledge"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/workspace-intelligence"] });
       toast({ title: "Website knowledge removed", description: "AI will no longer use this imported context." });
     },
     onError: (e: Error) => {

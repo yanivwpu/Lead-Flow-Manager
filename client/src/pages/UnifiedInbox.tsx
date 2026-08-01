@@ -107,6 +107,7 @@ import {
   buildBuyerPreferenceAiContext,
 } from "@shared/buyerPreferenceDisplay";
 import { shouldInjectBuyerRealEstateContext } from "@shared/aiDomainEligibility";
+import type { WorkspaceIntelligenceSnapshot } from "@shared/workspaceIntelligence";
 import { extractBuyerMatchCriteria } from "@shared/inventory/inventoryMatchScoring";
 import { usePersistedBuyerPreferences } from "@/lib/buyerPreferencesQuery";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
@@ -2582,6 +2583,17 @@ export function UnifiedInbox() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Workspace Intelligence Snapshot — workspace-scoped; long staleTime; not per-conversation.
+  const { data: workspaceIntelligence = null } = useQuery<WorkspaceIntelligenceSnapshot>({
+    queryKey: ["/api/ai/workspace-intelligence"],
+    queryFn: async () => {
+      const res = await fetch("/api/ai/workspace-intelligence", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load workspace intelligence");
+      return res.json();
+    },
+    staleTime: 15 * 60 * 1000,
+  });
+
   // Build contact context for AI reply quality improvement (must be after contact + messages are declared).
   // messages is already selection-isolated (empty when no conversation / contact mismatch).
   const contactContext: ContactContext | undefined = useMemo(() => {
@@ -4004,6 +4016,7 @@ export function UnifiedInbox() {
           }
           onInsertComposerDraft={insertComposerDraftFromCopilot}
           connectedChannels={connectedChannelsMap}
+          workspaceIntelligence={workspaceIntelligence}
           onUpdateContact={updateContact}
           onUpdateConversationStatus={status => {
             if (primaryConversation && hasConversation) {
@@ -4049,6 +4062,7 @@ export function UnifiedInbox() {
                   }
                   onInsertComposerDraft={insertComposerDraftFromCopilot}
                   connectedChannels={connectedChannelsMap}
+                  workspaceIntelligence={workspaceIntelligence}
                   onUpdateContact={updateContact}
                   onUpdateConversationStatus={status => {
                     if (primaryConversation && hasConversation) {

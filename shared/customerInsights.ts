@@ -21,6 +21,11 @@ import {
 } from "./aiDomainEligibility";
 import { looksLikeGreetingOnly } from "./conversationTextSignals";
 import type { SellerIntentClass } from "./sellerIntent";
+import type { WorkspaceIntelligenceSnapshot } from "./workspaceIntelligence";
+import {
+  analyzeWorkspaceRelevance,
+  type WorkspaceRelevanceMatch,
+} from "./workspaceIntelligenceRelevance";
 
 export type CustomerInsightContext = {
   reasons?: string[];
@@ -201,9 +206,40 @@ export type ContextualActionContext = {
   sellerProfileHasData?: boolean;
   contactEmail?: string | null;
   conversationText?: string | null;
+  /**
+   * Client-safe Workspace Intelligence Snapshot (Phase 1).
+   * Primary relevance signal; industry remains eligibility/fallback.
+   */
+  workspaceIntelligence?: WorkspaceIntelligenceSnapshot | null;
 };
 
-type ActionCandidate = { label: string; rank: number; group: string };
+export type CopilotBlockedAction = {
+  capability: string;
+  reason: string;
+};
+
+export type CopilotActionProvenance = {
+  capability: string;
+  label: string;
+  source: string;
+  intent?: string;
+  confidence?: number;
+  workspaceIntelligenceUsed: boolean;
+  evidence: string[];
+  intelligenceEvidence?: string[];
+  blockedActions?: CopilotBlockedAction[];
+  snapshotVersion?: string;
+  eligibility?: Record<string, boolean | string | null | undefined>;
+};
+
+type ActionCandidate = {
+  label: string;
+  rank: number;
+  group: string;
+  capability?: string;
+  source?: string;
+  evidence?: string[];
+};
 
 function collectBuyerInventoryActions(ctx: ContextualActionContext): ActionCandidate[] {
   const timing = ctx.showingTimingPhrase?.trim();
@@ -230,17 +266,127 @@ function domainEligibilityFromActionContext(
   ctx: ContextualActionContext,
 ): AiDomainEligibilityInput {
   const intentText = ctx.latestInboundText ?? ctx.inboundText;
+  const snap = ctx.workspaceIntelligence;
+  // Snapshot industry is preferred for eligibility signals; RGE may also come from snapshot.
+  const industry = snap?.industry ?? ctx.industry;
+  const rgeInstalled =
+    ctx.rgeInstalled === true || snap?.growthEngines?.rgeInstalled === true;
   return {
     inboundText: intentText,
     conversationText: ctx.conversationText ?? ctx.inboundText,
     sellerIntent: ctx.sellerIntent ?? null,
     leadType: ctx.leadType,
-    rgeInstalled: ctx.rgeInstalled,
-    industry: ctx.industry,
+    rgeInstalled,
+    industry,
     buyerProfileHasCriteria: ctx.buyerProfileHasCriteria,
     sellerProfileHasData: ctx.sellerProfileHasData,
     contactEmail: ctx.contactEmail,
   };
+}
+
+function resolveWorkspaceRelevance(ctx: ContextualActionContext): WorkspaceRelevanceMatch {
+  return analyzeWorkspaceRelevance({
+    snapshot: ctx.workspaceIntelligence,
+    conversationText: ctx.conversationText ?? ctx.inboundText,
+    latestInboundText: ctx.latestInboundText ?? ctx.inboundText,
+  });
+}
+
+/**
+ * Phase 2: Workspace Intelligence–grounded candidates (deterministic labels).
+ * Does not bypass Realtor/RGE/domain eligibility gates.
+ */
+function collectWorkspaceIntelligenceCandidates(
+  ctx: ContextualActionContext,
+  relevance: WorkspaceRelevanceMatch,
+): { actions: ActionCandidate[]; blocked: CopilotBlockedAction[] } {
+  const actions: ActionCandidate[] = [];
+  const blocked: CopilotBlockedAction[] = [];
+  if (!relevance.snapshotConfigured) return { actions, blocked };
+
+  const { modelHints, conversationHints } = relevance;
+  const baseEvidence = relevance.evidence.filter((e) =>
+    /offering_match|supported_intent|business_model|knowledge|brain_model|qualification/.test(e),
+  );
+
+  // Directory / local-guide businesses: listing sales vs visitor discovery.
+  if (modelHints.directoryOrLocalGuide && conversationHints.joinOrListBusiness) {
+    actions.push({
+      label: "Explain Listing Options",
+      rank: 96,
+      group: "wi_explain_listing",
+      capability: "explain_listing",
+      source: "workspace_intelligence_relevance",
+      evidence: [...baseEvidence, "capability_explain_listing"],
+    });
+    actions.push({
+      label: "Qualify Business Listing",
+      rank: 93,
+      group: "wi_qualify_listing",
+      capability: "qualify_listing",
+      source: "workspace_intelligence_relevance",
+      evidence: [...baseEvidence, "capability_qualify_listing"],
+    });
+    blocked.push({
+      capability: "qualify_trip",
+      reason: "industry_preset_overridden_by_business_model",
+    });
+  } else if (modelHints.directoryOrLocalGuide && conversationHints.visitorLocalDiscovery) {
+    actions.push({
+      label: "Answer From Knowledge",
+      rank: 95,
+      group: "wi_knowledge",
+      capability: "answer_from_knowledge",
+      source: "workspace_intelligence_relevance",
+      evidence: [...baseEvidence, "capability_answer_from_knowledge"],
+    });
+    blocked.push({
+      capability: "qualify_listing",
+      reason: "visitor_discovery_not_listing_sales",
+    });
+    blocked.push({
+      capability: "book",
+      reason: "insufficient_listing_sales_evidence",
+    });
+  } else if (modelHints.travelPlanner && conversationHints.tripPlanning) {
+    actions.push({
+      label: "Qualify Trip Details",
+      rank: 94,
+      group: "wi_qualify_trip",
+      capability: "qualify_trip",
+      source: "workspace_intelligence_relevance",
+      evidence: [...baseEvidence, "capability_qualify_trip"],
+    });
+  } else if (
+    // Travel industry alone must not invent trip qualification when Brain model is directory.
+    !modelHints.directoryOrLocalGuide &&
+    conversationHints.tripPlanning &&
+    /\b(travel|tourism)\b/i.test(String(ctx.workspaceIntelligence?.industry || ctx.industry || ""))
+  ) {
+    actions.push({
+      label: "Qualify Trip Details",
+      rank: 88,
+      group: "wi_qualify_trip",
+      capability: "qualify_trip",
+      source: "industry_fallback_relevance",
+      evidence: ["industry_travel_fallback", "conversation_trip_planning"],
+    });
+  } else if (
+    modelHints.knowledgeHeavy &&
+    conversationHints.genericInfoSeeking &&
+    !conversationHints.joinOrListBusiness
+  ) {
+    actions.push({
+      label: "Answer From Knowledge",
+      rank: 82,
+      group: "wi_knowledge",
+      capability: "answer_from_knowledge",
+      source: "workspace_intelligence_relevance",
+      evidence: [...baseEvidence, "capability_answer_from_knowledge"],
+    });
+  }
+
+  return { actions, blocked };
 }
 
 function collectLowEvidenceDiscoveryActions(): ActionCandidate[] {
@@ -267,49 +413,183 @@ function shouldPreferDiscoveryActions(
   return lowConfidence && (intentUnknown || unqualified);
 }
 
-function collectContextualActionCandidates(ctx: ContextualActionContext): ActionCandidate[] {
+type CollectedActions = {
+  actions: ActionCandidate[];
+  blockedActions: CopilotBlockedAction[];
+  relevance: WorkspaceRelevanceMatch;
+  earlySource?: string;
+  dominantIntent: string;
+  showRealEstateCopilotRecommendations: boolean;
+};
+
+function collectLowEvidenceDiscoveryActionsWithMeta(): ActionCandidate[] {
+  return collectLowEvidenceDiscoveryActions().map((a, i) => ({
+    ...a,
+    capability: i === 0 ? "discover_intent" : a.group === "qualify" ? "qualify" : "clarify",
+    source: "low_confidence_guard",
+    evidence: ["greeting_or_low_confidence"],
+  }));
+}
+
+function collectContextualActionCandidates(ctx: ContextualActionContext): CollectedActions {
   const actions: ActionCandidate[] = [];
+  const blockedActions: CopilotBlockedAction[] = [];
   const timing = ctx.showingTimingPhrase?.trim();
   const sellerIntent = ctx.sellerIntent ?? null;
   const domainInput = domainEligibilityFromActionContext(ctx);
   const domainDecision = resolveAiDomainEligibility(domainInput);
   const dominantIntent = resolveCopilotDominantIntent(domainInput);
+  const relevance = resolveWorkspaceRelevance(ctx);
+
+  const base = {
+    relevance,
+    dominantIntent,
+    showRealEstateCopilotRecommendations: domainDecision.showRealEstateCopilotRecommendations,
+  };
 
   // System / automated notifications — no lead workflow actions.
   if (domainDecision.suppressLeadWorkflowActions || domainDecision.copilotNoActionNeeded) {
-    return [{ label: "No action needed", rank: 100, group: "system_info" }];
+    return {
+      ...base,
+      earlySource: "system_notification_guard",
+      blockedActions: [{ capability: "book", reason: "system_notification" }],
+      actions: [
+        {
+          label: "No action needed",
+          rank: 100,
+          group: "system_info",
+          capability: "none",
+          source: "system_notification_guard",
+          evidence: ["system_or_notification"],
+        },
+      ],
+    };
   }
 
-  // Greeting / low-confidence unknown intent — never jump to booking/listing/showing.
+  // Greeting / low-confidence unknown intent — WI may be loaded but guard still wins.
   if (shouldPreferDiscoveryActions(ctx, dominantIntent)) {
-    return collectLowEvidenceDiscoveryActions();
+    const text = String(ctx.latestInboundText ?? ctx.inboundText ?? "").trim();
+    const evidence = [
+      ...(looksLikeGreetingOnly(text) ? ["greeting_only"] : ["low_confidence"]),
+      "no_detected_business_intent",
+      ...(relevance.workspaceIntelligenceUsed ? ["snapshot_loaded"] : ["snapshot_absent_or_empty"]),
+      "no_supported_intent_match",
+    ];
+    return {
+      ...base,
+      earlySource: "low_confidence_guard",
+      blockedActions: [
+        { capability: "book", reason: "insufficient_intent_evidence" },
+        { capability: "ge_seller_consult", reason: "insufficient_intent_evidence" },
+        { capability: "qualify_listing", reason: "insufficient_intent_evidence" },
+      ],
+      actions: collectLowEvidenceDiscoveryActionsWithMeta().map((a) => ({
+        ...a,
+        evidence,
+      })),
+    };
   }
+
+  // Workspace Intelligence relevance candidates (non-Realtor; does not bypass RE gates).
+  const wi = collectWorkspaceIntelligenceCandidates(ctx, relevance);
+  actions.push(...wi.actions);
+  blockedActions.push(...wi.blocked);
 
   // Real-estate Copilot actions require conversation domain + Realtor workspace.
   if (domainDecision.showRealEstateCopilotRecommendations) {
     if (dominantIntent === "seller") {
       if (sellerIntent === "seller_valuation") {
-        actions.push({ label: "Request CMA Information", rank: 97, group: "seller_cma" });
-        actions.push({ label: "Request Property Address", rank: 95, group: "seller_address" });
+        actions.push({
+          label: "Request CMA Information",
+          rank: 97,
+          group: "seller_cma",
+          capability: "ge_seller_cma",
+          source: "realtor_seller_eligibility",
+        });
+        actions.push({
+          label: "Request Property Address",
+          rank: 95,
+          group: "seller_address",
+          capability: "ge_seller_address",
+          source: "realtor_seller_eligibility",
+        });
       } else if (sellerIntent === "seller_listing_consultation" || sellerIntent === "seller_new") {
-        actions.push({ label: "Book Listing Consultation", rank: 98, group: "seller_consult" });
-        actions.push({ label: "Request Property Address", rank: 94, group: "seller_address" });
+        actions.push({
+          label: "Book Listing Consultation",
+          rank: 98,
+          group: "seller_consult",
+          capability: "ge_seller_consult",
+          source: "realtor_seller_eligibility",
+          evidence: ["explicit_seller_intent", "realtor_workspace_eligible"],
+        });
+        actions.push({
+          label: "Request Property Address",
+          rank: 94,
+          group: "seller_address",
+          capability: "ge_seller_address",
+          source: "realtor_seller_eligibility",
+        });
       } else {
-        actions.push({ label: "Book Listing Consultation", rank: 92, group: "seller_consult" });
+        actions.push({
+          label: "Book Listing Consultation",
+          rank: 92,
+          group: "seller_consult",
+          capability: "ge_seller_consult",
+          source: "realtor_seller_eligibility",
+        });
       }
-      actions.push({ label: "Assign Listing Agent", rank: 88, group: "seller_assign" });
-      actions.push({ label: "Follow Up", rank: 50, group: "seller_followup" });
-      return dedupeActionCandidates(actions).slice(0, 3);
+      actions.push({
+        label: "Assign Listing Agent",
+        rank: 88,
+        group: "seller_assign",
+        capability: "assign",
+        source: "realtor_seller_eligibility",
+      });
+      actions.push({
+        label: "Follow Up",
+        rank: 50,
+        group: "seller_followup",
+        capability: "follow_up",
+        source: "realtor_seller_eligibility",
+      });
+      return {
+        ...base,
+        blockedActions,
+        actions: dedupeActionCandidates(actions).slice(0, 3),
+      };
     }
 
     if (dominantIntent === "mixed") {
-      actions.push({ label: "Book Listing Consultation", rank: 90, group: "seller_consult" });
-      actions.push({ label: "Request Property Address", rank: 86, group: "seller_address" });
+      actions.push({
+        label: "Book Listing Consultation",
+        rank: 90,
+        group: "seller_consult",
+        capability: "ge_seller_consult",
+        source: "realtor_mixed_eligibility",
+      });
+      actions.push({
+        label: "Request Property Address",
+        rank: 86,
+        group: "seller_address",
+        capability: "ge_seller_address",
+        source: "realtor_mixed_eligibility",
+      });
     }
 
     if (dominantIntent === "buyer") {
-      actions.push(...collectBuyerInventoryActions(ctx));
+      actions.push(
+        ...collectBuyerInventoryActions(ctx).map((a) => ({
+          ...a,
+          capability: a.group === "showing" ? "book" : "ge_share_listings",
+          source: "realtor_buyer_eligibility",
+        })),
+      );
     }
+  } else if (dominantIntent === "seller" || sellerIntent) {
+    blockedActions.push({
+      capability: "ge_seller_consult",
+      reason: "realtor_workspace_or_domain_ineligible",
+    });
   }
 
   const routing =
@@ -326,17 +606,43 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
       label: "Clarify chat vs schedule",
       rank: 93,
       group: "contact",
+      capability: "clarify",
+      source: "routing_clarify",
     });
   } else if (routingDecision === "ASSIGN_AGENT" && !ctx.assignedTo) {
-    actions.push({ label: "Assign agent", rank: 96, group: "assign" });
+    actions.push({
+      label: "Assign agent",
+      rank: 96,
+      group: "assign",
+      capability: "assign",
+      source: "routing_assign",
+    });
   } else if (routingDecision === "START_NURTURE") {
     if ((ctx.enrollableCampaignCount ?? 0) > 0) {
-      actions.push({ label: "Enroll in nurture campaign", rank: 54, group: "campaign" });
+      actions.push({
+        label: "Enroll in nurture campaign",
+        rank: 54,
+        group: "campaign",
+        capability: "nurture",
+        source: "routing_nurture",
+      });
     } else {
-      actions.push({ label: "Send nurture follow-up", rank: 52, group: "followup" });
+      actions.push({
+        label: "Send nurture follow-up",
+        rank: 52,
+        group: "followup",
+        capability: "follow_up",
+        source: "routing_nurture",
+      });
     }
-  } else if (infoSeeking) {
-    actions.push({ label: "Ask qualifying question", rank: 84, group: "contact" });
+  } else if (infoSeeking && !actions.some((a) => a.capability === "answer_from_knowledge")) {
+    actions.push({
+      label: "Ask qualifying question",
+      rank: 84,
+      group: "contact",
+      capability: "qualify",
+      source: "routing_info_seeking",
+    });
   }
 
   const allowBookingActions =
@@ -354,12 +660,16 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
       label: timing ? `Confirm ${timing} availability` : "Confirm showing availability",
       rank: 100,
       group: "showing",
+      capability: "book",
+      source: "realtor_showing_eligibility",
     });
     if (!ctx.schedulingLinkSent) {
       actions.push({
         label: "Send available time options",
         rank: 94,
         group: "showing_times",
+        capability: "book",
+        source: "realtor_showing_eligibility",
       });
     }
   }
@@ -372,6 +682,8 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
       label: "Ask if financing is already arranged",
       rank: 88,
       group: "financing",
+      capability: "qualify",
+      source: "realtor_financing",
     });
   } else if (
     domainDecision.showRealEstateCopilotRecommendations &&
@@ -380,22 +692,54 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
     routingDecision !== "ASSIGN_AGENT" &&
     !needsClarify
   ) {
-    actions.push({ label: "Contact customer", rank: 82, group: "contact" });
+    actions.push({
+      label: "Contact customer",
+      rank: 82,
+      group: "contact",
+      capability: "follow_up",
+      source: "realtor_purchase_intent",
+    });
     if (allowBookingActions) {
-      actions.push({ label: "Schedule appointment", rank: 78, group: "showing" });
+      actions.push({
+        label: "Schedule appointment",
+        rank: 78,
+        group: "showing",
+        capability: "book",
+        source: "realtor_purchase_intent",
+      });
     }
   } else if (ctx.leadLabel === "Hot" || ctx.bucket === "hot") {
     if (!actions.some((a) => a.group === "contact")) {
-      actions.push({ label: "Contact customer", rank: 80, group: "contact" });
+      actions.push({
+        label: "Contact customer",
+        rank: 80,
+        group: "contact",
+        capability: "follow_up",
+        source: "hot_bucket",
+      });
     }
   } else if (ctx.leadLabel === "Cold" || ctx.bucket === "cold") {
-    if ((ctx.enrollableCampaignCount ?? 0) > 0) {
-      actions.push({ label: "Enroll in nurture campaign", rank: 42, group: "campaign" });
-    } else {
-      actions.push({ label: "Send nurture follow-up", rank: 40, group: "followup" });
+    if (!actions.some((a) => (a.rank ?? 0) >= 80)) {
+      if ((ctx.enrollableCampaignCount ?? 0) > 0) {
+        actions.push({
+          label: "Enroll in nurture campaign",
+          rank: 42,
+          group: "campaign",
+          capability: "nurture",
+          source: "cold_bucket",
+        });
+      } else {
+        actions.push({
+          label: "Send nurture follow-up",
+          rank: 40,
+          group: "followup",
+          capability: "follow_up",
+          source: "cold_bucket",
+        });
+      }
     }
-  } else if (ctx.bucket === "unqualified") {
-    actions.push(...collectLowEvidenceDiscoveryActions());
+  } else if (ctx.bucket === "unqualified" && actions.length === 0) {
+    actions.push(...collectLowEvidenceDiscoveryActionsWithMeta());
   }
 
   const hasHighValueAction = actions.some((a) => a.rank >= 75);
@@ -408,15 +752,25 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
       label: "Follow up if no response",
       rank: 48,
       group: "followup",
+      capability: "follow_up",
+      source: "followup_heuristic",
     });
   }
 
   const lowConfidence = (ctx.confidence ?? 1) < 0.45;
   if (actions.length === 0 && lowConfidence) {
-    return collectLowEvidenceDiscoveryActions();
+    return {
+      ...base,
+      earlySource: "low_confidence_guard",
+      blockedActions: [
+        ...blockedActions,
+        { capability: "book", reason: "insufficient_intent_evidence" },
+      ],
+      actions: collectLowEvidenceDiscoveryActionsWithMeta(),
+    };
   }
 
-  return actions;
+  return { ...base, blockedActions, actions };
 }
 
 function dedupeActionCandidates(candidates: ActionCandidate[]): ActionCandidate[] {
@@ -435,6 +789,15 @@ export type NextBestActionBehavior = "book" | "follow" | "assign" | "snooze" | "
 export type ContextualNextAction = {
   label: string;
   behavior: NextBestActionBehavior;
+  /** Structured diagnostics — not shown as chain-of-thought in UI. */
+  provenance?: CopilotActionProvenance;
+};
+
+export type CopilotRecommendationBuildResult = {
+  actions: ContextualNextAction[];
+  blockedActions: CopilotBlockedAction[];
+  workspaceIntelligenceUsed: boolean;
+  snapshotVersion?: string;
 };
 
 /** Map internal action group → UI surface (intent-based, not label text). */
@@ -462,29 +825,156 @@ export function behaviorForActionGroup(group: string): NextBestActionBehavior {
     case "discover":
     case "discover_needs":
     case "qualify":
+    case "wi_explain_listing":
+    case "wi_qualify_listing":
+    case "wi_knowledge":
+    case "wi_qualify_trip":
       return "composer";
     default:
       return "composer";
   }
 }
 
-export function buildContextualNextActions(ctx: ContextualActionContext): ContextualNextAction[] {
+function capabilityForGroup(group: string, explicit?: string): string {
+  if (explicit) return explicit;
+  switch (group) {
+    case "discover":
+      return "discover_intent";
+    case "discover_needs":
+      return "discover_needs";
+    case "qualify":
+      return "qualify";
+    case "seller_consult":
+      return "ge_seller_consult";
+    case "buyer_inventory":
+      return "ge_share_listings";
+    case "showing":
+    case "showing_times":
+      return "book";
+    case "campaign":
+      return "nurture";
+    case "assign":
+    case "seller_assign":
+      return "assign";
+    case "system_info":
+      return "none";
+    default:
+      return group;
+  }
+}
+
+function toProvenancedActions(
+  ctx: ContextualActionContext,
+  collected: CollectedActions,
+): CopilotRecommendationBuildResult {
+  const ranked = dedupeActionCandidates(collected.actions).slice(0, 3);
+  const intelligenceEvidence = collected.relevance.evidence.filter((e) =>
+    /offering_match|supported_intent|business_model|knowledge|brain_model|qualification|snapshot|ai_brain/.test(
+      e,
+    ),
+  );
+  const actions = ranked.map((c) => {
+    const capability = capabilityForGroup(c.group, c.capability);
+    const source = c.source || collected.earlySource || "deterministic_ranker";
+    const provenance: CopilotActionProvenance = {
+      capability,
+      label: c.label,
+      source,
+      intent: collected.dominantIntent,
+      confidence: ctx.confidence,
+      workspaceIntelligenceUsed: collected.relevance.workspaceIntelligenceUsed,
+      evidence: c.evidence || collected.relevance.evidence.slice(0, 12),
+      intelligenceEvidence,
+      blockedActions: collected.blockedActions.slice(0, 8),
+      snapshotVersion: collected.relevance.snapshotVersion,
+      eligibility: {
+        showRealEstateCopilotRecommendations: collected.showRealEstateCopilotRecommendations,
+        rgeInstalled:
+          ctx.rgeInstalled === true ||
+          ctx.workspaceIntelligence?.growthEngines?.rgeInstalled === true,
+        industry: ctx.workspaceIntelligence?.industry ?? ctx.industry ?? null,
+        snapshotPrimarySource: ctx.workspaceIntelligence?.primarySource ?? null,
+      },
+    };
+    return {
+      label: c.label,
+      behavior: behaviorForActionGroup(c.group) as ContextualNextAction["behavior"],
+      provenance,
+    };
+  });
+
+  return {
+    actions,
+    blockedActions: collected.blockedActions,
+    workspaceIntelligenceUsed: collected.relevance.workspaceIntelligenceUsed,
+    snapshotVersion: collected.relevance.snapshotVersion,
+  };
+}
+
+/** Full build with provenance + blocked action codes (Phase 2). */
+export function buildContextualNextActionsDetailed(
+  ctx: ContextualActionContext,
+): CopilotRecommendationBuildResult {
   if (ctx.handoffActive) {
-    return [
-      { label: "Assign agent", behavior: "assign" as const },
-      { label: "Reply personally", behavior: "composer" as const },
-    ].slice(0, 3);
+    return {
+      actions: [
+        {
+          label: "Assign agent",
+          behavior: "assign",
+          provenance: {
+            capability: "assign",
+            label: "Assign agent",
+            source: "handoff_active",
+            workspaceIntelligenceUsed: Boolean(ctx.workspaceIntelligence?.configured),
+            evidence: ["handoff_active"],
+          },
+        },
+        {
+          label: "Reply personally",
+          behavior: "composer",
+          provenance: {
+            capability: "follow_up",
+            label: "Reply personally",
+            source: "handoff_active",
+            workspaceIntelligenceUsed: Boolean(ctx.workspaceIntelligence?.configured),
+            evidence: ["handoff_active"],
+          },
+        },
+      ],
+      blockedActions: [{ capability: "book", reason: "handoff_active" }],
+      workspaceIntelligenceUsed: Boolean(ctx.workspaceIntelligence?.configured),
+      snapshotVersion: ctx.workspaceIntelligence?.version,
+    };
   }
 
   const domainDecision = resolveAiDomainEligibility(domainEligibilityFromActionContext(ctx));
   if (domainDecision.copilotNoActionNeeded || domainDecision.suppressLeadWorkflowActions) {
-    return [{ label: "No action needed", behavior: "info" }];
+    return {
+      actions: [
+        {
+          label: "No action needed",
+          behavior: "info",
+          provenance: {
+            capability: "none",
+            label: "No action needed",
+            source: "system_notification_guard",
+            workspaceIntelligenceUsed: Boolean(ctx.workspaceIntelligence?.configured),
+            evidence: ["system_or_notification"],
+            blockedActions: [{ capability: "book", reason: "system_notification" }],
+          },
+        },
+      ],
+      blockedActions: [{ capability: "book", reason: "system_notification" }],
+      workspaceIntelligenceUsed: Boolean(ctx.workspaceIntelligence?.configured),
+      snapshotVersion: ctx.workspaceIntelligence?.version,
+    };
   }
 
-  return dedupeActionCandidates(collectContextualActionCandidates(ctx)).map((c) => ({
-    label: c.label,
-    behavior: behaviorForActionGroup(c.group) as ContextualNextAction["behavior"],
-  }));
+  return toProvenancedActions(ctx, collectContextualActionCandidates(ctx));
+}
+
+export function buildContextualNextActions(ctx: ContextualActionContext): ContextualNextAction[] {
+  return buildContextualNextActionsDetailed(ctx).actions;
 }
 
 export function buildContextualNextActionLabels(ctx: ContextualActionContext): string[] {
@@ -567,6 +1057,15 @@ export function composerSuggestionForAction(label: string): string {
   }
   if (/understand intent|discover needs|ask clarifying question|qualify visitor/.test(l)) {
     return "Thanks for reaching out — what brings you here today?";
+  }
+  if (/explain listing options|qualify business listing/.test(l)) {
+    return "Happy to help with listing options — tell me a bit about your business and what you'd like to promote.";
+  }
+  if (/answer from knowledge/.test(l)) {
+    return "I can help with that — what are you looking for specifically?";
+  }
+  if (/qualify trip details/.test(l)) {
+    return "Happy to help plan your trip — how many people are traveling, and which dates are you considering?";
   }
   return label;
 }

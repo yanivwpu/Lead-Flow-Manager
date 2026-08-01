@@ -120,6 +120,7 @@ export function BusinessProfileSettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/business-profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/workspace-intelligence"] });
       toast({ title: "Business profile saved", description: "Your business details were updated." });
     },
     onError: (error: Error) => {

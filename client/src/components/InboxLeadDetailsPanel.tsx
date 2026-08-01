@@ -34,7 +34,7 @@ import {
   sanitizeUserFacingText,
 } from "@shared/customerBehaviorCopy";
 import {
-  buildContextualNextActions,
+  buildContextualNextActionsDetailed,
   buildCustomerInsights,
   buildCustomerSummaryBullets,
   buildSchedulingComposerDraft,
@@ -45,6 +45,7 @@ import {
 } from "@shared/customerInsights";
 import { resolveAiRouting } from "@shared/aiRouting";
 import { classifySellerIntent } from "@shared/sellerIntent";
+import type { WorkspaceIntelligenceSnapshot } from "@shared/workspaceIntelligence";
 import {
   evaluatePresetCampaignEnrollability,
   formatCampaignEnrollmentSubtitle,
@@ -265,6 +266,11 @@ interface InboxLeadDetailsPanelProps {
   connectedChannels?: Record<string, boolean>;
   /** Override the root container class — use when embedding in a mobile sheet */
   panelClassName?: string;
+  /**
+   * Workspace Intelligence Snapshot from parent (preferred).
+   * When omitted, panel loads GET /api/ai/workspace-intelligence via React Query (shared cache).
+   */
+  workspaceIntelligence?: WorkspaceIntelligenceSnapshot | null;
 }
 
 function formatRelativeTime(date: Date | string | null | undefined): string {
@@ -830,9 +836,26 @@ export function InboxLeadDetailsPanel({
   onInsertComposerDraft,
   connectedChannels,
   panelClassName,
+  workspaceIntelligence: workspaceIntelligenceProp,
 }: InboxLeadDetailsPanelProps) {
   const { toast } = useToast();
   const hideGrowthEngine = useHideGrowthEngineForShopify();
+
+  // Workspace-scoped snapshot — long staleTime; not refetched per conversation/contact.
+  const { data: workspaceIntelligenceQuery } = useQuery<WorkspaceIntelligenceSnapshot>({
+    queryKey: ["/api/ai/workspace-intelligence"],
+    queryFn: async () => {
+      const res = await fetch("/api/ai/workspace-intelligence", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load workspace intelligence");
+      return res.json();
+    },
+    staleTime: 15 * 60 * 1000,
+    enabled: workspaceIntelligenceProp === undefined,
+  });
+  const workspaceIntelligence =
+    workspaceIntelligenceProp !== undefined
+      ? workspaceIntelligenceProp
+      : workspaceIntelligenceQuery ?? null;
   // Default to full access if no capabilities provided (backward compat)
   const canSeeCopilot    = capabilities ? capabilities.canUseCopilotIntelligence    : true;
   const canSeeWorkflow   = capabilities ? capabilities.canUseWorkflowRecommendations : true;
@@ -1857,6 +1880,8 @@ export function InboxLeadDetailsPanel({
     const lastMsgText =
       lastMsg?.direction === "inbound" ? `${lastMsg.content ?? ""}`.toLowerCase() : "";
     const hay = `${inboundText} ${intentText}`.toLowerCase();
+    const workspaceIndustry =
+      workspaceIntelligence?.industry ?? businessKnowledge?.industry;
     const aiRouting = resolveAiRouting({
       inbound: lastMsgText || inboundText,
       joinedInbound: inboundText,
@@ -1864,7 +1889,7 @@ export function InboxLeadDetailsPanel({
         role: m.direction === "inbound" ? "user" : "assistant",
         content: m.content,
       })),
-      industry: businessKnowledge?.industry,
+      industry: workspaceIndustry,
       industrySignals: {
         viewingIntent: stageSignals.viewingIntent,
         strongIntent: stageSignals.strongIntent,
@@ -1894,7 +1919,7 @@ export function InboxLeadDetailsPanel({
         null,
     });
 
-    return buildContextualNextActions({
+    const result = buildContextualNextActionsDetailed({
       handoffActive,
       hasShowingIntent: hasBookingIntent,
       hasFinancingDiscussion,
@@ -1917,8 +1942,10 @@ export function InboxLeadDetailsPanel({
       needsRoutingClarification: aiRouting.needsRoutingClarification,
       enrollableCampaignCount,
       sellerIntent,
-      rgeInstalled: inventoryStatus?.rgeInstalled === true,
-      industry: businessKnowledge?.industry,
+      rgeInstalled:
+        inventoryStatus?.rgeInstalled === true ||
+        workspaceIntelligence?.growthEngines?.rgeInstalled === true,
+      industry: workspaceIndustry,
       leadType: String(
         (contact.customFields as Record<string, unknown> | undefined)?.leadType || "",
       ),
@@ -1926,7 +1953,28 @@ export function InboxLeadDetailsPanel({
       sellerProfileHasData: Boolean(sellerProfile),
       contactEmail: contact.email ?? null,
       conversationText: inboundText,
+      workspaceIntelligence: workspaceIntelligence ?? null,
     });
+
+    // Sanitized diagnostics (no chain-of-thought) — tests / support only.
+    if (typeof console !== "undefined" && result.actions[0]?.provenance) {
+      const p = result.actions[0].provenance;
+      console.info(
+        "[COPILOT_ACTION_PROVENANCE]",
+        JSON.stringify({
+          label: p.label,
+          capability: p.capability,
+          source: p.source,
+          confidence: p.confidence ?? null,
+          workspaceIntelligenceUsed: p.workspaceIntelligenceUsed,
+          evidence: p.evidence,
+          blockedActions: p.blockedActions,
+          snapshotVersion: p.snapshotVersion ?? null,
+        }),
+      );
+    }
+
+    return result.actions;
   }, [
     handoffActive,
     intel.intent,
@@ -1948,6 +1996,7 @@ export function InboxLeadDetailsPanel({
     enrollableCampaignCount,
     inventoryStatus?.rgeInstalled,
     persistedBuyerProfile,
+    workspaceIntelligence,
   ]);
 
   const runComposerAction = useCallback(
