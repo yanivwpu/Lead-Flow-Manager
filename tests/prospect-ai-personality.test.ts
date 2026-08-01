@@ -198,6 +198,7 @@ assert.equal(shouldAnimateAiEmoji(false, false), false);
   );
   assert.ok(!panel.includes("onReviewCampaignBlocked"));
   assert.ok(!panel.includes("campaignBlockedFocus"));
+  assert.ok(!panel.includes("setCampaignBlockedFocus"));
   assert.ok(!panel.includes("pi-campaign-blocked-focus-banner"));
   assert.ok(!card.includes("onReviewCampaignBlocked"));
   assert.ok(!card.includes("pi-ai-assistant-review-blocked"));

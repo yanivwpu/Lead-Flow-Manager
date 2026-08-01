@@ -1732,7 +1732,6 @@ export function ProspectIntelligencePanel(props: {
     // Reset stable order when the user changes filters/sort intentionally.
     stableOrderRef.current = [];
     setPinnedVisibleIds(new Set());
-    setCampaignBlockedFocus(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only clear when filters change
   }, [priorityFilter, businessFilter, workFilter, channelFilter, batchFilter, sortBy]);
 
