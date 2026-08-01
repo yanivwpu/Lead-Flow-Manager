@@ -5196,14 +5196,38 @@ export async function registerRoutes(
       let pages = await fetchUserPages(userAccessToken);
       pages = await enrichWithInstagramData(pages, userAccessToken);
 
+      const {
+        newFacebookReconnectCorrelationId,
+        logFacebookReconnectDiag,
+        facebookTokenFingerprint,
+      } = await import("./metaFacebookReconnectDiag");
+      const correlationId = newFacebookReconnectCorrelationId();
+
       (req.session as any).metaOAuthPending = {
         channel,
         userAccessToken,
         pages,
         userId: sessionState.userId,
         expiresAt: Date.now() + 10 * 60 * 1000, // 10 min TTL
+        correlationId,
       };
       delete (req.session as any).metaOAuthState;
+
+      // Never log full metaOAuthPending (contains tokens). Page IDs/names + fingerprints only.
+      logFacebookReconnectDiag("oauth_callback", {
+        correlationId,
+        userId: sessionState.userId,
+        channel,
+        pageCount: pages.length,
+        pages: pages.map((p: { id?: string; name?: string; accessToken?: string }) => ({
+          pageId: p.id ?? null,
+          pageName: typeof p.name === "string" ? p.name.slice(0, 80) : null,
+          tokenPresent: Boolean(p.accessToken),
+          tokenFingerprint: facebookTokenFingerprint(p.accessToken),
+        })),
+        userTokenPresent: Boolean(userAccessToken),
+        userTokenFingerprint: facebookTokenFingerprint(userAccessToken),
+      });
 
       console.log(`[Meta OAuth] callback success for user ${sessionState.userId} — ${pages.length} page(s) fetched`);
       return res.redirect(`/app/settings?meta_oauth=ready&channel=${encodeURIComponent(channel)}`);
@@ -5252,7 +5276,14 @@ export async function registerRoutes(
       if (!pageId) return res.status(400).json({ error: "pageId is required" });
 
       const pending = (req.session as any).metaOAuthPending as
-        | { channel: string; pages: any[]; userId: string; expiresAt: number; userAccessToken: string }
+        | {
+            channel: string;
+            pages: any[];
+            userId: string;
+            expiresAt: number;
+            userAccessToken: string;
+            correlationId?: string;
+          }
         | undefined;
       if (!pending) return res.status(404).json({ error: "No OAuth session — please reconnect" });
       if (pending.userId !== req.user.id) return res.status(403).json({ error: "Session mismatch" });
@@ -5262,6 +5293,13 @@ export async function registerRoutes(
       }
 
       const { connectPage } = await import("./metaOAuth");
+      const {
+        newFacebookReconnectCorrelationId,
+        logFacebookReconnectDiag,
+        facebookTokenFingerprint,
+        sanitizeMetaError,
+      } = await import("./metaFacebookReconnectDiag");
+      const correlationId = pending.correlationId || newFacebookReconnectCorrelationId();
       const channel = pending.channel as "facebook" | "instagram";
       const page = pending.pages.find((p: any) => p.id === pageId);
       if (!page) return res.status(404).json({ error: "Page not found in OAuth session" });
@@ -5272,10 +5310,42 @@ export async function registerRoutes(
         page.instagramAccountId = manualInstagramAccountId.trim();
       }
 
-      const result = await connectPage(req.user.id, channel, page);
+      // #region agent log
+      {
+        const priorFb = await storage.getChannelSetting(req.user.id, channel);
+        const priorCfg = (priorFb?.config || {}) as Record<string, unknown>;
+        const selectedTokenFp = facebookTokenFingerprint(page.accessToken);
+        const pageTokenFps = (pending.pages || []).map((p: any) => ({
+          pageId: String(p?.id || ""),
+          pageName: String(p?.name || "").slice(0, 80),
+          tokenPresent: Boolean(p?.accessToken),
+          tokenFingerprint: facebookTokenFingerprint(p?.accessToken),
+        }));
+        logFacebookReconnectDiag("connect_page_selected", {
+          correlationId,
+          userId: req.user.id,
+          channel,
+          selectedPageId: pageId,
+          selectedPageName: String(page.name || "").slice(0, 80),
+          previousStoredPageId: priorCfg.pageId ?? null,
+          previousStoredPageName: priorCfg.pageName ?? null,
+          previousTokenPresent: Boolean(priorCfg.accessToken || priorCfg.pageAccessToken),
+          previousIsConnected: priorFb?.isConnected ?? null,
+          oauthPages: pageTokenFps,
+          selectedTokenFingerprint: selectedTokenFp,
+          selectedTokenSource: "oauth_session_page.access_token",
+        });
+      }
+      // #endregion
+
+      const result = await connectPage(req.user.id, channel, page, {
+        correlationId,
+        userId: req.user.id,
+      });
 
       if (!result.success) {
-        return res.status(422).json(result);
+        const { subscriptionDiag: _failSubDiag, ...failPublic } = result;
+        return res.status(422).json(failPublic);
       }
 
       // Persist: generate stable webhook verify token
@@ -5293,6 +5363,8 @@ export async function registerRoutes(
         pageId: page.id,
         pageName: result.pageName || page.name,
         webhookVerifyToken: verifyTokenRaw,
+        // Diagnostic correlation only — does not affect connect success/failure.
+        reconnectDiagCorrelationId: correlationId,
       };
       if (process.env.META_APP_ID?.trim()) {
         channelConfig.metaAppId = process.env.META_APP_ID.trim();
@@ -5309,12 +5381,99 @@ export async function registerRoutes(
         config: { ...channelConfig, accessToken: "[REDACTED]" },
       };
       console.log(`[MetaOAuth] Step 5a: DB upsertChannelSetting userId=${req.user.id} channel=${channel}`, JSON.stringify(channelSavePayload));
+      logFacebookReconnectDiag("database_save", {
+        correlationId,
+        userId: req.user.id,
+        channel,
+        pageId: page.id,
+        pageName: result.pageName || page.name,
+        selectedTokenFingerprint: facebookTokenFingerprint(page.accessToken),
+        webhookSubscribed: result.steps.webhookSubscribed,
+        subscribedAppsAttempted: result.subscriptionDiag?.attempted ?? null,
+        subscribedAppsSucceeded: result.subscriptionDiag?.succeeded ?? null,
+      });
       await storage.upsertChannelSetting(req.user.id, channel, {
         isConnected: true,
         isEnabled: true,
         config: channelConfig,
       });
       console.log(`[MetaOAuth] Step 5a: upsertChannelSetting OK`);
+
+      // #region agent log
+      // Immediate post-save DB readback + Graph probe (diagnostic only; does not alter response).
+      {
+        const saved = await storage.getChannelSetting(req.user.id, channel);
+        const savedCfg = (saved?.config || {}) as Record<string, unknown>;
+        const savedTok = typeof savedCfg.accessToken === "string" ? savedCfg.accessToken : "";
+        const storedPageId = savedCfg.pageId != null ? String(savedCfg.pageId) : null;
+        const storedPageName =
+          typeof savedCfg.pageName === "string" ? savedCfg.pageName.slice(0, 80) : null;
+        const tokenPresent = Boolean(savedTok);
+        const tokenFingerprint = facebookTokenFingerprint(savedTok);
+        logFacebookReconnectDiag("database_readback", {
+          correlationId,
+          userId: req.user.id,
+          channel,
+          storedPageId,
+          storedPageName,
+          tokenPresent,
+          tokenFingerprint,
+          isConnected: saved?.isConnected ?? null,
+          pageIdMatchesSelected: storedPageId === String(page.id),
+          tokenFingerprintMatchesSelected:
+            tokenFingerprint === facebookTokenFingerprint(page.accessToken),
+        });
+
+        let graphReturnedPageId: string | null = null;
+        let graphReturnedPageName: string | null = null;
+        let idExactMatch: boolean | null = null;
+        let metaError: ReturnType<typeof sanitizeMetaError> | null = null;
+        let httpStatus: number | null = null;
+        try {
+          const GRAPH_V = "https://graph.facebook.com/v19.0";
+          // Token only in request — never logged.
+          const probeResp = await fetch(
+            `${GRAPH_V}/${encodeURIComponent(String(storedPageId || page.id))}` +
+              `?fields=id,name&access_token=${encodeURIComponent(savedTok || String(page.accessToken || ""))}`,
+          );
+          httpStatus = probeResp.status;
+          const probeJson = (await probeResp.json().catch(() => ({}))) as any;
+          graphReturnedPageId = probeJson?.id != null ? String(probeJson.id) : null;
+          graphReturnedPageName =
+            typeof probeJson?.name === "string" ? probeJson.name.slice(0, 80) : null;
+          idExactMatch =
+            graphReturnedPageId != null && storedPageId != null
+              ? graphReturnedPageId === storedPageId
+              : null;
+          if (probeJson?.error || !probeResp.ok) {
+            metaError = sanitizeMetaError(probeResp.status, probeJson);
+          }
+        } catch (e: any) {
+          metaError = {
+            httpStatus: null,
+            code: null,
+            errorSubcode: null,
+            type: "probe_exception",
+            fbtraceId: null,
+            message: String(e?.message || e).slice(0, 160),
+          };
+        }
+        logFacebookReconnectDiag("post_save_graph_probe", {
+          correlationId,
+          userId: req.user.id,
+          channel,
+          storedPageId,
+          storedPageName,
+          tokenPresent,
+          tokenFingerprint,
+          graphReturnedPageId,
+          graphReturnedPageName,
+          idExactMatch,
+          httpStatus,
+          metaError,
+        });
+      }
+      // #endregion
 
       // Upsert integration record for credential storage (encrypted)
       const integrationConfig: Record<string, string> = {
@@ -5359,7 +5518,9 @@ export async function registerRoutes(
 
       delete (req.session as any).metaOAuthPending;
       console.log(`[MetaOAuth] connect-page COMPLETE user=${req.user.id} channel=${channel} page=${result.pageName}(${result.pageId}) webhookSubscribed=${result.steps.webhookSubscribed} warnings=${result.warnings.join(" | ") || "none"}`);
-      res.json(result);
+      // Keep API response shape stable — subscriptionDiag is server-log only.
+      const { subscriptionDiag: _subscriptionDiag, ...publicResult } = result;
+      res.json(publicResult);
     } catch (err: any) {
       console.error("[Meta OAuth] connect-page error:", err);
       res.status(500).json({ error: err.message || "Failed to connect page" });
@@ -6095,7 +6256,7 @@ export async function registerRoutes(
                     totalLatencyMs: 0,
                   }),
               fetchMetaGraphJsonWithRetries({
-                url: `${GRAPH_LOCAL}/${pageId}?fields=name&access_token=${encodeURIComponent(accessToken)}`,
+                url: `${GRAPH_LOCAL}/${pageId}?fields=id,name&access_token=${encodeURIComponent(accessToken)}`,
                 logTag: "page_probe",
                 tokenSource,
                 extraLog: { userId: req.user.id, channel: s.channel, pageId },
@@ -6172,6 +6333,59 @@ export async function registerRoutes(
                 entry.issues.push("Could not verify webhook subscription");
               }
             }
+
+            // #region agent log
+            {
+              const {
+                logFacebookReconnectDiag,
+                facebookTokenFingerprint,
+                sanitizeMetaError,
+              } = await import("./metaFacebookReconnectDiag");
+              const pageErrBody =
+                (!pageRes.ok && pageRes.json && typeof pageRes.json === "object"
+                  ? pageRes.json
+                  : null) ||
+                (pageJson && pageJson.error ? pageJson : null);
+              const subErrBody =
+                !subRes.ok && subRes.json && typeof subRes.json === "object" ? subRes.json : null;
+              const correlationId =
+                typeof cfg?.reconnectDiagCorrelationId === "string"
+                  ? cfg.reconnectDiagCorrelationId
+                  : null;
+              logFacebookReconnectDiag("channel_health_page_probe", {
+                correlationId,
+                userId: req.user.id,
+                channel: s.channel,
+                storedPageId: pageId,
+                storedPageName: cfg?.pageName ?? null,
+                tokenPresent: Boolean(accessToken),
+                tokenFingerprint: facebookTokenFingerprint(accessToken),
+                tokenSource,
+                graphReturnedPageId: pageJson?.id != null ? String(pageJson.id) : null,
+                graphReturnedPageName:
+                  typeof pageJson?.name === "string" ? pageJson.name.slice(0, 80) : null,
+                idExactMatch:
+                  pageJson?.id != null ? String(pageJson.id) === String(pageId) : null,
+                httpStatus: pageRes.status,
+                outcome: pageRes.outcome,
+                pageAccessible: entry.checks.pageAccessible,
+                metaError: pageErrBody ? sanitizeMetaError(pageRes.status, pageErrBody) : null,
+                conflatedUiIssue:
+                  entry.checks.pageAccessible === false
+                    ? "Page is not accessible (revoked or unpublished)"
+                    : null,
+                tokenValid: entry.checks.tokenValid,
+                subscriptionOk: entry.checks.subscriptionOk,
+                subscriptionFields: entry.checks.subscriptionFields,
+                subscribedAppsGetAttempted: true,
+                subscribedAppsGetHttpStatus: subRes.status,
+                subscribedAppsGetOutcome: subRes.outcome,
+                subscribedAppsGetMetaError: subErrBody
+                  ? sanitizeMetaError(subRes.status, subErrBody)
+                  : null,
+              });
+            }
+            // #endregion
 
             // If Graph debug_token flaked but Page API accepts the same token, treat session as valid (degraded).
             if (
@@ -7274,6 +7488,9 @@ export async function registerRoutes(
         clearedFields.push(`integration:${fb.id}`);
       }
 
+      const beforeFb = await storage.getChannelSetting(userId, "facebook");
+      const beforeCfg = (beforeFb?.config || {}) as Record<string, unknown>;
+
       await storage.upsertChannelSetting(userId, "facebook", {
         isConnected: false,
         isEnabled: false,
@@ -7282,6 +7499,49 @@ export async function registerRoutes(
 
       clearedFields.push("channel_settings:facebook(pageId,pageAccessToken,pageName,...)");
       const channelSettingsUpdated = true;
+
+      const afterFb = await storage.getChannelSetting(userId, "facebook");
+      const afterCfg = (afterFb?.config || {}) as Record<string, unknown>;
+
+      // #region agent log
+      {
+        const { logFacebookReconnectDiag, facebookTokenFingerprint } = await import(
+          "./metaFacebookReconnectDiag"
+        );
+        logFacebookReconnectDiag("facebook_disconnect", {
+          correlationId:
+            typeof beforeCfg.reconnectDiagCorrelationId === "string"
+              ? beforeCfg.reconnectDiagCorrelationId
+              : null,
+          userId,
+          channel: "facebook",
+          hadIntegrationRow,
+          integrationRowsDeleted: facebookIntegrations.length,
+          before: {
+            pageId: beforeCfg.pageId ?? null,
+            pageName: beforeCfg.pageName ?? null,
+            tokenPresent: Boolean(beforeCfg.accessToken || beforeCfg.pageAccessToken),
+            tokenFingerprint: facebookTokenFingerprint(
+              beforeCfg.accessToken || beforeCfg.pageAccessToken,
+            ),
+            isConnected: beforeFb?.isConnected ?? null,
+            isEnabled: beforeFb?.isEnabled ?? null,
+            configKeyCount: Object.keys(beforeCfg).length,
+          },
+          after: {
+            pageId: afterCfg.pageId ?? null,
+            pageName: afterCfg.pageName ?? null,
+            tokenPresent: Boolean(afterCfg.accessToken || afterCfg.pageAccessToken),
+            isConnected: afterFb?.isConnected ?? null,
+            isEnabled: afterFb?.isEnabled ?? null,
+            configKeyCount: Object.keys(afterCfg).length,
+            configEmpty: Object.keys(afterCfg).length === 0,
+          },
+          metaUnsubscribeCalled: false,
+          clearedFields,
+        });
+      }
+      // #endregion
 
       console.log(
         `[FacebookDisconnect] ${JSON.stringify({

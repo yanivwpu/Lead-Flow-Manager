@@ -64,7 +64,29 @@ export interface ConnectPageResult {
   warnings: string[];
   error?: string;
   failedAt?: string;
+  /** Diagnostic only — never includes tokens. */
+  subscriptionDiag?: {
+    attempted: boolean;
+    succeeded: boolean;
+    attempts: Array<{
+      subscribedFields: string;
+      httpStatus: number;
+      success: boolean | null;
+      metaError: {
+        code: number | string | null;
+        errorSubcode: number | string | null;
+        type: string | null;
+        fbtraceId: string | null;
+        message: string | null;
+      } | null;
+    }>;
+  };
 }
+
+export type ConnectPageDiagContext = {
+  correlationId?: string;
+  userId?: string;
+};
 
 export function buildMetaOAuthUrl(state: string, redirectUri: string, channel: "facebook" | "instagram" = "facebook"): string {
   const appId = process.env.META_APP_ID;
@@ -405,13 +427,16 @@ export async function enrichWithInstagramData(pages: MetaPage[], userAccessToken
 export async function connectPage(
   userId: string,
   channel: "facebook" | "instagram",
-  page: MetaPage
+  page: MetaPage,
+  diag?: ConnectPageDiagContext,
 ): Promise<ConnectPageResult> {
   const result: ConnectPageResult = {
     success: false,
     steps: { tokenValid: false, permissionsOk: false, webhookSubscribed: false, instagramDetected: false },
     warnings: [],
+    subscriptionDiag: { attempted: false, succeeded: false, attempts: [] },
   };
+  const correlationId = diag?.correlationId || null;
 
   const REQUIRED_SCOPES: Record<string, string[]> = {
     facebook: ["pages_manage_metadata", "pages_messaging"],
@@ -493,28 +518,52 @@ export async function connectPage(
           "messages,messaging_postbacks",
           "messages",
         ];
-  const subEndpoint = `${GRAPH()}/${page.id}/subscribed_apps`;
-  console.log(`[MetaOAuth] Step 3: POST ${subEndpoint} subscribed_fields candidates=${trySubscribedFields.join(" | ")}`);
+  // Never log token-bearing URLs — endpoint path only.
+  const { logFacebookReconnectDiag, sanitizeMetaError } = await import("./metaFacebookReconnectDiag");
+  const subEndpointPath = `${GRAPH()}/${page.id}/subscribed_apps`;
+  console.log(
+    `[MetaOAuth] Step 3: POST /{pageId}/subscribed_apps pageId=${page.id} subscribed_fields candidates=${trySubscribedFields.join(" | ")}`,
+  );
   try {
+    result.subscriptionDiag!.attempted = true;
     for (const subscribedFields of trySubscribedFields) {
-      const subResp = await fetch(subEndpoint, {
+      const subResp = await fetch(subEndpointPath, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: `subscribed_fields=${encodeURIComponent(subscribedFields)}&access_token=${encodeURIComponent(page.accessToken)}`,
       });
       const subData = (await subResp.json()) as any;
-      console.log(`[MetaOAuth] subscribed_apps response:`, JSON.stringify({
-        subscribed_fields: subscribedFields,
-        http_status: subResp.status,
-        success: subData?.success,
-        error_code: subData?.error?.code,
-        error_type: subData?.error?.type,
-        error_message: subData?.error?.message,
-      }));
-      // Full response (sanitized). Meta doesn't include tokens in this response; we avoid logging request bodies.
-      console.log("[MetaOAuth] subscribed_apps raw response (full)", JSON.stringify(subData));
-      if (subResp.ok && subData.success) {
+      const metaError = subData?.error ? sanitizeMetaError(subResp.status, subData) : null;
+      const attemptSucceeded = Boolean(subResp.ok && subData.success);
+      result.subscriptionDiag!.attempts.push({
+        subscribedFields,
+        httpStatus: subResp.status,
+        success: subData?.success === true ? true : subData?.success === false ? false : null,
+        metaError: metaError
+          ? {
+              code: metaError.code,
+              errorSubcode: metaError.errorSubcode,
+              type: metaError.type,
+              fbtraceId: metaError.fbtraceId,
+              message: metaError.message,
+            }
+          : null,
+      });
+      logFacebookReconnectDiag("subscribed_apps_attempt", {
+        correlationId,
+        userId: diag?.userId || userId,
+        channel,
+        pageId: page.id,
+        pageName: page.name,
+        subscribedAppsAttempted: true,
+        subscribedAppsSucceeded: attemptSucceeded,
+        subscribedFieldsRequested: subscribedFields,
+        httpStatus: subResp.status,
+        metaError,
+      });
+      if (attemptSucceeded) {
         result.steps.webhookSubscribed = true;
+        result.subscriptionDiag!.succeeded = true;
         break;
       }
       // keep trying fallbacks; only warn after exhausting candidates
@@ -525,8 +574,32 @@ export async function connectPage(
         );
       }
     }
+    logFacebookReconnectDiag("subscribed_apps_summary", {
+      correlationId,
+      userId: diag?.userId || userId,
+      channel,
+      pageId: page.id,
+      pageName: page.name,
+      subscribedAppsAttempted: result.subscriptionDiag!.attempted,
+      subscribedAppsSucceeded: result.subscriptionDiag!.succeeded,
+      attemptsCount: result.subscriptionDiag!.attempts.length,
+      subscribedFieldsRequestedFinal:
+        result.subscriptionDiag!.attempts.find((a) => a.success === true)?.subscribedFields ??
+        result.subscriptionDiag!.attempts[result.subscriptionDiag!.attempts.length - 1]?.subscribedFields ??
+        null,
+    });
   } catch (e: any) {
     result.warnings.push("Webhook subscription failed: " + (e.message || "unknown error"));
+    logFacebookReconnectDiag("subscribed_apps_exception", {
+      correlationId,
+      userId: diag?.userId || userId,
+      channel,
+      pageId: page.id,
+      pageName: page.name,
+      subscribedAppsAttempted: true,
+      subscribedAppsSucceeded: false,
+      error: String(e?.message || e).slice(0, 160),
+    });
   }
 
   // Step 4: Instagram detection — only for instagram channel, all via the page token.
