@@ -51,4 +51,14 @@ assert.equal(
   "buyer search overrides stale seller profile",
 );
 
+assert.equal(
+  classifySellerIntent({
+    inboundText: "Hellooooo",
+    hasSellerProfile: true,
+    priorSellerIntent: "seller_new",
+  }),
+  null,
+  "greeting does not inherit stale seller profile",
+);
+
 console.log("seller-intent-detection.test.ts: OK");

@@ -2,6 +2,7 @@
  * Seller lead intent classification — separate from buyer inventory matching.
  */
 import { hasInventoryPreferenceSignals } from "./buyerPreferenceInventorySignals";
+import { looksLikeGreetingOnly } from "./conversationTextSignals";
 
 export type SellerIntentClass =
   | "seller_new"
@@ -57,6 +58,8 @@ export type ClassifySellerIntentInput = {
 export function classifySellerIntent(input: ClassifySellerIntentInput): SellerIntentClass | null {
   const t = (input.inboundText || "").trim();
   if (!t) return null;
+  // Greeting-only must never inherit stale seller profile as seller_followup.
+  if (looksLikeGreetingOnly(t)) return null;
 
   if (detectMixedSellerBuyerIntent(t)) return "seller_and_buyer";
   if (SELLER_VALUATION_RE.test(t)) {

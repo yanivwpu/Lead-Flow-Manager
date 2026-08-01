@@ -19,6 +19,7 @@ import {
   resolveAiDomainEligibility,
   type AiDomainEligibilityInput,
 } from "./aiDomainEligibility";
+import { looksLikeGreetingOnly } from "./conversationTextSignals";
 import type { SellerIntentClass } from "./sellerIntent";
 
 export type CustomerInsightContext = {
@@ -242,6 +243,30 @@ function domainEligibilityFromActionContext(
   };
 }
 
+function collectLowEvidenceDiscoveryActions(): ActionCandidate[] {
+  return [
+    { label: "Understand Intent", rank: 90, group: "discover" },
+    { label: "Discover Needs", rank: 86, group: "discover_needs" },
+    { label: "Ask Clarifying Question", rank: 84, group: "contact" },
+    { label: "Qualify Visitor", rank: 80, group: "qualify" },
+  ];
+}
+
+function shouldPreferDiscoveryActions(
+  ctx: ContextualActionContext,
+  dominantIntent: ReturnType<typeof resolveCopilotDominantIntent>,
+): boolean {
+  const text = String(ctx.latestInboundText ?? ctx.inboundText ?? "").trim();
+  if (looksLikeGreetingOnly(text)) return true;
+  const lowConfidence = (ctx.confidence ?? 1) < 0.45;
+  const intentUnknown = dominantIntent === "neutral";
+  const unqualified =
+    ctx.bucket === "unqualified" ||
+    String(ctx.leadLabel || "").toLowerCase() === "unqualified";
+  // Low confidence + unknown/unqualified → discover before high-intent booking/listing.
+  return lowConfidence && (intentUnknown || unqualified);
+}
+
 function collectContextualActionCandidates(ctx: ContextualActionContext): ActionCandidate[] {
   const actions: ActionCandidate[] = [];
   const timing = ctx.showingTimingPhrase?.trim();
@@ -255,58 +280,25 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
     return [{ label: "No action needed", rank: 100, group: "system_info" }];
   }
 
-  // Real-estate Copilot actions require shared domain eligibility (not workspace RGE alone).
+  // Greeting / low-confidence unknown intent — never jump to booking/listing/showing.
+  if (shouldPreferDiscoveryActions(ctx, dominantIntent)) {
+    return collectLowEvidenceDiscoveryActions();
+  }
+
+  // Real-estate Copilot actions require conversation domain + Realtor workspace.
   if (domainDecision.showRealEstateCopilotRecommendations) {
     if (dominantIntent === "seller") {
-      let sellerBranch:
-        | "seller_valuation"
-        | "seller_listing_consultation_or_new"
-        | "seller_followup_or_other" = "seller_followup_or_other";
       if (sellerIntent === "seller_valuation") {
-        sellerBranch = "seller_valuation";
         actions.push({ label: "Request CMA Information", rank: 97, group: "seller_cma" });
         actions.push({ label: "Request Property Address", rank: 95, group: "seller_address" });
       } else if (sellerIntent === "seller_listing_consultation" || sellerIntent === "seller_new") {
-        sellerBranch = "seller_listing_consultation_or_new";
         actions.push({ label: "Book Listing Consultation", rank: 98, group: "seller_consult" });
         actions.push({ label: "Request Property Address", rank: 94, group: "seller_address" });
       } else {
-        sellerBranch = "seller_followup_or_other";
         actions.push({ label: "Book Listing Consultation", rank: 92, group: "seller_consult" });
       }
       actions.push({ label: "Assign Listing Agent", rank: 88, group: "seller_assign" });
       actions.push({ label: "Follow Up", rank: 50, group: "seller_followup" });
-      // #region agent log
-      if (typeof fetch !== "undefined") {
-        fetch("http://127.0.0.1:7685/ingest/8d1a6f78-45f6-49bc-ab00-dc30a369dc35", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "6d3212" },
-          body: JSON.stringify({
-            sessionId: "6d3212",
-            runId: "copilot-primary-pre",
-            hypothesisId: "D",
-            location: "customerInsights.ts:collectContextualActionCandidates",
-            message: "Hardcoded seller RE branch selected Book Listing Consultation",
-            data: {
-              sellerBranch,
-              sellerIntent,
-              dominantIntent,
-              domain: domainDecision.domain,
-              showRealEstateCopilotRecommendations:
-                domainDecision.showRealEstateCopilotRecommendations,
-              primaryLabel: actions[0]?.label ?? null,
-              primaryRank: actions[0]?.rank ?? null,
-              source: "hardcoded_rule_not_llm",
-              industry: ctx.industry ?? null,
-              rgeInstalled: ctx.rgeInstalled ?? null,
-              sellerProfileHasData: ctx.sellerProfileHasData ?? null,
-              latestInboundLen: String(ctx.latestInboundText ?? ctx.inboundText ?? "").length,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-      }
-      // #endregion
       return dedupeActionCandidates(actions).slice(0, 3);
     }
 
@@ -396,16 +388,14 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
     if (!actions.some((a) => a.group === "contact")) {
       actions.push({ label: "Contact customer", rank: 80, group: "contact" });
     }
-  } else if (
-    ctx.leadLabel === "Cold" ||
-    ctx.bucket === "cold" ||
-    ctx.bucket === "unqualified"
-  ) {
+  } else if (ctx.leadLabel === "Cold" || ctx.bucket === "cold") {
     if ((ctx.enrollableCampaignCount ?? 0) > 0) {
       actions.push({ label: "Enroll in nurture campaign", rank: 42, group: "campaign" });
     } else {
       actions.push({ label: "Send nurture follow-up", rank: 40, group: "followup" });
     }
+  } else if (ctx.bucket === "unqualified") {
+    actions.push(...collectLowEvidenceDiscoveryActions());
   }
 
   const hasHighValueAction = actions.some((a) => a.rank >= 75);
@@ -423,8 +413,7 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
 
   const lowConfidence = (ctx.confidence ?? 1) < 0.45;
   if (actions.length === 0 && lowConfidence) {
-    if (!ctx.assignedTo) actions.push({ label: "Assign agent", rank: 20, group: "assign" });
-    actions.push({ label: "Set follow-up", rank: 15, group: "followup" });
+    return collectLowEvidenceDiscoveryActions();
   }
 
   return actions;
@@ -470,6 +459,9 @@ export function behaviorForActionGroup(group: string): NextBestActionBehavior {
     case "seller_address":
     case "seller_assign":
     case "buyer_inventory":
+    case "discover":
+    case "discover_needs":
+    case "qualify":
       return "composer";
     default:
       return "composer";
@@ -572,6 +564,9 @@ export function composerSuggestionForAction(label: string): string {
   }
   if (/contact customer/.test(l)) {
     return "Hi! I wanted to follow up on our conversation.";
+  }
+  if (/understand intent|discover needs|ask clarifying question|qualify visitor/.test(l)) {
+    return "Thanks for reaching out — what brings you here today?";
   }
   return label;
 }

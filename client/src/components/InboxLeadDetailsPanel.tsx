@@ -44,8 +44,6 @@ import {
   type NextBestActionBehavior,
 } from "@shared/customerInsights";
 import { resolveAiRouting } from "@shared/aiRouting";
-import { resolveAiDomainEligibility } from "@shared/aiDomainEligibility";
-import { resolveCopilotDominantIntent } from "@shared/copilotIntent";
 import { classifySellerIntent } from "@shared/sellerIntent";
 import {
   evaluatePresetCampaignEnrollability,
@@ -1888,16 +1886,15 @@ export function InboxLeadDetailsPanel({
 
     const sellerProfile = (contact as { sellerPreferenceProfile?: { lastSellerIntent?: string } })
       .sellerPreferenceProfile;
-    const sellerIntentInbound = lastMsgText || inboundText;
     const sellerIntent = classifySellerIntent({
-      inboundText: sellerIntentInbound,
+      inboundText: lastMsgText || inboundText,
       hasSellerProfile: Boolean(sellerProfile),
       priorSellerIntent:
         (sellerProfile?.lastSellerIntent as import("@shared/sellerIntent").SellerIntentClass | undefined) ??
         null,
     });
 
-    const actionCtx = {
+    return buildContextualNextActions({
       handoffActive,
       hasShowingIntent: hasBookingIntent,
       hasFinancingDiscussion,
@@ -1929,68 +1926,7 @@ export function InboxLeadDetailsPanel({
       sellerProfileHasData: Boolean(sellerProfile),
       contactEmail: contact.email ?? null,
       conversationText: inboundText,
-    };
-    const actions = buildContextualNextActions(actionCtx);
-
-    // #region agent log
-    {
-      const domainInput = {
-        inboundText: actionCtx.latestInboundText ?? actionCtx.inboundText,
-        conversationText: actionCtx.conversationText ?? actionCtx.inboundText,
-        sellerIntent: actionCtx.sellerIntent ?? null,
-        leadType: actionCtx.leadType,
-        rgeInstalled: actionCtx.rgeInstalled,
-        industry: actionCtx.industry,
-        buyerProfileHasCriteria: actionCtx.buyerProfileHasCriteria,
-        sellerProfileHasData: actionCtx.sellerProfileHasData,
-        contactEmail: actionCtx.contactEmail,
-      };
-      const domainDecision = resolveAiDomainEligibility(domainInput);
-      const dominantIntent = resolveCopilotDominantIntent(domainInput);
-      const latestSnippet = String(sellerIntentInbound || "").slice(0, 80);
-      fetch("http://127.0.0.1:7685/ingest/8d1a6f78-45f6-49bc-ab00-dc30a369dc35", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "6d3212" },
-        body: JSON.stringify({
-          sessionId: "6d3212",
-          runId: "copilot-primary-pre",
-          hypothesisId: "A,B,C,D,E",
-          location: "InboxLeadDetailsPanel.tsx:contextualNextActions",
-          message: "Copilot Primary Recommendation pipeline inputs",
-          data: {
-            latestInboundSnippet: latestSnippet,
-            latestInboundLen: String(sellerIntentInbound || "").length,
-            hasSellerProfile: Boolean(sellerProfile),
-            priorSellerIntent: sellerProfile?.lastSellerIntent ?? null,
-            sellerIntentClassified: sellerIntent,
-            sellerProfileHasData: Boolean(sellerProfile),
-            industry: businessKnowledge?.industry ?? null,
-            rgeInstalled: inventoryStatus?.rgeInstalled === true,
-            leadType: actionCtx.leadType || null,
-            buyerProfileHasCriteria: actionCtx.buyerProfileHasCriteria,
-            domain: domainDecision.domain,
-            showRealEstateCopilotRecommendations: domainDecision.showRealEstateCopilotRecommendations,
-            injectSellerContext: domainDecision.injectSellerContext,
-            workspaceCapable: domainDecision.workspaceCapable,
-            dominantIntent,
-            aiRoutingDecision: aiRouting.decision,
-            leadScoreConfidence: intel.leadScoreDetails?.confidence01 ?? null,
-            primaryRecommendation: actions[0]?.label ?? null,
-            allActionLabels: actions.map((a) => a.label),
-            aiBrainPassedToActionBuilder: false,
-            businessBioPassedToActionBuilder: false,
-            websiteKnowledgePassedToActionBuilder: false,
-            businessKnowledgePresent: Boolean(businessKnowledge),
-            businessKnowledgeKeys: businessKnowledge ? Object.keys(businessKnowledge).slice(0, 20) : [],
-            contactId: contact.id,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
-
-    return actions;
+    });
   }, [
     handoffActive,
     intel.intent,

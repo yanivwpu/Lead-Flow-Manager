@@ -261,6 +261,22 @@ run("Copilot and Suggest Reply use equivalent context eligibility", () => {
   }
 });
 
+run("Travel workspace never enables Realtor Copilot recommendations", () => {
+  const msg = "Hellooooo";
+  const decision = resolveAiDomainEligibility({
+    inboundText: msg,
+    industry: "Travel & Tourism",
+    rgeInstalled: false,
+    sellerProfileHasData: true,
+    sellerIntent: "seller_followup",
+  });
+  // Greeting clears seller continuity → generic; even with stale seller flags, no RE Copilot.
+  assert.equal(decision.domain, "generic");
+  assert.equal(decision.showRealEstateCopilotRecommendations, false);
+  assert.equal(decision.injectSellerContext, false);
+  assert.equal(decision.useRealEstatePromptPersona, false);
+});
+
 run("stripIneligibleRealEstateContactContext removes buyer/inventory fields", () => {
   const decision = resolveAiDomainEligibility({
     inboundText: "Does GHL integrate with WhachatCRM?",

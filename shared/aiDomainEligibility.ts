@@ -21,6 +21,9 @@ import {
   isPureSellerIntent,
   type SellerIntentClass,
 } from "./sellerIntent";
+import { looksLikeGreetingOnly } from "./conversationTextSignals";
+
+export { looksLikeGreetingOnly } from "./conversationTextSignals";
 
 export type AiConversationDomain =
   | "real_estate_buyer"
@@ -150,6 +153,14 @@ export function looksLikeProductOrSaasInquiry(text: string | null | undefined): 
   return PRODUCT_SAAS_INQUIRY_RE.test(String(text || ""));
 }
 
+/** Workspace can surface Realtor Growth Engine Copilot actions (industry or RGE). */
+export function isRealtorWorkspaceForCopilot(input: {
+  rgeInstalled?: boolean;
+  industry?: string | null;
+}): boolean {
+  return Boolean(input.rgeInstalled) || isRealEstateIndustry(input.industry);
+}
+
 /**
  * Strong real-estate transactional evidence in message text.
  * Deliberately stricter than hasInventoryPreferenceSignals (which false-positives
@@ -249,10 +260,17 @@ function hasSellerContinuity(text: string, input: AiDomainEligibilityInput): boo
   if (looksLikeProductOrSaasInquiry(text) || looksLikeSystemOrNotificationEmail({ inboundText: text })) {
     return false;
   }
+  // Greetings / unknown intent must never keep a stale seller domain
+  if (looksLikeGreetingOnly(text)) return false;
   // Require some property/sell language OR short follow-up answers in an active seller thread
   if (/\b(?:sell|listing|cma|valuation|address|home|house|property)\b/i.test(text)) return true;
-  // Very short acknowledgements in an active seller thread
-  if (text.length <= 40 && input.sellerProfileHasData) return true;
+  // Short acknowledgements only (not any short text — "Hellooooo" is not continuity)
+  if (
+    input.sellerProfileHasData &&
+    /^(?:yes|yeah|yep|ok|okay|sure|thanks|thank you|correct|right)[.!]?$/i.test(text.trim())
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -299,19 +317,23 @@ export function resolveAiDomainEligibility(
 ): AiDomainDecision {
   const domain = resolveAiConversationDomain(input);
   const workspaceCapable = isRealEstateWorkspaceCapable(input);
+  const realtorWorkspace = isRealtorWorkspaceForCopilot(input);
   const isSystemNotification = domain === "system";
   const reDomain = isRealEstateConversationDomain(domain);
+  // Conversation evidence AND Realtor workspace (industry or RGE). Never leak
+  // listing/showing/seller Copilot actions into Travel/generic businesses.
+  const reFeaturesAllowed = reDomain && realtorWorkspace;
 
   // Injection requires conversation domain evidence. Workspace capability is
   // preferred for inventory/RGE features but conversation domain is the gate.
   const injectBuyerContext =
-    reDomain &&
+    reFeaturesAllowed &&
     (domain === "real_estate_buyer" ||
       domain === "real_estate_rental" ||
       domain === "real_estate_mixed");
 
   const injectSellerContext =
-    reDomain &&
+    reFeaturesAllowed &&
     (domain === "real_estate_seller" || domain === "real_estate_mixed");
 
   const injectInventoryContext = injectBuyerContext && workspaceCapable;
@@ -326,9 +348,9 @@ export function resolveAiDomainEligibility(
     showBuyerPreferencesPanel: injectBuyerContext,
     injectSellerContext,
     injectInventoryContext,
-    // Conversation domain is the gate — workspace RGE alone never forces these.
-    showRealEstateCopilotRecommendations: reDomain,
-    useRealEstatePromptPersona: reDomain,
+    // Conversation domain + Realtor workspace — never RGE/domain alone across industries.
+    showRealEstateCopilotRecommendations: reFeaturesAllowed,
+    useRealEstatePromptPersona: reFeaturesAllowed,
   };
 }
 

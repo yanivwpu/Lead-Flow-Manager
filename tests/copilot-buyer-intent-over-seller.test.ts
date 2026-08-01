@@ -31,6 +31,8 @@ assert.equal(dominantIntent, "buyer", "dominantIntent=buyer for inventory search
 const actions = buildContextualNextActions({
   inboundText: MSG,
   sellerIntent,
+  rgeInstalled: true,
+  industry: "Real Estate",
 });
 
 const labels = actions.map((a) => a.label);
