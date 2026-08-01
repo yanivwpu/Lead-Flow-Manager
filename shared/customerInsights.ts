@@ -258,17 +258,55 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Action
   // Real-estate Copilot actions require shared domain eligibility (not workspace RGE alone).
   if (domainDecision.showRealEstateCopilotRecommendations) {
     if (dominantIntent === "seller") {
+      let sellerBranch:
+        | "seller_valuation"
+        | "seller_listing_consultation_or_new"
+        | "seller_followup_or_other" = "seller_followup_or_other";
       if (sellerIntent === "seller_valuation") {
+        sellerBranch = "seller_valuation";
         actions.push({ label: "Request CMA Information", rank: 97, group: "seller_cma" });
         actions.push({ label: "Request Property Address", rank: 95, group: "seller_address" });
       } else if (sellerIntent === "seller_listing_consultation" || sellerIntent === "seller_new") {
+        sellerBranch = "seller_listing_consultation_or_new";
         actions.push({ label: "Book Listing Consultation", rank: 98, group: "seller_consult" });
         actions.push({ label: "Request Property Address", rank: 94, group: "seller_address" });
       } else {
+        sellerBranch = "seller_followup_or_other";
         actions.push({ label: "Book Listing Consultation", rank: 92, group: "seller_consult" });
       }
       actions.push({ label: "Assign Listing Agent", rank: 88, group: "seller_assign" });
       actions.push({ label: "Follow Up", rank: 50, group: "seller_followup" });
+      // #region agent log
+      if (typeof fetch !== "undefined") {
+        fetch("http://127.0.0.1:7685/ingest/8d1a6f78-45f6-49bc-ab00-dc30a369dc35", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "6d3212" },
+          body: JSON.stringify({
+            sessionId: "6d3212",
+            runId: "copilot-primary-pre",
+            hypothesisId: "D",
+            location: "customerInsights.ts:collectContextualActionCandidates",
+            message: "Hardcoded seller RE branch selected Book Listing Consultation",
+            data: {
+              sellerBranch,
+              sellerIntent,
+              dominantIntent,
+              domain: domainDecision.domain,
+              showRealEstateCopilotRecommendations:
+                domainDecision.showRealEstateCopilotRecommendations,
+              primaryLabel: actions[0]?.label ?? null,
+              primaryRank: actions[0]?.rank ?? null,
+              source: "hardcoded_rule_not_llm",
+              industry: ctx.industry ?? null,
+              rgeInstalled: ctx.rgeInstalled ?? null,
+              sellerProfileHasData: ctx.sellerProfileHasData ?? null,
+              latestInboundLen: String(ctx.latestInboundText ?? ctx.inboundText ?? "").length,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+      }
+      // #endregion
       return dedupeActionCandidates(actions).slice(0, 3);
     }
 
