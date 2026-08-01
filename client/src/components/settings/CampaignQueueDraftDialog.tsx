@@ -55,25 +55,48 @@ export function CampaignQueueDraftDialog({
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
-    void fetchJson<{ item: ProspectOutreachQueueItemDetail }>(
-      `/api/growth-tools/prospect-outreach/queue/${itemId}`,
-    )
-      .then((data) => {
+    const draftUrl = `/api/growth-tools/prospect-outreach/queue/${encodeURIComponent(itemId)}`;
+    void (async () => {
+      try {
+        const res = await fetch(draftUrl, { credentials: "include" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const technical =
+            (data as { error?: string }).error || `HTTP ${res.status}`;
+          console.error("[CampaignQueueDraftDialog] load failed:", {
+            itemId,
+            status: res.status,
+            error: technical,
+          });
+          if (res.status === 404) {
+            throw new Error("This draft could not be found.");
+          }
+          throw new Error("Unable to load this draft. Please try again.");
+        }
         if (cancelled) return;
-        setDetail(data.item);
-        setEditSubject(data.item.subjectSnapshot || "");
-        setEditMessage(data.item.messageSnapshot || "");
+        const item = (data as { item: ProspectOutreachQueueItemDetail }).item;
+        setDetail(item);
+        setEditSubject(item.subjectSnapshot || "");
+        setEditMessage(item.messageSnapshot || "");
         setEditing(false);
         setPreviewing(false);
-      })
-      .catch((err: Error) => {
+      } catch (err) {
         if (cancelled) return;
-        setLoadError(err.message || "Failed to load draft");
+        const message =
+          err instanceof Error &&
+          (err.message === "This draft could not be found." ||
+            err.message === "Unable to load this draft. Please try again.")
+            ? err.message
+            : "Unable to load this draft. Please try again.";
+        if (!(err instanceof Error) || err.message !== message) {
+          console.error("[CampaignQueueDraftDialog] load error:", err);
+        }
+        setLoadError(message);
         setDetail(null);
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };

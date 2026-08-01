@@ -1243,11 +1243,13 @@ export async function getQueueItemDetail(params: {
   queueItemId: string;
   workspaceUserId: string;
 }): Promise<ProspectOutreachQueueItemDetail | null> {
+  // Prospect website comes from PI enrichment (`websiteUrlUsed`), not contacts
+  // (contacts has no website column; aiBusinessKnowledge.publicWebsite is the workspace brand site).
   const rows = await db
     .select({
       item: prospectOutreachQueueItems,
       name: contacts.name,
-      website: contacts.publicWebsite,
+      websiteUrlUsed: prospectIntelligence.websiteUrlUsed,
       companyName: prospectIntelligence.companyName,
       industry: prospectIntelligence.industry,
       businessType: prospectIntelligence.businessType,
@@ -1277,7 +1279,7 @@ export async function getQueueItemDetail(params: {
     companyName: row.companyName ?? null,
     industry: row.industry ?? null,
     businessType: row.businessType ?? null,
-    website: row.website ?? null,
+    website: row.websiteUrlUsed ?? null,
     personalizationTokens: extractCampaignDraftTokens(
       summary.subjectSnapshot,
       messageSnapshot,

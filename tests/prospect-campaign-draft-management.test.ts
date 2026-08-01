@@ -134,6 +134,17 @@ assert.ok(serviceSrc.includes("updateQueueItemDraft"));
 assert.ok(serviceSrc.includes("regenerateQueueItemDrafts"));
 assert.ok(serviceSrc.includes("removeQueueItemsBulk"));
 
+// Draft detail must not select non-existent contacts.publicWebsite
+assert.ok(!serviceSrc.includes("contacts.publicWebsite"));
+assert.ok(serviceSrc.includes("websiteUrlUsed"));
+assert.ok(dialogSrc.includes("Unable to load this draft. Please try again."));
+assert.ok(dialogSrc.includes("This draft could not be found."));
+assert.ok(!dialogSrc.includes("Failed to load draft"));
+assert.ok(routesSrc.includes("Unable to load this draft. Please try again."));
+assert.ok(!dialogSrc.includes("127.0.0.1:7693"));
+assert.ok(!serviceSrc.includes("127.0.0.1:7693"));
+assert.ok(!routesSrc.includes("127.0.0.1:7693"));
+
 assert.ok(panelSrc.includes("po-status-tabs"));
 assert.ok(panelSrc.includes("formatDraftCampaignReadyCopy"));
 

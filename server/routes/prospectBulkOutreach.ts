@@ -412,12 +412,16 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
           workspaceUserId,
         });
         if (!item) {
-          res.status(404).json({ error: "Queue item not found" });
+          res.status(404).json({ error: "This draft could not be found." });
           return;
         }
         res.json({ item });
       } catch (err) {
-        res.status(500).json({ error: "Failed to load draft" });
+        console.error(
+          "[ProspectBulkOutreach] getQueueItemDetail failed:",
+          err instanceof Error ? err.message : err,
+        );
+        res.status(500).json({ error: "Unable to load this draft. Please try again." });
       }
     },
   );
