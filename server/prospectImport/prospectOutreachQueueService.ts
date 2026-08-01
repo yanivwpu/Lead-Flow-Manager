@@ -30,10 +30,15 @@ import {
   type ProspectOutreachChannel,
   type ProspectOutreachPreferredChannel,
   type ProspectOutreachQueueDashboard,
+  type ProspectOutreachQueueItemDetail,
   type ProspectOutreachQueueItemSummary,
   type ProspectOutreachQueuePreview,
   type ProspectOutreachWorkspaceSettings,
 } from "@shared/prospectBulkOutreach";
+import {
+  extractCampaignDraftTokens,
+  isCampaignDraftEditable,
+} from "@shared/prospectCampaignDraftTokens";
 import {
   decideSenderDecryptInfraPause,
   formatSenderNotConnectedDiagnostic,
@@ -164,6 +169,10 @@ function mapQueueItem(
     messageId: row.messageId,
     createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
     historySource: "queue",
+    unresolvedTokenCount: extractCampaignDraftTokens(
+      row.subjectSnapshot,
+      row.messageSnapshot,
+    ).length,
   };
 }
 
@@ -1230,6 +1239,138 @@ export async function removeQueueItem(params: {
   return { removed: true, reason: "cancelled" };
 }
 
+export async function getQueueItemDetail(params: {
+  queueItemId: string;
+  workspaceUserId: string;
+}): Promise<ProspectOutreachQueueItemDetail | null> {
+  const rows = await db
+    .select({
+      item: prospectOutreachQueueItems,
+      name: contacts.name,
+      website: contacts.publicWebsite,
+      companyName: prospectIntelligence.companyName,
+      industry: prospectIntelligence.industry,
+      businessType: prospectIntelligence.businessType,
+      reasoningSummary: prospectIntelligence.reasoningSummary,
+    })
+    .from(prospectOutreachQueueItems)
+    .leftJoin(contacts, eq(contacts.id, prospectOutreachQueueItems.contactId))
+    .leftJoin(
+      prospectIntelligence,
+      eq(prospectIntelligence.contactId, prospectOutreachQueueItems.contactId),
+    )
+    .where(
+      and(
+        eq(prospectOutreachQueueItems.id, params.queueItemId),
+        eq(prospectOutreachQueueItems.workspaceUserId, params.workspaceUserId),
+      ),
+    )
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  const summary = mapQueueItem(row.item, row.name);
+  const messageSnapshot = String(row.item.messageSnapshot || "");
+  return {
+    ...summary,
+    messageSnapshot,
+    reasoningSummary: row.reasoningSummary ?? null,
+    companyName: row.companyName ?? null,
+    industry: row.industry ?? null,
+    businessType: row.businessType ?? null,
+    website: row.website ?? null,
+    personalizationTokens: extractCampaignDraftTokens(
+      summary.subjectSnapshot,
+      messageSnapshot,
+    ),
+  };
+}
+
+export async function updateQueueItemDraft(params: {
+  queueItemId: string;
+  workspaceUserId: string;
+  subject: string;
+  message: string;
+}): Promise<ProspectOutreachQueueItemDetail> {
+  const subject = String(params.subject || "").trim().slice(0, 200);
+  const message = String(params.message || "").trim().slice(0, 8000);
+  if (!subject) throw new Error("Subject is required");
+  if (!message) throw new Error("Message body is required");
+
+  const rows = await db
+    .select()
+    .from(prospectOutreachQueueItems)
+    .where(
+      and(
+        eq(prospectOutreachQueueItems.id, params.queueItemId),
+        eq(prospectOutreachQueueItems.workspaceUserId, params.workspaceUserId),
+      ),
+    )
+    .limit(1);
+  const item = rows[0];
+  if (!item) throw new Error("Queue item not found");
+  if (!isCampaignDraftEditable(item.queueStatus)) {
+    throw new Error("Only Ready, Paused, or Failed drafts can be edited");
+  }
+
+  await db
+    .update(prospectOutreachQueueItems)
+    .set({
+      subjectSnapshot: subject,
+      messageSnapshot: message,
+      updatedAt: new Date(),
+    })
+    .where(eq(prospectOutreachQueueItems.id, item.id));
+
+  await db
+    .update(prospectIntelligence)
+    .set({
+      suggestedOutreachSubject: subject,
+      suggestedFirstMessage: message,
+      updatedAt: new Date(),
+    })
+    .where(eq(prospectIntelligence.contactId, item.contactId));
+
+  const detail = await getQueueItemDetail({
+    queueItemId: item.id,
+    workspaceUserId: params.workspaceUserId,
+  });
+  if (!detail) throw new Error("Queue item not found after save");
+  return detail;
+}
+
+export async function regenerateQueueItemDrafts(params: {
+  workspaceUserId: string;
+  itemIds: string[];
+}): Promise<{ rewritten: number; skipped: number; failed: number }> {
+  const ids = Array.from(new Set(params.itemIds.filter(Boolean)));
+  if (ids.length === 0) return { rewritten: 0, skipped: 0, failed: 0 };
+  const settings = await getOutreachSettings(params.workspaceUserId);
+  const { rewriteQueuedOutreachDrafts } = await import("./prospectOutreachDraftRewriteService");
+  return rewriteQueuedOutreachDrafts({
+    workspaceUserId: params.workspaceUserId,
+    instructions: settings.outreachInstructions,
+    itemIds: ids,
+  });
+}
+
+export async function removeQueueItemsBulk(params: {
+  workspaceUserId: string;
+  itemIds: string[];
+}): Promise<{ removed: number; skipped: number }> {
+  // Delegates to removeQueueItem — sent/sending rows are never cancelled.
+  let removed = 0;
+  let skipped = 0;
+  for (const id of Array.from(new Set(params.itemIds.filter(Boolean)))) {
+    const result = await removeQueueItem({
+      queueItemId: id,
+      workspaceUserId: params.workspaceUserId,
+    });
+    if (result.removed) removed += 1;
+    else skipped += 1;
+  }
+  return { removed, skipped };
+}
+
 export async function retryFailedQueueItem(params: {
   queueItemId: string;
   workspaceUserId: string;
@@ -1886,6 +2027,10 @@ export const prospectOutreachQueueService = {
   previewQueueBatch,
   createQueueBatch,
   listQueueItems,
+  getQueueItemDetail,
+  updateQueueItemDraft,
+  regenerateQueueItemDrafts,
+  removeQueueItemsBulk,
   getQueueDashboard,
   pauseQueue,
   resumeQueue,

@@ -294,6 +294,48 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
   );
 
   app.post(
+    "/api/growth-tools/prospect-outreach/queue/bulk-remove",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const workspaceUserId = await workspaceFromReq(req);
+        const itemIds = Array.isArray(req.body?.itemIds)
+          ? req.body.itemIds.map((id: unknown) => String(id || "").trim()).filter(Boolean)
+          : [];
+        const result = await prospectOutreachQueueService.removeQueueItemsBulk({
+          workspaceUserId,
+          itemIds,
+        });
+        res.json(result);
+      } catch (err) {
+        res.status(400).json({ error: err instanceof Error ? err.message : "Bulk remove failed" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/growth-tools/prospect-outreach/queue/bulk-regenerate",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const workspaceUserId = await workspaceFromReq(req);
+        const itemIds = Array.isArray(req.body?.itemIds)
+          ? req.body.itemIds.map((id: unknown) => String(id || "").trim()).filter(Boolean)
+          : [];
+        const result = await prospectOutreachQueueService.regenerateQueueItemDrafts({
+          workspaceUserId,
+          itemIds,
+        });
+        res.json(result);
+      } catch (err) {
+        res.status(400).json({
+          error: err instanceof Error ? err.message : "Bulk regenerate failed",
+        });
+      }
+    },
+  );
+
+  app.post(
     "/api/growth-tools/prospect-outreach/queue/start",
     requireProspectImportAccess,
     async (req, res) => {
@@ -355,6 +397,73 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
           }),
         );
         res.status(400).json({ error: err instanceof Error ? err.message : "Resume failed" });
+      }
+    },
+  );
+
+  app.get(
+    "/api/growth-tools/prospect-outreach/queue/:itemId",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const workspaceUserId = await workspaceFromReq(req);
+        const item = await prospectOutreachQueueService.getQueueItemDetail({
+          queueItemId: req.params.itemId,
+          workspaceUserId,
+        });
+        if (!item) {
+          res.status(404).json({ error: "Queue item not found" });
+          return;
+        }
+        res.json({ item });
+      } catch (err) {
+        res.status(500).json({ error: "Failed to load draft" });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/growth-tools/prospect-outreach/queue/:itemId",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const workspaceUserId = await workspaceFromReq(req);
+        const item = await prospectOutreachQueueService.updateQueueItemDraft({
+          queueItemId: req.params.itemId,
+          workspaceUserId,
+          subject: String(req.body?.subject ?? ""),
+          message: String(req.body?.message ?? ""),
+        });
+        res.json({ item });
+      } catch (err) {
+        res.status(400).json({ error: err instanceof Error ? err.message : "Save failed" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/growth-tools/prospect-outreach/queue/:itemId/regenerate",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const workspaceUserId = await workspaceFromReq(req);
+        const result = await prospectOutreachQueueService.regenerateQueueItemDrafts({
+          workspaceUserId,
+          itemIds: [req.params.itemId],
+        });
+        const item = await prospectOutreachQueueService.getQueueItemDetail({
+          queueItemId: req.params.itemId,
+          workspaceUserId,
+        });
+        if (!item) {
+          res.status(404).json({ error: "Queue item not found" });
+          return;
+        }
+        res.json({ item, ...result });
+      } catch (err) {
+        res.status(400).json({
+          error: err instanceof Error ? err.message : "Regenerate failed",
+        });
       }
     },
   );

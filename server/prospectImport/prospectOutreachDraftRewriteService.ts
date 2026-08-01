@@ -37,13 +37,23 @@ export async function rewriteQueuedOutreachDrafts(params: {
   workspaceUserId: string;
   instructions: ProspectOutreachInstructions;
   batchId?: string | null;
+  /** When set, only rewrite these queue item ids (still must be queued/paused). */
+  itemIds?: string[] | null;
 }): Promise<{ rewritten: number; skipped: number; failed: number }> {
+  // Instructions save: only unsent drafts. Targeted regenerate may also refresh failed rows.
+  const editableStatuses =
+    params.itemIds && params.itemIds.length > 0
+      ? (["queued", "paused", "failed"] as const)
+      : (["queued", "paused"] as const);
   const conditions = [
     eq(prospectOutreachQueueItems.workspaceUserId, params.workspaceUserId),
-    inArray(prospectOutreachQueueItems.queueStatus, ["queued", "paused"]),
+    inArray(prospectOutreachQueueItems.queueStatus, [...editableStatuses]),
   ];
   if (params.batchId) {
     conditions.push(eq(prospectOutreachQueueItems.batchId, params.batchId));
+  }
+  if (params.itemIds && params.itemIds.length > 0) {
+    conditions.push(inArray(prospectOutreachQueueItems.id, Array.from(new Set(params.itemIds))));
   }
 
   const rows = await db

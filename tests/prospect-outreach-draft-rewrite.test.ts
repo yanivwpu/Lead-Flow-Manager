@@ -33,6 +33,9 @@ import { PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS } from "../shared/prospectOutre
   assert.match(prompt, /free trial/i);
   assert.match(prompt, /Don't mention AI/i);
   assert.match(prompt, /Luca Jacoli/);
+  // Rewrite layer keeps prospect facts from the existing draft + campaign guidance.
+  assert.match(prompt, /LA brokerage/);
+  assert.match(prompt, /campaign instructions|Rewrite the subject/i);
 }
 
 {

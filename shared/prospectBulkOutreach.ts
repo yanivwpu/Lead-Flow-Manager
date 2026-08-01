@@ -395,6 +395,20 @@ export type ProspectOutreachQueueItemSummary = {
    * inbox_outreach = pre-queue / native Inbox send with linked message (historical).
    */
   historySource?: "queue" | "inbox_outreach";
+  /** Count of unresolved {{token}} / {token} placeholders in subject+body. */
+  unresolvedTokenCount?: number;
+};
+
+/** Full draft detail for Campaigns row expansion (includes body + AI context). */
+export type ProspectOutreachQueueItemDetail = ProspectOutreachQueueItemSummary & {
+  messageSnapshot: string;
+  reasoningSummary?: string | null;
+  companyName?: string | null;
+  industry?: string | null;
+  businessType?: string | null;
+  website?: string | null;
+  /** Unresolved {{token}} / {token} placeholders found in subject/body. */
+  personalizationTokens: string[];
 };
 
 export type ProspectOutreachQueueDashboard = {

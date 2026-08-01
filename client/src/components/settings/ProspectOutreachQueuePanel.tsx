@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -45,6 +46,10 @@ import {
   formatProspectQueueItemError,
   PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE,
 } from "@shared/prospectBulkOutreach";
+import {
+  countQueuedDraftsWithUnresolvedTokens,
+  isCampaignDraftEditable,
+} from "@shared/prospectCampaignDraftTokens";
 import { selectNextQueuedCampaignItem } from "@shared/prospectCampaignCountdown";
 import {
   isEmailMailboxUiConnected,
@@ -61,6 +66,7 @@ import {
   CampaignSendActivityStatusLine,
   NextQueuedCountdownSuffix,
 } from "@/components/settings/CampaignSendCountdown";
+import { CampaignQueueDraftDialog } from "@/components/settings/CampaignQueueDraftDialog";
 import { AiGrowthAssistantCard } from "@/components/prospectAi/AiGrowthAssistantCard";
 import { OutreachInstructionsModal } from "@/components/prospectAi/OutreachInstructionsModal";
 import { format } from "date-fns";
@@ -116,6 +122,9 @@ export function ProspectOutreachQueuePanel({
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [instructionsOpen, setInstructionsOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [detailItemId, setDetailItemId] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   // Drop legacy Paused filter id if present in session state.
   useEffect(() => {
@@ -210,6 +219,56 @@ export function ProspectOutreachQueuePanel({
       toast({ title: "Requeued for retry" });
       invalidate();
     },
+  });
+
+  const bulkRemoveMutation = useMutation({
+    mutationFn: (itemIds: string[]) =>
+      fetchJson<{ removed: number; skipped: number }>(
+        "/api/growth-tools/prospect-outreach/queue/bulk-remove",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ itemIds }),
+        },
+      ),
+    onSuccess: (data) => {
+      toast({
+        title: `Removed ${data.removed} draft${data.removed === 1 ? "" : "s"}`,
+        description: data.skipped > 0 ? `${data.skipped} skipped (already sent/sending)` : undefined,
+      });
+      setSelectedIds(new Set());
+      invalidate();
+    },
+    onError: (err: Error) =>
+      toast({ title: "Bulk delete failed", description: err.message, variant: "destructive" }),
+  });
+
+  const bulkRegenerateMutation = useMutation({
+    mutationFn: (itemIds: string[]) =>
+      fetchJson<{ rewritten: number; skipped: number; failed: number }>(
+        "/api/growth-tools/prospect-outreach/queue/bulk-regenerate",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ itemIds }),
+        },
+      ),
+    onSuccess: (data) => {
+      toast({
+        title: `Regenerated ${data.rewritten} draft${data.rewritten === 1 ? "" : "s"}`,
+        description:
+          data.failed > 0 || data.skipped > 0
+            ? `${data.failed} failed, ${data.skipped} skipped`
+            : undefined,
+      });
+      invalidate();
+    },
+    onError: (err: Error) =>
+      toast({
+        title: "Bulk regenerate failed",
+        description: err.message,
+        variant: "destructive",
+      }),
   });
 
   const saveSettingsMutation = useMutation({
@@ -349,86 +408,202 @@ export function ProspectOutreachQueuePanel({
     });
   };
 
-  const renderQueueRow = (row: ProspectOutreachQueueItemSummary) => (
-    <TableRow key={row.id}>
-      <TableCell className="font-medium">
-        {row.prospectName || row.contactId.slice(0, 8)}
-        <p className="text-xs text-gray-500">{row.recipientIdentity}</p>
-      </TableCell>
-      <TableCell className="capitalize">{row.selectedChannel}</TableCell>
-      <TableCell className="max-w-[160px] truncate text-xs">
-        {row.recommendedOffer || "—"}
-        {row.outreachAngle ? (
-          <p className="truncate text-gray-500">{row.outreachAngle}</p>
-        ) : null}
-      </TableCell>
-      <TableCell className="max-w-[180px] truncate text-xs">
-        {row.subjectSnapshot || "—"}
-      </TableCell>
-      <TableCell className="text-xs whitespace-nowrap">
-        {row.scheduledAt ? format(new Date(row.scheduledAt), "MMM d, h:mm a") : "—"}
-      </TableCell>
-      <TableCell>
-        {statusBadge(row.queueStatus, {
-          isNextQueued: row.id === nextQueuedId,
-          scheduledAt: row.scheduledAt,
-        })}
-      </TableCell>
-      <TableCell>{row.attempts}</TableCell>
-      <TableCell className="max-w-[140px] truncate text-xs text-red-600">
-        {queueRowErrorLabel(row.lastError)}
-      </TableCell>
-      <TableCell className="whitespace-nowrap">
-        {row.historySource === "inbox_outreach" ? (
-          <span className="text-[10px] text-gray-400">Inbox send</span>
-        ) : null}
-        {row.historySource !== "inbox_outreach" &&
-        ["queued", "paused", "failed"].includes(row.queueStatus) ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => removeMutation.mutate(row.id)}
-            title="Remove before send"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        ) : null}
-        {row.historySource !== "inbox_outreach" && row.queueStatus === "failed" ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => retryMutation.mutate(row.id)}
-            title="Retry"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        ) : null}
-      </TableCell>
-    </TableRow>
+  const selectableActiveIds = useMemo(
+    () =>
+      activeItems
+        .filter(
+          (row) =>
+            row.historySource !== "inbox_outreach" && isCampaignDraftEditable(row.queueStatus),
+        )
+        .map((row) => row.id),
+    [activeItems],
   );
 
-  const queueTable = (rows: ProspectOutreachQueueItemSummary[]) => (
-    <div className="overflow-auto rounded-xl border border-gray-200 bg-white">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Prospect</TableHead>
-            <TableHead>Channel</TableHead>
-            <TableHead>Outreach</TableHead>
-            <TableHead>Subject</TableHead>
-            <TableHead>Scheduled</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Attempts</TableHead>
-            <TableHead>Error</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>{rows.map(renderQueueRow)}</TableBody>
-      </Table>
-    </div>
+  const allSelectableChecked =
+    selectableActiveIds.length > 0 &&
+    selectableActiveIds.every((id) => selectedIds.has(id));
+  const someSelectableChecked =
+    selectableActiveIds.some((id) => selectedIds.has(id)) && !allSelectableChecked;
+
+  const selectedEditableIds = useMemo(
+    () =>
+      Array.from(selectedIds).filter((id) => {
+        const row = allItems.find((r) => r.id === id);
+        return row && isCampaignDraftEditable(row.queueStatus);
+      }),
+    [allItems, selectedIds],
   );
+
+  useEffect(() => {
+    // Drop selections that left the queue (sent/cancelled) or filter view.
+    const visible = new Set(allItems.map((r) => r.id));
+    setSelectedIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (visible.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [allItems]);
+
+  const openDraftDetail = (row: ProspectOutreachQueueItemSummary) => {
+    if (row.historySource === "inbox_outreach") return;
+    setDetailItemId(row.id);
+    setDetailOpen(true);
+  };
+
+  const toggleRowSelected = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of selectableActiveIds) {
+        if (checked) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  const renderQueueRow = (
+    row: ProspectOutreachQueueItemSummary,
+    opts?: { showCheckbox?: boolean },
+  ) => {
+    const showCheckbox = opts?.showCheckbox === true;
+    const canSelect =
+      showCheckbox &&
+      row.historySource !== "inbox_outreach" &&
+      isCampaignDraftEditable(row.queueStatus);
+    return (
+      <TableRow
+        key={row.id}
+        className="cursor-pointer"
+        data-testid={`po-queue-row-${row.id}`}
+        onClick={() => openDraftDetail(row)}
+      >
+        {showCheckbox ? (
+          <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+            {canSelect ? (
+              <Checkbox
+                checked={selectedIds.has(row.id)}
+                onCheckedChange={(v) => toggleRowSelected(row.id, v === true)}
+                aria-label={`Select ${row.prospectName || "prospect"}`}
+                data-testid={`po-row-checkbox-${row.id}`}
+              />
+            ) : null}
+          </TableCell>
+        ) : null}
+        <TableCell className="font-medium">
+          {row.prospectName || row.contactId.slice(0, 8)}
+          <p className="text-xs text-gray-500">{row.recipientIdentity}</p>
+        </TableCell>
+        <TableCell className="capitalize">{row.selectedChannel}</TableCell>
+        <TableCell className="max-w-[160px] truncate text-xs">
+          {row.recommendedOffer || "—"}
+          {row.outreachAngle ? (
+            <p className="truncate text-gray-500">{row.outreachAngle}</p>
+          ) : null}
+        </TableCell>
+        <TableCell className="max-w-[180px] truncate text-xs">
+          {row.subjectSnapshot || "—"}
+        </TableCell>
+        <TableCell className="text-xs whitespace-nowrap">
+          {row.scheduledAt ? format(new Date(row.scheduledAt), "MMM d, h:mm a") : "—"}
+        </TableCell>
+        <TableCell>
+          {statusBadge(row.queueStatus, {
+            isNextQueued: row.id === nextQueuedId,
+            scheduledAt: row.scheduledAt,
+          })}
+        </TableCell>
+        <TableCell>{row.attempts}</TableCell>
+        <TableCell className="max-w-[140px] truncate text-xs text-red-600">
+          {queueRowErrorLabel(row.lastError)}
+        </TableCell>
+        <TableCell className="whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+          {row.historySource === "inbox_outreach" ? (
+            <span className="text-[10px] text-gray-400">Inbox send</span>
+          ) : null}
+          {row.historySource !== "inbox_outreach" &&
+          ["queued", "paused", "failed"].includes(row.queueStatus) ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => removeMutation.mutate(row.id)}
+              title="Remove before send"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          ) : null}
+          {row.historySource !== "inbox_outreach" && row.queueStatus === "failed" ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => retryMutation.mutate(row.id)}
+              title="Retry"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          ) : null}
+        </TableCell>
+      </TableRow>
+    );
+  };
+
+  const queueTable = (
+    rows: ProspectOutreachQueueItemSummary[],
+    opts?: { showCheckbox?: boolean },
+  ) => {
+    const showCheckbox = opts?.showCheckbox === true;
+    return (
+      <div className="overflow-auto rounded-xl border border-gray-200 bg-white">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {showCheckbox ? (
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={
+                      allSelectableChecked
+                        ? true
+                        : someSelectableChecked
+                          ? "indeterminate"
+                          : false
+                    }
+                    onCheckedChange={(v) => toggleSelectAllVisible(v === true)}
+                    aria-label="Select all editable drafts"
+                    data-testid="po-select-all"
+                    disabled={selectableActiveIds.length === 0}
+                  />
+                </TableHead>
+              ) : null}
+              <TableHead>Prospect</TableHead>
+              <TableHead>Channel</TableHead>
+              <TableHead>Outreach</TableHead>
+              <TableHead>Subject</TableHead>
+              <TableHead>Scheduled</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Attempts</TableHead>
+              <TableHead>Error</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>{rows.map((row) => renderQueueRow(row, opts))}</TableBody>
+        </Table>
+      </div>
+    );
+  };
 
   const cards = useMemo(
     () => [
@@ -613,7 +788,18 @@ export function ProspectOutreachQueuePanel({
               type="button"
               className="bg-brand-green hover:bg-emerald-700"
               disabled={startMutation.isPending || globalSenderBlocker}
-              onClick={() => startMutation.mutate()}
+              onClick={() => {
+                const tokenDrafts = countQueuedDraftsWithUnresolvedTokens(allActiveItems);
+                if (tokenDrafts > 0) {
+                  const ok = window.confirm(
+                    `${tokenDrafts} ready draft${tokenDrafts === 1 ? "" : "s"} still contain unresolved {{tokens}}.\n\n` +
+                      "Recipients may see raw placeholders. Open those rows to edit or regenerate before sending.\n\n" +
+                      "Start sending anyway?",
+                  );
+                  if (!ok) return;
+                }
+                startMutation.mutate();
+              }}
               data-testid="po-queue-start"
               title={
                 globalSenderBlocker
@@ -688,6 +874,18 @@ export function ProspectOutreachQueuePanel({
         </div>
       ) : null}
 
+      {countQueuedDraftsWithUnresolvedTokens(allActiveItems) > 0 ? (
+        <p
+          className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+          data-testid="po-unresolved-tokens-warning"
+        >
+          {(() => {
+            const n = countQueuedDraftsWithUnresolvedTokens(allActiveItems);
+            return `${n} ready draft${n === 1 ? "" : "s"} still contain unresolved {{tokens}}. Open those rows to edit or regenerate before Start Sending — recipients may otherwise see raw placeholders.`;
+          })()}
+        </p>
+      ) : null}
+
       <div
         className="flex max-w-full flex-nowrap gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         data-testid="po-status-tabs"
@@ -726,6 +924,63 @@ export function ProspectOutreachQueuePanel({
         })}
       </div>
 
+      {selectedEditableIds.length > 0 ? (
+        <div
+          className="flex flex-wrap items-center gap-2 rounded-xl border border-violet-100 bg-violet-50/40 px-3 py-2"
+          data-testid="po-bulk-toolbar"
+        >
+          <span className="text-xs font-medium text-violet-950">
+            {selectedEditableIds.length} selected
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 text-[11px]"
+            disabled={bulkRegenerateMutation.isPending}
+            onClick={() => bulkRegenerateMutation.mutate(selectedEditableIds)}
+            data-testid="po-bulk-regenerate"
+          >
+            {bulkRegenerateMutation.isPending ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            Regenerate selected
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 text-[11px] text-red-700"
+            disabled={bulkRemoveMutation.isPending}
+            onClick={() => {
+              const n = selectedEditableIds.length;
+              const ok = window.confirm(
+                `Delete ${n} selected draft${n === 1 ? "" : "s"} from this campaign?\n\n` +
+                  "Already Sent items are never deleted. This cannot be undone.",
+              );
+              if (!ok) return;
+              bulkRemoveMutation.mutate(selectedEditableIds);
+            }}
+            data-testid="po-bulk-delete"
+          >
+            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+            Delete selected
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 text-[11px]"
+            onClick={() => setSelectedIds(new Set())}
+            data-testid="po-bulk-clear"
+          >
+            Clear
+          </Button>
+        </div>
+      ) : null}
+
       {allActiveItems.length === 0 && allHistoryItems.length === 0 ? (
         <p className="text-sm text-gray-500">No outreach campaigns yet.</p>
       ) : (
@@ -735,7 +990,7 @@ export function ProspectOutreachQueuePanel({
               <div>
                 <h3 className="text-sm font-semibold text-gray-900">Active sending</h3>
                 <p className="text-xs text-gray-500">
-                  Ready, Sending, and Failed — actionable until resolved or sent.
+                  Ready, Sending, and Failed — click a row to review or edit the draft.
                 </p>
               </div>
               {activeItems.length === 0 ? (
@@ -745,7 +1000,7 @@ export function ProspectOutreachQueuePanel({
                     : "No prospects match this filter in the active queue."}
                 </p>
               ) : (
-                queueTable(activeItems)
+                queueTable(activeItems, { showCheckbox: true })
               )}
             </div>
           ) : null}
@@ -816,7 +1071,9 @@ export function ProspectOutreachQueuePanel({
                                       <TableHead />
                                     </TableRow>
                                   </TableHeader>
-                                  <TableBody>{batch.items.map(renderQueueRow)}</TableBody>
+                                  <TableBody>
+                                    {batch.items.map((row) => renderQueueRow(row))}
+                                  </TableBody>
                                 </Table>
                               </div>
                             )}
@@ -831,6 +1088,13 @@ export function ProspectOutreachQueuePanel({
           ) : null}
         </div>
       )}
+
+      <CampaignQueueDraftDialog
+        itemId={detailItemId}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        onChanged={invalidate}
+      />
     </section>
   );
 }
