@@ -118,3 +118,52 @@ export function buildQualificationSourcePatch(
     qualificationDecidedAt: new Date().toISOString(),
   };
 }
+
+/** Map lead score → priority when clearing a stale AI `needs_review` priority. */
+export function remapProspectPriorityFromScore(
+  leadScore?: number | null,
+): "high" | "medium" | "low" {
+  const score = typeof leadScore === "number" && Number.isFinite(leadScore) ? leadScore : 50;
+  if (score >= 80) return "high";
+  if (score >= 55) return "medium";
+  return "low";
+}
+
+/**
+ * Persist patch that clears stale AI "Needs review" presentation after a Qualified decision.
+ * Contact completeness (email/website) is never written here.
+ */
+export function buildQualifiedPresentationClearPatch(input?: {
+  priority?: string | null;
+  analysisStatus?: string | null;
+  leadScore?: number | null;
+}): {
+  needsReview: false;
+  analysisStatus?: "completed";
+  priority?: "high" | "medium" | "low";
+} {
+  const patch: {
+    needsReview: false;
+    analysisStatus?: "completed";
+    priority?: "high" | "medium" | "low";
+  } = { needsReview: false };
+  if (String(input?.analysisStatus || "").toLowerCase() === "needs_review") {
+    patch.analysisStatus = "completed";
+  }
+  if (String(input?.priority || "").toLowerCase() === "needs_review") {
+    patch.priority = remapProspectPriorityFromScore(input?.leadScore);
+  }
+  return patch;
+}
+
+/** True when Qualified rows still carry AI needs-review presentation fields. */
+export function hasStaleNeedsReviewPresentation(input: {
+  needsReview?: boolean | null;
+  priority?: string | null;
+  analysisStatus?: string | null;
+}): boolean {
+  if (input.needsReview === true) return true;
+  if (String(input.priority || "").toLowerCase() === "needs_review") return true;
+  if (String(input.analysisStatus || "").toLowerCase() === "needs_review") return true;
+  return false;
+}

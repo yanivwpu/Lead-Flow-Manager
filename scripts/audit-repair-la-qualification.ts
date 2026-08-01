@@ -366,6 +366,8 @@ async function main() {
     if (after.approvedAt === "set_now") patch.approvedAt = new Date();
     if (after.approvedAt === "clear") patch.approvedAt = null;
     if (after.approvedByUserId === "clear") patch.approvedByUserId = null;
+    if (after.analysisStatus) patch.analysisStatus = after.analysisStatus;
+    if (after.priority) patch.priority = after.priority;
     if (after.rawResultPatch) patch.rawResult = after.rawResultPatch;
     await db
       .update(prospectIntelligence)

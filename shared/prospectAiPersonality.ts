@@ -233,22 +233,41 @@ function pluralize(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
+/** Full-sentence campaign-blocker copy for the Review assistant (never vague “need attention”). */
 function blockerLabel(code: string, count: number): string {
   switch (code) {
     case "missing_email":
-      return count === 1 ? "1 missing email address" : `${count} missing email addresses`;
+      return count === 1
+        ? "1 qualified prospect is missing an email address."
+        : `${count} qualified prospects are missing an email address.`;
     case "outreach_needed":
       return count === 1
-        ? "1 outreach generation failed"
-        : `${count} outreach generation failed`;
+        ? "1 qualified prospect still needs outreach copy."
+        : `${count} qualified prospects still need outreach copy.`;
     case "enrichment_failed":
-      return count === 1 ? "1 enrichment failed" : `${count} enrichment failed`;
+      return count === 1
+        ? "1 enrichment failure can be retried."
+        : `${count} enrichment failures can be retried.`;
     case "enrichment_in_progress":
-      return count === 1 ? "1 still enriching" : `${count} still enriching`;
+      return count === 1
+        ? "1 qualified prospect is still enriching."
+        : `${count} qualified prospects are still enriching.`;
+    case "enrichment_incomplete":
+      return count === 1
+        ? "1 qualified prospect still needs contact enrichment."
+        : `${count} qualified prospects still need contact enrichment.`;
     case "qualification_failed":
-      return count === 1 ? "1 AI Review failed" : `${count} AI Review failed`;
+      return count === 1
+        ? "1 AI review failure can be retried."
+        : `${count} AI review failures can be retried.`;
+    case "qualification_incomplete":
+      return count === 1
+        ? "1 qualified prospect still needs AI review to finish."
+        : `${count} qualified prospects still need AI review to finish.`;
     default:
-      return `${count} need attention (${code.replace(/_/g, " ")})`;
+      return count === 1
+        ? `1 qualified prospect is blocked (${code.replace(/_/g, " ")}).`
+        : `${count} qualified prospects are blocked (${code.replace(/_/g, " ")}).`;
   }
 }
 
@@ -398,36 +417,35 @@ export function buildAiGrowthAssistantModel(
       });
     }
 
-    if (campaignBlocked > 0) {
+    // Specific blockers as primary lines — never a vague “need attention” bucket.
+    for (const blocker of blockerLines) {
+      if (lines.length >= 5) break;
+      lines.push({ emoji: "⚠️", text: blocker.text });
+    }
+
+    if (counts.needsReview > 0 && lines.length < 5) {
       lines.push({
-        emoji: "⚠️",
+        emoji: "😊",
         text:
-          campaignReady > 0
-            ? `${campaignBlocked} qualified prospect${
-                campaignBlocked === 1 ? " needs" : "s need"
-              } attention before they can be sent.`
-            : `${campaignBlocked} qualified prospect${
-                campaignBlocked === 1 ? " needs" : "s need"
-              } attention before Campaign.`,
-      });
-    } else if (decisionQualified > 0 && campaignReady === 0) {
-      lines.push({
-        emoji: "✅",
-        text: `${pluralize(decisionQualified, "prospect", "prospects")} qualified`,
+          counts.needsReview === 1
+            ? "1 prospect needs human review."
+            : `${counts.needsReview} prospects need human review.`,
       });
     }
 
-    if (counts.needsReview > 0) {
-      lines.push({
-        emoji: "😊",
-        text: `${pluralize(counts.needsReview, "prospect needs", "prospects need")} human review.`,
-      });
-    }
-    if (counts.enrichmentFailed > 0 || counts.qualificationFailed > 0 || bulkFailed > 0) {
-      const n = counts.enrichmentFailed + counts.qualificationFailed + bulkFailed;
+    // Row-level AI/enrichment failures not already covered by campaign blockers.
+    const blockerFailCodes = new Set(blockerLines.map((b) => b.code));
+    const retryFail =
+      (blockerFailCodes.has("qualification_failed") ? 0 : counts.qualificationFailed) +
+      (blockerFailCodes.has("enrichment_failed") ? 0 : counts.enrichmentFailed) +
+      bulkFailed;
+    if (retryFail > 0 && lines.length < 5) {
       lines.push({
         emoji: "⚠️",
-        text: `${n} failed and can be retried.`,
+        text:
+          retryFail === 1
+            ? "1 AI review failure can be retried."
+            : `${retryFail} AI review failures can be retried.`,
       });
     }
     if (busy && counts.analyzing > 0) {
@@ -449,7 +467,8 @@ export function buildAiGrowthAssistantModel(
     title: "AI Growth Assistant",
     titleEmoji: "🧠",
     lines: lines.slice(0, 5),
-    blockerLines: campaignBlocked > 0 ? blockerLines : [],
+    // Specific blockers already appear in `lines` — keep empty to avoid duplicate UI.
+    blockerLines: [],
     cta,
     nextAction: resolveNextAction(),
   };

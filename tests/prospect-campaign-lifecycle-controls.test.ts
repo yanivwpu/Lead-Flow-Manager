@@ -6,9 +6,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  formatDraftCampaignReadyCopy,
+  PROSPECT_CAMPAIGN_LIFECYCLE_LABELS,
   resolveProspectCampaignLifecycleStatus,
   resolveProspectCampaignPrimaryControl,
 } from "../shared/prospectCampaignLifecycle";
+import { PROSPECT_CAMPAIGN_METRIC_LABELS, PROSPECT_CAMPAIGN_STATUS_FILTERS } from "../shared/prospectAiDisplay";
 import { partitionProspectCampaignItems } from "../shared/prospectCampaignBatches";
 import type { ProspectOutreachQueueItemSummary } from "../shared/prospectBulkOutreach";
 
@@ -95,6 +98,22 @@ function item(
   );
   assert.equal(
     resolveProspectCampaignLifecycleStatus({
+      activeBatchStatus: "queued",
+      queueRunning: true,
+      paused: true,
+      mailboxUiConnected: true,
+      emailStatusKnown: true,
+      hasReadyRows: true,
+      hasSendingRows: false,
+      noActiveRows: false,
+      hasHistoryRows: false,
+    }),
+    "draft",
+    "sticky pause on never-started batch must remain Draft",
+  );
+  assert.equal(PROSPECT_CAMPAIGN_LIFECYCLE_LABELS.running, "Sending");
+  assert.equal(
+    resolveProspectCampaignLifecycleStatus({
       activeBatchStatus: "running",
       queueRunning: true,
       paused: false,
@@ -121,6 +140,25 @@ function item(
     }),
     "blocked",
   );
+}
+
+{
+  const copy = formatDraftCampaignReadyCopy(44);
+  assert.equal(copy.title, "Draft campaign ready.");
+  assert.equal(copy.readyLine, "44 personalized emails are ready.");
+  assert.match(copy.actionLine, /Start Sending/);
+  assert.ok(!/paused/i.test(`${copy.title} ${copy.readyLine} ${copy.actionLine}`));
+}
+
+{
+  assert.deepEqual(
+    PROSPECT_CAMPAIGN_STATUS_FILTERS.map((f) => f.id),
+    ["all", "queued", "sent", "failed"],
+  );
+  assert.ok(!PROSPECT_CAMPAIGN_STATUS_FILTERS.some((f) => f.id === "paused"));
+  assert.equal(PROSPECT_CAMPAIGN_METRIC_LABELS.queued, "Ready");
+  assert.equal(PROSPECT_CAMPAIGN_METRIC_LABELS.sentToday, "Sent");
+  assert.ok(!("paused" in PROSPECT_CAMPAIGN_METRIC_LABELS));
 }
 
 {

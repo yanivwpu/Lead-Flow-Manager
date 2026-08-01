@@ -107,6 +107,11 @@ import {
   assert.ok(panelSrc.includes("resolveProspectCampaignPrimaryControl"));
   assert.ok(panelSrc.includes("primaryControl === \"start\""));
   assert.ok(panelSrc.includes("primaryControl === \"resume\""));
+  assert.ok(panelSrc.includes("po-status-tabs"));
+  assert.ok(panelSrc.includes("inline-flex h-6 shrink-0 items-center rounded-md px-2 text-[11px]"));
+  assert.ok(panelSrc.includes("formatDraftCampaignReadyCopy"));
+  assert.ok(!panelSrc.includes("po-queue-paused-banner"));
+  assert.ok(!panelSrc.includes("PROSPECT_CAMPAIGN_METRIC_LABELS.paused"));
 }
 
 // Resume semantics: clear pause + restagger so first item is soon due

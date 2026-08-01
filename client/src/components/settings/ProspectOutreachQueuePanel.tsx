@@ -38,7 +38,6 @@ import {
   PROSPECT_CAMPAIGN_CONTROL_LABELS,
   PROSPECT_CAMPAIGN_METRIC_LABELS,
   PROSPECT_CAMPAIGN_STATUS_FILTERS,
-  PROSPECT_READY_TO_SEND_LABEL,
   buildCampaignsAiAssistantModel,
   prospectCampaignQueueStatusLabel,
 } from "@shared/prospectAiDisplay";
@@ -53,6 +52,7 @@ import {
 } from "@shared/emailMailboxAvailability";
 import { isSenderNotConnectedFailure } from "@shared/prospectOutreachFailureScope";
 import {
+  formatDraftCampaignReadyCopy,
   PROSPECT_CAMPAIGN_LIFECYCLE_LABELS,
   resolveProspectCampaignLifecycleStatus,
   resolveProspectCampaignPrimaryControl,
@@ -116,6 +116,13 @@ export function ProspectOutreachQueuePanel({
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [instructionsOpen, setInstructionsOpen] = useState(false);
+
+  // Drop legacy Paused filter id if present in session state.
+  useEffect(() => {
+    if (!PROSPECT_CAMPAIGN_STATUS_FILTERS.some((f) => f.id === statusFilter)) {
+      setStatusFilter("all");
+    }
+  }, [statusFilter]);
 
   const dashboardQuery = useQuery({
     queryKey: ["/api/growth-tools/prospect-outreach/dashboard"],
@@ -429,9 +436,21 @@ export function ProspectOutreachQueuePanel({
       { label: PROSPECT_CAMPAIGN_METRIC_LABELS.sending, value: dash?.sending ?? 0 },
       { label: PROSPECT_CAMPAIGN_METRIC_LABELS.sentToday, value: dash?.sentToday ?? 0 },
       { label: PROSPECT_CAMPAIGN_METRIC_LABELS.failed, value: dash?.failed ?? 0 },
-      { label: PROSPECT_CAMPAIGN_METRIC_LABELS.paused, value: dash?.paused ?? 0 },
     ],
     [dash],
+  );
+
+  const statusFilterCounts = useMemo(() => {
+    const ready = allActiveItems.filter((r) => r.queueStatus === "queued").length;
+    const failed = allActiveItems.filter((r) => r.queueStatus === "failed").length;
+    const sent = allHistoryItems.length;
+    const all = allActiveItems.length + allHistoryItems.length;
+    return { all, queued: ready, sent, failed } as Record<string, number>;
+  }, [allActiveItems, allHistoryItems]);
+
+  const draftReadyCopy = useMemo(
+    () => formatDraftCampaignReadyCopy(dash?.queued ?? allActiveItems.filter((r) => r.queueStatus === "queued").length),
+    [allActiveItems, dash?.queued],
   );
 
   const assistantModel = useMemo(
@@ -521,10 +540,10 @@ export function ProspectOutreachQueuePanel({
         onSave={(next) => saveInstructionsMutation.mutate(next)}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((card) => (
           <div key={card.label} className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-center">
-            <p className="text-xl font-bold text-gray-900">{card.value}</p>
+            <p className="text-xl font-bold text-gray-900 tabular-nums">{card.value}</p>
             <p className="text-xs text-gray-500">{card.label}</p>
           </div>
         ))}
@@ -583,13 +602,12 @@ export function ProspectOutreachQueuePanel({
           Save limits
         </Button>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Badge
-            variant="outline"
-            className="capitalize"
+          <span
+            className="inline-flex h-6 items-center rounded-md bg-gray-100 px-2 text-[11px] font-medium text-gray-800"
             data-testid="po-campaign-lifecycle"
           >
             {PROSPECT_CAMPAIGN_LIFECYCLE_LABELS[campaignLifecycle]}
-          </Badge>
+          </span>
           {primaryControl === "start" ? (
             <Button
               type="button"
@@ -646,11 +664,13 @@ export function ProspectOutreachQueuePanel({
         </div>
       </div>
 
-      <CampaignSendActivityStatusLine
-        queueRunning={dash?.queueRunning}
-        queuePaused={dash?.queuePaused}
-        items={allActiveItems}
-      />
+      {campaignLifecycle === "running" ? (
+        <CampaignSendActivityStatusLine
+          queueRunning={dash?.queueRunning}
+          queuePaused={dash?.queuePaused}
+          items={allActiveItems}
+        />
+      ) : null}
 
       {globalSenderBlocker ? (
         <p className="text-sm text-amber-800" data-testid="po-queue-sender-blocker">
@@ -659,30 +679,51 @@ export function ProspectOutreachQueuePanel({
             Open Channel Settings
           </a>
         </p>
-      ) : campaignLifecycle === "paused" ? (
-        <p className="text-sm text-amber-700" data-testid="po-queue-paused-banner">
-          Campaign paused — no new sends until {PROSPECT_CAMPAIGN_CONTROL_LABELS.resumeSending}.
-        </p>
       ) : null}
-      {primaryControl === "start" && hasReadyRows && !globalSenderBlocker ? (
-        <p className="text-sm text-amber-800" data-testid="po-queue-waiting-start">
-          Draft campaign ready — review messages and press{" "}
-          {PROSPECT_CAMPAIGN_CONTROL_LABELS.startSending} when you want outbound to begin.
-        </p>
+      {campaignLifecycle === "draft" && hasReadyRows && !globalSenderBlocker ? (
+        <div className="space-y-0.5 text-sm text-gray-700" data-testid="po-queue-waiting-start">
+          <p className="font-medium text-gray-900">{draftReadyCopy.title}</p>
+          <p>{draftReadyCopy.readyLine}</p>
+          <p className="text-gray-600">{draftReadyCopy.actionLine}</p>
+        </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {PROSPECT_CAMPAIGN_STATUS_FILTERS.map(({ id, label }) => (
-          <Button
-            key={id}
-            type="button"
-            size="sm"
-            variant={statusFilter === id ? "default" : "outline"}
-            onClick={() => setStatusFilter(id)}
-          >
-            {label}
-          </Button>
-        ))}
+      <div
+        className="flex max-w-full flex-nowrap gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        data-testid="po-status-tabs"
+        role="tablist"
+        aria-label="Campaign status"
+      >
+        {PROSPECT_CAMPAIGN_STATUS_FILTERS.map(({ id, label }) => {
+          const count = statusFilterCounts[id] ?? 0;
+          const active = statusFilter === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              className={cn(
+                "inline-flex h-6 shrink-0 items-center rounded-md px-2 text-[11px] font-medium transition-colors duration-150",
+                active
+                  ? "bg-gray-900 text-white"
+                  : "bg-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+              )}
+              onClick={() => setStatusFilter(id)}
+              data-testid={`po-filter-${id}`}
+            >
+              {label}
+              <span
+                className={cn(
+                  "ms-1 tabular-nums",
+                  active ? "text-white/75" : "text-gray-400",
+                )}
+              >
+                ({count})
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {allActiveItems.length === 0 && allHistoryItems.length === 0 ? (
@@ -694,7 +735,7 @@ export function ProspectOutreachQueuePanel({
               <div>
                 <h3 className="text-sm font-semibold text-gray-900">Active sending</h3>
                 <p className="text-xs text-gray-500">
-                  Ready, Sending, Failed, and Paused — actionable until resolved or sent.
+                  Ready, Sending, and Failed — actionable until resolved or sent.
                 </p>
               </div>
               {activeItems.length === 0 ? (

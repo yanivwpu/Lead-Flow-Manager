@@ -445,6 +445,10 @@ export type ProspectIntelligenceListFilters = {
   statusFilter?: ProspectIntelligenceStatusFilter;
   hasEmail?: boolean;
   hasPhone?: boolean;
+  /** Contact completeness — opposite of hasEmail (Qualified rows may match). */
+  missingEmail?: boolean;
+  missingPhone?: boolean;
+  missingWebsite?: boolean;
   emailEligible?: boolean;
   anyEligibleChannel?: boolean;
   sortBy?: "leadScore" | "priority" | "confidence" | "name" | "action" | "createdAt";

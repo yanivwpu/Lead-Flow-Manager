@@ -123,8 +123,9 @@ run("independent jobs: AI complete + enrichment failed is expected", () => {
     websiteUrl: "https://example.com",
     enrichmentErrorMessage: "website_fetch_failed",
   });
-  assert.equal(badge?.code, "enrichment_failed");
-  assert.equal(badge?.label, "Website lookup failed");
+  // Enrichment failure alone is not the status badge — awaiting qualification → Needs Review.
+  assert.equal(badge?.code, "needs_review");
+  assert.equal(badge?.label, "Needs Review");
   assert.deepEqual(
     resolveProspectTimelineStates({
       analysisStatus: "completed",
@@ -147,11 +148,22 @@ run("progress states are concise", () => {
     }).label,
     "Ready to Enrich",
   );
+  // Enrichment + email alone is never Ready for Campaign without a Qualified decision.
   assert.equal(
     resolveProspectProgressState({
       analysisStatus: "completed",
       enrichmentStatus: "completed",
       email: "a@b.com",
+    }).label,
+    "Enriched",
+  );
+  assert.equal(
+    resolveProspectProgressState({
+      analysisStatus: "completed",
+      enrichmentStatus: "completed",
+      email: "a@b.com",
+      decision: "qualified",
+      readyForCampaign: true,
     }).label,
     "Ready for Campaign",
   );
@@ -178,8 +190,13 @@ run("Needs Review discovery reasons are friendly", () => {
     websiteUrl: "https://example.com",
     discoveryAttentionReason: "social_profile_as_website",
   });
-  assert.equal(badge?.code, "discovery_attention");
-  assert.match(String(badge?.label), /social profile/i);
+  // Outcome badge is Needs Review; discovery attention remains a friendly label helper.
+  assert.equal(badge?.code, "needs_review");
+  assert.equal(badge?.label, "Needs Review");
+  assert.match(
+    discoveryAttentionLabel("social_profile_as_website"),
+    /social profile/i,
+  );
 });
 
 run("personality never dumps OPENAI diagnostics", () => {

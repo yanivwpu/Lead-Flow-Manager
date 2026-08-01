@@ -68,24 +68,25 @@ export function prospectCampaignQueueStatusLabel(status: string | null | undefin
   return PROSPECT_CAMPAIGN_QUEUE_STATUS_LABELS[key] || String(status || "—");
 }
 
-/** Operational metric card labels on Campaigns (not Activity). */
+/** Operational metric card labels on Campaigns (not campaign state). */
 export const PROSPECT_CAMPAIGN_METRIC_LABELS = {
-  queued: PROSPECT_READY_TO_SEND_LABEL,
+  queued: "Ready",
   sending: "Sending",
-  sentToday: "Sent today",
+  sentToday: "Sent",
   outreachSent: "Outreach Sent",
   replied: "Replied",
   failed: "Failed",
-  paused: "Paused",
 } as const;
 
-/** Campaigns page status filters (no dedicated Sending filter). */
+/**
+ * Campaigns status filters — same compact chip set as Review (All / Needs Review / …).
+ * No Paused filter; campaign state is shown once via the lifecycle badge.
+ */
 export const PROSPECT_CAMPAIGN_STATUS_FILTERS: Array<{ id: string; label: string }> = [
   { id: "all", label: "All" },
   { id: "queued", label: "Ready" },
   { id: "sent", label: "Sent" },
   { id: "failed", label: "Failed" },
-  { id: "paused", label: "Paused" },
 ];
 
 export const PROSPECT_CAMPAIGN_CONTROL_LABELS = {

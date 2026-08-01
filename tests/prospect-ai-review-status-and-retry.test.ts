@@ -105,8 +105,12 @@ run("service auto-retries transient provider/parse errors before failing", () =>
   assert.ok(serviceSrc.includes("isProspectAiTransientProviderError"));
   assert.ok(serviceSrc.includes("MAX_AI_RETRIES = 3"));
   assert.ok(serviceSrc.includes("errorMessage: null"));
-  // Success path clears prior failure
-  assert.ok(serviceSrc.includes("rawResult: intel as unknown as Record<string, unknown>"));
+  // Success path clears prior failure / stamps qualificationSource on rawResult
+  assert.ok(
+    serviceSrc.includes("errorMessage: null") &&
+      (serviceSrc.includes("rawResult: intel as unknown as Record<string, unknown>") ||
+        serviceSrc.includes("buildQualificationSourcePatch")),
+  );
 });
 
 run("bulk worker retries once after transient timeout", () => {

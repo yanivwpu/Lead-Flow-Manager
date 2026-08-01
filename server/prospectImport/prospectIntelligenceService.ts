@@ -58,6 +58,7 @@ import { resolveProspectWebsiteUrl } from "./prospectWebsiteUrl";
 import { assertContactInWorkspace } from "./prospectWorkspaceScope";
 import {
   buildQualificationSourcePatch,
+  buildQualifiedPresentationClearPatch,
   hasHumanQualificationLock,
   readProspectQualificationSource,
   shouldAutoQualifyFromAiResult,
@@ -774,7 +775,6 @@ export async function analyzeProspectContact(params: {
         } else {
           // Manual Qualified
           patch.reviewStatus = "approved";
-          patch.needsReview = false;
           patch.approvedAt = existing.approvedAt ?? new Date();
           patch.approvedByUserId = existing.approvedByUserId;
           if (String(patch.recommendedOffer || "").toLowerCase() === "not_a_fit") {
@@ -783,6 +783,14 @@ export async function analyzeProspectContact(params: {
                 ? existing.recommendedOffer
                 : "general_demo";
           }
+          Object.assign(
+            patch,
+            buildQualifiedPresentationClearPatch({
+              priority: patch.priority ?? intel.priority,
+              analysisStatus: patch.analysisStatus ?? intel.analysisStatus,
+              leadScore: patch.leadScore ?? intel.leadScore,
+            }),
+          );
           rawResult = buildQualificationSourcePatch("manual", {
             ...rawResult,
             ...existingRaw,
@@ -808,10 +816,17 @@ export async function analyzeProspectContact(params: {
         });
         if (autoOk) {
           patch.reviewStatus = "approved";
-          patch.needsReview = false;
           patch.approvedAt = new Date();
           // System decision — no user id.
           patch.approvedByUserId = null;
+          Object.assign(
+            patch,
+            buildQualifiedPresentationClearPatch({
+              priority: intel.priority,
+              analysisStatus: intel.analysisStatus,
+              leadScore: intel.leadScore,
+            }),
+          );
           rawResult = buildQualificationSourcePatch("auto_ai", rawResult);
           patch.rawResult = rawResult;
         } else if (String(intel.recommendedOffer || "").toLowerCase() === "not_a_fit") {
@@ -1204,9 +1219,21 @@ export async function listProspectIntelligence(
       const { isValidProspectEmail } = await import("@shared/prospectContactEnrichment");
       if (!isValidProspectEmail(contact.email)) continue;
     }
+    if (filters.missingEmail === true) {
+      const { isValidProspectEmail } = await import("@shared/prospectContactEnrichment");
+      if (isValidProspectEmail(contact.email)) continue;
+    }
     if (filters.hasPhone === true) {
       const { isValidProspectPhone } = await import("@shared/prospectContactEnrichment");
       if (!isValidProspectPhone(contact.phone)) continue;
+    }
+    if (filters.missingPhone === true) {
+      const { isValidProspectPhone } = await import("@shared/prospectContactEnrichment");
+      if (isValidProspectPhone(contact.phone)) continue;
+    }
+    if (filters.missingWebsite === true) {
+      const site = resolveProspectWebsiteUrl(contact);
+      if (site) continue;
     }
 
     if (filters.statusFilter) {
@@ -1488,12 +1515,25 @@ export async function approveProspectIntelligence(
   if (opts?.workspaceUserId) assertContactInWorkspace(contact, opts.workspaceUserId);
   assertInternalImportedProspect(contact);
 
+  const existingForApprove = await db
+    .select({
+      priority: prospectIntelligence.priority,
+      analysisStatus: prospectIntelligence.analysisStatus,
+      leadScore: prospectIntelligence.leadScore,
+    })
+    .from(prospectIntelligence)
+    .where(eq(prospectIntelligence.contactId, contactId))
+    .limit(1);
   const messagePatch: Partial<typeof prospectIntelligence.$inferInsert> = {
     reviewStatus: "approved",
-    needsReview: false,
     approvedAt: new Date(),
     approvedByUserId: userId,
     updatedAt: new Date(),
+    ...buildQualifiedPresentationClearPatch({
+      priority: existingForApprove[0]?.priority,
+      analysisStatus: existingForApprove[0]?.analysisStatus,
+      leadScore: existingForApprove[0]?.leadScore,
+    }),
   };
   // Approval retains the current edited outreach draft when provided (Save message not required).
   if (opts?.suggestedFirstMessage !== undefined) {
@@ -1621,10 +1661,17 @@ export async function setProspectQualificationDecision(
 
   if (decision === "qualified") {
     dbPatch.reviewStatus = "approved";
-    dbPatch.needsReview = false;
     dbPatch.approvedAt = new Date();
     if (opts?.userId) dbPatch.approvedByUserId = opts.userId;
     if (clearNotAFit) dbPatch.recommendedOffer = "general_demo";
+    Object.assign(
+      dbPatch,
+      buildQualifiedPresentationClearPatch({
+        priority: rows[0].priority,
+        analysisStatus: rows[0].analysisStatus,
+        leadScore: rows[0].leadScore,
+      }),
+    );
     dbPatch.rawResult = buildQualificationSourcePatch("manual", existingRaw);
   } else if (decision === "needs_review") {
     dbPatch.reviewStatus = "needs_review";

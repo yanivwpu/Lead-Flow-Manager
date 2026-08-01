@@ -7,7 +7,9 @@ import {
   buildQualificationSourcePatch,
   hasClearBusinessIdentity,
   hasHumanQualificationLock,
+  hasStaleNeedsReviewPresentation,
   readProspectQualificationSource,
+  remapProspectPriorityFromScore,
   type ProspectQualificationSource,
 } from "./prospectAutoQualify";
 
@@ -78,9 +80,40 @@ export type ProspectQualificationRepairProposal = {
     qualificationSource: ProspectQualificationSource | null;
     approvedAt: "keep" | "set_now" | "clear";
     approvedByUserId: "keep" | "clear";
+    /** Clear legacy AI analysisStatus=needs_review after qualify. */
+    analysisStatus?: "completed";
+    /** Remap stale priority=needs_review after qualify. */
+    priority?: "high" | "medium" | "low";
     rawResultPatch?: Record<string, unknown>;
   } | null;
 };
+
+function qualifiedAfterPatch(
+  input: ProspectQualificationRepairInput,
+  opts: {
+    offer: string | null;
+    source: ProspectQualificationSource;
+    approvedAt: "keep" | "set_now";
+    approvedByUserId: "keep" | "clear";
+  },
+): NonNullable<ProspectQualificationRepairProposal["after"]> {
+  const after: NonNullable<ProspectQualificationRepairProposal["after"]> = {
+    reviewStatus: "approved",
+    needsReview: false,
+    recommendedOffer: opts.offer === "not_a_fit" ? "general_demo" : opts.offer || "general_demo",
+    qualificationSource: opts.source,
+    approvedAt: opts.approvedAt,
+    approvedByUserId: opts.approvedByUserId,
+    rawResultPatch: buildQualificationSourcePatch(opts.source, input.rawResult),
+  };
+  if (String(input.analysisStatus || "").toLowerCase() === "needs_review") {
+    after.analysisStatus = "completed";
+  }
+  if (String(input.priority || "").toLowerCase() === "needs_review") {
+    after.priority = remapProspectPriorityFromScore(input.leadScore);
+  }
+  return after;
+}
 
 const REAL_ESTATE_RE =
   /real[\s-]?estate|realtor|broker(?:age)?|realty|property\s*manag|mls\b/i;
@@ -251,24 +284,24 @@ export function proposeProspectQualificationRepair(
     review === "approved" || review === "qualified" || Boolean(input.approvedAt);
 
   if (alreadyApproved && offer !== "not_a_fit" && (src === "auto_ai" || src === "manual" || !src)) {
-    // Ensure source stamped for legacy approved rows lacking qualificationSource.
-    if (!src) {
+    const stalePresentation = hasStaleNeedsReviewPresentation(input);
+    // Stamp source and/or clear stale AI Needs-review presentation on already-qualified rows.
+    if (!src || stalePresentation) {
       return {
         action: "auto_qualify",
-        reason: "stamp_legacy_approved_as_auto_ai",
+        reason: !src
+          ? "stamp_legacy_approved_as_auto_ai"
+          : "clear_stale_needs_review_presentation",
         staleSoftNotAFit: false,
         genuineStrongReject: false,
         preservedManualDecision: false,
         before,
-        after: {
-          reviewStatus: "approved",
-          needsReview: false,
-          recommendedOffer: offer || "general_demo",
-          qualificationSource: "auto_ai",
+        after: qualifiedAfterPatch(input, {
+          offer,
+          source: src === "manual" ? "manual" : "auto_ai",
           approvedAt: "keep",
           approvedByUserId: "keep",
-          rawResultPatch: buildQualificationSourcePatch("auto_ai", input.rawResult),
-        },
+        }),
       };
     }
     return {
@@ -291,15 +324,12 @@ export function proposeProspectQualificationRepair(
       genuineStrongReject: false,
       preservedManualDecision: false,
       before,
-      after: {
-        reviewStatus: "approved",
-        needsReview: false,
-        recommendedOffer: "general_demo",
-        qualificationSource: "auto_ai",
+      after: qualifiedAfterPatch(input, {
+        offer: "general_demo",
+        source: "auto_ai",
         approvedAt: alreadyApproved ? "keep" : "set_now",
         approvedByUserId: "clear",
-        rawResultPatch: buildQualificationSourcePatch("auto_ai", input.rawResult),
-      },
+      }),
     };
   }
 
@@ -341,15 +371,12 @@ export function proposeProspectQualificationRepair(
       genuineStrongReject: false,
       preservedManualDecision: false,
       before,
-      after: {
-        reviewStatus: "approved",
-        needsReview: false,
-        recommendedOffer: offer === "not_a_fit" ? "general_demo" : offer || "general_demo",
-        qualificationSource: "auto_ai",
+      after: qualifiedAfterPatch(input, {
+        offer,
+        source: "auto_ai",
         approvedAt: alreadyApproved ? "keep" : "set_now",
         approvedByUserId: "clear",
-        rawResultPatch: buildQualificationSourcePatch("auto_ai", input.rawResult),
-      },
+      }),
     };
   }
 

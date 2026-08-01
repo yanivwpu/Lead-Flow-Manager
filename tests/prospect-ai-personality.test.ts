@@ -11,37 +11,14 @@ import {
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// 1–5. Assistant counts from shared work-state resolver
+// Busy analyzing — no qualified campaign briefing yet
 {
   const model = buildAiGrowthAssistantModel([
     { analysisStatus: "processing", reviewStatus: "pending", enrichmentStatus: "none" },
     { analysisStatus: "processing", reviewStatus: "pending", enrichmentStatus: "none" },
-    {
-      analysisStatus: "completed",
-      reviewStatus: "approved",
-      enrichmentStatus: "enriching",
-      websiteUrl: "https://example.com",
-      email: "a@b.com",
-    },
-    {
-      analysisStatus: "completed",
-      reviewStatus: "approved",
-      enrichmentStatus: "completed",
-      enrichmentEmailFound: true,
-      websiteUrl: "https://example.com",
-      email: "b@c.com",
-    },
-    {
-      analysisStatus: "completed",
-      reviewStatus: "pending",
-      enrichmentStatus: "none",
-      email: "d@e.com",
-    },
   ]);
   assert.equal(model.idle, false);
-  assert.ok(model.lines.some((l) => /Reviewing 2/i.test(l.text) || /being enriched/i.test(l.text)));
-  assert.ok(model.lines.some((l) => /enriched successfully|being enriched|need review/i.test(l.text)));
-  assert.ok(model.nextAction);
+  assert.ok(model.lines.some((l) => /Reviewing 2/i.test(l.text)));
 }
 
 // Contact-found requires flags — enrichment completed alone is not enough
@@ -55,13 +32,17 @@ import { join } from "node:path";
       enrichmentPhoneFound: false,
       websiteUrl: "https://example.com",
       email: "x@y.com",
+      approvedAt: "2026-07-01T00:00:00.000Z",
+      suggestedFirstMessage: "Hi",
     },
   ]);
   assert.equal(model.idle, true);
   assert.ok(!model.lines.some((l) => /Found public contact/i.test(l.text)));
+  assert.ok(model.lines.some((l) => /Campaign Ready/i.test(l.text)));
+  assert.ok(model.nextAction && /Send all 1 to Campaign/i.test(model.nextAction));
 }
 
-// Idle — pending review but Email-campaign-ready (no website + valid email)
+// Needs human review path
 {
   const idle = buildAiGrowthAssistantModel([
     {
@@ -69,31 +50,42 @@ import { join } from "node:path";
       reviewStatus: "pending",
       enrichmentStatus: "none",
       email: "a@b.com",
+      needsReview: true,
     },
   ]);
   assert.equal(idle.idle, true);
   assert.ok(!idle.lines.some((l) => /caught up/i.test(l.text)));
-  assert.ok(
-    idle.lines.some((l) => /enriched successfully|need(s)? review/i.test(l.text)) ||
-      (idle.nextAction && /Send .* Campaigns/i.test(idle.nextAction)),
-  );
-  assert.ok(idle.nextAction && /Send .* Campaigns|Select prospects to enrich/i.test(idle.nextAction));
+  assert.ok(idle.lines.some((l) => /human review/i.test(l.text)));
+  assert.ok(idle.nextAction && /Needs Review|decide fit/i.test(idle.nextAction));
 }
 
-// Still needs Enrich when website exists and enrichment not done
+// Ready + blocked: CTA reviews blocked; next action prefers Review
 {
-  const needsEnrich = buildAiGrowthAssistantModel([
+  const model = buildAiGrowthAssistantModel([
     {
       analysisStatus: "completed",
-      reviewStatus: "pending",
-      enrichmentStatus: "none",
+      reviewStatus: "approved",
+      approvedAt: "2026-07-01T00:00:00.000Z",
       email: "a@b.com",
-      websiteUrl: "https://example.com",
+      suggestedFirstMessage: "Hi",
+    },
+    {
+      analysisStatus: "completed",
+      reviewStatus: "approved",
+      approvedAt: "2026-07-01T00:00:00.000Z",
+      email: null,
+      suggestedFirstMessage: "Hi",
     },
   ]);
-  assert.equal(needsEnrich.idle, true);
-  assert.ok(needsEnrich.lines.some((l) => /need(s)? review/i.test(l.text)));
-  assert.ok(needsEnrich.nextAction && /Select prospects to enrich/i.test(needsEnrich.nextAction));
+  assert.ok(model.lines.some((l) => /1 prospect is ready for Campaign/i.test(l.text)));
+  assert.ok(
+    model.lines.some((l) => /1 qualified prospect is missing an email address/i.test(l.text)),
+  );
+  assert.ok(!model.lines.some((l) => /need attention/i.test(l.text)));
+  assert.equal(model.cta?.kind, "review_campaign_blocked");
+  assert.equal(model.cta?.label, "Review 1 prospect");
+  assert.deepEqual(model.blockerLines, []);
+  assert.ok(model.nextAction && /Review 1 prospect/i.test(model.nextAction));
 }
 
 {
@@ -110,7 +102,7 @@ import { join } from "node:path";
   assert.equal(caughtUp.idle, true);
   assert.ok(caughtUp.lines.some((l) => /caught up/i.test(l.text)));
   assert.ok(caughtUp.lines.some((l) => /No prospects require attention/i.test(l.text)));
-  assert.ok(!caughtUp.lines.some((l) => /need review/i.test(l.text)));
+  assert.ok(!caughtUp.lines.some((l) => /need review|human review/i.test(l.text)));
 }
 
 // Qualification emoji/message
@@ -174,6 +166,18 @@ assert.equal(shouldAnimateAiEmoji(false, false), false);
   const a = buildAiGrowthAssistantModel(items);
   const b = buildAiGrowthAssistantModel(items);
   assert.deepEqual(a, b);
+}
+
+// Panel wires Review CTA to campaign-blocked focus (not a new tab)
+{
+  const panel = readFileSync(
+    join(process.cwd(), "client/src/components/settings/ProspectIntelligencePanel.tsx"),
+    "utf8",
+  );
+  assert.ok(panel.includes("onReviewCampaignBlocked"));
+  assert.ok(panel.includes("campaignBlockedFocus"));
+  assert.ok(panel.includes("isProspectQualifiedCampaignBlocked"));
+  assert.ok(!/PROSPECT_REVIEW_WORK_FILTER_CHIPS[\s\S]*campaign_blocked/.test(panel));
 }
 
 console.log("prospect-ai-personality.test.ts: all assertions passed");

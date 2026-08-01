@@ -1913,12 +1913,6 @@ export function ProspectIntelligencePanel(props: {
     return batchesQuery.data?.batches.find((b) => b.key === batchFilter) ?? null;
   }, [batchFilter, batchesQuery.data?.batches]);
 
-  const latestDiscoveryBatch = useMemo(() => {
-    const key = batchesQuery.data?.latestDiscoveryKey;
-    if (!key) return null;
-    return batchesQuery.data?.batches.find((b) => b.key === key) ?? null;
-  }, [batchesQuery.data?.batches, batchesQuery.data?.latestDiscoveryKey]);
-
   const batchActive = batchFilter !== "all";
 
   const workFilterCounts = useMemo(() => {
@@ -2587,8 +2581,8 @@ export function ProspectIntelligencePanel(props: {
         >
           <span>
             Showing {assistantModel.cta?.count ?? items.length} qualified prospect
-            {(assistantModel.cta?.count ?? items.length) === 1 ? "" : "s"} that need attention
-            before Campaign.
+            {(assistantModel.cta?.count ?? items.length) === 1 ? "" : "s"} not yet ready for
+            Campaign.
           </span>
           <Button
             type="button"
@@ -2598,27 +2592,6 @@ export function ProspectIntelligencePanel(props: {
             onClick={() => setCampaignBlockedFocus(false)}
           >
             Show all
-          </Button>
-        </div>
-      ) : null}
-
-      {latestDiscoveryBatch && batchFilter === "all" ? (
-        <div
-          className="flex flex-wrap items-center gap-2 text-xs text-gray-600"
-          data-testid="pi-latest-discovery-shortcut"
-        >
-          <span>
-            Latest discovery: {latestDiscoveryBatch.prospectCount}{" "}
-            {latestDiscoveryBatch.prospectCount === 1 ? "prospect" : "prospects"}
-          </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs"
-            onClick={() => applyBatchFilter(latestDiscoveryBatch.key)}
-          >
-            View batch
           </Button>
         </div>
       ) : null}
@@ -2661,7 +2634,7 @@ export function ProspectIntelligencePanel(props: {
       >
         <Select value={batchFilter} onValueChange={applyBatchFilter}>
           <SelectTrigger className="h-8 w-[200px] max-w-full text-xs" data-testid="pi-batch-filter">
-            <SelectValue placeholder="Batch" />
+            <SelectValue placeholder="Discovery Batch" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All prospects</SelectItem>

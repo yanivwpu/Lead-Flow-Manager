@@ -86,8 +86,9 @@ export function resolveCampaignSendActivityStatus(params: {
   items: readonly CampaignCountdownItemLike[];
   nowMs: number;
 }): CampaignSendActivityStatus {
+  // Campaign state badge already shows Paused — do not repeat copy here.
   if (params.queuePaused === true) {
-    return { kind: "paused", label: "Campaign paused" };
+    return { kind: "paused", label: "" };
   }
 
   const hasQueued = params.items.some((i) => String(i.queueStatus).toLowerCase() === "queued");

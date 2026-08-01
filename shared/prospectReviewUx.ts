@@ -191,6 +191,11 @@ export function buildProspectRowAiSummary(input: {
   recommendedOffer?: string | null;
   suggestedOutreachAngle?: string | null;
   reasoningSummary?: string | null;
+  /** When true (auto/manual Qualified), never surface stale needs_review priority. */
+  decisionQualified?: boolean | null;
+  reviewStatus?: string | null;
+  approvedAt?: string | Date | null;
+  notQualified?: boolean | null;
 }): ProspectRowAiSummary {
   if (!isProspectQualificationComplete(input.analysisStatus)) {
     return {
@@ -200,7 +205,12 @@ export function buildProspectRowAiSummary(input: {
     };
   }
   const offerRaw = String(input.recommendedOffer || "").trim().toLowerCase();
-  const notAFit = offerRaw === "not_a_fit";
+  const notAFit = offerRaw === "not_a_fit" || input.notQualified === true;
+  const review = String(input.reviewStatus || "").toLowerCase();
+  const decisionQualified =
+    input.decisionQualified === true ||
+    (!notAFit &&
+      (review === "approved" || review === "qualified" || Boolean(input.approvedAt)));
   // Never show Excellent/Strong Match alongside not_a_fit (safety net for legacy rows).
   const match = notAFit
     ? { stars: 1, label: "Not a fit" }
@@ -213,11 +223,17 @@ export function buildProspectRowAiSummary(input: {
     String(input.reasoningSummary || "").trim() ||
     null;
   const businessType = String(input.businessType || "").trim() || null;
+  const rawPriority = String(input.priority || "").toLowerCase();
+  // Qualified / Ready rows must not show a stale AI "Needs review" priority chip.
+  let priority: string | null = notAFit ? "low" : input.priority ?? null;
+  if (decisionQualified && rawPriority === "needs_review") {
+    priority = null;
+  }
   return {
     showSummary: true,
     matchLabel: match.label || "AI Review complete",
     matchStars: match.stars,
-    priority: notAFit ? "low" : input.priority ?? null,
+    priority,
     businessType,
     offerLabel: offer || null,
     // Successful AI Review always shows a summary line — never leave the cell blank.

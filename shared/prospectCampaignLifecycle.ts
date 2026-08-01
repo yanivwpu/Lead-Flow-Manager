@@ -17,11 +17,29 @@ export const PROSPECT_CAMPAIGN_LIFECYCLE_LABELS: Record<
   string
 > = {
   draft: "Draft",
-  running: "Running",
+  /** Armed and actively claiming/sending — UI label is "Sending". */
+  running: "Sending",
   paused: "Paused",
   blocked: "Blocked",
   completed: "Completed",
 };
+
+/** Draft-campaign helper copy (never uses "paused"). */
+export function formatDraftCampaignReadyCopy(readyCount: number): {
+  title: string;
+  readyLine: string;
+  actionLine: string;
+} {
+  const n = Math.max(0, Math.floor(Number(readyCount) || 0));
+  return {
+    title: "Draft campaign ready.",
+    readyLine:
+      n === 1
+        ? "1 personalized email is ready."
+        : `${n} personalized emails are ready.`,
+    actionLine: "Review messages if needed or click Start Sending.",
+  };
+}
 
 /**
  * Primary control for Campaigns toolbar.
@@ -88,10 +106,12 @@ export function resolveProspectCampaignLifecycleStatus(input: {
 
   if (input.queueRunning === true && input.paused !== true) return "running";
 
-  if (input.paused === true && input.queueRunning === true && batch !== "draft") {
-    return "paused";
-  }
+  // Never-started batches are Draft even if sticky pause flags leaked from infra.
+  const neverStarted = batch === "draft" || batch === "queued" || !batch;
+  if (neverStarted && input.hasReadyRows) return "draft";
+  if (neverStarted && !input.queueRunning) return "draft";
 
+  if (input.paused === true && input.queueRunning === true) return "paused";
   if (batch === "paused") return "paused";
   if (batch === "running") return "running";
 

@@ -319,7 +319,8 @@ export function resolveProspectProgressState(input: {
     return { code: "enriched", label: PROSPECT_PROGRESS_STATE_LABELS.enriched };
   }
 
-  if (review === "needs_review" || analysis === "needs_review" || decision === "needs_review") {
+  // Stale AI analysisStatus=needs_review must not override an explicit Qualified decision.
+  if (!isQualifiedDecision && (review === "needs_review" || analysis === "needs_review")) {
     return { code: "needs_review", label: PROSPECT_PROGRESS_STATE_LABELS.needs_review };
   }
 

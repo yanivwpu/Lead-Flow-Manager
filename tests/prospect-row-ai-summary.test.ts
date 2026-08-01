@@ -99,6 +99,23 @@ function simulatePollRefresh(params: {
   assert.equal(summary.offerLabel, "not a fit");
 }
 
+// Qualified rows suppress stale AI priority=needs_review in the summary cell.
+{
+  const summary = buildProspectRowAiSummary({
+    analysisStatus: "needs_review",
+    leadScore: 0,
+    priority: "needs_review",
+    businessType: "real estate",
+    recommendedOffer: "general_demo",
+    suggestedOutreachAngle: "Lead with listing follow-up.",
+    decisionQualified: true,
+    reviewStatus: "approved",
+    approvedAt: "2026-07-31T00:00:00.000Z",
+  });
+  assert.equal(summary.showSummary, true);
+  assert.equal(summary.priority, null);
+}
+
 // Regression: pending row with empty summary → poll returns needs_review data → summary appears
 // without changing stable order / without navigation.
 {

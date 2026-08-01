@@ -84,7 +84,8 @@ run("paused status", () => {
     nowMs: now,
   });
   assert.equal(s.kind, "paused");
-  assert.equal(s.label, "Campaign paused");
+  // Lifecycle badge owns "Paused" — activity line stays quiet.
+  assert.equal(s.label, "");
 });
 
 run("complete status", () => {
