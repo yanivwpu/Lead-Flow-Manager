@@ -3263,13 +3263,11 @@ export async function registerRoutes(
             devLog(`[Meta Webhook] [Stage 3-FB] MATCHED: channelSettings id=${matchSetting.id}, userId=${matchSetting.userId}, savedPageId=${matchedPageId}`);
 
             const {
-              shouldLookupFacebookSenderProfile,
-              buildFacebookContactNamePatch,
               resolveFacebookDisplayNameSource,
-              mergeFacebookDisplayNameSource,
-              readFacebookDisplayNameSource,
             } = await import("@shared/facebookContactNaming");
-            const { fetchFacebookSenderProfile } = await import("./facebookSenderProfile");
+            const { scheduleFacebookContactProfileEnrichment } = await import(
+              "./facebookProfileEnrichment"
+            );
 
             const existingFbContact = await storage.getContactByChannelId(
               matchSetting.userId,
@@ -3281,29 +3279,9 @@ export async function registerRoutes(
               senderPsid: senderId,
               sourceDetails: existingFbContact?.sourceDetails,
             });
-            const needsProfileLookup = shouldLookupFacebookSenderProfile({
-              name: existingFbContact?.name,
-              senderPsid: senderId,
-              sourceDetails: existingFbContact?.sourceDetails,
-            });
-
-            // Start Graph lookup without blocking message persistence.
-            const profilePromise =
-              needsProfileLookup && pageAccessToken
-                ? fetchFacebookSenderProfile(senderId, pageAccessToken, {
-                    pageIdForLog: matchedPageId,
-                    userIdForLog: matchSetting.userId,
-                  }).catch((err) => {
-                    console.warn("[Meta Webhook] [FB PROFILE] lookup rejected", {
-                      senderId,
-                      pageId: matchedPageId,
-                      error: err instanceof Error ? err.message : String(err),
-                    });
-                    return null;
-                  })
-                : Promise.resolve(null);
 
             // Persist immediately with existing display name or PSID fallback.
+            // Profile enrichment runs after persist (non-blocking for webhook ACK).
             const contactName =
               existingSource === "psid"
                 ? senderId
@@ -3340,56 +3318,29 @@ export async function registerRoutes(
                 devLog(`[FB-WEBHOOK] message saved contactId=${result.contact.id} conversationId=${result.conversation.id} dbMessageId=${result.message.id}`);
                 devLog(`[Inbound] [Stage 10-FB] Pipeline complete — channel: facebook, mid=${messageId}, contactId=${result.contact.id}, conversationId=${result.conversation.id}, dbMessageId=${result.message.id}, isNew=${result.isNewConversation}`);
 
-                // Stamp PSID provenance on new/fallback contacts (does not block ingest).
-                if (
-                  resolveFacebookDisplayNameSource({
-                    name: result.contact.name,
+                // Enrich after persist — never blocks message ACK; bounded retries inside scheduler.
+                if (pageAccessToken) {
+                  scheduleFacebookContactProfileEnrichment({
+                    userId: matchSetting.userId,
+                    contactId: result.contact.id,
+                    conversationId: result.conversation.id,
                     senderPsid: senderId,
-                    sourceDetails: result.contact.sourceDetails,
-                  }) === "psid" &&
-                  !readFacebookDisplayNameSource(result.contact.sourceDetails)
-                ) {
-                  await storage
-                    .updateContact(result.contact.id, {
-                      sourceDetails: mergeFacebookDisplayNameSource(
-                        result.contact.sourceDetails,
-                        "psid",
-                      ),
-                    })
-                    .catch(() => {});
-                }
-
-                // Enrich after persist — failures never roll back the message.
-                const fbProfile = await profilePromise;
-                const namePatch = buildFacebookContactNamePatch(
-                  result.contact.name,
-                  senderId,
-                  fbProfile?.displayName,
-                  result.contact.sourceDetails,
-                );
-                const contactPatch: Record<string, unknown> = { ...(namePatch || {}) };
-                if (fbProfile?.profilePic) {
-                  const { shouldRefreshAvatar } = await import("./avatarService");
-                  if (shouldRefreshAvatar(result.contact) || namePatch) {
-                    contactPatch.avatar = fbProfile.profilePic;
-                    contactPatch.avatarFetchedAt = new Date();
-                  }
-                }
-                if (Object.keys(contactPatch).length > 0) {
-                  await storage.updateContact(result.contact.id, contactPatch).catch((err) => {
-                    console.warn("[Meta Webhook] [FB PROFILE] contact update failed", {
-                      contactId: result.contact!.id,
-                      senderId,
-                      pageId: matchedPageId,
-                      error: err instanceof Error ? err.message : String(err),
-                    });
+                    pageId: matchedPageId,
+                    pageAccessToken,
+                    messageMid: messageId ?? null,
                   });
-                } else if (pageAccessToken) {
-                  const { shouldRefreshAvatar } = await import("./avatarService");
-                  if (shouldRefreshAvatar(result.contact)) {
-                    const { fetchFacebookAvatar } = await import("./avatarService");
-                    fetchFacebookAvatar(result.contact.id, senderId, pageAccessToken).catch(() => {});
-                  }
+                } else {
+                  console.info(
+                    `[FB PROFILE] ${JSON.stringify({
+                      event: "enrichment_skipped",
+                      reason: "missing_page_token",
+                      senderPsid: senderId,
+                      receivingPageId: matchedPageId,
+                      contactId: result.contact.id,
+                      conversationId: result.conversation.id,
+                      ts: new Date().toISOString(),
+                    })}`,
+                  );
                 }
               })().catch((err: any) => {
                 console.error(`[FB-WEBHOOK] processIncomingMessage FAILED mid=${messageId}`, err?.message || err, err?.stack);

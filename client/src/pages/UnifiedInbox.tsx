@@ -478,6 +478,18 @@ export function UnifiedInbox() {
           const msg = JSON.parse(event.data);
           if (msg.type === "auth_success") {
             /* no-op */
+          } else if (msg.type === "contact_updated") {
+            // Facebook (and other) profile enrichment finished — refresh Inbox promptly.
+            queryClient.refetchQueries({ queryKey: ["/api/inbox"], type: "active" });
+            if (typeof msg.contactId === "string" && msg.contactId) {
+              queryClient.invalidateQueries({
+                queryKey: ["/api/contacts", msg.contactId],
+              });
+              void queryClient.refetchQueries({
+                queryKey: ["/api/contacts", msg.contactId],
+                type: "active",
+              });
+            }
           } else if (msg.type === "new_message") {
             queryClient.refetchQueries({ queryKey: ["/api/inbox"], type: "active" });
             if (typeof msg.contactId === "string" && msg.contactId) {

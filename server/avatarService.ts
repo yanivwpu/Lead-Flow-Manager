@@ -50,14 +50,17 @@ export async function fetchFacebookAvatar(
     );
     const data = (await resp.json()) as Record<string, unknown>;
     const avatarUrl = typeof data.profile_pic === "string" ? data.profile_pic : null;
-    await storage.updateContact(contactId, {
-      ...(avatarUrl ? { avatar: avatarUrl } : {}),
-      avatarFetchedAt: new Date(),
-    });
+    // Only stamp avatarFetchedAt on success — empty/error responses must remain retryable.
     if (avatarUrl) {
+      await storage.updateContact(contactId, {
+        avatar: avatarUrl,
+        avatarFetchedAt: new Date(),
+      });
       console.log(`[Avatar] Facebook avatar stored for contact ${contactId}`);
     } else {
-      console.log(`[Avatar] No Facebook profile_pic returned for contact ${contactId} (${(data as any)?.error?.message ?? "unknown"})`);
+      console.log(
+        `[Avatar] No Facebook profile_pic returned for contact ${contactId} (${(data as any)?.error?.message ?? "unknown"}) — not stamping avatarFetchedAt`,
+      );
     }
   } catch (err: unknown) {
     console.log(`[Avatar] Facebook avatar fetch failed for contact ${contactId}: ${(err as Error).message ?? err}`);
