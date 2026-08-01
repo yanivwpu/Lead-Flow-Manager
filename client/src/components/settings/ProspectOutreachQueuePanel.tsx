@@ -47,7 +47,16 @@ import {
   PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE,
 } from "@shared/prospectBulkOutreach";
 import { selectNextQueuedCampaignItem } from "@shared/prospectCampaignCountdown";
+import {
+  isEmailMailboxUiConnected,
+  shouldShowCampaignEmailReconnectBanner,
+} from "@shared/emailMailboxAvailability";
 import { isSenderNotConnectedFailure } from "@shared/prospectOutreachFailureScope";
+import {
+  PROSPECT_CAMPAIGN_LIFECYCLE_LABELS,
+  resolveProspectCampaignLifecycleStatus,
+  resolveProspectCampaignPrimaryControl,
+} from "@shared/prospectCampaignLifecycle";
 import {
   CampaignSendActivityStatusLine,
   NextQueuedCountdownSuffix,
@@ -124,8 +133,21 @@ export function ProspectOutreachQueuePanel({
     refetchInterval: 5000,
   });
 
+  /** Same live mailbox status Settings Channels uses — never infer from sticky lastError. */
+  const emailStatusQuery = useQuery({
+    queryKey: ["/api/integrations/email/status"],
+    queryFn: () =>
+      fetchJson<{
+        connected?: boolean;
+        mailbox: { syncStatus?: string | null } | null;
+      }>("/api/integrations/email/status"),
+    staleTime: 15_000,
+    refetchInterval: 10_000,
+  });
+
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-outreach"] });
+    void queryClient.invalidateQueries({ queryKey: ["/api/integrations/email/status"] });
   };
 
   const startMutation = useMutation({
@@ -207,7 +229,10 @@ export function ProspectOutreachQueuePanel({
         },
       ),
     onSuccess: () => {
-      toast({ title: "Outreach instructions saved" });
+      toast({
+        title: "Campaign AI guidance saved",
+        description: "Existing personalized drafts were rewritten to match your instructions.",
+      });
       setInstructionsOpen(false);
       invalidate();
     },
@@ -231,16 +256,41 @@ export function ProspectOutreachQueuePanel({
 
   const queueArmed = dash?.queueRunning === true && dash?.queuePaused !== true;
   const queuePaused = dash?.queuePaused === true;
-  const queueIdle = !dash?.queueRunning && !dash?.queuePaused;
   const hasReadyRows = allActiveItems.some((r) => r.queueStatus === "queued");
-  const globalSenderBlocker = useMemo(() => {
-    if (!queuePaused) return false;
-    return allActiveItems.some(
-      (r) =>
-        (r.queueStatus === "queued" || r.queueStatus === "paused") &&
-        isSenderNotConnectedFailure(r.lastError),
-    );
-  }, [allActiveItems, queuePaused]);
+  const hasSendingRows = allActiveItems.some((r) => r.queueStatus === "sending");
+  const mailboxSyncStatus = emailStatusQuery.data?.mailbox?.syncStatus;
+  const mailboxUiConnected =
+    emailStatusQuery.isSuccess && isEmailMailboxUiConnected(mailboxSyncStatus);
+  const campaignNeedsMailbox =
+    hasReadyRows || hasSendingRows || queuePaused || queueArmed;
+  const globalSenderBlocker = shouldShowCampaignEmailReconnectBanner({
+    campaignNeedsMailbox,
+    mailboxSyncStatus,
+    emailStatusKnown: emailStatusQuery.isSuccess,
+  });
+  const primaryControl = resolveProspectCampaignPrimaryControl({
+    queueRunning: dash?.queueRunning === true,
+    paused: queuePaused,
+    activeBatchStatus: dash?.activeBatchStatus ?? null,
+    hasReadyRows,
+  });
+  const campaignLifecycle = resolveProspectCampaignLifecycleStatus({
+    activeBatchStatus: dash?.activeBatchStatus ?? null,
+    queueRunning: dash?.queueRunning === true,
+    paused: queuePaused,
+    mailboxUiConnected,
+    emailStatusKnown: emailStatusQuery.isSuccess,
+    hasReadyRows,
+    hasSendingRows,
+    noActiveRows: allActiveItems.length === 0,
+    hasHistoryRows: allHistoryItems.length > 0,
+  });
+
+  const queueRowErrorLabel = (lastError: string | null | undefined): string => {
+    // Live mailbox health wins over sticky infra lastError until Resume clears it.
+    if (mailboxUiConnected && isSenderNotConnectedFailure(lastError)) return "";
+    return formatProspectQueueItemError(lastError) || "";
+  };
 
   const nextQueuedId = useMemo(() => {
     // Do not show "Sending shortly…" on a Ready row while the campaign is paused.
@@ -319,7 +369,7 @@ export function ProspectOutreachQueuePanel({
       </TableCell>
       <TableCell>{row.attempts}</TableCell>
       <TableCell className="max-w-[140px] truncate text-xs text-red-600">
-        {formatProspectQueueItemError(row.lastError) || ""}
+        {queueRowErrorLabel(row.lastError)}
       </TableCell>
       <TableCell className="whitespace-nowrap">
         {row.historySource === "inbox_outreach" ? (
@@ -532,14 +582,26 @@ export function ProspectOutreachQueuePanel({
         >
           Save limits
         </Button>
-        <div className="ml-auto flex flex-wrap gap-2">
-          {queueIdle && hasReadyRows ? (
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Badge
+            variant="outline"
+            className="capitalize"
+            data-testid="po-campaign-lifecycle"
+          >
+            {PROSPECT_CAMPAIGN_LIFECYCLE_LABELS[campaignLifecycle]}
+          </Badge>
+          {primaryControl === "start" ? (
             <Button
               type="button"
               className="bg-brand-green hover:bg-emerald-700"
-              disabled={startMutation.isPending}
+              disabled={startMutation.isPending || globalSenderBlocker}
               onClick={() => startMutation.mutate()}
               data-testid="po-queue-start"
+              title={
+                globalSenderBlocker
+                  ? PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE
+                  : undefined
+              }
             >
               {startMutation.isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -549,7 +611,7 @@ export function ProspectOutreachQueuePanel({
               {PROSPECT_CAMPAIGN_CONTROL_LABELS.startSending}
             </Button>
           ) : null}
-          {queueArmed ? (
+          {primaryControl === "pause" ? (
             <Button
               type="button"
               variant="outline"
@@ -560,11 +622,11 @@ export function ProspectOutreachQueuePanel({
               <Pause className="mr-2 h-4 w-4" /> {PROSPECT_CAMPAIGN_CONTROL_LABELS.pauseSending}
             </Button>
           ) : null}
-          {queuePaused ? (
+          {primaryControl === "resume" ? (
             <Button
               type="button"
               variant="outline"
-              disabled={resumeMutation.isPending}
+              disabled={resumeMutation.isPending || globalSenderBlocker}
               onClick={() => resumeMutation.mutate()}
               data-testid="po-queue-resume"
               title={
@@ -597,16 +659,15 @@ export function ProspectOutreachQueuePanel({
             Open Channel Settings
           </a>
         </p>
-      ) : queuePaused ? (
-        <p className="text-sm text-amber-700">
-          {PROSPECT_READY_TO_SEND_LABEL} is paused — no new sends until{" "}
-          {PROSPECT_CAMPAIGN_CONTROL_LABELS.resumeSending}.
+      ) : campaignLifecycle === "paused" ? (
+        <p className="text-sm text-amber-700" data-testid="po-queue-paused-banner">
+          Campaign paused — no new sends until {PROSPECT_CAMPAIGN_CONTROL_LABELS.resumeSending}.
         </p>
       ) : null}
-      {queueIdle && hasReadyRows ? (
+      {primaryControl === "start" && hasReadyRows && !globalSenderBlocker ? (
         <p className="text-sm text-amber-800" data-testid="po-queue-waiting-start">
-          Sending is armed off — messages can wait in {PROSPECT_READY_TO_SEND_LABEL}, but nothing
-          sends until you press {PROSPECT_CAMPAIGN_CONTROL_LABELS.startSending}.
+          Draft campaign ready — review messages and press{" "}
+          {PROSPECT_CAMPAIGN_CONTROL_LABELS.startSending} when you want outbound to begin.
         </p>
       ) : null}
 

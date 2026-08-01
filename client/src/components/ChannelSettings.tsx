@@ -47,6 +47,7 @@ import {
   shouldOpenEmailModalFromOAuthReturn,
   stripGmailOAuthCallbackParams,
 } from "@/lib/gmailOAuthReturn";
+import { isEmailMailboxUiConnected } from "@shared/emailMailboxAvailability";
 
 type UnifiedPillKind = "connected" | "needs_attention" | "not_connected" | "test_number" | "error" | "loading";
 
@@ -1012,7 +1013,7 @@ export function ChannelSettings() {
           showReceiveToggle: false,
         };
       }
-      if (syncStatus === "connected" || syncStatus === "syncing") {
+      if (isEmailMailboxUiConnected(syncStatus)) {
         const syncHint =
           syncStatus === "syncing"
             ? " · initial sync in progress"

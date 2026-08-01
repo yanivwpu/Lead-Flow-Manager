@@ -2482,8 +2482,8 @@ export const prospectAiDiscoverySearches = pgTable(
 export type ProspectAiDiscoverySearch = typeof prospectAiDiscoverySearches.$inferSelect;
 
 /**
- * Persisted discovery rows — monthly quota is derived from count(created_at in period)
- * scoped by workspace_user_id.
+ * Persisted discovery rows (UX / Review handoff). Monthly quota is NOT derived from
+ * this mutable table — see prospect_ai_discovery_usage_events.
  */
 export const prospectAiDiscoveryResults = pgTable(
   "prospect_ai_discovery_results",
@@ -2529,6 +2529,42 @@ export const prospectAiDiscoveryResults = pgTable(
 );
 
 export type ProspectAiDiscoveryResult = typeof prospectAiDiscoveryResults.$inferSelect;
+
+/**
+ * Immutable discovery usage ledger — quota is SUM(units) in the billing/calendar period.
+ * Send-to-Review / Campaign / deletes must never remove these events.
+ */
+export const prospectAiDiscoveryUsageEvents = pgTable(
+  "prospect_ai_discovery_usage_events",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    workspaceUserId: varchar("workspace_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    searchId: varchar("search_id").references(() => prospectAiDiscoverySearches.id, {
+      onDelete: "set null",
+    }),
+    resultId: varchar("result_id").references(() => prospectAiDiscoveryResults.id, {
+      onDelete: "set null",
+    }),
+    units: integer("units").notNull().default(1),
+    reason: text("reason").notNull().default("discover"),
+    note: text("note"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    workspaceCreatedIdx: index("prospect_ai_discovery_usage_events_workspace_created_idx").on(
+      t.workspaceUserId,
+      t.createdAt,
+    ),
+    workspaceReasonIdx: index("prospect_ai_discovery_usage_events_workspace_reason_idx").on(
+      t.workspaceUserId,
+      t.reason,
+    ),
+  }),
+);
+
+export type ProspectAiDiscoveryUsageEvent = typeof prospectAiDiscoveryUsageEvents.$inferSelect;
 
 /** Prospect AI conversion outcomes (Won / Lost / pipeline stages). */
 export const prospectAiOutcomes = pgTable(

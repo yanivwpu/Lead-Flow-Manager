@@ -586,6 +586,43 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
         ADD COLUMN IF NOT EXISTS suggested_outreach_subject text`,
     ].join(";\n"),
   },
+  {
+    tag: "0071_prospect_ai_discovery_usage_ledger",
+    sql: [
+      `CREATE TABLE IF NOT EXISTS prospect_ai_discovery_usage_events (
+        id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        search_id varchar REFERENCES prospect_ai_discovery_searches(id) ON DELETE SET NULL,
+        result_id varchar REFERENCES prospect_ai_discovery_results(id) ON DELETE SET NULL,
+        units integer NOT NULL DEFAULT 1,
+        reason text NOT NULL DEFAULT 'discover',
+        note text,
+        created_at timestamp DEFAULT now()
+      )`,
+      `CREATE INDEX IF NOT EXISTS prospect_ai_discovery_usage_events_workspace_created_idx
+        ON prospect_ai_discovery_usage_events (workspace_user_id, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS prospect_ai_discovery_usage_events_workspace_reason_idx
+        ON prospect_ai_discovery_usage_events (workspace_user_id, reason)`,
+      // One aggregated backfill row per search; skip searches that already have discover/backfill events.
+      `INSERT INTO prospect_ai_discovery_usage_events (
+        workspace_user_id, search_id, units, reason, created_at
+      )
+      SELECT
+        r.workspace_user_id,
+        r.search_id,
+        COUNT(*)::integer,
+        'backfill',
+        MIN(r.created_at)
+      FROM prospect_ai_discovery_results r
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM prospect_ai_discovery_usage_events e
+        WHERE e.search_id = r.search_id
+          AND e.reason IN ('discover', 'backfill')
+      )
+      GROUP BY r.workspace_user_id, r.search_id`,
+    ].join(";\n"),
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {

@@ -24,6 +24,33 @@ export function isSenderNotConnectedFailure(reason: string | null | undefined): 
 }
 
 /**
+ * After live mailbox validation succeeds, clear only campaign-scoped sender disconnect
+ * sticky errors on Ready/Paused rows. Recipient-specific failures are preserved.
+ */
+export function shouldClearStaleSenderNotConnectedLastError(
+  lastError: string | null | undefined,
+): boolean {
+  return isSenderNotConnectedFailure(lastError);
+}
+
+/** Pure filter used by Resume/Start cleanup + unit tests. */
+export function filterQueueItemsForStaleSenderErrorClear<
+  T extends {
+    lastError?: string | null;
+    queueStatus?: string | null;
+    senderMailboxId?: string | null;
+  },
+>(items: T[], mailboxId: string): T[] {
+  return items.filter((item) => {
+    const status = String(item.queueStatus || "");
+    if (status !== "queued" && status !== "paused") return false;
+    if (!shouldClearStaleSenderNotConnectedLastError(item.lastError)) return false;
+    const rowMailbox = item.senderMailboxId ? String(item.senderMailboxId) : "";
+    return !rowMailbox || rowMailbox === mailboxId;
+  });
+}
+
+/**
  * Classify a send/eligibility failure for campaign control decisions.
  * Unknown errors default to prospect-scoped so one bad row cannot pause the campaign.
  */

@@ -4,7 +4,7 @@
  * Sending goes through existing channelService / EmailProspectOutreachSender.
  */
 
-import { and, desc, eq, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import {
   contacts,
   prospectIntelligence,
@@ -25,6 +25,7 @@ import {
   normalizeRecipientIdentity,
   prospectBulkOutreachLog,
   prospectOutreachEligibilityReasonLabel,
+  type ProspectOutreachBatchStatus,
   type ProspectOutreachBatchSummary,
   type ProspectOutreachChannel,
   type ProspectOutreachPreferredChannel,
@@ -220,6 +221,22 @@ export async function updateOutreachSettings(
       },
     });
 
+  // Campaign AI Instructions are a rewrite layer over existing personalized drafts.
+  if (shouldPersistInstructions) {
+    try {
+      const { rewriteQueuedOutreachDrafts } = await import("./prospectOutreachDraftRewriteService");
+      await rewriteQueuedOutreachDrafts({
+        workspaceUserId,
+        instructions: nextInstructions,
+      });
+    } catch (err) {
+      console.error(
+        "[ProspectBulkOutreach] draft rewrite after instructions save failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   return {
     ...nextCore,
     outreachInstructions: nextInstructions,
@@ -381,12 +398,19 @@ export async function createQueueBatch(params: {
   });
 
   const connections = await loadWorkspaceChannelConnections(workspaceUserId);
+
+  // New campaigns are Draft — never inherit sticky Pause from a prior infra failure.
+  await updateOutreachSettings(workspaceUserId, {
+    queueRunning: false,
+    paused: false,
+  });
+
   const [batch] = await db
     .insert(prospectOutreachBatches)
     .values({
       workspaceUserId,
       createdByUserId: params.createdByUserId,
-      status: "queued",
+      status: "draft",
       preferredChannel: preferred,
       selectedCount: preview.selectedCount,
       queuedCount: 0,
@@ -405,7 +429,7 @@ export async function createQueueBatch(params: {
       prospectBulkOutreachLog("queue_batch_created", {
         workspaceId: workspaceUserId,
         batchId: batch.id,
-        status: "queued",
+        status: "draft",
         selectedChannel: preferred,
       }),
     ),
@@ -636,7 +660,11 @@ export async function listQueueItems(params?: {
     .from(prospectOutreachQueueItems)
     .leftJoin(contacts, eq(contacts.id, prospectOutreachQueueItems.contactId))
     .where(and(...conditions))
-    .orderBy(desc(prospectOutreachQueueItems.createdAt))
+    // Match worker claim order: earliest scheduledAt sends first (top of Campaigns list).
+    .orderBy(
+      asc(prospectOutreachQueueItems.scheduledAt),
+      asc(prospectOutreachQueueItems.createdAt),
+    )
     .limit(limit);
 
   const queueItems = rows.map((r) => mapQueueItem(r.item, r.name));
@@ -760,6 +788,19 @@ export async function getQueueDashboard(
     }
   }
 
+  const activeBatches = await db
+    .select()
+    .from(prospectOutreachBatches)
+    .where(
+      and(
+        eq(prospectOutreachBatches.workspaceUserId, wid),
+        inArray(prospectOutreachBatches.status, ["draft", "queued", "running", "paused"]),
+      ),
+    )
+    .orderBy(desc(prospectOutreachBatches.createdAt))
+    .limit(1);
+  const activeBatch = activeBatches[0] ?? null;
+
   return {
     queued,
     sending,
@@ -771,6 +812,8 @@ export async function getQueueDashboard(
     settings,
     queuePaused: settings.paused,
     queueRunning: settings.queueRunning,
+    activeBatchId: activeBatch?.id ?? null,
+    activeBatchStatus: (activeBatch?.status as ProspectOutreachBatchStatus) ?? null,
   };
 }
 
@@ -915,6 +958,15 @@ export async function pauseQueue(workspaceUserId: string): Promise<ProspectOutre
     paused: flags.paused,
     queueRunning: flags.queueRunning,
   });
+  await db
+    .update(prospectOutreachBatches)
+    .set({ status: "paused" })
+    .where(
+      and(
+        eq(prospectOutreachBatches.workspaceUserId, workspaceUserId),
+        inArray(prospectOutreachBatches.status, ["running", "queued"]),
+      ),
+    );
   console.info(
     JSON.stringify(
       prospectBulkOutreachLog("queue_paused", {
@@ -927,14 +979,14 @@ export async function pauseQueue(workspaceUserId: string): Promise<ProspectOutre
   return settings;
 }
 
-async function assertLiveEmailSenderForCampaignArm(workspaceUserId: string): Promise<void> {
+async function assertLiveEmailSenderForCampaignArm(workspaceUserId: string): Promise<string> {
   const { resolveEmailSenderForBulkOutreach } = await import("./prospectOutreachEligibilityService");
   const {
     PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE,
     PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE,
   } = await import("@shared/prospectBulkOutreach");
   const email = await resolveEmailSenderForBulkOutreach(workspaceUserId);
-  if (email.emailConnected && email.emailMailboxId) return;
+  if (email.emailConnected && email.emailMailboxId) return email.emailMailboxId;
   const cls = String(email.failureClass || "").toLowerCase();
   if (
     cls === "decrypt" ||
@@ -946,6 +998,30 @@ async function assertLiveEmailSenderForCampaignArm(workspaceUserId: string): Pro
     throw new Error(PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE);
   }
   throw new Error(PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE);
+}
+
+/**
+ * After live sender validation succeeds, drop sticky sender_not_connected:* on Ready/Paused
+ * rows for this mailbox. Preserve recipient-specific and unrelated failures.
+ */
+async function clearStaleSenderNotConnectedQueueErrors(
+  workspaceUserId: string,
+  mailboxId: string,
+): Promise<void> {
+  await db
+    .update(prospectOutreachQueueItems)
+    .set({ lastError: null, updatedAt: new Date() })
+    .where(
+      and(
+        eq(prospectOutreachQueueItems.workspaceUserId, workspaceUserId),
+        inArray(prospectOutreachQueueItems.queueStatus, ["queued", "paused"]),
+        or(
+          eq(prospectOutreachQueueItems.senderMailboxId, mailboxId),
+          isNull(prospectOutreachQueueItems.senderMailboxId),
+        ),
+        sql`${prospectOutreachQueueItems.lastError} ~* '^sender_not_connected\\b'`,
+      ),
+    );
 }
 
 /**
@@ -1043,7 +1119,8 @@ async function handleSenderNotConnectedInfraPause(params: {
 
 export async function resumeQueue(workspaceUserId: string): Promise<ProspectOutreachWorkspaceSettings> {
   // Refuse to clear pause when mailbox still cannot send — prevents resume/pause loops.
-  await assertLiveEmailSenderForCampaignArm(workspaceUserId);
+  const mailboxId = await assertLiveEmailSenderForCampaignArm(workspaceUserId);
+  await clearStaleSenderNotConnectedQueueErrors(workspaceUserId, mailboxId);
 
   const flags = nextProspectQueueControlFlags("resume", {});
   const settings = await updateOutreachSettings(workspaceUserId, {
@@ -1066,7 +1143,7 @@ export async function resumeQueue(workspaceUserId: string): Promise<ProspectOutr
     .where(
       and(
         eq(prospectOutreachBatches.workspaceUserId, workspaceUserId),
-        inArray(prospectOutreachBatches.status, ["paused", "queued"]),
+        inArray(prospectOutreachBatches.status, ["draft", "paused", "queued"]),
       ),
     );
   await armQueueAndWake(workspaceUserId, "resume_queue");
@@ -1075,7 +1152,8 @@ export async function resumeQueue(workspaceUserId: string): Promise<ProspectOutr
 
 export async function startQueue(workspaceUserId: string): Promise<ProspectOutreachWorkspaceSettings> {
   // Fail closed before arming: never claim/send without a live outbound mailbox.
-  await assertLiveEmailSenderForCampaignArm(workspaceUserId);
+  const mailboxId = await assertLiveEmailSenderForCampaignArm(workspaceUserId);
+  await clearStaleSenderNotConnectedQueueErrors(workspaceUserId, mailboxId);
 
   const flags = nextProspectQueueControlFlags("start", {});
   const settings = await updateOutreachSettings(workspaceUserId, {
@@ -1098,7 +1176,7 @@ export async function startQueue(workspaceUserId: string): Promise<ProspectOutre
     .where(
       and(
         eq(prospectOutreachBatches.workspaceUserId, workspaceUserId),
-        inArray(prospectOutreachBatches.status, ["queued", "paused"]),
+        inArray(prospectOutreachBatches.status, ["draft", "queued", "paused"]),
       ),
     );
   await armQueueAndWake(workspaceUserId, "start_queue");

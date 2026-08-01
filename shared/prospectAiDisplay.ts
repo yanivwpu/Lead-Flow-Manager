@@ -332,8 +332,9 @@ export function buildCampaignsAiAssistantModel(
   if (failed > 0) {
     nextAction =
       failed === 1 ? "Review 1 failed message." : `Review ${failed} failed messages.`;
-  } else if (input.queuePaused) nextAction = "Resume Sending.";
-  else if (queued > 0 && !input.queueRunning) nextAction = "Start Sending.";
+  } else if (queued > 0 && input.queuePaused && input.queueRunning) {
+    nextAction = "Resume Sending.";
+  } else if (queued > 0 && !input.queueRunning) nextAction = "Start Sending.";
   else if (queued > 0 && input.queueRunning) nextAction = "Monitor replies in Inbox.";
   else nextAction = "Send qualified prospects from Review.";
 

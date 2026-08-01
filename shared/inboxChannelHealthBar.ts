@@ -3,6 +3,8 @@
  * Status for Email mirrors Settings (`/api/integrations/email/status` / mailbox syncStatus).
  */
 
+import { isEmailMailboxUiConnected } from "./emailMailboxAvailability";
+
 export const INBOX_CHANNEL_HEALTH_ORDER = [
   "whatsapp",
   "facebook",
@@ -73,7 +75,7 @@ export function emailStatusToChannelHealthEntry(
 
   const sync = String(status.mailbox.syncStatus || "");
   const needsAttention = sync === "needs_reconnect" || sync === "error";
-  const syncingOrOk = sync === "connected" || sync === "syncing";
+  const syncingOrOk = isEmailMailboxUiConnected(sync);
 
   return {
     channel: "email",

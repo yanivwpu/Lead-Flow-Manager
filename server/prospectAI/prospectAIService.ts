@@ -1,12 +1,14 @@
-import { and, count, desc, eq, gte, inArray, isNull } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import type { SubscriptionPlan } from "@shared/schema";
 import {
   campaignEnrollments,
   prospectAiActivations,
   prospectAiDiscoveryResults,
   prospectAiDiscoverySearches,
+  prospectAiDiscoveryUsageEvents,
   prospectIntelligence,
   prospectOutreachQueueItems,
+  users,
 } from "@shared/schema";
 import {
   PROSPECT_AI_DEFAULT_PROVIDER,
@@ -99,21 +101,110 @@ function numOrNull(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * Billing-period start for discovery quota. Prefer Stripe/user period when active;
+ * otherwise UTC calendar month. Never tied to Review/Campaign row mutations.
+ */
+export async function resolveDiscoveryQuotaPeriodStart(
+  workspaceUserId: string,
+  now = new Date(),
+): Promise<{ periodStart: Date; source: "billing_period" | "utc_month" }> {
+  const rows = await db
+    .select({
+      currentPeriodStart: users.currentPeriodStart,
+      currentPeriodEnd: users.currentPeriodEnd,
+    })
+    .from(users)
+    .where(eq(users.id, workspaceUserId))
+    .limit(1);
+  const start = rows[0]?.currentPeriodStart ? new Date(rows[0].currentPeriodStart) : null;
+  const end = rows[0]?.currentPeriodEnd ? new Date(rows[0].currentPeriodEnd) : null;
+  if (
+    start &&
+    !Number.isNaN(start.getTime()) &&
+    end &&
+    !Number.isNaN(end.getTime()) &&
+    now <= end
+  ) {
+    return { periodStart: start, source: "billing_period" };
+  }
+  return { periodStart: startOfUtcMonth(now), source: "utc_month" };
+}
+
+/** Immutable ledger sum for the active quota period. */
 export async function countMonthlyDiscoveryUsage(
   workspaceUserId: string,
   now = new Date(),
 ): Promise<number> {
-  const since = startOfUtcMonth(now);
-  const rows = await db
+  const { periodStart } = await resolveDiscoveryQuotaPeriodStart(workspaceUserId, now);
+
+  const [ledgerPresence] = await db
     .select({ total: count() })
-    .from(prospectAiDiscoveryResults)
+    .from(prospectAiDiscoveryUsageEvents)
+    .where(eq(prospectAiDiscoveryUsageEvents.workspaceUserId, workspaceUserId));
+
+  // Pre-migration safety: if ledger empty for workspace, fall back to result rows.
+  if (Number(ledgerPresence?.total ?? 0) === 0) {
+    const rows = await db
+      .select({ total: count() })
+      .from(prospectAiDiscoveryResults)
+      .where(
+        and(
+          eq(prospectAiDiscoveryResults.workspaceUserId, workspaceUserId),
+          gte(prospectAiDiscoveryResults.createdAt, periodStart),
+        ),
+      );
+    return Math.max(0, Number(rows[0]?.total ?? 0));
+  }
+
+  const rows = await db
+    .select({
+      total: sql<number>`coalesce(sum(${prospectAiDiscoveryUsageEvents.units}), 0)`,
+    })
+    .from(prospectAiDiscoveryUsageEvents)
     .where(
       and(
-        eq(prospectAiDiscoveryResults.workspaceUserId, workspaceUserId),
-        gte(prospectAiDiscoveryResults.createdAt, since),
+        eq(prospectAiDiscoveryUsageEvents.workspaceUserId, workspaceUserId),
+        gte(prospectAiDiscoveryUsageEvents.createdAt, periodStart),
       ),
     );
-  return Number(rows[0]?.total ?? 0);
+  return Math.max(0, Number(rows[0]?.total ?? 0));
+}
+
+/** Explicit admin/manual adjustment — never delete ledger rows to "reset". */
+export async function recordDiscoveryUsageAdjustment(params: {
+  workspaceUserId: string;
+  units: number;
+  note?: string;
+}): Promise<void> {
+  const units = Math.trunc(Number(params.units) || 0);
+  if (!units) return;
+  await db.insert(prospectAiDiscoveryUsageEvents).values({
+    workspaceUserId: params.workspaceUserId,
+    units,
+    reason: "admin_adjustment",
+    note: params.note ? String(params.note).slice(0, 500) : null,
+  });
+}
+
+/** One immutable ledger row per net-new usable result (units=1). No-op when empty. */
+async function recordDiscoveryUsageEventsForResults(params: {
+  workspaceUserId: string;
+  searchId: string;
+  resultIds: string[];
+  reason?: string;
+}): Promise<void> {
+  const ids = Array.from(new Set(params.resultIds.filter(Boolean)));
+  if (!ids.length) return;
+  await db.insert(prospectAiDiscoveryUsageEvents).values(
+    ids.map((resultId) => ({
+      workspaceUserId: params.workspaceUserId,
+      searchId: params.searchId,
+      resultId,
+      units: 1,
+      reason: params.reason || "discover",
+    })),
+  );
 }
 
 export async function resolveAiBrainSourceFlags(
@@ -610,6 +701,15 @@ export async function discoverProspects(
         )
         .returning();
     }
+
+    // Immutable quota: exactly one ledger event per net-new usable inserted row.
+    // Duplicates/rejected/possible-duplicates never reach `inserted` → no usage event.
+    await recordDiscoveryUsageEventsForResults({
+      workspaceUserId,
+      searchId: search.id,
+      resultIds: inserted.map((r) => r.id),
+      reason: "discover",
+    });
 
     const nextQuota = await buildQuotaSnapshot(workspaceUserId, plan);
     const diagnosticsOut = safeDiagnostics

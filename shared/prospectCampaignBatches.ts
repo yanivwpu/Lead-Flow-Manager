@@ -97,7 +97,14 @@ export function partitionProspectCampaignItems(params: {
     }
     // cancelled / skipped / unknown — omit from both (not actionable, not sent history)
   }
-  activeItems.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+  // Top of list = first to send (scheduledAt ASC). Must match worker claim order.
+  activeItems.sort((a, b) => {
+    const aSched = String(a.scheduledAt || a.createdAt || "");
+    const bSched = String(b.scheduledAt || b.createdAt || "");
+    const bySched = aSched.localeCompare(bSched);
+    if (bySched !== 0) return bySched;
+    return String(a.createdAt || "").localeCompare(String(b.createdAt || ""));
+  });
   historyItems.sort((a, b) => {
     const at = a.sentAt || a.createdAt || "";
     const bt = b.sentAt || b.createdAt || "";

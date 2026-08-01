@@ -73,8 +73,9 @@ run("persist on discover; restore via getActive; discard without refund", () => 
   assert.ok(serviceSrc.includes("PROSPECT_AI_DISCOVERY_STATUS_DISCARDED"));
   assert.ok(serviceSrc.includes("active_batch_exists"));
   assert.ok(serviceSrc.includes("replaceActiveBatch"));
-  // Quota still counted from discovery_results inserts (not on restore).
+  // Quota from immutable ledger events at discover time (not on restore / Review).
   assert.ok(serviceSrc.includes("countMonthlyDiscoveryUsage"));
+  assert.ok(serviceSrc.includes("recordDiscoveryUsageEventsForResults"));
   assert.ok(serviceSrc.includes("isNull(prospectAiDiscoveryResults.sentToReviewAt)"));
 });
 

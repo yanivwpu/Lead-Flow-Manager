@@ -408,6 +408,9 @@ export type ProspectOutreachQueueDashboard = {
   settings: ProspectOutreachWorkspaceSettings;
   queuePaused: boolean;
   queueRunning: boolean;
+  /** Latest non-completed batch (for Draft vs Running controls). */
+  activeBatchId?: string | null;
+  activeBatchStatus?: ProspectOutreachBatchStatus | null;
 };
 
 export type ProspectBulkAnalysisJobSummary = {

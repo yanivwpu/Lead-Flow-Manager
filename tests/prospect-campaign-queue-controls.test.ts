@@ -102,6 +102,11 @@ import {
   assert.ok(panelSrc.includes("po-queue-sender-blocker"));
   assert.ok(panelSrc.includes("queueArmed"));
   assert.ok(panelSrc.includes("globalSenderBlocker"));
+  assert.ok(panelSrc.includes("shouldShowCampaignEmailReconnectBanner"));
+  assert.ok(panelSrc.includes('"/api/integrations/email/status"'));
+  assert.ok(panelSrc.includes("resolveProspectCampaignPrimaryControl"));
+  assert.ok(panelSrc.includes("primaryControl === \"start\""));
+  assert.ok(panelSrc.includes("primaryControl === \"resume\""));
 }
 
 // Resume semantics: clear pause + restagger so first item is soon due
