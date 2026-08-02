@@ -41,6 +41,7 @@ import {
 } from "@/lib/shopifyCheckout";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
+import type { WebsiteKnowledgeSourceEntry } from "@shared/websiteKnowledgeSources";
 
 interface AISettings {
   aiMode: string;
@@ -60,6 +61,7 @@ interface BusinessKnowledge {
   websiteKnowledgeUrl?: string | null;
   websiteKnowledgeSummary?: string | null;
   websiteKnowledgeSourceUrls?: string[] | null;
+  websiteKnowledgeSources?: WebsiteKnowledgeSourceEntry[] | null;
   websiteKnowledgeUpdatedAt?: string | null;
 }
 
@@ -553,10 +555,17 @@ function AIBrainContent() {
     if (!businessKnowledge || typeof businessKnowledge !== "object") return;
     if (wkPhase === "scanning" || wkPhase === "scanned" || wkPhase === "failed") return;
     const k = businessKnowledge as BusinessKnowledge;
-    setWkUrls({
-      ...WK_URLS_INITIAL,
-      homepage: k.websiteKnowledgeUrl || "",
-    });
+    // Rehydrate every saved source, not just the homepage — otherwise the next scan
+    // silently drops the pages the user cannot see in the form.
+    const savedSources = Array.isArray(k.websiteKnowledgeSources) ? k.websiteKnowledgeSources : [];
+    const restored = { ...WK_URLS_INITIAL };
+    for (const entry of savedSources) {
+      if (entry && typeof entry.url === "string" && entry.key in restored) {
+        restored[entry.key as keyof WkUrlsState] = entry.url;
+      }
+    }
+    if (!restored.homepage && k.websiteKnowledgeUrl) restored.homepage = k.websiteKnowledgeUrl;
+    setWkUrls(restored);
     setWkPreview(websiteKnowledgePreviewToString(k.websiteKnowledgeSummary));
     setWkSources(
       Array.isArray(k.websiteKnowledgeSourceUrls)
@@ -621,6 +630,8 @@ function AIBrainContent() {
           termsUrl: urls.terms.trim(),
           privacyPolicyUrl: urls.privacy.trim(),
           otherUrl: urls.other.trim(),
+          // This client sends every slot it knows about, so a blank slot is a removal.
+          sourcesComplete: true,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -1283,6 +1294,7 @@ function AIBrainContent() {
                   {wkPhase === "idle" && !websiteKnowledgeSaved && (
                     <p className="text-slate-600">
                       Paste the public https URLs you want to include, then scan. Empty rows are skipped.
+                      Saved URLs stay here and are rescanned together whenever you add a new one.
                     </p>
                   )}
                 </div>
@@ -1323,7 +1335,7 @@ function AIBrainContent() {
 
                 <div className="space-y-1.5">
                   <Label htmlFor="wk-preview" className="text-xs font-medium text-muted-foreground">
-                    Preview (edit before saving)
+                    Generated knowledge preview — not saved until you save it below
                   </Label>
                   <Textarea
                     id="wk-preview"
@@ -1336,9 +1348,16 @@ function AIBrainContent() {
                   />
                 </div>
 
+                {wkPhase === "scanned" && (
+                  <p className="text-xs text-amber-700">
+                    Saving replaces the entire saved summary with this text. Your saved page URLs
+                    above are kept and rescanned together next time.
+                  </p>
+                )}
+
                 {wkSources.length > 0 && (
                   <div className="space-y-1">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Sources scanned</p>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Pages fetched in the last scan</p>
                     <ul className="max-h-24 space-y-0.5 overflow-y-auto text-xs text-violet-900/80">
                       {wkSources.map((u) => (
                         <li key={u} className="truncate font-mono">

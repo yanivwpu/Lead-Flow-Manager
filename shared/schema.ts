@@ -1468,6 +1468,11 @@ export const aiBusinessKnowledge = pgTable("ai_business_knowledge", {
   websiteKnowledgeSummary: text("website_knowledge_summary"),
   /** URLs actually fetched during last successful save. */
   websiteKnowledgeSourceUrls: jsonb("website_knowledge_source_urls").default(sql`'[]'::jsonb`),
+  /**
+   * Guided source URLs the user entered, one entry per slot (`WebsiteKnowledgeSourceEntry`).
+   * Persisted so rescans stay additive; migrates 1:1 into the V2 sources table.
+   */
+  websiteKnowledgeSources: jsonb("website_knowledge_sources").notNull().default(sql`'[]'::jsonb`),
   /** When website knowledge summary was last saved. */
   websiteKnowledgeUpdatedAt: timestamp("website_knowledge_updated_at"),
   /** Workspace master switch for public MLS listing share pages. */

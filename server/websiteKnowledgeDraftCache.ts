@@ -1,11 +1,14 @@
 import { randomUUID } from "crypto";
+import type { WebsiteKnowledgeSourceEntry } from "@shared/websiteKnowledgeSources";
 
 /** Short-lived server-side binding between a scan result and the authenticated user (V1). */
 type Draft = {
   userId: string;
-  url: string;
+  /** Homepage result only; null means "keep whatever the workspace already has". */
+  url: string | null;
   summary: string;
   sourceUrls: string[];
+  sources: WebsiteKnowledgeSourceEntry[];
   createdAt: number;
 };
 
@@ -36,7 +39,7 @@ export function putWebsiteKnowledgeDraft(d: Omit<Draft, "createdAt">): string {
 export function takeWebsiteKnowledgeDraft(
   scanId: string,
   userId: string,
-): { url: string; summary: string; sourceUrls: string[] } | null {
+): Omit<Draft, "userId" | "createdAt"> | null {
   prune();
   const d = drafts.get(scanId);
   if (!d) return null;
@@ -46,5 +49,5 @@ export function takeWebsiteKnowledgeDraft(
   }
   if (d.userId !== userId) return null;
   drafts.delete(scanId);
-  return { url: d.url, summary: d.summary, sourceUrls: d.sourceUrls };
+  return { url: d.url, summary: d.summary, sourceUrls: d.sourceUrls, sources: d.sources };
 }

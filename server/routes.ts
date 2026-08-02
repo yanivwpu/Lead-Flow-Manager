@@ -137,6 +137,15 @@ import {
   WebsiteKnowledgeScrapeError,
 } from "./websiteKnowledgeScraper";
 import { putWebsiteKnowledgeDraft, takeWebsiteKnowledgeDraft } from "./websiteKnowledgeDraftCache";
+import {
+  WEBSITE_KNOWLEDGE_SLOTS,
+  applyScanResultsToSources,
+  mergeWebsiteKnowledgeSources,
+  parseWebsiteKnowledgeSources,
+  resolveCanonicalWebsiteUrl,
+  sourcesFromLegacyRow,
+  type WebsiteKnowledgeSlotKey,
+} from "@shared/websiteKnowledgeSources";
 import { finalizeWebsiteKnowledgeSummaryText } from "./websiteKnowledgeSummaryNormalize";
 import { getUncachableStripeClient } from "./stripeClient";
 import { sanitizeStripeReturnPath } from "./checkoutReturnPath";
@@ -10703,26 +10712,36 @@ export async function registerRoutes(
       if (!(await requireAiBrainPremium(req, res))) return;
 
       const body = (req.body || {}) as Record<string, unknown>;
-      const slotDefs = [
-        { key: "homepage", label: "Homepage", bodyKey: "homepageUrl" },
-        { key: "productServices", label: "Product / Services", bodyKey: "productServicesUrl" },
-        { key: "about", label: "About", bodyKey: "aboutUrl" },
-        { key: "faq", label: "FAQ", bodyKey: "faqUrl" },
-        { key: "shippingPolicy", label: "Shipping policy", bodyKey: "shippingPolicyUrl" },
-        { key: "returnPolicy", label: "Return policy", bodyKey: "returnPolicyUrl" },
-        { key: "terms", label: "Terms", bodyKey: "termsUrl" },
-        { key: "privacy", label: "Privacy policy", bodyKey: "privacyPolicyUrl" },
-        { key: "other", label: "Other", bodyKey: "otherUrl" },
-      ] as const;
 
-      const slots = slotDefs.map((def) => ({
-        key: def.key,
-        label: def.label,
-        urlRaw: typeof body[def.bodyKey] === "string" ? (body[def.bodyKey] as string) : "",
+      // Scan the saved sources plus whatever the form submitted, so adding one URL
+      // never drops the pages that were scanned before.
+      const existingRow = await storage.getAiBusinessKnowledge(req.user.id);
+      const savedSources = (() => {
+        const parsed = parseWebsiteKnowledgeSources(existingRow?.websiteKnowledgeSources);
+        if (parsed.length > 0) return parsed;
+        return sourcesFromLegacyRow({
+          websiteKnowledgeUrl: existingRow?.websiteKnowledgeUrl,
+          websiteKnowledgeUpdatedAt: existingRow?.websiteKnowledgeUpdatedAt,
+        });
+      })();
+
+      const incoming: Partial<Record<WebsiteKnowledgeSlotKey, string>> = {};
+      for (const def of WEBSITE_KNOWLEDGE_SLOTS) {
+        if (typeof body[def.bodyKey] === "string") incoming[def.key] = body[def.bodyKey] as string;
+      }
+      const mergedSources = mergeWebsiteKnowledgeSources({
+        saved: savedSources,
+        incoming,
+        incomingIsComplete: body.sourcesComplete === true,
+      });
+
+      const slots = mergedSources.map((s) => ({
+        key: s.key,
+        label: s.label,
+        urlRaw: s.url,
       }));
 
-      const anyProvided = slots.some((s) => s.urlRaw.trim());
-      if (!anyProvided) {
+      if (slots.length === 0) {
         return res.status(400).json({
           error: "Provide at least one URL to scan.",
           code: "NO_URLS",
@@ -10766,20 +10785,23 @@ export async function registerRoutes(
       fetch('http://127.0.0.1:7685/ingest/8d1a6f78-45f6-49bc-ab00-dc30a369dc35',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6d3212'},body:JSON.stringify({sessionId:'6d3212',runId:'run1',hypothesisId:'C',location:'server/routes.ts:10762 website-knowledge/scan after summarize',message:'LLM summary price retention',data:{summaryLen:summary.length,summaryPriceCount:(summary.match(/\$\s?\d[\d.,]*/g)||[]).length,summarySamplePrices:(summary.match(/\$\s?\d[\d.,]*/g)||[]).slice(0,20),mentionsPricingWord:/pric|month|plan|\$/i.test(summary),summaryHead:summary.slice(0,600),summaryTail:summary.slice(-400)},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
 
-      const homepageScanned = pageResults.find((r) => r.key === "homepage" && r.status === "scanned");
-      const primaryUrl = homepageScanned?.finalUrl ?? pages[0]?.url ?? "";
+      const primaryUrl = resolveCanonicalWebsiteUrl(pageResults);
+
+      const scannedSources = applyScanResultsToSources(mergedSources, pageResults);
 
       const scanId = putWebsiteKnowledgeDraft({
         userId: req.user.id,
         url: primaryUrl,
         summary,
         sourceUrls: pages.map((p) => p.url),
+        sources: scannedSources,
       });
 
       res.json({
         scanId,
         previewSummary: summary,
         sourceUrls: pages.map((p) => p.url),
+        sources: scannedSources,
         pageResults,
       });
     } catch (error) {
@@ -10816,12 +10838,15 @@ export async function registerRoutes(
         summaryText = summaryText.slice(0, 8000);
       }
 
-      await storage.upsertAiBusinessKnowledge(req.user.id, {
-        websiteKnowledgeUrl: draft.url,
+      const updates: Parameters<typeof storage.upsertAiBusinessKnowledge>[1] = {
         websiteKnowledgeSummary: summaryText,
         websiteKnowledgeSourceUrls: draft.sourceUrls,
+        websiteKnowledgeSources: draft.sources,
         websiteKnowledgeUpdatedAt: new Date(),
-      });
+      };
+      // Only a scanned Homepage may move the canonical website URL; otherwise keep the existing one.
+      if (draft.url) updates.websiteKnowledgeUrl = draft.url;
+      await storage.upsertAiBusinessKnowledge(req.user.id, updates);
 
       const row = await storage.getAiBusinessKnowledge(req.user.id);
       // #region agent log
@@ -10832,6 +10857,7 @@ export async function registerRoutes(
         websiteKnowledgeUrl: row?.websiteKnowledgeUrl ?? null,
         websiteKnowledgeSummary: row?.websiteKnowledgeSummary ?? null,
         websiteKnowledgeSourceUrls: row?.websiteKnowledgeSourceUrls ?? [],
+        websiteKnowledgeSources: parseWebsiteKnowledgeSources(row?.websiteKnowledgeSources),
         websiteKnowledgeUpdatedAt: row?.websiteKnowledgeUpdatedAt ?? null,
       });
     } catch (error) {
@@ -10881,10 +10907,12 @@ export async function registerRoutes(
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       if (!(await requireAiBrainPremium(req, res))) return;
 
+      // Explicit user-initiated removal is the only path that clears saved sources.
       await storage.upsertAiBusinessKnowledge(req.user.id, {
         websiteKnowledgeUrl: null,
         websiteKnowledgeSummary: null,
         websiteKnowledgeSourceUrls: [],
+        websiteKnowledgeSources: [],
         websiteKnowledgeUpdatedAt: null,
       });
 

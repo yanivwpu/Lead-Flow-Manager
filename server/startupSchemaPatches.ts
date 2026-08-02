@@ -587,6 +587,11 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
     ].join(";\n"),
   },
   {
+    tag: "0072_ai_website_knowledge_sources",
+    sql: `ALTER TABLE ai_business_knowledge
+      ADD COLUMN IF NOT EXISTS website_knowledge_sources jsonb NOT NULL DEFAULT '[]'::jsonb`,
+  },
+  {
     tag: "0071_prospect_ai_discovery_usage_ledger",
     sql: [
       `CREATE TABLE IF NOT EXISTS prospect_ai_discovery_usage_events (
