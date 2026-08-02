@@ -146,6 +146,8 @@ import {
   sourcesFromLegacyRow,
   type WebsiteKnowledgeSlotKey,
 } from "@shared/websiteKnowledgeSources";
+// TEMPORARY [WK-DIAG] instrumentation — remove with the pricing investigation.
+import { newWkTrace, priceSignals, safePath, wkDiag } from "./websiteKnowledgeDiagnostics";
 import { finalizeWebsiteKnowledgeSummaryText } from "./websiteKnowledgeSummaryNormalize";
 import { getUncachableStripeClient } from "./stripeClient";
 import { sanitizeStripeReturnPath } from "./checkoutReturnPath";
@@ -10712,6 +10714,7 @@ export async function registerRoutes(
       if (!(await requireAiBrainPremium(req, res))) return;
 
       const body = (req.body || {}) as Record<string, unknown>;
+      const wkTrace = newWkTrace();
 
       // Scan the saved sources plus whatever the form submitted, so adding one URL
       // never drops the pages that were scanned before.
@@ -10776,13 +10779,45 @@ export async function registerRoutes(
 
       const combined = combineScrapedText(pages);
       // #region agent log
-      fetch('http://127.0.0.1:7685/ingest/8d1a6f78-45f6-49bc-ab00-dc30a369dc35',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6d3212'},body:JSON.stringify({sessionId:'6d3212',runId:'run1',hypothesisId:'A,B',location:'server/routes.ts:10759 website-knowledge/scan after combine',message:'scraped pages + combined text price coverage',data:{pages:pages.map((p)=>({key:p.key,url:String(p.url).slice(0,160),len:p.text.length,truncated:!!p.truncated,priceCount:(p.text.match(/\$\s?\d[\d.,]*/g)||[]).length,samplePrices:(p.text.match(/\$\s?\d[\d.,]*/g)||[]).slice(0,12)})),combinedLen:combined.length,combinedPriceCount:(combined.match(/\$\s?\d[\d.,]*/g)||[]).length,combinedSamplePrices:(combined.match(/\$\s?\d[\d.,]*/g)||[]).slice(0,20),combinedHitCap:combined.length>=94_000,sectionHeaders:(combined.match(/--- [^\n]{0,120} ---/g)||[]).slice(0,12)},timestamp:Date.now()})}).catch(()=>{});
+      wkDiag("stage_1_scrape", {
+        trace: wkTrace,
+        userId: req.user.id,
+        pages: pages.map((p) => {
+          const sig = priceSignals(p.text);
+          return {
+            slot: p.key,
+            path: safePath(p.url),
+            chars: sig.chars,
+            truncated: !!p.truncated,
+            priceCount: sig.priceCount,
+            priceTokens: sig.priceTokens,
+            planNames: sig.planNames,
+          };
+        }),
+        pageResults: pageResults.map((r) => ({
+          slot: r.key,
+          status: r.status,
+          reason: r.reason ? String(r.reason).slice(0, 80) : undefined,
+        })),
+      });
+      wkDiag("stage_2_combine", {
+        trace: wkTrace,
+        userId: req.user.id,
+        ...priceSignals(combined),
+        hitCombinedCap: combined.length >= 94_000,
+        includedSlots: pages.map((p) => p.key),
+      });
       // #endregion
       const { aiService } = await import("./aiService");
       const summaryRaw = await aiService.summarizeWebsiteKnowledgeForBrain(combined);
       const summary = finalizeWebsiteKnowledgeSummaryText(summaryRaw);
       // #region agent log
-      fetch('http://127.0.0.1:7685/ingest/8d1a6f78-45f6-49bc-ab00-dc30a369dc35',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6d3212'},body:JSON.stringify({sessionId:'6d3212',runId:'run1',hypothesisId:'C',location:'server/routes.ts:10762 website-knowledge/scan after summarize',message:'LLM summary price retention',data:{summaryLen:summary.length,summaryPriceCount:(summary.match(/\$\s?\d[\d.,]*/g)||[]).length,summarySamplePrices:(summary.match(/\$\s?\d[\d.,]*/g)||[]).slice(0,20),mentionsPricingWord:/pric|month|plan|\$/i.test(summary),summaryHead:summary.slice(0,600),summaryTail:summary.slice(-400)},timestamp:Date.now()})}).catch(()=>{});
+      wkDiag("stage_3_summarize", {
+        trace: wkTrace,
+        userId: req.user.id,
+        ...priceSignals(summary),
+        summaryHitCap: summary.length >= 4000,
+      });
       // #endregion
 
       const primaryUrl = resolveCanonicalWebsiteUrl(pageResults);
@@ -10795,6 +10830,7 @@ export async function registerRoutes(
         summary,
         sourceUrls: pages.map((p) => p.url),
         sources: scannedSources,
+        trace: wkTrace,
       });
 
       res.json({
@@ -10850,7 +10886,16 @@ export async function registerRoutes(
 
       const row = await storage.getAiBusinessKnowledge(req.user.id);
       // #region agent log
-      fetch('http://127.0.0.1:7685/ingest/8d1a6f78-45f6-49bc-ab00-dc30a369dc35',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6d3212'},body:JSON.stringify({sessionId:'6d3212',runId:'run1',hypothesisId:'A',location:'server/routes.ts:10826 website-knowledge/save persisted row',message:'persisted AI Brain website knowledge',data:{usedOverride:typeof summaryOverride==='string'&&!!summaryOverride.trim(),savedLen:String(row?.websiteKnowledgeSummary||'').length,savedPriceCount:(String(row?.websiteKnowledgeSummary||'').match(/\$\s?\d[\d.,]*/g)||[]).length,savedSamplePrices:(String(row?.websiteKnowledgeSummary||'').match(/\$\s?\d[\d.,]*/g)||[]).slice(0,20),sourceUrls:(row?.websiteKnowledgeSourceUrls||[]).map((u:string)=>String(u).slice(0,160)),websiteKnowledgeUpdatedAt:row?.websiteKnowledgeUpdatedAt??null,servicesProductsPriceCount:(String((row as any)?.servicesProducts||'').match(/\$\s?\d[\d.,]*/g)||[]).length},timestamp:Date.now()})}).catch(()=>{});
+      wkDiag("stage_4_persist", {
+        trace: draft.trace ?? null,
+        userId: req.user.id,
+        usedManualOverride: typeof summaryOverride === "string" && !!summaryOverride.trim(),
+        ...priceSignals(row?.websiteKnowledgeSummary),
+        savedSourceSlots: draft.sources.map((s) => s.key),
+        savedSourcePaths: draft.sources.map((s) => safePath(s.url)),
+        canonicalUrlUpdated: !!draft.url,
+        websiteKnowledgeUpdatedAt: row?.websiteKnowledgeUpdatedAt ?? null,
+      });
       // #endregion
       res.json({
         ok: true,
