@@ -11,9 +11,11 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "wouter";
 import {
   AlertTriangle,
   Check,
+  ChevronRight,
   Clock,
   ExternalLink,
   Loader2,
@@ -125,6 +127,47 @@ function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
+/** What a page is called on screen, by the kind of page it was detected to be. */
+const PAGE_TYPE_LABELS: Record<string, string> = {
+  pricing: "Pricing page",
+  services: "Services page",
+  about: "About page",
+  faq: "FAQ page",
+  policy: "Policy page",
+  contact: "Contact page",
+  locations: "Locations page",
+};
+
+function urlKey(url: string): string {
+  return url
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/[#?].*$/, "")
+    .replace(/\/+$/, "");
+}
+
+/**
+ * A source a merchant recognises: what they called the page, or what kind of page it is,
+ * falling back to the address itself. Never the raw document title, which is written for
+ * search engines and runs long.
+ */
+function shortSourceLabel(
+  url: string,
+  source: { label: string; url: string; detectedType: string } | undefined,
+): string {
+  if (source) {
+    const custom = source.label?.trim();
+    // `label` falls back to the page title server-side, so only use it when it is short
+    // enough to read at a glance and is not just the address repeated.
+    if (custom && custom.length <= 32 && urlKey(custom) !== urlKey(source.url)) return custom;
+    const byType = PAGE_TYPE_LABELS[source.detectedType];
+    if (byType) return byType;
+  }
+  return urlKey(url) || url;
+}
+
 function formatWhen(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const d = new Date(iso);
@@ -226,28 +269,85 @@ function FactRow({
   fact,
   onRemove,
   removing,
+  sourceLabel,
 }: {
   fact: KnowledgeFactView;
   onRemove: (fact: KnowledgeFactView) => void;
   removing: boolean;
+  sourceLabel: string | null;
 }) {
   const change = CHANGE_STYLES[fact.changeType];
+  const [showChanges, setShowChanges] = useState(false);
+  const struck = fact.changeType === "removing";
+
   return (
     <li className="flex flex-col gap-1.5 px-3 py-2.5 text-sm" data-testid={`knowledge-fact-${fact.id}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-1">
-          <p
-            className={cn(
-              "break-words text-slate-800",
-              fact.changeType === "removing" && "line-through text-slate-500",
-            )}
-          >
-            {fact.summary}
-          </p>
-          {fact.previousSummary && fact.changeType === "changed" && (
-            <p className="break-words text-xs text-slate-500">
-              Currently published: <span className="line-through">{fact.previousSummary}</span>
+          {fact.display ? (
+            // Laid out in parts so a plan reads as a plan: what it is, what it costs, what
+            // is in it. Every string here is the stored value, untouched.
+            <div className={cn("space-y-1", struck && "opacity-60")}>
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <span
+                  className={cn(
+                    "break-words font-semibold text-slate-900",
+                    struck && "line-through",
+                  )}
+                >
+                  {fact.display.title}
+                </span>
+                {fact.display.headline && (
+                  <span
+                    className={cn(
+                      "break-words font-semibold text-violet-800",
+                      struck && "line-through",
+                    )}
+                  >
+                    {fact.display.headline}
+                  </span>
+                )}
+              </div>
+              {fact.display.bullets.length > 0 && (
+                <ul className="space-y-0.5">
+                  {fact.display.bullets.map((benefit, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-[13px] text-slate-700">
+                      <Check className="mt-[3px] h-3 w-3 shrink-0 text-emerald-600" aria-hidden />
+                      <span className="break-words">{benefit}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : (
+            <p className={cn("break-words text-slate-800", struck && "line-through text-slate-500")}>
+              {fact.summary}
             </p>
+          )}
+
+          {/* The previous value is long enough to bury the new one, so it stays folded away
+              until asked for. */}
+          {fact.previousSummary && fact.changeType === "changed" && (
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={() => setShowChanges((v) => !v)}
+                className="inline-flex items-center gap-1 text-xs font-medium text-violet-800 hover:underline"
+                aria-expanded={showChanges}
+                data-testid={`button-show-changes-${fact.id}`}
+              >
+                <ChevronRight
+                  className={cn("h-3 w-3 transition-transform", showChanges && "rotate-90")}
+                  aria-hidden
+                />
+                {showChanges ? "Hide changes" : "Show changes"}
+              </button>
+              {showChanges && (
+                <p className="break-words rounded border border-slate-100 bg-slate-50/70 px-2 py-1 text-xs text-slate-500">
+                  Currently published: <span className="line-through">{fact.previousSummary}</span>
+                </p>
+              )}
+            </div>
           )}
           {fact.supersededBy && (
             <p className="text-xs text-slate-500">
@@ -278,7 +378,7 @@ function FactRow({
           <Clock className="h-3 w-3" aria-hidden />
           {freshnessLabel(fact)}
         </span>
-        {fact.sourceUrl && (
+        {fact.sourceUrl && sourceLabel && (
           <a
             href={fact.sourceUrl}
             target="_blank"
@@ -286,7 +386,7 @@ function FactRow({
             className="inline-flex max-w-[220px] items-center gap-1 truncate text-violet-800 hover:underline"
           >
             <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
-            <span className="truncate">{fact.sourceTitle || fact.sourceUrl}</span>
+            <span className="truncate">Source: {sourceLabel}</span>
           </a>
         )}
         {fact.provenanceUrls.length > 1 && (
@@ -313,22 +413,31 @@ function SectionBlock({
   section,
   onRemoveFact,
   removingId,
+  labelForSource,
 }: {
   section: KnowledgeReviewSection;
   onRemoveFact: (fact: KnowledgeFactView) => void;
   removingId: string | null;
+  labelForSource: (url: string) => string;
 }) {
-  const pending =
-    section.counts.new + section.counts.changed + section.counts.removing + section.counts.suggested;
+  const { counts } = section;
+  // Spelled out rather than totalled: "7 new" and "7 changed" are different amounts of work.
+  const breakdown = [
+    counts.new > 0 && `${counts.new} new`,
+    counts.changed > 0 && `${counts.changed} changed`,
+    counts.removing > 0 && `${counts.removing} no longer on page`,
+    counts.suggested > 0 && `${counts.suggested} suggested`,
+  ].filter((s): s is string => Boolean(s));
+
   return (
     <AccordionItem value={section.id} className="border-slate-200/80">
       <AccordionTrigger className="px-3 py-2.5 text-sm hover:no-underline">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 pr-2 text-left">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 pr-2 text-left">
           <span className="font-medium text-slate-900">{section.title}</span>
-          <span className="text-xs text-slate-500">{section.counts.total}</span>
-          {pending > 0 && (
+          <span className="text-xs text-slate-500">{plural(counts.total, "detail", "details")}</span>
+          {breakdown.length > 0 && (
             <Badge className="bg-violet-100 text-[10px] font-semibold text-violet-900 hover:bg-violet-100">
-              {pending} to review
+              {breakdown.join(" · ")}
             </Badge>
           )}
           {section.freshness.stale > 0 && (
@@ -339,7 +448,13 @@ function SectionBlock({
       <AccordionContent className="pb-0">
         <ul className="divide-y divide-slate-100 border-t border-slate-100">
           {section.facts.map((fact) => (
-            <FactRow key={fact.id} fact={fact} onRemove={onRemoveFact} removing={removingId === fact.id} />
+            <FactRow
+              key={fact.id}
+              fact={fact}
+              onRemove={onRemoveFact}
+              removing={removingId === fact.id}
+              sourceLabel={fact.sourceUrl ? labelForSource(fact.sourceUrl) : null}
+            />
           ))}
         </ul>
       </AccordionContent>
@@ -563,6 +678,21 @@ export function BusinessKnowledgeSteps({ aboutFields }: { aboutFields?: ReactNod
   }, [facts]);
   const heldBackOnly = pendingCount > 0 && publishableCount === 0;
 
+  const firstPendingSectionId = useMemo(
+    () =>
+      facts?.sections.find(
+        (s) => s.counts.new + s.counts.changed + s.counts.removing + s.counts.suggested > 0,
+      )?.id ?? null,
+    [facts],
+  );
+
+  // The pages the user named in step 1 are the best source labels available, so the review
+  // step borrows them instead of showing whatever title the page happened to carry.
+  const labelForSource = useMemo(() => {
+    const byUrl = new Map(sources.map((s) => [urlKey(s.url), s]));
+    return (url: string) => shortSourceLabel(url, byUrl.get(urlKey(url)));
+  }, [sources]);
+
   const jobItems = useMemo(() => (liveJob ? Object.entries(liveJob.items) : []), [liveJob]);
 
   const lastAnalyzed = useMemo(() => {
@@ -772,8 +902,8 @@ export function BusinessKnowledgeSteps({ aboutFields }: { aboutFields?: ReactNod
 
         <Step
           index={3}
-          title="Review & publish"
-          description="Check what AI picked up and remove anything wrong. Publishing is the only action that changes what your assistant says."
+          title="Review what AI learned"
+          description="Check what AI learned from your pages. Remove anything incorrect, then publish when it looks right — publishing is the only action that changes what your assistant says."
           state={reviewState}
           status={
             pendingCount > 0
@@ -832,11 +962,12 @@ export function BusinessKnowledgeSteps({ aboutFields }: { aboutFields?: ReactNod
                 )}
               </div>
 
+              {/* Only the first section with something to review opens. A large site can
+                  propose changes in every section, and opening them all buries the page. */}
               <Accordion
                 type="multiple"
-                defaultValue={facts.sections
-                  .filter((s) => s.counts.new + s.counts.changed + s.counts.removing + s.counts.suggested > 0)
-                  .map((s) => s.id)}
+                key={firstPendingSectionId ?? "reviewed"}
+                defaultValue={firstPendingSectionId ? [firstPendingSectionId] : []}
                 className="overflow-hidden rounded-lg border border-slate-200/80 bg-white"
               >
                 {facts.sections.map((section) => (
@@ -844,6 +975,7 @@ export function BusinessKnowledgeSteps({ aboutFields }: { aboutFields?: ReactNod
                     key={section.id}
                     section={section}
                     removingId={removingFactId}
+                    labelForSource={labelForSource}
                     onRemoveFact={(fact) => {
                       setRemovingFactId(fact.id);
                       removeFactMutation.mutate(fact.id);
@@ -885,6 +1017,20 @@ export function BusinessKnowledgeSteps({ aboutFields }: { aboutFields?: ReactNod
                   Discard draft changes
                 </Button>
               </div>
+
+              {publishMutation.isSuccess && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-emerald-200/80 bg-emerald-50/50 px-3 py-2 text-sm">
+                  <span className="text-emerald-900">Your assistant is using this now.</span>
+                  <Link
+                    href="/app/inbox"
+                    className="inline-flex items-center gap-1 font-medium text-emerald-900 underline underline-offset-2 hover:text-emerald-700"
+                    data-testid="link-test-knowledge"
+                  >
+                    Test AI knowledge
+                    <ExternalLink className="h-3 w-3" aria-hidden />
+                  </Link>
+                </div>
+              )}
 
               {heldBackOnly && (
                 <p className="text-xs text-slate-600">

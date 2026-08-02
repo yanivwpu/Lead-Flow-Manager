@@ -253,6 +253,39 @@ run("the review payload groups facts and counts what changed", () => {
   assert.equal(pricing.facts[0].state, "draft");
 });
 
+run("a pricing plan reaches the review split into its parts", () => {
+  const plan = fact("pricing_plan", {
+    name: "Featured Business",
+    description: null,
+    price: { amount: 59, currency: "USD", billingPeriod: "month" },
+    priceQualifier: "exact",
+    benefits: ["Enhanced visibility in local searches", "Priority placement in your category"],
+  });
+
+  const payload = buildKnowledgeReviewPayload({ facts: [plan], now: NOW });
+  const view = payload.sections.find((s) => s.id === "pricing")!.facts[0];
+
+  assert.ok(view.display, "a plan must carry a laid-out form");
+  assert.equal(view.display!.title, "Featured Business");
+  assert.equal(view.display!.headline, "USD 59 per month");
+  assert.deepEqual(view.display!.bullets, [
+    "Enhanced visibility in local searches",
+    "Priority placement in your category",
+  ]);
+  // Split for reading only: every part is the stored value, and the one-line form still
+  // carries the whole fact for everything else that renders it.
+  assert.match(view.summary, /^Featured Business: USD 59 per month — includes:/);
+  for (const benefit of view.display!.bullets) {
+    assert.ok(view.summary.includes(benefit), "the one-line form lost a benefit");
+  }
+});
+
+run("fact types that read fine as one line are left alone", () => {
+  const payload = buildKnowledgeReviewPayload({ facts: [FAQ], now: NOW });
+  const view = payload.sections.flatMap((s) => s.facts).find((f) => f.factType === "faq")!;
+  assert.equal(view.display, null);
+});
+
 run("with nothing proposed the review payload reports no pending changes", () => {
   const payload = buildKnowledgeReviewPayload({ facts: [PLAN, FAQ], now: NOW });
   assert.equal(payload.hasPendingChanges, false);

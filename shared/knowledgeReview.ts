@@ -16,6 +16,8 @@ import {
   formatFactValue,
   resolveStaleFactBehavior,
   summarizeKnowledgeFreshness,
+  formatFactMoney,
+  type FactDataMap,
   type FactProposedAction,
   type FactType,
   type FreshnessTier,
@@ -27,6 +29,27 @@ import {
 
 export type FactChangeType = "unchanged" | "new" | "changed" | "removing" | "suggested";
 
+/**
+ * A fact split into the parts a reviewer scans for, for the types that read badly as one
+ * line. Built from the same stored values as `summary`, with the same money formatter the
+ * prompt uses — the review screen re-arranges a fact, it never re-words one.
+ */
+export type FactDisplay = {
+  title: string;
+  headline: string | null;
+  bullets: string[];
+};
+
+function factDisplay(fact: KnowledgeFact): FactDisplay | null {
+  if (fact.factType !== "pricing_plan") return null;
+  const d = fact.data as FactDataMap["pricing_plan"];
+  return {
+    title: d.name,
+    headline: formatFactMoney(d.price, d.priceQualifier),
+    bullets: [...d.benefits],
+  };
+}
+
 export type KnowledgeFactView = {
   id: string;
   factType: FactType;
@@ -36,6 +59,8 @@ export type KnowledgeFactView = {
   changeType: FactChangeType;
   proposedAction: FactProposedAction | null;
   summary: string;
+  /** Set for fact types worth laying out in parts; `summary` still carries the whole value. */
+  display: FactDisplay | null;
   /** Currently published value this draft would replace. */
   previousSummary: string | null;
   origin: string;
@@ -128,6 +153,7 @@ export function toKnowledgeFactView(
     changeType: changeTypeFor(fact),
     proposedAction: fact.proposedAction,
     summary: formatFactValue(fact),
+    display: factDisplay(fact),
     previousSummary: previous ? formatFactValue(previous) : null,
     origin: fact.origin,
     precedence: factPrecedence(fact),
