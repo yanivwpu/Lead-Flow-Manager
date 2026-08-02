@@ -24,6 +24,52 @@ function run(name: string, fn: () => void) {
   }
 }
 
+/**
+ * The 2026-08-02 19:28 scan. The model answered the requested `{ "summary": "..." }`
+ * contract but volunteered the real content as siblings. Keeping only `summary`
+ * reduced four scanned pages to one sentence, which is why Auto Reply then told a
+ * restaurant owner the business "focuses on guides rather than listing services".
+ */
+const SUMMARY_PLUS_SIBLINGS = {
+  summary:
+    "A local magazine providing guides and information on homes, food, and activities in Pompano Beach.",
+  guides: ["First-Timer's Guide to Pompano Beach", "Best Beaches In Pompano Beach"],
+  advertising: {
+    visibility_packages: [
+      { name: "Business Listing", price: "$29/mo", includes: "Basic visibility in local searches" },
+      { name: "Featured Business", price: "$59/mo", includes: "Enhanced visibility" },
+      { name: "Homepage Spotlight", price: "$149/mo", includes: "Premium placement" },
+    ],
+  },
+};
+
+run("a volunteered sibling key cannot delete the pricing table", () => {
+  const out = extractWebsiteKnowledgeSummaryText(SUMMARY_PLUS_SIBLINGS);
+  assert.ok(out.startsWith("A local magazine providing guides"), "the summary still leads");
+  for (const needed of ["Business Listing", "$29/mo", "$59/mo", "$149/mo", "Homepage Spotlight"]) {
+    assert.ok(out.includes(needed), `dropped ${needed} from the stored knowledge`);
+  }
+  assert.ok(out.includes("First-Timer"), "dropped the guides list");
+});
+
+run("a plain summary object is still returned untouched", () => {
+  // The common case must stay byte-identical, or every existing note changes shape.
+  const out = extractWebsiteKnowledgeSummaryText({ summary: "Just prose, nothing else." });
+  assert.equal(out, "Just prose, nothing else.");
+});
+
+run("metadata siblings stay out of the merchant's knowledge note", () => {
+  const out = extractWebsiteKnowledgeSummaryText({
+    summary: "Prose.",
+    confidence: 0.92,
+    language: "en",
+    truncated: false,
+    empty_object: {},
+    empty_list: [],
+  });
+  assert.equal(out, "Prose.", "scalar metadata and empty containers must be ignored");
+});
+
 /** The shape production returned on 2026-08-02 (WK-DIAG trace ccyrwsqt). */
 const PRODUCTION_ENVELOPE = JSON.stringify(
   {

@@ -76,6 +76,27 @@ function renderStructuredText(value: unknown, depth = 0): string {
   return "";
 }
 
+/**
+ * Keys carrying content the summary key did not cover.
+ *
+ * Only objects and arrays qualify. Scalar siblings on these envelopes are metadata
+ * (`confidence`, `language`, `truncated`), and rendering them would put "Confidence: 0.9"
+ * into a merchant's knowledge note.
+ */
+function structuredSiblings(
+  o: Record<string, unknown>,
+  usedKey: string,
+): Record<string, unknown> {
+  const rest: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (k === usedKey || v == null) continue;
+    if (typeof v !== "object") continue;
+    if (Array.isArray(v) ? v.length === 0 : Object.keys(v).length === 0) continue;
+    rest[k] = v;
+  }
+  return rest;
+}
+
 export function extractWebsiteKnowledgeSummaryText(value: unknown): string {
   if (value == null) return "";
 
@@ -112,7 +133,13 @@ export function extractWebsiteKnowledgeSummaryText(value: unknown): string {
     for (const k of OBJECT_TEXT_KEYS) {
       if (k in o && o[k] != null) {
         const inner = extractWebsiteKnowledgeSummaryText(o[k]);
-        if (inner) return inner;
+        if (!inner) continue;
+        // The model is asked for `{ "summary": "..." }` but often volunteers extra
+        // structured keys alongside a one-line summary. Returning the summary alone
+        // silently threw those away — which is how a pricing table stopped reaching
+        // the reply prompt. Keep the summary first, then everything it left out.
+        const extra = renderStructuredText(structuredSiblings(o, k));
+        return extra ? `${inner}\n${extra}` : inner;
       }
     }
 
