@@ -10636,6 +10636,28 @@ export async function registerRoutes(
     }
   });
 
+  /**
+   * Workspace Intelligence Snapshot — Brain > Profile structured pack for Copilot / Inbox.
+   * No LLM. Cached server-side; invalidated on Brain / Profile / settings / GE writes.
+   * Does not change Copilot ranking (Phase 1).
+   */
+  app.get("/api/ai/workspace-intelligence", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const forceRefresh =
+        String(req.query.refresh || "").toLowerCase() === "1" ||
+        String(req.query.refresh || "").toLowerCase() === "true";
+      const { getWorkspaceIntelligenceSnapshot } = await import("./workspaceIntelligenceService");
+      const snapshot = await getWorkspaceIntelligenceSnapshot(req.user.id, { forceRefresh });
+      res.json(snapshot);
+    } catch (error) {
+      console.error("Workspace intelligence fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch workspace intelligence" });
+    }
+  });
+
   // Update business knowledge
   app.patch("/api/ai/business-knowledge", async (req, res) => {
     try {
@@ -10734,9 +10756,15 @@ export async function registerRoutes(
       }
 
       const combined = combineScrapedText(pages);
+      // #region agent log
+      fetch('http://127.0.0.1:7685/ingest/8d1a6f78-45f6-49bc-ab00-dc30a369dc35',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6d3212'},body:JSON.stringify({sessionId:'6d3212',runId:'run1',hypothesisId:'A,B',location:'server/routes.ts:10759 website-knowledge/scan after combine',message:'scraped pages + combined text price coverage',data:{pages:pages.map((p)=>({key:p.key,url:String(p.url).slice(0,160),len:p.text.length,truncated:!!p.truncated,priceCount:(p.text.match(/\$\s?\d[\d.,]*/g)||[]).length,samplePrices:(p.text.match(/\$\s?\d[\d.,]*/g)||[]).slice(0,12)})),combinedLen:combined.length,combinedPriceCount:(combined.match(/\$\s?\d[\d.,]*/g)||[]).length,combinedSamplePrices:(combined.match(/\$\s?\d[\d.,]*/g)||[]).slice(0,20),combinedHitCap:combined.length>=94_000,sectionHeaders:(combined.match(/--- [^\n]{0,120} ---/g)||[]).slice(0,12)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const { aiService } = await import("./aiService");
       const summaryRaw = await aiService.summarizeWebsiteKnowledgeForBrain(combined);
       const summary = finalizeWebsiteKnowledgeSummaryText(summaryRaw);
+      // #region agent log
+      fetch('http://127.0.0.1:7685/ingest/8d1a6f78-45f6-49bc-ab00-dc30a369dc35',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6d3212'},body:JSON.stringify({sessionId:'6d3212',runId:'run1',hypothesisId:'C',location:'server/routes.ts:10762 website-knowledge/scan after summarize',message:'LLM summary price retention',data:{summaryLen:summary.length,summaryPriceCount:(summary.match(/\$\s?\d[\d.,]*/g)||[]).length,summarySamplePrices:(summary.match(/\$\s?\d[\d.,]*/g)||[]).slice(0,20),mentionsPricingWord:/pric|month|plan|\$/i.test(summary),summaryHead:summary.slice(0,600),summaryTail:summary.slice(-400)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
 
       const homepageScanned = pageResults.find((r) => r.key === "homepage" && r.status === "scanned");
       const primaryUrl = homepageScanned?.finalUrl ?? pages[0]?.url ?? "";
@@ -10796,6 +10824,9 @@ export async function registerRoutes(
       });
 
       const row = await storage.getAiBusinessKnowledge(req.user.id);
+      // #region agent log
+      fetch('http://127.0.0.1:7685/ingest/8d1a6f78-45f6-49bc-ab00-dc30a369dc35',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6d3212'},body:JSON.stringify({sessionId:'6d3212',runId:'run1',hypothesisId:'A',location:'server/routes.ts:10826 website-knowledge/save persisted row',message:'persisted AI Brain website knowledge',data:{usedOverride:typeof summaryOverride==='string'&&!!summaryOverride.trim(),savedLen:String(row?.websiteKnowledgeSummary||'').length,savedPriceCount:(String(row?.websiteKnowledgeSummary||'').match(/\$\s?\d[\d.,]*/g)||[]).length,savedSamplePrices:(String(row?.websiteKnowledgeSummary||'').match(/\$\s?\d[\d.,]*/g)||[]).slice(0,20),sourceUrls:(row?.websiteKnowledgeSourceUrls||[]).map((u:string)=>String(u).slice(0,160)),websiteKnowledgeUpdatedAt:row?.websiteKnowledgeUpdatedAt??null,servicesProductsPriceCount:(String((row as any)?.servicesProducts||'').match(/\$\s?\d[\d.,]*/g)||[]).length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       res.json({
         ok: true,
         websiteKnowledgeUrl: row?.websiteKnowledgeUrl ?? null,

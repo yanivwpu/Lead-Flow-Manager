@@ -102,6 +102,13 @@ export class AIService {
       const result = JSON.parse(response || "{}");
       
       const rawReply = result.reply || "";
+      // #region agent log
+      {
+        const px = (s: string) => (s.match(/\$\s?\d[\d.,]*/g) || []);
+        const hedge = /(don'?t|do not|dont)\s+have\s+(the\s+)?(exact\s+)?(pricing|price|prices)|no\s+(exact\s+)?pricing|not\s+sure\s+(about\s+)?(the\s+)?pric/i;
+        fetch('http://127.0.0.1:7685/ingest/8d1a6f78-45f6-49bc-ab00-dc30a369dc35',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6d3212'},body:JSON.stringify({sessionId:'6d3212',runId:'run1',hypothesisId:'E',location:'server/aiService.ts:suggestReply after model',message:'drafted reply vs pricing available in prompt',data:{lastInbound:String(lastMessage).slice(0,240),askedAboutPrice:/(price|pricing|cost|how much|per month|monthly|fee)/i.test(String(lastMessage)),systemPromptLen:systemPrompt.length,systemPromptPriceCount:px(systemPrompt).length,systemPromptPrices:px(systemPrompt).slice(0,20),replyLen:String(rawReply).length,replyPriceCount:px(String(rawReply)).length,replyHasPricingHedge:hedge.test(String(rawReply)),reply:String(rawReply).slice(0,600),confidence:result.confidence??null},timestamp:Date.now()})}).catch(()=>{});
+      }
+      // #endregion
       return {
         suggestion: sanitizeRoboticBuyerReply(rawReply),
         confidence: result.confidence || 0.7,
@@ -723,6 +730,15 @@ When replying, work through these qualification questions in order. Ask only ONE
     }
 
     prompt += `\n\nRespond with valid JSON only: { "reply": "your reply in the correct language", "confidence": 0.0-1.0 }`;
+
+    // #region agent log
+    {
+      const wkRaw = String((businessKnowledge as any)?.websiteKnowledgeSummary || "");
+      const wkCapped = wkRaw.trim().slice(0, 3500);
+      const px = (s: string) => (s.match(/\$\s?\d[\d.,]*/g) || []);
+      fetch('http://127.0.0.1:7685/ingest/8d1a6f78-45f6-49bc-ab00-dc30a369dc35',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6d3212'},body:JSON.stringify({sessionId:'6d3212',runId:'run1',hypothesisId:'D',location:'server/aiService.ts:buildSystemPrompt',message:'website knowledge injected into reply system prompt',data:{hasWebsiteKnowledge:!!wkRaw.trim(),wkRawLen:wkRaw.length,wkCappedLen:wkCapped.length,capApplied:wkRaw.trim().length>3500,pricesRaw:px(wkRaw).slice(0,20),pricesRawCount:px(wkRaw).length,pricesInPromptCount:px(wkCapped).length,servicesProductsPriceCount:px(String(businessKnowledge?.servicesProducts||"")).length,industry:String(businessKnowledge?.industry||""),promptLen:prompt.length,promptPriceCount:px(prompt).length},timestamp:Date.now()})}).catch(()=>{});
+    }
+    // #endregion
 
     return prompt;
   }
