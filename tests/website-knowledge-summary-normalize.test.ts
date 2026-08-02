@@ -7,8 +7,6 @@
  * Run: npx tsx tests/website-knowledge-summary-normalize.test.ts
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { transformSync } from "esbuild";
 import {
   extractWebsiteKnowledgeSummaryText,
   finalizeWebsiteKnowledgeSummaryText,
@@ -90,16 +88,6 @@ const PRODUCTION_ENVELOPE = JSON.stringify(
   2,
 );
 
-/** Exercise the shipped client parser rather than a copy of it. */
-function loadClientPreviewParser(): (raw: unknown) => string {
-  const src = readFileSync(new URL("../client/src/pages/AIBrain.tsx", import.meta.url), "utf8");
-  const start = src.indexOf("function websiteKnowledgePreviewToString");
-  assert.ok(start >= 0, "websiteKnowledgePreviewToString not found in AIBrain.tsx");
-  const end = src.indexOf("\n}", src.indexOf('return "";', start)) + 2;
-  const code = transformSync(src.slice(start, end), { loader: "ts" }).code;
-  return new Function(`${code}; return websiteKnowledgePreviewToString;`)() as (raw: unknown) => string;
-}
-
 run("a nested JSON envelope is flattened instead of stored as raw JSON", () => {
   const out = finalizeWebsiteKnowledgeSummaryText(PRODUCTION_ENVELOPE);
   assert.ok(out.length > 0, "summary must not be empty");
@@ -149,15 +137,18 @@ run("empty and nullish inputs stay empty", () => {
   assert.equal(finalizeWebsiteKnowledgeSummaryText({}), "");
 });
 
-run("the client preview parser never blanks a payload it cannot destructure", () => {
-  const websiteKnowledgePreviewToString = loadClientPreviewParser();
-  // Regression: this returned "" and left the placeholder showing.
-  assert.ok(websiteKnowledgePreviewToString(PRODUCTION_ENVELOPE).length > 0);
-  // Normal path: the server now sends flattened text straight through.
-  const flattened = finalizeWebsiteKnowledgeSummaryText(PRODUCTION_ENVELOPE);
-  assert.equal(websiteKnowledgePreviewToString(flattened), flattened);
-  assert.equal(websiteKnowledgePreviewToString(""), "");
-  assert.equal(websiteKnowledgePreviewToString(null), "");
+/**
+ * The client half of this used to be asserted here, against a parser lifted out of
+ * AIBrain.tsx. That parser existed to render the summary into an editable textarea; the
+ * textarea is gone, and knowledge now reaches the merchant as reviewable values. What
+ * still matters is that the column this function writes stays readable prose, because
+ * every consumer not yet migrated reads it directly.
+ */
+run("the stored summary is plain readable text, never a JSON envelope", () => {
+  const stored = finalizeWebsiteKnowledgeSummaryText(PRODUCTION_ENVELOPE);
+  assert.ok(stored.length > 0);
+  assert.ok(!stored.trimStart().startsWith("{"));
+  assert.ok(!stored.includes('"'), "no JSON quoting should survive into the column");
 });
 
 console.log("\nAll website knowledge summary normalization tests passed.");

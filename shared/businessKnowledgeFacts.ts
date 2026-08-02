@@ -447,6 +447,11 @@ export function factPrecedence(fact: FactPrecedenceInput): number {
   return FACT_PRECEDENCE[fact.origin] ?? FACT_PRECEDENCE.ai_extracted;
 }
 
+/**
+ * Shown next to every value in the review step, so these read as provenance a merchant
+ * recognises. The two lowest tiers describe knowledge carried over from an earlier setup;
+ * they must not name the internal migration, which means nothing to the person reading it.
+ */
 const PRECEDENCE_LABELS: Record<number, string> = {
   100: "You entered or edited this",
   90: "Pinned",
@@ -454,8 +459,8 @@ const PRECEDENCE_LABELS: Record<number, string> = {
   70: "From an uploaded document",
   60: "From a connected integration",
   40: "AI extracted from your website",
-  20: "Migrated source",
-  10: "Legacy summary",
+  20: "From a page you saved earlier",
+  10: "From your existing business description",
 };
 
 export function describeFactPrecedence(fact: FactPrecedenceInput): string {
@@ -807,7 +812,7 @@ export const FACT_TYPE_LABELS: Record<FactType, string> = {
   call_to_action: "Call to action",
   eligibility_rule: "Eligibility rule",
   numeric_limit: "Limit",
-  custom_fact: "Other fact",
+  custom_fact: "Other detail",
 };
 
 /** Review UI grouping. Order is the display order. */

@@ -93,6 +93,23 @@ export async function getKnowledgeSourcesByIds(
     );
 }
 
+/** Resolves the row a URL would land on, so a caller can tell "added" from "already here". */
+export async function findKnowledgeSourceByUrl(
+  userId: string,
+  url: string,
+): Promise<AiWebsiteKnowledgeSourceRow | undefined> {
+  const rows = await db
+    .select()
+    .from(aiWebsiteKnowledgeSources)
+    .where(
+      and(
+        eq(aiWebsiteKnowledgeSources.userId, userId),
+        eq(aiWebsiteKnowledgeSources.normalizedUrl, normalizeWebsiteKnowledgeUrl(url.trim())),
+      ),
+    );
+  return rows[0];
+}
+
 export type UpsertSourceInput = {
   url: string;
   slotKey?: string | null;

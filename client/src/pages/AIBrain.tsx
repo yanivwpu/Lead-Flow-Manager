@@ -10,8 +10,6 @@ import {
   Lock,
   ChevronRight,
   Trash2,
-  ListChecks,
-  Globe,
   CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -41,8 +39,7 @@ import {
 } from "@/lib/shopifyCheckout";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
-import { KnowledgeReview } from "@/components/aibrain/KnowledgeReview";
-import type { WebsiteKnowledgeSourceEntry } from "@shared/websiteKnowledgeSources";
+import { BusinessKnowledgeSteps } from "@/components/aibrain/BusinessKnowledgeSteps";
 
 interface AISettings {
   aiMode: string;
@@ -59,11 +56,6 @@ interface BusinessKnowledge {
   calendlyBookingConnected?: boolean;
   customInstructions: string;
   qualifyingQuestions: Array<{ key: string; label: string; question: string; required: boolean }>;
-  websiteKnowledgeUrl?: string | null;
-  websiteKnowledgeSummary?: string | null;
-  websiteKnowledgeSourceUrls?: string[] | null;
-  websiteKnowledgeSources?: WebsiteKnowledgeSourceEntry[] | null;
-  websiteKnowledgeUpdatedAt?: string | null;
 }
 
 interface SubscriptionData {
@@ -106,94 +98,6 @@ const INDUSTRY_OPTIONS = [
   { value: "automotive", label: "Automotive" },
   { value: "other", label: "Other" },
 ] as const;
-
-/** Scan API or legacy rows may return structured JSON; the preview textarea must always receive plain text. */
-function websiteKnowledgePreviewToString(raw: unknown): string {
-  if (raw == null) return "";
-  if (typeof raw === "string") {
-    const t = raw.trim();
-    if (!t) return "";
-    if (t.startsWith("{") || t.startsWith("[")) {
-      try {
-        // Never swallow the payload: an unrecognised shape must still show something.
-        const inner = websiteKnowledgePreviewToString(JSON.parse(t));
-        if (inner) return inner;
-      } catch {
-        /* not JSON after all — fall through to the raw text */
-      }
-    }
-    return t;
-  }
-  if (typeof raw === "number" || typeof raw === "boolean") return String(raw);
-  if (Array.isArray(raw)) {
-    return raw
-      .map((item) => websiteKnowledgePreviewToString(item))
-      .filter((s) => s.length > 0)
-      .join("\n\n")
-      .trim();
-  }
-  if (typeof raw === "object") {
-    const o = raw as Record<string, unknown>;
-    const keys = ["previewSummary", "summary", "text", "content", "body", "message", "result", "output"] as const;
-    for (const k of keys) {
-      if (k in o && o[k] != null) {
-        const inner = websiteKnowledgePreviewToString(o[k]);
-        if (inner) return inner;
-      }
-    }
-    if ("data" in o && o.data != null) {
-      const inner = websiteKnowledgePreviewToString(o.data);
-      if (inner) return inner;
-    }
-  }
-  return "";
-}
-
-type WkUrlsState = {
-  homepage: string;
-  productServices: string;
-  about: string;
-  faq: string;
-  shippingPolicy: string;
-  returnPolicy: string;
-  terms: string;
-  privacy: string;
-  other: string;
-};
-
-const WK_URLS_INITIAL: WkUrlsState = {
-  homepage: "",
-  productServices: "",
-  about: "",
-  faq: "",
-  shippingPolicy: "",
-  returnPolicy: "",
-  terms: "",
-  privacy: "",
-  other: "",
-};
-
-const WK_FIELD_ROWS: { key: keyof WkUrlsState; label: string; placeholder: string; testId?: string }[] = [
-  { key: "homepage", label: "Homepage URL", placeholder: "https://example.com/", testId: "input-website-knowledge-url" },
-  { key: "productServices", label: "Product / Services URL", placeholder: "https://example.com/services" },
-  { key: "about", label: "About URL", placeholder: "https://example.com/about" },
-  { key: "faq", label: "FAQ URL", placeholder: "https://example.com/faq" },
-  { key: "shippingPolicy", label: "Shipping policy URL", placeholder: "https://example.com/shipping" },
-  { key: "returnPolicy", label: "Return policy URL", placeholder: "https://example.com/returns" },
-  { key: "terms", label: "Terms URL", placeholder: "https://example.com/terms" },
-  { key: "privacy", label: "Privacy policy URL", placeholder: "https://example.com/privacy" },
-  { key: "other", label: "Other URL (optional)", placeholder: "https://example.com/..." },
-];
-
-type WkPageResultRow = {
-  key: string;
-  label: string;
-  url: string;
-  status: "scanned" | "skipped" | "failed";
-  reason?: string;
-  finalUrl?: string;
-  truncated?: boolean;
-};
 
 type QualifyingQuestion = { key: string; label: string; question: string; required: boolean };
 
@@ -397,18 +301,6 @@ function AIBrainContent() {
   const [newKeyword, setNewKeyword] = useState("");
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [bundleModalOpen, setBundleModalOpen] = useState(false);
-  const [wkUrls, setWkUrls] = useState<WkUrlsState>(WK_URLS_INITIAL);
-  const [wkPreview, setWkPreview] = useState("");
-  const [wkPhase, setWkPhase] = useState<"idle" | "scanning" | "scanned" | "failed">("idle");
-  const [wkErr, setWkErr] = useState("");
-  const [wkScanId, setWkScanId] = useState<string | null>(null);
-  const [wkSources, setWkSources] = useState<string[]>([]);
-  const [wkPageResults, setWkPageResults] = useState<WkPageResultRow[] | null>(null);
-
-  const hasAnyWkUrl = useMemo(
-    () => Object.values(wkUrls).some((v) => typeof v === "string" && v.trim().length > 0),
-    [wkUrls],
-  );
 
   const isShopify = mustUseShopifyBilling(subscription?.subscription, shopHint);
 
@@ -554,29 +446,6 @@ function AIBrainContent() {
     }
   }, [businessKnowledge]);
 
-  useEffect(() => {
-    if (!businessKnowledge || typeof businessKnowledge !== "object") return;
-    if (wkPhase === "scanning" || wkPhase === "scanned" || wkPhase === "failed") return;
-    const k = businessKnowledge as BusinessKnowledge;
-    // Rehydrate every saved source, not just the homepage — otherwise the next scan
-    // silently drops the pages the user cannot see in the form.
-    const savedSources = Array.isArray(k.websiteKnowledgeSources) ? k.websiteKnowledgeSources : [];
-    const restored = { ...WK_URLS_INITIAL };
-    for (const entry of savedSources) {
-      if (entry && typeof entry.url === "string" && entry.key in restored) {
-        restored[entry.key as keyof WkUrlsState] = entry.url;
-      }
-    }
-    if (!restored.homepage && k.websiteKnowledgeUrl) restored.homepage = k.websiteKnowledgeUrl;
-    setWkUrls(restored);
-    setWkPreview(websiteKnowledgePreviewToString(k.websiteKnowledgeSummary));
-    setWkSources(
-      Array.isArray(k.websiteKnowledgeSourceUrls)
-        ? k.websiteKnowledgeSourceUrls.filter((x): x is string => typeof x === "string")
-        : [],
-    );
-  }, [businessKnowledge, wkPhase]);
-
   const saveSettingsMutation = useMutation({
     mutationFn: async (data: Partial<AISettings>) => {
       const res = await fetch("/api/ai/settings", {
@@ -617,136 +486,6 @@ function AIBrainContent() {
     },
   });
 
-  const websiteScanMutation = useMutation({
-    mutationFn: async (urls: WkUrlsState) => {
-      const res = await fetch("/api/ai/website-knowledge/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          homepageUrl: urls.homepage.trim(),
-          productServicesUrl: urls.productServices.trim(),
-          aboutUrl: urls.about.trim(),
-          faqUrl: urls.faq.trim(),
-          shippingPolicyUrl: urls.shippingPolicy.trim(),
-          returnPolicyUrl: urls.returnPolicy.trim(),
-          termsUrl: urls.terms.trim(),
-          privacyPolicyUrl: urls.privacy.trim(),
-          otherUrl: urls.other.trim(),
-          // This client sends every slot it knows about, so a blank slot is a removal.
-          sourcesComplete: true,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const msg = typeof data.error === "string" ? data.error : "Scan failed";
-        const err = new Error(msg) as Error & { pageResults?: WkPageResultRow[] };
-        err.pageResults = Array.isArray(data.pageResults) ? data.pageResults : undefined;
-        throw err;
-      }
-      return data as {
-        scanId: string;
-        previewSummary: unknown;
-        sourceUrls: string[];
-        pageResults?: WkPageResultRow[];
-      };
-    },
-    onMutate: () => {
-      setWkErr("");
-      setWkPageResults(null);
-      setWkPhase("scanning");
-    },
-    onSuccess: (data) => {
-      setWkScanId(data.scanId);
-      setWkPreview(websiteKnowledgePreviewToString(data.previewSummary));
-      setWkSources(Array.isArray(data.sourceUrls) ? data.sourceUrls : []);
-      setWkPageResults(Array.isArray(data.pageResults) ? data.pageResults : []);
-      setWkPhase("scanned");
-    },
-    onError: (e: Error) => {
-      setWkPhase("failed");
-      setWkErr(e.message || "Scan failed");
-      setWkScanId(null);
-      const pe = (e as Error & { pageResults?: WkPageResultRow[] }).pageResults;
-      setWkPageResults(Array.isArray(pe) ? pe : null);
-    },
-  });
-
-  const websiteSaveMutation = useMutation({
-    mutationFn: async (payload: { scanId: string; summary: string }) => {
-      if (!payload.scanId) throw new Error("Nothing to save — run a scan first.");
-      const res = await fetch("/api/ai/website-knowledge/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ scanId: payload.scanId, summaryOverride: payload.summary }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Failed to save");
-      return data;
-    },
-    onSuccess: () => {
-      setWkPhase("idle");
-      setWkScanId(null);
-      setWkPageResults(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/ai/business-knowledge"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/ai/workspace-intelligence"] });
-      toast({
-        title: "Saved to AI Brain",
-        description: "This summary is now included in Copilot suggestions and auto replies.",
-      });
-    },
-    onError: (e: Error) => {
-      toast({ title: "Could not save", description: e.message, variant: "destructive" });
-    },
-  });
-
-  const websiteEditMutation = useMutation({
-    mutationFn: async (summary: string) => {
-      const res = await fetch("/api/ai/website-knowledge", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ summary }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Failed to update");
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/ai/business-knowledge"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/ai/workspace-intelligence"] });
-      toast({ title: "Knowledge updated", description: "Your edited summary has been saved." });
-    },
-    onError: (e: Error) => {
-      toast({ title: "Update failed", description: e.message, variant: "destructive" });
-    },
-  });
-
-  const websiteDeleteMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/ai/website-knowledge", { method: "DELETE", credentials: "include" });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Failed to delete");
-      return data;
-    },
-    onSuccess: () => {
-      setWkUrls(WK_URLS_INITIAL);
-      setWkPreview("");
-      setWkSources([]);
-      setWkScanId(null);
-      setWkErr("");
-      setWkPageResults(null);
-      setWkPhase("idle");
-      queryClient.invalidateQueries({ queryKey: ["/api/ai/business-knowledge"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/ai/workspace-intelligence"] });
-      toast({ title: "Website knowledge removed", description: "AI will no longer use this imported context." });
-    },
-    onError: (e: Error) => {
-      toast({ title: "Delete failed", description: e.message, variant: "destructive" });
-    },
-  });
-
   const debouncedPersistKnowledge = useMemo(
     () =>
       debounce((payload: BusinessKnowledge) => {
@@ -774,28 +513,6 @@ function AIBrainContent() {
     if (snapshot === lastKnowledgeSentRef.current) return;
     debouncedPersistKnowledge(knowledge);
   }, [knowledge, effectiveHasAIBrain, knowledgeLoading, debouncedPersistKnowledge]);
-
-  /** Must run before any conditional return — same hook order on every render (React #310). */
-  const websiteKnowledgeSaved = useMemo(() => {
-    if (!businessKnowledge || typeof businessKnowledge !== "object") return null;
-    const k = businessKnowledge as BusinessKnowledge;
-    const summary = typeof k.websiteKnowledgeSummary === "string" ? k.websiteKnowledgeSummary.trim() : "";
-    const url = typeof k.websiteKnowledgeUrl === "string" ? k.websiteKnowledgeUrl.trim() : "";
-    const sourceUrlsRaw = k.websiteKnowledgeSourceUrls;
-    const sourceUrls = Array.isArray(sourceUrlsRaw)
-      ? sourceUrlsRaw.filter((x): x is string => typeof x === "string")
-      : [];
-    if (!summary && !url) return null;
-    return { summary, url, sourceUrls, updatedAt: k.websiteKnowledgeUpdatedAt ?? null };
-  }, [businessKnowledge]);
-
-  const websiteKnowledgeLastScannedLabel = useMemo(() => {
-    const t = websiteKnowledgeSaved?.updatedAt;
-    if (t == null || t === "") return null;
-    const d = new Date(t as string | number | Date);
-    if (Number.isNaN(d.getTime())) return null;
-    return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-  }, [websiteKnowledgeSaved]);
 
   const handleAddKeyword = () => {
     if (newKeyword && !settings.handoffKeywords.includes(newKeyword)) {
@@ -935,6 +652,66 @@ function AIBrainContent() {
       saveSettingsMutation.isPending && "pointer-events-none cursor-wait",
     );
 
+  /**
+   * Step 1 opens with these. They persist as you type, unlike the pages below them, so the
+   * label says so rather than adding a second save button next to the one publish action.
+   */
+  const businessProfileFields = (
+    <div className="space-y-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        About your business
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="biz-name" className="text-xs font-medium text-muted-foreground">
+            Business name
+          </Label>
+          <Input
+            id="biz-name"
+            className="h-9 text-sm"
+            value={knowledge.businessName}
+            onChange={(e) => setKnowledge((prev) => ({ ...prev, businessName: e.target.value }))}
+            placeholder="Acme Co."
+            data-testid="input-business-name"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium text-muted-foreground">Industry</Label>
+          <Select
+            value={knowledge.industry || undefined}
+            onValueChange={(value) => setKnowledge((prev) => ({ ...prev, industry: value }))}
+          >
+            <SelectTrigger className="h-9 text-sm" data-testid="select-industry">
+              <SelectValue placeholder="Select industry" />
+            </SelectTrigger>
+            <SelectContent>
+              {INDUSTRY_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="services" className="text-xs font-medium text-muted-foreground">
+          Services or products
+        </Label>
+        <Textarea
+          id="services"
+          className="text-sm min-h-[72px] max-h-28 resize-y"
+          rows={2}
+          value={knowledge.servicesProducts}
+          onChange={(e) => setKnowledge((prev) => ({ ...prev, servicesProducts: e.target.value }))}
+          placeholder="Short summary of what you sell or deliver"
+          data-testid="textarea-services-products"
+        />
+        <p className="text-xs text-slate-500">Saved as you type.</p>
+      </div>
+    </div>
+  );
+
   const assistBullets = assistPlanBullets(plan, showTrialFullSuite);
   const assistTier = assistTierLabel(plan, showTrialFullSuite);
   const showBrainUpgradeSection = hasAIAssist && !effectiveHasAIBrain;
@@ -1065,7 +842,7 @@ function AIBrainContent() {
           </Card>
         )}
 
-        {/* Section 1: AI behavior — primary control surface */}
+        {/* How the assistant acts — applies to AI Assist too, so it sits outside the Brain gate */}
         <Card className="overflow-hidden rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.04] ring-1 ring-violet-100/35">
           <div className="h-0.5 bg-gradient-to-r from-violet-300/40 via-brand-green/35 to-emerald-400/35" aria-hidden />
           <CardHeader className="pb-4 space-y-1 pt-5">
@@ -1149,305 +926,9 @@ function AIBrainContent() {
 
         {effectiveHasAIBrain && (
           <>
-            {/* Section 2: Business profile */}
-            <Card className="rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.03] ring-1 ring-violet-100/50">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-semibold text-slate-900">Business profile</CardTitle>
-                <CardDescription className="text-slate-600">Helps the model stay aligned with what you offer</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="biz-name" className="text-xs font-medium text-muted-foreground">
-                      Business name
-                    </Label>
-                    <Input
-                      id="biz-name"
-                      className="h-9 text-sm"
-                      value={knowledge.businessName}
-                      onChange={(e) => setKnowledge((prev) => ({ ...prev, businessName: e.target.value }))}
-                      placeholder="Acme Co."
-                      data-testid="input-business-name"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">Industry</Label>
-                    <Select
-                      value={knowledge.industry || undefined}
-                      onValueChange={(value) => setKnowledge((prev) => ({ ...prev, industry: value }))}
-                    >
-                      <SelectTrigger className="h-9 text-sm" data-testid="select-industry">
-                        <SelectValue placeholder="Select industry" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {INDUSTRY_OPTIONS.map((o) => (
-                          <SelectItem key={o.value} value={o.value}>
-                            {o.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-1.5 sm:max-w-xl">
-                  <Label htmlFor="services" className="text-xs font-medium text-muted-foreground">
-                    Services or products
-                  </Label>
-                  <Textarea
-                    id="services"
-                    className="text-sm min-h-[72px] max-h-28 resize-y"
-                    rows={2}
-                    value={knowledge.servicesProducts}
-                    onChange={(e) => setKnowledge((prev) => ({ ...prev, servicesProducts: e.target.value }))}
-                    placeholder="Short summary of what you sell or deliver"
-                    data-testid="textarea-services-products"
-                  />
-                </div>
-              </CardContent>
-            </Card>
+            <BusinessKnowledgeSteps aboutFields={businessProfileFields} />
 
-            <Card className="rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.03] ring-1 ring-violet-100/50">
-              <CardHeader className="pb-3">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-violet-100/90 bg-violet-50/80 text-violet-700">
-                    <Globe className="h-4 w-4" aria-hidden />
-                  </div>
-                  <div className="min-w-0 space-y-1">
-                    <CardTitle className="text-base font-semibold text-slate-900">Website Knowledge</CardTitle>
-                    <CardDescription className="text-slate-600">
-                      Add the most important pages from your website so AI can learn your products, services, FAQs, and policies.
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {WK_FIELD_ROWS.map((row) => (
-                    <div key={row.key} className="space-y-1.5">
-                      <Label htmlFor={`wk-${row.key}`} className="text-xs font-medium text-muted-foreground">
-                        {row.label}
-                      </Label>
-                      <Input
-                        id={`wk-${row.key}`}
-                        className="h-9 text-sm"
-                        value={wkUrls[row.key]}
-                        onChange={(e) =>
-                          setWkUrls((prev) => ({ ...prev, [row.key]: e.target.value }))
-                        }
-                        placeholder={row.placeholder}
-                        disabled={wkPhase === "scanning"}
-                        data-testid={row.testId ?? `input-website-knowledge-${row.key}`}
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    className="h-9 border-violet-200/80 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
-                    disabled={wkPhase === "scanning" || !hasAnyWkUrl || websiteScanMutation.isPending}
-                    onClick={() => websiteScanMutation.mutate(wkUrls)}
-                    data-testid="button-website-knowledge-scan"
-                  >
-                    {wkPhase === "scanning" || websiteScanMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Scanning…
-                      </>
-                    ) : (
-                      "Scan knowledge pages"
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 border-violet-200/80 text-violet-900 hover:bg-violet-50"
-                    disabled={wkPhase === "scanning" || !hasAnyWkUrl || websiteScanMutation.isPending}
-                    onClick={() => {
-                      setWkErr("");
-                      websiteScanMutation.mutate(wkUrls);
-                    }}
-                    data-testid="button-website-knowledge-rescan"
-                  >
-                    Rescan knowledge pages
-                  </Button>
-                </div>
-
-                <div className="rounded-lg border border-slate-200/70 bg-slate-50/40 px-3 py-2 text-sm" role="status">
-                  {wkPhase === "scanning" && (
-                    <p className="flex items-center gap-2 text-slate-700">
-                      <Loader2 className="h-4 w-4 shrink-0 animate-spin text-violet-500" aria-hidden />
-                      Fetching your pages and building a combined preview…
-                    </p>
-                  )}
-                  {wkPhase === "scanned" && (
-                    <p className="font-medium text-emerald-800">Success — review the summary below, then save to AI Brain.</p>
-                  )}
-                  {wkPhase === "failed" && (
-                    <p className="text-destructive">
-                      <span className="font-medium">Failed.</span> {wkErr || "Scan could not complete."}
-                    </p>
-                  )}
-                  {wkPhase === "idle" && websiteKnowledgeSaved && (
-                    <p className="text-emerald-800/95">
-                      <span className="font-medium">Saved</span> — this knowledge is used in Copilot and auto replies.
-                    </p>
-                  )}
-                  {wkPhase === "idle" && !websiteKnowledgeSaved && (
-                    <p className="text-slate-600">
-                      Paste the public https URLs you want to include, then scan. Empty rows are skipped.
-                      Saved URLs stay here and are rescanned together whenever you add a new one.
-                    </p>
-                  )}
-                </div>
-
-                {wkPageResults && wkPageResults.length > 0 && (wkPhase === "scanned" || wkPhase === "failed") && (
-                  <div className="overflow-hidden rounded-lg border border-slate-200/80 bg-white">
-                    <p className="border-b border-slate-100 bg-slate-50/80 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Page status
-                    </p>
-                    <ul className="max-h-48 divide-y divide-slate-100 overflow-y-auto text-xs">
-                      {wkPageResults.map((row) => (
-                        <li key={row.key} className="flex flex-col gap-0.5 px-3 py-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-                          <div className="min-w-0 shrink-0 font-medium text-slate-800">{row.label}</div>
-                          <div className="min-w-0 flex-1 font-mono text-[11px] text-slate-600">
-                            {row.url ? <span className="break-all">{row.url}</span> : <span className="text-slate-400">—</span>}
-                          </div>
-                          <div className="flex shrink-0 flex-col items-start gap-0.5 sm:items-end sm:text-right">
-                            <span
-                              className={cn(
-                                "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                                row.status === "scanned" && "bg-emerald-100 text-emerald-900",
-                                row.status === "skipped" && "bg-slate-100 text-slate-700",
-                                row.status === "failed" && "bg-red-100 text-red-900",
-                              )}
-                            >
-                              {row.status}
-                              {row.status === "scanned" && row.truncated ? " · truncated" : ""}
-                            </span>
-                            {row.reason ? (
-                              <span className="max-w-[220px] text-[10px] leading-snug text-slate-500">{row.reason}</span>
-                            ) : null}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="wk-preview" className="text-xs font-medium text-muted-foreground">
-                    Generated knowledge preview — not saved until you save it below
-                  </Label>
-                  <Textarea
-                    id="wk-preview"
-                    className="min-h-[140px] max-h-[320px] resize-y text-sm"
-                    value={wkPreview}
-                    onChange={(e) => setWkPreview(e.target.value)}
-                    disabled={wkPhase === "scanning"}
-                    placeholder="After a successful scan, a concise summary built from your pages appears here."
-                    data-testid="textarea-website-knowledge-preview"
-                  />
-                </div>
-
-                {wkPhase === "scanned" && (
-                  <p className="text-xs text-amber-700">
-                    Saving replaces the entire saved summary with this text. Your saved page URLs
-                    above are kept and rescanned together next time.
-                  </p>
-                )}
-
-                {wkSources.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Pages fetched in the last scan</p>
-                    <ul className="max-h-24 space-y-0.5 overflow-y-auto text-xs text-violet-900/80">
-                      {wkSources.map((u) => (
-                        <li key={u} className="truncate font-mono">
-                          {u}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {websiteKnowledgeLastScannedLabel && wkPhase === "idle" && websiteKnowledgeSaved && (
-                  <p className="text-xs text-muted-foreground">
-                    Last updated: <span className="font-medium text-slate-700">{websiteKnowledgeLastScannedLabel}</span>
-                  </p>
-                )}
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    className="h-9 border-violet-200/80 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500 disabled:opacity-50"
-                    disabled={
-                      !wkScanId ||
-                      wkPhase !== "scanned" ||
-                      websiteSaveMutation.isPending ||
-                      !wkPreview.trim()
-                    }
-                    onClick={() => {
-                      if (!wkScanId) return;
-                      websiteSaveMutation.mutate({ scanId: wkScanId, summary: wkPreview });
-                    }}
-                    data-testid="button-website-knowledge-save"
-                  >
-                    {websiteSaveMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Saving…
-                      </>
-                    ) : (
-                      "Save to AI Brain"
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 border-violet-200/80 text-violet-900 hover:bg-violet-50"
-                    disabled={
-                      !websiteKnowledgeSaved ||
-                      !wkPreview.trim() ||
-                      !!wkScanId ||
-                      wkPhase !== "idle" ||
-                      websiteEditMutation.isPending
-                    }
-                    onClick={() => websiteEditMutation.mutate(wkPreview.trim())}
-                    data-testid="button-website-knowledge-save-edits"
-                  >
-                    {websiteEditMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Saving…
-                      </>
-                    ) : (
-                      "Save text changes"
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 border-slate-200 text-slate-700 hover:bg-slate-50"
-                    disabled={
-                      !websiteKnowledgeSaved ||
-                      websiteDeleteMutation.isPending ||
-                      !!wkScanId ||
-                      wkPhase !== "idle"
-                    }
-                    onClick={() => websiteDeleteMutation.mutate()}
-                    data-testid="button-website-knowledge-delete"
-                  >
-                    <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                    Delete
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <KnowledgeReview />
-
-            {/* Section 3: Lead understanding */}
+            {/* What the assistant asks for — about the conversation, not the business */}
             <Card className="rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.03] ring-1 ring-violet-100/50">
               <CardHeader className="pb-3 flex flex-row items-start justify-between gap-3 space-y-0">
                 <div>
@@ -1612,7 +1093,7 @@ function AIBrainContent() {
               </CardContent>
             </Card>
 
-            {/* Section 4: Booking — Calendly via Integrations only */}
+            {/* Booking — Calendly via Integrations only */}
             <Card className="rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.03] ring-1 ring-violet-100/50">
               <CardHeader className="pb-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

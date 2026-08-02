@@ -22,6 +22,7 @@ import {
 } from "./scanJobService";
 import {
   deleteKnowledgeSource,
+  findKnowledgeSourceByUrl,
   listKnowledgeSources,
   sourceDisplayLabel,
   upsertKnowledgeSource,
@@ -59,17 +60,21 @@ export function registerKnowledgeV2Routes(app: Express, deps: KnowledgeRouteDeps
       const userId = req.user!.id;
 
       let sources = await listKnowledgeSources(userId);
+      let backfilled = false;
       if (sources.length === 0) {
         // First visit after the upgrade: adopt the V1 slot URLs without scanning them.
         const knowledge = await storage.getAiBusinessKnowledge(userId);
         const backfill = await backfillWorkspaceKnowledgeV2(userId, knowledge);
-        if (backfill.sourcesCreated > 0 || backfill.legacySummaryFactCreated) {
-          sources = await listKnowledgeSources(userId);
-        }
+        backfilled = backfill.sourcesCreated > 0 || backfill.legacySummaryFactCreated;
+        if (backfilled) sources = await listKnowledgeSources(userId);
       }
 
       const latestJob = await getLatestScanJob(userId);
       res.json({
+        // The client fetches sources and facts together. This tells it that the adoption
+        // above may have landed after its facts request, so it can ask again rather than
+        // show an established workspace an empty review.
+        backfilled,
         sources: sources.map((s) => ({
           id: s.id,
           url: s.url,
@@ -105,11 +110,15 @@ export function registerKnowledgeV2Routes(app: Express, deps: KnowledgeRouteDeps
         return res.status(400).json({ error: message });
       }
 
+      // Adding a page that is already listed is a no-op by design; the client says so
+      // rather than clearing the field and appearing to have done nothing.
+      const alreadyListed = await findKnowledgeSourceByUrl(req.user!.id, url);
       const source = await upsertKnowledgeSource(req.user!.id, {
         url,
         customLabel: typeof body.label === "string" && body.label.trim() ? body.label.trim() : null,
       });
       res.json({
+        created: !alreadyListed,
         source: {
           id: source.id,
           url: source.url,
