@@ -27,10 +27,14 @@ test("speak with an advisor → clarify before book or assign", () => {
   assert.equal(routingShouldTriggerHandoff(r), false);
 });
 
-test("pricing question → assign agent", () => {
+test("pricing question → continue AI (info-seeking, not handoff)", () => {
   const r = resolveAiRouting({ inbound: "How much does your premium plan cost?" });
-  assert.equal(r.decision, "ASSIGN_AGENT");
-  assert.equal(routingShouldTriggerHandoff(r), true);
+  assert.equal(r.decision, "CONTINUE_AI");
+  assert.equal(r.reason, "info_seeking_qualify");
+  assert.equal(r.humanHandoffRequested, false);
+  assert.equal(routingShouldTriggerHandoff(r), false);
+  assert.ok(r.subIntents.includes("pricing_question"));
+  assert.equal(r.turnIntent, "info_seeking");
 });
 
 test("schedule a call → book appointment", () => {
