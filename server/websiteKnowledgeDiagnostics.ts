@@ -72,7 +72,8 @@ export function wkDiag(event: string, data: Record<string, unknown>): void {
         tag: TAG,
         level: "info",
         event,
-        message: "",
+        // Railway's log text search only matches `message`, so keep the tag in it.
+        message: `${TAG} ${event}`,
         timestamp: new Date().toISOString(),
         ...data,
       }),
