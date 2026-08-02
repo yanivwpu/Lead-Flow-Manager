@@ -3460,15 +3460,21 @@ export class DbStorage implements IStorage {
 
   async upsertAiSettings(userId: string, updates: Partial<AiSettings>): Promise<AiSettings> {
     const existing = await this.getAiSettings(userId);
+    let row: AiSettings;
     if (existing) {
       const result = await db.update(aiSettings)
         .set({ ...updates, updatedAt: new Date() })
         .where(eq(aiSettings.userId, userId))
         .returning();
-      return result[0];
+      row = result[0];
+    } else {
+      const result = await db.insert(aiSettings).values({ ...updates, userId }).returning();
+      row = result[0];
     }
-    const result = await db.insert(aiSettings).values({ ...updates, userId }).returning();
-    return result[0];
+    // Workspace Intelligence Snapshot depends on AI Behavior settings.
+    const { invalidateWorkspaceIntelligenceCache } = await import("./workspaceIntelligenceCache");
+    invalidateWorkspaceIntelligenceCache(userId);
+    return row;
   }
 
   async getAiBusinessKnowledge(userId: string): Promise<AiBusinessKnowledge | undefined> {
@@ -3478,15 +3484,21 @@ export class DbStorage implements IStorage {
 
   async upsertAiBusinessKnowledge(userId: string, updates: Partial<AiBusinessKnowledge>): Promise<AiBusinessKnowledge> {
     const existing = await this.getAiBusinessKnowledge(userId);
+    let row: AiBusinessKnowledge;
     if (existing) {
       const result = await db.update(aiBusinessKnowledge)
         .set({ ...updates, updatedAt: new Date() })
         .where(eq(aiBusinessKnowledge.userId, userId))
         .returning();
-      return result[0];
+      row = result[0];
+    } else {
+      const result = await db.insert(aiBusinessKnowledge).values({ ...updates, userId }).returning();
+      row = result[0];
     }
-    const result = await db.insert(aiBusinessKnowledge).values({ ...updates, userId }).returning();
-    return result[0];
+    // Workspace Intelligence Snapshot depends on AI Brain / Business Profile columns.
+    const { invalidateWorkspaceIntelligenceCache } = await import("./workspaceIntelligenceCache");
+    invalidateWorkspaceIntelligenceCache(userId);
+    return row;
   }
 
   async getCurrentAiUsage(userId: string): Promise<AiUsage | undefined> {
@@ -3972,12 +3984,22 @@ export class DbStorage implements IStorage {
 
   async createTemplateInstall(data: InsertTemplateInstall): Promise<TemplateInstall> {
     const result = await db.insert(templateInstalls).values(data).returning();
-    return result[0];
+    const row = result[0];
+    if (row?.userId) {
+      const { invalidateWorkspaceIntelligenceCache } = await import("./workspaceIntelligenceCache");
+      invalidateWorkspaceIntelligenceCache(row.userId);
+    }
+    return row;
   }
 
   async updateTemplateInstall(id: string, updates: Partial<TemplateInstall>): Promise<TemplateInstall | undefined> {
     const result = await db.update(templateInstalls).set(updates).where(eq(templateInstalls.id, id)).returning();
-    return result[0];
+    const row = result[0];
+    if (row?.userId) {
+      const { invalidateWorkspaceIntelligenceCache } = await import("./workspaceIntelligenceCache");
+      invalidateWorkspaceIntelligenceCache(row.userId);
+    }
+    return row;
   }
 
   async getTemplateAssets(templateId: string): Promise<TemplateAsset[]> {
