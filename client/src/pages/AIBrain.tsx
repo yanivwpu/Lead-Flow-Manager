@@ -114,9 +114,11 @@ function websiteKnowledgePreviewToString(raw: unknown): string {
     if (!t) return "";
     if (t.startsWith("{") || t.startsWith("[")) {
       try {
-        return websiteKnowledgePreviewToString(JSON.parse(t));
+        // Never swallow the payload: an unrecognised shape must still show something.
+        const inner = websiteKnowledgePreviewToString(JSON.parse(t));
+        if (inner) return inner;
       } catch {
-        return t;
+        /* not JSON after all — fall through to the raw text */
       }
     }
     return t;

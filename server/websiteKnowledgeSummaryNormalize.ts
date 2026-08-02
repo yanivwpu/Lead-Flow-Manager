@@ -16,6 +16,66 @@ const OBJECT_TEXT_KEYS = [
   "markdown",
 ] as const;
 
+function humanizeKey(key: string): string {
+  return key
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^./, (c) => c.toUpperCase());
+}
+
+function isScalar(v: unknown): boolean {
+  return typeof v === "string" || typeof v === "number" || typeof v === "boolean";
+}
+
+/**
+ * Last resort for models that answer with a nested JSON tree instead of prose.
+ * Without this the known-key probes below bottom out and the caller keeps the raw
+ * JSON envelope, which reads as an empty preview in the UI.
+ */
+function renderStructuredText(value: unknown, depth = 0): string {
+  if (value == null) return "";
+  if (isScalar(value)) return String(value).trim();
+
+  const indent = "  ".repeat(depth);
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        // A row of scalars reads better inline: "Business Listing — $29/mo — Basic listing".
+        if (item && typeof item === "object" && !Array.isArray(item)) {
+          const values = Object.values(item as Record<string, unknown>);
+          if (values.length > 0 && values.every(isScalar)) {
+            return `${indent}- ${values.map((v) => String(v).trim()).join(" — ")}`;
+          }
+        }
+        const rendered = renderStructuredText(item, depth + 1);
+        if (!rendered) return "";
+        return rendered.includes("\n") ? `${indent}-\n${rendered}` : `${indent}- ${rendered}`;
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([k, v]) => {
+        const label = humanizeKey(k);
+        if (isScalar(v)) {
+          const scalar = String(v).trim();
+          return scalar ? `${indent}${label}: ${scalar}` : "";
+        }
+        const rendered = renderStructuredText(v, depth + 1);
+        return rendered ? `${indent}${label}:\n${rendered}` : "";
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  return "";
+}
+
 export function extractWebsiteKnowledgeSummaryText(value: unknown): string {
   if (value == null) return "";
 
@@ -42,7 +102,8 @@ export function extractWebsiteKnowledgeSummaryText(value: unknown): string {
     const parts = value
       .map((item) => extractWebsiteKnowledgeSummaryText(item))
       .filter((s) => s.length > 0);
-    return parts.join("\n\n").trim();
+    if (parts.length > 0) return parts.join("\n\n").trim();
+    return renderStructuredText(value);
   }
 
   if (typeof value === "object") {
@@ -65,6 +126,8 @@ export function extractWebsiteKnowledgeSummaryText(value: unknown): string {
       const inner = extractWebsiteKnowledgeSummaryText(o.parts);
       if (inner) return inner;
     }
+
+    return renderStructuredText(o);
   }
 
   return "";
