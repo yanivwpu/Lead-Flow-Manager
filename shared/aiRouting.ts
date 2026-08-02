@@ -96,6 +96,14 @@ const BENEFITS_QUESTION_RE =
   /\b(?:benefits?|what(?:'s|\s+is|\s+are)\s+(?:the\s+)?(?:benefit|value|advantage)|why\s+(?:should|would)\s+i)\b/i;
 const LISTING_JOIN_QUESTION_RE =
   /\b(?:list\s+my|how\s+(?:do|can)\s+i\s+list|join\s+(?:the\s+)?directory|advertis(?:e|ing)\s+my|get\s+(?:my|our)\s+business\s+listed)\b/i;
+const HOURS_QUESTION_RE =
+  /\b(?:open(?:ing)?\s+hours?|business\s+hours?|what\s+time\s+(?:do|are)\s+you|when\s+(?:do|are)\s+you\s+open|are\s+you\s+open|closing\s+time|what\s+are\s+your\s+hours)\b/i;
+const LOCATION_QUESTION_RE =
+  /\b(?:where\s+are\s+you|where\s+is\s+(?:your|the)|your\s+address|what'?s\s+your\s+address|do\s+you\s+(?:serve|cover|come\s+to)|service\s+areas?|which\s+areas?|nearest\s+(?:store|office|branch)|directions)\b/i;
+const POLICY_QUESTION_RE =
+  /\b(?:refund|return\s+policy|returns?\b|cancellation|cancel\s+(?:my|the)\s+(?:order|plan|subscription)|shipping\s+policy|delivery\s+time|warranty|guarantee|terms\s+(?:and|&)\s+conditions|privacy\s+policy)\b/i;
+const BOOKING_QUESTION_RE =
+  /\b(?:book\s+(?:a|an|my)|how\s+(?:do|can)\s+i\s+book|schedule\s+(?:a|an)|make\s+an?\s+appointment|available\s+times?|calendar\s+link|booking\s+link)\b/i;
 
 const NURTURE_RE =
   /\b(just\s+browsing|not\s+ready|maybe\s+later|not\s+now|no\s+rush|in\s+the\s+future|(?:still\s+)?researching|looking\s+around|exploring\s+options|not\s+yet|sometime\s+next|few\s+months\s+out)\b/i;
@@ -266,11 +274,16 @@ function buildPromptGuidance(
   }
 }
 
-function deriveSubIntents(latestNorm: string): string[] {
+/** Exported so fact retrieval can route on the same signals the router uses. */
+export function deriveSubIntents(latestNorm: string): string[] {
   const out: string[] = [];
   if (PRICING_QUESTION_RE.test(latestNorm)) out.push("pricing_question");
   if (BENEFITS_QUESTION_RE.test(latestNorm)) out.push("benefits_question");
   if (LISTING_JOIN_QUESTION_RE.test(latestNorm)) out.push("listing_join_question");
+  if (HOURS_QUESTION_RE.test(latestNorm)) out.push("hours_question");
+  if (LOCATION_QUESTION_RE.test(latestNorm)) out.push("location_question");
+  if (POLICY_QUESTION_RE.test(latestNorm)) out.push("policy_question");
+  if (BOOKING_QUESTION_RE.test(latestNorm)) out.push("booking_question");
   return out;
 }
 

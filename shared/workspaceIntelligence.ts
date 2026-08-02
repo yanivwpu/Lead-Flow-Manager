@@ -14,6 +14,14 @@
  */
 
 import type { AiBusinessKnowledge, AiSettings } from "./schema";
+import {
+  buildFactNarrativeSummary,
+  compareFactsForRetrieval,
+  formatFactValue,
+  summarizeKnowledgeFreshness,
+  type KnowledgeFact,
+  type KnowledgeFreshnessPolicy,
+} from "./businessKnowledgeFacts";
 
 export type WorkspaceIntelligenceSource = "ai_brain" | "business_profile" | "generic";
 
@@ -40,6 +48,30 @@ export type WorkspaceIntelligenceCapabilities = {
   hasQualifyingQuestions: boolean;
   hasCustomInstructions: boolean;
   realtorGrowthEngineInstalled: boolean;
+  /** True once the workspace has published structured facts. */
+  hasStructuredFacts: boolean;
+};
+
+/**
+ * Counts only — the snapshot is sent to the client on every Inbox load, so facts
+ * themselves stay server-side and are fetched per turn by the reply path.
+ */
+export type WorkspaceKnowledgeFreshness = {
+  publishedFacts: number;
+  fresh: number;
+  aging: number;
+  stale: number;
+  oldestVerifiedAt: string | null;
+  newestVerifiedAt: string | null;
+};
+
+const EMPTY_FRESHNESS: WorkspaceKnowledgeFreshness = {
+  publishedFacts: 0,
+  fresh: 0,
+  aging: 0,
+  stale: 0,
+  oldestVerifiedAt: null,
+  newestVerifiedAt: null,
 };
 
 /** Full assembled intelligence (server + Prospect reuse). */
@@ -84,6 +116,7 @@ export type WorkspaceIntelligence = {
 
   growthEngines: WorkspaceGrowthEngines;
   capabilities: WorkspaceIntelligenceCapabilities;
+  knowledgeFreshness: WorkspaceKnowledgeFreshness;
 
   knowledgeUpdatedAt: string | null;
   settingsUpdatedAt: string | null;
@@ -138,12 +171,18 @@ export type WorkspaceIntelligenceSnapshot = {
 
   growthEngines: WorkspaceGrowthEngines;
   capabilities: WorkspaceIntelligenceCapabilities;
+  /** Counts only; lets a client say "verified last week" without shipping the facts. */
+  knowledgeFreshness: WorkspaceKnowledgeFreshness;
 };
 
 export type AssembleWorkspaceIntelligenceInput = {
   knowledge?: Partial<AiBusinessKnowledge> | null;
   settings?: Partial<AiSettings> | null;
   growthEngines?: Partial<WorkspaceGrowthEngines> | null;
+  /** Published facts only. Drafts must never reach a consumer. */
+  publishedFacts?: KnowledgeFact[] | null;
+  freshnessPolicy?: KnowledgeFreshnessPolicy;
+  now?: Date;
 };
 
 const KNOWLEDGE_BRIEF_MAX = 500;
@@ -233,6 +272,31 @@ export function derivePrimaryOfferings(servicesProducts: string | undefined): st
     .map((part) => part.replace(/^[-*•]\s*/, "").trim())
     .filter((part) => part.length >= 2 && part.length <= 120)
     .slice(0, MAX_OFFERINGS);
+}
+
+/**
+ * Offerings taken from published facts rather than a prose blob.
+ * Plans come first because "what do you sell" is most often answered by the priced tiers.
+ */
+export function derivePrimaryOfferingsFromFacts(facts: KnowledgeFact[]): string[] {
+  const published = facts.filter((f) => f.state === "published");
+  if (published.length === 0) return [];
+  const ordered = [...published].sort(compareFactsForRetrieval);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const type of ["pricing_plan", "service", "product"] as const) {
+    for (const fact of ordered) {
+      if (fact.factType !== type) continue;
+      const data = fact.data as { name?: string };
+      const label = text(data?.name) || formatFactValue(fact);
+      const key = label.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(label.length > 120 ? `${label.slice(0, 119).trimEnd()}…` : label);
+      if (out.length >= MAX_OFFERINGS) return out;
+    }
+  }
+  return out;
 }
 
 export function buildKnowledgeBrief(params: {
@@ -337,6 +401,26 @@ export function assembleWorkspaceIntelligence(
       ? ["realtor-growth-engine"]
       : [];
 
+  const publishedFacts = (input.publishedFacts ?? []).filter((f) => f.state === "published");
+  const hasFacts = publishedFacts.length > 0;
+  const knowledgeFreshness: WorkspaceKnowledgeFreshness = hasFacts
+    ? (() => {
+        const summary = summarizeKnowledgeFreshness(
+          publishedFacts,
+          input.now ?? new Date(),
+          input.freshnessPolicy,
+        );
+        return {
+          publishedFacts: summary.total,
+          fresh: summary.fresh,
+          aging: summary.aging,
+          stale: summary.stale,
+          oldestVerifiedAt: summary.oldestVerifiedAt,
+          newestVerifiedAt: summary.newestVerifiedAt,
+        };
+      })()
+    : EMPTY_FRESHNESS;
+
   const faqs = parseWorkspaceFaqs(knowledge?.faqs);
   const qualifyingQuestions = parseQualifyingQuestions(knowledge?.qualifyingQuestions);
   const displayName = text(knowledge?.displayName);
@@ -355,7 +439,7 @@ export function assembleWorkspaceIntelligence(
   const locations = text(knowledge?.locations);
   const bookingLink = text(knowledge?.bookingLink);
 
-  const hasAiBrain = hasAiBrainIntelligence(knowledge);
+  const hasAiBrain = hasAiBrainIntelligence(knowledge) || hasFacts;
   const hasBusinessProfile = hasBusinessProfileIdentity(knowledge);
 
   const persona = text(settings?.aiPersona) || "professional";
@@ -385,16 +469,21 @@ export function assembleWorkspaceIntelligence(
     hasQualifyingQuestions: qualifyingQuestions.length > 0,
     hasCustomInstructions: Boolean(customInstructions),
     realtorGrowthEngineInstalled: rgeInstalled,
+    hasStructuredFacts: hasFacts,
   });
 
   if (hasAiBrain) {
+    // Facts outrank the prose summary here for the same reason they do in a reply:
+    // the summary is a paraphrase, the facts are the values that were verified.
+    const factNarrative = hasFacts ? buildFactNarrativeSummary(publishedFacts) : "";
     const executiveSummary =
-      websiteKnowledgeSummary || servicesProducts || customInstructions || industry;
+      text(factNarrative) || websiteKnowledgeSummary || servicesProducts || customInstructions || industry;
     const knowledgeBrief = buildKnowledgeBrief({
-      websiteKnowledgeSummary,
+      websiteKnowledgeSummary: text(factNarrative) || websiteKnowledgeSummary,
       servicesProducts,
       executiveSummary,
     });
+    const factOfferings = derivePrimaryOfferingsFromFacts(publishedFacts);
     return {
       configured: true,
       aiBrainIsPrimary: true,
@@ -419,7 +508,8 @@ export function assembleWorkspaceIntelligence(
       executiveSummary,
       faqs,
       qualifyingQuestions,
-      primaryOfferings: derivePrimaryOfferings(servicesProducts),
+      primaryOfferings:
+        factOfferings.length > 0 ? factOfferings : derivePrimaryOfferings(servicesProducts),
       persona,
       aiMode,
       confidenceLevel,
@@ -428,6 +518,7 @@ export function assembleWorkspaceIntelligence(
       handoffKeywords,
       growthEngines,
       capabilities: baseCapabilities(),
+      knowledgeFreshness,
       knowledgeUpdatedAt,
       settingsUpdatedAt,
       websiteKnowledgeUpdatedAt,
@@ -471,6 +562,7 @@ export function assembleWorkspaceIntelligence(
         hasQualifyingQuestions: false,
         hasCustomInstructions: false,
       },
+      knowledgeFreshness,
       knowledgeUpdatedAt,
       settingsUpdatedAt,
       websiteKnowledgeUpdatedAt,
@@ -502,7 +594,9 @@ export function assembleWorkspaceIntelligence(
       hasQualifyingQuestions: false,
       hasCustomInstructions: false,
       realtorGrowthEngineInstalled: rgeInstalled,
+      hasStructuredFacts: false,
     },
+    knowledgeFreshness,
     knowledgeUpdatedAt,
     settingsUpdatedAt,
     websiteKnowledgeUpdatedAt,
@@ -538,6 +632,9 @@ export function workspaceIntelligenceFingerprint(intel: WorkspaceIntelligence): 
     `rge:${intel.growthEngines.rgeInstalled ? "1" : "0"}`,
     `ge:${intel.growthEngines.installedTemplateIds.slice().sort().join(",") || "none"}`,
     intel.primarySource,
+    // Publishing changes facts without touching any of the timestamps above, so the
+    // fact count plus newest verification has to be part of the key.
+    `facts:${intel.knowledgeFreshness.publishedFacts}:${intel.knowledgeFreshness.newestVerifiedAt || "none"}`,
     contentStamp(intel),
   ].join("|");
 }
@@ -590,5 +687,6 @@ export function toWorkspaceIntelligenceSnapshot(
       installedTemplateIds: [...intel.growthEngines.installedTemplateIds],
     },
     capabilities: { ...intel.capabilities },
+    knowledgeFreshness: { ...intel.knowledgeFreshness },
   };
 }

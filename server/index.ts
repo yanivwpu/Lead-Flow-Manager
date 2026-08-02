@@ -441,6 +441,11 @@ app.use((req, res, next) => {
   );
   startProspectBulkAnalysisWorker();
 
+  // AI Brain structured-knowledge extraction — one fetch plus one model call per source,
+  // so it runs as a leased job rather than inside the scan request.
+  const { startKnowledgeScanWorker } = await import("./websiteKnowledge/scanJobWorker");
+  startKnowledgeScanWorker();
+
   // Ensure SSO user exists for LeadConnector integration
   try {
     const ssoUser = await storage.getUserByEmail('yaniv@whachatcrm.com');

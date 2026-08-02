@@ -41,6 +41,7 @@ import {
 } from "@/lib/shopifyCheckout";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
+import { KnowledgeReview } from "@/components/aibrain/KnowledgeReview";
 import type { WebsiteKnowledgeSourceEntry } from "@shared/websiteKnowledgeSources";
 
 interface AISettings {
@@ -1443,6 +1444,8 @@ function AIBrainContent() {
                 </div>
               </CardContent>
             </Card>
+
+            <KnowledgeReview />
 
             {/* Section 3: Lead understanding */}
             <Card className="rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.03] ring-1 ring-violet-100/50">

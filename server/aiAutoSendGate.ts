@@ -143,6 +143,8 @@ export function evaluateFullAutoSend(params: {
   suggestion: string;
   confidence: number;
   businessKnowledge?: BusinessKnowledgeForScoring;
+  /** Set when the draft contradicts or ignores published business facts. */
+  groundingViolations?: string[];
 }): { allowed: boolean; reason: string; missingRequiredLen: number; inboundCount: number } {
   const { businessMode, conversationHistory, suggestion, confidence, businessKnowledge } = params;
 
@@ -159,6 +161,17 @@ export function evaluateFullAutoSend(params: {
 
   if (!lastInbound) {
     return { allowed: false, reason: "empty_last_inbound", missingRequiredLen: 0, inboundCount };
+  }
+
+  // Checked ahead of every override: a reply that states a price the business never
+  // published, or claims not to know something it does, must reach a human first.
+  if (params.groundingViolations && params.groundingViolations.length > 0) {
+    return {
+      allowed: false,
+      reason: `grounding_violation:${params.groundingViolations[0]}`,
+      missingRequiredLen: 0,
+      inboundCount,
+    };
   }
 
   if (STOP_RE.test(joinedInbound) || COMPLAINT_RE.test(joinedInbound)) {

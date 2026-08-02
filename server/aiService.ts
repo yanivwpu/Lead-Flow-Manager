@@ -1,5 +1,7 @@
 import { aiProvider } from "./aiProvider";
 import { extractWebsiteKnowledgeSummaryText } from "./websiteKnowledgeSummaryNormalize";
+import { buildTurnGrounding, type TurnGrounding } from "./websiteKnowledge/factContext";
+import { validateGroundedClaims, type GroundedPromptBlock } from "@shared/factGrounding";
 import { storage } from "./storage";
 import { 
   LEAD_INTENT_KEYWORDS, 
@@ -10,9 +12,6 @@ import {
 import type { AiRoutingResult } from "@shared/aiRouting";
 import { resolveAiRouting, routingShouldTriggerHandoff } from "@shared/aiRouting";
 import { sanitizeRoboticBuyerReply } from "@shared/buyerQualification";
-// TEMPORARY [WK-DIAG] instrumentation — remove with the pricing investigation.
-import { newWkTrace, priceSignals, wkDiag } from "./websiteKnowledgeDiagnostics";
-
 export type SupportedAiLanguage = "en" | "he" | "es" | "ar";
 
 const LANGUAGE_PROMPTS: Record<SupportedAiLanguage, { instruction: string; name: string }> = {
@@ -63,7 +62,7 @@ export class AIService {
     },
     routing?: AiRoutingResult,
     channel?: string | null,
-  ): Promise<{ suggestion: string; confidence: number }> {
+  ): Promise<{ suggestion: string; confidence: number; groundingViolations?: string[] }> {
     const lastMessage = conversationHistory[conversationHistory.length - 1]?.content || "";
 
     // Don't suggest when there is no real conversational context yet.
@@ -80,6 +79,28 @@ export class AIService {
 
     const detectedLanguage = language || await this.detectMessageLanguage(lastMessage);
     const isFirstMessage = conversationHistory.length <= 2;
+
+    // Published facts are the factual source of truth. When a workspace has none, the
+    // block is empty and the V1 prose summary below remains the only business context.
+    let grounding: TurnGrounding = {
+      retrieved: [],
+      block: { text: "", factCount: 0, staleFactCount: 0, coveredTypes: [] },
+    };
+    try {
+      grounding = await buildTurnGrounding({
+        userId,
+        message: lastMessage,
+        knowledgeRow: businessKnowledge,
+        subIntents: routing?.subIntents,
+        freshnessPolicyRaw: (businessKnowledge as any)?.knowledgeFreshnessPolicy,
+      });
+    } catch (err) {
+      console.error(
+        "[AI] fact grounding unavailable",
+        err instanceof Error ? err.message.slice(0, 240) : String(err).slice(0, 240),
+      );
+    }
+
     const systemPrompt = this.buildSystemPrompt(
       businessKnowledge,
       settings,
@@ -89,31 +110,9 @@ export class AIService {
       isFirstMessage,
       routing,
       channel,
+      grounding.block,
     );
 
-    // #region agent log
-    const wkTrace = newWkTrace();
-    {
-      const savedKnowledge = String((businessKnowledge as any)?.websiteKnowledgeSummary || "").trim();
-      const knowledgeSignals = priceSignals(savedKnowledge);
-      const promptSignals = priceSignals(systemPrompt);
-      wkDiag("stage_5_reply_prompt", {
-        trace: wkTrace,
-        userId,
-        hasWebsiteKnowledge: savedKnowledge.length > 0,
-        knowledgeChars: knowledgeSignals.chars,
-        knowledgePriceCount: knowledgeSignals.priceCount,
-        knowledgePriceTokens: knowledgeSignals.priceTokens,
-        knowledgePlanNames: knowledgeSignals.planNames,
-        promptCapApplied: savedKnowledge.length > 3500,
-        promptChars: promptSignals.chars,
-        promptPriceCount: promptSignals.priceCount,
-        promptPriceTokens: promptSignals.priceTokens,
-        askedAboutPrice: /(price|pricing|cost|how much|per month|monthly|fee)/i.test(lastMessage),
-      });
-    }
-    // #endregion
-    
     try {
       const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
         { role: "system", content: systemPrompt },
@@ -127,25 +126,23 @@ export class AIService {
       const result = JSON.parse(response || "{}");
       
       const rawReply = result.reply || "";
-      // #region agent log
-      {
-        const replySignals = priceSignals(rawReply);
-        const hedge =
-          /(don'?t|do not|dont)\s+have\s+(the\s+)?(exact\s+)?(pricing|price|prices)|no\s+(exact\s+)?pricing|not\s+sure\s+(about\s+)?(the\s+)?pric/i;
-        wkDiag("stage_6_reply_draft", {
-          trace: wkTrace,
+      const suggestion = sanitizeRoboticBuyerReply(rawReply);
+      const groundingCheck = validateGroundedClaims({
+        draft: suggestion,
+        retrieved: grounding.retrieved,
+        subIntents: routing?.subIntents,
+      });
+      if (!groundingCheck.ok) {
+        console.warn("[AI] reply failed fact grounding", {
           userId,
-          replyChars: replySignals.chars,
-          replyPriceCount: replySignals.priceCount,
-          replyPriceTokens: replySignals.priceTokens,
-          replyHasPricingHedge: hedge.test(String(rawReply)),
-          confidence: typeof result.confidence === "number" ? result.confidence : null,
+          violations: groundingCheck.violations.map((v) => v.kind),
         });
       }
-      // #endregion
+
       return {
-        suggestion: sanitizeRoboticBuyerReply(rawReply),
+        suggestion,
         confidence: result.confidence || 0.7,
+        groundingViolations: groundingCheck.violations.map((v) => v.kind),
       };
     } catch (error) {
       console.error(
@@ -544,6 +541,7 @@ Return JSON only: { "summary": "..." }`;
     isFirstMessage?: boolean,
     routing?: AiRoutingResult,
     channel?: string | null,
+    groundedFacts?: GroundedPromptBlock,
   ): string {
     const langInstruction = language ? LANGUAGE_PROMPTS[language].instruction : LANGUAGE_PROMPTS.en.instruction;
     const industry = (businessKnowledge?.industry || "general").toLowerCase();
@@ -613,13 +611,18 @@ BUSINESS CONTEXT:
 - Services/Products: ${businessKnowledge?.servicesProducts || "Not specified"}
 - Location: ${businessKnowledge?.locations || "Available online"}
 - Hours: ${businessKnowledge?.businessHours || "Standard hours"}${bookingContextLine}
+${groundedFacts && groundedFacts.text ? `\n${groundedFacts.text}\n` : ""}
 ${(() => {
   const wk = (businessKnowledge as any)?.websiteKnowledgeSummary as string | undefined | null;
   if (!wk || !String(wk).trim()) return "";
   const cap = String(wk).trim().slice(0, 3500);
+  // Background only once facts exist: the facts block above is what may be stated as true.
+  const heading = groundedFacts && groundedFacts.factCount > 0
+    ? "ADDITIONAL WEBSITE BACKGROUND (unverified — never state a price, policy, or hour from this section; the verified facts above take precedence):"
+    : "WEBSITE KNOWLEDGE (from the merchant's public site — may be incomplete; verify critical facts with the customer when unsure):";
   return `
 
-WEBSITE KNOWLEDGE (from the merchant's public site — may be incomplete; verify critical facts with the customer when unsure):
+${heading}
 ${cap}`;
 })()}
 ${contactContext ? `LEAD CRM CONTEXT (use this to personalize your reply):

@@ -1475,6 +1475,10 @@ export const aiBusinessKnowledge = pgTable("ai_business_knowledge", {
   websiteKnowledgeSources: jsonb("website_knowledge_sources").notNull().default(sql`'[]'::jsonb`),
   /** When website knowledge summary was last saved. */
   websiteKnowledgeUpdatedAt: timestamp("website_knowledge_updated_at"),
+  /** Structured-facts pipeline active for this workspace. Flipped on first successful publish. */
+  knowledgeV2Enabled: boolean("knowledge_v2_enabled").notNull().default(false),
+  /** Per-workspace overrides for fact TTLs and stale-fact behaviour (`KnowledgeFreshnessPolicy`). */
+  knowledgeFreshnessPolicy: jsonb("knowledge_freshness_policy").notNull().default(sql`'{}'::jsonb`),
   /** Workspace master switch for public MLS listing share pages. */
   publishListingsPublicly: boolean("publish_listings_publicly").notNull().default(false),
   /** Public agent marketing page enabled. */
@@ -1490,6 +1494,144 @@ export const aiBusinessKnowledge = pgTable("ai_business_knowledge", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+/**
+ * V2 Website Knowledge sources — one row per page the workspace asked us to learn from.
+ *
+ * Named `ai_website_knowledge_sources` because `website_knowledge_sources` is already a
+ * jsonb column on `ai_business_knowledge` (the V1 slot list, kept for compatibility).
+ * Raw page text is never stored here — only its hash and length.
+ */
+export const aiWebsiteKnowledgeSources = pgTable("ai_website_knowledge_sources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** Exactly what the user entered. */
+  url: text("url").notNull(),
+  /** Lowercased, de-hashed, de-trailing-slashed comparison key. */
+  normalizedUrl: text("normalized_url").notNull(),
+  /** Bridge to the legacy nine fixed slots; null for sources added in V2. */
+  slotKey: text("slot_key"),
+  title: text("title"),
+  customLabel: text("custom_label"),
+  /** pricing | services | about | faq | policy | contact | locations | other */
+  detectedType: text("detected_type").notNull().default("other"),
+  /** pending | scanning | scanned | failed | stale | disabled */
+  status: text("status").notNull().default("pending"),
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  contentHash: text("content_hash"),
+  charCount: integer("char_count").notNull().default(0),
+  scanVersion: integer("scan_version").notNull().default(0),
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"),
+  metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+  firstAddedAt: timestamp("first_added_at").defaultNow(),
+  lastScannedAt: timestamp("last_scanned_at"),
+  lastSuccessfulScanAt: timestamp("last_successful_scan_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  userNormalizedUrlIdx: uniqueIndex("ai_website_knowledge_sources_user_url_idx").on(
+    t.userId,
+    t.normalizedUrl,
+  ),
+  userEnabledIdx: index("ai_website_knowledge_sources_user_enabled_idx").on(t.userId, t.isEnabled),
+}));
+
+export type AiWebsiteKnowledgeSourceRow = typeof aiWebsiteKnowledgeSources.$inferSelect;
+
+/**
+ * Structured, source-backed business facts — the factual source of truth for AI Brain.
+ *
+ * Scanning only ever writes `draft`; retrieval and Workspace Intelligence read `published`
+ * only, so a scan can never change live AI behaviour as a side effect.
+ */
+export const businessKnowledgeFacts = pgTable("business_knowledge_facts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** Null means manually entered — survives every rescan and source removal. */
+  sourceId: varchar("source_id").references(() => aiWebsiteKnowledgeSources.id, {
+    onDelete: "set null",
+  }),
+  factType: text("fact_type").notNull(),
+  /** Stable dedupe identity, e.g. `pricing_plan:business-listing`. */
+  factKey: text("fact_key").notNull(),
+  data: jsonb("data").notNull().default(sql`'{}'::jsonb`),
+  /** draft | published | retired */
+  state: text("state").notNull().default("draft"),
+  /**
+   * What a draft is asking for: add | update | retire | suggest.
+   * `suggest` is a change to a fact the user controls — review shows it, publish never
+   * applies it silently. Null on published and retired rows.
+   */
+  proposedAction: text("proposed_action"),
+  /** See FACT_PRECEDENCE in shared/businessKnowledgeFacts.ts. */
+  origin: text("origin").notNull().default("ai_extracted"),
+  confidence: doublePrecision("confidence").notNull().default(0.5),
+  isPinned: boolean("is_pinned").notNull().default(false),
+  userEdited: boolean("user_edited").notNull().default(false),
+  /** Shared by facts that claim the same key with different values. */
+  conflictGroup: text("conflict_group"),
+  /** null | precedence | user — how the conflict was settled. */
+  conflictResolution: text("conflict_resolution"),
+  supersededByFactId: varchar("superseded_by_fact_id"),
+  sourceUrl: text("source_url"),
+  sourceTitle: text("source_title"),
+  /** Short supporting quote (<=400 chars) — never the full page body. */
+  excerpt: text("excerpt"),
+  /** All supporting sources: [{ sourceId, url, title, verifiedAt }]. */
+  provenance: jsonb("provenance").notNull().default(sql`'[]'::jsonb`),
+  firstSeenAt: timestamp("first_seen_at").defaultNow(),
+  /** Drives freshness — bumped whenever a scan re-confirms the same value. */
+  lastVerifiedAt: timestamp("last_verified_at").defaultNow(),
+  publishedAt: timestamp("published_at"),
+  retiredAt: timestamp("retired_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  userStateTypeIdx: index("business_knowledge_facts_user_state_type_idx").on(
+    t.userId,
+    t.state,
+    t.factType,
+  ),
+  userFactKeyIdx: index("business_knowledge_facts_user_fact_key_idx").on(t.userId, t.factKey),
+  userSourceIdx: index("business_knowledge_facts_user_source_idx").on(t.userId, t.sourceId),
+  /**
+   * At most one live published value and one proposed draft per key. This is what stops
+   * two concurrent scans from proposing rival rows; retired history is exempt.
+   */
+  userKeyStateLiveUq: uniqueIndex("business_knowledge_facts_user_key_state_live_idx")
+    .on(t.userId, t.factKey, t.state)
+    .where(sql`state IN ('draft', 'published')`),
+}));
+
+export type BusinessKnowledgeFactRow = typeof businessKnowledgeFacts.$inferSelect;
+
+/** Leased extraction jobs — scanning runs outside the HTTP request. */
+export const aiKnowledgeScanJobs = pgTable("ai_knowledge_scan_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** pending | running | completed | failed | cancelled */
+  status: text("status").notNull().default("pending"),
+  /** Source ids to process, in order. */
+  sourceIds: jsonb("source_ids").notNull().default(sql`'[]'::jsonb`),
+  /** Per-source outcome keyed by source id. */
+  itemResults: jsonb("item_results").notNull().default(sql`'{}'::jsonb`),
+  leaseOwner: text("lease_owner"),
+  leaseExpiresAt: timestamp("lease_expires_at"),
+  progressCurrent: integer("progress_current").notNull().default(0),
+  progressTotal: integer("progress_total").notNull().default(0),
+  factsProposed: integer("facts_proposed").notNull().default(0),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  claimIdx: index("ai_knowledge_scan_jobs_claim_idx").on(t.status, t.leaseExpiresAt, t.createdAt),
+  userCreatedIdx: index("ai_knowledge_scan_jobs_user_created_idx").on(t.userId, t.createdAt),
+}));
+
+export type AiKnowledgeScanJobRow = typeof aiKnowledgeScanJobs.$inferSelect;
 
 // AI Settings - per-user AI behavior configuration
 export const aiSettings = pgTable("ai_settings", {

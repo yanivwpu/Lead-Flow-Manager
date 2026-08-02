@@ -9,8 +9,6 @@ type Draft = {
   summary: string;
   sourceUrls: string[];
   sources: WebsiteKnowledgeSourceEntry[];
-  /** [WK-DIAG] correlation id linking scan stages to the save stage. Temporary. */
-  trace?: string;
   createdAt: number;
 };
 
@@ -56,6 +54,5 @@ export function takeWebsiteKnowledgeDraft(
     summary: d.summary,
     sourceUrls: d.sourceUrls,
     sources: d.sources,
-    trace: d.trace,
   };
 }

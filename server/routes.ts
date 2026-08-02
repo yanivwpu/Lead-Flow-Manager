@@ -137,6 +137,7 @@ import {
   WebsiteKnowledgeScrapeError,
 } from "./websiteKnowledgeScraper";
 import { putWebsiteKnowledgeDraft, takeWebsiteKnowledgeDraft } from "./websiteKnowledgeDraftCache";
+import { registerKnowledgeV2Routes } from "./websiteKnowledge/knowledgeRoutes";
 import {
   WEBSITE_KNOWLEDGE_SLOTS,
   applyScanResultsToSources,
@@ -146,8 +147,6 @@ import {
   sourcesFromLegacyRow,
   type WebsiteKnowledgeSlotKey,
 } from "@shared/websiteKnowledgeSources";
-// TEMPORARY [WK-DIAG] instrumentation — remove with the pricing investigation.
-import { newWkTrace, priceSignals, safePath, wkDiag } from "./websiteKnowledgeDiagnostics";
 import { finalizeWebsiteKnowledgeSummaryText } from "./websiteKnowledgeSummaryNormalize";
 import { getUncachableStripeClient } from "./stripeClient";
 import { sanitizeStripeReturnPath } from "./checkoutReturnPath";
@@ -10714,7 +10713,6 @@ export async function registerRoutes(
       if (!(await requireAiBrainPremium(req, res))) return;
 
       const body = (req.body || {}) as Record<string, unknown>;
-      const wkTrace = newWkTrace();
 
       // Scan the saved sources plus whatever the form submitted, so adding one URL
       // never drops the pages that were scanned before.
@@ -10778,47 +10776,19 @@ export async function registerRoutes(
       }
 
       const combined = combineScrapedText(pages);
-      // #region agent log
-      wkDiag("stage_1_scrape", {
-        trace: wkTrace,
-        userId: req.user.id,
-        pages: pages.map((p) => {
-          const sig = priceSignals(p.text);
-          return {
-            slot: p.key,
-            path: safePath(p.url),
-            chars: sig.chars,
-            truncated: !!p.truncated,
-            priceCount: sig.priceCount,
-            priceTokens: sig.priceTokens,
-            planNames: sig.planNames,
-          };
-        }),
-        pageResults: pageResults.map((r) => ({
-          slot: r.key,
-          status: r.status,
-          reason: r.reason ? String(r.reason).slice(0, 80) : undefined,
-        })),
-      });
-      wkDiag("stage_2_combine", {
-        trace: wkTrace,
-        userId: req.user.id,
-        ...priceSignals(combined),
-        hitCombinedCap: combined.length >= 94_000,
-        includedSlots: pages.map((p) => p.key),
-      });
-      // #endregion
       const { aiService } = await import("./aiService");
       const summaryRaw = await aiService.summarizeWebsiteKnowledgeForBrain(combined);
       const summary = finalizeWebsiteKnowledgeSummaryText(summaryRaw);
-      // #region agent log
-      wkDiag("stage_3_summarize", {
-        trace: wkTrace,
-        userId: req.user.id,
-        ...priceSignals(summary),
-        summaryHitCap: summary.length >= 4000,
-      });
-      // #endregion
+
+      if (!summary) {
+        // Pages fetched but nothing usable came back: the one condition worth an
+        // operational log, since the user sees an empty preview and cannot tell why.
+        console.warn("[WebsiteKnowledge] scan produced no summary", {
+          userId: req.user.id,
+          pages: pages.length,
+          combinedChars: combined.length,
+        });
+      }
 
       const primaryUrl = resolveCanonicalWebsiteUrl(pageResults);
 
@@ -10830,7 +10800,6 @@ export async function registerRoutes(
         summary,
         sourceUrls: pages.map((p) => p.url),
         sources: scannedSources,
-        trace: wkTrace,
       });
 
       res.json({
@@ -10885,18 +10854,6 @@ export async function registerRoutes(
       await storage.upsertAiBusinessKnowledge(req.user.id, updates);
 
       const row = await storage.getAiBusinessKnowledge(req.user.id);
-      // #region agent log
-      wkDiag("stage_4_persist", {
-        trace: draft.trace ?? null,
-        userId: req.user.id,
-        usedManualOverride: typeof summaryOverride === "string" && !!summaryOverride.trim(),
-        ...priceSignals(row?.websiteKnowledgeSummary),
-        savedSourceSlots: draft.sources.map((s) => s.key),
-        savedSourcePaths: draft.sources.map((s) => safePath(s.url)),
-        canonicalUrlUpdated: !!draft.url,
-        websiteKnowledgeUpdatedAt: row?.websiteKnowledgeUpdatedAt ?? null,
-      });
-      // #endregion
       res.json({
         ok: true,
         websiteKnowledgeUrl: row?.websiteKnowledgeUrl ?? null,
@@ -10967,6 +10924,10 @@ export async function registerRoutes(
       res.status(500).json({ error: "Failed to delete" });
     }
   });
+
+  // V2 structured business knowledge. Additive: the V1 routes above keep working and
+  // remain the fallback for workspaces that have not published facts yet.
+  registerKnowledgeV2Routes(app, { requireAiBrainPremium });
 
   // Get AI health status (no numeric details exposed)
   app.get("/api/ai/health", async (req, res) => {
@@ -11317,7 +11278,12 @@ export async function registerRoutes(
       const skipAiModelForAutoNonText =
         wantsAuto && !substantiveInbound && !forceAutoBypass;
 
-      let suggestion: { suggestion?: string; confidence?: number } = {
+      let suggestion: {
+        suggestion?: string;
+        confidence?: number;
+        /** Populated when the draft contradicts published facts; blocks auto-send. */
+        groundingViolations?: string[];
+      } = {
         suggestion: "",
         confidence: 0,
       };
@@ -11652,6 +11618,7 @@ export async function registerRoutes(
             suggestion: suggestion.suggestion || "",
             confidence: typeof suggestion.confidence === "number" ? suggestion.confidence : 0,
             businessKnowledge: scoringKnowledge,
+            groundingViolations: suggestion.groundingViolations,
           });
           autoSendAllowed = gate.allowed;
           autoSendReason = gate.reason;
