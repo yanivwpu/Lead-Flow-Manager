@@ -2,9 +2,9 @@
  * Deterministic, per-page extraction. No model calls.
  *
  * Runs before the AI pass and owns everything that can be read literally off the page:
- * JSON-LD, prices with a billing period, contact links, hours, FAQ pairs. Facts produced
- * here carry origin `website_verified`, which outranks anything the model infers from the
- * same page — a literal on-page price always beats a paraphrase.
+ * JSON-LD, prices with a billing period, contact links, HTML forms / CTA anchors, hours,
+ * FAQ pairs. Facts produced here carry origin `website_verified`, which outranks anything
+ * the model infers from the same page — a literal on-page price always beats a paraphrase.
  *
  * `prepareHtmlPage` is pure so fixtures can be tested without network access.
  */
@@ -691,6 +691,148 @@ function extractContactsFromHtml(html: string, ctx: CandidateContext): FactCandi
   return out;
 }
 
+const NEWSLETTER_FORM_RE =
+  /\b(?:newsletter|subscribe|sign\s*up\s*for\s*(?:our\s+)?(?:emails?|updates?)|mailing\s*list)\b/i;
+const SEARCH_FORM_RE = /\b(?:search|query|q)\b/i;
+const ACTION_CTA_RE =
+  /\b(?:apply|application|list(?:ing)?|feature|advertise|book|schedule|quote|request|contact\s+us|get\s+started|sign\s*up|register|enroll|buy|checkout|order)\b/i;
+const RESPONSE_TIMING_RE =
+  /(?:we(?:'ll| will)\s+confirm[^.!]{0,80})?(?:usually\s+)?within\s+\d+\s*[-–—]?\s*\d+\s+business\s+days?/i;
+
+function stripHtmlToText(html: string): string {
+  return decodeEntities(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+}
+
+function pageLocationHint(html: string, formIndex: number, formHtml: string): string {
+  const at = html.indexOf(formHtml);
+  if (at < 0) return "on this page";
+  const ratio = at / Math.max(html.length, 1);
+  if (ratio >= 0.55) return "at the bottom of the page";
+  if (ratio <= 0.25) return "near the top of the page";
+  return "on this page";
+}
+
+function nearbyHeadingBefore(html: string, formIndex: number): string | null {
+  const before = html.slice(Math.max(0, formIndex - 2500), formIndex);
+  const headings = [...before.matchAll(/<h([1-4])[^>]*>([\s\S]*?)<\/h\1>/gi)];
+  if (headings.length === 0) return null;
+  const last = headings[headings.length - 1];
+  const text = stripHtmlToText(last[2]);
+  if (text.length < 3 || text.length > 160) return null;
+  return text;
+}
+
+function submitLabelFromForm(formHtml: string): string | null {
+  const button = /<button[^>]*type=["']submit["'][^>]*>([\s\S]*?)<\/button>/i.exec(formHtml)
+    || /<button(?![^>]*type=)[^>]*>([\s\S]*?)<\/button>/i.exec(formHtml);
+  if (button) {
+    const label = stripHtmlToText(button[1]);
+    if (label.length >= 2 && label.length <= 160) return label;
+  }
+  const input = /<input[^>]*type=["']submit["'][^>]*>/i.exec(formHtml);
+  if (input) {
+    const value = /value=["']([^"']+)["']/i.exec(input[0]);
+    if (value?.[1]) {
+      const label = decodeEntities(value[1]).trim();
+      if (label.length >= 2 && label.length <= 160) return label;
+    }
+  }
+  return null;
+}
+
+function absoluteUrl(raw: string | null | undefined, baseUrl: string): string | null {
+  const value = (raw || "").trim();
+  if (!value || value.startsWith("#") || value.toLowerCase().startsWith("javascript:")) return null;
+  try {
+    return new URL(value, baseUrl).toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * HTML forms and action links → call_to_action facts.
+ *
+ * On-page forms often have no separate action URL (client-handled submit). In that case the
+ * fact points at the source page and carries a location hint so the assistant can say
+ * "complete the form at the bottom of the advertising page" without inventing a link.
+ */
+export function extractCallToActionsFromHtml(html: string, ctx: CandidateContext): FactCandidate[] {
+  const out: FactCandidate[] = [];
+  const seen = new Set<string>();
+
+  const forms = html.match(/<form\b[\s\S]*?<\/form>/gi) || [];
+  for (const formHtml of forms) {
+    const formText = stripHtmlToText(formHtml);
+    if (NEWSLETTER_FORM_RE.test(formText) || NEWSLETTER_FORM_RE.test(formHtml)) continue;
+    if (SEARCH_FORM_RE.test(formHtml) && formText.length < 80) continue;
+
+    const formIndex = html.indexOf(formHtml);
+    const heading = formIndex >= 0 ? nearbyHeadingBefore(html, formIndex) : null;
+    const submitLabel = submitLabelFromForm(formHtml);
+    const label = heading || submitLabel;
+    if (!label || !ACTION_CTA_RE.test(label + " " + formText)) continue;
+
+    const actionAttr = /action=["']([^"']*)["']/i.exec(formHtml)?.[1] ?? "";
+    const actionUrl = absoluteUrl(actionAttr, ctx.sourceUrl);
+    const url = actionUrl || ctx.sourceUrl;
+    const locationHint = actionUrl ? null : pageLocationHint(html, formIndex, formHtml);
+    const around = html.slice(Math.max(0, formIndex - 800), formIndex + Math.min(formHtml.length, 400));
+    const timingMatch = RESPONSE_TIMING_RE.exec(stripHtmlToText(around));
+    const responseTiming = timingMatch ? timingMatch[0].trim() : null;
+    const description = heading && submitLabel && heading !== submitLabel
+      ? submitLabel
+      : null;
+
+    const data = {
+      label,
+      url,
+      description,
+      locationHint: locationHint
+        ? locationHint === "at the bottom of the page"
+          ? "Complete the application form at the bottom of the page"
+          : `Complete the application form ${locationHint}`
+        : null,
+      responseTiming,
+    };
+    const candidate = buildCandidate(ctx, "call_to_action", data, heading || submitLabel, 0.9);
+    if (!candidate || seen.has(candidate.factKey)) continue;
+    seen.add(candidate.factKey);
+    out.push(candidate);
+  }
+
+  // Anchor CTAs with clear action labels (Apply / Book / Get a quote / …).
+  const anchors = html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi);
+  for (const match of anchors) {
+    const href = match[1];
+    const label = stripHtmlToText(match[2]);
+    if (!label || label.length > 120 || !ACTION_CTA_RE.test(label)) continue;
+    if (NEWSLETTER_FORM_RE.test(label)) continue;
+    const url = absoluteUrl(href, ctx.sourceUrl);
+    if (!url) continue;
+    const candidate = buildCandidate(
+      ctx,
+      "call_to_action",
+      { label, url, description: null, locationHint: null, responseTiming: null },
+      label,
+      0.85,
+    );
+    if (!candidate || seen.has(candidate.factKey)) continue;
+    seen.add(candidate.factKey);
+    out.push(candidate);
+    if (out.length >= 12) break;
+  }
+
+  return out;
+}
+
 /** "Question?" followed by its answer — the shape almost every hand-written FAQ uses. */
 export function extractFaqPairsFromText(text: string, ctx: CandidateContext): FactCandidate[] {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -749,6 +891,7 @@ export function extractDeterministicFacts(
     ...extractFromJsonLd(page.jsonLd, ctx),
     ...extractPricingPlansFromText(page.text, ctx),
     ...extractContactsFromHtml(rawHtml, ctx),
+    ...extractCallToActionsFromHtml(rawHtml, ctx),
   ];
 
   if (page.detectedType === "faq") {

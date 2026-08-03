@@ -15,7 +15,10 @@ import {
   type GroundedPromptBlock,
   type GroundedResponsePackage,
 } from "@shared/factGrounding";
-import { retrieveFactsForTurn, type RetrievedFact } from "@shared/knowledgeRetrieval";
+import {
+  retrieveFactsForTurnWithNextAction,
+  type RetrievedFact,
+} from "@shared/knowledgeRetrieval";
 import { detectFactConflicts } from "@shared/businessKnowledgeFacts";
 import { listPublishedFacts } from "./factStore";
 import { knowledgeFactsActiveForWorkspace } from "./knowledgeFlags";
@@ -81,7 +84,7 @@ export async function buildTurnGrounding(params: {
     return { ...EMPTY_GROUNDING, block: { ...EMPTY_GROUNDING.block } };
   }
 
-  const retrieved = retrieveFactsForTurn({
+  const retrieved = retrieveFactsForTurnWithNextAction({
     facts,
     message: params.message,
     subIntents: params.subIntents,

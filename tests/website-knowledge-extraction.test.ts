@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import {
   classifyPage,
   cleanHtmlToStructuredText,
+  extractCallToActionsFromHtml,
   extractDeterministicFacts,
   extractFaqPairsFromText,
   extractJsonLdBlocks,
@@ -85,8 +86,23 @@ const ADVERTISING_HTML = `<!doctype html>
   <p>Questions? Email <a href="mailto:Sales@Example.test">Sales@Example.test</a> or call
      <a href="tel:+1-555-0100">+1 555 0100</a>. Book a walkthrough at
      <a href="https://calendly.com/example/walkthrough">this link</a>.</p>
+
+  <h2>Apply for a listing or feature</h2>
+  <p>Tell us about your business and which package fits best. We'll confirm availability — usually within 1–2 business days.</p>
+  <form class="application">
+    <label>Your name<input name="name" /></label>
+    <label>Business name<input name="business" /></label>
+    <label>Email<input name="email" type="email" /></label>
+    <button type="submit">Apply for a listing or feature</button>
+  </form>
 </main>
-<footer><p>© Example Directory</p></footer>
+<footer>
+  <form class="newsletter">
+    <label>Email address<input type="email" placeholder="your@email.com" /></label>
+    <button type="submit">Subscribe</button>
+  </form>
+  <p>© Example Directory</p>
+</footer>
 </body>
 </html>`;
 
@@ -279,6 +295,31 @@ run("mailto, tel and booking links become contact facts", () => {
   assert.ok(emails.some((c) => (c.data as FactDataMap["contact_method"]).value === "sales@example.test"));
   assert.ok(emails.some((c) => (c.data as FactDataMap["contact_method"]).kind === "phone"));
   assert.equal((booking[0].data as FactDataMap["booking_link"]).url, "https://calendly.com/example/walkthrough");
+});
+
+run("on-page application forms become call_to_action facts with the source page URL", () => {
+  const page = prepareHtmlPage(ADVERTISING_HTML, CTX.sourceUrl);
+  const { candidates } = extractDeterministicFacts(page, ADVERTISING_HTML, "src-1");
+  const ctas = candidates.filter((c) => c.factType === "call_to_action");
+  assert.ok(ctas.length >= 1, "expected an application CTA");
+  const apply = ctas.find((c) =>
+    /apply for a listing/i.test((c.data as FactDataMap["call_to_action"]).label),
+  );
+  assert.ok(apply, "apply CTA missing");
+  const data = apply!.data as FactDataMap["call_to_action"];
+  assert.equal(data.url, CTX.sourceUrl);
+  assert.match(String(data.locationHint || ""), /bottom of the page/i);
+  assert.match(String(data.responseTiming || ""), /1\s*[-–—]?\s*2\s*business days/i);
+  assert.ok(
+    !ctas.some((c) => /subscribe/i.test((c.data as FactDataMap["call_to_action"]).label)),
+    "newsletter form must not become a CTA",
+  );
+});
+
+run("newsletter-only forms are ignored by CTA extraction", () => {
+  const html = `<html><body><form><input type="email"/><button type="submit">Subscribe</button></form></body></html>`;
+  const ctas = extractCallToActionsFromHtml(html, CTX);
+  assert.equal(ctas.length, 0);
 });
 
 // --- Deterministic facts outrank model output -------------------------------

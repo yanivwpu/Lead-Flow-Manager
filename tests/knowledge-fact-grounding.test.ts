@@ -24,6 +24,7 @@ import {
   VERIFIED_FACTS_HEADER,
   assembleDeterministicGroundedDraft,
   buildGroundedPromptBlock,
+  formatNextActionSentence,
   mergeGroundingChecks,
   validateGroundedClaims,
   validateResponseCompleteness,
@@ -31,8 +32,10 @@ import {
 import {
   hasCoverageGap,
   retrieveFactsForTurn,
+  retrieveFactsForTurnWithNextAction,
+  selectNextActionFact,
 } from "../shared/knowledgeRetrieval";
-import { resolveAiRouting } from "../shared/aiRouting";
+import { deriveSubIntents, resolveAiRouting } from "../shared/aiRouting";
 import { evaluateFullAutoSend } from "../server/aiAutoSendGate";
 import { stripQuotedEmailReplies } from "../server/emailChannel/htmlSanitize";
 import { readFileSync } from "node:fs";
@@ -649,6 +652,136 @@ run("deterministic fallback states price and benefits from the fact", () => {
     }).ok,
     true,
   );
+});
+
+// --- Next-action grounding (CTA / form / booking) -----------------------------
+
+const APPLY_CTA = fact(
+  "call_to_action",
+  {
+    label: "Apply for a listing or feature",
+    url: "https://example.test/advertising",
+    description: null,
+    locationHint: "Complete the application form at the bottom of the page",
+    responseTiming: "usually within 1–2 business days",
+  },
+  // Same source page as BUSINESS_LISTING so source affinity can prefer it.
+  { sourceUrl: "https://example.test/pricing" },
+);
+
+run("next-action retrieval prefers CTA from the same source as the priced plan", () => {
+  const otherCta = fact(
+    "call_to_action",
+    {
+      label: "Contact support",
+      url: "https://example.test/support",
+      description: null,
+      locationHint: null,
+      responseTiming: null,
+    },
+    { id: "fact-support-cta", sourceUrl: "https://example.test/support" },
+  );
+  const pricingKeysWithCtaPresent = retrieveFactsForTurn({
+    facts: [BUSINESS_LISTING, APPLY_CTA, otherCta],
+    message: PROD_MSG,
+    subIntents: ["pricing_question", "benefits_question", "listing_join_question"],
+    now: NOW,
+  })
+    .filter((r) => r.fact.factType === "pricing_plan")
+    .map((r) => r.fact.factKey);
+  const pricingKeysAlone = retrieveFactsForTurn({
+    facts: [BUSINESS_LISTING],
+    message: PROD_MSG,
+    subIntents: ["pricing_question", "benefits_question", "listing_join_question"],
+    now: NOW,
+  })
+    .filter((r) => r.fact.factType === "pricing_plan")
+    .map((r) => r.fact.factKey);
+  // Pricing selection itself is unchanged when CTAs exist in the published set.
+  assert.deepEqual(pricingKeysWithCtaPresent, pricingKeysAlone);
+
+  const withNext = retrieveFactsForTurnWithNextAction({
+    facts: [BUSINESS_LISTING, APPLY_CTA, otherCta],
+    message: PROD_MSG,
+    subIntents: ["pricing_question", "benefits_question", "listing_join_question"],
+    now: NOW,
+  });
+  assert.ok(withNext.some((r) => r.fact.factKey === APPLY_CTA.factKey));
+  assert.ok(!withNext.some((r) => r.fact.factKey === otherCta.factKey));
+});
+
+run("listing reply without the application next step is incomplete", () => {
+  const retrieved = retrieveFactsForTurnWithNextAction({
+    facts: [BUSINESS_LISTING, APPLY_CTA],
+    message: PROD_MSG,
+    subIntents: ["pricing_question", "benefits_question", "listing_join_question"],
+    now: NOW,
+  });
+  const incomplete = validateResponseCompleteness({
+    draft:
+      "Business Listing is USD 29 per month. It includes a Business profile page, Category listing, Website, phone, and map, and Local SEO visibility. Are you interested in listing your business with us?",
+    retrieved,
+    subIntents: ["pricing_question", "benefits_question", "listing_join_question"],
+  });
+  assert.equal(incomplete.ok, false);
+  assert.ok(incomplete.violations.some((v) => /next step/i.test(v.detail)));
+});
+
+run("deterministic draft answers then directs to the published application form", () => {
+  const retrieved = retrieveFactsForTurnWithNextAction({
+    facts: [BUSINESS_LISTING, APPLY_CTA],
+    message: PROD_MSG,
+    subIntents: ["pricing_question", "benefits_question", "listing_join_question"],
+    now: NOW,
+  });
+  const draft = assembleDeterministicGroundedDraft({
+    retrieved,
+    subIntents: ["pricing_question", "benefits_question", "listing_join_question"],
+  });
+  assert.match(draft, /USD 29 per month/);
+  assert.match(draft, /Business profile page/);
+  assert.match(draft, /application form at the bottom of the page/i);
+  assert.match(draft, /https:\/\/example\.test\/advertising/);
+  assert.match(draft, /1\s*[-–—]?\s*2\s*business days/i);
+  assert.equal(
+    validateResponseCompleteness({
+      draft,
+      retrieved,
+      subIntents: ["pricing_question", "benefits_question", "listing_join_question"],
+    }).ok,
+    true,
+    draft,
+  );
+});
+
+run("next-action selection never invents a URL", () => {
+  const cta = selectNextActionFact({
+    facts: [APPLY_CTA],
+    message: PROD_MSG,
+    subIntents: ["listing_join_question"],
+    retrieved: retrieveFactsForTurn({
+      facts: [BUSINESS_LISTING],
+      message: PROD_MSG,
+      subIntents: ["listing_join_question"],
+      now: NOW,
+    }),
+    now: NOW,
+  });
+  assert.ok(cta);
+  const sentence = formatNextActionSentence(cta!);
+  assert.ok(sentence);
+  assert.match(sentence!, /https:\/\/example\.test\/advertising/);
+  assert.ok(!/example\.com\/invented|bit\.ly/i.test(sentence!));
+});
+
+run("hours questions do not force an unrelated listing CTA", () => {
+  const next = selectNextActionFact({
+    facts: [APPLY_CTA, HOURS],
+    message: "what are your hours?",
+    subIntents: ["hours_question"],
+    now: NOW,
+  });
+  assert.equal(next, null);
 });
 
 console.log("\nAll fact grounding tests passed.");

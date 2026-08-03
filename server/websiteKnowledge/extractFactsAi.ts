@@ -29,7 +29,7 @@ const MAX_FACTS_PER_PAGE = 60;
 
 const TYPE_GUIDANCE: Record<SourceDetectedType, string> = {
   pricing:
-    "This is a pricing or advertising page. Capture every plan or package as a pricing_plan with its exact amount, currency, billing period, and the benefits listed under that specific plan.",
+    "This is a pricing or advertising page. Capture every plan or package as a pricing_plan with its exact amount, currency, billing period, and the benefits listed under that specific plan. Also capture any apply/list/advertise call_to_action, including on-page application forms (use the page URL when the form has no separate action URL) and any stated confirmation timing.",
   services:
     "This is a products or services page. Capture each distinct offering as a product or service fact.",
   about:
@@ -72,7 +72,7 @@ FACT TYPES AND THEIR data SHAPES
 - business_hours: { entries: [{ days, opens, closes }], timezone?, notes? }
 - contact_method: { kind: phone|email|whatsapp|sms|form|chat|other, value, label? }
 - booking_link: { url, label? }
-- call_to_action: { label, url?, description? }
+- call_to_action: { label, url?, description?, locationHint?, responseTiming? }
 - eligibility_rule: { rule, appliesTo? }
 - numeric_limit: { label, value: number, unit?, appliesTo? }
 - custom_fact: { label, value }`;

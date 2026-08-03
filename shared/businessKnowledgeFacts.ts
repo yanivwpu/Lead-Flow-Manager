@@ -126,6 +126,13 @@ export const factSchemas = {
     label: shortText(160),
     url: z.string().trim().url().nullish(),
     description: shortText(400).nullish(),
+    /**
+     * Where to act when the destination is the page itself (on-page form with no separate
+     * action URL), e.g. "at the bottom of the advertising page".
+     */
+    locationHint: shortText(160).nullish(),
+    /** Published response timing, e.g. "usually within 1–2 business days". */
+    responseTiming: shortText(160).nullish(),
   }),
   eligibility_rule: z.object({
     rule: shortText(400),
@@ -774,7 +781,11 @@ export function formatFactValue(fact: Pick<KnowledgeFact, "factType" | "data">):
     }
     case "call_to_action": {
       const d = fact.data as FactDataMap["call_to_action"];
-      return d.url ? `${d.label} (${d.url})` : d.label;
+      const dest = d.url ? ` (${d.url})` : "";
+      const where = d.locationHint ? ` — ${d.locationHint}` : "";
+      const when = d.responseTiming ? ` ${d.responseTiming}` : "";
+      const desc = d.description && !d.locationHint ? ` — ${d.description}` : "";
+      return `${d.label}${dest}${where}${desc}${when}`.trim();
     }
     case "eligibility_rule": {
       const d = fact.data as FactDataMap["eligibility_rule"];

@@ -121,8 +121,10 @@ export const FACT_COMPLETENESS_RETRY_INSTRUCTION = `FACT-ONLY RETRY — your pre
 - For a pricing question: include the exact published price (currency, amount, period).
 - For an inclusions/benefits question: include the published benefits for the matching plan or product.
 - For a listing/join question: name the matching plan and answer directly.
+- If a published call-to-action, application form, or booking link is listed, end with that next step (label + URL or form location). Never invent a URL.
+- Do not replace the answer with a bare qualification question when a next step exists.
 - Do not use vague substitutes ("competitively priced", "various options", "contact us for details").
-- Answer first. At most one short follow-up question after the facts.`;
+- Answer first. Next step second.`;
 
 const DEFLECTION_RE =
   /\b(?:i(?:'m| am)?\s*(?:not\s+sure|unsure)|i\s*(?:don'?t|do not)\s+have|we\s*(?:don'?t|do not)\s+have|no\s+(?:information|details|pricing)\s+(?:on|about)|let\s+me\s+(?:check|find\s+out|look)|i(?:'ll| will)\s+(?:check|find\s+out|look\s+into|get\s+back)|need\s+to\s+(?:check|confirm)\s+(?:on\s+)?that|i\s+can'?t\s+say)\b/i;
@@ -226,6 +228,72 @@ function draftContainsBenefit(draft: string, benefits: string[]): boolean {
   });
 }
 
+function draftMentionsNextAction(draft: string, actions: RetrievedFact[]): boolean {
+  const lower = normalizePhrase(draft);
+  const raw = draft.toLowerCase();
+  for (const entry of actions) {
+    if (entry.fact.factType === "call_to_action") {
+      const d = entry.fact.data as {
+        label: string;
+        url?: string | null;
+        locationHint?: string | null;
+        responseTiming?: string | null;
+      };
+      if (d.label && lower.includes(normalizePhrase(d.label))) return true;
+      if (d.locationHint && lower.includes(normalizePhrase(d.locationHint))) return true;
+      if (d.url && raw.includes(d.url.toLowerCase())) return true;
+      if (/\b(?:application form|apply(?:\s+for|\s+here)?|advertising page)\b/i.test(draft) && d.url) {
+        try {
+          const host = new URL(d.url).hostname.replace(/^www\./, "");
+          if (host && raw.includes(host)) return true;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    if (entry.fact.factType === "booking_link") {
+      const d = entry.fact.data as { url: string; label?: string | null };
+      if (d.url && raw.includes(d.url.toLowerCase())) return true;
+      if (d.label && lower.includes(normalizePhrase(d.label))) return true;
+    }
+  }
+  return false;
+}
+
+/** Renders a retrieved CTA/booking as a closing next-step sentence. Never invents a URL. */
+export function formatNextActionSentence(entry: RetrievedFact): string | null {
+  if (entry.fact.factType === "call_to_action") {
+    const d = entry.fact.data as {
+      label: string;
+      url?: string | null;
+      locationHint?: string | null;
+      responseTiming?: string | null;
+    };
+    let sentence: string;
+    if (d.locationHint && d.url) {
+      sentence = `${d.locationHint.replace(/\.$/, "")}: ${d.url}`;
+    } else if (d.url) {
+      sentence = `${d.label}: ${d.url}`;
+    } else {
+      sentence = d.label;
+    }
+    if (d.responseTiming) {
+      const timing = d.responseTiming.trim().replace(/\.$/, "");
+      sentence += /confirm availability/i.test(timing)
+        ? `. ${timing}.`
+        : `. We'll confirm availability — ${timing}.`;
+    } else {
+      sentence += ".";
+    }
+    return sentence;
+  }
+  if (entry.fact.factType === "booking_link") {
+    const d = entry.fact.data as { url: string; label?: string | null };
+    return d.label ? `${d.label}: ${d.url}.` : `Book here: ${d.url}.`;
+  }
+  return null;
+}
+
 /**
  * Checks a draft reply against the facts it was given.
  *
@@ -305,8 +373,6 @@ export function validateResponseCompleteness(params: {
 
   const intents = new Set(params.subIntents ?? []);
   const answerable = extractAnswerableFacts(params.retrieved, params.conflictingKeys);
-  if (answerable.length === 0) return { ok: true, violations };
-
   const priced = answerable.filter((a) => a.amounts.length > 0);
   const withBenefits = answerable.filter((a) => a.benefits.length > 0);
   const namedPlans = answerable.filter((a) => a.name);
@@ -343,6 +409,26 @@ export function validateResponseCompleteness(params: {
       violations.push({
         kind: "incomplete_required_fact",
         detail: "A listing/join question matched a published plan, but the reply did not name it and answer directly.",
+      });
+    }
+  }
+
+  const nextActions = params.retrieved.filter(
+    (e) =>
+      !(params.conflictingKeys ?? []).includes(e.fact.factKey) &&
+      (e.fact.factType === "call_to_action" || e.fact.factType === "booking_link"),
+  );
+  if (
+    nextActions.length > 0 &&
+    (intents.has("listing_join_question") ||
+      intents.has("booking_question") ||
+      intents.has("pricing_question") ||
+      intents.has("benefits_question"))
+  ) {
+    if (!draftMentionsNextAction(draft, nextActions)) {
+      violations.push({
+        kind: "incomplete_required_fact",
+        detail: "A published next step (application CTA, form, or booking link) was retrieved, but the reply omitted it.",
       });
     }
   }
@@ -400,6 +486,7 @@ export function assembleDeterministicGroundedDraft(params: {
         price: { amount: number; currency: string; billingPeriod: string };
         priceQualifier?: string;
         benefits: string[];
+        planUrl?: string | null;
       };
       const price = formatFactMoney(d.price, d.priceQualifier);
       let line = `${prefix}${d.name} is ${price}.`;
@@ -413,6 +500,26 @@ export function assembleDeterministicGroundedDraft(params: {
       continue;
     }
     parts.push(`${prefix}${formatFactValue(item.entry.fact)}.`);
+  }
+
+  const next = params.retrieved.find(
+    (e) =>
+      !(params.conflictingKeys ?? []).includes(e.fact.factKey) &&
+      (e.fact.factType === "call_to_action" || e.fact.factType === "booking_link"),
+  );
+  if (next) {
+    const sentence = formatNextActionSentence(next);
+    if (sentence) parts.push(sentence);
+  } else {
+    const planWithUrl = prefer.find(
+      (p) =>
+        p.entry.fact.factType === "pricing_plan" &&
+        typeof (p.entry.fact.data as { planUrl?: string | null }).planUrl === "string",
+    );
+    if (planWithUrl) {
+      const url = (planWithUrl.entry.fact.data as { planUrl: string }).planUrl;
+      parts.push(`Get started here: ${url}.`);
+    }
   }
 
   return parts.join(" ").trim();
