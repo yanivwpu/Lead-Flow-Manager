@@ -16,6 +16,8 @@ export type BusinessQualifyingQuestion = {
   label?: string;
   question: string;
   required?: boolean;
+  /** Absent means on. Explicit false stops the assistant asking it. */
+  enabled?: boolean;
 };
 
 export type BusinessKnowledgeForScoring = {
@@ -489,7 +491,9 @@ function computeQualificationCompleteness(params: {
 }) {
   const { inbound, isRealEstate, qualifyingQuestions, realEstateSignals } = params;
   const raw = Array.isArray(qualifyingQuestions) ? qualifyingQuestions : [];
-  const required = raw.filter((q) => q?.question?.trim() && (q.required ?? true));
+  const required = raw.filter(
+    (q) => q?.question?.trim() && (q.required ?? true) && q.enabled !== false,
+  );
   if (required.length === 0) return { missingRequired: [] as string[], completedRequiredCount: 0, requiredCount: 0 };
 
   const detectUrgency = (s: string) => URGENCY_WORDS.some((w) => s.includes(w));

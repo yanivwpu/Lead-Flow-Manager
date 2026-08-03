@@ -1,7 +1,15 @@
 import { aiProvider } from "./aiProvider";
 import { extractWebsiteKnowledgeSummaryText } from "./websiteKnowledgeSummaryNormalize";
 import { buildTurnGrounding, type TurnGrounding } from "./websiteKnowledge/factContext";
-import { validateGroundedClaims, type GroundedPromptBlock } from "@shared/factGrounding";
+import {
+  assembleDeterministicGroundedDraft,
+  FACT_COMPLETENESS_RETRY_INSTRUCTION,
+  mergeGroundingChecks,
+  validateGroundedClaims,
+  validateResponseCompleteness,
+  type GroundedPromptBlock,
+  type GroundingCheck,
+} from "@shared/factGrounding";
 import { storage } from "./storage";
 import { 
   LEAD_INTENT_KEYWORDS, 
@@ -85,6 +93,7 @@ export class AIService {
     let grounding: TurnGrounding = {
       retrieved: [],
       block: { text: "", factCount: 0, staleFactCount: 0, coveredTypes: [] },
+      conflictingKeys: [],
     };
     try {
       grounding = await buildTurnGrounding({
@@ -113,26 +122,93 @@ export class AIService {
       grounding.block,
     );
 
-    try {
-      const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
-        { role: "system", content: systemPrompt },
-        ...conversationHistory.map(m => ({
-          role: m.role as "user" | "assistant",
-          content: m.content
-        }))
-      ];
+    const evaluateDraft = (draft: string): GroundingCheck =>
+      mergeGroundingChecks(
+        validateGroundedClaims({
+          draft,
+          retrieved: grounding.retrieved,
+          subIntents: routing?.subIntents,
+        }),
+        validateResponseCompleteness({
+          draft,
+          retrieved: grounding.retrieved,
+          subIntents: routing?.subIntents,
+          conflictingKeys: grounding.conflictingKeys,
+        }),
+      );
 
+    const runCompletion = async (prompt: string) => {
+      const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+        { role: "system", content: prompt },
+        ...conversationHistory.map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })),
+      ];
       const response = await aiProvider.complete("reply", messages, { jsonMode: true });
       const result = JSON.parse(response || "{}");
-      
-      const rawReply = result.reply || "";
-      const suggestion = sanitizeRoboticBuyerReply(rawReply);
-      const groundingCheck = validateGroundedClaims({
-        draft: suggestion,
-        retrieved: grounding.retrieved,
-        subIntents: routing?.subIntents,
-      });
-      if (!groundingCheck.ok) {
+      return {
+        suggestion: sanitizeRoboticBuyerReply(result.reply || ""),
+        confidence: typeof result.confidence === "number" ? result.confidence : 0.7,
+      };
+    };
+
+    try {
+      let { suggestion, confidence } = await runCompletion(systemPrompt);
+      let groundingCheck = evaluateDraft(suggestion);
+
+      const incomplete =
+        grounding.retrieved.length > 0 &&
+        groundingCheck.violations.some((v) => v.kind === "incomplete_required_fact");
+
+      if (incomplete) {
+        console.warn("[AI] reply incomplete vs retrieved facts; regenerating once", {
+          userId,
+          channel: channel ?? null,
+          violations: groundingCheck.violations.map((v) => v.kind),
+          retrievedKeys: grounding.retrieved.map((r) => r.fact.factKey),
+        });
+        try {
+          const retry = await runCompletion(
+            `${systemPrompt}\n\n${FACT_COMPLETENESS_RETRY_INSTRUCTION}`,
+          );
+          suggestion = retry.suggestion;
+          confidence = Math.min(confidence, retry.confidence);
+          groundingCheck = evaluateDraft(suggestion);
+        } catch (retryErr) {
+          console.warn(
+            "[AI] fact-completeness retry failed",
+            retryErr instanceof Error ? retryErr.message.slice(0, 240) : String(retryErr).slice(0, 240),
+          );
+        }
+      }
+
+      const stillIncomplete = groundingCheck.violations.some(
+        (v) => v.kind === "incomplete_required_fact",
+      );
+      if (stillIncomplete && grounding.retrieved.length > 0) {
+        suggestion = assembleDeterministicGroundedDraft({
+          retrieved: grounding.retrieved,
+          subIntents: routing?.subIntents,
+          conflictingKeys: grounding.conflictingKeys,
+        });
+        groundingCheck = {
+          ok: false,
+          violations: [
+            ...groundingCheck.violations,
+            {
+              kind: "grounding_fallback_requires_review",
+              detail: "Model omitted required published facts twice; deterministic draft requires human review.",
+            },
+          ],
+        };
+        confidence = Math.min(confidence, 0.4);
+        console.warn("[AI] using deterministic grounded draft for human review", {
+          userId,
+          channel: channel ?? null,
+          retrievedKeys: grounding.retrieved.map((r) => r.fact.factKey),
+        });
+      } else if (!groundingCheck.ok) {
         console.warn("[AI] reply failed fact grounding", {
           userId,
           violations: groundingCheck.violations.map((v) => v.kind),
@@ -141,7 +217,7 @@ export class AIService {
 
       return {
         suggestion,
-        confidence: result.confidence || 0.7,
+        confidence,
         groundingViolations: groundingCheck.violations.map((v) => v.kind),
       };
     } catch (error) {
@@ -749,15 +825,17 @@ GOOD: "I found several homes that match those criteria. Would you like me to sen
     }
 
     // Business-defined qualification criteria — override the generic goal when present
-    const qualifyingQuestions = (businessKnowledge as any)?.qualifyingQuestions as Array<{
-      key?: string; label?: string; question: string; required?: boolean;
-    }> | undefined;
-    const hasCustomCriteria = Array.isArray(qualifyingQuestions) && qualifyingQuestions.length > 0;
+    const qualifyingQuestions = (
+      ((businessKnowledge as any)?.qualifyingQuestions as Array<{
+        key?: string; label?: string; question: string; required?: boolean; enabled?: boolean;
+      }> | undefined) ?? []
+    ).filter((q) => q?.question?.trim() && q.enabled !== false);
+    const hasCustomCriteria = qualifyingQuestions.length > 0;
     if (hasCustomCriteria) {
       prompt += `
 
 QUALIFICATION CRITERIA — This business qualifies leads using these specific questions (in priority order):
-${qualifyingQuestions!.map((q, i) => `${i + 1}. [${q.label || `Q${i+1}`}] "${q.question}"${q.required ? ' (required)' : ' (optional)'}`).join('\n')}
+${qualifyingQuestions.map((q, i) => `${i + 1}. [${q.label || `Q${i+1}`}] "${q.question}"${q.required ? ' (required)' : ' (optional)'}`).join('\n')}
 
 When replying, work through these qualification questions in order. Ask only ONE at a time. Skip any that have already been answered in the conversation.`;
     }

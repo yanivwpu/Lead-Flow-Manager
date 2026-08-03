@@ -93,9 +93,9 @@ const SOFT_HUMAN_CHAT_RE =
 const PRICING_QUESTION_RE =
   /\b(?:how\s+much|pricing|prices?|costs?|fees?|rates?|per\s+month|monthly\s+(?:fee|cost|price|rate)|what\s+does\s+it\s+cost)\b/i;
 const BENEFITS_QUESTION_RE =
-  /\b(?:benefits?|what(?:'s|\s+is|\s+are)\s+(?:the\s+)?(?:benefit|value|advantage)|why\s+(?:should|would)\s+i)\b/i;
+  /\b(?:benefits?|inclusions?|what(?:'s|\s+is|\s+are)\s+(?:the\s+)?(?:benefit|value|advantage|inclusions?)|what(?:'s|\s+is|\s+are)\s+included|what(?:'s|\s+does)\s+(?:it|this|that)\s+include|why\s+(?:should|would)\s+i)\b/i;
 const LISTING_JOIN_QUESTION_RE =
-  /\b(?:list\s+my|how\s+(?:do|can)\s+i\s+list|join\s+(?:the\s+)?directory|advertis(?:e|ing)\s+my|get\s+(?:my|our)\s+business\s+listed)\b/i;
+  /\b(?:list\s+my|how\s+(?:do|can)\s+i\s+list|join\s+(?:the\s+)?directory|business\s+directory|directory\s+listing|advertis(?:e|ing)\s+my|get\s+(?:my|our)\s+business\s+listed)\b/i;
 const HOURS_QUESTION_RE =
   /\b(?:open(?:ing)?\s+hours?|business\s+hours?|what\s+time\s+(?:do|are)\s+you|when\s+(?:do|are)\s+you\s+open|are\s+you\s+open|closing\s+time|what\s+are\s+your\s+hours)\b/i;
 const LOCATION_QUESTION_RE =

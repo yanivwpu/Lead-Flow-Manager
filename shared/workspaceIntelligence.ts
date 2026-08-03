@@ -225,21 +225,23 @@ export function parseWorkspaceFaqs(raw: unknown): WorkspaceIntelligenceFaq[] {
 
 export function parseQualifyingQuestions(raw: unknown): WorkspaceQualifyingQuestion[] {
   if (!Array.isArray(raw)) return [];
-  return raw
-    .map((item, i) => {
-      if (!item || typeof item !== "object") return null;
-      const row = item as Record<string, unknown>;
-      const question = text(row.question);
-      if (!question) return null;
-      return {
-        key: text(row.key) || `q_${i}`,
-        label: text(row.label),
-        question,
-        required: row.required === false ? false : true,
-      };
-    })
-    .filter((item): item is WorkspaceQualifyingQuestion => Boolean(item))
-    .slice(0, MAX_QUALIFYING);
+  const out: WorkspaceQualifyingQuestion[] = [];
+  for (let i = 0; i < raw.length && out.length < MAX_QUALIFYING; i++) {
+    const item = raw[i];
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    // Explicit false turns a question off; absent/true keeps it in use.
+    if (row.enabled === false) continue;
+    const question = text(row.question);
+    if (!question) continue;
+    out.push({
+      key: text(row.key) || `q_${i}`,
+      label: text(row.label),
+      question,
+      required: row.required === false ? false : true,
+    });
+  }
+  return out;
 }
 
 /** Split services/products text into short offering labels (no LLM). */

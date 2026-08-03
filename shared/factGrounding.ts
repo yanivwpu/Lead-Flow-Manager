@@ -10,6 +10,7 @@
  */
 
 import {
+  formatFactMoney,
   formatFactValue,
   type FactType,
   type KnowledgeFact,
@@ -95,15 +96,39 @@ ${RESPONSE_COMPOSITION_RULES}`;
 export type GroundingViolation =
   | { kind: "denies_available_fact"; detail: string }
   | { kind: "unsupported_amount"; detail: string }
-  | { kind: "unqualified_stale_fact"; detail: string };
+  | { kind: "unqualified_stale_fact"; detail: string }
+  | { kind: "incomplete_required_fact"; detail: string }
+  | { kind: "grounding_fallback_requires_review"; detail: string };
 
 export type GroundingCheck = {
   ok: boolean;
   violations: GroundingViolation[];
 };
 
+/** Bundle handed from retrieval into prompt build + post-draft gates. */
+export type GroundedResponsePackage = {
+  retrieved: RetrievedFact[];
+  block: GroundedPromptBlock;
+  conflictingKeys: string[];
+};
+
+/**
+ * Appended only on a single regeneration after an incomplete draft. Kept separate from
+ * RESPONSE_COMPOSITION_RULES so the primary prompt wording stays unchanged.
+ */
+export const FACT_COMPLETENESS_RETRY_INSTRUCTION = `FACT-ONLY RETRY — your previous draft omitted published facts that answer this turn.
+- State every required verified value from ${VERIFIED_FACTS_HEADER} in the first sentence(s).
+- For a pricing question: include the exact published price (currency, amount, period).
+- For an inclusions/benefits question: include the published benefits for the matching plan or product.
+- For a listing/join question: name the matching plan and answer directly.
+- Do not use vague substitutes ("competitively priced", "various options", "contact us for details").
+- Answer first. At most one short follow-up question after the facts.`;
+
 const DEFLECTION_RE =
   /\b(?:i(?:'m| am)?\s*(?:not\s+sure|unsure)|i\s*(?:don'?t|do not)\s+have|we\s*(?:don'?t|do not)\s+have|no\s+(?:information|details|pricing)\s+(?:on|about)|let\s+me\s+(?:check|find\s+out|look)|i(?:'ll| will)\s+(?:check|find\s+out|look\s+into|get\s+back)|need\s+to\s+(?:check|confirm)\s+(?:on\s+)?that|i\s+can'?t\s+say)\b/i;
+
+const GENERIC_PRICING_HEDGE_RE =
+  /\b(?:competitively\s+priced|various\s+(?:needs|budgets|options|packages|plans)|suit\s+various|pricing\s+(?:varies|depends)|contact\s+us\s+for\s+(?:details|pricing|more)|reach\s+out\s+for\s+(?:details|pricing)|depends\s+on\s+(?:your|the)\s+(?:needs|budget|package))\b/i;
 
 const CURRENCY_CODES = "USD|EUR|GBP|ILS|JPY|INR|CAD|AUD|NZD|CHF|BRL|MXN|ZAR|AED|SAR|TRY|SGD|HKD|KRW|CNY";
 /** Matches `$29`, `29 USD`, and `USD 29` — the fact renderer emits the last form. */
@@ -119,13 +144,94 @@ function normalizeAmount(raw: string): string {
   return raw.replace(/[^\d.,]/g, "").replace(/,(?=\d{3}\b)/g, "");
 }
 
+function normalizePhrase(raw: string): string {
+  return raw.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+type PricedFact = {
+  entry: RetrievedFact;
+  amounts: string[];
+  name?: string;
+  benefits: string[];
+};
+
+/** Structured facts that can supply an exact price/name/benefits answer. */
+function extractAnswerableFacts(
+  retrieved: RetrievedFact[],
+  conflictingKeys?: string[],
+): PricedFact[] {
+  const blocked = new Set(conflictingKeys ?? []);
+  const out: PricedFact[] = [];
+  for (const entry of retrieved) {
+    if (blocked.has(entry.fact.factKey)) continue;
+    const { fact } = entry;
+    if (fact.factType === "pricing_plan") {
+      const d = fact.data as {
+        name: string;
+        price: { amount: number; currency: string; billingPeriod: string };
+        benefits?: string[];
+      };
+      const rendered = formatFactValue(fact);
+      out.push({
+        entry,
+        name: d.name,
+        amounts: [...rendered.matchAll(AMOUNT_RE)].map((m) => normalizeAmount(m[0])),
+        benefits: Array.isArray(d.benefits) ? d.benefits.filter(Boolean) : [],
+      });
+      continue;
+    }
+    if (fact.factType === "product" || fact.factType === "service") {
+      const d = fact.data as { name: string; price?: { amount: number } | null };
+      const rendered = formatFactValue(fact);
+      const amounts = [...rendered.matchAll(AMOUNT_RE)].map((m) => normalizeAmount(m[0]));
+      if (amounts.length === 0 && !d.price) continue;
+      out.push({ entry, name: d.name, amounts, benefits: [] });
+      continue;
+    }
+    if (fact.factType === "benefit") {
+      const d = fact.data as { statement: string; appliesTo?: string | null };
+      out.push({
+        entry,
+        name: d.appliesTo ?? undefined,
+        amounts: [],
+        benefits: d.statement ? [d.statement] : [],
+      });
+      continue;
+    }
+    if (fact.factType === "numeric_limit" || fact.factType === "feature") {
+      const rendered = formatFactValue(fact);
+      const amounts = [...rendered.matchAll(AMOUNT_RE)].map((m) => normalizeAmount(m[0]));
+      if (amounts.length === 0) continue;
+      out.push({ entry, amounts, benefits: [] });
+    }
+  }
+  return out;
+}
+
+function draftContainsAmount(draft: string, amounts: string[]): boolean {
+  if (amounts.length === 0) return false;
+  const present = new Set<string>();
+  for (const match of draft.matchAll(AMOUNT_RE)) {
+    present.add(normalizeAmount(match[0]));
+  }
+  return amounts.some((a) => present.has(a));
+}
+
+function draftContainsBenefit(draft: string, benefits: string[]): boolean {
+  const lower = normalizePhrase(draft);
+  return benefits.some((b) => {
+    const phrase = normalizePhrase(b);
+    if (phrase.length < 4) return false;
+    return lower.includes(phrase);
+  });
+}
+
 /**
  * Checks a draft reply against the facts it was given.
  *
- * Deliberately narrow: it flags only what can be decided mechanically — deflecting on a
- * question the facts answered, quoting an amount no fact contains, and stating a stale
- * fact with no qualifier. Anything softer belongs to the prompt, not to a gate that can
- * block an auto-send.
+ * Flags mechanically decidable contradictions: deflecting on a question the facts answered,
+ * quoting an amount no fact contains, and stating a stale fact with no qualifier.
+ * Completeness (must include the retrieved price/benefits) is a separate gate.
  */
 export function validateGroundedClaims(params: {
   draft: string;
@@ -179,6 +285,137 @@ export function validateGroundedClaims(params: {
   }
 
   return { ok: violations.length === 0, violations };
+}
+
+/**
+ * Requires the draft to actually use retrieved facts that answer the turn.
+ *
+ * Separate from unsupported-amount checks: a vague "competitively priced" reply states no
+ * wrong number, but still fails when a published price was retrieved.
+ */
+export function validateResponseCompleteness(params: {
+  draft: string;
+  retrieved: RetrievedFact[];
+  subIntents?: string[];
+  conflictingKeys?: string[];
+}): GroundingCheck {
+  const draft = (params.draft || "").trim();
+  const violations: GroundingViolation[] = [];
+  if (!draft) return { ok: true, violations };
+
+  const intents = new Set(params.subIntents ?? []);
+  const answerable = extractAnswerableFacts(params.retrieved, params.conflictingKeys);
+  if (answerable.length === 0) return { ok: true, violations };
+
+  const priced = answerable.filter((a) => a.amounts.length > 0);
+  const withBenefits = answerable.filter((a) => a.benefits.length > 0);
+  const namedPlans = answerable.filter((a) => a.name);
+
+  if (intents.has("pricing_question") && priced.length > 0) {
+    const requiredAmounts = priced.flatMap((p) => p.amounts);
+    if (!draftContainsAmount(draft, requiredAmounts)) {
+      violations.push({
+        kind: "incomplete_required_fact",
+        detail: GENERIC_PRICING_HEDGE_RE.test(draft)
+          ? "The reply used a generic pricing hedge instead of the published price."
+          : "A pricing question was asked and published prices were retrieved, but the reply omitted them.",
+      });
+    }
+  }
+
+  if (intents.has("benefits_question") && withBenefits.length > 0) {
+    const benefits = withBenefits.flatMap((b) => b.benefits);
+    if (!draftContainsBenefit(draft, benefits)) {
+      violations.push({
+        kind: "incomplete_required_fact",
+        detail: "An inclusions/benefits question was asked and published benefits were retrieved, but the reply omitted them.",
+      });
+    }
+  }
+
+  if (intents.has("listing_join_question") && namedPlans.length > 0) {
+    const lower = normalizePhrase(draft);
+    const named = namedPlans.some((p) => p.name && lower.includes(normalizePhrase(p.name)));
+    const answered =
+      named &&
+      (priced.length === 0 || draftContainsAmount(draft, priced.flatMap((p) => p.amounts)));
+    if (!answered) {
+      violations.push({
+        kind: "incomplete_required_fact",
+        detail: "A listing/join question matched a published plan, but the reply did not name it and answer directly.",
+      });
+    }
+  }
+
+  // Deduplicate identical incomplete details from hedge + missing price.
+  const seen = new Set<string>();
+  const unique = violations.filter((v) => {
+    const key = `${v.kind}:${v.detail}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return { ok: unique.length === 0, violations: unique };
+}
+
+export function mergeGroundingChecks(...checks: GroundingCheck[]): GroundingCheck {
+  const violations = checks.flatMap((c) => c.violations);
+  return { ok: violations.length === 0, violations };
+}
+
+/**
+ * Human-review draft built only from retrieved structured facts. Used when the model
+ * omits required facts twice. Never invents values.
+ */
+export function assembleDeterministicGroundedDraft(params: {
+  retrieved: RetrievedFact[];
+  subIntents?: string[];
+  conflictingKeys?: string[];
+}): string {
+  const intents = new Set(params.subIntents ?? []);
+  const blocked = new Set(params.conflictingKeys ?? []);
+  const conflicted = params.retrieved.filter((e) => blocked.has(e.fact.factKey));
+  if (conflicted.length > 0 && extractAnswerableFacts(params.retrieved, params.conflictingKeys).length === 0) {
+    return "I want to confirm the current details before quoting them — can I check and get back to you with the exact figures?";
+  }
+
+  const answerable = extractAnswerableFacts(params.retrieved, params.conflictingKeys);
+  if (answerable.length === 0) {
+    return "I do not have a verified figure for that on hand. Tell me which package or service you mean and I will confirm the published details.";
+  }
+
+  const prefer =
+    intents.has("pricing_question") || intents.has("benefits_question") || intents.has("listing_join_question")
+      ? answerable
+      : answerable.slice(0, 1);
+
+  const parts: string[] = [];
+  for (const item of prefer.slice(0, 2)) {
+    const stale = item.entry.freshness.tier === "stale" || item.entry.freshness.tier === "aging";
+    const prefix = stale ? "As of our last update, " : "";
+    if (item.entry.fact.factType === "pricing_plan") {
+      const d = item.entry.fact.data as {
+        name: string;
+        price: { amount: number; currency: string; billingPeriod: string };
+        priceQualifier?: string;
+        benefits: string[];
+      };
+      const price = formatFactMoney(d.price, d.priceQualifier);
+      let line = `${prefix}${d.name} is ${price}.`;
+      if (
+        (intents.has("benefits_question") || intents.has("pricing_question") || intents.has("listing_join_question")) &&
+        d.benefits.length > 0
+      ) {
+        line += ` It includes: ${d.benefits.join("; ")}.`;
+      }
+      parts.push(line);
+      continue;
+    }
+    parts.push(`${prefix}${formatFactValue(item.entry.fact)}.`);
+  }
+
+  return parts.join(" ").trim();
 }
 
 /** Compact provenance for logs and the Copilot "why" panel. No page bodies. */

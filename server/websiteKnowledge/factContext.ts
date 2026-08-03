@@ -10,7 +10,11 @@ import {
   type KnowledgeFact,
   type KnowledgeFreshnessPolicy,
 } from "@shared/businessKnowledgeFacts";
-import { buildGroundedPromptBlock, type GroundedPromptBlock } from "@shared/factGrounding";
+import {
+  buildGroundedPromptBlock,
+  type GroundedPromptBlock,
+  type GroundedResponsePackage,
+} from "@shared/factGrounding";
 import { retrieveFactsForTurn, type RetrievedFact } from "@shared/knowledgeRetrieval";
 import { detectFactConflicts } from "@shared/businessKnowledgeFacts";
 import { listPublishedFacts } from "./factStore";
@@ -44,14 +48,12 @@ export async function getPublishedFactsCached(
   return { facts, policy };
 }
 
-export type TurnGrounding = {
-  retrieved: RetrievedFact[];
-  block: GroundedPromptBlock;
-};
+export type TurnGrounding = GroundedResponsePackage;
 
 const EMPTY_GROUNDING: TurnGrounding = {
   retrieved: [],
   block: { text: "", factCount: 0, staleFactCount: 0, coveredTypes: [] },
+  conflictingKeys: [],
 };
 
 /**
@@ -71,15 +73,12 @@ export async function buildTurnGrounding(params: {
   limit?: number;
 }): Promise<TurnGrounding> {
   if (!knowledgeFactsActiveForWorkspace(params.knowledgeRow)) {
-    return { retrieved: [], block: { ...EMPTY_GROUNDING.block } };
+    return { ...EMPTY_GROUNDING, block: { ...EMPTY_GROUNDING.block } };
   }
 
   const { facts, policy } = await getPublishedFactsCached(params.userId, params.freshnessPolicyRaw);
   if (facts.length === 0) {
-    return {
-      retrieved: [],
-      block: { text: "", factCount: 0, staleFactCount: 0, coveredTypes: [] },
-    };
+    return { ...EMPTY_GROUNDING, block: { ...EMPTY_GROUNDING.block } };
   }
 
   const retrieved = retrieveFactsForTurn({
@@ -94,5 +93,9 @@ export async function buildTurnGrounding(params: {
     .filter((c) => c.resolution === "blocked")
     .map((c) => c.factKey);
 
-  return { retrieved, block: buildGroundedPromptBlock(retrieved, { conflictingKeys }) };
+  return {
+    retrieved,
+    block: buildGroundedPromptBlock(retrieved, { conflictingKeys }),
+    conflictingKeys,
+  };
 }

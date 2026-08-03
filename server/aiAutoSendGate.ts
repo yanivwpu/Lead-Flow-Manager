@@ -227,7 +227,7 @@ export function evaluateFullAutoSend(params: {
   const scored = scoreLead(msgs, businessKnowledge);
   const missingLen = scored.missingRequired?.length ?? 0;
   const requiredQs = (businessKnowledge?.qualifyingQuestions || []).filter(
-    (q) => q?.question?.trim() && (q.required ?? true),
+    (q) => q?.question?.trim() && (q.required ?? true) && (q as { enabled?: boolean }).enabled !== false,
   );
 
   // Strict path (no override)
@@ -269,7 +269,7 @@ export function businessKnowledgeFromAiRecord(k: Record<string, unknown> | undef
     salesGoals: (k.salesGoals as string) || undefined,
     servicesProducts: (k.servicesProducts as string) || undefined,
     qualifyingQuestions: qq
-      .filter((x) => x && typeof (x as any).question === "string")
+      .filter((x) => x && typeof (x as any).question === "string" && (x as any).enabled !== false)
       .map((x: any) => ({
         key: x.key,
         label: x.label,

@@ -1289,7 +1289,13 @@ export function InboxLeadDetailsPanel({
 
   // Business knowledge — used to drive qualifying questions in the Copilot panel
   const { data: businessKnowledge } = useQuery<{
-    qualifyingQuestions?: Array<{ key?: string; label?: string; question: string; required?: boolean }>;
+    qualifyingQuestions?: Array<{
+      key?: string;
+      label?: string;
+      question: string;
+      required?: boolean;
+      enabled?: boolean;
+    }>;
     industry?: string;
   }>({
     queryKey: ["/api/ai/business-knowledge"],
@@ -1300,7 +1306,7 @@ export function InboxLeadDetailsPanel({
   const qualifyingCriteria: QualifyingCriterion[] = useMemo(() => {
     const raw = businessKnowledge?.qualifyingQuestions ?? [];
     return raw
-      .filter(q => q.question?.trim())
+      .filter((q) => q.question?.trim() && q.enabled !== false)
       .map((q, i) => ({
         key:      q.key   || `q_${i}`,
         label:    q.label || `Question ${i + 1}`,

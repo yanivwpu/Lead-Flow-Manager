@@ -22,14 +22,20 @@ import {
 import {
   RESPONSE_COMPOSITION_RULES,
   VERIFIED_FACTS_HEADER,
+  assembleDeterministicGroundedDraft,
   buildGroundedPromptBlock,
+  mergeGroundingChecks,
   validateGroundedClaims,
+  validateResponseCompleteness,
 } from "../shared/factGrounding";
 import {
   hasCoverageGap,
   retrieveFactsForTurn,
 } from "../shared/knowledgeRetrieval";
-import { deriveSubIntents } from "../shared/aiRouting";
+import { resolveAiRouting } from "../shared/aiRouting";
+import { evaluateFullAutoSend } from "../server/aiAutoSendGate";
+import { stripQuotedEmailReplies } from "../server/emailChannel/htmlSanitize";
+import { readFileSync } from "node:fs";
 
 function run(name: string, fn: () => void) {
   try {
@@ -407,6 +413,242 @@ run("a conflicting value is marked in the prompt instead of being stated", () =>
     conflictingKeys: [BUSINESS_LISTING.factKey],
   });
   assert.match(block.text, /CONFLICTING SOURCES/);
+});
+
+// --- Response completeness (answer must use retrieved facts) ------------------
+
+const PROD_MSG =
+  "Wonder about your business directory. How much is it and what is included in it?";
+const GENERIC_DRAFT =
+  "Our business directory listings are competitively priced to suit various needs and budgets. Could you share the type of business or service you're interested in advertising, so I can provide more specific details on pricing and inclusions?";
+
+run("published pricing fact + pricing question requires the exact price", () => {
+  const retrieved = retrieveFactsForTurn({
+    facts: [BUSINESS_LISTING],
+    message: "how much is the business listing?",
+    subIntents: ["pricing_question"],
+    now: NOW,
+  });
+  const incomplete = validateResponseCompleteness({
+    draft: "Our listing packages are available — what category is your business in?",
+    retrieved,
+    subIntents: ["pricing_question"],
+  });
+  assert.equal(incomplete.ok, false);
+  assert.ok(incomplete.violations.some((v) => v.kind === "incomplete_required_fact"));
+
+  const complete = validateResponseCompleteness({
+    draft: "Business Listing is USD 29 per month.",
+    retrieved,
+    subIntents: ["pricing_question"],
+  });
+  assert.equal(complete.ok, true, JSON.stringify(complete.violations));
+});
+
+run("published benefits + what is included requires exact benefits", () => {
+  const routing = resolveAiRouting({ inbound: PROD_MSG });
+  assert.ok(routing.subIntents.includes("benefits_question"));
+  const retrieved = retrieveFactsForTurn({
+    facts: [BUSINESS_LISTING],
+    message: PROD_MSG,
+    subIntents: routing.subIntents,
+    now: NOW,
+  });
+  const incomplete = validateResponseCompleteness({
+    draft: "Business Listing is USD 29 per month. Want help getting started?",
+    retrieved,
+    subIntents: routing.subIntents,
+  });
+  assert.equal(incomplete.ok, false);
+
+  const complete = validateResponseCompleteness({
+    draft:
+      "Business Listing is USD 29 per month. It includes a Business profile page, Category listing, Website, phone, and map, and Local SEO visibility.",
+    retrieved,
+    subIntents: routing.subIntents,
+  });
+  assert.equal(complete.ok, true, JSON.stringify(complete.violations));
+});
+
+run("generic competitively priced draft is rejected as incomplete", () => {
+  const routing = resolveAiRouting({ inbound: PROD_MSG });
+  const retrieved = retrieveFactsForTurn({
+    facts: [BUSINESS_LISTING],
+    message: PROD_MSG,
+    subIntents: routing.subIntents,
+    now: NOW,
+  });
+  const check = mergeGroundingChecks(
+    validateGroundedClaims({ draft: GENERIC_DRAFT, retrieved, subIntents: routing.subIntents }),
+    validateResponseCompleteness({
+      draft: GENERIC_DRAFT,
+      retrieved,
+      subIntents: routing.subIntents,
+    }),
+  );
+  // Unsupported-amount alone would have allowed this — completeness must catch it.
+  assert.equal(
+    validateGroundedClaims({ draft: GENERIC_DRAFT, retrieved }).ok,
+    true,
+  );
+  assert.equal(check.ok, false);
+  assert.ok(check.violations.some((v) => v.kind === "incomplete_required_fact"));
+});
+
+run("retrieved facts absent → safe missing-information response allowed", () => {
+  const check = validateResponseCompleteness({
+    draft: "I don't have a verified price for that package yet — I can confirm it for you.",
+    retrieved: [],
+    subIntents: ["pricing_question"],
+  });
+  assert.equal(check.ok, true);
+});
+
+run("conflicted facts → cautious response, no guessing required", () => {
+  const retrieved = retrieveFactsForTurn({
+    facts: [BUSINESS_LISTING],
+    message: PROD_MSG,
+    subIntents: ["pricing_question", "benefits_question"],
+    now: NOW,
+  });
+  const check = validateResponseCompleteness({
+    draft: "I want to confirm the current listing details before quoting them.",
+    retrieved,
+    subIntents: ["pricing_question", "benefits_question"],
+    conflictingKeys: [BUSINESS_LISTING.factKey],
+  });
+  assert.equal(check.ok, true);
+  const fallback = assembleDeterministicGroundedDraft({
+    retrieved,
+    subIntents: ["pricing_question"],
+    conflictingKeys: [BUSINESS_LISTING.factKey],
+  });
+  assert.match(fallback, /confirm/i);
+  assert.ok(!/\$29|USD 29/.test(fallback));
+});
+
+run("email with quoted thread classifies only the newest customer content", () => {
+  const quoted = `${PROD_MSG}
+
+On Sat, Aug 1, 2026 at 3:00 PM Agent wrote:
+> Thanks for reaching out about our directory.
+> Our packages start at many price points.`;
+  const stripped = stripQuotedEmailReplies(quoted);
+  assert.equal(stripped, PROD_MSG);
+  const routing = resolveAiRouting({ inbound: stripped });
+  assert.ok(routing.subIntents.includes("pricing_question"));
+  assert.ok(routing.subIntents.includes("benefits_question"));
+  assert.ok(routing.subIntents.includes("listing_join_question"));
+  // Classification must not be poisoned by the quoted agent hedge.
+  assert.ok(!/competitively|many price points/i.test(stripped));
+});
+
+run("WhatsApp/Facebook/Instagram/Email share the same grounding contract in suggestReply", () => {
+  const src = readFileSync(new URL("../server/aiService.ts", import.meta.url), "utf8");
+  assert.ok(src.includes("validateResponseCompleteness"));
+  assert.ok(src.includes("FACT_COMPLETENESS_RETRY_INSTRUCTION"));
+  assert.ok(src.includes("assembleDeterministicGroundedDraft"));
+  // Channel only changes email framing — completeness runs for every suggestReply call.
+  assert.ok(/evaluateDraft\(suggestion\)/.test(src));
+  assert.ok(!/if\s*\(\s*isEmailChannel[\s\S]{0,80}validateResponseCompleteness/.test(src));
+});
+
+run("draft regeneration failure blocks auto-send", () => {
+  const gate = evaluateFullAutoSend({
+    businessMode: "auto",
+    conversationHistory: [
+      { role: "user", content: PROD_MSG },
+      { role: "user", content: "Following up on pricing" },
+    ],
+    suggestion: assembleDeterministicGroundedDraft({
+      retrieved: retrieveFactsForTurn({
+        facts: [BUSINESS_LISTING],
+        message: PROD_MSG,
+        subIntents: ["pricing_question", "benefits_question", "listing_join_question"],
+        now: NOW,
+      }),
+      subIntents: ["pricing_question", "benefits_question", "listing_join_question"],
+    }),
+    confidence: 0.9,
+    groundingViolations: ["incomplete_required_fact", "grounding_fallback_requires_review"],
+  });
+  assert.equal(gate.allowed, false);
+  assert.match(gate.reason, /grounding_violation/);
+});
+
+run("cross-workspace isolation: completeness only sees retrieved facts passed in", () => {
+  const otherWorkspacePlan = fact("pricing_plan", {
+    name: "Other Workspace Plan",
+    description: null,
+    price: { amount: 999, currency: "USD", billingPeriod: "month" },
+    priceQualifier: "exact",
+    benefits: ["Secret benefit"],
+  });
+  // Simulate workspace A retrieval — workspace B's fact never enters.
+  const retrievedA = retrieveFactsForTurn({
+    facts: [BUSINESS_LISTING],
+    message: "how much?",
+    subIntents: ["pricing_question"],
+    now: NOW,
+  });
+  assert.ok(!retrievedA.some((r) => r.fact.factKey === otherWorkspacePlan.factKey));
+  const check = validateResponseCompleteness({
+    draft: "Business Listing is USD 29 per month.",
+    retrieved: retrievedA,
+    subIntents: ["pricing_question"],
+  });
+  assert.equal(check.ok, true);
+  assert.equal(
+    validateResponseCompleteness({
+      draft: "Other Workspace Plan is USD 999 per month.",
+      retrieved: retrievedA,
+      subIntents: ["pricing_question"],
+    }).ok,
+    false,
+  );
+});
+
+run("no published facts → V1 fallback remains safe (empty grounding package)", () => {
+  const retrieved = retrieveFactsForTurn({
+    facts: [],
+    message: PROD_MSG,
+    subIntents: ["pricing_question"],
+    now: NOW,
+  });
+  const block = buildGroundedPromptBlock(retrieved);
+  assert.equal(block.text, "");
+  assert.equal(
+    validateResponseCompleteness({
+      draft: GENERIC_DRAFT,
+      retrieved,
+      subIntents: ["pricing_question"],
+    }).ok,
+    true,
+  );
+});
+
+run("deterministic fallback states price and benefits from the fact", () => {
+  const retrieved = retrieveFactsForTurn({
+    facts: [BUSINESS_LISTING],
+    message: PROD_MSG,
+    subIntents: ["pricing_question", "benefits_question", "listing_join_question"],
+    now: NOW,
+  });
+  const draft = assembleDeterministicGroundedDraft({
+    retrieved,
+    subIntents: ["pricing_question", "benefits_question", "listing_join_question"],
+  });
+  assert.match(draft, /Business Listing/i);
+  assert.match(draft, /USD 29 per month/);
+  assert.match(draft, /Business profile page/);
+  assert.equal(
+    validateResponseCompleteness({
+      draft,
+      retrieved,
+      subIntents: ["pricing_question", "benefits_question", "listing_join_question"],
+    }).ok,
+    true,
+  );
 });
 
 console.log("\nAll fact grounding tests passed.");

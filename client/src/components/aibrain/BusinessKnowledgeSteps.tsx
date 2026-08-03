@@ -1,9 +1,11 @@
 /**
- * The one business-knowledge workflow: Teach AI → Analyze knowledge → Review & publish.
+ * The one business-knowledge workflow: Teach AI → Analyze → Review & publish → Questions.
  *
  * There is a single way for knowledge to reach the assistant, and it ends at one button.
  * A scan only ever drafts; the user reviews what changed, removes what is wrong, and
  * publishes. Until then the assistant keeps answering from whatever was published before.
+ * Customer questions are the last step in the same list — they shape the conversation,
+ * not what the assistant knows.
  *
  * The copy here deliberately never mentions the storage generation behind it. A merchant
  * sees pages, what AI learned from them, and a publish action — not two knowledge systems.
@@ -45,6 +47,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { Hint, Step, type StepState } from "./WorkflowStep";
 import type {
   KnowledgeFactView,
   KnowledgeReviewPayload,
@@ -173,92 +176,6 @@ function formatWhen(iso: string | null | undefined): string | null {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleDateString(undefined, { dateStyle: "medium" });
-}
-
-// ---------------------------------------------------------------------------
-// Step shell
-// ---------------------------------------------------------------------------
-
-type StepState = "todo" | "ready" | "busy" | "done";
-
-const STEP_MARKER_STYLES: Record<StepState, string> = {
-  todo: "border-slate-200 bg-white text-slate-400",
-  ready: "border-violet-300 bg-white text-violet-700",
-  busy: "border-violet-300 bg-violet-50 text-violet-700",
-  done: "border-emerald-300 bg-emerald-50 text-emerald-700",
-};
-
-const STEP_STATUS_STYLES: Record<StepState, string> = {
-  todo: "text-slate-500",
-  ready: "text-violet-800",
-  busy: "text-violet-800",
-  done: "text-emerald-800",
-};
-
-function Step({
-  index,
-  title,
-  description,
-  state,
-  status,
-  isLast,
-  children,
-}: {
-  index: number;
-  title: string;
-  description: string;
-  state: StepState;
-  status: string;
-  isLast?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <li className="relative pl-11 sm:pl-14" data-testid={`knowledge-step-${index}`}>
-      {!isLast && (
-        <span
-          className="absolute left-4 top-11 bottom-[-1.25rem] w-px bg-gradient-to-b from-violet-200/80 to-slate-200/70 sm:left-5"
-          aria-hidden
-        />
-      )}
-      <span
-        className={cn(
-          "absolute left-0 top-1 flex h-8 w-8 items-center justify-center rounded-full border text-sm font-semibold shadow-sm sm:h-10 sm:w-10",
-          STEP_MARKER_STYLES[state],
-        )}
-        aria-hidden
-      >
-        {state === "busy" ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : state === "done" ? (
-          <Check className="h-4 w-4" strokeWidth={2.5} />
-        ) : (
-          index
-        )}
-      </span>
-
-      <div className="rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.03] ring-1 ring-violet-100/50">
-        <div className="space-y-1 px-4 pt-4 sm:px-5 sm:pt-5">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <h3 className="text-base font-semibold tracking-tight text-slate-900">
-              <span className="sr-only">{`Step ${index}: `}</span>
-              {title}
-            </h3>
-            <span className={cn("text-xs font-medium", STEP_STATUS_STYLES[state])}>{status}</span>
-          </div>
-          <p className="text-sm leading-relaxed text-slate-600">{description}</p>
-        </div>
-        <div className="space-y-4 px-4 pb-5 pt-4 sm:px-5">{children}</div>
-      </div>
-    </li>
-  );
-}
-
-function Hint({ children }: { children: ReactNode }) {
-  return (
-    <p className="rounded-lg border border-slate-200/70 bg-slate-50/50 px-3 py-2 text-sm text-slate-600">
-      {children}
-    </p>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -464,7 +381,14 @@ function SectionBlock({
 
 // ---------------------------------------------------------------------------
 
-export function BusinessKnowledgeSteps({ aboutFields }: { aboutFields?: ReactNode }) {
+export function BusinessKnowledgeSteps({
+  aboutFields,
+  questionsStep,
+}: {
+  aboutFields?: ReactNode;
+  /** Rendered as the final step, inside this list, so the workflow stays one column. */
+  questionsStep?: ReactNode;
+}) {
   const queryClient = useQueryClient();
   const [newUrl, setNewUrl] = useState("");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -912,7 +836,7 @@ export function BusinessKnowledgeSteps({ aboutFields }: { aboutFields?: ReactNod
                 ? `${plural(publishedCount, "detail", "details")} published`
                 : "Nothing yet"
           }
-          isLast
+          isLast={!questionsStep}
         >
           {blockedConflicts.length > 0 && (
             <div className="space-y-2 rounded-lg border border-red-200 bg-red-50/60 px-3 py-2.5">
@@ -1046,6 +970,8 @@ export function BusinessKnowledgeSteps({ aboutFields }: { aboutFields?: ReactNod
             </Hint>
           )}
         </Step>
+
+        {questionsStep}
       </ol>
 
       <AlertDialog
