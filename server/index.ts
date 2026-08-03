@@ -455,6 +455,7 @@ app.use((req, res, next) => {
         name: 'Yaniv',
         email: 'yaniv@whachatcrm.com',
         password: hashedPassword,
+        emailVerifiedAt: new Date(),
       });
       console.log('[SSO] Created SSO user: yaniv@whachatcrm.com');
     }

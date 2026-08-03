@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { trackSignUp } from "@/lib/ga4Events";
 
@@ -8,16 +8,38 @@ interface User {
   email: string;
   avatarUrl?: string | null;
   role?: string | null;
+  emailVerifiedAt?: string | null;
   /** Set when a self-service deletion request has been recorded (pending processing). */
   deletionRequestedAt?: string | null;
 }
+
+export type SignupOptions = {
+  phoneNumber?: string;
+  businessName?: string;
+  turnstileToken?: string | null;
+  /** Honeypot — must stay empty for real users */
+  website?: string;
+};
+
+export type SignupResult = {
+  success: boolean;
+  pendingVerification?: boolean;
+  error?: string;
+};
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>;
-  signup: (name: string, email: string, password: string, phoneNumber?: string, businessName?: string) => Promise<{ success: boolean; error?: string }>;
+  signup: (
+    name: string,
+    email: string,
+    password: string,
+    options?: SignupOptions,
+  ) => Promise<SignupResult>;
   logout: () => void;
+  refreshSession: () => Promise<void>;
+  resendVerification: (email: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,111 +49,124 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [, setLocation] = useLocation();
 
-  useEffect(() => {
-    // Check for existing session on mount
-    checkSession();
-  }, []);
-
-  const checkSession = async () => {
+  const refreshSession = useCallback(async () => {
     try {
-      const response = await fetch('/api/auth/me', {
-        credentials: 'include',
-      });
-      
+      const response = await fetch("/api/auth/me", { credentials: "include" });
       if (response.ok) {
         const userData = await response.json();
         setUser(userData);
+      } else {
+        setUser(null);
       }
     } catch (error) {
-      console.error('Failed to check session:', error);
-    } finally {
-      setIsLoading(false);
+      console.error("Failed to refresh session:", error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        await refreshSession();
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, [refreshSession]);
 
   const login = async (email: string, password: string, rememberMe: boolean = false): Promise<boolean> => {
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, rememberMe }),
-        credentials: 'include',
+        credentials: "include",
       });
 
       if (response.ok) {
-        // Prefer `/api/auth/me` so the client gets the full persisted user row (session may hydrate more than login JSON).
         const me = await fetch("/api/auth/me", { credentials: "include" });
         if (me.ok) {
-          const userData = await me.json();
-          setUser(userData);
+          setUser(await me.json());
         } else {
-          const userData = await response.json();
-          setUser(userData);
+          setUser(await response.json());
         }
         return true;
       }
       return false;
     } catch (error) {
-      console.error('Login error:', error);
+      console.error("Login error:", error);
       return false;
     }
   };
 
-  const signup = async (name: string, email: string, password: string, phoneNumber?: string, businessName?: string): Promise<{ success: boolean; error?: string }> => {
+  const signup = async (
+    name: string,
+    email: string,
+    password: string,
+    options: SignupOptions = {},
+  ): Promise<SignupResult> => {
     try {
-      const response = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name, email, password, phoneNumber, businessName }),
-        credentials: 'include',
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          phoneNumber: options.phoneNumber || "",
+          businessName: options.businessName || "",
+          turnstileToken: options.turnstileToken || undefined,
+          website: options.website || "",
+        }),
+        credentials: "include",
       });
 
-      if (response.ok) {
-        const me = await fetch("/api/auth/me", { credentials: "include" });
-        let userData: User;
-        if (me.ok) {
-          userData = await me.json();
-          setUser(userData);
-        } else {
-          userData = await response.json();
-          setUser(userData);
-        }
-        // GA4: sign_up — email/password account created
-        const source =
-          typeof window !== "undefined"
-            ? new URLSearchParams(window.location.search).get("ref") ||
-              new URLSearchParams(window.location.search).get("source") ||
-              undefined
-            : undefined;
-        trackSignUp({
-          method: "email",
-          plan: "free",
-          source: source || undefined,
-          userId: userData.id,
-        });
+      const data = await response.json().catch(() => ({}));
+
+      if (response.ok && data.pendingVerification) {
+        // GA4 sign_up fires after email verification once we have a session user id
+        return { success: true, pendingVerification: true };
+      }
+
+      if (response.ok && data.id) {
+        setUser(data);
+        trackSignUp({ method: "email", plan: "free", userId: data.id });
         return { success: true };
       }
-      const errorData = await response.json().catch(() => ({ error: 'Signup failed' }));
-      console.error('Signup failed:', response.status, errorData);
-      return { success: false, error: errorData.error || 'Signup failed' };
+
+      console.error("Signup failed:", response.status, data);
+      return { success: false, error: data.error || "Signup failed" };
     } catch (error) {
-      console.error('Signup error:', error);
-      return { success: false, error: 'Network error - please try again' };
+      console.error("Signup error:", error);
+      return { success: false, error: "Network error - please try again" };
+    }
+  };
+
+  const resendVerification = async (email: string): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const response = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+        credentials: "include",
+      });
+      if (response.status === 429) {
+        const data = await response.json().catch(() => ({}));
+        return { ok: false, error: data.error || "Too many requests. Please try again shortly." };
+      }
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "Network error - please try again" };
     }
   };
 
   const logout = async () => {
     try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
       });
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error("Logout error:", error);
     } finally {
       setUser(null);
       setLocation("/");
@@ -139,7 +174,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, signup, logout }}>
+    <AuthContext.Provider
+      value={{ user, isLoading, login, signup, logout, refreshSession, resendVerification }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -1,16 +1,43 @@
 import passport from 'passport';
 import { Strategy as LocalStrategy } from 'passport-local';
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
 import type { Express, Request } from 'express';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
 import { storage } from './storage';
 import type { User } from '@shared/schema';
-
-const resetTokens = new Map<string, { email: string; expires: Date }>();
+import { isDisposableEmail } from '@shared/disposableEmail';
+import {
+  AUTH_RATE_LIMIT_MESSAGE,
+  checkForgotPasswordEmailLimit,
+  checkForgotPasswordIpLimit,
+  checkSignupEmailLimit,
+  checkSignupIpLimit,
+  checkVerificationResendLimit,
+  getAuthClientIp,
+  getAuthUserAgent,
+  getRequestId,
+  isEmailVerified,
+  logAuthSecurityEvent,
+  softAuthDelay,
+} from './authSecurity';
+import {
+  TURNSTILE_GENERIC_ERROR,
+  isTurnstileRequired,
+  verifyTurnstileToken,
+  warnIfTurnstileMisconfigured,
+} from './authTurnstile';
+import { consumeEmailVerificationToken, issueEmailVerification, resendVerificationForEmail } from './emailVerification';
+import { consumePasswordResetToken, issuePasswordResetForEmail } from './passwordResetTokens';
 
 const PgStore = connectPgSimple(session);
+
+const DISPOSABLE_EMAIL_MESSAGE =
+  "Temporary email addresses aren’t allowed. Please use a permanent personal or business email address.";
+const PENDING_VERIFICATION_MESSAGE = "Check your email to verify your account.";
+const FORGOT_PASSWORD_MESSAGE =
+  "If an account exists for that email, we’ve sent password-reset instructions.";
+const HONEYPOT_FIELD = "website";
 
 async function resolveUserForLogin(rawEmail: string): Promise<User | undefined> {
   // Single code path: storage.getUserByEmail uses raw SQL only (no Drizzle eq/ilike on users.email).
@@ -102,8 +129,9 @@ async function verifyLoginPassword(
 }
 
 export function setupAuth(app: Express) {
-  // Trust proxy for Replit's reverse proxy
+  // Trust proxy for Railway / reverse proxies (req.ip from first trusted hop)
   app.set('trust proxy', 1);
+  warnIfTurnstileMisconfigured();
 
   // Session configuration with PostgreSQL store for production persistence
   const isProduction = process.env.NODE_ENV === 'production';
@@ -158,6 +186,7 @@ export function setupAuth(app: Express) {
                 name: 'Demo Agent',
                 email: DEMO_EMAIL,
                 password: hashedPassword,
+                emailVerifiedAt: new Date(),
               });
               needsSampleData = true;
               console.log('[AUTH] Demo user created on-demand');
@@ -301,75 +330,192 @@ export function setupAuth(app: Express) {
   });
 }
 
+/** Paths that authenticated-but-unverified users may still call. */
+const UNVERIFIED_ALLOWED_PATHS = new Set([
+  '/api/auth/me',
+  '/api/auth/logout',
+  '/api/auth/resend-verification',
+  '/api/auth/verify-email',
+]);
+
 // Auth middleware to protect routes
 export function requireAuth(req: any, res: any, next: any) {
-  if (req.isAuthenticated()) {
-    return next();
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Unauthorized' });
   }
-  res.status(401).json({ error: 'Unauthorized' });
+  const user = req.user as User | undefined;
+  const path = (req.path || req.originalUrl || '').split('?')[0];
+  if (user && !isEmailVerified(user) && !UNVERIFIED_ALLOWED_PATHS.has(path)) {
+    return res.status(403).json({
+      error: PENDING_VERIFICATION_MESSAGE,
+      code: 'EMAIL_NOT_VERIFIED',
+    });
+  }
+  return next();
 }
 
 // Register auth routes
 export function registerAuthRoutes(app: Express) {
-  // Sign up
+  // Sign up — pending verification; trial + welcome start after email verify
   app.post('/api/auth/signup', async (req, res) => {
+    const ip = getAuthClientIp(req);
+    const userAgent = getAuthUserAgent(req);
+    const requestId = getRequestId(req);
+
     try {
-      const { name, email, password, phoneNumber, businessName } = req.body;
+      const { name, email, password, phoneNumber, businessName, turnstileToken } = req.body || {};
+      const honeypotValue = typeof req.body?.[HONEYPOT_FIELD] === 'string' ? req.body[HONEYPOT_FIELD] : '';
+
+      await logAuthSecurityEvent({
+        eventType: 'signup_attempt',
+        email: typeof email === 'string' ? email : null,
+        ipAddress: ip,
+        userAgent,
+        outcome: 'allowed',
+        requestId,
+      });
+
+      // Honeypot: pretend success, do not create account or send email
+      if (honeypotValue && String(honeypotValue).trim().length > 0) {
+        await logAuthSecurityEvent({
+          eventType: 'signup_rejected_honeypot',
+          email: typeof email === 'string' ? email : null,
+          ipAddress: ip,
+          userAgent,
+          outcome: 'rejected',
+          reasonCode: 'honeypot',
+          requestId,
+        });
+        return res.status(201).json({
+          pendingVerification: true,
+          message: PENDING_VERIFICATION_MESSAGE,
+        });
+      }
 
       if (!name || !email || !password) {
         return res.status(400).json({ error: 'Missing required fields' });
       }
 
-      // Check if user already exists (case-insensitive + NFKC)
-      const existingUser = await resolveUserForLogin(normalizeEmailForAuth(email));
+      const normalizedEmail = normalizeEmailForAuth(email);
+
+      const ipLimit = await checkSignupIpLimit(ip);
+      if (!ipLimit.allowed) {
+        await logAuthSecurityEvent({
+          eventType: 'signup_rate_limited',
+          email: normalizedEmail,
+          ipAddress: ip,
+          userAgent,
+          outcome: 'rate_limited',
+          reasonCode: 'signup_ip',
+          requestId,
+        });
+        return res.status(429).json({ error: AUTH_RATE_LIMIT_MESSAGE, code: 'RATE_LIMITED' });
+      }
+
+      const emailLimit = await checkSignupEmailLimit(normalizedEmail);
+      if (!emailLimit.allowed) {
+        await logAuthSecurityEvent({
+          eventType: 'signup_rate_limited',
+          email: normalizedEmail,
+          ipAddress: ip,
+          userAgent,
+          outcome: 'rate_limited',
+          reasonCode: 'signup_email',
+          requestId,
+        });
+        return res.status(429).json({ error: AUTH_RATE_LIMIT_MESSAGE, code: 'RATE_LIMITED' });
+      }
+
+      if (isDisposableEmail(normalizedEmail)) {
+        await logAuthSecurityEvent({
+          eventType: 'signup_rejected_disposable',
+          email: normalizedEmail,
+          ipAddress: ip,
+          userAgent,
+          outcome: 'rejected',
+          reasonCode: 'disposable_email',
+          requestId,
+        });
+        return res.status(400).json({ error: DISPOSABLE_EMAIL_MESSAGE, code: 'DISPOSABLE_EMAIL' });
+      }
+
+      if (isTurnstileRequired()) {
+        const turnstile = await verifyTurnstileToken(turnstileToken, ip);
+        if (!turnstile.ok) {
+          await logAuthSecurityEvent({
+            eventType: 'signup_rejected_turnstile',
+            email: normalizedEmail,
+            ipAddress: ip,
+            userAgent,
+            outcome: 'rejected',
+            reasonCode: turnstile.reason,
+            requestId,
+          });
+          return res.status(400).json({ error: TURNSTILE_GENERIC_ERROR, code: 'TURNSTILE_FAILED' });
+        }
+      }
+
+      const existingUser = await resolveUserForLogin(normalizedEmail);
       if (existingUser) {
+        if (!isEmailVerified(existingUser)) {
+          // Resend verification without revealing account state beyond generic pending message
+          const resendLimit = await checkVerificationResendLimit(normalizedEmail);
+          if (resendLimit.allowed) {
+            await issueEmailVerification(existingUser.id, existingUser.email, existingUser.name);
+            await logAuthSecurityEvent({
+              eventType: 'verification_resent',
+              userId: existingUser.id,
+              email: normalizedEmail,
+              ipAddress: ip,
+              userAgent,
+              outcome: 'success',
+              reasonCode: 'signup_existing_pending',
+              requestId,
+            });
+          }
+          return res.status(201).json({
+            pendingVerification: true,
+            message: PENDING_VERIFICATION_MESSAGE,
+          });
+        }
         return res.status(400).json({ error: 'User already exists with that email' });
       }
 
-      // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
-
-      // 14-day Pro + AI Brain trial (server-side wall clock; persisted — no reset on logout)
-      const trialStartedAt = new Date();
-      const trialEndsAt = new Date(trialStartedAt);
-      trialEndsAt.setDate(trialEndsAt.getDate() + 14);
 
       console.log(
         `[SignupCreateUser] ${JSON.stringify({
-          phase: "before_create",
-          email: normalizeEmailForAuth(email),
-          trialEndsAt,
-          subscriptionPlan: "free",
-          trialPlan: "pro_ai",
+          phase: "before_create_pending",
+          email: normalizedEmail,
+          trialPlan: null,
+          emailVerified: false,
         })}`,
       );
 
       const user = await storage.createUser({
-        name,
-        email: normalizeEmailForAuth(email),
+        name: String(name).trim(),
+        email: normalizedEmail,
         password: hashedPassword,
-        trialStartedAt,
-        trialEndsAt,
-        trialStatus: "active",
-        trialPlan: "pro_ai",
+        trialStatus: "none",
+        trialPlan: null,
+        trialStartedAt: null,
+        trialEndsAt: null,
+        emailVerifiedAt: null,
       });
 
       console.log(
         `[SignupCreateUser] ${JSON.stringify({
-          phase: "after_create",
+          phase: "after_create_pending",
           userId: user?.id ?? null,
-          email: user?.email ?? normalizeEmailForAuth(email),
-          trialEndsAt: user?.trialEndsAt ?? null,
-          subscriptionPlan: user?.subscriptionPlan ?? null,
-          trialPlan: user?.trialPlan ?? null,
+          email: user?.email ?? normalizedEmail,
+          trialStatus: user?.trialStatus ?? "none",
         })}`,
       );
 
-      // Check for referral attribution (from session or 90-day cookie)
+      // Referral attribution (same as before; works before verification)
       let referralPartnerId = (req.session as any)?.referralPartnerId;
       let refCode = (req.session as any)?.referralCode;
-      
-      // If not in session, check for ref_code cookie (90-day persistence)
+
       if (!referralPartnerId && req.cookies?.ref_code) {
         refCode = req.cookies.ref_code;
         const partnerFromCookie = await storage.getPartnerByRefCode(refCode);
@@ -377,30 +523,24 @@ export function registerAuthRoutes(app: Express) {
           referralPartnerId = partnerFromCookie.id;
         }
       }
-      
+
       if (referralPartnerId) {
         try {
-          // Prevent self-referral (partner cannot earn commission on own account)
           const partner = await storage.getPartner(referralPartnerId);
-          if (partner && partner.email.toLowerCase() !== email.toLowerCase()) {
-            // Assign partner (first-touch wins, cannot be overwritten)
+          if (partner && partner.email.toLowerCase() !== normalizedEmail) {
             const assigned = await storage.assignPartnerToUser(user.id, referralPartnerId);
             if (assigned) {
-              // Increment partner referral count
               await storage.incrementPartnerReferrals(referralPartnerId);
               console.log(`[REFERRAL] User ${user.email} attributed to partner ${partner.name} (ref: ${refCode})`);
             }
           }
-          // Clear referral session after attribution
           (req.session as any).referralCode = null;
           (req.session as any).referralPartnerId = null;
         } catch (refError) {
           console.error('Referral attribution error:', refError);
-          // Continue with signup even if referral fails
         }
       }
 
-      // Register phone number if provided
       if (phoneNumber && phoneNumber.trim()) {
         try {
           let normalizedPhone = phoneNumber.trim();
@@ -410,8 +550,6 @@ export function registerAuthRoutes(app: Express) {
             }
             normalizedPhone = "whatsapp:" + normalizedPhone;
           }
-
-          // Check if phone not already registered
           const existingPhone = await storage.getRegisteredPhoneByNumber(normalizedPhone);
           if (!existingPhone) {
             await storage.registerPhone({
@@ -422,26 +560,133 @@ export function registerAuthRoutes(app: Express) {
           }
         } catch (phoneError) {
           console.error('Phone registration error during signup:', phoneError);
-          // Continue with signup even if phone registration fails
         }
       }
 
-      // Send welcome email (async, don't wait)
-      import('./email').then(({ sendWelcomeEmail }) => {
-        sendWelcomeEmail(name, email);
+      await issueEmailVerification(user.id, user.email, user.name);
+      await logAuthSecurityEvent({
+        eventType: 'signup_created_pending_verification',
+        userId: user.id,
+        email: normalizedEmail,
+        ipAddress: ip,
+        userAgent,
+        outcome: 'success',
+        requestId,
       });
 
-      // Log the user in
-      req.login(user, (err: any) => {
-        if (err) {
-          return res.status(500).json({ error: 'Failed to log in after signup' });
-        }
-        const { password: _, ...safeUser } = user;
-        res.status(201).json(safeUser);
+      // Do not establish a product session until verified
+      return res.status(201).json({
+        pendingVerification: true,
+        message: PENDING_VERIFICATION_MESSAGE,
       });
     } catch (error) {
       console.error('Signup error:', error);
       res.status(500).json({ error: 'Failed to create account' });
+    }
+  });
+
+  // Resend verification email (no account enumeration)
+  app.post('/api/auth/resend-verification', async (req, res) => {
+    const ip = getAuthClientIp(req);
+    const userAgent = getAuthUserAgent(req);
+    const requestId = getRequestId(req);
+    const generic = {
+      success: true,
+      message: PENDING_VERIFICATION_MESSAGE,
+    };
+
+    try {
+      const email = typeof req.body?.email === 'string' ? normalizeEmailForAuth(req.body.email) : '';
+      if (!email) {
+        return res.json(generic);
+      }
+
+      const limit = await checkVerificationResendLimit(email);
+      if (!limit.allowed) {
+        await logAuthSecurityEvent({
+          eventType: 'signup_rate_limited',
+          email,
+          ipAddress: ip,
+          userAgent,
+          outcome: 'rate_limited',
+          reasonCode: 'verification_resend',
+          requestId,
+        });
+        return res.status(429).json({ error: AUTH_RATE_LIMIT_MESSAGE, code: 'RATE_LIMITED' });
+      }
+
+      const result = await resendVerificationForEmail(email);
+      if (result.attempted) {
+        await logAuthSecurityEvent({
+          eventType: 'verification_resent',
+          userId: result.userId,
+          email,
+          ipAddress: ip,
+          userAgent,
+          outcome: 'success',
+          requestId,
+        });
+      }
+      return res.json(generic);
+    } catch (error) {
+      console.error('Resend verification error:', error);
+      return res.json(generic);
+    }
+  });
+
+  // Verify email via single-use token (JSON API)
+  app.post('/api/auth/verify-email', async (req, res) => {
+    const ip = getAuthClientIp(req);
+    const userAgent = getAuthUserAgent(req);
+    const requestId = getRequestId(req);
+
+    try {
+      const token = typeof req.body?.token === 'string' ? req.body.token : '';
+      const result = await consumeEmailVerificationToken(token);
+      if (!result.ok) {
+        const message =
+          result.reason === 'expired'
+            ? 'This verification link has expired. Please request a new one.'
+            : 'This verification link is invalid or has already been used.';
+        return res.status(400).json({ error: message, code: 'VERIFY_FAILED' });
+      }
+
+      await logAuthSecurityEvent({
+        eventType: 'email_verified',
+        userId: result.userId,
+        ipAddress: ip,
+        userAgent,
+        outcome: 'success',
+        reasonCode: result.alreadyVerified ? 'already_verified' : 'verified',
+        requestId,
+      });
+
+      const user = await storage.getUserForSession(result.userId);
+      if (!user) {
+        return res.status(400).json({ error: 'Unable to complete verification.' });
+      }
+
+      // Establish session after successful verification
+      req.login(user, (err: any) => {
+        if (err) {
+          return res.json({
+            success: true,
+            message: 'Email verified. Please log in to continue.',
+            verified: true,
+          });
+        }
+        const { password: _, ...safeUser } = user;
+        return res.json({
+          success: true,
+          verified: true,
+          alreadyVerified: result.alreadyVerified,
+          trialStarted: result.trialStarted,
+          user: safeUser,
+        });
+      });
+    } catch (error) {
+      console.error('Verify email error:', error);
+      res.status(500).json({ error: 'Failed to verify email' });
     }
   });
 
@@ -512,34 +757,76 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  // Forgot password - request password reset
+  // Forgot password - generic response; DB-backed hashed tokens; rate limited
   app.post('/api/auth/forgot-password', async (req, res) => {
+    const ip = getAuthClientIp(req);
+    const userAgent = getAuthUserAgent(req);
+    const requestId = getRequestId(req);
+    const generic = { success: true, message: FORGOT_PASSWORD_MESSAGE };
+
     try {
-      const { email } = req.body;
-
+      const email = typeof req.body?.email === 'string' ? normalizeEmailForAuth(req.body.email) : '';
       if (!email) {
-        return res.status(400).json({ error: 'Email is required' });
+        await softAuthDelay();
+        return res.json(generic);
       }
 
-      const user = await resolveUserForLogin(email);
-      
-      if (user) {
-        const token = crypto.randomBytes(32).toString('hex');
-        resetTokens.set(token, {
-          email: user.email,
-          expires: new Date(Date.now() + 60 * 60 * 1000) // 1 hour
+      const ipLimit = await checkForgotPasswordIpLimit(ip);
+      if (!ipLimit.allowed) {
+        await logAuthSecurityEvent({
+          eventType: 'forgot_password_rate_limited',
+          email,
+          ipAddress: ip,
+          userAgent,
+          outcome: 'rate_limited',
+          reasonCode: 'forgot_ip',
+          requestId,
         });
-        
-        // Send password reset email with proper error handling
-        const { sendPasswordResetEmail } = await import('./email');
-        const emailSent = await sendPasswordResetEmail(user.email, token);
-        console.log(`[AUTH] Password reset email to ${user.email}: ${emailSent ? 'SENT' : 'FAILED'}`);
+        await softAuthDelay();
+        return res.status(429).json({ error: AUTH_RATE_LIMIT_MESSAGE, code: 'RATE_LIMITED' });
       }
 
-      res.json({ success: true, message: 'If an account exists, a reset link will be sent.' });
+      const emailLimit = await checkForgotPasswordEmailLimit(email);
+      if (!emailLimit.allowed) {
+        await logAuthSecurityEvent({
+          eventType: 'forgot_password_rate_limited',
+          email,
+          ipAddress: ip,
+          userAgent,
+          outcome: 'rate_limited',
+          reasonCode: 'forgot_email',
+          requestId,
+        });
+        await softAuthDelay();
+        return res.status(429).json({ error: AUTH_RATE_LIMIT_MESSAGE, code: 'RATE_LIMITED' });
+      }
+
+      const issued = await issuePasswordResetForEmail(email);
+      if (issued.pendingUnverified && issued.userId) {
+        // Silently direct pending accounts toward verification (no public disclosure)
+        const resendLimit = await checkVerificationResendLimit(email);
+        if (resendLimit.allowed) {
+          await resendVerificationForEmail(email);
+        }
+      }
+
+      await logAuthSecurityEvent({
+        eventType: 'forgot_password_requested',
+        userId: issued.userId ?? null,
+        email,
+        ipAddress: ip,
+        userAgent,
+        outcome: issued.issued ? 'success' : 'noop',
+        reasonCode: issued.pendingUnverified ? 'pending_unverified' : issued.issued ? 'sent' : 'no_account',
+        requestId,
+      });
+
+      await softAuthDelay();
+      return res.json(generic);
     } catch (error) {
       console.error('Forgot password error:', error);
-      res.json({ success: true, message: 'If an account exists, a reset link will be sent.' });
+      await softAuthDelay();
+      return res.json(generic);
     }
   });
 
@@ -649,7 +936,7 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  // Reset password with token
+  // Reset password with hashed DB-backed token
   app.post('/api/auth/reset-password', async (req, res) => {
     try {
       const { token, password } = req.body;
@@ -658,39 +945,34 @@ export function registerAuthRoutes(app: Express) {
         return res.status(400).json({ error: 'Token and password are required' });
       }
 
-      const tokenData = resetTokens.get(token);
-      if (!tokenData) {
-        return res.status(400).json({ error: 'Invalid or expired reset token' });
+      const consumed = await consumePasswordResetToken(token);
+      if (!consumed.ok) {
+        const message =
+          consumed.reason === 'expired'
+            ? 'Reset token has expired'
+            : 'Invalid or expired reset token';
+        return res.status(400).json({ error: message });
       }
 
-      if (new Date() > tokenData.expires) {
-        resetTokens.delete(token);
-        return res.status(400).json({ error: 'Reset token has expired' });
-      }
-
-      const user = await storage.getUserByEmail(tokenData.email);
+      const user = await storage.getUserForSession(consumed.userId);
       if (!user) {
         return res.status(400).json({ error: 'User not found' });
       }
 
       const hashedPassword = await bcrypt.hash(password, 10);
       const updatedUser = await storage.updateUser(user.id, { password: hashedPassword });
-      
+
       if (!updatedUser) {
         return res.status(500).json({ error: 'Failed to update password in database' });
       }
-      
-      resetTokens.delete(token);
 
-      // Automatically log the user in after password reset
-      req.login(user, (loginErr: any) => {
+      req.login(updatedUser, (loginErr: any) => {
         if (loginErr) {
-          // Password was reset but login failed - still return success
           console.error('Auto-login after reset failed:', loginErr);
           return res.json({ success: true, message: 'Password has been reset successfully. Please log in.' });
         }
-        
-        const { password: _, ...safeUser } = user;
+
+        const { password: _, ...safeUser } = updatedUser;
         res.json({ success: true, message: 'Password has been reset successfully', user: safeUser });
       });
     } catch (error) {

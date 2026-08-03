@@ -154,6 +154,8 @@ interface AdminUser {
   subscriptionStatus: string | null;
   trialEndsAt: string | null;
   isInTrial: boolean;
+  emailVerifiedAt?: string | null;
+  emailVerificationStatus?: "verified" | "awaiting_verification";
   twilioConnected: boolean | null;
   metaConnected: boolean | null;
   createdAt: string | null;
@@ -1800,6 +1802,26 @@ export function Admin() {
                           <span className="font-medium">{new Date(selectedAdminUser.trialEndsAt).toLocaleString()}</span>
                         </div>
                       )}
+                      <div className="text-sm text-gray-700 flex items-center gap-2">
+                        Email:{" "}
+                        <Badge
+                          variant="outline"
+                          className={
+                            selectedAdminUser.emailVerificationStatus === "awaiting_verification"
+                              ? "border-amber-300 text-amber-700 text-[10px]"
+                              : "border-emerald-300 text-emerald-700 text-[10px]"
+                          }
+                          title={
+                            selectedAdminUser.emailVerifiedAt
+                              ? `Verified ${new Date(selectedAdminUser.emailVerifiedAt).toLocaleString()}`
+                              : "Awaiting email verification — trial starts after verify"
+                          }
+                        >
+                          {selectedAdminUser.emailVerificationStatus === "awaiting_verification"
+                            ? "Awaiting verification"
+                            : "Verified"}
+                        </Badge>
+                      </div>
                     </div>
 
                     <div className="rounded-lg border p-3 space-y-2">

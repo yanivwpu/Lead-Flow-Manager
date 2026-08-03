@@ -235,6 +235,7 @@ router.get('/callback', async (req: Request, res: Response) => {
           trialEndsAt,
           trialStatus: 'active',
           trialPlan: 'pro_ai',
+          emailVerifiedAt: new Date(),
         });
       } catch (createErr) {
         if (!isUsersEmailUniqueViolation(createErr)) {

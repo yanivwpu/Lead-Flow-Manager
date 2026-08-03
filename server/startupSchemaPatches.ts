@@ -592,6 +592,61 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
       ADD COLUMN IF NOT EXISTS website_knowledge_sources jsonb NOT NULL DEFAULT '[]'::jsonb`,
   },
   {
+    tag: "0074_auth_signup_hardening",
+    sql: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at timestamp`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS welcome_email_sent_at timestamp`,
+      // Safe backfill: never mark pending public signups (no trial yet) as verified.
+      // Existing users typically have trial_started_at, paid plan, Shopify, or completed onboarding.
+      `UPDATE users SET email_verified_at = COALESCE(created_at, NOW())
+        WHERE email_verified_at IS NULL
+          AND (
+            trial_started_at IS NOT NULL
+            OR COALESCE(billing_plan, 'free') NOT IN ('free')
+            OR COALESCE(subscription_plan, 'free') NOT IN ('free')
+            OR shopify_shop IS NOT NULL
+            OR onboarding_completed = true
+          )`,
+      `UPDATE users SET welcome_email_sent_at = COALESCE(created_at, NOW())
+        WHERE welcome_email_sent_at IS NULL
+          AND email_verified_at IS NOT NULL`,
+      `CREATE TABLE IF NOT EXISTS email_verification_tokens (
+        id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_hash text NOT NULL,
+        expires_at timestamp NOT NULL,
+        used_at timestamp,
+        created_at timestamp DEFAULT now()
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS email_verification_tokens_token_hash_uidx ON email_verification_tokens (token_hash)`,
+      `CREATE INDEX IF NOT EXISTS email_verification_tokens_user_idx ON email_verification_tokens (user_id)`,
+      `CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_hash text NOT NULL,
+        expires_at timestamp NOT NULL,
+        used_at timestamp,
+        created_at timestamp DEFAULT now()
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS password_reset_tokens_token_hash_uidx ON password_reset_tokens (token_hash)`,
+      `CREATE INDEX IF NOT EXISTS password_reset_tokens_user_idx ON password_reset_tokens (user_id)`,
+      `CREATE TABLE IF NOT EXISTS auth_security_events (
+        id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+        event_type text NOT NULL,
+        user_id varchar,
+        normalized_email text,
+        ip_address text,
+        user_agent text,
+        outcome text NOT NULL,
+        reason_code text,
+        request_id text,
+        created_at timestamp DEFAULT now()
+      )`,
+      `CREATE INDEX IF NOT EXISTS auth_security_events_created_idx ON auth_security_events (created_at)`,
+      `CREATE INDEX IF NOT EXISTS auth_security_events_type_idx ON auth_security_events (event_type)`,
+    ].join(";\n"),
+  },
+  {
     tag: "0073_ai_brain_structured_facts",
     sql: [
       `ALTER TABLE ai_business_knowledge

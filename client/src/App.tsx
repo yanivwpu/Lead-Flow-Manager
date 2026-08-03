@@ -24,6 +24,9 @@ import {
 } from "@/lib/shopifyBootstrap";
 
 const AuthPage = lazy(() => import("@/pages/Auth").then(m => ({ default: m.AuthPage })));
+const VerifyEmailPage = lazy(() =>
+  import("@/pages/VerifyEmail").then((m) => ({ default: m.VerifyEmailPage })),
+);
 
 const AppLayout = lazy(() => import("@/pages/AppLayout").then(m => ({ default: m.AppLayout })));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword").then(m => ({ default: m.ResetPassword })));
@@ -125,6 +128,12 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
     return <Redirect to={`/auth?redirect=${encodeURIComponent(returnTo)}`} />;
   }
 
+  // Only block when the server explicitly reports an unverified account (null).
+  // Missing field = legacy payload / pre-migration → allow.
+  if (user.emailVerifiedAt === null) {
+    return <Redirect to={`/auth?mode=login`} />;
+  }
+
   return <Component {...rest} />;
 }
 
@@ -138,6 +147,7 @@ function MarketingRoutes() {
   return (
     <Switch>
       <Route path="/auth" component={AuthPage} />
+      <Route path="/verify-email" component={VerifyEmailPage} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/privacy">
         <Redirect to="/privacy-policy" />

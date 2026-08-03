@@ -10,6 +10,7 @@ import { sendActivationEmailDay3, sendActivationEmailDay10 } from "./email";
 import {
   activationStartAt,
   daysSinceActivationStart,
+  isEligibleForActivationEmails,
   isExcludedFromActivationEmails,
 } from "@shared/activationEmailEligibility";
 
@@ -55,6 +56,7 @@ const activationUserSelect = {
   createdAt: users.createdAt,
   trialStartedAt: users.trialStartedAt,
   shopifyInstalledAt: users.shopifyInstalledAt,
+  emailVerifiedAt: users.emailVerifiedAt,
   activationEmailDay3Sent: users.activationEmailDay3Sent,
   activationEmailDay10Sent: users.activationEmailDay10Sent,
   deletionRequestedAt: users.deletionRequestedAt,
@@ -95,6 +97,9 @@ export async function runActivationEmails(): Promise<{
     for (const user of uniqueCandidates) {
       if (user.deletionRequestedAt) continue;
       if (!user.email || isExcludedFromActivationEmails(user.email)) {
+        continue;
+      }
+      if (!isEligibleForActivationEmails(user)) {
         continue;
       }
 

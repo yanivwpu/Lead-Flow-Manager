@@ -841,12 +841,15 @@ export class DbStorage implements IStorage {
     const providedTrialStatus = (insertUser as any).trialStatus as string | null | undefined;
     const providedTrialPlan = (insertUser as any).trialPlan as string | null | undefined;
 
+    // Skip auto-trial for: demo, paid/override, already-expired, or explicit pending
+    // public signup (trialStatus "none" — trial starts after email verification).
     const shouldDefaultTrial =
       !isDemoUser &&
       !overrideEnabled &&
       (billingPlan === "free" || billingPlan === "") &&
       !providedTrialEndsAt &&
-      providedTrialStatus !== "expired";
+      providedTrialStatus !== "expired" &&
+      providedTrialStatus !== "none";
 
     const values = shouldDefaultTrial
       ? (() => {

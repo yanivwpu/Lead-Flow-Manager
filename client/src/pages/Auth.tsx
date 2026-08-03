@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { useLocation, Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { NoIndexHelmet } from "@/components/NoIndexHelmet";
+import { TurnstileWidget } from "@/components/TurnstileWidget";
 
 export function AuthPage() {
   const { t } = useTranslation();
@@ -36,8 +37,19 @@ export function AuthPage() {
   const [resetSubmitted, setResetSubmitted] = useState(false);
   const [resetSubmitting, setResetSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { login, signup } = useAuth();
+  const [pendingVerification, setPendingVerification] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+  const [honeypot, setHoneypot] = useState("");
+  const [resendBusy, setResendBusy] = useState(false);
+  const [resendNote, setResendNote] = useState("");
+  const { login, signup, resendVerification } = useAuth();
   const [, setLocation] = useLocation();
+  const turnstileConfigured = !!(import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined);
+
+  const onTurnstileToken = useCallback((token: string | null) => {
+    setTurnstileToken(token);
+  }, []);
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,9 +78,15 @@ export function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setResendNote("");
 
     if (!isLogin && !agreedToTerms) {
       setError("Please agree to the Privacy Policy and Terms of Use");
+      return;
+    }
+
+    if (!isLogin && turnstileConfigured && !turnstileToken) {
+      setError("Please complete the security check and try again.");
       return;
     }
 
@@ -84,18 +102,41 @@ export function AuthPage() {
           setError("Invalid email or password");
         }
       } else {
-        const result = await signup(name, email, password, "", businessName);
-        if (result.success) {
+        const result = await signup(name, email, password, {
+          phoneNumber: "",
+          businessName,
+          turnstileToken,
+          website: honeypot,
+        });
+        if (result.success && result.pendingVerification) {
+          setPendingVerification(true);
+        } else if (result.success) {
           setLocation(postAuthRedirect);
         } else {
           setError(result.error || "Signup failed");
+          setTurnstileToken(null);
+          setTurnstileResetKey((k) => k + 1);
         }
       }
     } catch (err) {
       setError("An error occurred. Please try again.");
+      setTurnstileToken(null);
+      setTurnstileResetKey((k) => k + 1);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleResendVerification = async () => {
+    setResendBusy(true);
+    setResendNote("");
+    const result = await resendVerification(email);
+    setResendBusy(false);
+    setResendNote(
+      result.ok
+        ? "If an account needs verification, we’ve sent another email."
+        : result.error || "Please try again shortly.",
+    );
   };
 
   return (
@@ -155,7 +196,7 @@ export function AuthPage() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="relative space-y-4">
             {!isLogin && (
               <>
                 <div className="space-y-2">
@@ -275,6 +316,54 @@ export function AuthPage() {
               </div>
             )}
 
+            {/* Honeypot — hidden from users/AT; bots may fill "website" */}
+            {!isLogin && (
+              <div
+                aria-hidden="true"
+                className="absolute left-[-10000px] top-auto h-0 w-0 overflow-hidden"
+              >
+                <label htmlFor="website">Website</label>
+                <input
+                  id="website"
+                  name="website"
+                  type="text"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={honeypot}
+                  onChange={(e) => setHoneypot(e.target.value)}
+                />
+              </div>
+            )}
+
+            {!isLogin && (
+              <TurnstileWidget onToken={onTurnstileToken} resetKey={turnstileResetKey} />
+            )}
+
+            {pendingVerification && (
+              <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg space-y-2 text-sm text-emerald-800">
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">Check your email to verify your account.</p>
+                    <p className="text-emerald-700/90 mt-1">
+                      We sent a verification link to <span className="font-medium">{email}</span>. Your trial starts after you verify.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  disabled={resendBusy}
+                  onClick={handleResendVerification}
+                >
+                  {resendBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Resend verification email"}
+                </Button>
+                {resendNote && <p className="text-xs text-emerald-700">{resendNote}</p>}
+              </div>
+            )}
+
             {error && (
               <div className="p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 text-sm text-red-600">
                 <AlertCircle className="h-4 w-4 shrink-0" />
@@ -282,20 +371,22 @@ export function AuthPage() {
               </div>
             )}
 
-            <Button 
-              type="submit" 
-              className="w-full bg-brand-green hover:bg-emerald-700 h-11 text-base shadow-sm"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  {isLogin ? t('auth.loginButton') : t('auth.signupButton')}
-                  <ArrowRight className={`h-4 w-4 ${isRTL ? 'me-2 rotate-180' : 'ms-2'}`} />
-                </>
-              )}
-            </Button>
+            {!pendingVerification && (
+              <Button 
+                type="submit" 
+                className="w-full bg-brand-green hover:bg-emerald-700 h-11 text-base shadow-sm"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    {isLogin ? t('auth.loginButton') : t('auth.signupButton')}
+                    <ArrowRight className={`h-4 w-4 ${isRTL ? 'me-2 rotate-180' : 'ms-2'}`} />
+                  </>
+                )}
+              </Button>
+            )}
           </form>
 
           <div className="mt-6 text-center text-sm text-gray-500">

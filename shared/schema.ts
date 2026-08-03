@@ -170,7 +170,77 @@ export const users = pgTable("users", {
   checkinEmailSent: boolean("checkin_email_sent").default(false),
   /** When set, the user has requested account deletion; data may be purged per policy (not immediate hard-delete in MVP). */
   deletionRequestedAt: timestamp("deletion_requested_at"),
+  /**
+   * When set, the user has verified ownership of their email (public signup).
+   * Existing users are backfilled on migration; null = awaiting verification.
+   */
+  emailVerifiedAt: timestamp("email_verified_at"),
+  /** When the post-verification welcome email was sent (prevents duplicate welcome sequences). */
+  welcomeEmailSentAt: timestamp("welcome_email_sent_at"),
 });
+
+/** Hashed, single-use email verification tokens for public signup. */
+export const emailVerificationTokens = pgTable(
+  "email_verification_tokens",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at").notNull(),
+    usedAt: timestamp("used_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => [index("email_verification_tokens_user_idx").on(t.userId)],
+);
+
+export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
+
+/** Hashed, single-use password reset tokens for main app users (DB-backed for multi-instance). */
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at").notNull(),
+    usedAt: timestamp("used_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => [index("password_reset_tokens_user_idx").on(t.userId)],
+);
+
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+
+/**
+ * Privacy-conscious auth abuse audit trail (no passwords, raw tokens, or full form bodies).
+ * Retention: opportunistic purge ~90 days (see server/authSecurity.ts).
+ */
+export const authSecurityEvents = pgTable(
+  "auth_security_events",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    eventType: text("event_type").notNull(),
+    userId: varchar("user_id"),
+    /** Protected email fingerprint (hash@domain), not the full address. */
+    normalizedEmail: text("normalized_email"),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    outcome: text("outcome").notNull(),
+    reasonCode: text("reason_code"),
+    requestId: text("request_id"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => [
+    index("auth_security_events_created_idx").on(t.createdAt),
+    index("auth_security_events_type_idx").on(t.eventType),
+  ],
+);
+
+export type AuthSecurityEvent = typeof authSecurityEvents.$inferSelect;
 
 /**
  * Express session table for `connect-pg-simple` (`tableName: "user_sessions"` in `server/auth.ts`).

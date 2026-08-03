@@ -108,6 +108,35 @@ export async function sendWelcomeEmail(name: string, email: string): Promise<boo
   });
 }
 
+/** Verification email for public signup (not an onboarding/welcome sequence). */
+export async function sendEmailVerificationEmail(
+  name: string,
+  email: string,
+  rawToken: string,
+): Promise<boolean> {
+  const verifyUrl = `${APP_URL}/verify-email?token=${encodeURIComponent(rawToken)}`;
+  const body = [
+    emailParagraph(`Hi ${escapeHtml(name)}!`),
+    emailParagraph(
+      "Please verify your email address to activate your WhaChatCRM account and start your free trial.",
+    ),
+    emailButton(verifyUrl, "Verify my email"),
+    emailHighlightBox(
+      "<strong>This link expires in 45 minutes</strong> and can only be used once. If you did not create an account, you can ignore this email.",
+    ),
+    emailParagraph("Having trouble with the button? Copy and paste this link into your browser:"),
+    emailInfoBox(
+      `<span style="font-family: monospace; font-size: 12px; color: #64748b; word-break: break-all;">${escapeHtml(verifyUrl)}</span>`,
+    ),
+  ].join("");
+
+  return sendEmail({
+    to: email,
+    subject: "Verify your WhaChatCRM email",
+    html: renderBrandedEmail({ title: "Verify your email", bodyHtml: body }),
+  });
+}
+
 export async function sendPasswordResetEmail(email: string, resetToken: string): Promise<boolean> {
   const resetUrl = `${APP_URL}/reset-password?token=${resetToken}`;
 

@@ -194,7 +194,29 @@ async function incrementCounter(key: string, windowMs: number): Promise<number> 
   return memoryIncrement(key, windowMs);
 }
 
-function getClientIp(req: Request): string {
+/**
+ * Shared counter for auth-specific buckets (signup IP/email, forgot-password, etc.).
+ * Uses Redis when REDIS_URL is available; falls back to in-memory on local/dev or Redis failure.
+ */
+export async function consumeRateLimit(
+  key: string,
+  limit: number,
+  windowMs: number,
+): Promise<{ allowed: boolean; count: number }> {
+  const count = await incrementCounter(key, windowMs);
+  return { allowed: count <= limit, count };
+}
+
+/**
+ * Client IP behind Railway/proxies. Relies on Express `trust proxy` (set in setupAuth)
+ * so `req.ip` reflects the first trusted hop; X-Forwarded-For is only used as a secondary
+ * fallback when trust proxy has already been configured by the app.
+ */
+export function getClientIp(req: Request): string {
+  // Prefer Express-resolved IP when trust proxy is enabled (Railway / reverse proxy).
+  if (typeof req.ip === "string" && req.ip.length > 0 && req.ip !== "127.0.0.1") {
+    return req.ip;
+  }
   const forwarded = req.headers["x-forwarded-for"];
   if (typeof forwarded === "string" && forwarded.length > 0) {
     return forwarded.split(",")[0].trim();

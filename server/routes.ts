@@ -9149,6 +9149,10 @@ export async function registerRoutes(
           subscriptionStatus: user.subscriptionStatus,
           trialEndsAt: user.trialEndsAt,
           isInTrial: !!limits?.isInTrial,
+          emailVerifiedAt: user.emailVerifiedAt ?? null,
+          emailVerificationStatus: user.emailVerifiedAt
+            ? "verified"
+            : "awaiting_verification",
           twilioConnected: user.twilioConnected,
           metaConnected: user.metaConnected,
           createdAt: user.createdAt,
