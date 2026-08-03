@@ -31,11 +31,15 @@ const read = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url)
 
 const PAGE = "client/src/pages/AIBrain.tsx";
 const STEPS = "client/src/components/aibrain/BusinessKnowledgeSteps.tsx";
+const QUESTIONS = "client/src/components/aibrain/CustomerQuestions.tsx";
+const WORKFLOW_STEP = "client/src/components/aibrain/WorkflowStep.tsx";
 
 const page = read(PAGE);
 const steps = read(STEPS);
+const questions = read(QUESTIONS);
+const workflowStep = read(WORKFLOW_STEP);
 /** Everything a merchant can read or click on this page. */
-const clientSurface = `${page}\n${steps}`;
+const clientSurface = `${page}\n${steps}\n${questions}\n${workflowStep}`;
 
 // ---------------------------------------------------------------------------
 // The legacy experience is unreachable
@@ -84,10 +88,10 @@ run("the fixed nine-slot URL form is gone in favour of one page list", () => {
 // The workflow that remains
 // ---------------------------------------------------------------------------
 
-run("the three steps are present and in order", () => {
-  const order = ["Teach AI", "Analyze knowledge", "Review what AI learned"];
+run("the four steps are present and in order", () => {
+  const knowledgeOrder = ["Teach AI", "Analyze knowledge", "Review what AI learned"];
   let cursor = -1;
-  for (const title of order) {
+  for (const title of knowledgeOrder) {
     const at = steps.indexOf(`title="${title}"`);
     assert.ok(at > 0, `step "${title}" is missing`);
     assert.ok(at > cursor, `step "${title}" is out of order`);
@@ -96,6 +100,19 @@ run("the three steps are present and in order", () => {
   for (const index of [1, 2, 3]) {
     assert.ok(steps.includes(`index={${index}}`), `step ${index} is not numbered`);
   }
+  assert.ok(
+    questions.includes('title="What AI should ask customers"'),
+    "the questions step is missing",
+  );
+  assert.ok(questions.includes("index={4}"), "the questions step is not numbered 4");
+  assert.ok(steps.includes("questionsStep"), "questions must render inside the same list");
+  assert.ok(page.includes("<CustomerQuestions"), "the page must mount the questions step");
+});
+
+run("industry starter templates no longer replace the questions list", () => {
+  assert.ok(!page.includes("INDUSTRY_QUALIFY_TEMPLATES"), "the old template map survived");
+  assert.ok(!page.includes("button-apply-industry-template"), "the apply-template control survived");
+  assert.ok(!page.includes("What AI should learn from leads"), "the detached questions card survived");
 });
 
 run("exactly one control publishes knowledge", () => {
