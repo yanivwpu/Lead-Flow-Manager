@@ -932,12 +932,16 @@ function ProspectIntelligenceDetailDialog({
         : "needs_review";
   const detailEnrichBusy = Boolean(enrichPending);
   const reanalyzeMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (opts?: { deliberateRerun?: boolean }) =>
       fetchJson<{ intelligence?: ProspectIntelligenceListItem["intelligence"] }>(
         `/api/growth-tools/prospect-intelligence/${item!.contactId}/reanalyze`,
-        { method: "POST" },
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deliberateRerun: Boolean(opts?.deliberateRerun) }),
+        },
       ),
-    onSuccess: async () => {
+    onSuccess: async (_data, vars) => {
       const detail = await fetchJson<ProspectIntelligenceListItem>(
         `/api/growth-tools/prospect-intelligence/${item!.contactId}`,
       ).catch(() => null);
@@ -946,10 +950,15 @@ function ProspectIntelligenceDetailDialog({
       void queryClient.invalidateQueries({
         queryKey: ["/api/growth-tools/prospect-intelligence/bulk-analyze/active"],
       });
-      toast({ title: "AI Review queued", description: "Retrying on the shared qualification worker." });
+      toast({
+        title: vars?.deliberateRerun ? "Re-run Analysis queued" : "AI Review queued",
+        description: vars?.deliberateRerun
+          ? "Replacing the current review on the shared qualification worker."
+          : "Retrying on the shared qualification worker.",
+      });
     },
     onError: (err: Error) => {
-      toast({ title: "Could not queue AI Review retry", description: err.message, variant: "destructive" });
+      toast({ title: "Could not queue AI Review", description: err.message, variant: "destructive" });
     },
   });
 
@@ -1097,6 +1106,23 @@ function ProspectIntelligenceDetailDialog({
               )}
             </div>
           </div>
+
+          {!analysisIncomplete &&
+          String(intel?.lastRefreshFailedAt || "").trim() ? (
+            <div
+              className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-amber-900"
+              data-testid="pi-analysis-refresh-preserved-banner"
+            >
+              <p className="text-sm font-medium">
+                Latest refresh failed; previous AI Review preserved.
+              </p>
+              {String(intel?.lastRefreshFailureMessage || "").trim() ? (
+                <p className="mt-0.5 text-xs text-amber-800">
+                  {userFacingProspectAiReviewError(intel?.lastRefreshFailureMessage)}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           {analysisIncomplete ? (
             <div
@@ -1534,7 +1560,7 @@ function ProspectIntelligenceDetailDialog({
               type="button"
               variant="outline"
               disabled={reanalyzeMutation.isPending}
-              onClick={() => reanalyzeMutation.mutate()}
+              onClick={() => reanalyzeMutation.mutate({ deliberateRerun: false })}
               data-testid="pi-retry-review"
               title="Retry AI qualification"
             >
@@ -1546,6 +1572,36 @@ function ProspectIntelligenceDetailDialog({
               Retry Qualification
             </Button>
           ) : null}
+          {(() => {
+            const st = String(intel?.analysisStatus || "").toLowerCase();
+            if (st !== "completed" && st !== "needs_review") return null;
+            return (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={reanalyzeMutation.isPending}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      "Re-run Analysis will replace the current AI Review results. Continue?",
+                    )
+                  ) {
+                    return;
+                  }
+                  reanalyzeMutation.mutate({ deliberateRerun: true });
+                }}
+                data-testid="pi-rerun-analysis"
+                title="Deliberately re-run AI qualification for a completed review"
+              >
+                {reanalyzeMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                Re-run Analysis
+              </Button>
+            );
+          })()}
           {detailRetryable ? (
             <Button
               type="button"
@@ -2470,7 +2526,7 @@ export function ProspectIntelligencePanel(props: {
           intelligence: {
             ...row.intelligence,
             analysisStatus: "pending",
-            errorMessage: null,
+            errorMessage: undefined,
           },
         }));
         if (selected && ids.includes(selected.contactId)) {
@@ -2481,7 +2537,7 @@ export function ProspectIntelligencePanel(props: {
                   intelligence: {
                     ...prev.intelligence,
                     analysisStatus: "pending",
-                    errorMessage: null,
+                    errorMessage: undefined,
                   },
                 }
               : prev,

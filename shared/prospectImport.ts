@@ -357,6 +357,12 @@ export type ProspectIntelligence = {
    * Used for Retrying… vs Reviewing… and permanent-fail display — not a secret.
    */
   aiReviewFailureKind?: string | null;
+  /**
+   * Non-blocking: a later background refresh failed while a completed review was preserved.
+   * UI may show a warning without flipping to AI Review Failed.
+   */
+  lastRefreshFailedAt?: string | null;
+  lastRefreshFailureMessage?: string | null;
   createdAt?: string;
   /** Phase 2 website enrichment */
   enrichmentStatus?: string;

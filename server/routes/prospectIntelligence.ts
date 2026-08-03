@@ -152,9 +152,11 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
     async (req, res) => {
       try {
         const workspaceUserId = await resolveProspectWorkspaceUserId((req.user as { id: string }).id);
+        const body = (req.body || {}) as { deliberateRerun?: boolean };
         const intelligence = await prospectIntelligenceService.reanalyzeProspectContact(
           req.params.contactId,
           workspaceUserId,
+          { deliberateRerun: Boolean(body.deliberateRerun) },
         );
         res.json({ intelligence });
       } catch (err) {

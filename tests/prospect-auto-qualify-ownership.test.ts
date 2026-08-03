@@ -93,7 +93,16 @@ function testWorkerClaimThenComplete() {
   assert.equal(canClaimAnalysisStatus("failed", false), true);
   assert.equal(canClaimAnalysisStatus("processing", false), false);
   assert.equal(canClaimAnalysisStatus("completed", false), false);
-  assert.equal(canClaimAnalysisStatus("completed", true), true);
+  // force alone must not reclaim a completed review
+  assert.equal(canClaimAnalysisStatus("completed", true), false);
+  assert.equal(
+    canClaimAnalysisStatus("completed", true, { deliberateRerun: true }),
+    true,
+  );
+  assert.equal(
+    canClaimAnalysisStatus("completed", true, { backgroundRefresh: true }),
+    true,
+  );
 
   const flow = simulateBulkQualifyAnalyzeLifecycle({
     prematureMarkProcessing: false,

@@ -258,6 +258,203 @@ export function describeOpenAiKeyRuntimeDiagnostics(
   };
 }
 
+/** Usable successful AI Review statuses (not infrastructure failed). */
+export function isProspectAiReviewUsableSuccess(status?: string | null): boolean {
+  const s = String(status || "").toLowerCase();
+  return s === "completed" || s === "needs_review";
+}
+
+/** True when a prior AI Review explicitly asked for website intelligence before finalizing. */
+export function prospectAiReviewRequiresWebsiteIntelligence(
+  rawResult?: Record<string, unknown> | null,
+): boolean {
+  if (!rawResult || typeof rawResult !== "object") return false;
+  return (
+    rawResult.requiresWebsiteIntelligence === true ||
+    rawResult.aiReviewRequiresWebsiteIntelligence === true
+  );
+}
+
+/**
+ * After enrichment, only queue AI Review when:
+ * - no usable completed/needs_review exists yet, or
+ * - the prior review explicitly requires website intelligence.
+ * Never auto-re-run a completed review merely because enrichment finished.
+ * Never enqueue while another attempt is already processing.
+ */
+export function shouldEnqueueAiReviewAfterEnrichment(input: {
+  analysisStatus?: string | null;
+  errorMessage?: string | null;
+  rawResult?: Record<string, unknown> | null;
+}): boolean {
+  const status = String(input.analysisStatus || "").toLowerCase();
+  if (status === "processing") return false;
+  if (isProspectAiReviewUsableSuccess(input.analysisStatus)) {
+    return prospectAiReviewRequiresWebsiteIntelligence(input.rawResult);
+  }
+  return status === "failed" || status === "pending" || status === "" || !status;
+}
+
+export type ProspectAiAttemptMeta = {
+  analysisAttemptId: string;
+  attemptStartedAt: string;
+  attemptWorkerId?: string | null;
+  attemptRailwayServiceName?: string | null;
+  attemptRailwayDeploymentId?: string | null;
+  attemptKeyPrefixClass?: "sk-" | "re_" | "missing" | "unknown";
+};
+
+export type ProspectAiRefreshFailureMeta = {
+  message: string;
+  kind: ProspectAiReviewFailureKind;
+  at: string;
+  attemptId: string;
+};
+
+/** True when a persist may apply for this attempt (still the active claim). */
+export function isProspectAiAttemptCurrent(input: {
+  rowAttemptId?: string | null;
+  persistAttemptId?: string | null;
+}): boolean {
+  const row = String(input.rowAttemptId || "").trim();
+  const persist = String(input.persistAttemptId || "").trim();
+  if (!persist) return false;
+  if (!row) return true; // legacy rows without attempt id
+  return row === persist;
+}
+
+/**
+ * Decide how to persist a failed AI attempt.
+ * Never clear a usable completed/needs_review review for a stale or background refresh failure.
+ */
+export function resolveProspectAiFailurePersistAction(input: {
+  currentStatus?: string | null;
+  currentAttemptId?: string | null;
+  failingAttemptId?: string | null;
+  /** True when this attempt deliberately re-ran a prior completed review (user Re-run). */
+  deliberateRerun?: boolean;
+  /**
+   * Background refresh (e.g. post-enrich website intelligence) — never demote a
+   * previously usable success to AI Review Failed.
+   */
+  backgroundRefresh?: boolean;
+  /** Status before this attempt claimed the row (completed / needs_review). */
+  priorUsableStatus?: string | null;
+}): "mark_failed" | "preserve_success_record_refresh_failure" | "ignore_stale" {
+  if (
+    !isProspectAiAttemptCurrent({
+      rowAttemptId: input.currentAttemptId,
+      persistAttemptId: input.failingAttemptId,
+    })
+  ) {
+    // Stale attempt: newer claim owns the row.
+    return "ignore_stale";
+  }
+  if (input.backgroundRefresh && !input.deliberateRerun) {
+    if (
+      isProspectAiReviewUsableSuccess(input.currentStatus) ||
+      isProspectAiReviewUsableSuccess(input.priorUsableStatus)
+    ) {
+      return "preserve_success_record_refresh_failure";
+    }
+  }
+  if (isProspectAiReviewUsableSuccess(input.currentStatus) && !input.deliberateRerun) {
+    return "preserve_success_record_refresh_failure";
+  }
+  const status = String(input.currentStatus || "").toLowerCase();
+  if (isProspectAiReviewUsableSuccess(input.currentStatus) && input.deliberateRerun) {
+    // Deliberate re-run claimed completed→processing; failure may mark failed.
+    return "mark_failed";
+  }
+  if (status === "processing" || status === "pending" || status === "failed") {
+    return "mark_failed";
+  }
+  return "ignore_stale";
+}
+
+/** Merge refresh-failure diagnostics into rawResult without wiping AI outputs. */
+export function mergeProspectAiRefreshFailureRaw(
+  existingRaw: Record<string, unknown> | null | undefined,
+  failure: ProspectAiRefreshFailureMeta,
+): Record<string, unknown> {
+  const base = existingRaw && typeof existingRaw === "object" ? { ...existingRaw } : {};
+  delete base.aiReviewFailureKind;
+  delete base.aiReviewFailureStage;
+  delete base.autoRetryable;
+  delete base.userRetryable;
+  delete base.aiReviewRetrying;
+  return {
+    ...base,
+    lastRefreshFailure: failure,
+    lastRefreshFailedAt: failure.at,
+  };
+}
+
+/** Build claim-time attempt metadata (safe; no secrets). */
+export function buildProspectAiAttemptClaimRaw(
+  attempt: ProspectAiAttemptMeta,
+  priorRaw?: Record<string, unknown> | null,
+  opts?: {
+    deliberateRerun?: boolean;
+    backgroundRefresh?: boolean;
+    priorUsableStatus?: string | null;
+    clearOutputs?: boolean;
+  },
+): Record<string, unknown> {
+  const prior = priorRaw && typeof priorRaw === "object" ? { ...priorRaw } : {};
+  const preservedRefresh =
+    prior.lastRefreshFailure || prior.lastRefreshFailedAt
+      ? {
+          lastRefreshFailure: prior.lastRefreshFailure,
+          lastRefreshFailedAt: prior.lastRefreshFailedAt,
+        }
+      : {};
+  const base: Record<string, unknown> =
+    opts?.clearOutputs === false ? { ...prior } : { ...preservedRefresh };
+  delete base.aiReviewFailureKind;
+  delete base.aiReviewFailureStage;
+  delete base.autoRetryable;
+  delete base.userRetryable;
+  delete base.aiReviewRetrying;
+  return {
+    ...base,
+    analysisAttemptId: attempt.analysisAttemptId,
+    attemptStartedAt: attempt.attemptStartedAt,
+    attemptEndedAt: null,
+    attemptWorkerId: attempt.attemptWorkerId || null,
+    attemptRailwayServiceName: attempt.attemptRailwayServiceName || null,
+    attemptRailwayDeploymentId: attempt.attemptRailwayDeploymentId || null,
+    attemptKeyPrefixClass: attempt.attemptKeyPrefixClass || null,
+    deliberateRerun: Boolean(opts?.deliberateRerun || prior.deliberateRerun),
+    backgroundRefresh: Boolean(opts?.backgroundRefresh || prior.backgroundRefresh),
+    priorUsableStatus: opts?.priorUsableStatus || prior.priorUsableStatus || null,
+    requiresWebsiteIntelligence:
+      opts?.backgroundRefresh === true
+        ? false
+        : Boolean(prior.requiresWebsiteIntelligence || prior.aiReviewRequiresWebsiteIntelligence),
+  };
+}
+
+/** Decide whether a success persist may apply for this attempt. */
+export function resolveProspectAiSuccessPersistAction(input: {
+  currentStatus?: string | null;
+  currentAttemptId?: string | null;
+  successAttemptId?: string | null;
+}): "persist_success" | "ignore_stale" {
+  if (
+    !isProspectAiAttemptCurrent({
+      rowAttemptId: input.currentAttemptId,
+      persistAttemptId: input.successAttemptId,
+    })
+  ) {
+    return "ignore_stale";
+  }
+  const status = String(input.currentStatus || "").toLowerCase();
+  if (status === "processing" || status === "pending") return "persist_success";
+  if (isProspectAiReviewUsableSuccess(status)) return "persist_success";
+  return "ignore_stale";
+}
+
 /** Pipeline stages for Discover → Campaign eligibility (presentation / tests). */
 export const PROSPECT_AI_PIPELINE_STAGES = [
   "discover_saved",
@@ -340,7 +537,7 @@ export function explainProspectEnrichmentIndependence(): {
     canEnrichmentFailWhileAiSucceeds: true,
     intentional: true,
     rationale:
-      "Enrichment is website contact lookup; AI Review is qualification. post_qualify enrichment runs after AI success. Post-enrich force re-AI can fail without rolling back enrichment. Human Enrich requires AI complete (not failed).",
+      "Enrichment is website contact lookup; AI Review is qualification. post_qualify enrichment runs after AI success. Enrichment workers never mutate AI Review inline — they may enqueue the canonical AI queue only when no usable review exists or website intelligence was explicitly required. Human Enrich requires AI complete (not failed).",
   };
 }
 

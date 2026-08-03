@@ -200,14 +200,16 @@ run("JSON.parse exhausted: user-retryable, no partial persist, clean replace on 
   assert.ok(serviceSrc.includes("errorMessage: null"));
   assert.ok(serviceSrc.includes("aiReviewFailureKind"));
   assert.ok(serviceSrc.includes("MAX_AI_RETRIES = 3"));
-  // Failure path must not assign parseAndValidate output / model text into summary columns.
+  // Failure path delegates to attempt-aware persist (clears outputs / preserves success).
   const failBlock = serviceSrc.slice(
     serviceSrc.indexOf("if (!parsed)"),
     serviceSrc.indexOf("intel = parsed"),
   );
-  assert.ok(failBlock.includes("prospectAiReviewOutputClearPatch"));
+  assert.ok(failBlock.includes("persistFailedAttempt"));
   assert.ok(!failBlock.includes("parseAndValidateProspectIntelligence"));
   assert.ok(!failBlock.includes("rawText"));
+  assert.ok(serviceSrc.includes("prospectAiReviewOutputClearPatch"));
+  assert.ok(serviceSrc.includes("resolveProspectAiFailurePersistAction"));
 });
 
 run("successful retry clears stale failure state", () => {

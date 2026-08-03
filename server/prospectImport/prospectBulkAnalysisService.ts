@@ -28,7 +28,11 @@ import {
 } from "@shared/prospectAnalysisOwnership";
 import { shouldSkipDefaultBulkReanalyze } from "@shared/prospectOutreachEligibility";
 import { isProspectAiTransientProviderError } from "@shared/prospectAiReviewErrors";
-import { shouldOrphanRequeueFailedAnalysis } from "@shared/prospectAiReliability";
+import {
+  isProspectAiReviewUsableSuccess,
+  shouldEnqueueAiReviewAfterEnrichment,
+  shouldOrphanRequeueFailedAnalysis,
+} from "@shared/prospectAiReliability";
 import { db } from "../../drizzle/db";
 import {
   analyzeProspectContact,
@@ -79,16 +83,31 @@ export async function createBulkAnalysisJob(params: {
   filtersSnapshot?: ProspectIntelligenceListFilters | null;
   parentJobId?: string | null;
 }): Promise<ProspectBulkAnalysisJobSummary> {
-  const ids = Array.from(new Set(params.contactIds.map((id) => String(id).trim()).filter(Boolean)));
-  if (!ids.length) throw new Error("No prospects selected for analysis.");
+  const requested = Array.from(
+    new Set(params.contactIds.map((id) => String(id).trim()).filter(Boolean)),
+  );
+  if (!requested.length) throw new Error("No prospects selected for analysis.");
 
   const workspaceUserId =
     params.workspaceUserId || (await resolveProspectImportDestinationUserId());
 
-  // Merge into an existing *pending* job so Discover → Review handoffs keep enqueueing
-  // without dropping contact IDs. If a job is already running, create a new pending job
-  // (worker claims by created_at); do not return the running job without adding IDs.
-  const pendingRows = await db
+  // One active AI Review job per contact: skip IDs already on pending/running jobs
+  // (except the pending job we will merge into).
+  const activeJobs = await db
+    .select({
+      id: prospectBulkAnalysisJobs.id,
+      status: prospectBulkAnalysisJobs.status,
+      contactIds: prospectBulkAnalysisJobs.contactIds,
+    })
+    .from(prospectBulkAnalysisJobs)
+    .where(
+      and(
+        eq(prospectBulkAnalysisJobs.workspaceUserId, workspaceUserId),
+        inArray(prospectBulkAnalysisJobs.status, ["pending", "running"]),
+      ),
+    );
+
+  const mergeTargetRows = await db
     .select()
     .from(prospectBulkAnalysisJobs)
     .where(
@@ -100,8 +119,57 @@ export async function createBulkAnalysisJob(params: {
     .orderBy(desc(prospectBulkAnalysisJobs.createdAt))
     .limit(1);
 
-  if (pendingRows[0]) {
-    const existing = pendingRows[0];
+  const mergeTarget = mergeTargetRows[0] || null;
+  const mergeTargetIds = new Set(
+    Array.isArray(mergeTarget?.contactIds)
+      ? (mergeTarget!.contactIds as string[]).map(String)
+      : [],
+  );
+  const covered = contactIdsCoveredByActiveBulkJobs(activeJobs);
+  const ids = requested.filter((id) => mergeTargetIds.has(id) || !covered.has(id));
+  if (!ids.length) {
+    if (mergeTarget) return mapJob(mergeTarget);
+    // All contacts already covered by a running job — return that coverage as no-op summary.
+    const running = activeJobs.find((j) => String(j.status).toLowerCase() === "running");
+    if (running) {
+      const rows = await db
+        .select()
+        .from(prospectBulkAnalysisJobs)
+        .where(eq(prospectBulkAnalysisJobs.id, running.id))
+        .limit(1);
+      if (rows[0]) return mapJob(rows[0]);
+    }
+    throw new Error("All selected prospects already have an active AI Review job.");
+  }
+
+  // #region agent log
+  fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "d96ff4" },
+    body: JSON.stringify({
+      sessionId: "d96ff4",
+      runId: "post-fix",
+      hypothesisId: "H-dedupe",
+      location: "prospectBulkAnalysisService.ts:createBulkAnalysisJob",
+      message: "bulk AI job enqueue after active-job dedupe",
+      data: {
+        workspaceUserId,
+        requested: requested.length,
+        enqueued: ids.length,
+        skippedActive: requested.length - ids.length,
+        mergeTargetId: mergeTarget?.id || null,
+        force: Boolean(params.force),
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
+  // Merge into an existing *pending* job so Discover → Review handoffs keep enqueueing
+  // without dropping contact IDs. If a job is already running, create a new pending job
+  // (worker claims by created_at); do not return the running job without adding IDs.
+  if (mergeTarget) {
+    const existing = mergeTarget;
     const prior = Array.isArray(existing.contactIds)
       ? (existing.contactIds as string[]).map(String)
       : [];
@@ -267,6 +335,9 @@ async function renewLease(jobId: string, workerId: string): Promise<boolean> {
 async function analyzeContactOnceWithTimeout(params: {
   contactId: string;
   force?: boolean;
+  deliberateRerun?: boolean;
+  backgroundRefresh?: boolean;
+  workerId?: string;
 }): Promise<Awaited<ReturnType<typeof analyzeProspectContact>>> {
   let timer: ReturnType<typeof setTimeout> | null = null;
   try {
@@ -274,6 +345,9 @@ async function analyzeContactOnceWithTimeout(params: {
       analyzeProspectContact({
         contactId: params.contactId,
         force: params.force,
+        deliberateRerun: params.deliberateRerun,
+        backgroundRefresh: params.backgroundRefresh,
+        workerId: params.workerId,
         preClaimed: true,
       }),
       new Promise<never>((_, reject) => {
@@ -297,6 +371,9 @@ async function analyzeContactOnceWithTimeout(params: {
 async function analyzeContactWithTimeout(params: {
   contactId: string;
   force?: boolean;
+  deliberateRerun?: boolean;
+  backgroundRefresh?: boolean;
+  workerId?: string;
 }): Promise<Awaited<ReturnType<typeof analyzeProspectContact>>> {
   try {
     return await analyzeContactOnceWithTimeout(params);
@@ -321,6 +398,9 @@ async function analyzeContactWithTimeout(params: {
     const claim = await claimProspectContactForAnalysis({
       contactId: params.contactId,
       force: true,
+      deliberateRerun: params.deliberateRerun,
+      backgroundRefresh: params.backgroundRefresh,
+      workerId: params.workerId,
     });
     if (claim.outcome === "already_completed") {
       return analyzeProspectContact({
@@ -425,9 +505,18 @@ export async function processClaimedBulkAnalysisJob(
           ),
         );
       } else {
+        const rowRaw =
+          row?.rawResult && typeof row.rawResult === "object"
+            ? (row.rawResult as Record<string, unknown>)
+            : {};
+        const deliberateRerun = Boolean(rowRaw.deliberateRerun);
+        const backgroundRefresh = Boolean(rowRaw.backgroundRefresh) && !deliberateRerun;
         const claim = await claimProspectContactForAnalysis({
           contactId,
-          force: job.forceReanalyze,
+          force: job.forceReanalyze || deliberateRerun || backgroundRefresh,
+          deliberateRerun,
+          backgroundRefresh,
+          workerId,
         });
 
         if (claim.outcome === "already_completed") {
@@ -476,7 +565,10 @@ export async function processClaimedBulkAnalysisJob(
           );
           const intel = await analyzeContactWithTimeout({
             contactId,
-            force: job.forceReanalyze,
+            force: job.forceReanalyze || deliberateRerun || backgroundRefresh,
+            deliberateRerun: claim.deliberateRerun,
+            backgroundRefresh: claim.backgroundRefresh,
+            workerId,
           });
           const needsReview = Boolean(intel.needsReview || intel.priority === "needs_review");
           itemResults[contactId] = {
@@ -526,20 +618,44 @@ export async function processClaimedBulkAnalysisJob(
           markErr,
         );
       }
-      itemResults[contactId] = {
-        status: "failed",
-        at: new Date().toISOString(),
-        reason: reason.substring(0, 200),
-      };
-      console.info(
-        JSON.stringify(
-          prospectBulkAnalysisLog("item_failed", {
-            jobId: job.id,
-            contactId,
-            reason: reason.substring(0, 200),
-          }),
-        ),
-      );
+      const afterRows = await db
+        .select({ analysisStatus: prospectIntelligence.analysisStatus })
+        .from(prospectIntelligence)
+        .where(eq(prospectIntelligence.contactId, contactId))
+        .limit(1);
+      const afterStatus = String(afterRows[0]?.analysisStatus || "").toLowerCase();
+      if (afterStatus === "completed" || afterStatus === "needs_review") {
+        itemResults[contactId] = {
+          status: afterStatus === "needs_review" ? "needs_review" : "completed",
+          at: new Date().toISOString(),
+          reason: "refresh_failed_preserved",
+        };
+        console.info(
+          JSON.stringify(
+            prospectBulkAnalysisLog("item_completed", {
+              jobId: job.id,
+              contactId,
+              status: itemResults[contactId].status,
+              reason: "refresh_failed_preserved",
+            }),
+          ),
+        );
+      } else {
+        itemResults[contactId] = {
+          status: "failed",
+          at: new Date().toISOString(),
+          reason: reason.substring(0, 200),
+        };
+        console.info(
+          JSON.stringify(
+            prospectBulkAnalysisLog("item_failed", {
+              jobId: job.id,
+              contactId,
+              reason: reason.substring(0, 200),
+            }),
+          ),
+        );
+      }
     }
 
     const counts = recountBulkAnalysisItemResults(itemResults);
@@ -735,6 +851,204 @@ export async function enqueueBulkRetryAiReview(params: {
 }
 
 /**
+ * Deliberate Re-run Analysis (completed) or queue pending rows via the canonical bulk path.
+ * Sets rawResult flags so the worker claims with the correct attempt semantics.
+ */
+export async function enqueueBulkRerunAiReview(params: {
+  contactIds: string[];
+  initiatedByUserId: string;
+  workspaceUserId?: string;
+  selectionMode?: "selected" | "filtered";
+  filtersSnapshot?: ProspectIntelligenceListFilters | null;
+  deliberateRerun?: boolean;
+  backgroundRefresh?: boolean;
+}): Promise<{
+  job: ProspectBulkAnalysisJobSummary;
+  enqueuedCount: number;
+  skippedCount: number;
+  enqueuedContactIds: string[];
+}> {
+  const requested = Array.from(
+    new Set(params.contactIds.map((id) => String(id).trim()).filter(Boolean)),
+  );
+  if (!requested.length) throw new Error("No prospects selected for AI Review.");
+
+  const wid = params.workspaceUserId || (await resolveProspectImportDestinationUserId());
+  const deliberateRerun = Boolean(params.deliberateRerun);
+  const backgroundRefresh = Boolean(params.backgroundRefresh) && !deliberateRerun;
+
+  const rows = await db
+    .select({
+      contactId: prospectIntelligence.contactId,
+      analysisStatus: prospectIntelligence.analysisStatus,
+      rawResult: prospectIntelligence.rawResult,
+    })
+    .from(prospectIntelligence)
+    .where(inArray(prospectIntelligence.contactId, requested));
+
+  const eligible: string[] = [];
+  for (const row of rows) {
+    const status = String(row.analysisStatus || "").toLowerCase();
+    if (status === "processing") continue;
+    if (isProspectAiReviewUsableSuccess(status) && !deliberateRerun && !backgroundRefresh) {
+      continue;
+    }
+    eligible.push(String(row.contactId));
+  }
+  const skippedCount = requested.length - eligible.length;
+  if (!eligible.length) {
+    throw new Error("No prospects eligible for AI Review enqueue.");
+  }
+
+  for (const contactId of eligible) {
+    const row = rows.find((r) => String(r.contactId) === contactId);
+    const prior =
+      row?.rawResult && typeof row.rawResult === "object"
+        ? (row.rawResult as Record<string, unknown>)
+        : {};
+    const status = String(row?.analysisStatus || "").toLowerCase();
+    const patch: Record<string, unknown> = {
+      ...prior,
+      deliberateRerun,
+      backgroundRefresh,
+      priorUsableStatus: isProspectAiReviewUsableSuccess(status) ? status : prior.priorUsableStatus || null,
+    };
+    if (deliberateRerun || status === "failed") {
+      await db
+        .update(prospectIntelligence)
+        .set({
+          analysisStatus: "pending",
+          errorMessage: null,
+          rawResult: patch,
+          updatedAt: new Date(),
+        })
+        .where(eq(prospectIntelligence.contactId, contactId));
+    } else {
+      await db
+        .update(prospectIntelligence)
+        .set({
+          rawResult: patch,
+          updatedAt: new Date(),
+        })
+        .where(eq(prospectIntelligence.contactId, contactId));
+    }
+  }
+
+  const job = await createBulkAnalysisJob({
+    contactIds: eligible,
+    initiatedByUserId: params.initiatedByUserId,
+    workspaceUserId: wid,
+    selectionMode: params.selectionMode || "selected",
+    force: true,
+    filtersSnapshot: params.filtersSnapshot || null,
+  });
+
+  console.info(
+    JSON.stringify(
+      prospectBulkAnalysisLog("bulk_rerun_ai_review_enqueued", {
+        workspaceId: wid,
+        jobId: job.id,
+        enqueuedCount: eligible.length,
+        skippedCount,
+        deliberateRerun,
+        backgroundRefresh,
+      }),
+    ),
+  );
+
+  return {
+    job,
+    enqueuedCount: eligible.length,
+    skippedCount,
+    enqueuedContactIds: eligible,
+  };
+}
+
+/**
+ * Post-enrichment AI Review enqueue (canonical queue only — never inline analyze).
+ * Skips contacts with a usable completed review unless website intelligence was required.
+ */
+export async function enqueueAiReviewAfterEnrichment(params: {
+  contactId: string;
+  workspaceUserId: string;
+  initiatedByUserId?: string;
+}): Promise<{ enqueued: boolean; reason: string; jobId?: string }> {
+  const rows = await db
+    .select({
+      analysisStatus: prospectIntelligence.analysisStatus,
+      errorMessage: prospectIntelligence.errorMessage,
+      rawResult: prospectIntelligence.rawResult,
+    })
+    .from(prospectIntelligence)
+    .where(eq(prospectIntelligence.contactId, params.contactId))
+    .limit(1);
+  const row = rows[0];
+  const raw =
+    row?.rawResult && typeof row.rawResult === "object"
+      ? (row.rawResult as Record<string, unknown>)
+      : null;
+  const should = shouldEnqueueAiReviewAfterEnrichment({
+    analysisStatus: row?.analysisStatus,
+    errorMessage: row?.errorMessage,
+    rawResult: raw,
+  });
+  // #region agent log
+  fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "d96ff4" },
+    body: JSON.stringify({
+      sessionId: "d96ff4",
+      runId: "post-fix",
+      hypothesisId: "H-post-enrich",
+      location: "prospectBulkAnalysisService.ts:enqueueAiReviewAfterEnrichment",
+      message: "post-enrichment AI enqueue decision",
+      data: {
+        contactId: params.contactId,
+        analysisStatus: row?.analysisStatus || null,
+        shouldEnqueue: should,
+        requiresWebsite: Boolean(raw?.requiresWebsiteIntelligence),
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+  if (!should) {
+    return { enqueued: false, reason: "usable_review_present_or_in_flight" };
+  }
+
+  const status = String(row?.analysisStatus || "").toLowerCase();
+  if (status === "failed") {
+    const result = await enqueueBulkRetryAiReview({
+      contactIds: [params.contactId],
+      initiatedByUserId: params.initiatedByUserId || params.workspaceUserId,
+      workspaceUserId: params.workspaceUserId,
+      selectionMode: "selected",
+    });
+    return { enqueued: true, reason: "retry_failed", jobId: result.job.id };
+  }
+
+  if (isProspectAiReviewUsableSuccess(status)) {
+    const result = await enqueueBulkRerunAiReview({
+      contactIds: [params.contactId],
+      initiatedByUserId: params.initiatedByUserId || params.workspaceUserId,
+      workspaceUserId: params.workspaceUserId,
+      selectionMode: "selected",
+      backgroundRefresh: true,
+    });
+    return { enqueued: true, reason: "website_intelligence_refresh", jobId: result.job.id };
+  }
+
+  const job = await createBulkAnalysisJob({
+    contactIds: [params.contactId],
+    initiatedByUserId: params.initiatedByUserId || params.workspaceUserId,
+    workspaceUserId: params.workspaceUserId,
+    selectionMode: "selected",
+    force: status === "failed",
+  });
+  return { enqueued: true, reason: "queued_pending", jobId: job.id };
+}
+
+/**
  * Re-enqueue pending/failed intelligence rows that are not on any pending/running bulk job.
  * Idempotent: createBulkAnalysisJob merges into an existing pending job when present.
  * Skips configuration / missing_data failures (no tight retry loop).
@@ -763,16 +1077,18 @@ export async function recoverOrphanedPendingQualifications(params?: {
       ),
     );
 
-  const eligible = candidates.filter((row) =>
-    shouldOrphanRequeueFailedAnalysis({
+  const eligible = candidates.filter((row) => {
+    // Never orphan-requeue a usable success (defensive — query already excludes them).
+    if (isProspectAiReviewUsableSuccess(row.analysisStatus)) return false;
+    return shouldOrphanRequeueFailedAnalysis({
       analysisStatus: row.analysisStatus,
       errorMessage: row.errorMessage,
       rawResult:
         row.rawResult && typeof row.rawResult === "object"
           ? (row.rawResult as Record<string, unknown>)
           : null,
-    }),
-  );
+    });
+  });
 
   if (!eligible.length) return { recoveredContacts: 0, jobsTouched: 0 };
 
@@ -991,6 +1307,8 @@ export const prospectBulkAnalysisService = {
   countClaimableBulkAnalysisJobs,
   retryFailedBulkAnalysisItems,
   enqueueBulkRetryAiReview,
+  enqueueBulkRerunAiReview,
+  enqueueAiReviewAfterEnrichment,
   resetFailedAnalysisToPendingForRetry,
   runBulkAnalysisJob,
 };

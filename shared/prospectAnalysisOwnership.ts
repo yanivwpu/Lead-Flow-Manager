@@ -18,13 +18,30 @@ export const PROSPECT_ORPHAN_SWEEP_INTERVAL_MS = 60_000;
 /** Per-contact AI wall-clock budget so one hung OpenAI call cannot stall the worker forever. */
 export const PROSPECT_ANALYSIS_ITEM_TIMEOUT_MS = 90_000;
 
-export function claimableAnalysisStatuses(force: boolean): string[] {
-  return force ? ["pending", "failed", "completed"] : ["pending", "failed"];
+/**
+ * Statuses that may be claimed into `processing`.
+ * `force` alone never reclaim a completed/needs_review review — that requires
+ * deliberateRerun (user Re-run) or backgroundRefresh (post-enrich website refresh).
+ */
+export function claimableAnalysisStatuses(
+  force: boolean,
+  opts?: { deliberateRerun?: boolean; backgroundRefresh?: boolean },
+): string[] {
+  if (opts?.deliberateRerun || opts?.backgroundRefresh) {
+    return ["pending", "failed", "completed", "needs_review"];
+  }
+  // force retries failed/pending only — never silently reclaim a successful review
+  void force;
+  return ["pending", "failed"];
 }
 
-export function canClaimAnalysisStatus(status: string | null | undefined, force: boolean): boolean {
+export function canClaimAnalysisStatus(
+  status: string | null | undefined,
+  force: boolean,
+  opts?: { deliberateRerun?: boolean; backgroundRefresh?: boolean },
+): boolean {
   const s = String(status || "").toLowerCase();
-  return claimableAnalysisStatuses(force).includes(s);
+  return claimableAnalysisStatuses(force, opts).includes(s);
 }
 
 export function isAnalysisAlreadyProcessing(status: string | null | undefined): boolean {

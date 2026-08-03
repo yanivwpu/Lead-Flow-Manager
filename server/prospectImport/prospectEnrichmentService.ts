@@ -19,7 +19,6 @@ import { db } from "../../drizzle/db";
 import { storage } from "../storage";
 import { assertContactInWorkspace } from "./prospectWorkspaceScope";
 import { getProspectEnrichmentProvider } from "./prospectWebsiteEnrichmentProvider";
-import { analyzeProspectContact } from "./prospectIntelligenceService";
 import { isValidProspectEmail, isValidProspectPhone } from "@shared/prospectContactEnrichment";
 import { shouldApplyScrapedProspectEmail, selectBestProspectEmail } from "./prospectWebsiteContactExtract";
 import { extractSqlExecuteId } from "@shared/prospectAnalysisOwnership";
@@ -387,12 +386,23 @@ export async function processClaimedEnrichmentJob(
       return;
     }
 
-    // Re-run AI analysis with website intelligence now on the contact.
+    // Never mutate AI Review inline. Conditionally enqueue the canonical bulk AI queue
+    // only when no usable review exists or website intelligence was explicitly required.
     try {
-      await analyzeProspectContact({ contactId: job.contactId, force: true });
+      const { enqueueAiReviewAfterEnrichment } = await import("./prospectBulkAnalysisService");
+      const queued = await enqueueAiReviewAfterEnrichment({
+        contactId: job.contactId,
+        workspaceUserId: job.workspaceUserId,
+        initiatedByUserId: job.initiatedByUserId || job.workspaceUserId,
+      });
+      if (queued.enqueued) {
+        console.info(
+          `[ProspectEnrichment] Post-enrichment AI Review enqueued (${queued.reason}) job=${queued.jobId || "n/a"}`,
+        );
+      }
     } catch (err) {
       console.error(
-        "[ProspectEnrichment] Post-enrichment reanalyze failed:",
+        "[ProspectEnrichment] Post-enrichment AI Review enqueue failed:",
         err instanceof Error ? err.message : err,
       );
     }

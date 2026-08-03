@@ -32,12 +32,19 @@ import {
 } from "@shared/prospectAnalysisOwnership";
 import { isProspectAiTransientProviderError } from "@shared/prospectAiReviewErrors";
 import {
+  buildProspectAiAttemptClaimRaw,
   classifyProspectAiReviewFailure,
+  describeOpenAiKeyRuntimeDiagnostics,
+  isProspectAiReviewUsableSuccess,
+  mergeProspectAiRefreshFailureRaw,
   prospectAiReviewOutputClearPatch,
+  resolveProspectAiFailurePersistAction,
+  resolveProspectAiSuccessPersistAction,
 } from "@shared/prospectAiReliability";
 import { db } from "../../drizzle/db";
 import { aiProvider } from "../aiProvider";
 import { storage } from "../storage";
+import crypto from "crypto";
 import {
   buildInsufficientDataResult,
   buildProspectIntelligenceInput,
@@ -119,6 +126,26 @@ function mapIntelligenceRow(row: ProspectIntelligenceRow): ProspectIntelligence 
           : null;
       const kind = raw?.aiReviewFailureKind ?? raw?.failureKind;
       return kind != null && String(kind).trim() ? String(kind) : undefined;
+    })(),
+    lastRefreshFailedAt: (() => {
+      const raw =
+        row.rawResult && typeof row.rawResult === "object"
+          ? (row.rawResult as Record<string, unknown>)
+          : null;
+      const at = raw?.lastRefreshFailedAt;
+      return at != null && String(at).trim() ? String(at) : undefined;
+    })(),
+    lastRefreshFailureMessage: (() => {
+      const raw =
+        row.rawResult && typeof row.rawResult === "object"
+          ? (row.rawResult as Record<string, unknown>)
+          : null;
+      const failure = raw?.lastRefreshFailure;
+      if (failure && typeof failure === "object") {
+        const msg = (failure as { message?: unknown }).message;
+        return msg != null && String(msg).trim() ? String(msg).slice(0, 300) : undefined;
+      }
+      return undefined;
     })(),
     createdAt: row.createdAt?.toISOString(),
     enrichmentStatus: row.enrichmentStatus ?? undefined,
@@ -322,21 +349,31 @@ function logProspectQualificationFailed(params: {
 
 
 export type ProspectAnalysisClaimOutcome =
-  | { outcome: "claimed" }
+  | {
+      outcome: "claimed";
+      attemptId: string;
+      deliberateRerun: boolean;
+      backgroundRefresh: boolean;
+    }
   | { outcome: "already_completed"; row: ProspectIntelligenceRow }
   | { outcome: "already_processing" };
 
 /**
  * Atomically claim a prospect intelligence row for analysis (pending/failed → processing).
- * With force, completed rows may also be claimed for re-analyze.
+ * Completed/needs_review rows are only reclaimable with deliberateRerun or backgroundRefresh.
  * Job creation must never call this — only the worker / analyze entrypoint.
  */
 export async function claimProspectContactForAnalysis(params: {
   contactId: string;
   force?: boolean;
+  deliberateRerun?: boolean;
+  backgroundRefresh?: boolean;
   importJobId?: string | null;
   aiModel?: string | null;
+  workerId?: string | null;
 }): Promise<ProspectAnalysisClaimOutcome> {
+  const deliberateRerun = Boolean(params.deliberateRerun);
+  const backgroundRefresh = Boolean(params.backgroundRefresh) && !deliberateRerun;
   const existingRows = await db
     .select()
     .from(prospectIntelligence)
@@ -344,12 +381,12 @@ export async function claimProspectContactForAnalysis(params: {
     .limit(1);
   let existing = existingRows[0];
 
+  // Never silently reclaim a usable success unless this is an explicit re-run / background refresh.
   if (
-    !params.force &&
     existing &&
-    existing.analysisStatus === "completed" &&
-    existing.aiVersion === PROSPECT_INTELLIGENCE_AI_VERSION &&
-    !existing.errorMessage
+    isProspectAiReviewUsableSuccess(existing.analysisStatus) &&
+    !deliberateRerun &&
+    !backgroundRefresh
   ) {
     return { outcome: "already_completed", row: existing };
   }
@@ -359,6 +396,8 @@ export async function claimProspectContactForAnalysis(params: {
   }
 
   const now = new Date();
+  const attemptId = crypto.randomUUID();
+  const keyDiag = describeOpenAiKeyRuntimeDiagnostics();
   if (!existing) {
     const inserted = await db
       .insert(prospectIntelligence)
@@ -370,11 +409,46 @@ export async function claimProspectContactForAnalysis(params: {
         aiModel: params.aiModel ?? null,
         aiVersion: PROSPECT_INTELLIGENCE_AI_VERSION,
         errorMessage: null,
+        rawResult: buildProspectAiAttemptClaimRaw(
+          {
+            analysisAttemptId: attemptId,
+            attemptStartedAt: now.toISOString(),
+            attemptWorkerId: params.workerId || null,
+            attemptRailwayServiceName: keyDiag.railwayServiceName,
+            attemptRailwayDeploymentId: keyDiag.railwayDeploymentId,
+            attemptKeyPrefixClass: keyDiag.prefixClass,
+          },
+          null,
+          { deliberateRerun, backgroundRefresh, clearOutputs: true },
+        ),
         updatedAt: now,
       })
       .onConflictDoNothing({ target: prospectIntelligence.contactId })
       .returning();
-    if (inserted[0]) return { outcome: "claimed" };
+    if (inserted[0]) {
+      // #region agent log
+      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "d96ff4" },
+        body: JSON.stringify({
+          sessionId: "d96ff4",
+          runId: "post-fix",
+          hypothesisId: "H-claim",
+          location: "prospectIntelligenceService.ts:claim:insert",
+          message: "claimed new intelligence row",
+          data: {
+            contactId: params.contactId,
+            attemptId,
+            deliberateRerun,
+            backgroundRefresh,
+            keyPrefixClass: keyDiag.prefixClass,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      return { outcome: "claimed", attemptId, deliberateRerun, backgroundRefresh };
+    }
     existing = (
       await db
         .select()
@@ -386,11 +460,10 @@ export async function claimProspectContactForAnalysis(params: {
       return { outcome: "already_processing" };
     }
     if (
-      !params.force &&
       existing &&
-      existing.analysisStatus === "completed" &&
-      existing.aiVersion === PROSPECT_INTELLIGENCE_AI_VERSION &&
-      !existing.errorMessage
+      isProspectAiReviewUsableSuccess(existing.analysisStatus) &&
+      !deliberateRerun &&
+      !backgroundRefresh
     ) {
       return { outcome: "already_completed", row: existing };
     }
@@ -400,23 +473,43 @@ export async function claimProspectContactForAnalysis(params: {
     existing?.rawResult && typeof existing.rawResult === "object"
       ? (existing.rawResult as Record<string, unknown>)
       : {};
+  const priorUsable = isProspectAiReviewUsableSuccess(existing?.analysisStatus)
+    ? String(existing?.analysisStatus)
+    : null;
+  const preserveOutputs = backgroundRefresh && Boolean(priorUsable);
   const priorFailureKind = priorRaw.aiReviewFailureKind ?? priorRaw.failureKind;
-  // Keep a lightweight retry marker so UI can show Retrying… (not a full failed payload).
-  const claimRawResult =
-    priorFailureKind != null && String(priorFailureKind).trim()
-      ? {
-          aiReviewFailureKind: String(priorFailureKind),
-          aiReviewRetrying: true,
-        }
-      : {};
+  const claimRawResult = buildProspectAiAttemptClaimRaw(
+    {
+      analysisAttemptId: attemptId,
+      attemptStartedAt: now.toISOString(),
+      attemptWorkerId: params.workerId || null,
+      attemptRailwayServiceName: keyDiag.railwayServiceName,
+      attemptRailwayDeploymentId: keyDiag.railwayDeploymentId,
+      attemptKeyPrefixClass: keyDiag.prefixClass,
+    },
+    {
+      ...priorRaw,
+      ...(priorFailureKind != null && String(priorFailureKind).trim() && !preserveOutputs
+        ? { aiReviewFailureKind: String(priorFailureKind), aiReviewRetrying: true }
+        : {}),
+      deliberateRerun: deliberateRerun || Boolean(priorRaw.deliberateRerun),
+      backgroundRefresh,
+    },
+    {
+      deliberateRerun,
+      backgroundRefresh,
+      priorUsableStatus: priorUsable,
+      clearOutputs: !preserveOutputs,
+    },
+  );
 
   const updated = await db
     .update(prospectIntelligence)
     .set({
       analysisStatus: "processing",
       errorMessage: null,
-      // Drop prior AI outputs so a retry never shows a stale summary mid-flight.
-      ...prospectAiReviewOutputClearPatch(),
+      // Drop prior AI outputs unless this is a background refresh of a usable success.
+      ...(preserveOutputs ? {} : prospectAiReviewOutputClearPatch()),
       rawResult: claimRawResult,
       updatedAt: now,
       ...(params.aiModel ? { aiModel: params.aiModel } : {}),
@@ -427,12 +520,43 @@ export async function claimProspectContactForAnalysis(params: {
     .where(
       and(
         eq(prospectIntelligence.contactId, params.contactId),
-        inArray(prospectIntelligence.analysisStatus, claimableAnalysisStatuses(Boolean(params.force))),
+        inArray(
+          prospectIntelligence.analysisStatus,
+          claimableAnalysisStatuses(Boolean(params.force), {
+            deliberateRerun,
+            backgroundRefresh,
+          }),
+        ),
       ),
     )
     .returning();
 
-  if (updated.length) return { outcome: "claimed" };
+  if (updated.length) {
+    // #region agent log
+    fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "d96ff4" },
+      body: JSON.stringify({
+        sessionId: "d96ff4",
+        runId: "post-fix",
+        hypothesisId: "H-claim",
+        location: "prospectIntelligenceService.ts:claim:update",
+        message: "claimed intelligence row for analysis",
+        data: {
+          contactId: params.contactId,
+          attemptId,
+          deliberateRerun,
+          backgroundRefresh,
+          preserveOutputs,
+          priorStatus: existing?.analysisStatus || null,
+          keyPrefixClass: keyDiag.prefixClass,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    return { outcome: "claimed", attemptId, deliberateRerun, backgroundRefresh };
+  }
 
   const again = (
     await db
@@ -441,25 +565,85 @@ export async function claimProspectContactForAnalysis(params: {
       .where(eq(prospectIntelligence.contactId, params.contactId))
       .limit(1)
   )[0];
-  if (
-    !params.force &&
-    again &&
-    again.analysisStatus === "completed" &&
-    again.aiVersion === PROSPECT_INTELLIGENCE_AI_VERSION &&
-    !again.errorMessage
-  ) {
+  if (again && isProspectAiReviewUsableSuccess(again.analysisStatus)) {
     return { outcome: "already_completed", row: again };
   }
   return { outcome: "already_processing" };
 }
 
-/** Clear stuck/failed analysis without overwriting a successful completed row. */
+/**
+ * Clear stuck/failed analysis without overwriting a usable completed review.
+ * Background-refresh failures restore prior success and record lastRefreshFailure.
+ */
 export async function markProspectAnalysisFailed(
   contactId: string,
   reason: string,
 ): Promise<boolean> {
   const message = reason.substring(0, 500);
   const classified = classifyProspectAiReviewFailure(message);
+  const rows = await db
+    .select()
+    .from(prospectIntelligence)
+    .where(eq(prospectIntelligence.contactId, contactId))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return false;
+  if (isProspectAiReviewUsableSuccess(row.analysisStatus)) return false;
+
+  const raw =
+    row.rawResult && typeof row.rawResult === "object"
+      ? (row.rawResult as Record<string, unknown>)
+      : {};
+  const action = resolveProspectAiFailurePersistAction({
+    currentStatus: row.analysisStatus,
+    currentAttemptId:
+      typeof raw.analysisAttemptId === "string" ? raw.analysisAttemptId : null,
+    failingAttemptId:
+      typeof raw.analysisAttemptId === "string" ? raw.analysisAttemptId : "legacy",
+    deliberateRerun: Boolean(raw.deliberateRerun),
+    backgroundRefresh: Boolean(raw.backgroundRefresh),
+    priorUsableStatus:
+      typeof raw.priorUsableStatus === "string" ? raw.priorUsableStatus : null,
+  });
+  const endedAt = new Date().toISOString();
+  if (action === "preserve_success_record_refresh_failure") {
+    const restoreStatus = isProspectAiReviewUsableSuccess(
+      typeof raw.priorUsableStatus === "string" ? raw.priorUsableStatus : null,
+    )
+      ? String(raw.priorUsableStatus)
+      : "completed";
+    const updated = await db
+      .update(prospectIntelligence)
+      .set({
+        analysisStatus: restoreStatus,
+        errorMessage: null,
+        rawResult: {
+          ...mergeProspectAiRefreshFailureRaw(raw, {
+            message,
+            kind: classified.kind,
+            at: endedAt,
+            attemptId:
+              typeof raw.analysisAttemptId === "string"
+                ? raw.analysisAttemptId
+                : "unknown",
+          }),
+          attemptEndedAt: endedAt,
+          backgroundRefresh: false,
+          deliberateRerun: false,
+        },
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(prospectIntelligence.contactId, contactId),
+          inArray(prospectIntelligence.analysisStatus, ["pending", "processing"]),
+        ),
+      )
+      .returning({ contactId: prospectIntelligence.contactId });
+    return updated.length > 0;
+  }
+  if (action === "ignore_stale") return false;
+
   const updated = await db
     .update(prospectIntelligence)
     .set({
@@ -471,6 +655,13 @@ export async function markProspectAnalysisFailed(
         aiReviewFailureStage: "mark_failed",
         autoRetryable: classified.autoRetryable,
         userRetryable: classified.userRetryable,
+        analysisAttemptId: raw.analysisAttemptId || null,
+        attemptStartedAt: raw.attemptStartedAt || null,
+        attemptEndedAt: endedAt,
+        attemptWorkerId: raw.attemptWorkerId || null,
+        attemptRailwayServiceName: raw.attemptRailwayServiceName || null,
+        attemptRailwayDeploymentId: raw.attemptRailwayDeploymentId || null,
+        attemptKeyPrefixClass: raw.attemptKeyPrefixClass || null,
       },
       updatedAt: new Date(),
     })
@@ -536,40 +727,31 @@ export async function healAbandonedProcessingAnalysis(params?: {
     );
   if (!toHeal.length) return 0;
 
-  const healed = await db
-    .update(prospectIntelligence)
-    .set({
-      analysisStatus: "failed",
-      errorMessage: "Abandoned stale processing (auto-heal)",
-      ...prospectAiReviewOutputClearPatch(),
-      rawResult: {
-        aiReviewFailureKind: "race_condition",
-        aiReviewFailureStage: "stale_processing_heal",
-        autoRetryable: false,
-        userRetryable: true,
-      },
-      updatedAt: now,
-    })
-    .where(
-      and(
-        inArray(prospectIntelligence.contactId, toHeal),
-        eq(prospectIntelligence.analysisStatus, "processing"),
-      ),
-    )
-    .returning({ contactId: prospectIntelligence.contactId });
+  // Prefer per-row heal so background refreshes restore prior success instead of failing.
+  let healedCount = 0;
+  for (const contactId of toHeal) {
+    const ok = await markProspectAnalysisFailed(
+      contactId,
+      "Abandoned stale processing (auto-heal)",
+    );
+    if (ok) healedCount += 1;
+  }
 
-  if (healed.length) {
+  if (healedCount) {
     console.info(
-      `[ProspectIntelligence] healed ${healed.length} abandoned processing row(s)`,
+      `[ProspectIntelligence] healed ${healedCount} abandoned processing row(s)`,
     );
   }
-  return healed.length;
+  return healedCount;
 }
 
 export async function analyzeProspectContact(params: {
   contactId: string;
   importJobId?: string | null;
   force?: boolean;
+  deliberateRerun?: boolean;
+  backgroundRefresh?: boolean;
+  workerId?: string | null;
   /**
    * When true, the caller (bulk worker) already atomically claimed this row.
    * Skips the processing guard / re-claim so the owning worker can run AI.
@@ -580,6 +762,9 @@ export async function analyzeProspectContact(params: {
   let stage: QualFailureStage | string = "contact_loaded";
   let model = "";
   let workspaceId: string | null = null;
+  let attemptId = "";
+  let deliberateRerun = Boolean(params.deliberateRerun);
+  let backgroundRefresh = Boolean(params.backgroundRefresh) && !deliberateRerun;
 
   if (runningContactAnalysis.has(params.contactId)) {
     const err = new Error("Analysis already in progress for this contact.");
@@ -590,6 +775,116 @@ export async function analyzeProspectContact(params: {
     });
     throw err;
   }
+
+  const persistFailedAttempt = async (
+    message: string,
+    failStage: string,
+    err: unknown,
+  ): Promise<"mark_failed" | "preserve_success_record_refresh_failure" | "ignore_stale"> => {
+    const classified = classifyProspectAiReviewFailure(err ?? message, failStage);
+    const rows = await db
+      .select()
+      .from(prospectIntelligence)
+      .where(eq(prospectIntelligence.contactId, params.contactId))
+      .limit(1);
+    const row = rows[0];
+    const raw =
+      row?.rawResult && typeof row.rawResult === "object"
+        ? (row.rawResult as Record<string, unknown>)
+        : {};
+    const action = resolveProspectAiFailurePersistAction({
+      currentStatus: row?.analysisStatus,
+      currentAttemptId:
+        typeof raw.analysisAttemptId === "string" ? raw.analysisAttemptId : null,
+      failingAttemptId: attemptId || null,
+      deliberateRerun: deliberateRerun || Boolean(raw.deliberateRerun),
+      backgroundRefresh: backgroundRefresh || Boolean(raw.backgroundRefresh),
+      priorUsableStatus:
+        typeof raw.priorUsableStatus === "string" ? raw.priorUsableStatus : null,
+    });
+    // #region agent log
+    fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "d96ff4" },
+      body: JSON.stringify({
+        sessionId: "d96ff4",
+        runId: "post-fix",
+        hypothesisId: "H-persist-fail",
+        location: "prospectIntelligenceService.ts:persistFailedAttempt",
+        message: "AI failure persist action resolved",
+        data: {
+          contactId: params.contactId,
+          attemptId,
+          action,
+          currentStatus: row?.analysisStatus || null,
+          failureKind: classified.kind,
+          backgroundRefresh,
+          deliberateRerun,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    if (action === "ignore_stale") return action;
+    const endedAt = new Date().toISOString();
+    if (action === "preserve_success_record_refresh_failure") {
+      const restoreStatus = isProspectAiReviewUsableSuccess(
+        typeof raw.priorUsableStatus === "string" ? raw.priorUsableStatus : null,
+      )
+        ? String(raw.priorUsableStatus)
+        : isProspectAiReviewUsableSuccess(row?.analysisStatus)
+          ? String(row?.analysisStatus)
+          : "completed";
+      await db
+        .update(prospectIntelligence)
+        .set({
+          analysisStatus: restoreStatus,
+          errorMessage: null,
+          rawResult: {
+            ...mergeProspectAiRefreshFailureRaw(raw, {
+              message: message.substring(0, 500),
+              kind: classified.kind,
+              at: endedAt,
+              attemptId: attemptId || "unknown",
+            }),
+            attemptEndedAt: endedAt,
+            backgroundRefresh: false,
+            deliberateRerun: false,
+          },
+          updatedAt: new Date(),
+        })
+        .where(eq(prospectIntelligence.contactId, params.contactId));
+      return action;
+    }
+    await db
+      .update(prospectIntelligence)
+      .set({
+        analysisStatus: "failed",
+        errorMessage: message.substring(0, 500),
+        ...prospectAiReviewOutputClearPatch(),
+        rawResult: {
+          aiReviewFailureKind: classified.kind,
+          aiReviewFailureStage: failStage,
+          autoRetryable: classified.autoRetryable,
+          userRetryable: classified.userRetryable,
+          analysisAttemptId: attemptId || raw.analysisAttemptId || null,
+          attemptStartedAt: raw.attemptStartedAt || null,
+          attemptEndedAt: endedAt,
+          attemptWorkerId: raw.attemptWorkerId || null,
+          attemptRailwayServiceName: raw.attemptRailwayServiceName || null,
+          attemptRailwayDeploymentId: raw.attemptRailwayDeploymentId || null,
+          attemptKeyPrefixClass: raw.attemptKeyPrefixClass || null,
+        },
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(prospectIntelligence.contactId, params.contactId),
+          inArray(prospectIntelligence.analysisStatus, ["pending", "processing", "failed"]),
+        ),
+      );
+    return action;
+  };
 
   try {
     const contact = await storage.getContact(params.contactId);
@@ -616,8 +911,11 @@ export async function analyzeProspectContact(params: {
       const claim = await claimProspectContactForAnalysis({
         contactId: params.contactId,
         force: params.force,
+        deliberateRerun,
+        backgroundRefresh,
         importJobId,
         aiModel: model,
+        workerId: params.workerId,
       });
       if (claim.outcome === "already_completed") {
         return mapIntelligenceRow(claim.row);
@@ -625,6 +923,9 @@ export async function analyzeProspectContact(params: {
       if (claim.outcome === "already_processing") {
         throw new Error("Analysis already in progress for this contact.");
       }
+      attemptId = claim.attemptId;
+      deliberateRerun = claim.deliberateRerun;
+      backgroundRefresh = claim.backgroundRefresh;
     } else {
       const existingRows = await db
         .select()
@@ -635,6 +936,17 @@ export async function analyzeProspectContact(params: {
       if (!existing || existing.analysisStatus !== "processing") {
         throw new Error("Analysis claim required before preClaimed analyze.");
       }
+      const raw =
+        existing.rawResult && typeof existing.rawResult === "object"
+          ? (existing.rawResult as Record<string, unknown>)
+          : {};
+      attemptId =
+        typeof raw.analysisAttemptId === "string" && raw.analysisAttemptId
+          ? raw.analysisAttemptId
+          : crypto.randomUUID();
+      deliberateRerun = deliberateRerun || Boolean(raw.deliberateRerun);
+      backgroundRefresh =
+        (backgroundRefresh || Boolean(raw.backgroundRefresh)) && !deliberateRerun;
     }
 
     runningContactAnalysis.add(params.contactId);
@@ -702,7 +1014,6 @@ export async function analyzeProspectContact(params: {
         if (!parsed) {
           const { formatProspectAiProviderFailureMessage } = await import("@shared/openaiApiKey");
           const message = formatProspectAiProviderFailureMessage(lastErr ?? "Qualification failed");
-          const classified = classifyProspectAiReviewFailure(lastErr ?? message, stage);
           logProspectQualificationFailed({
             contactId: params.contactId,
             workspaceId,
@@ -710,24 +1021,7 @@ export async function analyzeProspectContact(params: {
             stage,
             err: lastErr ?? new Error(message),
           });
-          await db
-            .update(prospectIntelligence)
-            .set({
-              analysisStatus: "failed",
-              errorMessage: message.substring(0, 500),
-              // Never keep a prior/partial AI summary under a failed attempt.
-              ...prospectAiReviewOutputClearPatch(),
-              // Ops diagnostics only — UI uses userFacingProspectAiReviewError(errorMessage).
-              // Do not store raw model text from failed parse attempts.
-              rawResult: {
-                aiReviewFailureKind: classified.kind,
-                aiReviewFailureStage: stage,
-                autoRetryable: classified.autoRetryable,
-                userRetryable: classified.userRetryable,
-              },
-              updatedAt: new Date(),
-            })
-            .where(eq(prospectIntelligence.contactId, params.contactId));
+          await persistFailedAttempt(message, stage, lastErr ?? message);
           throw new Error(message);
         }
         intel = parsed;
@@ -744,6 +1038,39 @@ export async function analyzeProspectContact(params: {
         existing?.rawResult && typeof existing.rawResult === "object"
           ? (existing.rawResult as Record<string, unknown>)
           : {};
+      const successAction = resolveProspectAiSuccessPersistAction({
+        currentStatus: existing?.analysisStatus,
+        currentAttemptId:
+          typeof existingRaw.analysisAttemptId === "string"
+            ? existingRaw.analysisAttemptId
+            : null,
+        successAttemptId: attemptId || null,
+      });
+      // #region agent log
+      fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "d96ff4" },
+        body: JSON.stringify({
+          sessionId: "d96ff4",
+          runId: "post-fix",
+          hypothesisId: "H-persist-success",
+          location: "prospectIntelligenceService.ts:db_persist",
+          message: "AI success persist action resolved",
+          data: {
+            contactId: params.contactId,
+            attemptId,
+            action: successAction,
+            currentStatus: existing?.analysisStatus || null,
+            rowAttemptId: existingRaw.analysisAttemptId || null,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      if (successAction === "ignore_stale") {
+        if (existing) return mapIntelligenceRow(existing);
+        throw new Error("Stale AI success ignored; newer attempt owns this contact.");
+      }
       const humanLocked = existing
         ? hasHumanQualificationLock({
             approvedByUserId: existing.approvedByUserId,
@@ -754,8 +1081,24 @@ export async function analyzeProspectContact(params: {
           })
         : false;
 
+      const keyDiag = describeOpenAiKeyRuntimeDiagnostics();
+      const endedAt = new Date().toISOString();
+      const requiresWebsiteIntelligence =
+        !input.enrichmentCompleted && Boolean(input.websiteUrl);
       let rawResult: Record<string, unknown> = {
         ...(intel as unknown as Record<string, unknown>),
+        analysisAttemptId: attemptId || existingRaw.analysisAttemptId || null,
+        attemptStartedAt: existingRaw.attemptStartedAt || null,
+        attemptEndedAt: endedAt,
+        attemptWorkerId: existingRaw.attemptWorkerId || params.workerId || null,
+        attemptRailwayServiceName:
+          existingRaw.attemptRailwayServiceName || keyDiag.railwayServiceName,
+        attemptRailwayDeploymentId:
+          existingRaw.attemptRailwayDeploymentId || keyDiag.railwayDeploymentId,
+        attemptKeyPrefixClass: existingRaw.attemptKeyPrefixClass || keyDiag.prefixClass,
+        requiresWebsiteIntelligence,
+        deliberateRerun: false,
+        backgroundRefresh: false,
       };
       const patch = toDbPatch(intel, {
         importJobId,
@@ -1784,24 +2127,30 @@ export async function patchProspectIntelligence(
 }
 
 /**
- * User Retry Qualification — enqueue the same durable bulk worker path as discovery.
- * Resets failed → pending (Queued UX) and force-requeues; does not run AI inline.
+ * User Retry Qualification / Re-run Analysis — enqueue the same durable bulk worker path.
+ * - failed → Retry AI Review (canonical bulk retry)
+ * - completed/needs_review → requires deliberateRerun (Re-run Analysis)
+ * Does not run AI inline.
  */
 export async function reanalyzeProspectContact(
   contactId: string,
   workspaceUserId?: string,
+  opts?: { deliberateRerun?: boolean },
 ): Promise<ProspectIntelligence> {
   const contact = await storage.getContact(contactId);
   if (!contact) throw new Error("Contact not found");
   if (workspaceUserId) assertContactInWorkspace(contact, workspaceUserId);
 
   const wid = workspaceUserId || contact.userId;
-  const { enqueueBulkRetryAiReview, createBulkAnalysisJob } = await import(
+  const { enqueueBulkRetryAiReview, enqueueBulkRerunAiReview } = await import(
     "./prospectBulkAnalysisService"
   );
 
   const existing = await db
-    .select({ analysisStatus: prospectIntelligence.analysisStatus })
+    .select({
+      analysisStatus: prospectIntelligence.analysisStatus,
+      rawResult: prospectIntelligence.rawResult,
+    })
     .from(prospectIntelligence)
     .where(eq(prospectIntelligence.contactId, contactId))
     .limit(1);
@@ -1814,21 +2163,28 @@ export async function reanalyzeProspectContact(
       workspaceUserId: wid,
       selectionMode: "selected",
     });
-  } else {
-    await db
-      .update(prospectIntelligence)
-      .set({
-        analysisStatus: "pending",
-        errorMessage: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(prospectIntelligence.contactId, contactId));
-    await createBulkAnalysisJob({
+  } else if (isProspectAiReviewUsableSuccess(status)) {
+    if (!opts?.deliberateRerun) {
+      throw new Error(
+        "This prospect already has a completed AI Review. Use Re-run Analysis to replace it.",
+      );
+    }
+    await enqueueBulkRerunAiReview({
       contactIds: [contactId],
       initiatedByUserId: wid,
       workspaceUserId: wid,
       selectionMode: "selected",
-      force: true,
+      deliberateRerun: true,
+    });
+  } else if (status === "processing") {
+    throw new Error("AI Review is already in progress for this prospect.");
+  } else {
+    await enqueueBulkRerunAiReview({
+      contactIds: [contactId],
+      initiatedByUserId: wid,
+      workspaceUserId: wid,
+      selectionMode: "selected",
+      deliberateRerun: false,
     });
   }
 
