@@ -223,26 +223,51 @@ export function shouldOrphanRequeueFailedAnalysis(input: {
   return classified.kind !== "configuration";
 }
 
-/** Safe OpenAI key shape for worker startup logs — never includes the secret. */
+export type ProspectAiKeyPrefixClass = "sk-" | "re_" | "missing" | "unknown";
+
+export type ProspectAiRuntimeDiagnostics = {
+  selectedSource: "AI_INTEGRATIONS_OPENAI_API_KEY" | "OPENAI_API_KEY" | "missing" | "invalid";
+  prefixClass: ProspectAiKeyPrefixClass;
+  keyLength: number;
+  /** True only when resolveOpenAiApiKey accepts a non-Resend usable key. */
+  ok: boolean;
+  /** Human-readable reason when ok=false (never includes the secret). */
+  rejectReason: string | null;
+  railwayProjectId: string | null;
+  railwayProjectName: string | null;
+  railwayServiceName: string | null;
+  railwayEnvironmentName: string | null;
+  railwayDeploymentId: string | null;
+  /** Safe classification of RESEND_API_KEY only — never the secret. */
+  resendKeyPrefixClass: ProspectAiKeyPrefixClass;
+};
+
+function classifyKeyPrefix(key: string): ProspectAiKeyPrefixClass {
+  const pick = String(key || "").trim();
+  if (!pick) return "missing";
+  if (looksLikeResendApiKey(pick)) return "re_";
+  if (/^sk-/i.test(pick)) return "sk-";
+  return "unknown";
+}
+
+/** Safe OpenAI / Railway ownership diagnostics — never includes secrets. */
 export function describeOpenAiKeyRuntimeDiagnostics(
   env: NodeJS.ProcessEnv = process.env,
-): {
-  selectedSource: "AI_INTEGRATIONS_OPENAI_API_KEY" | "OPENAI_API_KEY" | "missing" | "invalid";
-  prefixClass: "sk-" | "re_" | "missing" | "unknown";
-  keyLength: number;
-  ok: boolean;
-  railwayServiceName: string | null;
-  railwayDeploymentId: string | null;
-} {
+): ProspectAiRuntimeDiagnostics {
   const resolved = resolveOpenAiApiKey(env);
   const pick = resolved.ok
     ? resolved.apiKey
     : String(env.AI_INTEGRATIONS_OPENAI_API_KEY || env.OPENAI_API_KEY || "").trim();
-  let prefixClass: "sk-" | "re_" | "missing" | "unknown" = "missing";
-  if (!pick) prefixClass = "missing";
-  else if (looksLikeResendApiKey(pick)) prefixClass = "re_";
-  else if (/^sk-/i.test(pick)) prefixClass = "sk-";
-  else prefixClass = "unknown";
+  const prefixClass = classifyKeyPrefix(pick);
+  let rejectReason: string | null = null;
+  if (!resolved.ok) {
+    rejectReason = resolved.reason;
+  } else if (prefixClass === "re_") {
+    rejectReason =
+      "OpenAI API key is misconfigured: selected key looks like a Resend key (re_...).";
+  } else if (prefixClass === "missing") {
+    rejectReason = "OpenAI API key is missing.";
+  }
 
   return {
     selectedSource: resolved.ok
@@ -252,9 +277,65 @@ export function describeOpenAiKeyRuntimeDiagnostics(
         : "invalid",
     prefixClass,
     keyLength: pick ? pick.length : 0,
-    ok: resolved.ok,
+    ok: resolved.ok && prefixClass === "sk-",
+    rejectReason: resolved.ok && prefixClass === "sk-" ? null : rejectReason,
+    railwayProjectId: String(env.RAILWAY_PROJECT_ID || "").trim() || null,
+    railwayProjectName: String(env.RAILWAY_PROJECT_NAME || "").trim() || null,
     railwayServiceName: String(env.RAILWAY_SERVICE_NAME || "").trim() || null,
+    railwayEnvironmentName: String(env.RAILWAY_ENVIRONMENT_NAME || "").trim() || null,
     railwayDeploymentId: String(env.RAILWAY_DEPLOYMENT_ID || "").trim() || null,
+    resendKeyPrefixClass: classifyKeyPrefix(String(env.RESEND_API_KEY || "")),
+  };
+}
+
+/**
+ * Prospect AI bulk worker may start only with a validated OpenAI sk- key.
+ * Web process can continue; the AI worker must refuse otherwise.
+ */
+export function shouldStartProspectAiBulkWorker(
+  diag: Pick<ProspectAiRuntimeDiagnostics, "ok" | "prefixClass" | "rejectReason">,
+): { start: true } | { start: false; reason: string } {
+  if (diag.ok && diag.prefixClass === "sk-") return { start: true };
+  if (diag.prefixClass === "re_") {
+    return {
+      start: false,
+      reason:
+        diag.rejectReason ||
+        "OPENAI_API_KEY looks like a Resend key (re_...). Prospect AI worker will not start.",
+    };
+  }
+  if (diag.prefixClass === "missing") {
+    return {
+      start: false,
+      reason:
+        diag.rejectReason ||
+        "OPENAI_API_KEY is missing. Prospect AI worker will not start.",
+    };
+  }
+  return {
+    start: false,
+    reason:
+      diag.rejectReason ||
+      "OPENAI_API_KEY failed validation. Prospect AI worker will not start.",
+  };
+}
+
+/** True when recent attempt ownership implies another Railway deployment is on this DB. */
+export function detectForeignProspectAiDeployment(input: {
+  currentDeploymentId?: string | null;
+  recentDeploymentIds?: Array<string | null | undefined>;
+}): { foreignDetected: boolean; foreignDeploymentIds: string[] } {
+  const current = String(input.currentDeploymentId || "").trim();
+  const foreign = [
+    ...new Set(
+      (input.recentDeploymentIds || [])
+        .map((id) => String(id || "").trim())
+        .filter((id) => id && id !== current),
+    ),
+  ];
+  return {
+    foreignDetected: foreign.length > 0,
+    foreignDeploymentIds: foreign,
   };
 }
 

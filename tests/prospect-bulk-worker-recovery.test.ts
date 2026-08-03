@@ -18,11 +18,20 @@ function testProductionEntrypointStartsWorker() {
   assert.ok(/startProspectBulkAnalysisWorker/.test(src));
   assert.ok(/prospectBulkAnalysisWorker/.test(src));
   // Must start during boot — not gated by a feature flag / env skip.
+  // (OpenAI key validation inside startProspectBulkAnalysisWorker is allowed.)
   assert.ok(!/DISABLE_PROSPECT_BULK|SKIP_PROSPECT_BULK|PROSPECT_BULK_WORKER_ENABLED/.test(src));
   // Starts after registerRoutes (server routes ready) and before listen is fine.
   const routesIdx = src.indexOf("await registerRoutes");
   const startIdx = src.indexOf("startProspectBulkAnalysisWorker()");
   assert.ok(routesIdx >= 0 && startIdx > routesIdx);
+
+  const workerSrc = readFileSync(
+    join(process.cwd(), "server/prospectImport/prospectBulkAnalysisWorker.ts"),
+    "utf8",
+  );
+  assert.ok(workerSrc.includes("shouldStartProspectAiBulkWorker"));
+  assert.ok(workerSrc.includes("worker_start_blocked"));
+  assert.ok(workerSrc.includes("foreign_deployment_warning"));
 }
 
 function testWorkerIsolatesHealAndKeepsTicking() {

@@ -8,7 +8,9 @@ import { join } from "node:path";
 import {
   classifyProspectAiReviewFailure,
   describeOpenAiKeyRuntimeDiagnostics,
+  detectForeignProspectAiDeployment,
   shouldOrphanRequeueFailedAnalysis,
+  shouldStartProspectAiBulkWorker,
 } from "../shared/prospectAiReliability";
 import {
   PROSPECT_PROGRESS_STATE_LABELS,
@@ -95,13 +97,17 @@ run("safe OpenAI key diagnostics never include secret material", () => {
     RESEND_API_KEY: "re_eX7RFabcdefghijhhAF",
     RAILWAY_SERVICE_NAME: "Lead-Flow-Manager",
     RAILWAY_DEPLOYMENT_ID: "dep-123",
+    RAILWAY_PROJECT_NAME: "luminous-transformation",
+    RAILWAY_PROJECT_ID: "proj-1",
   } as NodeJS.ProcessEnv);
   const sampleKey = "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789";
   assert.equal(diag.ok, true);
   assert.equal(diag.selectedSource, "OPENAI_API_KEY");
   assert.equal(diag.prefixClass, "sk-");
+  assert.equal(diag.resendKeyPrefixClass, "re_");
   assert.equal(diag.keyLength, sampleKey.length);
   assert.equal(diag.railwayServiceName, "Lead-Flow-Manager");
+  assert.equal(diag.railwayProjectName, "luminous-transformation");
   const json = JSON.stringify(diag);
   assert.equal(json.includes(sampleKey), false);
   assert.equal(json.includes("re_eX7RFabcdefghijhhAF"), false);
@@ -112,6 +118,18 @@ run("safe OpenAI key diagnostics never include secret material", () => {
   assert.equal(bad.ok, false);
   assert.equal(bad.prefixClass, "re_");
   assert.equal(bad.selectedSource, "invalid");
+  assert.equal(shouldStartProspectAiBulkWorker(bad).start, false);
+
+  const missing = describeOpenAiKeyRuntimeDiagnostics({} as NodeJS.ProcessEnv);
+  assert.equal(shouldStartProspectAiBulkWorker(missing).start, false);
+  assert.equal(shouldStartProspectAiBulkWorker(diag).start, true);
+
+  const foreign = detectForeignProspectAiDeployment({
+    currentDeploymentId: "dep-good",
+    recentDeploymentIds: ["dep-good", "dep-rogue", null, "dep-rogue"],
+  });
+  assert.equal(foreign.foreignDetected, true);
+  assert.deepEqual(foreign.foreignDeploymentIds, ["dep-rogue"]);
 });
 
 run("bulk retry API + service + UI wired", () => {
@@ -136,7 +154,12 @@ run("bulk retry API + service + UI wired", () => {
     "utf8",
   );
   assert.ok(worker.includes("describeOpenAiKeyRuntimeDiagnostics"));
+  assert.ok(worker.includes("shouldStartProspectAiBulkWorker"));
+  assert.ok(worker.includes("worker_start_blocked"));
+  assert.ok(worker.includes("foreign_deployment_warning"));
   assert.ok(worker.includes("openaiKeyPrefixClass"));
+  assert.ok(worker.includes("railwayProjectName"));
+  assert.ok(worker.includes("resendKeyPrefixClass"));
 
   const panel = readFileSync(
     join(root, "client/src/components/settings/ProspectIntelligencePanel.tsx"),
