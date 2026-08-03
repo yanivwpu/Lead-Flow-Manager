@@ -225,6 +225,7 @@ export function sanitizeProspectAiReviewTechnicalDetails(
 export type ProspectProgressStateCode =
   | "queued"
   | "reviewing"
+  | "retrying"
   | "needs_review"
   | "not_qualified"
   | "ready_to_enrich"
@@ -237,6 +238,7 @@ export type ProspectProgressStateCode =
 export const PROSPECT_PROGRESS_STATE_LABELS: Record<ProspectProgressStateCode, string> = {
   queued: "Queued",
   reviewing: "Reviewing",
+  retrying: "Retrying",
   needs_review: "Needs Review",
   not_qualified: "Not Qualified",
   ready_to_enrich: "Ready to Enrich",
@@ -246,6 +248,16 @@ export const PROSPECT_PROGRESS_STATE_LABELS: Record<ProspectProgressStateCode, s
   failed: "Failed",
   in_campaign: "In Campaign",
 };
+
+/**
+ * True when a failed AI Review should stay red (config / permanent / exhausted).
+ * Transient failures that are still auto-recovering should not use this path —
+ * callers reset those rows to pending/processing before showing UI.
+ */
+export function isProspectAiReviewPermanentFailureDisplay(errorMessage?: string | null): boolean {
+  const info = classifyProspectAiReviewError(errorMessage);
+  return info.class === "permanent" || info.class === "configuration" || !info.retryable;
+}
 
 export function resolveProspectProgressState(input: {
   analysisStatus?: string | null;
@@ -261,6 +273,13 @@ export function resolveProspectProgressState(input: {
   /** Prefer shared campaign gate when provided. */
   readyForCampaign?: boolean | null;
   notQualified?: boolean | null;
+  /**
+   * When analysis is processing after a prior failure / outer retry, show Retrying.
+   * Set by UI when rawResult indicates an in-flight retry, or when errorMessage was
+   * cleared but processing continues after requeue.
+   */
+  aiReviewRetrying?: boolean | null;
+  errorMessage?: string | null;
 }): { code: ProspectProgressStateCode; label: string } {
   const analysis = String(input.analysisStatus || "pending").toLowerCase();
   const enrichment = String(input.enrichmentStatus || "none").toLowerCase();
@@ -279,9 +298,14 @@ export function resolveProspectProgressState(input: {
   }
 
   if (analysis === "failed") {
+    // Retryable provider failures still show Failed only after exhaustion (status=failed).
+    // Configuration / permanent use the same badge; copy differs in detail banner.
     return { code: "failed", label: PROSPECT_PROGRESS_STATE_LABELS.failed };
   }
   if (analysis === "processing") {
+    if (input.aiReviewRetrying === true) {
+      return { code: "retrying", label: PROSPECT_PROGRESS_STATE_LABELS.retrying };
+    }
     return { code: "reviewing", label: PROSPECT_PROGRESS_STATE_LABELS.reviewing };
   }
   if (analysis === "pending") {

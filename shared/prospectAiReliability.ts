@@ -10,6 +10,10 @@ import {
   userFacingProspectAiReviewError,
 } from "./prospectAiReviewErrors";
 import {
+  looksLikeResendApiKey,
+  resolveOpenAiApiKey,
+} from "./openaiApiKey";
+import {
   PROSPECT_ENRICHMENT_FAILURE_LABELS,
   type ProspectEnrichmentFailureClass,
 } from "./prospectEnrichment";
@@ -185,6 +189,73 @@ export function summarizeProspectAiReviewFailureKinds(
     counts[kind] += 1;
   }
   return counts;
+}
+
+/**
+ * Orphan auto-requeue must not tight-loop permanent/config failures.
+ * Pending always eligible; failed only when user/auto retryable and not configuration/missing_data.
+ */
+export function shouldOrphanRequeueFailedAnalysis(input: {
+  analysisStatus?: string | null;
+  errorMessage?: string | null;
+  rawResult?: Record<string, unknown> | null;
+  stage?: string | null;
+}): boolean {
+  const status = String(input.analysisStatus || "").toLowerCase();
+  if (status === "pending") return true;
+  if (status !== "failed") return false;
+
+  const storedKind = String(
+    input.rawResult?.aiReviewFailureKind || input.rawResult?.failureKind || "",
+  ).toLowerCase();
+  if (storedKind === "configuration" || storedKind === "missing_data") return false;
+
+  const classified = classifyProspectAiReviewFailure(
+    input.errorMessage,
+    input.stage ||
+      (typeof input.rawResult?.aiReviewFailureStage === "string"
+        ? String(input.rawResult.aiReviewFailureStage)
+        : null),
+  );
+  if (classified.kind === "configuration" || classified.kind === "missing_data") return false;
+  if (classified.autoRetryable || classified.userRetryable) return true;
+  // Unknown / unexpected: allow user-driven orphan recovery once (not config).
+  return classified.kind !== "configuration";
+}
+
+/** Safe OpenAI key shape for worker startup logs — never includes the secret. */
+export function describeOpenAiKeyRuntimeDiagnostics(
+  env: NodeJS.ProcessEnv = process.env,
+): {
+  selectedSource: "AI_INTEGRATIONS_OPENAI_API_KEY" | "OPENAI_API_KEY" | "missing" | "invalid";
+  prefixClass: "sk-" | "re_" | "missing" | "unknown";
+  keyLength: number;
+  ok: boolean;
+  railwayServiceName: string | null;
+  railwayDeploymentId: string | null;
+} {
+  const resolved = resolveOpenAiApiKey(env);
+  const pick = resolved.ok
+    ? resolved.apiKey
+    : String(env.AI_INTEGRATIONS_OPENAI_API_KEY || env.OPENAI_API_KEY || "").trim();
+  let prefixClass: "sk-" | "re_" | "missing" | "unknown" = "missing";
+  if (!pick) prefixClass = "missing";
+  else if (looksLikeResendApiKey(pick)) prefixClass = "re_";
+  else if (/^sk-/i.test(pick)) prefixClass = "sk-";
+  else prefixClass = "unknown";
+
+  return {
+    selectedSource: resolved.ok
+      ? resolved.source
+      : !String(env.AI_INTEGRATIONS_OPENAI_API_KEY || env.OPENAI_API_KEY || "").trim()
+        ? "missing"
+        : "invalid",
+    prefixClass,
+    keyLength: pick ? pick.length : 0,
+    ok: resolved.ok,
+    railwayServiceName: String(env.RAILWAY_SERVICE_NAME || "").trim() || null,
+    railwayDeploymentId: String(env.RAILWAY_DEPLOYMENT_ID || "").trim() || null,
+  };
 }
 
 /** Pipeline stages for Discover → Campaign eligibility (presentation / tests). */

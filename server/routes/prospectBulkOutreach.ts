@@ -139,6 +139,39 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
     },
   );
 
+  /** Force-requeue selected failed AI Reviews onto the durable bulk worker. */
+  app.post(
+    "/api/growth-tools/prospect-intelligence/bulk-retry-ai-review",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const userId = (req.user as { id: string }).id;
+        const workspaceUserId = await workspaceFromReq(req);
+        const body = req.body as SelectionBody;
+        const selection = await resolveFromBody(body, workspaceUserId);
+        const result = await prospectBulkAnalysisService.enqueueBulkRetryAiReview({
+          contactIds: selection.contactIds,
+          initiatedByUserId: userId,
+          workspaceUserId,
+          selectionMode: selection.selectionMode,
+          filtersSnapshot: selection.filters || null,
+        });
+        res.status(202).json({
+          job: result.job,
+          selection,
+          retriedCount: result.retriedCount,
+          skippedCount: result.skippedCount,
+          retriedContactIds: result.retriedContactIds,
+        });
+      } catch (err) {
+        if (selectionErrorResponse(err, res)) return;
+        res.status(400).json({
+          error: err instanceof Error ? err.message : "Bulk AI Review retry failed",
+        });
+      }
+    },
+  );
+
   app.post(
     "/api/growth-tools/prospect-intelligence/bulk-approve",
     requireProspectImportAccess,

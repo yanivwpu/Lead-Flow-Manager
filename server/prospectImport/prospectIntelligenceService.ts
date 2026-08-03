@@ -112,6 +112,14 @@ function mapIntelligenceRow(row: ProspectIntelligenceRow): ProspectIntelligence 
     outreachMessageId: row.outreachMessageId ?? undefined,
     repliedAt: row.repliedAt?.toISOString(),
     errorMessage: row.errorMessage ?? undefined,
+    aiReviewFailureKind: (() => {
+      const raw =
+        row.rawResult && typeof row.rawResult === "object"
+          ? (row.rawResult as Record<string, unknown>)
+          : null;
+      const kind = raw?.aiReviewFailureKind ?? raw?.failureKind;
+      return kind != null && String(kind).trim() ? String(kind) : undefined;
+    })(),
     createdAt: row.createdAt?.toISOString(),
     enrichmentStatus: row.enrichmentStatus ?? undefined,
     enrichmentProvider: row.enrichmentProvider ?? undefined,
@@ -388,6 +396,20 @@ export async function claimProspectContactForAnalysis(params: {
     }
   }
 
+  const priorRaw =
+    existing?.rawResult && typeof existing.rawResult === "object"
+      ? (existing.rawResult as Record<string, unknown>)
+      : {};
+  const priorFailureKind = priorRaw.aiReviewFailureKind ?? priorRaw.failureKind;
+  // Keep a lightweight retry marker so UI can show Retrying… (not a full failed payload).
+  const claimRawResult =
+    priorFailureKind != null && String(priorFailureKind).trim()
+      ? {
+          aiReviewFailureKind: String(priorFailureKind),
+          aiReviewRetrying: true,
+        }
+      : {};
+
   const updated = await db
     .update(prospectIntelligence)
     .set({
@@ -395,7 +417,7 @@ export async function claimProspectContactForAnalysis(params: {
       errorMessage: null,
       // Drop prior AI outputs so a retry never shows a stale summary mid-flight.
       ...prospectAiReviewOutputClearPatch(),
-      rawResult: {},
+      rawResult: claimRawResult,
       updatedAt: now,
       ...(params.aiModel ? { aiModel: params.aiModel } : {}),
       ...(params.importJobId !== undefined
@@ -1761,6 +1783,10 @@ export async function patchProspectIntelligence(
   return detail;
 }
 
+/**
+ * User Retry Qualification — enqueue the same durable bulk worker path as discovery.
+ * Resets failed → pending (Queued UX) and force-requeues; does not run AI inline.
+ */
 export async function reanalyzeProspectContact(
   contactId: string,
   workspaceUserId?: string,
@@ -1768,7 +1794,51 @@ export async function reanalyzeProspectContact(
   const contact = await storage.getContact(contactId);
   if (!contact) throw new Error("Contact not found");
   if (workspaceUserId) assertContactInWorkspace(contact, workspaceUserId);
-  return analyzeProspectContact({ contactId, force: true });
+
+  const wid = workspaceUserId || contact.userId;
+  const { enqueueBulkRetryAiReview, createBulkAnalysisJob } = await import(
+    "./prospectBulkAnalysisService"
+  );
+
+  const existing = await db
+    .select({ analysisStatus: prospectIntelligence.analysisStatus })
+    .from(prospectIntelligence)
+    .where(eq(prospectIntelligence.contactId, contactId))
+    .limit(1);
+  const status = String(existing[0]?.analysisStatus || "").toLowerCase();
+
+  if (status === "failed") {
+    await enqueueBulkRetryAiReview({
+      contactIds: [contactId],
+      initiatedByUserId: wid,
+      workspaceUserId: wid,
+      selectionMode: "selected",
+    });
+  } else {
+    await db
+      .update(prospectIntelligence)
+      .set({
+        analysisStatus: "pending",
+        errorMessage: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(prospectIntelligence.contactId, contactId));
+    await createBulkAnalysisJob({
+      contactIds: [contactId],
+      initiatedByUserId: wid,
+      workspaceUserId: wid,
+      selectionMode: "selected",
+      force: true,
+    });
+  }
+
+  const rows = await db
+    .select()
+    .from(prospectIntelligence)
+    .where(eq(prospectIntelligence.contactId, contactId))
+    .limit(1);
+  if (!rows[0]) throw new Error("Prospect intelligence not found after requeue");
+  return mapIntelligenceRow(rows[0]);
 }
 
 /**

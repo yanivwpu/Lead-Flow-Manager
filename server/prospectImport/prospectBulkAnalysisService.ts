@@ -28,6 +28,7 @@ import {
 } from "@shared/prospectAnalysisOwnership";
 import { shouldSkipDefaultBulkReanalyze } from "@shared/prospectOutreachEligibility";
 import { isProspectAiTransientProviderError } from "@shared/prospectAiReviewErrors";
+import { shouldOrphanRequeueFailedAnalysis } from "@shared/prospectAiReliability";
 import { db } from "../../drizzle/db";
 import {
   analyzeProspectContact,
@@ -105,10 +106,11 @@ export async function createBulkAnalysisJob(params: {
       ? (existing.contactIds as string[]).map(String)
       : [];
     const merged = Array.from(new Set([...prior, ...ids]));
-    if (merged.length !== prior.length) {
+    if (merged.length !== prior.length || params.force) {
       await updateJob(existing.id, {
         contactIds: merged,
         progressTotal: merged.length,
+        ...(params.force ? { forceReanalyze: true } : {}),
       });
       console.info(
         JSON.stringify(
@@ -118,6 +120,7 @@ export async function createBulkAnalysisJob(params: {
             status: "pending",
             progressTotal: merged.length,
             added: merged.length - prior.length,
+            force: Boolean(params.force),
           }),
         ),
       );
@@ -639,8 +642,102 @@ export async function countClaimableBulkAnalysisJobs(now: Date = new Date()): Pr
 }
 
 /**
+ * Reset failed AI Review rows to pending so UI shows Queued (not permanent Failed)
+ * while a force retry job is waiting for the worker.
+ */
+export async function resetFailedAnalysisToPendingForRetry(
+  contactIds: string[],
+): Promise<number> {
+  const ids = Array.from(new Set(contactIds.map(String).filter(Boolean)));
+  if (!ids.length) return 0;
+  const updated = await db
+    .update(prospectIntelligence)
+    .set({
+      analysisStatus: "pending",
+      errorMessage: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        inArray(prospectIntelligence.contactId, ids),
+        eq(prospectIntelligence.analysisStatus, "failed"),
+      ),
+    )
+    .returning({ contactId: prospectIntelligence.contactId });
+  return updated.length;
+}
+
+/**
+ * Force-requeue selected failed AI Reviews onto the durable bulk worker path.
+ * Filters to analysisStatus=failed; resets rows to pending for Queued UX.
+ */
+export async function enqueueBulkRetryAiReview(params: {
+  contactIds: string[];
+  initiatedByUserId: string;
+  workspaceUserId?: string;
+  selectionMode?: "selected" | "filtered";
+  filtersSnapshot?: ProspectIntelligenceListFilters | null;
+}): Promise<{
+  job: ProspectBulkAnalysisJobSummary;
+  retriedCount: number;
+  skippedCount: number;
+  retriedContactIds: string[];
+}> {
+  const requested = Array.from(
+    new Set(params.contactIds.map((id) => String(id).trim()).filter(Boolean)),
+  );
+  if (!requested.length) throw new Error("No prospects selected for AI Review retry.");
+
+  const wid = params.workspaceUserId || (await resolveProspectImportDestinationUserId());
+  const rows = await db
+    .select({
+      contactId: prospectIntelligence.contactId,
+      analysisStatus: prospectIntelligence.analysisStatus,
+    })
+    .from(prospectIntelligence)
+    .where(inArray(prospectIntelligence.contactId, requested));
+
+  const failedIds = rows
+    .filter((r) => String(r.analysisStatus || "").toLowerCase() === "failed")
+    .map((r) => String(r.contactId));
+  const skippedCount = requested.length - failedIds.length;
+  if (!failedIds.length) {
+    throw new Error("No failed AI Reviews in the selection to retry.");
+  }
+
+  await resetFailedAnalysisToPendingForRetry(failedIds);
+  const job = await createBulkAnalysisJob({
+    contactIds: failedIds,
+    initiatedByUserId: params.initiatedByUserId,
+    workspaceUserId: wid,
+    selectionMode: params.selectionMode || "selected",
+    force: true,
+    filtersSnapshot: params.filtersSnapshot || null,
+  });
+
+  console.info(
+    JSON.stringify(
+      prospectBulkAnalysisLog("bulk_retry_ai_review_enqueued", {
+        workspaceId: wid,
+        jobId: job.id,
+        retriedCount: failedIds.length,
+        skippedCount,
+      }),
+    ),
+  );
+
+  return {
+    job,
+    retriedCount: failedIds.length,
+    skippedCount,
+    retriedContactIds: failedIds,
+  };
+}
+
+/**
  * Re-enqueue pending/failed intelligence rows that are not on any pending/running bulk job.
  * Idempotent: createBulkAnalysisJob merges into an existing pending job when present.
+ * Skips configuration / missing_data failures (no tight retry loop).
  */
 export async function recoverOrphanedPendingQualifications(params?: {
   olderThanMs?: number;
@@ -655,6 +752,8 @@ export async function recoverOrphanedPendingQualifications(params?: {
       contactId: prospectIntelligence.contactId,
       analysisStatus: prospectIntelligence.analysisStatus,
       updatedAt: prospectIntelligence.updatedAt,
+      errorMessage: prospectIntelligence.errorMessage,
+      rawResult: prospectIntelligence.rawResult,
     })
     .from(prospectIntelligence)
     .where(
@@ -664,7 +763,18 @@ export async function recoverOrphanedPendingQualifications(params?: {
       ),
     );
 
-  if (!candidates.length) return { recoveredContacts: 0, jobsTouched: 0 };
+  const eligible = candidates.filter((row) =>
+    shouldOrphanRequeueFailedAnalysis({
+      analysisStatus: row.analysisStatus,
+      errorMessage: row.errorMessage,
+      rawResult:
+        row.rawResult && typeof row.rawResult === "object"
+          ? (row.rawResult as Record<string, unknown>)
+          : null,
+    }),
+  );
+
+  if (!eligible.length) return { recoveredContacts: 0, jobsTouched: 0 };
 
   const activeJobs = await db
     .select({
@@ -675,12 +785,15 @@ export async function recoverOrphanedPendingQualifications(params?: {
     .where(inArray(prospectBulkAnalysisJobs.status, ["pending", "running"]));
 
   const orphanIds = filterOrphanQualificationContactIds({
-    candidates,
+    candidates: eligible,
     activeJobs,
     now,
     olderThanMs,
   });
   if (!orphanIds.length) return { recoveredContacts: 0, jobsTouched: 0 };
+
+  // Clear failed → pending so UI shows Queued while the new job waits.
+  await resetFailedAnalysisToPendingForRetry(orphanIds);
 
   const contactRows = await db
     .select({ id: contacts.id, userId: contacts.userId })
@@ -831,6 +944,7 @@ export async function retryFailedBulkAnalysisItems(params: {
   );
   if (!failedIds.length) throw new Error("No failed items to retry.");
 
+  await resetFailedAnalysisToPendingForRetry(failedIds);
   return createBulkAnalysisJob({
     contactIds: failedIds,
     initiatedByUserId: params.initiatedByUserId,
@@ -876,5 +990,7 @@ export const prospectBulkAnalysisService = {
   recoverOrphanedPendingQualifications,
   countClaimableBulkAnalysisJobs,
   retryFailedBulkAnalysisItems,
+  enqueueBulkRetryAiReview,
+  resetFailedAnalysisToPendingForRetry,
   runBulkAnalysisJob,
 };

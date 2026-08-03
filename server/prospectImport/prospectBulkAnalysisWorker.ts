@@ -17,6 +17,7 @@ import {
 import { healAbandonedProcessingAnalysis } from "./prospectIntelligenceService";
 import { prospectBulkAnalysisLog } from "@shared/prospectBulkSelection";
 import { PROSPECT_ORPHAN_SWEEP_INTERVAL_MS } from "@shared/prospectAnalysisOwnership";
+import { describeOpenAiKeyRuntimeDiagnostics } from "@shared/prospectAiReliability";
 
 const POLL_INTERVAL_MS = 5_000;
 const workerId = `bulk-ai-${process.pid}-${crypto.randomBytes(3).toString("hex")}`;
@@ -186,12 +187,19 @@ function scheduleNext(): void {
 
 export function startProspectBulkAnalysisWorker(): void {
   if (workerTimer) return;
+  const keyDiag = describeOpenAiKeyRuntimeDiagnostics();
   console.info(
     JSON.stringify(
       prospectBulkAnalysisLog("worker_started", {
         workerId,
         pollIntervalMs: POLL_INTERVAL_MS,
         orphanSweepIntervalMs: PROSPECT_ORPHAN_SWEEP_INTERVAL_MS,
+        openaiKeySource: keyDiag.selectedSource,
+        openaiKeyPrefixClass: keyDiag.prefixClass,
+        openaiKeyLength: keyDiag.keyLength,
+        openaiKeyOk: keyDiag.ok,
+        railwayServiceName: keyDiag.railwayServiceName,
+        railwayDeploymentId: keyDiag.railwayDeploymentId,
       }),
     ),
   );

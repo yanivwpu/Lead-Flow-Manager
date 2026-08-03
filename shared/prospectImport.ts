@@ -352,6 +352,11 @@ export type ProspectIntelligence = {
   outreachMessageId?: string | null;
   repliedAt?: string;
   errorMessage?: string;
+  /**
+   * Ops failure kind from rawResult (e.g. timeout, configuration).
+   * Used for Retrying… vs Reviewing… and permanent-fail display — not a secret.
+   */
+  aiReviewFailureKind?: string | null;
   createdAt?: string;
   /** Phase 2 website enrichment */
   enrichmentStatus?: string;

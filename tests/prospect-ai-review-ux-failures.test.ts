@@ -225,6 +225,7 @@ run("panel gates technical details + retry + no raw env for users", () => {
   assert.ok(panelSrc.includes("pi-analysis-technical-details"));
   assert.ok(panelSrc.includes("isAdmin"));
   assert.ok(panelSrc.includes("Retry Qualification"));
+  assert.ok(panelSrc.includes('data-testid="pi-bulk-retry-ai-review"'));
   assert.ok(panelSrc.includes("resolveProspectProgressState"));
   assert.ok(panelSrc.includes('Status (default)'));
   // Detail banner must not interpolate raw intel.errorMessage for users

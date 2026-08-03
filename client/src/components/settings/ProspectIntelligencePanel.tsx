@@ -933,19 +933,23 @@ function ProspectIntelligenceDetailDialog({
   const detailEnrichBusy = Boolean(enrichPending);
   const reanalyzeMutation = useMutation({
     mutationFn: () =>
-      fetchJson(`/api/growth-tools/prospect-intelligence/${item!.contactId}/reanalyze`, {
-        method: "POST",
-      }),
+      fetchJson<{ intelligence?: ProspectIntelligenceListItem["intelligence"] }>(
+        `/api/growth-tools/prospect-intelligence/${item!.contactId}/reanalyze`,
+        { method: "POST" },
+      ),
     onSuccess: async () => {
       const detail = await fetchJson<ProspectIntelligenceListItem>(
         `/api/growth-tools/prospect-intelligence/${item!.contactId}`,
       ).catch(() => null);
       if (detail?.contactId) applyItemUpdate(detail);
       else void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
-      toast({ title: "Re-analysis complete" });
+      void queryClient.invalidateQueries({
+        queryKey: ["/api/growth-tools/prospect-intelligence/bulk-analyze/active"],
+      });
+      toast({ title: "AI Review queued", description: "Retrying on the shared qualification worker." });
     },
     onError: (err: Error) => {
-      toast({ title: "Re-analysis failed", description: err.message, variant: "destructive" });
+      toast({ title: "Could not queue AI Review retry", description: err.message, variant: "destructive" });
     },
   });
 
@@ -1140,8 +1144,14 @@ function ProspectIntelligenceDetailDialog({
                 </>
               ) : analysisStatus === "processing" ? (
                 <>
-                  <p className="font-medium">Reviewing</p>
-                  <p className="mt-0.5 text-xs text-amber-800">AI Review is in progress.</p>
+                  <p className="font-medium">
+                    {String(intel?.aiReviewFailureKind || "").trim() ? "Retrying" : "Reviewing"}
+                  </p>
+                  <p className="mt-0.5 text-xs text-amber-800">
+                    {String(intel?.aiReviewFailureKind || "").trim()
+                      ? "AI Review is retrying after a temporary issue."
+                      : "AI Review is in progress."}
+                  </p>
                 </>
               ) : (
                 <>
@@ -2056,6 +2066,7 @@ export function ProspectIntelligencePanel(props: {
     let unavailable = 0;
     let notQualified = 0;
     let needsReview = 0;
+    let failedAiReview = 0;
     let firstEnrich: ReturnType<typeof explainCanEnrichProspect> | null = null;
     let firstQualified: ReturnType<typeof explainQualifiedForCampaign> | null = null;
     let retryCount = 0;
@@ -2082,6 +2093,9 @@ export function ProspectIntelligencePanel(props: {
       if (ux.notQualified === true && !isProspectDecisionQualified(ux)) notQualified += 1;
       if (matchesProspectReviewWorkFilter(ux, "needs_review")) {
         needsReview += 1;
+      }
+      if (String(row.intelligence?.analysisStatus || "").toLowerCase() === "failed") {
+        failedAiReview += 1;
       }
     }
     const availability = summarizeSelectionActionAvailability({
@@ -2114,6 +2128,7 @@ export function ProspectIntelligencePanel(props: {
       unavailable,
       notQualified,
       needsReview,
+      failedAiReview,
       retryCount,
       firstEnrich,
       firstQualified,
@@ -2428,6 +2443,74 @@ export function ProspectIntelligencePanel(props: {
     },
   });
 
+  const bulkRetryAiReviewMutation = useMutation({
+    mutationFn: () => {
+      const failedIds = Array.from(effectiveSelectedIds).filter((id) => {
+        const row = rawItems.find((r) => r.contactId === id);
+        return String(row?.intelligence?.analysisStatus || "").toLowerCase() === "failed";
+      });
+      return fetchJson<{
+        job: { id: string };
+        retriedCount: number;
+        skippedCount: number;
+        retriedContactIds: string[];
+      }>("/api/growth-tools/prospect-intelligence/bulk-retry-ai-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          failedIds.length ? { contactIds: failedIds } : selectionBody,
+        ),
+      });
+    },
+    onSuccess: (data) => {
+      const ids = data.retriedContactIds || [];
+      if (ids.length) {
+        patchListRows(ids, (row) => ({
+          ...row,
+          intelligence: {
+            ...row.intelligence,
+            analysisStatus: "pending",
+            errorMessage: null,
+          },
+        }));
+        if (selected && ids.includes(selected.contactId)) {
+          setSelected((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  intelligence: {
+                    ...prev.intelligence,
+                    analysisStatus: "pending",
+                    errorMessage: null,
+                  },
+                }
+              : prev,
+          );
+        }
+      }
+      if (data.job?.id) setBulkAnalysisJobId(data.job.id);
+      void queryClient.invalidateQueries({
+        queryKey: ["/api/growth-tools/prospect-intelligence"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["/api/growth-tools/prospect-intelligence/bulk-analyze/active"],
+      });
+      const msg =
+        data.retriedCount > 0
+          ? `Queued ${data.retriedCount} AI Review${data.retriedCount === 1 ? "" : "s"} for retry`
+          : "No failed AI Reviews to retry";
+      setBulkResultBanner(msg);
+      toast({ title: msg });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Bulk AI Review retry failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const confirmQueueMutation = useMutation({
     mutationFn: () =>
       fetchJson<{
@@ -2739,6 +2822,37 @@ export function ProspectIntelligencePanel(props: {
             className="h-8 text-xs"
             disabled={
               !selectedCount ||
+              selectionEligibility.failedAiReview === 0 ||
+              bulkRetryAiReviewMutation.isPending
+            }
+            onClick={() => bulkRetryAiReviewMutation.mutate()}
+            data-testid="pi-bulk-retry-ai-review"
+            title={
+              selectionEligibility.failedAiReview === 0
+                ? "Select prospects with AI Review Failed to retry"
+                : "Requeue failed AI Reviews on the shared qualification worker"
+            }
+          >
+            {bulkRetryAiReviewMutation.isPending ? (
+              <>
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> Queuing…
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-1 h-3.5 w-3.5" />{" "}
+                {selectionEligibility.failedAiReview > 0
+                  ? `Retry AI Review ${selectionEligibility.failedAiReview}`
+                  : "Retry AI Review"}
+              </>
+            )}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            disabled={
+              !selectedCount ||
               selectionEligibility.canEnrich === 0 ||
               bulkApproveMutation.isPending
             }
@@ -2861,6 +2975,8 @@ export function ProspectIntelligencePanel(props: {
                   String(intel.analysisStatus).toLowerCase() === "processing";
                 const waitingAnalyze =
                   String(intel.analysisStatus || "pending").toLowerCase() === "pending";
+                const aiReviewRetrying =
+                  analyzing && Boolean(String(intel.aiReviewFailureKind || "").trim());
                 const enriching = enrichmentBusy(intel.enrichmentStatus);
                 const flashMsg = rowFlash[row.contactId];
                 const reviewReady = isProspectQualificationComplete(intel.analysisStatus);
@@ -2939,7 +3055,9 @@ export function ProspectIntelligencePanel(props: {
                     <TableCell className="min-w-0">
                       {analyzing ? (
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs text-gray-400">Reviewing…</span>
+                          <span className="text-xs text-gray-400">
+                            {aiReviewRetrying ? "Retrying…" : "Reviewing…"}
+                          </span>
                           <ProspectWebsiteGlobeIcon
                             websiteUrl={row.websiteUrl}
                             websiteUrlUsed={intel.websiteUrlUsed}
