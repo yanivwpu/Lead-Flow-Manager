@@ -227,6 +227,7 @@ export function normalizeGmailApiMessage(
       cc: headers.cc || "",
       subject: headers.subject || "",
       date: headers.date || "",
+      "reply-to": headers["reply-to"] || "",
     },
   };
 }

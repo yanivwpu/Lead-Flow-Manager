@@ -17,6 +17,7 @@ import {
 import { findEmailConversationByThread } from "./persistInbound";
 import { sanitizeEmailHtml, htmlToPlainText } from "./htmlSanitize";
 import { normalizeEmailAddress } from "@shared/emailChannel";
+import { resolveOutboundToForContactSend } from "./resolveConversationReplyTarget";
 
 function dayKey(d = new Date()): string {
   return d.toISOString().slice(0, 10);
@@ -108,13 +109,6 @@ export async function sendEmailViaMailbox(params: {
     };
   }
 
-  const to =
-    params.rich.to?.filter(Boolean) ||
-    (contact.email ? [normalizeEmailAddress(contact.email)!].filter(Boolean) : []);
-  if (!to.length) {
-    return { success: false, channel: "email", error: "Contact has no email address" };
-  }
-
   const textBody = params.rich.textBody?.trim() || params.content.trim();
   const htmlBody = params.rich.htmlBody?.trim() || null;
   if (!textBody && !htmlBody) {
@@ -148,6 +142,23 @@ export async function sendEmailViaMailbox(params: {
   if (conversation) {
     threadId = conversation.externalThreadId;
     subject = subject || conversation.subject || "Re:";
+  }
+
+  // Server-authoritative reply target (Reply-To > From). Blocks unsafe client overrides
+  // that would send to forms@/notification From when a visitor Reply-To exists.
+  const outboundTo = await resolveOutboundToForContactSend({
+    conversationId: conversation?.id || null,
+    mailboxEmail: mailbox.emailAddress,
+    contactEmail: contact.email,
+    clientTo: params.rich.to?.filter(Boolean) || null,
+  });
+  const to = outboundTo.to;
+  if (!to.length) {
+    return {
+      success: false,
+      channel: "email",
+      error: outboundTo.replyTarget.warning || "No safe external reply address",
+    };
   }
 
   if (replyMode === "new" && !subject) {

@@ -1424,6 +1424,8 @@ export const emailMessageDetails = pgTable("email_message_details", {
   ccAddresses: jsonb("cc_addresses").notNull().default(sql`'[]'::jsonb`),
   bccAddresses: jsonb("bcc_addresses").notNull().default(sql`'[]'::jsonb`),
   replyToAddress: text("reply_to_address"),
+  /** Display name from Reply-To header when present. */
+  replyToName: text("reply_to_name"),
   rfcMessageId: text("rfc_message_id"),
   inReplyTo: text("in_reply_to"),
   referencesHeader: jsonb("references_header").notNull().default(sql`'[]'::jsonb`),
@@ -1432,6 +1434,12 @@ export const emailMessageDetails = pgTable("email_message_details", {
   hasAttachments: boolean("has_attachments").notNull().default(false),
   attachmentMetadata: jsonb("attachment_metadata").notNull().default(sql`'[]'::jsonb`),
   selectedHeaders: jsonb("selected_headers").notNull().default(sql`'{}'::jsonb`),
+  /**
+   * Structured source classification (e.g. website_form).
+   * Raw htmlBody/textBody remain the audit copy of the original notification.
+   */
+  sourceType: text("source_type"),
+  sourceMetadata: jsonb("source_metadata").notNull().default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

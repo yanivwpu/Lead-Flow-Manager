@@ -77,6 +77,8 @@ export class AIService {
       listingFollowUp?: string;
       useRealEstatePromptPersona?: boolean;
       aiConversationDomain?: string;
+      websiteFormInquiry?: string;
+      leadSource?: string;
     },
     routing?: AiRoutingResult,
     channel?: string | null,
@@ -676,6 +678,8 @@ Return JSON only: { "summary": "..." }`;
       listingFollowUp?: string;
       useRealEstatePromptPersona?: boolean;
       aiConversationDomain?: string;
+      websiteFormInquiry?: string;
+      leadSource?: string;
     },
     isFirstMessage?: boolean,
     routing?: AiRoutingResult,
@@ -768,6 +772,7 @@ ${cap}`;
 })()}
 ${contactContext ? `LEAD CRM CONTEXT (use this to personalize your reply):
 ${contactContext.name ? `- Lead name: ${contactContext.name}` : ''}
+${contactContext.leadSource ? `- Lead source: ${contactContext.leadSource}` : ''}
 ${contactContext.pipelineStage ? `- Pipeline stage: ${contactContext.pipelineStage}` : ''}
 ${contactContext.leadScore ? `- Lead score: ${contactContext.leadScore}` : ''}
 ${contactContext.intent ? `- Detected intent: ${contactContext.intent}` : ''}
@@ -775,6 +780,7 @@ ${contactContext.budget ? `- Budget (already mentioned): ${contactContext.budget
 ${contactContext.timeline ? `- Timeline (already mentioned): ${contactContext.timeline} — DO NOT ask for timeline again` : ''}
 ${contactContext.financing ? `- Financing (already mentioned): ${contactContext.financing} — DO NOT ask about financing again` : ''}
 ${contactContext.notes ? `- Agent notes: ${contactContext.notes}` : ''}
+${contactContext.websiteFormInquiry ? `\nWEBSITE FORM INQUIRY (reply to the visitor, not any notification sender):\n${contactContext.websiteFormInquiry}\n` : ''}
 ${contactContext.buyerPreferences ? `\n${contactContext.buyerPreferences}\nUse these preferences when relevant. Do not re-ask for details already captured unless the customer contradicts them.` : ''}
 ${contactContext.buyerQualificationContext ? `\n${contactContext.buyerQualificationContext}` : ''}
 ${contactContext.inventoryMatchSummary ? `\n${contactContext.inventoryMatchSummary}` : ''}

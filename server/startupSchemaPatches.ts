@@ -806,6 +806,17 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
         ON workspace_offers (user_id, archived_at)`,
     ].join(";\n"),
   },
+  {
+    tag: "0076_email_form_source_metadata",
+    sql: [
+      `ALTER TABLE email_message_details ADD COLUMN IF NOT EXISTS reply_to_name text`,
+      `ALTER TABLE email_message_details ADD COLUMN IF NOT EXISTS source_type text`,
+      `ALTER TABLE email_message_details ADD COLUMN IF NOT EXISTS source_metadata jsonb NOT NULL DEFAULT '{}'::jsonb`,
+      `CREATE INDEX IF NOT EXISTS email_message_details_source_type_idx
+        ON email_message_details (source_type)
+        WHERE source_type IS NOT NULL`,
+    ].join(";\n"),
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {

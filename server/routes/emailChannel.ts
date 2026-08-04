@@ -155,7 +155,44 @@ export function registerEmailChannelRoutes(app: Express): void {
       // Ownership: message must belong to workspace
       const msg = await storageGetMessage(req.params.messageId);
       if (!msg || msg.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
-      res.json({ detail });
+
+      const { formMetaFromEmailDetail } = await import(
+        "../emailChannel/resolveConversationReplyTarget"
+      );
+      const { resolveEmailReplyTarget } = await import("@shared/emailReplyTarget");
+      const { getEmailMailboxById } = await import("../emailChannel/mailboxStore");
+
+      let mailboxEmail: string | null = null;
+      try {
+        const conv = msg.conversationId
+          ? await (await import("../storage")).storage.getConversation(msg.conversationId)
+          : null;
+        if (conv?.channelAccountId) {
+          const mailbox = await getEmailMailboxById(conv.channelAccountId);
+          mailboxEmail = mailbox?.emailAddress || null;
+        }
+      } catch {
+        mailboxEmail = null;
+      }
+
+      const formMeta = formMetaFromEmailDetail(detail, mailboxEmail);
+      const replyTarget = resolveEmailReplyTarget({
+        fromEmail: detail.fromAddress,
+        replyToEmail: detail.replyToAddress || formMeta?.replyTargetEmail,
+        replyToName: detail.replyToName || formMeta?.replyTargetName,
+        mailboxEmail,
+      });
+
+      res.json({
+        detail: {
+          ...detail,
+          // On-read enrichment for historical messages (does not rewrite DB).
+          sourceType: detail.sourceType || formMeta?.sourceType || null,
+          formMeta: formMeta || null,
+        },
+        replyTarget,
+        formMeta: formMeta || null,
+      });
     } catch (err) {
       res.status(500).json({ error: "Failed to load email details" });
     }

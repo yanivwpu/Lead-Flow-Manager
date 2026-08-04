@@ -55,12 +55,19 @@ export async function resolveEmailContact(params: {
   direction: "inbound" | "outbound";
   /** When outbound, prefer linking to To recipient. */
   toEmail?: string | null;
+  /**
+   * Optional identity override for inbound (e.g. website form visitor from Reply-To).
+   * When set, contact matching uses this instead of From.
+   */
+  identityEmail?: string | null;
+  identityName?: string | null;
 }): Promise<EmailContactMatchResult> {
   const mailbox = normalizeEmailAddress(params.mailboxEmail);
+  const identity = normalizeEmailAddress(params.identityEmail);
   const matchEmail =
     params.direction === "outbound"
       ? normalizeEmailAddress(params.toEmail) || normalizeEmailAddress(params.fromEmail)
-      : normalizeEmailAddress(params.fromEmail);
+      : identity || normalizeEmailAddress(params.fromEmail);
 
   if (!matchEmail) return { kind: "suppressed", reason: "missing_email" };
   if (mailbox && matchEmail === mailbox) {
@@ -109,7 +116,7 @@ export async function resolveEmailContact(params: {
   }
 
   const name =
-    String(params.fromName || "").trim() ||
+    String(params.identityName || params.fromName || "").trim() ||
     matchEmail.split("@")[0] ||
     matchEmail;
 
@@ -120,7 +127,7 @@ export async function resolveEmailContact(params: {
     primaryChannel: "email",
     lastIncomingChannel: params.direction === "inbound" ? "email" : null,
     lastIncomingAt: params.direction === "inbound" ? new Date() : null,
-    source: "email",
+    source: identity ? "website_form" : "email",
   } as any);
 
   return { kind: "created", contact: created };

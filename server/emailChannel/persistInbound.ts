@@ -10,6 +10,13 @@ import { resolveEmailContact } from "./contactMatch";
 import { insertEmailMessageDetail } from "./mailboxStore";
 import { sanitizeEmailHtml, htmlToPlainText } from "./htmlSanitize";
 import { logEmailUnreadDiag } from "./emailUnreadDiag";
+import {
+  classifyNormalizedInboundEmail,
+  conversationPreviewForInbound,
+  logWebsiteFormClassification,
+  messageContentForInbound,
+} from "./websiteFormPersist";
+import { looksLikeNotificationSender } from "@shared/emailReplyTarget";
 
 export async function findEmailConversationByThread(params: {
   workspaceUserId: string;
@@ -78,7 +85,22 @@ export async function persistNormalizedEmailMessage(params: {
     return null;
   }
 
+  const { formMeta, replyTarget } = classifyNormalizedInboundEmail({
+    normalized,
+    mailboxEmail: mailbox.emailAddress,
+  });
+
   const primaryTo = normalized.to[0]?.email || null;
+  const identityEmail =
+    formMeta?.visitorEmail ||
+    (replyTarget.source === "reply_to" &&
+    looksLikeNotificationSender(normalized.from.email)
+      ? replyTarget.email
+      : null);
+  const identityName =
+    formMeta?.visitorName ||
+    (identityEmail ? replyTarget.name : null);
+
   const match = await resolveEmailContact({
     workspaceUserId: mailbox.workspaceUserId,
     fromEmail: normalized.from.email,
@@ -86,6 +108,8 @@ export async function persistNormalizedEmailMessage(params: {
     mailboxEmail: mailbox.emailAddress,
     direction: normalized.direction,
     toEmail: primaryTo,
+    identityEmail,
+    identityName,
   });
 
   if (match.kind === "suppressed") {
@@ -149,11 +173,44 @@ export async function persistNormalizedEmailMessage(params: {
   }
 
   const contact = match.contact;
+
+  // Soft-refresh contact display when a form visitor is confidently known.
+  if (
+    normalized.direction === "inbound" &&
+    formMeta?.visitorName &&
+    contact.name &&
+    (looksLikeNotificationSender(contact.email) ||
+      looksLikeNotificationSender(normalized.from.email) ||
+      contact.name === normalized.from.name)
+  ) {
+    try {
+      await storage.updateContact(contact.id, {
+        name: formMeta.visitorName,
+        ...(formMeta.visitorEmail && contact.email !== formMeta.visitorEmail
+          ? {}
+          : {}),
+      } as any);
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  logWebsiteFormClassification({
+    workspaceUserId: mailbox.workspaceUserId,
+    formMeta,
+    replyTarget,
+    contactId: contact.id,
+    contactDecision: match.kind,
+  });
+
   let conversation = await findEmailConversationByThread({
     workspaceUserId: mailbox.workspaceUserId,
     mailboxId: mailbox.id,
     threadId: normalized.providerThreadId,
   });
+
+  const rawPreview = (normalized.snippet || normalized.textBody || "").slice(0, 100);
+  const preview = conversationPreviewForInbound({ formMeta, fallback: rawPreview });
 
   if (!conversation) {
     const initialUnread = normalized.direction === "inbound" ? 1 : 0;
@@ -166,7 +223,7 @@ export async function persistNormalizedEmailMessage(params: {
       status: "open",
       subject: normalized.subject,
       lastMessageAt: normalized.sentAt,
-      lastMessagePreview: (normalized.snippet || normalized.textBody || "").slice(0, 100),
+      lastMessagePreview: preview,
       lastMessageDirection: normalized.direction,
       unreadCount: initialUnread,
     } as any);
@@ -187,7 +244,7 @@ export async function persistNormalizedEmailMessage(params: {
     });
     await storage.updateConversation(conversation.id, {
       lastMessageAt: normalized.sentAt,
-      lastMessagePreview: (normalized.snippet || normalized.textBody || "").slice(0, 100),
+      lastMessagePreview: preview,
       lastMessageDirection: normalized.direction,
       unreadCount: unread,
       subject: conversation.subject || normalized.subject,
@@ -205,11 +262,15 @@ export async function persistNormalizedEmailMessage(params: {
     }
   }
 
-  const textContent =
+  const rawTextContent =
     normalized.textBody?.trim() ||
     (normalized.htmlBody ? htmlToPlainText(normalized.htmlBody) : "") ||
     normalized.snippet ||
     "";
+  const textContent = messageContentForInbound({
+    formMeta,
+    fallbackText: rawTextContent,
+  });
 
   const message = await storage.createMessage({
     conversationId: conversation.id,
@@ -234,6 +295,7 @@ export async function persistNormalizedEmailMessage(params: {
     ccAddresses: normalized.cc,
     bccAddresses: normalized.bcc,
     replyToAddress: normalized.replyTo?.email || null,
+    replyToName: normalized.replyTo?.name || null,
     rfcMessageId: normalized.rfcMessageId,
     inReplyTo: normalized.inReplyTo,
     referencesHeader: normalized.references,
@@ -242,6 +304,8 @@ export async function persistNormalizedEmailMessage(params: {
     hasAttachments: normalized.hasAttachments,
     attachmentMetadata: normalized.attachments,
     selectedHeaders: normalized.selectedHeaders || {},
+    sourceType: formMeta?.sourceType || null,
+    sourceMetadata: formMeta || {},
   });
 
   try {

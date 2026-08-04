@@ -1334,6 +1334,47 @@ export function UnifiedInbox() {
     return messagesQueryData ?? [];
   }, [forceNewEmailCompose, messagesEnabled, activeConversationId, messagesQueryData]);
 
+  const latestInboundEmailMessageId = useMemo(() => {
+    if (primaryConversation?.channel !== "email") return null;
+    const inbound = [...messages].reverse().find((m) => m.direction === "inbound");
+    return inbound?.id ?? null;
+  }, [messages, primaryConversation?.channel]);
+
+  const { data: emailReplyDetails } = useQuery<{
+    replyTarget?: {
+      email: string | null;
+      name: string | null;
+      source: string;
+      unsafe: boolean;
+      warning: string | null;
+    };
+    formMeta?: {
+      sourceType: "website_form";
+      visitorName?: string | null;
+      visitorEmail?: string | null;
+      visitorMessage?: string | null;
+      formName?: string | null;
+    } | null;
+  }>({
+    queryKey: ["/api/messages", latestInboundEmailMessageId, "email-details"],
+    queryFn: async () => {
+      const res = await fetch(`/api/messages/${latestInboundEmailMessageId}/email-details`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to load email details");
+      return res.json();
+    },
+    enabled: Boolean(latestInboundEmailMessageId),
+    staleTime: 60_000,
+  });
+
+  const emailComposeTo =
+    emailReplyDetails?.replyTarget?.email ||
+    emailReplyDetails?.formMeta?.visitorEmail ||
+    null;
+  const emailComposeUnsafe = Boolean(emailReplyDetails?.replyTarget?.unsafe);
+  const isWebsiteFormThread = emailReplyDetails?.formMeta?.sourceType === "website_form";
+
   const expandedCalendlyMessageIndex = useMemo(
     () => findExpandedCalendlyMessageIndex(messages),
     [messages],
@@ -2628,8 +2669,21 @@ export function UnifiedInbox() {
       ? buildBuyerPreferenceAiContext(persistedBuyerProfile)
       : { buyerPreferences: undefined, budget: undefined, timeline: undefined, financing: undefined };
 
+    const formMeta = emailReplyDetails?.formMeta;
+    const websiteFormInquiry =
+      formMeta?.sourceType === "website_form"
+        ? [
+            formMeta.visitorName ? `Visitor: ${formMeta.visitorName}` : null,
+            formMeta.visitorEmail ? `Reply to: ${formMeta.visitorEmail}` : null,
+            formMeta.formName ? `Form: ${formMeta.formName}` : null,
+            formMeta.visitorMessage ? `Message: ${formMeta.visitorMessage}` : null,
+          ]
+            .filter(Boolean)
+            .join("\n")
+        : undefined;
+
     return {
-      name:          contact.name,
+      name:          formMeta?.visitorName || contact.name,
       tag:           contact.tag || undefined,
       pipelineStage: contact.pipelineStage || undefined,
       notes:         contact.notes || undefined,
@@ -2639,9 +2693,12 @@ export function UnifiedInbox() {
       intent:        intel?.intent,
       leadScore:     intel?.leadScore?.label,
       buyerPreferences: injectBuyerCtx ? aiPrefFields.buyerPreferences : undefined,
+      websiteFormInquiry,
+      leadSource: formMeta?.sourceType === "website_form" ? "Website Form" : undefined,
     };
   }, [
     contact,
+    emailReplyDetails?.formMeta,
     selectedContactId,
     messages,
     aiBusinessKnowledge?.industry,
@@ -2973,6 +3030,14 @@ export function UnifiedInbox() {
                       <span className={INBOX_ROW_CHANNEL_ICON_WRAP} aria-hidden>
                         {getChannelIcon(item.channel, "w-3 h-3")}
                       </span>
+                      {(item.contact as { source?: string | null }).source === "website_form" ? (
+                        <span
+                          className="mr-1 shrink-0 rounded bg-sky-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-sky-900"
+                          data-testid={`badge-form-row-${item.contact.id}`}
+                        >
+                          Form
+                        </span>
+                      ) : null}
                       <p
                         className={cn(
                           INBOX_ROW_PREVIEW,
@@ -3104,8 +3169,19 @@ export function UnifiedInbox() {
               <ChatAvatar src={contact.avatar} name={contact.name} size="md" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <h3 className="font-semibold text-sm truncate" data-testid="inbox-selected-contact-name">{contact.name}</h3>
+                  <h3 className="font-semibold text-sm truncate" data-testid="inbox-selected-contact-name">
+                    {emailReplyDetails?.formMeta?.visitorName || contact.name}
+                  </h3>
                   {getChannelIcon(activeChannel)}
+                  {isWebsiteFormThread ? (
+                    <Badge
+                      variant="secondary"
+                      className="h-5 rounded-md bg-sky-100 px-1.5 text-[10px] font-semibold text-sky-900 hover:bg-sky-100"
+                      data-testid="badge-website-form"
+                    >
+                      Form
+                    </Badge>
+                  ) : null}
                   {hasConversation ? (
                     <span className={cn("text-[10px] font-medium tracking-tight", conversationStatusRow.textClass)}>
                       {conversationStatusRow.label}
@@ -3122,8 +3198,11 @@ export function UnifiedInbox() {
                   </p>
                 ) : null}
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {isEmailChannel && contact.email ? (
-                    <span className="flex items-center gap-1 truncate"><Mail className="w-3 h-3" />{contact.email}</span>
+                  {isEmailChannel && (emailComposeTo || contact.email) ? (
+                    <span className="flex items-center gap-1 truncate">
+                      <Mail className="w-3 h-3" />
+                      {emailComposeTo || contact.email}
+                    </span>
                   ) : null}
                   {contact.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{contact.phone}</span>}
                   {contact.assignedTo && (() => {
@@ -3909,9 +3988,22 @@ export function UnifiedInbox() {
                 <div className="flex items-center gap-2 text-xs text-gray-500">
                   <span className="w-10 shrink-0">To</span>
                   <span className="truncate text-gray-800" data-testid="inbox-email-to">
-                    {contact.email || "No email on contact"}
+                    {emailComposeTo || contact.email || "No email on contact"}
                   </span>
                 </div>
+                {emailComposeUnsafe ? (
+                  <p
+                    className="text-[11px] text-amber-700"
+                    data-testid="inbox-email-to-warning"
+                  >
+                    No safe external reply address — confirm the visitor email before sending.
+                  </p>
+                ) : null}
+                {isWebsiteFormThread && emailComposeTo ? (
+                  <p className="text-[11px] text-sky-800/90" data-testid="inbox-email-to-form-hint">
+                    Replying to form visitor{emailReplyDetails?.replyTarget?.source === "reply_to" ? " (Reply-To)" : ""}
+                  </p>
+                ) : null}
                 <div className="flex items-center gap-2">
                   <label htmlFor="inbox-email-subject" className="w-10 shrink-0 text-xs text-gray-500">
                     Subj

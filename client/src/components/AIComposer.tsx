@@ -52,6 +52,9 @@ export interface ContactContext {
   intent?: string;
   leadScore?: string;
   buyerPreferences?: string;
+  /** Website form inquiry context for Copilot (visitor message + identity). */
+  websiteFormInquiry?: string;
+  leadSource?: string;
 }
 
 export interface AIComposerProps {
