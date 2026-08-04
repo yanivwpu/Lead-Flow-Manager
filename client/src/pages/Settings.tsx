@@ -14,6 +14,7 @@ import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
 import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { ChannelSettings } from "@/components/ChannelSettings";
 import { BusinessProfileSettings } from "@/components/settings/BusinessProfileSettings";
+import { OffersPaymentLinksSettings } from "@/components/settings/OffersPaymentLinksSettings";
 import { cn } from "@/lib/utils";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
@@ -1209,6 +1210,8 @@ export function Settings() {
           </div>
 
           <BusinessProfileSettings />
+
+          <OffersPaymentLinksSettings />
 
           {/* Danger Zone — last section */}
           <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 sm:p-5 shadow-none">

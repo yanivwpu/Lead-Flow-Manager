@@ -138,6 +138,8 @@ import {
 } from "./websiteKnowledgeScraper";
 import { putWebsiteKnowledgeDraft, takeWebsiteKnowledgeDraft } from "./websiteKnowledgeDraftCache";
 import { registerKnowledgeV2Routes } from "./websiteKnowledge/knowledgeRoutes";
+import { registerLiveBusinessDataRoutes } from "./aiLiveBusinessData/routes";
+import { registerWorkspaceOfferRoutes } from "./workspaceOffers/routes";
 import {
   WEBSITE_KNOWLEDGE_SLOTS,
   applyScanResultsToSources,
@@ -10933,6 +10935,12 @@ export async function registerRoutes(
   // remain the fallback for workspaces that have not published facts yet.
   registerKnowledgeV2Routes(app, { requireAiBrainPremium });
 
+  // Live Business Data registry (typed connectors). Separate from Knowledge Sources.
+  registerLiveBusinessDataRoutes(app, { requireAiBrainPremium });
+
+  // Workspace Offers & Payment Links (Settings editor + Business Packages source of truth).
+  registerWorkspaceOfferRoutes(app);
+
   // Get AI health status (no numeric details exposed)
   app.get("/api/ai/health", async (req, res) => {
     try {
@@ -11582,6 +11590,20 @@ export async function registerRoutes(
         suggestion.suggestion = stripSchedulingUrlsFromReply(suggestion.suggestion);
       }
 
+      // Re-check after scheduling-strip: payment links still require human send approval.
+      if (
+        suggestion.suggestion &&
+        Array.isArray(suggestion.liveCheckoutUrls) &&
+        suggestion.liveCheckoutUrls.length > 0
+      ) {
+        const { draftContainsCheckoutUrl, PAYMENT_LINK_HUMAN_APPROVAL_REASON } =
+          await import("@shared/workspaceOffers");
+        if (draftContainsCheckoutUrl(suggestion.suggestion, suggestion.liveCheckoutUrls)) {
+          suggestion.requiresPaymentLinkApproval = true;
+          suggestion.paymentLinkApprovalReason = PAYMENT_LINK_HUMAN_APPROVAL_REASON;
+        }
+      }
+
       let autoSendAllowed = false;
       let autoSendReason = wantsAuto ? "not_evaluated" : "not_requested";
       let contactIdForLog: string | null = null;
@@ -11611,6 +11633,10 @@ export async function registerRoutes(
         } else if (routingHandoffLogged || routingShouldTriggerHandoff(aiRouting)) {
           autoSendAllowed = false;
           autoSendReason = "routing_assign_agent";
+        } else if (suggestion.requiresPaymentLinkApproval) {
+          autoSendAllowed = false;
+          autoSendReason =
+            suggestion.paymentLinkApprovalReason || "payment_link_requires_human_approval";
         } else if (chatbotArb.flowMatched) {
           autoSendAllowed = false;
           autoSendReason = "chatbot_flow_active";
@@ -11707,6 +11733,8 @@ export async function registerRoutes(
         shouldDowngradeToSuggestOnly: fairUse.shouldDowngradeToSuggestOnly,
         autoSendAllowed,
         autoSendReason,
+        requiresPaymentLinkApproval: Boolean(suggestion.requiresPaymentLinkApproval),
+        paymentLinkApprovalReason: suggestion.paymentLinkApprovalReason,
         contactId: resolvedContactId,
         conversationId: resolvedConversationId,
         buyerMatchingTraceId: buyerMatchingTraceId ?? undefined,

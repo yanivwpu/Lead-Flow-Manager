@@ -16,13 +16,19 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   AlertTriangle,
+  Boxes,
+  Calendar,
   Check,
+  ChevronDown,
   ChevronRight,
   Clock,
   ExternalLink,
+  Home,
   Loader2,
+  Package,
   Plus,
   RefreshCw,
+  ShoppingBag,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,6 +40,11 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -381,6 +392,129 @@ function SectionBlock({
 
 // ---------------------------------------------------------------------------
 
+type LiveBusinessDataProviderRow = {
+  id: string;
+  name: string;
+  icon: string;
+  status: "connected" | "disconnected" | "coming_soon" | "error";
+  detail: string | null;
+};
+
+function liveProviderIcon(icon: string) {
+  switch (icon) {
+    case "package":
+      return Package;
+    case "shoppingBag":
+      return ShoppingBag;
+    case "home":
+      return Home;
+    case "calendar":
+      return Calendar;
+    case "boxes":
+      return Boxes;
+    default:
+      return Package;
+  }
+}
+
+function liveProviderStatusLabel(provider: LiveBusinessDataProviderRow): string {
+  if (provider.id === "businessPackages") {
+    if (provider.status === "connected") {
+      return provider.detail || "Connected";
+    }
+    return provider.detail || "Not configured";
+  }
+  if (provider.status === "coming_soon") return "Coming Soon";
+  if (provider.status === "error") return provider.detail || "Unavailable";
+  if (provider.status === "disconnected") return provider.detail || "Not connected";
+  return provider.detail || "Connected";
+}
+
+function LiveBusinessDataPanel({
+  open,
+  onOpenChange,
+  providers,
+  loading,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  providers?: LiveBusinessDataProviderRow[];
+  loading: boolean;
+}) {
+  const rows = providers ?? [];
+
+  return (
+    <Collapsible open={open} onOpenChange={onOpenChange} className="pt-1">
+      <CollapsibleTrigger
+        type="button"
+        className="flex w-full items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/60 px-3 py-2.5 text-left hover:bg-slate-50"
+        data-testid="button-live-business-data"
+      >
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Live Business Data
+          </p>
+          <p className="text-xs text-slate-600">
+            Offers, products, listings, and calendar AI can query directly. Manage offers in Settings.
+          </p>
+        </div>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 shrink-0 text-slate-500 transition-transform",
+            open && "rotate-180",
+          )}
+          aria-hidden
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-2">
+        {loading && rows.length === 0 ? (
+          <div className="flex items-center gap-2 px-1 py-2 text-xs text-slate-500">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            Loading…
+          </div>
+        ) : (
+          <ul
+            className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200/80 bg-white text-sm"
+            data-testid="list-live-business-data"
+          >
+            {rows.map((provider) => {
+              const Icon = liveProviderIcon(provider.icon);
+              const statusLabel = liveProviderStatusLabel(provider);
+              const connected = provider.status === "connected";
+              const comingSoon = provider.status === "coming_soon";
+              return (
+                <li
+                  key={provider.id}
+                  className="flex items-center gap-3 px-3 py-2.5"
+                  data-testid={`live-provider-${provider.id}`}
+                >
+                  <Icon className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate font-medium text-slate-800">
+                    {provider.name}
+                  </span>
+                  <span
+                    className={cn(
+                      "shrink-0 text-xs font-medium",
+                      connected && "text-emerald-700",
+                      comingSoon && "text-slate-500",
+                      provider.status === "disconnected" && "text-slate-500",
+                      provider.status === "error" && "text-amber-700",
+                    )}
+                  >
+                    {statusLabel}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
 export function BusinessKnowledgeSteps({
   aboutFields,
   questionsStep,
@@ -393,6 +527,7 @@ export function BusinessKnowledgeSteps({
   const [newUrl, setNewUrl] = useState("");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [removingFactId, setRemovingFactId] = useState<string | null>(null);
+  const [liveDataOpen, setLiveDataOpen] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState<{
     source: KnowledgeSource;
     impact: RemovalImpact | null;
@@ -400,6 +535,18 @@ export function BusinessKnowledgeSteps({
 
   const sourcesQuery = useQuery<SourcesResponse>({ queryKey: SOURCES_KEY });
   const factsQuery = useQuery<FactsResponse>({ queryKey: FACTS_KEY });
+  const liveBusinessDataQuery = useQuery<{
+    providers: Array<{
+      id: string;
+      name: string;
+      icon: string;
+      status: "connected" | "disconnected" | "coming_soon" | "error";
+      detail: string | null;
+      capabilities: string[];
+    }>;
+  }>({
+    queryKey: ["/api/ai/live-business-data"],
+  });
 
   const jobQuery = useQuery<ScanJobView>({
     queryKey: ["/api/ai/knowledge/scan", activeJobId],
@@ -740,6 +887,13 @@ export function BusinessKnowledgeSteps({
               </Hint>
             )}
           </div>
+
+          <LiveBusinessDataPanel
+            open={liveDataOpen}
+            onOpenChange={setLiveDataOpen}
+            providers={liveBusinessDataQuery.data?.providers}
+            loading={liveBusinessDataQuery.isLoading}
+          />
         </Step>
 
         <Step

@@ -1676,6 +1676,44 @@ export const businessKnowledgeFacts = pgTable("business_knowledge_facts", {
 
 export type BusinessKnowledgeFactRow = typeof businessKnowledgeFacts.$inferSelect;
 
+/**
+ * Workspace-owned Offers & Payment Links — authoritative structured catalog for AI Brain
+ * Business Packages / Live Business Data. Not derived from website scans.
+ * Tenancy: userId = workspace owner (users.id).
+ */
+export const workspaceOffers = pgTable("workspace_offers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  internalName: text("internal_name").notNull(),
+  displayName: text("display_name").notNull(),
+  description: text("description"),
+  benefits: jsonb("benefits").notNull().default(sql`'[]'::jsonb`),
+  priceDisplay: text("price_display"),
+  /** once | day | week | month | quarter | year | custom */
+  billingCadence: text("billing_cadence").notNull().default("once"),
+  checkoutUrl: text("checkout_url"),
+  followUpUrl: text("follow_up_url"),
+  /** available | limited | waitlist | unavailable */
+  availability: text("availability").notNull().default("available"),
+  active: boolean("active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  category: text("category"),
+  tags: jsonb("tags").notNull().default(sql`'[]'::jsonb`),
+  aiGuidance: text("ai_guidance"),
+  archivedAt: timestamp("archived_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  userActiveSortIdx: index("workspace_offers_user_active_sort_idx").on(
+    t.userId,
+    t.active,
+    t.sortOrder,
+  ),
+  userArchivedIdx: index("workspace_offers_user_archived_idx").on(t.userId, t.archivedAt),
+}));
+
+export type WorkspaceOfferRow = typeof workspaceOffers.$inferSelect;
+
 /** Leased extraction jobs — scanning runs outside the HTTP request. */
 export const aiKnowledgeScanJobs = pgTable("ai_knowledge_scan_jobs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

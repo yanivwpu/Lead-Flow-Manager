@@ -1,6 +1,10 @@
 import { aiProvider } from "./aiProvider";
 import { extractWebsiteKnowledgeSummaryText } from "./websiteKnowledgeSummaryNormalize";
-import { buildTurnGrounding, type TurnGrounding } from "./websiteKnowledge/factContext";
+import {
+  buildTurnGrounding,
+  excludeFactTypesFromGrounding,
+  type TurnGrounding,
+} from "./websiteKnowledge/factContext";
 import {
   assembleDeterministicGroundedDraft,
   FACT_COMPLETENESS_RETRY_INSTRUCTION,
@@ -10,6 +14,12 @@ import {
   type GroundedPromptBlock,
   type GroundingCheck,
 } from "@shared/factGrounding";
+import { resolveLiveBusinessDataDecision } from "@shared/aiLiveBusinessData";
+import {
+  draftContainsCheckoutUrl,
+  PAYMENT_LINK_HUMAN_APPROVAL_REASON,
+} from "@shared/workspaceOffers";
+import { resolveLiveBusinessDataForTurn } from "./aiLiveBusinessData/orchestrate";
 import { storage } from "./storage";
 import { 
   LEAD_INTENT_KEYWORDS, 
@@ -70,7 +80,16 @@ export class AIService {
     },
     routing?: AiRoutingResult,
     channel?: string | null,
-  ): Promise<{ suggestion: string; confidence: number; groundingViolations?: string[] }> {
+  ): Promise<{
+    suggestion: string;
+    confidence: number;
+    groundingViolations?: string[];
+    /** Exact checkout URLs retrieved from structured offers for this turn. */
+    liveCheckoutUrls?: string[];
+    /** True when the draft includes a payment link that must not auto-send. */
+    requiresPaymentLinkApproval?: boolean;
+    paymentLinkApprovalReason?: string;
+  }> {
     const lastMessage = conversationHistory[conversationHistory.length - 1]?.content || "";
 
     // Don't suggest when there is no real conversational context yet.
@@ -88,6 +107,12 @@ export class AIService {
     const detectedLanguage = language || await this.detectMessageLanguage(lastMessage);
     const isFirstMessage = conversationHistory.length <= 2;
 
+    // AI Brain source decision: Knowledge Sources and/or Live Business Data connectors.
+    const liveDecision = resolveLiveBusinessDataDecision({
+      message: lastMessage,
+      subIntents: routing?.subIntents,
+    });
+
     // Published facts are the factual source of truth. When a workspace has none, the
     // block is empty and the V1 prose summary below remains the only business context.
     let grounding: TurnGrounding = {
@@ -95,17 +120,44 @@ export class AIService {
       block: { text: "", factCount: 0, staleFactCount: 0, coveredTypes: [] },
       conflictingKeys: [],
     };
+    if (liveDecision.needsKnowledge) {
+      try {
+        grounding = await buildTurnGrounding({
+          userId,
+          message: lastMessage,
+          knowledgeRow: businessKnowledge,
+          subIntents: routing?.subIntents,
+          freshnessPolicyRaw: (businessKnowledge as any)?.knowledgeFreshnessPolicy,
+        });
+      } catch (err) {
+        console.error(
+          "[AI] fact grounding unavailable",
+          err instanceof Error ? err.message.slice(0, 240) : String(err).slice(0, 240),
+        );
+      }
+    }
+
+    let liveBusinessDataBlock = "";
+    let liveCheckoutUrls: string[] = [];
     try {
-      grounding = await buildTurnGrounding({
+      const live = await resolveLiveBusinessDataForTurn({
         userId,
         message: lastMessage,
-        knowledgeRow: businessKnowledge,
         subIntents: routing?.subIntents,
-        freshnessPolicyRaw: (businessKnowledge as any)?.knowledgeFreshnessPolicy,
+        decision: liveDecision,
       });
+      liveBusinessDataBlock = live.promptBlock;
+      liveCheckoutUrls = live.records
+        .filter((r) => r.providerId === "businessPackages")
+        .map((r) => String((r.data as { checkoutUrl?: string | null }).checkoutUrl || "").trim())
+        .filter((u) => /^https:\/\//i.test(u));
+      // Structured offers win over scanned pricing_plan knowledge rows.
+      if (live.usedBusinessPackages) {
+        grounding = excludeFactTypesFromGrounding(grounding, ["pricing_plan"]);
+      }
     } catch (err) {
-      console.error(
-        "[AI] fact grounding unavailable",
+      console.warn(
+        "[AI] live business data unavailable",
         err instanceof Error ? err.message.slice(0, 240) : String(err).slice(0, 240),
       );
     }
@@ -120,6 +172,7 @@ export class AIService {
       routing,
       channel,
       grounding.block,
+      liveBusinessDataBlock,
     );
 
     const evaluateDraft = (draft: string): GroundingCheck =>
@@ -215,10 +268,20 @@ export class AIService {
         });
       }
 
+      const requiresPaymentLinkApproval = draftContainsCheckoutUrl(
+        suggestion,
+        liveCheckoutUrls,
+      );
+
       return {
         suggestion,
         confidence,
         groundingViolations: groundingCheck.violations.map((v) => v.kind),
+        liveCheckoutUrls,
+        requiresPaymentLinkApproval,
+        paymentLinkApprovalReason: requiresPaymentLinkApproval
+          ? PAYMENT_LINK_HUMAN_APPROVAL_REASON
+          : undefined,
       };
     } catch (error) {
       console.error(
@@ -618,6 +681,7 @@ Return JSON only: { "summary": "..." }`;
     routing?: AiRoutingResult,
     channel?: string | null,
     groundedFacts?: GroundedPromptBlock,
+    liveBusinessDataBlock?: string,
   ): string {
     const langInstruction = language ? LANGUAGE_PROMPTS[language].instruction : LANGUAGE_PROMPTS.en.instruction;
     const industry = (businessKnowledge?.industry || "general").toLowerCase();
@@ -688,6 +752,7 @@ BUSINESS CONTEXT:
 - Location: ${businessKnowledge?.locations || "Available online"}
 - Hours: ${businessKnowledge?.businessHours || "Standard hours"}${bookingContextLine}
 ${groundedFacts && groundedFacts.text ? `\n${groundedFacts.text}\n` : ""}
+${liveBusinessDataBlock && liveBusinessDataBlock.trim() ? `\n${liveBusinessDataBlock.trim()}\n` : ""}
 ${(() => {
   const wk = (businessKnowledge as any)?.websiteKnowledgeSummary as string | undefined | null;
   if (!wk || !String(wk).trim()) return "";

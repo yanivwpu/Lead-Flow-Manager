@@ -102,3 +102,24 @@ export async function buildTurnGrounding(params: {
     conflictingKeys,
   };
 }
+
+/**
+ * Drop specific fact types from a turn's grounding (e.g. prefer Live Business Packages
+ * over scanned pricing_plan rows). Does not mutate Knowledge Sources storage.
+ */
+export function excludeFactTypesFromGrounding(
+  grounding: TurnGrounding,
+  factTypes: readonly string[],
+): TurnGrounding {
+  if (!factTypes.length || grounding.retrieved.length === 0) return grounding;
+  const drop = new Set(factTypes);
+  const retrieved = grounding.retrieved.filter((r) => !drop.has(r.fact.factType));
+  if (retrieved.length === grounding.retrieved.length) return grounding;
+  return {
+    retrieved,
+    block: buildGroundedPromptBlock(retrieved, {
+      conflictingKeys: grounding.conflictingKeys,
+    }),
+    conflictingKeys: grounding.conflictingKeys,
+  };
+}
