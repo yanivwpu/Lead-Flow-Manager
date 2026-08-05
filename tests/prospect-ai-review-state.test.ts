@@ -516,8 +516,8 @@ assert.equal(
     enrichmentStatus: "none",
   });
   assert.equal(noWebsite.ok, false);
-  assert.equal(noWebsite.code, "missing_website");
-  assert.match(noWebsite.message, /No website available to enrich/i);
+  assert.equal(noWebsite.code, "enrichment_unavailable");
+  assert.match(noWebsite.message, /No official website is available/i);
 
   const qualFailed = explainCanEnrichProspect({
     analysisStatus: "failed",

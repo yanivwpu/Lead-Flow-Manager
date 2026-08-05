@@ -30,7 +30,10 @@ import {
 } from "./prospectAiDiscoveryQuality";
 import { userFacingProspectAiReviewError } from "./prospectAiReviewErrors";
 import { readProspectQualificationSource } from "./prospectAutoQualify";
-import { resolveProspectEnrichmentStatusUx } from "./prospectEnrichmentStatusUx";
+import {
+  ENRICHMENT_UNAVAILABLE_DIALOG_REASON,
+  resolveProspectEnrichmentStatusUx,
+} from "./prospectEnrichmentStatusUx";
 
 export type ProspectReviewWorkState =
   | "needs_review"
@@ -383,6 +386,7 @@ export type ProspectEligibilityExplanation = {
     | "needs_review"
     | "already_enriched"
     | "partially_enriched"
+    | "enrichment_unavailable"
     | "email_added"
     | "enrichment_in_progress"
     | "enrichment_failed"
@@ -419,12 +423,13 @@ export function enrichDisabledActionLabel(input: ProspectReviewStateInput): stri
       return "Enrichment Complete";
     case "partially_enriched":
       return "Partially Enriched";
+    case "enrichment_unavailable":
+    case "missing_website":
+      return "Enrichment Unavailable";
     case "email_added":
       return "Email Added";
     case "enrichment_in_progress":
       return "Enriching…";
-    case "missing_website":
-      return "No website";
     case "social_profile_only":
       return "Social profile only";
     case "not_qualified":
@@ -448,13 +453,14 @@ function explainEnrichBlockedByWebsite(input: ProspectReviewStateInput): Prospec
     return {
       ok: false,
       code: "social_profile_only",
-      message: "Social profile only — add an official website to enrich.",
+      message: "Social profile only — add an official business website to enrich.",
     };
   }
+  // Pre-attempt: enrichment never ran — Enrichment Unavailable (not Partially Enriched).
   return {
     ok: false,
-    code: "missing_website",
-    message: "No website available to enrich.",
+    code: "enrichment_unavailable",
+    message: ENRICHMENT_UNAVAILABLE_DIALOG_REASON,
   };
 }
 
@@ -533,22 +539,19 @@ export function explainCanEnrichProspect(
     return { ok: true, code: "retry_available", message: "" };
   }
 
-  // Failed / completed empty without official website.
+  // Failed / completed empty without official website — real attempt finished → Partially Enriched.
   if (
     isProspectEnrichmentFailed(input.enrichmentStatus) ||
     (isProspectEnrichmentComplete(input.enrichmentStatus) && !prospectEnrichmentEmailSatisfied(input))
   ) {
-    if (isProspectEnrichmentComplete(input.enrichmentStatus)) {
-      const enrichUx = resolveProspectEnrichmentStatusUx(input);
-      return {
-        ok: false,
-        code: "partially_enriched",
-        message:
-          enrichUx.unavailableExplanation ||
-          "Enrichment finished, but some sources were unavailable.",
-      };
-    }
-    return explainEnrichBlockedByWebsite(input);
+    const enrichUx = resolveProspectEnrichmentStatusUx(input);
+    return {
+      ok: false,
+      code: "partially_enriched",
+      message:
+        enrichUx.unavailableExplanation ||
+        "Enrichment finished, but some sources were unavailable.",
+    };
   }
 
   if (review === "approved") {

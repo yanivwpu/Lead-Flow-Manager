@@ -1,5 +1,5 @@
 /**
- * Prospect enrichment status presentation — clarifies Complete vs Partial vs Campaign-ready.
+ * Prospect enrichment status presentation — clarifies Complete vs Partial vs Unavailable.
  * Display only; does not change enrichment workers or gates.
  */
 
@@ -7,11 +7,15 @@ import {
   isValidProspectEmail,
   isValidProspectPhone,
 } from "./prospectContactEnrichment";
-import { prospectHasOfficialWebsiteUrl } from "./prospectEnrichmentOutcome";
+import {
+  prospectHasOfficialWebsiteUrl,
+  prospectWebsiteIsSocialOnly,
+} from "./prospectEnrichmentOutcome";
 import {
   isProspectEnrichmentComplete,
   isProspectEnrichmentFailed,
   isProspectEnrichmentInProgress,
+  isProspectQualificationComplete,
 } from "./prospectReviewUx";
 
 export type ProspectEnrichmentChannelId = "phone" | "social" | "website" | "email";
@@ -24,12 +28,14 @@ export type ProspectEnrichmentChannelItem = {
 
 export type ProspectEnrichmentUxStatusCode =
   | "not_run"
+  | "ready_to_enrich"
+  | "enrichment_unavailable"
   | "in_progress"
-  | "failed"
   | "enrichment_complete"
   | "partially_enriched";
 
 export type ProspectEnrichmentStatusUxInput = {
+  analysisStatus?: string | null;
   enrichmentStatus?: string | null;
   enrichmentEmailFound?: boolean | null;
   enrichmentPhoneFound?: boolean | null;
@@ -48,10 +54,20 @@ export type ProspectEnrichmentStatusUx = {
   /** Enrichment finished (completed or failed after an attempt). */
   finished: boolean;
   /**
-   * When enrichment finished but sources were missing — never implies the job is still running.
+   * Compact / dialog explanation — never implies infrastructure failure.
    */
   unavailableExplanation: string | null;
+  /** Short progress-row reason (optional). */
+  compactReason: string | null;
 };
+
+/** List-row compact reason when enrichment cannot start. */
+export const ENRICHMENT_UNAVAILABLE_COMPACT_REASON =
+  "No official website available for enrichment.";
+
+/** Dialog explanation when enrichment cannot start (no prior attempt). */
+export const ENRICHMENT_UNAVAILABLE_DIALOG_REASON =
+  "No official website is available, so enrichment cannot currently run.";
 
 function readSocialFound(enrichmentResult: unknown): boolean {
   if (!enrichmentResult || typeof enrichmentResult !== "object") return false;
@@ -88,7 +104,7 @@ export function formatProspectEnrichmentChannelMarks(
     .join(" · ");
 }
 
-function buildUnavailableExplanation(
+function buildPartialExplanation(
   channels: ProspectEnrichmentChannelItem[],
 ): string | null {
   const missingIds = channels.filter((c) => !c.found).map((c) => c.id);
@@ -115,8 +131,15 @@ function buildUnavailableExplanation(
   return `Enrichment finished, but ${labels.join(" and ")} were unavailable.`;
 }
 
+/** True when an official (non-social) website exists so enrichment can start. */
+export function prospectEnrichmentCanStartFromSources(
+  input: ProspectEnrichmentStatusUxInput,
+): boolean {
+  return prospectHasOfficialWebsiteUrl(input);
+}
+
 /**
- * Distinguishes Enrichment Complete vs Partially Enriched after a finished run.
+ * Distinguishes Ready to Enrich / Enrichment Unavailable / Complete / Partial.
  * Ready for Campaign is a separate campaign-gate status (not returned here).
  */
 export function resolveProspectEnrichmentStatusUx(
@@ -125,6 +148,8 @@ export function resolveProspectEnrichmentStatusUx(
   const channels = resolveProspectEnrichmentChannels(input);
   const emailOk = channels.find((c) => c.id === "email")?.found === true;
   const websiteOk = channels.find((c) => c.id === "website")?.found === true;
+  const enrichment = String(input.enrichmentStatus || "none").toLowerCase();
+  const analysisDone = isProspectQualificationComplete(input.analysisStatus);
 
   if (isProspectEnrichmentInProgress(input.enrichmentStatus)) {
     return {
@@ -133,6 +158,7 @@ export function resolveProspectEnrichmentStatusUx(
       channels,
       finished: false,
       unavailableExplanation: null,
+      compactReason: null,
     };
   }
 
@@ -144,6 +170,7 @@ export function resolveProspectEnrichmentStatusUx(
         channels,
         finished: true,
         unavailableExplanation: null,
+        compactReason: null,
       };
     }
     return {
@@ -151,7 +178,8 @@ export function resolveProspectEnrichmentStatusUx(
       label: "Partially Enriched",
       channels,
       finished: true,
-      unavailableExplanation: buildUnavailableExplanation(channels),
+      unavailableExplanation: buildPartialExplanation(channels),
+      compactReason: null,
     };
   }
 
@@ -161,8 +189,40 @@ export function resolveProspectEnrichmentStatusUx(
       label: "Partially Enriched",
       channels,
       finished: true,
-      unavailableExplanation: buildUnavailableExplanation(channels),
+      unavailableExplanation: buildPartialExplanation(channels),
+      compactReason: null,
     };
+  }
+
+  // enrichmentStatus none / cancelled — no real attempt yet.
+  if (enrichment === "none" || enrichment === "cancelled" || !enrichment) {
+    if (analysisDone) {
+      const canStart = prospectEnrichmentCanStartFromSources(input);
+      if (canStart) {
+        return {
+          code: "ready_to_enrich",
+          label: "Ready to Enrich",
+          channels,
+          finished: false,
+          unavailableExplanation: null,
+          compactReason: null,
+        };
+      }
+      // Social-only or missing official website → unavailable (not Partially Enriched).
+      const socialOnly = prospectWebsiteIsSocialOnly(input);
+      return {
+        code: "enrichment_unavailable",
+        label: "Enrichment Unavailable",
+        channels,
+        finished: false,
+        unavailableExplanation: socialOnly
+          ? "Social profile only — add an official business website to enrich."
+          : ENRICHMENT_UNAVAILABLE_DIALOG_REASON,
+        compactReason: socialOnly
+          ? "Social profile only — official website required."
+          : ENRICHMENT_UNAVAILABLE_COMPACT_REASON,
+      };
+    }
   }
 
   return {
@@ -171,6 +231,7 @@ export function resolveProspectEnrichmentStatusUx(
     channels,
     finished: false,
     unavailableExplanation: null,
+    compactReason: null,
   };
 }
 
@@ -183,6 +244,10 @@ export function prospectEnrichmentTimelineLabel(
       return { full: "Enrichment Complete", short: "Complete" };
     case "partially_enriched":
       return { full: "Partially Enriched", short: "Partial" };
+    case "enrichment_unavailable":
+      return { full: "Enrichment Unavailable", short: "Unavailable" };
+    case "ready_to_enrich":
+      return { full: "Ready to Enrich", short: "Ready" };
     case "in_progress":
       return { full: "Enriching", short: "Enrich" };
     default:

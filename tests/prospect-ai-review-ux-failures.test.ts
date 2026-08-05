@@ -144,9 +144,19 @@ run("progress states are concise", () => {
     resolveProspectProgressState({
       analysisStatus: "completed",
       enrichmentStatus: "none",
-      websiteUrl: "https://x.com",
+      websiteUrl: "https://example-broker.com",
     }).label,
     "Ready to Enrich",
+  );
+  assert.equal(
+    resolveProspectProgressState({
+      analysisStatus: "completed",
+      enrichmentStatus: "none",
+      websiteUrl: null,
+      decision: "qualified",
+      reviewStatus: "approved",
+    }).label,
+    "Enrichment Unavailable",
   );
   // Enrichment + email alone is never Ready for Campaign without a Qualified decision.
   assert.equal(

@@ -231,6 +231,7 @@ export type ProspectProgressStateCode =
   | "needs_review"
   | "not_qualified"
   | "ready_to_enrich"
+  | "enrichment_unavailable"
   | "enriching"
   | "enriched"
   | "partially_enriched"
@@ -245,6 +246,7 @@ export const PROSPECT_PROGRESS_STATE_LABELS: Record<ProspectProgressStateCode, s
   needs_review: "Needs Review",
   not_qualified: "Not Qualified",
   ready_to_enrich: "Ready to Enrich",
+  enrichment_unavailable: "Enrichment Unavailable",
   enriching: "Enriching",
   enriched: "Enrichment Complete",
   partially_enriched: "Partially Enriched",
@@ -289,7 +291,7 @@ export function resolveProspectProgressState(input: {
    */
   aiReviewRetrying?: boolean | null;
   errorMessage?: string | null;
-}): { code: ProspectProgressStateCode; label: string } {
+}): { code: ProspectProgressStateCode; label: string; detail?: string | null } {
   const analysis = String(input.analysisStatus || "pending").toLowerCase();
   const enrichment = String(input.enrichmentStatus || "none").toLowerCase();
   const queue = String(input.queueStatus || "").toLowerCase();
@@ -345,29 +347,37 @@ export function resolveProspectProgressState(input: {
     };
   }
 
-  if (enrichment === "completed" || enrichment === "failed") {
-    const enrichUx = resolveProspectEnrichmentStatusUx({
-      enrichmentStatus: input.enrichmentStatus,
-      enrichmentEmailFound: input.enrichmentEmailFound,
-      enrichmentPhoneFound: input.enrichmentPhoneFound,
-      enrichmentResult: input.enrichmentResult,
-      email: input.email,
-      phone: input.phone,
-      websiteUrl: input.websiteUrl,
-      websiteUrlUsed: input.websiteUrlUsed,
-    });
-    if (enrichUx.code === "partially_enriched") {
-      return {
-        code: "partially_enriched",
-        label: PROSPECT_PROGRESS_STATE_LABELS.partially_enriched,
-      };
-    }
-    if (enrichUx.code === "enrichment_complete") {
-      return { code: "enriched", label: PROSPECT_PROGRESS_STATE_LABELS.enriched };
-    }
-    if (enrichment === "failed") {
-      return { code: "failed", label: PROSPECT_PROGRESS_STATE_LABELS.failed };
-    }
+  const enrichUx = resolveProspectEnrichmentStatusUx({
+    analysisStatus: input.analysisStatus,
+    enrichmentStatus: input.enrichmentStatus,
+    enrichmentEmailFound: input.enrichmentEmailFound,
+    enrichmentPhoneFound: input.enrichmentPhoneFound,
+    enrichmentResult: input.enrichmentResult,
+    email: input.email,
+    phone: input.phone,
+    websiteUrl: input.websiteUrl,
+    websiteUrlUsed: input.websiteUrlUsed,
+  });
+
+  if (enrichUx.code === "partially_enriched") {
+    return {
+      code: "partially_enriched",
+      label: PROSPECT_PROGRESS_STATE_LABELS.partially_enriched,
+      detail: enrichUx.compactReason,
+    };
+  }
+  if (enrichUx.code === "enrichment_complete") {
+    return { code: "enriched", label: PROSPECT_PROGRESS_STATE_LABELS.enriched };
+  }
+  if (enrichUx.code === "enrichment_unavailable") {
+    return {
+      code: "enrichment_unavailable",
+      label: PROSPECT_PROGRESS_STATE_LABELS.enrichment_unavailable,
+      detail: enrichUx.compactReason,
+    };
+  }
+  if (enrichUx.code === "ready_to_enrich") {
+    return { code: "ready_to_enrich", label: PROSPECT_PROGRESS_STATE_LABELS.ready_to_enrich };
   }
 
   // Stale AI analysisStatus=needs_review must not override an explicit Qualified decision.
@@ -375,15 +385,14 @@ export function resolveProspectProgressState(input: {
     return { code: "needs_review", label: PROSPECT_PROGRESS_STATE_LABELS.needs_review };
   }
 
-  const hasWebsite = Boolean(String(input.websiteUrl || "").trim());
-  if (hasWebsite && enrichment === "none") {
-    return { code: "ready_to_enrich", label: PROSPECT_PROGRESS_STATE_LABELS.ready_to_enrich };
-  }
-
   if (!isQualifiedDecision) {
     return { code: "needs_review", label: PROSPECT_PROGRESS_STATE_LABELS.needs_review };
   }
 
-  // Qualified but enrichment not finished — not Ready for Campaign until campaign gate passes.
-  return { code: "ready_to_enrich", label: PROSPECT_PROGRESS_STATE_LABELS.ready_to_enrich };
+  // Qualified but enrichment not started and sources unclear — prefer unavailable over false Ready.
+  return {
+    code: "enrichment_unavailable",
+    label: PROSPECT_PROGRESS_STATE_LABELS.enrichment_unavailable,
+    detail: enrichUx.compactReason,
+  };
 }

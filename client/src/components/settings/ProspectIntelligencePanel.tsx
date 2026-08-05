@@ -228,8 +228,10 @@ function ProspectProgressTimeline({
   const states = resolveProspectTimelineStates(ux);
   const enrichment = String(ux.enrichmentStatus || "none").toLowerCase();
   const enrichUx = resolveProspectEnrichmentStatusUx({
+    analysisStatus: ux.analysisStatus,
     enrichmentStatus: ux.enrichmentStatus,
     enrichmentEmailFound: ux.enrichmentEmailFound,
+    enrichmentPhoneFound: ux.enrichmentPhoneFound,
     enrichmentResult: ux.enrichmentResult,
     email: ux.email,
     phone,
@@ -237,6 +239,8 @@ function ProspectProgressTimeline({
     websiteUrlUsed: ux.websiteUrlUsed,
   });
   const enrichLabels = prospectEnrichmentTimelineLabel(enrichUx);
+  const enrichAmber =
+    enrichUx.code === "partially_enriched" || enrichUx.code === "enrichment_unavailable";
   const legacyEnriched =
     !isProspectEnrichmentComplete(enrichment) &&
     !isProspectEnrichmentFailed(enrichment) &&
@@ -269,39 +273,45 @@ function ProspectProgressTimeline({
             <span
               className={cn(
                 "inline-flex items-center gap-1 text-[10px] font-medium tracking-tight transition-colors duration-300",
-                state === "done" &&
-                  stage.id === "enriched" &&
-                  enrichUx.code === "partially_enriched"
+                state === "done" && stage.id === "enriched" && enrichAmber
                   ? "text-amber-700"
                   : state === "done" && "text-emerald-700",
                 state === "current" && "text-emerald-800",
-                state === "todo" && "text-gray-400",
+                state === "todo" &&
+                  stage.id === "enriched" &&
+                  enrichUx.code === "enrichment_unavailable"
+                  ? "text-amber-700"
+                  : state === "todo" && "text-gray-400",
                 state === "failed" && "text-red-600",
               )}
             >
               <span
                 className={cn(
                   "inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[9px] leading-none",
-                  state === "done" &&
-                    stage.id === "enriched" &&
-                    enrichUx.code === "partially_enriched"
+                  state === "done" && stage.id === "enriched" && enrichAmber
                     ? "bg-amber-500 text-white"
                     : state === "done" && "bg-emerald-600 text-white",
                   state === "current" && "bg-emerald-500 text-white pi-timeline-current",
-                  state === "todo" && "border border-gray-300 bg-white text-gray-300",
+                  state === "todo" &&
+                    stage.id === "enriched" &&
+                    enrichUx.code === "enrichment_unavailable"
+                    ? "border border-amber-300 bg-amber-50 text-amber-700"
+                    : state === "todo" && "border border-gray-300 bg-white text-gray-300",
                   state === "failed" && "bg-red-500 text-white",
                 )}
                 aria-hidden
               >
                 {state === "done"
-                  ? enrichUx.code === "partially_enriched" && stage.id === "enriched"
+                  ? enrichAmber && stage.id === "enriched"
                     ? "~"
                     : "✓"
                   : state === "current"
                     ? "●"
                     : state === "failed"
                       ? "!"
-                      : "○"}
+                      : enrichUx.code === "enrichment_unavailable" && stage.id === "enriched"
+                        ? "–"
+                        : "○"}
               </span>
               <span className="prospect-ai-stage-label-full">{fullLabel}</span>
               <span className="prospect-ai-stage-label-short" aria-hidden>
@@ -1123,6 +1133,7 @@ function ProspectIntelligenceDetailDialog({
             <div data-testid="pi-enrichment-summary">
               {(() => {
                 const enrichUx = resolveProspectEnrichmentStatusUx({
+                  analysisStatus: intel.analysisStatus,
                   enrichmentStatus: intel.enrichmentStatus,
                   enrichmentEmailFound: intel.enrichmentEmailFound,
                   enrichmentPhoneFound: intel.enrichmentPhoneFound,
@@ -1132,18 +1143,29 @@ function ProspectIntelligenceDetailDialog({
                   websiteUrl: item.websiteUrl,
                   websiteUrlUsed: intel.websiteUrlUsed,
                 });
+                const showChannels =
+                  enrichUx.finished ||
+                  enrichUx.code === "in_progress" ||
+                  enrichUx.code === "enrichment_unavailable" ||
+                  enrichUx.code === "ready_to_enrich";
                 return (
                   <>
                     <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
                       Contact enrichment
                     </p>
                     <p
-                      className="mt-0.5 font-medium text-gray-900"
+                      className={cn(
+                        "mt-0.5 font-medium",
+                        enrichUx.code === "enrichment_unavailable" ||
+                          enrichUx.code === "partially_enriched"
+                          ? "text-amber-800"
+                          : "text-gray-900",
+                      )}
                       data-testid="pi-enrichment-status-label"
                     >
                       {enrichUx.label}
                     </p>
-                    {enrichUx.finished || enrichUx.code === "in_progress" ? (
+                    {showChannels ? (
                       <div
                         className="mt-1.5 flex flex-wrap gap-1"
                         data-testid="pi-enrichment-channel-summary"
@@ -1155,7 +1177,7 @@ function ProspectIntelligenceDetailDialog({
                     ) : null}
                     {enrichUx.unavailableExplanation ? (
                       <p
-                        className="mt-1.5 text-xs text-gray-500"
+                        className="mt-1.5 text-xs text-amber-800/90"
                         data-testid="pi-enrichment-unavailable-explanation"
                       >
                         {enrichUx.unavailableExplanation}
@@ -1166,6 +1188,10 @@ function ProspectIntelligenceDetailDialog({
                         data-testid="pi-enrichment-independent-hint"
                       >
                         Contact data found. Qualification is a separate decision.
+                      </p>
+                    ) : enrichUx.code === "ready_to_enrich" ? (
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        Website available — Enrich is separate from Re-run Analysis.
                       </p>
                     ) : (
                       <p className="mt-0.5 text-xs text-gray-500">
@@ -3239,6 +3265,7 @@ export function ProspectIntelligencePanel(props: {
                     <TableCell className="min-w-0 align-top">
                       {(() => {
                         const enrichUx = resolveProspectEnrichmentStatusUx({
+                          analysisStatus: intel.analysisStatus,
                           enrichmentStatus: intel.enrichmentStatus,
                           enrichmentEmailFound: intel.enrichmentEmailFound,
                           enrichmentPhoneFound: intel.enrichmentPhoneFound,
@@ -3248,10 +3275,12 @@ export function ProspectIntelligencePanel(props: {
                           websiteUrl: row.websiteUrl,
                           websiteUrlUsed: intel.websiteUrlUsed,
                         });
-                        // Show channel checklist once enrichment has been attempted (or contact signals exist).
+                        // Show channel checklist once AI/enrichment state is meaningful.
                         if (
                           !enrichUx.finished &&
                           enrichUx.code !== "in_progress" &&
+                          enrichUx.code !== "enrichment_unavailable" &&
+                          enrichUx.code !== "ready_to_enrich" &&
                           !emailFound &&
                           !phoneFound &&
                           !socialFound
@@ -3292,21 +3321,37 @@ export function ProspectIntelligencePanel(props: {
                             readyForCampaign: presentation.campaignReady,
                           });
                           return (
-                            <span
-                              className={cn(
-                                "text-[11px] font-medium",
-                                progress.code === "failed" && "text-red-600",
-                                (progress.code === "reviewing" || progress.code === "enriching") &&
-                                  "text-emerald-800",
-                                progress.code !== "failed" &&
-                                  progress.code !== "reviewing" &&
-                                  progress.code !== "enriching" &&
-                                  "text-gray-700",
-                              )}
-                              data-testid={`pi-progress-state-${progress.code}`}
-                            >
-                              {progress.label}
-                            </span>
+                            <div className="min-w-0">
+                              <span
+                                className={cn(
+                                  "text-[11px] font-medium",
+                                  progress.code === "failed" && "text-red-600",
+                                  (progress.code === "reviewing" ||
+                                    progress.code === "enriching") &&
+                                    "text-emerald-800",
+                                  (progress.code === "enrichment_unavailable" ||
+                                    progress.code === "partially_enriched") &&
+                                    "text-amber-800",
+                                  progress.code !== "failed" &&
+                                    progress.code !== "reviewing" &&
+                                    progress.code !== "enriching" &&
+                                    progress.code !== "enrichment_unavailable" &&
+                                    progress.code !== "partially_enriched" &&
+                                    "text-gray-700",
+                                )}
+                                data-testid={`pi-progress-state-${progress.code}`}
+                              >
+                                {progress.label}
+                              </span>
+                              {progress.detail ? (
+                                <p
+                                  className="mt-0.5 text-[10px] leading-tight text-amber-700/90"
+                                  data-testid="pi-progress-enrichment-detail"
+                                >
+                                  {progress.detail}
+                                </p>
+                              ) : null}
+                            </div>
                           );
                         })()}
                         <ProspectProgressTimeline ux={ux} phone={row.phone} />

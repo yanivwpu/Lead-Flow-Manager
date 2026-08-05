@@ -136,7 +136,8 @@ function baseUx(over: Record<string, unknown> = {}) {
   assert.equal(detail?.code, "no_website");
   assert.match(detail?.reason || "", /No public website found/i);
   assert.equal(isProspectEnrichmentRetryable(none), false);
-  assert.equal(explainCanEnrichProspect(none).code, "missing_website");
+  // Real enrichment attempt finished without website → Partially Enriched (not pre-attempt Unavailable).
+  assert.equal(explainCanEnrichProspect(none).code, "partially_enriched");
 }
 
 {
@@ -158,7 +159,8 @@ function baseUx(over: Record<string, unknown> = {}) {
   });
   assert.equal(resolveProspectEnrichmentOutcomeClass(social), "social_profile_only");
   assert.equal(isProspectEnrichmentRetryable(social), false);
-  assert.equal(explainCanEnrichProspect(social).code, "social_profile_only");
+  // Completed enrichment attempt with social-only URL → Partially Enriched (attempt finished).
+  assert.equal(explainCanEnrichProspect(social).code, "partially_enriched");
   assert.match(
     resolveMissingEmailDetail(social)?.reason || "",
     /social profile/i,
