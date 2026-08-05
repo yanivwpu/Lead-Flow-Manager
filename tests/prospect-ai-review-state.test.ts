@@ -405,7 +405,7 @@ assert.equal(
   });
   assert.equal(noEmail.ok, false);
   assert.equal(noEmail.code, "missing_email");
-  assert.match(noEmail.message, /Email required|Missing email/i);
+  assert.match(noEmail.message, /Email required for Campaign|Missing email/i);
 }
 
 {
@@ -800,7 +800,7 @@ assert.equal(
     firstEnrich: {
       ok: false,
       code: "already_enriched",
-      message: "This prospect is already enriched.",
+      message: "Enrichment is complete for this prospect.",
     },
     firstQualified: { ok: true, code: "ok", message: "" },
   });

@@ -27,7 +27,7 @@ export const PROSPECT_REVIEW_LIFECYCLE_LABELS: Record<ProspectReviewLifecycle, s
   imported: "Imported",
   analyzing: "Analyzing…",
   ready_for_approval: "Ready for Approval",
-  website_intelligence: "Enriched",
+  website_intelligence: "Enrichment",
   campaign_ready: "Campaign Ready",
   queued: "Campaign Queue",
   campaign: "Campaign",
@@ -54,7 +54,7 @@ export const PROSPECT_REVIEW_FILTER_CHIPS: Array<{
 }> = [
   { id: "all", label: "All" },
   { id: "review", label: "Review" },
-  { id: "website_intelligence", label: "Enriched" },
+  { id: "website_intelligence", label: "Enrichment" },
   { id: "campaigns", label: "Campaigns" },
   { id: "inbox", label: "Inbox" },
   { id: "won", label: "Won" },
@@ -91,12 +91,13 @@ export const PROSPECT_CAMPAIGNS_SUB_FILTERS: Array<{
 /**
  * Compact row timeline (primary visual status).
  * Imported is intentionally omitted — presence in the list already implies import.
- * Enriched = Website Intelligence completed (not merely “has a URL”).
+ * Enrichment stage = Website Intelligence finished (not merely “has a URL”).
+ * Labels refine to Enrichment Complete / Partially Enriched in the UI.
  * Campaign = queued / enrolled / sent — not Campaign Ready alone.
  */
 export const PROSPECT_TIMELINE_STAGES = [
   { id: "ai_review", label: "AI Review" },
-  { id: "enriched", label: "Enriched" },
+  { id: "enriched", label: "Enrichment" },
   { id: "campaign", label: "Campaign" },
 ] as const;
 
@@ -485,7 +486,7 @@ export function prospectReviewCompletionFlash(
     return "✓ AI Review complete";
   }
   if (prevLife === "website_intelligence" && nextLife === "campaign_ready") {
-    return "✓ Enriched";
+    return "✓ Enrichment Complete";
   }
   if (prevLife !== "campaign_ready" && nextLife === "campaign_ready") {
     return "✓ Campaign Ready";
@@ -493,7 +494,7 @@ export function prospectReviewCompletionFlash(
   const prevEnrich = String(prev.enrichmentStatus || "").toLowerCase();
   const nextEnrich = String(next.enrichmentStatus || "").toLowerCase();
   if (prevEnrich !== "completed" && nextEnrich === "completed") {
-    return "✓ Enriched";
+    return "✓ Enrichment finished";
   }
   return null;
 }

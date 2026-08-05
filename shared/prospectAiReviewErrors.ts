@@ -3,6 +3,8 @@
  * Technical diagnostics stay for admins/logs; never surface env vars or key material to users.
  */
 
+import { resolveProspectEnrichmentStatusUx } from "./prospectEnrichmentStatusUx";
+
 export type ProspectAiReviewErrorClass =
   | "retryable"
   | "permanent"
@@ -231,6 +233,7 @@ export type ProspectProgressStateCode =
   | "ready_to_enrich"
   | "enriching"
   | "enriched"
+  | "partially_enriched"
   | "ready_for_campaign"
   | "failed"
   | "in_campaign";
@@ -243,7 +246,8 @@ export const PROSPECT_PROGRESS_STATE_LABELS: Record<ProspectProgressStateCode, s
   not_qualified: "Not Qualified",
   ready_to_enrich: "Ready to Enrich",
   enriching: "Enriching",
-  enriched: "Enriched",
+  enriched: "Enrichment Complete",
+  partially_enriched: "Partially Enriched",
   ready_for_campaign: "Ready for Campaign",
   failed: "Failed",
   in_campaign: "In Campaign",
@@ -266,7 +270,12 @@ export function resolveProspectProgressState(input: {
   queueStatus?: string | null;
   outreachStatus?: string | null;
   email?: string | null;
+  phone?: string | null;
   websiteUrl?: string | null;
+  websiteUrlUsed?: string | null;
+  enrichmentEmailFound?: boolean | null;
+  enrichmentPhoneFound?: boolean | null;
+  enrichmentResult?: unknown;
   priorOutreachDetected?: boolean | null;
   /** When set, Ready for Campaign requires a Qualified decision. */
   decision?: "qualified" | "needs_review" | "not_qualified" | null;
@@ -323,9 +332,6 @@ export function resolveProspectProgressState(input: {
   if (enrichment === "pending" || enrichment === "enriching") {
     return { code: "enriching", label: PROSPECT_PROGRESS_STATE_LABELS.enriching };
   }
-  if (enrichment === "failed") {
-    return { code: "failed", label: PROSPECT_PROGRESS_STATE_LABELS.failed };
-  }
 
   const review = String(input.reviewStatus || "pending").toLowerCase();
   const isQualifiedDecision =
@@ -339,8 +345,29 @@ export function resolveProspectProgressState(input: {
     };
   }
 
-  if (enrichment === "completed") {
-    return { code: "enriched", label: PROSPECT_PROGRESS_STATE_LABELS.enriched };
+  if (enrichment === "completed" || enrichment === "failed") {
+    const enrichUx = resolveProspectEnrichmentStatusUx({
+      enrichmentStatus: input.enrichmentStatus,
+      enrichmentEmailFound: input.enrichmentEmailFound,
+      enrichmentPhoneFound: input.enrichmentPhoneFound,
+      enrichmentResult: input.enrichmentResult,
+      email: input.email,
+      phone: input.phone,
+      websiteUrl: input.websiteUrl,
+      websiteUrlUsed: input.websiteUrlUsed,
+    });
+    if (enrichUx.code === "partially_enriched") {
+      return {
+        code: "partially_enriched",
+        label: PROSPECT_PROGRESS_STATE_LABELS.partially_enriched,
+      };
+    }
+    if (enrichUx.code === "enrichment_complete") {
+      return { code: "enriched", label: PROSPECT_PROGRESS_STATE_LABELS.enriched };
+    }
+    if (enrichment === "failed") {
+      return { code: "failed", label: PROSPECT_PROGRESS_STATE_LABELS.failed };
+    }
   }
 
   // Stale AI analysisStatus=needs_review must not override an explicit Qualified decision.
@@ -357,5 +384,6 @@ export function resolveProspectProgressState(input: {
     return { code: "needs_review", label: PROSPECT_PROGRESS_STATE_LABELS.needs_review };
   }
 
-  return { code: "enriched", label: PROSPECT_PROGRESS_STATE_LABELS.enriched };
+  // Qualified but enrichment not finished — not Ready for Campaign until campaign gate passes.
+  return { code: "ready_to_enrich", label: PROSPECT_PROGRESS_STATE_LABELS.ready_to_enrich };
 }

@@ -30,6 +30,7 @@ import {
 } from "./prospectAiDiscoveryQuality";
 import { userFacingProspectAiReviewError } from "./prospectAiReviewErrors";
 import { readProspectQualificationSource } from "./prospectAutoQualify";
+import { resolveProspectEnrichmentStatusUx } from "./prospectEnrichmentStatusUx";
 
 export type ProspectReviewWorkState =
   | "needs_review"
@@ -111,9 +112,11 @@ export type ProspectNeedsReviewBadge = {
 
 export type ProspectReviewStateInput = ProspectReviewUxInput & {
   email?: string | null;
+  phone?: string | null;
   websiteUrl?: string | null;
   websiteUrlUsed?: string | null;
   enrichmentEmailFound?: boolean | null;
+  enrichmentPhoneFound?: boolean | null;
   enrichmentErrorMessage?: string | null;
   enrichmentResult?: Record<string, unknown> | null;
   enrichmentTriggeredBy?: string | null;
@@ -191,7 +194,7 @@ export function resolveProspectNeedsReviewBadgeDetail(
     return "Retry outreach generation before sending to Campaign.";
   }
   if (badge.code === "missing_email") {
-    return "Email required to send to Campaign.";
+    return "Add an email to send to Campaign.";
   }
   if (badge.code === "enrichment_failed" || badge.code === "missing_website") {
     return resolveMissingEmailDetail(input)?.reason ?? null;
@@ -379,6 +382,7 @@ export type ProspectEligibilityExplanation = {
     | "needs_review_decision"
     | "needs_review"
     | "already_enriched"
+    | "partially_enriched"
     | "email_added"
     | "enrichment_in_progress"
     | "enrichment_failed"
@@ -412,7 +416,9 @@ export function enrichDisabledActionLabel(input: ProspectReviewStateInput): stri
   if (ex.ok) return enrichActionLabel(input);
   switch (ex.code) {
     case "already_enriched":
-      return "Enriched";
+      return "Enrichment Complete";
+    case "partially_enriched":
+      return "Partially Enriched";
     case "email_added":
       return "Email Added";
     case "enrichment_in_progress":
@@ -510,10 +516,15 @@ export function explainCanEnrichProspect(
     isProspectEnrichmentComplete(input.enrichmentStatus) &&
     prospectEnrichmentEmailSatisfied(input)
   ) {
+    const enrichUx = resolveProspectEnrichmentStatusUx(input);
     return {
       ok: false,
-      code: "already_enriched",
-      message: "This prospect is already enriched.",
+      code: enrichUx.code === "partially_enriched" ? "partially_enriched" : "already_enriched",
+      message:
+        enrichUx.code === "partially_enriched"
+          ? enrichUx.unavailableExplanation ||
+            "Enrichment finished, but some sources were unavailable."
+          : "Enrichment is complete for this prospect.",
     };
   }
 
@@ -527,6 +538,16 @@ export function explainCanEnrichProspect(
     isProspectEnrichmentFailed(input.enrichmentStatus) ||
     (isProspectEnrichmentComplete(input.enrichmentStatus) && !prospectEnrichmentEmailSatisfied(input))
   ) {
+    if (isProspectEnrichmentComplete(input.enrichmentStatus)) {
+      const enrichUx = resolveProspectEnrichmentStatusUx(input);
+      return {
+        ok: false,
+        code: "partially_enriched",
+        message:
+          enrichUx.unavailableExplanation ||
+          "Enrichment finished, but some sources were unavailable.",
+      };
+    }
     return explainEnrichBlockedByWebsite(input);
   }
 
@@ -540,7 +561,8 @@ export function explainCanEnrichProspect(
       return {
         ok: false,
         code: "email_added",
-        message: "Email already on file — no official website to enrich.",
+        message:
+          "Email is on file. Enrichment could not crawl a website because none was available.",
       };
     }
     // Approved + none/cancelled with website → Enrich once.
@@ -660,7 +682,7 @@ export function listEmailCampaignBlockingReasons(
   if (!prospectHasCampaignContact(input)) {
     blocks.push({
       code: "missing_email",
-      message: "Email required",
+      message: "Email required for Campaign",
     });
   }
 

@@ -65,21 +65,21 @@ assert.equal(isProspectQualificationComplete("needs_review"), true);
 assert.equal(isProspectQualificationComplete("pending"), false);
 assert.equal(isProspectQualificationComplete("failed"), false);
 
-// Timeline is 3 stages: AI Review · Enriched · Campaign (no Imported)
+// Timeline is 3 stages: AI Review · Enrichment · Campaign (no Imported)
 assert.deepEqual(
   PROSPECT_TIMELINE_STAGES.map((s) => s.id),
   ["ai_review", "enriched", "campaign"],
 );
 assert.deepEqual(
   PROSPECT_TIMELINE_STAGES.map((s) => s.label),
-  ["AI Review", "Enriched", "Campaign"],
+  ["AI Review", "Enrichment", "Campaign"],
 );
 assert.ok(!PROSPECT_TIMELINE_STAGES.some((s) => s.id === "imported" || s.label === "Imported"));
 assert.ok(!PROSPECT_TIMELINE_STAGES.some((s) => s.label === "Website"));
-assert.equal(PROSPECT_REVIEW_LIFECYCLE_LABELS.website_intelligence, "Enriched");
+assert.equal(PROSPECT_REVIEW_LIFECYCLE_LABELS.website_intelligence, "Enrichment");
 assert.equal(
   PROSPECT_REVIEW_FILTER_CHIPS.find((c) => c.id === "website_intelligence")?.label,
-  "Enriched",
+  "Enrichment",
 );
 
 // Analyzing → AI Review current; Enriched/Campaign empty
@@ -290,7 +290,7 @@ assert.equal(
       enrichmentStatus: "completed",
     },
   ),
-  "✓ Enriched",
+  "✓ Enrichment Complete",
 );
 
 assert.ok(prospectAiProgressMessage("analysis", "x", 0).length > 5);

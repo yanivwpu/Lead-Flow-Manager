@@ -99,7 +99,7 @@ run("qualified + missing email remains qualified but campaign-blocked", () => {
   assert.equal(isProspectDecisionQualified(ux), true);
   assert.equal(explainQualifiedForCampaign(ux).ok, false);
   assert.equal(explainQualifiedForCampaign(ux).code, "missing_email");
-  assert.match(explainQualifiedForCampaign(ux).message, /Email required/i);
+  assert.match(explainQualifiedForCampaign(ux).message, /Email required for Campaign/i);
   assert.equal(resolveProspectNeedsReviewBadge(ux)?.code, "missing_email");
 });
 

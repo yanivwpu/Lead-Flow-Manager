@@ -133,6 +133,10 @@ import {
   userFacingEnrichmentErrorMessage,
   readEnrichmentFailureClass,
 } from "@shared/prospectEnrichmentOutcome";
+import {
+  prospectEnrichmentTimelineLabel,
+  resolveProspectEnrichmentStatusUx,
+} from "@shared/prospectEnrichmentStatusUx";
 import { useAuth } from "@/lib/auth-context";
 import {
   Collapsible,
@@ -199,6 +203,7 @@ function reviewUxInput(row: ProspectIntelligenceListItem) {
     websiteUrl: row.websiteUrl,
     websiteUrlUsed: row.intelligence.websiteUrlUsed,
     enrichmentEmailFound: row.intelligence.enrichmentEmailFound,
+    enrichmentPhoneFound: row.intelligence.enrichmentPhoneFound,
     enrichmentErrorMessage: row.intelligence.enrichmentErrorMessage,
     enrichmentResult: (row.intelligence.enrichmentResult || null) as Record<string, unknown> | null,
     suggestedFirstMessage: row.intelligence.suggestedFirstMessage,
@@ -212,16 +217,26 @@ function reviewUxInput(row: ProspectIntelligenceListItem) {
   };
 }
 
-const PROSPECT_TIMELINE_SHORT_LABELS: Record<(typeof PROSPECT_TIMELINE_STAGES)[number]["id"], string> = {
-  ai_review: "AI",
-  enriched: "Enr",
-  campaign: "Camp",
-};
-
-function ProspectProgressTimeline({ ux }: { ux: ReturnType<typeof reviewUxInput> }) {
+function ProspectProgressTimeline({
+  ux,
+  phone,
+}: {
+  ux: ReturnType<typeof reviewUxInput>;
+  phone?: string | null;
+}) {
   const life = resolveProspectReviewLifecycle(ux);
   const states = resolveProspectTimelineStates(ux);
   const enrichment = String(ux.enrichmentStatus || "none").toLowerCase();
+  const enrichUx = resolveProspectEnrichmentStatusUx({
+    enrichmentStatus: ux.enrichmentStatus,
+    enrichmentEmailFound: ux.enrichmentEmailFound,
+    enrichmentResult: ux.enrichmentResult,
+    email: ux.email,
+    phone,
+    websiteUrl: ux.websiteUrl,
+    websiteUrlUsed: ux.websiteUrlUsed,
+  });
+  const enrichLabels = prospectEnrichmentTimelineLabel(enrichUx);
   const legacyEnriched =
     !isProspectEnrichmentComplete(enrichment) &&
     !isProspectEnrichmentFailed(enrichment) &&
@@ -232,17 +247,33 @@ function ProspectProgressTimeline({ ux }: { ux: ReturnType<typeof reviewUxInput>
       className={PROSPECT_AI_PROGRESS_TIMELINE_CLASS}
       data-testid={`pi-timeline-${life}`}
       aria-label={`Progress: ${prospectReviewLifecycleLabel(life)}`}
-      title={legacyEnriched ? "Created before Website Intelligence." : undefined}
+      title={
+        legacyEnriched
+          ? "Created before Website Intelligence."
+          : enrichUx.unavailableExplanation || undefined
+      }
     >
       {PROSPECT_TIMELINE_STAGES.map((stage, i) => {
         const state = states[i] as ProspectTimelineStageState;
+        const fullLabel =
+          stage.id === "enriched" ? enrichLabels.full : stage.label;
+        const shortLabel =
+          stage.id === "enriched"
+            ? enrichLabels.short
+            : stage.id === "ai_review"
+              ? "AI"
+              : "Camp";
         return (
           <span key={stage.id} className="inline-flex shrink-0 items-center gap-1">
             {i > 0 ? <span className="text-[10px] text-gray-200 select-none">·</span> : null}
             <span
               className={cn(
                 "inline-flex items-center gap-1 text-[10px] font-medium tracking-tight transition-colors duration-300",
-                state === "done" && "text-emerald-700",
+                state === "done" &&
+                  stage.id === "enriched" &&
+                  enrichUx.code === "partially_enriched"
+                  ? "text-amber-700"
+                  : state === "done" && "text-emerald-700",
                 state === "current" && "text-emerald-800",
                 state === "todo" && "text-gray-400",
                 state === "failed" && "text-red-600",
@@ -251,18 +282,30 @@ function ProspectProgressTimeline({ ux }: { ux: ReturnType<typeof reviewUxInput>
               <span
                 className={cn(
                   "inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[9px] leading-none",
-                  state === "done" && "bg-emerald-600 text-white",
+                  state === "done" &&
+                    stage.id === "enriched" &&
+                    enrichUx.code === "partially_enriched"
+                    ? "bg-amber-500 text-white"
+                    : state === "done" && "bg-emerald-600 text-white",
                   state === "current" && "bg-emerald-500 text-white pi-timeline-current",
                   state === "todo" && "border border-gray-300 bg-white text-gray-300",
                   state === "failed" && "bg-red-500 text-white",
                 )}
                 aria-hidden
               >
-                {state === "done" ? "✓" : state === "current" ? "●" : state === "failed" ? "!" : "○"}
+                {state === "done"
+                  ? enrichUx.code === "partially_enriched" && stage.id === "enriched"
+                    ? "~"
+                    : "✓"
+                  : state === "current"
+                    ? "●"
+                    : state === "failed"
+                      ? "!"
+                      : "○"}
               </span>
-              <span className="prospect-ai-stage-label-full">{stage.label}</span>
+              <span className="prospect-ai-stage-label-full">{fullLabel}</span>
               <span className="prospect-ai-stage-label-short" aria-hidden>
-                {PROSPECT_TIMELINE_SHORT_LABELS[stage.id]}
+                {shortLabel}
               </span>
             </span>
           </span>
@@ -321,10 +364,11 @@ function VerifiedChip({ ok, label }: { ok: boolean; label: string }) {
     <span
       className={cn(
         "inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-medium transition-colors duration-300",
-        ok ? "bg-emerald-50 text-emerald-800" : "bg-gray-50 text-gray-400",
+        ok ? "bg-emerald-50 text-emerald-800" : "bg-rose-50/80 text-rose-700/80",
       )}
+      data-testid={`pi-enrich-channel-${label.toLowerCase()}`}
     >
-      {ok ? "✓" : "○"} {label}
+      {ok ? "✓" : "✕"} {label}
     </span>
   );
 }
@@ -1077,33 +1121,60 @@ function ProspectIntelligenceDetailDialog({
               ) : null}
             </div>
             <div data-testid="pi-enrichment-summary">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
-                Contact enrichment
-              </p>
-              <p className="mt-0.5 font-medium text-gray-900">
-                {String(intel.enrichmentStatus || "").toLowerCase() === "completed"
-                  ? "Complete"
-                  : String(intel.enrichmentStatus || "").toLowerCase() === "failed"
-                    ? "Some info unavailable"
-                    : isProspectEnrichmentInProgress(intel.enrichmentStatus)
-                      ? "In progress"
-                      : "Not run"}
-              </p>
-              {String(intel.enrichmentStatus || "").toLowerCase() === "completed" ||
-              Boolean(String(item.email || "").trim()) ||
-              Boolean(String(item.phone || "").trim()) ? (
-                <p
-                  className="mt-0.5 text-xs text-gray-500"
-                  data-testid="pi-enrichment-independent-hint"
-                  title="Contact data found. Qualification is a separate decision."
-                >
-                  Contact data found. Qualification is a separate decision.
-                </p>
-              ) : (
-                <p className="mt-0.5 text-xs text-gray-500">
-                  Qualification is separate from enrichment.
-                </p>
-              )}
+              {(() => {
+                const enrichUx = resolveProspectEnrichmentStatusUx({
+                  enrichmentStatus: intel.enrichmentStatus,
+                  enrichmentEmailFound: intel.enrichmentEmailFound,
+                  enrichmentPhoneFound: intel.enrichmentPhoneFound,
+                  enrichmentResult: intel.enrichmentResult,
+                  email: item.email,
+                  phone: item.phone,
+                  websiteUrl: item.websiteUrl,
+                  websiteUrlUsed: intel.websiteUrlUsed,
+                });
+                return (
+                  <>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                      Contact enrichment
+                    </p>
+                    <p
+                      className="mt-0.5 font-medium text-gray-900"
+                      data-testid="pi-enrichment-status-label"
+                    >
+                      {enrichUx.label}
+                    </p>
+                    {enrichUx.finished || enrichUx.code === "in_progress" ? (
+                      <div
+                        className="mt-1.5 flex flex-wrap gap-1"
+                        data-testid="pi-enrichment-channel-summary"
+                      >
+                        {enrichUx.channels.map((ch) => (
+                          <VerifiedChip key={ch.id} ok={ch.found} label={ch.label} />
+                        ))}
+                      </div>
+                    ) : null}
+                    {enrichUx.unavailableExplanation ? (
+                      <p
+                        className="mt-1.5 text-xs text-gray-500"
+                        data-testid="pi-enrichment-unavailable-explanation"
+                      >
+                        {enrichUx.unavailableExplanation}
+                      </p>
+                    ) : enrichUx.code === "enrichment_complete" ? (
+                      <p
+                        className="mt-0.5 text-xs text-gray-500"
+                        data-testid="pi-enrichment-independent-hint"
+                      >
+                        Contact data found. Qualification is a separate decision.
+                      </p>
+                    ) : (
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        Qualification is separate from enrichment.
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
 
@@ -3167,15 +3238,33 @@ export function ProspectIntelligencePanel(props: {
                     </TableCell>
                     <TableCell className="min-w-0 align-top">
                       {(() => {
-                        const signals: Array<{ ok: boolean; label: string }> = [];
-                        if (emailFound) signals.push({ ok: true, label: "Email" });
-                        if (phoneFound) signals.push({ ok: true, label: "Phone" });
-                        if (socialFound) signals.push({ ok: true, label: "Social" });
-                        if (signals.length === 0) return null;
+                        const enrichUx = resolveProspectEnrichmentStatusUx({
+                          enrichmentStatus: intel.enrichmentStatus,
+                          enrichmentEmailFound: intel.enrichmentEmailFound,
+                          enrichmentPhoneFound: intel.enrichmentPhoneFound,
+                          enrichmentResult: intel.enrichmentResult,
+                          email: row.email,
+                          phone: row.phone,
+                          websiteUrl: row.websiteUrl,
+                          websiteUrlUsed: intel.websiteUrlUsed,
+                        });
+                        // Show channel checklist once enrichment has been attempted (or contact signals exist).
+                        if (
+                          !enrichUx.finished &&
+                          enrichUx.code !== "in_progress" &&
+                          !emailFound &&
+                          !phoneFound &&
+                          !socialFound
+                        ) {
+                          return null;
+                        }
                         return (
-                          <div className="flex flex-col gap-0.5">
-                            {signals.map((s) => (
-                              <VerifiedChip key={s.label} ok={s.ok} label={s.label} />
+                          <div
+                            className="flex flex-col gap-0.5"
+                            data-testid={`pi-row-enrich-channels-${row.contactId}`}
+                          >
+                            {enrichUx.channels.map((s) => (
+                              <VerifiedChip key={s.id} ok={s.found} label={s.label} />
                             ))}
                           </div>
                         );
@@ -3191,7 +3280,12 @@ export function ProspectIntelligencePanel(props: {
                             queueStatus: row.queueStatus,
                             outreachStatus: intel.outreachStatus,
                             email: row.email,
+                            phone: row.phone,
                             websiteUrl: row.websiteUrl,
+                            websiteUrlUsed: intel.websiteUrlUsed,
+                            enrichmentEmailFound: intel.enrichmentEmailFound,
+                            enrichmentPhoneFound: intel.enrichmentPhoneFound,
+                            enrichmentResult: intel.enrichmentResult,
                             priorOutreachDetected: row.priorOutreachDetected,
                             decision: presentation.decision,
                             notQualified: ux.notQualified === true,
@@ -3215,7 +3309,7 @@ export function ProspectIntelligencePanel(props: {
                             </span>
                           );
                         })()}
-                        <ProspectProgressTimeline ux={ux} />
+                        <ProspectProgressTimeline ux={ux} phone={row.phone} />
                         {showActivity && (analyzing || enriching) ? (
                           <AiPersonalityStatusView
                             status={personality}

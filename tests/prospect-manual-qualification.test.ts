@@ -176,7 +176,7 @@ const root = join(import.meta.dirname, "..");
   assert.match(explainCanEnrichProspect(ux).message, /Mark as Qualified/i);
 }
 
-// True website enrichment shows Enriched; manual email alone does not
+// True website enrichment shows Enrichment Complete; manual email alone does not
 {
   assert.equal(
     enrichDisabledActionLabel({
@@ -189,7 +189,7 @@ const root = join(import.meta.dirname, "..");
       websiteUrl: "https://example.com",
       websiteUrlUsed: "https://example.com",
     }),
-    "Enriched",
+    "Enrichment Complete",
   );
   assert.equal(
     enrichDisabledActionLabel({

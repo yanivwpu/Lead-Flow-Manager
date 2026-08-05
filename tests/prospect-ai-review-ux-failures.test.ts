@@ -154,8 +154,9 @@ run("progress states are concise", () => {
       analysisStatus: "completed",
       enrichmentStatus: "completed",
       email: "a@b.com",
+      websiteUrl: "https://example.com",
     }).label,
-    "Enriched",
+    "Enrichment Complete",
   );
   assert.equal(
     resolveProspectProgressState({
