@@ -103,7 +103,17 @@ export const PROSPECT_TIMELINE_STAGES = [
 
 export type ProspectTimelineStageId = (typeof PROSPECT_TIMELINE_STAGES)[number]["id"];
 
-export type ProspectTimelineStageState = "done" | "current" | "todo" | "failed";
+/**
+ * Timeline stage visual state.
+ * `attention` = amber (partial / unavailable / soft enrichment outcomes).
+ * `failed` = red (real processing failure only — e.g. AI Review failed).
+ */
+export type ProspectTimelineStageState =
+  | "done"
+  | "current"
+  | "todo"
+  | "attention"
+  | "failed";
 
 export type ProspectReviewUxInput = {
   analysisStatus?: string | null;
@@ -324,7 +334,8 @@ export function resolveProspectTimelineStates(
 
   let enriched: ProspectTimelineStageState;
   if (isProspectEnrichmentFailed(enrichment)) {
-    enriched = "failed";
+    // Soft / missing-data enrichment outcomes — amber attention, never red failure.
+    enriched = "attention";
   } else if (isProspectEnrichmentComplete(enrichment)) {
     enriched = "done";
   } else if (isProspectEnrichmentInProgress(enrichment)) {

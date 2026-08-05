@@ -145,14 +145,14 @@ assert.equal(
   "campaign_ready",
 );
 
-// Failed enrichment → failed Enriched; Campaign not active
+// Failed enrichment (missing-data soft outcome) → amber attention, never red failed
 assert.deepEqual(
   resolveProspectTimelineStates({
     analysisStatus: "completed",
     reviewStatus: "approved",
     enrichmentStatus: "failed",
   }),
-  ["done", "failed", "todo"],
+  ["done", "attention", "todo"],
 );
 
 // Campaign Ready must NOT activate Campaign

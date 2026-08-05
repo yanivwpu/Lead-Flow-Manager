@@ -137,6 +137,17 @@ import {
   prospectEnrichmentTimelineLabel,
   resolveProspectEnrichmentStatusUx,
 } from "@shared/prospectEnrichmentStatusUx";
+import {
+  PROSPECT_STATUS_TONE_CLASSES,
+  prospectToneBadgeClass,
+  prospectToneChipClass,
+  prospectToneTextClass,
+  resolveProspectChannelChipTone,
+  resolveProspectEnrichmentUxTone,
+  resolveProspectNeedsReviewBadgeTone,
+  resolveProspectProgressTone,
+  resolveProspectTimelineStageTone,
+} from "@shared/prospectStatusTone";
 import { useAuth } from "@/lib/auth-context";
 import {
   Collapsible,
@@ -239,8 +250,7 @@ function ProspectProgressTimeline({
     websiteUrlUsed: ux.websiteUrlUsed,
   });
   const enrichLabels = prospectEnrichmentTimelineLabel(enrichUx);
-  const enrichAmber =
-    enrichUx.code === "partially_enriched" || enrichUx.code === "enrichment_unavailable";
+  const enrichTone = resolveProspectEnrichmentUxTone(enrichUx.code);
   const legacyEnriched =
     !isProspectEnrichmentComplete(enrichment) &&
     !isProspectEnrichmentFailed(enrichment) &&
@@ -258,7 +268,25 @@ function ProspectProgressTimeline({
       }
     >
       {PROSPECT_TIMELINE_STAGES.map((stage, i) => {
-        const state = states[i] as ProspectTimelineStageState;
+        let state = states[i] as ProspectTimelineStageState;
+        // Align enrichment stage with shared enrich UX tone (partial/unavailable → attention, never red).
+        if (stage.id === "enriched") {
+          if (
+            enrichUx.code === "partially_enriched" ||
+            enrichUx.code === "enrichment_unavailable"
+          ) {
+            state = "attention";
+          } else if (enrichUx.code === "enrichment_complete") {
+            state = "done";
+          } else if (enrichUx.code === "ready_to_enrich" || enrichUx.code === "in_progress") {
+            state = enrichUx.code === "in_progress" ? "current" : state;
+          }
+        }
+        const tone =
+          stage.id === "enriched" && enrichTone === "warning"
+            ? "warning"
+            : resolveProspectTimelineStageTone(state);
+        const toneCls = PROSPECT_STATUS_TONE_CLASSES[tone];
         const fullLabel =
           stage.id === "enriched" ? enrichLabels.full : stage.label;
         const shortLabel =
@@ -267,51 +295,42 @@ function ProspectProgressTimeline({
             : stage.id === "ai_review"
               ? "AI"
               : "Camp";
+        const mark =
+          state === "done"
+            ? "✓"
+            : state === "attention"
+              ? enrichUx.code === "enrichment_unavailable"
+                ? "–"
+                : "~"
+              : state === "current"
+                ? "●"
+                : state === "failed"
+                  ? "!"
+                  : "○";
         return (
           <span key={stage.id} className="inline-flex shrink-0 items-center gap-1">
             {i > 0 ? <span className="text-[10px] text-gray-200 select-none">·</span> : null}
             <span
               className={cn(
                 "inline-flex items-center gap-1 text-[10px] font-medium tracking-tight transition-colors duration-300",
-                state === "done" && stage.id === "enriched" && enrichAmber
-                  ? "text-amber-700"
-                  : state === "done" && "text-emerald-700",
-                state === "current" && "text-emerald-800",
-                state === "todo" &&
-                  stage.id === "enriched" &&
-                  enrichUx.code === "enrichment_unavailable"
-                  ? "text-amber-700"
-                  : state === "todo" && "text-gray-400",
-                state === "failed" && "text-red-600",
+                toneCls.text,
               )}
+              data-testid={
+                stage.id === "enriched" ? `pi-timeline-enrich-tone-${tone}` : undefined
+              }
             >
               <span
                 className={cn(
                   "inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[9px] leading-none",
-                  state === "done" && stage.id === "enriched" && enrichAmber
-                    ? "bg-amber-500 text-white"
-                    : state === "done" && "bg-emerald-600 text-white",
-                  state === "current" && "bg-emerald-500 text-white pi-timeline-current",
-                  state === "todo" &&
-                    stage.id === "enriched" &&
-                    enrichUx.code === "enrichment_unavailable"
-                    ? "border border-amber-300 bg-amber-50 text-amber-700"
-                    : state === "todo" && "border border-gray-300 bg-white text-gray-300",
-                  state === "failed" && "bg-red-500 text-white",
+                  state === "todo" ||
+                    (state === "attention" && enrichUx.code === "enrichment_unavailable")
+                    ? cn("border", toneCls.border, toneCls.bg, toneCls.text)
+                    : toneCls.iconBg,
+                  state === "current" && "pi-timeline-current",
                 )}
                 aria-hidden
               >
-                {state === "done"
-                  ? enrichAmber && stage.id === "enriched"
-                    ? "~"
-                    : "✓"
-                  : state === "current"
-                    ? "●"
-                    : state === "failed"
-                      ? "!"
-                      : enrichUx.code === "enrichment_unavailable" && stage.id === "enriched"
-                        ? "–"
-                        : "○"}
+                {mark}
               </span>
               <span className="prospect-ai-stage-label-full">{fullLabel}</span>
               <span className="prospect-ai-stage-label-short" aria-hidden>
@@ -370,13 +389,15 @@ function ProspectWebsiteGlobeIcon({
 }
 
 function VerifiedChip({ ok, label }: { ok: boolean; label: string }) {
+  const tone = resolveProspectChannelChipTone(ok);
   return (
     <span
       className={cn(
         "inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-medium transition-colors duration-300",
-        ok ? "bg-emerald-50 text-emerald-800" : "bg-rose-50/80 text-rose-700/80",
+        prospectToneChipClass(tone),
       )}
       data-testid={`pi-enrich-channel-${label.toLowerCase()}`}
+      data-tone={tone}
     >
       {ok ? "✓" : "✕"} {label}
     </span>
@@ -390,23 +411,15 @@ function NeedsReviewReasonBadge({
   badge: ProspectNeedsReviewBadge;
   detail?: string | null;
 }) {
-  const tone =
-    badge.code === "qualified"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-      : badge.code === "enriching" || badge.code === "analyzing"
-        ? "border-sky-200 bg-sky-50 text-sky-800"
-        : badge.code === "ai_review_failed" || badge.code === "enrichment_failed"
-          ? "border-rose-200 bg-rose-50 text-rose-800"
-          : badge.code === "not_qualified"
-            ? "border-gray-200 bg-gray-50 text-gray-600"
-            : "border-amber-200 bg-amber-50 text-amber-900";
+  const tone = resolveProspectNeedsReviewBadgeTone(badge.code);
   const title = detail ? `${badge.label}: ${detail}` : badge.label;
   return (
     <span className="mt-1 inline-flex max-w-full flex-col gap-0.5" title={title}>
       <Badge
         variant="outline"
-        className={cn("w-fit px-1.5 py-0 text-[10px] font-medium", tone)}
+        className={cn("w-fit px-1.5 py-0 text-[10px] font-medium", prospectToneBadgeClass(tone))}
         data-testid={`pi-needs-review-badge-${badge.code}`}
+        data-tone={tone}
       >
         {badge.label}
       </Badge>
@@ -1156,12 +1169,13 @@ function ProspectIntelligenceDetailDialog({
                     <p
                       className={cn(
                         "mt-0.5 font-medium",
-                        enrichUx.code === "enrichment_unavailable" ||
-                          enrichUx.code === "partially_enriched"
-                          ? "text-amber-800"
-                          : "text-gray-900",
+                        prospectToneTextClass(
+                          resolveProspectEnrichmentUxTone(enrichUx.code),
+                          true,
+                        ),
                       )}
                       data-testid="pi-enrichment-status-label"
+                      data-tone={resolveProspectEnrichmentUxTone(enrichUx.code)}
                     >
                       {enrichUx.label}
                     </p>
@@ -1177,7 +1191,13 @@ function ProspectIntelligenceDetailDialog({
                     ) : null}
                     {enrichUx.unavailableExplanation ? (
                       <p
-                        className="mt-1.5 text-xs text-amber-800/90"
+                        className={cn(
+                          "mt-1.5 text-xs",
+                          prospectToneTextClass(
+                            resolveProspectEnrichmentUxTone(enrichUx.code),
+                            true,
+                          ),
+                        )}
                         data-testid="pi-enrichment-unavailable-explanation"
                       >
                         {enrichUx.unavailableExplanation}
@@ -3320,32 +3340,25 @@ export function ProspectIntelligencePanel(props: {
                             notQualified: ux.notQualified === true,
                             readyForCampaign: presentation.campaignReady,
                           });
+                          const progressTone = resolveProspectProgressTone(progress.code);
                           return (
                             <div className="min-w-0">
                               <span
                                 className={cn(
                                   "text-[11px] font-medium",
-                                  progress.code === "failed" && "text-red-600",
-                                  (progress.code === "reviewing" ||
-                                    progress.code === "enriching") &&
-                                    "text-emerald-800",
-                                  (progress.code === "enrichment_unavailable" ||
-                                    progress.code === "partially_enriched") &&
-                                    "text-amber-800",
-                                  progress.code !== "failed" &&
-                                    progress.code !== "reviewing" &&
-                                    progress.code !== "enriching" &&
-                                    progress.code !== "enrichment_unavailable" &&
-                                    progress.code !== "partially_enriched" &&
-                                    "text-gray-700",
+                                  prospectToneTextClass(progressTone, true),
                                 )}
                                 data-testid={`pi-progress-state-${progress.code}`}
+                                data-tone={progressTone}
                               >
                                 {progress.label}
                               </span>
                               {progress.detail ? (
                                 <p
-                                  className="mt-0.5 text-[10px] leading-tight text-amber-700/90"
+                                  className={cn(
+                                    "mt-0.5 text-[10px] leading-tight",
+                                    prospectToneTextClass(progressTone),
+                                  )}
                                   data-testid="pi-progress-enrichment-detail"
                                 >
                                   {progress.detail}

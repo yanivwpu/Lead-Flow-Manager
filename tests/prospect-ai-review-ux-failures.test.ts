@@ -131,7 +131,7 @@ run("independent jobs: AI complete + enrichment failed is expected", () => {
       analysisStatus: "completed",
       enrichmentStatus: "failed",
     }),
-    ["done", "failed", "todo"],
+    ["done", "attention", "todo"],
   );
 });
 
