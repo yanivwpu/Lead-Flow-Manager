@@ -146,8 +146,10 @@ export async function loadProspectAiWorkspaceContext(
 
   try {
     const { getOutreachSettings } = await import("./prospectOutreachQueueService");
+    const { toOutreachInstructions } = await import("@shared/prospectMessageCreation");
     const settings = await getOutreachSettings(workspaceUserId);
-    context.outreachInstructions = settings.outreachInstructions;
+    // AI Compose prompt layer uses instruction fields only (mode/templates handled elsewhere).
+    context.outreachInstructions = toOutreachInstructions(settings.outreachInstructions);
   } catch {
     context.outreachInstructions = null;
   }

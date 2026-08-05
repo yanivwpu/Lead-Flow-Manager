@@ -4,8 +4,8 @@
  */
 
 import { prospectSuppressionDetailLabel } from "./prospectEmailSuppression";
-import type { ProspectOutreachInstructions } from "./prospectOutreachInstructions";
-import { PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS } from "./prospectOutreachInstructions";
+import type { ProspectMessageCreationSettings } from "./prospectMessageCreation";
+import { PROSPECT_MESSAGE_CREATION_DEFAULTS } from "./prospectMessageCreation";
 
 export const PROSPECT_OUTREACH_CHANNELS = [
   "email",
@@ -73,7 +73,7 @@ export const PROSPECT_OUTREACH_DEFAULT_SETTINGS = {
    */
   queueRunning: false,
   paused: false,
-  outreachInstructions: PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
+  outreachInstructions: PROSPECT_MESSAGE_CREATION_DEFAULTS,
   outreachInstructionsConfigured: false,
 } as const;
 
@@ -86,9 +86,9 @@ export type ProspectOutreachWorkspaceSettings = {
   /** Explicit Start arm — default false. */
   queueRunning: boolean;
   paused: boolean;
-  /** Campaign Outreach Instructions (AI Growth Assistant). */
-  outreachInstructions: ProspectOutreachInstructions;
-  /** True after the workspace has saved instructions at least once. */
+  /** Message Creation settings (AI Compose / templates). */
+  outreachInstructions: ProspectMessageCreationSettings;
+  /** True when Message Creation is configured for the active mode. */
   outreachInstructionsConfigured: boolean;
   updatedAt?: string;
 };

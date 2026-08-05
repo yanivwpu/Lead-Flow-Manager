@@ -27,7 +27,7 @@ import type {
   ProspectOutreachQueueItemSummary,
   ProspectOutreachWorkspaceSettings,
 } from "@shared/prospectBulkOutreach";
-import type { ProspectOutreachInstructions } from "@shared/prospectOutreachInstructions";
+import type { ProspectMessageCreationSettings } from "@shared/prospectMessageCreation";
 import {
   formatProspectCampaignBatchSummary,
   formatProspectCampaignBatchTitle,
@@ -68,7 +68,7 @@ import {
 } from "@/components/settings/CampaignSendCountdown";
 import { CampaignQueueDraftDialog } from "@/components/settings/CampaignQueueDraftDialog";
 import { AiGrowthAssistantCard } from "@/components/prospectAi/AiGrowthAssistantCard";
-import { OutreachInstructionsModal } from "@/components/prospectAi/OutreachInstructionsModal";
+import { MessageCreationModal } from "@/components/prospectAi/MessageCreationModal";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -285,7 +285,7 @@ export function ProspectOutreachQueuePanel({
   });
 
   const saveInstructionsMutation = useMutation({
-    mutationFn: (outreachInstructions: ProspectOutreachInstructions) =>
+    mutationFn: (outreachInstructions: ProspectMessageCreationSettings) =>
       fetchJson<{ settings: ProspectOutreachWorkspaceSettings }>(
         "/api/growth-tools/prospect-outreach/settings",
         {
@@ -294,17 +294,23 @@ export function ProspectOutreachQueuePanel({
           body: JSON.stringify({ outreachInstructions }),
         },
       ),
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
+      const mode = vars.mode;
       toast({
-        title: "Campaign AI guidance saved",
-        description: "Existing personalized drafts were rewritten to match your instructions.",
+        title: "Message Creation saved",
+        description:
+          mode === "use_my_template"
+            ? "Queued drafts were re-merged from your template (no AI rewrite)."
+            : mode === "ai_assisted_template"
+              ? "Queued drafts were refreshed — only AI placeholders were generated."
+              : "Existing personalized drafts were rewritten to match AI Compose settings.",
       });
       setInstructionsOpen(false);
       invalidate();
     },
     onError: (err: Error) => {
       toast({
-        title: "Could not save instructions",
+        title: "Could not save Message Creation",
         description: err.message,
         variant: "destructive",
       });
@@ -672,7 +678,7 @@ export function ProspectOutreachQueuePanel({
             {settings?.outreachInstructionsConfigured === true ? (
               <>
                 <p className="text-[11px] font-semibold text-violet-950">
-                  ✓ Outreach Instructions Set
+                  ✓ Message Creation Set
                 </p>
                 <Button
                   type="button"
@@ -687,9 +693,9 @@ export function ProspectOutreachQueuePanel({
               </>
             ) : (
               <>
-                <p className="text-[11px] font-semibold text-violet-950">Outreach Instructions</p>
+                <p className="text-[11px] font-semibold text-violet-950">Message Creation</p>
                 <p className="mt-0.5 text-[10px] leading-snug text-violet-900/70">
-                  Guide how AI writes subjects and messages
+                  AI Compose, your template, or AI-assisted placeholders
                 </p>
                 <Button
                   type="button"
@@ -707,7 +713,7 @@ export function ProspectOutreachQueuePanel({
         }
       />
 
-      <OutreachInstructionsModal
+      <MessageCreationModal
         open={instructionsOpen}
         onOpenChange={setInstructionsOpen}
         initial={settings?.outreachInstructions}

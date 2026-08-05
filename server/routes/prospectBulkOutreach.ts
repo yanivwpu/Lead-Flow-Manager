@@ -326,6 +326,40 @@ export function registerProspectBulkOutreachRoutes(app: Express): void {
     },
   );
 
+  /** Preview rendered Message Creation output for one prospect (does not enqueue). */
+  app.post(
+    "/api/growth-tools/prospect-outreach/preview-message",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const workspaceUserId = await workspaceFromReq(req);
+        const contactId = String(req.body?.contactId || "").trim();
+        if (!contactId) {
+          res.status(400).json({ error: "contactId is required" });
+          return;
+        }
+        const { previewProspectOutreachMessage } = await import(
+          "../prospectImport/prospectMessageGenerationService"
+        );
+        const { parseMessageCreationSettings } = await import("@shared/prospectMessageCreation");
+        const draftSettings =
+          req.body?.outreachInstructions != null
+            ? parseMessageCreationSettings(req.body.outreachInstructions)
+            : null;
+        const preview = await previewProspectOutreachMessage({
+          workspaceUserId,
+          contactId,
+          settings: draftSettings,
+        });
+        res.json({ preview });
+      } catch (err) {
+        res.status(400).json({
+          error: err instanceof Error ? err.message : "Preview failed",
+        });
+      }
+    },
+  );
+
   app.post(
     "/api/growth-tools/prospect-outreach/queue/bulk-remove",
     requireProspectImportAccess,

@@ -223,20 +223,22 @@ run("Campaign AI Assistant Configure vs Edit wiring", () => {
   );
   assert.ok(panel.includes("pi-outreach-instructions-configure"));
   assert.ok(panel.includes("pi-outreach-instructions-edit"));
-  assert.ok(panel.includes("Outreach Instructions Set"));
-  assert.ok(panel.includes("OutreachInstructionsModal"));
+  assert.ok(panel.includes("Message Creation Set"));
+  assert.ok(panel.includes("MessageCreationModal"));
   assert.ok(!panel.includes("Discover"));
 });
 
 run("modal exposes language + optional link controls", () => {
   const modal = readFileSync(
-    join(process.cwd(), "client/src/components/prospectAi/OutreachInstructionsModal.tsx"),
+    join(process.cwd(), "client/src/components/prospectAi/MessageCreationModal.tsx"),
     "utf8",
   );
   assert.ok(modal.includes("pi-outreach-language"));
   assert.ok(modal.includes("pi-outreach-link-url"));
   assert.ok(modal.includes("pi-outreach-include-link"));
   assert.ok(modal.includes("validateOutreachLinkUrl"));
+  assert.ok(modal.includes("Message Creation"));
+  assert.ok(modal.includes("pi-message-creation-mode-picker") || modal.includes("MessageCreationModePicker"));
 });
 
 run("Review detail exposes editable Email Subject", () => {
@@ -264,9 +266,9 @@ run("changing campaign instructions rewrites queued drafts via writing-standard 
     join(process.cwd(), "server/prospectImport/prospectOutreachQueueService.ts"),
     "utf8",
   );
-  assert.ok(queue.includes("normalizeOutreachInstructionsForSave"));
-  // Saving Campaign Instructions rewrites queued/paused drafts (preserves Platform Writing Standard).
-  assert.ok(queue.includes("rewriteQueuedOutreachDrafts"));
+  assert.ok(queue.includes("normalizeMessageCreationForSave"));
+  // Saving Message Creation refreshes queued/paused drafts by mode (AI rewrite / merge / AI slots).
+  assert.ok(queue.includes("refreshQueuedDraftsForMessageCreation"));
 });
 
 run("missing-email prospect remains non-sendable", () => {

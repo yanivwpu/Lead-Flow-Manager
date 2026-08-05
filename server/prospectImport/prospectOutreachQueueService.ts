@@ -58,12 +58,13 @@ import {
   shouldGloballyPauseProspectCampaign,
 } from "@shared/prospectOutreachFailureScope";
 import {
-  isOutreachInstructionsConfigured,
-  normalizeOutreachInstructionsForSave,
-  parseOutreachInstructions,
-  PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS,
-  resolveProspectOutreachSubject,
-} from "@shared/prospectOutreachInstructions";
+  isMessageCreationConfigured,
+  normalizeMessageCreationForSave,
+  parseMessageCreationSettings,
+  PROSPECT_MESSAGE_CREATION_DEFAULTS,
+  messageCreationUsesTemplate,
+} from "@shared/prospectMessageCreation";
+import { resolveProspectOutreachSubject } from "@shared/prospectOutreachInstructions";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
 import { resolveProspectImportDestinationUserId } from "./prospectImportService";
@@ -107,7 +108,7 @@ function mapSettings(
       hourlySendLimit: PROSPECT_OUTREACH_DEFAULT_SETTINGS.hourlySendLimit,
       queueRunning: PROSPECT_OUTREACH_DEFAULT_SETTINGS.queueRunning,
       paused: PROSPECT_OUTREACH_DEFAULT_SETTINGS.paused,
-      outreachInstructions: { ...PROSPECT_OUTREACH_INSTRUCTIONS_DEFAULTS },
+      outreachInstructions: { ...PROSPECT_MESSAGE_CREATION_DEFAULTS },
       outreachInstructionsConfigured: false,
     };
   }
@@ -120,8 +121,8 @@ function mapSettings(
     hourlySendLimit: row.hourlySendLimit,
     queueRunning: row.queueRunning ?? false,
     paused: row.paused,
-    outreachInstructions: parseOutreachInstructions(rawInstructions),
-    outreachInstructionsConfigured: isOutreachInstructionsConfigured(rawInstructions),
+    outreachInstructions: parseMessageCreationSettings(rawInstructions),
+    outreachInstructionsConfigured: isMessageCreationConfigured(rawInstructions),
     updatedAt: row.updatedAt?.toISOString(),
   };
 }
@@ -210,7 +211,7 @@ export async function updateOutreachSettings(
 
   const shouldPersistInstructions = patch.outreachInstructions !== undefined;
   const nextInstructions = shouldPersistInstructions
-    ? normalizeOutreachInstructionsForSave(patch.outreachInstructions)
+    ? normalizeMessageCreationForSave(patch.outreachInstructions)
     : current.outreachInstructions;
 
   await db
@@ -230,17 +231,19 @@ export async function updateOutreachSettings(
       },
     });
 
-  // Campaign AI Instructions are a rewrite layer over existing personalized drafts.
+  // Refresh queued drafts according to Message Creation mode (AI rewrite / merge / AI slots).
   if (shouldPersistInstructions) {
     try {
-      const { rewriteQueuedOutreachDrafts } = await import("./prospectOutreachDraftRewriteService");
-      await rewriteQueuedOutreachDrafts({
+      const { refreshQueuedDraftsForMessageCreation } = await import(
+        "./prospectMessageGenerationService"
+      );
+      await refreshQueuedDraftsForMessageCreation({
         workspaceUserId,
-        instructions: nextInstructions,
+        settings: nextInstructions,
       });
     } catch (err) {
       console.error(
-        "[ProspectBulkOutreach] draft rewrite after instructions save failed:",
+        "[ProspectBulkOutreach] draft refresh after Message Creation save failed:",
         err instanceof Error ? err.message : err,
       );
     }
@@ -250,7 +253,7 @@ export async function updateOutreachSettings(
     ...nextCore,
     outreachInstructions: nextInstructions,
     outreachInstructionsConfigured: shouldPersistInstructions
-      ? true
+      ? isMessageCreationConfigured(nextInstructions)
       : current.outreachInstructionsConfigured,
     updatedAt: new Date().toISOString(),
   };
@@ -523,7 +526,29 @@ export async function createQueueBatch(params: {
       .where(eq(prospectIntelligence.contactId, contactId))
       .limit(1);
     const pi = piRows[0];
-    const messageSnapshot = String(pi?.suggestedFirstMessage || "").trim();
+
+    let subjectSnapshot = "";
+    let messageSnapshot = "";
+    if (messageCreationUsesTemplate(settings.outreachInstructions.mode)) {
+      const { generateProspectOutreachDraft } = await import("./prospectMessageGenerationService");
+      const generated = await generateProspectOutreachDraft({
+        workspaceUserId,
+        settings: settings.outreachInstructions,
+        contactId,
+        channel,
+      });
+      subjectSnapshot = String(generated?.subject || "").trim();
+      messageSnapshot = String(generated?.body || "").trim();
+    } else {
+      messageSnapshot = String(pi?.suggestedFirstMessage || "").trim();
+      subjectSnapshot = resolveProspectOutreachSubject({
+        savedSubject: pi?.suggestedOutreachSubject,
+        prospectName: contact.name,
+        recommendedOffer: pi?.recommendedOffer,
+        outreachAngle: pi?.suggestedOutreachAngle,
+      });
+    }
+
     if (!messageSnapshot) {
       console.info(
         JSON.stringify(
@@ -538,12 +563,6 @@ export async function createQueueBatch(params: {
       continue;
     }
 
-    const subjectSnapshot = resolveProspectOutreachSubject({
-      savedSubject: pi?.suggestedOutreachSubject,
-      prospectName: contact.name,
-      recommendedOffer: pi?.recommendedOffer,
-      outreachAngle: pi?.suggestedOutreachAngle,
-    });
     const dedupKey = buildQueueDedupKey({
       workspaceUserId,
       contactId,
@@ -1347,10 +1366,12 @@ export async function regenerateQueueItemDrafts(params: {
   const ids = Array.from(new Set(params.itemIds.filter(Boolean)));
   if (ids.length === 0) return { rewritten: 0, skipped: 0, failed: 0 };
   const settings = await getOutreachSettings(params.workspaceUserId);
-  const { rewriteQueuedOutreachDrafts } = await import("./prospectOutreachDraftRewriteService");
-  return rewriteQueuedOutreachDrafts({
+  const { refreshQueuedDraftsForMessageCreation } = await import(
+    "./prospectMessageGenerationService"
+  );
+  return refreshQueuedDraftsForMessageCreation({
     workspaceUserId: params.workspaceUserId,
-    instructions: settings.outreachInstructions,
+    settings: settings.outreachInstructions,
     itemIds: ids,
   });
 }

@@ -1,5 +1,6 @@
 /**
- * Prospect AI Campaign — workspace Outreach Instructions.
+ * Prospect AI Campaign — workspace Outreach Instructions (AI Compose fields).
+ * Message Creation modes wrap these in `shared/prospectMessageCreation.ts`.
  * Separate from AI Brain custom_instructions.
  */
 
