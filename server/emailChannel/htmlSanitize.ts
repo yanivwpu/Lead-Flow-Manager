@@ -1,15 +1,22 @@
 /**
- * Conservative HTML sanitizer for email bodies.
- * Blocks scripts, event handlers, javascript: URLs, iframes, and remote images by default.
+ * Conservative HTML sanitizer for email bodies (persist / send path).
+ * Blocks scripts, event handlers, javascript: URLs, iframes, forms, external stylesheets,
+ * and remote images by default.
+ *
+ * Note: `<style>` blocks are retained so legitimate email formatting works inside the
+ * client sandboxed iframe. They must never be injected into the host document via
+ * dangerouslySetInnerHTML — see shared/emailHtmlIsolation.ts + EmailHtmlFrame.
  */
 const DANGEROUS_TAGS =
-  /<\/?(?:script|iframe|object|embed|form|link|meta|base|svg|math|frame|frameset)(?:\s[^>]*)?>/gi;
+  /<\/?(?:script|iframe|object|embed|form|link|meta|base|svg|math|frame|frameset|template)(?:\s[^>]*)?>/gi;
 const EVENT_HANDLER_ATTR = /\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
 const JAVASCRIPT_URL = /(href|src|action|xlink:href)\s*=\s*(["'])\s*javascript:[^"']*\2/gi;
 const DATA_URL_SCRIPT = /(href|src)\s*=\s*(["'])\s*data:text\/html[^"']*\2/gi;
 const REMOTE_IMG = /<img\b[^>]*\bsrc\s*=\s*(["'])https?:\/\/[^"']*\1[^>]*>/gi;
 const STYLE_EXPRESSION = /expression\s*\(/gi;
 const STYLE_URL_JS = /url\s*\(\s*['"]?\s*javascript:/gi;
+const CSS_IMPORT = /@import\b[^;]+;/gi;
+const CSS_BEHAVIOR = /behavior\s*:[^;}]+/gi;
 
 export type SanitizeEmailHtmlResult = {
   html: string;
@@ -32,7 +39,9 @@ export function sanitizeEmailHtml(raw: string | null | undefined): SanitizeEmail
     .replace(JAVASCRIPT_URL, '$1=""')
     .replace(DATA_URL_SCRIPT, '$1=""')
     .replace(STYLE_EXPRESSION, "")
-    .replace(STYLE_URL_JS, "url(");
+    .replace(STYLE_URL_JS, "url(")
+    .replace(CSS_IMPORT, "")
+    .replace(CSS_BEHAVIOR, "");
 
   return { html, remoteImagesBlocked };
 }

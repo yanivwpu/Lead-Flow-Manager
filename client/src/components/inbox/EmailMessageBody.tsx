@@ -4,6 +4,7 @@ import {
   WebsiteFormMessageCard,
   type WebsiteFormMetaView,
 } from "./WebsiteFormMessageCard";
+import { EmailHtmlFrame } from "./EmailHtmlFrame";
 
 type EmailDetail = {
   subject?: string | null;
@@ -29,8 +30,9 @@ type EmailDetailsResponse = {
 };
 
 /**
- * Renders sanitized email HTML from `/api/messages/:id/email-details`.
- * Confident website-form notifications use the dedicated form card; raw bodies stay available.
+ * Renders email HTML from `/api/messages/:id/email-details` inside a sandboxed iframe
+ * so third-party `<style>` rules cannot leak into Inbox chrome.
+ * Website-form notifications use the dedicated form card when classified.
  */
 export function EmailMessageBody({
   messageId,
@@ -74,17 +76,7 @@ export function EmailMessageBody({
   }
 
   if (html) {
-    return (
-      <div
-        className={cn(
-          "email-html-body prose prose-sm max-w-none text-gray-800 [overflow-wrap:anywhere] break-words",
-          "[&_a]:text-blue-700 [&_a]:underline",
-          className,
-        )}
-        dangerouslySetInnerHTML={{ __html: html }}
-        data-testid="email-html-body"
-      />
-    );
+    return <EmailHtmlFrame html={html} className={className} />;
   }
 
   return (
