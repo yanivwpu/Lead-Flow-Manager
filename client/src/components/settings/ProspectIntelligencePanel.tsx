@@ -2084,11 +2084,6 @@ export function ProspectIntelligencePanel(props: {
 
   const rawItems = listQuery.data?.items ?? [];
 
-  const activeBatchOption = useMemo(() => {
-    if (batchFilter === "all") return null;
-    return batchesQuery.data?.batches.find((b) => b.key === batchFilter) ?? null;
-  }, [batchFilter, batchesQuery.data?.batches]);
-
   const batchActive = batchFilter !== "all";
 
   const workFilterCounts = useMemo(() => {
@@ -2803,37 +2798,6 @@ export function ProspectIntelligencePanel(props: {
         className="max-w-xl"
       />
 
-      {batchActive && activeBatchOption ? (
-        <div
-          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-100 bg-emerald-50/40 px-3 py-1.5 text-xs text-emerald-900"
-          data-testid="pi-batch-banner"
-        >
-          <div className="min-w-0">
-            <p className="font-medium">
-              {activeBatchOption.prospectCount}{" "}
-              {activeBatchOption.prospectCount === 1 ? "prospect" : "prospects"}
-              {activeBatchOption.kind === "discovery" ? " discovered" : ""}
-            </p>
-            <p className="text-emerald-800">
-              {activeBatchOption.label}
-              {activeBatchOption.detail ? ` · ${activeBatchOption.detail}` : ""}
-            </p>
-            <p className="text-emerald-700/80">
-              Viewing this {activeBatchOption.kind === "discovery" ? "discovery" : "import batch"}
-            </p>
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-7 shrink-0 text-xs text-emerald-900 hover:bg-emerald-100/60"
-            onClick={() => applyBatchFilter("all")}
-          >
-            Show all prospects
-          </Button>
-        </div>
-      ) : null}
-
       {/* Dataset filters first — then status tabs within that dataset */}
       <div
         className="flex flex-wrap items-center gap-1.5"
@@ -2841,10 +2805,10 @@ export function ProspectIntelligencePanel(props: {
       >
         <Select value={batchFilter} onValueChange={applyBatchFilter}>
           <SelectTrigger className="h-8 w-[200px] max-w-full text-xs" data-testid="pi-batch-filter">
-            <SelectValue placeholder="Discovery Batch" />
+            <SelectValue placeholder="Discovery" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All prospects</SelectItem>
+            <SelectItem value="all">All Prospects</SelectItem>
             {(batchesQuery.data?.batches ?? []).map((batch) => (
               <SelectItem key={batch.key} value={batch.key}>
                 {batch.label}
