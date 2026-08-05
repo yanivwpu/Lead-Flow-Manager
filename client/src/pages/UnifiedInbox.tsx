@@ -16,6 +16,7 @@ import {
   shouldFetchInboxMessages,
 } from "@/lib/inboxSelectionState";
 import { inboxRowKey, isEmailConversationChannel } from "@shared/inboxRowModel";
+import { inboxRowDisplayName } from "@shared/websiteFormIdentity";
 import {
   PROSPECT_OUTREACH_COMPOSE_STORAGE_KEY,
   parseProspectOutreachComposePayload,
@@ -261,6 +262,16 @@ function inferTemplateMediaKindFromUrl(url: string): "image" | "video" | "docume
   return "image";
 }
 
+interface InboxFormIdentity {
+  isWebsiteForm: true;
+  displayName: string | null;
+  displayEmail: string | null;
+  subjectLine: string | null;
+  leadSource: "Website Form";
+  sourcePageUrl: string | null;
+  notificationFromEmail: string | null;
+}
+
 interface InboxItem {
   contact: Contact;
   conversation: Conversation | null;
@@ -273,6 +284,8 @@ interface InboxItem {
   contactUnreadTotal?: number;
   /** Email thread rows: newest local message id for quick-delete of latest Gmail message. */
   lastEmailMessageId?: string | null;
+  /** Website-form visitor identity overlay (display-only). */
+  formIdentity?: InboxFormIdentity | null;
 }
 
 interface TeamMember {
@@ -1354,7 +1367,17 @@ export function UnifiedInbox() {
       visitorEmail?: string | null;
       visitorMessage?: string | null;
       formName?: string | null;
+      sourcePageUrl?: string | null;
+      notificationFromEmail?: string | null;
     } | null;
+    formIdentity?: InboxFormIdentity | null;
+    displayIdentity?: {
+      isWebsiteForm: boolean;
+      displayName: string | null;
+      displayEmail: string | null;
+      subjectLine: string | null;
+      leadSource: "Website Form" | null;
+    };
   }>({
     queryKey: ["/api/messages", latestInboundEmailMessageId, "email-details"],
     queryFn: async () => {
@@ -1371,9 +1394,40 @@ export function UnifiedInbox() {
   const emailComposeTo =
     emailReplyDetails?.replyTarget?.email ||
     emailReplyDetails?.formMeta?.visitorEmail ||
+    emailReplyDetails?.displayIdentity?.displayEmail ||
     null;
   const emailComposeUnsafe = Boolean(emailReplyDetails?.replyTarget?.unsafe);
-  const isWebsiteFormThread = emailReplyDetails?.formMeta?.sourceType === "website_form";
+  const isWebsiteFormThread =
+    emailReplyDetails?.formMeta?.sourceType === "website_form" ||
+    emailReplyDetails?.displayIdentity?.isWebsiteForm === true ||
+    emailReplyDetails?.formIdentity?.isWebsiteForm === true;
+
+  const selectedFormIdentity: InboxFormIdentity | null =
+    emailReplyDetails?.formIdentity ||
+    (emailReplyDetails?.displayIdentity?.isWebsiteForm
+      ? {
+          isWebsiteForm: true as const,
+          displayName: emailReplyDetails.displayIdentity.displayName,
+          displayEmail: emailReplyDetails.displayIdentity.displayEmail,
+          subjectLine: emailReplyDetails.displayIdentity.subjectLine,
+          leadSource: "Website Form" as const,
+          sourcePageUrl: emailReplyDetails.formMeta?.sourcePageUrl || null,
+          notificationFromEmail: emailReplyDetails.formMeta?.notificationFromEmail || null,
+        }
+      : null);
+
+  // When on-read classification lands, overlay visitor identity onto the matching inbox row.
+  useEffect(() => {
+    if (!selectedFormIdentity?.isWebsiteForm || !primaryConversation?.id) return;
+    queryClient.setQueryData<InboxItem[]>(["/api/inbox"], (old) => {
+      if (!old) return old;
+      return old.map((item) =>
+        item.conversation?.id === primaryConversation.id
+          ? { ...item, formIdentity: selectedFormIdentity }
+          : item,
+      );
+    });
+  }, [selectedFormIdentity, primaryConversation?.id, queryClient]);
 
   const expandedCalendlyMessageIndex = useMemo(
     () => findExpandedCalendlyMessageIndex(messages),
@@ -2521,14 +2575,25 @@ export function UnifiedInbox() {
 
   const filteredInbox = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    let result = inbox.filter(
-      (item) =>
+    let result = inbox.filter((item) => {
+      if (!q) return true;
+      const formId =
+        item.conversation?.id &&
+        selectedFormIdentity &&
+        primaryConversation?.id === item.conversation.id
+          ? selectedFormIdentity
+          : item.formIdentity;
+      return (
         item.contact.name.toLowerCase().includes(q) ||
         item.contact.phone?.includes(searchQuery) ||
         item.contact.email?.toLowerCase().includes(q) ||
         item.lastMessage?.toLowerCase().includes(q) ||
-        (item.conversation as Conversation | null)?.subject?.toLowerCase().includes(q),
-    );
+        (item.conversation as Conversation | null)?.subject?.toLowerCase().includes(q) ||
+        formId?.displayName?.toLowerCase().includes(q) ||
+        formId?.displayEmail?.toLowerCase().includes(q) ||
+        formId?.subjectLine?.toLowerCase().includes(q)
+      );
+    });
     // Per-row unread (email threads are separate rows — do not use contact aggregate).
     if (filterTab === "unread") {
       result = result.filter((item) => item.unreadCount > 0);
@@ -2538,7 +2603,15 @@ export function UnifiedInbox() {
       result = result.filter((item) => selectedChannels.has(item.channel as Channel));
     }
     return result;
-  }, [inbox, searchQuery, filterTab, user?.id, selectedChannels]);
+  }, [
+    inbox,
+    searchQuery,
+    filterTab,
+    user?.id,
+    selectedChannels,
+    selectedFormIdentity,
+    primaryConversation?.id,
+  ]);
 
   const showInboxEmptyNoChannels =
     filteredInbox.length === 0 &&
@@ -2618,6 +2691,24 @@ export function UnifiedInbox() {
   /** Matched detail contact or inbox-list fallback — never previous contact via keepPreviousData. */
   const contact = displayContact;
 
+  /** Display overlay for website-form visitor identity (shared with list/header/panel/compose). */
+  const formDisplayContact = useMemo(() => {
+    if (!contact) return null;
+    const identity = selectedFormIdentity;
+    if (!identity?.isWebsiteForm) return contact;
+    return {
+      ...contact,
+      name: identity.displayName || contact.name,
+      email: identity.displayEmail || contact.email,
+      source: "website_form",
+      customFields: {
+        ...(contact.customFields || {}),
+        leadSource: "Website Form",
+        notificationSenderEmail: identity.notificationFromEmail,
+      },
+    };
+  }, [contact, selectedFormIdentity]);
+
   // Business knowledge (industry gate for Copilot intel; no backend logic change)
   const { data: aiBusinessKnowledge } = useQuery<{ industry?: string }>({
     queryKey: ["/api/ai/business-knowledge"],
@@ -2670,20 +2761,28 @@ export function UnifiedInbox() {
       : { buyerPreferences: undefined, budget: undefined, timeline: undefined, financing: undefined };
 
     const formMeta = emailReplyDetails?.formMeta;
+    const identity = selectedFormIdentity;
+    const display = formDisplayContact || contact;
     const websiteFormInquiry =
-      formMeta?.sourceType === "website_form"
+      formMeta?.sourceType === "website_form" || identity?.isWebsiteForm
         ? [
-            formMeta.visitorName ? `Visitor: ${formMeta.visitorName}` : null,
-            formMeta.visitorEmail ? `Reply to: ${formMeta.visitorEmail}` : null,
-            formMeta.formName ? `Form: ${formMeta.formName}` : null,
-            formMeta.visitorMessage ? `Message: ${formMeta.visitorMessage}` : null,
+            (identity?.displayName || formMeta?.visitorName)
+              ? `Visitor: ${identity?.displayName || formMeta?.visitorName}`
+              : null,
+            (identity?.displayEmail || formMeta?.visitorEmail)
+              ? `Reply to: ${identity?.displayEmail || formMeta?.visitorEmail}`
+              : null,
+            formMeta?.formName ? `Form: ${formMeta.formName}` : null,
+            formMeta?.sourcePageUrl ? `Source page: ${formMeta.sourcePageUrl}` : null,
+            formMeta?.visitorMessage ? `Message: ${formMeta.visitorMessage}` : null,
+            "Lead source: Website Form",
           ]
             .filter(Boolean)
             .join("\n")
         : undefined;
 
     return {
-      name:          formMeta?.visitorName || contact.name,
+      name:          display.name,
       tag:           contact.tag || undefined,
       pipelineStage: contact.pipelineStage || undefined,
       notes:         contact.notes || undefined,
@@ -2694,10 +2793,12 @@ export function UnifiedInbox() {
       leadScore:     intel?.leadScore?.label,
       buyerPreferences: injectBuyerCtx ? aiPrefFields.buyerPreferences : undefined,
       websiteFormInquiry,
-      leadSource: formMeta?.sourceType === "website_form" ? "Website Form" : undefined,
+      leadSource: identity?.leadSource || (formMeta?.sourceType === "website_form" ? "Website Form" : undefined),
     };
   }, [
     contact,
+    formDisplayContact,
+    selectedFormIdentity,
     emailReplyDetails?.formMeta,
     selectedContactId,
     messages,
@@ -2978,6 +3079,21 @@ export function UnifiedInbox() {
                   ? selectedConversationId === item.conversation?.id
                   : !selectedConversationId ||
                     selectedConversationId === item.conversation?.id);
+              const rowFormIdentity =
+                isSelected && selectedFormIdentity
+                  ? selectedFormIdentity
+                  : item.formIdentity || null;
+              const rowDisplayName = inboxRowDisplayName(
+                rowFormIdentity,
+                item.contact.name,
+              );
+              const rowPreview =
+                (isEmailRow &&
+                  (rowFormIdentity?.subjectLine ||
+                    (item.conversation as Conversation | null)?.subject)) ||
+                item.lastMessage ||
+                "No messages yet";
+              const rowIsForm = Boolean(rowFormIdentity?.isWebsiteForm);
               return (
               <div
                 key={rowId}
@@ -3008,7 +3124,7 @@ export function UnifiedInbox() {
                 <div className={INBOX_ROW_INNER}>
                   <ChatAvatar
                     src={item.contact.avatar}
-                    name={item.contact.name}
+                    name={rowDisplayName}
                     size="sm"
                     className="shrink-0"
                   />
@@ -3019,8 +3135,9 @@ export function UnifiedInbox() {
                           INBOX_ROW_NAME,
                           needsReply && INBOX_ROW_NAME_UNREAD,
                         )}
+                        data-testid={rowIsForm ? `inbox-form-row-name-${item.contact.id}` : undefined}
                       >
-                        {item.contact.name}
+                        {rowDisplayName}
                       </span>
                       {rowUnread > 0 ? (
                         <span className={INBOX_ROW_UNREAD_BADGE}>{rowUnread}</span>
@@ -3030,7 +3147,7 @@ export function UnifiedInbox() {
                       <span className={INBOX_ROW_CHANNEL_ICON_WRAP} aria-hidden>
                         {getChannelIcon(item.channel, "w-3 h-3")}
                       </span>
-                      {(item.contact as { source?: string | null }).source === "website_form" ? (
+                      {rowIsForm ? (
                         <span
                           className="mr-1 shrink-0 rounded bg-sky-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-sky-900"
                           data-testid={`badge-form-row-${item.contact.id}`}
@@ -3044,7 +3161,7 @@ export function UnifiedInbox() {
                           needsReply && INBOX_ROW_PREVIEW_UNREAD,
                         )}
                       >
-                        {item.lastMessage || "No messages yet"}
+                        {rowPreview}
                       </p>
                     </div>
                     <div className={INBOX_ROW_LINE3}>
@@ -3166,11 +3283,15 @@ export function UnifiedInbox() {
               <button onClick={() => setLocation('/app/inbox')} className="md:hidden p-1 text-gray-500" data-testid="button-back-inbox">
                 <ChevronDown className="w-5 h-5 rotate-90" />
               </button>
-              <ChatAvatar src={contact.avatar} name={contact.name} size="md" />
+              <ChatAvatar
+                src={contact.avatar}
+                name={formDisplayContact?.name || contact.name}
+                size="md"
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <h3 className="font-semibold text-sm truncate" data-testid="inbox-selected-contact-name">
-                    {emailReplyDetails?.formMeta?.visitorName || contact.name}
+                    {formDisplayContact?.name || contact.name}
                   </h3>
                   {getChannelIcon(activeChannel)}
                   {isWebsiteFormThread ? (
@@ -3198,10 +3319,10 @@ export function UnifiedInbox() {
                   </p>
                 ) : null}
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {isEmailChannel && (emailComposeTo || contact.email) ? (
+                  {isEmailChannel && (emailComposeTo || formDisplayContact?.email || contact.email) ? (
                     <span className="flex items-center gap-1 truncate">
                       <Mail className="w-3 h-3" />
-                      {emailComposeTo || contact.email}
+                      {emailComposeTo || formDisplayContact?.email || contact.email}
                     </span>
                   ) : null}
                   {contact.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{contact.phone}</span>}
@@ -4088,7 +4209,7 @@ export function UnifiedInbox() {
       {!isMobile && selectedContactId && contact && (
         <InboxLeadDetailsPanel
           key={contact.id}
-          contact={contact as InboxLeadDetailsPanelContact}
+          contact={(formDisplayContact || contact) as InboxLeadDetailsPanelContact}
           primaryConversation={hasConversation ? (primaryConversation as InboxLeadDetailsPanelConversation) : undefined}
           teamMembers={teamMembers}
           messages={hasConversation ? messages.map(m => ({ direction: m.direction, content: m.content || '' })) : []}
@@ -4126,14 +4247,16 @@ export function UnifiedInbox() {
           <SheetContent side="right" className="w-full sm:w-96 p-0 flex flex-col" data-testid="mobile-crm-sheet">
             <SheetHeader className="px-4 pt-4 pb-2 border-b flex-shrink-0">
               <SheetTitle className="text-sm font-semibold">
-                {contact ? `${contact.name} — Details` : "Details"}
+                {formDisplayContact || contact
+                  ? `${(formDisplayContact || contact)!.name} — Details`
+                  : "Details"}
               </SheetTitle>
             </SheetHeader>
             <div className="flex-1 min-h-0 overflow-y-auto">
               {showDetailsSheet && selectedContactId && contact ? (
                 <InboxLeadDetailsPanel
                   key={contact.id}
-                  contact={contact as InboxLeadDetailsPanelContact}
+                  contact={(formDisplayContact || contact) as InboxLeadDetailsPanelContact}
                   primaryConversation={hasConversation ? (primaryConversation as InboxLeadDetailsPanelConversation) : undefined}
                   teamMembers={teamMembers}
                   messages={hasConversation ? messages.map(m => ({ direction: m.direction, content: m.content || '' })) : []}

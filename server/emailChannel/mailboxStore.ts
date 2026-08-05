@@ -119,6 +119,25 @@ export async function getEmailMessageDetail(messageId: string) {
   return rows[0];
 }
 
+/** Idempotent patch for on-read website-form classification (no body rewrite). */
+export async function patchEmailMessageDetailSource(
+  messageId: string,
+  patch: {
+    sourceType: string;
+    sourceMetadata: Record<string, unknown>;
+    replyToName?: string | null;
+  },
+): Promise<void> {
+  await db
+    .update(emailMessageDetails)
+    .set({
+      sourceType: patch.sourceType,
+      sourceMetadata: patch.sourceMetadata,
+      ...(patch.replyToName !== undefined ? { replyToName: patch.replyToName } : {}),
+    })
+    .where(eq(emailMessageDetails.messageId, messageId));
+}
+
 export async function listConnectedMailboxesForPoll(limit = 50): Promise<EmailMailbox[]> {
   return db
     .select()

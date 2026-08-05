@@ -183,15 +183,49 @@ export function registerEmailChannelRoutes(app: Express): void {
         mailboxEmail,
       });
 
+      // Idempotent on-read persist so Inbox list can show visitor identity next fetch.
+      const { isWebsiteFormSourceMetadata } = await import("@shared/websiteFormEmail");
+      const needsSourcePersist =
+        Boolean(formMeta) &&
+        (!detail.sourceType || !isWebsiteFormSourceMetadata(detail.sourceMetadata));
+      if (formMeta && needsSourcePersist) {
+        try {
+          const { patchEmailMessageDetailSource } = await import(
+            "../emailChannel/mailboxStore"
+          );
+          await patchEmailMessageDetailSource(detail.messageId, {
+            sourceType: formMeta.sourceType,
+            sourceMetadata: formMeta as unknown as Record<string, unknown>,
+            replyToName: detail.replyToName || formMeta.replyTargetName || null,
+          });
+        } catch {
+          /* non-fatal */
+        }
+      }
+
+      const { resolveWebsiteFormDisplayIdentity, toInboxWebsiteFormIdentity } = await import(
+        "@shared/websiteFormIdentity"
+      );
+      const displayIdentity = resolveWebsiteFormDisplayIdentity({
+        formMeta,
+        sourceType: detail.sourceType || formMeta?.sourceType,
+        replyToEmail: detail.replyToAddress || formMeta?.replyTargetEmail,
+        replyToName: detail.replyToName || formMeta?.replyTargetName,
+        fromEmail: detail.fromAddress,
+        fromName: formMeta?.notificationFromName,
+        emailSubject: detail.subject,
+      });
+
       res.json({
         detail: {
           ...detail,
-          // On-read enrichment for historical messages (does not rewrite DB).
           sourceType: detail.sourceType || formMeta?.sourceType || null,
           formMeta: formMeta || null,
         },
         replyTarget,
         formMeta: formMeta || null,
+        displayIdentity,
+        formIdentity: toInboxWebsiteFormIdentity(displayIdentity),
       });
     } catch (err) {
       res.status(500).json({ error: "Failed to load email details" });

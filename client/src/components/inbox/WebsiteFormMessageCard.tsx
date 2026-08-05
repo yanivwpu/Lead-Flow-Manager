@@ -4,7 +4,7 @@
  */
 
 import { useState } from "react";
-import { ChevronDown, FileInput, Mail, Phone } from "lucide-react";
+import { ChevronDown, ExternalLink, FileInput, Mail, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Collapsible,
@@ -12,6 +12,9 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { compactSourcePageLabel } from "@shared/websiteFormEmail";
+import { formCardSubjectLine, isSafeHttpUrl } from "@shared/websiteFormIdentity";
+
+export { formCardSubjectLine, isSafeHttpUrl };
 
 export type WebsiteFormMetaView = {
   sourceType: "website_form";
@@ -60,12 +63,15 @@ export function WebsiteFormMessageCard({
     meta.visitorMessage?.trim() ||
     meta.structuredFields?.message?.trim() ||
     null;
-  const formSubject =
-    meta.structuredFields?.subject?.trim() ||
-    (emailSubject && !/contact\s+form/i.test(emailSubject) ? emailSubject : null);
+  const formSubject = formCardSubjectLine({
+    formSubject: meta.structuredFields?.subject,
+    formName: meta.formName,
+    emailSubject,
+  });
   const pageLabel = compactSourcePageLabel(meta.sourcePageUrl);
   const submittedLabel = formatSubmittedAt(meta.submittedAt);
   const formTitle = meta.formName || "Contact Form";
+  const sourceUrl = isSafeHttpUrl(meta.sourcePageUrl) ? String(meta.sourcePageUrl).trim() : null;
 
   const extraFields = Object.entries(meta.structuredFields || {}).filter(
     ([key]) =>
@@ -90,14 +96,15 @@ export function WebsiteFormMessageCard({
           <FileInput className="h-3.5 w-3.5" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-800/90">
-            New Contact Form Submission
+          <p className="text-[11px] font-medium tracking-wide text-sky-800/90">
+            Contact Form Submission
           </p>
           <p className="truncate text-sm font-semibold text-gray-900" data-testid="form-visitor-identity">
             {[visitorName, visitorEmail].filter(Boolean).join(" · ") || formTitle}
           </p>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-gray-600">
-            {visitorEmail ? (
+            {/* Email already shown in identity line when name is present; only repeat when name is missing. */}
+            {visitorEmail && !visitorName ? (
               <span className="inline-flex items-center gap-1 truncate">
                 <Mail className="h-3 w-3 shrink-0" aria-hidden />
                 {visitorEmail}
@@ -109,15 +116,20 @@ export function WebsiteFormMessageCard({
                 {visitorPhone}
               </span>
             ) : null}
-            <span className="text-gray-500">{formTitle}</span>
+            <span className="rounded bg-sky-100/80 px-1.5 py-0.5 text-[10px] font-medium text-sky-900">
+              {formTitle}
+            </span>
           </div>
         </div>
       </div>
 
       <div className="space-y-2.5 px-3.5 py-3">
         {formSubject ? (
-          <p className="text-xs text-gray-600">
-            <span className="font-medium text-gray-700">Subject:</span> {formSubject}
+          <p
+            className="text-xs font-medium text-gray-700"
+            data-testid="form-subject-line"
+          >
+            {formSubject}
           </p>
         ) : null}
 
@@ -142,6 +154,21 @@ export function WebsiteFormMessageCard({
               .join(" · ")}
           </p>
         )}
+
+        {sourceUrl ? (
+          <div className="pt-0.5">
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-800 hover:underline"
+              data-testid="form-view-source-page"
+            >
+              View Source Page
+              <ExternalLink className="h-3 w-3" aria-hidden />
+            </a>
+          </div>
+        ) : null}
       </div>
 
       <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
@@ -171,7 +198,7 @@ export function WebsiteFormMessageCard({
             </p>
           ) : null}
           {meta.notificationFromEmail ? (
-            <p>
+            <p data-testid="form-notification-sender">
               <span className="font-medium text-gray-700">Notification sender:</span>{" "}
               {[meta.notificationFromName, meta.notificationFromEmail].filter(Boolean).join(" · ")}
             </p>

@@ -176,6 +176,7 @@ const SOURCE_LABELS: Record<string, string> = {
   manual: 'Manual', whatsapp: 'WhatsApp', instagram: 'Instagram',
   facebook: 'Facebook', webchat: 'Web Chat', import: 'CSV Import',
   api: 'API', tiktok: 'TikTok', sms: 'SMS', telegram: 'Telegram',
+  email: 'Email', website_form: 'Website Form',
 };
 
 function resolveContactSourceLabel(contact: {
@@ -189,6 +190,15 @@ function resolveContactSourceLabel(contact: {
   if (cf.sourcePage === 'agent_page') return 'Agent Page';
   if (contact.source) return SOURCE_LABELS[contact.source] || contact.source;
   return null;
+}
+
+function isWebsiteFormContact(contact: {
+  source?: string | null;
+  customFields?: Record<string, unknown> | null;
+}): boolean {
+  if (contact.source === "website_form") return true;
+  const cf = contact.customFields || {};
+  return String(cf.leadSource || "").toLowerCase() === "website form";
 }
 
 const TIME_SLOTS = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'];
@@ -2990,6 +3000,14 @@ export function InboxLeadDetailsPanel({
               </button>
             </div>
             <div className="space-y-1">
+              {contact.name ? (
+                <p
+                  className="text-[13px] font-semibold text-gray-900 truncate"
+                  data-testid="text-contact-panel-name"
+                >
+                  {contact.name}
+                </p>
+              ) : null}
               {contact.phone && (
                 <div className="flex items-center gap-1.5 text-[12px] text-gray-600" data-testid="text-contact-phone">
                   <Phone className="w-3 h-3 text-gray-400 shrink-0" />
@@ -3005,12 +3023,25 @@ export function InboxLeadDetailsPanel({
               {!contact.phone && !contact.email && (
                 <span className="text-[11px] text-gray-400 italic">No contact info</span>
               )}
-              {resolveContactSourceLabel(contact) && (
+              {isWebsiteFormContact(contact) ? (
+                <>
+                  <div
+                    className="flex items-center gap-1.5 text-[11px] text-sky-800"
+                    data-testid="text-lead-source-website-form"
+                  >
+                    <TrendingUp className="w-3 h-3 shrink-0" />
+                    Lead Source: Website Form
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-gray-400" data-testid="text-source">
+                    via Email
+                  </div>
+                </>
+              ) : resolveContactSourceLabel(contact) ? (
                 <div className="flex items-center gap-1.5 text-[11px] text-gray-400" data-testid="text-source">
                   <TrendingUp className="w-3 h-3 shrink-0" />
                   via {resolveContactSourceLabel(contact)}
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
 

@@ -1508,6 +1508,19 @@ export type InboxItem = {
    * Used for quick-delete of the latest Gmail message (not the whole thread).
    */
   lastEmailMessageId?: string | null;
+  /**
+   * Website-form visitor identity for email rows (from persisted source_metadata).
+   * Display-only — does not rewrite the underlying contact row.
+   */
+  formIdentity?: {
+    isWebsiteForm: true;
+    displayName: string | null;
+    displayEmail: string | null;
+    subjectLine: string | null;
+    leadSource: "Website Form";
+    sourcePageUrl: string | null;
+    notificationFromEmail: string | null;
+  } | null;
 };
 
 // ==========================================

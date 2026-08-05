@@ -3017,8 +3017,32 @@ export class DbStorage implements IStorage {
           unreadCount: row.unreadCount,
           contactUnreadTotal: row.contactUnreadTotal,
           lastEmailMessageId,
+          formIdentity: null,
         });
       }
+    }
+
+    // Attach website-form visitor identity for email rows (display-only overlay).
+    try {
+      const emailConvIds = inboxItems
+        .filter((i) => i.channel === "email" && i.conversation?.id)
+        .map((i) => i.conversation!.id);
+      if (emailConvIds.length > 0) {
+        const { loadInboxFormIdentitiesByConversationIds } = await import(
+          "./emailChannel/inboxFormIdentity"
+        );
+        const formMap = await loadInboxFormIdentitiesByConversationIds(emailConvIds);
+        for (const item of inboxItems) {
+          const convId = item.conversation?.id;
+          if (!convId) continue;
+          item.formIdentity = formMap.get(convId) || null;
+        }
+      }
+    } catch (err) {
+      console.warn(
+        "[Inbox] form identity enrichment skipped",
+        err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
+      );
     }
 
     return inboxItems.sort((a, b) => {
