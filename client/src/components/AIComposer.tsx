@@ -30,6 +30,10 @@ import {
   type ComposerDraftSource,
 } from "@/lib/composerDraftScope";
 import { captureBuyerMatchingTraceFromApi } from "@/lib/buyerMatchingTraceStore";
+import {
+  composerKeyboardHelperText,
+  resolveComposerEnterAction,
+} from "@shared/composerKeyboard";
 
 type AIMode = "manual" | "suggest" | "auto";
 type AutoPhase = "idle" | "typing" | "replied" | "waiting";
@@ -791,13 +795,21 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     }
   };
 
+  const keyboardHelperText = useMemo(() => composerKeyboardHelperText(channel), [channel]);
+  const keyboardHelperId = "ai-composer-keyboard-hint";
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // On mobile, the virtual keyboard's Enter key should insert a newline,
-    // not send the message. Users send via the send button instead.
-    // On desktop, Enter sends; Shift+Enter inserts a newline.
-    if (e.key === "Enter" && !e.shiftKey && !isMobile) {
-      if (!canSend) return;
-      e.preventDefault();
+    const decision = resolveComposerEnterAction({
+      channel,
+      isMobile,
+      key: e.key,
+      shiftKey: e.shiftKey,
+      ctrlKey: e.ctrlKey,
+      metaKey: e.metaKey,
+      canSend,
+    });
+    if (decision.preventDefault) e.preventDefault();
+    if (decision.action === "send") {
       if (setTyping) setTyping(false);
       handleSendClick();
     }
@@ -965,11 +977,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
           <textarea
             ref={textareaRef}
             placeholder={
-              isSuggestMode && isDrafting
-                ? "AI is drafting…"
-                : isMobile
-                  ? "Type a message…"
-                  : "Type a message… (Enter to send, Shift+Enter for new line)"
+              isSuggestMode && isDrafting ? "AI is drafting…" : "Type a message…"
             }
             className={cn(
               "w-full border rounded-xl px-3.5 py-2.5 text-base md:text-[13px] leading-relaxed focus:outline-none transition-colors resize-none",
@@ -984,9 +992,20 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
             onKeyDown={handleKeyDown}
             onBlur={() => setTyping && setTyping(false)}
             readOnly={isSuggestMode && isDrafting}
+            aria-describedby={!isMobile ? keyboardHelperId : undefined}
             data-testid="input-message"
           />
         )}
+
+        {!isAutoPassive && !isMobile ? (
+          <p
+            id={keyboardHelperId}
+            className="px-0.5 text-[10px] leading-tight text-gray-400"
+            data-testid="composer-keyboard-hint"
+          >
+            {keyboardHelperText}
+          </p>
+        ) : null}
 
         {/* Row 3: Actions */}
         <div className="flex items-center justify-between">
