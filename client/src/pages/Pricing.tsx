@@ -33,6 +33,7 @@ import {
 import { trackPricingEvent } from "@/lib/ga4Events";
 import {
   AiBrainSpotlight,
+  COMPARE_FEATURE_HINTS,
   COMPARE_FEATURE_LABELS,
   COMPARE_GROUP_LABELS,
   CoreCapabilitiesSection,
@@ -638,11 +639,25 @@ export function Pricing() {
                     {t(`${p}.trialState.proTrialHelper`)}
                   </p>
                 ) : null}
-                <ul className="mb-4 flex-1 space-y-1.5">
+                <ul className="mb-3 flex-1 space-y-1.5">
                   {proHighlights.map((f) => (
                     <FeatureItem key={f} text={f} iconClass="text-brand-green" isRTL={isRTL} />
                   ))}
                 </ul>
+                <div
+                  className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2.5"
+                  data-testid="pro-growth-engines-callout"
+                >
+                  <p className="flex items-start gap-2 text-sm font-semibold text-emerald-950">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" />
+                    <span>Unlock Industry Growth Engines</span>
+                  </p>
+                  <p className="mt-1 pl-6 text-xs leading-relaxed text-emerald-900/85">
+                    Activate industry-specific Growth Engines such as the Realtor Growth Engine, with
+                    more Growth Engines coming soon. Growth Engines may require their own purchase or
+                    subscription.
+                  </p>
+                </div>
                 <p className="mb-4 text-xs text-gray-400">
                   Best value for teams — Most Popular plan.
                 </p>
@@ -832,8 +847,16 @@ export function Pricing() {
                         <td
                           dir={isRTL ? "rtl" : "ltr"}
                           className="px-5 py-3 text-start font-medium text-gray-800"
+                          title={COMPARE_FEATURE_HINTS[row.featureKey]}
                         >
-                          {COMPARE_FEATURE_LABELS[row.featureKey] || row.featureKey}
+                          <span className="inline-flex flex-col gap-0.5">
+                            <span>{COMPARE_FEATURE_LABELS[row.featureKey] || row.featureKey}</span>
+                            {COMPARE_FEATURE_HINTS[row.featureKey] ? (
+                              <span className="text-[10px] font-normal leading-snug text-gray-500">
+                                {COMPARE_FEATURE_HINTS[row.featureKey]}
+                              </span>
+                            ) : null}
+                          </span>
                         </td>
                         <td className="px-3 py-3 text-center">
                           <TableCellValue val={row.free} />

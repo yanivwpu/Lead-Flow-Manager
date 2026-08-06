@@ -216,7 +216,7 @@ export function buildPricingCompareRows(opts?: {
       featureKey: "growthEngines",
       free: false,
       starter: false,
-      pro: "Eligible + AI Brain",
+      pro: "Growth Engine Ready",
     });
   }
 

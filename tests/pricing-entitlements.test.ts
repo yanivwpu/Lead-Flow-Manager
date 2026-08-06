@@ -83,6 +83,11 @@ test("compare rows include Prospect AI + chatbot", () => {
     undefined,
     "AI Assist quota rows must not appear on public comparison",
   );
+  const growth = rows.find((r) => r.featureKey === "growthEngines");
+  assert.ok(growth);
+  assert.equal(growth!.free, false);
+  assert.equal(growth!.starter, false);
+  assert.equal(growth!.pro, "Growth Engine Ready");
 });
 
 test("plan highlights include Prospect AI + chatbot on paid (no Assist quotas)", () => {
@@ -124,9 +129,16 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(marketing.includes("0% WhachatCRM markup"));
   assert.ok(marketing.includes("Works with your customer channels"));
   assert.ok(marketing.includes("Transparent Pricing"));
+  assert.ok(marketing.includes("brightness-0"));
+  assert.ok(marketing.includes("data-mono-logo"));
+  assert.ok(!marketing.includes("bg-emerald-500"));
+  assert.ok(!marketing.includes("bg-pink-600"));
   assert.ok(!marketing.includes("No user fees"));
   assert.ok(!marketing.includes("No channel fees"));
   assert.ok(!marketing.includes("No extra seat fees"));
+  assert.ok(pricing.includes("Unlock Industry Growth Engines"));
+  assert.ok(pricing.includes("pro-growth-engines-callout"));
+  assert.ok(pricing.includes("Growth Engines may require their own purchase"));
 });
 
 test("server imports inbox AI reply generation constants", () => {

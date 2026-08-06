@@ -4,13 +4,13 @@ import { Button } from "@/components/ui/button";
 import {
   Brain,
   Check,
+  FileText,
+  Globe2,
+  Inbox,
   MessageSquare,
   Radar,
   Sparkles,
   Workflow,
-  Inbox,
-  Bot,
-  Globe2,
 } from "lucide-react";
 import { AI_BRAIN_ADDON_PRICE_USD } from "@shared/pricingEntitlements";
 import { PROSPECT_AI_MONTHLY_QUOTAS } from "@shared/prospectAI";
@@ -42,40 +42,54 @@ export function PricingHeroChips() {
   );
 }
 
-type ChannelItem = { id: string; label: string; logoSrc: string; logoBgClass?: string };
+type ChannelItem =
+  | { id: string; label: string; logoSrc: string }
+  | { id: string; label: string; icon: "webchat" | "sms" | "forms" };
 
 const MESSAGING_CHANNELS: ChannelItem[] = [
-  { id: "whatsapp", label: "WhatsApp Business", logoSrc: "/logos/whatsapp.svg", logoBgClass: "bg-emerald-500" },
-  { id: "facebook", label: "Facebook Messenger", logoSrc: "/logos/facebook.svg", logoBgClass: "bg-blue-600" },
-  { id: "instagram", label: "Instagram", logoSrc: "/logos/instagram.svg", logoBgClass: "bg-pink-600" },
-  { id: "gmail", label: "Gmail", logoSrc: "/logos/gmail.svg", logoBgClass: "bg-white" },
-  { id: "telegram", label: "Telegram", logoSrc: "/logos/telegram.svg", logoBgClass: "bg-sky-500" },
-  { id: "webchat", label: "Website Chat", logoSrc: "/logos/whatsapp.svg", logoBgClass: "bg-emerald-100" },
-  { id: "sms", label: "SMS", logoSrc: "/logos/sms.svg", logoBgClass: "bg-gray-100" },
+  { id: "whatsapp", label: "WhatsApp Business", logoSrc: "/logos/whatsapp.svg" },
+  { id: "facebook", label: "Facebook Messenger", logoSrc: "/logos/facebook.svg" },
+  { id: "instagram", label: "Instagram", logoSrc: "/logos/instagram.svg" },
+  { id: "gmail", label: "Gmail", logoSrc: "/logos/gmail.svg" },
+  { id: "telegram", label: "Telegram", logoSrc: "/logos/telegram.svg" },
+  { id: "webchat", label: "Website Chat", icon: "webchat" },
+  { id: "sms", label: "SMS", icon: "sms" },
 ];
 
 const LEAD_SOURCES: ChannelItem[] = [
-  { id: "tiktok", label: "TikTok Lead Forms", logoSrc: "/logos/tiktok.svg", logoBgClass: "bg-black" },
-  { id: "website-forms", label: "Website Forms", logoSrc: "/logos/gmail.svg", logoBgClass: "bg-white" },
+  { id: "tiktok", label: "TikTok Lead Forms", logoSrc: "/logos/tiktok.svg" },
+  { id: "website-forms", label: "Website Forms", icon: "forms" },
 ];
 
-function ChannelIcon({ item }: { item: ChannelItem }) {
+/** Official logo shapes forced to one monochrome weight (no brand colors). */
+function MonoOfficialLogo({ src }: { src: string }) {
+  return (
+    <img
+      src={src}
+      alt=""
+      aria-hidden
+      className="h-3.5 w-3.5 object-contain brightness-0 opacity-70"
+      data-mono-logo="true"
+    />
+  );
+}
+
+function ChannelGlyph({ item }: { item: ChannelItem }) {
+  if ("icon" in item) {
+    const Icon =
+      item.icon === "webchat" ? Globe2 : item.icon === "sms" ? MessageSquare : FileText;
+    return <Icon className="h-3.5 w-3.5 text-gray-700" strokeWidth={1.75} aria-hidden />;
+  }
+  return <MonoOfficialLogo src={item.logoSrc} />;
+}
+
+function ChannelPill({ item }: { item: ChannelItem }) {
   return (
     <li
-      className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-800"
+      className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-800 shadow-[0_1px_0_rgba(0,0,0,0.02)]"
       data-testid={`channel-${item.id}`}
     >
-      <span
-        className={`flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md ${item.logoBgClass || "bg-gray-100"}`}
-      >
-        {item.id === "webchat" ? (
-          <Globe2 className="h-4 w-4 text-emerald-700" aria-hidden />
-        ) : item.id === "website-forms" ? (
-          <Bot className="h-4 w-4 text-gray-700" aria-hidden />
-        ) : (
-          <img src={item.logoSrc} alt="" className="h-4 w-4 object-contain" />
-        )}
-      </span>
+      <ChannelGlyph item={item} />
       {item.label}
     </li>
   );
@@ -83,28 +97,28 @@ function ChannelIcon({ item }: { item: ChannelItem }) {
 
 export function SupportedChannelsSection() {
   return (
-    <section className="mb-8" data-testid="section-supported-channels">
-      <h2 className="mb-4 text-center text-lg font-display font-bold text-gray-900 sm:text-xl">
+    <section className="mb-7" data-testid="section-supported-channels">
+      <h2 className="mb-3 text-center text-lg font-display font-bold text-gray-900 sm:text-xl">
         Works with your customer channels
       </h2>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+      <div className="grid gap-5 sm:grid-cols-2 sm:gap-8">
+        <div>
+          <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:text-start">
             Messaging
           </p>
-          <ul className="grid grid-cols-1 gap-2 xs:grid-cols-2 sm:grid-cols-1 md:grid-cols-2">
+          <ul className="flex flex-wrap justify-center gap-2 sm:justify-start">
             {MESSAGING_CHANNELS.map((item) => (
-              <ChannelIcon key={item.id} item={item} />
+              <ChannelPill key={item.id} item={item} />
             ))}
           </ul>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+        <div>
+          <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:text-start">
             Lead Sources
           </p>
-          <ul className="grid gap-2">
+          <ul className="flex flex-wrap justify-center gap-2 sm:justify-start">
             {LEAD_SOURCES.map((item) => (
-              <ChannelIcon key={item.id} item={item} />
+              <ChannelPill key={item.id} item={item} />
             ))}
           </ul>
         </div>
@@ -453,6 +467,11 @@ export const COMPARE_FEATURE_LABELS: Record<string, string> = {
   assignment: "Assignment / collaboration",
   integrations: "Integrations",
   growthEngines: "Growth Engines",
+};
+
+/** Helper / tooltip copy for comparison rows (internal + title attributes). */
+export const COMPARE_FEATURE_HINTS: Record<string, string> = {
+  growthEngines: "Required platform plan to activate compatible Growth Engines.",
 };
 
 export const COMPARE_GROUP_LABELS: Record<string, string> = {
