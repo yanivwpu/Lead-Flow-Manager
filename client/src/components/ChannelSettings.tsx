@@ -47,6 +47,13 @@ import {
   shouldOpenEmailModalFromOAuthReturn,
   stripGmailOAuthCallbackParams,
 } from "@/lib/gmailOAuthReturn";
+import {
+  gmailVerificationCancelHelpToast,
+  readGmailGoogleVerificationPending,
+  shouldShowGmailVerificationCancelHelp,
+  shouldShowGmailVerificationGuidance,
+} from "@/lib/gmailGoogleVerification";
+import { GmailVerificationGuidance } from "@/components/GmailVerificationGuidance";
 import { isEmailMailboxUiConnected } from "@shared/emailMailboxAvailability";
 
 type UnifiedPillKind = "connected" | "needs_attention" | "not_connected" | "test_number" | "error" | "loading";
@@ -315,6 +322,18 @@ export function ChannelSettings() {
       void queryClient.invalidateQueries({ queryKey: ["/api/integrations/email/status"] });
       // GA4: gmail_connected — OAuth callback success (mailbox id survives before user hydrates)
       trackGmailConnected({ userId: user?.id || oauthReturn.mailbox || "gmail" });
+    } else if (
+      shouldShowGmailVerificationCancelHelp({
+        verificationPending: readGmailGoogleVerificationPending(),
+        errorCategory: oauthReturn.errorCategory,
+        errorDetail: oauthReturn.errorDetail,
+      })
+    ) {
+      const help = gmailVerificationCancelHelpToast();
+      toast({
+        title: help.title,
+        description: help.description,
+      });
     } else {
       toast({
         title: "Gmail connection failed",
@@ -1814,7 +1833,17 @@ export function ChannelSettings() {
       })()}
 
       <Dialog open={configChannel === "email"} onOpenChange={(open) => !open && setConfigChannel(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className={cn(
+            "max-h-[90vh] overflow-y-auto",
+            shouldShowGmailVerificationGuidance({
+              verificationPending: readGmailGoogleVerificationPending(),
+              gmailUiConnected: isEmailMailboxUiConnected(emailStatus?.mailbox?.syncStatus),
+            })
+              ? "sm:max-w-lg"
+              : "sm:max-w-md",
+          )}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="w-9 h-9 flex items-center justify-center rounded-lg bg-[#EA4335]">
@@ -1857,6 +1886,12 @@ export function ChannelSettings() {
                 One Gmail mailbox per workspace. Scopes: gmail.readonly + gmail.send. Push sync when Pub/Sub is configured.
               </p>
             )}
+            {shouldShowGmailVerificationGuidance({
+              verificationPending: readGmailGoogleVerificationPending(),
+              gmailUiConnected: isEmailMailboxUiConnected(emailStatus?.mailbox?.syncStatus),
+            }) ? (
+              <GmailVerificationGuidance />
+            ) : null}
             <div className="flex flex-col gap-2">
               {!emailStatus?.mailbox ||
               emailStatus.mailbox.syncStatus === "disconnected" ||
