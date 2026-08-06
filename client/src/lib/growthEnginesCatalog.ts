@@ -64,7 +64,7 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
       "Launch outreach and manage replies from one inbox",
     ],
     status: "available",
-    detailHref: "/app/prospect-ai",
+    detailHref: "/prospect-ai",
     ctaLabel: "Activate",
     placeholderKey: undefined,
     oneTimePrice: null,

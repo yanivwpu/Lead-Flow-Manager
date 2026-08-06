@@ -155,9 +155,8 @@ export function TransparentPricingStrip() {
 }
 
 export function ProspectAiCallout({ loggedIn }: { loggedIn: boolean }) {
-  const href = loggedIn
-    ? PROSPECT_AI_PATH
-    : `/auth?redirect=${encodeURIComponent(PROSPECT_AI_PATH)}`;
+  /** Logged-out visitors land on the SEO product page; signed-in users open the app. */
+  const href = loggedIn ? PROSPECT_AI_PATH : "/prospect-ai";
   return (
     <section
       className="mb-6 overflow-hidden rounded-2xl border border-emerald-200/80 bg-gradient-to-b from-white to-gray-50 px-4 py-6 sm:mb-8 sm:px-8 sm:py-8"

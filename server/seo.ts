@@ -322,6 +322,13 @@ export const PAGE_META: Record<string, PageMeta> = {
     canonical: `${BASE_URL}/realtor-growth-engine`,
     ogImage: `${BASE_URL}/og/og-realtor-growth-engine.png`
   },
+  "/prospect-ai": {
+    title: "Prospect AI — AI Sales Team for Lead Generation & Outreach | WhachatCRM",
+    description:
+      "Prospect AI is your AI sales team: discover local businesses, qualify opportunities, launch personalized email outreach, and manage every reply in one CRM. Start free.",
+    canonical: `${BASE_URL}/prospect-ai`,
+    ogImage: `${BASE_URL}/og/og-prospect-ai.png`,
+  },
   "/help": {
     title: "Help Center | WhachatCRM",
     description:

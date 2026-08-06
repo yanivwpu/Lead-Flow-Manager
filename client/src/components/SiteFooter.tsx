@@ -46,6 +46,7 @@ export function SiteFooter() {
                 <li><Link href="/shopify-crm"><span className="hover:text-gray-900 transition-colors cursor-pointer">Shopify CRM</span></Link></li>
                 <li><Link href="/real-estate-crm"><span className="hover:text-gray-900 transition-colors cursor-pointer">Real Estate CRM</span></Link></li>
                 <li><Link href="/realtor-growth-engine"><span className="hover:text-gray-900 transition-colors cursor-pointer">Realtor Growth Engine</span></Link></li>
+                <li><Link href="/prospect-ai"><span className="hover:text-gray-900 transition-colors cursor-pointer">Prospect AI</span></Link></li>
                 <li><Link href="/crm-with-mls-integration"><span className="hover:text-gray-900 transition-colors cursor-pointer">MLS Integration</span></Link></li>
                 <li><Link href="/ai-lead-scoring"><span className="hover:text-gray-900 transition-colors cursor-pointer">AI Lead Scoring</span></Link></li>
                 <li><Link href="/shared-team-inbox"><span className="hover:text-gray-900 transition-colors cursor-pointer">Shared Team Inbox</span></Link></li>

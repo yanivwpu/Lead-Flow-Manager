@@ -153,6 +153,14 @@
     <priority>0.9</priority>
   </url>
 
+  <!-- Prospect AI -->
+  <url>
+    <loc>https://www.whachatcrm.com/prospect-ai</loc>
+    <lastmod>2026-08-06</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
   <!-- Help & Guide -->
   <url>
     <loc>https://www.whachatcrm.com/help</loc>

@@ -71,6 +71,9 @@ const GoHighLevelAgencies = lazy(() =>
 const RealtorGrowthEngine = lazy(() => import("@/pages/RealtorGrowthEngine").then(m => ({ default: m.RealtorGrowthEngine })));
 const PostCheckout = lazy(() => import("@/pages/PostCheckout").then(m => ({ default: m.PostCheckout })));
 const RealtorLanding = lazy(() => import("@/pages/RealtorLanding").then(m => ({ default: m.RealtorLanding })));
+const ProspectAiLanding = lazy(() =>
+  import("@/pages/ProspectAiLanding").then((m) => ({ default: m.ProspectAiLanding })),
+);
 const WidgetFrame = lazy(() => import("@/pages/WidgetFrame").then(m => ({ default: m.WidgetFrame })));
 const WidgetChat = lazy(() => import("@/pages/WidgetChat").then(m => ({ default: m.WidgetChat })));
 const HelpCenter = lazy(() => import("@/pages/HelpCenter").then(m => ({ default: m.HelpCenter })));
@@ -195,6 +198,7 @@ function MarketingRoutes() {
       <Route path="/partner-portal/reset-password" component={PartnerResetPassword} />
       <Route path="/partner-portal" component={PartnerPortal} />
       <Route path="/realtor-growth-engine" component={RealtorLanding} />
+      <Route path="/prospect-ai" component={ProspectAiLanding} />
       <Route path="/widget-frame/:widgetId" component={WidgetFrame} />
       <Route path="/chat/:widgetId" component={WidgetChat} />
       <Route path="/help" component={HelpCenter} />

@@ -17,6 +17,9 @@ export const MARKETING_SCREENSHOTS = {
   connectWhatsapp: "/images/screenshots/connect-whatsapp.webp",
   channels: "/images/screenshots/channels.webp",
   metaBusinessSelection: "/images/screenshots/meta-business-selection.webp",
+  prospectAiDiscover: "/images/screenshots/prospect-ai-discover.png",
+  prospectAiReview: "/images/screenshots/prospect-ai-review.png",
+  prospectAiCampaign: "/images/screenshots/prospect-ai-campaign.png",
 } as const;
 
 export type MarketingScreenshotKey = keyof typeof MARKETING_SCREENSHOTS;
@@ -43,6 +46,9 @@ export const SCREENSHOT_DIMENSIONS: Record<
   channels: { width: 460, height: 257 },
   metaBusinessSelection: { width: 460, height: 610 },
   dashboard: { width: 704, height: 384 },
+  prospectAiDiscover: { width: 1280, height: 720 },
+  prospectAiReview: { width: 1280, height: 720 },
+  prospectAiCampaign: { width: 1280, height: 720 },
 };
 
 export type MarketingScreenshotSize = "hero" | "content" | "compact";

@@ -15,6 +15,7 @@ export const SEO_CLUSTER_LINKS = {
   bestCrm2026: { href: "/best-whatsapp-crm-2026", label: "Best WhatsApp CRM 2026" },
   crmForWhatsapp: { href: "/crm-for-whatsapp-business", label: "CRM for WhatsApp Business" },
   realtorGrowth: { href: "/realtor-growth-engine", label: "Realtor Growth Engine" },
+  prospectAi: { href: "/prospect-ai", label: "Prospect AI" },
   pricing: { href: "/pricing", label: "Pricing" },
 } as const satisfies Record<string, SeoRelatedLink>;
 
