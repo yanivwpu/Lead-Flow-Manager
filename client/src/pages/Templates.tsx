@@ -36,8 +36,8 @@ import { Link, useLocation, useSearch } from "wouter";
 import { 
   FileText, RefreshCw, Lock, Zap, Send, Clock, CheckCircle2, XCircle, Eye,
   AlertCircle, Image, LayoutGrid,
-  Users, Target,   Sparkles, Rocket, ArrowRight, TrendingUp, Wrench,
-  Search, MessageCircle, Facebook, Instagram, Building2,
+  Users, Target,   Sparkles, Rocket, ArrowRight,
+  Search, MessageCircle, Facebook, Instagram,
   Pencil, Pause, Play, Copy, Trash2, MoreVertical, ChevronDown, Star,
 } from "lucide-react";
 import {
@@ -80,6 +80,7 @@ import { cn } from "@/lib/utils";
 import { GROWTH_ENGINE_CARDS, sortGrowthEnginesCatalog, type GrowthEngineCardModel } from "@/lib/growthEnginesCatalog";
 import { prospectDiscoveriesCatalogLines, useProspectAiStatus } from "@/lib/prospectAi";
 import { ProspectAiCardArt } from "@/components/growthEngines/ProspectAiCardArt";
+import { GrowthEngineStoryArt } from "@/components/growthEngines/GrowthEngineStoryArt";
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
@@ -549,28 +550,6 @@ const STATUS_ICONS: Record<string, any> = {
   rejected: { icon: XCircle, color: "text-red-500" },
 };
 
-const GROWTH_ENGINE_PLACEHOLDER: Record<
-  NonNullable<GrowthEngineCardModel["placeholderKey"]>,
-  { gradient: string; icon: typeof Sparkles }
-> = {
-  wellness: {
-    gradient: "from-rose-100/95 via-fuchsia-50/70 to-slate-100",
-    icon: Sparkles,
-  },
-  capital: {
-    gradient: "from-slate-200/90 via-indigo-50/90 to-sky-50/80",
-    icon: TrendingUp,
-  },
-  trades: {
-    gradient: "from-amber-50 via-orange-50/95 to-stone-100/90",
-    icon: Wrench,
-  },
-  property: {
-    gradient: "from-teal-100/95 via-emerald-50/85 to-slate-100/90",
-    icon: Building2,
-  },
-};
-
 function GrowthEngineGalleryCard({
   engine,
   setLocation,
@@ -599,9 +578,7 @@ function GrowthEngineGalleryCard({
       ? "Open"
       : engine.ctaLabel;
   const statusLabel = isRge ? getRgeGalleryStatusLabel(rgeEntitlementStatus, rgeEntitlement) : null;
-  const phKey = engine.placeholderKey ?? "wellness";
-  const ph = GROWTH_ENGINE_PLACEHOLDER[phKey];
-  const PhIcon = ph.icon;
+  const storyVariant = engine.placeholderKey ?? "wellness";
   const catalogQuota = prospectDiscoveriesCatalogLines();
 
   return (
@@ -622,29 +599,7 @@ function GrowthEngineGalleryCard({
         ) : engine.image ? (
           <img src={engine.image} alt="" className="h-full w-full object-cover object-[center_22%]" loading="lazy" />
         ) : (
-          <div
-            className={cn(
-              "relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-gradient-to-br",
-              ph.gradient,
-            )}
-          >
-            <div
-              className="pointer-events-none absolute inset-0 opacity-50"
-              style={{
-                backgroundImage:
-                  "radial-gradient(ellipse 80% 60% at 20% 15%, rgba(255,255,255,0.75), transparent 55%), radial-gradient(ellipse 70% 50% at 85% 80%, rgba(255,255,255,0.45), transparent 50%)",
-              }}
-            />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/[0.06] to-transparent" />
-            <div className="relative z-[1] flex flex-col items-center gap-2.5 px-4 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/70 bg-white/75 shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm">
-                <PhIcon className="h-7 w-7 text-gray-700/85" strokeWidth={1.5} aria-hidden />
-              </div>
-              <p className="max-w-[12rem] text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-600/90">
-                {engine.industry}
-              </p>
-            </div>
-          </div>
+          <GrowthEngineStoryArt variant={storyVariant} className="h-full w-full" />
         )}
         {!isComingSoon && engine.image && statusLabel ? (
           <div className="pointer-events-none absolute left-4 top-4 z-[1]">

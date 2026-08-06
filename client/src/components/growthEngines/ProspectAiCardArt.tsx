@@ -1,15 +1,21 @@
+import { useId } from "react";
+
 /**
- * Branded header artwork for the Prospect AI Growth Engine gallery card.
- * Dark emerald networking motif — nodes feed a central AI hub, then flow to outreach/inbox.
+ * Prospect AI Growth Engine card artwork.
+ * Visual story (under 2 seconds): local businesses → AI Brain → personalized outreach.
+ * Matches the dark-green, thin line-art language of the Realtor Growth Engine card.
  */
 export function ProspectAiCardArt({ className }: { className?: string }) {
+  const uid = useId().replace(/:/g, "");
+  const stroke = `pai-stroke-${uid}`;
+
   return (
     <div
       className={className}
       aria-hidden
       style={{
         background:
-          "radial-gradient(ellipse 90% 70% at 18% 12%, rgba(52, 211, 153, 0.28), transparent 55%), radial-gradient(ellipse 70% 60% at 88% 88%, rgba(16, 185, 129, 0.18), transparent 50%), linear-gradient(145deg, #064e3b 0%, #065f46 38%, #047857 72%, #0f766e 100%)",
+          "radial-gradient(ellipse 85% 70% at 50% 40%, rgba(5, 150, 105, 0.22), transparent 58%), linear-gradient(160deg, #052e24 0%, #064e3b 42%, #065f46 78%, #0a3d32 100%)",
       }}
     >
       <svg
@@ -19,127 +25,137 @@ export function ProspectAiCardArt({ className }: { className?: string }) {
         preserveAspectRatio="xMidYMid slice"
       >
         <defs>
-          <linearGradient id="pai-line" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#6ee7b7" stopOpacity="0.15" />
-            <stop offset="50%" stopColor="#a7f3d0" stopOpacity="0.75" />
-            <stop offset="100%" stopColor="#6ee7b7" stopOpacity="0.2" />
+          <linearGradient id={stroke} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#059669" stopOpacity="0.2" />
+            <stop offset="50%" stopColor="#34d399" stopOpacity="0.65" />
+            <stop offset="100%" stopColor="#059669" stopOpacity="0.25" />
           </linearGradient>
-          <linearGradient id="pai-hub" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#ecfdf5" />
-            <stop offset="100%" stopColor="#a7f3d0" />
-          </linearGradient>
-          <filter id="pai-soft" x="-40%" y="-40%" width="180%" height="180%">
-            <feGaussianBlur stdDeviation="6" result="b" />
-            <feMerge>
-              <feMergeNode in="b" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
         </defs>
 
-        {/* Soft grid */}
-        <g opacity="0.12" stroke="#ecfdf5" strokeWidth="0.6">
-          <path d="M40 40 H600 M40 80 H600 M40 120 H600 M40 160 H600 M40 200 H600" />
-          <path d="M80 20 V200 M160 20 V200 M240 20 V200 M320 20 V200 M400 20 V200 M480 20 V200 M560 20 V200" />
+        <circle cx="320" cy="94" r="72" fill="#059669" opacity="0.055" />
+
+        {/* Thin connection lines — businesses → AI → outreach */}
+        <g stroke={`url(#${stroke})`} strokeWidth="1.2" fill="none" strokeLinecap="round">
+          <path d="M112 48 C175 55, 235 78, 288 94" />
+          <path d="M88 94 C175 94, 240 94, 288 94" />
+          <path d="M112 148 C175 135, 240 110, 288 94" />
+          <path d="M160 176 C215 145, 255 115, 288 94" />
+          <path d="M352 94 C410 94, 465 70, 528 54" />
+          <path d="M352 94 C410 94, 465 118, 528 140" />
         </g>
 
-        {/* Connection lines: nodes → hub → pipeline */}
-        <g stroke="url(#pai-line)" strokeWidth="1.6" fill="none">
-          <path d="M92 58 C150 58, 180 98, 268 110" />
-          <path d="M78 118 C150 118, 190 112, 268 110" />
-          <path d="M98 176 C160 168, 200 130, 268 110" />
-          <path d="M372 110 C430 110, 470 96, 534 78" />
-          <path d="M372 110 C430 110, 470 124, 534 142" />
-        </g>
+        {/* Industry: local businesses */}
+        <g
+          fill="none"
+          stroke="#34d399"
+          strokeWidth="1.55"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {/* Hotel / lodging */}
+          <g transform="translate(48 34)">
+            <path d="M5 24 V7 h22 v17" />
+            <path d="M5 7 l11-5 11 5" />
+            <path d="M11 12 h3.5 v3.5 H11 z M17.5 12 H21 v3.5 h-3.5 z" />
+            <path d="M11 18 h3.5 v3.5 H11 z M17.5 18 H21 v3.5 h-3.5 z" />
+          </g>
 
-        {/* Directional chevrons on main flow */}
-        <g fill="#a7f3d0" opacity="0.85">
-          <path d="M210 104 l8 6 -8 6 z" />
-          <path d="M430 104 l8 6 -8 6 z" />
-          <path d="M490 72 l8 6 -8 6 z" />
-          <path d="M490 136 l8 6 -8 6 z" />
-        </g>
+          {/* Restaurant (storefront + fork) */}
+          <g transform="translate(98 30)">
+            <path d="M4 24 V10 h24 v14" />
+            <path d="M4 10 l12-6 12 6" />
+            <path d="M12 14 v7 M16 14 v7 M20 14 v4 c0 2-2 3-2 3" />
+          </g>
 
-        {/* Source business / location nodes */}
-        <g filter="url(#pai-soft)">
-          <circle cx="92" cy="58" r="14" fill="#064e3b" stroke="#6ee7b7" strokeWidth="1.5" />
-          <circle cx="92" cy="58" r="4.5" fill="#a7f3d0" />
-          <circle cx="78" cy="118" r="16" fill="#065f46" stroke="#6ee7b7" strokeWidth="1.5" />
-          <circle cx="78" cy="118" r="5" fill="#d1fae5" />
-          <circle cx="98" cy="176" r="13" fill="#064e3b" stroke="#6ee7b7" strokeWidth="1.5" />
-          <circle cx="98" cy="176" r="4" fill="#a7f3d0" />
-        </g>
+          {/* Dentist */}
+          <g transform="translate(62 82)">
+            <path d="M14 3 c5 0 8 3.5 8 8.5 0 6-3 12-8 16.5-5-4.5-8-10.5-8-16.5C6 6.5 9 3 14 3z" />
+            <path d="M10 12 h8" opacity="0.7" />
+          </g>
 
-        {/* Small satellite nodes */}
-        <g fill="#34d399" opacity="0.55">
-          <circle cx="148" cy="42" r="3.5" />
-          <circle cx="136" cy="156" r="3" />
-          <circle cx="168" cy="188" r="2.5" />
-        </g>
+          {/* Attorney scales */}
+          <g transform="translate(100 126)">
+            <path d="M16 3 v20" />
+            <path d="M7 8 h18" />
+            <path d="M7 8 l-5 9 h10 z" />
+            <path d="M25 8 l-5 9 h10 z" />
+            <path d="M10 23 h12" />
+          </g>
 
-        {/* Central AI hub */}
-        <g filter="url(#pai-soft)">
-          <circle cx="320" cy="110" r="42" fill="#022c22" opacity="0.35" />
-          <circle cx="320" cy="110" r="34" fill="url(#pai-hub)" />
-          <circle cx="320" cy="110" r="34" fill="none" stroke="#ecfdf5" strokeWidth="1.2" opacity="0.9" />
-          {/* Abstract AI mark */}
-          <g transform="translate(320 110)">
-            <circle r="7" fill="#065f46" />
-            <circle cx="-14" cy="-8" r="3.2" fill="#047857" />
-            <circle cx="14" cy="-8" r="3.2" fill="#047857" />
-            <circle cx="0" cy="16" r="3.2" fill="#047857" />
-            <path
-              d="M-14 -8 L0 0 L14 -8 M0 0 L0 16"
-              stroke="#065f46"
-              strokeWidth="1.4"
-              fill="none"
-              strokeLinecap="round"
-            />
+          {/* Tour / map pin */}
+          <g transform="translate(154 40)">
+            <path d="M13 3 c5 0 9 3.8 9 8.5 0 6-9 14-9 14S4 17.5 4 11.5C4 6.8 8 3 13 3z" />
+            <circle cx="13" cy="11" r="2.8" />
+          </g>
+
+          {/* Auto shop */}
+          <g transform="translate(148 158)">
+            <path d="M3 15 h26" />
+            <path d="M6 15 l3.5-8 h13 l3.5 8" />
+            <circle cx="11" cy="17" r="2.6" />
+            <circle cx="23" cy="17" r="2.6" />
           </g>
         </g>
 
-        {/* Downstream stage nodes: qualify → outreach → inbox */}
-        <g>
-          <rect
-            x="508"
-            y="58"
-            width="44"
-            height="28"
-            rx="8"
-            fill="#022c22"
-            stroke="#6ee7b7"
-            strokeWidth="1.2"
-            opacity="0.92"
-          />
-          <circle cx="530" cy="72" r="4" fill="#a7f3d0" />
-
-          <rect
-            x="508"
-            y="122"
-            width="44"
-            height="28"
-            rx="8"
-            fill="#022c22"
-            stroke="#6ee7b7"
-            strokeWidth="1.2"
-            opacity="0.92"
-          />
-          <rect x="520" y="132" width="20" height="8" rx="2" fill="#6ee7b7" opacity="0.85" />
+        {/* Central AI Brain */}
+        <g transform="translate(320 94)">
+          <circle r="30" fill="#022c22" stroke="#34d399" strokeWidth="1.45" />
+          <g
+            fill="none"
+            stroke="#a7f3d0"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M-11 -7 c-4-5 1-11 7.5-10 2.2-4 8.5-4 10.5 0 5-2 10.5 2.2 8.5 7.5 3 1.2 4.2 6.2 1.2 9.2-1.2 4-5.5 6.2-9.5 5.2-2.2 3-7.5 3-9.8 0-4 1-8.2-2.2-8.2-6.2 0-2.2 1-4 0-5.7z" />
+            <path d="M-1.5 -13 v19 M-1.5 -2.5 c-4.2 0-6.5 2.2-6.5 5.2 M-1.5 -2.5 c4.2 0 6.5 2.2 6.5 5.2" />
+          </g>
+          <text
+            y="36"
+            textAnchor="middle"
+            fill="#ecfdf5"
+            fontFamily="ui-sans-serif, system-ui, sans-serif"
+            fontSize="9"
+            fontWeight="700"
+            letterSpacing="1.4"
+            opacity="0.88"
+          >
+            AI
+          </text>
         </g>
 
-        {/* Tiny workflow caption — minimal */}
+        {/* Outcome: personalized outreach */}
+        <g
+          fill="none"
+          stroke="#34d399"
+          strokeWidth="1.55"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {/* Email */}
+          <g transform="translate(512 36)">
+            <rect x="1" y="6" width="30" height="20" rx="3.5" />
+            <path d="M1 9.5 l15 9.5 15-9.5" />
+          </g>
+          {/* Message */}
+          <g transform="translate(512 120)">
+            <path d="M3 5 h26 a4 4 0 0 1 4 4 v11 a4 4 0 0 1-4 4 H14 l-7 7 v-7 H3 a4 4 0 0 1-4-4 V9 a4 4 0 0 1 4-4z" />
+            <path d="M9 14 h14 M9 19 h9" opacity="0.75" />
+          </g>
+        </g>
+
         <text
           x="320"
-          y="198"
+          y="204"
           textAnchor="middle"
           fill="#ecfdf5"
-          opacity="0.55"
+          opacity="0.64"
           fontFamily="ui-sans-serif, system-ui, sans-serif"
           fontSize="11"
-          letterSpacing="1.6"
+          letterSpacing="2.2"
           fontWeight="600"
         >
-          DISCOVER · ANALYZE · OUTREACH
+          DISCOVER • QUALIFY • OUTREACH
         </text>
       </svg>
     </div>
