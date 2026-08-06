@@ -93,16 +93,18 @@ test("compare rows include Prospect AI + chatbot", () => {
 test("plan highlights include Prospect AI + chatbot on paid (no Assist quotas)", () => {
   const free = getPlanPricingHighlights("free").join(" | ");
   assert.match(free, /50 Prospect AI/);
-  assert.match(free, /Unified Inbox/);
+  assert.match(free, /Multi-channel Inbox/);
   assert.ok(!/Chatbot/i.test(free));
   assert.ok(!/credits/i.test(free));
   const starter = getPlanPricingHighlights("starter").join(" | ");
   assert.match(starter, /100 Prospect AI/);
-  assert.match(starter, /Chatbot & Website Widget/);
+  assert.match(starter, /AI Chatbot & Website Widget/);
   assert.match(starter, /Workflow Automation/);
   assert.ok(!/credits/i.test(starter));
   const pro = getPlanPricingHighlights("pro").join(" | ");
   assert.match(pro, /500 Prospect AI/);
+  assert.match(pro, /AI Chatbot & Website Widget/);
+  assert.match(pro, /Industry Growth Engines/);
   assert.ok(!/credits/i.test(pro));
 });
 
@@ -117,6 +119,11 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(pricing.includes("Everything you need to find, engage, and convert more customers"));
   assert.ok(pricing.includes("SupportedChannelsSection"));
   assert.ok(pricing.includes("PricingBottomCta"));
+  assert.ok(pricing.includes("FULL_PRO_AI_TRIAL_COPY"));
+  assert.ok(pricing.includes("section-optional-addon"));
+  assert.ok(pricing.includes('md:grid-cols-3'));
+  assert.ok(!pricing.includes("xl:grid-cols-4"));
+  assert.ok(!pricing.includes("AiBrainSpotlight"));
   assert.ok(!/ManyChat|Wati|Gorgias/i.test(pricing));
   // No monthly/yearly billing toggle in product — do not invent one on pricing.
   assert.ok(!/monthly\/yearly|billingPeriod|annual/i.test(pricing));
@@ -129,6 +136,13 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(marketing.includes("0% WhachatCRM markup"));
   assert.ok(marketing.includes("Works with your customer channels"));
   assert.ok(marketing.includes("Transparent Pricing"));
+  assert.ok(marketing.includes("Prospect AI Included — Free with Every Plan"));
+  assert.ok(marketing.includes("Monthly Prospect AI Discoveries"));
+  assert.ok(marketing.includes("Multi-channel Inbox"));
+  assert.ok(marketing.includes("Can I try Pro and AI Brain before upgrading?"));
+  assert.ok(marketing.includes("What counts as an active conversation?"));
+  assert.ok(marketing.includes("What are Meta conversation fees?"));
+  assert.ok(marketing.includes("FULL_PRO_AI_TRIAL_COPY"));
   assert.ok(marketing.includes("brightness-0"));
   assert.ok(marketing.includes("data-mono-logo"));
   assert.ok(!marketing.includes("bg-emerald-500"));
@@ -138,7 +152,10 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(!marketing.includes("No extra seat fees"));
   assert.ok(pricing.includes("Unlock Industry Growth Engines"));
   assert.ok(pricing.includes("pro-growth-engines-callout"));
-  assert.ok(pricing.includes("Growth Engines may require their own purchase"));
+  assert.ok(pricing.includes("required platform plan"));
+  assert.ok(pricing.includes("Growth Engines may require"));
+  assert.ok(pricing.includes("their own purchase or subscription"));
+  assert.ok(pricing.includes("not included in Pro"));
 });
 
 test("server imports inbox AI reply generation constants", () => {

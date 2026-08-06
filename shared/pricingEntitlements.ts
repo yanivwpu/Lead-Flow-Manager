@@ -61,16 +61,16 @@ export function getPlanPricingHighlights(plan: SubscriptionPlan): string[] {
     limits.maxWhatsappNumbers === 1
       ? "1 WhatsApp Business account"
       : `Up to ${limits.maxWhatsappNumbers} WhatsApp Business accounts`,
-    "Unified Inbox",
+    "Multi-channel Inbox",
   ];
   if (limits.chatbotEnabled) {
-    lines.push("Chatbot & Website Widget included");
+    lines.push("AI Chatbot & Website Widget");
   }
   if (limits.workflowsEnabled) {
     lines.push("Workflow Automation");
   }
   if (plan === "pro") {
-    lines.push("Best for teams and higher-volume businesses");
+    lines.push("Required plan for Industry Growth Engines");
   }
   return lines;
 }
@@ -212,7 +212,7 @@ export function buildPricingCompareRows(opts?: {
 
   if (includeGrowthEngines) {
     rows.push({
-      group: "SUPPORT",
+      group: "GROWTH ENGINES",
       featureKey: "growthEngines",
       free: false,
       starter: false,

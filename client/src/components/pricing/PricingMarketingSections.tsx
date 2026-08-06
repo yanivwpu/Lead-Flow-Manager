@@ -9,7 +9,6 @@ import {
   Inbox,
   MessageSquare,
   Radar,
-  Sparkles,
   Workflow,
 } from "lucide-react";
 import { AI_BRAIN_ADDON_PRICE_USD } from "@shared/pricingEntitlements";
@@ -97,11 +96,11 @@ function ChannelPill({ item }: { item: ChannelItem }) {
 
 export function SupportedChannelsSection() {
   return (
-    <section className="mb-7" data-testid="section-supported-channels">
-      <h2 className="mb-3 text-center text-lg font-display font-bold text-gray-900 sm:text-xl">
+    <section className="mb-5 sm:mb-7" data-testid="section-supported-channels">
+      <h2 className="mb-2.5 text-center text-lg font-display font-bold text-gray-900 sm:mb-3 sm:text-xl">
         Works with your customer channels
       </h2>
-      <div className="grid gap-5 sm:grid-cols-2 sm:gap-8">
+      <div className="grid gap-4 sm:grid-cols-2 sm:gap-8">
         <div>
           <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:text-start">
             Messaging
@@ -135,7 +134,7 @@ export function TransparentPricingStrip() {
   ];
   return (
     <section
-      className="mb-8 rounded-2xl border border-gray-200 bg-white px-5 py-5 shadow-sm"
+      className="mb-6 rounded-2xl border border-gray-200 bg-white px-4 py-4 shadow-sm sm:mb-8 sm:px-5 sm:py-5"
       data-testid="section-transparent-pricing"
     >
       <h2 className="text-center text-lg font-display font-bold text-gray-900 sm:text-xl">
@@ -159,20 +158,20 @@ export function ProspectAiCallout({ loggedIn }: { loggedIn: boolean }) {
     : `/auth?redirect=${encodeURIComponent(PROSPECT_AI_PATH)}`;
   return (
     <section
-      className="mb-10 overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 px-5 py-6 sm:px-8"
+      className="mb-6 overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 px-4 py-5 sm:mb-8 sm:px-8 sm:py-6"
       data-testid="section-prospect-ai-callout"
     >
       <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">NEW</p>
       <h2 className="mt-1 text-xl font-display font-bold text-gray-900 sm:text-2xl">
-        Prospect AI included with every plan
+        Prospect AI Included — Free with Every Plan
       </h2>
       <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-700">
-        Discover businesses, qualify opportunities and launch outreach campaigns without leaving
-        WhachatCRM.
+        Find local businesses, qualify opportunities with AI, and launch personalized outreach
+        campaigns—all without leaving WhachatCRM.
       </p>
       <ul className="mt-4 flex flex-wrap gap-3 text-sm font-medium text-gray-800">
         <li className="rounded-lg bg-white/80 px-3 py-1.5 ring-1 ring-emerald-100">
-          Free: {PROSPECT_AI_MONTHLY_QUOTAS.free} discoveries
+          Free: {PROSPECT_AI_MONTHLY_QUOTAS.free}
         </li>
         <li className="rounded-lg bg-white/80 px-3 py-1.5 ring-1 ring-emerald-100">
           Starter: {PROSPECT_AI_MONTHLY_QUOTAS.starter}
@@ -181,9 +180,10 @@ export function ProspectAiCallout({ loggedIn }: { loggedIn: boolean }) {
           Pro: {PROSPECT_AI_MONTHLY_QUOTAS.pro}
         </li>
       </ul>
+      <p className="mt-2 text-xs text-gray-500">Monthly Prospect AI discoveries by plan</p>
       <Link href={href}>
         <Button
-          className="mt-5 bg-brand-green hover:bg-emerald-700"
+          className="mt-4 bg-brand-green hover:bg-emerald-700"
           data-testid="button-explore-prospect-ai"
           onClick={() => trackPricingEvent("prospect_ai_learn_more_click")}
         >
@@ -203,13 +203,13 @@ export function CoreCapabilitiesSection() {
     },
     {
       icon: Inbox,
-      title: "Unified Inbox",
+      title: "Multi-channel Inbox",
       body: "Reply across WhatsApp, Messenger, Instagram, Gmail, Telegram, SMS, and Website Chat.",
     },
     {
       icon: Workflow,
-      title: "Chatbot & Automations",
-      body: "Capture and qualify leads with Chatbot & Website Widget, then automate follow-ups.",
+      title: "AI Chatbot & Automations",
+      body: "Capture, qualify, and respond to website visitors—then automate follow-ups.",
     },
     {
       icon: MessageSquare,
@@ -246,32 +246,39 @@ export function CoreCapabilitiesSection() {
 export function WhyChooseSection() {
   const points = [
     {
-      title: "Find, engage, and convert",
-      body: "Prospect AI finds opportunities. Unified Inbox and automations help you close more sales.",
+      title: "FREE Prospect AI",
+      body: "Discover and qualify local businesses on every plan—including Free.",
     },
     {
-      title: "No active-contact pricing",
+      title: "No Active Contact Pricing",
       body: "Your bill does not rise just because more contacts exist in your CRM.",
     },
     {
-      title: "0% WhachatCRM markup on Meta fees",
-      body: "Meta’s own conversation charges may still apply.",
+      title: "0% WhachatCRM markup on Meta conversation fees",
+      body: "You only pay Meta’s published WhatsApp conversation rates.",
     },
     {
-      title: "Chatbot on Starter and Pro",
-      body: "Chatbot captures and qualifies leads. AI Brain makes conversations smarter.",
+      title: "Unified Inbox for messaging and email",
+      body: "Manage WhatsApp, Messenger, Instagram, Gmail, and more in one place.",
+    },
+    {
+      title: "AI Chatbot & Workflow Automation",
+      body: "Capture, qualify, and follow up automatically on Starter and Pro.",
     },
   ];
   return (
-    <section className="mb-10" data-testid="section-why-choose">
-      <h2 className="mb-5 text-center text-2xl font-display font-bold text-gray-900">
-        Why businesses choose WhachatCRM
+    <section className="mb-8" data-testid="section-why-choose">
+      <h2 className="mb-4 text-center text-2xl font-display font-bold text-gray-900">
+        Why businesses switch to WhachatCRM
       </h2>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {points.map((point) => (
           <div key={point.title} className="rounded-xl border border-gray-200 bg-white p-4">
-            <h3 className="text-sm font-semibold text-gray-900">{point.title}</h3>
-            <p className="mt-1 text-sm text-gray-600">{point.body}</p>
+            <h3 className="flex items-start gap-2 text-sm font-semibold text-gray-900">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden />
+              <span>{point.title}</span>
+            </h3>
+            <p className="mt-1 pl-6 text-sm text-gray-600">{point.body}</p>
           </div>
         ))}
       </div>
@@ -279,96 +286,30 @@ export function WhyChooseSection() {
   );
 }
 
-export function AiBrainSpotlight({
-  onAdd,
-  ctaLabel,
-  disabled,
-  loading,
-}: {
-  onAdd: () => void;
-  ctaLabel: string;
-  disabled?: boolean;
-  loading?: boolean;
-}) {
-  return (
-    <section
-      className="mb-10 rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 to-white px-5 py-7 sm:px-8"
-      data-testid="section-ai-brain"
-    >
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div className="max-w-2xl">
-          <div className="inline-flex items-center gap-2 text-purple-700">
-            <Sparkles className="h-4 w-4" />
-            <span className="text-xs font-semibold uppercase tracking-wide">Add-on</span>
-          </div>
-          <h2 className="mt-2 text-2xl font-display font-bold text-gray-900">
-            AI Brain enhances the whole platform
-          </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Add AI Brain to Starter or Pro for +${AI_BRAIN_ADDON_PRICE_USD}/month. It enhances the
-            platform with business knowledge—not a standalone base plan.
-          </p>
-          <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-            {[
-              "Learns your business",
-              "Uses company knowledge",
-              "Connects Offers & Payment Links",
-              "Improves Prospect AI personalization",
-              "Smarter AI Copilot",
-              "Better recommendations",
-            ].map((line) => (
-              <li key={line} className="flex items-start gap-2 text-sm text-gray-700">
-                <Check className="mt-0.5 h-4 w-4 shrink-0 text-purple-600" />
-                <span>{line}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-xs text-gray-500">
-            Chatbot captures and qualifies leads. AI Brain makes conversations smarter with your
-            business context.
-          </p>
-        </div>
-        <div className="shrink-0 text-center lg:text-end">
-          <p className="text-3xl font-bold text-gray-900">+${AI_BRAIN_ADDON_PRICE_USD}</p>
-          <p className="text-sm text-gray-500">/month add-on</p>
-          <Button
-            className="mt-4 bg-purple-600 hover:bg-purple-700"
-            disabled={disabled || loading}
-            onClick={() => {
-              trackPricingEvent("ai_brain_learn_more_click");
-              trackPricingEvent("ai_brain_addon_click");
-              onAdd();
-            }}
-            data-testid="button-ai-brain-spotlight"
-          >
-            {ctaLabel}
-          </Button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 const FAQ_ITEMS = [
   {
+    q: "Can I try Pro and AI Brain before upgrading?",
+    a: "Every new account receives a full-featured 14-day Pro + AI Brain trial. No feature restrictions during the trial.",
+  },
+  {
     q: "What is Prospect AI?",
-    a: "Prospect AI helps you discover businesses, qualify opportunities, and launch outreach campaigns without leaving WhachatCRM. Monthly discovery quotas apply by plan.",
+    a: "Prospect AI helps you find local businesses, qualify opportunities with AI, and launch personalized outreach campaigns without leaving WhachatCRM. Monthly discovery quotas apply by plan.",
   },
   {
     q: "Is Chatbot included?",
-    a: "Chatbot & Website Widget is included on Starter and Pro. Free does not include the visual chatbot builder. Chatbot captures and qualifies leads; AI Brain makes conversations smarter with your business knowledge.",
+    a: "AI Chatbot & Website Widget is included on Starter and Pro. Free does not include the visual chatbot builder. Chatbot captures, qualifies, and responds to website visitors; AI Brain is an optional add-on that makes conversations smarter.",
   },
   {
     q: "What is AI Brain?",
-    a: `AI Brain is a $${AI_BRAIN_ADDON_PRICE_USD}/month add-on for Starter or Pro. It learns your business, uses company knowledge and Offers & Payment Links, improves Prospect AI personalization, and powers a smarter AI Copilot across the platform.`,
+    a: `AI Brain is an optional $${AI_BRAIN_ADDON_PRICE_USD}/month add-on for Starter or Pro—not a base plan. It learns your business, uses company knowledge and Offers & Payment Links, improves Prospect AI personalization, and powers a smarter AI Copilot.`,
   },
   {
-    q: "Do you charge by active contacts?",
-    a: "No. Plan limits are based on active conversations and other included usage—not how many contacts are stored in your CRM.",
+    q: "What counts as an active conversation?",
+    a: "A conversation counts once when a customer actively messages you during the billing period. Multiple messages within that conversation do not create additional conversations.",
   },
   {
-    q: "Do you add markup to Meta fees?",
-    a: "WhachatCRM applies 0% markup on Meta conversation fees. Meta’s own charges may still apply according to Meta’s pricing.",
+    q: "What are Meta conversation fees?",
+    a: "Meta determines WhatsApp conversation pricing. WhachatCRM adds 0% markup. Customers only pay Meta’s published rates.",
   },
   {
     q: "Can I upgrade anytime?",
@@ -453,14 +394,14 @@ export const COMPARE_FEATURE_LABELS: Record<string, string> = {
   activeConversations: "Active conversations",
   users: "Users",
   whatsappNumbers: "WhatsApp Business accounts",
-  unifiedInbox: "Unified Inbox",
+  unifiedInbox: "Multi-channel Inbox",
   supportedChannels: "Supported messaging channels",
-  prospectDiscoveries: "Monthly Prospect AI discoveries",
+  prospectDiscoveries: "Monthly Prospect AI Discoveries",
   prospectReview: "AI Review / qualification",
   prospectCampaigns: "Campaign builder",
   messageCreation: "Message Creation modes",
   prospectArchive: "Archive / Restore",
-  chatbotWidget: "Chatbot & Website Widget",
+  chatbotWidget: "AI Chatbot & Website Widget",
   workflowAutomation: "Workflow Automation",
   followUps: "Follow-ups",
   aiBrainAddon: "AI Brain add-on",
@@ -482,4 +423,9 @@ export const COMPARE_GROUP_LABELS: Record<string, string> = {
   AI: "AI",
   TEAM: "Team",
   SUPPORT: "Support",
+  "GROWTH ENGINES": "Growth Engines",
 };
+
+/** Consistent trial messaging for public pricing surfaces. */
+export const FULL_PRO_AI_TRIAL_COPY =
+  "Every new account includes a full 14-day Pro + AI Brain trial.";

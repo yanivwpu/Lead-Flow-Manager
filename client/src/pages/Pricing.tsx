@@ -32,11 +32,11 @@ import {
 } from "@shared/pricingEntitlements";
 import { trackPricingEvent } from "@/lib/ga4Events";
 import {
-  AiBrainSpotlight,
   COMPARE_FEATURE_HINTS,
   COMPARE_FEATURE_LABELS,
   COMPARE_GROUP_LABELS,
   CoreCapabilitiesSection,
+  FULL_PRO_AI_TRIAL_COPY,
   PricingBottomCta,
   PricingFaqSection,
   PricingHeroChips,
@@ -430,14 +430,14 @@ export function Pricing() {
             ) : null}
           </div>
         ) : (
-        <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4 mb-8 text-sm text-emerald-800" data-testid="banner-free-trial">
+        <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-3.5 mb-6 text-sm text-emerald-800" data-testid="banner-free-trial">
           <span className="text-emerald-500 mt-0.5 shrink-0">✓</span>
-          <span>New accounts include a 14-day Pro + AI Brain trial.</span>
+          <span dir="ltr">{FULL_PRO_AI_TRIAL_COPY}</span>
         </div>
         )}
 
         {/* ─────────────── SECTION 1: HERO ─────────────── */}
-        <div className="mb-6 text-center">
+        <div className="mb-5 text-center" dir="ltr">
           <h1
             className="mb-3 font-display text-3xl font-bold text-gray-900 sm:text-4xl"
             data-testid="text-pricing-hero-title"
@@ -448,15 +448,18 @@ export function Pricing() {
             Prospect AI, Unified Inbox, Chatbot, Workflow Automation and AI Copilot—all in one
             platform.
           </p>
+          <p className="mx-auto mt-2 max-w-xl text-sm font-medium text-emerald-800" data-testid="text-hero-trial">
+            {FULL_PRO_AI_TRIAL_COPY}
+          </p>
           <PricingHeroChips />
         </div>
 
         <SupportedChannelsSection />
         <TransparentPricingStrip />
 
-        {/* ─────────────── SECTION 3: PRICING CARDS ─────────────── */}
+        {/* ─────────────── SECTION 3: PRICING CARDS (plans only) ─────────────── */}
         <div
-          className="mb-10 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4"
+          className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3"
           data-testid="section-pricing-cards"
         >
           {/* FREE */}
@@ -560,19 +563,28 @@ export function Pricing() {
                     {t(`${p}.plans.starter.desc`)}
                   </p>
                 </div>
-                <ul className="mb-4 flex-1 space-y-1.5">
+                <ul className="mb-3 flex-1 space-y-1.5">
                   {starterHighlights.map((f) => (
                     <FeatureItem key={f} text={f} iconClass="text-blue-500" isRTL={isRTL} />
                   ))}
                 </ul>
-                <p className="mb-2 text-xs text-gray-600">
-                  Chatbot captures and qualifies leads. AI Brain (add-on) makes conversations smarter.
-                </p>
-                <p className="text-xs font-medium text-emerald-600 mb-4 flex items-center gap-1" data-testid="text-trial-starter">
-                  <span>✓</span>{" "}
-                  {isActiveProAiTrial
-                    ? t(`${p}.trialState.chooseStarterAfterTrial`)
-                    : t(`${p}.trialNote`)}
+                <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2.5" data-testid="starter-chatbot-callout">
+                  <p className="flex items-start gap-2 text-sm font-semibold text-blue-950">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+                    <span>AI Chatbot & Website Widget</span>
+                  </p>
+                  <p className="mt-1 pl-6 text-xs leading-relaxed text-blue-900/80">
+                    Capture, qualify and respond to website visitors automatically. AI Brain remains
+                    an optional add-on that makes conversations smarter.
+                  </p>
+                </div>
+                <p className="text-xs font-medium text-emerald-700 mb-4 flex items-start gap-1" data-testid="text-trial-starter">
+                  <span className="shrink-0">✓</span>{" "}
+                  <span dir="ltr">
+                    {isActiveProAiTrial
+                      ? t(`${p}.trialState.chooseStarterAfterTrial`)
+                      : FULL_PRO_AI_TRIAL_COPY}
+                  </span>
                 </p>
                 <Button
                   className={`w-full ${
@@ -602,17 +614,17 @@ export function Pricing() {
             const isLoading = loadingPlan === "pro";
             return (
               <div
-                className={`bg-white rounded-2xl border-2 p-6 flex flex-col relative ${
+                className={`bg-white rounded-2xl border-2 p-6 flex flex-col relative md:-mt-1 md:scale-[1.02] ${
                   isActiveProAiTrial
-                    ? "border-brand-green shadow-lg ring-2 ring-emerald-100"
-                    : "border-brand-green shadow-lg"
+                    ? "border-brand-green shadow-xl ring-2 ring-emerald-200"
+                    : "border-brand-green shadow-xl ring-2 ring-emerald-100"
                 }`}
                 data-testid="plan-card-pro"
               >
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-green text-white text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-green text-white text-xs font-bold tracking-wide px-3.5 py-1 rounded-full whitespace-nowrap shadow-sm">
                   {isActiveProAiTrial
                     ? t(`${p}.trialState.proTrialPlanBadge`)
-                    : t(`${p}.plans.pro.badge`)}
+                    : "Most Popular"}
                 </div>
                 <div className="mb-4 mt-2">
                   <span className="text-xs font-semibold text-brand-green uppercase tracking-wider">
@@ -644,6 +656,11 @@ export function Pricing() {
                     <FeatureItem key={f} text={f} iconClass="text-brand-green" isRTL={isRTL} />
                   ))}
                 </ul>
+                <p className="mb-3 text-xs leading-relaxed text-gray-600" data-testid="pro-chatbot-helper">
+                  <span className="font-semibold text-gray-800">AI Chatbot & Website Widget</span>
+                  {" — "}
+                  Capture, qualify and respond to website visitors automatically.
+                </p>
                 <div
                   className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2.5"
                   data-testid="pro-growth-engines-callout"
@@ -653,13 +670,19 @@ export function Pricing() {
                     <span>Unlock Industry Growth Engines</span>
                   </p>
                   <p className="mt-1 pl-6 text-xs leading-relaxed text-emerald-900/85">
-                    Activate industry-specific Growth Engines such as the Realtor Growth Engine, with
-                    more Growth Engines coming soon. Growth Engines may require their own purchase or
-                    subscription.
+                    Pro is the required platform plan to activate compatible Growth Engines such as
+                    the Realtor Growth Engine, with more coming soon. Growth Engines may require
+                    their own purchase or subscription—they are not included in Pro.
                   </p>
                 </div>
-                <p className="mb-4 text-xs text-gray-400">
-                  Best value for teams — Most Popular plan.
+                {!isActiveProAiTrial ? (
+                  <p className="mb-3 text-xs font-medium text-emerald-700 flex items-start gap-1" data-testid="text-trial-pro">
+                    <span className="shrink-0">✓</span>
+                    <span dir="ltr">{FULL_PRO_AI_TRIAL_COPY}</span>
+                  </p>
+                ) : null}
+                <p className="mb-4 text-xs text-gray-500">
+                  Built for teams that want to find customers, automate follow-up, and close more sales.
                 </p>
                 <Button
                   className={`w-full ${
@@ -686,110 +709,125 @@ export function Pricing() {
               </div>
             );
           })()}
+        </div>
 
-          {/* AI BRAIN ADD-ON */}
+        {/* ─────────────── OPTIONAL ADD-ON: AI BRAIN ─────────────── */}
+        <section className="mb-8" data-testid="section-optional-addon">
+          <div className="mb-3 text-center">
+            <p className="text-xs font-semibold uppercase tracking-wide text-purple-700">
+              Optional Add-on
+            </p>
+            <h2 className="mt-1 font-display text-xl font-bold text-gray-900 sm:text-2xl">
+              AI Brain
+            </h2>
+            <p className="mx-auto mt-1 max-w-xl text-sm text-gray-600">
+              Enhances WhachatCRM with your business knowledge—not a separate subscription plan.
+            </p>
+          </div>
           <div
-            className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl border-2 border-purple-200 p-6 flex flex-col"
+            className="mx-auto max-w-3xl bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl border-2 border-purple-200 p-6 sm:p-7"
             data-testid="plan-card-ai-brain"
           >
-            <div className="mb-5">
-              <span className="text-xs font-semibold text-purple-600 uppercase tracking-wider">
-                {t(`${p}.plans.aiBrain.name`)}
-              </span>
-              <div
-                className={`flex items-baseline gap-1 mt-1 mb-1 ${
-                  isRTL ? "flex-row-reverse justify-end" : ""
-                }`}
-              >
-                <span className="text-3xl font-bold text-gray-900">
-                  {t(`${p}.plans.aiBrain.price`)}
+            <div className="flex flex-col gap-6 sm:flex-row sm:items-stretch">
+              <div className="sm:w-[42%] sm:shrink-0">
+                <span className="text-xs font-semibold text-purple-600 uppercase tracking-wider">
+                  {t(`${p}.plans.aiBrain.name`)}
                 </span>
-                <span className="text-sm text-gray-500">
-                  {t(`${p}.plans.aiBrain.period`)}
-                </span>
-              </div>
-              <p className="text-sm text-gray-500">
-                Add AI Brain to Starter or Pro — not a standalone base plan.
-              </p>
-            </div>
-            <ul className="flex-1 space-y-1.5">
-              {aiBrainHighlights.map((f) => (
-                <FeatureItem key={f} text={f} iconClass="text-purple-500" isRTL={isRTL} />
-              ))}
-            </ul>
-            <p className="text-xs font-medium text-purple-700 mt-4 mb-1 flex items-center gap-1" dir={isRTL ? "rtl" : "ltr"}>
-              <Shield className="w-3 h-3 shrink-0" />
-              {isActiveProAiTrial
-                ? t(`${p}.trialState.aiBrainIncludedInTrial`)
-                : t(`${p}.aiBrainNote`)}
-            </p>
-            {isActiveProAiTrial ? (
-              <p
-                className="text-xs text-purple-800/90 mb-3 leading-relaxed"
-                data-testid="text-ai-brain-trial-helper"
-              >
-                {t(`${p}.trialState.aiBrainTrialHelper`)}
-              </p>
-            ) : (
-            <p className="text-xs text-gray-400 mb-4">
-              {t(`${p}.plans.aiBrain.upsell`)}
-            </p>
-            )}
-            {!subscriptionResolved ? (
-              <Button className="w-full bg-gray-200 text-gray-500" disabled data-testid="button-ai-brain-loading">
-                <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} />
-              </Button>
-            ) : hasAIBrainAddon ? (
-              <Link href="/app/ai-brain">
-                <Button
-                  className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                  data-testid="button-ai-brain-go"
+                <div
+                  className={`flex items-baseline gap-1 mt-1 mb-1 ${
+                    isRTL ? "flex-row-reverse justify-end" : ""
+                  }`}
                 >
-                  <Brain className={`w-4 h-4 ${isRTL ? "ml-2" : "mr-2"}`} />
-                  {t(`${p}.plans.aiBrain.ctaOpenBrain`)}
-                </Button>
-              </Link>
-            ) : isActiveProAiTrial && isShopify ? (
-              <Button
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                onClick={handleAIBrainAddonCheckout}
-                disabled={aiBrainAddonLoading || planButtonsDisabled}
-                data-testid="button-ai-brain-addon-checkout"
-              >
-                {aiBrainAddonLoading ? (
-                  <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} />
-                ) : null}
-                {shopifyPlanButtonLabel("aiBrain", false)}
-              </Button>
-            ) : aiBrainBasePlanEligible ? (
-              <Button
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                onClick={handleAIBrainAddonCheckout}
-                disabled={aiBrainAddonLoading || planButtonsDisabled}
-                data-testid="button-ai-brain-addon-checkout"
-              >
-                {aiBrainAddonLoading ? (
-                  <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} />
-                ) : null}
-                {isShopify ? shopifyPlanButtonLabel("aiBrain", false) : t(`${p}.plans.aiBrain.ctaUnlock`)}
-              </Button>
-            ) : (
-              <Button
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                onClick={() => handleUpgrade("starter")}
-                disabled={planButtonsDisabled || loadingPlan === "starter"}
-                data-testid="button-upgrade-for-ai-brain"
-              >
-                {loadingPlan === "starter" && (
-                  <Loader2
-                    className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`}
-                  />
+                  <span className="text-3xl font-bold text-gray-900">
+                    {t(`${p}.plans.aiBrain.price`)}
+                  </span>
+                  <span className="text-sm text-gray-500">
+                    {t(`${p}.plans.aiBrain.period`)}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-600">
+                  Add AI Brain to Starter or Pro — enhances the platform, not a standalone plan.
+                </p>
+                <p className="text-xs font-medium text-purple-700 mt-3 mb-1 flex items-center gap-1" dir={isRTL ? "rtl" : "ltr"}>
+                  <Shield className="w-3 h-3 shrink-0" />
+                  {isActiveProAiTrial
+                    ? t(`${p}.trialState.aiBrainIncludedInTrial`)
+                    : t(`${p}.aiBrainNote`)}
+                </p>
+                {isActiveProAiTrial ? (
+                  <p
+                    className="text-xs text-purple-800/90 mb-3 leading-relaxed"
+                    data-testid="text-ai-brain-trial-helper"
+                  >
+                    {t(`${p}.trialState.aiBrainTrialHelper`)}
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-500 mb-4">
+                    {t(`${p}.plans.aiBrain.upsell`)}
+                  </p>
                 )}
-                {t(`${p}.plans.aiBrain.ctaUpgrade`)}
-              </Button>
-            )}
+                {!subscriptionResolved ? (
+                  <Button className="w-full bg-gray-200 text-gray-500" disabled data-testid="button-ai-brain-loading">
+                    <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} />
+                  </Button>
+                ) : hasAIBrainAddon ? (
+                  <Link href="/app/ai-brain">
+                    <Button
+                      className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                      data-testid="button-ai-brain-go"
+                    >
+                      <Brain className={`w-4 h-4 ${isRTL ? "ml-2" : "mr-2"}`} />
+                      {t(`${p}.plans.aiBrain.ctaOpenBrain`)}
+                    </Button>
+                  </Link>
+                ) : isActiveProAiTrial && isShopify ? (
+                  <Button
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={handleAIBrainAddonCheckout}
+                    disabled={aiBrainAddonLoading || planButtonsDisabled}
+                    data-testid="button-ai-brain-addon-checkout"
+                  >
+                    {aiBrainAddonLoading ? (
+                      <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} />
+                    ) : null}
+                    {shopifyPlanButtonLabel("aiBrain", false)}
+                  </Button>
+                ) : aiBrainBasePlanEligible ? (
+                  <Button
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={handleAIBrainAddonCheckout}
+                    disabled={aiBrainAddonLoading || planButtonsDisabled}
+                    data-testid="button-ai-brain-addon-checkout"
+                  >
+                    {aiBrainAddonLoading ? (
+                      <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} />
+                    ) : null}
+                    {isShopify ? shopifyPlanButtonLabel("aiBrain", false) : t(`${p}.plans.aiBrain.ctaUnlock`)}
+                  </Button>
+                ) : (
+                  <Button
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={() => handleUpgrade("starter")}
+                    disabled={planButtonsDisabled || loadingPlan === "starter"}
+                    data-testid="button-upgrade-for-ai-brain"
+                  >
+                    {loadingPlan === "starter" && (
+                      <Loader2
+                        className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`}
+                      />
+                    )}
+                    {t(`${p}.plans.aiBrain.ctaUpgrade`)}
+                  </Button>
+                )}
+              </div>
+              <ul className="flex-1 space-y-1.5 sm:border-l sm:border-purple-200/80 sm:pl-8">
+                {aiBrainHighlights.map((f) => (
+                  <FeatureItem key={f} text={f} iconClass="text-purple-500" isRTL={isRTL} />
+                ))}
+              </ul>
+            </div>
           </div>
-        </div>
+        </section>
 
         {isShopify ? (
           <p
@@ -875,29 +913,6 @@ export function Pricing() {
             </table>
           </div>
         </div>
-
-        <AiBrainSpotlight
-          onAdd={() => {
-            if (hasAIBrainAddon) {
-              setLocation("/app/ai-brain");
-              return;
-            }
-            if (aiBrainBasePlanEligible || isActiveProAiTrial) {
-              void handleAIBrainAddonCheckout();
-            } else {
-              handleUpgrade("starter");
-            }
-          }}
-          ctaLabel={
-            hasAIBrainAddon
-              ? t(`${p}.plans.aiBrain.ctaOpenBrain`)
-              : aiBrainBasePlanEligible || isActiveProAiTrial
-                ? t(`${p}.plans.aiBrain.ctaUnlock`)
-                : t(`${p}.plans.aiBrain.ctaUpgrade`)
-          }
-          disabled={planButtonsDisabled}
-          loading={aiBrainAddonLoading}
-        />
 
         <PricingFaqSection />
 
