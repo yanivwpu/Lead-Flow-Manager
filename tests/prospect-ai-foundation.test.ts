@@ -25,11 +25,11 @@ import type { ProspectDiscoveryProvider } from "../server/prospectAI/providers/t
 function testQuotas() {
   assert.equal(PROSPECT_AI_MONTHLY_QUOTAS.starter, 100);
   assert.equal(PROSPECT_AI_MONTHLY_QUOTAS.pro, 500);
-  assert.equal(PROSPECT_AI_MONTHLY_QUOTAS.free, 0);
+  assert.equal(PROSPECT_AI_MONTHLY_QUOTAS.free, 50);
   assert.equal(getProspectAiMonthlyQuota("starter"), 100);
   assert.equal(getProspectAiMonthlyQuota("pro"), 500);
-  assert.equal(getProspectAiMonthlyQuota("free"), 0);
-  assert.equal(isProspectAiPlanEligible("free"), false);
+  assert.equal(getProspectAiMonthlyQuota("free"), 50);
+  assert.equal(isProspectAiPlanEligible("free"), true);
   assert.equal(isProspectAiPlanEligible("starter"), true);
   assert.equal(isProspectAiPlanEligible("pro"), true);
 }

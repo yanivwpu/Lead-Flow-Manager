@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Zap, MessageSquare, Users, Phone, Sparkles, Loader2, Check, Info } from "lucide-react";
+import { PROSPECT_AI_MONTHLY_QUOTAS } from "@shared/prospectAI";
 
 export type UpgradeReason =
   | "conversation_limit"
@@ -23,7 +24,8 @@ export type UpgradeReason =
   | "automations_paid_plan"
   | "automations_upgrade_pro"
   | "team_invite_upgrade_starter"
-  | "team_invite_upgrade_pro";
+  | "team_invite_upgrade_pro"
+  | "prospect_ai_discoveries";
 
 export interface ConversationLimitInfo {
   limit: number;
@@ -146,6 +148,19 @@ const UPGRADE_CONTENT: Record<
       "Assignment & advanced CRM",
     ],
   },
+  prospect_ai_discoveries: {
+    icon: <Sparkles className="h-8 w-8 text-emerald-600" />,
+    title: "Prospect Discovery limit reached",
+    description:
+      "You've reached your monthly Prospect AI discovery limit. Upgrade for more discoveries each month.",
+    targetPlan: "starter",
+    ctaText: "Upgrade Plan",
+    benefits: [
+      "More Prospect Discoveries each month",
+      "Find and qualify local businesses",
+      "Launch personalized outreach campaigns",
+    ],
+  },
 };
 
 const PLAN_PRICES: Record<TargetPlan, string> = {
@@ -242,8 +257,25 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
         description: "Upgrade to Pro for advanced workflows and AI-assisted triggers where enabled.",
       };
     }
+    if (reason === "prospect_ai_discoveries") {
+      const plan = String(currentPlan || "").toLowerCase();
+      if (plan.includes("starter")) {
+        return {
+          ...base,
+          description: `You've reached your monthly Prospect AI discovery limit. Upgrade to Pro for ${PROSPECT_AI_MONTHLY_QUOTAS.pro} discoveries per month.`,
+          targetPlan: "pro" as TargetPlan,
+          ctaText: "Upgrade to Pro",
+        };
+      }
+      return {
+        ...base,
+        description: `You've reached your monthly Prospect AI discovery limit. Upgrade to Starter for ${PROSPECT_AI_MONTHLY_QUOTAS.starter} discoveries per month.`,
+        targetPlan: "starter" as TargetPlan,
+        ctaText: "Upgrade to Starter",
+      };
+    }
     return base;
-  }, [isAutomationsPaidPlan, reason, isShopify]);
+  }, [isAutomationsPaidPlan, reason, isShopify, currentPlan]);
 
   const runCheckout = async (plan: TargetPlan) => {
     setLoadingPlan(plan);

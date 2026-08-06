@@ -1,4 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  getProspectAiMonthlyQuota,
+  nextProspectAiQuotaUpgradePlan,
+  prospectAiPlanDisplayName,
+  PROSPECT_AI_MONTHLY_QUOTAS,
+} from "@shared/prospectAI";
+import type { SubscriptionPlan } from "@shared/schema";
 
 export const PROSPECT_AI_STATUS_KEY = ["/api/growth-engines/prospect-ai/status"] as const;
 export const PROSPECT_AI_ACTIVITY_KEY = ["/api/growth-engines/prospect-ai/activity"] as const;
@@ -133,34 +140,60 @@ export type ProspectAiActivityResponse = {
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { credentials: "include", ...init });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error || "Request failed");
+  if (!res.ok) {
+    const err = new Error((data as { error?: string }).error || "Request failed") as Error & {
+      code?: string;
+      remaining_quota?: number;
+      plan_limit?: number;
+      plan?: string;
+    };
+    const body = data as {
+      code?: string;
+      remaining_quota?: number;
+      plan_limit?: number;
+      plan?: string;
+    };
+    if (body.code) err.code = body.code;
+    if (typeof body.remaining_quota === "number") err.remaining_quota = body.remaining_quota;
+    if (typeof body.plan_limit === "number") err.plan_limit = body.plan_limit;
+    if (body.plan) err.plan = body.plan;
+    throw err;
+  }
   return data as T;
+}
+
+function asSubscriptionPlan(plan: string | null | undefined): SubscriptionPlan {
+  const normalized = String(plan || "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "pro" || normalized.includes("pro")) return "pro";
+  if (normalized === "starter" || normalized.includes("starter")) return "starter";
+  return "free";
 }
 
 /** Monthly Prospect Discoveries included by subscription plan (catalog / activation copy). */
 export function prospectDiscoveriesForPlan(plan: string | null | undefined): number {
-  const normalized = (plan || "").toLowerCase();
-  if (normalized.includes("pro")) return 500;
-  if (normalized.includes("starter")) return 100;
-  return 100;
+  return getProspectAiMonthlyQuota(asSubscriptionPlan(plan));
 }
 
 export function normalizeProspectAiPlanLabel(
   plan: string | null | undefined,
-): "pro" | "starter" | "other" {
+): "pro" | "starter" | "free" | "other" {
   const normalized = (plan || "").toLowerCase();
   if (normalized.includes("pro")) return "pro";
   if (normalized.includes("starter")) return "starter";
+  if (normalized.includes("free") || !normalized) return "free";
   return "other";
 }
 
-/** Compact two-line catalog quota block (both plans). */
+/** Compact catalog quota block for all plans. */
 export function prospectDiscoveriesCatalogLines(): { title: string; lines: string[] } {
   return {
     title: "Included with your plan",
     lines: [
-      "Starter: 100 Prospect Discoveries / month",
-      "Pro: 500 Prospect Discoveries / month",
+      `Free: ${PROSPECT_AI_MONTHLY_QUOTAS.free} Prospect Discoveries / month`,
+      `Starter: ${PROSPECT_AI_MONTHLY_QUOTAS.starter} Prospect Discoveries / month`,
+      `Pro: ${PROSPECT_AI_MONTHLY_QUOTAS.pro} Prospect Discoveries / month`,
     ],
   };
 }
@@ -172,23 +205,42 @@ export function prospectDiscoveriesPlanPanel(plan: string | null | undefined): {
   secondaryLines?: string[];
 } {
   const label = normalizeProspectAiPlanLabel(plan);
+  const resolved = asSubscriptionPlan(plan);
+  const quota = getProspectAiMonthlyQuota(resolved);
   if (label === "pro") {
     return {
       title: "Included with your Pro plan",
-      primary: "500 Prospect Discoveries / month",
+      primary: `${quota} Prospect Discoveries / month`,
     };
   }
   if (label === "starter") {
+    const next = nextProspectAiQuotaUpgradePlan("starter");
     return {
       title: "Included with your Starter plan",
-      primary: "100 Prospect Discoveries / month",
-      secondaryLines: ["Pro: 500 Prospect Discoveries / month"],
+      primary: `${quota} Prospect Discoveries / month`,
+      secondaryLines: next
+        ? [
+            `${prospectAiPlanDisplayName(next)}: ${getProspectAiMonthlyQuota(next)} Prospect Discoveries / month`,
+          ]
+        : undefined,
+    };
+  }
+  if (label === "free") {
+    const next = nextProspectAiQuotaUpgradePlan("free");
+    return {
+      title: "Included with your Free plan",
+      primary: `${quota} Prospect Discoveries / month`,
+      secondaryLines: next
+        ? [
+            `${prospectAiPlanDisplayName(next)}: ${getProspectAiMonthlyQuota(next)} Prospect Discoveries / month`,
+          ]
+        : undefined,
     };
   }
   const catalog = prospectDiscoveriesCatalogLines();
   return {
     title: catalog.title,
-    primary: catalog.lines[0],
+    primary: catalog.lines[0]!,
     secondaryLines: catalog.lines.slice(1),
   };
 }

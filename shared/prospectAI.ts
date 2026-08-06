@@ -15,12 +15,14 @@ export const PROSPECT_AI_IMPORT_PROVIDER = "prospect_ai" as const;
 
 export const PROSPECT_AI_INTERNAL_TAG = "Discovered-ProspectAI" as const;
 
-/** Monthly discovery result quotas by effective plan. Free is not eligible. */
+/** Monthly Prospect Discoveries (net-new) by effective workspace plan. */
 export const PROSPECT_AI_MONTHLY_QUOTAS = {
-  free: 0,
+  free: 50,
   starter: 100,
   pro: 500,
 } as const satisfies Record<SubscriptionPlan, number>;
+
+const PROSPECT_AI_PLAN_ORDER: readonly SubscriptionPlan[] = ["free", "starter", "pro"];
 
 export const PROSPECT_AI_MAX_RADIUS_KM = 50;
 export const PROSPECT_AI_MIN_RADIUS_KM = 0.5;
@@ -60,9 +62,38 @@ export function getProspectAiMonthlyQuota(plan: SubscriptionPlan): number {
   return PROSPECT_AI_MONTHLY_QUOTAS[plan] ?? 0;
 }
 
-/** Starter and Pro may activate; Free cannot (admin plan override still flows through effective plan). */
+/** Eligible when the effective plan has a positive monthly discovery allowance. */
 export function isProspectAiPlanEligible(plan: SubscriptionPlan): boolean {
-  return plan === "starter" || plan === "pro";
+  return getProspectAiMonthlyQuota(plan) > 0;
+}
+
+/** Next plan with a higher discovery quota, if any (upgrade path). */
+export function nextProspectAiQuotaUpgradePlan(
+  plan: SubscriptionPlan,
+): SubscriptionPlan | null {
+  const current = getProspectAiMonthlyQuota(plan);
+  for (const candidate of PROSPECT_AI_PLAN_ORDER) {
+    if (getProspectAiMonthlyQuota(candidate) > current) return candidate;
+  }
+  return null;
+}
+
+export function prospectAiPlanDisplayName(plan: SubscriptionPlan): string {
+  if (plan === "pro") return "Pro";
+  if (plan === "starter") return "Starter";
+  if (plan === "free") return "Free";
+  return String(plan);
+}
+
+/** User-facing exhausted-quota copy (no developer wording). */
+export function prospectAiQuotaExceededUserMessage(plan: SubscriptionPlan): string {
+  const base = "You've reached your monthly Prospect AI discovery limit.";
+  const next = nextProspectAiQuotaUpgradePlan(plan);
+  if (!next) {
+    return `${base} Your quota resets with your next billing period.`;
+  }
+  const nextQuota = getProspectAiMonthlyQuota(next);
+  return `${base} Upgrade to ${prospectAiPlanDisplayName(next)} for ${nextQuota} discoveries per month.`;
 }
 
 export type ProspectAiDiscoverRequest = {

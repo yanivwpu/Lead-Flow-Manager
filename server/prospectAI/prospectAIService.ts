@@ -16,6 +16,7 @@ import {
   PROSPECT_AI_INTERNAL_TAG,
   getProspectAiMonthlyQuota,
   isProspectAiPlanEligible,
+  prospectAiQuotaExceededUserMessage,
   type ProspectAiAiBrainStatus,
   type ProspectAiQuotaSnapshot,
   type ProspectAiStatusResponse,
@@ -65,6 +66,13 @@ function acquireDiscoveryRunLock(
   };
 }
 
+export type ProspectAiErrorDetails = {
+  remaining_quota?: number;
+  plan_limit?: number;
+  used?: number;
+  plan?: SubscriptionPlan;
+};
+
 export class ProspectAiError extends Error {
   constructor(
     message: string,
@@ -79,14 +87,38 @@ export class ProspectAiError extends Error {
       | "active_batch_exists"
       | "concurrent_discovery",
     public readonly status = 400,
+    public readonly details: ProspectAiErrorDetails = {},
   ) {
     super(message);
     this.name = "ProspectAiError";
   }
 }
 
-function startOfUtcMonth(now = new Date()): Date {
+export function startOfUtcMonth(now = new Date()): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+}
+
+/**
+ * Pure period resolver for discovery quota (billing cycle when active, else UTC month).
+ * Exported for tests — production path uses resolveDiscoveryQuotaPeriodStart.
+ */
+export function resolveDiscoveryQuotaPeriodStartFromDates(
+  currentPeriodStart: Date | null | undefined,
+  currentPeriodEnd: Date | null | undefined,
+  now = new Date(),
+): { periodStart: Date; source: "billing_period" | "utc_month" } {
+  const start =
+    currentPeriodStart instanceof Date && !Number.isNaN(currentPeriodStart.getTime())
+      ? currentPeriodStart
+      : null;
+  const end =
+    currentPeriodEnd instanceof Date && !Number.isNaN(currentPeriodEnd.getTime())
+      ? currentPeriodEnd
+      : null;
+  if (start && end && now <= end) {
+    return { periodStart: start, source: "billing_period" };
+  }
+  return { periodStart: startOfUtcMonth(now), source: "utc_month" };
 }
 
 function toIso(value: Date | string | null | undefined): string | null {
@@ -119,16 +151,7 @@ export async function resolveDiscoveryQuotaPeriodStart(
     .limit(1);
   const start = rows[0]?.currentPeriodStart ? new Date(rows[0].currentPeriodStart) : null;
   const end = rows[0]?.currentPeriodEnd ? new Date(rows[0].currentPeriodEnd) : null;
-  if (
-    start &&
-    !Number.isNaN(start.getTime()) &&
-    end &&
-    !Number.isNaN(end.getTime()) &&
-    now <= end
-  ) {
-    return { periodStart: start, source: "billing_period" };
-  }
-  return { periodStart: startOfUtcMonth(now), source: "utc_month" };
+  return resolveDiscoveryQuotaPeriodStartFromDates(start, end, now);
 }
 
 /** Immutable ledger sum for the active quota period. */
@@ -301,9 +324,14 @@ export async function activateProspectAi(workspaceUserId: string): Promise<Prosp
   }
   if (!isProspectAiPlanEligible(limits.plan)) {
     throw new ProspectAiError(
-      "Prospect AI requires Starter or Pro. Upgrade to activate.",
+      "Prospect AI is not available on your current plan.",
       "upgrade_required",
       403,
+      {
+        plan: limits.plan,
+        plan_limit: getProspectAiMonthlyQuota(limits.plan),
+        remaining_quota: 0,
+      },
     );
   }
 
@@ -340,9 +368,14 @@ async function assertActivatedAndEligible(
   }
   if (!isProspectAiPlanEligible(limits.plan)) {
     throw new ProspectAiError(
-      "Prospect AI requires Starter or Pro.",
+      "Prospect AI is not available on your current plan.",
       "upgrade_required",
       403,
+      {
+        plan: limits.plan,
+        plan_limit: getProspectAiMonthlyQuota(limits.plan),
+        remaining_quota: 0,
+      },
     );
   }
   const activation = await getActivation(workspaceUserId);
@@ -352,11 +385,15 @@ async function assertActivatedAndEligible(
   const quota = await buildQuotaSnapshot(workspaceUserId, limits.plan);
   if (opts?.requireQuota !== false && quota.remaining <= 0) {
     throw new ProspectAiError(
-      limits.plan === "pro"
-        ? "You've used all of your monthly Prospect Discoveries. Your quota resets next month."
-        : "You've used all of your monthly Prospect Discoveries. Upgrade to Pro for 500 Prospect Discoveries each month.",
+      prospectAiQuotaExceededUserMessage(limits.plan),
       "quota_exceeded",
       429,
+      {
+        plan: limits.plan,
+        plan_limit: quota.monthlyQuota,
+        remaining_quota: 0,
+        used: quota.used,
+      },
     );
   }
   return { plan: limits.plan, quota };
@@ -1153,6 +1190,8 @@ export async function getProspectAiActivity(workspaceUserId: string): Promise<{
 /** Pure helpers exported for unit tests. */
 export const prospectAiQuotaHelpers = {
   startOfUtcMonth,
+  resolveDiscoveryQuotaPeriodStartFromDates,
   getProspectAiMonthlyQuota,
   isProspectAiPlanEligible,
+  prospectAiQuotaExceededUserMessage,
 };

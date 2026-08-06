@@ -45,6 +45,12 @@ import {
 } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
 import { useSubscription } from "@/lib/subscription-context";
+import { UpgradeModal } from "@/components/UpgradeModal";
+import {
+  nextProspectAiQuotaUpgradePlan,
+  prospectAiQuotaExceededUserMessage,
+} from "@shared/prospectAI";
+import type { SubscriptionPlan } from "@shared/schema";
 import {
   PROSPECT_AI_PATH,
   prospectDiscoveriesPlanPanel,
@@ -120,7 +126,22 @@ function resultLabel(row: ProspectAiDiscoverResult): string {
   );
 }
 
-function QuotaMeter({ status }: { status: ProspectAiStatus }) {
+function resolveStatusPlan(plan: string | null | undefined): SubscriptionPlan {
+  const normalized = String(plan || "")
+    .trim()
+    .toLowerCase();
+  if (normalized.includes("pro")) return "pro";
+  if (normalized.includes("starter")) return "starter";
+  return "free";
+}
+
+function QuotaMeter({
+  status,
+  onUpgrade,
+}: {
+  status: ProspectAiStatus;
+  onUpgrade?: () => void;
+}) {
   const used = Math.max(0, status.used ?? 0);
   const monthlyQuota = Math.max(0, status.monthlyQuota ?? 0);
   const remaining = Math.max(0, status.remaining ?? monthlyQuota - used);
@@ -129,10 +150,15 @@ function QuotaMeter({ status }: { status: ProspectAiStatus }) {
   const exhausted = monthlyQuota > 0 && remaining <= 0;
   const nearing =
     !exhausted && monthlyQuota > 0 && (remaining / monthlyQuota <= 0.15 || remaining <= 15);
-  const isStarter = String(status.plan || "").toLowerCase().includes("starter");
+  const plan = resolveStatusPlan(status.plan);
+  const canUpgrade = Boolean(nextProspectAiQuotaUpgradePlan(plan));
+  const exhaustedMessage = prospectAiQuotaExceededUserMessage(plan);
 
   return (
-    <div className="rounded-xl border border-gray-200/90 bg-white p-4 shadow-sm">
+    <div
+      className="rounded-xl border border-gray-200/90 bg-white p-4 shadow-sm"
+      data-testid="prospect-ai-quota-meter"
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 text-pretty">
@@ -140,12 +166,14 @@ function QuotaMeter({ status }: { status: ProspectAiStatus }) {
           </p>
           <p className="mt-1 text-sm text-gray-800">
             <span className="font-semibold tabular-nums text-gray-900">{used}</span>
-            {" of "}
+            {" / "}
             <span className="tabular-nums">{monthlyQuota}</span> used this month
-            <span className="text-gray-500">
-              {" · "}
-              <span className="tabular-nums text-gray-700">{remaining}</span> remaining
-            </span>
+            {!exhausted ? (
+              <span className="text-gray-500">
+                {" · "}
+                <span className="tabular-nums text-gray-700">{remaining}</span> remaining
+              </span>
+            ) : null}
           </p>
           <p className="mt-0.5 text-xs text-gray-500">Resets each billing month</p>
         </div>
@@ -156,18 +184,25 @@ function QuotaMeter({ status }: { status: ProspectAiStatus }) {
       <Progress
         value={pct}
         className="mt-3 h-2"
-        aria-label={`${used} of ${monthlyQuota} Prospect Discoveries used`}
+        aria-label={`${used} / ${monthlyQuota} Prospect Discoveries used this month`}
       />
       {exhausted ? (
-        <p className="mt-3 text-sm text-amber-900">
-          You’ve used all of your monthly Prospect Discoveries.
-          {isStarter ? (
-            <>
-              {" "}
-              Upgrade to Pro for 500 Prospect Discoveries each month.
-            </>
+        <div className="mt-3 space-y-2">
+          <p className="text-sm text-amber-900" data-testid="prospect-ai-quota-exhausted">
+            {exhaustedMessage}
+          </p>
+          {canUpgrade && onUpgrade ? (
+            <Button
+              type="button"
+              size="sm"
+              className="bg-brand-green hover:bg-brand-green/90"
+              onClick={onUpgrade}
+              data-testid="prospect-ai-quota-upgrade"
+            >
+              Upgrade plan
+            </Button>
           ) : null}
-        </p>
+        </div>
       ) : nearing ? (
         <p className="mt-3 text-sm text-amber-800">
           You’re nearing your monthly Prospect Discovery limit.
@@ -424,9 +459,13 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
   const [confirmReplaceOpen, setConfirmReplaceOpen] = useState(false);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [restoredFromBatch, setRestoredFromBatch] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const discoverAbortRef = useRef<AbortController | null>(null);
 
   const discover = useProspectAiDiscover();
+  const quotaExhausted = Math.max(0, status.remaining ?? 0) < 1;
+  const statusPlan = resolveStatusPlan(status.plan);
+  const canUpgradeQuota = Boolean(nextProspectAiQuotaUpgradePlan(statusPlan));
   const sendToReview = useSendDiscoverToReview(searchId);
   const discardBatch = useDiscardDiscoverySearch();
   const activeBatchQuery = useActiveDiscoveryBatch({ enabled: status.activated !== false });
@@ -606,6 +645,16 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
           });
           return;
         }
+        const code = (err as Error & { code?: string }).code;
+        if (code === "quota_exceeded" || /monthly Prospect AI discovery limit/i.test(msg)) {
+          if (canUpgradeQuota) setUpgradeOpen(true);
+          toast({
+            title: "Discovery limit reached",
+            description: msg,
+            variant: "destructive",
+          });
+          return;
+        }
         toast({
           title: "Discovery failed",
           description: msg,
@@ -683,7 +732,16 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
 
   return (
     <ProspectAiTabBody className="space-y-10" data-testid="prospect-discover-tab">
-      <QuotaMeter status={status} />
+      <QuotaMeter
+        status={status}
+        onUpgrade={canUpgradeQuota ? () => setUpgradeOpen(true) : undefined}
+      />
+      <UpgradeModal
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        reason="prospect_ai_discoveries"
+        currentPlan={status.plan}
+      />
       <AiBrainPanel status={status} />
 
       <div className="rounded-2xl border border-emerald-200/70 bg-white p-6 shadow-md shadow-emerald-900/[0.04] ring-1 ring-emerald-100/80 sm:p-7">
@@ -780,15 +838,17 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
                   discover.isPending ||
                   !businessType.trim() ||
                   !location.trim() ||
-                  status.remaining < 1
+                  quotaExhausted
                 }
                 onClick={() => {
+                  if (quotaExhausted) return;
                   if (results.length > 0 && searchId) {
                     setConfirmReplaceOpen(true);
                     return;
                   }
                   runDiscover(false);
                 }}
+                aria-disabled={quotaExhausted}
                 data-testid="prospect-ai-discover"
               >
                 {discover.isPending ? (
@@ -799,7 +859,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
                 ) : (
                   <>
                     <Search className="mr-2 h-4 w-4" />
-                    Discover Prospects
+                    Start Discovery
                   </>
                 )}
               </Button>
@@ -817,6 +877,11 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
             ) : null}
           </div>
         </div>
+        {quotaExhausted ? (
+          <p className="mt-3 text-sm text-amber-900" data-testid="prospect-ai-discover-quota-gate">
+            {prospectAiQuotaExceededUserMessage(statusPlan)}
+          </p>
+        ) : null}
         {discover.isPending ? (
           <p className="mt-3 text-xs text-amber-800" data-testid="prospect-discover-progress">
             Preparing search → Searching Google Places → Checking pages → Removing duplicates →

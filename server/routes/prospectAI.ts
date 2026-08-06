@@ -28,9 +28,26 @@ function workspaceUserId(req: Request): string {
 
 function handleProspectAiError(err: unknown, res: Response, logLabel: string): void {
   if (err instanceof ProspectAiError) {
-    const body: Record<string, unknown> = { error: err.message, code: err.code };
+    const body: Record<string, unknown> = {
+      error: err.message,
+      code: err.code,
+    };
     if (err.code === "upgrade_required") {
       body.upgradeRequired = true;
+    }
+    if (err.code === "quota_exceeded" || err.code === "upgrade_required") {
+      if (typeof err.details.remaining_quota === "number") {
+        body.remaining_quota = err.details.remaining_quota;
+      }
+      if (typeof err.details.plan_limit === "number") {
+        body.plan_limit = err.details.plan_limit;
+      }
+      if (typeof err.details.used === "number") {
+        body.used = err.details.used;
+      }
+      if (err.details.plan) {
+        body.plan = err.details.plan;
+      }
     }
     res.status(err.status).json(body);
     return;
