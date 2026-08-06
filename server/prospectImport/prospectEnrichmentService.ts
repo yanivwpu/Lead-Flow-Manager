@@ -250,10 +250,12 @@ async function applyEnrichmentToContact(
   if (!contact || contact.userId !== workspaceUserId) return;
 
   const patch: Record<string, unknown> = {};
-  const foundEmail = selectBestProspectEmail(result.publicContacts.emails, {
-    websiteUrl: result.websiteUrl,
-    extractions: result.publicContacts.emailExtractions,
-  });
+  const foundEmail =
+    result.bestEmailProvenance?.email ||
+    selectBestProspectEmail(result.publicContacts.emails, {
+      websiteUrl: result.websiteUrl,
+      extractions: result.publicContacts.emailExtractions,
+    });
   const foundPhone = result.publicContacts.phones.find((p) => isValidProspectPhone(p));
 
   if (foundEmail && shouldApplyScrapedProspectEmail(contact.email, foundEmail)) {
@@ -329,12 +331,14 @@ export async function processClaimedEnrichmentJob(
       failureClass,
       providerEmailFound: result.emailFound,
       contactEmail: contact.email,
+      providerOutcomeClass: result.outcomeClass,
     });
     const storedResult: ProspectEnrichmentResult = {
       ...result,
       emailFound: decision.enrichmentEmailFound,
       outcomeClass: decision.outcomeClass,
       websiteCrawlFailed: decision.softCompleteWithExistingEmail ? true : result.crawlSucceeded === false,
+      bestEmailProvenance: result.bestEmailProvenance ?? null,
     };
 
     if (decision.enrichmentStatus === "failed") {

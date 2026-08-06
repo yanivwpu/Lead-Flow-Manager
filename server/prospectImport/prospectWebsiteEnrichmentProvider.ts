@@ -1,11 +1,12 @@
 /**
  * Website-public enrichment provider (Phase 2).
- * Crawls prospect homepage + common paths; extracts public contacts; AI summarizes.
+ * Crawls prospect homepage + contact/location pages; extracts public contacts; AI summarizes.
  * Future Apollo/Hunter providers implement the same interface.
  */
 
 import type { Contact } from "@shared/schema";
 import type {
+  ProspectEmailProvenance,
   ProspectEnrichmentResult,
   ProspectPublicContacts,
   ProspectWebsiteIntelligence,
@@ -17,18 +18,34 @@ import {
 import { aiProvider } from "../aiProvider";
 import {
   detectWebsiteSignals,
-  discoverContactUrlsFromHtml,
   extractPublicContactsFromHtml,
-  selectBestProspectEmail,
+  selectBestProspectEmailDetailed,
+  type ProspectExtractedEmail,
 } from "./prospectWebsiteContactExtract";
-import {
-  resolveProspectSocialProfileUrls,
-} from "./prospectWebsiteUrl";
+import { resolveProspectSocialProfileUrls } from "./prospectWebsiteUrl";
 import { recoverOfficialWebsiteForEnrichment } from "./prospectOfficialWebsiteRecovery";
 import { loadProspectAiWorkspaceContext } from "./prospectAiWorkspaceContext";
 import { readProspectImportMetadata } from "./prospectIntelligenceEligibility";
 import { classifyAllPagesFailed } from "@shared/prospectEnrichmentOutcome";
 import type { ProspectEnrichmentFailureClass } from "@shared/prospectEnrichment";
+import {
+  buildEnrichmentPageQueue,
+  discoverEmailBearingUrlsFromHtml,
+  mergeDiscoveredIntoQueue,
+  pageLooksJavaScriptHeavy,
+  PROSPECT_ENRICH_MAX_COMBINED_TEXT,
+  PROSPECT_ENRICH_MAX_PAGES,
+  type EnrichmentPageCandidate,
+} from "./prospectWebsitePageDiscovery";
+import {
+  readProspectLocationSignals,
+  scoreLocationPageMatch,
+} from "./prospectWebsiteLocationSignals";
+import {
+  isProspectEnrichmentHeadlessEnabled,
+  PROSPECT_ENRICH_MAX_RENDER_PAGES,
+  renderPageHtmlForEnrichment,
+} from "./prospectWebsiteRenderFallback";
 
 export {
   resolveProspectWebsiteUrl,
@@ -78,18 +95,9 @@ function failureResult(params: {
     failureClass: params.failureClass,
     outcomeClass,
     socialProfilesPreserved: params.socialProfiles || [],
+    bestEmailProvenance: null,
   };
 }
-
-const GUIDED_PATHS = [
-  { key: "home", path: "/" },
-  { key: "contact", path: "/contact" },
-  { key: "contact-us", path: "/contact-us" },
-  { key: "about", path: "/about" },
-  { key: "about-us", path: "/about-us" },
-  { key: "team", path: "/team" },
-  { key: "services", path: "/services" },
-];
 
 export type ProspectEnrichmentProvider = {
   id: "website_public";
@@ -134,26 +142,21 @@ function mergeContacts(...parts: ProspectPublicContacts[]): ProspectPublicContac
   };
 }
 
-function buildGuidedUrls(homepage: string): Array<{ key: string; url: string }> {
-  const base = new URL(homepage);
-  const origin = `${base.protocol}//${base.host}`;
-  const urls: Array<{ key: string; url: string }> = [{ key: "home", url: origin + "/" }];
-  for (const p of GUIDED_PATHS) {
-    if (p.key === "home") continue;
-    urls.push({ key: p.key, url: origin + p.path });
-  }
-  // Also try homepage path as given if not root
-  if (base.pathname && base.pathname !== "/") {
-    urls.unshift({ key: "listed", url: homepage });
-  }
-  // Dedupe
-  const seen = new Set<string>();
-  return urls.filter((u) => {
-    const k = u.url.toLowerCase();
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+function annotateExtractionsWithLocation(
+  extractions: ProspectExtractedEmail[] | undefined,
+  pageUrl: string,
+  locationScore: number,
+  locationEvidence: string[],
+): ProspectExtractedEmail[] {
+  return (extractions || []).map((ex) => ({
+    ...ex,
+    sourceUrl: ex.sourceUrl || pageUrl,
+    matchedLocationEvidence:
+      locationScore > 0
+        ? [...(ex.matchedLocationEvidence || []), ...locationEvidence]
+        : ex.matchedLocationEvidence,
+    confidence: Math.max(ex.confidence || 40, locationScore >= 40 ? 75 : 50),
+  }));
 }
 
 async function summarizeWebsiteWithAi(params: {
@@ -281,6 +284,7 @@ export const websitePublicEnrichmentProvider: ProspectEnrichmentProvider = {
       ? recovered.socialProfiles
       : resolveProspectSocialProfileUrls(contact);
     const phoneOnContact = Boolean(String(contact.phone || "").trim());
+    const locationSignals = readProspectLocationSignals(contact);
 
     if (!recovered.websiteUrl) {
       if (socialProfiles.length || recovered.reason === "social_only") {
@@ -304,45 +308,133 @@ export const websitePublicEnrichmentProvider: ProspectEnrichmentProvider = {
     const websiteUrl = recovered.websiteUrl;
 
     await onProgress?.(2, total);
-    const guided = buildGuidedUrls(websiteUrl);
-    const pageQueue = [...guided];
-    const queuedUrls = new Set(pageQueue.map((p) => p.url.toLowerCase()));
+    let pageQueue = buildEnrichmentPageQueue({ homepage: websiteUrl, contact });
+    const queuedUrls = new Set(pageQueue.map((p) => p.url.toLowerCase().replace(/\/$/, "")));
     const pageResults: Array<{ url: string; status: string; reason?: string }> = [];
+    const locationScoreByUrl: Record<string, number> = {};
     let combinedText = "";
     let allHtml = "";
     let contacts = mergeContacts(emptyPublicContacts(socialProfiles));
+    let scannedCount = 0;
+    let failedCount = 0;
+    const renderCandidates: EnrichmentPageCandidate[] = [];
+    const renderPages: string[] = [];
+    let renderFallbackUsed = false;
 
-    for (let i = 0; i < pageQueue.length && i < 8; i++) {
+    for (let i = 0; i < pageQueue.length && scannedCount + failedCount < PROSPECT_ENRICH_MAX_PAGES; i++) {
       const page = pageQueue[i]!;
       try {
         const { finalUrl, html } = await fetchPublicHtmlPage(page.url);
         allHtml += `\n${html}`;
+        const loc = scoreLocationPageMatch(locationSignals, finalUrl, html);
+        const locationScore = Math.max(page.locationScore, loc.score);
+        const locationEvidence = [...page.locationEvidence, ...loc.evidence];
+        locationScoreByUrl[finalUrl.toLowerCase()] = locationScore;
+        locationScoreByUrl[finalUrl.toLowerCase().replace(/\/$/, "")] = locationScore;
+
         const pageContacts = extractPublicContactsFromHtml(html, finalUrl);
-        contacts = mergeContacts(contacts, pageContacts);
+        const annotated: ProspectPublicContacts = {
+          ...pageContacts,
+          emailExtractions: annotateExtractionsWithLocation(
+            pageContacts.emailExtractions as ProspectExtractedEmail[] | undefined,
+            finalUrl,
+            locationScore,
+            locationEvidence,
+          ),
+        };
+        contacts = mergeContacts(contacts, annotated);
         const text = htmlToEnrichmentText(html, 12_000);
         combinedText += `\n\n--- ${page.key} — ${finalUrl} ---\n${text}`;
         pageResults.push({ url: finalUrl, status: "scanned" });
+        scannedCount += 1;
 
-        // After homepage (or listed URL), follow footer/nav contact links present in HTML.
-        if (page.key === "home" || page.key === "listed") {
-          for (const discovered of discoverContactUrlsFromHtml(html, finalUrl)) {
-            const key = discovered.toLowerCase();
-            if (queuedUrls.has(key)) continue;
+        if (pageLooksJavaScriptHeavy(html, text.length) && locationScore >= 40) {
+          renderCandidates.push({ ...page, url: finalUrl, locationScore, locationEvidence });
+        } else if (
+          pageLooksJavaScriptHeavy(html, text.length) &&
+          (page.key.includes("contact") || page.key.includes("location") || page.key === "home")
+        ) {
+          renderCandidates.push({ ...page, url: finalUrl, locationScore, locationEvidence });
+        }
+
+        // Discover contact/location links from home/listed/locations hubs.
+        if (
+          page.key === "home" ||
+          page.key === "listed" ||
+          page.key === "locations" ||
+          page.key === "location"
+        ) {
+          const discovered = discoverEmailBearingUrlsFromHtml(html, finalUrl, locationSignals);
+          const fresh = discovered.filter((d) => {
+            const key = d.url.toLowerCase().replace(/\/$/, "");
+            if (queuedUrls.has(key)) return false;
             queuedUrls.add(key);
-            pageQueue.push({ key: "discovered_contact", url: discovered });
+            return true;
+          });
+          if (fresh.length) {
+            pageQueue = mergeDiscoveredIntoQueue(pageQueue, fresh);
           }
         }
       } catch (err) {
+        failedCount += 1;
         pageResults.push({
           url: page.url,
           status: "failed",
           reason: err instanceof Error ? err.message.slice(0, 120) : "fetch_failed",
         });
       }
-      if (combinedText.length > 90_000) break;
+      if (combinedText.length > PROSPECT_ENRICH_MAX_COMBINED_TEXT) break;
+      if (contacts.emails.length > 0 && scannedCount >= 3 && locationSignals.city) {
+        // Early stop once we have an on-domain email from a strong location match.
+        const strong = (contacts.emailExtractions || []).some(
+          (ex) => (ex.matchedLocationEvidence || []).length > 0,
+        );
+        if (strong) break;
+      }
     }
 
-    const anyScanned = pageResults.some((p) => p.status === "scanned");
+    // Headless fallback — only when static crawl found no email and pages look JS-heavy.
+    if (
+      contacts.emails.length === 0 &&
+      isProspectEnrichmentHeadlessEnabled() &&
+      renderCandidates.length > 0
+    ) {
+      const uniqueRender = new Map<string, EnrichmentPageCandidate>();
+      for (const c of [...renderCandidates].sort((a, b) => b.locationScore - a.locationScore)) {
+        const k = c.url.toLowerCase();
+        if (!uniqueRender.has(k)) uniqueRender.set(k, c);
+      }
+      let rendered = 0;
+      for (const cand of uniqueRender.values()) {
+        if (rendered >= PROSPECT_ENRICH_MAX_RENDER_PAGES) break;
+        const html = await renderPageHtmlForEnrichment(cand.url);
+        rendered += 1;
+        renderFallbackUsed = true;
+        renderPages.push(cand.url);
+        if (!html) {
+          pageResults.push({ url: cand.url, status: "render_failed", reason: "headless_unavailable_or_timeout" });
+          continue;
+        }
+        const loc = scoreLocationPageMatch(locationSignals, cand.url, html);
+        locationScoreByUrl[cand.url.toLowerCase()] = Math.max(cand.locationScore, loc.score);
+        const pageContacts = extractPublicContactsFromHtml(html, cand.url);
+        const withMethod: ProspectPublicContacts = {
+          ...pageContacts,
+          emailExtractions: (pageContacts.emailExtractions || []).map((ex) => ({
+            ...ex,
+            method: "rendered_dom" as const,
+            sourceUrl: cand.url,
+            matchedLocationEvidence: [...(ex.matchedLocationEvidence || []), ...loc.evidence],
+            confidence: 80,
+          })),
+        };
+        contacts = mergeContacts(contacts, withMethod);
+        pageResults.push({ url: cand.url, status: "rendered" });
+        if (contacts.emails.length > 0) break;
+      }
+    }
+
+    const anyScanned = pageResults.some((p) => p.status === "scanned" || p.status === "rendered");
     if (!anyScanned || !String(allHtml || "").trim()) {
       const failureClass = classifyAllPagesFailed(pageResults);
       return failureResult({
@@ -361,7 +453,7 @@ export const websitePublicEnrichmentProvider: ProspectEnrichmentProvider = {
       contact,
       workspaceUserId,
       websiteUrl,
-      combinedText: combinedText.slice(0, 90_000),
+      combinedText: combinedText.slice(0, PROSPECT_ENRICH_MAX_COMBINED_TEXT),
       signals,
       publicContacts: contacts,
     });
@@ -369,21 +461,35 @@ export const websitePublicEnrichmentProvider: ProspectEnrichmentProvider = {
 
     await onProgress?.(4, total);
 
-    // Prefer business-domain / mailto contact emails over vendor noise.
-    const bestEmail = selectBestProspectEmail(contacts.emails, {
+    const best = selectBestProspectEmailDetailed(contacts.emails, {
       websiteUrl,
       extractions: contacts.emailExtractions,
+      locationScoreByUrl,
     });
-    if (bestEmail) {
+    if (best) {
       contacts = {
         ...contacts,
-        emails: [bestEmail, ...contacts.emails.filter((e) => e.toLowerCase() !== bestEmail)],
+        emails: [best.email, ...contacts.emails.filter((e) => e.toLowerCase() !== best.email)],
       };
     }
 
-    // Prefer discovered public email/phone; never invent. Keep existing contact phone if found none.
     const emailFound = contacts.emails.length > 0;
     const phoneFound = contacts.phones.length > 0 || phoneOnContact;
+    const renderFailed =
+      renderFallbackUsed && renderPages.length > 0 && !emailFound &&
+      pageResults.some((p) => p.status === "render_failed");
+    const searchIncomplete =
+      !emailFound &&
+      ((failedCount > 0 && scannedCount > 0) || renderFailed);
+    const provenance: ProspectEmailProvenance | null = best
+      ? {
+          email: best.email,
+          sourceUrl: best.sourceUrl || null,
+          method: best.method || null,
+          confidence: best.confidence,
+          matchedLocationEvidence: best.matchedLocationEvidence || [],
+        }
+      : null;
 
     return {
       provider: "website_public",
@@ -395,8 +501,15 @@ export const websitePublicEnrichmentProvider: ProspectEnrichmentProvider = {
       phoneFound,
       crawlSucceeded: true,
       failureClass: null,
-      outcomeClass: emailFound ? "completed_email_found" : "completed_no_email",
+      outcomeClass: emailFound
+        ? "completed_email_found"
+        : searchIncomplete
+          ? "completed_search_incomplete"
+          : "completed_no_email",
       socialProfilesPreserved: socialProfiles,
+      bestEmailProvenance: provenance,
+      renderFallbackUsed,
+      renderPages: renderPages.length ? renderPages : undefined,
     };
   },
 };
@@ -405,6 +518,5 @@ export function getProspectEnrichmentProvider(
   id: string = "website_public",
 ): ProspectEnrichmentProvider {
   if (id === "website_public") return websitePublicEnrichmentProvider;
-  // Future: apollo, hunter, etc.
   return websitePublicEnrichmentProvider;
 }

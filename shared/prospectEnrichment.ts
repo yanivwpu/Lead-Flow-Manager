@@ -48,6 +48,8 @@ export const PROSPECT_ENRICHMENT_OUTCOME_CLASSES = [
   "running",
   "completed_email_found",
   "completed_no_email",
+  /** Crawl finished but some fetches/renders aborted — email search incomplete. */
+  "completed_search_incomplete",
   /** Website crawl failed, but contact already had a valid (e.g. manual) email. */
   "completed_email_present_website_failed",
   "failed_timeout",
@@ -75,9 +77,27 @@ export type ProspectPublicContacts = {
   /** Optional extraction trace — stored in jsonb enrichment_result only (no migration). */
   emailExtractions?: Array<{
     email: string;
-    method: "cloudflare_cfemail" | "mailto" | "standard_text" | "obfuscated_text";
+    method:
+      | "cloudflare_cfemail"
+      | "mailto"
+      | "standard_text"
+      | "obfuscated_text"
+      | "json_ld"
+      | "embedded_json"
+      | "rendered_dom";
     sourceUrl?: string;
+    confidence?: number;
+    matchedLocationEvidence?: string[];
   }>;
+};
+
+/** Winning email provenance for debugging false negatives (jsonb only). */
+export type ProspectEmailProvenance = {
+  email: string;
+  sourceUrl?: string | null;
+  method?: string | null;
+  confidence?: number;
+  matchedLocationEvidence?: string[];
 };
 
 export type ProspectWebsiteIntelligence = {
@@ -115,6 +135,12 @@ export type ProspectEnrichmentResult = {
   websiteCrawlFailed?: boolean;
   /** Social URLs preserved when the crawl target was official or recovery ran. */
   socialProfilesPreserved?: string[];
+  /** Best email provenance for audit / debugging. */
+  bestEmailProvenance?: ProspectEmailProvenance | null;
+  /** True when headless render fallback was attempted. */
+  renderFallbackUsed?: boolean;
+  /** Pages where headless render ran. */
+  renderPages?: string[];
 };
 
 export type ProspectEnrichmentJobSummary = {

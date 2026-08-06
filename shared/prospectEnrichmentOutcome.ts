@@ -25,6 +25,8 @@ export function resolveEnrichmentFinalizeDecision(input: {
   failureClass?: ProspectEnrichmentFailureClass | string | null;
   providerEmailFound?: boolean | null;
   contactEmail?: string | null;
+  /** Provider-reported outcome (e.g. completed_search_incomplete). */
+  providerOutcomeClass?: ProspectEnrichmentOutcomeClass | string | null;
 }): {
   enrichmentStatus: "completed" | "failed";
   enrichmentEmailFound: boolean;
@@ -66,11 +68,23 @@ export function resolveEnrichmentFinalizeDecision(input: {
   }
 
   const emailFound = providerEmailFound || contactHasEmail;
+  if (emailFound) {
+    return {
+      enrichmentStatus: "completed",
+      enrichmentEmailFound: true,
+      softCompleteWithExistingEmail: false,
+      outcomeClass: "completed_email_found",
+      enrichmentErrorMessage: null,
+    };
+  }
   return {
     enrichmentStatus: "completed",
-    enrichmentEmailFound: emailFound,
+    enrichmentEmailFound: false,
     softCompleteWithExistingEmail: false,
-    outcomeClass: emailFound ? "completed_email_found" : "completed_no_email",
+    outcomeClass:
+      input.providerOutcomeClass === "completed_search_incomplete"
+        ? "completed_search_incomplete"
+        : "completed_no_email",
     enrichmentErrorMessage: null,
   };
 }
@@ -206,6 +220,7 @@ export function resolveProspectEnrichmentOutcomeClass(
       return "completed_email_present_website_failed";
     }
     if (emailOk) return "completed_email_found";
+    if (er.outcomeClass === "completed_search_incomplete") return "completed_search_incomplete";
     // Legacy: completed with every page failed and no email → surface as fetch failure.
     if (failure === "website_timeout") return "failed_timeout";
     if (failure === "website_fetch_failed" || failure === "all_pages_failed") return "failed_fetch";
@@ -238,6 +253,7 @@ export type MissingEmailDetail = {
     | "website_timeout"
     | "website_fetch_failed"
     | "no_email_on_website"
+    | "email_search_incomplete"
     | "unknown";
   /** Show Retry Enrichment affordance when an official website can be crawled again. */
   canRetry: boolean;
@@ -288,9 +304,17 @@ export function resolveMissingEmailDetail(
       needsWebsiteEdit: false,
     };
   }
+  if (outcome === "completed_search_incomplete") {
+    return {
+      reason: "Email search could not complete — try Retry Enrichment",
+      code: "email_search_incomplete",
+      canRetry: prospectHasOfficialWebsiteUrl(input),
+      needsWebsiteEdit: false,
+    };
+  }
   if (outcome === "completed_no_email") {
     return {
-      reason: "No email found on the website",
+      reason: "No public email found on the website",
       code: "no_email_on_website",
       canRetry: prospectHasOfficialWebsiteUrl(input),
       needsWebsiteEdit: false,

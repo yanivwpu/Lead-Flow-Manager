@@ -12,6 +12,7 @@
 
 import type { ProspectPublicContacts } from "@shared/prospectEnrichment";
 import { isValidProspectEmail } from "@shared/prospectContactEnrichment";
+import { discoverEmailBearingUrlsFromHtml } from "./prospectWebsitePageDiscovery";
 
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 const TEL_HREF_RE = /(?:tel|sms):([+\d][\d\s().-]{6,})/gi;
@@ -52,7 +53,10 @@ export type ProspectEmailExtractionMethod =
   | "cloudflare_cfemail"
   | "mailto"
   | "standard_text"
-  | "obfuscated_text";
+  | "obfuscated_text"
+  | "json_ld"
+  | "embedded_json"
+  | "rendered_dom";
 
 /** Cloudflare Email Address Obfuscation — XOR decode of `data-cfemail` hex. */
 export function decodeCloudflareCfEmail(encoded: string): string | null {
@@ -81,6 +85,8 @@ export type ProspectExtractedEmail = {
   email: string;
   method: ProspectEmailExtractionMethod;
   sourceUrl?: string;
+  confidence?: number;
+  matchedLocationEvidence?: string[];
 };
 
 function unique(values: string[]): string[] {
@@ -241,12 +247,130 @@ function pushEmail(
   raw: string,
   method: ProspectEmailExtractionMethod,
   sourceUrl?: string,
+  extras?: { confidence?: number; matchedLocationEvidence?: string[] },
 ): void {
   const email = finalizeEmail(raw);
   if (!email) return;
   if (seen.has(email)) return;
   seen.add(email);
-  bag.push({ email, method, sourceUrl: sourceUrl || undefined });
+  bag.push({
+    email,
+    method,
+    sourceUrl: sourceUrl || undefined,
+    confidence: extras?.confidence,
+    matchedLocationEvidence: extras?.matchedLocationEvidence,
+  });
+}
+
+/** Pull emails from application/ld+json blocks (schema.org ContactPoint / email). */
+export function extractEmailsFromJsonLd(html: string, pageUrl?: string): ProspectExtractedEmail[] {
+  const found: ProspectExtractedEmail[] = [];
+  const seen = new Set<string>();
+  const re = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const raw = m[1].trim();
+    if (!raw) continue;
+    try {
+      const data = JSON.parse(raw) as unknown;
+      collectEmailsFromUnknownJson(data, (email) =>
+        pushEmail(found, seen, email, "json_ld", pageUrl, { confidence: 70 }),
+      );
+    } catch {
+      // Non-JSON ld+json — fall through to regex on the blob
+      EMAIL_RE.lastIndex = 0;
+      let em: RegExpExecArray | null;
+      while ((em = EMAIL_RE.exec(raw)) !== null) {
+        pushEmail(found, seen, em[0], "json_ld", pageUrl, { confidence: 55 });
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * Extract emails from embedded application state (__NEXT_DATA__, script JSON blobs).
+ * Does not invent — only addresses literally present in JSON strings.
+ */
+export function extractEmailsFromEmbeddedJson(
+  html: string,
+  pageUrl?: string,
+): ProspectExtractedEmail[] {
+  const found: ProspectExtractedEmail[] = [];
+  const seen = new Set<string>();
+
+  const next = /<script[^>]*id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i.exec(html);
+  if (next?.[1]) {
+    try {
+      collectEmailsFromUnknownJson(JSON.parse(next[1]), (email) =>
+        pushEmail(found, seen, email, "embedded_json", pageUrl, { confidence: 65 }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const scriptJsonRe =
+    /<script[^>]*(?:type=["']application\/json["']|id=["'][^"']*(?:__NEXT_DATA__|__NUXT__|__INITIAL)[^"']*["'])[^>]*>([\s\S]*?)<\/script>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = scriptJsonRe.exec(html)) !== null) {
+    const raw = m[1].trim();
+    if (!raw || raw.length > 800_000) continue;
+    if (!raw.includes("@")) continue;
+    try {
+      collectEmailsFromUnknownJson(JSON.parse(raw), (email) =>
+        pushEmail(found, seen, email, "embedded_json", pageUrl, { confidence: 60 }),
+      );
+    } catch {
+      EMAIL_RE.lastIndex = 0;
+      let em: RegExpExecArray | null;
+      while ((em = EMAIL_RE.exec(raw)) !== null) {
+        pushEmail(found, seen, em[0], "embedded_json", pageUrl, { confidence: 50 });
+      }
+    }
+  }
+
+  // window.__INITIAL_STATE__ = {...}
+  const assignRe =
+    /(?:window\.)?(?:__INITIAL_STATE__|__PRELOADED_STATE__|__DATA__)\s*=\s*(\{[\s\S]*?\});?\s*<\/script>/gi;
+  while ((m = assignRe.exec(html)) !== null) {
+    const raw = m[1];
+    if (!raw || !raw.includes("@") || raw.length > 800_000) continue;
+    try {
+      collectEmailsFromUnknownJson(JSON.parse(raw), (email) =>
+        pushEmail(found, seen, email, "embedded_json", pageUrl, { confidence: 55 }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return found;
+}
+
+function collectEmailsFromUnknownJson(node: unknown, onEmail: (email: string) => void, depth = 0): void {
+  if (depth > 12 || node == null) return;
+  if (typeof node === "string") {
+    if (node.includes("@") && node.length < 120) {
+      EMAIL_RE.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = EMAIL_RE.exec(node)) !== null) onEmail(m[0]);
+    }
+    return;
+  }
+  if (typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (const item of node.slice(0, 200)) collectEmailsFromUnknownJson(item, onEmail, depth + 1);
+    return;
+  }
+  const obj = node as Record<string, unknown>;
+  for (const [key, value] of Object.entries(obj).slice(0, 200)) {
+    if (/email/i.test(key) && typeof value === "string") {
+      onEmail(value);
+    } else {
+      collectEmailsFromUnknownJson(value, onEmail, depth + 1);
+    }
+  }
 }
 
 /** Extract emails with method metadata (Cloudflare → mailto → standard → obfuscated). */
@@ -288,48 +412,25 @@ export function extractEmailsFromHtml(
     if (normalized) pushEmail(found, seen, normalized, "obfuscated_text", pageUrl);
   }
 
+  for (const ex of extractEmailsFromJsonLd(html, pageUrl)) {
+    pushEmail(found, seen, ex.email, ex.method, ex.sourceUrl, {
+      confidence: ex.confidence,
+    });
+  }
+  for (const ex of extractEmailsFromEmbeddedJson(html, pageUrl)) {
+    pushEmail(found, seen, ex.email, ex.method, ex.sourceUrl, {
+      confidence: ex.confidence,
+    });
+  }
+
   return found;
 }
 
-const CONTACT_PATH_HINT =
-  /(?:^|\/)(?:contact(?:-us)?|get-in-touch|reach-us|about(?:-us)?|team|support)(?:\/|$|\?)/i;
-
-/**
- * Discover same-origin contact/about URLs linked from a page (footer/nav).
- * Does not invent paths — only follows hrefs present in HTML.
- */
+/** Same-origin contact/location URLs linked from a page (footer/nav). */
 export function discoverContactUrlsFromHtml(html: string, pageUrl: string): string[] {
-  let base: URL;
-  try {
-    base = new URL(pageUrl);
-  } catch {
-    return [];
-  }
-  const found: string[] = [];
-  const seen = new Set<string>();
-  const hrefRe = /href\s*=\s*["']([^"'#]+)["']/gi;
-  let m: RegExpExecArray | null;
-  while ((m = hrefRe.exec(html)) !== null) {
-    const raw = m[1].trim();
-    if (!raw || raw.startsWith("mailto:") || raw.startsWith("tel:") || raw.startsWith("javascript:")) {
-      continue;
-    }
-    let abs: URL;
-    try {
-      abs = new URL(raw, base);
-    } catch {
-      continue;
-    }
-    if (abs.protocol !== "http:" && abs.protocol !== "https:") continue;
-    if (abs.host !== base.host) continue;
-    if (!CONTACT_PATH_HINT.test(abs.pathname)) continue;
-    const key = abs.origin + abs.pathname.replace(/\/$/, "").toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    found.push(abs.origin + abs.pathname + abs.search);
-    if (found.length >= 5) break;
-  }
-  return found;
+  return discoverEmailBearingUrlsFromHtml(html, pageUrl)
+    .map((c) => c.url)
+    .slice(0, 8);
 }
 
 function normalizePhone(raw: string): string | null {
@@ -445,7 +546,10 @@ export function scoreProspectEmailCandidate(
   email: string,
   opts?: {
     websiteUrl?: string | null;
+    sourceUrl?: string | null;
     method?: ProspectEmailExtractionMethod | string | null;
+    locationScore?: number;
+    matchedLocationEvidence?: string[] | null;
   },
 ): number {
   const normalized = normalizeExtractedEmail(email);
@@ -470,17 +574,45 @@ export function scoreProspectEmailCandidate(
   const method = String(opts?.method || "").toLowerCase();
   if (method === "mailto") score += 40;
   else if (method === "cloudflare_cfemail") score += 35;
+  else if (method === "json_ld") score += 32;
+  else if (method === "rendered_dom") score += 28;
+  else if (method === "embedded_json") score += 25;
   else if (method === "standard_text") score += 20;
   else if (method === "obfuscated_text") score += 10;
+
+  const sourcePath = String(opts?.sourceUrl || "").toLowerCase();
+  if (/\/(contact|contact-us)(\/|$|\?)/i.test(sourcePath)) score += 30;
+  if (/location|pompano|miami|gables|stores?|branches?/i.test(sourcePath)) score += 35;
+
+  const locScore = Math.max(0, Math.floor(opts?.locationScore || 0));
+  if (locScore >= 40) score += 60; // matched-location page
+  else if (locScore > 0) score += Math.min(locScore, 40);
+  if ((opts?.matchedLocationEvidence || []).some((e) => e.startsWith("phone_match"))) {
+    score += 25; // mailto / email beside address+phone block
+  }
 
   if (local === "info") score += 25;
   else if (local === "hello" || local === "hi") score += 20;
   else if (local === "contact" || local === "contacts") score += 18;
   else if (local === "office" || local === "team") score += 12;
   else if (local.includes(".")) score += 8; // first.last style on-domain
+  else if (!/^(info|hello|hi|contact|sales|support|admin)$/i.test(local)) {
+    score += 6; // personal/location mailboxes like nastete@
+  }
+
+  if (/^(privacy|legal|copyright|dmca|careers|jobs)@/i.test(normalized)) score -= 80;
 
   return score;
 }
+
+export type ProspectBestEmailSelection = {
+  email: string;
+  score: number;
+  method?: string | null;
+  sourceUrl?: string | null;
+  matchedLocationEvidence?: string[];
+  confidence: number;
+};
 
 /**
  * Pick the best scraped email for the contact record.
@@ -490,31 +622,90 @@ export function selectBestProspectEmail(
   emails: string[],
   opts?: {
     websiteUrl?: string | null;
-    extractions?: Array<{ email: string; method?: string | null }>;
+    extractions?: Array<{
+      email: string;
+      method?: string | null;
+      sourceUrl?: string | null;
+      matchedLocationEvidence?: string[] | null;
+      confidence?: number | null;
+    }>;
+    /** locationScore by source URL */
+    locationScoreByUrl?: Record<string, number>;
   },
 ): string | null {
-  const methodByEmail = new Map<string, string>();
+  return selectBestProspectEmailDetailed(emails, opts)?.email || null;
+}
+
+/** Full provenance for persistence / debugging. */
+export function selectBestProspectEmailDetailed(
+  emails: string[],
+  opts?: {
+    websiteUrl?: string | null;
+    extractions?: Array<{
+      email: string;
+      method?: string | null;
+      sourceUrl?: string | null;
+      matchedLocationEvidence?: string[] | null;
+      confidence?: number | null;
+    }>;
+    locationScoreByUrl?: Record<string, number>;
+  },
+): ProspectBestEmailSelection | null {
+  const metaByEmail = new Map<
+    string,
+    {
+      method?: string;
+      sourceUrl?: string;
+      evidence?: string[];
+      confidence?: number;
+    }
+  >();
   for (const ex of opts?.extractions || []) {
     const key = normalizeExtractedEmail(ex.email);
     if (!key) continue;
-    if (!methodByEmail.has(key)) methodByEmail.set(key, String(ex.method || ""));
+    if (!metaByEmail.has(key)) {
+      metaByEmail.set(key, {
+        method: String(ex.method || ""),
+        sourceUrl: ex.sourceUrl || undefined,
+        evidence: ex.matchedLocationEvidence || undefined,
+        confidence: typeof ex.confidence === "number" ? ex.confidence : undefined,
+      });
+    }
   }
 
-  let best: string | null = null;
-  let bestScore = -Infinity;
+  let best: ProspectBestEmailSelection | null = null;
   for (const raw of emails) {
     const normalized = normalizeExtractedEmail(raw);
     if (!normalized) continue;
+    const meta = metaByEmail.get(normalized);
+    const sourceUrl = meta?.sourceUrl || null;
+    const locationScore = sourceUrl
+      ? opts?.locationScoreByUrl?.[sourceUrl.toLowerCase()] ||
+        opts?.locationScoreByUrl?.[sourceUrl.toLowerCase().replace(/\/$/, "")] ||
+        0
+      : 0;
     const score = scoreProspectEmailCandidate(normalized, {
       websiteUrl: opts?.websiteUrl,
-      method: methodByEmail.get(normalized),
+      sourceUrl,
+      method: meta?.method,
+      locationScore,
+      matchedLocationEvidence: meta?.evidence,
     });
-    if (score > bestScore) {
-      bestScore = score;
-      best = normalized;
+    if (!best || score > best.score) {
+      best = {
+        email: normalized,
+        score,
+        method: meta?.method || null,
+        sourceUrl,
+        matchedLocationEvidence: meta?.evidence || [],
+        confidence: Math.max(
+          0,
+          Math.min(100, Math.round((meta?.confidence ?? 50) + Math.min(score, 80) / 4)),
+        ),
+      };
     }
   }
-  return bestScore > -Infinity ? best : null;
+  return best && best.score > -Infinity ? best : null;
 }
 
 /**
