@@ -26,7 +26,7 @@ export function PricingHeroChips() {
     { id: "copilot", label: "AI Copilot" },
   ];
   return (
-    <div className="mt-5 flex flex-wrap justify-center gap-2" data-testid="section-hero-chips">
+    <div className="mt-3 flex flex-wrap justify-center gap-2" data-testid="section-hero-chips">
       {chips.map((chip) => (
         <span
           key={chip.id}
@@ -96,13 +96,13 @@ function ChannelPill({ item }: { item: ChannelItem }) {
 
 export function SupportedChannelsSection() {
   return (
-    <section className="mb-5 sm:mb-7" data-testid="section-supported-channels">
-      <h2 className="mb-2.5 text-center text-lg font-display font-bold text-gray-900 sm:mb-3 sm:text-xl">
+    <section className="mb-4 sm:mb-5" data-testid="section-supported-channels">
+      <h2 className="mb-2 text-center text-lg font-display font-bold text-gray-900 sm:text-xl">
         Works with your customer channels
       </h2>
-      <div className="grid gap-4 sm:grid-cols-2 sm:gap-8">
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-6">
         <div>
-          <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:text-start">
+          <p className="mb-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:text-start">
             Messaging
           </p>
           <ul className="flex flex-wrap justify-center gap-2 sm:justify-start">
@@ -112,7 +112,7 @@ export function SupportedChannelsSection() {
           </ul>
         </div>
         <div>
-          <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:text-start">
+          <p className="mb-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:text-start">
             Lead Sources
           </p>
           <ul className="flex flex-wrap justify-center gap-2 sm:justify-start">
@@ -134,17 +134,19 @@ export function TransparentPricingStrip() {
   ];
   return (
     <section
-      className="mb-6 rounded-2xl border border-gray-200 bg-white px-4 py-4 shadow-sm sm:mb-8 sm:px-5 sm:py-5"
+      className="mx-auto mb-6 max-w-3xl rounded-2xl border border-gray-200 bg-white px-4 py-3.5 shadow-sm sm:mb-7 sm:px-6 sm:py-4"
       data-testid="section-transparent-pricing"
     >
-      <h2 className="text-center text-lg font-display font-bold text-gray-900 sm:text-xl">
+      <h2 className="text-center text-base font-display font-bold text-gray-900 sm:text-lg">
         Transparent Pricing
       </h2>
-      <ul className="mt-4 grid gap-2 sm:grid-cols-3">
+      <ul className="mx-auto mt-3 flex w-fit max-w-full flex-col items-start gap-2.5 sm:flex-row sm:items-start sm:justify-center sm:gap-x-10">
         {points.map((point) => (
           <li key={point} className="flex items-start gap-2 text-sm text-gray-700">
-            <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" />
-            <span>{point}</span>
+            <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden />
+            <span className="leading-snug whitespace-nowrap sm:whitespace-normal sm:max-w-[12rem]">
+              {point}
+            </span>
           </li>
         ))}
       </ul>
@@ -158,38 +160,40 @@ export function ProspectAiCallout({ loggedIn }: { loggedIn: boolean }) {
     : `/auth?redirect=${encodeURIComponent(PROSPECT_AI_PATH)}`;
   return (
     <section
-      className="mb-6 overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 px-4 py-5 sm:mb-8 sm:px-8 sm:py-6"
+      className="mb-6 overflow-hidden rounded-2xl border border-emerald-200/80 bg-gradient-to-b from-white to-gray-50 px-4 py-6 sm:mb-8 sm:px-8 sm:py-8"
       data-testid="section-prospect-ai-callout"
     >
-      <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">NEW</p>
-      <h2 className="mt-1 text-xl font-display font-bold text-gray-900 sm:text-2xl">
-        Prospect AI Included — Free with Every Plan
-      </h2>
-      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-700">
-        Find local businesses, qualify opportunities with AI, and launch personalized outreach
-        campaigns—all without leaving WhachatCRM.
-      </p>
-      <ul className="mt-4 flex flex-wrap gap-3 text-sm font-medium text-gray-800">
-        <li className="rounded-lg bg-white/80 px-3 py-1.5 ring-1 ring-emerald-100">
-          Free: {PROSPECT_AI_MONTHLY_QUOTAS.free}
-        </li>
-        <li className="rounded-lg bg-white/80 px-3 py-1.5 ring-1 ring-emerald-100">
-          Starter: {PROSPECT_AI_MONTHLY_QUOTAS.starter}
-        </li>
-        <li className="rounded-lg bg-white/80 px-3 py-1.5 ring-1 ring-emerald-100">
-          Pro: {PROSPECT_AI_MONTHLY_QUOTAS.pro}
-        </li>
-      </ul>
-      <p className="mt-2 text-xs text-gray-500">Monthly Prospect AI discoveries by plan</p>
-      <Link href={href}>
-        <Button
-          className="mt-4 bg-brand-green hover:bg-emerald-700"
-          data-testid="button-explore-prospect-ai"
-          onClick={() => trackPricingEvent("prospect_ai_learn_more_click")}
-        >
-          Explore Prospect AI
-        </Button>
-      </Link>
+      <div className="mx-auto max-w-xl text-center">
+        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">NEW</p>
+        <h2 className="mt-1.5 font-display text-xl font-bold text-gray-900 sm:text-2xl">
+          Prospect AI Included — Free with Every Plan
+        </h2>
+        <p className="mx-auto mt-2 max-w-lg text-sm leading-relaxed text-gray-600">
+          Find local businesses, qualify opportunities with AI, and launch personalized outreach
+          campaigns—all within WhachatCRM.
+        </p>
+        <ul className="mt-4 flex flex-wrap items-center justify-center gap-2.5 text-sm font-medium text-gray-800">
+          <li className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 shadow-sm">
+            Free: {PROSPECT_AI_MONTHLY_QUOTAS.free}
+          </li>
+          <li className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 shadow-sm">
+            Starter: {PROSPECT_AI_MONTHLY_QUOTAS.starter}
+          </li>
+          <li className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 shadow-sm">
+            Pro: {PROSPECT_AI_MONTHLY_QUOTAS.pro}
+          </li>
+        </ul>
+        <p className="mt-2 text-xs text-gray-500">Monthly Prospect AI discoveries by plan</p>
+        <Link href={href}>
+          <Button
+            className="mt-4 bg-brand-green hover:bg-emerald-700"
+            data-testid="button-explore-prospect-ai"
+            onClick={() => trackPricingEvent("prospect_ai_learn_more_click")}
+          >
+            Explore Prospect AI
+          </Button>
+        </Link>
+      </div>
     </section>
   );
 }

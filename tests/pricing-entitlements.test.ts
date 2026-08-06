@@ -150,12 +150,10 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(!marketing.includes("No user fees"));
   assert.ok(!marketing.includes("No channel fees"));
   assert.ok(!marketing.includes("No extra seat fees"));
-  assert.ok(pricing.includes("Unlock Industry Growth Engines"));
+  assert.ok(pricing.includes("Growth Engine Ready"));
   assert.ok(pricing.includes("pro-growth-engines-callout"));
-  assert.ok(pricing.includes("required platform plan"));
-  assert.ok(pricing.includes("Growth Engines may require"));
-  assert.ok(pricing.includes("their own purchase or subscription"));
-  assert.ok(pricing.includes("not included in Pro"));
+  assert.ok(pricing.includes("Growth Engines may require a separate purchase"));
+  assert.ok(!pricing.includes("text-hero-trial"));
 });
 
 test("server imports inbox AI reply generation constants", () => {

@@ -430,16 +430,16 @@ export function Pricing() {
             ) : null}
           </div>
         ) : (
-        <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-3.5 mb-6 text-sm text-emerald-800" data-testid="banner-free-trial">
+        <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-3 mb-4 text-sm text-emerald-800" data-testid="banner-free-trial">
           <span className="text-emerald-500 mt-0.5 shrink-0">✓</span>
           <span dir="ltr">{FULL_PRO_AI_TRIAL_COPY}</span>
         </div>
         )}
 
         {/* ─────────────── SECTION 1: HERO ─────────────── */}
-        <div className="mb-5 text-center" dir="ltr">
+        <div className="mb-4 text-center" dir="ltr">
           <h1
-            className="mb-3 font-display text-3xl font-bold text-gray-900 sm:text-4xl"
+            className="mb-2 font-display text-3xl font-bold text-gray-900 sm:text-4xl"
             data-testid="text-pricing-hero-title"
           >
             Everything you need to find, engage, and convert more customers
@@ -447,9 +447,6 @@ export function Pricing() {
           <p className="mx-auto max-w-2xl text-base text-gray-600 sm:text-lg">
             Prospect AI, Unified Inbox, Chatbot, Workflow Automation and AI Copilot—all in one
             platform.
-          </p>
-          <p className="mx-auto mt-2 max-w-xl text-sm font-medium text-emerald-800" data-testid="text-hero-trial">
-            {FULL_PRO_AI_TRIAL_COPY}
           </p>
           <PricingHeroChips />
         </div>
@@ -459,7 +456,7 @@ export function Pricing() {
 
         {/* ─────────────── SECTION 3: PRICING CARDS (plans only) ─────────────── */}
         <div
-          className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3"
+          className="mb-6 grid grid-cols-1 items-stretch gap-4 md:grid-cols-3"
           data-testid="section-pricing-cards"
         >
           {/* FREE */}
@@ -467,7 +464,7 @@ export function Pricing() {
             const isCurrentBillingPlan = billingPlan === "free" && !isActiveProAiTrial;
             return (
               <div
-                className={`bg-white rounded-2xl border-2 p-6 flex flex-col relative ${
+                className={`bg-white rounded-2xl border-2 p-5 sm:p-6 flex flex-col h-full relative ${
                   isActiveProAiTrial ? "border-gray-300" : "border-gray-200"
                 }`}
                 data-testid="plan-card-free"
@@ -477,7 +474,7 @@ export function Pricing() {
                     {t(`${p}.trialState.freePlanBadge`)}
                   </div>
                 ) : null}
-                <div className={`mb-5 ${isActiveProAiTrial ? "mt-2" : ""}`}>
+                <div className={`mb-4 ${isActiveProAiTrial ? "mt-2" : ""}`}>
                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     {t(`${p}.plans.free.name`)}
                   </span>
@@ -502,34 +499,36 @@ export function Pricing() {
                     <FeatureItem key={f} text={f} iconClass="text-emerald-500" isRTL={isRTL} />
                   ))}
                 </ul>
-                <p className="mb-4 mt-4 text-xs text-gray-400">
-                  Upgrade when you need chatbot, automations, and more capacity.
-                </p>
-                {isActiveProAiTrial ? (
-                  <p
-                    className="text-xs text-gray-600 mb-4 leading-relaxed"
-                    data-testid="text-free-after-trial-note"
-                  >
-                    {isShopify
-                      ? t(`${p}.trialState.freeAfterTrialHelper`)
-                      : t(`${p}.trialState.freeAfterTrialHelperWeb`)}
+                <div className="mt-auto pt-4 space-y-3">
+                  <p className="text-xs text-gray-400">
+                    Upgrade when you need chatbot, automations, and more capacity.
                   </p>
-                ) : null}
-                <Button
-                  className="w-full bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  onClick={() => {
-                    trackPricingEvent("pricing_plan_cta_click", { plan: "free" });
-                    setLocation(user ? "/app/inbox" : "/auth");
-                  }}
-                  disabled={planButtonsDisabled || isCurrentBillingPlan || isActiveProAiTrial}
-                  data-testid="button-upgrade-free"
-                >
-                  {isActiveProAiTrial
-                    ? t(`${p}.trialState.freePlanBadge`)
-                    : isCurrentBillingPlan
-                      ? t(`${p}.plans.currentPlan`)
-                      : t(`${p}.plans.free.cta`)}
-                </Button>
+                  {isActiveProAiTrial ? (
+                    <p
+                      className="text-xs text-gray-600 leading-relaxed"
+                      data-testid="text-free-after-trial-note"
+                    >
+                      {isShopify
+                        ? t(`${p}.trialState.freeAfterTrialHelper`)
+                        : t(`${p}.trialState.freeAfterTrialHelperWeb`)}
+                    </p>
+                  ) : null}
+                  <Button
+                    className="w-full bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    onClick={() => {
+                      trackPricingEvent("pricing_plan_cta_click", { plan: "free" });
+                      setLocation(user ? "/app/inbox" : "/auth");
+                    }}
+                    disabled={planButtonsDisabled || isCurrentBillingPlan || isActiveProAiTrial}
+                    data-testid="button-upgrade-free"
+                  >
+                    {isActiveProAiTrial
+                      ? t(`${p}.trialState.freePlanBadge`)
+                      : isCurrentBillingPlan
+                        ? t(`${p}.plans.currentPlan`)
+                        : t(`${p}.plans.free.cta`)}
+                  </Button>
+                </div>
               </div>
             );
           })()}
@@ -540,7 +539,7 @@ export function Pricing() {
             const isLoading = loadingPlan === "starter";
             return (
               <div
-                className="bg-white rounded-2xl border-2 border-blue-200 p-6 flex flex-col"
+                className="bg-white rounded-2xl border-2 border-blue-200 p-5 sm:p-6 flex flex-col h-full"
                 data-testid="plan-card-starter"
               >
                 <div className="mb-4">
@@ -563,47 +562,51 @@ export function Pricing() {
                     {t(`${p}.plans.starter.desc`)}
                   </p>
                 </div>
-                <ul className="mb-3 flex-1 space-y-1.5">
+                <ul className="flex-1 space-y-1.5">
                   {starterHighlights.map((f) => (
                     <FeatureItem key={f} text={f} iconClass="text-blue-500" isRTL={isRTL} />
                   ))}
                 </ul>
-                <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2.5" data-testid="starter-chatbot-callout">
-                  <p className="flex items-start gap-2 text-sm font-semibold text-blue-950">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
-                    <span>AI Chatbot & Website Widget</span>
+                <div className="mt-auto pt-4 space-y-3">
+                  <div
+                    className="rounded-md border border-blue-100 bg-blue-50/50 px-2.5 py-2"
+                    data-testid="starter-chatbot-callout"
+                  >
+                    <p className="flex items-start gap-1.5 text-xs font-semibold text-blue-950">
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-600" />
+                      <span>AI Chatbot & Website Widget</span>
+                    </p>
+                    <p className="mt-0.5 pl-5 text-[11px] leading-snug text-blue-900/75">
+                      Capture, qualify and respond to website visitors automatically.
+                    </p>
+                  </div>
+                  <p className="text-xs font-medium text-emerald-700 flex items-start gap-1" data-testid="text-trial-starter">
+                    <span className="shrink-0">✓</span>{" "}
+                    <span dir="ltr">
+                      {isActiveProAiTrial
+                        ? t(`${p}.trialState.chooseStarterAfterTrial`)
+                        : FULL_PRO_AI_TRIAL_COPY}
+                    </span>
                   </p>
-                  <p className="mt-1 pl-6 text-xs leading-relaxed text-blue-900/80">
-                    Capture, qualify and respond to website visitors automatically. AI Brain remains
-                    an optional add-on that makes conversations smarter.
-                  </p>
+                  <Button
+                    className={`w-full ${
+                      isCurrentBillingPlan && !isShopify
+                        ? "bg-gray-100 text-gray-500"
+                        : isCurrentBillingPlan && isShopify
+                          ? "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                          : "bg-blue-600 hover:bg-blue-700 text-white"
+                    }`}
+                    disabled={planButtonsDisabled || (isCurrentBillingPlan && !isShopify) || isLoading}
+                    onClick={() => handleUpgrade("starter")}
+                    data-testid="button-upgrade-starter"
+                  >
+                    {isLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      paidPlanButtonLabel("starter", isCurrentBillingPlan)
+                    )}
+                  </Button>
                 </div>
-                <p className="text-xs font-medium text-emerald-700 mb-4 flex items-start gap-1" data-testid="text-trial-starter">
-                  <span className="shrink-0">✓</span>{" "}
-                  <span dir="ltr">
-                    {isActiveProAiTrial
-                      ? t(`${p}.trialState.chooseStarterAfterTrial`)
-                      : FULL_PRO_AI_TRIAL_COPY}
-                  </span>
-                </p>
-                <Button
-                  className={`w-full ${
-                    isCurrentBillingPlan && !isShopify
-                      ? "bg-gray-100 text-gray-500"
-                      : isCurrentBillingPlan && isShopify
-                        ? "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
-                        : "bg-blue-600 hover:bg-blue-700 text-white"
-                  }`}
-                  disabled={planButtonsDisabled || (isCurrentBillingPlan && !isShopify) || isLoading}
-                  onClick={() => handleUpgrade("starter")}
-                  data-testid="button-upgrade-starter"
-                >
-                  {isLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    paidPlanButtonLabel("starter", isCurrentBillingPlan)
-                  )}
-                </Button>
               </div>
             );
           })()}
@@ -614,10 +617,10 @@ export function Pricing() {
             const isLoading = loadingPlan === "pro";
             return (
               <div
-                className={`bg-white rounded-2xl border-2 p-6 flex flex-col relative md:-mt-1 md:scale-[1.02] ${
+                className={`bg-white rounded-2xl border-2 p-5 sm:p-6 flex flex-col h-full relative ${
                   isActiveProAiTrial
-                    ? "border-brand-green shadow-xl ring-2 ring-emerald-200"
-                    : "border-brand-green shadow-xl ring-2 ring-emerald-100"
+                    ? "border-brand-green shadow-lg ring-1 ring-emerald-200"
+                    : "border-brand-green shadow-lg ring-1 ring-emerald-100"
                 }`}
                 data-testid="plan-card-pro"
               >
@@ -651,61 +654,54 @@ export function Pricing() {
                     {t(`${p}.trialState.proTrialHelper`)}
                   </p>
                 ) : null}
-                <ul className="mb-3 flex-1 space-y-1.5">
+                <ul className="flex-1 space-y-1.5">
                   {proHighlights.map((f) => (
                     <FeatureItem key={f} text={f} iconClass="text-brand-green" isRTL={isRTL} />
                   ))}
                 </ul>
-                <p className="mb-3 text-xs leading-relaxed text-gray-600" data-testid="pro-chatbot-helper">
-                  <span className="font-semibold text-gray-800">AI Chatbot & Website Widget</span>
-                  {" — "}
-                  Capture, qualify and respond to website visitors automatically.
-                </p>
-                <div
-                  className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2.5"
-                  data-testid="pro-growth-engines-callout"
-                >
-                  <p className="flex items-start gap-2 text-sm font-semibold text-emerald-950">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" />
-                    <span>Unlock Industry Growth Engines</span>
-                  </p>
-                  <p className="mt-1 pl-6 text-xs leading-relaxed text-emerald-900/85">
-                    Pro is the required platform plan to activate compatible Growth Engines such as
-                    the Realtor Growth Engine, with more coming soon. Growth Engines may require
-                    their own purchase or subscription—they are not included in Pro.
-                  </p>
+                <div className="mt-auto pt-4 space-y-3">
+                  <div
+                    className="rounded-md border border-emerald-200/80 bg-emerald-50/40 px-2.5 py-2"
+                    data-testid="pro-growth-engines-callout"
+                  >
+                    <p className="flex items-start gap-1.5 text-xs font-semibold text-emerald-950">
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-green" />
+                      <span>Growth Engine Ready</span>
+                    </p>
+                    <p className="mt-0.5 pl-5 text-[11px] leading-snug text-emerald-900/80">
+                      Activate compatible industry Growth Engines such as Realtor Growth Engine.
+                      Growth Engines may require a separate purchase.
+                    </p>
+                  </div>
+                  {!isActiveProAiTrial ? (
+                    <p className="text-xs font-medium text-emerald-700 flex items-start gap-1" data-testid="text-trial-pro">
+                      <span className="shrink-0">✓</span>
+                      <span dir="ltr">{FULL_PRO_AI_TRIAL_COPY}</span>
+                    </p>
+                  ) : null}
+                  <Button
+                    className={`w-full ${
+                      isCurrentBillingPlan && !isShopify && !isActiveProAiTrial
+                        ? "bg-gray-100 text-gray-500"
+                        : isCurrentBillingPlan && isShopify && !isActiveProAiTrial
+                          ? "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                          : "bg-brand-green hover:bg-emerald-700 text-white"
+                    }`}
+                    disabled={
+                      planButtonsDisabled ||
+                      (isCurrentBillingPlan && !isShopify && !isActiveProAiTrial) ||
+                      isLoading
+                    }
+                    onClick={() => handleUpgrade("pro")}
+                    data-testid="button-upgrade-pro"
+                  >
+                    {isLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      paidPlanButtonLabel("pro", isCurrentBillingPlan)
+                    )}
+                  </Button>
                 </div>
-                {!isActiveProAiTrial ? (
-                  <p className="mb-3 text-xs font-medium text-emerald-700 flex items-start gap-1" data-testid="text-trial-pro">
-                    <span className="shrink-0">✓</span>
-                    <span dir="ltr">{FULL_PRO_AI_TRIAL_COPY}</span>
-                  </p>
-                ) : null}
-                <p className="mb-4 text-xs text-gray-500">
-                  Built for teams that want to find customers, automate follow-up, and close more sales.
-                </p>
-                <Button
-                  className={`w-full ${
-                    isCurrentBillingPlan && !isShopify && !isActiveProAiTrial
-                      ? "bg-gray-100 text-gray-500"
-                      : isCurrentBillingPlan && isShopify && !isActiveProAiTrial
-                        ? "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
-                        : "bg-brand-green hover:bg-emerald-700 text-white"
-                  }`}
-                  disabled={
-                    planButtonsDisabled ||
-                    (isCurrentBillingPlan && !isShopify && !isActiveProAiTrial) ||
-                    isLoading
-                  }
-                  onClick={() => handleUpgrade("pro")}
-                  data-testid="button-upgrade-pro"
-                >
-                  {isLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    paidPlanButtonLabel("pro", isCurrentBillingPlan)
-                  )}
-                </Button>
               </div>
             );
           })()}
