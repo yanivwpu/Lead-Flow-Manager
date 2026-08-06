@@ -79,7 +79,6 @@ import {
 import { cn } from "@/lib/utils";
 import { GROWTH_ENGINE_CARDS, sortGrowthEnginesCatalog, type GrowthEngineCardModel } from "@/lib/growthEnginesCatalog";
 import { prospectDiscoveriesCatalogLines, useProspectAiStatus } from "@/lib/prospectAi";
-import { ProspectAiCardArt } from "@/components/growthEngines/ProspectAiCardArt";
 import { GrowthEngineStoryArt } from "@/components/growthEngines/GrowthEngineStoryArt";
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { useToast } from "@/hooks/use-toast";
@@ -588,20 +587,26 @@ function GrowthEngineGalleryCard({
         isComingSoon
           ? "border-gray-200/75 text-gray-800 hover:border-gray-200"
           : isProspectAi
-            ? "border-emerald-200/90 ring-1 ring-emerald-100/80 hover:-translate-y-0.5 hover:border-emerald-300/90 hover:shadow-lg"
+            ? "border-sky-200/90 ring-1 ring-sky-100/80 hover:-translate-y-0.5 hover:border-cyan-300/90 hover:shadow-lg"
             : "border-gray-200/90 hover:-translate-y-0.5 hover:border-gray-300/90 hover:shadow-lg",
       )}
       data-testid={engine.slug === "realtor-growth-engine" ? "card-realtor-growth-engine" : `card-engine-${engine.slug}`}
     >
       <div className="relative isolate h-40 w-full shrink-0 overflow-hidden rounded-t-xl bg-gray-100 sm:h-44">
-        {isProspectAi ? (
-          <ProspectAiCardArt className="h-full w-full" />
-        ) : engine.image ? (
-          <img src={engine.image} alt="" className="h-full w-full object-cover object-[center_22%]" loading="lazy" />
+        {engine.image ? (
+          <img
+            src={engine.image}
+            alt=""
+            className={cn(
+              "h-full w-full object-cover",
+              isProspectAi ? "object-center" : "object-[center_22%]",
+            )}
+            loading="lazy"
+          />
         ) : (
           <GrowthEngineStoryArt variant={storyVariant} className="h-full w-full" />
         )}
-        {!isComingSoon && engine.image && statusLabel ? (
+        {!isComingSoon && engine.image && statusLabel && !isProspectAi ? (
           <div className="pointer-events-none absolute left-4 top-4 z-[1]">
             <Badge
               variant="outline"
@@ -612,10 +617,10 @@ function GrowthEngineGalleryCard({
           </div>
         ) : null}
         {isProspectAi ? (
-          <div className="pointer-events-none absolute left-4 top-4 z-[1]">
-            <Badge className="border border-emerald-200/80 bg-white/95 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800 shadow-sm backdrop-blur-sm">
-              <Star className="mr-1 h-3 w-3 fill-current" aria-hidden />
-              Featured
+          <div className="pointer-events-none absolute left-3 top-3 z-[1] max-w-[calc(100%-1.5rem)]">
+            <Badge className="border border-cyan-200/80 bg-white/95 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-sky-900 shadow-sm backdrop-blur-sm">
+              Included with Every Plan
+              <Star className="ml-1 h-3 w-3 fill-amber-400 text-amber-500" aria-hidden />
             </Badge>
           </div>
         ) : null}
@@ -638,11 +643,6 @@ function GrowthEngineGalleryCard({
               <>
                 <RealtorMark /> Growth Engine
               </>
-            ) : isProspectAi ? (
-              <span className="inline-flex items-center gap-1.5">
-                <Star className="h-4 w-4 shrink-0 fill-amber-400 text-amber-500" aria-hidden />
-                {engine.title}
-              </span>
             ) : (
               engine.title
             )}
@@ -653,8 +653,8 @@ function GrowthEngineGalleryCard({
           if (rgeOwned) return null;
           if (isProspectAi) {
             return (
-              <div className="rounded-lg border border-emerald-100/90 bg-gradient-to-br from-emerald-50/70 to-sky-50/40 px-3 py-2.5 shadow-sm">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800/80">
+              <div className="rounded-lg border border-sky-100/90 bg-gradient-to-br from-sky-50/80 to-cyan-50/40 px-3 py-2.5 shadow-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-900/80">
                   {catalogQuota.title}
                 </p>
                 <ul className="mt-1.5 space-y-0.5 text-sm leading-snug text-gray-800">

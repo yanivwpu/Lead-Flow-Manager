@@ -54,7 +54,8 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     slug: "prospect-ai",
     title: "Prospect AI",
     industry: "Sales & outreach",
-    badges: ["Featured", "AI Discovery", "Campaigns"],
+    image: "/og/prospect-ai-growth-engine.png",
+    badges: ["Included with Every Plan", "AI Discovery", "Campaigns"],
     summary:
       "Find new businesses, let AI qualify the best opportunities, launch personalized outreach, and manage every reply from one unified inbox.",
     benefits: [
@@ -65,7 +66,6 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     status: "available",
     detailHref: "/app/prospect-ai",
     ctaLabel: "Activate",
-    // Custom ProspectAiCardArt renders instead of generic placeholder.
     placeholderKey: undefined,
     oneTimePrice: null,
     subscriptionRequirementShort: "Included with your plan",

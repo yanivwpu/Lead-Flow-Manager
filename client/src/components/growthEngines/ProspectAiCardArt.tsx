@@ -1,13 +1,13 @@
 import { useId } from "react";
 
 /**
- * Prospect AI Growth Engine card artwork.
- * Visual story (under 2 seconds): local businesses → AI Brain → personalized outreach.
- * Matches the dark-green, thin line-art language of the Realtor Growth Engine card.
+ * Prospect AI Growth Engine artwork (V2B).
+ * Story: Businesses → AI (chat+spark salesperson) → Conversations → Replies.
+ * Navy / cyan / teal — sibling to emerald Realtor, not a twin.
  */
 export function ProspectAiCardArt({ className }: { className?: string }) {
   const uid = useId().replace(/:/g, "");
-  const stroke = `pai-stroke-${uid}`;
+  const flow = `pai-flow-${uid}`;
 
   return (
     <div
@@ -15,7 +15,7 @@ export function ProspectAiCardArt({ className }: { className?: string }) {
       aria-hidden
       style={{
         background:
-          "radial-gradient(ellipse 85% 70% at 50% 40%, rgba(5, 150, 105, 0.22), transparent 58%), linear-gradient(160deg, #052e24 0%, #064e3b 42%, #065f46 78%, #0a3d32 100%)",
+          "radial-gradient(ellipse 80% 55% at 50% 48%, rgba(34, 211, 238, 0.14), transparent 58%), linear-gradient(165deg, #0B1F3A 0%, #123A5C 55%, #0E2A4A 100%)",
       }}
     >
       <svg
@@ -25,137 +25,143 @@ export function ProspectAiCardArt({ className }: { className?: string }) {
         preserveAspectRatio="xMidYMid slice"
       >
         <defs>
-          <linearGradient id={stroke} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#059669" stopOpacity="0.2" />
-            <stop offset="50%" stopColor="#34d399" stopOpacity="0.65" />
-            <stop offset="100%" stopColor="#059669" stopOpacity="0.25" />
+          <linearGradient id={flow} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#22D3EE" stopOpacity="0.2" />
+            <stop offset="55%" stopColor="#22D3EE" stopOpacity="0.65" />
+            <stop offset="100%" stopColor="#2DD4BF" stopOpacity="0.35" />
           </linearGradient>
         </defs>
 
-        <circle cx="320" cy="94" r="72" fill="#059669" opacity="0.055" />
+        {/* Title inside artwork */}
+        <text
+          x="320"
+          y="28"
+          textAnchor="middle"
+          fill="#F8FAFC"
+          fontFamily="ui-sans-serif, system-ui, sans-serif"
+          fontSize="20"
+          fontWeight="700"
+        >
+          Prospect AI
+        </text>
+        <text
+          x="320"
+          y="46"
+          textAnchor="middle"
+          fill="#BAE6FD"
+          fontFamily="ui-sans-serif, system-ui, sans-serif"
+          fontSize="10"
+          fontWeight="500"
+          opacity="0.9"
+        >
+          Your AI Sales Team
+        </text>
 
-        {/* Thin connection lines — businesses → AI → outreach */}
-        <g stroke={`url(#${stroke})`} strokeWidth="1.2" fill="none" strokeLinecap="round">
-          <path d="M112 48 C175 55, 235 78, 288 94" />
-          <path d="M88 94 C175 94, 240 94, 288 94" />
-          <path d="M112 148 C175 135, 240 110, 288 94" />
-          <path d="M160 176 C215 145, 255 115, 288 94" />
-          <path d="M352 94 C410 94, 465 70, 528 54" />
-          <path d="M352 94 C410 94, 465 118, 528 140" />
-        </g>
-
-        {/* Industry: local businesses */}
+        {/* Businesses (upper) */}
         <g
           fill="none"
-          stroke="#34d399"
-          strokeWidth="1.55"
+          stroke="#22D3EE"
+          strokeWidth="1.45"
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          {/* Hotel / lodging */}
-          <g transform="translate(48 34)">
-            <path d="M5 24 V7 h22 v17" />
-            <path d="M5 7 l11-5 11 5" />
-            <path d="M11 12 h3.5 v3.5 H11 z M17.5 12 H21 v3.5 h-3.5 z" />
-            <path d="M11 18 h3.5 v3.5 H11 z M17.5 18 H21 v3.5 h-3.5 z" />
-          </g>
-
-          {/* Restaurant (storefront + fork) */}
-          <g transform="translate(98 30)">
-            <path d="M4 24 V10 h24 v14" />
+          {/* Restaurant */}
+          <g transform="translate(88 58)">
+            <path d="M4 22 V10 h24 v12" />
             <path d="M4 10 l12-6 12 6" />
-            <path d="M12 14 v7 M16 14 v7 M20 14 v4 c0 2-2 3-2 3" />
+            <path d="M12 14 v6 M16 14 v6 M20 14 v3c0 2-2 3-2 3" />
           </g>
-
           {/* Dentist */}
-          <g transform="translate(62 82)">
-            <path d="M14 3 c5 0 8 3.5 8 8.5 0 6-3 12-8 16.5-5-4.5-8-10.5-8-16.5C6 6.5 9 3 14 3z" />
-            <path d="M10 12 h8" opacity="0.7" />
+          <g transform="translate(178 56)">
+            <path d="M14 2 c5 0 8 3.2 8 8 0 5.5-3 11-8 15.5C9 21 6 15.5 6 10 6 5.2 9 2 14 2z" />
           </g>
-
-          {/* Attorney scales */}
-          <g transform="translate(100 126)">
-            <path d="M16 3 v20" />
-            <path d="M7 8 h18" />
-            <path d="M7 8 l-5 9 h10 z" />
-            <path d="M25 8 l-5 9 h10 z" />
-            <path d="M10 23 h12" />
+          {/* Attorney */}
+          <g transform="translate(268 56)">
+            <path d="M14 2 v18" />
+            <path d="M6 7 h16" />
+            <path d="M6 7 l-4 8 h8 z" />
+            <path d="M22 7 l-4 8 h8 z" />
+            <path d="M8 20 h12" />
           </g>
-
-          {/* Tour / map pin */}
-          <g transform="translate(154 40)">
-            <path d="M13 3 c5 0 9 3.8 9 8.5 0 6-9 14-9 14S4 17.5 4 11.5C4 6.8 8 3 13 3z" />
-            <circle cx="13" cy="11" r="2.8" />
+          {/* Auto */}
+          <g transform="translate(358 62)">
+            <path d="M2 14 h26" />
+            <path d="M5 14 l3.5-7 h13 l3.5 7" />
+            <circle cx="10" cy="16" r="2.4" />
+            <circle cx="22" cy="16" r="2.4" />
           </g>
-
-          {/* Auto shop */}
-          <g transform="translate(148 158)">
-            <path d="M3 15 h26" />
-            <path d="M6 15 l3.5-8 h13 l3.5 8" />
-            <circle cx="11" cy="17" r="2.6" />
-            <circle cx="23" cy="17" r="2.6" />
+          {/* Hotel */}
+          <g transform="translate(448 56)">
+            <path d="M6 22 V8 h18 v14" />
+            <path d="M6 8 l9-5 9 5" />
+            <path d="M11 12 h3 v3 h-3 z M17 12 h3 v3 h-3 z M11 17 h3 v3 h-3 z M17 17 h3 v3 h-3 z" />
           </g>
         </g>
 
-        {/* Central AI Brain */}
-        <g transform="translate(320 94)">
-          <circle r="30" fill="#022c22" stroke="#34d399" strokeWidth="1.45" />
-          <g
-            fill="none"
-            stroke="#a7f3d0"
-            strokeWidth="1.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M-11 -7 c-4-5 1-11 7.5-10 2.2-4 8.5-4 10.5 0 5-2 10.5 2.2 8.5 7.5 3 1.2 4.2 6.2 1.2 9.2-1.2 4-5.5 6.2-9.5 5.2-2.2 3-7.5 3-9.8 0-4 1-8.2-2.2-8.2-6.2 0-2.2 1-4 0-5.7z" />
-            <path d="M-1.5 -13 v19 M-1.5 -2.5 c-4.2 0-6.5 2.2-6.5 5.2 M-1.5 -2.5 c4.2 0 6.5 2.2 6.5 5.2" />
-          </g>
-          <text
-            y="36"
-            textAnchor="middle"
-            fill="#ecfdf5"
-            fontFamily="ui-sans-serif, system-ui, sans-serif"
-            fontSize="9"
-            fontWeight="700"
-            letterSpacing="1.4"
-            opacity="0.88"
-          >
-            AI
-          </text>
+        {/* Flow into AI */}
+        <g stroke={`url(#${flow})`} strokeWidth="1.2" fill="none" strokeLinecap="round">
+          <path d="M102 82 L320 108" />
+          <path d="M192 82 L320 108" />
+          <path d="M282 82 L320 108" />
+          <path d="M372 82 L320 108" />
+          <path d="M462 82 L320 108" />
         </g>
 
-        {/* Outcome: personalized outreach */}
-        <g
-          fill="none"
-          stroke="#34d399"
-          strokeWidth="1.55"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {/* Email */}
-          <g transform="translate(512 36)">
-            <rect x="1" y="6" width="30" height="20" rx="3.5" />
-            <path d="M1 9.5 l15 9.5 15-9.5" />
-          </g>
-          {/* Message */}
-          <g transform="translate(512 120)">
-            <path d="M3 5 h26 a4 4 0 0 1 4 4 v11 a4 4 0 0 1-4 4 H14 l-7 7 v-7 H3 a4 4 0 0 1-4-4 V9 a4 4 0 0 1 4-4z" />
-            <path d="M9 14 h14 M9 19 h9" opacity="0.75" />
-          </g>
+        {/* AI hero — conversation bubble + spark (salesperson, not neural net) */}
+        <g transform="translate(320 118)">
+          <path
+            d="M-28 -22 h56 a10 10 0 0 1 10 10 v24 a10 10 0 0 1-10 10 H-4 l-12 12 v-12 h-12 a10 10 0 0 1-10-10 v-24 a10 10 0 0 1 10-10z"
+            fill="#0B1F3A"
+            stroke="#22D3EE"
+            strokeWidth="2"
+          />
+          {/* Spark */}
+          <path
+            d="M0 -8 l2.2 5.2 5.6.4-4.2 3.6 1.4 5.4L0 3.2l-4.9 3.4 1.4-5.4-4.2-3.6 5.6-.4z"
+            fill="#67E8F9"
+            stroke="#22D3EE"
+            strokeWidth="0.6"
+          />
+        </g>
+
+        {/* Conversations — reduced count (~3) */}
+        <g fill="#0E2A4A" stroke="#22D3EE" strokeWidth="1.2">
+          <rect x="168" y="158" width="78" height="28" rx="8" opacity="0.92" />
+          <rect x="280" y="156" width="86" height="30" rx="8" opacity="0.95" />
+          <rect x="396" y="158" width="78" height="28" rx="8" opacity="0.9" />
+        </g>
+        <g fill="none" stroke="#67E8F9" strokeWidth="1.1" strokeLinecap="round" opacity="0.85">
+          <circle cx="184" cy="172" r="5" />
+          <path d="M196 168 h36 M196 175 h28" />
+          <circle cx="298" cy="171" r="5" />
+          <path d="M310 167 h40 M310 174 h30" />
+          <circle cx="412" cy="172" r="5" />
+          <path d="M424 168 h36 M424 175 h24" />
+        </g>
+        {/* Quiet notification dots (no loud labels) */}
+        <circle cx="238" cy="162" r="3.5" fill="#22D3EE" />
+        <circle cx="358" cy="160" r="3.5" fill="#22D3EE" />
+
+        {/* Soft reply arrows — no REPLY text */}
+        <g fill="none" stroke="#2DD4BF" strokeWidth="1.2" strokeLinecap="round" opacity="0.45">
+          <path d="M210 196 c-8 0-12-4-12-4" />
+          <path d="M198 188 l-4 4 4 4" />
+          <path d="M330 196 c-8 0-12-4-12-4" />
+          <path d="M318 188 l-4 4 4 4" />
         </g>
 
         <text
           x="320"
-          y="204"
+          y="214"
           textAnchor="middle"
-          fill="#ecfdf5"
-          opacity="0.64"
+          fill="#F8FAFC"
+          opacity="0.62"
           fontFamily="ui-sans-serif, system-ui, sans-serif"
-          fontSize="11"
+          fontSize="9"
           letterSpacing="2.2"
           fontWeight="600"
         >
-          DISCOVER • QUALIFY • OUTREACH
+          DISCOVER • QUALIFY • ENGAGE
         </text>
       </svg>
     </div>
