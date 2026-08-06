@@ -138,8 +138,8 @@ export function generateAIFeaturesPDF() {
   
   const explanations = [
     'AI Recommended: Smart task prioritization based on engagement & urgency (available to all)',
-    'AI Assist: Reply suggestions & sentiment detection with monthly quotas (Starter/Pro)',
-    'Full AI Brain: Unlimited AI + lead qualification, automation builder & more (+$29/mo add-on)',
+    'AI Assist: Reply suggestions & sentiment detection with fair use (Starter Basic / Pro Enhanced)',
+    'Full AI Brain: Advanced intelligence, lead qualification, automation builder & more (+$29/mo add-on)',
   ];
   
   currentY += 12;

@@ -181,3 +181,24 @@ export function trackPurchase(params: {
     params.transactionId,
   );
 }
+
+/** Pricing-page engagement (no PII). Not deduped — each click may fire. */
+export function trackPricingEvent(
+  eventName:
+    | "pricing_plan_cta_click"
+    | "pricing_toggle_changed"
+    | "prospect_ai_learn_more_click"
+    | "ai_brain_addon_click"
+    | "pricing_comparison_expand"
+    | "pricing_faq_open",
+  params: Record<string, unknown> = {},
+): void {
+  if (!hasAnalyticsConsent()) return;
+  const gtag = getGtag();
+  if (!gtag) return;
+  try {
+    gtag("event", eventName, params);
+  } catch {
+    /* fail silently */
+  }
+}

@@ -91,6 +91,12 @@ export class AIService {
     /** True when the draft includes a payment link that must not auto-send. */
     requiresPaymentLinkApproval?: boolean;
     paymentLinkApprovalReason?: string;
+    /**
+     * True only when the reply model completion path succeeded (including one
+     * internal fact-completeness retry). False for trivial no-op / provider failure.
+     * Used for inbox AI reply generation accounting — one unit per successful call.
+     */
+    modelGenerationSucceeded?: boolean;
   }> {
     const lastMessage = conversationHistory[conversationHistory.length - 1]?.content || "";
 
@@ -103,7 +109,7 @@ export class AIService {
     const inboundMessages = conversationHistory.filter(m => m.role === 'user');
     const allTrivial = inboundMessages.length > 0 && inboundMessages.every(m => TRIVIAL_OPENERS.test((m.content || "").trim()));
     if (allTrivial && conversationHistory.length <= 4) {
-      return { suggestion: "", confidence: 0 };
+      return { suggestion: "", confidence: 0, modelGenerationSucceeded: false };
     }
 
     const detectedLanguage = language || await this.detectMessageLanguage(lastMessage);
@@ -284,13 +290,15 @@ export class AIService {
         paymentLinkApprovalReason: requiresPaymentLinkApproval
           ? PAYMENT_LINK_HUMAN_APPROVAL_REASON
           : undefined,
+        // One successful suggestReply = one meter unit (internal retry does not double-count).
+        modelGenerationSucceeded: true,
       };
     } catch (error) {
       console.error(
         "[AI] Error generating suggestion:",
         error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
       );
-      return { suggestion: "", confidence: 0 };
+      return { suggestion: "", confidence: 0, modelGenerationSucceeded: false };
     }
   }
 

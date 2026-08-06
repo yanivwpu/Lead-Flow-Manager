@@ -1,18 +1,33 @@
 /**
- * useAICapabilities — single source of truth for plan-based AI access control.
+ * useAICapabilities — plan-based AI access control for the client.
  *
  * Reads from:
- *   - /api/ai/usage  (credits used, monthly limit, feature flags)
+ *   - /api/ai/usage  (internal generation accounting + feature flags)
  *   - useSubscription (plan, hasAIBrainAddon)
+ *
+ * Public experience: AI Assist Included (Basic / Enhanced) with fair use.
+ * Internal meter: inbox AI reply generations (Suggest/Auto via suggest-reply) —
+ * abuse backstops only; never surface numeric quotas in product UI.
+ * See @shared/inboxAiReplyGenerations.
  *
  * Returns a typed AICapabilities object consumed by AIComposer and InboxLeadDetailsPanel.
  */
 import { useQuery } from "@tanstack/react-query";
+import {
+  AI_BRAIN_PRO_CREDIT_BONUS,
+  INBOX_AI_REPLY_GENERATIONS_MONTHLY,
+} from "@shared/pricingEntitlements";
 import { useSubscription } from "./subscription-context";
 
 export interface AIUsageData {
   plan:                         string;
   hasAIBrain:                   boolean;
+  /** Accurate internal meter (preferred). */
+  inboxAiReplyGenerationsUsed?: number;
+  inboxAiReplyGenerationsLimit?: number;
+  inboxAiReplyGenerationsRemaining?: number;
+  inboxAiReplyGenerationsPercent?: number;
+  /** @deprecated Legacy aliases — same values as inboxAiReplyGenerations*. */
   creditsUsed:                  number;
   monthlyLimit:                 number;
   creditsRemaining:             number;
@@ -41,28 +56,28 @@ export interface AICapabilities {
   canUseCopilotIntelligence:    boolean;
   canUseWorkflowRecommendations: boolean;
 
-  // Credit state
+  // Internal accounting (developer/API only — do not show meters in product UI)
   creditsUsed:      number;
   monthlyLimit:     number;
   creditsRemaining: number;
   creditPercent:    number;
 
-  // Status flags
-  isLimited:        boolean;  // >75% of credits consumed
-  isNearLimit:      boolean;  // >90% consumed
-  isExhausted:      boolean;  // 100% consumed or usageLimitReached
+  // Status flags — fair-use / backstop; not for customer quota messaging
+  isLimited:        boolean;
+  isNearLimit:      boolean;
+  isExhausted:      boolean;  // internal backstop or fair-use pause
   fairUseStatus:    "healthy" | "limited" | "paused";
 
-  // Upgrade guidance
-  upgradePlan:      string | null;  // what to upgrade to for next tier
+  // Upgrade guidance (plan features — not generation quotas)
+  upgradePlan:      string | null;
   isLoading:        boolean;
 }
 
-// Plan display names with AI capability descriptions
+// Plan display names with AI capability descriptions (no quota numbers)
 const PLAN_NAMES: Record<string, string> = {
   free:       "Free",
-  starter:    "Starter — AI Assist (Limited)",
-  pro:        "Pro — AI Assist (Advanced)",
+  starter:    "Starter — AI Assist Basic",
+  pro:        "Pro — AI Assist Enhanced",
   enterprise: "Enterprise",
 };
 
@@ -111,10 +126,14 @@ export function useAICapabilities(): AICapabilities {
     return { ...DEFAULT_CAPABILITIES, plan, isLoading: subLoading || usageLoading };
   }
 
-  const creditsUsed      = usageData.creditsUsed;
-  const monthlyLimit     = usageData.monthlyLimit;
-  const creditsRemaining = usageData.creditsRemaining;
-  const creditPercent    = usageData.creditPercent;
+  const creditsUsed =
+    usageData.inboxAiReplyGenerationsUsed ?? usageData.creditsUsed;
+  const monthlyLimit =
+    usageData.inboxAiReplyGenerationsLimit ?? usageData.monthlyLimit;
+  const creditsRemaining =
+    usageData.inboxAiReplyGenerationsRemaining ?? usageData.creditsRemaining;
+  const creditPercent =
+    usageData.inboxAiReplyGenerationsPercent ?? usageData.creditPercent;
 
   const isLimited   = monthlyLimit > 0 && creditPercent >= 75;
   const isNearLimit = monthlyLimit > 0 && creditPercent >= 90;
@@ -151,8 +170,8 @@ export function useAICapabilities(): AICapabilities {
 
 // ── Verification scenarios (used in tests / browser console) ─────────────────
 export const AI_PLAN_MATRIX = {
-  free:       { manual: true,  suggest: false, auto: false, copilot: false, workflow: false, credits: 0    },
-  starter:    { manual: true,  suggest: true,  auto: false, copilot: true,  workflow: false, credits: 50   },
-  pro:        { manual: true,  suggest: true,  auto: true,  copilot: true,  workflow: true,  credits: 300  },
-  pro_brain:  { manual: true,  suggest: true,  auto: true,  copilot: true,  workflow: true,  credits: 1000 },
+  free:       { manual: true,  suggest: false, auto: false, copilot: false, workflow: false, inboxAiReplyGenerations: INBOX_AI_REPLY_GENERATIONS_MONTHLY.free },
+  starter:    { manual: true,  suggest: true,  auto: false, copilot: true,  workflow: false, inboxAiReplyGenerations: INBOX_AI_REPLY_GENERATIONS_MONTHLY.starter },
+  pro:        { manual: true,  suggest: true,  auto: true,  copilot: true,  workflow: true,  inboxAiReplyGenerations: INBOX_AI_REPLY_GENERATIONS_MONTHLY.pro },
+  pro_brain:  { manual: true,  suggest: true,  auto: true,  copilot: true,  workflow: true,  inboxAiReplyGenerations: INBOX_AI_REPLY_GENERATIONS_MONTHLY.pro + AI_BRAIN_PRO_CREDIT_BONUS },
 } as const;

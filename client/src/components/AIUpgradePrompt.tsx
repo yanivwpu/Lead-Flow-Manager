@@ -83,48 +83,13 @@ export function AIUpgradePrompt({
   );
 }
 
-interface AICreditBadgeProps {
+/** @deprecated Customer-visible AI generation meters removed — fair use only. Kept as no-op for any stale imports. */
+export function AICreditBadge(_props: {
   creditsRemaining: number;
-  monthlyLimit:     number;
-  creditPercent:    number;
-  planName:         string;
-  className?:       string;
-}
-
-export function AICreditBadge({
-  creditsRemaining,
-  monthlyLimit,
-  creditPercent,
-  planName,
-  className,
-}: AICreditBadgeProps) {
-  if (monthlyLimit === 0) return null;
-
-  const isNear      = creditPercent >= 75;
-  const isNearLimit = creditPercent >= 90;
-  const isExhausted = creditPercent >= 100 || creditsRemaining <= 0;
-
-  if (!isNear) return null;
-
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border",
-        isExhausted
-          ? "bg-red-50 text-red-600 border-red-200"
-          : isNearLimit
-          ? "bg-amber-50 text-amber-600 border-amber-200"
-          : "bg-yellow-50 text-yellow-700 border-yellow-200",
-        className
-      )}
-      title={`High AI Assist usage on your ${planName} plan`}
-      data-testid="ai-credit-badge"
-    >
-      {isExhausted
-        ? "AI Assist limit reached"
-        : isNearLimit
-        ? "Almost at your AI Assist limit"
-        : "High AI Assist usage"}
-    </span>
-  );
+  monthlyLimit: number;
+  creditPercent: number;
+  planName: string;
+  className?: string;
+}) {
+  return null;
 }

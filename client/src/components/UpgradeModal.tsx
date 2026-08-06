@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Zap, MessageSquare, Users, Phone, Sparkles, Loader2, Check, Info } from "lucide-react";
 import { PROSPECT_AI_MONTHLY_QUOTAS } from "@shared/prospectAI";
+import { PLAN_LIMITS } from "@shared/schema";
 
 export type UpgradeReason =
   | "conversation_limit"
@@ -156,9 +157,10 @@ const UPGRADE_CONTENT: Record<
     targetPlan: "starter",
     ctaText: "Upgrade Plan",
     benefits: [
-      "More Prospect Discoveries each month",
-      "Find and qualify local businesses",
-      "Launch personalized outreach campaigns",
+      `Starter: ${PROSPECT_AI_MONTHLY_QUOTAS.starter} discoveries/month · Pro: ${PROSPECT_AI_MONTHLY_QUOTAS.pro}/month`,
+      "Chatbot & Website Widget on paid plans",
+      `Up to ${PLAN_LIMITS.starter.maxUsers} users on Starter · unlimited on Pro`,
+      `${PLAN_LIMITS.starter.conversationsPerMonth.toLocaleString("en-US")} / ${PLAN_LIMITS.pro.conversationsPerMonth.toLocaleString("en-US")} active conversations on Starter / Pro`,
     ],
   },
 };

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Helmet } from "react-helmet";
@@ -6,8 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { MARKETING_URL } from "@/lib/marketingUrl";
 import {
-  ArrowLeft, Check, Loader2, Shield, Brain, Sparkles,
-  Zap, MessageSquare, Users
+  ArrowLeft, Check, Loader2, Shield, Brain,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
@@ -26,6 +25,22 @@ import {
   openShopifyManagedPricing,
   shopifyManagedPricingInstructions,
 } from "@/lib/shopifyCheckout";
+import {
+  buildPricingCompareRows,
+  getAiBrainAddonHighlights,
+  getPlanPricingHighlights,
+} from "@shared/pricingEntitlements";
+import { trackPricingEvent } from "@/lib/ga4Events";
+import {
+  AiBrainSpotlight,
+  COMPARE_FEATURE_LABELS,
+  CoreCapabilitiesSection,
+  PricingFaqSection,
+  PricingHeroChips,
+  ProspectAiCallout,
+  TransparentPricingStrip,
+  WhyChooseSection,
+} from "@/components/pricing/PricingMarketingSections";
 
 // ─── Shared structural components ───────────────────────────────────────────
 function FeatureItem({
@@ -45,34 +60,6 @@ function FeatureItem({
       <Check className={`h-4 w-4 shrink-0 mt-0.5 ${iconClass}`} />
       <span className="flex-1 leading-snug">{text}</span>
     </li>
-  );
-}
-
-function FeatureGroup({
-  label,
-  features,
-  iconClass,
-  isRTL,
-}: {
-  label: string;
-  features: string[];
-  iconClass: string;
-  isRTL: boolean;
-}) {
-  return (
-    <div>
-      <p
-        className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1.5"
-        dir={isRTL ? "rtl" : "ltr"}
-      >
-        {label}
-      </p>
-      <ul className="space-y-1.5">
-        {features.map((f) => (
-          <FeatureItem key={f} text={f} iconClass={iconClass} isRTL={isRTL} />
-        ))}
-      </ul>
-    </div>
   );
 }
 
@@ -173,31 +160,15 @@ export function Pricing() {
   const isShopify = mustUseShopifyBilling(subscriptionData?.subscription, shopHint);
   const planButtonsDisabled = !!user && subscriptionLoading;
 
-  const compareRows: {
-    feature: string;
-    free: boolean | string;
-    starter: boolean | string;
-    pro: boolean | string;
-  }[] = useMemo(() => {
-    const rows = [
-      { feature: t(`${p}.compare.activeConversations`), free: "50", starter: "500", pro: "2,000" },
-      { feature: t(`${p}.compare.users`), free: "1", starter: t(`${p}.compare.upTo3`), pro: t(`${p}.compare.multiple`) },
-      { feature: t(`${p}.compare.whatsappNumbers`), free: "1", starter: "1", pro: t(`${p}.compare.upTo5`) },
-      { feature: t(`${p}.compare.unifiedInbox`), free: true, starter: true, pro: true },
-      { feature: t(`${p}.compare.crm`), free: t(`${p}.compare.basic`), starter: t(`${p}.compare.full`), pro: t(`${p}.compare.full`) },
-      { feature: t(`${p}.compare.pipelineTasks`), free: true, starter: true, pro: true },
-      { feature: t(`${p}.compare.aiAssist`), free: false, starter: t(`${p}.compare.aiAssistBasic`), pro: t(`${p}.compare.aiAssistEnhanced`) },
-      { feature: t(`${p}.compare.automations`), free: false, starter: t(`${p}.compare.basic`), pro: t(`${p}.compare.advancedAutomations`) },
-      { feature: t(`${p}.compare.leadScoring`), free: false, starter: false, pro: true },
-      { feature: t(`${p}.compare.smartRetargeting`), free: false, starter: true, pro: true },
-      { feature: t(`${p}.compare.integrations`), free: false, starter: true, pro: true },
-      { feature: t(`${p}.compare.growthEngines`), free: false, starter: false, pro: t(`${p}.compare.eligible`) },
-      { feature: t(`${p}.compare.aiBrainAddon`), free: false, starter: true, pro: true },
-    ];
-    return isShopify
-      ? rows.filter((row) => row.feature !== t(`${p}.compare.growthEngines`))
-      : rows;
-  }, [isShopify, t, p]);
+  const compareRows = useMemo(
+    () => buildPricingCompareRows({ includeGrowthEngines: !isShopify }),
+    [isShopify],
+  );
+
+  const freeHighlights = useMemo(() => getPlanPricingHighlights("free"), []);
+  const starterHighlights = useMemo(() => getPlanPricingHighlights("starter"), []);
+  const proHighlights = useMemo(() => getPlanPricingHighlights("pro"), []);
+  const aiBrainHighlights = useMemo(() => getAiBrainAddonHighlights(), []);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -310,6 +281,7 @@ export function Pricing() {
   });
 
   const handleUpgrade = (planId: string) => {
+    trackPricingEvent("pricing_plan_cta_click", { plan: planId });
     if (!user) {
       const hint = getShopifyShopHint();
       const pricingPath = hint ? `/pricing?shop=${encodeURIComponent(hint)}` : "/pricing";
@@ -328,6 +300,7 @@ export function Pricing() {
   const [aiBrainAddonLoading, setAiBrainAddonLoading] = useState(false);
 
   const handleAIBrainAddonCheckout = async () => {
+    trackPricingEvent("ai_brain_addon_click");
     if (!user) {
       setLocation("/auth?redirect=/pricing");
       return;
@@ -382,16 +355,25 @@ export function Pricing() {
       className={`min-h-screen bg-gray-50 ${isRTL ? "text-right" : "text-left"}`}
     >
       <Helmet>
-        <title>Pricing – Free Forever | WhachatCRM</title>
-        <meta name="description" content="Simple, transparent pricing for WhatsApp CRM. Free plan forever, Starter at $19/mo, Pro at $49/mo. No hidden fees, no message markup. Start free today." />
+        <title>WhachatCRM Pricing | Unified Inbox, Prospect AI &amp; AI Chatbot</title>
+        <meta
+          name="description"
+          content="WhachatCRM pricing for your AI sales team: Prospect AI, unified inbox, WhatsApp CRM, chatbot &amp; automations, and AI Copilot. Free plan with 50 discoveries/month. Starter $19, Pro $49."
+        />
         <link rel="canonical" href={`${MARKETING_URL}/pricing`} />
-        <meta property="og:title" content="WhachatCRM Pricing: Free Plan Forever, Starter from $19/mo" />
-        <meta property="og:description" content="Simple, transparent pricing for WhatsApp CRM. Free plan forever, Starter at $19/mo. No hidden fees." />
+        <meta property="og:title" content="WhachatCRM Pricing | Unified Inbox, Prospect AI & AI Chatbot" />
+        <meta
+          property="og:description"
+          content="Simple pricing for sales automation software: Prospect AI, multi-channel messaging CRM, and AI chatbot tools. Start free."
+        />
         <meta property="og:url" content={`${MARKETING_URL}/pricing`} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="WhachatCRM Pricing: Free Plan Forever" />
-        <meta name="twitter:description" content="Simple pricing for WhatsApp CRM. Free plan forever, Starter at $19/mo." />
+        <meta name="twitter:title" content="WhachatCRM Pricing | Unified Inbox & Prospect AI" />
+        <meta
+          name="twitter:description"
+          content="Prospect AI, unified inbox, chatbot & automations, and AI Copilot—clear plans from Free to Pro."
+        />
       </Helmet>
 
       <div className="max-w-6xl 2xl:max-w-7xl mx-auto px-4 py-10">
@@ -444,206 +426,32 @@ export function Pricing() {
             ) : null}
           </div>
         ) : (
-        <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4 mb-10 text-sm text-emerald-800" data-testid="banner-free-trial">
+        <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4 mb-8 text-sm text-emerald-800" data-testid="banner-free-trial">
           <span className="text-emerald-500 mt-0.5 shrink-0">✓</span>
-          <span>{t(`${p}.trialBanner`)}</span>
+          <span>New accounts include a 14-day Pro + AI Brain trial.</span>
         </div>
         )}
 
         {/* ─────────────── SECTION 1: HERO ─────────────── */}
-        <div className="text-center mb-14">
+        <div className="mb-8 text-center">
           <h1
-            className="text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4"
+            className="mb-3 font-display text-3xl font-bold text-gray-900 sm:text-4xl"
             data-testid="text-pricing-hero-title"
           >
-            {t(`${p}.hero.title`)}
+            Simple pricing for your AI sales team
           </h1>
-          <p className="text-lg xl:text-xl text-gray-600 max-w-2xl xl:max-w-3xl mx-auto mb-2">
-            {t(`${p}.hero.subtitle`)}
+          <p className="mx-auto max-w-2xl text-base text-gray-600 sm:text-lg">
+            Find prospects, manage conversations, automate follow-up, and turn more leads into
+            customers—all from one workspace.
           </p>
-          <p className="text-sm text-gray-500 max-w-2xl mx-auto">
-            {t(`${p}.hero.desc`)}
-          </p>
-          <div className="flex flex-wrap justify-center gap-3 mt-6">
-            <span className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2 rounded-full text-sm font-medium">
-              <Shield className="h-4 w-4 shrink-0" />
-              {t(`${p}.hero.badge1`)}
-            </span>
-            <span className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-2 rounded-full text-sm font-medium">
-              <Check className="h-4 w-4 shrink-0" />
-              {t(`${p}.hero.badge2`)}
-            </span>
-            <span className="inline-flex items-center gap-2 bg-purple-50 border border-purple-200 text-purple-800 px-4 py-2 rounded-full text-sm font-medium">
-              <Sparkles className="h-4 w-4 shrink-0" />
-              {t(`${p}.hero.badge3`)}
-            </span>
-          </div>
+          <PricingHeroChips />
         </div>
 
-        {/* ─────────────── SECTION 1b: META FEE TRANSPARENCY ─────────────── */}
-        <div className="mb-14 mx-auto max-w-4xl rounded-2xl border border-gray-200 bg-white px-5 py-5 shadow-sm" data-testid="section-meta-fees">
-          <div className={`flex items-start gap-4 ${isRTL ? "flex-row-reverse text-right" : ""}`}>
-            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-              <Shield className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-900">{t(`${p}.metaFees.title`)}</p>
-              <p className="mt-1 text-sm leading-relaxed text-gray-600">{t(`${p}.metaFees.body`)}</p>
-              <p className="mt-2 text-xs font-medium text-emerald-700">{t(`${p}.metaFees.note`)}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* ─────────────── SECTION 2: COPILOT EXPLANATION ─────────────── */}
-        <div className="mb-14" data-testid="section-copilot">
-          <div className="text-center mb-8">
-            <h2 className="text-2xl md:text-3xl font-display font-bold text-gray-900 mb-3">
-              {t(`${p}.copilot.title`)}
-            </h2>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              {t(`${p}.copilot.subtitle`)}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {/* Starter card */}
-            <div
-              className="bg-white rounded-2xl border border-blue-100 p-6"
-              data-testid="copilot-card-starter"
-            >
-              <div className="h-10 w-10 bg-blue-100 rounded-xl flex items-center justify-center mb-3">
-                <MessageSquare className="h-5 w-5 text-blue-600" />
-              </div>
-              <h3 className="font-bold text-gray-900 mb-1">
-                {t(`${p}.copilot.starterTitle`)}
-              </h3>
-              <p className="text-sm text-gray-500 mb-4">
-                {t(`${p}.copilot.starterDesc`)}
-              </p>
-              <ul className="space-y-2">
-                {[
-                  t(`${p}.copilot.starterF1`),
-                  t(`${p}.copilot.starterF2`),
-                  t(`${p}.copilot.starterF3`),
-                ].map((item) => (
-                  <FeatureItem
-                    key={item}
-                    text={item}
-                    iconClass="text-blue-500"
-                    isRTL={isRTL}
-                  />
-                ))}
-              </ul>
-            </div>
-
-            {/* Pro card */}
-            <div
-              className="bg-white rounded-2xl border border-emerald-100 p-6"
-              data-testid="copilot-card-pro"
-            >
-              <div className="h-10 w-10 bg-emerald-100 rounded-xl flex items-center justify-center mb-3">
-                <Zap className="h-5 w-5 text-emerald-600" />
-              </div>
-              <h3 className="font-bold text-gray-900 mb-1">
-                {t(`${p}.copilot.proTitle`)}
-              </h3>
-              <p className="text-sm text-gray-500 mb-4">
-                {t(`${p}.copilot.proDesc`)}
-              </p>
-              <ul className="space-y-2">
-                {[
-                  t(`${p}.copilot.proF1`),
-                  t(`${p}.copilot.proF2`),
-                  t(`${p}.copilot.proF3`),
-                  t(`${p}.copilot.proF4`),
-                ].map((item) => (
-                  <FeatureItem
-                    key={item}
-                    text={item}
-                    iconClass="text-emerald-500"
-                    isRTL={isRTL}
-                  />
-                ))}
-              </ul>
-            </div>
-
-            {/* AI Brain card */}
-            <div
-              className="bg-white rounded-2xl border border-purple-100 p-6"
-              data-testid="copilot-card-ai-brain"
-            >
-              <div className="h-10 w-10 bg-purple-100 rounded-xl flex items-center justify-center mb-3">
-                <Brain className="h-5 w-5 text-purple-600" />
-              </div>
-              <h3 className="font-bold text-gray-900 mb-1">
-                {t(`${p}.copilot.brainTitle`)}
-              </h3>
-              <p className="text-sm text-gray-500 mb-4">
-                {t(`${p}.copilot.brainDesc`)}
-              </p>
-              <ul className="space-y-2">
-                {[
-                  t(`${p}.copilot.brainF1`),
-                  t(`${p}.copilot.brainF2`),
-                  t(`${p}.copilot.brainF3`),
-                ].map((item) => (
-                  <FeatureItem
-                    key={item}
-                    text={item}
-                    iconClass="text-purple-500"
-                    isRTL={isRTL}
-                  />
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          <p className="text-xs text-gray-500 text-center mt-4">
-            {t(`${p}.copilot.note`)}
-          </p>
-        </div>
-
-        {/* ─────────────── SECTION 2b: USE-CASE STRIP ─────────────── */}
-        <div className="mb-14" data-testid="section-use-cases">
-          <h2 className="text-xl font-display font-bold text-gray-900 text-center mb-6">
-            {t(`${p}.useCases.title`)}
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              {
-                icon: <Users className="h-5 w-5 text-blue-600" />,
-                bg: "bg-blue-50",
-                text: t(`${p}.useCases.case1`),
-              },
-              {
-                icon: <MessageSquare className="h-5 w-5 text-emerald-600" />,
-                bg: "bg-emerald-50",
-                text: t(`${p}.useCases.case2`),
-              },
-              {
-                icon: <Zap className="h-5 w-5 text-purple-600" />,
-                bg: "bg-purple-50",
-                text: t(`${p}.useCases.case3`),
-              },
-            ].map((item, i) => (
-              <div
-                key={i}
-                className={`${item.bg} rounded-2xl p-5 flex items-start gap-4 ${
-                  isRTL ? "flex-row-reverse" : ""
-                }`}
-              >
-                <div className="shrink-0 mt-0.5">{item.icon}</div>
-                <p className="text-sm font-medium text-gray-800 leading-snug" dir="auto">
-                  {item.text}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
+        <TransparentPricingStrip />
 
         {/* ─────────────── SECTION 3: PRICING CARDS ─────────────── */}
         <div
-          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mb-14"
+          className="mb-10 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4"
           data-testid="section-pricing-cards"
         >
           {/* FREE */}
@@ -681,31 +489,13 @@ export function Pricing() {
                     {t(`${p}.plans.free.desc`)}
                   </p>
                 </div>
-                <div className="flex-1 space-y-4">
-                  <FeatureGroup
-                    label={t(`${p}.sections.conversationsLimits`)}
-                    features={[
-                      t(`${p}.plans.free.f1`),
-                      t(`${p}.plans.free.f2`),
-                      t(`${p}.plans.free.f3`),
-                    ]}
-                    iconClass="text-emerald-500"
-                    isRTL={isRTL}
-                  />
-                  <FeatureGroup
-                    label={t(`${p}.sections.crmInbox`)}
-                    features={[
-                      t(`${p}.plans.free.f4`),
-                      t(`${p}.plans.free.f5`),
-                      t(`${p}.plans.free.f6`),
-                      t(`${p}.plans.free.f7`),
-                    ]}
-                    iconClass="text-emerald-500"
-                    isRTL={isRTL}
-                  />
-                </div>
-                <p className="text-xs text-gray-400 mt-4 mb-4">
-                  {t(`${p}.plans.free.upsell`)}
+                <ul className="flex-1 space-y-1.5">
+                  {freeHighlights.map((f) => (
+                    <FeatureItem key={f} text={f} iconClass="text-emerald-500" isRTL={isRTL} />
+                  ))}
+                </ul>
+                <p className="mb-4 mt-4 text-xs text-gray-400">
+                  Upgrade when you need chatbot, automations, and more capacity.
                 </p>
                 {isActiveProAiTrial ? (
                   <p
@@ -719,7 +509,10 @@ export function Pricing() {
                 ) : null}
                 <Button
                   className="w-full bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  onClick={() => setLocation(user ? "/app/inbox" : "/auth")}
+                  onClick={() => {
+                    trackPricingEvent("pricing_plan_cta_click", { plan: "free" });
+                    setLocation(user ? "/app/inbox" : "/auth");
+                  }}
                   disabled={planButtonsDisabled || isCurrentBillingPlan || isActiveProAiTrial}
                   data-testid="button-upgrade-free"
                 >
@@ -762,56 +555,13 @@ export function Pricing() {
                     {t(`${p}.plans.starter.desc`)}
                   </p>
                 </div>
-                <div
-                  className={`flex items-center gap-1.5 mb-4 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-100 ${isRTL ? "flex-row-reverse" : ""}`}
-                  dir={isRTL ? "rtl" : "ltr"}
-                >
-                  <span className="text-xs font-bold text-blue-700">
-                    {t(`${p}.inherit.free`)}
-                  </span>
-                </div>
-                <div className="flex-1 space-y-4">
-                  <FeatureGroup
-                    label={t(`${p}.sections.conversationsLimits`)}
-                    features={[
-                      t(`${p}.plans.starter.f1`),
-                      t(`${p}.plans.starter.f2`),
-                      t(`${p}.plans.starter.f3`),
-                    ]}
-                    iconClass="text-blue-500"
-                    isRTL={isRTL}
-                  />
-                  <FeatureGroup
-                    label={t(`${p}.sections.crmInbox`)}
-                    features={[
-                      t(`${p}.plans.starter.f4`),
-                      t(`${p}.plans.starter.f9`),
-                    ]}
-                    iconClass="text-blue-500"
-                    isRTL={isRTL}
-                  />
-                  <FeatureGroup
-                    label={t(`${p}.sections.automation`)}
-                    features={[
-                      t(`${p}.plans.starter.f5`),
-                      t(`${p}.plans.starter.f6`),
-                      t(`${p}.plans.starter.f10`),
-                    ]}
-                    iconClass="text-blue-500"
-                    isRTL={isRTL}
-                  />
-                  <FeatureGroup
-                    label={t(`${p}.sections.aiFeatures`)}
-                    features={[
-                      t(`${p}.plans.starter.f7`),
-                      t(`${p}.plans.starter.f8`),
-                    ]}
-                    iconClass="text-blue-500"
-                    isRTL={isRTL}
-                  />
-                </div>
-                <p className="text-xs text-gray-400 mt-4 mb-2">
-                  {t(`${p}.plans.starter.upsell`)}
+                <ul className="mb-4 flex-1 space-y-1.5">
+                  {starterHighlights.map((f) => (
+                    <FeatureItem key={f} text={f} iconClass="text-blue-500" isRTL={isRTL} />
+                  ))}
+                </ul>
+                <p className="mb-2 text-xs text-gray-400">
+                  Includes Chatbot & Website Widget and workflow automations.
                 </p>
                 <p className="text-xs font-medium text-emerald-600 mb-4 flex items-center gap-1" data-testid="text-trial-starter">
                   <span>✓</span>{" "}
@@ -879,51 +629,18 @@ export function Pricing() {
                     {t(`${p}.plans.pro.desc`)}
                   </p>
                 </div>
-                <div
-                  className={`flex items-center gap-1.5 mb-4 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-100 ${isRTL ? "flex-row-reverse" : ""}`}
-                  dir={isRTL ? "rtl" : "ltr"}
-                >
-                  <span className="text-xs font-bold text-brand-green">
-                    {isActiveProAiTrial
-                      ? t(`${p}.trialState.proTrialHelper`)
-                      : t(`${p}.inherit.starter`)}
-                  </span>
-                </div>
-                <div className="flex-1 space-y-4">
-                  <FeatureGroup
-                    label={t(`${p}.sections.conversationsLimits`)}
-                    features={[
-                      t(`${p}.plans.pro.f1`),
-                      t(`${p}.plans.pro.f2`),
-                      t(`${p}.plans.pro.f3`),
-                    ]}
-                    iconClass="text-brand-green"
-                    isRTL={isRTL}
-                  />
-                  <FeatureGroup
-                    label={t(`${p}.sections.automation`)}
-                    features={[
-                      t(`${p}.plans.pro.f4`),
-                      t(`${p}.plans.pro.f4b`),
-                      t(`${p}.plans.pro.f8`),
-                    ]}
-                    iconClass="text-brand-green"
-                    isRTL={isRTL}
-                  />
-                  <FeatureGroup
-                    label={t(`${p}.sections.aiFeatures`)}
-                    features={[
-                      t(`${p}.plans.pro.f5`),
-                      t(`${p}.plans.pro.f6`),
-                      t(`${p}.plans.pro.f7`),
-                      t(`${p}.plans.pro.f9`),
-                    ]}
-                    iconClass="text-brand-green"
-                    isRTL={isRTL}
-                  />
-                </div>
-                <p className="text-xs text-gray-400 mt-4 mb-4">
-                  {t(`${p}.plans.pro.upsell`)}
+                {isActiveProAiTrial ? (
+                  <p className="mb-3 text-xs font-medium text-brand-green">
+                    {t(`${p}.trialState.proTrialHelper`)}
+                  </p>
+                ) : null}
+                <ul className="mb-4 flex-1 space-y-1.5">
+                  {proHighlights.map((f) => (
+                    <FeatureItem key={f} text={f} iconClass="text-brand-green" isRTL={isRTL} />
+                  ))}
+                </ul>
+                <p className="mb-4 text-xs text-gray-400">
+                  Best value for teams — Most Popular plan.
                 </p>
                 <Button
                   className={`w-full ${
@@ -973,23 +690,12 @@ export function Pricing() {
                 </span>
               </div>
               <p className="text-sm text-gray-500">
-                {t(`${p}.plans.aiBrain.desc`)}
+                Add AI Brain to Starter or Pro — not a standalone base plan.
               </p>
             </div>
-            <ul className="space-y-3 flex-1">
-              {[
-                t(`${p}.plans.aiBrain.f1`),
-                t(`${p}.plans.aiBrain.f2`),
-                t(`${p}.plans.aiBrain.f3`),
-                t(`${p}.plans.aiBrain.f4`),
-                t(`${p}.plans.aiBrain.f5`),
-              ].map((f) => (
-                <FeatureItem
-                  key={f}
-                  text={f}
-                  iconClass="text-purple-500"
-                  isRTL={isRTL}
-                />
+            <ul className="flex-1 space-y-1.5">
+              {aiBrainHighlights.map((f) => (
+                <FeatureItem key={f} text={f} iconClass="text-purple-500" isRTL={isRTL} />
               ))}
             </ul>
             <p className="text-xs font-medium text-purple-700 mt-4 mb-1 flex items-center gap-1" dir={isRTL ? "rtl" : "ltr"}>
@@ -1068,133 +774,135 @@ export function Pricing() {
 
         {isShopify ? (
           <p
-            className="text-center text-sm text-gray-600 -mt-8 mb-14 max-w-2xl mx-auto leading-relaxed px-4"
+            className="mx-auto mb-8 max-w-2xl px-4 text-center text-sm leading-relaxed text-gray-600"
             data-testid="text-shopify-billing-note"
           >
             {t(`${p}.trialState.shopifyBillingNote`)}
           </p>
         ) : null}
 
-        {/* ─────────────── SECTION 4: COMPARISON TABLE ─────────────── */}
-        <div className="mb-14" data-testid="section-comparison-table">
-          <h2 className="text-2xl font-display font-bold text-gray-900 text-center mb-8">
-            {t(`${p}.compare.title`)}
-          </h2>
+        <ProspectAiCallout loggedIn={!!user} />
+        <CoreCapabilitiesSection />
+        <WhyChooseSection />
 
+        {/* ─────────────── COMPARISON TABLE ─────────────── */}
+        <div className="mb-12" data-testid="section-comparison-table">
+          <h2 className="mb-6 text-center font-display text-2xl font-bold text-gray-900">
+            Compare plans
+          </h2>
           <div
             className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm"
             dir={isRTL ? "rtl" : "ltr"}
           >
-            <table className="w-full text-sm min-w-[600px]" dir={isRTL ? "rtl" : "ltr"}>
+            <table className="w-full min-w-[640px] text-sm" dir={isRTL ? "rtl" : "ltr"}>
               <thead>
                 <tr className="border-b border-gray-100">
-                  {/* Feature header — explicit dir so mixed labels anchor correctly */}
                   <th
                     dir={isRTL ? "rtl" : "ltr"}
-                    className="py-4 px-5 font-semibold text-gray-700 w-[40%] text-start"
+                    className="w-[40%] px-5 py-4 text-start font-semibold text-gray-700"
                   >
-                    {t(`${p}.compare.feature`)}
+                    Feature
                   </th>
-                  <th className="text-center py-4 px-3 font-semibold text-gray-700">
-                    {t(`${p}.plans.free.name`)}
-                  </th>
-                  <th className="text-center py-4 px-3 font-semibold text-blue-700">
-                    {t(`${p}.plans.starter.name`)}
-                  </th>
-                  <th className="text-center py-4 px-3 font-semibold text-brand-green">
-                    {t(`${p}.plans.pro.name`)}
-                  </th>
+                  <th className="px-3 py-4 text-center font-semibold text-gray-700">Free</th>
+                  <th className="px-3 py-4 text-center font-semibold text-blue-700">Starter</th>
+                  <th className="px-3 py-4 text-center font-semibold text-brand-green">Pro</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
-                {compareRows.map((row, idx) => (
-                  <tr
-                    key={row.feature}
-                    className={idx % 2 === 0 ? "bg-gray-50/40" : ""}
-                  >
-                    {/* Feature cell — explicit dir="rtl" forces the correct anchor
-                        even for labels that start with English ("CRM", "AI Assist…").
-                        text-start resolves to right in RTL, left in LTR. */}
-                    <td
-                      dir={isRTL ? "rtl" : "ltr"}
-                      className="py-3 px-5 font-medium text-gray-800 text-start"
-                    >
-                      {row.feature}
-                    </td>
-
-                    {/* Value cells: always centered.
-                        dir="auto" on string values so English plan labels stay LTR
-                        and Hebrew strings stay RTL. */}
-                    <td className="py-3 px-3 text-center">
-                      <TableCellValue val={row.free} />
-                    </td>
-                    <td className="py-3 px-3 text-center">
-                      <TableCellValue val={row.starter} />
-                    </td>
-                    <td className="py-3 px-3 text-center">
-                      <TableCellValue val={row.pro} />
-                    </td>
-                  </tr>
-                ))}
+              <tbody>
+                {compareRows.map((row, idx) => {
+                  const prevGroup = idx > 0 ? compareRows[idx - 1]!.group : null;
+                  const showGroup = row.group !== prevGroup;
+                  return (
+                    <Fragment key={row.featureKey}>
+                      {showGroup ? (
+                        <tr className="bg-gray-100/80">
+                          <td
+                            colSpan={4}
+                            className="px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500"
+                          >
+                            {row.group}
+                          </td>
+                        </tr>
+                      ) : null}
+                      <tr className={idx % 2 === 0 ? "bg-gray-50/40" : ""}>
+                        <td
+                          dir={isRTL ? "rtl" : "ltr"}
+                          className="px-5 py-3 text-start font-medium text-gray-800"
+                        >
+                          {COMPARE_FEATURE_LABELS[row.featureKey] || row.featureKey}
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          <TableCellValue val={row.free} />
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          <TableCellValue val={row.starter} />
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          <TableCellValue val={row.pro} />
+                        </td>
+                      </tr>
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* ─────────────── SECTION 5: FAQ ─────────────── */}
-        <div className="mb-14 max-w-3xl mx-auto" data-testid="section-faq">
-          <h2 className="text-2xl font-display font-bold text-gray-900 text-center mb-8">
-            {t(`${p}.faq.title`)}
-          </h2>
-          <div className="space-y-4">
-            {[
-              { q: t(`${p}.faq.q1`), a: t(`${p}.faq.a1`) },
-              { q: t(`${p}.faq.q2`), a: t(`${p}.faq.a2`) },
-              { q: t(`${p}.faq.q3`), a: t(`${p}.faq.a3`) },
-              { q: t(`${p}.faq.q4`), a: t(`${p}.faq.a4`) },
-            ].map((item, idx) => (
-              <div
-                key={idx}
-                className="bg-white rounded-xl border border-gray-200 p-5"
-              >
-                {/* dir="auto": question/answer text direction auto-detected per language */}
-                <p className="font-semibold text-gray-900 mb-2" dir="auto">
-                  {item.q}
-                </p>
-                <p className="text-sm text-gray-600 leading-relaxed" dir="auto">
-                  {item.a}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
+        <AiBrainSpotlight
+          onAdd={() => {
+            if (hasAIBrainAddon) {
+              setLocation("/app/ai-brain");
+              return;
+            }
+            if (aiBrainBasePlanEligible || isActiveProAiTrial) {
+              void handleAIBrainAddonCheckout();
+            } else {
+              handleUpgrade("starter");
+            }
+          }}
+          ctaLabel={
+            hasAIBrainAddon
+              ? t(`${p}.plans.aiBrain.ctaOpenBrain`)
+              : aiBrainBasePlanEligible || isActiveProAiTrial
+                ? t(`${p}.plans.aiBrain.ctaUnlock`)
+                : t(`${p}.plans.aiBrain.ctaUpgrade`)
+          }
+          disabled={planButtonsDisabled}
+          loading={aiBrainAddonLoading}
+        />
 
-        {/* ─────────────── SECTION 6: FINAL CTA ─────────────── */}
+        <PricingFaqSection />
+
         <div
-          className="bg-gray-900 rounded-2xl p-8 md:p-12 text-center text-white"
+          className="rounded-2xl bg-gray-900 p-8 text-center text-white md:p-12"
           data-testid="section-final-cta"
         >
-          <h2 className="text-2xl md:text-3xl font-display font-bold mb-4">
-            {t(`${p}.cta.title`)}
+          <h2 className="mb-3 font-display text-2xl font-bold md:text-3xl">
+            Start finding customers before you pay
           </h2>
-          <p className="text-gray-400 max-w-2xl mx-auto mb-8">
-            {t(`${p}.cta.subtitle`)}
+          <p className="mx-auto mb-8 max-w-2xl text-gray-400">
+            Get 50 Prospect AI discoveries every month on Free, manage conversations in one inbox,
+            and upgrade when your business grows.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <div className="flex flex-col justify-center gap-3 sm:flex-row">
             <Button
-              className="h-12 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full"
-              onClick={() => setLocation(user ? "/app/inbox" : "/auth")}
+              className="h-12 rounded-full bg-brand-green px-8 font-semibold text-white hover:bg-emerald-700"
+              onClick={() => {
+                trackPricingEvent("pricing_plan_cta_click", { plan: "free", source: "bottom_cta" });
+                setLocation(user ? "/app/inbox" : "/auth");
+              }}
               data-testid="button-cta-start-free"
             >
-              {t(`${p}.cta.startFree`)}
+              Start Free
             </Button>
             <Link href="/contact">
               <Button
                 variant="outline"
-                className="h-12 px-8 border-gray-700 text-gray-300 hover:bg-gray-800 rounded-full"
+                className="h-12 rounded-full border-gray-700 px-8 text-gray-300 hover:bg-gray-800"
                 data-testid="button-cta-talk-to-sales"
               >
-                {t(`${p}.cta.talkSales`)}
+                Talk to Sales
               </Button>
             </Link>
           </div>

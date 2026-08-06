@@ -55,6 +55,13 @@ import {
   type Conversation,
   type Contact,
 } from "@shared/schema";
+import {
+  AI_BRAIN_PRO_CREDIT_BONUS,
+  INBOX_AI_REPLY_FAIR_USE_MONTHLY_THRESHOLD,
+  INBOX_AI_REPLY_GENERATIONS_MONTHLY,
+  countInboxAiReplyGenerations,
+  shouldRecordInboxAiReplyGeneration,
+} from "@shared/pricingEntitlements";
 import { deriveAdminUserChannelConnections } from "@shared/adminChannelConnectionStatus";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
 import {
@@ -10424,14 +10431,7 @@ export async function registerRoutes(
   // ==========================================
 
   // Helper: Check if user has AI Brain access (Pro plan with add-on)
-  // Per-plan monthly AI credit allowances
-  const AI_MONTHLY_CREDITS: Record<string, number> = {
-    free:       0,
-    starter:   50,
-    pro:       300,
-    enterprise: 500,
-  };
-  const AI_BRAIN_ADDON_BONUS = 700; // Pro+Brain = 300 + 700 = 1000 credits/month
+  // Credit allowances: shared/pricingEntitlements.ts
 
   const checkAiBrainAccess = async (
     userId: string,
@@ -10452,9 +10452,13 @@ export async function registerRoutes(
     const effectivePlan = limits.plan || "free";
     const hasAIBrain = !!limits.effectiveHasAIBrain;
 
-    const baseLimit = AI_MONTHLY_CREDITS[effectivePlan] ?? 0;
+    // Internal inbox AI reply generation ceilings (not public): Starter 2k / Pro 10k; Brain adds no quota.
+    const baseLimit =
+      INBOX_AI_REPLY_GENERATIONS_MONTHLY[
+        effectivePlan as keyof typeof INBOX_AI_REPLY_GENERATIONS_MONTHLY
+      ] ?? 0;
     const monthlyLimit =
-      hasAIBrain && effectivePlan === "pro" ? baseLimit + AI_BRAIN_ADDON_BONUS : baseLimit;
+      hasAIBrain && effectivePlan === "pro" ? baseLimit + AI_BRAIN_PRO_CREDIT_BONUS : baseLimit;
 
     // Free users: no AI access
     if (effectivePlan === 'free') {
@@ -10481,12 +10485,13 @@ export async function registerRoutes(
     const usage = await storage.getCurrentAiUsage(userId);
     if (!usage) return { canProceed: true, status: "healthy" };
     
-    // Internal thresholds (not exposed to users)
-    const internalThreshold = 5000;
+    // Internal abuse thresholds (not exposed to users; above plan generation ceilings)
+    const internalThreshold = INBOX_AI_REPLY_FAIR_USE_MONTHLY_THRESHOLD;
     const warningThreshold = internalThreshold * 0.7;
     const criticalThreshold = internalThreshold * 0.9;
     
-    const totalUsage = (usage.messagesGenerated || 0) + (usage.repliesSuggested || 0);
+    // Active meter: inbox AI reply generations only (legacy messagesGenerated excluded).
+    const totalUsage = countInboxAiReplyGenerations(usage);
     
     // Paused state - soft pause with generic message
     if (usage.usageLimitReached) {
@@ -11019,18 +11024,33 @@ export async function registerRoutes(
       const usage  = await storage.getCurrentAiUsage(userId);
       const fairUse = await checkFairUseBehavior(userId);
 
-      const creditsUsed     = (usage?.repliesSuggested || 0) + (usage?.messagesGenerated || 0);
-      const monthlyLimit    = access.monthlyLimit;
-      const creditsRemaining = Math.max(0, monthlyLimit - creditsUsed);
-      const creditPercent   = monthlyLimit > 0 ? Math.round((creditsUsed / monthlyLimit) * 100) : 0;
+      const inboxAiReplyGenerationsUsed = countInboxAiReplyGenerations(usage);
+      const inboxAiReplyGenerationsLimit = access.monthlyLimit;
+      const inboxAiReplyGenerationsRemaining = Math.max(
+        0,
+        inboxAiReplyGenerationsLimit - inboxAiReplyGenerationsUsed,
+      );
+      const inboxAiReplyGenerationsPercent =
+        inboxAiReplyGenerationsLimit > 0
+          ? Math.round((inboxAiReplyGenerationsUsed / inboxAiReplyGenerationsLimit) * 100)
+          : 0;
 
       res.json({
         plan:              access.plan,
         hasAIBrain:        access.hasAIBrain,
-        creditsUsed,
-        monthlyLimit,
-        creditsRemaining,
-        creditPercent,
+        // Accurate internal meter (inbox AI reply generations via suggest-reply)
+        inboxAiReplyGenerationsUsed,
+        inboxAiReplyGenerationsLimit,
+        inboxAiReplyGenerationsRemaining,
+        inboxAiReplyGenerationsPercent,
+        // Legacy aliases for existing clients / diagnostics — not customer-facing meters
+        creditsUsed:       inboxAiReplyGenerationsUsed,
+        monthlyLimit:      inboxAiReplyGenerationsLimit,
+        creditsRemaining:  inboxAiReplyGenerationsRemaining,
+        creditPercent:     inboxAiReplyGenerationsPercent,
+        repliesSuggested:  usage?.repliesSuggested || 0,
+        /** @deprecated Never incremented; excluded from active quota formula. */
+        legacyMessagesGenerated: usage?.messagesGenerated || 0,
         fairUseStatus:     fairUse.status,
         usageLimitReached: usage?.usageLimitReached || false,
         periodStart:       usage?.periodStart,
@@ -11089,18 +11109,22 @@ export async function registerRoutes(
         return res.status(403).json({ error: access.reason, needsUpgrade: true, plan: access.plan });
       }
 
-      // Enforce per-plan monthly credit limits
+      // Internal inbox AI reply generation backstop (soft customer message — no upgrade CTA)
       if (access.monthlyLimit > 0) {
-        const usage      = await storage.getCurrentAiUsage(userId);
-        const creditsUsed = (usage?.repliesSuggested || 0) + (usage?.messagesGenerated || 0);
-        if (creditsUsed >= access.monthlyLimit) {
+        const usage = await storage.getCurrentAiUsage(userId);
+        const inboxAiReplyGenerationsUsed = countInboxAiReplyGenerations(usage);
+        if (inboxAiReplyGenerationsUsed >= access.monthlyLimit) {
           return res.status(429).json({
-            error:        "Your plan's AI Assist limit for this period has been reached. Upgrade for more capacity.",
-            status:       "credits_exhausted",
-            creditsUsed,
+            error:  "AI assistance is temporarily limited to protect deliverability.",
+            status: "inbox_ai_reply_generations_exhausted",
+            // Legacy status alias for older diagnostics
+            legacyStatus: "credits_exhausted",
+            // Developer diagnostics only — not shown in product UI
+            inboxAiReplyGenerationsUsed,
+            inboxAiReplyGenerationsLimit: access.monthlyLimit,
+            creditsUsed: inboxAiReplyGenerationsUsed,
             monthlyLimit: access.monthlyLimit,
-            needsUpgrade: access.plan === 'starter',
-            plan:         access.plan,
+            plan: access.plan,
           });
         }
       }
@@ -11295,9 +11319,14 @@ export async function registerRoutes(
         confidence?: number;
         /** Populated when the draft contradicts published facts; blocks auto-send. */
         groundingViolations?: string[];
+        liveCheckoutUrls?: string[];
+        requiresPaymentLinkApproval?: boolean;
+        paymentLinkApprovalReason?: string;
+        modelGenerationSucceeded?: boolean;
       } = {
         suggestion: "",
         confidence: 0,
+        modelGenerationSucceeded: false,
       };
 
       let enrichedContactContext = contactContext as Record<string, unknown> | undefined;
@@ -11571,7 +11600,10 @@ export async function registerRoutes(
         }
       }
 
+      let modelWasInvoked = false;
+      let modelGenerationSucceeded = false;
       if (!skipAiModelForAutoNonText) {
+        modelWasInvoked = true;
         suggestion = await aiService.suggestReply(
           userId,
           chatId,
@@ -11584,6 +11616,7 @@ export async function registerRoutes(
           aiRouting,
           messagingChannel,
         );
+        modelGenerationSucceeded = suggestion.modelGenerationSucceeded === true;
       }
 
       if (suggestion.suggestion && !routingAllowsSchedulingLink(aiRouting)) {
@@ -11699,8 +11732,26 @@ export async function registerRoutes(
         console.info("[AI-AUTO] blocked", autoSendAllowed ? "(none)" : autoSendReason);
       }
 
-      // Track usage
-      await storage.incrementAiUsage(userId, "repliesSuggested");
+      // Inbox AI reply generation meter: one unit only when model succeeded with usable text.
+      // Empty/whitespace completions are diagnostic-only (empty_completion) — do not meter.
+      const finalReplyText = suggestion.suggestion ?? "";
+      if (
+        shouldRecordInboxAiReplyGeneration({
+          modelWasInvoked,
+          modelGenerationSucceeded,
+          finalReplyText,
+        })
+      ) {
+        await storage.incrementAiUsage(userId, "repliesSuggested");
+      } else if (modelWasInvoked && modelGenerationSucceeded) {
+        console.info("[AI-USAGE] empty_completion", {
+          userId,
+          chatId: chatId ?? null,
+          contactId: resolvedContactId,
+          requestedMode: requestedMode ?? "suggest",
+          suggestionLen: finalReplyText.trim().length,
+        });
+      }
 
       if (
         buyerMatchingTraceId &&

@@ -3561,6 +3561,11 @@ export class DbStorage implements IStorage {
       .where(eq(aiUsage.id, current.id));
   }
 
+  /**
+   * Increment an ai_usage counter for the current calendar period.
+   * Active inbox AI reply meter: `repliesSuggested` only.
+   * `messagesGenerated` is legacy/deprecated (never call for new metering).
+   */
   async incrementAiUsage(userId: string, field: 'messagesGenerated' | 'repliesSuggested' | 'leadsQualified' | 'automationsGenerated'): Promise<void> {
     const current = await this.getCurrentAiUsage(userId);
     if (!current) return;

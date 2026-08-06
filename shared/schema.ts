@@ -1790,7 +1790,9 @@ export const aiUsage = pgTable("ai_usage", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   periodStart: timestamp("period_start").notNull(),
   periodEnd: timestamp("period_end").notNull(),
+  /** @deprecated Legacy column — never incremented in current code; excluded from active inbox AI reply meter. Kept for historical rows (no migration). */
   messagesGenerated: integer("messages_generated").default(0),
+  /** Inbox AI reply generations (Suggest/Auto via suggest-reply). Active internal meter. */
   repliesSuggested: integer("replies_suggested").default(0),
   leadsQualified: integer("leads_qualified").default(0),
   automationsGenerated: integer("automations_generated").default(0),

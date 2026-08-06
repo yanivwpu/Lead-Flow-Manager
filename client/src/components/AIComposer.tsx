@@ -18,7 +18,6 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import EmojiPicker from "emoji-picker-react";
 import { cn } from "@/lib/utils";
-import { AICreditBadge, AIUpgradePrompt } from "./AIUpgradePrompt";
 import type { AICapabilities } from "@/lib/useAICapabilities";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { LucideIcon } from "lucide-react";
@@ -868,8 +867,8 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
                   ? "Unlock Suggest to draft replies"
                   : !modeEnabled && mode === "auto" && capabilities?.plan === "starter"
                   ? "Unlock Autopilot to reply automatically"
-                  : !modeEnabled && (capabilities?.isExhausted)
-                  ? "AI Assist limit reached for this period — upgrade for more"
+                  : !modeEnabled && capabilities?.isExhausted
+                  ? "AI Assist is temporarily limited to protect deliverability"
                   : !modeEnabled
                   ? "Upgrade to unlock"
                   : null;
@@ -900,27 +899,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
               );
             })}
 
-            {/* Usage hint when approaching plan limits — no numeric quotas shown */}
-            {capabilities && (
-              <AICreditBadge
-                creditsRemaining={capabilities.creditsRemaining}
-                monthlyLimit={capabilities.monthlyLimit}
-                creditPercent={capabilities.creditPercent}
-                planName={capabilities.planName}
-              />
-            )}
           </div>
-        )}
-
-        {/* Upgrade prompt when plan AI Assist limit is reached */}
-        {capabilities?.isExhausted && capabilities.upgradePlan && (
-          <AIUpgradePrompt
-            feature="more AI Assist capacity"
-            requiredPlan={capabilities.upgradePlan}
-            reason="You've reached your plan's AI Assist limit for this period. Upgrade for more capacity."
-            size="sm"
-            className="mt-0.5"
-          />
         )}
 
         {aiMode === "auto" && !autoOverride && (

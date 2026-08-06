@@ -1,3 +1,5 @@
+[SUPERSEDED — historical paste only. AI Assist quotas: do not treat “Pro = 200/month” or “replies” as current truth. Canonical internal ceilings live in shared/pricingEntitlements.ts (Starter 50 / Pro 300 / Pro+Brain 1000 AI Assist credits). Numeric limits are not public.]
+
 TASK: FINAL PRICING PAGE POLISH — MAKE VALUE CLEARER, STRENGTHEN PRO, AND IMPROVE CONVERSION
 
 GOAL:
