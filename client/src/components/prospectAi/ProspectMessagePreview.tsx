@@ -51,7 +51,7 @@ function localTemplatePreview(draft: ProspectMessageCreationSettings): {
     body,
     note:
       aiKeys.length > 0
-        ? `Sample merge only — ${aiKeys.length} AI personalization section(s) still need a live prospect fill.`
+        ? `Sample preview only — ${aiKeys.length} AI personalization section(s) still need a live prospect fill.`
         : "Sample prospect: Alex Rivera / Rivera Realty.",
   };
 }
@@ -141,10 +141,15 @@ export function ProspectMessagePreview({ draft, contactId }: Props) {
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-[220px] flex-1 space-y-1">
           <Label htmlFor="pi-preview-prospect" className="text-xs">
-            Preview using
+            Preview as
           </Label>
           <Select value={selection} onValueChange={setSelection}>
-            <SelectTrigger id="pi-preview-prospect" className="h-8 text-xs" data-testid="pi-preview-prospect">
+            <SelectTrigger
+              id="pi-preview-prospect"
+              className="h-8 text-xs"
+              aria-label="Preview as"
+              data-testid="pi-preview-prospect"
+            >
               <SelectValue placeholder="Select a prospect..." />
             </SelectTrigger>
             <SelectContent>
@@ -178,6 +183,7 @@ export function ProspectMessagePreview({ draft, contactId }: Props) {
           className="h-8"
           disabled={previewMutation.isPending}
           onClick={() => previewMutation.mutate()}
+          aria-label="Preview Message"
           data-testid="pi-preview-for-prospect"
         >
           {previewMutation.isPending ? "Previewing…" : "Preview Message"}
@@ -212,7 +218,7 @@ export function ProspectMessagePreview({ draft, contactId }: Props) {
           data-testid="pi-preview-result"
         >
           <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
-            Final rendered email
+            Preview Message
           </p>
           <p className="text-[11px] text-gray-500">
             {preview.prospectName || "Prospect"}

@@ -6,18 +6,16 @@ import {
 const SUMMARY_POINTS: Record<ProspectMessageCreationMode, string[]> = {
   ai_compose: [
     "AI creates every message individually.",
-    "Uses campaign instructions.",
-    "Uses Prospect AI context.",
-    "Uses AI Brain.",
+    "Uses your campaign instructions, AI Brain business knowledge, and prospect information.",
   ],
   use_my_template: [
     "Your wording is preserved exactly.",
-    "AI only replaces variables.",
+    "Only inserted personalized fields are replaced.",
     "No AI rewriting.",
   ],
   ai_assisted_template: [
     "Your wording stays unchanged.",
-    "AI personalizes only the sections you selected.",
+    "AI personalizes only the sections you inserted.",
   ],
 };
 
@@ -31,9 +29,10 @@ export function MessageStrategySummary({ mode }: Props) {
     <div
       className="rounded-lg border border-gray-200 bg-gray-50/80 px-3 py-2.5"
       data-testid="pi-message-strategy-summary"
+      aria-label="Message Strategy summary"
     >
       <p className="text-xs font-semibold text-gray-900">
-        {PROSPECT_MESSAGE_CREATION_MODE_LABELS[mode]}
+        Message Strategy · {PROSPECT_MESSAGE_CREATION_MODE_LABELS[mode]}
       </p>
       <ul className="mt-1.5 space-y-0.5">
         {points.map((point) => (

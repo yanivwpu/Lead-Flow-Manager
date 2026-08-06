@@ -24,7 +24,7 @@ type Props = {
 export function ProspectVariablePicker({
   onInsert,
   groups = PROSPECT_MESSAGE_VARIABLE_GROUPS,
-  triggerLabel = "Insert Variable",
+  triggerLabel = "Insert Personalized Field",
 }: Props) {
   return (
     <DropdownMenu>
@@ -34,6 +34,7 @@ export function ProspectVariablePicker({
           size="sm"
           variant="outline"
           className="h-8 text-xs"
+          aria-label="Insert Personalized Field"
           data-testid="pi-insert-variable"
         >
           {triggerLabel}
@@ -52,10 +53,7 @@ export function ProspectVariablePicker({
                 onClick={() => onInsert(`{{${key}}}`)}
                 data-testid={`pi-variable-${key}`}
               >
-                <span className="flex flex-col">
-                  <span>{PROSPECT_MESSAGE_VARIABLE_LABELS[key]}</span>
-                  <span className="font-mono text-[10px] text-gray-400">{`{{${key}}}`}</span>
-                </span>
+                {PROSPECT_MESSAGE_VARIABLE_LABELS[key]}
               </DropdownMenuItem>
             ))}
           </DropdownMenuGroup>

@@ -31,7 +31,7 @@ export const PROSPECT_MESSAGE_VARIABLE_LABELS: Record<ProspectMessageVariableKey
   email: "Email",
 };
 
-/** UI grouping for the Insert Variable picker (order within each group is display order). */
+/** UI grouping for the Insert Personalized Field picker (order within each group is display order). */
 export const PROSPECT_MESSAGE_VARIABLE_GROUPS: ReadonlyArray<{
   id: string;
   label: string;
@@ -39,12 +39,12 @@ export const PROSPECT_MESSAGE_VARIABLE_GROUPS: ReadonlyArray<{
 }> = [
   {
     id: "prospect",
-    label: "Prospect",
+    label: "Prospect Information",
     keys: ["first_name", "last_name", "business_name", "category", "city"],
   },
   {
     id: "contact",
-    label: "Contact",
+    label: "Contact Information",
     keys: ["website", "email", "phone"],
   },
 ];

@@ -13,17 +13,26 @@ type Props = {
   showAiPlaceholders?: boolean;
 };
 
-const TEMPLATE_BODY_PLACEHOLDER = `Hi {{first_name}},
+/** Ghost hint only — actual first-use starter content is applied in MessageCreationModal. */
+const TEMPLATE_BODY_HINT = `Hi {{first_name}},
 
-I wanted to introduce how we help {{business_name}} in {{city}}…
+I wanted to introduce our business and share how we may be able to help {{business_name}}.
 
-Best,`;
-
-const ASSISTED_BODY_PLACEHOLDER = `Hi {{first_name}},
-
-I wanted to introduce…
+Would you be open to a quick conversation?
 
 Best,`;
+
+const ASSISTED_BODY_HINT = `Hi {{first_name}},
+
+{{ai_opening}}
+
+{{ai_reason}}
+
+{{ai_cta}}
+
+Best,
+
+{{ai_closing}}`;
 
 function insertAtCursor(
   el: HTMLInputElement | HTMLTextAreaElement | null,
@@ -82,7 +91,7 @@ export function ProspectTemplateEditor({
             lastFocus.current = "subject";
           }}
           onChange={(e) => onSubjectChange(e.target.value)}
-          placeholder="Quick idea for {{business_name}}"
+          placeholder="A quick idea for {{business_name}}"
           data-testid="pi-template-subject"
         />
       </div>
@@ -98,7 +107,7 @@ export function ProspectTemplateEditor({
             lastFocus.current = "body";
           }}
           onChange={(e) => onBodyChange(e.target.value)}
-          placeholder={showAiPlaceholders ? ASSISTED_BODY_PLACEHOLDER : TEMPLATE_BODY_PLACEHOLDER}
+          placeholder={showAiPlaceholders ? ASSISTED_BODY_HINT : TEMPLATE_BODY_HINT}
           className="min-h-[200px] font-mono text-[13px]"
           data-testid="pi-template-body"
         />

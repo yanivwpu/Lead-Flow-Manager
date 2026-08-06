@@ -1,4 +1,4 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,6 +27,8 @@ import {
   validateOutreachLinkUrl,
 } from "@shared/prospectOutreachInstructions";
 import {
+  applyFirstUseTemplateStarter,
+  hasSavedMessageTemplate,
   PROSPECT_MESSAGE_CREATION_DEFAULTS,
   type ProspectMessageCreationMode,
   type ProspectMessageCreationSettings,
@@ -42,7 +44,7 @@ type Props = {
   initial: ProspectMessageCreationSettings | null | undefined;
   saving?: boolean;
   onSave: (next: ProspectMessageCreationSettings) => void;
-  /** Optional contact for Preview for Prospect. */
+  /** Optional contact for message preview. */
   previewContactId?: string | null;
 };
 
@@ -190,9 +192,14 @@ export function MessageCreationModal({
   });
   const [linkError, setLinkError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  /** Prevents re-applying first-use starter after the user clears or edits it. */
+  const templateStarterAppliedRef = useRef(false);
+  const savedHadTemplateRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
+    templateStarterAppliedRef.current = false;
+    savedHadTemplateRef.current = hasSavedMessageTemplate(initial);
     setDraft({
       ...PROSPECT_MESSAGE_CREATION_DEFAULTS,
       ...(initial || {}),
@@ -202,8 +209,17 @@ export function MessageCreationModal({
   }, [open, initial]);
 
   const setMode = (mode: ProspectMessageCreationMode) => {
-    setDraft((prev) => ({ ...prev, mode }));
     setFormError(null);
+    setDraft((prev) => {
+      const result = applyFirstUseTemplateStarter({
+        mode,
+        draft: prev,
+        savedHadTemplate: savedHadTemplateRef.current,
+        alreadyApplied: templateStarterAppliedRef.current,
+      });
+      if (result.applied) templateStarterAppliedRef.current = true;
+      return result.next;
+    });
   };
 
   const showAiSettings = draft.mode === "ai_compose" || draft.mode === "ai_assisted_template";
@@ -258,8 +274,8 @@ export function MessageCreationModal({
         <DialogHeader>
           <DialogTitle>Message Creation</DialogTitle>
           <DialogDescription>
-            Choose how Prospect AI creates outreach messages for this campaign. Pick the approach
-            that matches how much you want AI to write versus keep your own wording.
+            Choose your Message Strategy for this campaign — how much AI should write versus how
+            much of your own wording to keep.
           </DialogDescription>
         </DialogHeader>
 

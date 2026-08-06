@@ -40,6 +40,79 @@ export const PROSPECT_MESSAGE_CREATION_DEFAULTS: ProspectMessageCreationSettings
   templateBody: "",
 };
 
+/** First-use starter for Use My Template — generic; never overwrites a saved template. */
+export const USE_MY_TEMPLATE_STARTER = {
+  templateSubject: "A quick idea for {{business_name}}",
+  templateBody: `Hi {{first_name}},
+
+I wanted to introduce our business and share how we may be able to help {{business_name}}.
+
+Would you be open to a quick conversation?
+
+Best,`,
+} as const;
+
+/** First-use starter for AI Personalization — generic wording + explicit AI sections. */
+export const AI_PERSONALIZATION_STARTER = {
+  templateSubject: "A quick idea for {{business_name}}",
+  templateBody: `Hi {{first_name}},
+
+{{ai_opening}}
+
+{{ai_reason}}
+
+{{ai_cta}}
+
+Best,
+
+{{ai_closing}}`,
+} as const;
+
+export function hasSavedMessageTemplate(
+  settings: Pick<ProspectMessageCreationSettings, "templateSubject" | "templateBody"> | null | undefined,
+): boolean {
+  if (!settings) return false;
+  return Boolean(String(settings.templateSubject || "").trim() || String(settings.templateBody || "").trim());
+}
+
+export function isMessageTemplateEmpty(
+  settings: Pick<ProspectMessageCreationSettings, "templateSubject" | "templateBody">,
+): boolean {
+  return !String(settings.templateSubject || "").trim() && !String(settings.templateBody || "").trim();
+}
+
+/**
+ * First-use only: fill a generic starter when entering a template mode with empty fields
+ * and no previously saved template. Caller must gate with a session flag so clears are not restored.
+ */
+export function applyFirstUseTemplateStarter(args: {
+  mode: ProspectMessageCreationMode;
+  draft: ProspectMessageCreationSettings;
+  savedHadTemplate: boolean;
+  alreadyApplied: boolean;
+}): { next: ProspectMessageCreationSettings; applied: boolean } {
+  const { mode, draft, savedHadTemplate, alreadyApplied } = args;
+  if (alreadyApplied || savedHadTemplate) {
+    return { next: { ...draft, mode }, applied: false };
+  }
+  if (mode !== "use_my_template" && mode !== "ai_assisted_template") {
+    return { next: { ...draft, mode }, applied: false };
+  }
+  if (!isMessageTemplateEmpty(draft)) {
+    return { next: { ...draft, mode }, applied: false };
+  }
+  const starter = mode === "use_my_template" ? USE_MY_TEMPLATE_STARTER : AI_PERSONALIZATION_STARTER;
+  return {
+    next: {
+      ...draft,
+      mode,
+      templateSubject: starter.templateSubject,
+      templateBody: starter.templateBody,
+    },
+    applied: true,
+  };
+}
+
 export function parseProspectMessageCreationMode(raw: unknown): ProspectMessageCreationMode {
   const mode = String(raw || "")
     .trim()

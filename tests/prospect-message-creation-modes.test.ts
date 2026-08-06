@@ -7,12 +7,15 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  AI_PERSONALIZATION_STARTER,
+  applyFirstUseTemplateStarter,
   isMessageCreationConfigured,
   messageCreationAllowsAiRewrite,
   messageCreationUsesTemplate,
   normalizeMessageCreationForSave,
   parseMessageCreationSettings,
   PROSPECT_MESSAGE_CREATION_DEFAULTS,
+  USE_MY_TEMPLATE_STARTER,
 } from "../shared/prospectMessageCreation";
 import { OutreachInstructionsValidationError } from "../shared/prospectOutreachInstructions";
 import {
@@ -157,12 +160,14 @@ test("UI + server wiring present", () => {
   assert.ok(modal.includes("MessageStrategySummary"));
   assert.ok(modal.includes("Save Message Strategy"));
   assert.ok(modal.includes("ProspectMessagePreview"));
+  assert.ok(modal.includes("applyFirstUseTemplateStarter"));
 
   const modePicker = readFileSync(
     join(process.cwd(), "client/src/components/prospectAi/MessageCreationModePicker.tsx"),
     "utf8",
   );
-  assert.ok(modePicker.includes("AI Writes Everything") || modePicker.includes("PROSPECT_MESSAGE_CREATION_MODE_LABELS"));
+  assert.ok(modePicker.includes("role=\"radiogroup\""));
+  assert.ok(modePicker.includes("border-brand-green"));
 
   const labels = readFileSync(
     join(process.cwd(), "shared/prospectMessageCreation.ts"),
@@ -171,6 +176,22 @@ test("UI + server wiring present", () => {
   assert.ok(labels.includes("AI Writes Everything"));
   assert.ok(labels.includes("Use My Template"));
   assert.ok(labels.includes("AI Personalization"));
+  assert.ok(labels.includes("USE_MY_TEMPLATE_STARTER"));
+  assert.ok(labels.includes("AI_PERSONALIZATION_STARTER"));
+
+  const picker = readFileSync(
+    join(process.cwd(), "client/src/components/prospectAi/ProspectVariablePicker.tsx"),
+    "utf8",
+  );
+  assert.ok(picker.includes("Insert Personalized Field"));
+  assert.ok(!picker.includes("Insert Variable"));
+
+  const groups = readFileSync(
+    join(process.cwd(), "shared/prospectMessageVariables.ts"),
+    "utf8",
+  );
+  assert.ok(groups.includes("Prospect Information"));
+  assert.ok(groups.includes("Contact Information"));
 
   const service = readFileSync(
     join(process.cwd(), "server/prospectImport/prospectMessageGenerationService.ts"),
@@ -184,4 +205,45 @@ test("UI + server wiring present", () => {
     "utf8",
   );
   assert.ok(routes.includes("preview-message"));
+});
+
+test("first-use template starter applies once and never overwrites saved", () => {
+  const empty = { ...PROSPECT_MESSAGE_CREATION_DEFAULTS };
+  const first = applyFirstUseTemplateStarter({
+    mode: "use_my_template",
+    draft: empty,
+    savedHadTemplate: false,
+    alreadyApplied: false,
+  });
+  assert.equal(first.applied, true);
+  assert.equal(first.next.templateSubject, USE_MY_TEMPLATE_STARTER.templateSubject);
+  assert.equal(first.next.templateBody, USE_MY_TEMPLATE_STARTER.templateBody);
+  assert.ok(!first.next.templateBody.includes("Affordable Pompano"));
+
+  const afterClear = applyFirstUseTemplateStarter({
+    mode: "use_my_template",
+    draft: { ...empty, mode: "use_my_template", templateSubject: "", templateBody: "" },
+    savedHadTemplate: false,
+    alreadyApplied: true,
+  });
+  assert.equal(afterClear.applied, false);
+  assert.equal(afterClear.next.templateBody, "");
+
+  const withSaved = applyFirstUseTemplateStarter({
+    mode: "use_my_template",
+    draft: empty,
+    savedHadTemplate: true,
+    alreadyApplied: false,
+  });
+  assert.equal(withSaved.applied, false);
+
+  const assisted = applyFirstUseTemplateStarter({
+    mode: "ai_assisted_template",
+    draft: empty,
+    savedHadTemplate: false,
+    alreadyApplied: false,
+  });
+  assert.equal(assisted.applied, true);
+  assert.equal(assisted.next.templateBody, AI_PERSONALIZATION_STARTER.templateBody);
+  assert.ok(assisted.next.templateBody.includes("{{ai_opening}}"));
 });

@@ -20,6 +20,7 @@ export function ProspectAiPlaceholderPicker({ onInsert }: Props) {
           size="sm"
           variant="outline"
           className="h-8 text-xs"
+          aria-label="Insert AI Personalization"
           data-testid="pi-insert-ai-placeholder"
         >
           ✨ Insert AI Personalization
@@ -32,10 +33,7 @@ export function ProspectAiPlaceholderPicker({ onInsert }: Props) {
             onClick={() => onInsert(`{{${preset.key}}}`)}
             data-testid={`pi-ai-placeholder-${preset.key}`}
           >
-            <span className="flex flex-col">
-              <span>{preset.label}</span>
-              <span className="font-mono text-[10px] text-gray-400">{`{{${preset.key}}}`}</span>
-            </span>
+            {preset.label}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
