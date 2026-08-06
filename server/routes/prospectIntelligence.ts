@@ -96,6 +96,7 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
           missingWebsite: req.query.missingWebsite === "true" ? true : undefined,
           emailEligible: req.query.emailEligible === "true" ? true : undefined,
           anyEligibleChannel: req.query.anyEligibleChannel === "true" ? true : undefined,
+          lifecycle: req.query.lifecycle as ProspectIntelligenceListFilters["lifecycle"],
           sortBy: req.query.sortBy as ProspectIntelligenceListFilters["sortBy"],
           sortDir: req.query.sortDir as ProspectIntelligenceListFilters["sortDir"],
           limit: req.query.limit ? Number(req.query.limit) : undefined,
@@ -123,6 +124,202 @@ export function registerProspectIntelligenceRoutes(app: Express): void {
       } catch (err) {
         console.error("[ProspectIntelligence] batches error:", err);
         res.status(500).json({ error: "Failed to list review batches" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/growth-tools/prospect-intelligence/bulk-archive",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const actorUserId = (req.user as { id: string }).id;
+        const workspaceUserId = await resolveProspectWorkspaceUserId(actorUserId);
+        const { bulkArchiveProspects } = await import("../prospectImport/prospectLifecycleService");
+        const contactIds = Array.isArray(req.body?.contactIds)
+          ? req.body.contactIds.map((id: unknown) => String(id || "").trim()).filter(Boolean)
+          : [];
+        const modeRaw = String(req.body?.mode || "infer").trim();
+        const mode =
+          modeRaw === "one_reason" || modeRaw === "no_reason" ? modeRaw : "infer";
+        const result = await bulkArchiveProspects({
+          workspaceUserId,
+          actorUserId,
+          contactIds,
+          mode,
+          oneReason: req.body?.reason ?? null,
+          note: req.body?.note ?? null,
+          cancelQueue: req.body?.cancelQueue === true,
+        });
+        res.json(result);
+      } catch (err) {
+        res.status(400).json({
+          error: err instanceof Error ? err.message : "Bulk archive failed",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/api/growth-tools/prospect-intelligence/bulk-restore",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const actorUserId = (req.user as { id: string }).id;
+        const workspaceUserId = await resolveProspectWorkspaceUserId(actorUserId);
+        const { bulkRestoreProspects } = await import("../prospectImport/prospectLifecycleService");
+        const contactIds = Array.isArray(req.body?.contactIds)
+          ? req.body.contactIds.map((id: unknown) => String(id || "").trim()).filter(Boolean)
+          : [];
+        const result = await bulkRestoreProspects({
+          workspaceUserId,
+          actorUserId,
+          contactIds,
+        });
+        res.json(result);
+      } catch (err) {
+        res.status(400).json({
+          error: err instanceof Error ? err.message : "Bulk restore failed",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/api/growth-tools/prospect-intelligence/bulk-trash",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const actorUserId = (req.user as { id: string }).id;
+        const workspaceUserId = await resolveProspectWorkspaceUserId(actorUserId);
+        const { bulkTrashProspects } = await import("../prospectImport/prospectLifecycleService");
+        const contactIds = Array.isArray(req.body?.contactIds)
+          ? req.body.contactIds.map((id: unknown) => String(id || "").trim()).filter(Boolean)
+          : [];
+        const result = await bulkTrashProspects({
+          workspaceUserId,
+          actorUserId,
+          contactIds,
+          cancelQueue: req.body?.cancelQueue === true,
+        });
+        res.json(result);
+      } catch (err) {
+        res.status(400).json({
+          error: err instanceof Error ? err.message : "Bulk trash failed",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/api/growth-tools/prospect-intelligence/bulk-delete-permanent",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const actorUserId = (req.user as { id: string }).id;
+        const workspaceUserId = await resolveProspectWorkspaceUserId(actorUserId);
+        const { softDeleteProspects } = await import("../prospectImport/prospectLifecycleService");
+        const contactIds = Array.isArray(req.body?.contactIds)
+          ? req.body.contactIds.map((id: unknown) => String(id || "").trim()).filter(Boolean)
+          : [];
+        const expectedCount = Number(req.body?.expectedCount);
+        const result = await softDeleteProspects({
+          workspaceUserId,
+          actorUserId,
+          contactIds,
+          expectedCount: Number.isFinite(expectedCount) ? expectedCount : -1,
+        });
+        if (result.forbidden) {
+          res.status(403).json({ error: "Owner or admin permission required" });
+          return;
+        }
+        res.json(result);
+      } catch (err) {
+        res.status(400).json({
+          error: err instanceof Error ? err.message : "Delete failed",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/api/growth-tools/prospect-intelligence/:contactId/archive",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const actorUserId = (req.user as { id: string }).id;
+        const workspaceUserId = await resolveProspectWorkspaceUserId(actorUserId);
+        const { archiveProspect } = await import("../prospectImport/prospectLifecycleService");
+        const result = await archiveProspect({
+          workspaceUserId,
+          actorUserId,
+          contactId: req.params.contactId,
+          reason: req.body?.reason ?? null,
+          note: req.body?.note ?? null,
+          cancelQueue: req.body?.cancelQueue === true,
+        });
+        if (!result.ok && result.reason === "not_found") {
+          res.status(404).json(result);
+          return;
+        }
+        res.json(result);
+      } catch (err) {
+        res.status(400).json({
+          error: err instanceof Error ? err.message : "Archive failed",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/api/growth-tools/prospect-intelligence/:contactId/restore",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const actorUserId = (req.user as { id: string }).id;
+        const workspaceUserId = await resolveProspectWorkspaceUserId(actorUserId);
+        const { restoreProspect } = await import("../prospectImport/prospectLifecycleService");
+        const result = await restoreProspect({
+          workspaceUserId,
+          actorUserId,
+          contactId: req.params.contactId,
+        });
+        if (!result.ok && result.reason === "not_found") {
+          res.status(404).json(result);
+          return;
+        }
+        res.json(result);
+      } catch (err) {
+        res.status(400).json({
+          error: err instanceof Error ? err.message : "Restore failed",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/api/growth-tools/prospect-intelligence/:contactId/trash",
+    requireProspectImportAccess,
+    async (req, res) => {
+      try {
+        const actorUserId = (req.user as { id: string }).id;
+        const workspaceUserId = await resolveProspectWorkspaceUserId(actorUserId);
+        const { trashProspect } = await import("../prospectImport/prospectLifecycleService");
+        const result = await trashProspect({
+          workspaceUserId,
+          actorUserId,
+          contactId: req.params.contactId,
+          cancelQueue: req.body?.cancelQueue === true,
+        });
+        if (!result.ok && result.reason === "not_found") {
+          res.status(404).json(result);
+          return;
+        }
+        res.json(result);
+      } catch (err) {
+        res.status(400).json({
+          error: err instanceof Error ? err.message : "Trash failed",
+        });
       }
     },
   );

@@ -157,6 +157,14 @@ function mapIntelligenceRow(row: ProspectIntelligenceRow): ProspectIntelligence 
     enrichmentPhoneFound: row.enrichmentPhoneFound ?? undefined,
     enrichmentResult: (row.enrichmentResult as Record<string, unknown>) ?? undefined,
     enrichmentErrorMessage: row.enrichmentErrorMessage ?? undefined,
+    lifecycleStatus: (row as { lifecycleStatus?: string | null }).lifecycleStatus ?? "active",
+    archivedAt: (row as { archivedAt?: Date | null }).archivedAt?.toISOString?.() ?? null,
+    archivedByUserId: (row as { archivedByUserId?: string | null }).archivedByUserId ?? null,
+    archiveReason: (row as { archiveReason?: string | null }).archiveReason ?? null,
+    archiveNote: (row as { archiveNote?: string | null }).archiveNote ?? null,
+    trashedAt: (row as { trashedAt?: Date | null }).trashedAt?.toISOString?.() ?? null,
+    deletedAt: (row as { deletedAt?: Date | null }).deletedAt?.toISOString?.() ?? null,
+    restoredAt: (row as { restoredAt?: Date | null }).restoredAt?.toISOString?.() ?? null,
   };
 }
 
@@ -1552,9 +1560,26 @@ export async function listProspectIntelligence(
     .filter((id) => contactMap.has(id));
   const priorByContact = await batchLoadPriorOutreachFlags(candidateContactIds);
 
+  const lifecycleFilter = String(filters.lifecycle || "active")
+    .trim()
+    .toLowerCase();
+
   for (const row of rows) {
     const contact = contactMap.get(row.contactId);
     if (!contact) continue;
+
+    const rowLifecycle = String(
+      (row as { lifecycleStatus?: string | null }).lifecycleStatus || "active",
+    )
+      .trim()
+      .toLowerCase();
+    if (lifecycleFilter !== "all") {
+      if (lifecycleFilter === "active") {
+        if (rowLifecycle !== "active") continue;
+      } else if (rowLifecycle !== lifecycleFilter) {
+        continue;
+      }
+    }
 
     if (filterImportJobId) {
       const metaImportId = readContactImportJobIdFromMeta(contact);

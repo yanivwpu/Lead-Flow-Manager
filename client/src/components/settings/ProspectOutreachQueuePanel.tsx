@@ -300,10 +300,10 @@ export function ProspectOutreachQueuePanel({
         title: "Message Creation saved",
         description:
           mode === "use_my_template"
-            ? "Queued drafts were re-merged from your template (no AI rewrite)."
+            ? "Queued drafts were re-merged from your Message Template (no AI rewrite)."
             : mode === "ai_assisted_template"
-              ? "Queued drafts were refreshed — only AI placeholders were generated."
-              : "Existing personalized drafts were rewritten to match AI Compose settings.",
+              ? "Queued drafts were refreshed — only AI personalization sections were generated."
+              : "Existing personalized drafts were rewritten to match AI Writes Everything settings.",
       });
       setInstructionsOpen(false);
       invalidate();
@@ -695,7 +695,7 @@ export function ProspectOutreachQueuePanel({
               <>
                 <p className="text-[11px] font-semibold text-violet-950">Message Creation</p>
                 <p className="mt-0.5 text-[10px] leading-snug text-violet-900/70">
-                  AI Compose, your template, or AI-assisted placeholders
+                  AI Writes Everything, Use My Template, or AI Personalization
                 </p>
                 <Button
                   type="button"

@@ -20,16 +20,34 @@ export const PROSPECT_MESSAGE_VARIABLES = [
 export type ProspectMessageVariableKey = (typeof PROSPECT_MESSAGE_VARIABLES)[number];
 
 export const PROSPECT_MESSAGE_VARIABLE_LABELS: Record<ProspectMessageVariableKey, string> = {
-  first_name: "First name",
-  last_name: "Last name",
-  full_name: "Full name",
-  business_name: "Business name",
+  first_name: "First Name",
+  last_name: "Last Name",
+  full_name: "Full Name",
+  business_name: "Business Name",
   city: "City",
   category: "Category",
   website: "Website",
   phone: "Phone",
   email: "Email",
 };
+
+/** UI grouping for the Insert Variable picker (order within each group is display order). */
+export const PROSPECT_MESSAGE_VARIABLE_GROUPS: ReadonlyArray<{
+  id: string;
+  label: string;
+  keys: readonly ProspectMessageVariableKey[];
+}> = [
+  {
+    id: "prospect",
+    label: "Prospect",
+    keys: ["first_name", "last_name", "business_name", "category", "city"],
+  },
+  {
+    id: "contact",
+    label: "Contact",
+    keys: ["website", "email", "phone"],
+  },
+];
 
 export type ProspectMessageVariableSource = {
   name?: string | null;

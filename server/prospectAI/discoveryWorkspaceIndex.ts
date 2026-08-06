@@ -17,15 +17,26 @@ export type WorkspaceIdentityHit = {
   recordKind: "crm_contact" | "discovery_result" | "prospect_ai_contact";
   label: string;
   match: ProspectAiIdentityMatch;
+  /** Prospect AI lifecycle when record is a PI contact (archived/trashed/deleted). */
+  lifecycleStatus?: "active" | "archived" | "trashed" | "deleted";
 };
 
 export type DiscoveryWorkspaceIndex = {
-  byPlaceId: Map<string, { recordId: string; recordKind: WorkspaceIdentityHit["recordKind"]; label: string }>;
+  byPlaceId: Map<
+    string,
+    {
+      recordId: string;
+      recordKind: WorkspaceIdentityHit["recordKind"];
+      label: string;
+      lifecycleStatus?: WorkspaceIdentityHit["lifecycleStatus"];
+    }
+  >;
   entries: Array<{
     recordId: string;
     recordKind: WorkspaceIdentityHit["recordKind"];
     label: string;
     keys: ProspectAiIdentityKeys;
+    lifecycleStatus?: WorkspaceIdentityHit["lifecycleStatus"];
   }>;
 };
 
@@ -39,6 +50,13 @@ export async function loadDiscoveryWorkspaceIndex(
   const entries: DiscoveryWorkspaceIndex["entries"] = [];
 
   const existingContacts = await storage.getContacts(workspaceUserId, 5000);
+  const { loadProspectLifecycleByContactIds } = await import(
+    "../prospectImport/prospectLifecycleService"
+  );
+  const lifecycleByContact = await loadProspectLifecycleByContactIds(
+    existingContacts.map((c) => c.id),
+  );
+
   for (const c of existingContacts) {
     const sd = (c.sourceDetails || {}) as Record<string, unknown>;
     const cf = (c.customFields || {}) as Record<string, unknown>;
@@ -66,10 +84,22 @@ export async function loadDiscoveryWorkspaceIndex(
       String(c.source || "").includes("prospect") || placeId
         ? "prospect_ai_contact"
         : "crm_contact";
+    const lifecycleStatus = lifecycleByContact.get(c.id);
     if (placeId && !byPlaceId.has(placeId)) {
-      byPlaceId.set(placeId, { recordId: c.id, recordKind: kind, label });
+      byPlaceId.set(placeId, {
+        recordId: c.id,
+        recordKind: kind,
+        label,
+        lifecycleStatus,
+      });
     }
-    entries.push({ recordId: c.id, recordKind: kind, label, keys });
+    entries.push({
+      recordId: c.id,
+      recordKind: kind,
+      label,
+      keys,
+      lifecycleStatus,
+    });
   }
 
   // Pending / prior discovery rows (including not-yet-sent Review batch)
@@ -147,6 +177,7 @@ export function findWorkspaceMatch(
       recordKind: entry.recordKind,
       label: entry.label,
       match,
+      lifecycleStatus: entry.lifecycleStatus,
     };
     if (match.autoCollapse) {
       if (

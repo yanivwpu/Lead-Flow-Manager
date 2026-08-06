@@ -62,6 +62,7 @@ export type ProspectAiDiscoveryDiagnostics = {
   uniqueInRun?: number;
   duplicatesInRun?: number;
   alreadyInWorkspace?: number;
+  alreadyArchived?: number;
   rejectedInvalid?: number;
   rejectedClosed?: number;
   rejectedQuality?: number;

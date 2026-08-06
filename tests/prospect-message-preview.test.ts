@@ -66,5 +66,7 @@ test("Preview for Prospect UI wired", () => {
     "utf8",
   );
   assert.ok(preview.includes("pi-preview-for-prospect"));
+  assert.ok(preview.includes("Preview using"));
+  assert.ok(preview.includes("Preview Message"));
   assert.ok(preview.includes("/api/growth-tools/prospect-outreach/preview-message"));
 });

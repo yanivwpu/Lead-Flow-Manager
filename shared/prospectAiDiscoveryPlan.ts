@@ -59,7 +59,12 @@ export type ProspectAiDiscoveryPlan = {
 
 export type ProspectAiDiscoveryExcludedSample = {
   name: string;
-  disposition: "already_exists" | "rejected" | "needs_attention" | "possible_duplicate";
+  disposition:
+    | "already_exists"
+    | "already_archived"
+    | "rejected"
+    | "needs_attention"
+    | "possible_duplicate";
   reason: string | null;
   matchType?: string | null;
   existingRecordId?: string | null;
@@ -83,6 +88,8 @@ export type ProspectAiDiscoveryRunDiagnostics = {
   uniqueInRun: number;
   duplicatesInRun: number;
   alreadyInWorkspace: number;
+  /** Hard identity match against archived / trashed / soft-deleted PI rows — no quota. */
+  alreadyArchived: number;
   rejectedInvalid: number;
   rejectedClosed: number;
   rejectedQuality: number;

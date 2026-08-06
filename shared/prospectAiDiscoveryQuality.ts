@@ -47,6 +47,7 @@ export type ProspectAiDiscoveryDisposition =
   | "needs_attention"
   | "possible_duplicate"
   | "already_exists"
+  | "already_archived"
   | "rejected";
 
 export function isUsableNeedsAttentionReason(

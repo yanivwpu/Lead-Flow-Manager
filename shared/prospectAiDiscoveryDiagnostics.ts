@@ -83,6 +83,7 @@ export function normalizeDiagnosticsRecord(
     uniqueInRun: n(input?.uniqueInRun),
     duplicatesInRun: n(input?.duplicatesInRun),
     alreadyInWorkspace: n(input?.alreadyInWorkspace),
+    alreadyArchived: n(input?.alreadyArchived),
     rejectedInvalid: n(input?.rejectedInvalid),
     rejectedClosed: n(input?.rejectedClosed),
     rejectedQuality: n(input?.rejectedQuality),

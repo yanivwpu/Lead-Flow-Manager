@@ -22,7 +22,7 @@ export function ProspectAiPlaceholderPicker({ onInsert }: Props) {
           className="h-8 text-xs"
           data-testid="pi-insert-ai-placeholder"
         >
-          Insert AI Placeholder
+          ✨ Insert AI Personalization
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">

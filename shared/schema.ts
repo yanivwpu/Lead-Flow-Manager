@@ -2432,6 +2432,20 @@ export const prospectIntelligence = pgTable("prospect_intelligence", {
   enrichmentResult: jsonb("enrichment_result").notNull().default(sql`'{}'::jsonb`),
   enrichmentErrorMessage: text("enrichment_error_message"),
   enrichmentJobId: varchar("enrichment_job_id"),
+  /**
+   * Prospect AI record lifecycle (not CRM contact lifecycle):
+   * active → archived | trashed → deleted (soft terminal).
+   */
+  lifecycleStatus: text("lifecycle_status").notNull().default("active"),
+  archivedAt: timestamp("archived_at"),
+  archivedByUserId: varchar("archived_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  archiveReason: text("archive_reason"),
+  archiveNote: text("archive_note"),
+  trashedAt: timestamp("trashed_at"),
+  trashedByUserId: varchar("trashed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  deletedAt: timestamp("deleted_at"),
+  deletedByUserId: varchar("deleted_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  restoredAt: timestamp("restored_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

@@ -437,6 +437,12 @@ export function prospectReviewWorkEmptyMessage(
       return "No qualified prospects in this view.";
     case "not_qualified":
       return "No not-qualified prospects.";
+    case "campaign_ready":
+      return "No campaign-ready prospects.";
+    case "archived":
+      return "No archived prospects.";
+    case "trashed":
+      return "Trash is empty.";
     case "enriching":
       return "No prospects are being enriched.";
     case "needs_attention":

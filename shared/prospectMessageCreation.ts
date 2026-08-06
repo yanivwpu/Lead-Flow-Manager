@@ -22,9 +22,9 @@ export const PROSPECT_MESSAGE_CREATION_MODES = [
 export type ProspectMessageCreationMode = (typeof PROSPECT_MESSAGE_CREATION_MODES)[number];
 
 export const PROSPECT_MESSAGE_CREATION_MODE_LABELS: Record<ProspectMessageCreationMode, string> = {
-  ai_compose: "AI Compose",
-  use_my_template: "Use My Template",
-  ai_assisted_template: "AI Assisted Template",
+  ai_compose: "🤖 AI Writes Everything",
+  use_my_template: "✍️ Use My Template",
+  ai_assisted_template: "✨ AI Personalization",
 };
 
 export type ProspectMessageCreationSettings = ProspectOutreachInstructions & {
@@ -91,7 +91,7 @@ export function normalizeMessageCreationForSave(raw: unknown): ProspectMessageCr
     const aiKeys = extractAiPlaceholderKeys(next.templateSubject, next.templateBody);
     if (aiKeys.length > 0) {
       throw new OutreachInstructionsValidationError(
-        "Use My Template cannot include AI placeholders ({{ai_…}}). Switch to AI Assisted Template, or remove those tokens.",
+        "Use My Template cannot include AI personalization sections ({{ai_…}}). Switch to AI Personalization, or remove those sections.",
       );
     }
   }

@@ -374,6 +374,15 @@ export type ProspectIntelligence = {
   enrichmentPhoneFound?: boolean;
   enrichmentResult?: Record<string, unknown> | null;
   enrichmentErrorMessage?: string | null;
+  /** Prospect AI record lifecycle — active | archived | trashed | deleted. */
+  lifecycleStatus?: string;
+  archivedAt?: string | null;
+  archivedByUserId?: string | null;
+  archiveReason?: string | null;
+  archiveNote?: string | null;
+  trashedAt?: string | null;
+  deletedAt?: string | null;
+  restoredAt?: string | null;
 };
 
 export type ProspectIntelligenceListItem = {
@@ -462,6 +471,12 @@ export type ProspectIntelligenceListFilters = {
   missingWebsite?: boolean;
   emailEligible?: boolean;
   anyEligibleChannel?: boolean;
+  /**
+   * Prospect AI lifecycle filter.
+   * Default (omit / active): only active Review rows.
+   * archived | trashed | deleted | all for lifecycle views.
+   */
+  lifecycle?: "active" | "archived" | "trashed" | "deleted" | "all";
   sortBy?: "leadScore" | "priority" | "confidence" | "name" | "action" | "createdAt";
   sortDir?: "asc" | "desc";
   limit?: number;

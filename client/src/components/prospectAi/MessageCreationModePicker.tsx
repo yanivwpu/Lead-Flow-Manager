@@ -7,9 +7,11 @@ import {
 import { cn } from "@/lib/utils";
 
 const MODE_HELP: Record<ProspectMessageCreationMode, string> = {
-  ai_compose: "AI writes every outreach individually using your instructions and prospect context.",
-  use_my_template: "You write the message. Only variables are replaced — AI never rewrites.",
-  ai_assisted_template: "You write the template. AI fills only {{ai_…}} placeholders.",
+  ai_compose:
+    "AI writes a personalized message for every prospect using your campaign instructions and business knowledge.",
+  use_my_template:
+    "You write the message. Prospect AI only replaces variables like name and business. Your wording is never rewritten.",
+  ai_assisted_template: "You write the message. AI personalizes only the sections you choose.",
 };
 
 type Props = {

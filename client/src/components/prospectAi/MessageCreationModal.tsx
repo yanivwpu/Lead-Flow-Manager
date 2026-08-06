@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,6 +32,7 @@ import {
   type ProspectMessageCreationSettings,
 } from "@shared/prospectMessageCreation";
 import { MessageCreationModePicker } from "./MessageCreationModePicker";
+import { MessageStrategySummary } from "./MessageStrategySummary";
 import { ProspectTemplateEditor } from "./ProspectTemplateEditor";
 import { ProspectMessagePreview } from "./ProspectMessagePreview";
 
@@ -44,6 +45,137 @@ type Props = {
   /** Optional contact for Preview for Prospect. */
   previewContactId?: string | null;
 };
+
+function AiComposeSettings({
+  draft,
+  setDraft,
+  linkError,
+  setLinkError,
+}: {
+  draft: ProspectMessageCreationSettings;
+  setDraft: Dispatch<SetStateAction<ProspectMessageCreationSettings>>;
+  linkError: string | null;
+  setLinkError: (value: string | null) => void;
+}) {
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-1.5">
+          <Label>Language</Label>
+          <Select
+            value={draft.language}
+            onValueChange={(value) =>
+              setDraft((prev) => ({
+                ...prev,
+                language: value as ProspectMessageCreationSettings["language"],
+              }))
+            }
+          >
+            <SelectTrigger data-testid="pi-outreach-language">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PROSPECT_OUTREACH_LANGUAGES.map((language) => (
+                <SelectItem key={language} value={language}>
+                  {PROSPECT_OUTREACH_LANGUAGE_LABELS[language]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Tone</Label>
+          <Select
+            value={draft.tone}
+            onValueChange={(value) =>
+              setDraft((prev) => ({
+                ...prev,
+                tone: value as ProspectMessageCreationSettings["tone"],
+              }))
+            }
+          >
+            <SelectTrigger data-testid="pi-outreach-tone">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PROSPECT_OUTREACH_TONES.map((tone) => (
+                <SelectItem key={tone} value={tone}>
+                  {tone.charAt(0).toUpperCase() + tone.slice(1)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Length</Label>
+          <Select
+            value={draft.length}
+            onValueChange={(value) =>
+              setDraft((prev) => ({
+                ...prev,
+                length: value as ProspectMessageCreationSettings["length"],
+              }))
+            }
+          >
+            <SelectTrigger data-testid="pi-outreach-length">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PROSPECT_OUTREACH_LENGTHS.map((length) => (
+                <SelectItem key={length} value={length}>
+                  {length.charAt(0).toUpperCase() + length.slice(1)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <label className="flex items-start gap-2 text-sm text-gray-800">
+        <Checkbox
+          checked={draft.personalize}
+          onCheckedChange={(checked) =>
+            setDraft((prev) => ({ ...prev, personalize: checked === true }))
+          }
+          data-testid="pi-outreach-personalize"
+        />
+        <span>Personalize using prospect information</span>
+      </label>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="pi-outreach-link">Include link (optional)</Label>
+        <Input
+          id="pi-outreach-link"
+          type="url"
+          inputMode="url"
+          value={draft.linkUrl}
+          onChange={(e) => {
+            setLinkError(null);
+            setDraft((prev) => ({ ...prev, linkUrl: e.target.value }));
+          }}
+          placeholder="https://example.com/your-offer"
+          data-testid="pi-outreach-link-url"
+        />
+        {linkError ? (
+          <p className="text-xs text-red-600" data-testid="pi-outreach-link-error">
+            {linkError}
+          </p>
+        ) : null}
+      </div>
+
+      <label className="flex items-start gap-2 text-sm text-gray-800">
+        <Checkbox
+          checked={draft.includeLinkNaturally}
+          onCheckedChange={(checked) =>
+            setDraft((prev) => ({ ...prev, includeLinkNaturally: checked === true }))
+          }
+          data-testid="pi-outreach-include-link"
+        />
+        <span>Let AI include this link naturally in the message</span>
+      </label>
+    </>
+  );
+}
 
 export function MessageCreationModal({
   open,
@@ -74,30 +206,44 @@ export function MessageCreationModal({
     setFormError(null);
   };
 
+  const showAiSettings = draft.mode === "ai_compose" || draft.mode === "ai_assisted_template";
+  const showTemplateEditor =
+    draft.mode === "use_my_template" || draft.mode === "ai_assisted_template";
+
   const handleSave = () => {
     setFormError(null);
     if (draft.mode === "use_my_template" || draft.mode === "ai_assisted_template") {
       if (!draft.templateBody.trim()) {
-        setFormError("Add a message template before saving.");
+        setFormError("Add a Message Template before saving.");
         return;
       }
     }
     if (draft.mode === "use_my_template" && /\{\{\s*ai_/i.test(`${draft.templateSubject}\n${draft.templateBody}`)) {
       setFormError(
-        "Use My Template cannot include AI placeholders. Switch to AI Assisted Template, or remove {{ai_…}} tokens.",
+        "Use My Template cannot include AI personalization sections. Switch to AI Personalization, or remove those sections.",
       );
       return;
     }
 
-    const linkCheck = validateOutreachLinkUrl(draft.linkUrl);
-    if (!linkCheck.ok) {
-      setLinkError(linkCheck.error);
+    if (showAiSettings) {
+      const linkCheck = validateOutreachLinkUrl(draft.linkUrl);
+      if (!linkCheck.ok) {
+        setLinkError(linkCheck.error);
+        return;
+      }
+      setLinkError(null);
+      onSave({
+        ...draft,
+        linkUrl: linkCheck.linkUrl,
+        templateSubject: draft.templateSubject.trim(),
+        templateBody: draft.templateBody.trim(),
+      });
       return;
     }
+
     setLinkError(null);
     onSave({
       ...draft,
-      linkUrl: linkCheck.linkUrl,
       templateSubject: draft.templateSubject.trim(),
       templateBody: draft.templateBody.trim(),
     });
@@ -112,8 +258,8 @@ export function MessageCreationModal({
         <DialogHeader>
           <DialogTitle>Message Creation</DialogTitle>
           <DialogDescription>
-            Choose how Prospect AI creates outreach messages for this campaign. AI Compose keeps
-            today&apos;s behavior; templates never rewrite your prose outside placeholders.
+            Choose how Prospect AI creates outreach messages for this campaign. Pick the approach
+            that matches how much you want AI to write versus keep your own wording.
           </DialogDescription>
         </DialogHeader>
 
@@ -121,167 +267,63 @@ export function MessageCreationModal({
           <MessageCreationModePicker value={draft.mode} onChange={setMode} />
 
           {draft.mode === "ai_compose" ? (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="pi-outreach-custom">What to emphasize</Label>
-                <Textarea
-                  id="pi-outreach-custom"
-                  rows={5}
-                  value={draft.customInstructions}
-                  onChange={(e) =>
-                    setDraft((prev) => ({ ...prev, customInstructions: e.target.value }))
-                  }
-                  placeholder="Emphasize free trial. Mention Realtor Growth Engine for brokerages. CTA: book a 10-minute walkthrough. Avoid talking about AI jargon."
-                  data-testid="pi-outreach-custom-instructions"
-                />
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="space-y-1.5">
-                  <Label>Language</Label>
-                  <Select
-                    value={draft.language}
-                    onValueChange={(value) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        language: value as ProspectMessageCreationSettings["language"],
-                      }))
-                    }
-                  >
-                    <SelectTrigger data-testid="pi-outreach-language">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PROSPECT_OUTREACH_LANGUAGES.map((language) => (
-                        <SelectItem key={language} value={language}>
-                          {PROSPECT_OUTREACH_LANGUAGE_LABELS[language]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Tone</Label>
-                  <Select
-                    value={draft.tone}
-                    onValueChange={(value) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        tone: value as ProspectMessageCreationSettings["tone"],
-                      }))
-                    }
-                  >
-                    <SelectTrigger data-testid="pi-outreach-tone">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PROSPECT_OUTREACH_TONES.map((tone) => (
-                        <SelectItem key={tone} value={tone}>
-                          {tone.charAt(0).toUpperCase() + tone.slice(1)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Length</Label>
-                  <Select
-                    value={draft.length}
-                    onValueChange={(value) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        length: value as ProspectMessageCreationSettings["length"],
-                      }))
-                    }
-                  >
-                    <SelectTrigger data-testid="pi-outreach-length">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PROSPECT_OUTREACH_LENGTHS.map((length) => (
-                        <SelectItem key={length} value={length}>
-                          {length.charAt(0).toUpperCase() + length.slice(1)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <label className="flex items-start gap-2 text-sm text-gray-800">
-                <Checkbox
-                  checked={draft.personalize}
-                  onCheckedChange={(checked) =>
-                    setDraft((prev) => ({ ...prev, personalize: checked === true }))
-                  }
-                  data-testid="pi-outreach-personalize"
-                />
-                <span>Personalize using prospect information</span>
-              </label>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="pi-outreach-link">Include link (optional)</Label>
-                <Input
-                  id="pi-outreach-link"
-                  type="url"
-                  inputMode="url"
-                  value={draft.linkUrl}
-                  onChange={(e) => {
-                    setLinkError(null);
-                    setDraft((prev) => ({ ...prev, linkUrl: e.target.value }));
-                  }}
-                  placeholder="https://example.com/your-offer"
-                  data-testid="pi-outreach-link-url"
-                />
-                {linkError ? (
-                  <p className="text-xs text-red-600" data-testid="pi-outreach-link-error">
-                    {linkError}
-                  </p>
-                ) : null}
-              </div>
-
-              <label className="flex items-start gap-2 text-sm text-gray-800">
-                <Checkbox
-                  checked={draft.includeLinkNaturally}
-                  onCheckedChange={(checked) =>
-                    setDraft((prev) => ({ ...prev, includeLinkNaturally: checked === true }))
-                  }
-                  data-testid="pi-outreach-include-link"
-                />
-                <span>Let AI include this link naturally in the message</span>
-              </label>
-            </>
-          ) : (
-            <>
-              <ProspectTemplateEditor
-                subject={draft.templateSubject}
-                body={draft.templateBody}
-                onSubjectChange={(templateSubject) =>
-                  setDraft((prev) => ({ ...prev, templateSubject }))
+            <div className="space-y-1.5">
+              <Label htmlFor="pi-outreach-custom">What to emphasize</Label>
+              <Textarea
+                id="pi-outreach-custom"
+                rows={5}
+                value={draft.customInstructions}
+                onChange={(e) =>
+                  setDraft((prev) => ({ ...prev, customInstructions: e.target.value }))
                 }
-                onBodyChange={(templateBody) => setDraft((prev) => ({ ...prev, templateBody }))}
-                showAiPlaceholders={draft.mode === "ai_assisted_template"}
+                placeholder="Emphasize free trial. Mention Realtor Growth Engine for brokerages. CTA: book a 10-minute walkthrough. Avoid talking about AI jargon."
+                data-testid="pi-outreach-custom-instructions"
               />
+            </div>
+          ) : null}
 
-              {draft.mode === "ai_assisted_template" ? (
-                <div className="space-y-1.5">
-                  <Label htmlFor="pi-assisted-emphasis">Optional AI slot guidance</Label>
-                  <Textarea
-                    id="pi-assisted-emphasis"
-                    rows={3}
-                    value={draft.customInstructions}
-                    onChange={(e) =>
-                      setDraft((prev) => ({ ...prev, customInstructions: e.target.value }))
-                    }
-                    placeholder="Guidance for AI placeholders only (tone of opening, CTA style). Does not rewrite your template prose."
-                    data-testid="pi-outreach-custom-instructions"
-                  />
-                </div>
-              ) : null}
+          {showTemplateEditor ? (
+            <ProspectTemplateEditor
+              subject={draft.templateSubject}
+              body={draft.templateBody}
+              onSubjectChange={(templateSubject) =>
+                setDraft((prev) => ({ ...prev, templateSubject }))
+              }
+              onBodyChange={(templateBody) => setDraft((prev) => ({ ...prev, templateBody }))}
+              showAiPlaceholders={draft.mode === "ai_assisted_template"}
+            />
+          ) : null}
 
-              <ProspectMessagePreview draft={draft} contactId={previewContactId} />
-            </>
-          )}
+          {draft.mode === "ai_assisted_template" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="pi-assisted-emphasis">Optional guidance for AI sections</Label>
+              <Textarea
+                id="pi-assisted-emphasis"
+                rows={3}
+                value={draft.customInstructions}
+                onChange={(e) =>
+                  setDraft((prev) => ({ ...prev, customInstructions: e.target.value }))
+                }
+                placeholder="Guidance for the AI personalization sections only (tone of opening, CTA style). Does not rewrite your Message Template."
+                data-testid="pi-outreach-custom-instructions"
+              />
+            </div>
+          ) : null}
+
+          {showAiSettings ? (
+            <AiComposeSettings
+              draft={draft}
+              setDraft={setDraft}
+              linkError={linkError}
+              setLinkError={setLinkError}
+            />
+          ) : null}
+
+          {showTemplateEditor ? (
+            <ProspectMessagePreview draft={draft} contactId={previewContactId} />
+          ) : null}
+
+          <MessageStrategySummary mode={draft.mode} />
 
           {formError ? (
             <p className="text-xs text-red-600" data-testid="pi-message-creation-error">
@@ -306,7 +348,7 @@ export function MessageCreationModal({
             onClick={handleSave}
             data-testid="pi-outreach-instructions-save"
           >
-            {saving ? "Saving…" : "Save"}
+            {saving ? "Saving…" : "Save Message Strategy"}
           </Button>
         </DialogFooter>
       </DialogContent>

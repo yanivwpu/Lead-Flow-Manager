@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useSearch } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   Brain,
@@ -415,7 +415,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
   const [diagnostics, setDiagnostics] = useState<import("@/lib/prospectAi").ProspectAiDiscoveryDiagnostics | null>(null);
   const [excluded, setExcluded] = useState<ProspectAiDiscoveryExcludedSample[]>([]);
   const [resultFilter, setResultFilter] = useState<
-    "ready" | "possible_duplicate" | "already_exists" | "rejected"
+    "ready" | "possible_duplicate" | "already_exists" | "already_archived" | "rejected"
   >("ready");
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -469,6 +469,10 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
     () => excluded.filter((e) => e.disposition === "already_exists"),
     [excluded],
   );
+  const alreadyArchivedSamples = useMemo(
+    () => excluded.filter((e) => e.disposition === "already_archived"),
+    [excluded],
+  );
   const rejectedSamples = useMemo(
     () => excluded.filter((e) => e.disposition === "rejected"),
     [excluded],
@@ -477,6 +481,26 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
     () => excluded.filter((e) => e.disposition === "possible_duplicate"),
     [excluded],
   );
+
+  const restoreArchivedMutation = useMutation({
+    mutationFn: async (contactId: string) => {
+      const res = await fetch(`/api/growth-tools/prospect-intelligence/${contactId}/restore`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || data.reason || "Restore failed");
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: "Prospect restored to Active Review" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Restore failed", description: err.message, variant: "destructive" });
+    },
+  });
   const visibleRows = useMemo(() => {
     if (resultFilter === "ready") return readyResults;
     return [];
@@ -834,6 +858,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
                   Possible Duplicates: {diagnostics.possibleDuplicates ?? possibleDuplicateSamples.length}
                 </li>
                 <li>Already Exists: {diagnostics.alreadyInWorkspace ?? 0}</li>
+                <li>Already Archived: {diagnostics.alreadyArchived ?? alreadyArchivedSamples.length}</li>
                 <li>
                   Rejected:{" "}
                   {(diagnostics.rejectedClosed ?? 0) +
@@ -890,6 +915,10 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
                 [
                   "already_exists",
                   `Already Exists (${diagnostics?.alreadyInWorkspace ?? alreadyExistsSamples.length})`,
+                ],
+                [
+                  "already_archived",
+                  `Already Archived (${diagnostics?.alreadyArchived ?? alreadyArchivedSamples.length})`,
                 ],
                 [
                   "rejected",
@@ -1029,6 +1058,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
             </AlertDialogContent>
           </AlertDialog>
           {resultFilter === "already_exists" ||
+          resultFilter === "already_archived" ||
           resultFilter === "rejected" ||
           resultFilter === "possible_duplicate" ? (
             <div className="overflow-auto rounded-xl border" data-testid="prospect-discover-excluded">
@@ -1038,19 +1068,24 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
                     <TableHead>Name</TableHead>
                     <TableHead>Why</TableHead>
                     <TableHead>Match / details</TableHead>
+                    {resultFilter === "already_archived" ? <TableHead /> : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {(resultFilter === "already_exists"
                     ? alreadyExistsSamples
-                    : resultFilter === "possible_duplicate"
-                      ? possibleDuplicateSamples
-                      : rejectedSamples
+                    : resultFilter === "already_archived"
+                      ? alreadyArchivedSamples
+                      : resultFilter === "possible_duplicate"
+                        ? possibleDuplicateSamples
+                        : rejectedSamples
                   ).map((row, idx) => (
                       <TableRow key={`${row.providerPlaceId || row.name}-${idx}`}>
                         <TableCell className="font-medium">{row.name || "—"}</TableCell>
                         <TableCell className="text-sm text-gray-600">
-                          {discoveryAttentionLabel(row.reason)}
+                          {resultFilter === "already_archived"
+                            ? "Already archived — not counted toward quota"
+                            : discoveryAttentionLabel(row.reason)}
                         </TableCell>
                         <TableCell className="text-sm text-gray-600">
                           {row.existingRecordLabel
@@ -1063,17 +1098,41 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
                                 ? "Not counted toward quota — confirm later if distinct"
                                 : "—"}
                         </TableCell>
+                        {resultFilter === "already_archived" ? (
+                          <TableCell className="text-right">
+                            {row.existingRecordId ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs"
+                                disabled={restoreArchivedMutation.isPending}
+                                onClick={() =>
+                                  restoreArchivedMutation.mutate(String(row.existingRecordId))
+                                }
+                                data-testid="prospect-discover-restore-archived"
+                              >
+                                Restore
+                              </Button>
+                            ) : null}
+                          </TableCell>
+                        ) : null}
                       </TableRow>
                     ),
                   )}
                   {(resultFilter === "already_exists"
                     ? alreadyExistsSamples
-                    : resultFilter === "possible_duplicate"
-                      ? possibleDuplicateSamples
-                      : rejectedSamples
+                    : resultFilter === "already_archived"
+                      ? alreadyArchivedSamples
+                      : resultFilter === "possible_duplicate"
+                        ? possibleDuplicateSamples
+                        : rejectedSamples
                   ).length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={3} className="text-sm text-gray-500">
+                      <TableCell
+                        colSpan={resultFilter === "already_archived" ? 4 : 3}
+                        className="text-sm text-gray-500"
+                      >
                         None in this run
                         {resultFilter === "already_exists" &&
                         (diagnostics?.alreadyInWorkspace ?? 0) >

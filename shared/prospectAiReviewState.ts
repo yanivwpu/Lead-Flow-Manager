@@ -48,12 +48,14 @@ export type ProspectReviewWorkState =
 export type ProspectReviewWorkFilter =
   | "all"
   | "needs_review"
-  /** @deprecated Removed from primary chips — Qualified is default outcome, not a tab. */
   | "qualified"
+  | "not_qualified"
+  | "campaign_ready"
+  | "archived"
+  | "trashed"
   /** @deprecated Removed from primary chips — kept for older URLs/tests. */
   | "enriching"
-  | "needs_attention"
-  | "not_qualified";
+  | "needs_attention";
 
 export type ProspectNeedsAttentionSubFilter =
   | "all"
@@ -61,14 +63,27 @@ export type ProspectNeedsAttentionSubFilter =
   | "missing_website"
   | "missing_email";
 
-/** Primary Review filters: All · Needs Review · Not Qualified. */
+/** Primary Review filters including lifecycle views. */
 export const PROSPECT_REVIEW_WORK_FILTER_CHIPS: Array<{
-  id: Extract<ProspectReviewWorkFilter, "all" | "needs_review" | "not_qualified">;
+  id: Extract<
+    ProspectReviewWorkFilter,
+    | "all"
+    | "needs_review"
+    | "qualified"
+    | "not_qualified"
+    | "campaign_ready"
+    | "archived"
+    | "trashed"
+  >;
   label: string;
 }> = [
-  { id: "all", label: "All" },
+  { id: "all", label: "All Active" },
   { id: "needs_review", label: "Needs Review" },
+  { id: "qualified", label: "Qualified" },
   { id: "not_qualified", label: "Not Qualified" },
+  { id: "campaign_ready", label: "Campaign Ready" },
+  { id: "archived", label: "Archived" },
+  { id: "trashed", label: "Trash" },
 ];
 
 /** @deprecated Needs Attention is folded into Needs Review. */
@@ -137,6 +152,8 @@ export type ProspectReviewStateInput = ProspectReviewUxInput & {
   suggestedOutreachSubject?: string | null;
   /** From rawResult.qualificationSource when present. */
   qualificationSource?: string | null;
+  /** Prospect AI record lifecycle (active | archived | trashed | deleted). */
+  lifecycleStatus?: string | null;
   rawResult?: Record<string, unknown> | null;
   /** AI priority — may be stale `needs_review` after auto-qualify. */
   priority?: string | null;
@@ -998,6 +1015,15 @@ export function matchesProspectReviewWorkFilter(
   filter: ProspectReviewWorkFilter,
   attentionSub: ProspectNeedsAttentionSubFilter = "all",
 ): boolean {
+  const lifecycle = String(input.lifecycleStatus || "active")
+    .trim()
+    .toLowerCase();
+
+  if (filter === "archived") return lifecycle === "archived";
+  if (filter === "trashed") return lifecycle === "trashed";
+
+  // Active Review chips never include archived/trashed/deleted.
+  if (lifecycle !== "active") return false;
   if (!isProspectVisibleInReview(input)) return false;
 
   if (filter === "all") return true;
@@ -1008,6 +1034,10 @@ export function matchesProspectReviewWorkFilter(
 
   if (filter === "qualified") {
     return isProspectDecisionQualified(input);
+  }
+
+  if (filter === "campaign_ready") {
+    return explainQualifiedForCampaign(input).ok;
   }
 
   if (filter === "needs_review") {

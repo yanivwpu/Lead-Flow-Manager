@@ -153,10 +153,24 @@ test("UI + server wiring present", () => {
     join(process.cwd(), "client/src/components/prospectAi/MessageCreationModal.tsx"),
     "utf8",
   );
-  assert.ok(modal.includes("AI Compose"));
-  assert.ok(modal.includes("Use My Template"));
-  assert.ok(modal.includes("AI Assisted Template"));
+  assert.ok(modal.includes("MessageCreationModePicker"));
+  assert.ok(modal.includes("MessageStrategySummary"));
+  assert.ok(modal.includes("Save Message Strategy"));
   assert.ok(modal.includes("ProspectMessagePreview"));
+
+  const modePicker = readFileSync(
+    join(process.cwd(), "client/src/components/prospectAi/MessageCreationModePicker.tsx"),
+    "utf8",
+  );
+  assert.ok(modePicker.includes("AI Writes Everything") || modePicker.includes("PROSPECT_MESSAGE_CREATION_MODE_LABELS"));
+
+  const labels = readFileSync(
+    join(process.cwd(), "shared/prospectMessageCreation.ts"),
+    "utf8",
+  );
+  assert.ok(labels.includes("AI Writes Everything"));
+  assert.ok(labels.includes("Use My Template"));
+  assert.ok(labels.includes("AI Personalization"));
 
   const service = readFileSync(
     join(process.cwd(), "server/prospectImport/prospectMessageGenerationService.ts"),

@@ -35,9 +35,9 @@ export function extractAiPlaceholderKeys(
 
 /** Common AI slots offered in the picker (users may still type custom ai_* keys). */
 export const PROSPECT_AI_PLACEHOLDER_PRESETS = [
-  { key: "ai_opening", label: "Opening" },
-  { key: "ai_reason", label: "Reason / why them" },
-  { key: "ai_cta", label: "Call to action" },
+  { key: "ai_opening", label: "Personalized Opening" },
+  { key: "ai_reason", label: "Why This Business" },
+  { key: "ai_cta", label: "Call to Action" },
   { key: "ai_closing", label: "Closing" },
 ] as const;
 

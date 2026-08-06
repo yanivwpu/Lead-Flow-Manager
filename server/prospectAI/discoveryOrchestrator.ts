@@ -98,6 +98,7 @@ function emptyDiagnostics(
     uniqueInRun: 0,
     duplicatesInRun: 0,
     alreadyInWorkspace: 0,
+    alreadyArchived: 0,
     rejectedInvalid: 0,
     rejectedClosed: 0,
     rejectedQuality: 0,
@@ -177,6 +178,7 @@ export async function runProspectAiDiscoveryOrchestrator(
   let rawResults = 0;
   let duplicatesInRun = 0;
   let alreadyInWorkspace = 0;
+  let alreadyArchived = 0;
   let rejectedInvalid = 0;
   let rejectedClosed = 0;
   let rejectedQuality = 0;
@@ -406,6 +408,30 @@ export async function runProspectAiDiscoveryOrchestrator(
         if (workspaceIndex) {
           const hit = findWorkspaceMatch(workspaceIndex, keys, { allowSoft: true });
           if (hit?.match.autoCollapse) {
+            const lifecycle = String(hit.lifecycleStatus || "active").toLowerCase();
+            const isArchivedLifecycle =
+              lifecycle === "archived" ||
+              lifecycle === "trashed" ||
+              lifecycle === "deleted";
+            if (isArchivedLifecycle) {
+              alreadyArchived += 1;
+              pushExcluded(excludedSamples, {
+                name: normalized.name,
+                disposition: "already_archived",
+                reason:
+                  lifecycle === "trashed"
+                    ? "already_trashed"
+                    : lifecycle === "deleted"
+                      ? "already_deleted"
+                      : "already_archived",
+                matchType: hit.match.matchType,
+                existingRecordId: hit.recordId,
+                existingRecordLabel: hit.label,
+                providerPlaceId: normalized.providerPlaceId,
+                discoveryQuery: q.textQuery,
+              });
+              continue;
+            }
             alreadyInWorkspace += 1;
             pushExcluded(excludedSamples, {
               name: normalized.name,
@@ -525,6 +551,7 @@ export async function runProspectAiDiscoveryOrchestrator(
       uniqueInRun: prospects.length,
       duplicatesInRun,
       alreadyInWorkspace,
+      alreadyArchived,
       rejectedInvalid,
       rejectedClosed,
       rejectedQuality,

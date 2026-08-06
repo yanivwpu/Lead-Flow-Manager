@@ -137,6 +137,12 @@ import {
   prospectEnrichmentTimelineLabel,
   resolveProspectEnrichmentStatusUx,
 } from "@shared/prospectEnrichmentStatusUx";
+import { ArchiveProspectsDialog } from "@/components/prospectAi/ArchiveProspectsDialog";
+import {
+  inferProspectArchiveReason,
+  type ProspectArchiveReason,
+  type ProspectBulkArchiveMode,
+} from "@shared/prospectLifecycle";
 import {
   PROSPECT_STATUS_TONE_CLASSES,
   prospectToneBadgeClass,
@@ -225,6 +231,7 @@ function reviewUxInput(row: ProspectIntelligenceListItem) {
     priorOutreachDetected: row.priorOutreachDetected === true,
     errorMessage: row.intelligence.errorMessage,
     discoveryAttentionReason: row.discoveryAttentionReason,
+    lifecycleStatus: row.intelligence.lifecycleStatus || "active",
   };
 }
 
@@ -1849,6 +1856,7 @@ export function ProspectIntelligencePanel(props: {
   const [resolvedFilteredIds, setResolvedFilteredIds] = useState<string[] | null>(null);
   const [resolvedFilteredCount, setResolvedFilteredCount] = useState<number | null>(null);
   const [bulkResultBanner, setBulkResultBanner] = useState<string | null>(null);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [queuePreviewOpen, setQueuePreviewOpen] = useState(false);
   const [queuePreview, setQueuePreview] = useState<{
     selectedCount: number;
@@ -1953,6 +1961,7 @@ export function ProspectIntelligencePanel(props: {
       channelFilter,
       batchFilter,
       sortBy,
+      "lifecycle-all",
     ],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -1967,6 +1976,8 @@ export function ProspectIntelligencePanel(props: {
       if (channelFilter === "email_eligible") params.set("emailEligible", "true");
       if (channelFilter === "any_eligible") params.set("anyEligibleChannel", "true");
       if (batchFilter !== "all") params.set("reviewBatchKey", batchFilter);
+      // Include archived/trash for lifecycle tabs; active chips filter client-side.
+      params.set("lifecycle", "all");
       // Stable default sort — lifecycle filter applied client-side so rows never vanish mid-action.
       params.set("sortBy", sortBy);
       params.set("sortDir", sortBy === "name" ? "asc" : "desc");
@@ -2122,8 +2133,11 @@ export function ProspectIntelligencePanel(props: {
   const filteredItems = useMemo(() => {
     return rawItems.filter((row) => {
       const ux = reviewUxInput(row);
-      if (isProspectInCampaigns(ux) || String(ux.outcome || "").toLowerCase() === "won") {
-        return false;
+      // Archived / Trash tabs show lifecycle rows even if they have campaign history.
+      if (workFilter !== "archived" && workFilter !== "trashed") {
+        if (isProspectInCampaigns(ux) || String(ux.outcome || "").toLowerCase() === "won") {
+          return false;
+        }
       }
       if (pinnedVisibleIds.has(row.contactId)) return true;
       return matchesProspectReviewWorkFilter(ux, workFilter);
@@ -2742,6 +2756,145 @@ export function ProspectIntelligencePanel(props: {
     },
   });
 
+  const archiveMutation = useMutation({
+    mutationFn: (payload: {
+      mode: ProspectBulkArchiveMode;
+      reason: ProspectArchiveReason | null;
+      note: string;
+      cancelQueue: boolean;
+    }) =>
+      fetchJson<{
+        requested: number;
+        archived?: number;
+        skipped: number;
+        blocked: number;
+        failed: number;
+      }>("/api/growth-tools/prospect-intelligence/bulk-archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactIds: Array.from(effectiveSelectedIds),
+          mode: payload.mode,
+          reason: payload.reason,
+          note: payload.note || undefined,
+          cancelQueue: payload.cancelQueue,
+        }),
+      }),
+    onSuccess: (data) => {
+      setArchiveDialogOpen(false);
+      setBulkResultBanner(
+        `Archived ${data.archived ?? 0} · skipped ${data.skipped} · blocked ${data.blocked} · failed ${data.failed}`,
+      );
+      clearSelection();
+      void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+      toast({ title: "Prospects archived" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Archive failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: () =>
+      fetchJson<{ restored?: number; skipped: number; failed: number }>(
+        "/api/growth-tools/prospect-intelligence/bulk-restore",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contactIds: Array.from(effectiveSelectedIds) }),
+        },
+      ),
+    onSuccess: (data) => {
+      setBulkResultBanner(
+        `Restored ${data.restored ?? 0} · skipped ${data.skipped} · failed ${data.failed}`,
+      );
+      clearSelection();
+      void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+      toast({ title: "Prospects restored" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Restore failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const trashMutation = useMutation({
+    mutationFn: () =>
+      fetchJson<{ trashed?: number; skipped: number; blocked: number; failed: number }>(
+        "/api/growth-tools/prospect-intelligence/bulk-trash",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contactIds: Array.from(effectiveSelectedIds),
+            cancelQueue: true,
+          }),
+        },
+      ),
+    onSuccess: (data) => {
+      setBulkResultBanner(
+        `Moved to Trash ${data.trashed ?? 0} · skipped ${data.skipped} · blocked ${data.blocked} · failed ${data.failed}`,
+      );
+      clearSelection();
+      void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+      toast({ title: "Moved to Trash" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Trash failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const permanentDeleteMutation = useMutation({
+    mutationFn: () => {
+      const ids = Array.from(effectiveSelectedIds);
+      return fetchJson<{ deleted?: number; skipped: number; blocked: number; failed: number }>(
+        "/api/growth-tools/prospect-intelligence/bulk-delete-permanent",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contactIds: ids, expectedCount: ids.length }),
+        },
+      );
+    },
+    onSuccess: (data) => {
+      setBulkResultBanner(
+        `Deleted from Prospect AI ${data.deleted ?? 0} · skipped ${data.skipped} · blocked ${data.blocked} · failed ${data.failed}`,
+      );
+      clearSelection();
+      void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+      toast({ title: "Deleted from Prospect AI" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const archiveInferencePreview = useMemo(() => {
+    const counts = new Map<ProspectArchiveReason, number>();
+    for (const id of effectiveSelectedIds) {
+      const row = rawItems.find((r) => r.contactId === id);
+      if (!row) continue;
+      const ux = reviewUxInput(row);
+      const reason = inferProspectArchiveReason({
+        notQualified: ux.notQualified === true,
+        outsideTargetArea: String(ux.discoveryAttentionReason || "")
+          .toLowerCase()
+          .includes("outside"),
+        confirmedDuplicate: String(ux.discoveryAttentionReason || "")
+          .toLowerCase()
+          .includes("duplicate"),
+        noContactInformation:
+          !isValidProspectEmail(row.email) &&
+          !isValidProspectPhone(row.phone) &&
+          !String(row.websiteUrl || "").trim(),
+        alreadyContacted: row.priorOutreachDetected === true,
+      });
+      counts.set(reason, (counts.get(reason) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [effectiveSelectedIds, rawItems]);
+
   const bulkJob = bulkJobQuery.data?.job;
 
   return (
@@ -3055,8 +3208,90 @@ export function ProspectIntelligencePanel(props: {
               ? `Send ${selectionEligibility.qualified} to Campaign`
               : "Send to Campaign"}
           </Button>
+          {workFilter !== "archived" && workFilter !== "trashed" ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+              disabled={!selectedCount || archiveMutation.isPending}
+              onClick={() => setArchiveDialogOpen(true)}
+              data-testid="pi-bulk-archive"
+            >
+              Archive{selectedCount > 0 ? ` ${selectedCount}` : ""}
+            </Button>
+          ) : null}
+          {workFilter === "archived" || workFilter === "trashed" ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+              disabled={!selectedCount || restoreMutation.isPending}
+              onClick={() => restoreMutation.mutate()}
+              data-testid="pi-bulk-restore"
+            >
+              Restore{selectedCount > 0 ? ` ${selectedCount}` : ""}
+            </Button>
+          ) : null}
+          {workFilter !== "trashed" ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs text-amber-900"
+              disabled={!selectedCount || trashMutation.isPending}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Move ${selectedCount} prospect${selectedCount === 1 ? "" : "s"} to Trash?`,
+                  )
+                ) {
+                  trashMutation.mutate();
+                }
+              }}
+              data-testid="pi-bulk-trash"
+            >
+              Move to Trash
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs text-red-700"
+              disabled={!selectedCount || permanentDeleteMutation.isPending}
+              onClick={() => {
+                const n = selectedCount;
+                const typed = window.prompt(
+                  `Type ${n} to permanently delete ${n} prospect${n === 1 ? "" : "s"} from Prospect AI (CRM contacts are kept).`,
+                );
+                if (String(typed || "").trim() !== String(n)) {
+                  toast({
+                    title: "Delete cancelled",
+                    description: "Confirmation count did not match.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                permanentDeleteMutation.mutate();
+              }}
+              data-testid="pi-bulk-delete-permanent"
+            >
+              Delete from Prospect AI
+            </Button>
+          )}
         </div>
       </div>
+
+      <ArchiveProspectsDialog
+        open={archiveDialogOpen}
+        onOpenChange={setArchiveDialogOpen}
+        count={selectedCount}
+        saving={archiveMutation.isPending}
+        inferencePreview={archiveInferencePreview}
+        onConfirm={(payload) => archiveMutation.mutate(payload)}
+      />
 
       {bulkResultBanner ? (
         <p className="text-xs text-gray-700" data-testid="pi-bulk-result-banner">
