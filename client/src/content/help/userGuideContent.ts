@@ -291,6 +291,108 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
     ],
   },
   {
+    id: "prospect-ai",
+    title: "Prospect AI",
+    intro:
+      "Prospect AI is your AI sales team for discovering local businesses, qualifying opportunities with real public information, and launching personalized outreach—included with every WhachatCRM plan.",
+    subsections: [
+      {
+        title: "Introduction",
+        paragraphs: [
+          "Open Prospect AI from the Growth Engines gallery or the sidebar after activation. The first time you activate Prospect AI, a short onboarding guide explains how discovery, review, and campaigns work. You can reopen Prospect AI Guide anytime from the Prospect AI header.",
+          "Think of Prospect AI as an AI sales employee—not a perfect database. It works with real-world public business information, so incomplete contact data and Not Qualified outcomes are expected.",
+        ],
+      },
+      {
+        title: "Discover Businesses",
+        paragraphs: [
+          "On the Discover tab, choose a business type (industry) and location, optionally set a search radius and target count, then start discovery. Prospect AI searches publicly available business information and returns potential customers.",
+          "Start with one city or niche and a smaller batch so you can learn what works for your market.",
+        ],
+        bullets: [
+          "Business Type — e.g. dental clinics, restaurants, auto repair",
+          "Location — city or region to search",
+          "Target new prospects — how many net-new businesses to aim for",
+          "Existing CRM matches and duplicates do not count toward your target",
+        ],
+      },
+      {
+        title: "AI Review",
+        paragraphs: [
+          "After discovery, send prospects to Review. Prospect AI analyzes each business and surfaces a mix of Qualified, Needs Review, Missing Email, Enrichment Unavailable, and Not Qualified outcomes.",
+          "This mix is normal. Not every business is the right customer for your offer.",
+        ],
+      },
+      {
+        title: "Understanding AI Decisions",
+        paragraphs: [
+          "Qualification uses your AI Brain and business context when available, plus publicly available signals about the prospect. Decisions explain fit, gaps, and suggested next steps so you can accept, edit, or archive with confidence.",
+        ],
+      },
+      {
+        title: "Enrichment",
+        paragraphs: [
+          "Enrichment looks for publicly available contact details such as websites and emails. When public sources are thin, you may see Enrichment Unavailable or Missing Email—even for otherwise strong businesses.",
+        ],
+      },
+      {
+        title: "Missing Data",
+        paragraphs: [
+          "Missing emails, websites, or limited profiles do not mean Prospect AI is broken. They mean the public web does not expose that information cleanly. Prefer honest gaps over invented contact details.",
+        ],
+        bullets: [
+          "Missing Email — common for small local businesses",
+          "Missing Website — many businesses rely on social profiles only",
+          "Enrichment Unavailable — public sources did not yield usable fields",
+          "Duplicate — already in your workspace or discovery batch",
+          "Not Qualified — outside your ideal customer profile",
+        ],
+      },
+      {
+        title: "Manual Prospect Updates",
+        paragraphs: [
+          "Before discarding a strong prospect with a missing email, update the record manually. Check the business website, contact page, Facebook, Instagram, Google Business Profile, or LinkedIn. One verified email can move a prospect to Campaign Ready.",
+        ],
+      },
+      {
+        title: "Campaigns",
+        paragraphs: [
+          "Accept the prospects you want, send them to Campaign, then create outreach. Review or edit the message before you start sending. Replies land in your Unified Inbox.",
+        ],
+      },
+      {
+        title: "Message Creation Modes",
+        paragraphs: [
+          "Prospect AI supports message creation modes for drafting personalized outreach. Use campaign instructions and AI assistance to tailor tone and length, then edit anything before send.",
+        ],
+      },
+      {
+        title: "Unified Inbox",
+        paragraphs: [
+          "When prospects reply, conversations appear in the Unified Inbox. AI Copilot can help draft responses and suggest next actions so you keep momentum after the first outreach.",
+        ],
+      },
+      {
+        title: "Archive & Restore",
+        paragraphs: [
+          "Archive prospects you do not need so your Review and Campaign queues stay focused. Restore archived prospects later if you want to revisit them.",
+        ],
+      },
+      {
+        title: "Best Practices",
+        bullets: [
+          "Start with one city or niche",
+          "Begin with a smaller batch",
+          "Review AI recommendations before accepting",
+          "Manually add verified emails for promising prospects",
+          "Personalize outreach before sending",
+          "Archive prospects you will not pursue",
+          "Watch replies in the Unified Inbox",
+        ],
+      },
+    ],
+  },
+  {
     id: "policies",
     title: "Policies & Support",
     bullets: [
@@ -345,11 +447,37 @@ export const USER_GUIDE_FAQS: SeoFaqItem[] = [
   { question: "Do you mark up Meta message fees?", answer: "No. You pay Meta directly per their pricing." },
   { question: "What is coexistence on WhatsApp?", answer: "Meta feature allowing Business app and Cloud API on the same number when eligible." },
   { question: "How do I test automations safely?", answer: "Enroll an internal test contact, use pause/resume controls, and review messages before broad enrollment." },
+  {
+    question: "Why is a business Not Qualified?",
+    answer:
+      "Prospect AI marks a business Not Qualified when it does not fit your ideal customer profile or AI Brain context. This is expected when working with real public listings—not every business is a good opportunity.",
+  },
+  {
+    question: "Why is email missing?",
+    answer:
+      "Many local businesses do not publish a clear public email. Prospect AI does not invent contact details. You can add a verified email manually from the website, social profiles, or Google Business Profile to make the prospect Campaign Ready.",
+  },
+  {
+    question: "Why does Enrichment Unavailable happen?",
+    answer:
+      "Enrichment Unavailable means public sources did not yield usable contact fields for that business. It does not mean Prospect AI failed—it means the public web did not expose enough information.",
+  },
+  {
+    question: "Can I edit prospect information manually?",
+    answer:
+      "Yes. Update missing fields such as email or website on promising prospects before discarding them. Manual updates often unlock Campaign Ready status.",
+  },
+  {
+    question: "How does Prospect AI qualify businesses?",
+    answer:
+      "Prospect AI analyzes publicly available business information against your goals and AI Brain context when available, then recommends Qualified, Needs Review, or Not Qualified with reasoning you can review before accepting.",
+  },
 ];
 
 export const USER_GUIDE_RELATED_LINKS = [
   { href: "/whatsapp-crm", label: "WhatsApp CRM Guide" },
   { href: "/unified-inbox", label: "Unified Inbox" },
+  { href: "/app/prospect-ai", label: "Prospect AI" },
   { href: "/shopify-crm", label: "Shopify CRM" },
   { href: "/real-estate-crm", label: "Real Estate CRM" },
   { href: "/crm-with-mls-integration", label: "MLS Integration" },

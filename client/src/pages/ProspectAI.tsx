@@ -90,9 +90,18 @@ import {
   ProspectAiTabBody,
 } from "@/components/prospectAi/ProspectAiPageLayout";
 import { ProspectAiCardArt } from "@/components/growthEngines/ProspectAiCardArt";
+import { ProspectAiOnboarding } from "@/components/prospectAi/ProspectAiOnboarding";
 import { GhlProspectImport, ProspectImportHistoryPanel } from "@/components/settings/GhlProspectImport";
 import { ProspectIntelligencePanel } from "@/components/settings/ProspectIntelligencePanel";
 import { ProspectOutreachQueuePanel } from "@/components/settings/ProspectOutreachQueuePanel";
+import { useAuth } from "@/lib/auth-context";
+import { trackGa4EventWhenReady } from "@/lib/ga4Events";
+import {
+  focusProspectAiDiscoverForm,
+  isProspectAiOnboardingComplete,
+  markProspectAiOnboardingComplete,
+  trackProspectAiGuideEvent,
+} from "@/lib/prospectAiOnboarding";
 import type {
   ProspectIntelligenceJobSummary,
   ProspectImportHistoryItem,
@@ -577,7 +586,16 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
     discoverAbortRef.current?.abort();
   };
 
+  const { user } = useAuth();
   const runDiscover = (replaceActiveBatch: boolean) => {
+    if (user?.id) {
+      trackGa4EventWhenReady(
+        "prospect_ai_first_discovery_started",
+        {},
+        `${user.id}:prospect_ai_first_discovery_started`,
+      );
+      trackProspectAiGuideEvent("prospect_ai_first_discovery_started", { replaceActiveBatch });
+    }
     discoverAbortRef.current?.abort();
     const controller = new AbortController();
     discoverAbortRef.current = controller;
@@ -1676,7 +1694,15 @@ function WonTab() {
   );
 }
 
-function Workspace({ status }: { status: ProspectAiStatus }) {
+function Workspace({
+  status,
+  autoFocusDiscover = false,
+  onOpenGuide,
+}: {
+  status: ProspectAiStatus;
+  autoFocusDiscover?: boolean;
+  onOpenGuide: () => void;
+}) {
   const searchString = useSearch();
   const activeTab = useMemo(
     () => parseTab(new URLSearchParams(searchString).get("tab")),
@@ -1684,6 +1710,7 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
   );
   const [, setLocation] = useLocation();
   const [analysisJob, setAnalysisJob] = useState<ProspectIntelligenceJobSummary | null>(null);
+  const focusedDiscoverRef = useRef(false);
 
   const handleTabChange = (next: string) => {
     const params = new URLSearchParams(searchString);
@@ -1692,6 +1719,22 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
     const q = params.toString();
     setLocation(q ? `${PROSPECT_AI_PATH}?${q}` : PROSPECT_AI_PATH);
   };
+
+  useEffect(() => {
+    if (!autoFocusDiscover || focusedDiscoverRef.current) return;
+    if (activeTab !== "discover") {
+      handleTabChange("discover");
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      if (focusProspectAiDiscoverForm()) {
+        focusedDiscoverRef.current = true;
+        trackProspectAiGuideEvent("prospect_ai_discover_dialog_auto_opened");
+      }
+    }, 120);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- focus once after onboarding
+  }, [autoFocusDiscover, activeTab]);
 
   return (
     <ProspectAiPageLayout>
@@ -1709,17 +1752,27 @@ function Workspace({ status }: { status: ProspectAiStatus }) {
               Your AI employee for customer acquisition.
             </p>
           </div>
-          <button
-            type="button"
-            className={cn(
-              "shrink-0 pt-1 text-sm text-gray-600 hover:text-gray-900",
-              activeTab === "activity" && "font-medium text-brand-green hover:text-brand-green",
-            )}
-            onClick={() => handleTabChange("activity")}
-            data-testid="prospect-ai-activity-link"
-          >
-            {PROSPECT_AI_TAB_LABELS.activity}
-          </button>
+          <div className="flex shrink-0 items-center gap-4 pt-1">
+            <button
+              type="button"
+              className="text-sm font-medium text-cyan-800 hover:text-cyan-950"
+              onClick={onOpenGuide}
+              data-testid="prospect-ai-guide-link"
+            >
+              Prospect AI Guide
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "text-sm text-gray-600 hover:text-gray-900",
+                activeTab === "activity" && "font-medium text-brand-green hover:text-brand-green",
+              )}
+              onClick={() => handleTabChange("activity")}
+              data-testid="prospect-ai-activity-link"
+            >
+              {PROSPECT_AI_TAB_LABELS.activity}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -1776,7 +1829,11 @@ function Shell({ children }: { children: ReactNode }) {
 
 export function ProspectAI() {
   const statusQuery = useProspectAiStatus();
+  const { user } = useAuth();
   const [localStatus, setLocalStatus] = useState<ProspectAiStatus | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [autoFocusDiscover, setAutoFocusDiscover] = useState(false);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
   if (statusQuery.isLoading && !localStatus) {
     return (
@@ -1790,6 +1847,10 @@ export function ProspectAI() {
 
   const status = localStatus ?? statusQuery.data ?? null;
   const activated = Boolean(status?.activated);
+  const onboardingComplete =
+    onboardingDismissed || isProspectAiOnboardingComplete(user?.id);
+  const showFirstTimeGuide =
+    activated && Boolean(status) && Boolean(user?.id) && !onboardingComplete;
 
   if (statusQuery.isError && !status) {
     return (
@@ -1819,9 +1880,52 @@ export function ProspectAI() {
     );
   }
 
+  const completeOnboarding = (opts: { skipped?: boolean; finishDiscover?: boolean }) => {
+    markProspectAiOnboardingComplete(user?.id);
+    setOnboardingDismissed(true);
+    if (opts.skipped) {
+      trackProspectAiGuideEvent("prospect_ai_guide_skipped");
+    } else {
+      trackProspectAiGuideEvent("prospect_ai_guide_completed", {
+        finish_discover: Boolean(opts.finishDiscover),
+      });
+    }
+    setGuideOpen(false);
+    if (opts.finishDiscover) {
+      setAutoFocusDiscover(true);
+    }
+  };
+
+  if (showFirstTimeGuide || guideOpen) {
+    return (
+      <Shell>
+        <ProspectAiOnboarding
+          mode={showFirstTimeGuide ? "first_time" : "reference"}
+          onSkip={() => completeOnboarding({ skipped: true })}
+          onFinishDiscover={() => {
+            if (showFirstTimeGuide) {
+              completeOnboarding({ finishDiscover: true });
+            } else {
+              setGuideOpen(false);
+              setAutoFocusDiscover(true);
+            }
+          }}
+          onViewFullGuide={() => {
+            window.open("/user-guide#prospect-ai", "_blank", "noopener,noreferrer");
+          }}
+          onCloseReference={() => setGuideOpen(false)}
+        />
+      </Shell>
+    );
+  }
+
   return (
     <Shell>
-      <Workspace status={status} />
+      <Workspace
+        status={status}
+        autoFocusDiscover={autoFocusDiscover}
+        onOpenGuide={() => setGuideOpen(true)}
+      />
     </Shell>
   );
 }
