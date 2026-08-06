@@ -55,22 +55,19 @@ export function getPlanPricingHighlights(plan: SubscriptionPlan): string[] {
   const limits = PLAN_LIMITS[plan];
   const discoveries = PROSPECT_AI_MONTHLY_QUOTAS[plan];
   const lines = [
+    `${discoveries} Prospect AI discoveries/month`,
     `${formatConversations(limits.conversationsPerMonth)} active conversations`,
     `${formatUsers(limits.maxUsers)} ${limits.maxUsers === 1 ? "user" : "users"}`,
     limits.maxWhatsappNumbers === 1
-      ? "1 WhatsApp number"
-      : `Up to ${limits.maxWhatsappNumbers} WhatsApp numbers`,
-    `${discoveries} Prospect AI discoveries/month`,
+      ? "1 WhatsApp Business account"
+      : `Up to ${limits.maxWhatsappNumbers} WhatsApp Business accounts`,
+    "Unified Inbox",
   ];
-  if (plan === "free") {
-    lines.push("Unified Inbox");
-    lines.push("Basic contact management");
-  }
   if (limits.chatbotEnabled) {
-    lines.push("Chatbot & website widget");
+    lines.push("Chatbot & Website Widget included");
   }
   if (limits.workflowsEnabled) {
-    lines.push("Workflow automations");
+    lines.push("Workflow Automation");
   }
   if (plan === "pro") {
     lines.push("Best for teams and higher-volume businesses");
@@ -81,10 +78,11 @@ export function getPlanPricingHighlights(plan: SubscriptionPlan): string[] {
 export function getAiBrainAddonHighlights(): string[] {
   return [
     "Learns your business",
-    "Powers advanced AI personalization",
-    "Enhances AI Copilot",
-    "Uses connected knowledge and live business data",
-    "Helps recommend strategy and next actions",
+    "Uses company knowledge",
+    "Connects Offers & Payment Links",
+    "Improves Prospect AI personalization",
+    "Smarter AI Copilot",
+    "Better recommendations",
   ];
 }
 
@@ -169,21 +167,21 @@ export function buildPricingCompareRows(opts?: {
       pro: true,
     },
     {
-      group: "CHATBOT & AUTOMATION",
+      group: "CHATBOT",
       featureKey: "chatbotWidget",
       free: false,
       starter: true,
       pro: true,
     },
     {
-      group: "CHATBOT & AUTOMATION",
+      group: "AUTOMATION",
       featureKey: "workflowAutomation",
       free: false,
       starter: true,
       pro: true,
     },
     {
-      group: "CHATBOT & AUTOMATION",
+      group: "AUTOMATION",
       featureKey: "followUps",
       free: false,
       starter: true,
@@ -197,14 +195,14 @@ export function buildPricingCompareRows(opts?: {
       pro: "Add-on",
     },
     {
-      group: "TEAM & SUPPORT",
+      group: "TEAM",
       featureKey: "assignment",
       free: false,
       starter: false,
       pro: true,
     },
     {
-      group: "TEAM & SUPPORT",
+      group: "SUPPORT",
       featureKey: "integrations",
       free: false,
       starter: true,
@@ -214,7 +212,7 @@ export function buildPricingCompareRows(opts?: {
 
   if (includeGrowthEngines) {
     rows.push({
-      group: "TEAM & SUPPORT",
+      group: "SUPPORT",
       featureKey: "growthEngines",
       free: false,
       starter: false,

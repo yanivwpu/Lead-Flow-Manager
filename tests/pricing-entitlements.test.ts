@@ -93,8 +93,8 @@ test("plan highlights include Prospect AI + chatbot on paid (no Assist quotas)",
   assert.ok(!/credits/i.test(free));
   const starter = getPlanPricingHighlights("starter").join(" | ");
   assert.match(starter, /100 Prospect AI/);
-  assert.match(starter, /Chatbot/);
-  assert.match(starter, /Workflow automations/);
+  assert.match(starter, /Chatbot & Website Widget/);
+  assert.match(starter, /Workflow Automation/);
   assert.ok(!/credits/i.test(starter));
   const pro = getPlanPricingHighlights("pro").join(" | ");
   assert.match(pro, /500 Prospect AI/);
@@ -109,8 +109,12 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(pricing.includes("buildPricingCompareRows"));
   assert.ok(pricing.includes("getPlanPricingHighlights"));
   assert.ok(pricing.includes("ProspectAiCallout"));
-  assert.ok(pricing.includes("Simple pricing for your AI sales team"));
+  assert.ok(pricing.includes("Everything you need to find, engage, and convert more customers"));
+  assert.ok(pricing.includes("SupportedChannelsSection"));
+  assert.ok(pricing.includes("PricingBottomCta"));
   assert.ok(!/ManyChat|Wati|Gorgias/i.test(pricing));
+  // No monthly/yearly billing toggle in product — do not invent one on pricing.
+  assert.ok(!/monthly\/yearly|billingPeriod|annual/i.test(pricing));
 
   const marketing = readFileSync(
     join(process.cwd(), "client/src/components/pricing/PricingMarketingSections.tsx"),
@@ -118,6 +122,11 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   );
   assert.ok(!/ManyChat|Wati|Gorgias/i.test(marketing));
   assert.ok(marketing.includes("0% WhachatCRM markup"));
+  assert.ok(marketing.includes("Works with your customer channels"));
+  assert.ok(marketing.includes("Transparent Pricing"));
+  assert.ok(!marketing.includes("No user fees"));
+  assert.ok(!marketing.includes("No channel fees"));
+  assert.ok(!marketing.includes("No extra seat fees"));
 });
 
 test("server imports inbox AI reply generation constants", () => {

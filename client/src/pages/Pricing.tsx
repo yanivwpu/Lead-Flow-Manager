@@ -34,10 +34,13 @@ import { trackPricingEvent } from "@/lib/ga4Events";
 import {
   AiBrainSpotlight,
   COMPARE_FEATURE_LABELS,
+  COMPARE_GROUP_LABELS,
   CoreCapabilitiesSection,
+  PricingBottomCta,
   PricingFaqSection,
   PricingHeroChips,
   ProspectAiCallout,
+  SupportedChannelsSection,
   TransparentPricingStrip,
   WhyChooseSection,
 } from "@/components/pricing/PricingMarketingSections";
@@ -355,16 +358,16 @@ export function Pricing() {
       className={`min-h-screen bg-gray-50 ${isRTL ? "text-right" : "text-left"}`}
     >
       <Helmet>
-        <title>WhachatCRM Pricing | Unified Inbox, Prospect AI &amp; AI Chatbot</title>
+        <title>WhachatCRM Pricing | Prospect AI, Unified Inbox &amp; WhatsApp CRM</title>
         <meta
           name="description"
-          content="WhachatCRM pricing for your AI sales team: Prospect AI, unified inbox, WhatsApp CRM, chatbot &amp; automations, and AI Copilot. Free plan with 50 discoveries/month. Starter $19, Pro $49."
+          content="WhachatCRM Pricing: Prospect AI, Unified Inbox, WhatsApp CRM, AI Chatbot, and sales automation. Find, engage, and convert more customers. Free plan includes 50 Prospect AI discoveries/month."
         />
         <link rel="canonical" href={`${MARKETING_URL}/pricing`} />
-        <meta property="og:title" content="WhachatCRM Pricing | Unified Inbox, Prospect AI & AI Chatbot" />
+        <meta property="og:title" content="WhachatCRM Pricing | Prospect AI, Unified Inbox & WhatsApp CRM" />
         <meta
           property="og:description"
-          content="Simple pricing for sales automation software: Prospect AI, multi-channel messaging CRM, and AI chatbot tools. Start free."
+          content="Multi-channel inbox, Prospect AI, AI Chatbot, and Workflow Automation in one platform. Start free."
         />
         <meta property="og:url" content={`${MARKETING_URL}/pricing`} />
         <meta property="og:type" content="website" />
@@ -372,7 +375,7 @@ export function Pricing() {
         <meta name="twitter:title" content="WhachatCRM Pricing | Unified Inbox & Prospect AI" />
         <meta
           name="twitter:description"
-          content="Prospect AI, unified inbox, chatbot & automations, and AI Copilot—clear plans from Free to Pro."
+          content="Prospect AI, multi-channel inbox, AI Chatbot, and sales automation—clear plans from Free to Pro."
         />
       </Helmet>
 
@@ -433,20 +436,21 @@ export function Pricing() {
         )}
 
         {/* ─────────────── SECTION 1: HERO ─────────────── */}
-        <div className="mb-8 text-center">
+        <div className="mb-6 text-center">
           <h1
             className="mb-3 font-display text-3xl font-bold text-gray-900 sm:text-4xl"
             data-testid="text-pricing-hero-title"
           >
-            Simple pricing for your AI sales team
+            Everything you need to find, engage, and convert more customers
           </h1>
           <p className="mx-auto max-w-2xl text-base text-gray-600 sm:text-lg">
-            Find prospects, manage conversations, automate follow-up, and turn more leads into
-            customers—all from one workspace.
+            Prospect AI, Unified Inbox, Chatbot, Workflow Automation and AI Copilot—all in one
+            platform.
           </p>
           <PricingHeroChips />
         </div>
 
+        <SupportedChannelsSection />
         <TransparentPricingStrip />
 
         {/* ─────────────── SECTION 3: PRICING CARDS ─────────────── */}
@@ -560,8 +564,8 @@ export function Pricing() {
                     <FeatureItem key={f} text={f} iconClass="text-blue-500" isRTL={isRTL} />
                   ))}
                 </ul>
-                <p className="mb-2 text-xs text-gray-400">
-                  Includes Chatbot & Website Widget and workflow automations.
+                <p className="mb-2 text-xs text-gray-600">
+                  Chatbot captures and qualifies leads. AI Brain (add-on) makes conversations smarter.
                 </p>
                 <p className="text-xs font-medium text-emerald-600 mb-4 flex items-center gap-1" data-testid="text-trial-starter">
                   <span>✓</span>{" "}
@@ -820,7 +824,7 @@ export function Pricing() {
                             colSpan={4}
                             className="px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500"
                           >
-                            {row.group}
+                            {COMPARE_GROUP_LABELS[row.group] || row.group}
                           </td>
                         </tr>
                       ) : null}
@@ -874,39 +878,9 @@ export function Pricing() {
 
         <PricingFaqSection />
 
-        <div
-          className="rounded-2xl bg-gray-900 p-8 text-center text-white md:p-12"
-          data-testid="section-final-cta"
-        >
-          <h2 className="mb-3 font-display text-2xl font-bold md:text-3xl">
-            Start finding customers before you pay
-          </h2>
-          <p className="mx-auto mb-8 max-w-2xl text-gray-400">
-            Get 50 Prospect AI discoveries every month on Free, manage conversations in one inbox,
-            and upgrade when your business grows.
-          </p>
-          <div className="flex flex-col justify-center gap-3 sm:flex-row">
-            <Button
-              className="h-12 rounded-full bg-brand-green px-8 font-semibold text-white hover:bg-emerald-700"
-              onClick={() => {
-                trackPricingEvent("pricing_plan_cta_click", { plan: "free", source: "bottom_cta" });
-                setLocation(user ? "/app/inbox" : "/auth");
-              }}
-              data-testid="button-cta-start-free"
-            >
-              Start Free
-            </Button>
-            <Link href="/contact">
-              <Button
-                variant="outline"
-                className="h-12 rounded-full border-gray-700 px-8 text-gray-300 hover:bg-gray-800"
-                data-testid="button-cta-talk-to-sales"
-              >
-                Talk to Sales
-              </Button>
-            </Link>
-          </div>
-        </div>
+        <PricingBottomCta
+          onStartFree={() => setLocation(user ? "/app/inbox" : "/auth")}
+        />
 
       </div>
       <SiteFooter />

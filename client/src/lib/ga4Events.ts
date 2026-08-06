@@ -189,6 +189,8 @@ export function trackPricingEvent(
     | "pricing_toggle_changed"
     | "prospect_ai_learn_more_click"
     | "ai_brain_addon_click"
+    | "ai_brain_learn_more_click"
+    | "pricing_book_demo_click"
     | "pricing_comparison_expand"
     | "pricing_faq_open",
   params: Record<string, unknown> = {},
