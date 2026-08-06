@@ -29,7 +29,7 @@ export const PROSPECT_AI_PRIMARY_TABS = [
 /** One short subtitle per top-level page. */
 export const PROSPECT_AI_PAGE_SUBTITLES: Record<ProspectAiTabId, string> = {
   discover: "Find new businesses to grow your pipeline.",
-  review: "AI qualifies fits automatically — review exceptions, then send to Campaigns.",
+  review: "AI qualifies fits automatically — Review & Accept, then send to Campaigns.",
   campaign: "Control outreach sending and monitor delivery.",
   inbox: "Continue conversations and move successful prospects to Won.",
   activity: "Discoveries, imports, outreach, and wins over time.",
@@ -37,10 +37,10 @@ export const PROSPECT_AI_PAGE_SUBTITLES: Record<ProspectAiTabId, string> = {
 };
 
 /**
- * @deprecated Internal lifecycle label — prefer Ready to Send on Campaigns.
+ * @deprecated Prefer PROSPECT_READY_TO_SEND_LABEL.
  * DB status remains `queued`.
  */
-export const PROSPECT_LIFECYCLE_QUEUE_LABEL = "Campaign Queue";
+export const PROSPECT_LIFECYCLE_QUEUE_LABEL = "Ready to Send";
 
 /**
  * Campaigns: messages waiting to send (DB status `queued`).
@@ -53,7 +53,7 @@ export const PROSPECT_SENDING_QUEUE_LABEL = PROSPECT_READY_TO_SEND_LABEL;
 /** Campaign queue item / filter display labels (keys = DB queue_status). */
 export const PROSPECT_CAMPAIGN_QUEUE_STATUS_LABELS: Record<string, string> = {
   all: "All",
-  queued: "Ready",
+  queued: "Ready to Send",
   sending: "Sending",
   sent: "Sent",
   failed: "Failed",
@@ -70,7 +70,7 @@ export function prospectCampaignQueueStatusLabel(status: string | null | undefin
 
 /** Operational metric card labels on Campaigns (not campaign state). */
 export const PROSPECT_CAMPAIGN_METRIC_LABELS = {
-  queued: "Ready",
+  queued: "Ready to Send",
   sending: "Sending",
   sentToday: "Sent",
   outreachSent: "Outreach Sent",
@@ -84,7 +84,7 @@ export const PROSPECT_CAMPAIGN_METRIC_LABELS = {
  */
 export const PROSPECT_CAMPAIGN_STATUS_FILTERS: Array<{ id: string; label: string }> = [
   { id: "all", label: "All" },
-  { id: "queued", label: "Ready" },
+  { id: "queued", label: "Ready to Send" },
   { id: "sent", label: "Sent" },
   { id: "failed", label: "Failed" },
 ];
@@ -93,7 +93,7 @@ export const PROSPECT_CAMPAIGN_CONTROL_LABELS = {
   startSending: "Start Sending",
   pauseSending: "Pause Sending",
   resumeSending: "Resume Sending",
-  saveLimits: "Save limits",
+  saveLimits: "Save Limits",
 } as const;
 
 export const PROSPECT_SELECTION_LABELS = {
@@ -155,10 +155,10 @@ export function formatProspectReviewSelectionSummary(params: {
   const missingEmail = Math.max(0, Math.floor(params.missingEmailCount ?? 0));
 
   const campaignParts: string[] = [];
-  if (qualified > 0) campaignParts.push(`${qualified} ready for Campaign`);
+  if (qualified > 0) campaignParts.push(`${qualified} Campaign Ready`);
   if (missingEmail > 0) campaignParts.push(`${missingEmail} missing email`);
-  if (needsReview > 0) campaignParts.push(`${needsReview} need review`);
-  if (notQualified > 0) campaignParts.push(`${notQualified} not qualified`);
+  if (needsReview > 0) campaignParts.push(`${needsReview} Needs Review`);
+  if (notQualified > 0) campaignParts.push(`${notQualified} Not Qualified`);
 
   const enrichParts: string[] = [];
   if (enrichable > 0 || already > 0 || unavailable > 0) {

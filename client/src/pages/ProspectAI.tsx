@@ -772,7 +772,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
               Discover Businesses
             </h2>
             <p className="mt-1.5 text-sm leading-relaxed text-gray-600 text-pretty">
-              Find net-new businesses ready for Review. Existing CRM matches, duplicates, and invalid
+              Find net-new businesses for Review. Existing CRM matches, duplicates, and invalid
               listings do not count toward your target.
             </p>
           </div>
@@ -1411,7 +1411,7 @@ function ActivityTab() {
             type="button"
             size="sm"
             variant={kindFilter === value ? "default" : "outline"}
-            className="h-7 shrink-0 rounded-full px-2.5 text-[11px]"
+            className="h-7 shrink-0 rounded-md px-2.5 text-[11px]"
             onClick={() => setKindFilter(value)}
             data-testid={`activity-filter-${value}`}
           >
@@ -1527,12 +1527,13 @@ function InboxTab() {
       </div>
 
       {listQuery.isLoading ? (
-        <div className="flex w-full justify-center py-10">
+        <div className="flex w-full flex-col items-center justify-center gap-2 py-10">
           <Loader2 className="h-6 w-6 animate-spin text-brand-green" />
+          <p className="text-sm text-gray-500">Loading replies…</p>
         </div>
       ) : conversations.length === 0 ? (
         <ProspectAiEmptyState data-testid="prospect-inbox-empty">
-          <p className="text-sm text-gray-600">No conversations yet.</p>
+          <p className="text-sm text-gray-600">No replies yet.</p>
         </ProspectAiEmptyState>
       ) : (
         <ul className="w-full divide-y divide-gray-100 rounded-xl border border-gray-200/90 bg-white">
@@ -1649,8 +1650,9 @@ function WonTab() {
       </div>
 
       {customersQuery.isLoading ? (
-        <div className="flex w-full justify-center py-10">
+        <div className="flex w-full flex-col items-center justify-center gap-2 py-10">
           <Loader2 className="h-6 w-6 animate-spin text-brand-green" />
+          <p className="text-sm text-gray-500">Loading wins…</p>
         </div>
       ) : customers.length === 0 ? (
         <ProspectAiEmptyState data-testid="prospect-won-empty">

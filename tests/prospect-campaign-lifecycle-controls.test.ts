@@ -144,7 +144,7 @@ function item(
 
 {
   const copy = formatDraftCampaignReadyCopy(44);
-  assert.equal(copy.title, "Draft campaign ready.");
+  assert.equal(copy.title, "Draft ready to send.");
   assert.equal(copy.readyLine, "44 personalized emails are ready.");
   assert.match(copy.actionLine, /Start Sending/);
   assert.ok(!/paused/i.test(`${copy.title} ${copy.readyLine} ${copy.actionLine}`));
@@ -156,7 +156,7 @@ function item(
     ["all", "queued", "sent", "failed"],
   );
   assert.ok(!PROSPECT_CAMPAIGN_STATUS_FILTERS.some((f) => f.id === "paused"));
-  assert.equal(PROSPECT_CAMPAIGN_METRIC_LABELS.queued, "Ready");
+  assert.equal(PROSPECT_CAMPAIGN_METRIC_LABELS.queued, "Ready to Send");
   assert.equal(PROSPECT_CAMPAIGN_METRIC_LABELS.sentToday, "Sent");
   assert.ok(!("paused" in PROSPECT_CAMPAIGN_METRIC_LABELS));
 }

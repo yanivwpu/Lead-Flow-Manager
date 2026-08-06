@@ -253,7 +253,7 @@ run("wiring: enrichment does not inline force analyze; uses canonical enqueue", 
     "utf8",
   );
   assert.ok(uiSrc.includes("pi-rerun-analysis"));
-  assert.ok(uiSrc.includes("Re-run Analysis"));
+  assert.ok(uiSrc.includes("Re-run AI Review"));
   assert.ok(uiSrc.includes("pi-retry-review"));
   assert.ok(uiSrc.includes("Latest refresh failed; previous AI Review preserved."));
   assert.ok(uiSrc.includes("bulk-retry-ai-review"));

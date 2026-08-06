@@ -546,7 +546,7 @@ export function explainCanEnrichProspect(
       message:
         enrichUx.code === "partially_enriched"
           ? enrichUx.unavailableExplanation ||
-            "Enrichment finished, but some sources were unavailable."
+            "Enrichment complete, but some sources were unavailable."
           : "Enrichment is complete for this prospect.",
     };
   }
@@ -567,7 +567,7 @@ export function explainCanEnrichProspect(
       code: "partially_enriched",
       message:
         enrichUx.unavailableExplanation ||
-        "Enrichment finished, but some sources were unavailable.",
+        "Enrichment complete, but some sources were unavailable.",
     };
   }
 
@@ -674,12 +674,12 @@ export function listEmailCampaignBlockingReasons(
   } else if (isProspectAwaitingHumanReview(input)) {
     blocks.push({
       code: "needs_review",
-      message: "Needs review",
+      message: "Needs Review",
     });
   } else if (!isProspectExplicitlyNotQualified(input) && !isProspectDecisionQualified(input)) {
     blocks.push({
       code: "not_approved",
-      message: "Needs review",
+      message: "Needs Review",
     });
   }
 
@@ -805,11 +805,11 @@ export function summarizeSelectionActionAvailability(input: {
   const missingEmail = input.missingEmailCount ?? 0;
   const campaignParts: string[] = [];
   if (input.qualifiedCount > 0) {
-    campaignParts.push(`${input.qualifiedCount} ready for Campaign`);
+    campaignParts.push(`${input.qualifiedCount} Campaign Ready`);
   }
   if (missingEmail > 0) campaignParts.push(`${missingEmail} missing email`);
-  if (needsReview > 0) campaignParts.push(`${needsReview} need review`);
-  if (notQualified > 0) campaignParts.push(`${notQualified} not qualified`);
+  if (needsReview > 0) campaignParts.push(`${needsReview} Needs Review`);
+  if (notQualified > 0) campaignParts.push(`${notQualified} Not Qualified`);
 
   // Prefer campaign eligibility summary whenever send-related counts exist.
   const campaignMixed =

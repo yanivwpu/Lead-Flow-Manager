@@ -359,7 +359,7 @@ export function MessageCreationModal({
           </Button>
           <Button
             type="button"
-            className="bg-brand-green hover:bg-emerald-700"
+            className="bg-brand-green hover:bg-brand-green/90"
             disabled={saving}
             onClick={handleSave}
             data-testid="pi-outreach-instructions-save"

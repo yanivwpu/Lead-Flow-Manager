@@ -114,21 +114,21 @@ function buildPartialExplanation(
   const hasEmail = !missingIds.includes("email");
 
   if (!hasWebsite && !hasEmail) {
-    return "Enrichment finished, but no website or email was available. Add a website to retry enrichment, or add an email to unlock Campaign.";
+    return "Enrichment complete, but no website or email was available. Add a website to retry enrichment, or add an email to unlock Campaign.";
   }
   if (!hasWebsite) {
-    return "Enrichment finished, but no crawlable website was available. Add an official website to find more contact details.";
+    return "Enrichment complete, but no crawlable website was available. Add an official website to find more contact details.";
   }
   if (!hasEmail) {
-    return "Enrichment finished, but no email was found. Add an email to unlock Campaign.";
+    return "Enrichment complete, but no email was found. Add an email to unlock Campaign.";
   }
   const labels = channels
     .filter((c) => !c.found)
     .map((c) => c.label.toLowerCase());
   if (labels.length === 1) {
-    return `Enrichment finished, but ${labels[0]} was unavailable.`;
+    return `Enrichment complete, but ${labels[0]} was unavailable.`;
   }
-  return `Enrichment finished, but ${labels.join(" and ")} were unavailable.`;
+  return `Enrichment complete, but ${labels.join(" and ")} were unavailable.`;
 }
 
 /** True when an official (non-social) website exists so enrichment can start. */

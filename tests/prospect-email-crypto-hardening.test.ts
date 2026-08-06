@@ -86,7 +86,7 @@ async function main() {
     assert.equal(parsed.decryptField, "access_token");
     assert.equal(
       formatProspectQueueItemError(persisted),
-      "Reconnect your email account before resuming",
+      "Reconnect Gmail before Start Sending",
     );
   });
 

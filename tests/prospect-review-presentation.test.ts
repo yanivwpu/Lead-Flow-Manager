@@ -159,7 +159,7 @@ run("assistant summary separates Qualified from Campaign ready", () => {
       suggestedFirstMessage: "Hi C",
     },
   ]);
-  assert.ok(model.lines.some((l) => /2 prospects? are ready for Campaign/i.test(l.text)));
+  assert.ok(model.lines.some((l) => /2 prospects? are Campaign Ready/i.test(l.text)));
   assert.ok(
     model.lines.some((l) => /1 qualified prospect is missing an email address/i.test(l.text)),
   );

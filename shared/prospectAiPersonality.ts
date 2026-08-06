@@ -165,7 +165,7 @@ export function resolveAiPersonalityStatus(params: {
     return {
       kind: "campaign_ready",
       emoji: "🎯",
-      message: "Ready for outreach.",
+      message: "Campaign Ready.",
       active: false,
     };
   }
@@ -174,7 +174,7 @@ export function resolveAiPersonalityStatus(params: {
     return {
       kind: "campaign_ready",
       emoji: "🎯",
-      message: "Ready for outreach.",
+      message: "Campaign Ready.",
       active: false,
     };
   }
@@ -399,7 +399,7 @@ export function buildAiGrowthAssistantModel(
     } else if (campaignReady > 0) {
       lines.push({
         emoji: "✅",
-        text: `${campaignReady} prospect${campaignReady === 1 ? " is" : "s are"} ready for Campaign.`,
+        text: `${campaignReady} prospect${campaignReady === 1 ? " is" : "s are"} Campaign Ready.`,
       });
     }
 

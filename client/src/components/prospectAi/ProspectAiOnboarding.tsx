@@ -40,11 +40,11 @@ const STATUS_ROWS = [
 const WORKFLOW_STEPS = [
   { icon: Radar, title: "Discover", body: "Choose industry and location to find businesses." },
   { icon: Search, title: "Send to Review", body: "Move promising results into AI Review." },
-  { icon: CheckCircle2, title: "Review & Accept", body: "Accept fits; archive the rest." },
-  { icon: Target, title: "Send to Campaign", body: "Queue accepted prospects for outreach." },
-  { icon: Pencil, title: "Review / Edit Message", body: "Personalize before you send." },
+  { icon: CheckCircle2, title: "Review & Accept", body: "Mark fits Qualified; Archive the rest." },
+  { icon: Target, title: "Send to Campaign", body: "Queue Campaign Ready prospects for outreach." },
+  { icon: Pencil, title: "Message Creation", body: "Personalize before you Start Sending." },
   { icon: Send, title: "Start Sending", body: "Launch outreach on your schedule." },
-  { icon: Inbox, title: "Replies in Unified Inbox", body: "Continue conversations with AI Copilot." },
+  { icon: Inbox, title: "Inbox", body: "Continue conversations with AI Copilot." },
 ] as const;
 
 const TIPS = [
@@ -322,7 +322,7 @@ export function ProspectAiOnboarding({
                   className="relative rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
                 >
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-50 text-cyan-700">
-                    <step.icon className="h-4.5 w-4.5 h-4 w-4" aria-hidden />
+                    <step.icon className="h-4 w-4" aria-hidden />
                   </div>
                   <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-cyan-700/80">
                     Step {idx + 1}
@@ -380,7 +380,7 @@ export function ProspectAiOnboarding({
             </p>
             <div className="mt-6 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
               <Button
-                className="bg-brand-green hover:bg-emerald-700"
+                className="bg-brand-green hover:bg-brand-green/90"
                 onClick={onFinishDiscover}
                 data-testid="prospect-ai-guide-finish-discover"
               >

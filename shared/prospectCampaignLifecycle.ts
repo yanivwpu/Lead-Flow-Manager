@@ -32,12 +32,12 @@ export function formatDraftCampaignReadyCopy(readyCount: number): {
 } {
   const n = Math.max(0, Math.floor(Number(readyCount) || 0));
   return {
-    title: "Draft campaign ready.",
+    title: "Draft ready to send.",
     readyLine:
       n === 1
         ? "1 personalized email is ready."
         : `${n} personalized emails are ready.`,
-    actionLine: "Review messages if needed or click Start Sending.",
+    actionLine: "Review messages if needed, then Start Sending.",
   };
 }
 

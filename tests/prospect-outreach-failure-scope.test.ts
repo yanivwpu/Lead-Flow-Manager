@@ -67,9 +67,9 @@ import {
 {
   assert.equal(
     formatProspectQueueItemError("sender_not_connected:decrypt:access_token"),
-    "Reconnect your email account before resuming",
+    "Reconnect Gmail before Start Sending",
   );
-  assert.match(PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE, /Reconnect your email account/i);
+  assert.match(PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE, /Reconnect Gmail/i);
 }
 
 // Resume arming only when not paused

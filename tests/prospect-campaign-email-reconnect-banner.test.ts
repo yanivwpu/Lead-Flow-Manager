@@ -159,7 +159,7 @@ const mailboxId = "7f279098-850a-4d86-bff1-1f9cd87973b9";
   assert.ok(panelSrc.includes("PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE"));
   assert.ok(queueSrc.includes("clearStaleSenderNotConnectedQueueErrors"));
   assert.ok(queueSrc.includes("assertLiveEmailSenderForCampaignArm"));
-  assert.match(PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE, /Reconnect your email account/i);
+  assert.match(PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE, /Reconnect Gmail/i);
 }
 
 console.log("prospect-campaign-email-reconnect-banner.test.ts: ok");

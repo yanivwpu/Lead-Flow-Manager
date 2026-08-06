@@ -149,13 +149,13 @@ export function ArchiveProspectsDialog({
           </label>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="gap-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
           <Button
             type="button"
-            className="bg-brand-green hover:bg-emerald-700"
+            className="bg-brand-green hover:bg-brand-green/90"
             disabled={saving || count < 1}
             onClick={() =>
               onConfirm({

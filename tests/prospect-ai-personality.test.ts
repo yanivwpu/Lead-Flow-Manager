@@ -77,7 +77,7 @@ import { join } from "node:path";
       suggestedFirstMessage: "Hi",
     },
   ]);
-  assert.ok(model.lines.some((l) => /1 prospect is ready for Campaign/i.test(l.text)));
+  assert.ok(model.lines.some((l) => /1 prospect is Campaign Ready/i.test(l.text)));
   assert.ok(
     model.lines.some((l) => /1 qualified prospect is missing an email address/i.test(l.text)),
   );

@@ -678,7 +678,7 @@ export function GhlProspectImport({
               type="button"
               disabled={!canContinueFromStep1}
               onClick={() => setStep(2)}
-              className="bg-brand-green hover:bg-emerald-700"
+              className="bg-brand-green hover:bg-brand-green/90"
               title={!canContinueFromStep1 ? "Select a GoHighLevel location first" : undefined}
             >
               Continue <ArrowRight className="ml-2 h-4 w-4" />
@@ -893,7 +893,7 @@ export function GhlProspectImport({
             </Button>
             <Button
               type="button"
-              className="bg-brand-green hover:bg-emerald-700"
+              className="bg-brand-green hover:bg-brand-green/90"
               disabled={previewMutation.isPending}
               onClick={() => previewMutation.mutate()}
             >
@@ -1086,7 +1086,7 @@ export function GhlProspectImport({
             <Button type="button" variant="outline" onClick={() => setStep(2)}>
               <ArrowLeft className="mr-2 h-4 w-4" /> Back
             </Button>
-            <Button type="button" className="bg-brand-green hover:bg-emerald-700" onClick={() => setStep(4)}>
+            <Button type="button" className="bg-brand-green hover:bg-brand-green/90" onClick={() => setStep(4)}>
               Import options <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
@@ -1183,7 +1183,7 @@ export function GhlProspectImport({
             </Button>
             <Button
               type="button"
-              className="bg-brand-green hover:bg-emerald-700"
+              className="bg-brand-green hover:bg-brand-green/90"
               disabled={
                 importMutation.isPending ||
                 !batchName.trim() ||
@@ -1238,7 +1238,7 @@ export function GhlProspectImport({
               <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4 text-sm text-emerald-950">
                 <p className="font-medium">AI qualification started automatically</p>
                 <p className="mt-1 text-emerald-900/80">
-                  Prospects appear in AI Review as Imported → Analyzing → Ready for Approval. Your first
+                  Prospects appear in AI Review as Imported → Analyzing → Needs Review. Your first
                   step is Review — no Analyze click needed.
                 </p>
               </div>

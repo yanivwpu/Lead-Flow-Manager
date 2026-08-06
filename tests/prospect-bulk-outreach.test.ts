@@ -47,6 +47,7 @@ function testEmailEligibleWhenConnected() {
     outreachStatus: "not_sent",
     analysisStatus: "completed",
     preferredChannel: "auto",
+    suggestedFirstMessage: "Hi — quick question about your business.",
   });
   assert.equal(result.channels.email.eligible, true);
   assert.equal(result.selectedChannel, "email");
@@ -146,7 +147,8 @@ function testLifecycleSkips() {
   }
 }
 
-function testNeedsReviewIsNotCampaignBlocker() {
+function testNeedsReviewIsNotCampaignReady() {
+  // Needs Review is not Campaign Ready — must Review & Accept (Qualified) first.
   const result = resolveProspectOutreachEligibility({
     email: "a@example.com",
     emailConnected: true,
@@ -157,11 +159,11 @@ function testNeedsReviewIsNotCampaignBlocker() {
     enrichmentStatus: "completed",
     websiteUrl: "https://example.com",
     preferredChannel: "email",
+    suggestedFirstMessage: "Hi — quick question about your business.",
   });
-  assert.equal(result.anyEligible, true);
-  assert.equal(result.selectedChannel, "email");
-  assert.notEqual(result.summaryReason, "needs_review");
-  assert.notEqual(result.summaryReason, "not_approved");
+  assert.equal(result.anyEligible, false);
+  assert.equal(result.selectedChannel, null);
+  assert.equal(result.summaryReason, "not_approved");
 }
 
 function testDedupKeyAndSnapshotNormalization() {
@@ -231,6 +233,7 @@ function testSummaryReasonDoesNotMaskSenderNotConnected() {
     outreachStatus: "not_sent",
     analysisStatus: "completed",
     preferredChannel: "auto",
+    suggestedFirstMessage: "Hi — quick question about your business.",
   });
   assert.equal(result.channels.email.reason, "sender_not_connected");
   assert.equal(result.summaryReason, "sender_not_connected");
@@ -239,7 +242,7 @@ function testSummaryReasonDoesNotMaskSenderNotConnected() {
 }
 
 function testAutoSelectsEmailWhenConnectedLikeProduction() {
-  // Mirrors production: valid email + usable Gmail + Preferred = Auto
+  // Mirrors production: Qualified + message + usable Gmail + Preferred = Auto
   const result = resolveProspectOutreachEligibility({
     email: "solomonjames@gmail.com",
     emailConnected: true,
@@ -248,6 +251,7 @@ function testAutoSelectsEmailWhenConnectedLikeProduction() {
     analysisStatus: "completed",
     needsReview: false,
     preferredChannel: "auto",
+    suggestedFirstMessage: "Hi — quick question about your business.",
   });
   assert.equal(result.channels.email.technicallyAvailable, true);
   assert.equal(result.channels.email.connected, true);
@@ -262,14 +266,14 @@ function testAutoSelectsEmailWhenConnectedLikeProduction() {
 function testHumanReadableReasonLabels() {
   assert.equal(
     prospectOutreachEligibilityReasonLabel("sender_not_connected"),
-    "Connect an email account before starting the campaign",
+    "Connect Gmail before starting the campaign",
   );
   assert.equal(
     prospectOutreachEligibilityReasonLabel("missing_identity", "missing_email"),
     "Missing email",
   );
   assert.equal(prospectOutreachEligibilityReasonLabel("needs_review"), "Needs attention");
-  assert.equal(prospectOutreachEligibilityReasonLabel("not_qualified"), "Not qualified");
+  assert.equal(prospectOutreachEligibilityReasonLabel("not_qualified"), "Not Qualified");
   assert.equal(prospectOutreachEligibilityReasonLabel("already_in_campaign"), "Already in Campaigns");
   assert.equal(
     prospectOutreachEligibilityReasonLabel("already_outreach_sent"),
@@ -396,7 +400,7 @@ const tests: Array<[string, () => void]> = [
   ["8 Messenger identity ≠ unrestricted bulk", testMessengerIdentityNotUnrestrictedBulk],
   ["9 SMS respects consent/provider hooks", testSmsRequiresConsentAndProvider],
   ["11-12 lifecycle skips Sent/Replied", testLifecycleSkips],
-  ["needsReview advisory is not a Campaign blocker", testNeedsReviewIsNotCampaignBlocker],
+  ["Needs Review is not Campaign Ready", testNeedsReviewIsNotCampaignReady],
   ["14-15 duplicate recipient normalization + dedup", testDedupKeyAndSnapshotNormalization],
   ["delay jitter within safe range", testDelayJitterRange],
   ["production bulk channel = email only", testOnlyEmailBulkEnabledByDefault],

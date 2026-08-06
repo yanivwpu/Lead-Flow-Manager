@@ -242,15 +242,15 @@ assert.equal(prospectMatchSummary(91).stars, 5);
 
 assert.equal(
   prospectReviewEmptyMessage("review", true),
-  "No businesses waiting for review.",
+  "No prospects need review.",
 );
 assert.equal(
   prospectReviewEmptyMessage("campaigns", true),
-  "No outreach campaigns yet.",
+  "No campaigns yet.",
 );
 assert.equal(
   prospectReviewEmptyMessage("inbox", true),
-  "No conversations yet.",
+  "No replies yet.",
 );
 assert.equal(
   prospectReviewEmptyMessage("won", true),
@@ -314,7 +314,7 @@ assert.deepEqual(
 
 assert.equal(buildProspectRowAiSummary({ analysisStatus: "pending" }).showSummary, false);
 
-assert.equal(PROSPECT_REVIEW_LIFECYCLE_LABELS.queued, "Campaign Queue");
+assert.equal(PROSPECT_REVIEW_LIFECYCLE_LABELS.queued, "Ready to Send");
 
 const panelSrc = readFileSync(
   join(root, "client/src/components/settings/ProspectIntelligencePanel.tsx"),

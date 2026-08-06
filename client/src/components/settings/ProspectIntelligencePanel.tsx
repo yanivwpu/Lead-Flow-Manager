@@ -498,7 +498,7 @@ function priorityBadge(
     case "low":
       return <Badge variant="secondary" className="text-[10px]">Low</Badge>;
     case "needs_review":
-      return <Badge variant="outline" className="text-[10px]">Needs review</Badge>;
+      return <Badge variant="outline" className="text-[10px]">Needs Review</Badge>;
     default:
       return null;
   }
@@ -783,7 +783,7 @@ function ProspectContactFieldRow(props: {
             <Button
               type="button"
               size="sm"
-              className="h-8 bg-brand-green hover:bg-emerald-700"
+              className="h-8 bg-brand-green hover:bg-brand-green/90"
               disabled={saveMutation.isPending}
               onClick={requestSave}
               data-testid={`pi-contact-${kind}-save`}
@@ -1025,7 +1025,7 @@ function ProspectIntelligenceDetailDialog({
         queryKey: ["/api/growth-tools/prospect-intelligence/bulk-analyze/active"],
       });
       toast({
-        title: vars?.deliberateRerun ? "Re-run Analysis queued" : "AI Review queued",
+        title: vars?.deliberateRerun ? "Re-run AI Review queued" : "AI Review queued",
         description: vars?.deliberateRerun
           ? "Replacing the current review on the shared qualification worker."
           : "Retrying on the shared qualification worker.",
@@ -1218,7 +1218,7 @@ function ProspectIntelligenceDetailDialog({
                       </p>
                     ) : enrichUx.code === "ready_to_enrich" ? (
                       <p className="mt-0.5 text-xs text-gray-500">
-                        Website available — Enrich is separate from Re-run Analysis.
+                        Website available — Enrich is separate from Re-run AI Review.
                       </p>
                     ) : (
                       <p className="mt-0.5 text-xs text-gray-500">
@@ -1575,7 +1575,7 @@ function ProspectIntelligenceDetailDialog({
             ) : (
               <>
             <p className="mt-1 text-xs text-gray-500">
-              Save message keeps a draft. Enrich also saves the text currently in this box.
+              Save Message keeps a draft. Enrich also saves the text currently in this box.
             </p>
             <Textarea
               className="mt-2"
@@ -1656,7 +1656,7 @@ function ProspectIntelligenceDetailDialog({
               variant={detailQualificationDecision === "qualified" ? "default" : "outline"}
               className={
                 detailQualificationDecision === "qualified"
-                  ? "bg-brand-green hover:bg-emerald-700"
+                  ? "bg-brand-green hover:bg-brand-green/90"
                   : undefined
               }
               disabled={qualificationMutation.isPending}
@@ -1707,7 +1707,7 @@ function ProspectIntelligenceDetailDialog({
                 onClick={() => {
                   if (
                     !window.confirm(
-                      "Re-run Analysis will replace the current AI Review results. Continue?",
+                      "Re-run AI Review will replace the current results. Continue?",
                     )
                   ) {
                     return;
@@ -1722,7 +1722,7 @@ function ProspectIntelligenceDetailDialog({
                 ) : (
                   <RefreshCw className="mr-2 h-4 w-4" />
                 )}
-                Re-run Analysis
+                Re-run AI Review
               </Button>
             );
           })()}
@@ -1754,12 +1754,12 @@ function ProspectIntelligenceDetailDialog({
             }
             data-testid="pi-save-message"
           >
-            Save message
+            Save Message
           </Button>
           {detailCanEnrich && !detailRetryable ? (
             <Button
               type="button"
-              className="bg-brand-green hover:bg-emerald-700"
+              className="bg-brand-green hover:bg-brand-green/90"
               disabled={detailEnrichBusy}
               onClick={() => {
                 if (!item?.contactId) return;
@@ -1795,7 +1795,7 @@ function ProspectIntelligenceDetailDialog({
           {approveUi.showSendOutreach ? (
             <Button
               type="button"
-              className="bg-brand-green hover:bg-emerald-700"
+              className="bg-brand-green hover:bg-brand-green/90"
               onClick={openNativeEmailOutreach}
               data-testid="pi-send-outreach-email"
             >
@@ -1805,7 +1805,7 @@ function ProspectIntelligenceDetailDialog({
           {approveUi.showViewThread ? (
             <Button
               type="button"
-              className="bg-brand-green hover:bg-emerald-700"
+              className="bg-brand-green hover:bg-brand-green/90"
               onClick={openLinkedConversation}
               data-testid="pi-view-conversation"
             >
@@ -2214,7 +2214,7 @@ export function ProspectIntelligencePanel(props: {
   const jobProgressLabel = useMemo(() => {
     const job = props.activeAnalysisJob;
     if (!job || job.status !== "running") return null;
-    return `Analyzing prospects… ${job.progressCurrent} / ${job.progressTotal}`;
+    return `AI is reviewing prospects… ${job.progressCurrent} / ${job.progressTotal}`;
   }, [props.activeAnalysisJob]);
 
   const selectionBody = useMemo(() => {
@@ -2938,7 +2938,7 @@ export function ProspectIntelligencePanel(props: {
 
       {props.activeAnalysisJob?.status === "completed" ? (
         <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 px-3 py-1.5 text-xs text-emerald-900">
-          Analysis complete — {props.activeAnalysisJob.analyzed} reviewed
+          AI Review complete — {props.activeAnalysisJob.analyzed} reviewed
           {props.activeAnalysisJob.errors
             ? `, ${props.activeAnalysisJob.errors} errors`
             : ""}
@@ -2974,34 +2974,34 @@ export function ProspectIntelligencePanel(props: {
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
           <SelectTrigger className="h-8 w-[140px] max-w-full text-xs"><SelectValue placeholder="Priority" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All priorities</SelectItem>
+            <SelectItem value="all">All Priorities</SelectItem>
             <SelectItem value="high">High</SelectItem>
             <SelectItem value="medium">Medium</SelectItem>
             <SelectItem value="low">Low</SelectItem>
-            <SelectItem value="needs_review">Needs review</SelectItem>
+            <SelectItem value="needs_review">Needs Review</SelectItem>
           </SelectContent>
         </Select>
         <Select value={businessFilter} onValueChange={setBusinessFilter}>
           <SelectTrigger className="h-8 w-[150px] max-w-full text-xs"><SelectValue placeholder="Segment" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All segments</SelectItem>
+            <SelectItem value="all">All Segments</SelectItem>
             <SelectItem value="agency">Agency</SelectItem>
             <SelectItem value="shopify">Shopify</SelectItem>
             <SelectItem value="real_estate">Real Estate</SelectItem>
-            <SelectItem value="needs_review">Needs review</SelectItem>
+            <SelectItem value="needs_review">Needs Review</SelectItem>
           </SelectContent>
         </Select>
         <Select value={channelFilter} onValueChange={setChannelFilter}>
           <SelectTrigger className="h-8 w-[150px] max-w-full text-xs"><SelectValue placeholder="Contact info" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Any contact info</SelectItem>
+            <SelectItem value="all">Any Contact Info</SelectItem>
             <SelectItem value="has_email">Has Email</SelectItem>
-            <SelectItem value="missing_email">Missing email</SelectItem>
+            <SelectItem value="missing_email">Missing Email</SelectItem>
             <SelectItem value="has_phone">Has Phone</SelectItem>
-            <SelectItem value="missing_phone">Missing phone</SelectItem>
-            <SelectItem value="missing_website">Missing website</SelectItem>
-            <SelectItem value="email_eligible">Email eligible</SelectItem>
-            <SelectItem value="any_eligible">Any eligible channel</SelectItem>
+            <SelectItem value="missing_phone">Missing Phone</SelectItem>
+            <SelectItem value="missing_website">Missing Website</SelectItem>
+            <SelectItem value="email_eligible">Email Eligible</SelectItem>
+            <SelectItem value="any_eligible">Any Eligible Channel</SelectItem>
           </SelectContent>
         </Select>
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
@@ -3011,7 +3011,7 @@ export function ProspectIntelligencePanel(props: {
           <SelectContent>
             <SelectItem value="action">Status (default)</SelectItem>
             <SelectItem value="name">Name</SelectItem>
-            <SelectItem value="leadScore">Lead score</SelectItem>
+            <SelectItem value="leadScore">Fit Score</SelectItem>
             <SelectItem value="priority">Priority</SelectItem>
             <SelectItem value="confidence">Confidence</SelectItem>
           </SelectContent>
@@ -3181,7 +3181,7 @@ export function ProspectIntelligencePanel(props: {
           <Button
             type="button"
             size="sm"
-            className="h-8 bg-brand-green text-xs hover:bg-emerald-700"
+            className="h-8 bg-brand-green text-xs hover:bg-brand-green/90"
             disabled={
               !selectedCount ||
               selectionEligibility.qualified === 0 ||
@@ -3603,7 +3603,7 @@ export function ProspectIntelligencePanel(props: {
               </p>
               {queuePreview.willQueue > 0 ? (
                 <p className="text-emerald-800" data-testid="pi-send-campaign-ready">
-                  ✓ {queuePreview.willQueue} ready for Campaign
+                  ✓ {queuePreview.willQueue} Campaign Ready
                 </p>
               ) : null}
               {queuePreview.skips.length > 0 ? (
@@ -3634,7 +3634,7 @@ export function ProspectIntelligencePanel(props: {
             </Button>
             <Button
               type="button"
-              className="bg-brand-green hover:bg-emerald-700"
+              className="bg-brand-green hover:bg-brand-green/90"
               disabled={!queuePreview?.willQueue || confirmQueueMutation.isPending}
               onClick={() => confirmQueueMutation.mutate()}
               data-testid="pi-confirm-queue"

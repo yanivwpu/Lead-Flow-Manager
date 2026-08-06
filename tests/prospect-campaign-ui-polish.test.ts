@@ -33,7 +33,7 @@ assert.ok(panelSrc.includes("formatDraftCampaignReadyCopy"));
 
 assert.deepEqual(
   PROSPECT_CAMPAIGN_STATUS_FILTERS.map((f) => f.label),
-  ["All", "Ready", "Sent", "Failed"],
+  ["All", "Ready to Send", "Sent", "Failed"],
 );
 assert.deepEqual(
   [
@@ -42,7 +42,7 @@ assert.deepEqual(
     PROSPECT_CAMPAIGN_METRIC_LABELS.sentToday,
     PROSPECT_CAMPAIGN_METRIC_LABELS.failed,
   ],
-  ["Ready", "Sending", "Sent", "Failed"],
+  ["Ready to Send", "Sending", "Sent", "Failed"],
 );
 
 assert.equal(PROSPECT_CAMPAIGN_LIFECYCLE_LABELS.draft, "Draft");
@@ -52,9 +52,9 @@ assert.equal(PROSPECT_CAMPAIGN_LIFECYCLE_LABELS.blocked, "Blocked");
 assert.equal(PROSPECT_CAMPAIGN_LIFECYCLE_LABELS.completed, "Completed");
 
 const draft = formatDraftCampaignReadyCopy(44);
-assert.equal(draft.title, "Draft campaign ready.");
+assert.equal(draft.title, "Draft ready to send.");
 assert.equal(draft.readyLine, "44 personalized emails are ready.");
-assert.equal(draft.actionLine, "Review messages if needed or click Start Sending.");
+assert.equal(draft.actionLine, "Review messages if needed, then Start Sending.");
 
 assert.ok(!panelSrc.includes("Campaign paused"));
 assert.ok(!panelSrc.includes("po-queue-paused-banner"));

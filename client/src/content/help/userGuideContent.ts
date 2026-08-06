@@ -357,7 +357,7 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
       {
         title: "Campaigns",
         paragraphs: [
-          "Accept the prospects you want, send them to Campaign, then create outreach. Review or edit the message before you start sending. Replies land in your Unified Inbox.",
+          "Review & Accept fits (mark Qualified), send Campaign Ready prospects to Campaign, then use Message Creation. Start Sending when ready. Replies land in Inbox.",
         ],
       },
       {

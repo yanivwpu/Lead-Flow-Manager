@@ -26,10 +26,10 @@ export type ProspectReviewLifecycle = (typeof PROSPECT_REVIEW_LIFECYCLE)[number]
 export const PROSPECT_REVIEW_LIFECYCLE_LABELS: Record<ProspectReviewLifecycle, string> = {
   imported: "Imported",
   analyzing: "Analyzing…",
-  ready_for_approval: "Ready for Approval",
+  ready_for_approval: "Needs Review",
   website_intelligence: "Enrichment",
   campaign_ready: "Campaign Ready",
-  queued: "Campaign Queue",
+  queued: "Ready to Send",
   campaign: "Campaign",
   inbox: "Inbox",
   won: "Won",
@@ -82,8 +82,8 @@ export const PROSPECT_CAMPAIGNS_SUB_FILTERS: Array<{
   label: string;
 }> = [
   { id: "all", label: "All" },
-  { id: "ready", label: "Ready" },
-  { id: "queued", label: "Queued" },
+  { id: "ready", label: "Campaign Ready" },
+  { id: "queued", label: "Ready to Send" },
   { id: "sending", label: "Sending" },
   { id: "completed", label: "Sent" },
 ];
@@ -403,17 +403,17 @@ export function prospectReviewEmptyMessage(
   hasAnyProspects: boolean,
 ): string {
   if (!hasAnyProspects) {
-    return "No businesses yet. Discover prospects — AI qualifies them automatically.";
+    return "No prospects yet.";
   }
   switch (filter) {
     case "review":
-      return "No businesses waiting for review.";
+      return "No prospects need review.";
     case "website_intelligence":
-      return "No enriched prospects yet.";
+      return "No prospects in Enrichment.";
     case "campaigns":
-      return "No outreach campaigns yet.";
+      return "No campaigns yet.";
     case "inbox":
-      return "No conversations yet.";
+      return "No replies yet.";
     case "won":
       return "No customers won yet.";
     case "all":
@@ -428,23 +428,23 @@ export function prospectReviewWorkEmptyMessage(
   hasAnyProspects: boolean,
 ): string {
   if (!hasAnyProspects) {
-    return "No businesses yet. Discover prospects — AI qualifies them automatically.";
+    return "No prospects yet.";
   }
   switch (filter) {
     case "needs_review":
       return "No prospects need review.";
     case "qualified":
-      return "No qualified prospects in this view.";
+      return "No qualified prospects.";
     case "not_qualified":
-      return "No not-qualified prospects.";
+      return "No Not Qualified prospects.";
     case "campaign_ready":
-      return "No campaign-ready prospects.";
+      return "No Campaign Ready prospects.";
     case "archived":
       return "No archived prospects.";
     case "trashed":
       return "Trash is empty.";
     case "enriching":
-      return "No prospects are being enriched.";
+      return "No prospects enriching.";
     case "needs_attention":
       return "Nothing needs attention.";
     case "all":
@@ -511,7 +511,7 @@ export function prospectReviewCompletionFlash(
   const prevEnrich = String(prev.enrichmentStatus || "").toLowerCase();
   const nextEnrich = String(next.enrichmentStatus || "").toLowerCase();
   if (prevEnrich !== "completed" && nextEnrich === "completed") {
-    return "✓ Enrichment finished";
+    return "✓ Enrichment Complete";
   }
   return null;
 }

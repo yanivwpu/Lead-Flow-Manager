@@ -86,13 +86,13 @@ import {
 {
   assert.equal(
     formatProspectQueueItemError("sender_not_connected"),
-    "Connect an email account before starting the campaign",
+    "Connect Gmail before starting the campaign",
   );
   assert.equal(
     formatProspectQueueItemError("sender_not_connected:decrypt"),
-    "Reconnect your email account before resuming",
+    "Reconnect Gmail before Start Sending",
   );
-  assert.match(PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE, /Connect an email account/i);
+  assert.match(PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE, /Connect Gmail/i);
 
   const panelSrc = readFileSync(
     join(import.meta.dirname, "..", "client/src/components/settings/ProspectOutreachQueuePanel.tsx"),

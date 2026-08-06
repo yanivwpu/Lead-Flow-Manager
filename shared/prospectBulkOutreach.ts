@@ -179,7 +179,7 @@ export function prospectOutreachEligibilityReasonLabel(
           ? "Missing phone"
           : "Missing contact identity";
     case "sender_not_connected":
-      return "Connect an email account before starting the campaign";
+      return "Connect Gmail before starting the campaign";
     case "already_outreach_sent":
     case "already_contacted":
       return "Already contacted";
@@ -189,9 +189,9 @@ export function prospectOutreachEligibilityReasonLabel(
       // Advisory only — should not appear as a Campaign blocker after gate fix.
       return "Needs attention";
     case "not_approved":
-      return "Not ready for Campaign";
+      return "Not Campaign Ready";
     case "not_qualified":
-      return "Not qualified";
+      return "Not Qualified";
     case "already_in_campaign":
     case "duplicate_queued":
       return "Already in Campaigns";
@@ -223,7 +223,7 @@ export function prospectOutreachEligibilityReasonLabel(
     case "not_enabled_for_bulk":
       return "Email sending is not available";
     default:
-      return "Not ready for Campaign";
+      return "Not Campaign Ready";
   }
 }
 
@@ -245,9 +245,9 @@ export function formatProspectQueueItemError(lastError?: string | null): string 
     if (
       /decrypt|token_refresh|api_auth|needs_reconnect|mailbox_disconnected/i.test(lower)
     ) {
-      return "Reconnect your email account before resuming";
+      return "Reconnect Gmail before Start Sending";
     }
-    return "Connect an email account before starting the campaign";
+    return "Connect Gmail before starting the campaign";
   }
 
   const known = [
@@ -284,11 +284,11 @@ export function formatProspectQueueItemError(lastError?: string | null): string 
 }
 
 export const PROSPECT_CAMPAIGN_CONNECT_EMAIL_MESSAGE =
-  "Connect an email account before starting the campaign.";
+  "Connect Gmail before starting the campaign.";
 
 /** Resume/Start when mailbox probe fails after a prior connection existed. */
 export const PROSPECT_CAMPAIGN_RECONNECT_EMAIL_MESSAGE =
-  "Reconnect your email account before resuming. Open Channel Settings to reconnect Gmail.";
+  "Reconnect Gmail before Start Sending. Open Channel Settings to reconnect.";
 
 /** Group preview skips by human-readable reason for the Send to Campaign modal. */
 export function groupCampaignSkipReasons(

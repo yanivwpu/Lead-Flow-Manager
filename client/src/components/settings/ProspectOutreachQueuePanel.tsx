@@ -39,6 +39,7 @@ import {
   PROSPECT_CAMPAIGN_CONTROL_LABELS,
   PROSPECT_CAMPAIGN_METRIC_LABELS,
   PROSPECT_CAMPAIGN_STATUS_FILTERS,
+  PROSPECT_READY_TO_SEND_LABEL,
   buildCampaignsAiAssistantModel,
   prospectCampaignQueueStatusLabel,
 } from "@shared/prospectAiDisplay";
@@ -170,7 +171,7 @@ export function ProspectOutreachQueuePanel({
     mutationFn: () =>
       fetchJson("/api/growth-tools/prospect-outreach/queue/start", { method: "POST" }),
     onSuccess: () => {
-      toast({ title: "Queue started — sends gradually under daily limits" });
+      toast({ title: "Sending started" });
       invalidate();
     },
     onError: (err: Error) => toast({ title: "Start failed", description: err.message, variant: "destructive" }),
@@ -180,7 +181,7 @@ export function ProspectOutreachQueuePanel({
     mutationFn: () =>
       fetchJson("/api/growth-tools/prospect-outreach/queue/pause", { method: "POST" }),
     onSuccess: () => {
-      toast({ title: "Queue paused" });
+      toast({ title: "Sending paused" });
       invalidate();
     },
   });
@@ -189,7 +190,7 @@ export function ProspectOutreachQueuePanel({
     mutationFn: () =>
       fetchJson("/api/growth-tools/prospect-outreach/queue/resume", { method: "POST" }),
     onSuccess: () => {
-      toast({ title: "Sending resumed — queue will process under daily limits" });
+      toast({ title: "Sending resumed" });
       // Invalidate this browser only — other clients catch up via 5s refetchInterval.
       // Resume arms the queue; rows stay Ready/queued until the worker marks them Sent.
       invalidate();
@@ -613,7 +614,7 @@ export function ProspectOutreachQueuePanel({
 
   const cards = useMemo(
     () => [
-      { label: PROSPECT_CAMPAIGN_METRIC_LABELS.queued, value: dash?.queued ?? 0 },
+      { label: PROSPECT_READY_TO_SEND_LABEL, value: dash?.queued ?? 0 },
       { label: PROSPECT_CAMPAIGN_METRIC_LABELS.sending, value: dash?.sending ?? 0 },
       { label: PROSPECT_CAMPAIGN_METRIC_LABELS.sentToday, value: dash?.sentToday ?? 0 },
       { label: PROSPECT_CAMPAIGN_METRIC_LABELS.failed, value: dash?.failed ?? 0 },
@@ -780,7 +781,7 @@ export function ProspectOutreachQueuePanel({
             });
           }}
         >
-          Save limits
+          {PROSPECT_CAMPAIGN_CONTROL_LABELS.saveLimits}
         </Button>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <span
@@ -792,7 +793,7 @@ export function ProspectOutreachQueuePanel({
           {primaryControl === "start" ? (
             <Button
               type="button"
-              className="bg-brand-green hover:bg-emerald-700"
+              className="bg-brand-green hover:bg-brand-green/90"
               disabled={startMutation.isPending || globalSenderBlocker}
               onClick={() => {
                 const tokenDrafts = countQueuedDraftsWithUnresolvedTokens(allActiveItems);
@@ -988,7 +989,7 @@ export function ProspectOutreachQueuePanel({
       ) : null}
 
       {allActiveItems.length === 0 && allHistoryItems.length === 0 ? (
-        <p className="text-sm text-gray-500">No outreach campaigns yet.</p>
+        <p className="text-sm text-gray-500">No campaigns yet.</p>
       ) : (
         <div className="space-y-6" data-testid="po-campaign-sections">
           {showActiveSection ? (
@@ -1002,7 +1003,7 @@ export function ProspectOutreachQueuePanel({
               {activeItems.length === 0 ? (
                 <p className="text-sm text-gray-500">
                   {statusFilter === "all"
-                    ? "No active prospects in the send queue."
+                    ? "No prospects ready to send."
                     : "No prospects match this filter in the active queue."}
                 </p>
               ) : (

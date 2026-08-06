@@ -40,7 +40,15 @@ assert.equal(PROSPECT_AI_TAB_LABELS.activity, "Activity");
 
 assert.deepEqual(
   PROSPECT_REVIEW_WORK_FILTER_CHIPS.map((c) => c.label),
-  ["All", "Needs Review", "Not Qualified"],
+  [
+    "All Active",
+    "Needs Review",
+    "Qualified",
+    "Not Qualified",
+    "Campaign Ready",
+    "Archived",
+    "Trash",
+  ],
 );
 
 // Needs Review → can Enrich
@@ -854,7 +862,7 @@ assert.ok(!panelSrc.includes("Preferred channel: Auto"));
 assert.ok(!panelSrc.includes("bulk-enabled channel"));
 assert.ok(!panelSrc.includes("frozen at queue time"));
 assert.ok(panelSrc.includes("groupCampaignSkipReasons"));
-assert.ok(panelSrc.includes("ready for Campaign"));
+assert.ok(panelSrc.includes("Campaign Ready"));
 
 const campaignsSrc = readFileSync(
   join(root, "client/src/components/settings/ProspectOutreachQueuePanel.tsx"),

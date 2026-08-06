@@ -92,9 +92,9 @@ const panelSrc = readFileSync(
     needsReviewCount: 2,
   });
   assert.equal(campaignSummary.headline, "20 selected");
-  assert.match(campaignSummary.detail || "", /11 ready for Campaign/i);
-  assert.match(campaignSummary.detail || "", /7 not qualified/);
-  assert.match(campaignSummary.detail || "", /2 need review/);
+  assert.match(campaignSummary.detail || "", /11 Campaign Ready/i);
+  assert.match(campaignSummary.detail || "", /7 Not Qualified/);
+  assert.match(campaignSummary.detail || "", /2 Needs Review/);
 
   assert.ok(!panelSrc.includes("server-resolved"));
 }
@@ -119,8 +119,8 @@ const panelSrc = readFileSync(
     notQualifiedCount: 7,
   });
   assert.equal(avail.line, "20 selected");
-  assert.match(avail.detail || "", /11 ready for Campaign/i);
-  assert.match(avail.detail || "", /2 need review/);
+  assert.match(avail.detail || "", /11 Campaign Ready/i);
+  assert.match(avail.detail || "", /2 Needs Review/);
   assert.equal(avail.reason, null);
 }
 
