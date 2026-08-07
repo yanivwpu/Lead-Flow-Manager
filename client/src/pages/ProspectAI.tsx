@@ -1831,6 +1831,7 @@ function Shell({ children }: { children: ReactNode }) {
 
 export function ProspectAI() {
   const statusQuery = useProspectAiStatus();
+  const { data: subscription } = useSubscription();
   const { user } = useAuth();
   const [localStatus, setLocalStatus] = useState<ProspectAiStatus | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -1899,10 +1900,17 @@ export function ProspectAI() {
   };
 
   if (showFirstTimeGuide || guideOpen) {
+    const aiBrainActive = Boolean(
+      status?.aiBrain?.configured ||
+        subscription?.limits?.effectiveHasAIBrain ||
+        subscription?.subscription?.effectiveHasAIBrain ||
+        subscription?.subscription?.trialIncludesAIBrain,
+    );
     return (
       <Shell>
         <ProspectAiOnboarding
           mode={showFirstTimeGuide ? "first_time" : "reference"}
+          aiBrainActive={aiBrainActive}
           onSkip={() => completeOnboarding({ skipped: true })}
           onFinishDiscover={() => {
             if (showFirstTimeGuide) {

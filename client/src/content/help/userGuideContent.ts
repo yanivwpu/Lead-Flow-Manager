@@ -1,6 +1,12 @@
 import type { SeoFaqItem } from "@/content/seo/types";
 import type { MarketingScreenshotMeta } from "@shared/marketingScreenshots";
 import { S } from "@shared/marketingScreenshots";
+import {
+  PROSPECT_AI_BRAIN_FAQ,
+  PROSPECT_AI_BRAIN_OPTIONAL_DETAIL,
+  PROSPECT_AI_BRAIN_OPTIONAL_SUMMARY,
+  PROSPECT_AI_BRAIN_RELATIONSHIP,
+} from "@/content/prospectAiBrainEducation";
 
 export type HelpSubsection = {
   title: string;
@@ -326,7 +332,15 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
       {
         title: "Understanding AI Decisions",
         paragraphs: [
-          "Qualification uses your AI Brain and business context when available, plus publicly available signals about the prospect. Decisions explain fit, gaps, and suggested next steps so you can accept, edit, or archive with confidence.",
+          "Qualification uses publicly available signals about the prospect, plus your business context when available (including AI Brain if you use it). Decisions explain fit, gaps, and suggested next steps so you can accept, edit, or archive with confidence. AI Brain is optional — Prospect AI discovery, qualification, outreach, campaigns, and reply management work without it.",
+        ],
+      },
+      {
+        title: "AI Brain (Optional)",
+        paragraphs: [
+          PROSPECT_AI_BRAIN_OPTIONAL_SUMMARY,
+          PROSPECT_AI_BRAIN_OPTIONAL_DETAIL,
+          PROSPECT_AI_BRAIN_RELATIONSHIP.replace("\n", " "),
         ],
       },
       {
@@ -470,7 +484,11 @@ export const USER_GUIDE_FAQS: SeoFaqItem[] = [
   {
     question: "How does Prospect AI qualify businesses?",
     answer:
-      "Prospect AI analyzes publicly available business information against your goals and AI Brain context when available, then recommends Qualified, Needs Review, or Not Qualified with reasoning you can review before accepting.",
+      "Prospect AI analyzes publicly available business information against your goals and business context when available (including AI Brain if you use it), then recommends Qualified, Needs Review, or Not Qualified with reasoning you can review before accepting. AI Brain is optional and not required for qualification.",
+  },
+  {
+    question: PROSPECT_AI_BRAIN_FAQ.question,
+    answer: PROSPECT_AI_BRAIN_FAQ.answer,
   },
 ];
 

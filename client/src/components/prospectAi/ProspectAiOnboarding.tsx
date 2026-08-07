@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
+import { Link } from "wouter";
 import {
   ArrowDown,
+  Brain,
   Building2,
   CheckCircle2,
   CircleAlert,
@@ -18,6 +20,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { trackProspectAiGuideEvent } from "@/lib/prospectAiOnboarding";
+import {
+  PROSPECT_AI_BRAIN_ONBOARDING,
+  PROSPECT_AI_BRAIN_RELATIONSHIP_LINES,
+} from "@/content/prospectAiBrainEducation";
 
 export type ProspectAiOnboardingMode = "first_time" | "reference";
 
@@ -27,6 +33,8 @@ type Props = {
   onFinishDiscover: () => void;
   onViewFullGuide: () => void;
   onCloseReference?: () => void;
+  /** When true, show subtle active confirmation (no pricing / recommendation CTA). */
+  aiBrainActive?: boolean;
 };
 
 const STATUS_ROWS = [
@@ -93,6 +101,7 @@ export function ProspectAiOnboarding({
   onFinishDiscover,
   onViewFullGuide,
   onCloseReference,
+  aiBrainActive = false,
 }: Props) {
   const trackedView = useRef(false);
 
@@ -368,6 +377,67 @@ export function ProspectAiOnboarding({
               ))}
             </ul>
           </Section>
+
+          <section
+            className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-5 py-5 sm:px-6"
+            data-testid="prospect-ai-guide-ai-brain"
+            aria-label="AI Brain optional intelligence"
+          >
+            {aiBrainActive ? (
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-violet-200/80 bg-white text-violet-600 shadow-sm">
+                  <Brain className="h-4 w-4" aria-hidden />
+                </div>
+                <div className="min-w-0 space-y-2">
+                  <p className="text-sm font-medium leading-snug text-slate-800">
+                    {PROSPECT_AI_BRAIN_ONBOARDING.activeConfirmation}
+                  </p>
+                  <p className="text-xs leading-relaxed text-slate-500 whitespace-pre-line">
+                    {PROSPECT_AI_BRAIN_RELATIONSHIP_LINES.join("\n")}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm">
+                    <Brain className="h-4 w-4" aria-hidden />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-base font-semibold tracking-tight text-slate-900 sm:text-lg">
+                      {PROSPECT_AI_BRAIN_ONBOARDING.heading}
+                    </h2>
+                    <div className="mt-2 space-y-2 text-sm leading-relaxed text-slate-600">
+                      {PROSPECT_AI_BRAIN_ONBOARDING.body.map((paragraph) => (
+                        <p key={paragraph}>{paragraph}</p>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-slate-200/80 bg-white px-3.5 py-3">
+                  <p className="text-sm font-semibold leading-snug text-slate-900 whitespace-pre-line">
+                    {PROSPECT_AI_BRAIN_RELATIONSHIP_LINES.join("\n")}
+                  </p>
+                  <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    {PROSPECT_AI_BRAIN_ONBOARDING.priceLabel}
+                  </p>
+                </div>
+                <div>
+                  <Link href={PROSPECT_AI_BRAIN_ONBOARDING.ctaHref}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+                      data-testid="prospect-ai-guide-learn-ai-brain"
+                    >
+                      {PROSPECT_AI_BRAIN_ONBOARDING.ctaLabel}
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            )}
+          </section>
 
           <section className="rounded-3xl border border-cyan-200 bg-gradient-to-br from-cyan-50 to-sky-50 px-6 py-8 text-center sm:px-10">
             <h2 className="font-display text-2xl font-semibold tracking-tight text-gray-900">
