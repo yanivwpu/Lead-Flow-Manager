@@ -11,9 +11,11 @@ import {
   prospectOutreachBatches,
   prospectOutreachQueueItems,
   prospectOutreachSettings,
+  users,
   type ProspectOutreachQueueItemRow,
   type ProspectOutreachBatchRow,
 } from "@shared/schema";
+import { countProspectSentToday } from "@shared/prospectCampaignDayBoundary";
 import {
   PROSPECT_OUTREACH_DEFAULT_SETTINGS,
   buildQueueDedupKey,
@@ -777,22 +779,28 @@ export async function listQueueItems(params?: {
   return merged.slice(0, limit);
 }
 
+async function resolveWorkspaceTimeZone(workspaceUserId: string): Promise<string> {
+  const rows = await db
+    .select({ timezone: users.timezone })
+    .from(users)
+    .where(eq(users.id, workspaceUserId))
+    .limit(1);
+  return String(rows[0]?.timezone || "").trim() || "America/New_York";
+}
+
 export async function getQueueDashboard(
   workspaceUserId?: string,
 ): Promise<ProspectOutreachQueueDashboard> {
   const wid = workspaceUserId || (await resolveProspectImportDestinationUserId());
   const settings = await getOutreachSettings(wid);
+  const timeZone = await resolveWorkspaceTimeZone(wid);
   const items = await db
     .select()
     .from(prospectOutreachQueueItems)
     .where(eq(prospectOutreachQueueItems.workspaceUserId, wid));
 
-  const dayStart = new Date();
-  dayStart.setHours(0, 0, 0, 0);
-
   let queued = 0;
   let sending = 0;
-  let sentToday = 0;
   let failed = 0;
   let paused = 0;
 
@@ -802,8 +810,9 @@ export async function getQueueDashboard(
     else if (st === "sending") sending += 1;
     else if (st === "failed") failed += 1;
     else if (st === "paused") paused += 1;
-    if (st === "sent" && item.sentAt && item.sentAt >= dayStart) sentToday += 1;
   }
+  // Workspace calendar day — never server/UTC midnight (Railway runs UTC).
+  const sentToday = countProspectSentToday({ items, timeZone });
 
   const piRows = await db.select().from(prospectIntelligence);
   let outreachSentTotal = 0;
@@ -1470,14 +1479,13 @@ export async function claimNextDueQueueItem(
   const item = due[0];
   if (!item) return null;
 
-  // Daily / hourly bulk limits
-  const dayStart = new Date();
-  dayStart.setHours(0, 0, 0, 0);
+  // Daily / hourly bulk limits — daily window matches Sent Today (workspace TZ).
+  const timeZone = await resolveWorkspaceTimeZone(workspaceUserId);
   const hourStart = new Date();
   hourStart.setMinutes(0, 0, 0);
 
   const sentRows = await db
-    .select({ sentAt: prospectOutreachQueueItems.sentAt })
+    .select({ sentAt: prospectOutreachQueueItems.sentAt, queueStatus: prospectOutreachQueueItems.queueStatus })
     .from(prospectOutreachQueueItems)
     .where(
       and(
@@ -1485,7 +1493,7 @@ export async function claimNextDueQueueItem(
         eq(prospectOutreachQueueItems.queueStatus, "sent"),
       ),
     );
-  const sentToday = sentRows.filter((r) => r.sentAt && r.sentAt >= dayStart).length;
+  const sentToday = countProspectSentToday({ items: sentRows, timeZone });
   const sentHour = sentRows.filter((r) => r.sentAt && r.sentAt >= hourStart).length;
   if (sentToday >= settings.dailySendLimit || sentHour >= settings.hourlySendLimit) {
     return null;
