@@ -157,7 +157,7 @@ function item(
   );
   assert.ok(!PROSPECT_CAMPAIGN_STATUS_FILTERS.some((f) => f.id === "paused"));
   assert.equal(PROSPECT_CAMPAIGN_METRIC_LABELS.queued, "Ready to Send");
-  assert.equal(PROSPECT_CAMPAIGN_METRIC_LABELS.sentToday, "Sent");
+  assert.equal(PROSPECT_CAMPAIGN_METRIC_LABELS.sentToday, "Sent Today");
   assert.ok(!("paused" in PROSPECT_CAMPAIGN_METRIC_LABELS));
 }
 

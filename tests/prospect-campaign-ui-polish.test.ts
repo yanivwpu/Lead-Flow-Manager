@@ -42,7 +42,7 @@ assert.deepEqual(
     PROSPECT_CAMPAIGN_METRIC_LABELS.sentToday,
     PROSPECT_CAMPAIGN_METRIC_LABELS.failed,
   ],
-  ["Ready to Send", "Sending", "Sent", "Failed"],
+  ["Ready to Send", "Sending", "Sent Today", "Failed"],
 );
 
 assert.equal(PROSPECT_CAMPAIGN_LIFECYCLE_LABELS.draft, "Draft");

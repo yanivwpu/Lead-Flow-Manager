@@ -68,11 +68,16 @@ export function prospectCampaignQueueStatusLabel(status: string | null | undefin
   return PROSPECT_CAMPAIGN_QUEUE_STATUS_LABELS[key] || String(status || "—");
 }
 
-/** Operational metric card labels on Campaigns (not campaign state). */
+/**
+ * Operational metric card labels on Campaigns (not campaign state).
+ * `sentToday` is intentionally "Sent Today" — the dashboard value is
+ * queue rows with status=sent and sentAt >= server-local midnight.
+ * Do not confuse with the Sent status filter (cumulative history in the loaded list).
+ */
 export const PROSPECT_CAMPAIGN_METRIC_LABELS = {
   queued: "Ready to Send",
   sending: "Sending",
-  sentToday: "Sent",
+  sentToday: "Sent Today",
   outreachSent: "Outreach Sent",
   replied: "Replied",
   failed: "Failed",
