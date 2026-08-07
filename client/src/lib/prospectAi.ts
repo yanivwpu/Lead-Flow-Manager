@@ -186,15 +186,22 @@ export function normalizeProspectAiPlanLabel(
   return "other";
 }
 
-/** Compact catalog quota block for all plans. */
-export function prospectDiscoveriesCatalogLines(): { title: string; lines: string[] } {
+/** Compact catalog quota block for all plans (Growth Engines gallery). */
+export function prospectDiscoveriesCatalogLines(): {
+  title: string;
+  rows: Array<{ plan: string; allowance: string }>;
+  /** Flattened scan lines — kept for legacy callers. */
+  lines: string[];
+} {
+  const rows = [
+    { plan: "Free", allowance: `${PROSPECT_AI_MONTHLY_QUOTAS.free} discoveries/mo` },
+    { plan: "Starter", allowance: `${PROSPECT_AI_MONTHLY_QUOTAS.starter} discoveries/mo` },
+    { plan: "Pro", allowance: `${PROSPECT_AI_MONTHLY_QUOTAS.pro} discoveries/mo` },
+  ] as const;
   return {
     title: "Included with your plan",
-    lines: [
-      `Free: ${PROSPECT_AI_MONTHLY_QUOTAS.free} Prospect Discoveries / month`,
-      `Starter: ${PROSPECT_AI_MONTHLY_QUOTAS.starter} Prospect Discoveries / month`,
-      `Pro: ${PROSPECT_AI_MONTHLY_QUOTAS.pro} Prospect Discoveries / month`,
-    ],
+    rows: [...rows],
+    lines: rows.map((r) => `${r.plan}  ${r.allowance}`),
   };
 }
 

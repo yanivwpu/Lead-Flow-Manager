@@ -21,8 +21,16 @@ export interface GrowthEngineCardModel {
   /** Short bullets for gallery cards (max ~3 in UI) */
   benefits: string[];
   status: GrowthEngineCardStatus;
-  /** In-app path when status === "available" */
+  /**
+   * Authenticated in-app path when status === "available".
+   * Must be an `/app/...` workspace/hub route — never a public marketing URL.
+   */
   detailHref?: string;
+  /**
+   * Optional public marketing landing (logged-out SEO pages).
+   * Not used by the Growth Engines gallery Open/Activate CTA.
+   */
+  marketingHref?: string;
   /** Primary gallery CTA label */
   ctaLabel: string;
   /**
@@ -64,7 +72,8 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
       "Launch outreach and manage replies from one inbox",
     ],
     status: "available",
-    detailHref: "/prospect-ai",
+    detailHref: "/app/prospect-ai",
+    marketingHref: "/prospect-ai",
     ctaLabel: "Activate",
     placeholderKey: undefined,
     oneTimePrice: null,

@@ -38,7 +38,7 @@ import {
   AlertCircle, Image, LayoutGrid,
   Users, Target,   Sparkles, Rocket, ArrowRight,
   Search, MessageCircle, Facebook, Instagram,
-  Pencil, Pause, Play, Copy, Trash2, MoreVertical, ChevronDown, Star,
+  Pencil, Pause, Play, Copy, Trash2, MoreVertical, ChevronDown,
 } from "lucide-react";
 import {
   WhatsAppTemplateRichPreview,
@@ -78,7 +78,11 @@ import {
 } from "@shared/rgePaths";
 import { cn } from "@/lib/utils";
 import { GROWTH_ENGINE_CARDS, sortGrowthEnginesCatalog, type GrowthEngineCardModel } from "@/lib/growthEnginesCatalog";
-import { prospectDiscoveriesCatalogLines, useProspectAiStatus } from "@/lib/prospectAi";
+import {
+  PROSPECT_AI_PATH,
+  prospectDiscoveriesCatalogLines,
+  useProspectAiStatus,
+} from "@/lib/prospectAi";
 import { GrowthEngineStoryArt } from "@/components/growthEngines/GrowthEngineStoryArt";
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { useToast } from "@/hooks/use-toast";
@@ -570,7 +574,12 @@ function GrowthEngineGalleryCard({
   const isRge = engine.slug === "realtor-growth-engine";
   const rgeEntitlementStatus = rgeEntitlement?.status ?? null;
   const rgeOwned = isRge && isRgeOwnedStatus(rgeEntitlementStatus);
-  const hubHref = isRge ? getRgeHubPath(rgeEntitlementStatus, rgeEntitlement) : engine.detailHref;
+  // Prospect AI must open the authenticated workspace — never the public /prospect-ai landing.
+  const hubHref = isRge
+    ? getRgeHubPath(rgeEntitlementStatus, rgeEntitlement)
+    : isProspectAi
+      ? PROSPECT_AI_PATH
+      : engine.detailHref;
   const ctaLabel = isRge
     ? getRgeGalleryCtaLabel(rgeEntitlementStatus, engine.ctaLabel)
     : isProspectAi && prospectAiActivated
@@ -616,14 +625,6 @@ function GrowthEngineGalleryCard({
             </Badge>
           </div>
         ) : null}
-        {isProspectAi ? (
-          <div className="pointer-events-none absolute left-3 top-3 z-[1] max-w-[calc(100%-1.5rem)]">
-            <Badge className="border border-cyan-200/80 bg-white/95 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-sky-900 shadow-sm backdrop-blur-sm">
-              Included with Every Plan
-              <Star className="ml-1 h-3 w-3 fill-amber-400 text-amber-500" aria-hidden />
-            </Badge>
-          </div>
-        ) : null}
         {isComingSoon ? (
           <div className="pointer-events-none absolute right-4 top-4 z-[1]">
             <Badge className="border border-white/30 bg-gray-900/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm backdrop-blur-sm">
@@ -653,14 +654,15 @@ function GrowthEngineGalleryCard({
           if (rgeOwned) return null;
           if (isProspectAi) {
             return (
-              <div className="rounded-lg border border-sky-100/90 bg-gradient-to-br from-sky-50/80 to-cyan-50/40 px-3 py-2.5 shadow-sm">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-900/80">
+              <div className="rounded-lg border border-sky-100/90 bg-gradient-to-br from-sky-50/80 to-cyan-50/40 px-2 py-2 shadow-sm sm:px-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-900/80">
                   {catalogQuota.title}
                 </p>
-                <ul className="mt-1.5 space-y-0.5 text-sm leading-snug text-gray-800">
-                  {catalogQuota.lines.map((line) => (
-                    <li key={line} className="tabular-nums">
-                      {line}
+                <ul className="mt-1 space-y-0.5 text-left text-[12px] leading-snug text-gray-700 sm:text-[12.5px]">
+                  {catalogQuota.rows.map((row) => (
+                    <li key={row.plan} className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
+                      <span className="min-w-[3.75rem] font-semibold text-gray-900">{row.plan}</span>
+                      <span className="tabular-nums text-gray-600">{row.allowance}</span>
                     </li>
                   ))}
                 </ul>
@@ -758,14 +760,14 @@ function GrowthEnginesTab() {
   const prospectAiActivated = Boolean(prospectAiStatus.data?.activated);
 
   return (
-    <div className="space-y-8 md:space-y-10">
-      <div className="max-w-2xl space-y-2.5">
+    <div className="space-y-4 md:space-y-5">
+      <div className="w-full space-y-1.5 text-left">
         <h2 className="text-lg font-semibold tracking-tight text-gray-900 md:text-xl">Growth Engines</h2>
-        <p className="text-sm leading-relaxed text-gray-600 md:text-[15px]">
+        <p className="text-sm leading-relaxed text-gray-600 md:text-[15px] md:leading-snug">
           Growth Engines are industry-specific automation systems powered by templates, workflows, AI qualification, and CRM
           follow-up logic.
         </p>
-        <p className="text-xs leading-relaxed text-gray-500 md:text-sm">
+        <p className="text-xs leading-relaxed text-gray-500 md:text-sm md:leading-snug">
           Premium engines require Pro + AI Brain because they use advanced automation and intelligence capacity.
         </p>
       </div>

@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 const root = process.cwd();
 
-test("Prospect AI uses approved V2B PNG and Included badge", () => {
+test("Prospect AI uses approved V2B PNG; Included badge stays in card body only", () => {
   const catalog = readFileSync(join(root, "client/src/lib/growthEnginesCatalog.ts"), "utf8");
   const templates = readFileSync(join(root, "client/src/pages/Templates.tsx"), "utf8");
   const art = readFileSync(
@@ -20,14 +20,30 @@ test("Prospect AI uses approved V2B PNG and Included badge", () => {
   assert.ok(existsSync(join(root, "client/public/og/prospect-ai-growth-engine.png")));
   assert.ok(catalog.includes('image: "/og/prospect-ai-growth-engine.png"'));
   assert.ok(catalog.includes("Included with Every Plan"));
+  assert.ok(catalog.includes("Included with your plan"));
   assert.ok(!catalog.includes('"Featured"'));
-  assert.ok(templates.includes("Included with Every Plan"));
+  // Artwork must stay unobstructed — no overlay badge on Prospect AI image.
+  assert.ok(
+    !templates.includes("Included with Every Plan\n              <Star") &&
+      !/isProspectAi \? \(\s*<div className="pointer-events-none absolute left-3 top-3/.test(templates),
+    "Prospect AI artwork must not overlay Included with Every Plan",
+  );
   assert.ok(!templates.includes(">Featured<") && !templates.includes("\n              Featured\n"));
   assert.ok(art.includes("DISCOVER • QUALIFY • ENGAGE"));
   assert.ok(art.includes("Your AI Sales Team"));
   assert.ok(art.includes("#0B1F3A") || art.includes("#22D3EE"));
   assert.ok(!art.includes("feGaussianBlur"));
   assert.ok(!art.includes("DISCOVER • QUALIFY • OUTREACH"));
+});
+
+test("Growth Engines intro spans full gallery width", () => {
+  const templates = readFileSync(join(root, "client/src/pages/Templates.tsx"), "utf8");
+  const introStart = templates.indexOf("function GrowthEnginesTab()");
+  assert.ok(introStart >= 0);
+  const introSlice = templates.slice(introStart, introStart + 1800);
+  assert.ok(introSlice.includes('className="w-full space-y-1.5 text-left"'));
+  assert.ok(!introSlice.includes("max-w-2xl"), "intro must not use max-w-2xl");
+  assert.ok(introSlice.includes("Growth Engines are industry-specific"));
 });
 
 test("Coming-soon engines use neutral slate placeholder art", () => {
