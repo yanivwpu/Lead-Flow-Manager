@@ -40,10 +40,28 @@ test("Growth Engines intro spans full gallery width", () => {
   const templates = readFileSync(join(root, "client/src/pages/Templates.tsx"), "utf8");
   const introStart = templates.indexOf("function GrowthEnginesTab()");
   assert.ok(introStart >= 0);
-  const introSlice = templates.slice(introStart, introStart + 1800);
-  assert.ok(introSlice.includes('className="w-full space-y-1.5 text-left"'));
+  const introSlice = templates.slice(introStart, introStart + 2200);
+  assert.ok(introSlice.includes("w-full max-w-none"), "intro must span full gallery width");
   assert.ok(!introSlice.includes("max-w-2xl"), "intro must not use max-w-2xl");
+  assert.ok(!introSlice.includes("max-w-3xl"), "intro must not use max-w-3xl");
+  assert.ok(!introSlice.includes("max-w-xl"), "intro must not use max-w-xl");
   assert.ok(introSlice.includes("Growth Engines are industry-specific"));
+  assert.ok(introSlice.includes("overflow-visible"));
+});
+
+test("Prospect AI artwork uses contain + shared strip height (no title/caption crop)", () => {
+  const templates = readFileSync(join(root, "client/src/pages/Templates.tsx"), "utf8");
+  const cardStart = templates.indexOf("function GrowthEngineGalleryCard(");
+  assert.ok(cardStart >= 0);
+  const cardSlice = templates.slice(cardStart, cardStart + 3500);
+  assert.ok(cardSlice.includes("h-52") && cardSlice.includes("sm:h-56"), "shared art strip height");
+  assert.ok(cardSlice.includes("object-contain"), "Prospect AI must use object-contain");
+  assert.ok(
+    cardSlice.includes("object-contain p-3 sm:p-3.5"),
+    "Prospect AI inset keeps title/caption clear of rounded crop",
+  );
+  assert.ok(cardSlice.includes("object-cover"), "Realtor / cover engines still fill the strip");
+  assert.ok(cardSlice.includes("bg-[#0B1F3A]"), "Prospect AI letterbox matches artwork navy");
 });
 
 test("Coming-soon engines use neutral slate placeholder art", () => {

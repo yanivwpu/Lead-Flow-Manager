@@ -601,14 +601,23 @@ function GrowthEngineGalleryCard({
       )}
       data-testid={engine.slug === "realtor-growth-engine" ? "card-realtor-growth-engine" : `card-engine-${engine.slug}`}
     >
-      <div className="relative isolate h-40 w-full shrink-0 overflow-hidden rounded-t-xl bg-gray-100 sm:h-44">
+      <div
+        className={cn(
+          // Shared strip height so Prospect AI / Realtor / placeholders align edge-to-edge.
+          // Prospect AI PNG is 1536×1024 (taller AR) — contain + inset so title/caption clear the rounded crop.
+          "relative isolate h-52 w-full shrink-0 overflow-hidden rounded-t-xl sm:h-56",
+          isProspectAi ? "bg-[#0B1F3A]" : "bg-gray-100",
+        )}
+      >
         {engine.image ? (
           <img
             src={engine.image}
             alt=""
             className={cn(
-              "h-full w-full object-cover",
-              isProspectAi ? "object-center" : "object-[center_22%]",
+              "h-full w-full object-center",
+              isProspectAi
+                ? "object-contain p-3 sm:p-3.5"
+                : "object-cover object-[center_22%]",
             )}
             loading="lazy"
           />
@@ -760,20 +769,19 @@ function GrowthEnginesTab() {
   const prospectAiActivated = Boolean(prospectAiStatus.data?.activated);
 
   return (
-    <div className="space-y-4 md:space-y-5">
-      <div className="w-full space-y-1.5 text-left">
+    <div className="w-full max-w-none space-y-4 overflow-visible md:space-y-5">
+      <div className="w-full max-w-none space-y-1.5 overflow-visible text-left">
         <h2 className="text-lg font-semibold tracking-tight text-gray-900 md:text-xl">Growth Engines</h2>
-        <p className="text-sm leading-relaxed text-gray-600 md:text-[15px] md:leading-snug">
-          Growth Engines are industry-specific automation systems powered by templates, workflows, AI qualification, and CRM
-          follow-up logic.
+        <p className="w-full max-w-none overflow-visible text-sm leading-relaxed text-gray-600 md:text-[15px] md:leading-snug">
+          Growth Engines are industry-specific automation systems powered by templates, workflows, AI qualification, and CRM follow-up logic.
         </p>
-        <p className="text-xs leading-relaxed text-gray-500 md:text-sm md:leading-snug">
+        <p className="w-full max-w-none overflow-visible text-xs leading-relaxed text-gray-500 md:text-sm md:leading-snug">
           Premium engines require Pro + AI Brain because they use advanced automation and intelligence capacity.
         </p>
       </div>
 
-      <div className="rounded-2xl border border-gray-200/70 bg-gray-50/40 p-4 shadow-sm sm:p-5 md:p-6">
-        <div className="grid auto-rows-fr gap-5 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
+      <div className="w-full max-w-none rounded-2xl border border-gray-200/70 bg-gray-50/40 p-4 shadow-sm sm:p-5 md:p-6">
+        <div className="grid w-full auto-rows-fr gap-5 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
           {sortGrowthEnginesCatalog(GROWTH_ENGINE_CARDS).map((engine) => (
             <GrowthEngineGalleryCard
               key={engine.slug}
@@ -2277,7 +2285,7 @@ export function Templates() {
           </TabsContent>
 
           {!hideGrowthEngine && (
-          <TabsContent value="growth-engines" className="mt-0 space-y-2 md:space-y-4">
+          <TabsContent value="growth-engines" className="mt-0 w-full max-w-none space-y-2 overflow-visible md:space-y-4">
             <GrowthEnginesTab />
           </TabsContent>
           )}

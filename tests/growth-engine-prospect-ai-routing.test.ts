@@ -83,9 +83,10 @@ test("Prospect AI artwork overlay badge remains removed; intro stays full width"
   const templates = readFileSync(join(root, "client/src/pages/Templates.tsx"), "utf8");
   assert.ok(!/isProspectAi \? \(\s*<div className="pointer-events-none absolute left-3 top-3/.test(templates));
   const introStart = templates.indexOf("function GrowthEnginesTab()");
-  const introSlice = templates.slice(introStart, introStart + 1800);
-  assert.ok(introSlice.includes('className="w-full space-y-1.5 text-left"'));
+  const introSlice = templates.slice(introStart, introStart + 2200);
+  assert.ok(introSlice.includes("w-full max-w-none"));
   assert.ok(!introSlice.includes("max-w-2xl"));
+  assert.ok(templates.includes("object-contain p-3 sm:p-3.5"));
 });
 
 test("Prospect AI plan allowance box is compact and scannable", async () => {
