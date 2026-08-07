@@ -259,7 +259,7 @@ export function ProspectAiLanding() {
               </div>
             </div>
             <MarketingScreenshot
-              {...C.featureSections[0]!.image}
+              {...C.meetTeam.image}
               className="my-0"
               captionAlign="left"
             />

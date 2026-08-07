@@ -17,9 +17,12 @@ export const MARKETING_SCREENSHOTS = {
   connectWhatsapp: "/images/screenshots/connect-whatsapp.webp",
   channels: "/images/screenshots/channels.webp",
   metaBusinessSelection: "/images/screenshots/meta-business-selection.webp",
-  prospectAiDiscover: "/images/screenshots/prospect-ai-discover.png",
-  prospectAiReview: "/images/screenshots/prospect-ai-review.png",
-  prospectAiCampaign: "/images/screenshots/prospect-ai-campaign.png",
+  prospectAiDiscover: "/images/screenshots/prospect-ai-discover.webp",
+  /** Wide Review workspace — Meet Your AI Sales Team */
+  prospectAiReview: "/images/screenshots/prospect-ai-review.webp",
+  /** Closer Review crop — AI Qualification feature section */
+  prospectAiQualification: "/images/screenshots/prospect-ai-qualification.webp",
+  prospectAiPersonalizedOutreach: "/images/screenshots/prospect-ai-personalized-outreach.webp",
 } as const;
 
 export type MarketingScreenshotKey = keyof typeof MARKETING_SCREENSHOTS;
@@ -46,9 +49,10 @@ export const SCREENSHOT_DIMENSIONS: Record<
   channels: { width: 460, height: 257 },
   metaBusinessSelection: { width: 460, height: 610 },
   dashboard: { width: 704, height: 384 },
-  prospectAiDiscover: { width: 1280, height: 720 },
-  prospectAiReview: { width: 1280, height: 720 },
-  prospectAiCampaign: { width: 1280, height: 720 },
+  prospectAiDiscover: { width: 983, height: 442 },
+  prospectAiReview: { width: 1004, height: 510 },
+  prospectAiQualification: { width: 983, height: 361 },
+  prospectAiPersonalizedOutreach: { width: 721, height: 530 },
 };
 
 export type MarketingScreenshotSize = "hero" | "content" | "compact";

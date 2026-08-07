@@ -100,9 +100,10 @@ run("landing page includes FAQ schema + OG/Twitter tags", () => {
 
 run("screenshot assets exist", () => {
   for (const name of [
-    "prospect-ai-discover.png",
-    "prospect-ai-review.png",
-    "prospect-ai-campaign.png",
+    "prospect-ai-discover.webp",
+    "prospect-ai-review.webp",
+    "prospect-ai-qualification.webp",
+    "prospect-ai-personalized-outreach.webp",
   ]) {
     assert.ok(
       existsSync(join(root, "client/public/images/screenshots", name)),
@@ -110,6 +111,39 @@ run("screenshot assets exist", () => {
     );
   }
   assert.ok(existsSync(join(root, "client/public/og/og-prospect-ai.png")));
+
+  // Old fabricated PNG mockups must not ship.
+  for (const stale of [
+    "prospect-ai-discover.png",
+    "prospect-ai-review.png",
+    "prospect-ai-campaign.png",
+  ]) {
+    assert.ok(
+      !existsSync(join(root, "client/public/images/screenshots", stale)),
+      `stale mockup still present: ${stale}`,
+    );
+  }
+});
+
+run("landing sections use real product screenshot assets with descriptive alts", () => {
+  assert.ok(PROSPECT_AI_LANDING.meetTeam.image.src.includes("prospect-ai-review.webp"));
+  assert.match(
+    PROSPECT_AI_LANDING.meetTeam.image.alt,
+    /Review workspace.*AI-qualified/i,
+  );
+
+  const byId = Object.fromEntries(
+    PROSPECT_AI_LANDING.featureSections.map((s) => [s.id, s]),
+  );
+  assert.ok(byId["discover-businesses"]?.image.src.includes("prospect-ai-discover.webp"));
+  assert.match(byId["discover-businesses"]!.image.alt, /discovery tool/i);
+  assert.ok(byId["ai-qualification"]?.image.src.includes("prospect-ai-qualification.webp"));
+  assert.match(byId["ai-qualification"]!.image.alt, /AI-qualified/i);
+  assert.ok(
+    byId["personalized-outreach"]?.image.src.includes("prospect-ai-personalized-outreach.webp"),
+  );
+  assert.match(byId["personalized-outreach"]!.image.alt, /message editor/i);
+  assert.ok(byId["unified-inbox"]?.image.src.includes("unified-inbox"));
 });
 
 console.log("\nAll prospect AI landing SEO tests passed.");

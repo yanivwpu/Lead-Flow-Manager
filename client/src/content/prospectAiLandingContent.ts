@@ -65,6 +65,14 @@ export const PROSPECT_AI_LANDING = {
       "Think of Prospect AI as an AI employee for customer acquisition—not a static database. It discovers businesses in your market, researches publicly available information, recommends who is worth your time, and helps you launch personalized outreach.",
       "You stay in control: Review & Accept fits, edit every message, then Start Sending when you are ready. Replies land in your Unified Inbox beside WhatsApp, Messenger, Instagram, and more.",
     ],
+    image: screenshot(
+      "prospectAiReview",
+      "WhachatCRM Prospect AI Review workspace showing AI-qualified business prospects and campaign readiness.",
+      {
+        size: "content",
+        caption: "The real Prospect AI Review workspace—AI-qualified prospects ready for campaign outreach.",
+      },
+    ),
   },
 
   howItWorks: {
@@ -95,7 +103,7 @@ export const PROSPECT_AI_LANDING = {
       ],
       image: screenshot(
         "prospectAiDiscover",
-        "Prospect AI Discover screen for finding local businesses by industry and location",
+        "WhachatCRM Prospect AI business discovery tool for finding prospects by business type and location.",
         {
           size: "content",
           caption: "Discover local businesses by industry and location—then send fits to AI Review.",
@@ -115,8 +123,8 @@ export const PROSPECT_AI_LANDING = {
         "Review & Accept before outreach",
       ],
       image: screenshot(
-        "prospectAiReview",
-        "Prospect AI Review screen with Needs Review, Qualified, and Campaign Ready statuses",
+        "prospectAiQualification",
+        "WhachatCRM Prospect AI Review workspace showing AI-qualified business prospects and campaign readiness.",
         {
           size: "content",
           caption: "AI qualifies leads so your team reviews exceptions—not every raw listing.",
@@ -136,8 +144,8 @@ export const PROSPECT_AI_LANDING = {
         "Start, Pause, and Resume Sending",
       ],
       image: screenshot(
-        "prospectAiCampaign",
-        "Prospect AI Campaigns screen with Message Creation and Start Sending",
+        "prospectAiPersonalizedOutreach",
+        "WhachatCRM Prospect AI message editor for creating and reviewing personalized business outreach.",
         {
           size: "content",
           caption: "Personalized email outreach campaigns with clear Ready to Send controls.",
