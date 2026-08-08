@@ -6,6 +6,7 @@ import { markShopifyPlanPickerOpened } from "@/lib/shopifyBootstrap";
 import {
   buildShopifyManagedPricingUrl,
   DEFAULT_SHOPIFY_APP_HANDLE,
+  resolveShopifyAppStoreListingUrl,
   SHOPIFY_MANAGED_PRICING_CODE,
   SHOPIFY_MANAGED_PRICING_INSTRUCTIONS,
 } from "@shared/shopifyManagedPricing";
@@ -25,6 +26,15 @@ export function getClientShopifyAppHandle(): string {
   const raw = import.meta.env.VITE_SHOPIFY_APP_HANDLE;
   if (typeof raw === "string" && raw.trim()) return raw.trim().toLowerCase();
   return DEFAULT_SHOPIFY_APP_HANDLE;
+}
+
+/** Live Shopify App Store listing — env override, else apps.shopify.com/{handle}. */
+export function getShopifyAppStoreListingUrl(): string {
+  const envUrl =
+    typeof import.meta.env.VITE_SHOPIFY_APP_STORE_URL === "string"
+      ? import.meta.env.VITE_SHOPIFY_APP_STORE_URL
+      : "";
+  return resolveShopifyAppStoreListingUrl(envUrl, getClientShopifyAppHandle());
 }
 
 export function shopifyManagedPricingInstructions(

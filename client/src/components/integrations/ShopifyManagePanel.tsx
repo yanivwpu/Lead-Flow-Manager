@@ -73,8 +73,8 @@ export function ShopifyManagePanel({
           </div>
           <p className="text-xs text-gray-600 leading-relaxed">
             {status?.uninstalled
-              ? "This workspace is no longer linked to Shopify. Reinstall the app from Shopify Admin to restore order and customer sync."
-              : "Install WhachatCRM on your Shopify store to sync customers and orders into your inbox."}
+              ? "This workspace is no longer linked to Shopify. Reinstall WhachatCRM from the Shopify App Store to restore order and customer sync."
+              : "Install WhachatCRM from the Shopify App Store to sync customers and orders into your inbox."}
           </p>
           {status?.shop && (
             <p className="text-xs text-gray-500">

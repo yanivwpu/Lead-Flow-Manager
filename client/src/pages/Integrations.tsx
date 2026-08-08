@@ -33,6 +33,7 @@ import {
   humanReadableCrmOAuthRecoveryMessage,
 } from "@shared/ghlOAuthRecoveryMessages";
 import { ShopifyManagePanel } from "@/components/integrations/ShopifyManagePanel";
+import { getShopifyAppStoreListingUrl } from "@/lib/shopifyCheckout";
 
 function integrationBrandLogoLetter(name: string) {
   const c = name.trim().charAt(0);
@@ -280,15 +281,6 @@ function CrmOAuthRecoveryResultPanel({ result }: { result: CrmOAuthRecoveryAttem
     </div>
   );
 }
-
-const VITE_SHOPIFY_APP_STORE_URL =
-  typeof import.meta.env.VITE_SHOPIFY_APP_STORE_URL === "string"
-    ? import.meta.env.VITE_SHOPIFY_APP_STORE_URL.trim()
-    : "";
-const VITE_SHOPIFY_MANUAL_INSTALL_URL =
-  typeof import.meta.env.VITE_SHOPIFY_MANUAL_INSTALL_URL === "string"
-    ? import.meta.env.VITE_SHOPIFY_MANUAL_INSTALL_URL.trim()
-    : "";
 
 const CALENDLY_PAT_URL = "https://calendly.com/integrations/api_webhooks";
 
@@ -593,8 +585,6 @@ export function Integrations() {
   const [integrationForm, setIntegrationForm] = useState<Record<string, string>>({});
   const [selectedSyncOptions, setSelectedSyncOptions] = useState<string[]>([]);
   const [showShopifyInfo, setShowShopifyInfo] = useState(false);
-  type ShopifyListingState = "checking" | "live" | "unavailable";
-  const [shopifyListingState, setShopifyListingState] = useState<ShopifyListingState>("unavailable");
   const [showWooCommerceInfo, setShowWooCommerceInfo] = useState(false);
   const [wooForm, setWooForm] = useState({ storeUrl: "", consumerKey: "", consumerSecret: "" });
   const [wooError, setWooError] = useState<string | null>(null);
@@ -1048,44 +1038,15 @@ export function Integrations() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only close timer on success + modal open
   }, [wooSuccess, showWooCommerceInfo]);
 
-  useEffect(() => {
-    if (!showShopifyInfo) return;
-
-    if (!VITE_SHOPIFY_APP_STORE_URL) {
-      setShopifyListingState("unavailable");
-      return;
-    }
-
-    setShopifyListingState("checking");
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch(
-          `/api/shopify/listing-check?target=${encodeURIComponent(VITE_SHOPIFY_APP_STORE_URL)}`,
-          { credentials: "include" },
-        );
-        const data = (await res.json().catch(() => ({ available: false }))) as { available?: boolean };
-        if (cancelled) return;
-        setShopifyListingState(data.available ? "live" : "unavailable");
-      } catch {
-        if (!cancelled) setShopifyListingState("unavailable");
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [showShopifyInfo]);
-
-  const openShopifyUrl = (raw: string) => {
+  const openShopifyAppStore = () => {
     try {
-      const u = new URL(raw);
+      const u = new URL(getShopifyAppStoreListingUrl());
       if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("bad proto");
       window.open(u.href, "_blank", "noopener,noreferrer");
     } catch {
       toast({
-        title: "Invalid link",
-        description: "Configure a full URL starting with https:// in your environment variables.",
+        title: "Could not open Shopify App Store",
+        description: "Please try again, or search for WhachatCRM in the Shopify App Store.",
         variant: "destructive",
       });
     }
@@ -1309,12 +1270,7 @@ export function Integrations() {
                         primaryTestId = `button-manage-${integration.id}`;
                         primaryAction = () => setManageIntegrationId(integration.id);
                       } else if (integration.id === "shopify") {
-                        primaryAction = () => {
-                          setShopifyListingState(
-                            VITE_SHOPIFY_APP_STORE_URL ? "checking" : "unavailable"
-                          );
-                          setShowShopifyInfo(true);
-                        };
+                        primaryAction = () => setShowShopifyInfo(true);
                       } else if (integration.id === "woocommerce") {
                         primaryAction = () => setShowWooCommerceInfo(true);
                       }
@@ -1693,7 +1649,7 @@ export function Integrations() {
           </DialogContent>
         </Dialog>
 
-        {/* Shopify OAuth Install Dialog */}
+        {/* Shopify App Store Install Dialog */}
         <Dialog open={showShopifyInfo} onOpenChange={setShowShopifyInfo}>
           <DialogContent className="max-w-md">
             <DialogHeader>
@@ -1706,73 +1662,35 @@ export function Integrations() {
                 <div>
                   <DialogTitle>Install WhachatCRM on Shopify</DialogTitle>
                   <DialogDescription>
-  Shopify apps are installed directly from Shopify.
-  Once installed, your store will automatically connect to WhachatCRM.
-</DialogDescription>
+                    Install WhachatCRM from the Shopify App Store. Once installed, your store will
+                    automatically connect to WhachatCRM.
+                  </DialogDescription>
                 </div>
               </div>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800 space-y-1">
                 <p className="font-medium">Transparent Pricing:</p>
-                <p className="text-xs">WhachatCRM keeps billing transparent with no markup on Meta conversation pricing. Your subscription and Meta messaging charges are separate.</p>
+                <p className="text-xs">
+                  WhachatCRM keeps billing transparent with no markup on Meta conversation pricing.
+                  Your subscription and Meta messaging charges are separate.
+                </p>
               </div>
-              {shopifyListingState === "live" ? (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800 space-y-1">
-                  <p className="font-medium">How to install:</p>
-                  <ol className="list-decimal list-inside text-xs space-y-1 text-green-700">
-                    <li>Open our listing on the Shopify App Store using the button below</li>
-                    <li>Click &quot;Add app&quot; on the listing page</li>
-                    <li>Review the permissions and approve the app in your Shopify admin</li>
-                    <li>You&apos;ll be redirected back here automatically once installed</li>
-                  </ol>
-                </div>
-              ) : (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900 space-y-1">
-                  <p className="font-medium">App Store listing</p>
-                  <p className="text-xs">
-                    This app may still be in review on Shopify. Use the buttons below when{" "}
-                    <span className="font-mono">VITE_SHOPIFY_APP_STORE_URL</span> or{" "}
-                    <span className="font-mono">VITE_SHOPIFY_MANUAL_INSTALL_URL</span> is configured for this
-                    environment.
-                  </p>
-                </div>
-              )}
             </div>
             <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={() => setShowShopifyInfo(false)}>
                 Close
               </Button>
-              {VITE_SHOPIFY_APP_STORE_URL ? (
-                <Button
-                  type="button"
-                  onClick={() => openShopifyUrl(VITE_SHOPIFY_APP_STORE_URL)}
-                  disabled={shopifyListingState === "checking"}
-                  className="bg-green-600 hover:bg-green-700 text-white"
-                  data-testid="button-shopify-app-store"
-                >
-                  <ShoppingCart className="h-4 w-4 mr-2" />
-                  {shopifyListingState === "checking" ? "Checking listing…" : "Go to Shopify App Store"}
-                  <ExternalLink className="h-3 w-3 ml-2" />
-                </Button>
-              ) : null}
-              {VITE_SHOPIFY_MANUAL_INSTALL_URL ? (
-                <Button
-                  type="button"
-                  variant={VITE_SHOPIFY_APP_STORE_URL ? "outline" : "default"}
-                  onClick={() => openShopifyUrl(VITE_SHOPIFY_MANUAL_INSTALL_URL)}
-                  className={
-                    VITE_SHOPIFY_APP_STORE_URL
-                      ? "border-green-200 text-green-800 hover:bg-green-50"
-                      : "bg-green-600 hover:bg-green-700 text-white"
-                  }
-                  data-testid="button-shopify-manual-install"
-                >
-                  <ShoppingCart className="h-4 w-4 mr-2" />
-                  Open manual install link
-                  <ExternalLink className="h-3 w-3 ml-2" />
-                </Button>
-              ) : null}
+              <Button
+                type="button"
+                onClick={openShopifyAppStore}
+                className="bg-green-600 hover:bg-green-700 text-white"
+                data-testid="button-shopify-app-store"
+              >
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                Install on Shopify
+                <ExternalLink className="h-3 w-3 ml-2" />
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -2184,9 +2102,6 @@ export function Integrations() {
                     <ShopifyManagePanel
                       onConnect={() => {
                         setManageIntegrationId(null);
-                        setShopifyListingState(
-                          VITE_SHOPIFY_APP_STORE_URL ? "checking" : "unavailable",
-                        );
                         setShowShopifyInfo(true);
                       }}
                       onDisconnect={(integrationId) =>

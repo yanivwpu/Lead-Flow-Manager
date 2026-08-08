@@ -8,6 +8,21 @@ export const DEFAULT_SHOPIFY_APP_HANDLE = "whachatcrm";
 export const SHOPIFY_MANAGED_PRICING_INSTRUCTIONS =
   "Open WhachatCRM in your Shopify admin to choose or update your plan.";
 
+/**
+ * Public Shopify App Store listing URL.
+ * Prefer an explicit listing URL; otherwise derive from the app handle
+ * (same handle used for Managed Pricing plan selection).
+ */
+export function resolveShopifyAppStoreListingUrl(
+  envUrl?: string | null,
+  appHandle: string = DEFAULT_SHOPIFY_APP_HANDLE,
+): string {
+  const fromEnv = typeof envUrl === "string" ? envUrl.trim() : "";
+  if (fromEnv) return fromEnv;
+  const handle = appHandle.trim().toLowerCase() || DEFAULT_SHOPIFY_APP_HANDLE;
+  return `https://apps.shopify.com/${encodeURIComponent(handle)}`;
+}
+
 export function shopifyStoreHandleFromDomain(shop: string | null | undefined): string | null {
   const normalized = normalizeShopifyShopDomain(shop);
   if (!normalized) return null;
