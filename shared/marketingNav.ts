@@ -100,7 +100,7 @@ export const PRODUCT_NAV: MarketingNavDropdown = {
 
 /**
  * Solutions = industries / how businesses use the products.
- * Omitted (no suitable public page yet): Healthcare & Med Spas, Travel & Hospitality.
+ * Omitted (no suitable public page yet): Travel & Hospitality.
  */
 export const SOLUTIONS_NAV: MarketingNavDropdown = {
   id: "solutions",
@@ -112,22 +112,27 @@ export const SOLUTIONS_NAV: MarketingNavDropdown = {
         {
           label: "Real Estate",
           href: "/real-estate-crm",
-          description: "Inbox, AI, and Growth Engines for agents and teams",
+          description: "Capture, qualify and convert buyers and sellers",
         },
         {
           label: "E-commerce",
-          href: "/shopify-crm",
-          description: "WhatsApp CRM workflows for Shopify sellers",
+          href: "/solutions/ecommerce",
+          description: "Turn shopper conversations into repeat customers",
         },
         {
           label: "Local & Service Businesses",
-          href: "/prospect-ai",
-          description: "Find local prospects and manage every reply",
+          href: "/solutions/local-service-businesses",
+          description: "Find leads, book work and automate follow-up",
         },
         {
           label: "Marketing Agencies",
-          href: "/go-high-level-agencies",
-          description: "Agency workflows with GoHighLevel and WhatsApp",
+          href: "/solutions/marketing-agencies",
+          description: "Deliver messaging, automation and AI for clients",
+        },
+        {
+          label: "Med Spas & Wellness",
+          href: "/solutions/med-spas",
+          description: "Turn inquiries into booked consultations",
         },
       ],
     },
@@ -214,10 +219,6 @@ export function getAllMarketingNavLinks(): MarketingNavLink[] {
 
 /** Destinations intentionally omitted from Solutions (no suitable public page). */
 export const OMITTED_SOLUTIONS = [
-  {
-    label: "Healthcare & Med Spas",
-    reason: "Mentioned on homepage use-cases only; no dedicated industry landing route",
-  },
   {
     label: "Travel & Hospitality",
     reason: "No dedicated industry landing route",

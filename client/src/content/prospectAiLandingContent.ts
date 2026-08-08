@@ -277,6 +277,7 @@ export const PROSPECT_AI_LANDING = {
   ],
 
   relatedLinks: cluster(
+    "localServiceSolution",
     "whatsappCrm",
     "unifiedInbox",
     "aiLeadScoring",

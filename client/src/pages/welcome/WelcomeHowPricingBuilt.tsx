@@ -83,18 +83,19 @@ export default function WelcomeHowPricingBuilt() {
                 icon: HeartPulse,
                 title: t("home.builtFor.medSpas"),
                 desc: t("home.builtFor.medSpasDesc"),
+                href: "/solutions/med-spas",
               },
               {
                 icon: Building2,
                 title: t("home.builtFor.agencies"),
                 desc: t("home.builtFor.agenciesDesc"),
-                href: "/go-high-level-agencies",
+                href: "/solutions/marketing-agencies",
               },
               {
                 icon: Store,
                 title: t("home.builtFor.localServices"),
                 desc: t("home.builtFor.localServicesDesc"),
-                href: "/prospect-ai",
+                href: "/solutions/local-service-businesses",
               },
               {
                 icon: Users,

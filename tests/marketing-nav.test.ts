@@ -43,6 +43,10 @@ const KNOWN_PUBLIC_PATHS = new Set([
   "/contact",
   "/whatsapp-crm",
   "/crm-with-mls-integration",
+  "/solutions/ecommerce",
+  "/solutions/local-service-businesses",
+  "/solutions/marketing-agencies",
+  "/solutions/med-spas",
 ]);
 
 const HOMEPAGE_HASHES = new Set(["/#ai-brain", "/#ai-copilot", "/#integrations", "/#ai-platform", "/#built-for"]);
@@ -84,7 +88,13 @@ assert.ok(
   PRODUCT_NAV.groups.some((g) => g.items.some((i) => i.href === "/realtor-growth-engine")),
   "RGE dedicated page",
 );
-assert.equal(OMITTED_SOLUTIONS.length, 2);
+assert.equal(OMITTED_SOLUTIONS.length, 1);
+for (const item of SOLUTIONS_NAV.groups.flatMap((g) => g.items)) {
+  assert.ok(
+    !["/prospect-ai", "/shopify-crm", "/go-high-level-agencies"].includes(item.href),
+    `Solutions item ${item.label} must not shortcut to product/integration page`,
+  );
+}
 
 const shell = `<!DOCTYPE html><html><head><title>Home</title></head><body><div id="root"></div></body></html>`;
 const ssr = generateHomepageHtml();

@@ -16,6 +16,13 @@ export const SEO_CLUSTER_LINKS = {
   crmForWhatsapp: { href: "/crm-for-whatsapp-business", label: "CRM for WhatsApp Business" },
   realtorGrowth: { href: "/realtor-growth-engine", label: "Realtor Growth Engine" },
   prospectAi: { href: "/prospect-ai", label: "Prospect AI" },
+  ecommerceSolution: { href: "/solutions/ecommerce", label: "E-commerce Solution" },
+  localServiceSolution: {
+    href: "/solutions/local-service-businesses",
+    label: "Local & Service Businesses",
+  },
+  agenciesSolution: { href: "/solutions/marketing-agencies", label: "Marketing Agencies Solution" },
+  medSpasSolution: { href: "/solutions/med-spas", label: "Med Spas & Wellness" },
   pricing: { href: "/pricing", label: "Pricing" },
 } as const satisfies Record<string, SeoRelatedLink>;
 

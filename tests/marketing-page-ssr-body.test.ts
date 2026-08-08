@@ -25,6 +25,11 @@ const requiredRoutes = [
   "/best-whatsapp-crm-2026",
   "/crm-for-whatsapp-business",
   "/prospect-ai",
+  "/real-estate-crm",
+  "/solutions/ecommerce",
+  "/solutions/local-service-businesses",
+  "/solutions/marketing-agencies",
+  "/solutions/med-spas",
 ] as const;
 
 const expectedH1: Record<(typeof requiredRoutes)[number], RegExp> = {
@@ -39,6 +44,11 @@ const expectedH1: Record<(typeof requiredRoutes)[number], RegExp> = {
   "/best-whatsapp-crm-2026": /<h1>Best WhatsApp CRM in 2026:/,
   "/crm-for-whatsapp-business": /<h1>CRM for WhatsApp Business:/,
   "/prospect-ai": /<h1>Meet Your AI Sales Team<\/h1>/,
+  "/real-estate-crm": /<h1>Capture, Qualify, and Convert Real Estate Leads/,
+  "/solutions/ecommerce": /<h1>Turn Every Shopper Conversation Into More Revenue<\/h1>/,
+  "/solutions/local-service-businesses": /<h1>From Finding Local Customers to Booking the Next Job<\/h1>/,
+  "/solutions/marketing-agencies": /<h1>Deliver Smarter Messaging and AI Automation for Your Clients<\/h1>/,
+  "/solutions/med-spas": /<h1>Turn More Med Spa Inquiries Into Booked Consultations<\/h1>/,
 };
 
 const ssrRoutes = getMarketingSsrBodyRoutes();

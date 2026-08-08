@@ -610,6 +610,7 @@ export const shopifyCrmConfig: SeoLandingPageConfig = {
     },
   ],
   relatedLinks: cluster(
+    "ecommerceSolution",
     "automationTemplates",
     "whatsappCrm",
     "unifiedInbox",

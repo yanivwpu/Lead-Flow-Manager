@@ -6,6 +6,7 @@ import {
   type BlogPostMeta,
 } from "@shared/blogPosts";
 import { getAllMarketingNavLinks, MARKETING_NAV_DROPDOWNS } from "@shared/marketingNav";
+import { ALL_SOLUTION_PAGES } from "@shared/solutionPages";
 
 const BASE_URL = (process.env.MARKETING_URL || "https://www.whachatcrm.com").replace(/\/+$/, "");
 
@@ -187,8 +188,32 @@ export const PAGE_META: Record<string, PageMeta> = {
   "/real-estate-crm": {
     title: "Real Estate CRM for Agents & Teams | WhachatCRM",
     description:
-      "Real estate CRM with WhatsApp, unified inbox, AI lead qualification, MLS integration, agent pages, and follow-up automation. Built for agents who close on messaging apps.",
+      "Real estate CRM with WhatsApp, Unified Inbox, AI qualification, MLS matching, and follow-up automation. Capture buyer and seller leads and move conversations toward booked showings.",
     canonical: `${BASE_URL}/real-estate-crm`
+  },
+  "/solutions/ecommerce": {
+    title: "E-commerce CRM & Customer Messaging | WhachatCRM",
+    description:
+      "E-commerce CRM and customer messaging for WhatsApp, Instagram, Facebook, SMS, and Email. Unify shopper conversations, automate follow-up, and connect Shopify where supported.",
+    canonical: `${BASE_URL}/solutions/ecommerce`
+  },
+  "/solutions/local-service-businesses": {
+    title: "CRM for Local Service Businesses | WhachatCRM",
+    description:
+      "CRM and messaging for local service businesses. Find and qualify leads with Prospect AI, capture service requests, assign work, share booking links, and automate follow-up.",
+    canonical: `${BASE_URL}/solutions/local-service-businesses`
+  },
+  "/solutions/marketing-agencies": {
+    title: "WhatsApp & Messaging Platform for Marketing Agencies | WhachatCRM",
+    description:
+      "Agency messaging platform for WhatsApp, multi-channel inbox, chatbots, automation, AI Copilot, and client engagement. Optional GoHighLevel connection and Partner Program.",
+    canonical: `${BASE_URL}/solutions/marketing-agencies`
+  },
+  "/solutions/med-spas": {
+    title: "CRM for Med Spas & Wellness Businesses | WhachatCRM",
+    description:
+      "CRM and messaging for med spas and wellness businesses. Capture treatment inquiries from WhatsApp and Instagram, qualify consultations, assign your team, and automate follow-up.",
+    canonical: `${BASE_URL}/solutions/med-spas`
   },
   "/unified-inbox": {
     title: "Unified Inbox for WhatsApp, Messenger & Instagram | WhachatCRM",
@@ -571,6 +596,21 @@ const MARKETING_SSR_PAGES: Record<string, MarketingSsrPage> = {
     linksHtml:
       '<a href="/pricing">View plans</a> · <a href="/auth">Start free</a> · <a href="/whatsapp-crm">WhatsApp CRM overview</a>',
   },
+  ...Object.fromEntries(
+    ALL_SOLUTION_PAGES.map((solution) => [
+      solution.path,
+      {
+        h1: solution.h1,
+        lead: solution.heroIntro,
+        bullets: solution.ssrBullets,
+        linksHtml: [
+          ...solution.relatedLinks.slice(0, 2).map((l) => `<a href="${l.href}">${l.label}</a>`),
+          '<a href="/auth">Start Free Trial</a>',
+          '<a href="/pricing">Pricing</a>',
+        ].join(" · "),
+      } satisfies MarketingSsrPage,
+    ]),
+  ),
 };
 
 function renderMarketingSsrPage(page: MarketingSsrPage): string {

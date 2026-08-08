@@ -82,7 +82,19 @@ const CrmWithMlsIntegrationPage = lazy(() =>
   import("@/pages/seo/LandingPages").then((m) => ({ default: m.CrmWithMlsIntegrationPage }))
 );
 const RealEstateCrmPage = lazy(() =>
-  import("@/pages/seo/LandingPages").then((m) => ({ default: m.RealEstateCrmPage }))
+  import("@/pages/solutions/SolutionPages").then((m) => ({ default: m.RealEstateSolutionPage }))
+);
+const EcommerceSolutionPage = lazy(() =>
+  import("@/pages/solutions/SolutionPages").then((m) => ({ default: m.EcommerceSolutionPage }))
+);
+const LocalServiceSolutionPage = lazy(() =>
+  import("@/pages/solutions/SolutionPages").then((m) => ({ default: m.LocalServiceSolutionPage }))
+);
+const MarketingAgenciesSolutionPage = lazy(() =>
+  import("@/pages/solutions/SolutionPages").then((m) => ({ default: m.MarketingAgenciesSolutionPage }))
+);
+const MedSpasSolutionPage = lazy(() =>
+  import("@/pages/solutions/SolutionPages").then((m) => ({ default: m.MedSpasSolutionPage }))
 );
 const UnifiedInboxPage = lazy(() =>
   import("@/pages/seo/LandingPages").then((m) => ({ default: m.UnifiedInboxPage }))
@@ -176,6 +188,10 @@ function MarketingRoutes() {
       <Route path="/whatsapp-crm" component={WhatsappCrm} />
       <Route path="/crm-with-mls-integration" component={CrmWithMlsIntegrationPage} />
       <Route path="/real-estate-crm" component={RealEstateCrmPage} />
+      <Route path="/solutions/ecommerce" component={EcommerceSolutionPage} />
+      <Route path="/solutions/local-service-businesses" component={LocalServiceSolutionPage} />
+      <Route path="/solutions/marketing-agencies" component={MarketingAgenciesSolutionPage} />
+      <Route path="/solutions/med-spas" component={MedSpasSolutionPage} />
       <Route path="/unified-inbox" component={UnifiedInboxPage} />
       <Route path="/shopify-crm" component={ShopifyCrmPage} />
       <Route path="/whatsapp-business-api" component={WhatsappBusinessApiPage} />
