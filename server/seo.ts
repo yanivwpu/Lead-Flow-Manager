@@ -399,6 +399,57 @@ export function getMarketingRoutes(): string[] {
   return Object.keys(PAGE_META);
 }
 
+/** Visually hidden crawlable body used when React mounts with createRoot (replaces #root). */
+function wrapCrawlableSsr(innerHtml: string): string {
+  return `
+      <div data-ssr-content="true" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;">
+        ${innerHtml}
+      </div>`;
+}
+
+/**
+ * Lightweight page-specific initial HTML for selected marketing routes.
+ * Returns null when the route has head-meta only (existing behavior).
+ */
+export function generateMarketingPageSsrHtml(route: string): string | null {
+  if (route === "/realtor-growth-engine") {
+    return wrapCrawlableSsr(`
+        <main>
+          <h1>Realtor Growth Engine</h1>
+          <p>From new lead to booked showing — automatically. An AI-assisted real estate workspace inside WhachatCRM for agents and teams.</p>
+          <p>Qualify buyers from conversation, capture preferences, match connected live inventory where supported, create personalized property presentations, run channel-aware follow-up, and move conversations toward a showing.</p>
+          <ul>
+            <li>AI-assisted lead qualification and buyer preference capture</li>
+            <li>Realtor workflows from inquiry to follow-up and booking</li>
+            <li>MLS / live inventory property matching where connected</li>
+            <li>Personalized property flyers and presentations</li>
+            <li>Unified Inbox with AI Copilot for messaging channels</li>
+            <li>Requires an appropriate WhachatCRM plan and AI Brain where applicable</li>
+          </ul>
+          <p><a href="/pricing">View WhachatCRM plans</a> · <a href="/auth">Start free</a> · <a href="/real-estate-crm">Real estate CRM overview</a></p>
+        </main>`);
+  }
+
+  if (route === "/waba360-alternative") {
+    return wrapCrawlableSsr(`
+        <main>
+          <h1>360dialog Alternative for WhatsApp CRM and Automation</h1>
+          <p>360dialog is primarily WhatsApp Business API / BSP infrastructure for teams that want direct API access. WhachatCRM is a ready-to-use CRM and customer engagement platform built around WhatsApp and other channels.</p>
+          <p>Compare API-first BSP access with a complete product layer: Meta Embedded Signup, WhatsApp Cloud API onboarding, Unified Inbox, automation, team collaboration, and broader customer communication tools — without building the inbox and CRM yourself.</p>
+          <ul>
+            <li>Meta Embedded Signup and WhatsApp Cloud API onboarding</li>
+            <li>Unified Inbox for WhatsApp and supported messaging channels</li>
+            <li>Automation, chatbot, and team collaboration workflows</li>
+            <li>CRM context, notes, and follow-up in one workspace</li>
+            <li>Built for operators who want a ready product, not raw API pipes alone</li>
+          </ul>
+          <p><a href="/best-whatsapp-crm-2026">Best WhatsApp CRM comparison</a> · <a href="/whatsapp-business-api">WhatsApp Business API guide</a> · <a href="/pricing">Pricing</a></p>
+        </main>`);
+  }
+
+  return null;
+}
+
 const NOINDEX_EXACT_PATHS = new Set([
   "/auth",
   "/reset-password",

@@ -8,6 +8,7 @@ import {
   generateHomepageHtml,
   injectHomepageSeoMeta,
   injectPageMeta,
+  generateMarketingPageSsrHtml,
   getMarketingRoutes,
   isNoIndexPath,
   injectNoindexMeta,
@@ -214,7 +215,14 @@ export function serveStatic(app: Express) {
         }
 
         try {
-          const enhancedHtml = injectPageMeta(html, route);
+          let enhancedHtml = injectPageMeta(html, route);
+          const ssrBody = generateMarketingPageSsrHtml(route);
+          if (ssrBody && enhancedHtml.includes('<div id="root"></div>')) {
+            enhancedHtml = enhancedHtml.replace(
+              '<div id="root"></div>',
+              `<div id="root">${ssrBody}</div>`,
+            );
+          }
           res.set("Content-Type", "text/html");
           res.set("Cache-Control", "public, max-age=3600");
           res.send(enhancedHtml);

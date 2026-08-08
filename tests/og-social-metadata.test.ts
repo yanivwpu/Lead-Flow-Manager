@@ -43,7 +43,7 @@ assert.ok(
   "og:description",
 );
 assert.ok(
-  indexHtml.includes(`content="https://www.whachatcrm.com/og/og-whachatcrm.png?v=4"`),
+  indexHtml.includes(`content="https://www.whachatcrm.com/og/og-whachatcrm.png?v=5"`),
   "og:image v=4",
 );
 assert.ok(indexHtml.includes(`name="twitter:card" content="summary_large_image"`), "twitter:card");
@@ -53,7 +53,7 @@ assert.ok(
   "twitter:description",
 );
 assert.ok(
-  indexHtml.includes(`name="twitter:image" content="https://www.whachatcrm.com/og/og-whachatcrm.png?v=4"`),
+  indexHtml.includes(`name="twitter:image" content="https://www.whachatcrm.com/og/og-whachatcrm.png?v=5"`),
   "twitter:image",
 );
 
