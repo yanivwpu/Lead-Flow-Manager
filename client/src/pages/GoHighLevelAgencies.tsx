@@ -102,11 +102,11 @@ export function GoHighLevelAgencies() {
         <meta property="og:description" content={GHL_AGENCIES_META.description} />
         <meta property="og:url" content={CANONICAL} />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=3`} />
+        <meta property="og:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=4`} />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={GHL_AGENCIES_META.title} />
         <meta name="twitter:description" content={GHL_AGENCIES_META.description} />
-        <meta name="twitter:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=3`} />
+        <meta name="twitter:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=4`} />
         <script type="application/ld+json">{JSON.stringify(organizationSchema)}</script>
         <script type="application/ld+json">{JSON.stringify(webPageSchema)}</script>
         {faqSchema ? (

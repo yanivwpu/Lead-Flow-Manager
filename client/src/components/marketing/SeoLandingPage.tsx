@@ -150,11 +150,11 @@ export function SeoLandingPage({ config }: Props) {
         <meta property="og:description" content={config.metaDescription} />
         <meta property="og:url" content={canonical} />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=3`} />
+        <meta property="og:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=4`} />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={config.title} />
         <meta name="twitter:description" content={config.metaDescription} />
-        <meta name="twitter:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=3`} />
+        <meta name="twitter:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=4`} />
         {faqSchema ? (
           <script type="application/ld+json">{JSON.stringify(faqSchema)}</script>
         ) : null}

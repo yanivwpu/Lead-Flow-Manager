@@ -102,11 +102,11 @@ export function Comparison() {
         <meta property="og:description" content={BEST_WHATSAPP_CRM_2026_META.description} />
         <meta property="og:url" content={CANONICAL} />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=3`} />
+        <meta property="og:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=4`} />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={BEST_WHATSAPP_CRM_2026_META.title} />
         <meta name="twitter:description" content={BEST_WHATSAPP_CRM_2026_META.description} />
-        <meta name="twitter:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=3`} />
+        <meta name="twitter:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=4`} />
         <script type="application/ld+json">{JSON.stringify(webPageSchema)}</script>
         <script type="application/ld+json">{JSON.stringify(faqSchema)}</script>
         <script type="application/ld+json">{JSON.stringify(softwareSchema)}</script>
