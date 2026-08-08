@@ -100,11 +100,11 @@ export function CompetitorAlternativeLayout({ content }: { content: CompetitorAl
         <meta property="og:description" content={content.meta.description} />
         <meta property="og:url" content={canonical} />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=4`} />
+        <meta property="og:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=5`} />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={content.meta.title} />
         <meta name="twitter:description" content={content.meta.description} />
-        <meta name="twitter:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=4`} />
+        <meta name="twitter:image" content={`${MARKETING_URL}/og/og-whachatcrm.png?v=5`} />
         <script type="application/ld+json">{JSON.stringify(webPageSchema)}</script>
         <script type="application/ld+json">{JSON.stringify(faqSchema)}</script>
         <script type="application/ld+json">{JSON.stringify(softwareSchema)}</script>

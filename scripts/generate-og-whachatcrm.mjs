@@ -23,14 +23,16 @@ const brandDir = path.join(root, "client/public/brand");
 const brandLogo = path.join(brandDir, "whachatcrm-w-logo.png");
 const ogPath = path.join(root, "client/public/og/og-whachatcrm.png");
 
-if (!fs.existsSync(src)) {
+fs.mkdirSync(brandDir, { recursive: true });
+fs.mkdirSync(path.dirname(ogPath), { recursive: true });
+
+// Prefer the exact supplied source; otherwise reuse the committed brand asset.
+if (fs.existsSync(src)) {
+  fs.copyFileSync(src, brandLogo);
+} else if (!fs.existsSync(brandLogo)) {
   console.error("Source logo not found:", src);
   process.exit(1);
 }
-
-fs.mkdirSync(brandDir, { recursive: true });
-fs.mkdirSync(path.dirname(ogPath), { recursive: true });
-fs.copyFileSync(src, brandLogo);
 
 const meta = await sharp(brandLogo).metadata();
 console.log("source", meta.width, meta.height, meta.format);
@@ -62,10 +64,13 @@ console.log("fill RGB", fill);
 
 const W = 1200;
 const H = 630;
-// Exact supplied mark, centered and prominent (~52% of canvas height).
-const markSize = Math.round(H * 0.52);
+// Previous mark was ~52% of canvas height; enlarge ~60% (within 50–70%)
+// while keeping clear edge padding for compact Facebook cards.
+const previousMarkSize = Math.round(H * 0.52);
+const markSize = Math.round(previousMarkSize * 1.6);
 const left = Math.round((W - markSize) / 2);
 const top = Math.round((H - markSize) / 2);
+console.log("markSize", markSize, "paddingX", left, "paddingY", top);
 
 const mark = await sharp(brandLogo)
   .resize(markSize, markSize, { fit: "fill", kernel: "lanczos3" })

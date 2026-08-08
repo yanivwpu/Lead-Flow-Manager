@@ -112,14 +112,14 @@ export function injectSeoMeta(html: string, url: string): string {
     <meta property="og:description" content="Learn how to grow your business with WhatsApp. Expert guides on WhatsApp CRM, automation, lead management, and customer service." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${canonicalUrl}" />
-    <meta property="og:image" content="${BASE_URL}/og/og-whachatcrm.png?v=4" />
+    <meta property="og:image" content="${BASE_URL}/og/og-whachatcrm.png?v=5" />
     <meta property="og:image:alt" content="WhachatCRM – AI Sales & Automation Platform" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="WhatsApp CRM Blog & Guides | WhachatCRM" />
     <meta name="twitter:description" content="Learn how to grow your business with WhatsApp. Expert guides on WhatsApp CRM, automation, lead management, and customer service." />
-    <meta name="twitter:image" content="${BASE_URL}/og/og-whachatcrm.png?v=4" />
+    <meta name="twitter:image" content="${BASE_URL}/og/og-whachatcrm.png?v=5" />
     <meta name="twitter:image:alt" content="WhachatCRM – AI Sales & Automation Platform" />
     <link rel="canonical" href="${canonicalUrl}" />
     <script type="application/ld+json">
@@ -345,7 +345,7 @@ export function injectPageMeta(html: string, url: string): string {
 
   const safeTitle = escapeHtmlAttr(pageMeta.title);
   const safeDescription = escapeHtmlAttr(pageMeta.description);
-  const ogImage = pageMeta.ogImage || `${BASE_URL}/og/og-whachatcrm.png?v=4`;
+  const ogImage = pageMeta.ogImage || `${BASE_URL}/og/og-whachatcrm.png?v=5`;
 
   // Remove existing meta tags to prevent duplicates
   html = html.replace(/<meta property="og:title"[^>]*>/gi, '');
