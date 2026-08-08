@@ -407,47 +407,197 @@ function wrapCrawlableSsr(innerHtml: string): string {
       </div>`;
 }
 
+type MarketingSsrPage = {
+  h1: string;
+  lead: string;
+  bullets: string[];
+  linksHtml: string;
+};
+
+const MARKETING_SSR_PAGES: Record<string, MarketingSsrPage> = {
+  "/realtor-growth-engine": {
+    h1: "Realtor Growth Engine",
+    lead:
+      "From new lead to booked showing — automatically. An AI-assisted real estate workspace inside WhachatCRM for agents and teams. Qualify buyers from conversation, capture preferences, match connected live inventory where supported, create personalized property presentations, run channel-aware follow-up, and move conversations toward a showing.",
+    bullets: [
+      "AI-assisted lead qualification and buyer preference capture",
+      "Realtor workflows from inquiry to follow-up and booking",
+      "MLS / live inventory property matching where connected",
+      "Personalized property flyers and presentations",
+      "Unified Inbox with AI Copilot for messaging channels",
+      "Requires an appropriate WhachatCRM plan and AI Brain where applicable",
+    ],
+    linksHtml:
+      '<a href="/pricing">View WhachatCRM plans</a> · <a href="/auth">Start free</a> · <a href="/real-estate-crm">Real estate CRM overview</a>',
+  },
+  "/waba360-alternative": {
+    h1: "360dialog Alternative for WhatsApp CRM and Automation",
+    lead:
+      "360dialog is primarily WhatsApp Business API / BSP infrastructure for teams that want direct API access. WhachatCRM is a ready-to-use CRM and customer engagement platform built around WhatsApp and other channels — Meta Embedded Signup, Unified Inbox, automation, and team collaboration without building the product layer yourself.",
+    bullets: [
+      "Meta Embedded Signup and WhatsApp Cloud API onboarding",
+      "Unified Inbox for WhatsApp and supported messaging channels",
+      "Automation, chatbot, and team collaboration workflows",
+      "CRM context, notes, and follow-up in one workspace",
+      "Built for operators who want a ready product, not raw API pipes alone",
+    ],
+    linksHtml:
+      '<a href="/best-whatsapp-crm-2026">Best WhatsApp CRM comparison</a> · <a href="/whatsapp-business-api">WhatsApp Business API guide</a> · <a href="/pricing">Pricing</a>',
+  },
+  "/wati-alternative": {
+    h1: "WATI Alternative: WhatsApp Ops Maturity vs Omnichannel CRM Simplicity",
+    lead:
+      "WATI is a proven WhatsApp operations platform with strong shared-inbox and broadcast workflows. This page compares that WhatsApp-ops depth with WhachatCRM’s omnichannel CRM approach — Meta Embedded Signup, WhatsApp beside Email and Meta social channels, and a self-serve team inbox for SMBs.",
+    bullets: [
+      "Unified Inbox across WhatsApp and supported messaging channels",
+      "Meta Embedded Signup for WhatsApp Cloud API onboarding",
+      "Chatbot, templates, and automation on eligible plans",
+      "Team collaboration with notes, tags, and follow-ups",
+      "Built for SMBs that want omnichannel CRM simplicity, not WhatsApp-only ops",
+    ],
+    linksHtml:
+      '<a href="/best-whatsapp-crm-2026">Best WhatsApp CRM comparison</a> · <a href="/whatsapp-crm">WhatsApp CRM guide</a> · <a href="/pricing">Pricing</a>',
+  },
+  "/manychat-alternative": {
+    h1: "ManyChat Alternative: Social Automation Power vs WhatsApp-First CRM Inbox",
+    lead:
+      "ManyChat is widely used for social messaging automation and growth flows. This buying guide compares that automation focus with WhachatCRM as a WhatsApp-first CRM inbox for teams that need shared conversations, CRM context, and follow-up across customer channels.",
+    bullets: [
+      "WhatsApp Business API onboarding with Meta Embedded Signup",
+      "Shared Unified Inbox for team replies and ownership",
+      "CRM notes, tags, and pipeline context beside each chat",
+      "Automation and chatbot tools for follow-up workflows",
+      "Designed for operators who need inbox + CRM, not only social bots",
+    ],
+    linksHtml:
+      '<a href="/best-whatsapp-crm-2026">Best WhatsApp CRM comparison</a> · <a href="/unified-inbox">Unified Inbox</a> · <a href="/pricing">Pricing</a>',
+  },
+  "/respond-io-alternative": {
+    h1: "Respond.io Alternative: Omnichannel Scale vs SMB-Friendly Team Inbox",
+    lead:
+      "Respond.io is often evaluated for broader omnichannel conversation platforms. This page compares that enterprise-leaning scale with WhachatCRM’s SMB-friendly team inbox — WhatsApp, supported social channels, CRM context, and clear self-serve packaging.",
+    bullets: [
+      "Shared team inbox for WhatsApp and supported channels",
+      "CRM context, assignments, and follow-ups in one workspace",
+      "Automation and chatbot options for growing teams",
+      "Meta Embedded Signup for official WhatsApp Cloud API setup",
+      "Built for SMBs that want practical omnichannel CRM without enterprise complexity",
+    ],
+    linksHtml:
+      '<a href="/best-whatsapp-crm-2026">Best WhatsApp CRM comparison</a> · <a href="/shared-team-inbox">Shared team inbox</a> · <a href="/pricing">Pricing</a>',
+  },
+  "/interakt-alternative": {
+    h1: "Interakt Alternative: WhatsApp Commerce Hub vs Broader Engagement CRM",
+    lead:
+      "Interakt is commonly considered for WhatsApp commerce and engagement workflows. This guide compares that commerce-hub focus with WhachatCRM as a broader customer engagement CRM — Unified Inbox, automation, team collaboration, and multi-channel conversations.",
+    bullets: [
+      "Unified Inbox for WhatsApp and supported messaging channels",
+      "CRM timeline, notes, and lead follow-up in one place",
+      "Automation and chatbot support for sales and support",
+      "Meta Embedded Signup for WhatsApp Cloud API onboarding",
+      "Useful when you need engagement CRM breadth beyond a commerce-centric WhatsApp hub",
+    ],
+    linksHtml:
+      '<a href="/best-whatsapp-crm-2026">Best WhatsApp CRM comparison</a> · <a href="/shopify-crm">Shopify CRM</a> · <a href="/pricing">Pricing</a>',
+  },
+  "/zoko-alternative": {
+    h1: "Zoko Alternative: Shopify-First WhatsApp vs Multi-Channel CRM Inbox",
+    lead:
+      "Zoko is often evaluated for Shopify-first WhatsApp commerce workflows. This page compares that Shopify-centric approach with WhachatCRM’s multi-channel CRM inbox — WhatsApp plus supported channels, order-aware follow-up where connected, and team collaboration.",
+    bullets: [
+      "Shopify connection alongside a broader Unified Inbox",
+      "WhatsApp Cloud API onboarding with Meta Embedded Signup",
+      "Team inbox, notes, and automated follow-up workflows",
+      "Support for sales and service conversations beyond D2C chat alone",
+      "Built for merchants that need WhatsApp CRM plus omnichannel context",
+    ],
+    linksHtml:
+      '<a href="/shopify-crm">Shopify CRM</a> · <a href="/best-whatsapp-crm-2026">Best WhatsApp CRM comparison</a> · <a href="/pricing">Pricing</a>',
+  },
+  "/pabbly-alternative": {
+    h1: "Pabbly Alternative: Upfront Credits vs Predictable Monthly CRM",
+    lead:
+      "Pabbly is often compared for credit-based messaging and automation packaging. This page contrasts that model with WhachatCRM’s predictable SaaS CRM inbox — WhatsApp, team collaboration, automation, and clear monthly plans for operators who want an inbox-first product.",
+    bullets: [
+      "Unified Inbox and CRM context for WhatsApp conversations",
+      "Team collaboration with notes, tags, and follow-ups",
+      "Automation and chatbot tools on eligible plans",
+      "Meta Embedded Signup for official WhatsApp Cloud API setup",
+      "Predictable subscription packaging instead of credit-only math",
+    ],
+    linksHtml:
+      '<a href="/pricing">WhachatCRM pricing</a> · <a href="/best-whatsapp-crm-2026">Best WhatsApp CRM comparison</a> · <a href="/whatsapp-crm">WhatsApp CRM guide</a>',
+  },
+  "/best-whatsapp-crm-2026": {
+    h1: "Best WhatsApp CRM in 2026: Why Businesses Are Choosing Omnichannel CRM Platforms",
+    lead:
+      "A practical 2026 buying guide for WhatsApp CRM platforms. Learn what matters for official WhatsApp Business API access, shared inbox, automation, AI assistance, and omnichannel customer conversations — and how WhachatCRM fits that checklist.",
+    bullets: [
+      "Official WhatsApp Business API path with Meta Embedded Signup",
+      "Unified omnichannel inbox for WhatsApp and supported channels",
+      "Shared team inbox, notes, tags, and pipeline context",
+      "Automation templates and AI-assisted workflows where enabled",
+      "Transparent Meta messaging fees without WhachatCRM markup",
+    ],
+    linksHtml:
+      '<a href="/wati-alternative">WATI alternative</a> · <a href="/crm-for-whatsapp-business">CRM for WhatsApp Business</a> · <a href="/pricing">Pricing</a>',
+  },
+  "/crm-for-whatsapp-business": {
+    h1: "CRM for WhatsApp Business: The Complete Guide for Growing Teams",
+    lead:
+      "Learn what a CRM for WhatsApp Business is, how it differs from the WhatsApp Business app alone, and how growing teams use official API onboarding, shared inbox, automation, and AI tools to manage customer conversations.",
+    bullets: [
+      "Official WhatsApp Business API setup with Embedded Signup",
+      "Unified omnichannel and shared team inbox",
+      "Automation, templates, and follow-up workflows",
+      "AI Copilot and lead scoring for prioritization",
+      "Transparent Meta conversation pricing guidance",
+    ],
+    linksHtml:
+      '<a href="/whatsapp-business-api">WhatsApp Business API guide</a> · <a href="/best-whatsapp-crm-2026">Best WhatsApp CRM 2026</a> · <a href="/pricing">Pricing</a>',
+  },
+  "/prospect-ai": {
+    h1: "Meet Your AI Sales Team",
+    lead:
+      "Prospect AI is WhachatCRM’s AI sales team for finding local business prospects, qualifying opportunities, launching personalized outreach, and managing replies in one CRM — from discovery to conversation in Unified Inbox.",
+    bullets: [
+      "Discover businesses by type and location",
+      "AI qualification and fit scoring before outreach",
+      "Personalized outreach with message control",
+      "Replies land in Unified Inbox for follow-up",
+      "Works inside WhachatCRM alongside your messaging channels",
+    ],
+    linksHtml:
+      '<a href="/pricing">View plans</a> · <a href="/auth">Start free</a> · <a href="/whatsapp-crm">WhatsApp CRM overview</a>',
+  },
+};
+
+function renderMarketingSsrPage(page: MarketingSsrPage): string {
+  const bullets = page.bullets.map((b) => `<li>${b}</li>`).join("\n            ");
+  return wrapCrawlableSsr(`
+        <main>
+          <h1>${page.h1}</h1>
+          <p>${page.lead}</p>
+          <ul>
+            ${bullets}
+          </ul>
+          <p>${page.linksHtml}</p>
+        </main>`);
+}
+
 /**
  * Lightweight page-specific initial HTML for selected marketing routes.
  * Returns null when the route has head-meta only (existing behavior).
  */
 export function generateMarketingPageSsrHtml(route: string): string | null {
-  if (route === "/realtor-growth-engine") {
-    return wrapCrawlableSsr(`
-        <main>
-          <h1>Realtor Growth Engine</h1>
-          <p>From new lead to booked showing — automatically. An AI-assisted real estate workspace inside WhachatCRM for agents and teams.</p>
-          <p>Qualify buyers from conversation, capture preferences, match connected live inventory where supported, create personalized property presentations, run channel-aware follow-up, and move conversations toward a showing.</p>
-          <ul>
-            <li>AI-assisted lead qualification and buyer preference capture</li>
-            <li>Realtor workflows from inquiry to follow-up and booking</li>
-            <li>MLS / live inventory property matching where connected</li>
-            <li>Personalized property flyers and presentations</li>
-            <li>Unified Inbox with AI Copilot for messaging channels</li>
-            <li>Requires an appropriate WhachatCRM plan and AI Brain where applicable</li>
-          </ul>
-          <p><a href="/pricing">View WhachatCRM plans</a> · <a href="/auth">Start free</a> · <a href="/real-estate-crm">Real estate CRM overview</a></p>
-        </main>`);
-  }
+  const page = MARKETING_SSR_PAGES[route];
+  if (!page) return null;
+  return renderMarketingSsrPage(page);
+}
 
-  if (route === "/waba360-alternative") {
-    return wrapCrawlableSsr(`
-        <main>
-          <h1>360dialog Alternative for WhatsApp CRM and Automation</h1>
-          <p>360dialog is primarily WhatsApp Business API / BSP infrastructure for teams that want direct API access. WhachatCRM is a ready-to-use CRM and customer engagement platform built around WhatsApp and other channels.</p>
-          <p>Compare API-first BSP access with a complete product layer: Meta Embedded Signup, WhatsApp Cloud API onboarding, Unified Inbox, automation, team collaboration, and broader customer communication tools — without building the inbox and CRM yourself.</p>
-          <ul>
-            <li>Meta Embedded Signup and WhatsApp Cloud API onboarding</li>
-            <li>Unified Inbox for WhatsApp and supported messaging channels</li>
-            <li>Automation, chatbot, and team collaboration workflows</li>
-            <li>CRM context, notes, and follow-up in one workspace</li>
-            <li>Built for operators who want a ready product, not raw API pipes alone</li>
-          </ul>
-          <p><a href="/best-whatsapp-crm-2026">Best WhatsApp CRM comparison</a> · <a href="/whatsapp-business-api">WhatsApp Business API guide</a> · <a href="/pricing">Pricing</a></p>
-        </main>`);
-  }
-
-  return null;
+/** Routes that currently receive crawlable SSR body markup (for tests / audits). */
+export function getMarketingSsrBodyRoutes(): string[] {
+  return Object.keys(MARKETING_SSR_PAGES);
 }
 
 const NOINDEX_EXACT_PATHS = new Set([
