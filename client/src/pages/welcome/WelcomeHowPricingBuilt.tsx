@@ -63,7 +63,7 @@ export default function WelcomeHowPricingBuilt() {
         </div>
       </section>
 
-      <section className="px-4 md:px-6 py-16 md:py-20 bg-white">
+      <section id="built-for" className="scroll-mt-24 px-4 md:px-6 py-16 md:py-20 bg-white">
         <div className="max-w-6xl xl:max-w-7xl mx-auto">
           <div className="mx-auto mb-12 max-w-3xl text-center">
             <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-brand-green">Use cases</p>
@@ -73,20 +73,57 @@ export default function WelcomeHowPricingBuilt() {
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
             {[
-              { icon: Home, title: t("home.builtFor.realEstate"), desc: t("home.builtFor.realEstateDesc") },
-              { icon: HeartPulse, title: t("home.builtFor.medSpas"), desc: t("home.builtFor.medSpasDesc") },
-              { icon: Building2, title: t("home.builtFor.agencies"), desc: t("home.builtFor.agenciesDesc") },
-              { icon: Store, title: t("home.builtFor.localServices"), desc: t("home.builtFor.localServicesDesc") },
-              { icon: Users, title: t("home.builtFor.salesTeams"), desc: t("home.builtFor.salesTeamsDesc") },
+              {
+                icon: Home,
+                title: t("home.builtFor.realEstate"),
+                desc: t("home.builtFor.realEstateDesc"),
+                href: "/real-estate-crm",
+              },
+              {
+                icon: HeartPulse,
+                title: t("home.builtFor.medSpas"),
+                desc: t("home.builtFor.medSpasDesc"),
+              },
+              {
+                icon: Building2,
+                title: t("home.builtFor.agencies"),
+                desc: t("home.builtFor.agenciesDesc"),
+                href: "/go-high-level-agencies",
+              },
+              {
+                icon: Store,
+                title: t("home.builtFor.localServices"),
+                desc: t("home.builtFor.localServicesDesc"),
+                href: "/prospect-ai",
+              },
+              {
+                icon: Users,
+                title: t("home.builtFor.salesTeams"),
+                desc: t("home.builtFor.salesTeamsDesc"),
+                href: "/unified-inbox",
+              },
             ].map((item) => {
               const Icon = item.icon;
-              return (
-                <div key={item.title} className="rounded-[1.5rem] bg-gray-50/80 p-5 ring-1 ring-gray-100">
+              const body = (
+                <>
                   <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-white text-gray-800 ring-1 ring-gray-200">
                     <Icon className="h-5 w-5" />
                   </div>
                   <h3 className="font-semibold text-gray-950">{item.title}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-gray-600">{item.desc}</p>
+                </>
+              );
+              return item.href ? (
+                <Link
+                  key={item.title}
+                  href={item.href}
+                  className="rounded-[1.5rem] bg-gray-50/80 p-5 ring-1 ring-gray-100 transition-colors hover:bg-emerald-50/50 hover:ring-brand-green/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40"
+                >
+                  {body}
+                </Link>
+              ) : (
+                <div key={item.title} className="rounded-[1.5rem] bg-gray-50/80 p-5 ring-1 ring-gray-100">
+                  {body}
                 </div>
               );
             })}

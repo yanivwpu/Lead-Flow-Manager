@@ -35,7 +35,10 @@ function IntegrationsHub() {
 export default function WelcomeIntegrationsSection() {
   const { t } = useTranslation();
   return (
-    <section className="px-4 md:px-6 py-16 md:py-20 bg-gradient-to-b from-white to-gray-50">
+    <section
+      id="integrations"
+      className="scroll-mt-24 px-4 md:px-6 py-16 md:py-20 bg-gradient-to-b from-white to-gray-50"
+    >
       <div className="max-w-6xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
         <div className="text-center mb-10 md:mb-12">
           <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-brand-green">Integrations</p>

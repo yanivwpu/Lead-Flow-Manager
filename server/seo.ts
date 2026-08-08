@@ -5,6 +5,7 @@ import {
   resolveBlogOgImage,
   type BlogPostMeta,
 } from "@shared/blogPosts";
+import { getAllMarketingNavLinks, MARKETING_NAV_DROPDOWNS } from "@shared/marketingNav";
 
 const BASE_URL = (process.env.MARKETING_URL || "https://www.whachatcrm.com").replace(/\/+$/, "");
 
@@ -633,49 +634,88 @@ export function injectNoindexMeta(html: string): string {
 }
 
 export function generateHomepageHtml(): string {
+  const navLinks = getAllMarketingNavLinks()
+    .map((item) => `<li><a href="${item.href}">${item.label}</a> — ${item.description}</li>`)
+    .join("\n            ");
+  const navGroups = MARKETING_NAV_DROPDOWNS.map((dropdown) => {
+    const items = dropdown.groups
+      .flatMap((g) => g.items)
+      .map((item) => `<li><a href="${item.href}">${item.label}</a></li>`)
+      .join("\n              ");
+    return `<h3>${dropdown.label}</h3>\n            <ul>\n              ${items}\n            </ul>`;
+  }).join("\n            ");
+
   // SSR content for SEO - visually hidden but accessible to crawlers
   return `
       <div data-ssr-content="true" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;">
         <main>
-          <h1>One Inbox. Every Channel. Zero Complexity.</h1>
-          <p>WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat — all in one unified inbox. Stop juggling apps. Respond faster, never lose a lead.</p>
-          <p>WhachatCRM - Official WhatsApp API, Instagram & SMS - One Unified Inbox</p>
-          <p>Manage all your customer conversations from WhatsApp Business API, Instagram, Facebook, SMS and more in one unified inbox. Built for SMBs and solo founders.</p>
+          <h1>Meet Your AI Sales Team</h1>
+          <p>WhachatCRM helps businesses find and qualify prospects, manage conversations across channels, personalize the next action with AI, automate follow-up, and convert more chats into revenue.</p>
+          <p>Official Meta API · WhatsApp, Instagram, Facebook, SMS, Telegram, Email and more</p>
+          <p>Prospect AI finds and qualifies businesses to sell to. AI Brain powers personalization and strategy. AI Copilot assists inside conversations. Unified Inbox brings messaging channels together. Growth Engines — including the live Realtor Growth Engine — package workflows for specific growth needs.</p>
+
+          <nav aria-label="Primary">
+            <h2>Explore WhachatCRM</h2>
+            ${navGroups}
+            <ul>
+              <li><a href="/pricing">Pricing</a></li>
+              <li><a href="/auth">Start Free Trial</a></li>
+            </ul>
+          </nav>
 
           <section>
-            <h2>WhatsApp Wasn't Built for Managing Customers — Until Now</h2>
-            <p>Important chats get buried. No context about customers. Follow-ups are forgotten. Teams lose visibility.</p>
-            <p>WhachatCRM Solution: One conversation per customer. Notes, tags & tasks inside each chat. Clear follow-ups so nothing slips through. Multi-channel integrations with your favorite tools.</p>
+            <h2>Find and qualify prospects</h2>
+            <p>Use Prospect AI to discover local businesses, qualify fit, and launch personalized outreach — then manage replies in Unified Inbox.</p>
+            <p><a href="/prospect-ai">Explore Prospect AI</a></p>
           </section>
 
           <section>
-            <h2>Everything You Need to Manage WhatsApp Like a CRM</h2>
-            <h3>Organized Conversations</h3>
-            <p>Every WhatsApp chat becomes a customer record — no more searching or guessing.</p>
-            <h3>Notes & Tags</h3>
-            <p>Add internal notes and tags so your team always knows the full context.</p>
-            <h3>Follow-Ups & Tasks</h3>
-            <p>Set reminders and tasks to make sure every lead is followed up on time.</p>
+            <h2>Manage and convert conversations</h2>
+            <p>Bring WhatsApp and supported channels into one Unified Inbox. Use AI Copilot in-thread and automate follow-up with templates and chatbots.</p>
+            <ul>
+              <li><a href="/unified-inbox">Unified Inbox</a></li>
+              <li><a href="/automation-templates">Automations</a></li>
+              <li><a href="/ai-lead-scoring">AI lead scoring</a></li>
+            </ul>
+          </section>
+
+          <section>
+            <h2>AI Brain and AI Copilot</h2>
             <h3>AI Brain</h3>
-            <p>Smart reply suggestions, lead capture & tone control. Your AI-powered business assistant.</p>
-            <h3>Visual Chatbot Builder</h3>
-            <p>Build automated flows with our drag-and-drop chatbot builder. No coding required.</p>
-            <h3>Multi-Channel Integrations</h3>
-            <p>Connect with Shopify, HubSpot, Salesforce, Stripe & more to sync leads across all your tools.</p>
+            <p>Analyzes prospects, helps create personalized campaigns, recommends strategy, and powers AI features across the platform where enabled.</p>
+            <h3>AI Copilot</h3>
+            <p>Assists inside customer conversations with summaries, suggested replies, and lead context.</p>
+          </section>
+
+          <section>
+            <h2>Everything you need to turn conversations into revenue</h2>
+            <h3>Organized Conversations</h3>
+            <p>Every chat becomes a customer record with notes, tags, and ownership.</p>
+            <h3>Follow-Ups &amp; Tasks</h3>
+            <p>Set reminders and tasks so every lead is followed up on time.</p>
+            <h3>Automations &amp; Chatbots</h3>
+            <p>Launch ready-to-use templates and automated messaging flows without building from scratch.</p>
+            <h3>Integrations</h3>
+            <p>Connect Meta messaging, Shopify, Gmail, Stripe, Calendly, and more.</p>
           </section>
 
           <section>
             <h2>Up and running in minutes</h2>
-            <p>No complex setup. No training required.</p>
             <ol>
-              <li>Connect your number - Link your WhatsApp Business number in just a few clicks.</li>
-              <li>Organize your chats - Add notes, tags, and set follow-up reminders for each conversation.</li>
-              <li>Close more deals - Get reminders, follow up on time, and convert more leads into customers.</li>
+              <li>Connect your channels with guided Meta onboarding and supported integrations.</li>
+              <li>Centralize leads with ownership, notes, tags, and next steps.</li>
+              <li>Follow up faster with reminders, templates, and AI assistance.</li>
             </ol>
-            <a href="/auth" rel="prefetch">Start Your 14-Day Pro Trial</a>
+            <a href="/auth" rel="prefetch">Start Free Trial</a>
             <a href="/pricing" rel="prefetch">Compare Plans</a>
             <p>No credit card required. Free plan available forever.</p>
-            <p>Built on the official WhatsApp Business API. Secure & compliant — no scraping. Designed for founders, sales teams & support teams.</p>
+          </section>
+
+          <section>
+            <h2>Site navigation</h2>
+            <ul>
+            ${navLinks}
+            </ul>
           </section>
 
           <footer>
@@ -685,6 +725,8 @@ export function generateHomepageHtml(): string {
               <a href="/terms-of-use">Terms</a>
               <a href="/contact">Contact</a>
               <a href="/blog">Blog</a>
+              <a href="/help">Help</a>
+              <a href="/partner-program">Partner Program</a>
             </nav>
           </footer>
         </main>
@@ -697,9 +739,9 @@ export function injectHomepageSeoMeta(html: string): string {
     {
       "@context": "https://schema.org",
       "@type": "WebPage",
-      "name": "Official WhatsApp API, Instagram & SMS - One Unified Inbox",
+      "name": "Meet Your AI Sales Team | WhachatCRM",
       "url": "${BASE_URL}/",
-      "description": "Manage WhatsApp Business API, Instagram, Facebook and SMS conversations in one unified inbox."
+      "description": "AI-powered sales and messaging CRM: find and qualify prospects, manage WhatsApp and omnichannel conversations, automate follow-up, and convert more chats into revenue."
     }
     </script>`;
   

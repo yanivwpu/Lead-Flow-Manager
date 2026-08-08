@@ -1,22 +1,22 @@
-import { useState, lazy, Suspense, useLayoutEffect } from "react";
+import { useState, lazy, Suspense, useLayoutEffect, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, Calendar, Shield } from "lucide-react";
+import { ArrowRight, Calendar } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 const SiteFooter = lazy(() =>
   import("@/components/SiteFooter").then((m) => ({ default: m.SiteFooter })),
 );
 const BookDemoModal = lazy(() =>
   import("@/components/BookDemoModal").then((m) => ({ default: m.BookDemoModal })),
 );
-const LanguageSelector = lazy(() =>
-  import("@/components/LanguageSelector").then((m) => ({ default: m.LanguageSelector })),
-);
 const WelcomeBenefitsSection = lazy(() => import("@/pages/welcome/WelcomeBenefitsSection"));
+const WelcomeAiPlatformSection = lazy(() => import("@/pages/welcome/WelcomeAiPlatformSection"));
 const WelcomeIntegrationsSection = lazy(() => import("@/pages/welcome/WelcomeIntegrationsSection"));
 const WelcomeHowPricingBuilt = lazy(() => import("@/pages/welcome/WelcomeHowPricingBuilt"));
 const WelcomeFinalCta = lazy(() => import("@/pages/welcome/WelcomeFinalCta"));
+const WelcomeDiscoveryPaths = lazy(() => import("@/pages/welcome/WelcomeDiscoveryPaths"));
 import { getDirection } from "@/lib/i18n";
 import { MARKETING_URL } from "@/lib/marketingUrl";
 
@@ -44,15 +44,21 @@ function HeroConversationMockup() {
   );
 }
 
+function scrollToHashTarget(hash: string) {
+  const id = hash.replace(/^#/, "");
+  if (!id) return;
+  const el = document.getElementById(id);
+  if (el) {
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
 export function Welcome() {
   const { user } = useAuth();
   const [location] = useLocation();
   const { t } = useTranslation();
   const [showDemoModal, setShowDemoModal] = useState(false);
   const isRTL = getDirection() === "rtl";
-  const heroTitle = t("landing.heroTitle");
-  const zeroPhrase = "Zero Complexity";
-  const zeroIndex = heroTitle.indexOf(zeroPhrase);
 
   useLayoutEffect(() => {
     document.documentElement.classList.remove("wcs-marketing-navigating");
@@ -63,6 +69,20 @@ export function Welcome() {
     if (!document.getElementById("whachat-static-shell")) return;
     document.documentElement.classList.add("wcs-hide-static-marketing");
   }, [location, user]);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash) return;
+    // Wait a tick for lazy sections; retry briefly for #ai-brain etc.
+    const tryScroll = () => scrollToHashTarget(hash);
+    tryScroll();
+    const t1 = window.setTimeout(tryScroll, 200);
+    const t2 = window.setTimeout(tryScroll, 800);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [location]);
 
   return (
     <div dir={isRTL ? "rtl" : "ltr"} className={`min-h-screen bg-white overflow-x-hidden ${isRTL ? "text-right" : "text-left"}`}>
@@ -97,76 +117,32 @@ export function Welcome() {
         </Suspense>
       ) : null}
 
-      <nav className="min-h-[56px] py-2 px-4 md:py-3 md:px-6 grid grid-cols-[auto_1fr_auto] items-center gap-3 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto box-border">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 bg-brand-green rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-lg">W</span>
-          </div>
-          <span className="font-display font-bold text-xl text-gray-900">WhachatCRM</span>
-        </div>
-        <div className="hidden lg:flex justify-self-center">
-          <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 text-[11px] font-medium text-emerald-800 ring-1 ring-emerald-100">
-            <Shield className="h-3.5 w-3.5" />
-            {t("landing.heroEyebrow")}
-          </span>
-        </div>
-        <div className="flex items-center gap-2 md:gap-5 lg:gap-6 justify-self-end">
-          <Link href="/pricing" className="h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:inline-flex items-center">
-            {t("landing.pricing")}
-          </Link>
-          <Link href="/blog" className="h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden md:inline-flex items-center">
-            {t("landing.blog")}
-          </Link>
-          <Link href="/partner-program" className="h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden lg:inline-flex items-center">
-            Partners
-          </Link>
-          <Suspense
-            fallback={<div className="h-9 w-9 shrink-0 rounded-md bg-gray-100/90 border border-transparent" aria-hidden />}
-          >
-            <LanguageSelector variant="compact" className="text-gray-600 hover:text-gray-900 hover:bg-gray-100" />
-          </Suspense>
-          {user ? (
-            <Link
-              href="/app/inbox"
-              className="h-9 shrink-0 px-4 text-sm font-medium bg-brand-green text-white rounded-full hover:bg-emerald-700 inline-flex items-center"
-            >
-              {t("landing.dashboard")}
-            </Link>
-          ) : (
-            <>
-              <Link
-                href="/auth?mode=login"
-                className="h-9 px-2 text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:inline-flex items-center"
-              >
-                {t("landing.login")}
-              </Link>
-              <Link
-                href="/auth"
-                className="h-9 shrink-0 px-4 text-sm font-medium bg-brand-green text-white rounded-full hover:bg-emerald-700 inline-flex items-center"
-              >
-                {t("landing.startFree")}
-              </Link>
-            </>
-          )}
-        </div>
-      </nav>
+      <MarketingHeader
+        isLoggedIn={!!user}
+        loginLabel={t("landing.login")}
+        startTrialLabel={t("landing.startTrial")}
+        startTrialShortLabel={t("landing.startFree")}
+        dashboardLabel={t("landing.dashboard")}
+        pricingLabel={t("landing.pricing")}
+      />
 
       <section className="px-4 md:px-6 pt-5 md:pt-8 pb-6 md:pb-8 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
         <div className="flex flex-col gap-8 md:grid md:grid-cols-[1fr_1.04fr] md:gap-10 xl:gap-14 items-start">
           <HeroConversationMockup />
 
           <div className="order-1 md:order-1 max-w-[780px] md:mt-12 lg:mt-14">
-            <h1 className="text-[3rem] md:text-[4rem] lg:text-[5.5rem] xl:text-[6rem] font-display font-bold text-gray-950 tracking-tight leading-[0.95] mb-7">
-              {zeroIndex >= 0 ? (
-                <>
-                  <span className="block">{heroTitle.slice(0, zeroIndex).trim()}</span>
-                  <span className="block whitespace-nowrap">{zeroPhrase}</span>
-                </>
-              ) : (
-                heroTitle
-              )}
+            <p className="mb-4 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
+              {t("landing.heroEyebrow")}
+            </p>
+            <h1 className="text-[2.75rem] md:text-[3.75rem] lg:text-[4.5rem] xl:text-[5rem] font-display font-bold text-gray-950 tracking-tight leading-[0.98] mb-6">
+              {t("landing.heroTitle")}
             </h1>
-            <p className="text-base md:text-[1.05rem] text-gray-600 mb-10 leading-7 max-w-xl">{t("landing.heroSubtitle")}</p>
+            <p className="text-base md:text-[1.05rem] text-gray-600 mb-4 leading-7 max-w-xl">
+              {t("landing.heroSubtitle")}
+            </p>
+            <p className="text-sm text-gray-500 mb-8 max-w-xl leading-6">
+              {t("landing.heroChannels")}
+            </p>
 
             <div className="flex flex-col sm:flex-row gap-2.5 mb-4">
               <div className="w-full sm:w-auto">
@@ -207,6 +183,14 @@ export function Welcome() {
           </div>
         </div>
       </section>
+
+      <Suspense fallback={<BelowFoldFallback className="min-h-[180px] bg-white [contain-intrinsic-size:auto_180px]" />}>
+        <WelcomeDiscoveryPaths />
+      </Suspense>
+
+      <Suspense fallback={<BelowFoldFallback className="min-h-[420px] bg-white [contain-intrinsic-size:auto_420px]" />}>
+        <WelcomeAiPlatformSection />
+      </Suspense>
 
       <Suspense fallback={<BelowFoldFallback className="min-h-[520px] bg-gray-50 [contain-intrinsic-size:auto_520px]" />}>
         <WelcomeBenefitsSection />
