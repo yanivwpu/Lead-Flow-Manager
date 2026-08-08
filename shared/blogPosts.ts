@@ -3,7 +3,7 @@
  * Add `featuredImage` (and optional `ogImage`, `imageAlt`) per cornerstone article — no code changes elsewhere.
  */
 
-export const DEFAULT_BLOG_OG_IMAGE_PATH = "/og/og-whachatcrm.png?v=3";
+export const DEFAULT_BLOG_OG_IMAGE_PATH = "/og/og-whachatcrm.png?v=4";
 
 export interface BlogPostMeta {
   slug: string;
