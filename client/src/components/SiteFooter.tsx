@@ -59,7 +59,7 @@ function SocialIcon({ id }: { id: WhachatSocialPlatformId }) {
 
 /** Compact on desktop; comfortable touch targets on mobile. */
 const linkClass =
-  "inline-flex min-h-10 items-center text-sm leading-5 text-gray-500 transition-colors hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green rounded-sm lg:min-h-0 lg:py-0.5";
+  "inline-flex min-h-10 items-center text-sm leading-5 text-gray-500 transition-colors hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green rounded-sm lg:min-h-0 lg:py-0";
 
 function FooterNavLink({ link }: { link: ResolvedSiteFooterLink }) {
   const { openPreferences } = useCookieConsent();
@@ -83,7 +83,7 @@ function FooterNavLink({ link }: { link: ResolvedSiteFooterLink }) {
 
 function FooterLinkList({ links }: { links: ResolvedSiteFooterLink[] }) {
   return (
-    <ul className="flex flex-col gap-2">
+    <ul className="flex flex-col gap-1.5">
       {links.map((link) => (
         <li key={link.id} className="leading-5">
           <FooterNavLink link={link} />
@@ -98,11 +98,11 @@ function FooterColumn({ column }: { column: ResolvedSiteFooterColumn }) {
     // One list (crawlable once). On large screens, flow into two columns:
     // col A = first five products, col B = remaining five.
     return (
-      <div className="min-w-0 lg:col-span-2">
-        <h3 className="mb-3.5 text-xs font-semibold uppercase tracking-wider text-gray-900">
+      <div className="min-w-0">
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-900">
           {column.heading}
         </h3>
-        <ul className="flex flex-col gap-2 lg:grid lg:grid-flow-col lg:grid-cols-2 lg:grid-rows-5 lg:gap-x-6 lg:gap-y-2">
+        <ul className="flex flex-col gap-1.5 lg:grid lg:grid-flow-col lg:grid-cols-2 lg:grid-rows-5 lg:gap-x-2.5 lg:gap-y-1.5">
           {column.links.map((link) => (
             <li key={link.id} className="leading-5">
               <FooterNavLink link={link} />
@@ -115,7 +115,7 @@ function FooterColumn({ column }: { column: ResolvedSiteFooterColumn }) {
 
   return (
     <div className="min-w-0">
-      <h3 className="mb-3.5 text-xs font-semibold uppercase tracking-wider text-gray-900">
+      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-900">
         {column.heading}
       </h3>
       <FooterLinkList links={column.links} />
@@ -161,8 +161,8 @@ export function SiteFooter() {
       data-footer-locale={locale}
     >
       <div className="mx-auto max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px]">
-        <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-8 xl:gap-10">
-          <div className="w-full shrink-0 lg:w-[260px] xl:w-[280px]">
+        <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-5 xl:gap-6">
+          <div className="w-full shrink-0 lg:w-[220px] xl:w-[236px]">
             <Link
               href={resolvedHome}
               className="mb-3 inline-flex items-center gap-2 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
@@ -202,9 +202,13 @@ export function SiteFooter() {
             </div>
           </div>
 
+          {/*
+            Desktop proportions (5 tracks): Product wider for dual lists;
+            Compare + Legal get more width than Solutions/Resources to reduce wrapping.
+          */}
           <nav
             aria-label={footer.footerNavAria}
-            className="grid min-w-0 flex-1 grid-cols-2 gap-x-7 gap-y-8 sm:grid-cols-3 lg:grid-cols-6 lg:gap-x-8 lg:gap-y-0"
+            className="grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-3 lg:grid-cols-[minmax(0,1.38fr)_minmax(0,0.9fr)_minmax(0,0.85fr)_minmax(0,1.28fr)_minmax(0,1.22fr)] lg:gap-x-5 xl:gap-x-5 lg:gap-y-0"
           >
             {ordered.map((column) => (
               <FooterColumn key={column.id} column={column} />
