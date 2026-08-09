@@ -178,12 +178,12 @@ export function SiteFooter() {
             </Link>
             <p className="text-[13px] leading-[1.4] text-gray-500">{footer.tagline}</p>
             <div
-              className="mt-2 flex items-start gap-1.5"
+              className="mt-2 flex items-center gap-1.5"
               role="group"
               aria-label={footer.metaTechProvider}
             >
               <ShieldCheck
-                className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-green [transform:none]"
+                className="h-[22px] w-[22px] shrink-0 text-brand-green [transform:none] min-[1180px]:!h-[26px] min-[1180px]:!w-[26px]"
                 aria-hidden
               />
               <div className="min-w-0">
