@@ -57,8 +57,9 @@ function SocialIcon({ id }: { id: WhachatSocialPlatformId }) {
   }
 }
 
+/** Compact on desktop; comfortable touch targets on mobile. */
 const linkClass =
-  "inline-flex min-h-11 items-center text-[0.9375rem] leading-snug text-gray-500 transition-colors hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green rounded-sm";
+  "inline-flex min-h-10 items-center text-sm leading-5 text-gray-500 transition-colors hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green rounded-sm lg:min-h-0 lg:py-0.5";
 
 function FooterNavLink({ link }: { link: ResolvedSiteFooterLink }) {
   const { openPreferences } = useCookieConsent();
@@ -80,19 +81,44 @@ function FooterNavLink({ link }: { link: ResolvedSiteFooterLink }) {
   );
 }
 
-function FooterColumn({ column }: { column: ResolvedSiteFooterColumn }) {
+function FooterLinkList({ links }: { links: ResolvedSiteFooterLink[] }) {
   return (
-    <div>
-      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-900 md:mb-4">
+    <ul className="flex flex-col gap-2">
+      {links.map((link) => (
+        <li key={link.id} className="leading-5">
+          <FooterNavLink link={link} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function FooterColumn({ column }: { column: ResolvedSiteFooterColumn }) {
+  if (column.id === "product") {
+    // One list (crawlable once). On large screens, flow into two columns:
+    // col A = first five products, col B = remaining five.
+    return (
+      <div className="min-w-0 lg:col-span-2">
+        <h3 className="mb-3.5 text-xs font-semibold uppercase tracking-wider text-gray-900">
+          {column.heading}
+        </h3>
+        <ul className="flex flex-col gap-2 lg:grid lg:grid-flow-col lg:grid-cols-2 lg:grid-rows-5 lg:gap-x-6 lg:gap-y-2">
+          {column.links.map((link) => (
+            <li key={link.id} className="leading-5">
+              <FooterNavLink link={link} />
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-0">
+      <h3 className="mb-3.5 text-xs font-semibold uppercase tracking-wider text-gray-900">
         {column.heading}
       </h3>
-      <ul className="space-y-0.5 md:space-y-1">
-        {column.links.map((link) => (
-          <li key={link.id}>
-            <FooterNavLink link={link} />
-          </li>
-        ))}
-      </ul>
+      <FooterLinkList links={column.links} />
     </div>
   );
 }
@@ -122,30 +148,31 @@ export function SiteFooter() {
   const [location] = useLocation();
   const urlLocale = useMarketingUrlLocale();
   const locale = resolveFooterLocale(urlLocale, location, getCurrentLanguage());
+  // Same calendar-year source as SSR (`getLocalizedSiteFooter` default).
   const footer = getLocalizedSiteFooter(locale);
   const resolvedHome = localizePath("/", locale) || "/";
   const ordered = COLUMN_ORDER.map((id) => footer.columns.find((c) => c.id === id)!);
 
   return (
     <footer
-      className="border-t border-gray-200 bg-gray-50 px-4 py-12 md:px-6 md:py-16"
+      className="border-t border-gray-200 bg-gray-50 px-4 pt-12 pb-7 md:px-6"
       dir={dir}
       data-testid="site-footer"
       data-footer-locale={locale}
     >
       <div className="mx-auto max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px]">
-        <div className="flex flex-col gap-12 lg:flex-row lg:gap-14 xl:gap-16">
-          <div className="w-full shrink-0 lg:w-[300px] xl:w-[320px]">
+        <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-8 xl:gap-10">
+          <div className="w-full shrink-0 lg:w-[260px] xl:w-[280px]">
             <Link
               href={resolvedHome}
-              className="mb-4 inline-flex items-center gap-2 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
+              className="mb-3 inline-flex items-center gap-2 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
             >
               <div className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-green">
                 <span className="text-sm font-bold text-white">W</span>
               </div>
               <span className="font-display text-lg font-bold text-gray-900">WhachatCRM</span>
             </Link>
-            <p className="text-sm leading-relaxed text-gray-500">{footer.tagline}</p>
+            <p className="text-sm leading-[1.4] text-gray-500">{footer.tagline}</p>
             <p className="mt-3 flex items-start gap-2 text-xs leading-snug text-gray-600">
               <ShieldCheck
                 className="mt-0.5 h-4 w-4 shrink-0 text-brand-green [transform:none]"
@@ -153,8 +180,8 @@ export function SiteFooter() {
               />
               <span dir="auto">{footer.metaTechProvider}</span>
             </p>
-            <div className="mt-6">
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-900">
+            <div className="mt-4">
+              <h3 className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-gray-900">
                 {footer.followUs}
               </h3>
               <ul className="flex flex-wrap gap-2" style={{ direction: "ltr" }}>
@@ -165,7 +192,7 @@ export function SiteFooter() {
                       target="_blank"
                       rel={WHACHAT_SOCIAL_LINK_REL}
                       aria-label={profile.ariaLabel}
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green lg:h-9 lg:w-9"
                     >
                       <SocialIcon id={profile.id} />
                     </a>
@@ -177,7 +204,7 @@ export function SiteFooter() {
 
           <nav
             aria-label={footer.footerNavAria}
-            className="grid flex-1 grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-5 lg:gap-x-6 xl:gap-x-8"
+            className="grid min-w-0 flex-1 grid-cols-2 gap-x-7 gap-y-8 sm:grid-cols-3 lg:grid-cols-6 lg:gap-x-8 lg:gap-y-0"
           >
             {ordered.map((column) => (
               <FooterColumn key={column.id} column={column} />
@@ -185,7 +212,7 @@ export function SiteFooter() {
           </nav>
         </div>
 
-        <div className="mt-12 border-t border-gray-200 pt-8">
+        <div className="mt-8 border-t border-gray-200 pt-5">
           <p className="text-sm text-gray-400">{footer.copyright}</p>
         </div>
       </div>

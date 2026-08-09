@@ -9,6 +9,8 @@ import { fileURLToPath } from "node:url";
 import {
   getLocalizedSiteFooter,
   getSiteFooterEnglishHrefs,
+  PRODUCT_FOOTER_COL_A_IDS,
+  PRODUCT_FOOTER_COL_B_IDS,
   SITE_FOOTER_COLUMNS_EN,
 } from "../shared/siteFooterContent";
 import {
@@ -241,6 +243,31 @@ run("SiteFooter component wires shared social config and cookie action", () => {
   assert.match(src, /cookiePreferences/);
   assert.doesNotMatch(src, /href="#"/);
   assert.doesNotMatch(src, /shopify-crm/);
+});
+
+run("copyright uses dynamic current year", () => {
+  const year = new Date().getFullYear();
+  const en = getLocalizedSiteFooter("en");
+  const es = getLocalizedSiteFooter("es");
+  const he = getLocalizedSiteFooter("he");
+  assert.equal(en.copyright, `© ${year} WhachatCRM. All rights reserved.`);
+  assert.equal(es.copyright, `© ${year} WhachatCRM. Todos los derechos reservados.`);
+  assert.equal(he.copyright, `© ${year} WhachatCRM. כל הזכויות שמורות.`);
+  assert.doesNotMatch(en.copyright, /2025/);
+  const ssr = generateHomepageHtml("en");
+  assert.match(ssr, new RegExp(`© ${year} WhachatCRM`));
+});
+
+run("Product column order supports desktop two-column grouping", () => {
+  const product = SITE_FOOTER_COLUMNS_EN.find((c) => c.id === "product")!;
+  assert.deepEqual(
+    product.links.slice(0, 5).map((l) => l.id),
+    [...PRODUCT_FOOTER_COL_A_IDS],
+  );
+  assert.deepEqual(
+    product.links.slice(5, 10).map((l) => l.id),
+    [...PRODUCT_FOOTER_COL_B_IDS],
+  );
 });
 
 console.log("\nAll site-footer tests passed.");

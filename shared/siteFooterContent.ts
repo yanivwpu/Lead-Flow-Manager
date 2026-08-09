@@ -44,11 +44,34 @@ export type SiteFooterChrome = {
   footerNavAria: string;
   /** Accessible label template; keep WhachatCRM + platform names untranslated. */
   socialAriaTemplate: string;
-  copyright: string;
+  /** Copyright template; use `{{year}}` for the calendar year. */
+  copyrightTemplate: string;
   columnHeadings: Record<SiteFooterColumnId, string>;
   /** Overrides for translated link labels by link id. */
   linkLabels: Partial<Record<string, string>>;
 };
+
+/** First Product subcolumn (desktop two-column layout). */
+export const PRODUCT_FOOTER_COL_A_IDS = [
+  "prospect-ai",
+  "ai-brain",
+  "ai-copilot",
+  "unified-inbox",
+  "workflows",
+] as const;
+
+/** Second Product subcolumn (desktop two-column layout). */
+export const PRODUCT_FOOTER_COL_B_IDS = [
+  "chatbot-builder",
+  "campaigns",
+  "realtor-growth-engine",
+  "integrations",
+  "team-collaboration",
+] as const;
+
+export function formatFooterCopyright(template: string, year = new Date().getFullYear()): string {
+  return template.replace(/\{\{\s*year\s*\}\}/g, String(year));
+}
 
 const PRODUCT_LINKS: SiteFooterLinkDef[] = [
   { id: "prospect-ai", href: "/prospect-ai", localizeHref: true, label: "Prospect AI" },
@@ -195,7 +218,7 @@ const CHROME_EN: SiteFooterChrome = {
   followUs: "Follow us",
   footerNavAria: "Footer",
   socialAriaTemplate: "WhachatCRM on {{platform}}",
-  copyright: "© 2025 WhachatCRM. All rights reserved.",
+  copyrightTemplate: "© {{year}} WhachatCRM. All rights reserved.",
   columnHeadings: {
     product: "Product",
     solutions: "Solutions",
@@ -213,7 +236,7 @@ const CHROME_ES: SiteFooterChrome = {
   followUs: "Síguenos",
   footerNavAria: "Pie de página",
   socialAriaTemplate: "WhachatCRM en {{platform}}",
-  copyright: "© 2025 WhachatCRM. Todos los derechos reservados.",
+  copyrightTemplate: "© {{year}} WhachatCRM. Todos los derechos reservados.",
   columnHeadings: {
     product: "Producto",
     solutions: "Soluciones",
@@ -257,7 +280,7 @@ const CHROME_HE: SiteFooterChrome = {
   followUs: "עקבו אחרינו",
   footerNavAria: "כותרת תחתונה",
   socialAriaTemplate: "WhachatCRM ב-{{platform}}",
-  copyright: "© 2025 WhachatCRM. כל הזכויות שמורות.",
+  copyrightTemplate: "© {{year}} WhachatCRM. כל הזכויות שמורות.",
   columnHeadings: {
     product: "מוצר",
     solutions: "פתרונות",
@@ -347,7 +370,10 @@ export function resolveSiteFooterLinkHref(
   return link.href;
 }
 
-export function getLocalizedSiteFooter(locale: MarketingLocale): ResolvedSiteFooter {
+export function getLocalizedSiteFooter(
+  locale: MarketingLocale,
+  year = new Date().getFullYear(),
+): ResolvedSiteFooter {
   const chrome = getSiteFooterChrome(locale);
   const columns: ResolvedSiteFooterColumn[] = SITE_FOOTER_COLUMNS_EN.map((col) => ({
     id: col.id,
@@ -371,7 +397,7 @@ export function getLocalizedSiteFooter(locale: MarketingLocale): ResolvedSiteFoo
     metaTechProvider: chrome.metaTechProvider,
     followUs: chrome.followUs,
     footerNavAria: chrome.footerNavAria,
-    copyright: chrome.copyright,
+    copyright: formatFooterCopyright(chrome.copyrightTemplate, year),
     columns,
     social: WHACHAT_SOCIAL_PROFILES.map((profile) => ({
       ...profile,
