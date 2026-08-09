@@ -4,7 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
-import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
 import { ShopifyBootstrapScreen } from "@/components/ShopifyBootstrapScreen";
 import { ShopifyBootstrapRoutes } from "@/components/ShopifyBootstrapRoutes";
@@ -22,6 +22,8 @@ import {
   shopifyMerchantNeedsPlanSelection,
   shouldSuppressAppRoutes,
 } from "@/lib/shopifyBootstrap";
+import { useSyncLanguageFromMarketingUrl } from "@/lib/marketingLocaleRouting";
+import { parseLocalizedPath } from "@shared/localeRoutes";
 
 const AuthPage = lazy(() => import("@/pages/Auth").then(m => ({ default: m.AuthPage })));
 const VerifyEmailPage = lazy(() =>
@@ -170,11 +172,30 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
   return <Component {...rest} />;
 }
 
+function localeRoutes(path: string, Component: ComponentType) {
+  return [
+    <Route key={path} path={path} component={Component} />,
+    <Route key={`es${path}`} path={`/es${path}`} component={Component} />,
+    <Route key={`he${path}`} path={`/he${path}`} component={Component} />,
+  ];
+}
+
 function MarketingRoutes() {
   const [location] = useLocation();
+  useSyncLanguageFromMarketingUrl();
 
-  if (location === "/") {
+  if (location === "/es" || location === "/he") {
+    return <Redirect to={`${location}/`} />;
+  }
+
+  if (location === "/" || location === "/es/" || location === "/he/") {
     return <Welcome />;
+  }
+
+  // Unsupported locale-prefixed marketing paths → NotFound (server also 404s).
+  const parsed = parseLocalizedPath(location);
+  if (parsed.isLocalePrefixed && !parsed.isSupported) {
+    return <NotFound />;
   }
 
   return (
@@ -195,7 +216,7 @@ function MarketingRoutes() {
       <Route path="/terms-of-use" component={TermsOfUse} />
       <Route path="/data-deletion" component={DataDeletion} />
       <Route path="/unsubscribe" component={Unsubscribe} />
-      <Route path="/pricing" component={Pricing} />
+      {localeRoutes("/pricing", Pricing)}
       <Route path="/wati-alternative" component={WatiAlternative} />
       <Route path="/zoko-alternative" component={ZokoAlternative} />
       <Route path="/manychat-alternative" component={ManychatAlternative} />
@@ -205,22 +226,22 @@ function MarketingRoutes() {
       <Route path="/waba360-alternative" component={Waba360Alternative} />
       <Route path="/whatsapp-crm" component={WhatsappCrm} />
       <Route path="/crm-with-mls-integration" component={CrmWithMlsIntegrationPage} />
-      <Route path="/real-estate-crm" component={RealEstateCrmPage} />
-      <Route path="/solutions/ecommerce" component={EcommerceSolutionPage} />
-      <Route path="/solutions/local-service-businesses" component={LocalServiceSolutionPage} />
-      <Route path="/solutions/marketing-agencies" component={MarketingAgenciesSolutionPage} />
-      <Route path="/solutions/med-spas" component={MedSpasSolutionPage} />
-      <Route path="/unified-inbox" component={UnifiedInboxPage} />
-      <Route path="/ai-brain" component={AiBrainProductPage} />
-      <Route path="/ai-copilot" component={AiCopilotProductPage} />
-      <Route path="/automations" component={AutomationsProductPage} />
-      <Route path="/chatbot-builder" component={ChatbotBuilderProductPage} />
-      <Route path="/campaigns" component={CampaignsProductPage} />
-      <Route path="/integrations" component={IntegrationsProductPage} />
+      {localeRoutes("/real-estate-crm", RealEstateCrmPage)}
+      {localeRoutes("/solutions/ecommerce", EcommerceSolutionPage)}
+      {localeRoutes("/solutions/local-service-businesses", LocalServiceSolutionPage)}
+      {localeRoutes("/solutions/marketing-agencies", MarketingAgenciesSolutionPage)}
+      {localeRoutes("/solutions/med-spas", MedSpasSolutionPage)}
+      {localeRoutes("/unified-inbox", UnifiedInboxPage)}
+      {localeRoutes("/ai-brain", AiBrainProductPage)}
+      {localeRoutes("/ai-copilot", AiCopilotProductPage)}
+      {localeRoutes("/automations", AutomationsProductPage)}
+      {localeRoutes("/chatbot-builder", ChatbotBuilderProductPage)}
+      {localeRoutes("/campaigns", CampaignsProductPage)}
+      {localeRoutes("/integrations", IntegrationsProductPage)}
       <Route path="/shopify-crm" component={ShopifyCrmPage} />
       <Route path="/whatsapp-business-api" component={WhatsappBusinessApiPage} />
       <Route path="/ai-lead-scoring" component={AiLeadScoringPage} />
-      <Route path="/shared-team-inbox" component={SharedTeamInboxPage} />
+      {localeRoutes("/shared-team-inbox", SharedTeamInboxPage)}
       <Route path="/automation-templates" component={AutomationTemplatesPage} />
       <Route path="/best-whatsapp-crm-2026" component={Comparison} />
       <Route path="/crm-for-whatsapp-business" component={CrmForWhatsappBusiness} />
@@ -237,8 +258,8 @@ function MarketingRoutes() {
       <Route path="/partner-portal/forgot-password" component={PartnerForgotPassword} />
       <Route path="/partner-portal/reset-password" component={PartnerResetPassword} />
       <Route path="/partner-portal" component={PartnerPortal} />
-      <Route path="/realtor-growth-engine" component={RealtorLanding} />
-      <Route path="/prospect-ai" component={ProspectAiLanding} />
+      {localeRoutes("/realtor-growth-engine", RealtorLanding)}
+      {localeRoutes("/prospect-ai", ProspectAiLanding)}
       <Route path="/widget-frame/:widgetId" component={WidgetFrame} />
       <Route path="/chat/:widgetId" component={WidgetChat} />
       <Route path="/help" component={HelpCenter} />

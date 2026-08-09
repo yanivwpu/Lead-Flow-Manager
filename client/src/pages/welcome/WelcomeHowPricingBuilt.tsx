@@ -1,15 +1,28 @@
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, CheckCircle2, Building2, HeartPulse, Home, Store, Users } from "lucide-react";
+import { getLocalizedHomepage } from "@shared/localizeMarketingContent";
+import { useLocalizedHref, useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
 
 export default function WelcomeHowPricingBuilt() {
   const { t } = useTranslation();
+  const locale = useMarketingUrlLocale();
+  const eyebrows = getLocalizedHomepage(locale).eyebrows;
+  const pricingHref = useLocalizedHref("/pricing");
+  const realEstateHref = useLocalizedHref("/real-estate-crm");
+  const medSpasHref = useLocalizedHref("/solutions/med-spas");
+  const agenciesHref = useLocalizedHref("/solutions/marketing-agencies");
+  const localHref = useLocalizedHref("/solutions/local-service-businesses");
+  const salesHref = useLocalizedHref("/unified-inbox");
+
   return (
     <>
       <section className="px-4 md:px-6 py-16 md:py-20 bg-white">
         <div className="max-w-5xl xl:max-w-6xl mx-auto">
           <div className="text-center mb-12 md:mb-16">
-            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-brand-green">Setup</p>
+            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-brand-green">
+              {eyebrows.setup}
+            </p>
             <h2 className="text-3xl md:text-5xl font-display font-bold tracking-tight text-gray-950 mb-4">
               {t("home.howItWorks.title")}
             </h2>
@@ -54,7 +67,7 @@ export default function WelcomeHowPricingBuilt() {
             </div>
           </div>
 
-          <Link href="/pricing">
+          <Link href={pricingHref}>
             <button className="h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center gap-2 transition-all shadow-lg">
               {t("home.pricingTeaser.seePlans")}
               <ArrowRight className="h-5 w-5" />
@@ -66,7 +79,9 @@ export default function WelcomeHowPricingBuilt() {
       <section id="built-for" className="scroll-mt-24 px-4 md:px-6 py-16 md:py-20 bg-white">
         <div className="max-w-6xl xl:max-w-7xl mx-auto">
           <div className="mx-auto mb-12 max-w-3xl text-center">
-            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-brand-green">Use cases</p>
+            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-brand-green">
+              {eyebrows.useCases}
+            </p>
             <h2 className="text-3xl md:text-5xl font-display font-bold tracking-tight text-gray-950 mb-4">{t("home.builtFor.title")}</h2>
             <p className="text-base md:text-lg text-gray-600">{t("home.builtFor.tagline")}</p>
           </div>
@@ -77,31 +92,31 @@ export default function WelcomeHowPricingBuilt() {
                 icon: Home,
                 title: t("home.builtFor.realEstate"),
                 desc: t("home.builtFor.realEstateDesc"),
-                href: "/real-estate-crm",
+                href: realEstateHref,
               },
               {
                 icon: HeartPulse,
                 title: t("home.builtFor.medSpas"),
                 desc: t("home.builtFor.medSpasDesc"),
-                href: "/solutions/med-spas",
+                href: medSpasHref,
               },
               {
                 icon: Building2,
                 title: t("home.builtFor.agencies"),
                 desc: t("home.builtFor.agenciesDesc"),
-                href: "/solutions/marketing-agencies",
+                href: agenciesHref,
               },
               {
                 icon: Store,
                 title: t("home.builtFor.localServices"),
                 desc: t("home.builtFor.localServicesDesc"),
-                href: "/solutions/local-service-businesses",
+                href: localHref,
               },
               {
                 icon: Users,
                 title: t("home.builtFor.salesTeams"),
                 desc: t("home.builtFor.salesTeamsDesc"),
-                href: "/unified-inbox",
+                href: salesHref,
               },
             ].map((item) => {
               const Icon = item.icon;
@@ -114,7 +129,7 @@ export default function WelcomeHowPricingBuilt() {
                   <p className="mt-2 text-sm leading-relaxed text-gray-600">{item.desc}</p>
                 </>
               );
-              return item.href ? (
+              return (
                 <Link
                   key={item.title}
                   href={item.href}
@@ -122,10 +137,6 @@ export default function WelcomeHowPricingBuilt() {
                 >
                   {body}
                 </Link>
-              ) : (
-                <div key={item.title} className="rounded-[1.5rem] bg-gray-50/80 p-5 ring-1 ring-gray-100">
-                  {body}
-                </div>
               );
             })}
           </div>

@@ -7,13 +7,20 @@ import {
   generateBlogPostHtml,
   generateHomepageHtml,
   injectHomepageSeoMeta,
+  injectLocalizedStaticShell,
+  hideStaticShellInHtml,
   injectPageMeta,
   generateMarketingPageSsrHtml,
   getMarketingRoutes,
+  getLocalizedMarketingRoutes,
   isNoIndexPath,
   injectNoindexMeta,
 } from "./seo";
 import { normalizeRequestPath, shouldServeSpaFallback } from "./spaRouting";
+import {
+  isLocaleRootRedirect,
+  localeRootRedirectTarget,
+} from "@shared/localeRoutes";
 
 const ONE_YEAR = 31536000;
 const ONE_WEEK = 604800;
@@ -79,6 +86,7 @@ function sendNotFoundSpaShell(res: Response, indexPath: string) {
       return;
     }
     let enhancedHtml = injectNoindexMeta(html);
+    enhancedHtml = hideStaticShellInHtml(enhancedHtml);
     enhancedHtml = enhancedHtml.replace(
       /<title>.*?<\/title>/i,
       "<title>404 Page Not Found | WhachatCRM</title>",
@@ -126,11 +134,8 @@ export function serveStatic(app: Express) {
         return res.sendFile(indexPath);
       }
 
-      // Inject WebPage schema (keeps existing Organization + SoftwareApplication schemas)
-      let enhancedHtml = injectHomepageSeoMeta(html);
-
-      // Generate and inject SSR content for homepage
-      const ssrContent = generateHomepageHtml();
+      let enhancedHtml = injectHomepageSeoMeta(html, "en");
+      const ssrContent = generateHomepageHtml("en");
       enhancedHtml = enhancedHtml.replace(
         '<div id="root"></div>',
         `<div id="root">${ssrContent}</div>`,
@@ -140,6 +145,34 @@ export function serveStatic(app: Express) {
       res.set("Cache-Control", "public, max-age=3600"); // 1 hour cache
       res.send(enhancedHtml);
     });
+  });
+
+  // Locale homepage roots: /es/ and /he/ (canonical). /es and /he redirect once.
+  for (const locale of ["es", "he"] as const) {
+    app.get(`/${locale}/`, (_req, res) => {
+      fs.readFile(indexPath, "utf-8", (err, html) => {
+        if (err) {
+          return res.sendFile(indexPath);
+        }
+        let enhancedHtml = injectHomepageSeoMeta(html, locale);
+        enhancedHtml = injectLocalizedStaticShell(enhancedHtml, locale);
+        const ssrContent = generateHomepageHtml(locale);
+        enhancedHtml = enhancedHtml.replace(
+          '<div id="root"></div>',
+          `<div id="root">${ssrContent}</div>`,
+        );
+        res.set("Content-Type", "text/html");
+        res.set("Cache-Control", "public, max-age=3600");
+        res.send(enhancedHtml);
+      });
+    });
+  }
+
+  app.get("/es", (_req, res) => {
+    res.redirect(301, "/es/");
+  });
+  app.get("/he", (_req, res) => {
+    res.redirect(301, "/he/");
   });
 
   // Blog pages SSR - MUST be before express.static
@@ -235,6 +268,39 @@ export function serveStatic(app: Express) {
     });
   });
 
+  // Localized Phase 2 marketing routes (/es/..., /he/...)
+  const localizedRoutes = getLocalizedMarketingRoutes().filter(
+    (r) => r !== "/es/" && r !== "/he/",
+  );
+  localizedRoutes.forEach((route) => {
+    app.get(route, (_req, res) => {
+      fs.readFile(indexPath, "utf-8", (err, html) => {
+        if (err) {
+          console.error(`[SSR${route}] Failed to read index.html:`, err.message);
+          return res.sendFile(indexPath);
+        }
+        try {
+          let enhancedHtml = injectPageMeta(html, route);
+          enhancedHtml = hideStaticShellInHtml(enhancedHtml);
+          const ssrBody = generateMarketingPageSsrHtml(route);
+          if (ssrBody && enhancedHtml.includes('<div id="root"></div>')) {
+            enhancedHtml = enhancedHtml.replace(
+              '<div id="root"></div>',
+              `<div id="root">${ssrBody}</div>`,
+            );
+          }
+          res.set("Content-Type", "text/html");
+          res.set("Cache-Control", "public, max-age=3600");
+          res.send(enhancedHtml);
+        } catch (ssrErr: unknown) {
+          const message = ssrErr instanceof Error ? ssrErr.message : String(ssrErr);
+          console.error(`[SSR${route}] Render failed, falling back to SPA shell:`, message);
+          sendSpaShell(res, indexPath);
+        }
+      });
+    });
+  });
+
   // Legacy / removed marketing URLs → current canonical page (301, before express.static).
   // Keeps old Google-indexed URLs from soft-404ing (200 SPA shell) under "Crawled - currently not indexed".
   const LEGACY_REDIRECTS: Record<string, string> = {
@@ -256,7 +322,13 @@ export function serveStatic(app: Express) {
   app.use("*", (req, res) => {
     const url = normalizeRequestPath(req.originalUrl || req.url || "/");
 
-    if (!shouldServeSpaFallback(url, marketingRoutes)) {
+    if (isLocaleRootRedirect(url)) {
+      const target = localeRootRedirectTarget(url);
+      if (target) return res.redirect(301, target);
+    }
+
+    const allMarketing = [...marketingRoutes, ...getLocalizedMarketingRoutes()];
+    if (!shouldServeSpaFallback(url, allMarketing)) {
       return sendNotFoundSpaShell(res, indexPath);
     }
 

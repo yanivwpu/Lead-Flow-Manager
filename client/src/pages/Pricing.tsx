@@ -25,18 +25,17 @@ import {
   openShopifyManagedPricing,
   shopifyManagedPricingInstructions,
 } from "@/lib/shopifyCheckout";
-import {
-  buildPricingCompareRows,
-  getAiBrainAddonHighlights,
-  getPlanPricingHighlights,
-} from "@shared/pricingEntitlements";
 import { trackPricingEvent } from "@/lib/ga4Events";
 import {
-  COMPARE_FEATURE_HINTS,
-  COMPARE_FEATURE_LABELS,
-  COMPARE_GROUP_LABELS,
+  buildLocalizedPricingCompareRows,
+  getLocalizedAiBrainAddonHighlights,
+  getLocalizedPlanPricingHighlights,
+  getLocalizedPricingPage,
+  normalizeMarketingLocale,
+} from "@shared/localizeMarketingContent";
+import { getCanonicalUrl, getHreflangLinks, localizePath } from "@shared/localeRoutes";
+import {
   CoreCapabilitiesSection,
-  FULL_PRO_AI_TRIAL_COPY,
   PricingBottomCta,
   PricingFaqSection,
   PricingHeroChips,
@@ -45,6 +44,7 @@ import {
   TransparentPricingStrip,
   WhyChooseSection,
 } from "@/components/pricing/PricingMarketingSections";
+import { getCurrentLanguage } from "@/lib/i18n";
 
 // ─── Shared structural components ───────────────────────────────────────────
 function FeatureItem({
@@ -87,6 +87,11 @@ export function Pricing() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const { t, i18n } = useTranslation();
   const p = "pricingPage";
+  const marketingLocale = normalizeMarketingLocale(i18n.language || getCurrentLanguage());
+  const pricingContent = useMemo(
+    () => getLocalizedPricingPage(marketingLocale),
+    [marketingLocale],
+  );
 
   const isRTL =
     (supportedLanguages[i18n.language as keyof typeof supportedLanguages]?.dir ??
@@ -165,14 +170,30 @@ export function Pricing() {
   const planButtonsDisabled = !!user && subscriptionLoading;
 
   const compareRows = useMemo(
-    () => buildPricingCompareRows({ includeGrowthEngines: !isShopify }),
-    [isShopify],
+    () =>
+      buildLocalizedPricingCompareRows(
+        { includeGrowthEngines: !isShopify },
+        marketingLocale,
+      ),
+    [isShopify, marketingLocale],
   );
 
-  const freeHighlights = useMemo(() => getPlanPricingHighlights("free"), []);
-  const starterHighlights = useMemo(() => getPlanPricingHighlights("starter"), []);
-  const proHighlights = useMemo(() => getPlanPricingHighlights("pro"), []);
-  const aiBrainHighlights = useMemo(() => getAiBrainAddonHighlights(), []);
+  const freeHighlights = useMemo(
+    () => getLocalizedPlanPricingHighlights("free", marketingLocale),
+    [marketingLocale],
+  );
+  const starterHighlights = useMemo(
+    () => getLocalizedPlanPricingHighlights("starter", marketingLocale),
+    [marketingLocale],
+  );
+  const proHighlights = useMemo(
+    () => getLocalizedPlanPricingHighlights("pro", marketingLocale),
+    [marketingLocale],
+  );
+  const aiBrainHighlights = useMemo(
+    () => getLocalizedAiBrainAddonHighlights(marketingLocale),
+    [marketingLocale],
+  );
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -288,7 +309,8 @@ export function Pricing() {
     trackPricingEvent("pricing_plan_cta_click", { plan: planId });
     if (!user) {
       const hint = getShopifyShopHint();
-      const pricingPath = hint ? `/pricing?shop=${encodeURIComponent(hint)}` : "/pricing";
+      const pricingBase = localizePath("/pricing", marketingLocale) || "/pricing";
+      const pricingPath = hint ? `${pricingBase}?shop=${encodeURIComponent(hint)}` : pricingBase;
       setLocation(`/auth?redirect=${encodeURIComponent(pricingPath)}`);
       return;
     }
@@ -306,7 +328,8 @@ export function Pricing() {
   const handleAIBrainAddonCheckout = async () => {
     trackPricingEvent("ai_brain_addon_click");
     if (!user) {
-      setLocation("/auth?redirect=/pricing");
+      const pricingBase = localizePath("/pricing", marketingLocale) || "/pricing";
+      setLocation(`/auth?redirect=${encodeURIComponent(pricingBase)}`);
       return;
     }
     setAiBrainAddonLoading(true);
@@ -356,28 +379,29 @@ export function Pricing() {
     // double-application issues with overflow-x-auto scroll direction.
     <div
       dir={isRTL ? "rtl" : "ltr"}
-      className={`min-h-screen bg-gray-50 ${isRTL ? "text-right" : "text-left"}`}
+      className={`min-h-screen bg-gray-50 overflow-x-hidden ${isRTL ? "text-right" : "text-left"}`}
     >
       <Helmet>
-        <title>WhachatCRM Pricing | Prospect AI, Unified Inbox &amp; WhatsApp CRM</title>
-        <meta
-          name="description"
-          content="WhachatCRM Pricing: Prospect AI, Unified Inbox, WhatsApp CRM, AI Chatbot, and sales automation. Find, engage, and convert more customers. Free plan includes 50 Prospect AI discoveries/month."
+        <html lang={marketingLocale} dir={isRTL ? "rtl" : "ltr"} />
+        <title>{pricingContent.seo.title}</title>
+        <meta name="description" content={pricingContent.seo.description} />
+        <link
+          rel="canonical"
+          href={getCanonicalUrl("/pricing", marketingLocale, MARKETING_URL) || `${MARKETING_URL}/pricing`}
         />
-        <link rel="canonical" href={`${MARKETING_URL}/pricing`} />
-        <meta property="og:title" content="WhachatCRM Pricing | Prospect AI, Unified Inbox & WhatsApp CRM" />
+        {getHreflangLinks("/pricing", MARKETING_URL).map((alt) => (
+          <link key={alt.hreflang} rel="alternate" hrefLang={alt.hreflang} href={alt.href} />
+        ))}
+        <meta property="og:title" content={pricingContent.seo.ogTitle} />
+        <meta property="og:description" content={pricingContent.seo.ogDescription} />
         <meta
-          property="og:description"
-          content="Multi-channel inbox, Prospect AI, AI Chatbot, and Workflow Automation in one platform. Start free."
+          property="og:url"
+          content={getCanonicalUrl("/pricing", marketingLocale, MARKETING_URL) || `${MARKETING_URL}/pricing`}
         />
-        <meta property="og:url" content={`${MARKETING_URL}/pricing`} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="WhachatCRM Pricing | Unified Inbox & Prospect AI" />
-        <meta
-          name="twitter:description"
-          content="Prospect AI, multi-channel inbox, AI Chatbot, and sales automation—clear plans from Free to Pro."
-        />
+        <meta name="twitter:title" content={pricingContent.seo.twitterTitle} />
+        <meta name="twitter:description" content={pricingContent.seo.twitterDescription} />
       </Helmet>
 
       <div className="max-w-6xl 2xl:max-w-7xl mx-auto px-4 py-10">
@@ -432,21 +456,20 @@ export function Pricing() {
         ) : (
         <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-3 mb-4 text-sm text-emerald-800" data-testid="banner-free-trial">
           <span className="text-emerald-500 mt-0.5 shrink-0">✓</span>
-          <span dir="ltr">{FULL_PRO_AI_TRIAL_COPY}</span>
+          <span>{pricingContent.trialBanner}</span>
         </div>
         )}
 
         {/* ─────────────── SECTION 1: HERO ─────────────── */}
-        <div className="mb-4 text-center" dir="ltr">
+        <div className="mb-4 text-center">
           <h1
             className="mb-2 font-display text-3xl font-bold text-gray-900 sm:text-4xl"
             data-testid="text-pricing-hero-title"
           >
-            Everything you need to find, engage, and convert more customers
+            {pricingContent.hero.h1}
           </h1>
           <p className="mx-auto max-w-2xl text-base text-gray-600 sm:text-lg">
-            Prospect AI, Unified Inbox, Chatbot, Workflow Automation and AI Copilot—all in one
-            platform.
+            {pricingContent.hero.subtitle}
           </p>
           <PricingHeroChips />
         </div>
@@ -480,8 +503,9 @@ export function Pricing() {
                   </span>
                   <div
                     className={`flex items-baseline gap-1 mt-1 mb-1 ${
-                      isRTL ? "flex-row-reverse justify-end" : ""
+                      isRTL ? "justify-start" : ""
                     }`}
+                    dir="ltr"
                   >
                     <span className="text-3xl font-bold text-gray-900">
                       {t(`${p}.plans.free.price`)}
@@ -501,7 +525,7 @@ export function Pricing() {
                 </ul>
                 <div className="mt-auto pt-4 space-y-3">
                   <p className="text-xs text-gray-400">
-                    Upgrade when you need chatbot, automations, and more capacity.
+                    {pricingContent.freeUpsell}
                   </p>
                   {isActiveProAiTrial ? (
                     <p
@@ -548,8 +572,9 @@ export function Pricing() {
                   </span>
                   <div
                     className={`flex items-baseline gap-1 mt-1 mb-1 ${
-                      isRTL ? "flex-row-reverse justify-end" : ""
+                      isRTL ? "justify-start" : ""
                     }`}
+                    dir="ltr"
                   >
                     <span className="text-3xl font-bold text-gray-900">
                       {t(`${p}.plans.starter.price`)}
@@ -574,18 +599,18 @@ export function Pricing() {
                   >
                     <p className="flex items-start gap-1.5 text-xs font-semibold text-blue-950">
                       <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-600" />
-                      <span>AI Chatbot & Website Widget</span>
+                      <span>{pricingContent.starterCallout.title}</span>
                     </p>
                     <p className="mt-0.5 pl-5 text-[11px] leading-snug text-blue-900/75">
-                      Capture, qualify and respond to website visitors automatically.
+                      {pricingContent.starterCallout.body}
                     </p>
                   </div>
                   <p className="text-xs font-medium text-emerald-700 flex items-start gap-1" data-testid="text-trial-starter">
                     <span className="shrink-0">✓</span>{" "}
-                    <span dir="ltr">
+                    <span>
                       {isActiveProAiTrial
                         ? t(`${p}.trialState.chooseStarterAfterTrial`)
-                        : FULL_PRO_AI_TRIAL_COPY}
+                        : pricingContent.trialBanner}
                     </span>
                   </p>
                   <Button
@@ -627,7 +652,7 @@ export function Pricing() {
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-green text-white text-xs font-bold tracking-wide px-3.5 py-1 rounded-full whitespace-nowrap shadow-sm">
                   {isActiveProAiTrial
                     ? t(`${p}.trialState.proTrialPlanBadge`)
-                    : "Most Popular"}
+                    : pricingContent.proBadge}
                 </div>
                 <div className="mb-4 mt-2">
                   <span className="text-xs font-semibold text-brand-green uppercase tracking-wider">
@@ -635,8 +660,9 @@ export function Pricing() {
                   </span>
                   <div
                     className={`flex items-baseline gap-1 mt-1 mb-1 ${
-                      isRTL ? "flex-row-reverse justify-end" : ""
+                      isRTL ? "justify-start" : ""
                     }`}
+                    dir="ltr"
                   >
                     <span className="text-3xl font-bold text-gray-900">
                       {t(`${p}.plans.pro.price`)}
@@ -666,17 +692,16 @@ export function Pricing() {
                   >
                     <p className="flex items-start gap-1.5 text-xs font-semibold text-emerald-950">
                       <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-green" />
-                      <span>Growth Engine Ready</span>
+                      <span>{pricingContent.proCallout.title}</span>
                     </p>
                     <p className="mt-0.5 pl-5 text-[11px] leading-snug text-emerald-900/80">
-                      Activate compatible industry Growth Engines such as Realtor Growth Engine.
-                      Growth Engines may require a separate purchase.
+                      {pricingContent.proCallout.body}
                     </p>
                   </div>
                   {!isActiveProAiTrial ? (
                     <p className="text-xs font-medium text-emerald-700 flex items-start gap-1" data-testid="text-trial-pro">
                       <span className="shrink-0">✓</span>
-                      <span dir="ltr">{FULL_PRO_AI_TRIAL_COPY}</span>
+                      <span>{pricingContent.trialBanner}</span>
                     </p>
                   ) : null}
                   <Button
@@ -711,13 +736,13 @@ export function Pricing() {
         <section className="mb-8" data-testid="section-optional-addon">
           <div className="mb-3 text-center">
             <p className="text-xs font-semibold uppercase tracking-wide text-purple-700">
-              Optional Add-on
+              {pricingContent.aiBrain.badge}
             </p>
             <h2 className="mt-1 font-display text-xl font-bold text-gray-900 sm:text-2xl">
-              AI Brain
+              {pricingContent.aiBrain.title}
             </h2>
             <p className="mx-auto mt-1 max-w-xl text-sm text-gray-600">
-              Enhances WhachatCRM with your business knowledge—not a separate subscription plan.
+              {pricingContent.aiBrain.intro}
             </p>
           </div>
           <div
@@ -731,8 +756,9 @@ export function Pricing() {
                 </span>
                 <div
                   className={`flex items-baseline gap-1 mt-1 mb-1 ${
-                    isRTL ? "flex-row-reverse justify-end" : ""
+                    isRTL ? "justify-start" : ""
                   }`}
+                  dir="ltr"
                 >
                   <span className="text-3xl font-bold text-gray-900">
                     {t(`${p}.plans.aiBrain.price`)}
@@ -742,7 +768,7 @@ export function Pricing() {
                   </span>
                 </div>
                 <p className="text-sm text-gray-600">
-                  Add AI Brain to Starter or Pro — enhances the platform, not a standalone plan.
+                  {pricingContent.aiBrain.cardDesc}
                 </p>
                 <p className="text-xs font-medium text-purple-700 mt-3 mb-1 flex items-center gap-1" dir={isRTL ? "rtl" : "ltr"}>
                   <Shield className="w-3 h-3 shrink-0" />
@@ -841,20 +867,14 @@ export function Pricing() {
         {/* ─────────────── COMPARISON TABLE ─────────────── */}
         <div className="mb-12" data-testid="section-comparison-table">
           <h2 className="mb-6 text-center font-display text-2xl font-bold text-gray-900">
-            Compare plans
+            {pricingContent.compareTitle}
           </h2>
-          <div
-            className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm"
-            dir={isRTL ? "rtl" : "ltr"}
-          >
-            <table className="w-full min-w-[640px] text-sm" dir={isRTL ? "rtl" : "ltr"}>
+          <div className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th
-                    dir={isRTL ? "rtl" : "ltr"}
-                    className="w-[40%] px-5 py-4 text-start font-semibold text-gray-700"
-                  >
-                    Feature
+                  <th className="w-[40%] px-5 py-4 text-start font-semibold text-gray-700">
+                    {pricingContent.featureColumnHeader}
                   </th>
                   <th className="px-3 py-4 text-center font-semibold text-gray-700">Free</th>
                   <th className="px-3 py-4 text-center font-semibold text-blue-700">Starter</th>
@@ -873,21 +893,20 @@ export function Pricing() {
                             colSpan={4}
                             className="px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500"
                           >
-                            {COMPARE_GROUP_LABELS[row.group] || row.group}
+                            {pricingContent.compareGroups[row.group] || row.group}
                           </td>
                         </tr>
                       ) : null}
                       <tr className={idx % 2 === 0 ? "bg-gray-50/40" : ""}>
                         <td
-                          dir={isRTL ? "rtl" : "ltr"}
                           className="px-5 py-3 text-start font-medium text-gray-800"
-                          title={COMPARE_FEATURE_HINTS[row.featureKey]}
+                          title={pricingContent.compareHints[row.featureKey]}
                         >
                           <span className="inline-flex flex-col gap-0.5">
-                            <span>{COMPARE_FEATURE_LABELS[row.featureKey] || row.featureKey}</span>
-                            {COMPARE_FEATURE_HINTS[row.featureKey] ? (
+                            <span>{pricingContent.compareLabels[row.featureKey] || row.featureKey}</span>
+                            {pricingContent.compareHints[row.featureKey] ? (
                               <span className="text-[10px] font-normal leading-snug text-gray-500">
-                                {COMPARE_FEATURE_HINTS[row.featureKey]}
+                                {pricingContent.compareHints[row.featureKey]}
                               </span>
                             ) : null}
                           </span>

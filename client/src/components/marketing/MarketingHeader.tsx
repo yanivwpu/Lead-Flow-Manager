@@ -6,8 +6,10 @@ import { type MarketingNavDropdown } from "@shared/marketingNav";
 import {
   getLocalizedMarketingNav,
   getMarketingChrome,
+  getLocalizedHomepage,
   normalizeMarketingLocale,
 } from "@shared/localizeMarketingContent";
+import { localizedInternalHref } from "@shared/localeRoutes";
 import { getCurrentLanguage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -29,9 +31,11 @@ type MarketingHeaderProps = {
 function DropdownPanel({
   dropdown,
   onNavigate,
+  localeHref,
 }: {
   dropdown: MarketingNavDropdown;
   onNavigate: () => void;
+  localeHref: (href: string) => string;
 }) {
   return (
     <div
@@ -54,7 +58,7 @@ function DropdownPanel({
               {group.items.map((item) => (
                 <li key={`${group.title}-${item.label}`}>
                   <Link
-                    href={item.href}
+                    href={localeHref(item.href)}
                     role="menuitem"
                     onClick={onNavigate}
                     className="block rounded-xl px-2 py-2 hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40"
@@ -79,11 +83,13 @@ function DesktopNav({
   openId,
   setOpenId,
   onNavigate,
+  localeHref,
 }: {
   navDropdowns: MarketingNavDropdown[];
   openId: string | null;
   setOpenId: (id: string | null) => void;
   onNavigate: () => void;
+  localeHref: (href: string) => string;
 }) {
   return (
     <div className="hidden lg:flex items-center gap-1">
@@ -114,7 +120,7 @@ function DesktopNav({
             </button>
             {isOpen ? (
               <div id={panelId}>
-                <DropdownPanel dropdown={dropdown} onNavigate={onNavigate} />
+                <DropdownPanel dropdown={dropdown} onNavigate={onNavigate} localeHref={localeHref} />
               </div>
             ) : null}
           </div>
@@ -128,10 +134,12 @@ function MobileAccordion({
   navDropdowns,
   pricingLabel,
   onNavigate,
+  localeHref,
 }: {
   navDropdowns: MarketingNavDropdown[];
   pricingLabel: string;
   onNavigate: () => void;
+  localeHref: (href: string) => string;
 }) {
   const [openSection, setOpenSection] = useState<string | null>(null);
 
@@ -166,7 +174,7 @@ function MobileAccordion({
                       {group.items.map((item) => (
                         <li key={`${group.title}-${item.label}`}>
                           <Link
-                            href={item.href}
+                            href={localeHref(item.href)}
                             onClick={onNavigate}
                             className="block rounded-lg px-2 py-2 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40"
                           >
@@ -185,7 +193,7 @@ function MobileAccordion({
       })}
       <div className="px-3 pt-2">
         <Link
-          href="/pricing"
+          href={localeHref("/pricing")}
           onClick={onNavigate}
           className="block rounded-lg px-2 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
         >
@@ -207,7 +215,13 @@ export function MarketingHeader({
   const { i18n } = useTranslation();
   const locale = normalizeMarketingLocale(i18n.language || getCurrentLanguage());
   const chrome = getMarketingChrome(locale);
+  const a11y = getLocalizedHomepage(locale).chromeA11y;
   const navDropdowns = getLocalizedMarketingNav(locale);
+  const localeHref = useCallback(
+    (href: string) => localizedInternalHref(href, locale),
+    [locale],
+  );
+  const homeHref = localeHref("/");
 
   const loginLabel = loginLabelProp ?? chrome.logIn;
   const startTrialLabel = startTrialLabelProp ?? chrome.startFreeTrial;
@@ -264,9 +278,9 @@ export function MarketingHeader({
     >
       <div className="mx-auto grid min-h-[56px] max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-2 box-border md:px-6 md:py-3 xl:max-w-[1440px] 2xl:max-w-[1536px]">
         <Link
-          href="/"
+          href={homeHref}
           className="flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40"
-          aria-label="WhachatCRM home"
+          aria-label={a11y.homeAria}
           onClick={closeAll}
         >
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-green">
@@ -275,18 +289,19 @@ export function MarketingHeader({
           <span className="font-display text-xl font-bold text-gray-900">WhachatCRM</span>
         </Link>
 
-        <nav className="hidden justify-self-center lg:block" aria-label="Primary">
+        <nav className="hidden justify-self-center lg:block" aria-label={a11y.primaryNav}>
           <DesktopNav
             navDropdowns={navDropdowns}
             openId={openId}
             setOpenId={setOpenId}
             onNavigate={closeAll}
+            localeHref={localeHref}
           />
         </nav>
 
         <div className="flex items-center gap-1.5 justify-self-end sm:gap-2 md:gap-3">
           <Link
-            href="/pricing"
+            href={localeHref("/pricing")}
             className="hidden h-9 items-center px-2 text-sm font-medium text-gray-600 hover:text-gray-900 sm:inline-flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40 rounded-md"
             onClick={closeAll}
           >
@@ -295,7 +310,11 @@ export function MarketingHeader({
 
           <div className="hidden sm:block">
             <Suspense fallback={<div className="h-9 w-9 shrink-0 rounded-md bg-gray-100/90" aria-hidden />}>
-              <LanguageSelector variant="compact" className="text-gray-600 hover:text-gray-900 hover:bg-gray-100" />
+              <LanguageSelector
+                variant="compact"
+                className="text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                navigateOnChange
+              />
             </Suspense>
           </div>
 
@@ -333,7 +352,7 @@ export function MarketingHeader({
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-gray-700 hover:bg-gray-100 lg:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40"
             aria-expanded={mobileOpen}
             aria-controls={mobilePanelId}
-            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-label={mobileOpen ? a11y.closeMenu : a11y.openMenu}
             onClick={() => {
               setOpenId(null);
               setMobileOpen((v) => !v);
@@ -353,6 +372,7 @@ export function MarketingHeader({
             navDropdowns={navDropdowns}
             pricingLabel={pricingLabel}
             onNavigate={closeAll}
+            localeHref={localeHref}
           />
           {!isLoggedIn ? (
             <div className="mt-3 flex flex-col gap-2 border-t border-gray-100 pt-3 sm:hidden">
@@ -374,25 +394,25 @@ export function MarketingHeader({
           ) : null}
           <div className="mt-3 border-t border-gray-100 pt-3 sm:hidden">
             <Suspense fallback={null}>
-              <LanguageSelector variant="compact" className="text-gray-600" />
+              <LanguageSelector variant="compact" className="text-gray-600" navigateOnChange />
             </Suspense>
           </div>
         </div>
       ) : null}
 
-      <nav className="sr-only" aria-label="Site">
+      <nav className="sr-only" aria-label={a11y.siteNav}>
         <ul>
           {navDropdowns.flatMap((d) =>
             d.groups.flatMap((g) =>
               g.items.map((item) => (
                 <li key={`crawl-${d.id}-${item.label}`}>
-                  <a href={item.href}>{item.label}</a>
+                  <a href={localeHref(item.href)}>{item.label}</a>
                 </li>
               )),
             ),
           )}
           <li>
-            <a href="/pricing">{pricingLabel}</a>
+            <a href={localeHref("/pricing")}>{pricingLabel}</a>
           </li>
           <li>
             <a href="/auth">{startTrialLabel}</a>

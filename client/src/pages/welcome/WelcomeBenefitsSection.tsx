@@ -1,13 +1,17 @@
 import { useTranslation } from "react-i18next";
 import { MessageSquare, Bell, Tag, Phone, Zap, Brain } from "lucide-react";
+import { getLocalizedHomepage } from "@shared/localizeMarketingContent";
+import { useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
 
 export default function WelcomeBenefitsSection() {
   const { t } = useTranslation();
+  const locale = useMarketingUrlLocale();
+  const eyebrow = getLocalizedHomepage(locale).eyebrows.businessOutcomes;
   return (
     <section className="px-4 md:px-6 py-16 md:py-20 bg-gray-50">
       <div className="max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
         <div className="mx-auto mb-12 max-w-3xl text-center md:mb-16">
-          <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-brand-green">Business outcomes</p>
+          <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-brand-green">{eyebrow}</p>
           <h2 className="text-3xl md:text-5xl font-display font-bold tracking-tight text-gray-950 mb-4">
             {t("home.features.title")}
           </h2>

@@ -145,14 +145,13 @@ assert.ok(
   "whachatcrm_language must be read before i18nextLng fallback",
 );
 
-// Sitemap unchanged (English paths only — no /es/ or /he/)
+// Phase 1 preserved English URLs; Phase 2 adds /es/ and /he/ (asserted in phase2-locale-seo.test.ts).
 const sitemap = fs.readFileSync(
   path.join(path.dirname(fileURLToPath(import.meta.url)), "../client/public/sitemap.xml"),
   "utf8",
 );
-assert.doesNotMatch(sitemap, /\/es\//);
-assert.doesNotMatch(sitemap, /\/he\//);
-assert.doesNotMatch(sitemap, /hreflang/);
+assert.match(sitemap, /https:\/\/www\.whachatcrm\.com\/ai-brain/);
+assert.match(sitemap, /https:\/\/www\.whachatcrm\.com\/pricing/);
 
 console.log(
   `PASS phase1-marketing-i18n.test.ts (${ALL_PRODUCT_PAGES.length} products, ${ALL_SOLUTION_PAGES.length} solutions × es/he)`,

@@ -1,18 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Update <lastmod> when a page's content changes materially (YYYY-MM-DD). -->
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <!-- Core Pages -->
   <url>
     <loc>https://www.whachatcrm.com/</loc>
     <lastmod>2026-06-21</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/"/>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/pricing</loc>
     <lastmod>2026-07-02</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/pricing"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/pricing"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/pricing"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/pricing"/>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/contact</loc>
@@ -51,72 +59,120 @@
     <lastmod>2026-08-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/real-estate-crm"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/real-estate-crm"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/real-estate-crm"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/real-estate-crm"/>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/solutions/ecommerce</loc>
     <lastmod>2026-08-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/solutions/ecommerce"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/solutions/ecommerce"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/solutions/ecommerce"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/solutions/ecommerce"/>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/solutions/local-service-businesses</loc>
     <lastmod>2026-08-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/solutions/local-service-businesses"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/solutions/local-service-businesses"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/solutions/local-service-businesses"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/solutions/local-service-businesses"/>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/solutions/marketing-agencies</loc>
     <lastmod>2026-08-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/solutions/marketing-agencies"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/solutions/marketing-agencies"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/solutions/marketing-agencies"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/solutions/marketing-agencies"/>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/solutions/med-spas</loc>
     <lastmod>2026-08-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/solutions/med-spas"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/solutions/med-spas"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/solutions/med-spas"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/solutions/med-spas"/>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/unified-inbox</loc>
     <lastmod>2026-08-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/unified-inbox"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/unified-inbox"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/unified-inbox"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/unified-inbox"/>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/ai-brain</loc>
     <lastmod>2026-08-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/ai-brain"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/ai-brain"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/ai-brain"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/ai-brain"/>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/ai-copilot</loc>
     <lastmod>2026-08-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/ai-copilot"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/ai-copilot"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/ai-copilot"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/ai-copilot"/>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/automations</loc>
     <lastmod>2026-08-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/automations"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/automations"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/automations"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/automations"/>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/chatbot-builder</loc>
     <lastmod>2026-08-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/chatbot-builder"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/chatbot-builder"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/chatbot-builder"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/chatbot-builder"/>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/campaigns</loc>
     <lastmod>2026-08-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/campaigns"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/campaigns"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/campaigns"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/campaigns"/>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/integrations</loc>
     <lastmod>2026-08-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/integrations"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/integrations"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/integrations"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/integrations"/>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/shopify-crm</loc>
@@ -141,6 +197,10 @@
     <lastmod>2026-08-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/shared-team-inbox"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/shared-team-inbox"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/shared-team-inbox"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/shared-team-inbox"/>
   </url>
   <url>
     <loc>https://www.whachatcrm.com/automation-templates</loc>
@@ -211,6 +271,10 @@
     <lastmod>2026-07-02</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/realtor-growth-engine"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/realtor-growth-engine"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/realtor-growth-engine"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/realtor-growth-engine"/>
   </url>
 
   <!-- Prospect AI -->
@@ -219,6 +283,10 @@
     <lastmod>2026-08-06</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/prospect-ai"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/prospect-ai"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/prospect-ai"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/prospect-ai"/>
   </url>
 
   <!-- Help & Guide -->
@@ -325,4 +393,344 @@
     <priority>0.6</priority>
   </url>
 
+  <url>
+    <loc>https://www.whachatcrm.com/es/</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/es/pricing</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/pricing"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/pricing"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/pricing"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/pricing"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/pricing</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/pricing"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/pricing"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/pricing"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/pricing"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/es/prospect-ai</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/prospect-ai"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/prospect-ai"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/prospect-ai"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/prospect-ai"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/prospect-ai</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/prospect-ai"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/prospect-ai"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/prospect-ai"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/prospect-ai"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/es/ai-brain</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/ai-brain"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/ai-brain"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/ai-brain"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/ai-brain"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/ai-brain</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/ai-brain"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/ai-brain"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/ai-brain"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/ai-brain"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/es/ai-copilot</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/ai-copilot"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/ai-copilot"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/ai-copilot"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/ai-copilot"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/ai-copilot</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/ai-copilot"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/ai-copilot"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/ai-copilot"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/ai-copilot"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/es/unified-inbox</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/unified-inbox"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/unified-inbox"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/unified-inbox"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/unified-inbox"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/unified-inbox</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/unified-inbox"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/unified-inbox"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/unified-inbox"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/unified-inbox"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/es/automations</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/automations"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/automations"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/automations"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/automations"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/automations</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/automations"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/automations"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/automations"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/automations"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/es/chatbot-builder</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/chatbot-builder"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/chatbot-builder"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/chatbot-builder"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/chatbot-builder"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/chatbot-builder</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/chatbot-builder"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/chatbot-builder"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/chatbot-builder"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/chatbot-builder"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/es/campaigns</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/campaigns"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/campaigns"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/campaigns"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/campaigns"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/campaigns</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/campaigns"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/campaigns"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/campaigns"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/campaigns"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/es/realtor-growth-engine</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/realtor-growth-engine"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/realtor-growth-engine"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/realtor-growth-engine"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/realtor-growth-engine"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/realtor-growth-engine</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/realtor-growth-engine"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/realtor-growth-engine"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/realtor-growth-engine"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/realtor-growth-engine"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/es/integrations</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/integrations"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/integrations"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/integrations"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/integrations"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/integrations</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/integrations"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/integrations"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/integrations"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/integrations"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/es/shared-team-inbox</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/shared-team-inbox"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/shared-team-inbox"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/shared-team-inbox"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/shared-team-inbox"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/shared-team-inbox</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/shared-team-inbox"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/shared-team-inbox"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/shared-team-inbox"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/shared-team-inbox"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/es/real-estate-crm</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/real-estate-crm"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/real-estate-crm"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/real-estate-crm"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/real-estate-crm"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/real-estate-crm</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/real-estate-crm"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/real-estate-crm"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/real-estate-crm"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/real-estate-crm"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/es/solutions/ecommerce</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/solutions/ecommerce"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/solutions/ecommerce"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/solutions/ecommerce"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/solutions/ecommerce"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/solutions/ecommerce</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/solutions/ecommerce"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/solutions/ecommerce"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/solutions/ecommerce"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/solutions/ecommerce"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/es/solutions/local-service-businesses</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/solutions/local-service-businesses"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/solutions/local-service-businesses"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/solutions/local-service-businesses"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/solutions/local-service-businesses"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/solutions/local-service-businesses</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/solutions/local-service-businesses"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/solutions/local-service-businesses"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/solutions/local-service-businesses"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/solutions/local-service-businesses"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/es/solutions/marketing-agencies</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/solutions/marketing-agencies"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/solutions/marketing-agencies"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/solutions/marketing-agencies"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/solutions/marketing-agencies"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/solutions/marketing-agencies</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/solutions/marketing-agencies"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/solutions/marketing-agencies"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/solutions/marketing-agencies"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/solutions/marketing-agencies"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/es/solutions/med-spas</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/solutions/med-spas"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/solutions/med-spas"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/solutions/med-spas"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/solutions/med-spas"/>
+  </url>
+  <url>
+    <loc>https://www.whachatcrm.com/he/solutions/med-spas</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.whachatcrm.com/solutions/med-spas"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.whachatcrm.com/es/solutions/med-spas"/>
+    <xhtml:link rel="alternate" hreflang="he" href="https://www.whachatcrm.com/he/solutions/med-spas"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.whachatcrm.com/solutions/med-spas"/>
+  </url>
 </urlset>

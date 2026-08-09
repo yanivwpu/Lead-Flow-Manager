@@ -96,7 +96,7 @@
                 );
               } catch (e) {}
             }
-          } else if (p !== "/") {
+          } else if (p !== "/" && p !== "/es" && p !== "/he") {
             document.documentElement.classList.add("wcs-hide-static-marketing");
           }
 
@@ -341,12 +341,21 @@
       }
     </script>
 
-    <!-- Persist RTL direction on initial load (before React hydrates) -->
+    <!-- Persist language/direction on initial load (before React hydrates).
+         URL locale prefix wins over localStorage for Phase 2 marketing pages. -->
     <script>
       (function() {
-        var storedLang = localStorage.getItem('whachatcrm_language')
+        var path = window.location.pathname || '/';
+        var urlLang = null;
+        if (path === '/es' || path === '/es/' || path.indexOf('/es/') === 0) urlLang = 'es';
+        else if (path === '/he' || path === '/he/' || path.indexOf('/he/') === 0) urlLang = 'he';
+        var storedLang = urlLang
+          || localStorage.getItem('whachatcrm_language')
           || localStorage.getItem('i18nextLng')
           || 'en';
+        if (urlLang) {
+          try { localStorage.setItem('whachatcrm_language', urlLang); } catch (e) {}
+        }
         var rtlLanguages = ['he', 'ar', 'fa', 'ur'];
         var isRtl = rtlLanguages.includes(storedLang);
         document.documentElement.lang = storedLang;

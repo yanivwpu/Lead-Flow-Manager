@@ -5,9 +5,29 @@ import {
   resolveBlogOgImage,
   type BlogPostMeta,
 } from "@shared/blogPosts";
-import { getAllMarketingNavLinks, MARKETING_NAV_DROPDOWNS } from "@shared/marketingNav";
 import { ALL_SOLUTION_PAGES } from "@shared/solutionPages";
 import { ALL_PRODUCT_PAGES } from "@shared/productPages";
+import {
+  getCanonicalUrl,
+  getHreflangLinks,
+  hasLocalizedVersion,
+  localizePath,
+  localizedInternalHref,
+  marketingDirForLocale,
+  parseLocalizedPath,
+  PHASE2_LOCALIZED_PATHS,
+} from "@shared/localeRoutes";
+import type { MarketingLocale } from "@shared/marketingLocale";
+import {
+  getLocalizedPricingPage,
+  getLocalizedProductPage,
+  getLocalizedSolutionPage,
+  getLocalizedMarketingNav,
+  getLocalizedHomepage,
+} from "@shared/localizeMarketingContent";
+import { getLocalizedPageMeta } from "@shared/marketingPageMetaLocales";
+import { PROSPECT_AI_LANDING_LOCALES } from "@shared/prospectAiLandingLocales";
+import { RGE_LANDING_LOCALES } from "@shared/realtorGrowthEngineLandingLocales";
 
 const BASE_URL = (process.env.MARKETING_URL || "https://www.whachatcrm.com").replace(/\/+$/, "");
 
@@ -15,6 +35,13 @@ function escapeHtmlAttr(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function escapeHtmlText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 }
@@ -170,8 +197,8 @@ interface PageMeta {
 
 export const PAGE_META: Record<string, PageMeta> = {
   "/pricing": {
-    title: "Pricing – Free Forever | WhachatCRM",
-    description: "Simple, transparent pricing for WhatsApp CRM. Free plan forever, Starter at $19/mo, Pro at $49/mo. No hidden fees, no message markup. Start free today.",
+    title: "WhachatCRM Pricing | Prospect AI, Unified Inbox & WhatsApp CRM",
+    description: "WhachatCRM Pricing: Prospect AI, Unified Inbox, WhatsApp CRM, AI Chatbot, and sales automation. Find, engage, and convert more customers. Free plan includes 50 Prospect AI discoveries/month.",
     canonical: `${BASE_URL}/pricing`
   },
   "/whatsapp-crm": {
@@ -401,14 +428,31 @@ export const PAGE_META: Record<string, PageMeta> = {
 };
 
 export function injectPageMeta(html: string, url: string): string {
-  const pageMeta = PAGE_META[url];
-  if (!pageMeta) {
+  const parsed = parseLocalizedPath(url);
+  const englishPath = parsed.isLocalePrefixed ? parsed.englishPath : url;
+  const locale: MarketingLocale =
+    parsed.isLocalePrefixed && parsed.isSupported ? parsed.locale : "en";
+
+  const englishMeta = PAGE_META[englishPath];
+  const localizedMeta =
+    locale !== "en" ? getLocalizedPageMeta(englishPath, locale) : null;
+
+  if (!englishMeta && !localizedMeta && englishPath !== "/") {
     return html;
   }
 
-  const safeTitle = escapeHtmlAttr(pageMeta.title);
-  const safeDescription = escapeHtmlAttr(pageMeta.description);
-  const ogImage = pageMeta.ogImage || `${BASE_URL}/og/og-whachatcrm.png?v=5`;
+  const title = localizedMeta?.title || englishMeta?.title || "";
+  const description = localizedMeta?.description || englishMeta?.description || "";
+  if (!title || !description) return html;
+
+  const canonical =
+    getCanonicalUrl(englishPath, locale, BASE_URL) ||
+    englishMeta?.canonical ||
+    `${BASE_URL}${englishPath}`;
+  const ogImage = englishMeta?.ogImage || `${BASE_URL}/og/og-whachatcrm.png?v=5`;
+
+  const safeTitle = escapeHtmlAttr(title);
+  const safeDescription = escapeHtmlAttr(description);
 
   // Remove existing meta tags to prevent duplicates
   html = html.replace(/<meta property="og:title"[^>]*>/gi, '');
@@ -424,6 +468,17 @@ export function injectPageMeta(html: string, url: string): string {
   html = html.replace(/<meta name="twitter:image"[^>]*>/gi, '');
   html = html.replace(/<meta name="description"[^>]*>/gi, '');
   html = html.replace(/<link rel="canonical"[^>]*>/gi, '');
+  html = html.replace(/<link rel="alternate"[^>]*hreflang[^>]*>/gi, '');
+
+  const hreflang =
+    hasLocalizedVersion(englishPath)
+      ? getHreflangLinks(englishPath, BASE_URL)
+          .map(
+            (l) =>
+              `<link rel="alternate" hreflang="${l.hreflang}" href="${l.href}" />`,
+          )
+          .join("\n    ")
+      : "";
 
   const metaTags = `
     <title>${safeTitle}</title>
@@ -431,7 +486,7 @@ export function injectPageMeta(html: string, url: string): string {
     <meta property="og:title" content="${safeTitle}" />
     <meta property="og:description" content="${safeDescription}" />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="${pageMeta.canonical}" />
+    <meta property="og:url" content="${canonical}" />
     <meta property="og:image" content="${ogImage}" />
     <meta property="og:image:secure_url" content="${ogImage}" />
     <meta property="og:image:alt" content="${safeTitle}" />
@@ -442,24 +497,49 @@ export function injectPageMeta(html: string, url: string): string {
     <meta name="twitter:description" content="${safeDescription}" />
     <meta name="twitter:image" content="${ogImage}" />
     <meta name="twitter:image:alt" content="${safeTitle}" />
-    <link rel="canonical" href="${pageMeta.canonical}" />
+    <link rel="canonical" href="${canonical}" />
+    ${hreflang}
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "WebPage",
-      "name": ${jsonLd(pageMeta.title)},
-      "description": ${jsonLd(pageMeta.description)},
-      "url": ${jsonLd(pageMeta.canonical)},
+      "name": ${jsonLd(title)},
+      "description": ${jsonLd(description)},
+      "url": ${jsonLd(canonical)},
       "isPartOf": { "@id": "${BASE_URL}/#website" }
     }
     </script>`;
 
   html = html.replace(/<title>.*?<\/title>/, metaTags);
+  html = applyHtmlLangDir(html, locale);
   return html;
+}
+
+/** Set <html lang dir> for the initial SSR response. */
+export function applyHtmlLangDir(html: string, locale: MarketingLocale): string {
+  const dir = marketingDirForLocale(locale);
+  return html.replace(
+    /<html\b[^>]*>/i,
+    `<html lang="${locale}" dir="${dir}">`,
+  );
 }
 
 export function getMarketingRoutes(): string[] {
   return Object.keys(PAGE_META);
+}
+
+/** Phase 2 localized public pathnames that must receive SSR (excluding bare /es /he redirects). */
+export function getLocalizedMarketingRoutes(): string[] {
+  const out: string[] = [];
+  for (const path of PHASE2_LOCALIZED_PATHS) {
+    if (path === "/") {
+      out.push("/es/", "/he/");
+      continue;
+    }
+    out.push(localizePath(path, "es")!);
+    out.push(localizePath(path, "he")!);
+  }
+  return out;
 }
 
 /** Visually hidden crawlable body used when React mounts with createRoot (replaces #root). */
@@ -678,19 +758,122 @@ function renderMarketingSsrPage(page: MarketingSsrPage): string {
         </main>`);
 }
 
+function localizeSsrLinksHtml(linksHtml: string, locale: MarketingLocale): string {
+  if (locale === "en") return linksHtml;
+  return linksHtml.replace(/href="(\/[^"]*)"/g, (_m, href: string) => {
+    return `href="${localizedInternalHref(href, locale)}"`;
+  });
+}
+
+function resolveMarketingSsrPage(
+  englishPath: string,
+  locale: MarketingLocale,
+): MarketingSsrPage | null {
+  if (englishPath === "/pricing") {
+    const pricing = getLocalizedPricingPage(locale);
+    return {
+      h1: pricing.ssr.h1,
+      lead: pricing.ssr.lead,
+      bullets: pricing.ssr.bullets,
+      linksHtml: [
+        `<a href="${localizedInternalHref("/auth", locale)}">Start Free Trial</a>`,
+        `<a href="${localizedInternalHref("/prospect-ai", locale)}">Prospect AI</a>`,
+        `<a href="${localizedInternalHref("/ai-brain", locale)}">AI Brain</a>`,
+      ].join(" · "),
+    };
+  }
+
+  if (englishPath === "/prospect-ai" && locale !== "en") {
+    const overlay = PROSPECT_AI_LANDING_LOCALES[locale];
+    const base = MARKETING_SSR_PAGES["/prospect-ai"];
+    if (!base) return null;
+    return {
+      h1: overlay.h1,
+      lead: overlay.subheadlineLines?.join(" ") || base.lead,
+      bullets: base.bullets,
+      linksHtml: localizeSsrLinksHtml(base.linksHtml, locale),
+    };
+  }
+
+  if (englishPath === "/realtor-growth-engine" && locale !== "en") {
+    const overlay = RGE_LANDING_LOCALES[locale];
+    const base = MARKETING_SSR_PAGES["/realtor-growth-engine"];
+    if (!base) return null;
+    return {
+      h1: overlay.hero.h1,
+      lead: overlay.hero.support,
+      bullets: overlay.hero.capabilities?.length ? overlay.hero.capabilities : base.bullets,
+      linksHtml: localizeSsrLinksHtml(base.linksHtml, locale),
+    };
+  }
+
+  const product = ALL_PRODUCT_PAGES.find((p) => p.path === englishPath);
+  if (product) {
+    const localized = getLocalizedProductPage(product, locale);
+    return {
+      h1: localized.h1,
+      lead: localized.heroIntro,
+      bullets: localized.ssrBullets,
+      linksHtml: [
+        ...localized.relatedProducts
+          .slice(0, 2)
+          .map((l) => `<a href="${localizedInternalHref(l.href, locale)}">${l.label}</a>`),
+        `<a href="${localizedInternalHref("/auth", locale)}">Start Free Trial</a>`,
+        `<a href="${localizedInternalHref("/pricing", locale)}">Pricing</a>`,
+      ].join(" · "),
+    };
+  }
+
+  const solution = ALL_SOLUTION_PAGES.find((s) => s.path === englishPath);
+  if (solution) {
+    const localized = getLocalizedSolutionPage(solution, locale);
+    return {
+      h1: localized.h1,
+      lead: localized.heroIntro,
+      bullets: localized.ssrBullets,
+      linksHtml: [
+        ...localized.relatedLinks
+          .slice(0, 2)
+          .map((l) => `<a href="${localizedInternalHref(l.href, locale)}">${l.label}</a>`),
+        `<a href="${localizedInternalHref("/auth", locale)}">Start Free Trial</a>`,
+        `<a href="${localizedInternalHref("/pricing", locale)}">Pricing</a>`,
+      ].join(" · "),
+    };
+  }
+
+  const base = MARKETING_SSR_PAGES[englishPath];
+  if (!base) return null;
+  if (locale === "en") return base;
+  return {
+    ...base,
+    linksHtml: localizeSsrLinksHtml(base.linksHtml, locale),
+  };
+}
+
 /**
  * Lightweight page-specific initial HTML for selected marketing routes.
  * Returns null when the route has head-meta only (existing behavior).
+ * Accepts English or locale-prefixed paths (`/es/ai-brain`).
  */
 export function generateMarketingPageSsrHtml(route: string): string | null {
-  const page = MARKETING_SSR_PAGES[route];
+  const parsed = parseLocalizedPath(route);
+  const englishPath = parsed.isLocalePrefixed ? parsed.englishPath : route;
+  const locale: MarketingLocale =
+    parsed.isLocalePrefixed && parsed.isSupported ? parsed.locale : "en";
+
+  // Pricing gains an SSR body in Phase 2 (was meta-only).
+  const page = resolveMarketingSsrPage(englishPath, locale);
   if (!page) return null;
   return renderMarketingSsrPage(page);
 }
 
 /** Routes that currently receive crawlable SSR body markup (for tests / audits). */
 export function getMarketingSsrBodyRoutes(): string[] {
-  return Object.keys(MARKETING_SSR_PAGES);
+  const english = Object.keys(MARKETING_SSR_PAGES);
+  if (!english.includes("/pricing")) {
+    english.push("/pricing");
+  }
+  return english;
 }
 
 const NOINDEX_EXACT_PATHS = new Set([
@@ -725,123 +908,311 @@ export function injectNoindexMeta(html: string): string {
   return html;
 }
 
-export function generateHomepageHtml(): string {
-  const navLinks = getAllMarketingNavLinks()
-    .map((item) => `<li><a href="${item.href}">${item.label}</a> — ${item.description}</li>`)
+export function generateHomepageHtml(locale: MarketingLocale = "en"): string {
+  const home = getLocalizedHomepage(locale);
+  const s = home.ssr;
+  const nav = getLocalizedMarketingNav(locale);
+  const navLinks = nav
+    .flatMap((d) => d.groups.flatMap((g) => g.items))
+    .map((item) => {
+      const href = localizedInternalHref(item.href, locale);
+      return `<li><a href="${href}">${escapeHtmlText(item.label)}</a> — ${escapeHtmlText(item.description)}</li>`;
+    })
     .join("\n            ");
-  const navGroups = MARKETING_NAV_DROPDOWNS.map((dropdown) => {
-    const items = dropdown.groups
-      .flatMap((g) => g.items)
-      .map((item) => `<li><a href="${item.href}">${item.label}</a></li>`)
-      .join("\n              ");
-    return `<h3>${dropdown.label}</h3>\n            <ul>\n              ${items}\n            </ul>`;
-  }).join("\n            ");
+  const navGroups = nav
+    .map((dropdown) => {
+      const items = dropdown.groups
+        .flatMap((g) => g.items)
+        .map(
+          (item) =>
+            `<li><a href="${localizedInternalHref(item.href, locale)}">${escapeHtmlText(item.label)}</a></li>`,
+        )
+        .join("\n              ");
+      return `<h3>${escapeHtmlText(dropdown.label)}</h3>\n            <ul>\n              ${items}\n            </ul>`;
+    })
+    .join("\n            ");
 
-  // SSR content for SEO - visually hidden but accessible to crawlers
+  const pricingHref = localizedInternalHref("/pricing", locale);
+  const prospectHref = localizedInternalHref("/prospect-ai", locale);
+  const inboxHref = localizedInternalHref("/unified-inbox", locale);
+  const automationsHref = localizedInternalHref("/automations", locale);
+  const chatbotHref = localizedInternalHref("/chatbot-builder", locale);
+  const copilotHref = localizedInternalHref("/ai-copilot", locale);
+  const brainHref = localizedInternalHref("/ai-brain", locale);
+  const privacyHref = localizedInternalHref("/privacy-policy", locale);
+  const termsHref = localizedInternalHref("/terms-of-use", locale);
+
   return `
       <div data-ssr-content="true" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;">
         <main>
-          <h1>Meet Your AI Sales Team</h1>
-          <p>WhachatCRM helps businesses find and qualify prospects, manage conversations across channels, personalize the next action with AI, automate follow-up, and convert more chats into revenue.</p>
-          <p>Official Meta API · WhatsApp, Instagram, Facebook, SMS, Telegram, Email and more</p>
-          <p>Prospect AI finds and qualifies businesses to sell to. AI Brain powers personalization and strategy. AI Copilot assists inside conversations. Unified Inbox brings messaging channels together. Growth Engines — including the live Realtor Growth Engine — package workflows for specific growth needs.</p>
+          <h1>${escapeHtmlText(s.h1)}</h1>
+          <p>${escapeHtmlText(s.lead)}</p>
+          <p>${escapeHtmlText(s.channels)}</p>
+          <p>${escapeHtmlText(s.productLine)}</p>
 
-          <nav aria-label="Primary">
-            <h2>Explore WhachatCRM</h2>
+          <nav aria-label="${escapeHtmlAttr(home.chromeA11y.primaryNav)}">
+            <h2>${escapeHtmlText(s.exploreHeading)}</h2>
             ${navGroups}
             <ul>
-              <li><a href="/pricing">Pricing</a></li>
-              <li><a href="/auth">Start Free Trial</a></li>
+              <li><a href="${pricingHref}">${escapeHtmlText(s.pricingLabel)}</a></li>
+              <li><a href="/auth">${escapeHtmlText(s.startTrialLabel)}</a></li>
             </ul>
           </nav>
 
           <section>
-            <h2>Find and qualify prospects</h2>
-            <p>Use Prospect AI to discover local businesses, qualify fit, and launch personalized outreach — then manage replies in Unified Inbox.</p>
-            <p><a href="/prospect-ai">Explore Prospect AI</a></p>
+            <h2>${escapeHtmlText(s.findProspectsTitle)}</h2>
+            <p>${escapeHtmlText(s.findProspectsBody)}</p>
+            <p><a href="${prospectHref}">${escapeHtmlText(s.findProspectsCta)}</a></p>
           </section>
 
           <section>
-            <h2>Manage and convert conversations</h2>
-            <p>Bring WhatsApp and supported channels into one Unified Inbox. Use AI Copilot in-thread and automate follow-up with templates and chatbots.</p>
+            <h2>${escapeHtmlText(s.convertTitle)}</h2>
+            <p>${escapeHtmlText(s.convertBody)}</p>
             <ul>
-              <li><a href="/unified-inbox">Unified Inbox</a></li>
-              <li><a href="/automations">Workflows &amp; Automations</a></li>
-              <li><a href="/chatbot-builder">Chatbot Builder</a></li>
-              <li><a href="/ai-copilot">AI Copilot</a></li>
+              <li><a href="${inboxHref}">${escapeHtmlText(s.convertLinks.inbox)}</a></li>
+              <li><a href="${automationsHref}">${escapeHtmlText(s.convertLinks.automations)}</a></li>
+              <li><a href="${chatbotHref}">${escapeHtmlText(s.convertLinks.chatbot)}</a></li>
+              <li><a href="${copilotHref}">${escapeHtmlText(s.convertLinks.copilot)}</a></li>
             </ul>
           </section>
 
           <section>
-            <h2>AI Brain and AI Copilot</h2>
-            <h3>AI Brain</h3>
-            <p>Analyzes business knowledge, helps create personalized campaigns, recommends strategy, and powers AI features across the platform where enabled.</p>
-            <p><a href="/ai-brain">Explore AI Brain</a></p>
-            <h3>AI Copilot</h3>
-            <p>Assists inside customer conversations with summaries, suggested replies, and lead context.</p>
-            <p><a href="/ai-copilot">Explore AI Copilot</a></p>
+            <h2>${escapeHtmlText(s.aiSectionTitle)}</h2>
+            <h3>${escapeHtmlText(s.aiBrainTitle)}</h3>
+            <p>${escapeHtmlText(s.aiBrainBody)}</p>
+            <p><a href="${brainHref}">${escapeHtmlText(s.aiBrainCta)}</a></p>
+            <h3>${escapeHtmlText(s.aiCopilotTitle)}</h3>
+            <p>${escapeHtmlText(s.aiCopilotBody)}</p>
+            <p><a href="${copilotHref}">${escapeHtmlText(s.aiCopilotCta)}</a></p>
           </section>
 
           <section>
-            <h2>Everything you need to turn conversations into revenue</h2>
-            <h3>Organized Conversations</h3>
-            <p>Every chat becomes a customer record with notes, tags, and ownership.</p>
-            <h3>Follow-Ups &amp; Tasks</h3>
-            <p>Set reminders and tasks so every lead is followed up on time.</p>
-            <h3>Automations &amp; Chatbots</h3>
-            <p>Launch ready-to-use templates and automated messaging flows without building from scratch.</p>
-            <h3>Integrations</h3>
-            <p>Connect Meta messaging, Shopify, Gmail, Stripe, Calendly, and more.</p>
-          </section>
-
-          <section>
-            <h2>Up and running in minutes</h2>
-            <ol>
-              <li>Connect your channels with guided Meta onboarding and supported integrations.</li>
-              <li>Centralize leads with ownership, notes, tags, and next steps.</li>
-              <li>Follow up faster with reminders, templates, and AI assistance.</li>
-            </ol>
-            <a href="/auth" rel="prefetch">Start Free Trial</a>
-            <a href="/pricing" rel="prefetch">Compare Plans</a>
-            <p>No credit card required. Free plan available forever.</p>
-          </section>
-
-          <section>
-            <h2>Site navigation</h2>
+            <h2>${escapeHtmlText(s.siteNavHeading)}</h2>
             <ul>
             ${navLinks}
             </ul>
           </section>
 
           <footer>
-            <p>© 2025 WhachatCRM. All rights reserved.</p>
+            <p>${escapeHtmlText(s.footerCopyright)}</p>
             <nav>
-              <a href="/privacy-policy">Privacy</a>
-              <a href="/terms-of-use">Terms</a>
-              <a href="/contact">Contact</a>
-              <a href="/blog">Blog</a>
-              <a href="/help">Help</a>
-              <a href="/partner-program">Partner Program</a>
+              <a href="${privacyHref}">${escapeHtmlText(s.footerPrivacy)}</a>
+              <a href="${termsHref}">${escapeHtmlText(s.footerTerms)}</a>
+              <a href="${pricingHref}">${escapeHtmlText(s.pricingLabel)}</a>
+              <a href="/auth">${escapeHtmlText(s.startTrialLabel)}</a>
             </nav>
           </footer>
         </main>
       </div>`;
 }
 
-export function injectHomepageSeoMeta(html: string): string {
-  const webPageSchema = `
+/**
+ * Replace the English `#whachat-static-shell` first-paint copy for localized homepage roots.
+ * English routes keep the committed shell in index.html unchanged.
+ */
+export function injectLocalizedStaticShell(html: string, locale: MarketingLocale): string {
+  if (locale === "en") return html;
+  const shell = getLocalizedHomepage(locale).staticShell;
+  const productHref = localizedInternalHref("/prospect-ai", locale);
+  const solutionsHref = localizedInternalHref("/real-estate-crm", locale);
+  const pricingHref = localizedInternalHref("/pricing", locale);
+  const homeHref = localizePath("/", locale) || `/${locale}/`;
+
+  let out = html;
+  const replaceOnce = (pattern: RegExp, replacement: string) => {
+    out = out.replace(pattern, replacement);
+  };
+
+  replaceOnce(
+    /(<a class="wcs-brand" href=")\/(" aria-label=")[^"]*(">)/,
+    `$1${homeHref}$2${escapeHtmlAttr(shell.homeAria)}$3`,
+  );
+  replaceOnce(
+    /(<div class="wcs-trust-pill">)[^<]*(<\/div>)/,
+    `$1${escapeHtmlText(shell.trustPill)}$2`,
+  );
+  replaceOnce(
+    /(<nav class="wcs-nav-links" aria-label=")[^"]*(">)/,
+    `$1${escapeHtmlAttr(shell.primaryNavAria)}$2`,
+  );
+  replaceOnce(
+    /(<a class="wcs-link wcs-hide-sm" href=")\/prospect-ai(">Product<\/a>)/,
+    `$1${productHref}">${escapeHtmlText(shell.navProduct)}</a>`,
+  );
+  replaceOnce(
+    /(<a class="wcs-link wcs-hide-sm" href=")\/real-estate-crm(">Solutions<\/a>)/,
+    `$1${solutionsHref}">${escapeHtmlText(shell.navSolutions)}</a>`,
+  );
+  replaceOnce(
+    /(<a class="wcs-link wcs-hide-sm" href="\/blog">)Resources(<\/a>)/,
+    `$1${escapeHtmlText(shell.navResources)}$2`,
+  );
+  replaceOnce(
+    /(<a class="wcs-link wcs-hide-sm" href=")\/pricing(">Pricing<\/a>)/,
+    `$1${pricingHref}">${escapeHtmlText(shell.navPricing)}</a>`,
+  );
+  replaceOnce(
+    /(<a class="wcs-btn-header wcs-btn-ghost wcs-hide-sm" href="\/auth\?mode=login">)Log in(<\/a>)/,
+    `$1${escapeHtmlText(shell.navLogin)}$2`,
+  );
+  replaceOnce(
+    /(<a class="wcs-btn-header wcs-btn-green" href="\/auth">)Start Free Trial(<\/a>)/,
+    `$1${escapeHtmlText(shell.navStartTrial)}$2`,
+  );
+  replaceOnce(
+    /(alt=")WhachatCRM WhatsApp conversation mockup with AI copilot and lead score(")/i,
+    `alt="${escapeHtmlAttr(shell.heroImageAlt)}"`,
+  );
+  replaceOnce(
+    /(<h1 id="whachat-static-hero-title">)[^<]*(<\/h1>)/,
+    `$1${escapeHtmlText(shell.h1)}$2`,
+  );
+  replaceOnce(/(<p class="wcs-sub">)[^<]*(<\/p>)/, `$1${escapeHtmlText(shell.subtitle)}$2`);
+  replaceOnce(
+    /(<p class="wcs-note" style="margin-bottom: 24px;">)[^<]*(<\/p>)/,
+    `$1${escapeHtmlText(shell.channels)}$2`,
+  );
+  replaceOnce(
+    /(<a class="wcs-btn-primary" href="\/auth"[^>]*>)[^<]*(<\/a>)/,
+    `$1${escapeHtmlText(shell.ctaTrial)}$2`,
+  );
+  replaceOnce(
+    /(<a class="wcs-btn-outline" href=")\/pricing("[^>]*>)Pricing(<\/a>)/,
+    `$1${pricingHref}$2${escapeHtmlText(shell.ctaPricing)}$3`,
+  );
+  replaceOnce(
+    /(<a class="wcs-btn-demo" href="\/contact"[^>]*>)Book a Demo(<\/a>)/,
+    `$1${escapeHtmlText(shell.ctaDemo)}$2`,
+  );
+  replaceOnce(
+    /(<p class="wcs-note">)No credit card required(<\/p>)/,
+    `$1${escapeHtmlText(shell.noCreditCard)}$2`,
+  );
+  replaceOnce(
+    /(<nav class="wcs-sr-only" aria-label=")Explore WhachatCRM(")/,
+    `$1${escapeHtmlAttr(shell.exploreNavAria)}$2`,
+  );
+
+  // Localize crawlable static-shell internal hrefs + labels from nav overlays.
+  const localizedNav = getLocalizedMarketingNav(locale);
+  const enNav = getLocalizedMarketingNav("en");
+  const labelByHref = new Map<string, string>();
+  for (const dropdown of localizedNav) {
+    for (const group of dropdown.groups) {
+      for (const item of group.items) {
+        labelByHref.set(item.href, item.label);
+      }
+    }
+  }
+  const enLabelByHref = new Map<string, string>();
+  for (const dropdown of enNav) {
+    for (const group of dropdown.groups) {
+      for (const item of group.items) {
+        enLabelByHref.set(item.href, item.label);
+      }
+    }
+  }
+
+  const shellHrefMap: Array<[string, string]> = [
+    ["/prospect-ai", localizedInternalHref("/prospect-ai", locale)],
+    ["/ai-brain", localizedInternalHref("/ai-brain", locale)],
+    ["/ai-copilot", localizedInternalHref("/ai-copilot", locale)],
+    ["/unified-inbox", localizedInternalHref("/unified-inbox", locale)],
+    ["/automations", localizedInternalHref("/automations", locale)],
+    ["/chatbot-builder", localizedInternalHref("/chatbot-builder", locale)],
+    ["/campaigns", localizedInternalHref("/campaigns", locale)],
+    ["/integrations", localizedInternalHref("/integrations", locale)],
+    ["/realtor-growth-engine", localizedInternalHref("/realtor-growth-engine", locale)],
+    ["/real-estate-crm", localizedInternalHref("/real-estate-crm", locale)],
+    ["/solutions/ecommerce", localizedInternalHref("/solutions/ecommerce", locale)],
+    [
+      "/solutions/local-service-businesses",
+      localizedInternalHref("/solutions/local-service-businesses", locale),
+    ],
+    [
+      "/solutions/marketing-agencies",
+      localizedInternalHref("/solutions/marketing-agencies", locale),
+    ],
+    ["/solutions/med-spas", localizedInternalHref("/solutions/med-spas", locale)],
+  ];
+  for (const [from, to] of shellHrefMap) {
+    const enLabel = enLabelByHref.get(from);
+    const locLabel = labelByHref.get(from);
+    if (enLabel && locLabel && enLabel !== locLabel) {
+      out = out.replaceAll(`>${enLabel}<`, `>${escapeHtmlText(locLabel)}<`);
+      // HTML entity form used in static shell for &
+      const enEntity = enLabel.replace(/&/g, "&amp;");
+      if (enEntity !== enLabel) {
+        out = out.replaceAll(`>${enEntity}<`, `>${escapeHtmlText(locLabel)}<`);
+      }
+    }
+    out = out.replaceAll(`href="${from}"`, `href="${to}"`);
+  }
+
+  // Static-shell industry labels not always identical to nav item labels.
+  const staticExtraLabels: Array<[string, string]> = [
+    ["Real Estate", locale === "es" ? "Bienes raíces" : "נדל״ן"],
+    ["Local &amp; Service Businesses", locale === "es" ? "Negocios locales y de servicios" : "עסקים מקומיים ושירותים"],
+    ["Local & Service Businesses", locale === "es" ? "Negocios locales y de servicios" : "עסקים מקומיים ושירותים"],
+    ["Marketing Agencies", locale === "es" ? "Agencias de marketing" : "סוכנויות שיווק"],
+    ["Med Spas &amp; Wellness", locale === "es" ? "Med spas y bienestar" : "מדיספה ווולנס"],
+    ["Med Spas & Wellness", locale === "es" ? "Med spas y bienestar" : "מדיספה ווולנס"],
+    ["Compare WhachatCRM", locale === "es" ? "Comparar WhachatCRM" : "השוו את WhachatCRM"],
+    ["Partner Program", locale === "es" ? "Programa de partners" : "תוכנית שותפים"],
+    ["Help Center", locale === "es" ? "Centro de ayuda" : "מרכז עזרה"],
+    ["User Guide", locale === "es" ? "Guía de usuario" : "מדריך למשתמש"],
+    ["Blog", locale === "es" ? "Blog" : "בלוג"],
+  ];
+  for (const [en, loc] of staticExtraLabels) {
+    if (en !== loc) out = out.replaceAll(`>${en}<`, `>${escapeHtmlText(loc)}<`);
+  }
+
+  return out;
+}
+
+/** Hide English static shell on non-home localized marketing pages (no JS required). */
+export function hideStaticShellInHtml(html: string): string {
+  return html.replace(/<html\b([^>]*)>/i, (_m, attrs: string) => {
+    if (/\bclass="/i.test(attrs)) {
+      return `<html${attrs.replace(/class="/i, 'class="wcs-hide-static-marketing ')}>`;
+    }
+    return `<html class="wcs-hide-static-marketing"${attrs}>`;
+  });
+}
+
+export function injectHomepageSeoMeta(html: string, locale: MarketingLocale = "en"): string {
+  const meta = getLocalizedPageMeta("/", locale);
+  const name =
+    meta?.title || "Meet Your AI Sales Team | WhachatCRM";
+  const description =
+    meta?.description ||
+    "AI-powered sales and messaging CRM: find and qualify prospects, manage WhatsApp and omnichannel conversations, automate follow-up, and convert more chats into revenue.";
+  const canonical = getCanonicalUrl("/", locale, BASE_URL) || `${BASE_URL}/`;
+  const hreflang = getHreflangLinks("/", BASE_URL)
+    .map((l) => `<link rel="alternate" hreflang="${l.hreflang}" href="${l.href}" />`)
+    .join("\n    ");
+
+  html = html.replace(/<link rel="canonical"[^>]*>/gi, "");
+  html = html.replace(/<link rel="alternate"[^>]*hreflang[^>]*>/gi, "");
+  html = html.replace(/<meta name="description"[^>]*>/gi, "");
+
+  const headInject = `
+    <title>${escapeHtmlAttr(name)}</title>
+    <meta name="description" content="${escapeHtmlAttr(description)}" />
+    <link rel="canonical" href="${canonical}" />
+    ${hreflang}
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "WebPage",
-      "name": "Meet Your AI Sales Team | WhachatCRM",
-      "url": "${BASE_URL}/",
-      "description": "AI-powered sales and messaging CRM: find and qualify prospects, manage WhatsApp and omnichannel conversations, automate follow-up, and convert more chats into revenue."
+      "name": ${jsonLd(name)},
+      "url": ${jsonLd(canonical)},
+      "description": ${jsonLd(description)}
     }
     </script>`;
-  
-  html = html.replace('</head>', webPageSchema + '\n  </head>');
-  
+
+  html = html.replace(/<title>.*?<\/title>/i, headInject);
+  html = applyHtmlLangDir(html, locale);
   return html;
 }
 

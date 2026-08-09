@@ -19,20 +19,23 @@ const WelcomeFinalCta = lazy(() => import("@/pages/welcome/WelcomeFinalCta"));
 const WelcomeDiscoveryPaths = lazy(() => import("@/pages/welcome/WelcomeDiscoveryPaths"));
 import { getDirection } from "@/lib/i18n";
 import { MARKETING_URL } from "@/lib/marketingUrl";
+import { getLocalizedHomepage } from "@shared/localizeMarketingContent";
+import { getCanonicalUrl, getHreflangLinks } from "@shared/localeRoutes";
+import { useLocalizedHref, useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
 
 /** Fixed min-heights reduce layout shift when lazy sections hydrate (approximate final block size). */
 function BelowFoldFallback({ className }: { className?: string }) {
   return <div className={className ?? "min-h-[240px] bg-gray-50"} aria-hidden />;
 }
 
-function HeroConversationMockup() {
+function HeroConversationMockup({ alt }: { alt: string }) {
   return (
     <div className="wcs-hero-image-column w-full md:order-2">
       <div className="wcs-hero-image-slot">
         <img
           className="wcs-hero-image"
           src="/hero/whachat-hero-mockup.png"
-          alt="WhachatCRM WhatsApp conversation mockup with AI copilot and lead score"
+          alt={alt}
           width={560}
           height={871}
           loading="eager"
@@ -59,6 +62,11 @@ export function Welcome() {
   const { t } = useTranslation();
   const [showDemoModal, setShowDemoModal] = useState(false);
   const isRTL = getDirection() === "rtl";
+  const locale = useMarketingUrlLocale();
+  const home = getLocalizedHomepage(locale);
+  const pricingHref = useLocalizedHref("/pricing");
+  const canonical = getCanonicalUrl("/", locale, MARKETING_URL) || `${MARKETING_URL}/`;
+  const hreflang = getHreflangLinks("/", MARKETING_URL);
 
   useLayoutEffect(() => {
     document.documentElement.classList.remove("wcs-marketing-navigating");
@@ -87,29 +95,24 @@ export function Welcome() {
   return (
     <div dir={isRTL ? "rtl" : "ltr"} className={`min-h-screen bg-white overflow-x-hidden ${isRTL ? "text-right" : "text-left"}`}>
       <Helmet>
-        <title>WhatsApp & Unified Mailbox | WhachatCRM</title>
-        <meta
-          name="description"
-          content="Manage WhatsApp, Instagram, and SMS in one unified mailbox. The simple CRM for SMBs and Shopify sellers."
-        />
-        <link rel="canonical" href={`${MARKETING_URL}/`} />
-        <meta property="og:title" content="WhatsApp & Unified Mailbox | WhachatCRM" />
-        <meta
-          property="og:description"
-          content="Manage WhatsApp, Instagram, and SMS in one unified mailbox. The simple CRM for SMBs and Shopify sellers."
-        />
-        <meta property="og:url" content={`${MARKETING_URL}/`} />
+        <html lang={locale} dir={isRTL ? "rtl" : "ltr"} />
+        <title>{home.seo.title}</title>
+        <meta name="description" content={home.seo.description} />
+        <link rel="canonical" href={canonical} />
+        {hreflang.map((l) => (
+          <link key={l.hreflang} rel="alternate" hrefLang={l.hreflang} href={l.href} />
+        ))}
+        <meta property="og:title" content={home.seo.ogTitle} />
+        <meta property="og:description" content={home.seo.ogDescription} />
+        <meta property="og:url" content={canonical} />
         <meta property="og:type" content="website" />
         <meta property="og:image" content={`${MARKETING_URL}/og-image.png`} />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:image" content={`${MARKETING_URL}/og-image.png`} />
-        <meta name="twitter:title" content="WhatsApp & Unified Mailbox | WhachatCRM" />
-        <meta
-          name="twitter:description"
-          content="Manage WhatsApp, Instagram, and SMS in one unified mailbox. The simple CRM for SMBs and Shopify sellers."
-        />
+        <meta name="twitter:title" content={home.seo.twitterTitle} />
+        <meta name="twitter:description" content={home.seo.twitterDescription} />
       </Helmet>
       {showDemoModal ? (
         <Suspense fallback={null}>
@@ -128,7 +131,7 @@ export function Welcome() {
 
       <section className="px-4 md:px-6 pt-5 md:pt-8 pb-6 md:pb-8 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
         <div className="flex flex-col gap-8 md:grid md:grid-cols-[1fr_1.04fr] md:gap-10 xl:gap-14 items-start">
-          <HeroConversationMockup />
+          <HeroConversationMockup alt={home.heroImageAlt} />
 
           <div className="order-1 md:order-1 max-w-[780px] md:mt-12 lg:mt-14">
             <p className="mb-4 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
@@ -157,7 +160,7 @@ export function Welcome() {
               </div>
               <div className="w-full sm:w-auto">
                 <Link
-                  href="/pricing"
+                  href={pricingHref}
                   className="w-full sm:w-auto h-11 px-5 bg-white border border-gray-200 text-gray-800 text-sm font-semibold rounded-full inline-flex items-center justify-center gap-1.5 hover:bg-gray-50 transition-colors"
                   data-testid="button-hero-pricing"
                 >

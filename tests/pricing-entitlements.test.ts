@@ -113,13 +113,12 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
     join(process.cwd(), "client/src/pages/Pricing.tsx"),
     "utf8",
   );
-  assert.ok(pricing.includes("buildPricingCompareRows"));
-  assert.ok(pricing.includes("getPlanPricingHighlights"));
+  assert.ok(pricing.includes("buildLocalizedPricingCompareRows"));
+  assert.ok(pricing.includes("getLocalizedPlanPricingHighlights"));
   assert.ok(pricing.includes("ProspectAiCallout"));
-  assert.ok(pricing.includes("Everything you need to find, engage, and convert more customers"));
+  assert.ok(pricing.includes("getLocalizedPricingPage"));
   assert.ok(pricing.includes("SupportedChannelsSection"));
   assert.ok(pricing.includes("PricingBottomCta"));
-  assert.ok(pricing.includes("FULL_PRO_AI_TRIAL_COPY"));
   assert.ok(pricing.includes("section-optional-addon"));
   assert.ok(pricing.includes('md:grid-cols-3'));
   assert.ok(!pricing.includes("xl:grid-cols-4"));
@@ -128,21 +127,31 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   // No monthly/yearly billing toggle in product — do not invent one on pricing.
   assert.ok(!/monthly\/yearly|billingPeriod|annual/i.test(pricing));
 
+  const content = readFileSync(
+    join(process.cwd(), "shared/pricingPageContent.ts"),
+    "utf8",
+  );
+  assert.ok(content.includes("Everything you need to find, engage, and convert more customers"));
+  assert.ok(content.includes("0% WhachatCRM markup"));
+  assert.ok(content.includes("Works with your customer channels"));
+  assert.ok(content.includes("Transparent Pricing"));
+  assert.ok(content.includes("Prospect AI Included — Free with Every Plan"));
+  assert.ok(content.includes("Monthly Prospect AI Discoveries"));
+  assert.ok(content.includes("Multi-channel Inbox"));
+  assert.ok(content.includes("Can I try Pro and AI Brain before upgrading?"));
+  assert.ok(content.includes("What counts as an active conversation?"));
+  assert.ok(content.includes("What are Meta conversation fees?"));
+  assert.ok(content.includes("FULL_PRO_AI_TRIAL_COPY"));
+  assert.ok(content.includes("Growth Engine Ready"));
+  assert.ok(content.includes("Growth Engines may require a separate purchase"));
+
   const marketing = readFileSync(
     join(process.cwd(), "client/src/components/pricing/PricingMarketingSections.tsx"),
     "utf8",
   );
   assert.ok(!/ManyChat|Wati|Gorgias/i.test(marketing));
-  assert.ok(marketing.includes("0% WhachatCRM markup"));
-  assert.ok(marketing.includes("Works with your customer channels"));
-  assert.ok(marketing.includes("Transparent Pricing"));
-  assert.ok(marketing.includes("Prospect AI Included — Free with Every Plan"));
-  assert.ok(marketing.includes("Monthly Prospect AI Discoveries"));
-  assert.ok(marketing.includes("Multi-channel Inbox"));
-  assert.ok(marketing.includes("Can I try Pro and AI Brain before upgrading?"));
-  assert.ok(marketing.includes("What counts as an active conversation?"));
-  assert.ok(marketing.includes("What are Meta conversation fees?"));
   assert.ok(marketing.includes("FULL_PRO_AI_TRIAL_COPY"));
+  assert.ok(marketing.includes("getLocalizedPricingPage"));
   assert.ok(marketing.includes("brightness-0"));
   assert.ok(marketing.includes("data-mono-logo"));
   assert.ok(!marketing.includes("bg-emerald-500"));
@@ -150,9 +159,7 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(!marketing.includes("No user fees"));
   assert.ok(!marketing.includes("No channel fees"));
   assert.ok(!marketing.includes("No extra seat fees"));
-  assert.ok(pricing.includes("Growth Engine Ready"));
   assert.ok(pricing.includes("pro-growth-engines-callout"));
-  assert.ok(pricing.includes("Growth Engines may require a separate purchase"));
   assert.ok(!pricing.includes("text-hero-trial"));
 });
 

@@ -1,6 +1,8 @@
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { ArrowRight } from "lucide-react";
+import { getLocalizedHomepage } from "@shared/localizeMarketingContent";
+import { useLocalizedHref, useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
 
 const INTEGRATIONS = [
   { name: "WhatsApp via Meta", logo: "/logos/whatsapp.svg" },
@@ -36,6 +38,9 @@ function IntegrationsHub() {
 
 export default function WelcomeIntegrationsSection() {
   const { t } = useTranslation();
+  const locale = useMarketingUrlLocale();
+  const home = getLocalizedHomepage(locale);
+  const integrationsHref = useLocalizedHref("/integrations");
   return (
     <section
       id="integrations"
@@ -43,7 +48,9 @@ export default function WelcomeIntegrationsSection() {
     >
       <div className="max-w-6xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
         <div className="text-center mb-10 md:mb-12">
-          <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-brand-green">Integrations</p>
+          <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-brand-green">
+            {home.eyebrows.integrations}
+          </p>
           <h2 className="text-3xl md:text-5xl font-display font-bold tracking-tight text-gray-950 mb-4">
             {t("home.integrations.title")}
           </h2>
@@ -55,10 +62,10 @@ export default function WelcomeIntegrationsSection() {
         <IntegrationsHub />
         <div className="mt-10 text-center">
           <Link
-            href="/integrations"
+            href={integrationsHref}
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-green hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40 rounded"
           >
-            Explore all integrations
+            {home.integrationsCta}
             <ArrowRight className="h-4 w-4" aria-hidden />
           </Link>
         </div>

@@ -5,8 +5,9 @@ import viteConfig from "../vite.config";
 import fs from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
-import { getMarketingRoutes, injectNoindexMeta, isNoIndexPath } from "./seo";
+import { getMarketingRoutes, getLocalizedMarketingRoutes, injectNoindexMeta, isNoIndexPath } from "./seo";
 import { normalizeRequestPath, shouldServeSpaFallback } from "./spaRouting";
+import { isLocaleRootRedirect, localeRootRedirectTarget } from "@shared/localeRoutes";
 
 const viteLogger = createLogger();
 
@@ -33,11 +34,19 @@ export async function setupVite(server: Server, app: Express) {
 
   app.use(vite.middlewares);
 
-  const marketingRoutes = getMarketingRoutes();
+  const marketingRoutes = [...getMarketingRoutes(), ...getLocalizedMarketingRoutes()];
 
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
     const pathname = normalizeRequestPath(url);
+
+    if (isLocaleRootRedirect(pathname)) {
+      const target = localeRootRedirectTarget(pathname);
+      if (target) {
+        res.redirect(301, target);
+        return;
+      }
+    }
 
     try {
       const clientTemplate = path.resolve(

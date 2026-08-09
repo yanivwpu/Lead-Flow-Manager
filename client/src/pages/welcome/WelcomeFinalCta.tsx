@@ -1,11 +1,13 @@
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
+import { useLocalizedHref } from "@/lib/marketingLocaleRouting";
 
 type Props = { isLoggedIn: boolean };
 
 export default function WelcomeFinalCta({ isLoggedIn }: Props) {
   const { t } = useTranslation();
+  const pricingHref = useLocalizedHref("/pricing");
   return (
     <section className="px-4 md:px-6 py-16 md:py-20 bg-gradient-to-br from-emerald-50 to-white">
       <div className="max-w-3xl xl:max-w-4xl mx-auto text-center">
@@ -22,7 +24,7 @@ export default function WelcomeFinalCta({ isLoggedIn }: Props) {
               <ArrowRight className="h-5 w-5" />
             </button>
           </Link>
-          <Link href="/pricing">
+          <Link href={pricingHref}>
             <button
               className="h-14 px-8 bg-white border border-gray-200 text-gray-800 font-semibold rounded-full inline-flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
               data-testid="button-final-pricing"

@@ -672,7 +672,22 @@
       "manychatAlt": "Manychat Alternative",
       "pabblyAlt": "Pabbly Alternative",
       "privacy": "Privacy Policy",
-      "terms": "Terms of Use"
+      "terms": "Terms of Use",
+      "solutions": "Solutions",
+      "workflows": "Workflows & Automations",
+      "campaigns": "Campaigns",
+      "integrations": "Integrations",
+      "partnerProgram": "Partner Program",
+      "shopifyCrm": "Shopify CRM",
+      "realEstateCrm": "Real Estate CRM",
+      "mlsIntegration": "MLS Integration",
+      "aiLeadScoring": "AI Lead Scoring",
+      "sharedTeamInbox": "Shared Team Inbox",
+      "automationTemplates": "Automation Templates",
+      "bestWhatsappCrm": "Best WhatsApp CRM 2026",
+      "dataDeletion": "Data deletion",
+      "emailPreferences": "Email preferences",
+      "cookiePreferences": "Cookie preferences"
     }
   },
   "auth": {

@@ -88,8 +88,15 @@ for (const route of requiredRoutes) {
   assert.equal(html.includes('<div id="root"></div>'), false, `root filled for ${route}`);
 }
 
-assert.equal(generateMarketingPageSsrHtml("/pricing"), null, "pricing still meta-only");
+const pricingBody = generateMarketingPageSsrHtml("/pricing");
+assert.ok(pricingBody, "pricing now has crawlable SSR body");
+assert.match(pricingBody!, /WhachatCRM Pricing/);
 assert.equal(generateMarketingPageSsrHtml("/contact"), null, "contact still meta-only");
+
+const esPricing = generateMarketingPageSsrHtml("/es/pricing");
+assert.ok(esPricing?.includes("Precios de WhachatCRM"));
+const hePricing = generateMarketingPageSsrHtml("/he/pricing");
+assert.ok(hePricing?.includes("מחירי WhachatCRM"));
 
 const marketing = Object.keys(PAGE_META);
 assert.equal(shouldServeSpaFallback("/this-page-should-not-exist", marketing), false);

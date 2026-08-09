@@ -3,6 +3,8 @@
  * Used by production static catch-all (and mirrored in Vite catch-all for local parity).
  */
 
+import { parseLocalizedPath } from "@shared/localeRoutes";
+
 /** Prefixes that must keep SPA 200 (client router / product surfaces). */
 export const SPA_FALLBACK_PREFIXES = [
   "/app",
@@ -43,6 +45,10 @@ export function normalizeRequestPath(rawPath: string): string {
   } catch {
     // Malformed percent-encoding → treat as opaque path (still unknown → 404).
     decoded = pathOnly;
+  }
+  // Preserve canonical locale homepage trailing slash for matching.
+  if (decoded === "/es/" || decoded === "/he/") {
+    return decoded;
   }
   // Strip trailing slash except root
   if (decoded.length > 1 && decoded.endsWith("/")) {
@@ -86,6 +92,18 @@ export function shouldServeSpaFallback(
 
   // Blog SSR handlers usually catch these first; keep as SPA if they reach catch-all.
   if (p === "/blog" || p.startsWith("/blog/")) return true;
+
+  // Phase 2 localized marketing paths (reject unsupported /es|/he|/fr prefixes).
+  const parsed = parseLocalizedPath(p === "/es" || p === "/he" ? `${p}/` : p);
+  if (parsed.isLocalePrefixed) {
+    return parsed.isSupported;
+  }
+
+  // Unsupported two-letter prefix attempts (e.g. /fr/ai-brain) → hard 404.
+  const seg = p.split("/").filter(Boolean)[0];
+  if (seg && /^[a-z]{2}$/i.test(seg) && seg !== "en" && !marketingRoutes.includes(p)) {
+    return false;
+  }
 
   return false;
 }

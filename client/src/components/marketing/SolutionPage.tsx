@@ -24,6 +24,12 @@ import {
   getMarketingChrome,
   normalizeMarketingLocale,
 } from "@shared/localizeMarketingContent";
+import {
+  getCanonicalUrl,
+  getHreflangLinks,
+  localizePath,
+  localizedInternalHref,
+} from "@shared/localeRoutes";
 
 const SiteFooter = lazy(() =>
   import("@/components/SiteFooter").then((m) => ({ default: m.SiteFooter })),
@@ -88,13 +94,17 @@ export function SolutionPage({ content: baseContent }: Props) {
   const isRTL = getDirection() === "rtl";
   const arrowClass = isRTL ? "h-4 w-4 rotate-180" : "h-4 w-4";
   const arrowClassSm = isRTL ? "h-3.5 w-3.5 rotate-180" : "h-3.5 w-3.5";
-  const canonical = `${MARKETING_URL}${content.path}`;
+  const localePath = localizePath(content.path, locale) || content.path;
+  const canonical =
+    getCanonicalUrl(content.path, locale, MARKETING_URL) || `${MARKETING_URL}${content.path}`;
+  const hreflangLinks = getHreflangLinks(content.path, MARKETING_URL);
+  const localeHref = (href: string) => localizedInternalHref(href, locale);
   const ogTitle = content.ogTitle ?? content.title;
 
   const breadcrumbs = [
-    { label: chrome.home, href: "/" },
-    { label: chrome.solutions, href: "/#built-for" },
-    { label: content.breadcrumbLabel, href: content.path },
+    { label: chrome.home, href: localeHref("/") },
+    { label: chrome.solutions, href: localeHref("/#built-for") },
+    { label: content.breadcrumbLabel, href: localePath },
   ];
 
   const webPageSchema = {
@@ -111,6 +121,9 @@ export function SolutionPage({ content: baseContent }: Props) {
         <title>{content.title}</title>
         <meta name="description" content={content.metaDescription} />
         <link rel="canonical" href={canonical} />
+        {hreflangLinks.map((alt) => (
+          <link key={alt.hreflang} rel="alternate" hrefLang={alt.hreflang} href={alt.href} />
+        ))}
         <meta property="og:title" content={ogTitle} />
         <meta property="og:description" content={content.metaDescription} />
         <meta property="og:url" content={canonical} />
@@ -157,7 +170,7 @@ export function SolutionPage({ content: baseContent }: Props) {
                   <ArrowRight className={arrowClass} />
                 </Link>
                 <Link
-                  href={content.secondaryCta.href}
+                  href={localeHref(content.secondaryCta.href)}
                   className="inline-flex h-11 items-center justify-center rounded-full border border-gray-200 bg-white px-6 text-sm font-semibold text-gray-800 hover:bg-gray-50"
                 >
                   {content.secondaryCta.label}
@@ -252,7 +265,7 @@ export function SolutionPage({ content: baseContent }: Props) {
                 return product.href ? (
                   <Link
                     key={product.label}
-                    href={product.href}
+                    href={localeHref(product.href)}
                     className="rounded-2xl border border-gray-200 bg-white p-5 transition-colors hover:border-brand-green/40 hover:bg-emerald-50/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40"
                   >
                     {body}
@@ -326,7 +339,7 @@ export function SolutionPage({ content: baseContent }: Props) {
                   <li key={item.label}>
                     {item.href ? (
                       <Link
-                        href={item.href}
+                        href={localeHref(item.href)}
                         className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-green hover:text-emerald-700"
                       >
                         {item.label}
@@ -370,7 +383,7 @@ export function SolutionPage({ content: baseContent }: Props) {
               {content.relatedLinks.map((link) => (
                 <Link
                   key={link.href}
-                  href={link.href}
+                  href={localeHref(link.href)}
                   className="rounded-2xl border border-gray-200 p-5 transition-colors hover:border-brand-green/40 hover:bg-emerald-50/30"
                 >
                   <span className="font-semibold text-gray-950">{link.label}</span>

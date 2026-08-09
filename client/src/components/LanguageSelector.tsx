@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'wouter';
 import { Globe, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,14 +10,23 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { supportedLanguages, changeLanguage, getCurrentLanguage, type SupportedLanguage } from '@/lib/i18n';
+import { marketingLanguageTargetPath } from '@/lib/marketingLocaleRouting';
+import type { MarketingLocale } from '@shared/marketingLocale';
 
 interface LanguageSelectorProps {
   variant?: 'default' | 'compact';
   className?: string;
+  /** When true (marketing chrome), navigate to the equivalent localized URL. */
+  navigateOnChange?: boolean;
 }
 
-export function LanguageSelector({ variant = 'default', className }: LanguageSelectorProps) {
+export function LanguageSelector({
+  variant = 'default',
+  className,
+  navigateOnChange = false,
+}: LanguageSelectorProps) {
   const { t } = useTranslation();
+  const [location, setLocation] = useLocation();
   const [currentLang, setCurrentLang] = useState<SupportedLanguage>(getCurrentLanguage());
 
   useEffect(() => {
@@ -29,8 +39,15 @@ export function LanguageSelector({ variant = 'default', className }: LanguageSel
   }, []);
 
   const handleLanguageChange = async (lang: SupportedLanguage) => {
-    changeLanguage(lang);
+    await changeLanguage(lang);
     setCurrentLang(lang);
+
+    if (navigateOnChange) {
+      const nextPath = marketingLanguageTargetPath(location, lang as MarketingLocale);
+      if (nextPath !== location) {
+        setLocation(nextPath);
+      }
+    }
     
     try {
       await fetch('/api/user/language', {

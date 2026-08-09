@@ -631,7 +631,22 @@
       "manychatAlt": "Alternativa a Manychat",
       "pabblyAlt": "Alternativa a Pabbly",
       "privacy": "Política de Privacidad",
-      "terms": "Términos de Uso"
+      "terms": "Términos de Uso",
+      "solutions": "Soluciones",
+      "workflows": "Flujos de trabajo y automatizaciones",
+      "campaigns": "Campañas",
+      "integrations": "Integraciones",
+      "partnerProgram": "Programa de partners",
+      "shopifyCrm": "Shopify CRM",
+      "realEstateCrm": "CRM inmobiliario",
+      "mlsIntegration": "Integración MLS",
+      "aiLeadScoring": "Puntuación de leads con IA",
+      "sharedTeamInbox": "Bandeja compartida del equipo",
+      "automationTemplates": "Plantillas de automatización",
+      "bestWhatsappCrm": "Mejor CRM de WhatsApp 2026",
+      "dataDeletion": "Eliminación de datos",
+      "emailPreferences": "Preferencias de correo",
+      "cookiePreferences": "Preferencias de cookies"
     }
   },
   "rge": {

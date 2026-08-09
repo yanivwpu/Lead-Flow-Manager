@@ -30,6 +30,12 @@ import {
   normalizeMarketingLocale,
   PLATFORM_STORY_STEP_TEXT,
 } from "@shared/localizeMarketingContent";
+import {
+  getCanonicalUrl,
+  getHreflangLinks,
+  localizePath,
+  localizedInternalHref,
+} from "@shared/localeRoutes";
 
 const SiteFooter = lazy(() =>
   import("@/components/SiteFooter").then((m) => ({ default: m.SiteFooter })),
@@ -118,7 +124,11 @@ export function ProductPage({ content: baseContent }: Props) {
   const brainConsumerText = BRAIN_CONSUMER_TEXT[locale];
   const theme = PRODUCT_THEMES[content.themeId];
   const workflowVariant = content.workflowVariant ?? "both";
-  const canonical = `${MARKETING_URL}${content.path}`;
+  const localePath = localizePath(content.path, locale) || content.path;
+  const canonical =
+    getCanonicalUrl(content.path, locale, MARKETING_URL) || `${MARKETING_URL}${content.path}`;
+  const hreflangLinks = getHreflangLinks(content.path, MARKETING_URL);
+  const localeHref = (href: string) => localizedInternalHref(href, locale);
   const ogTitle = content.ogTitle ?? content.title;
   const heroShot =
     content.screenshotKey && content.screenshotAlt
@@ -126,9 +136,9 @@ export function ProductPage({ content: baseContent }: Props) {
       : null;
 
   const breadcrumbs = [
-    { label: chrome.home, href: "/" },
-    { label: chrome.product, href: "/#ai-platform" },
-    { label: content.breadcrumbLabel, href: content.path },
+    { label: chrome.home, href: localeHref("/") },
+    { label: chrome.product, href: localeHref("/#ai-platform") },
+    { label: content.breadcrumbLabel, href: localePath },
   ];
 
   const howProductWorksTitle = useMemo(
@@ -159,6 +169,9 @@ export function ProductPage({ content: baseContent }: Props) {
         <title>{content.title}</title>
         <meta name="description" content={content.metaDescription} />
         <link rel="canonical" href={canonical} />
+        {hreflangLinks.map((alt) => (
+          <link key={alt.hreflang} rel="alternate" hrefLang={alt.hreflang} href={alt.href} />
+        ))}
         <meta property="og:title" content={ogTitle} />
         <meta property="og:description" content={content.metaDescription} />
         <meta property="og:url" content={canonical} />
@@ -205,7 +218,7 @@ export function ProductPage({ content: baseContent }: Props) {
                   <ArrowRight className={arrowClass} />
                 </Link>
                 <Link
-                  href={content.secondaryCta.href}
+                  href={localeHref(content.secondaryCta.href)}
                   className="inline-flex h-11 items-center justify-center rounded-full border border-gray-200 bg-white px-6 text-sm font-semibold text-gray-800 hover:bg-gray-50"
                 >
                   {content.secondaryCta.label}
@@ -381,7 +394,7 @@ export function ProductPage({ content: baseContent }: Props) {
                 {BRAIN_CONSUMER_LINKS.map((item, index) => (
                   <Link
                     key={item.label}
-                    href={item.href}
+                    href={localeHref(item.href)}
                     className="rounded-2xl border border-white bg-white/95 p-5 shadow-sm transition hover:shadow-md"
                   >
                     <p className={cn("text-sm font-semibold", theme.accentText)}>{item.label}</p>
@@ -445,7 +458,7 @@ export function ProductPage({ content: baseContent }: Props) {
                 return feature.href ? (
                   <Link
                     key={feature.label}
-                    href={feature.href}
+                    href={localeHref(feature.href)}
                     className={cn(
                       "rounded-2xl border bg-white p-5 transition hover:shadow-sm",
                       theme.accentBorder,
@@ -501,7 +514,7 @@ export function ProductPage({ content: baseContent }: Props) {
                           </div>
                         );
                         return item.href ? (
-                          <Link key={item.name} href={item.href} className="block transition hover:opacity-95">
+                          <Link key={item.name} href={localeHref(item.href)} className="block transition hover:opacity-95">
                             {card}
                           </Link>
                         ) : (
@@ -561,7 +574,7 @@ export function ProductPage({ content: baseContent }: Props) {
                 {PLATFORM_STORY_LINKS.map((step, index) => (
                   <li key={step.label} className="rounded-2xl bg-white p-4 ring-1 ring-emerald-100">
                     <p className="text-xs font-semibold text-brand-green">{index + 1}</p>
-                    <Link href={step.href} className="mt-1 block font-semibold text-gray-950 hover:text-brand-green">
+                    <Link href={localeHref(step.href)} className="mt-1 block font-semibold text-gray-950 hover:text-brand-green">
                       {step.label}
                     </Link>
                     <p className="mt-1 text-sm text-gray-600">{platformStoryText[index]}</p>
@@ -597,7 +610,7 @@ export function ProductPage({ content: baseContent }: Props) {
               {content.relatedProducts.map((link) => (
                 <Link
                   key={link.href + link.label}
-                  href={link.href}
+                  href={localeHref(link.href)}
                   className={cn(
                     "rounded-2xl border bg-white p-5 transition hover:shadow-sm",
                     theme.accentBorder,
@@ -619,7 +632,7 @@ export function ProductPage({ content: baseContent }: Props) {
                   {content.industryLinks.map((link) => (
                     <Link
                       key={link.href}
-                      href={link.href}
+                      href={localeHref(link.href)}
                       className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:border-emerald-200"
                     >
                       {link.label}

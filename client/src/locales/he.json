@@ -679,7 +679,22 @@
       "manychatAlt": "אלטרנטיבה ל-Manychat",
       "pabblyAlt": "אלטרנטיבה ל-Pabbly",
       "privacy": "מדיניות פרטיות",
-      "terms": "תנאי שימוש"
+      "terms": "תנאי שימוש",
+      "solutions": "פתרונות",
+      "workflows": "זרימות עבודה ואוטומציות",
+      "campaigns": "קמפיינים",
+      "integrations": "אינטגרציות",
+      "partnerProgram": "תוכנית שותפים",
+      "shopifyCrm": "Shopify CRM",
+      "realEstateCrm": "CRM לנדל״ן",
+      "mlsIntegration": "אינטגרציית MLS",
+      "aiLeadScoring": "ניקוד לידים עם AI",
+      "sharedTeamInbox": "תיבה משותפת לצוות",
+      "automationTemplates": "תבניות אוטומציה",
+      "bestWhatsappCrm": "CRM WhatsApp הטוב ביותר 2026",
+      "dataDeletion": "מחיקת נתונים",
+      "emailPreferences": "העדפות אימייל",
+      "cookiePreferences": "העדפות עוגיות"
     }
   },
   "auth": {
