@@ -4,6 +4,8 @@ import { ArrowRight, Check } from "lucide-react";
 type Props = {
   onBookDemo: () => void;
   headline?: string;
+  startTrialLabel?: string;
+  bookDemoLabel?: string;
 };
 
 const DEFAULT_BULLETS = [
@@ -15,6 +17,8 @@ const DEFAULT_BULLETS = [
 export function MarketingLandingCta({
   onBookDemo,
   headline = "Ready to automate customer conversations?",
+  startTrialLabel = "Start Free Trial",
+  bookDemoLabel = "Book a Demo",
 }: Props) {
   return (
     <section className="border-t border-gray-100 bg-gradient-to-b from-gray-50 to-white px-4 py-16 md:px-6 md:py-20">
@@ -31,7 +35,7 @@ export function MarketingLandingCta({
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link href="/auth">
             <a className="inline-flex h-12 min-w-[180px] items-center justify-center gap-2 rounded-full bg-brand-green px-8 font-semibold text-white hover:bg-emerald-700">
-              Start Free Trial
+              {startTrialLabel}
               <ArrowRight className="h-4 w-4" />
             </a>
           </Link>
@@ -40,7 +44,7 @@ export function MarketingLandingCta({
             onClick={onBookDemo}
             className="inline-flex h-12 min-w-[180px] items-center justify-center rounded-full border border-gray-300 bg-white px-8 font-semibold text-gray-900 hover:border-gray-400 hover:bg-gray-50"
           >
-            Book a Demo
+            {bookDemoLabel}
           </button>
         </div>
       </div>

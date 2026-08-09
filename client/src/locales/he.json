@@ -64,7 +64,7 @@
     "integrations": "אינטגרציות",
     "settings": "הגדרות",
     "help": "מרכז עזרה",
-    "pricing": "מחירון",
+    "pricing": "מחירים",
     "more": "עוד",
     "search": "חיפוש"
   },
@@ -182,7 +182,7 @@
     "pipelineChange": "שינוי בצינור"
   },
   "aiBrain": {
-    "title": "מוח AI",
+    "title": "AI Brain",
     "subtitle": "הגדר את עוזר ה-AI שלך",
     "aiMode": "מצב AI",
     "suggestOnly": "הצעות בלבד",
@@ -208,7 +208,7 @@
     "saveSettings": "שמור הגדרות",
     "testAi": "בדוק AI",
     "upgradeRequired": "נדרש שדרוג",
-    "upgradeDesc": "שדרג ל-Pro לפתיחת תכונות מוח AI"
+    "upgradeDesc": "שדרג ל-Pro לפתיחת תכונות AI Brain"
   },
   "pricing": {
     "backToSettings": "חזרה להגדרות",
@@ -477,9 +477,9 @@
     }
   },
   "landing": {
-    "pricing": "מחירון",
+    "pricing": "מחירים",
     "blog": "בלוג",
-    "realtorGrowthEngine": "מנוע צמיחה לסוכני נדל\"ן",
+    "realtorGrowthEngine": "Realtor Growth Engine",
     "login": "התחברות",
     "startFree": "התחל בחינם",
     "dashboard": "לוח בקרה",
@@ -487,7 +487,7 @@
     "heroEyebrow": "מכירות והודעות מבוססות AI לצוותים בצמיחה",
     "heroSubtitle": "WhachatCRM עוזר לעסקים למצוא ולסנן לידים, לנהל שיחות בערוצים שונים, להמליץ על הצעד הבא עם AI, לאוטומציה של מעקב ולהמיר יותר שיחות להכנסות.",
     "heroChannels": "API רשמי של Meta · WhatsApp, Instagram, Facebook, SMS, Telegram, Email ועוד",
-    "startTrial": "התחל ניסיון חינם ל-14 יום",
+    "startTrial": "התחל ניסיון חינם",
     "bookDemo": "קבע הדגמה",
     "noCreditCard": "לא נדרש כרטיס אשראי",
     "trustedBy": "נבחר על ידי",
@@ -506,12 +506,20 @@
       "analyticsDesc": "עקוב אחר ביצועים ושפר"
     },
     "integrations": "אינטגרציות",
-    "integrationsDesc": "התחבר לכלים האהובים עליך"
+    "integrationsDesc": "התחבר לכלים האהובים עליך",
+    "trust": {
+      "officialMeta": "Meta API רשמי",
+      "unifiedInbox": "תיבה מאוחדת",
+      "automations": "אוטומציות",
+      "teamCollab": "שיתוף פעולה בצוות",
+      "noMetaMarkup": "ללא תוספת על דמי Meta",
+      "aiWorkflows": "זרימות עבודה בסיוע AI"
+    }
   },
   "home": {
     "hero": {
       "title": "תיבת דואר אחת. כל הערוצים. אפס מורכבות.",
-      "subtitle": "WhatsApp, SMS, טלגרם, אינסטגרם, פייסבוק ומסנג'ר, צ'אט באתר — הכל בתיבה מאוחדת אחת. תפסיק ללהטט בין אפליקציות. הגב מהר יותר, ואל תפספס אף ליד.",
+      "subtitle": "WhatsApp, Instagram, Facebook Messenger, SMS, Telegram, Email וצ'אט באתר בתיבת דואר נכנס מאוחדת אחת ו-CRM. הגב מהר יותר, שתף פעולה כצוות והפוך מעקבים לאוטומטיים.",
       "cta": {
         "primary": "התחל ניסיון חינם ל-14 יום",
         "secondary": "צפה במחירון",
@@ -526,12 +534,39 @@
       "alt": "ממשק WhachatCRM - CRM לווטסאפ"
     },
     "problem": {
-      "title": "ווטסאפ לא נבנה לניהול לקוחות — עד עכשיו",
-      "heading": "הבעיה",
-      "item1": "שיחות חשובות נקברות בין מאות הודעות",
-      "item2": "אין הקשר מלא על הלקוח",
-      "item3": "מעקבים נשכחים",
-      "item4": "הצוות מאבד שקיפות"
+      "eyebrow": "זרימות שיחה",
+      "title": "נבנה לשיחות שהופכות להכנסות",
+      "subtitle": "WhachatCRM מחבר את ההודעה, הקשר ה-AI, המעקב ושלב הצינור כדי שלכל שיחה חשובה יהיה צעד הבא.",
+      "scenarios": {
+        "lead": {
+          "title": "ליד חדש נכנס",
+          "source": "WhatsApp",
+          "step1": "שיחה",
+          "step2": "AI לוכד תקציב ולוח זמנים",
+          "step3": "ליד נוצר ב-CRM"
+        },
+        "instagram": {
+          "title": "לקוח שואל שאלה",
+          "source": "Instagram DM",
+          "step1": "הקשר בתיבה",
+          "step2": "הצוות עונה עם היסטוריה",
+          "step3": "הלקוח נשאר גלוי"
+        },
+        "quiet": {
+          "title": "פרוספקט משתתק",
+          "source": "מעקב",
+          "step1": "לא זוהתה תשובה",
+          "step2": "תזכורת או תבנית",
+          "step3": "השיחה ממשיכה להתקדם"
+        },
+        "appointment": {
+          "title": "זוהתה כוונה לפגישה",
+          "source": "קביעת פגישה",
+          "step1": "כוונה זוהתה",
+          "step2": "נשלח הקישור הנכון",
+          "step3": "הצינור עודכן"
+        }
+      }
     },
     "solution": {
       "heading": "הפתרון של WhachatCRM",
@@ -541,7 +576,8 @@
       "item4": "אינטגרציות רב-ערוציות עם הכלים האהובים עליך"
     },
     "features": {
-      "title": "כל מה שצריך כדי לנהל ווטסאפ כמו CRM אמיתי",
+      "title": "הפוך שיחות לעבודת הכנסות מסודרת",
+      "subtitle": "מרחב עבודה רגוע יותר לנראות לידים, מעקבים, שיתוף פעולה ואוטומציה בערוצים הנתמכים שלך.",
       "item1": {
         "title": "שיחות מאורגנות",
         "desc": "כל צ'אט בווטסאפ הופך לרשומת לקוח — בלי חיפושים ובלי ניחושים."
@@ -555,7 +591,7 @@
         "desc": "קבע תזכורות ומשימות כדי לוודא שכל ליד מקבל מעקב בזמן."
       },
       "item4": {
-        "title": "מוח AI",
+        "title": "AI Brain",
         "desc": "הצעות תשובה חכמות, זיהוי לידים ושליטה בטון. העוזר העסקי המופעל בינה מלאכותית שלך."
       },
       "item5": {
@@ -596,17 +632,24 @@
       "seePlans": "צפה בתוכניות"
     },
     "builtFor": {
-      "title": "נבנה לעסקים שחיים על ווטסאפ",
-      "salesTeams": "צוותי מכירות שמנהלים לידים נכנסים",
-      "supportTeams": "צוותי תמיכת לקוחות",
-      "agencies": "סוכנויות ויועצים",
-      "smallBiz": "עסקים קטנים ויזמים",
-      "tagline": "אם ווטסאפ הוא הדרך שלך לדבר עם לקוחות — זה ה-CRM שלך."
+      "title": "נבנה לצוותים שמנצחים דרך שיחות",
+      "realEstate": "צוותי נדל\"ן",
+      "realEstateDesc": "סנן לידי קונים, שלח קישורי הזמנה ובצע מעקב אוטומטי כשפרוספקטים משתתקים.",
+      "medSpas": "מד ספא וקליניקות",
+      "medSpasDesc": "ענה על שאלות טיפול, לכוד כוונת פגישה והמשך בקשות ייעוץ.",
+      "salesTeams": "צוותי מכירות",
+      "salesTeamsDesc": "נתב שיחות נכנסות, דרג לידים בעלי כוונה גבוהה ושמור על יישור בין נציגים.",
+      "agencies": "סוכנויות",
+      "agenciesDesc": "נהל מקורות לידים של לקוחות, תגובות WhatsApp ומעקבי קמפיין ממקום אחד.",
+      "localServices": "עסקי שירות מקומיים",
+      "localServicesDesc": "הפוך שיחות שלא נענו ושאלות WhatsApp לעבודות שנקבעו וצעדים ברורים.",
+      "tagline": "מהתגובה הראשונה ועד הצעד הבא, WhachatCRM עוזר לצוותים לזוז מהר יותר בלי לאבד הקשר."
     },
     "trust": {
-      "title": "רשמי. מאובטח. אמין.",
-      "line1": "WhachatCRM משתמש ב-WhatsApp Business API הרשמי ולא סורק חשבונות אישיים.",
-      "line2": "הנתונים שלך נשארים מאובטחים ותואמים למדיניות של Meta."
+      "eyebrow": "הוכחה חברתית",
+      "title": "נבנה לצוותי מכירות ושירות בצמיחה",
+      "line1": "בית נקי ל-WhatsApp, הודעות חברתיות, מעקבים ושיתוף פעולה בצוות.",
+      "line2": "לוגואים של לקוחות ומקרי בוחן יופיעו כאן כשצוותים עולים לאוויר."
     },
     "cta": {
       "title": "תפסיק לאבד לידים בתיבת הווטסאפ שלך",
@@ -623,9 +666,9 @@
       "resources": "משאבים",
       "comparisons": "השוואות",
       "legal": "משפטי",
-      "pricing": "מחירון",
+      "pricing": "מחירים",
       "whatsappCrm": "WhatsApp CRM",
-      "realtorGrowthEngine": "מנוע צמיחה לסוכני נדל\"ן",
+      "realtorGrowthEngine": "Realtor Growth Engine",
       "contact": "צור קשר",
       "gettingStarted": "מדריך התחלה",
       "helpCenter": "מרכז עזרה",
@@ -670,7 +713,7 @@
   },
   "rge": {
     "nav": {
-      "pricing": "מחירון",
+      "pricing": "מחירים",
       "blog": "בלוג",
       "dashboard": "לוח בקרה",
       "startFree": "התחל בחינם"
@@ -682,7 +725,7 @@
       "share": "שתף את האוטומציה הזו עם הרשת שלך"
     },
     "hero": {
-      "title": "מנוע צמיחה לסוכני נדל\"ן",
+      "title": "Realtor Growth Engine",
       "subtitle": "הפוך לידים בנדל\"ן לפגישות באופן אוטומטי עם אוטומציית WhatsApp מבוססת AI.",
       "check1": "מענה מיידי לכל ליד חדש",
       "check2": "AI מסווג קונים ומוכרים באופן אוטומטי",
@@ -693,7 +736,7 @@
       "mainTitle": "הפוך שיחות נדל\"ן לפגישות מתואמות — באופן אוטומטי",
       "mainSubtitle": "אוטומציית WhatsApp מבוססת AI שמגיבה מיידית, מסווגת לידים וקובעת פגישות עבורך.",
       "mainDesc": "מערכת אוטומציה מוכנה מראש, מותקנת בתוך ה-CRM שלך — מוכנה לפעולה.",
-      "installCta": "התקן את מנוע הצמיחה לסוכני נדל\"ן",
+      "installCta": "התקן Realtor Growth Engine",
       "seeHowItWorks": "ראה איך זה עובד"
     },
     "preview": {
@@ -710,7 +753,7 @@
       "aiDetail": "קישור לקביעת פגישה נשלח לשרה מ. — פגישת Calendly נקבעה ליום שבת ב-14:00"
     },
     "workflow": {
-      "title": "איך מנוע צמיחה לסוכני נדל\"ן עובד",
+      "title": "איך Realtor Growth Engine עובד",
       "subtitle": "מליד חדש ועד פגישה שנקבעה — באופן אוטומטי.",
       "step": "שלב",
       "tagline": "המערכת מטפלת בשיחה הראשונה, מסווגת את הליד, ושולחת אליך רק קונים רציניים.",
@@ -771,7 +814,7 @@
     },
     "platform": {
       "title": "בנוי על WhachatCRM",
-      "subtitle": "מנוע צמיחה לסוכני נדל\"ן פועל על גבי פלטפורמת הודעות ואוטומציה מוכנה לעבודה.",
+      "subtitle": "Realtor Growth Engine פועל על גבי פלטפורמת הודעות ואוטומציה מוכנה לעבודה.",
       "f1": {
         "title": "תיבת הודעות מאוחדת",
         "desc": "כל השיחות במקום אחד."
@@ -795,7 +838,7 @@
     },
     "pricing": {
       "title": "מה צריך כדי להתחיל",
-      "subtitle": "מנוע צמיחה לסוכני נדל\"ן הוא תבנית אוטומציה מלאה על גבי WhachatCRM.",
+      "subtitle": "Realtor Growth Engine הוא תבנית אוטומציה מלאה על גבי WhachatCRM.",
       "platform": "פלטפורמה",
       "platformName": "WhachatCRM Pro",
       "platformPrice": "$49/mo",
@@ -833,17 +876,17 @@
       "product": "מוצר",
       "solutions": "פתרונות",
       "legal": "משפטי",
-      "pricing": "מחירון",
+      "pricing": "מחירים",
       "whatsappCrm": "WhatsApp CRM",
       "blog": "בלוג",
-      "rge": "מנוע צמיחה לסוכני נדל\"ן",
+      "rge": "Realtor Growth Engine",
       "privacy": "מדיניות פרטיות",
       "terms": "תנאי שימוש",
       "gettingStarted": "מדריך התחלה",
       "helpCenter": "מרכז עזרה"
     },
     "features": {
-      "title": "מה עושה מנוע הצמיחה",
+      "title": "מה עושה Realtor Growth Engine",
       "subtitle": "מערכת טיפול בלידים מלאה שפועלת 24/7 — כדי שתוכל להתמקד בסגירת עסקאות.",
       "f1": {
         "title": "מגיב מיידית לכל פנייה",
@@ -936,20 +979,20 @@
       }
     },
     "pricingSection": {
-      "title": "מה מניע את מנוע הצמיחה לסוכני נדל\"ן",
+      "title": "מה מניע את Realtor Growth Engine",
       "subtitle": "כל מה שצריך כלול — פלטפורמה, שכבת AI והתבנית עצמה.",
       "corePlatform": "פלטפורמה בסיסית",
       "aiLayer": "שכבת אוטומציה AI",
-      "templateLicense": "מנוע צמיחה לסוכני נדל\"ן",
+      "templateLicense": "Realtor Growth Engine",
       "oneTime": "רישיון תבנית חד-פעמי",
       "metaNote": "עמלות הודעות WhatsApp מחויבות ישירות על ידי Meta ללא תוספת מחיר.",
-      "installCta": "התקן את מנוע הצמיחה לסוכני נדל\"ן",
+      "installCta": "התקן Realtor Growth Engine",
       "viewPlans": "צפה בכל התוכניות"
     },
     "finalCta": {
       "title": "מוכן להפוך לידים לפגישות מתואמות?",
-      "subtitle": "התקן את מנוע הצמיחה לסוכני נדל\"ן והאוטומציות שלך מתחילות לפעול מיידית.",
-      "installCta": "התקן את מנוע הצמיחה לסוכני נדל\"ן",
+      "subtitle": "התקן Realtor Growth Engine והאוטומציות שלך מתחילות לפעול מיידית.",
+      "installCta": "התקן Realtor Growth Engine",
       "viewPlans": "צפה בכל התוכניות",
       "note": "מוכן לפעולה. ללא הגדרה טכנית."
     }
@@ -1059,7 +1102,8 @@
         "f6": "אינטגרציות ליבה",
         "f7": "AI Assist Basic כלול",
         "f8": "הצעות תגובה + זיהוי סנטימנט",
-        "f9": "Copilot כלול",
+        "f9": "Pipeline ומשימות כלולים",
+        "f10": "אינטגרציות",
         "upsell": "שדרג ל-Pro כדי לזהות אוטומטית לידים חמים ולבצע מעקב עם פחות עבודה ידנית.",
         "cta": "שדרג ל-Starter"
       },
@@ -1078,6 +1122,7 @@
         "f6": "סיוע AI משופר + תובנות תיבת דואר נכנס",
         "f7": "ניקוד לידים",
         "f8": "ריטרגטינג חכם",
+        "f9": "תוסף AI Brain זמין",
         "upsell": "הטוב ביותר לעסקים שרוצים שהמערכת תעזור לזהות לידים רציניים ולאוטומציית מעקב.",
         "cta": "שדרג ל-Pro"
       },
@@ -1118,13 +1163,18 @@
       "crm": "CRM",
       "pipelineTasks": "צינור ומשימות",
       "aiAssist": "AI Assist",
+      "aiAssistBasic": "AI Assist Basic",
+      "aiAssistEnhanced": "AI Assist Enhanced",
       "aiAssistBasicIncluded": "AI Assist Basic כלול",
-      "aiAssistEnhancedIncluded": "AI Assist Basic כלול",
+      "aiAssistEnhancedIncluded": "AI Assist Enhanced כלול",
       "automations": "אוטומציות",
       "advancedAutomations": "אוטומציות מתקדמות עם טריגרים מבוססי AI — הפעל תהליכי עבודה לפי התנהגות ליד, תגיות, שלבים, טיימרים ללא מענה, כוונה לקביעת פגישות ואותות שמזוהים ב-AI.",
       "leadScoring": "ניקוד לידים",
       "smartRetargeting": "ריטרגטינג חכם",
+      "integrations": "אינטגרציות",
       "integrationsWebhooks": "אינטגרציות",
+      "growthEngines": "Growth Engines",
+      "eligible": "זכאי",
       "aiBrainAddon": "תוסף AI Brain ($29/חודש)",
       "basic": "בסיסי",
       "full": "מלא",

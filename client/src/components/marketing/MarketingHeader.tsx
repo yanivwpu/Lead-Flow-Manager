@@ -1,7 +1,14 @@
 import { Suspense, lazy, useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link } from "wouter";
 import { ChevronDown, Menu, X } from "lucide-react";
-import { MARKETING_NAV_DROPDOWNS, type MarketingNavDropdown } from "@shared/marketingNav";
+import { useTranslation } from "react-i18next";
+import { type MarketingNavDropdown } from "@shared/marketingNav";
+import {
+  getLocalizedMarketingNav,
+  getMarketingChrome,
+  normalizeMarketingLocale,
+} from "@shared/localizeMarketingContent";
+import { getCurrentLanguage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const LanguageSelector = lazy(() =>
@@ -68,17 +75,19 @@ function DropdownPanel({
 }
 
 function DesktopNav({
+  navDropdowns,
   openId,
   setOpenId,
   onNavigate,
 }: {
+  navDropdowns: MarketingNavDropdown[];
   openId: string | null;
   setOpenId: (id: string | null) => void;
   onNavigate: () => void;
 }) {
   return (
     <div className="hidden lg:flex items-center gap-1">
-      {MARKETING_NAV_DROPDOWNS.map((dropdown) => {
+      {navDropdowns.map((dropdown) => {
         const isOpen = openId === dropdown.id;
         const buttonId = `marketing-nav-${dropdown.id}`;
         const panelId = `${buttonId}-panel`;
@@ -115,12 +124,20 @@ function DesktopNav({
   );
 }
 
-function MobileAccordion({ onNavigate }: { onNavigate: () => void }) {
+function MobileAccordion({
+  navDropdowns,
+  pricingLabel,
+  onNavigate,
+}: {
+  navDropdowns: MarketingNavDropdown[];
+  pricingLabel: string;
+  onNavigate: () => void;
+}) {
   const [openSection, setOpenSection] = useState<string | null>(null);
 
   return (
     <div className="space-y-1 border-t border-gray-100 pt-3">
-      {MARKETING_NAV_DROPDOWNS.map((dropdown) => {
+      {navDropdowns.map((dropdown) => {
         const isOpen = openSection === dropdown.id;
         const panelId = `mobile-nav-${dropdown.id}`;
         return (
@@ -172,7 +189,7 @@ function MobileAccordion({ onNavigate }: { onNavigate: () => void }) {
           onClick={onNavigate}
           className="block rounded-lg px-2 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
         >
-          Pricing
+          {pricingLabel}
         </Link>
       </div>
     </div>
@@ -181,12 +198,23 @@ function MobileAccordion({ onNavigate }: { onNavigate: () => void }) {
 
 export function MarketingHeader({
   isLoggedIn,
-  loginLabel = "Log in",
-  startTrialLabel = "Start Free Trial",
-  startTrialShortLabel = "Start Free",
-  dashboardLabel = "Dashboard",
-  pricingLabel = "Pricing",
+  loginLabel: loginLabelProp,
+  startTrialLabel: startTrialLabelProp,
+  startTrialShortLabel: startTrialShortLabelProp,
+  dashboardLabel: dashboardLabelProp,
+  pricingLabel: pricingLabelProp,
 }: MarketingHeaderProps) {
+  const { i18n } = useTranslation();
+  const locale = normalizeMarketingLocale(i18n.language || getCurrentLanguage());
+  const chrome = getMarketingChrome(locale);
+  const navDropdowns = getLocalizedMarketingNav(locale);
+
+  const loginLabel = loginLabelProp ?? chrome.logIn;
+  const startTrialLabel = startTrialLabelProp ?? chrome.startFreeTrial;
+  const startTrialShortLabel = startTrialShortLabelProp ?? chrome.startFree;
+  const dashboardLabel = dashboardLabelProp ?? "Dashboard";
+  const pricingLabel = pricingLabelProp ?? chrome.pricing;
+
   const [openId, setOpenId] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
@@ -248,7 +276,12 @@ export function MarketingHeader({
         </Link>
 
         <nav className="hidden justify-self-center lg:block" aria-label="Primary">
-          <DesktopNav openId={openId} setOpenId={setOpenId} onNavigate={closeAll} />
+          <DesktopNav
+            navDropdowns={navDropdowns}
+            openId={openId}
+            setOpenId={setOpenId}
+            onNavigate={closeAll}
+          />
         </nav>
 
         <div className="flex items-center gap-1.5 justify-self-end sm:gap-2 md:gap-3">
@@ -316,7 +349,11 @@ export function MarketingHeader({
           id={mobilePanelId}
           className="absolute inset-x-0 top-full z-50 max-h-[min(70vh,32rem)] overflow-y-auto border-b border-gray-200 bg-white px-4 pb-4 shadow-lg lg:hidden"
         >
-          <MobileAccordion onNavigate={closeAll} />
+          <MobileAccordion
+            navDropdowns={navDropdowns}
+            pricingLabel={pricingLabel}
+            onNavigate={closeAll}
+          />
           {!isLoggedIn ? (
             <div className="mt-3 flex flex-col gap-2 border-t border-gray-100 pt-3 sm:hidden">
               <Link
@@ -343,10 +380,9 @@ export function MarketingHeader({
         </div>
       ) : null}
 
-      {/* Crawlable fallback links for crawlers / no-JS (visually hidden, real hrefs) */}
       <nav className="sr-only" aria-label="Site">
         <ul>
-          {MARKETING_NAV_DROPDOWNS.flatMap((d) =>
+          {navDropdowns.flatMap((d) =>
             d.groups.flatMap((g) =>
               g.items.map((item) => (
                 <li key={`crawl-${d.id}-${item.label}`}>

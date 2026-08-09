@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Helmet } from "react-helmet";
 import {
@@ -9,6 +9,7 @@ import {
   Puzzle,
   Sparkles,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { MarketingBreadcrumbs } from "@/components/marketing/MarketingBreadcrumbs";
@@ -17,11 +18,18 @@ import { SolutionWorkflow } from "@/components/marketing/SolutionWorkflow";
 import { MarketingScreenshot } from "@/components/marketing/MarketingScreenshot";
 import { ProductFlowSchema } from "@/components/marketing/ProductFlowSchema";
 import { MARKETING_URL } from "@/lib/marketingUrl";
-import { getDirection } from "@/lib/i18n";
+import { getCurrentLanguage, getDirection } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { screenshot } from "@shared/marketingScreenshots";
 import { PRODUCT_THEMES } from "@shared/productThemes";
 import type { ProductPageContent } from "@shared/productPages";
+import {
+  BRAIN_CONSUMER_TEXT,
+  getLocalizedProductPage,
+  getMarketingChrome,
+  normalizeMarketingLocale,
+  PLATFORM_STORY_STEP_TEXT,
+} from "@shared/localizeMarketingContent";
 
 const SiteFooter = lazy(() =>
   import("@/components/SiteFooter").then((m) => ({ default: m.SiteFooter })),
@@ -35,9 +43,11 @@ type Props = { content: ProductPageContent };
 function HeroVisual({
   visual,
   theme,
+  statusLabel,
 }: {
   visual: ProductPageContent["heroVisual"];
   theme: (typeof PRODUCT_THEMES)[keyof typeof PRODUCT_THEMES];
+  statusLabel: string;
 }) {
   return (
     <div
@@ -64,7 +74,7 @@ function HeroVisual({
       </div>
       <div className="absolute bottom-6 left-4 right-8 rounded-2xl bg-white p-4 shadow-md ring-1 ring-gray-100">
         <div className="mb-2 flex items-center justify-between text-xs font-semibold text-gray-500">
-          <span>Status</span>
+          <span>{statusLabel}</span>
           <span className={cn("rounded-full px-2 py-0.5", theme.badgeBg, theme.badgeText)}>
             {visual.stageLabel}
           </span>
@@ -78,31 +88,34 @@ function HeroVisual({
   );
 }
 
-const PLATFORM_STORY = [
-  { label: "Prospect AI", href: "/prospect-ai", text: "finds opportunities" },
-  { label: "AI Brain", href: "/ai-brain", text: "understands and recommends" },
-  { label: "Campaigns", href: "/campaigns", text: "start personalized outreach" },
-  { label: "Unified Inbox", href: "/unified-inbox", text: "manages replies" },
-  { label: "AI Copilot", href: "/ai-copilot", text: "guides the conversation" },
-  { label: "Chatbots & Automations", href: "/automations", text: "handle repeatable work" },
-  {
-    label: "Growth Engines",
-    href: "/realtor-growth-engine",
-    text: "package industry workflows",
-  },
+const PLATFORM_STORY_LINKS = [
+  { label: "Prospect AI", href: "/prospect-ai" },
+  { label: "AI Brain", href: "/ai-brain" },
+  { label: "Campaigns", href: "/campaigns" },
+  { label: "Unified Inbox", href: "/unified-inbox" },
+  { label: "AI Copilot", href: "/ai-copilot" },
+  { label: "Chatbots & Automations", href: "/automations" },
+  { label: "Growth Engines", href: "/realtor-growth-engine" },
 ] as const;
 
-const BRAIN_CONSUMERS = [
-  { label: "Prospect AI", href: "/prospect-ai", text: "Approved context for personalized outreach" },
-  { label: "AI Copilot", href: "/ai-copilot", text: "Business-aware recommendations in chat" },
-  { label: "Campaigns", href: "/campaigns", text: "Personalization grounded in your offer" },
-  { label: "Qualification", href: "/ai-brain", text: "Consistent questions and ideal-customer rules" },
+const BRAIN_CONSUMER_LINKS = [
+  { label: "Prospect AI", href: "/prospect-ai" },
+  { label: "AI Copilot", href: "/ai-copilot" },
+  { label: "Campaigns", href: "/campaigns" },
+  { label: "Qualification", href: "/ai-brain" },
 ] as const;
 
-export function ProductPage({ content }: Props) {
+export function ProductPage({ content: baseContent }: Props) {
   const { user } = useAuth();
+  const { i18n } = useTranslation();
   const [showDemo, setShowDemo] = useState(false);
+  const locale = normalizeMarketingLocale(i18n.language || getCurrentLanguage());
+  const chrome = getMarketingChrome(locale);
+  const content = getLocalizedProductPage(baseContent, locale);
   const isRTL = getDirection() === "rtl";
+  const arrowClass = isRTL ? "h-4 w-4 rotate-180" : "h-4 w-4";
+  const platformStoryText = PLATFORM_STORY_STEP_TEXT[locale];
+  const brainConsumerText = BRAIN_CONSUMER_TEXT[locale];
   const theme = PRODUCT_THEMES[content.themeId];
   const workflowVariant = content.workflowVariant ?? "both";
   const canonical = `${MARKETING_URL}${content.path}`;
@@ -113,10 +126,19 @@ export function ProductPage({ content }: Props) {
       : null;
 
   const breadcrumbs = [
-    { label: "Home", href: "/" },
-    { label: "Product", href: "/#ai-platform" },
+    { label: chrome.home, href: "/" },
+    { label: chrome.product, href: "/#ai-platform" },
     { label: content.breadcrumbLabel, href: content.path },
   ];
+
+  const howProductWorksTitle = useMemo(
+    () => chrome.howProductWorks.replace("{{product}}", content.productLabel),
+    [chrome.howProductWorks, content.productLabel],
+  );
+  const realisticTeamsTitle = useMemo(
+    () => chrome.realisticTeamsUse.replace("{{product}}", content.productLabel),
+    [chrome.realisticTeamsUse, content.productLabel],
+  );
 
   const webPageSchema = {
     "@context": "https://schema.org",
@@ -156,8 +178,8 @@ export function ProductPage({ content }: Props) {
 
       <MarketingHeader
         isLoggedIn={!!user}
-        startTrialLabel="Start Free Trial"
-        startTrialShortLabel="Start Free"
+        startTrialLabel={chrome.startFreeTrial}
+        startTrialShortLabel={chrome.startFree}
       />
 
       <main>
@@ -179,8 +201,8 @@ export function ProductPage({ content }: Props) {
                   href={user ? "/app/inbox" : "/auth"}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-brand-green px-6 text-sm font-semibold text-white hover:bg-emerald-700"
                 >
-                  Start Free Trial
-                  <ArrowRight className="h-4 w-4" />
+                  {chrome.startFreeTrial}
+                  <ArrowRight className={arrowClass} />
                 </Link>
                 <Link
                   href={content.secondaryCta.href}
@@ -193,16 +215,21 @@ export function ProductPage({ content }: Props) {
                   onClick={() => setShowDemo(true)}
                   className="inline-flex h-11 items-center justify-center rounded-full border border-amber-200 bg-amber-50 px-6 text-sm font-semibold text-amber-900 hover:bg-amber-100"
                 >
-                  Book a Demo
+                  {chrome.bookDemo}
                 </button>
               </div>
             </div>
             {heroShot ? (
               <div className={cn("mx-auto w-full max-w-xl rounded-2xl p-2 ring-1", theme.accentRing, theme.accentSoft)}>
-                <MarketingScreenshot {...heroShot} priority />
+                <MarketingScreenshot
+                  {...heroShot}
+                  priority
+                  enlargeLabel={chrome.enlargeScreenshot}
+                  closeEnlargedLabel={chrome.closeEnlarged}
+                />
               </div>
             ) : (
-              <HeroVisual visual={content.heroVisual} theme={theme} />
+              <HeroVisual visual={content.heroVisual} theme={theme} statusLabel={chrome.status} />
             )}
           </div>
         </section>
@@ -210,7 +237,7 @@ export function ProductPage({ content }: Props) {
         <section className="bg-white px-4 py-14 md:px-6 md:py-16">
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
             <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
-              The problem
+              {chrome.theProblem}
             </p>
             <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
               {content.problemTitle}
@@ -219,7 +246,7 @@ export function ProductPage({ content }: Props) {
               {content.problems.map((item) => (
                 <div
                   key={item.title}
-                  className={cn("border-l-4 bg-gray-50/80 py-4 pl-5 pr-4", theme.accentBorder)}
+                  className={cn("border-s-4 bg-gray-50/80 py-4 ps-5 pe-4", theme.accentBorder)}
                 >
                   <h3 className="font-semibold text-gray-950">{item.title}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-gray-600">{item.description}</p>
@@ -232,10 +259,10 @@ export function ProductPage({ content }: Props) {
         <section className={cn("px-4 py-14 md:px-6 md:py-16", theme.sectionAltBg)}>
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
             <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
-              How it helps
+              {chrome.howItHelps}
             </p>
             <h2 className="font-display mb-3 text-2xl font-bold text-gray-950 md:text-3xl">
-              How {content.productLabel} works
+              {howProductWorksTitle}
             </h2>
             <p className="mb-8 max-w-3xl text-base text-gray-600 md:text-lg">{content.howIntro}</p>
             <div className="grid gap-4 md:grid-cols-2">
@@ -262,10 +289,10 @@ export function ProductPage({ content }: Props) {
           <section className="border-y border-gray-100 bg-white px-4 py-14 md:px-6 md:py-16">
             <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
               <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
-                Differentiation
+                {chrome.differentiation}
               </p>
               <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
-                Generic AI vs WhachatCRM AI Brain
+                {chrome.genericAiVsBrain}
               </h2>
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6">
@@ -315,7 +342,7 @@ export function ProductPage({ content }: Props) {
                   >
                     <div>
                       <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
-                        Product detail
+                        {chrome.productDetail}
                       </p>
                       <h2 className="font-display text-2xl font-bold text-gray-950 md:text-3xl">
                         {section.title}
@@ -324,7 +351,11 @@ export function ProductPage({ content }: Props) {
                     </div>
                     {shot ? (
                       <div className={cn("rounded-2xl p-2 ring-1", theme.accentRing, theme.accentSoft)}>
-                        <MarketingScreenshot {...shot} />
+                        <MarketingScreenshot
+                          {...shot}
+                          enlargeLabel={chrome.enlargeScreenshot}
+                          closeEnlargedLabel={chrome.closeEnlarged}
+                        />
                       </div>
                     ) : null}
                   </div>
@@ -338,24 +369,23 @@ export function ProductPage({ content }: Props) {
           <section className={cn("px-4 py-14 md:px-6 md:py-16", theme.sectionAltBg)}>
             <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
               <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
-                Platform intelligence
+                {chrome.platformIntelligence}
               </p>
               <h2 className="font-display mb-3 text-2xl font-bold text-gray-950 md:text-3xl">
-                One Brain across the platform
+                {chrome.oneBrainAcross}
               </h2>
               <p className="mb-8 max-w-3xl text-base text-gray-600 md:text-lg">
-                Approved business intelligence can power the products that need company context — without
-                inventing knowledge you did not provide or publish.
+                {chrome.oneBrainIntro}
               </p>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {BRAIN_CONSUMERS.map((item) => (
+                {BRAIN_CONSUMER_LINKS.map((item, index) => (
                   <Link
                     key={item.label}
                     href={item.href}
                     className="rounded-2xl border border-white bg-white/95 p-5 shadow-sm transition hover:shadow-md"
                   >
                     <p className={cn("text-sm font-semibold", theme.accentText)}>{item.label}</p>
-                    <p className="mt-2 text-sm text-gray-600">{item.text}</p>
+                    <p className="mt-2 text-sm text-gray-600">{brainConsumerText[index]}</p>
                   </Link>
                 ))}
               </div>
@@ -369,9 +399,10 @@ export function ProductPage({ content }: Props) {
             theme={theme}
             heading={
               content.path === "/chatbot-builder"
-                ? "Chatbot journey scenarios"
-                : "Automation if-this-then-that scenarios"
+                ? chrome.flowScenariosChatbot
+                : chrome.flowScenariosAutomations
             }
+            eyebrow={chrome.flowEyebrow}
           />
         ) : null}
 
@@ -383,6 +414,8 @@ export function ProductPage({ content }: Props) {
                 steps={content.workflowSteps}
                 eyebrowClassName={theme.accentText}
                 stepBadgeClassName={cn(theme.accentBg, "text-white")}
+                eyebrow={chrome.visualWorkflow}
+                isRTL={isRTL}
               />
             </div>
           </section>
@@ -391,7 +424,7 @@ export function ProductPage({ content }: Props) {
         <section className="bg-white px-4 py-14 md:px-6 md:py-16">
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
             <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
-              Capabilities
+              {chrome.capabilities}
             </p>
             <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
               {content.featuresTitle}
@@ -404,7 +437,7 @@ export function ProductPage({ content }: Props) {
                     <p className="mt-2 text-sm leading-relaxed text-gray-600">{feature.description}</p>
                     {feature.href ? (
                       <span className={cn("mt-3 inline-flex items-center gap-1 text-sm font-semibold", theme.accentText)}>
-                        Learn more <ArrowRight className="h-3.5 w-3.5" />
+                        {chrome.learnMore} <ArrowRight className={cn("h-3.5 w-3.5", isRTL && "rotate-180")} />
                       </span>
                     ) : null}
                   </>
@@ -437,10 +470,10 @@ export function ProductPage({ content }: Props) {
           <section className={cn("border-y border-gray-100 px-4 py-14 md:px-6 md:py-16", theme.sectionAltBg)}>
             <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
               <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
-                Directory
+                {chrome.directory}
               </p>
               <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
-                Verified integrations
+                {chrome.verifiedIntegrations}
               </h2>
               <div className="space-y-10">
                 {content.integrationCategories.map((category) => (
@@ -462,7 +495,7 @@ export function ProductPage({ content }: Props) {
                                   theme.accentText,
                                 )}
                               >
-                                Open guide <ArrowRight className="h-3.5 w-3.5" />
+                                {chrome.openGuide} <ArrowRight className={cn("h-3.5 w-3.5", isRTL && "rotate-180")} />
                               </span>
                             ) : null}
                           </div>
@@ -486,10 +519,10 @@ export function ProductPage({ content }: Props) {
         <section className={cn("px-4 py-14 md:px-6 md:py-16", theme.sectionAltBg)}>
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
             <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
-              Use cases
+              {chrome.useCases}
             </p>
             <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
-              Realistic ways teams use {content.productLabel}
+              {realisticTeamsTitle}
             </h2>
             <div className="grid gap-4 lg:grid-cols-3">
               {content.useCases.map((useCase) => (
@@ -498,15 +531,15 @@ export function ProductPage({ content }: Props) {
                   className="flex flex-col rounded-2xl border border-white bg-white p-5 shadow-sm"
                 >
                   <h3 className={cn("text-sm font-semibold uppercase tracking-wide", theme.accentText)}>
-                    Situation
+                    {chrome.situation}
                   </h3>
                   <p className="mt-1 text-sm font-medium text-gray-950">{useCase.situation}</p>
                   <h3 className="mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
-                    What WhachatCRM does
+                    {chrome.whatWhachatDoes}
                   </h3>
                   <p className="mt-1 text-sm text-gray-700">{useCase.action}</p>
                   <h3 className="mt-4 text-sm font-semibold uppercase tracking-wide text-emerald-700">
-                    Outcome
+                    {chrome.outcome}
                   </h3>
                   <p className="mt-1 text-sm text-gray-700">{useCase.outcome}</p>
                 </article>
@@ -519,19 +552,19 @@ export function ProductPage({ content }: Props) {
           <section className="border-y border-gray-100 bg-emerald-50/40 px-4 py-14 md:px-6 md:py-16">
             <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
               <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
-                Platform story
+                {chrome.platformStory}
               </p>
               <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
-                How WhachatCRM works together
+                {chrome.howWhachatWorksTogether}
               </h2>
               <ol className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {PLATFORM_STORY.map((step, index) => (
+                {PLATFORM_STORY_LINKS.map((step, index) => (
                   <li key={step.label} className="rounded-2xl bg-white p-4 ring-1 ring-emerald-100">
                     <p className="text-xs font-semibold text-brand-green">{index + 1}</p>
                     <Link href={step.href} className="mt-1 block font-semibold text-gray-950 hover:text-brand-green">
                       {step.label}
                     </Link>
-                    <p className="mt-1 text-sm text-gray-600">{step.text}</p>
+                    <p className="mt-1 text-sm text-gray-600">{platformStoryText[index]}</p>
                   </li>
                 ))}
               </ol>
@@ -542,9 +575,9 @@ export function ProductPage({ content }: Props) {
         <section className="px-4 py-14 md:px-6 md:py-16">
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
             <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
-              Getting started
+              {chrome.gettingStarted}
             </p>
-            <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">How to get started</h2>
+            <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">{chrome.howToGetStarted}</h2>
             <ol className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               {content.howItWorks.map((step, index) => (
                 <li key={step.title} className={cn("rounded-2xl bg-white p-5 ring-1", theme.accentRing)}>
@@ -559,7 +592,7 @@ export function ProductPage({ content }: Props) {
 
         <section className="border-t border-gray-100 bg-gray-50 px-4 py-14 md:px-6 md:py-16">
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
-            <h2 className="font-display mb-6 text-2xl font-bold text-gray-950">Related products</h2>
+            <h2 className="font-display mb-6 text-2xl font-bold text-gray-950">{chrome.relatedProducts}</h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {content.relatedProducts.map((link) => (
                 <Link
@@ -580,7 +613,7 @@ export function ProductPage({ content }: Props) {
             {content.industryLinks?.length ? (
               <>
                 <h2 className="font-display mb-6 mt-12 text-2xl font-bold text-gray-950">
-                  See it in industry solutions
+                  {chrome.seeInIndustry}
                 </h2>
                 <div className="flex flex-wrap gap-3">
                   {content.industryLinks.map((link) => (
@@ -590,7 +623,7 @@ export function ProductPage({ content }: Props) {
                       className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:border-emerald-200"
                     >
                       {link.label}
-                      <ArrowRight className="h-3.5 w-3.5" />
+                      <ArrowRight className={cn("h-3.5 w-3.5", isRTL && "rotate-180")} />
                     </Link>
                   ))}
                 </div>
@@ -602,6 +635,8 @@ export function ProductPage({ content }: Props) {
         <MarketingLandingCta
           onBookDemo={() => setShowDemo(true)}
           headline={content.finalCtaHeadline}
+          startTrialLabel={chrome.startFreeTrial}
+          bookDemoLabel={chrome.bookDemo}
         />
         <p className="-mt-10 mb-10 px-4 text-center text-sm text-gray-500 md:px-6">
           {content.finalCtaSubtitle}

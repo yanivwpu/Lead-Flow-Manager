@@ -1,7 +1,8 @@
 import { Link } from "wouter";
-import { ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Helmet } from "react-helmet";
 import { MARKETING_URL } from "@/lib/marketingUrl";
+import { getDirection } from "@/lib/i18n";
 
 export type BreadcrumbItem = {
   label: string;
@@ -20,6 +21,8 @@ function breadcrumbUrl(href: string): string {
 }
 
 export function MarketingBreadcrumbs({ items, className = "" }: Props) {
+  const isRTL = getDirection() === "rtl";
+  const Chevron = isRTL ? ChevronLeft : ChevronRight;
   const schema = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -42,7 +45,7 @@ export function MarketingBreadcrumbs({ items, className = "" }: Props) {
             const isLast = index === items.length - 1;
             return (
               <li key={`${item.label}-${index}`} className="flex items-center gap-1">
-                {index > 0 ? <ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-300" aria-hidden /> : null}
+                {index > 0 ? <Chevron className="h-3.5 w-3.5 shrink-0 text-gray-300" aria-hidden /> : null}
                 {isLast ? (
                   <span className="font-medium text-gray-700" aria-current="page">
                     {item.label}

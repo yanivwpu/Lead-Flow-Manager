@@ -13,7 +13,9 @@ import {
   Users,
 } from "lucide-react";
 import { Helmet } from "react-helmet";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
+import { getCurrentLanguage, getDirection } from "@/lib/i18n";
 import { MARKETING_URL } from "@/lib/marketingUrl";
 import { SiteFooter } from "@/components/SiteFooter";
 import { BookDemoModal } from "@/components/BookDemoModal";
@@ -25,10 +27,12 @@ import {
   PROSPECT_AI_LANDING_PATH,
   PROSPECT_AI_LANDING_SEO,
 } from "@/content/prospectAiLandingContent";
+import {
+  getLocalizedProspectAiContent,
+  getMarketingChrome,
+  normalizeMarketingLocale,
+} from "@shared/localizeMarketingContent";
 import { cn } from "@/lib/utils";
-
-const C = PROSPECT_AI_LANDING;
-const SEO = PROSPECT_AI_LANDING_SEO;
 
 const FLOW_ICONS = [Radar, Sparkles, Send, Inbox, Users] as const;
 
@@ -59,13 +63,18 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
 
 export function ProspectAiLanding() {
   const { user } = useAuth();
+  const { i18n } = useTranslation();
   const [showDemoModal, setShowDemoModal] = useState(false);
+  const locale = normalizeMarketingLocale(i18n.language || getCurrentLanguage());
+  const chrome = getMarketingChrome(locale);
+  const C = getLocalizedProspectAiContent(PROSPECT_AI_LANDING, PROSPECT_AI_LANDING_SEO, locale);
+  const isRTL = getDirection() === "rtl";
 
   const canonical = `${MARKETING_URL}${PROSPECT_AI_LANDING_PATH}`;
-  const ogImage = `${MARKETING_URL}${SEO.ogImagePath}`;
+  const ogImage = `${MARKETING_URL}${PROSPECT_AI_LANDING_SEO.ogImagePath}`;
   const ctaHref = user
-    ? C.authRedirect
-    : `/auth?redirect=${encodeURIComponent(C.authRedirect)}`;
+    ? PROSPECT_AI_LANDING.authRedirect
+    : `/auth?redirect=${encodeURIComponent(PROSPECT_AI_LANDING.authRedirect)}`;
 
   const faqSchema = {
     "@context": "https://schema.org",
@@ -84,7 +93,7 @@ export function ProspectAiLanding() {
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     url: canonical,
-    description: SEO.description,
+    description: C.seo.description,
     offers: {
       "@type": "Offer",
       price: "0",
@@ -99,20 +108,24 @@ export function ProspectAiLanding() {
   };
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-white" data-testid="prospect-ai-landing">
+    <div
+      dir={isRTL ? "rtl" : "ltr"}
+      className="min-h-screen overflow-x-hidden bg-white"
+      data-testid="prospect-ai-landing"
+    >
       <Helmet>
-        <title>{SEO.title}</title>
-        <meta name="description" content={SEO.description} />
-        <meta name="keywords" content={SEO.keywords} />
+        <title>{C.seo.title}</title>
+        <meta name="description" content={C.seo.description} />
+        <meta name="keywords" content={PROSPECT_AI_LANDING_SEO.keywords} />
         <link rel="canonical" href={canonical} />
-        <meta property="og:title" content={SEO.ogTitle} />
-        <meta property="og:description" content={SEO.ogDescription} />
+        <meta property="og:title" content={C.seo.ogTitle} />
+        <meta property="og:description" content={C.seo.ogDescription} />
         <meta property="og:url" content={canonical} />
         <meta property="og:image" content={ogImage} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={SEO.ogTitle} />
-        <meta name="twitter:description" content={SEO.ogDescription} />
+        <meta name="twitter:title" content={C.seo.ogTitle} />
+        <meta name="twitter:description" content={C.seo.ogDescription} />
         <meta name="twitter:image" content={ogImage} />
         <script type="application/ld+json">{JSON.stringify(faqSchema)}</script>
         <script type="application/ld+json">{JSON.stringify(softwareSchema)}</script>
@@ -130,18 +143,17 @@ export function ProspectAiLanding() {
         <div className="flex items-center gap-2 md:gap-4">
           <Link href="/pricing">
             <a className="hidden text-sm font-medium text-gray-600 hover:text-gray-900 sm:block">
-              Pricing
+              {chrome.pricing}
             </a>
           </Link>
           <Link href={user ? "/app/inbox" : "/auth"}>
             <a className="rounded-full bg-brand-green px-4 py-2 text-sm font-medium text-white hover:bg-brand-green/90">
-              {user ? "Dashboard" : "Start Free"}
+              {user ? "Dashboard" : chrome.startFree}
             </a>
           </Link>
         </div>
       </nav>
 
-      {/* Hero — brand first, full-bleed visual plane */}
       <header className="relative overflow-hidden border-b border-emerald-100/80">
         <div
           className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(5,150,105,0.14),_transparent_55%),linear-gradient(180deg,#f8fafc_0%,#ffffff_70%)]"
@@ -154,8 +166,8 @@ export function ProspectAiLanding() {
         <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-6 md:px-6 md:pb-24 md:pt-10 xl:max-w-[1440px]">
           <MarketingBreadcrumbs
             items={[
-              { label: "Home", href: "/" },
-              { label: "Prospect AI", href: PROSPECT_AI_LANDING_PATH },
+              { label: C.ui.breadcrumbHome, href: "/" },
+              { label: C.brand, href: PROSPECT_AI_LANDING_PATH },
             ]}
             className="mb-8"
           />
@@ -194,7 +206,7 @@ export function ProspectAiLanding() {
                   data-testid="prospect-ai-landing-cta-primary"
                 >
                   {C.primaryCta}
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className={cn("h-4 w-4", isRTL && "rotate-180")} />
                 </a>
               </Link>
               <button
@@ -215,7 +227,7 @@ export function ProspectAiLanding() {
           >
             <img
               src="/og/prospect-ai-growth-engine.png"
-              alt="Prospect AI growth engine — discover businesses, qualify with AI, and launch outreach"
+              alt={C.ui.heroImageAlt}
               className="mx-auto h-auto w-full max-w-4xl rounded-none object-cover shadow-none"
               width={1200}
               height={630}
@@ -225,7 +237,6 @@ export function ProspectAiLanding() {
       </header>
 
       <main>
-        {/* Stop Cold Prospecting */}
         <section
           id={C.pain.id}
           className="scroll-mt-24 border-b border-gray-100 px-4 py-16 md:px-6 md:py-20"
@@ -242,7 +253,6 @@ export function ProspectAiLanding() {
           </div>
         </section>
 
-        {/* Meet Your AI Sales Team */}
         <section
           id={C.meetTeam.id}
           className="scroll-mt-24 bg-slate-50 px-4 py-16 md:px-6 md:py-20"
@@ -266,7 +276,6 @@ export function ProspectAiLanding() {
           </div>
         </section>
 
-        {/* How it works */}
         <section
           id={C.howItWorks.id}
           className="scroll-mt-24 px-4 py-16 md:px-6 md:py-20"
@@ -311,7 +320,6 @@ export function ProspectAiLanding() {
           </div>
         </section>
 
-        {/* Feature sections with screenshots */}
         {C.featureSections.map((section, index) => (
           <section
             key={section.id}
@@ -347,7 +355,6 @@ export function ProspectAiLanding() {
           </section>
         ))}
 
-        {/* Platform */}
         <section
           id={C.platform.id}
           className="scroll-mt-24 border-y border-gray-100 bg-gray-950 px-4 py-16 text-white md:px-6 md:py-20"
@@ -370,7 +377,6 @@ export function ProspectAiLanding() {
           </div>
         </section>
 
-        {/* Why choose */}
         <section
           id={C.whyChoose.id}
           className="scroll-mt-24 px-4 py-16 md:px-6 md:py-20"
@@ -390,11 +396,10 @@ export function ProspectAiLanding() {
           </div>
         </section>
 
-        {/* FAQ */}
         <section id="faq" className="scroll-mt-24 bg-slate-50 px-4 py-16 md:px-6 md:py-20">
           <div className="mx-auto max-w-3xl">
             <h2 className="font-display text-2xl font-bold text-gray-900 md:text-4xl">
-              Frequently Asked Questions
+              {C.ui.faqTitle}
             </h2>
             <div className="mt-8 space-y-3">
               {C.faqs.map((f) => (
@@ -404,10 +409,9 @@ export function ProspectAiLanding() {
           </div>
         </section>
 
-        {/* Related */}
         <section className="px-4 py-12 md:px-6">
           <div className="mx-auto max-w-5xl rounded-2xl border border-gray-100 bg-gray-50 p-6">
-            <h2 className="mb-4 text-lg font-bold text-gray-900">Related resources</h2>
+            <h2 className="mb-4 text-lg font-bold text-gray-900">{C.ui.relatedResourcesTitle}</h2>
             <div className="flex flex-wrap gap-3">
               {C.relatedLinks.map((l) => (
                 <Link key={l.href} href={l.href}>
@@ -424,6 +428,8 @@ export function ProspectAiLanding() {
       <MarketingLandingCta
         headline={C.finalCta.headline}
         onBookDemo={() => setShowDemoModal(true)}
+        startTrialLabel={chrome.startFreeTrial}
+        bookDemoLabel={chrome.bookDemo}
       />
 
       <SiteFooter />

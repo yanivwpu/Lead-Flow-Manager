@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type WorkflowStep = {
@@ -12,6 +12,8 @@ type Props = {
   className?: string;
   eyebrowClassName?: string;
   stepBadgeClassName?: string;
+  eyebrow?: string;
+  isRTL?: boolean;
 };
 
 /** Lightweight workflow graphic — HTML/CSS only, no heavy animation libs. */
@@ -21,7 +23,11 @@ export function SolutionWorkflow({
   className,
   eyebrowClassName = "text-brand-green",
   stepBadgeClassName = "bg-brand-green text-white",
+  eyebrow = "Visual workflow",
+  isRTL = false,
 }: Props) {
+  const Arrow = isRTL ? ArrowLeft : ArrowRight;
+
   return (
     <section
       className={cn("scroll-mt-24", className)}
@@ -29,7 +35,7 @@ export function SolutionWorkflow({
     >
       <div className="mb-8 max-w-3xl">
         <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", eyebrowClassName)}>
-          Visual workflow
+          {eyebrow}
         </p>
         <h2
           id="solution-workflow-heading"
@@ -56,8 +62,13 @@ export function SolutionWorkflow({
                 {index + 1}
               </span>
               {index < steps.length - 1 ? (
-                <ArrowRight
-                  className="hidden h-4 w-4 text-gray-300 xl:absolute xl:-right-2 xl:top-8 xl:block xl:translate-x-full"
+                <Arrow
+                  className={cn(
+                    "hidden h-4 w-4 text-gray-300 xl:block xl:translate-x-full",
+                    isRTL
+                      ? "xl:absolute xl:-left-2 xl:top-8 xl:-translate-x-full"
+                      : "xl:absolute xl:-right-2 xl:top-8",
+                  )}
                   aria-hidden
                 />
               ) : null}

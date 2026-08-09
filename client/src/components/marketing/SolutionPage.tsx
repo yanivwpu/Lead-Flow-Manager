@@ -9,14 +9,21 @@ import {
   Puzzle,
   Sparkles,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { MarketingBreadcrumbs } from "@/components/marketing/MarketingBreadcrumbs";
 import { MarketingLandingCta } from "@/components/marketing/MarketingLandingCta";
 import { SolutionWorkflow } from "@/components/marketing/SolutionWorkflow";
 import { MARKETING_URL } from "@/lib/marketingUrl";
-import { getDirection } from "@/lib/i18n";
+import { getCurrentLanguage, getDirection } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import type { SolutionPageContent } from "@shared/solutionPages";
+import {
+  getLocalizedSolutionPage,
+  getMarketingChrome,
+  normalizeMarketingLocale,
+} from "@shared/localizeMarketingContent";
 
 const SiteFooter = lazy(() =>
   import("@/components/SiteFooter").then((m) => ({ default: m.SiteFooter })),
@@ -27,7 +34,13 @@ const BookDemoModal = lazy(() =>
 
 type Props = { content: SolutionPageContent };
 
-function HeroVisual({ visual }: { visual: SolutionPageContent["heroVisual"] }) {
+function HeroVisual({
+  visual,
+  leadStageLabel,
+}: {
+  visual: SolutionPageContent["heroVisual"];
+  leadStageLabel: string;
+}) {
   return (
     <div
       className="relative mx-auto w-full max-w-md"
@@ -53,7 +66,7 @@ function HeroVisual({ visual }: { visual: SolutionPageContent["heroVisual"] }) {
       </div>
       <div className="absolute bottom-6 left-4 right-8 rounded-2xl bg-white p-4 shadow-md ring-1 ring-gray-100">
         <div className="mb-2 flex items-center justify-between text-xs font-semibold text-gray-500">
-          <span>Lead stage</span>
+          <span>{leadStageLabel}</span>
           <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-brand-green">{visual.stageLabel}</span>
         </div>
         <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
@@ -65,16 +78,22 @@ function HeroVisual({ visual }: { visual: SolutionPageContent["heroVisual"] }) {
   );
 }
 
-export function SolutionPage({ content }: Props) {
+export function SolutionPage({ content: baseContent }: Props) {
   const { user } = useAuth();
+  const { i18n } = useTranslation();
   const [showDemo, setShowDemo] = useState(false);
+  const locale = normalizeMarketingLocale(i18n.language || getCurrentLanguage());
+  const chrome = getMarketingChrome(locale);
+  const content = getLocalizedSolutionPage(baseContent, locale);
   const isRTL = getDirection() === "rtl";
+  const arrowClass = isRTL ? "h-4 w-4 rotate-180" : "h-4 w-4";
+  const arrowClassSm = isRTL ? "h-3.5 w-3.5 rotate-180" : "h-3.5 w-3.5";
   const canonical = `${MARKETING_URL}${content.path}`;
   const ogTitle = content.ogTitle ?? content.title;
 
   const breadcrumbs = [
-    { label: "Home", href: "/" },
-    { label: "Solutions", href: "/#built-for" },
+    { label: chrome.home, href: "/" },
+    { label: chrome.solutions, href: "/#built-for" },
     { label: content.breadcrumbLabel, href: content.path },
   ];
 
@@ -111,8 +130,8 @@ export function SolutionPage({ content }: Props) {
 
       <MarketingHeader
         isLoggedIn={!!user}
-        startTrialLabel="Start Free Trial"
-        startTrialShortLabel="Start Free"
+        startTrialLabel={chrome.startFreeTrial}
+        startTrialShortLabel={chrome.startFree}
       />
 
       <main>
@@ -134,8 +153,8 @@ export function SolutionPage({ content }: Props) {
                   href={user ? "/app/inbox" : "/auth"}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-brand-green px-6 text-sm font-semibold text-white hover:bg-emerald-700"
                 >
-                  Start Free Trial
-                  <ArrowRight className="h-4 w-4" />
+                  {chrome.startFreeTrial}
+                  <ArrowRight className={arrowClass} />
                 </Link>
                 <Link
                   href={content.secondaryCta.href}
@@ -148,18 +167,18 @@ export function SolutionPage({ content }: Props) {
                   onClick={() => setShowDemo(true)}
                   className="inline-flex h-11 items-center justify-center rounded-full border border-amber-200 bg-amber-50 px-6 text-sm font-semibold text-amber-900 hover:bg-amber-100"
                 >
-                  Book a Demo
+                  {chrome.bookDemo}
                 </button>
               </div>
             </div>
-            <HeroVisual visual={content.heroVisual} />
+            <HeroVisual visual={content.heroVisual} leadStageLabel={chrome.leadStage} />
           </div>
         </section>
 
         <section className="bg-gray-50 px-4 py-14 md:px-6 md:py-16">
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
             <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
-              Industry challenges
+              {chrome.industryChallenges}
             </p>
             <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
               {content.challengesHeading}
@@ -178,10 +197,10 @@ export function SolutionPage({ content }: Props) {
         <section className="px-4 py-14 md:px-6 md:py-16">
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
             <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
-              How WhachatCRM helps
+              {chrome.howWhachatHelps}
             </p>
             <h2 className="font-display mb-4 text-2xl font-bold text-gray-950 md:text-3xl">
-              Multiple products working together
+              {chrome.multipleProductsTogether}
             </h2>
             <p className="mb-8 max-w-3xl text-gray-600">{content.helpsIntro}</p>
             <div className="grid gap-4 md:grid-cols-2">
@@ -200,17 +219,22 @@ export function SolutionPage({ content }: Props) {
 
         <section className="bg-gradient-to-b from-emerald-50/40 to-white px-4 py-14 md:px-6 md:py-16">
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
-            <SolutionWorkflow title={content.workflowTitle} steps={content.workflowSteps} />
+            <SolutionWorkflow
+              title={content.workflowTitle}
+              steps={content.workflowSteps}
+              eyebrow={chrome.visualWorkflow}
+              isRTL={isRTL}
+            />
           </div>
         </section>
 
         <section className="px-4 py-14 md:px-6 md:py-16">
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
             <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
-              Platform capabilities
+              {chrome.platformCapabilities}
             </p>
             <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
-              Relevant WhachatCRM products
+              {chrome.relevantProducts}
             </h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {content.products.map((product) => {
@@ -220,7 +244,7 @@ export function SolutionPage({ content }: Props) {
                     <p className="mt-2 text-sm leading-relaxed text-gray-600">{product.description}</p>
                     {product.href ? (
                       <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-brand-green">
-                        Learn more <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                        {chrome.learnMore} <ArrowRight className={arrowClassSm} aria-hidden />
                       </span>
                     ) : null}
                   </>
@@ -246,24 +270,24 @@ export function SolutionPage({ content }: Props) {
         <section className="bg-gray-50 px-4 py-14 md:px-6 md:py-16">
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
             <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
-              Use cases
+              {chrome.useCases}
             </p>
             <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
-              Realistic scenarios for {content.industryLabel.toLowerCase()}
+              {chrome.realisticScenariosFor} {content.industryLabel.toLowerCase()}
             </h2>
             <div className="grid gap-4 lg:grid-cols-2">
               {content.useCases.map((useCase, i) => (
                 <article key={i} className="rounded-2xl bg-white p-5 ring-1 ring-gray-100">
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-                    Situation
+                    {chrome.situation}
                   </h3>
                   <p className="mt-1 text-gray-900">{useCase.situation}</p>
                   <h3 className="mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
-                    What WhachatCRM does
+                    {chrome.whatWhachatDoes}
                   </h3>
                   <p className="mt-1 text-gray-700">{useCase.action}</p>
                   <h3 className="mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
-                    Outcome
+                    {chrome.outcome}
                   </h3>
                   <p className="mt-1 font-medium text-brand-green">{useCase.outcome}</p>
                 </article>
@@ -278,8 +302,8 @@ export function SolutionPage({ content }: Props) {
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-sky-100 text-sky-700">
                 <MessageSquare className="h-5 w-5" aria-hidden />
               </div>
-              <h2 className="font-display text-2xl font-bold text-gray-950">Messaging channels</h2>
-              <p className="mt-2 text-gray-600">Verified channels available in WhachatCRM.</p>
+              <h2 className="font-display text-2xl font-bold text-gray-950">{chrome.messagingChannels}</h2>
+              <p className="mt-2 text-gray-600">{chrome.verifiedChannelsNote}</p>
               <ul className="mt-5 flex flex-wrap gap-2">
                 {content.channels.map((channel) => (
                   <li
@@ -295,8 +319,8 @@ export function SolutionPage({ content }: Props) {
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
                 <Puzzle className="h-5 w-5" aria-hidden />
               </div>
-              <h2 className="font-display text-2xl font-bold text-gray-950">Relevant integrations</h2>
-              <p className="mt-2 text-gray-600">Connect the tools that matter for this industry.</p>
+              <h2 className="font-display text-2xl font-bold text-gray-950">{chrome.relevantIntegrationsTitle}</h2>
+              <p className="mt-2 text-gray-600">{chrome.relevantIntegrationsNote}</p>
               <ul className="mt-5 space-y-2">
                 {content.integrations.map((item) => (
                   <li key={item.label}>
@@ -306,7 +330,7 @@ export function SolutionPage({ content }: Props) {
                         className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-green hover:text-emerald-700"
                       >
                         {item.label}
-                        <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                        <ArrowRight className={arrowClassSm} aria-hidden />
                       </Link>
                     ) : (
                       <span className="text-sm font-medium text-gray-800">{item.label}</span>
@@ -321,12 +345,14 @@ export function SolutionPage({ content }: Props) {
         <section className="border-y border-gray-100 bg-gray-50 px-4 py-14 md:px-6 md:py-16">
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
             <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
-              How it works
+              {chrome.howItWorksSection}
             </h2>
             <ol className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               {content.howItWorks.map((step, index) => (
                 <li key={step.title} className="rounded-2xl bg-white p-5 ring-1 ring-gray-100">
-                  <span className="text-sm font-bold text-brand-green">Step {index + 1}</span>
+                  <span className="text-sm font-bold text-brand-green">
+                    {chrome.step} {index + 1}
+                  </span>
                   <h3 className="mt-2 font-semibold text-gray-950">{step.title}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-gray-600">{step.description}</p>
                 </li>
@@ -338,7 +364,7 @@ export function SolutionPage({ content }: Props) {
         <section className="px-4 py-14 md:px-6 md:py-16">
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
             <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
-              Related products and integrations
+              {chrome.relatedProductsAndIntegrations}
             </h2>
             <div className="grid gap-4 md:grid-cols-2">
               {content.relatedLinks.map((link) => (
@@ -360,6 +386,8 @@ export function SolutionPage({ content }: Props) {
         <MarketingLandingCta
           onBookDemo={() => setShowDemo(true)}
           headline={content.finalCtaHeadline}
+          startTrialLabel={chrome.startFreeTrial}
+          bookDemoLabel={chrome.bookDemo}
         />
         <p className="-mt-10 mb-10 px-4 text-center text-sm text-gray-500 md:px-6">
           {content.finalCtaSubtitle}

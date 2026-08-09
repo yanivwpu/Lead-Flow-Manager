@@ -10,6 +10,10 @@ type Props = MarketingScreenshotMeta & {
   /** @deprecated Use `size` on meta instead. */
   variant?: "default" | "hero";
   captionAlign?: "center" | "left";
+  /** Keep screenshot UI LTR in RTL locales (default true for product UI captures). */
+  forceLtr?: boolean;
+  enlargeLabel?: string;
+  closeEnlargedLabel?: string;
 };
 
 const FRAME =
@@ -28,6 +32,9 @@ export function MarketingScreenshot({
   priority = false,
   variant,
   captionAlign = "center",
+  forceLtr = true,
+  enlargeLabel = "Enlarge",
+  closeEnlargedLabel = "Close enlarged image",
 }: Props) {
   const size: MarketingScreenshotSize =
     sizeProp ?? (variant === "hero" ? "hero" : "content");
@@ -60,6 +67,7 @@ export function MarketingScreenshot({
       <figure
         className={cn("mx-auto w-full", className)}
         style={{ maxWidth: displayWidth }}
+        dir={forceLtr ? "ltr" : undefined}
       >
         {title ? (
           <p
@@ -78,7 +86,8 @@ export function MarketingScreenshot({
             "group relative block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2",
             FRAME,
           )}
-          aria-label={`Enlarge: ${alt}`}
+          aria-label={`${enlargeLabel}: ${alt}`}
+          dir={forceLtr ? "ltr" : undefined}
         >
           <img
             src={src}
@@ -92,7 +101,7 @@ export function MarketingScreenshot({
           />
           <span className="pointer-events-none absolute bottom-2.5 right-2.5 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-medium text-gray-600 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
             <ZoomIn className="h-3 w-3" />
-            Enlarge
+            {enlargeLabel}
           </span>
         </button>
         {figCaption ? (
@@ -119,7 +128,7 @@ export function MarketingScreenshot({
             type="button"
             onClick={close}
             className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
-            aria-label="Close enlarged image"
+            aria-label={closeEnlargedLabel}
           >
             <X className="h-5 w-5" />
           </button>

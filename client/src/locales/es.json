@@ -182,7 +182,7 @@
     "pipelineChange": "Cambio de Embudo"
   },
   "aiBrain": {
-    "title": "Cerebro IA",
+    "title": "AI Brain",
     "subtitle": "Configura tu asistente de IA",
     "aiMode": "Modo IA",
     "suggestOnly": "Solo Sugerencias",
@@ -208,7 +208,7 @@
     "saveSettings": "Guardar Configuración",
     "testAi": "Probar IA",
     "upgradeRequired": "Mejora Requerida",
-    "upgradeDesc": "Actualiza a Pro para desbloquear las funciones del Cerebro IA"
+    "upgradeDesc": "Actualiza a Pro para desbloquear las funciones de AI Brain"
   },
   "pricing": {
     "backToSettings": "Volver a Configuración",
@@ -402,7 +402,7 @@
   "landing": {
     "pricing": "Precios",
     "blog": "Blog",
-    "realtorGrowthEngine": "Motor de Crecimiento Inmobiliario",
+    "realtorGrowthEngine": "Realtor Growth Engine",
     "login": "Iniciar sesión",
     "startFree": "Empezar Gratis",
     "dashboard": "Panel de Control",
@@ -410,8 +410,8 @@
     "heroEyebrow": "Ventas y mensajería con IA para equipos en crecimiento",
     "heroSubtitle": "WhachatCRM ayuda a las empresas a encontrar y calificar prospectos, gestionar conversaciones en varios canales, personalizar el siguiente paso con IA, automatizar el seguimiento y convertir más chats en ingresos.",
     "heroChannels": "API oficial de Meta · WhatsApp, Instagram, Facebook, SMS, Telegram, Email y más",
-    "startTrial": "Comienza Tu Prueba Gratis de 14 Días",
-    "bookDemo": "Reservar Demo",
+    "startTrial": "Empieza tu prueba gratis",
+    "bookDemo": "Reserva una demo",
     "noCreditCard": "No se requiere tarjeta de crédito",
     "trustedBy": "Confiado por",
     "businesses": "negocios",
@@ -426,7 +426,18 @@
       "analyticsDesc": "Monitorea el rendimiento y optimiza"
     },
     "integrations": "Integraciones",
-    "integrationsDesc": "Conecta con tus herramientas favoritas"
+    "integrationsDesc": "Conecta con tus herramientas favoritas",
+    "badge1": "Construido sobre la API oficial de Meta",
+    "badge2": "Seguro y compliant — sin scraping",
+    "badge3": "Diseñado para fundadores, equipos de ventas y equipos de soporte",
+    "trust": {
+      "officialMeta": "API oficial de Meta",
+      "unifiedInbox": "Bandeja unificada",
+      "automations": "Automatizaciones",
+      "teamCollab": "Colaboración en equipo",
+      "noMetaMarkup": "Sin recargos de Meta",
+      "aiWorkflows": "Flujos asistidos por IA"
+    }
   },
   "auth": {
     "welcomeBack": "Bienvenido de nuevo",
@@ -460,21 +471,54 @@
   "home": {
     "hero": {
       "title": "Una Bandeja. Todos los Canales. Cero Complejidad.",
-      "subtitle": "WhatsApp, SMS, Telegram, Instagram, Facebook, Chat Web — todo en una bandeja unificada. Deja de cambiar entre apps. Responde más rápido, nunca pierdas un lead.",
-      "cta": "Inicia tu Prueba Pro de 14 Días",
-      "secondary": "Comparar Planes",
+      "subtitle": "WhatsApp, Instagram, Facebook Messenger, SMS, Telegram, Email y chat web en una bandeja unificada y CRM. Responde más rápido, colabora en equipo y automatiza el seguimiento que normalmente se pierde.",
+      "cta": {
+        "primary": "Inicia tu prueba Pro de 14 días",
+        "secondary": "Ver precios",
+        "demo": "Reservar demo"
+      },
       "note": "No se requiere tarjeta de crédito",
-      "badge1": "Construido sobre la API oficial de WhatsApp Business",
+      "badge1": "Construido sobre las APIs oficiales de Meta",
       "badge2": "Seguro y compliant — sin scraping",
       "badge3": "Diseñado para fundadores, equipos de ventas y equipos de soporte"
     },
+    "dashboard": {
+      "alt": "Panel de WhachatCRM — interfaz CRM de WhatsApp"
+    },
     "problem": {
-      "title": "WhatsApp no fue diseñado para gestionar clientes — Hasta ahora",
-      "heading": "El Problema",
-      "item1": "Los chats importantes se entierran",
-      "item2": "No hay contexto sobre los clientes",
-      "item3": "Los seguimientos se olvidan",
-      "item4": "Los equipos pierden visibilidad"
+      "eyebrow": "Flujos de conversación",
+      "title": "Diseñado para conversaciones que se convierten en ingresos",
+      "subtitle": "WhachatCRM conecta el mensaje, el contexto de IA, el seguimiento y el paso del pipeline para que cada chat importante tenga una siguiente acción.",
+      "scenarios": {
+        "lead": {
+          "title": "Llega un nuevo lead",
+          "source": "WhatsApp",
+          "step1": "Conversación",
+          "step2": "La IA captura presupuesto y plazo",
+          "step3": "Lead creado en el CRM"
+        },
+        "instagram": {
+          "title": "Un cliente hace una pregunta",
+          "source": "DM de Instagram",
+          "step1": "Contexto en la bandeja",
+          "step2": "El equipo responde con historial",
+          "step3": "El cliente sigue visible"
+        },
+        "quiet": {
+          "title": "Un prospecto se queda en silencio",
+          "source": "Seguimiento",
+          "step1": "Sin respuesta detectada",
+          "step2": "Recordatorio o plantilla",
+          "step3": "La conversación sigue avanzando"
+        },
+        "appointment": {
+          "title": "Se detecta intención de cita",
+          "source": "Reserva",
+          "step1": "Intención detectada",
+          "step2": "Se envía el enlace correcto",
+          "step3": "Pipeline actualizado"
+        }
+      }
     },
     "solution": {
       "heading": "Solución WhachatCRM",
@@ -484,7 +528,8 @@
       "item4": "Integraciones multicanal con tus herramientas favoritas"
     },
     "features": {
-      "title": "Todo lo que necesitas para gestionar WhatsApp como un CRM",
+      "title": "Convierte conversaciones en trabajo de ingresos organizado",
+      "subtitle": "Un espacio de trabajo más tranquilo para visibilidad de leads, seguimientos, colaboración y automatización en tus canales compatibles.",
       "item1": {
         "title": "Conversaciones Organizadas",
         "desc": "Cada chat de WhatsApp se convierte en un registro de cliente — sin más búsquedas ni adivinanzas."
@@ -498,7 +543,7 @@
         "desc": "Establece recordatorios y tareas para asegurar que cada lead sea seguido a tiempo."
       },
       "item4": {
-        "title": "Cerebro IA",
+        "title": "AI Brain",
         "desc": "Sugerencias de respuestas inteligentes, captura de leads y control de tono. Tu asistente de negocio impulsado por IA."
       },
       "item5": {
@@ -539,24 +584,32 @@
       "seePlans": "Ver Planes"
     },
     "builtFor": {
-      "title": "Diseñado para Negocios que Viven en WhatsApp",
-      "salesTeams": "Equipos de ventas gestionando leads entrantes",
-      "supportTeams": "Equipos de soporte al cliente",
-      "agencies": "Agencias y consultores",
-      "smallBiz": "Pequeños negocios y fundadores",
-      "tagline": "Si WhatsApp es cómo hablas con tus clientes — este es tu CRM."
+      "title": "Diseñado para equipos que ganan a través de conversaciones",
+      "realEstate": "Equipos inmobiliarios",
+      "realEstateDesc": "Califica leads compradores, envía enlaces de reserva y haz seguimiento automático cuando los prospectos se quedan en silencio.",
+      "medSpas": "Med spas y clínicas",
+      "medSpasDesc": "Responde preguntas sobre tratamientos, captura intención de cita y mantén las solicitudes de consulta en movimiento.",
+      "salesTeams": "Equipos de ventas",
+      "salesTeamsDesc": "Enruta conversaciones entrantes, puntúa leads de alta intención y mantén a cada representante alineado.",
+      "agencies": "Agencias",
+      "agenciesDesc": "Gestiona fuentes de leads de clientes, respuestas de WhatsApp y seguimientos de campañas desde un solo lugar.",
+      "localServices": "Negocios de servicios locales",
+      "localServicesDesc": "Convierte llamadas perdidas y preguntas de WhatsApp en trabajos reservados y próximos pasos claros.",
+      "tagline": "Desde la primera respuesta hasta el siguiente paso, WhachatCRM ayuda a los equipos a moverse más rápido sin perder contexto."
     },
     "trust": {
-      "title": "Oficial. Seguro. Confiable.",
-      "line1": "WhachatCRM usa la API oficial de WhatsApp Business y no hace scraping de cuentas personales.",
-      "line2": "Tus datos permanecen seguros y cumplen con las políticas de Meta."
+      "eyebrow": "Prueba social",
+      "title": "Diseñado para equipos de ventas y servicio en crecimiento",
+      "line1": "Un hogar limpio para WhatsApp, mensajes sociales, seguimientos y colaboración en equipo.",
+      "line2": "Los logotipos de clientes y casos de estudio aparecerán aquí a medida que los equipos entren en producción."
     },
     "cta": {
       "setupTime": "Configúralo en menos de 5 minutos",
       "title": "Deja de Perder Leads en tu Bandeja de WhatsApp",
       "subtitle": "Únete a los negocios en crecimiento que usan WhachatCRM para cerrar más ventas vía WhatsApp.",
       "primary": "Inicia tu Prueba Pro de 14 Días",
-      "secondary": "Ver Precios"
+      "secondary": "Ver Precios",
+      "note": "No se requiere tarjeta de crédito • Plan gratis para siempre • Cancela cuando quieras"
     },
     "footer": {
       "copyright": "© 2025 WhachatCRM. Todos los derechos reservados.",
@@ -567,7 +620,7 @@
       "legal": "Legal",
       "pricing": "Precios",
       "whatsappCrm": "WhatsApp CRM",
-      "realtorGrowthEngine": "Motor de Crecimiento Inmobiliario",
+      "realtorGrowthEngine": "Realtor Growth Engine",
       "contact": "Contacto",
       "gettingStarted": "Primeros Pasos",
       "helpCenter": "Centro de Ayuda",
@@ -586,7 +639,7 @@
       "pricing": "Precios",
       "blog": "Blog",
       "dashboard": "Panel de Control",
-      "startFree": "Empezar Gratis"
+      "startFree": "Empieza gratis"
     },
     "banner": {
       "curious": "¿Curioso de cómo funciona esto para tu mercado?",
@@ -595,7 +648,7 @@
       "share": "Comparte esta automatización con tu red"
     },
     "hero": {
-      "title": "Motor de Crecimiento Inmobiliario",
+      "title": "Realtor Growth Engine",
       "subtitle": "Convierte leads de bienes raíces en visitas automáticamente con automatización de WhatsApp impulsada por IA.",
       "check1": "Responde al instante a cada nuevo lead",
       "check2": "La IA califica a compradores y vendedores automáticamente",
@@ -606,7 +659,7 @@
       "mainTitle": "Convierte Conversaciones Inmobiliarias en Visitas Agendadas Automáticamente",
       "mainSubtitle": "Automatización de WhatsApp con IA que responde al instante, califica leads y agenda visitas por ti.",
       "mainDesc": "Un sistema de automatización completamente pre-construido instalado dentro de tu CRM — listo para funcionar.",
-      "installCta": "Instalar Motor de Crecimiento Inmobiliario",
+      "installCta": "Instalar Realtor Growth Engine",
       "seeHowItWorks": "Ver Cómo Funciona"
     },
     "preview": {
@@ -623,7 +676,7 @@
       "aiDetail": "Enlace de reserva enviado a Sarah M. — Visita en Calendly programada para el sábado 2:00 PM"
     },
     "workflow": {
-      "title": "Cómo funciona el Motor de Crecimiento Inmobiliario",
+      "title": "Cómo funciona Realtor Growth Engine",
       "subtitle": "Desde el nuevo lead hasta la visita agendada — automáticamente.",
       "step": "Paso",
       "tagline": "El sistema se encarga de la primera conversación, califica al lead y solo te envía compradores serios.",
@@ -684,7 +737,7 @@
     },
     "platform": {
       "title": "Construido sobre WhachatCRM",
-      "subtitle": "El Motor de Crecimiento Inmobiliario se ejecuta sobre una plataforma de mensajería y automatización lista para producción.",
+      "subtitle": "Realtor Growth Engine se ejecuta sobre una plataforma de mensajería y automatización lista para producción.",
       "f1": {
         "title": "Bandeja de Mensajería Unificada",
         "desc": "Todas las conversaciones en un solo lugar."
@@ -708,7 +761,7 @@
     },
     "pricing": {
       "title": "Lo que necesitas para empezar",
-      "subtitle": "El Motor de Crecimiento Inmobiliario es una plantilla de automatización hecha para ti sobre WhachatCRM.",
+      "subtitle": "Realtor Growth Engine es una plantilla de automatización hecha para ti sobre WhachatCRM.",
       "platform": "Plataforma",
       "platformName": "WhachatCRM Pro",
       "platformPrice": "$49/mo",
@@ -749,14 +802,14 @@
       "pricing": "Precios",
       "whatsappCrm": "WhatsApp CRM",
       "blog": "Blog",
-      "rge": "Motor de Crecimiento Inmobiliario",
+      "rge": "Realtor Growth Engine",
       "privacy": "Política de Privacidad",
       "terms": "Términos de Uso",
       "gettingStarted": "Primeros Pasos",
       "helpCenter": "Centro de Ayuda"
     },
     "features": {
-      "title": "¿Qué Hace el Motor de Crecimiento?",
+      "title": "¿Qué hace Realtor Growth Engine?",
       "subtitle": "Un sistema completo de manejo de leads que funciona 24/7 — para que puedas enfocarte en cerrar tratos.",
       "f1": {
         "title": "Responde al instante a cada consulta",
@@ -849,20 +902,20 @@
       }
     },
     "pricingSection": {
-      "title": "Qué Impulsa el Motor de Crecimiento Inmobiliario",
+      "title": "Qué impulsa Realtor Growth Engine",
       "subtitle": "Todo lo que necesitas está incluido — plataforma, capa de IA y la plantilla en sí.",
       "corePlatform": "Plataforma Principal",
       "aiLayer": "Capa de Automatización IA",
-      "templateLicense": "Motor de Crecimiento Inmobiliario",
+      "templateLicense": "Realtor Growth Engine",
       "oneTime": "Licencia de plantilla única",
       "metaNote": "Las tarifas de mensajería de WhatsApp son facturadas directamente por Meta sin recargo.",
-      "installCta": "Instalar Motor de Crecimiento Inmobiliario",
+      "installCta": "Instalar Realtor Growth Engine",
       "viewPlans": "Ver todos los planes"
     },
     "finalCta": {
       "title": "¿Listo para convertir leads en visitas agendadas?",
-      "subtitle": "Instala el Motor de Crecimiento Inmobiliario y tus automatizaciones comienzan a funcionar de inmediato.",
-      "installCta": "Instalar Motor de Crecimiento Inmobiliario",
+      "subtitle": "Instala Realtor Growth Engine y tus automatizaciones comienzan a funcionar de inmediato.",
+      "installCta": "Instalar Realtor Growth Engine",
       "viewPlans": "Ver todos los planes",
       "note": "Listo para funcionar. Sin configuración técnica."
     }
@@ -972,7 +1025,8 @@
         "f6": "Integraciones principales",
         "f7": "AI Assist Basic incluido",
         "f8": "Sugerencias de respuesta + detección de sentimiento",
-        "f9": "Copilot incluido",
+        "f9": "Pipeline y tareas incluidos",
+        "f10": "Integraciones",
         "upsell": "Actualiza a Pro para identificar automáticamente leads calientes y hacer seguimiento con menos trabajo manual.",
         "cta": "Actualizar a Starter"
       },
@@ -991,6 +1045,7 @@
         "f6": "IA mejorada + insights de bandeja de entrada",
         "f7": "Puntuación de leads",
         "f8": "Reorientación inteligente",
+        "f9": "Complemento AI Brain disponible",
         "upsell": "Ideal para empresas que quieren que el sistema ayude a identificar leads serios y automatizar el seguimiento.",
         "cta": "Actualizar a Pro"
       },
@@ -1031,13 +1086,18 @@
       "crm": "CRM",
       "pipelineTasks": "Pipeline y tareas",
       "aiAssist": "AI Assist",
+      "aiAssistBasic": "AI Assist Basic",
+      "aiAssistEnhanced": "AI Assist Enhanced",
       "aiAssistBasicIncluded": "AI Assist Basic incluido",
-      "aiAssistEnhancedIncluded": "AI Assist Basic incluido",
+      "aiAssistEnhancedIncluded": "AI Assist Enhanced incluido",
       "automations": "Automatizaciones",
       "advancedAutomations": "Automatizaciones avanzadas con disparadores de IA — activa flujos según el comportamiento del lead, etiquetas, etapas, temporizadores sin respuesta, intención de reserva y señales detectadas por IA.",
       "leadScoring": "Puntuación de leads",
       "smartRetargeting": "Reorientación inteligente",
+      "integrations": "Integraciones",
       "integrationsWebhooks": "Integraciones",
+      "growthEngines": "Growth Engines",
+      "eligible": "Elegible",
       "aiBrainAddon": "Complemento AI Brain ($29/mes)",
       "basic": "Básico",
       "full": "Completo",
