@@ -5,7 +5,7 @@ import viteConfig from "../vite.config";
 import fs from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
-import { getMarketingRoutes, getLocalizedMarketingRoutes, injectNoindexMeta, isNoIndexPath } from "./seo";
+import { getMarketingRoutes, getLocalizedMarketingRoutes, injectNoindexMeta, isNoIndexPath, removeStaticShellFromHtml } from "./seo";
 import { normalizeRequestPath, shouldServeSpaFallback } from "./spaRouting";
 import { isLocaleRootRedirect, localeRootRedirectTarget } from "@shared/localeRoutes";
 
@@ -67,6 +67,7 @@ export async function setupVite(server: Server, app: Express) {
       const isKnownSpa = shouldServeSpaFallback(pathname, marketingRoutes);
       if (!isKnownSpa) {
         page = injectNoindexMeta(page);
+        page = removeStaticShellFromHtml(page);
         page = page.replace(
           /<title>.*?<\/title>/i,
           "<title>404 Page Not Found | WhachatCRM</title>",
@@ -77,6 +78,12 @@ export async function setupVite(server: Server, app: Express) {
 
       if (isNoIndexPath(pathname)) {
         page = injectNoindexMeta(page);
+      }
+
+      // Non-home routes: strip homepage static shell so crawlers never see a duplicate English H1.
+      const isLocaleHome = pathname === "/es/" || pathname === "/he/";
+      if (pathname !== "/" && !isLocaleHome) {
+        page = removeStaticShellFromHtml(page);
       }
 
       res.status(200).set({ "Content-Type": "text/html" }).end(page);

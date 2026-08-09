@@ -945,7 +945,6 @@ export function generateHomepageHtml(locale: MarketingLocale = "en"): string {
   return `
       <div data-ssr-content="true" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;">
         <main>
-          <h1>${escapeHtmlText(s.h1)}</h1>
           <p>${escapeHtmlText(s.lead)}</p>
           <p>${escapeHtmlText(s.channels)}</p>
           <p>${escapeHtmlText(s.productLine)}</p>
@@ -1170,14 +1169,51 @@ export function injectLocalizedStaticShell(html: string, locale: MarketingLocale
   return out;
 }
 
-/** Hide English static shell on non-home localized marketing pages (no JS required). */
-export function hideStaticShellInHtml(html: string): string {
-  return html.replace(/<html\b([^>]*)>/i, (_m, attrs: string) => {
-    if (/\bclass="/i.test(attrs)) {
-      return `<html${attrs.replace(/class="/i, 'class="wcs-hide-static-marketing ')}>`;
+/** Physically remove `#whachat-static-shell` from HTML (do not leave a crawlable English H1). */
+export function removeStaticShellFromHtml(html: string): string {
+  const marker = 'id="whachat-static-shell"';
+  const markerIdx = html.indexOf(marker);
+  if (markerIdx === -1) return html;
+
+  let openIdx = html.lastIndexOf("<div", markerIdx);
+  if (openIdx === -1) return html;
+
+  // Drop the preceding instant-shell HTML comment when present.
+  const before = html.slice(0, openIdx);
+  const commentMatch = before.match(/<!--\s*Instant above-the-fold[\s\S]*?-->\s*$/i);
+  if (commentMatch) {
+    openIdx = before.length - commentMatch[0].length;
+  }
+
+  let depth = 0;
+  let i = openIdx;
+  while (i < html.length) {
+    if (html.startsWith("<div", i)) {
+      depth += 1;
+      i += 4;
+      continue;
     }
-    return `<html class="wcs-hide-static-marketing"${attrs}>`;
-  });
+    if (html.startsWith("</div>", i)) {
+      depth -= 1;
+      i += 6;
+      if (depth === 0) {
+        const leading = html.slice(0, openIdx).replace(/\s*$/, "\n    ");
+        const trailing = html.slice(i).replace(/^\s*/, "");
+        return leading + trailing;
+      }
+      continue;
+    }
+    i += 1;
+  }
+  return html;
+}
+
+/**
+ * @deprecated Prefer removeStaticShellFromHtml — CSS hide leaves English H1 crawlable.
+ * Kept as an alias so older call sites still strip the shell.
+ */
+export function hideStaticShellInHtml(html: string): string {
+  return removeStaticShellFromHtml(html);
 }
 
 export function injectHomepageSeoMeta(html: string, locale: MarketingLocale = "en"): string {

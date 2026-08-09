@@ -8,7 +8,7 @@ import {
   generateHomepageHtml,
   injectHomepageSeoMeta,
   injectLocalizedStaticShell,
-  hideStaticShellInHtml,
+  removeStaticShellFromHtml,
   injectPageMeta,
   generateMarketingPageSsrHtml,
   getMarketingRoutes,
@@ -70,7 +70,8 @@ function sendNoIndexSpaShell(res: Response, indexPath: string, status = 200) {
     if (err) {
       return sendSpaShell(res, indexPath, status);
     }
-    const enhancedHtml = injectNoindexMeta(html);
+    let enhancedHtml = injectNoindexMeta(html);
+    enhancedHtml = removeStaticShellFromHtml(enhancedHtml);
     res.status(status);
     res.set("Content-Type", "text/html; charset=utf-8");
     res.set("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -86,7 +87,7 @@ function sendNotFoundSpaShell(res: Response, indexPath: string) {
       return;
     }
     let enhancedHtml = injectNoindexMeta(html);
-    enhancedHtml = hideStaticShellInHtml(enhancedHtml);
+    enhancedHtml = removeStaticShellFromHtml(enhancedHtml);
     enhancedHtml = enhancedHtml.replace(
       /<title>.*?<\/title>/i,
       "<title>404 Page Not Found | WhachatCRM</title>",
@@ -185,6 +186,7 @@ export function serveStatic(app: Express) {
 
       try {
         let enhancedHtml = injectSeoMeta(html, "/blog");
+        enhancedHtml = removeStaticShellFromHtml(enhancedHtml);
         const ssrContent = generateBlogListHtml();
         enhancedHtml = enhancedHtml.replace(
           '<div id="root"></div>',
@@ -215,6 +217,7 @@ export function serveStatic(app: Express) {
 
       try {
         let enhancedHtml = injectSeoMeta(html, `/blog/${slug}`);
+        enhancedHtml = removeStaticShellFromHtml(enhancedHtml);
         const ssrContent = generateBlogPostHtml(slug);
         if (ssrContent) {
           enhancedHtml = enhancedHtml.replace(
@@ -249,6 +252,7 @@ export function serveStatic(app: Express) {
 
         try {
           let enhancedHtml = injectPageMeta(html, route);
+          enhancedHtml = removeStaticShellFromHtml(enhancedHtml);
           const ssrBody = generateMarketingPageSsrHtml(route);
           if (ssrBody && enhancedHtml.includes('<div id="root"></div>')) {
             enhancedHtml = enhancedHtml.replace(
@@ -281,7 +285,7 @@ export function serveStatic(app: Express) {
         }
         try {
           let enhancedHtml = injectPageMeta(html, route);
-          enhancedHtml = hideStaticShellInHtml(enhancedHtml);
+          enhancedHtml = removeStaticShellFromHtml(enhancedHtml);
           const ssrBody = generateMarketingPageSsrHtml(route);
           if (ssrBody && enhancedHtml.includes('<div id="root"></div>')) {
             enhancedHtml = enhancedHtml.replace(

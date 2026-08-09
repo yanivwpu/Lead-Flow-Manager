@@ -11,7 +11,7 @@ import {
   generateHomepageHtml,
   injectHomepageSeoMeta,
   injectLocalizedStaticShell,
-  hideStaticShellInHtml,
+  removeStaticShellFromHtml,
 } from "../server/seo";
 
 const NARROW_ALLOWLIST = [
@@ -128,7 +128,10 @@ test("homepage SSR bodies are localized for es and he", () => {
   const es = generateHomepageHtml("es");
   const he = generateHomepageHtml("he");
 
-  assert.ok(es.includes("Conoce a tu equipo de ventas con IA"));
+  // Homepage H1 lives in the static shell (exactly one H1 in the full response).
+  assert.ok(!/<h1[\s>]/i.test(es));
+  assert.ok(!/<h1[\s>]/i.test(he));
+  assert.ok(!/<h1[\s>]/i.test(en));
   assert.ok(es.includes("Encuentra y califica prospectos"));
   assert.ok(es.includes("Explorar Prospect AI"));
   assert.ok(es.includes("Precios"));
@@ -138,7 +141,6 @@ test("homepage SSR bodies are localized for es and he", () => {
   assert.ok(!es.includes("Find and qualify prospects"));
   assert.ok(!es.includes("Explore WhachatCRM"));
 
-  assert.ok(he.includes("הכירו את צוות המכירות מבוסס ה-AI שלכם"));
   assert.ok(he.includes("מצאו וסננו לידים"));
   assert.ok(he.includes("מחירים"));
   assert.ok(he.includes("התחל ניסיון חינם"));
@@ -166,21 +168,52 @@ test("localized static shell replaces English first-paint copy", () => {
   assert.ok(!es.includes("Meet Your AI Sales Team"));
   assert.ok(!es.includes(">Start Free Trial<"));
   assert.ok(!es.includes(">Product</a>"));
-  assertNoEnglishMarketing("es", "static shell", es.match(/id="whachat-static-shell"[\s\S]*?<\/div>\s*<div id="root"/)?.[0] || es);
+  const esShell =
+    es.match(/<div id="whachat-static-shell">[\s\S]*?<div id="root"/)?.[0] || "";
+  assert.ok(esShell.includes("Conoce a tu equipo de ventas con IA"));
+  assertNoEnglishMarketing("es", "static shell", esShell);
 
   const he = injectLocalizedStaticShell(injectHomepageSeoMeta(shell, "he"), "he");
   assert.match(he, /<html lang="he" dir="rtl">/);
-  assert.ok(he.includes("הכירו את צוות המכירות מבוסס ה-AI שלכם"));
+  const heH1 = getLocalizedHomepage("he").staticShell.h1;
+  assert.ok(he.includes(heH1), `missing Hebrew shell H1: ${heH1}`);
   assert.ok(he.includes("התחל ניסיון חינם"));
   assert.ok(he.includes('href="/he/ai-brain"'));
   assert.ok(!he.includes("Meet Your AI Sales Team"));
-  assertNoEnglishMarketing("he", "static shell", he.match(/id="whachat-static-shell"[\s\S]*?<\/div>\s*<div id="root"/)?.[0] || he);
+  const heShell =
+    he.match(/<div id="whachat-static-shell">[\s\S]*?<div id="root"/)?.[0] || "";
+  assert.ok(heShell.includes(heH1));
+  assertNoEnglishMarketing("he", "static shell", heShell);
 
   const enKept = injectLocalizedStaticShell(shell, "en");
   assert.ok(enKept.includes("Meet Your AI Sales Team"));
 
-  const hidden = hideStaticShellInHtml(shell);
-  assert.match(hidden, /wcs-hide-static-marketing/);
+  const removed = removeStaticShellFromHtml(shell);
+  assert.ok(!removed.includes('id="whachat-static-shell"'));
+  assert.ok(!removed.includes("Meet Your AI Sales Team"));
+  assert.ok(removed.includes('<div id="root"></div>'));
+});
+
+test("complete homepage HTML has exactly one localized H1", () => {
+  const index = fs.readFileSync(path.join(process.cwd(), "client/index.html"), "utf8");
+  const en = injectHomepageSeoMeta(index, "en").replace(
+    '<div id="root"></div>',
+    `<div id="root">${generateHomepageHtml("en")}</div>`,
+  );
+  const es = injectLocalizedStaticShell(injectHomepageSeoMeta(index, "es"), "es").replace(
+    '<div id="root"></div>',
+    `<div id="root">${generateHomepageHtml("es")}</div>`,
+  );
+  const he = injectLocalizedStaticShell(injectHomepageSeoMeta(index, "he"), "he").replace(
+    '<div id="root"></div>',
+    `<div id="root">${generateHomepageHtml("he")}</div>`,
+  );
+  assert.equal((en.match(/<h1\b/gi) || []).length, 1);
+  assert.equal((es.match(/<h1\b/gi) || []).length, 1);
+  assert.equal((he.match(/<h1\b/gi) || []).length, 1);
+  assert.match(en, /<h1[^>]*>Meet Your AI Sales Team<\/h1>/);
+  assert.match(es, /<h1[^>]*>Conoce a tu equipo de ventas con IA<\/h1>/);
+  assert.match(he, /<h1[^>]*>הכירו את צוות המכירות מבוסס ה-AI שלכם<\/h1>/);
 });
 
 test("index.html boot keeps static shell on localized homepage roots", () => {

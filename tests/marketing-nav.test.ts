@@ -110,13 +110,13 @@ for (const item of SOLUTIONS_NAV.groups.flatMap((g) => g.items)) {
 
 const shell = `<!DOCTYPE html><html><head><title>Home</title></head><body><div id="root"></div></body></html>`;
 const ssr = generateHomepageHtml();
-assert.match(ssr, /<h1>Meet Your AI Sales Team<\/h1>/);
+assert.ok(!/<h1[\s>]/i.test(ssr), "homepage SSR must not duplicate the static-shell H1");
 assert.match(ssr, /data-ssr-content="true"/);
 assert.match(ssr, /href="\/prospect-ai"/);
 assert.match(ssr, /href="\/realtor-growth-engine"/);
 assert.match(ssr, /href="\/unified-inbox"/);
 assert.match(ssr, /href="\/auth"/);
-assert.equal((ssr.match(/<h1>/g) || []).length, 1);
+assert.equal((ssr.match(/<h1>/g) || []).length, 0);
 
 const withMeta = injectHomepageSeoMeta(shell);
 assert.match(withMeta, /application\/ld\+json/);

@@ -17,7 +17,7 @@ import {
   getMarketingRoutes,
   injectHomepageSeoMeta,
   injectLocalizedStaticShell,
-  hideStaticShellInHtml,
+  removeStaticShellFromHtml,
   injectPageMeta,
   injectNoindexMeta,
 } from "../server/seo";
@@ -65,7 +65,7 @@ async function renderHtml(pathname: string): Promise<{ status: number; html: str
   const parsed = parseLocalizedPath(pathname);
   if (parsed.isLocalePrefixed && !parsed.isSupported) {
     html = injectNoindexMeta(html);
-    html = hideStaticShellInHtml(html);
+    html = removeStaticShellFromHtml(html);
     html = html.replace(/<title>.*?<\/title>/i, "<title>404 Page Not Found | WhachatCRM</title>");
     html = html.replace(
       '<div id="root"></div>',
@@ -76,9 +76,7 @@ async function renderHtml(pathname: string): Promise<{ status: number; html: str
 
   if (marketingRoutes.includes(pathname) || (parsed.isLocalePrefixed && parsed.isSupported)) {
     html = injectPageMeta(html, pathname);
-    if (parsed.isLocalePrefixed && parsed.isSupported && pathname !== "/es/" && pathname !== "/he/") {
-      html = hideStaticShellInHtml(html);
-    }
+    html = removeStaticShellFromHtml(html);
     const ssr = generateMarketingPageSsrHtml(pathname);
     if (ssr) {
       html = html.replace('<div id="root"></div>', `<div id="root">${ssr}</div>`);
@@ -88,11 +86,12 @@ async function renderHtml(pathname: string): Promise<{ status: number; html: str
 
   if (!shouldServeSpaFallback(pathname, marketingRoutes)) {
     html = injectNoindexMeta(html);
+    html = removeStaticShellFromHtml(html);
     html = html.replace(/<title>.*?<\/title>/i, "<title>404 Page Not Found | WhachatCRM</title>");
     return { status: 404, html };
   }
 
-  return { status: 200, html: applyHtmlLangDir(html, "en") };
+  return { status: 200, html: removeStaticShellFromHtml(applyHtmlLangDir(html, "en")) };
 }
 
 const server = http.createServer(async (req, res) => {
