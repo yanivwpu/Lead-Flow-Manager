@@ -36,6 +36,7 @@ import {
   GHL_WHY_AGENCIES,
   GHL_WHY_MORE_THAN_CRM,
 } from "@/content/goHighLevelAgenciesContent";
+import { WHACHAT_ORGANIZATION_SAME_AS } from "@shared/whachatSocialProfiles";
 
 const CANONICAL = `${MARKETING_URL}/${GHL_AGENCIES_SLUG}`;
 
@@ -60,7 +61,7 @@ const organizationSchema = {
   description:
     "WhachatCRM is a CRM-first WhatsApp sales platform that helps small and medium businesses manage leads, conversations, follow-ups, and deals without per-message fees.",
   foundingDate: "2025",
-  sameAs: ["https://www.linkedin.com/company/whachatcrm", "https://twitter.com/whachatcrm"],
+  sameAs: [...WHACHAT_ORGANIZATION_SAME_AS],
 };
 
 function scrollToAgencyUseCases() {

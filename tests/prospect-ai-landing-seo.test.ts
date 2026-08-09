@@ -76,14 +76,16 @@ run("route, PAGE_META, sitemap, footer, and cluster link are wired", () => {
   assert.equal(SEO_CLUSTER_LINKS.prospectAi.href, "/prospect-ai");
 
   const app = readFileSync(join(root, "client/src/App.tsx"), "utf8");
-  assert.match(app, /path="\/prospect-ai"/);
+  assert.match(app, /localeRoutes\("\/prospect-ai"|path="\/prospect-ai"/);
   assert.match(app, /ProspectAiLanding/);
 
   const sitemap = readFileSync(join(root, "client/public/sitemap.xml"), "utf8");
   assert.match(sitemap, /whachatcrm\.com\/prospect-ai/);
 
+  const footerShared = readFileSync(join(root, "shared/siteFooterContent.ts"), "utf8");
+  assert.match(footerShared, /href: "\/prospect-ai"/);
   const footer = readFileSync(join(root, "client/src/components/SiteFooter.tsx"), "utf8");
-  assert.match(footer, /href="\/prospect-ai"/);
+  assert.match(footer, /getLocalizedSiteFooter/);
 });
 
 run("landing page includes FAQ schema + OG/Twitter tags", () => {

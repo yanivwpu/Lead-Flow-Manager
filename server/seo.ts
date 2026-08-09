@@ -29,6 +29,8 @@ import { getLocalizedPageMeta } from "@shared/marketingPageMetaLocales";
 import { PROSPECT_AI_LANDING_LOCALES } from "@shared/prospectAiLandingLocales";
 import { RGE_LANDING_LOCALES } from "@shared/realtorGrowthEngineLandingLocales";
 import { formatHeadingHtmlWithLeadingLtrIsolate } from "@shared/rtlLeadingLtrIsolate";
+import { getLocalizedSiteFooter } from "@shared/siteFooterContent";
+import { WHACHAT_SOCIAL_LINK_REL } from "@shared/whachatSocialProfiles";
 
 const BASE_URL = (process.env.MARKETING_URL || "https://www.whachatcrm.com").replace(/\/+$/, "");
 
@@ -941,8 +943,25 @@ export function generateHomepageHtml(locale: MarketingLocale = "en"): string {
   const chatbotHref = localizedInternalHref("/chatbot-builder", locale);
   const copilotHref = localizedInternalHref("/ai-copilot", locale);
   const brainHref = localizedInternalHref("/ai-brain", locale);
-  const privacyHref = localizedInternalHref("/privacy-policy", locale);
-  const termsHref = localizedInternalHref("/terms-of-use", locale);
+  const footer = getLocalizedSiteFooter(locale);
+  const footerColumnsHtml = footer.columns
+    .map((col) => {
+      const items = col.links
+        .filter((link) => link.href)
+        .map(
+          (link) =>
+            `<li><a href="${escapeHtmlAttr(link.href!)}">${escapeHtmlText(link.label)}</a></li>`,
+        )
+        .join("\n                ");
+      return `<h3>${escapeHtmlText(col.heading)}</h3>\n              <ul>\n                ${items}\n              </ul>`;
+    })
+    .join("\n              ");
+  const socialHtml = footer.social
+    .map(
+      (profile) =>
+        `<li><a href="${escapeHtmlAttr(profile.url)}" target="_blank" rel="${WHACHAT_SOCIAL_LINK_REL}">${escapeHtmlText(profile.ariaLabel)}</a></li>`,
+    )
+    .join("\n                ");
 
   return `
       <div data-ssr-content="true" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;">
@@ -995,13 +1014,16 @@ export function generateHomepageHtml(locale: MarketingLocale = "en"): string {
           </section>
 
           <footer>
-            <p>${escapeHtmlText(s.footerCopyright)}</p>
-            <nav>
-              <a href="${privacyHref}">${escapeHtmlText(s.footerPrivacy)}</a>
-              <a href="${termsHref}">${escapeHtmlText(s.footerTerms)}</a>
-              <a href="${pricingHref}">${escapeHtmlText(s.pricingLabel)}</a>
-              <a href="/auth">${escapeHtmlText(s.startTrialLabel)}</a>
+            <p>${escapeHtmlText(footer.tagline)}</p>
+            <p>${escapeHtmlText(footer.metaTechProvider)}</p>
+            <h2>${escapeHtmlText(footer.followUs)}</h2>
+            <ul>
+                ${socialHtml}
+            </ul>
+            <nav aria-label="${escapeHtmlAttr(footer.footerNavAria)}">
+              ${footerColumnsHtml}
             </nav>
+            <p>${escapeHtmlText(footer.copyright)}</p>
           </footer>
         </main>
       </div>`;
