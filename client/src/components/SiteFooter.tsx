@@ -5,6 +5,8 @@ import { useCookieConsent } from "@/components/CookieConsentRoot";
 import { useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
 import {
   getLocalizedSiteFooter,
+  PRODUCT_FOOTER_COL_A_IDS,
+  PRODUCT_FOOTER_COL_B_IDS,
   type ResolvedSiteFooterColumn,
   type ResolvedSiteFooterLink,
   type SiteFooterColumnId,
@@ -83,7 +85,7 @@ function FooterNavLink({ link }: { link: ResolvedSiteFooterLink }) {
 
 function FooterLinkList({ links }: { links: ResolvedSiteFooterLink[] }) {
   return (
-    <ul className="flex flex-col gap-1.5">
+    <ul className="flex flex-col gap-2.5">
       {links.map((link) => (
         <li key={link.id} className="leading-5">
           <FooterNavLink link={link} />
@@ -95,20 +97,24 @@ function FooterLinkList({ links }: { links: ResolvedSiteFooterLink[] }) {
 
 function FooterColumn({ column }: { column: ResolvedSiteFooterColumn }) {
   if (column.id === "product") {
-    // One list (crawlable once). On large screens, flow into two columns:
-    // col A = first five products, col B = remaining five.
+    const byId = new Map(column.links.map((link) => [link.id, link]));
+    const colA = PRODUCT_FOOTER_COL_A_IDS.map((id) => byId.get(id)).filter(
+      (link): link is ResolvedSiteFooterLink => Boolean(link),
+    );
+    const colB = PRODUCT_FOOTER_COL_B_IDS.map((id) => byId.get(id)).filter(
+      (link): link is ResolvedSiteFooterLink => Boolean(link),
+    );
+
+    // Two independent lists — wrapping in one subcolumn must not stretch the other.
     return (
       <div className="min-w-0">
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-900">
           {column.heading}
         </h3>
-        <ul className="flex flex-col gap-1.5 lg:grid lg:grid-flow-col lg:grid-cols-2 lg:grid-rows-5 lg:gap-x-2.5 lg:gap-y-1.5">
-          {column.links.map((link) => (
-            <li key={link.id} className="leading-5">
-              <FooterNavLink link={link} />
-            </li>
-          ))}
-        </ul>
+        <div className="grid grid-cols-1 gap-y-3 lg:grid-cols-2 lg:items-start lg:gap-x-4">
+          <FooterLinkList links={colA} />
+          <FooterLinkList links={colB} />
+        </div>
       </div>
     );
   }
