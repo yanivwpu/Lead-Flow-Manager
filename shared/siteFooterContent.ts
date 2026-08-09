@@ -39,7 +39,12 @@ export type SiteFooterColumnDef = {
 
 export type SiteFooterChrome = {
   tagline: string;
+  /** Full accessible trust phrase (screen readers / SSR). */
   metaTechProvider: string;
+  /** Compact trust line 1 — branded term, untranslated. */
+  metaTechProviderTitle: string;
+  /** Compact trust line 2 — branded term, untranslated. */
+  metaTechProviderPlatform: string;
   followUs: string;
   footerNavAria: string;
   /** Accessible label template; keep WhachatCRM + platform names untranslated. */
@@ -215,6 +220,8 @@ const CHROME_EN: SiteFooterChrome = {
   tagline:
     "The all-in-one WhatsApp CRM for teams that want to sell more, respond faster, and never lose a lead.",
   metaTechProvider: "Meta Tech Provider for the WhatsApp Business Platform",
+  metaTechProviderTitle: "Meta Tech Provider",
+  metaTechProviderPlatform: "WhatsApp Business Platform",
   followUs: "Follow us",
   footerNavAria: "Footer",
   socialAriaTemplate: "WhachatCRM on {{platform}}",
@@ -233,6 +240,8 @@ const CHROME_ES: SiteFooterChrome = {
   tagline:
     "El CRM de WhatsApp todo en uno para equipos que quieren vender más, responder más rápido y nunca perder un lead.",
   metaTechProvider: "Meta Tech Provider para WhatsApp Business Platform",
+  metaTechProviderTitle: "Meta Tech Provider",
+  metaTechProviderPlatform: "WhatsApp Business Platform",
   followUs: "Síguenos",
   footerNavAria: "Pie de página",
   socialAriaTemplate: "WhachatCRM en {{platform}}",
@@ -277,6 +286,8 @@ const CHROME_HE: SiteFooterChrome = {
   tagline:
     "מערכת ה-CRM המקיפה לווטסאפ לצוותים שרוצים למכור יותר, להגיב מהר יותר ולעולם לא לאבד ליד.",
   metaTechProvider: "Meta Tech Provider עבור WhatsApp Business Platform",
+  metaTechProviderTitle: "Meta Tech Provider",
+  metaTechProviderPlatform: "WhatsApp Business Platform",
   followUs: "עקבו אחרינו",
   footerNavAria: "כותרת תחתונה",
   socialAriaTemplate: "WhachatCRM ב-{{platform}}",
@@ -350,6 +361,8 @@ export type ResolvedSiteFooter = {
   locale: MarketingLocale;
   tagline: string;
   metaTechProvider: string;
+  metaTechProviderTitle: string;
+  metaTechProviderPlatform: string;
   followUs: string;
   footerNavAria: string;
   copyright: string;
@@ -395,6 +408,8 @@ export function getLocalizedSiteFooter(
     locale,
     tagline: chrome.tagline,
     metaTechProvider: chrome.metaTechProvider,
+    metaTechProviderTitle: chrome.metaTechProviderTitle,
+    metaTechProviderPlatform: chrome.metaTechProviderPlatform,
     followUs: chrome.followUs,
     footerNavAria: chrome.footerNavAria,
     copyright: formatFooterCopyright(chrome.copyrightTemplate, year),

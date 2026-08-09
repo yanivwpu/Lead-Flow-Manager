@@ -20,8 +20,8 @@ import { hasLocalizedVersion, localizePath, parseLocalizedPath } from "@shared/l
 
 function SocialIcon({ id }: { id: WhachatSocialPlatformId }) {
   const common = {
-    width: 18,
-    height: 18,
+    width: 16,
+    height: 16,
     viewBox: "0 0 24 24",
     fill: "currentColor",
     "aria-hidden": true as const,
@@ -59,9 +59,12 @@ function SocialIcon({ id }: { id: WhachatSocialPlatformId }) {
   }
 }
 
-/** Compact on desktop; comfortable touch targets on mobile. */
+/** ~13px / 20px line-height; touch targets below full desktop row. */
 const linkClass =
-  "inline-flex min-h-10 items-center text-sm leading-5 text-gray-500 transition-colors hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green rounded-sm lg:min-h-0 lg:py-0";
+  "inline-flex min-h-10 items-center text-[13px] leading-5 text-gray-500 transition-colors hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green rounded-sm min-[1180px]:!min-h-0 min-[1180px]:!py-0";
+
+const headingClass =
+  "mb-2.5 text-xs font-semibold uppercase tracking-wider text-gray-900";
 
 function FooterNavLink({ link }: { link: ResolvedSiteFooterLink }) {
   const { openPreferences } = useCookieConsent();
@@ -85,7 +88,7 @@ function FooterNavLink({ link }: { link: ResolvedSiteFooterLink }) {
 
 function FooterLinkList({ links }: { links: ResolvedSiteFooterLink[] }) {
   return (
-    <ul className="flex flex-col gap-2.5">
+    <ul className="flex flex-col gap-2">
       {links.map((link) => (
         <li key={link.id} className="leading-5">
           <FooterNavLink link={link} />
@@ -105,13 +108,11 @@ function FooterColumn({ column }: { column: ResolvedSiteFooterColumn }) {
       (link): link is ResolvedSiteFooterLink => Boolean(link),
     );
 
-    // Two independent lists — wrapping in one subcolumn must not stretch the other.
     return (
       <div className="min-w-0">
-        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-900">
-          {column.heading}
-        </h3>
-        <div className="grid grid-cols-1 gap-y-3 lg:grid-cols-2 lg:items-start lg:gap-x-4">
+        <h3 className={headingClass}>{column.heading}</h3>
+        {/* Two independent lists — wrapping in one must not stretch the other */}
+        <div className="grid grid-cols-1 gap-y-3 sm:grid-cols-2 sm:items-start sm:gap-x-5">
           <FooterLinkList links={colA} />
           <FooterLinkList links={colB} />
         </div>
@@ -121,9 +122,7 @@ function FooterColumn({ column }: { column: ResolvedSiteFooterColumn }) {
 
   return (
     <div className="min-w-0">
-      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-900">
-        {column.heading}
-      </h3>
+      <h3 className={headingClass}>{column.heading}</h3>
       <FooterLinkList links={column.links} />
     </div>
   );
@@ -154,43 +153,53 @@ export function SiteFooter() {
   const [location] = useLocation();
   const urlLocale = useMarketingUrlLocale();
   const locale = resolveFooterLocale(urlLocale, location, getCurrentLanguage());
-  // Same calendar-year source as SSR (`getLocalizedSiteFooter` default).
   const footer = getLocalizedSiteFooter(locale);
   const resolvedHome = localizePath("/", locale) || "/";
   const ordered = COLUMN_ORDER.map((id) => footer.columns.find((c) => c.id === id)!);
 
   return (
     <footer
-      className="border-t border-gray-200 bg-gray-50 px-4 pt-12 pb-7 md:px-6"
+      className="border-t border-gray-200 bg-gray-50 px-4 pt-12 pb-5 md:px-6 md:pb-6"
       dir={dir}
       data-testid="site-footer"
       data-footer-locale={locale}
     >
-      <div className="mx-auto max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px]">
-        <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-5 xl:gap-6">
-          <div className="w-full shrink-0 lg:w-[220px] xl:w-[236px]">
+      <div className="mx-auto max-w-7xl min-[1180px]:!max-w-[1440px] 2xl:max-w-[1536px]">
+        <div className="flex flex-col gap-8 min-[1180px]:!flex-row min-[1180px]:!items-start min-[1180px]:!gap-6">
+          <div className="w-full shrink-0 min-[1180px]:!w-[228px]">
             <Link
               href={resolvedHome}
-              className="mb-3 inline-flex items-center gap-2 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
+              className="mb-2.5 inline-flex items-center gap-2 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
             >
               <div className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-green">
                 <span className="text-sm font-bold text-white">W</span>
               </div>
               <span className="font-display text-lg font-bold text-gray-900">WhachatCRM</span>
             </Link>
-            <p className="text-sm leading-[1.4] text-gray-500">{footer.tagline}</p>
-            <p className="mt-3 flex items-start gap-2 text-xs leading-snug text-gray-600">
+            <p className="text-[13px] leading-[1.4] text-gray-500">{footer.tagline}</p>
+            <div
+              className="mt-2 flex items-start gap-1.5"
+              role="group"
+              aria-label={footer.metaTechProvider}
+            >
               <ShieldCheck
-                className="mt-0.5 h-4 w-4 shrink-0 text-brand-green [transform:none]"
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-green [transform:none]"
                 aria-hidden
               />
-              <span dir="auto">{footer.metaTechProvider}</span>
-            </p>
-            <div className="mt-4">
-              <h3 className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-gray-900">
+              <div className="min-w-0">
+                <p className="text-xs leading-snug text-gray-600" dir="ltr">
+                  {footer.metaTechProviderTitle}
+                </p>
+                <p className="text-[11px] leading-snug text-gray-500" dir="ltr">
+                  {footer.metaTechProviderPlatform}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3.5">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-900">
                 {footer.followUs}
               </h3>
-              <ul className="flex flex-wrap gap-2" style={{ direction: "ltr" }}>
+              <ul className="flex flex-wrap gap-1.5" style={{ direction: "ltr" }}>
                 {footer.social.map((profile) => (
                   <li key={profile.id}>
                     <a
@@ -198,7 +207,7 @@ export function SiteFooter() {
                       target="_blank"
                       rel={WHACHAT_SOCIAL_LINK_REL}
                       aria-label={profile.ariaLabel}
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green lg:h-9 lg:w-9"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green min-[1180px]:!h-9 min-[1180px]:!w-9"
                     >
                       <SocialIcon id={profile.id} />
                     </a>
@@ -209,12 +218,13 @@ export function SiteFooter() {
           </div>
 
           {/*
-            Desktop proportions (5 tracks): Product wider for dual lists;
-            Compare + Legal get more width than Solutions/Resources to reduce wrapping.
+            Mobile-first: 2 → 3 cols, then forced 5-col desktop from 1180px.
+            Important modifiers beat sm: cascade order in Tailwind v4.
+            Product ~300–330px via 1.95fr at typical desktop content widths.
           */}
           <nav
             aria-label={footer.footerNavAria}
-            className="grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-3 lg:grid-cols-[minmax(0,1.38fr)_minmax(0,0.9fr)_minmax(0,0.85fr)_minmax(0,1.28fr)_minmax(0,1.22fr)] lg:gap-x-5 xl:gap-x-5 lg:gap-y-0"
+            className="grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-3 min-[1180px]:!grid-cols-[minmax(0,1.95fr)_minmax(0,0.88fr)_minmax(0,0.78fr)_minmax(0,1.1fr)_minmax(0,0.98fr)] min-[1180px]:!gap-x-5 min-[1180px]:!gap-y-0 2xl:gap-x-6"
           >
             {ordered.map((column) => (
               <FooterColumn key={column.id} column={column} />
@@ -222,8 +232,8 @@ export function SiteFooter() {
           </nav>
         </div>
 
-        <div className="mt-8 border-t border-gray-200 pt-5">
-          <p className="text-sm text-gray-400">{footer.copyright}</p>
+        <div className="mt-7 border-t border-gray-200 pt-4 md:mt-8">
+          <p className="text-[13px] leading-5 text-gray-400">{footer.copyright}</p>
         </div>
       </div>
     </footer>

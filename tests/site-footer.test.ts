@@ -203,6 +203,10 @@ run("Spanish and Hebrew footer chrome is translated (no English generics)", () =
   assert.equal(he.columns.find((c) => c.id === "legal")?.heading, "מידע משפטי");
   assert.match(es.metaTechProvider, /^Meta Tech Provider para WhatsApp Business Platform$/);
   assert.match(he.metaTechProvider, /^Meta Tech Provider עבור WhatsApp Business Platform$/);
+  assert.equal(es.metaTechProviderTitle, "Meta Tech Provider");
+  assert.equal(he.metaTechProviderTitle, "Meta Tech Provider");
+  assert.equal(es.metaTechProviderPlatform, "WhatsApp Business Platform");
+  assert.equal(he.metaTechProviderPlatform, "WhatsApp Business Platform");
   assert.equal(
     es.metaTechProvider.includes("Official") || es.metaTechProvider.includes("Partner"),
     false,

@@ -1015,7 +1015,10 @@ export function generateHomepageHtml(locale: MarketingLocale = "en"): string {
 
           <footer>
             <p>${escapeHtmlText(footer.tagline)}</p>
-            <p>${escapeHtmlText(footer.metaTechProvider)}</p>
+            <div aria-label="${escapeHtmlAttr(footer.metaTechProvider)}">
+              <p dir="ltr">${escapeHtmlText(footer.metaTechProviderTitle)}</p>
+              <p dir="ltr">${escapeHtmlText(footer.metaTechProviderPlatform)}</p>
+            </div>
             <h2>${escapeHtmlText(footer.followUs)}</h2>
             <ul>
                 ${socialHtml}
