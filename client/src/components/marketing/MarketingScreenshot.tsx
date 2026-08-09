@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { X, ZoomIn } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MarketingScreenshotMeta, MarketingScreenshotSize } from "@shared/marketingScreenshots";
-import { screenshotDisplayWidth } from "@shared/marketingScreenshots";
+import { ensureRootAbsoluteAssetPath, screenshotDisplayWidth } from "@shared/marketingScreenshots";
 
 type Props = MarketingScreenshotMeta & {
   className?: string;
@@ -41,6 +41,7 @@ export function MarketingScreenshot({
   const nativeWidth = width ?? 640;
   const nativeHeight = height ?? Math.round(nativeWidth * 0.62);
   const displayWidth = screenshotDisplayWidth(nativeWidth, size);
+  const absoluteSrc = ensureRootAbsoluteAssetPath(src);
   const [open, setOpen] = useState(false);
 
   const close = useCallback(() => setOpen(false), []);
@@ -90,7 +91,7 @@ export function MarketingScreenshot({
           dir={forceLtr ? "ltr" : undefined}
         >
           <img
-            src={src}
+            src={absoluteSrc}
             alt={alt}
             width={nativeWidth}
             height={nativeHeight}
@@ -133,7 +134,7 @@ export function MarketingScreenshot({
             <X className="h-5 w-5" />
           </button>
           <img
-            src={src}
+            src={absoluteSrc}
             alt={alt}
             width={nativeWidth}
             height={nativeHeight}

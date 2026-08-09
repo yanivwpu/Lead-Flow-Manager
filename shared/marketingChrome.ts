@@ -260,7 +260,7 @@ export const MARKETING_CHROME: Record<MarketingLocale, MarketingChromeCopy> = {
     relatedProductsAndIntegrations: "מוצרים ואינטגרציות קשורים",
     howProductWorks: "איך {{product}} עובד",
     realisticTeamsUse: "דרכים ריאליות שבהן צוותים משתמשים ב-{{product}}",
-    genericAiVsBrain: "AI גנרי מול WhachatCRM AI Brain",
+    genericAiVsBrain: "AI רגיל לעומת WhachatCRM AI Brain",
   },
 };
 

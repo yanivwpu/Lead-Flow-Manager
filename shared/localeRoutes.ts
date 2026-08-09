@@ -197,8 +197,9 @@ export function getHreflangLinks(
 }
 
 /**
- * Preserve locale on Phase 2 internal links; leave auth/deferred English URLs unchanged.
- * Absolute http(s) URLs and hash-only links are returned as-is.
+ * Preserve locale on Phase 2 internal page links; leave auth/deferred English URLs unchanged.
+ * Absolute http(s) URLs, hash-only, mailto, and static asset / API paths are returned as-is
+ * (never prefixed with /es or /he).
  */
 export function localizedInternalHref(
   href: string,
@@ -206,6 +207,10 @@ export function localizedInternalHref(
 ): string {
   if (!href || href.startsWith("http://") || href.startsWith("https://") || href.startsWith("#") || href.startsWith("mailto:")) {
     return href;
+  }
+  // Static assets & APIs must stay root-absolute across locale routes.
+  if (isNonLocalizedAssetOrApiPath(href)) {
+    return href.startsWith("/") ? href : `/${href}`;
   }
   const [pathPart, query = ""] = href.split("?");
   const hashIdx = href.indexOf("#");
@@ -220,6 +225,39 @@ export function localizedInternalHref(
   }
   const q = query ? `?${query.split("#")[0]}` : "";
   return `${localized}${q}${hash}`;
+}
+
+/** True for public static / API paths that must never receive a locale prefix. */
+export function isNonLocalizedAssetOrApiPath(href: string): boolean {
+  const path = (href || "").split("?")[0].split("#")[0] || "";
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return (
+    normalized.startsWith("/images/") ||
+    normalized.startsWith("/assets/") ||
+    normalized.startsWith("/fonts/") ||
+    normalized.startsWith("/icons/") ||
+    normalized.startsWith("/og/") ||
+    normalized.startsWith("/favicon") ||
+    normalized.startsWith("/manifest") ||
+    normalized.startsWith("/api/") ||
+    normalized.endsWith(".css") ||
+    normalized.endsWith(".js") ||
+    normalized.endsWith(".mjs") ||
+    normalized.endsWith(".map") ||
+    normalized.endsWith(".woff") ||
+    normalized.endsWith(".woff2") ||
+    normalized.endsWith(".ttf") ||
+    normalized.endsWith(".webp") ||
+    normalized.endsWith(".png") ||
+    normalized.endsWith(".jpg") ||
+    normalized.endsWith(".jpeg") ||
+    normalized.endsWith(".gif") ||
+    normalized.endsWith(".svg") ||
+    normalized.endsWith(".ico") ||
+    normalized.endsWith(".pdf") ||
+    normalized.endsWith(".xml") ||
+    normalized.endsWith(".txt")
+  );
 }
 
 /** All public pathnames that must return HTTP 200 for Phase 2 (including English). */

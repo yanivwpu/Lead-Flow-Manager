@@ -85,13 +85,26 @@ export function screenshot(
   options?: Omit<MarketingScreenshotMeta, "src" | "alt">,
 ): MarketingScreenshotMeta {
   const dims = SCREENSHOT_DIMENSIONS[key];
+  const src = MARKETING_SCREENSHOTS[key];
+  if (!src.startsWith("/")) {
+    throw new Error(`Marketing screenshot "${key}" must be root-absolute, got: ${src}`);
+  }
   return {
-    src: MARKETING_SCREENSHOTS[key],
+    src,
     alt,
     width: dims.width,
     height: dims.height,
     ...options,
   };
+}
+
+/** Ensure a public asset URL stays root-absolute (never locale-relative). */
+export function ensureRootAbsoluteAssetPath(src: string): string {
+  if (!src) return src;
+  if (src.startsWith("http://") || src.startsWith("https://") || src.startsWith("data:")) {
+    return src;
+  }
+  return src.startsWith("/") ? src : `/${src}`;
 }
 
 /** Pre-captioned screenshots for SEO pages and Help Center. */

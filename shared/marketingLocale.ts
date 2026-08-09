@@ -16,11 +16,36 @@ export function marketingDir(locale: MarketingLocale): "ltr" | "rtl" {
   return locale === "he" ? "rtl" : "ltr";
 }
 
-/** Deep-merge plain objects/arrays; arrays replaced by overlay when provided. */
+/** Deep-merge plain objects/arrays.
+ * - Arrays of plain objects → merge element-by-element by index (keeps base-only
+ *   asset fields like image.src / screenshotKey when overlays only translate alt).
+ * - Arrays of primitives (paragraphs, bullets) → overlay replaces when provided.
+ */
 export function mergeMarketingContent<T>(base: T, overlay: unknown): T {
   if (overlay === undefined || overlay === null) return base;
   if (Array.isArray(base)) {
-    return (Array.isArray(overlay) ? overlay : base) as T;
+    if (!Array.isArray(overlay)) return base;
+    const baseIsObjectArray =
+      base.length > 0 &&
+      typeof base[0] === "object" &&
+      base[0] !== null &&
+      !Array.isArray(base[0]);
+    const overlayIsObjectArray =
+      overlay.length > 0 &&
+      typeof overlay[0] === "object" &&
+      overlay[0] !== null &&
+      !Array.isArray(overlay[0]);
+    if (baseIsObjectArray && overlayIsObjectArray) {
+      const len = Math.max(base.length, overlay.length);
+      const out: unknown[] = [];
+      for (let i = 0; i < len; i++) {
+        if (i >= overlay.length) out.push(base[i]);
+        else if (i >= base.length) out.push(overlay[i]);
+        else out.push(mergeMarketingContent(base[i], overlay[i]));
+      }
+      return out as T;
+    }
+    return overlay as T;
   }
   if (typeof base === "object" && base !== null) {
     if (typeof overlay !== "object" || overlay === null || Array.isArray(overlay)) {

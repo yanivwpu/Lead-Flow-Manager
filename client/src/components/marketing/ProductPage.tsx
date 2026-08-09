@@ -36,6 +36,8 @@ import {
   localizePath,
   localizedInternalHref,
 } from "@shared/localeRoutes";
+import { renderRtlAwareHeadingText, renderHeGenericAiVsBrainHeading } from "@/components/marketing/RtlAwareHeadingText";
+import { needsHebrewAiBidiLayout } from "@shared/rtlLeadingLtrIsolate";
 
 const SiteFooter = lazy(() =>
   import("@/components/SiteFooter").then((m) => ({ default: m.SiteFooter })),
@@ -204,10 +206,12 @@ export function ProductPage({ content: baseContent }: Props) {
                 {content.productLabel}
               </p>
               <h1 className="font-display text-3xl font-bold tracking-tight text-gray-950 md:text-4xl lg:text-[2.75rem] lg:leading-[1.1]">
-                {content.h1}
+                {renderRtlAwareHeadingText(content.h1)}
               </h1>
               <p className="mt-5 max-w-xl text-base leading-relaxed text-gray-600 md:text-lg">
-                {content.heroIntro}
+                {locale === "he" && needsHebrewAiBidiLayout(content.heroIntro)
+                  ? renderRtlAwareHeadingText(content.heroIntro)
+                  : content.heroIntro}
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Link
@@ -253,7 +257,9 @@ export function ProductPage({ content: baseContent }: Props) {
               {chrome.theProblem}
             </p>
             <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
-              {content.problemTitle}
+              {locale === "he" && needsHebrewAiBidiLayout(content.problemTitle)
+                ? renderRtlAwareHeadingText(content.problemTitle)
+                : content.problemTitle}
             </h2>
             <div className="grid gap-4 md:grid-cols-2">
               {content.problems.map((item) => (
@@ -305,11 +311,15 @@ export function ProductPage({ content: baseContent }: Props) {
                 {chrome.differentiation}
               </p>
               <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
-                {chrome.genericAiVsBrain}
+                {locale === "he" ? renderHeGenericAiVsBrainHeading() : chrome.genericAiVsBrain}
               </h2>
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6">
-                  <h3 className="mb-4 text-lg font-semibold text-gray-700">{content.comparison.leftTitle}</h3>
+                  <h3 className="mb-4 text-lg font-semibold text-gray-700">
+                    {locale === "he" && needsHebrewAiBidiLayout(content.comparison.leftTitle)
+                      ? renderRtlAwareHeadingText(content.comparison.leftTitle)
+                      : content.comparison.leftTitle}
+                  </h3>
                   <ul className="space-y-3">
                     {content.comparison.leftItems.map((item) => (
                       <li key={item} className="flex gap-2 text-sm text-gray-600">

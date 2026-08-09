@@ -1961,7 +1961,7 @@ export const PRODUCT_PAGE_LOCALES = {
     "metaDescription": "WhachatCRM AI Brain הוא שכבת האינטליגנציה של ידע עסקי עבור ה-CRM שלכם. לימדו את הפרופיל, נתחו מקורות ידע, בדקו סתירות, פרסמו אינטליגנציה מאושרת והפעילו את Copilot, Prospect AI וקמפיינים.",
     "ogTitle": "AI Brain — אינטליגנציה של ידע עסקי | WhachatCRM",
     "h1": "AI שמבין איך העסק שלכם עובד",
-    "heroIntro": "AI גנרי יכול לכתוב תשובה. AI Brain מבין את העסק, את המטרות, מה לשאול ומה צריך לקרות בהמשך — ואז מספק את האינטליגנציה המאושרת ב-WhachatCRM.",
+    "heroIntro": "AI רגיל יכול לכתוב תשובה. AI Brain מבין את העסק, את המטרות, מה לשאול ומה צריך לקרות בהמשך — ואז מספק את האינטליגנציה המאושרת ב-WhachatCRM.",
     "secondaryCta": {
       "label": "ראו AI Copilot",
       "href": "/ai-copilot"
@@ -1990,7 +1990,7 @@ export const PRODUCT_PAGE_LOCALES = {
         "screenshotAlt": "פאנל שאלות לקוח של AI Brain עם שדות סינון חובה ואופציונליים"
       }
     ],
-    "problemTitle": "למה AI גנרי לא מספיק לצוותי מכירות",
+    "problemTitle": "למה AI רגיל לא מספיק לצוותי מכירות",
     "problems": [
       {
         "title": "תשובות בלי הקשר עסקי",
@@ -2029,7 +2029,7 @@ export const PRODUCT_PAGE_LOCALES = {
       }
     ],
     "comparison": {
-      "leftTitle": "AI גנרי",
+      "leftTitle": "AI רגיל",
       "leftItems": [
         "עובד בעיקר מה-prompt הנוכחי",
         "לעיתים מייצר תגובות גנריות",

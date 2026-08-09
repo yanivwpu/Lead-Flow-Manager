@@ -28,6 +28,7 @@ import {
 import { getLocalizedPageMeta } from "@shared/marketingPageMetaLocales";
 import { PROSPECT_AI_LANDING_LOCALES } from "@shared/prospectAiLandingLocales";
 import { RGE_LANDING_LOCALES } from "@shared/realtorGrowthEngineLandingLocales";
+import { formatHeadingHtmlWithLeadingLtrIsolate } from "@shared/rtlLeadingLtrIsolate";
 
 const BASE_URL = (process.env.MARKETING_URL || "https://www.whachatcrm.com").replace(/\/+$/, "");
 
@@ -746,11 +747,12 @@ const MARKETING_SSR_PAGES: Record<string, MarketingSsrPage> = {
 };
 
 function renderMarketingSsrPage(page: MarketingSsrPage): string {
-  const bullets = page.bullets.map((b) => `<li>${b}</li>`).join("\n            ");
+  const bullets = page.bullets.map((b) => `<li>${escapeHtmlText(b)}</li>`).join("\n            ");
+  const h1Inner = formatHeadingHtmlWithLeadingLtrIsolate(page.h1, escapeHtmlText);
   return wrapCrawlableSsr(`
         <main>
-          <h1>${page.h1}</h1>
-          <p>${page.lead}</p>
+          <h1>${h1Inner}</h1>
+          <p>${escapeHtmlText(page.lead)}</p>
           <ul>
             ${bullets}
           </ul>

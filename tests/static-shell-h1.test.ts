@@ -78,7 +78,10 @@ function assembleCompleteHtml(pathname: string): { status: number; html: string 
 
 function h1Texts(html: string): string[] {
   return [...html.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi)].map((m) =>
-    m[1]!.replace(/\s+/g, " ").trim(),
+    m[1]!
+      .replace(/<[^>]+>/g, "")
+      .replace(/\s+/g, " ")
+      .trim(),
   );
 }
 
