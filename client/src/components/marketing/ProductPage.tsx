@@ -15,9 +15,12 @@ import { MarketingBreadcrumbs } from "@/components/marketing/MarketingBreadcrumb
 import { MarketingLandingCta } from "@/components/marketing/MarketingLandingCta";
 import { SolutionWorkflow } from "@/components/marketing/SolutionWorkflow";
 import { MarketingScreenshot } from "@/components/marketing/MarketingScreenshot";
+import { ProductFlowSchema } from "@/components/marketing/ProductFlowSchema";
 import { MARKETING_URL } from "@/lib/marketingUrl";
 import { getDirection } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import { screenshot } from "@shared/marketingScreenshots";
+import { PRODUCT_THEMES } from "@shared/productThemes";
 import type { ProductPageContent } from "@shared/productPages";
 
 const SiteFooter = lazy(() =>
@@ -29,16 +32,22 @@ const BookDemoModal = lazy(() =>
 
 type Props = { content: ProductPageContent };
 
-function HeroVisual({ visual }: { visual: ProductPageContent["heroVisual"] }) {
+function HeroVisual({
+  visual,
+  theme,
+}: {
+  visual: ProductPageContent["heroVisual"];
+  theme: (typeof PRODUCT_THEMES)[keyof typeof PRODUCT_THEMES];
+}) {
   return (
     <div
       className="relative mx-auto w-full max-w-md"
       style={{ aspectRatio: "4 / 5" }}
       aria-hidden
     >
-      <div className="absolute inset-0 rounded-[1.75rem] bg-gradient-to-br from-emerald-50 via-white to-sky-50 ring-1 ring-gray-200" />
+      <div className={cn("absolute inset-0 rounded-[1.75rem] ring-1 ring-gray-200", theme.heroBg)} />
       <div className="absolute left-4 right-4 top-6 rounded-2xl bg-white p-4 shadow-md ring-1 ring-gray-100">
-        <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-brand-green">
+        <div className={cn("mb-2 flex items-center gap-2 text-xs font-semibold", theme.accentText)}>
           <MessageSquare className="h-3.5 w-3.5" />
           {visual.inquiryLabel}
         </div>
@@ -46,8 +55,8 @@ function HeroVisual({ visual }: { visual: ProductPageContent["heroVisual"] }) {
           {visual.inquiryMessage}
         </div>
       </div>
-      <div className="absolute left-8 right-2 top-[38%] rounded-2xl bg-emerald-600 p-4 text-white shadow-lg">
-        <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-emerald-100">
+      <div className={cn("absolute left-8 right-2 top-[38%] rounded-2xl p-4 text-white shadow-lg", theme.accentBg)}>
+        <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-white/85">
           <Sparkles className="h-3.5 w-3.5" />
           {visual.suggestionLabel}
         </div>
@@ -56,10 +65,12 @@ function HeroVisual({ visual }: { visual: ProductPageContent["heroVisual"] }) {
       <div className="absolute bottom-6 left-4 right-8 rounded-2xl bg-white p-4 shadow-md ring-1 ring-gray-100">
         <div className="mb-2 flex items-center justify-between text-xs font-semibold text-gray-500">
           <span>Status</span>
-          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-brand-green">{visual.stageLabel}</span>
+          <span className={cn("rounded-full px-2 py-0.5", theme.badgeBg, theme.badgeText)}>
+            {visual.stageLabel}
+          </span>
         </div>
         <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
-          <Calendar className="h-4 w-4 text-brand-green" />
+          <Calendar className={cn("h-4 w-4", theme.accentText)} />
           {visual.nextStep}
         </div>
       </div>
@@ -81,10 +92,19 @@ const PLATFORM_STORY = [
   },
 ] as const;
 
+const BRAIN_CONSUMERS = [
+  { label: "Prospect AI", href: "/prospect-ai", text: "Approved context for personalized outreach" },
+  { label: "AI Copilot", href: "/ai-copilot", text: "Business-aware recommendations in chat" },
+  { label: "Campaigns", href: "/campaigns", text: "Personalization grounded in your offer" },
+  { label: "Qualification", href: "/ai-brain", text: "Consistent questions and ideal-customer rules" },
+] as const;
+
 export function ProductPage({ content }: Props) {
   const { user } = useAuth();
   const [showDemo, setShowDemo] = useState(false);
   const isRTL = getDirection() === "rtl";
+  const theme = PRODUCT_THEMES[content.themeId];
+  const workflowVariant = content.workflowVariant ?? "both";
   const canonical = `${MARKETING_URL}${content.path}`;
   const ogTitle = content.ogTitle ?? content.title;
   const heroShot =
@@ -105,6 +125,11 @@ export function ProductPage({ content }: Props) {
     url: canonical,
     description: content.metaDescription,
   };
+
+  const showSteps = workflowVariant === "steps" || workflowVariant === "both";
+  const showScenarios =
+    (workflowVariant === "scenarios" || workflowVariant === "both") &&
+    Boolean(content.flowScenarios?.length);
 
   return (
     <div dir={isRTL ? "rtl" : "ltr"} className={`min-h-screen bg-white ${isRTL ? "text-right" : "text-left"}`}>
@@ -136,11 +161,11 @@ export function ProductPage({ content }: Props) {
       />
 
       <main>
-        <section className="border-b border-gray-100 px-4 pb-12 pt-6 md:px-6 md:pb-16 md:pt-8">
+        <section className={cn("border-b border-gray-100 px-4 pb-12 pt-6 md:px-6 md:pb-16 md:pt-8", theme.heroBg)}>
           <div className="mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-[1.05fr_0.95fr] xl:max-w-[1440px]">
             <div>
               <MarketingBreadcrumbs items={breadcrumbs} className="mb-6" />
-              <p className="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
+              <p className={cn("mb-3 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
                 {content.productLabel}
               </p>
               <h1 className="font-display text-3xl font-bold tracking-tight text-gray-950 md:text-4xl lg:text-[2.75rem] lg:leading-[1.1]">
@@ -173,18 +198,18 @@ export function ProductPage({ content }: Props) {
               </div>
             </div>
             {heroShot ? (
-              <div className="mx-auto w-full max-w-xl">
+              <div className={cn("mx-auto w-full max-w-xl rounded-2xl p-2 ring-1", theme.accentRing, theme.accentSoft)}>
                 <MarketingScreenshot {...heroShot} priority />
               </div>
             ) : (
-              <HeroVisual visual={content.heroVisual} />
+              <HeroVisual visual={content.heroVisual} theme={theme} />
             )}
           </div>
         </section>
 
-        <section className="bg-gray-50 px-4 py-14 md:px-6 md:py-16">
+        <section className="bg-white px-4 py-14 md:px-6 md:py-16">
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
-            <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
+            <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
               The problem
             </p>
             <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
@@ -192,7 +217,10 @@ export function ProductPage({ content }: Props) {
             </h2>
             <div className="grid gap-4 md:grid-cols-2">
               {content.problems.map((item) => (
-                <div key={item.title} className="rounded-2xl bg-white p-5 ring-1 ring-gray-100">
+                <div
+                  key={item.title}
+                  className={cn("border-l-4 bg-gray-50/80 py-4 pl-5 pr-4", theme.accentBorder)}
+                >
                   <h3 className="font-semibold text-gray-950">{item.title}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-gray-600">{item.description}</p>
                 </div>
@@ -201,9 +229,9 @@ export function ProductPage({ content }: Props) {
           </div>
         </section>
 
-        <section className="px-4 py-14 md:px-6 md:py-16">
+        <section className={cn("px-4 py-14 md:px-6 md:py-16", theme.sectionAltBg)}>
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
-            <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
+            <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
               How it helps
             </p>
             <h2 className="font-display mb-3 text-2xl font-bold text-gray-950 md:text-3xl">
@@ -212,8 +240,14 @@ export function ProductPage({ content }: Props) {
             <p className="mb-8 max-w-3xl text-base text-gray-600 md:text-lg">{content.howIntro}</p>
             <div className="grid gap-4 md:grid-cols-2">
               {content.howPoints.map((item) => (
-                <div key={item.title} className="rounded-2xl border border-gray-100 bg-gray-50/80 p-5">
-                  <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-brand-green">
+                <div key={item.title} className="rounded-2xl border border-white/80 bg-white/90 p-5 shadow-sm">
+                  <div
+                    className={cn(
+                      "mb-3 flex h-9 w-9 items-center justify-center rounded-full",
+                      theme.badgeBg,
+                      theme.accentText,
+                    )}
+                  >
                     <CheckCircle2 className="h-4 w-4" aria-hidden />
                   </div>
                   <h3 className="font-semibold text-gray-950">{item.title}</h3>
@@ -227,7 +261,7 @@ export function ProductPage({ content }: Props) {
         {content.comparison ? (
           <section className="border-y border-gray-100 bg-white px-4 py-14 md:px-6 md:py-16">
             <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
-              <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
+              <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
                 Differentiation
               </p>
               <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
@@ -245,12 +279,14 @@ export function ProductPage({ content }: Props) {
                     ))}
                   </ul>
                 </div>
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-6">
-                  <h3 className="mb-4 text-lg font-semibold text-emerald-900">{content.comparison.rightTitle}</h3>
+                <div className={cn("rounded-2xl border p-6", theme.accentBorder, theme.accentSoft)}>
+                  <h3 className={cn("mb-4 text-lg font-semibold", theme.accentText)}>
+                    {content.comparison.rightTitle}
+                  </h3>
                   <ul className="space-y-3">
                     {content.comparison.rightItems.map((item) => (
-                      <li key={item} className="flex gap-2 text-sm text-emerald-950">
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden />
+                      <li key={item} className="flex gap-2 text-sm text-gray-900">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
                         {item}
                       </li>
                     ))}
@@ -261,15 +297,100 @@ export function ProductPage({ content }: Props) {
           </section>
         ) : null}
 
-        <section className="bg-gray-50 px-4 py-14 md:px-6 md:py-16">
-          <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
-            <SolutionWorkflow title={content.workflowTitle} steps={content.workflowSteps} />
-          </div>
-        </section>
+        {content.visualSections?.length ? (
+          <section className="bg-white px-4 py-14 md:px-6 md:py-16">
+            <div className="mx-auto max-w-7xl space-y-16 xl:max-w-[1440px]">
+              {content.visualSections.map((section) => {
+                const shot =
+                  section.screenshotKey && section.screenshotAlt
+                    ? screenshot(section.screenshotKey, section.screenshotAlt, { size: "content" })
+                    : null;
+                return (
+                  <div
+                    key={section.title}
+                    className={cn(
+                      "grid items-center gap-8 lg:grid-cols-2",
+                      section.reverse && "lg:[&>*:first-child]:order-2",
+                    )}
+                  >
+                    <div>
+                      <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
+                        Product detail
+                      </p>
+                      <h2 className="font-display text-2xl font-bold text-gray-950 md:text-3xl">
+                        {section.title}
+                      </h2>
+                      <p className="mt-4 text-base leading-relaxed text-gray-600">{section.description}</p>
+                    </div>
+                    {shot ? (
+                      <div className={cn("rounded-2xl p-2 ring-1", theme.accentRing, theme.accentSoft)}>
+                        <MarketingScreenshot {...shot} />
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
 
-        <section className="px-4 py-14 md:px-6 md:py-16">
+        {content.path === "/ai-brain" ? (
+          <section className={cn("px-4 py-14 md:px-6 md:py-16", theme.sectionAltBg)}>
+            <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
+              <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
+                Platform intelligence
+              </p>
+              <h2 className="font-display mb-3 text-2xl font-bold text-gray-950 md:text-3xl">
+                One Brain across the platform
+              </h2>
+              <p className="mb-8 max-w-3xl text-base text-gray-600 md:text-lg">
+                Approved business intelligence can power the products that need company context — without
+                inventing knowledge you did not provide or publish.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {BRAIN_CONSUMERS.map((item) => (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    className="rounded-2xl border border-white bg-white/95 p-5 shadow-sm transition hover:shadow-md"
+                  >
+                    <p className={cn("text-sm font-semibold", theme.accentText)}>{item.label}</p>
+                    <p className="mt-2 text-sm text-gray-600">{item.text}</p>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {showScenarios && content.flowScenarios ? (
+          <ProductFlowSchema
+            scenarios={content.flowScenarios}
+            theme={theme}
+            heading={
+              content.path === "/chatbot-builder"
+                ? "Chatbot journey scenarios"
+                : "Automation if-this-then-that scenarios"
+            }
+          />
+        ) : null}
+
+        {showSteps ? (
+          <section className={cn("px-4 py-14 md:px-6 md:py-16", showScenarios ? "bg-white" : theme.sectionAltBg)}>
+            <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
+              <SolutionWorkflow
+                title={content.workflowTitle}
+                steps={content.workflowSteps}
+                eyebrowClassName={theme.accentText}
+                stepBadgeClassName={cn(theme.accentBg, "text-white")}
+              />
+            </div>
+          </section>
+        ) : null}
+
+        <section className="bg-white px-4 py-14 md:px-6 md:py-16">
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
-            <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
+            <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
               Capabilities
             </p>
             <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
@@ -282,7 +403,7 @@ export function ProductPage({ content }: Props) {
                     <h3 className="font-semibold text-gray-950">{feature.label}</h3>
                     <p className="mt-2 text-sm leading-relaxed text-gray-600">{feature.description}</p>
                     {feature.href ? (
-                      <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-brand-green">
+                      <span className={cn("mt-3 inline-flex items-center gap-1 text-sm font-semibold", theme.accentText)}>
                         Learn more <ArrowRight className="h-3.5 w-3.5" />
                       </span>
                     ) : null}
@@ -292,12 +413,18 @@ export function ProductPage({ content }: Props) {
                   <Link
                     key={feature.label}
                     href={feature.href}
-                    className="rounded-2xl border border-gray-100 bg-white p-5 transition hover:border-emerald-200 hover:shadow-sm"
+                    className={cn(
+                      "rounded-2xl border bg-white p-5 transition hover:shadow-sm",
+                      theme.accentBorder,
+                    )}
                   >
                     {body}
                   </Link>
                 ) : (
-                  <div key={feature.label} className="rounded-2xl border border-gray-100 bg-white p-5">
+                  <div
+                    key={feature.label}
+                    className={cn("rounded-2xl border bg-white p-5", theme.accentBorder)}
+                  >
                     {body}
                   </div>
                 );
@@ -307,9 +434,9 @@ export function ProductPage({ content }: Props) {
         </section>
 
         {content.integrationCategories?.length ? (
-          <section className="border-y border-gray-100 bg-gray-50 px-4 py-14 md:px-6 md:py-16">
+          <section className={cn("border-y border-gray-100 px-4 py-14 md:px-6 md:py-16", theme.sectionAltBg)}>
             <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
-              <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
+              <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
                 Directory
               </p>
               <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
@@ -324,12 +451,17 @@ export function ProductPage({ content }: Props) {
                         const card = (
                           <div className="h-full rounded-2xl border border-gray-200 bg-white p-5">
                             <div className="mb-2 flex items-center gap-2">
-                              <Puzzle className="h-4 w-4 text-brand-green" aria-hidden />
+                              <Puzzle className={cn("h-4 w-4", theme.accentText)} aria-hidden />
                               <p className="font-semibold text-gray-950">{item.name}</p>
                             </div>
                             <p className="text-sm leading-relaxed text-gray-600">{item.description}</p>
                             {item.href ? (
-                              <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-brand-green">
+                              <span
+                                className={cn(
+                                  "mt-3 inline-flex items-center gap-1 text-sm font-semibold",
+                                  theme.accentText,
+                                )}
+                              >
                                 Open guide <ArrowRight className="h-3.5 w-3.5" />
                               </span>
                             ) : null}
@@ -351,9 +483,9 @@ export function ProductPage({ content }: Props) {
           </section>
         ) : null}
 
-        <section className="bg-white px-4 py-14 md:px-6 md:py-16">
+        <section className={cn("px-4 py-14 md:px-6 md:py-16", theme.sectionAltBg)}>
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
-            <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
+            <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
               Use cases
             </p>
             <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">
@@ -363,15 +495,19 @@ export function ProductPage({ content }: Props) {
               {content.useCases.map((useCase) => (
                 <article
                   key={useCase.situation}
-                  className="flex flex-col rounded-2xl border border-gray-100 bg-gray-50/70 p-5"
+                  className="flex flex-col rounded-2xl border border-white bg-white p-5 shadow-sm"
                 >
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Situation</h3>
+                  <h3 className={cn("text-sm font-semibold uppercase tracking-wide", theme.accentText)}>
+                    Situation
+                  </h3>
                   <p className="mt-1 text-sm font-medium text-gray-950">{useCase.situation}</p>
                   <h3 className="mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
                     What WhachatCRM does
                   </h3>
                   <p className="mt-1 text-sm text-gray-700">{useCase.action}</p>
-                  <h3 className="mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">Outcome</h3>
+                  <h3 className="mt-4 text-sm font-semibold uppercase tracking-wide text-emerald-700">
+                    Outcome
+                  </h3>
                   <p className="mt-1 text-sm text-gray-700">{useCase.outcome}</p>
                 </article>
               ))}
@@ -405,14 +541,14 @@ export function ProductPage({ content }: Props) {
 
         <section className="px-4 py-14 md:px-6 md:py-16">
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
-            <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
+            <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", theme.accentText)}>
               Getting started
             </p>
             <h2 className="font-display mb-8 text-2xl font-bold text-gray-950 md:text-3xl">How to get started</h2>
             <ol className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               {content.howItWorks.map((step, index) => (
-                <li key={step.title} className="rounded-2xl bg-white p-5 ring-1 ring-gray-100">
-                  <span className="text-sm font-bold text-brand-green">{index + 1}</span>
+                <li key={step.title} className={cn("rounded-2xl bg-white p-5 ring-1", theme.accentRing)}>
+                  <span className={cn("text-sm font-bold", theme.accentText)}>{index + 1}</span>
                   <h3 className="mt-2 font-semibold text-gray-950">{step.title}</h3>
                   <p className="mt-2 text-sm text-gray-600">{step.description}</p>
                 </li>
@@ -429,7 +565,10 @@ export function ProductPage({ content }: Props) {
                 <Link
                   key={link.href + link.label}
                   href={link.href}
-                  className="rounded-2xl border border-gray-200 bg-white p-5 transition hover:border-emerald-200"
+                  className={cn(
+                    "rounded-2xl border bg-white p-5 transition hover:shadow-sm",
+                    theme.accentBorder,
+                  )}
                 >
                   <p className="font-semibold text-gray-950">{link.label}</p>
                   {link.description ? (

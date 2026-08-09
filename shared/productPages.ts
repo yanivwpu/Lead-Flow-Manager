@@ -68,6 +68,27 @@ export type ProductIntegrationCategory = {
   items: ProductIntegrationItem[];
 };
 
+export type ProductVisualSection = {
+  title: string;
+  description: string;
+  /** Screenshot key from marketingScreenshots */
+  screenshotKey?: import("./marketingScreenshots").MarketingScreenshotKey;
+  screenshotAlt?: string;
+  reverse?: boolean;
+};
+
+export type ProductFlowNode = {
+  kind: "trigger" | "message" | "question" | "action" | "outcome" | "delay";
+  label: string;
+  detail?: string;
+};
+
+export type ProductFlowScenario = {
+  title: string;
+  summary: string;
+  nodes: ProductFlowNode[];
+};
+
 export type ProductPageContent = {
   path: string;
   productLabel: string;
@@ -78,17 +99,18 @@ export type ProductPageContent = {
   h1: string;
   heroIntro: string;
   secondaryCta: ProductLink;
+  /** Visual identity — distinct accent while keeping WhachatCRM brand */
+  themeId: import("./productThemes").ProductThemeId;
+  heroVariant?: "screenshot" | "split-visual" | "diagram";
+  workflowVariant?: "steps" | "scenarios" | "both";
   heroVisual: ProductHeroVisual;
   /** Optional marketing screenshot key from shared/marketingScreenshots */
-  screenshotKey?:
-    | "unifiedInbox"
-    | "aiCopilot"
-    | "leadScore"
-    | "automationWorkflows"
-    | "automationTemplateCards"
-    | "channels"
-    | "dashboard";
+  screenshotKey?: import("./marketingScreenshots").MarketingScreenshotKey;
   screenshotAlt?: string;
+  /** Additional screenshot-led sections (AI Brain priority) */
+  visualSections?: ProductVisualSection[];
+  /** Practical if-this-then-that scenarios (Chatbot / Automations) */
+  flowScenarios?: ProductFlowScenario[];
   problemTitle: string;
   problems: ProductProblem[];
   howIntro: string;
@@ -121,6 +143,9 @@ export const aiBrainProduct: ProductPageContent = {
   heroIntro:
     "Generic AI can write a reply. AI Brain understands your business, your goals, what to ask, and what should happen next — then supplies that approved intelligence across WhachatCRM.",
   secondaryCta: { label: "See AI Copilot", href: "/ai-copilot" },
+  themeId: "violet",
+  heroVariant: "screenshot",
+  workflowVariant: "both",
   heroVisual: {
     inquiryLabel: "Business knowledge",
     inquiryMessage: "Services, policies, and ideal customers connected for review.",
@@ -129,6 +154,28 @@ export const aiBrainProduct: ProductPageContent = {
     stageLabel: "Ready to publish",
     nextStep: "Next: approve intelligence",
   },
+  screenshotKey: "aiWorkspace",
+  screenshotAlt:
+    "WhachatCRM AI workspace explaining AI Assist and the premium AI Brain intelligence layer",
+  visualSections: [
+    {
+      title: "Analyze knowledge page by page",
+      description:
+        "AI reads each connected page separately and drafts what it found. Nothing reaches your replies until you review and publish approved intelligence.",
+      screenshotKey: "aiBrainAnalyze",
+      screenshotAlt:
+        "AI Brain Analyze knowledge panel showing scanned pages with new and changed fact counts",
+    },
+    {
+      title: "Define what AI should ask",
+      description:
+        "Generate, edit, and manage qualification questions from your business context so Copilot and conversations ask for the right details.",
+      screenshotKey: "aiBrainQuestions",
+      screenshotAlt:
+        "AI Brain customer questions panel with required and optional qualification fields",
+      reverse: true,
+    },
+  ],
   problemTitle: "Why generic AI falls short for sales teams",
   problems: [
     {
@@ -341,6 +388,9 @@ export const aiCopilotProduct: ProductPageContent = {
   heroIntro:
     "AI Copilot is the conversation assistant that works inside Unified Inbox. It uses conversation context — and AI Brain when enabled — to help your team understand the opportunity and move it forward.",
   secondaryCta: { label: "Explore AI Brain", href: "/ai-brain" },
+  themeId: "indigo",
+  heroVariant: "screenshot",
+  workflowVariant: "both",
   heroVisual: {
     inquiryLabel: "Live conversation",
     inquiryMessage: "Interested in a consult this week — what’s the next step?",
@@ -350,7 +400,17 @@ export const aiCopilotProduct: ProductPageContent = {
     nextStep: "Next: suggested reply ready",
   },
   screenshotKey: "aiCopilot",
-  screenshotAlt: "AI Copilot panel showing conversation assistance in WhachatCRM",
+  screenshotAlt: "AI Copilot panel showing conversation assistance and lead insights in WhachatCRM",
+  visualSections: [
+    {
+      title: "Lead scoring beside the thread",
+      description:
+        "Scores and explanations help teams understand why a conversation looks ready — without leaving Unified Inbox.",
+      screenshotKey: "leadScore",
+      screenshotAlt: "AI Copilot lead score card with qualification factors",
+      reverse: true,
+    },
+  ],
   problemTitle: "What slows teams down in the inbox",
   problems: [
     {
@@ -522,20 +582,71 @@ export const chatbotBuilderProduct: ProductPageContent = {
   breadcrumbLabel: "Chatbot Builder",
   title: "Visual Chatbot Builder for Customer Journeys | WhachatCRM",
   metaDescription:
-    "Build no-code chatbot journeys in WhachatCRM. Create message and question flows, capture inputs, branch conversations, tag contacts, assign teammates, and hand work into Unified Inbox across supported channels.",
+    "Build no-code chatbot journeys in WhachatCRM. Create message and question flows, capture inputs, tag contacts, assign teammates, and hand work into Unified Inbox across supported channels.",
   ogTitle: "Chatbot Builder — Visual Customer Journeys | WhachatCRM",
   h1: "Build Customer Journeys Without Writing Code",
   heroIntro:
     "Chatbot Builder helps you design conversational flows that welcome customers, capture what they need, qualify interest, and route work to the right teammate — then continue in Unified Inbox.",
   secondaryCta: { label: "See Unified Inbox", href: "/unified-inbox" },
+  themeId: "teal",
+  heroVariant: "screenshot",
+  workflowVariant: "scenarios",
   heroVisual: {
     inquiryLabel: "Flow step",
     inquiryMessage: "What service are you looking for today?",
-    suggestionLabel: "Branch",
-    suggestionMessage: "If “Pricing” → capture contact → assign Sales → open inbox.",
+    suggestionLabel: "Action",
+    suggestionMessage: "Add Tag → continue the conversation in Unified Inbox.",
     stageLabel: "Qualified",
-    nextStep: "Next: human handoff",
+    nextStep: "Next: team follow-up",
   },
+  screenshotKey: "chatbotFlowCanvas",
+  screenshotAlt:
+    "Chatbot Builder canvas with Send Message and Add Tag steps plus WhatsApp template settings",
+  visualSections: [
+    {
+      title: "Configure when the flow starts",
+      description:
+        "Start on a new conversation, add keyword triggers, and limit the flow to supported channels such as WhatsApp, Instagram, Facebook Messenger, SMS, web chat, and Telegram.",
+      screenshotKey: "chatbotTrigger",
+      screenshotAlt:
+        "Chatbot Builder trigger panel with new-conversation toggle, keyword input, and channel filters",
+    },
+  ],
+  flowScenarios: [
+    {
+      title: "Welcome and qualify",
+      summary: "Greet a new conversation, capture what the customer needs, apply a tag, then continue with the team.",
+      nodes: [
+        { kind: "trigger", label: "New conversation", detail: "Start on new conversation" },
+        { kind: "message", label: "Send welcome message", detail: "Hello! How can I help you today?" },
+        { kind: "question", label: "Ask what they need", detail: "Capture the customer’s request" },
+        { kind: "action", label: "Add Tag", detail: "Supported contact action" },
+        { kind: "outcome", label: "Continue in Unified Inbox", detail: "Team takes over with context" },
+      ],
+    },
+    {
+      title: "Keyword flow",
+      summary: "When a configured keyword arrives, send the relevant message, ask a follow-up, and tag interest.",
+      nodes: [
+        { kind: "trigger", label: "Keyword detected", detail: "Configured keyword on a supported channel" },
+        { kind: "message", label: "Send relevant reply", detail: "Message or template where supported" },
+        { kind: "question", label: "Ask a follow-up", detail: "Capture interest details" },
+        { kind: "action", label: "Add Tag", detail: "Mark interest for the team" },
+        { kind: "outcome", label: "Continue the conversation", detail: "Human follow-up in the inbox" },
+      ],
+    },
+    {
+      title: "Capture a lead",
+      summary: "Respond immediately, capture name and need, then assign for team follow-up.",
+      nodes: [
+        { kind: "trigger", label: "New conversation", detail: "Immediate after-hours capture" },
+        { kind: "message", label: "Send welcome message", detail: "Set expectations quickly" },
+        { kind: "question", label: "Capture name and need", detail: "Supported input capture" },
+        { kind: "action", label: "Assign to team", detail: "Supported assignment action" },
+        { kind: "outcome", label: "Team follow-up", detail: "Owner continues in Unified Inbox" },
+      ],
+    },
+  ],
   problemTitle: "Why teams need a visual builder",
   problems: [
     {
@@ -563,8 +674,8 @@ export const chatbotBuilderProduct: ProductPageContent = {
       description: "Compose journeys with message, question, delay, and action nodes.",
     },
     {
-      title: "Capture and branch",
-      description: "Ask questions, collect inputs, and move contacts down different paths.",
+      title: "Capture what they need",
+      description: "Ask questions and collect the details your team needs before follow-up.",
     },
     {
       title: "Update CRM context",
@@ -617,8 +728,8 @@ export const chatbotBuilderProduct: ProductPageContent = {
       description: "A question node captures intent.",
     },
     {
-      label: "Branch by response",
-      description: "Different answers follow different paths.",
+      label: "Continue the flow",
+      description: "Send the next message or ask another supported question.",
     },
     {
       label: "Capture contact details",
@@ -642,7 +753,7 @@ export const chatbotBuilderProduct: ProductPageContent = {
     },
     {
       situation: "Different services need different owners.",
-      action: "Branch by service selection and assign the right teammate.",
+      action: "Use keyword triggers or assignment actions to route the right teammate.",
       outcome: "Routing happens before the first human reply.",
     },
     {
@@ -705,16 +816,53 @@ export const automationsProduct: ProductPageContent = {
   heroIntro:
     "Workflows & Automations help your team respond to repeatable moments — new chats, keywords, stage changes, tags, and quiet leads — without rebuilding the process every time. Use custom workflows or start from ready-made templates.",
   secondaryCta: { label: "Browse automation templates", href: "/automation-templates" },
+  themeId: "amber",
+  heroVariant: "screenshot",
+  workflowVariant: "scenarios",
   heroVisual: {
     inquiryLabel: "Trigger",
     inquiryMessage: "No reply for 24 hours on a qualified lead.",
     suggestionLabel: "Automation action",
-    suggestionMessage: "Assign owner → add follow-up tag → send reminder message.",
+    suggestionMessage: "Assign owner → add follow-up tag → set the next follow-up reminder.",
     stageLabel: "In nurture",
     nextStep: "Next: continue workflow",
   },
   screenshotKey: "automationWorkflows",
-  screenshotAlt: "WhachatCRM automation workflow canvas with triggers and actions",
+  screenshotAlt: "WhachatCRM Workflow Builder showing automation triggers and follow-up actions",
+  flowScenarios: [
+    {
+      title: "No-response follow-up",
+      summary: "When a contact goes quiet, start a follow-up path and keep pipeline context accurate.",
+      nodes: [
+        { kind: "trigger", label: "No reply", detail: "Contact has not replied after the selected delay" },
+        { kind: "action", label: "Add or update tag", detail: "Mark the follow-up state" },
+        { kind: "action", label: "Set pipeline stage", detail: "Keep opportunity status current" },
+        { kind: "action", label: "Assign team member", detail: "Route ownership for the next touch" },
+        { kind: "outcome", label: "Continue nurture", detail: "Human or campaign follow-up continues" },
+      ],
+    },
+    {
+      title: "Keyword routing",
+      summary: "Route high-intent keywords to the right owner with a clear next step.",
+      nodes: [
+        { kind: "trigger", label: "Keyword detected", detail: "Message contains a configured keyword" },
+        { kind: "action", label: "Add tag", detail: "Flag intent for the team" },
+        { kind: "action", label: "Assign team member", detail: "Round robin or specific owner" },
+        { kind: "action", label: "Set follow-up", detail: "Schedule the next reminder" },
+        { kind: "outcome", label: "Owner responds", detail: "Conversation continues in Unified Inbox" },
+      ],
+    },
+    {
+      title: "Stage progression",
+      summary: "When a contact reaches a configured pipeline stage, start the next workflow steps.",
+      nodes: [
+        { kind: "trigger", label: "Pipeline stage change", detail: "Contact moves to a configured stage" },
+        { kind: "action", label: "Assign or update contact", detail: "Keep ownership and status aligned" },
+        { kind: "action", label: "Set follow-up", detail: "Begin the relevant follow-up timing" },
+        { kind: "outcome", label: "Workflow continues", detail: "Team and automations stay in sync" },
+      ],
+    },
+  ],
   problemTitle: "Manual follow-up does not scale",
   problems: [
     {
@@ -901,6 +1049,9 @@ export const campaignsProduct: ProductPageContent = {
   heroIntro:
     "Campaigns help you enroll the right contacts on supported messaging channels, personalize outreach with business context, and keep follow-up moving — without treating every send like a one-off broadcast.",
   secondaryCta: { label: "Explore AI Brain", href: "/ai-brain" },
+  themeId: "rose",
+  heroVariant: "screenshot",
+  workflowVariant: "both",
   heroVisual: {
     inquiryLabel: "Audience",
     inquiryMessage: "Qualified prospects tagged “ready for nurture”.",
@@ -910,7 +1061,7 @@ export const campaignsProduct: ProductPageContent = {
     nextStep: "Next: track enrollment",
   },
   screenshotKey: "automationTemplateCards",
-  screenshotAlt: "Campaign and automation template cards in WhachatCRM",
+  screenshotAlt: "Campaign and automation template cards for nurture and re-engagement sequences",
   problemTitle: "Why campaigns matter after the first reply",
   problems: [
     {
@@ -1084,6 +1235,9 @@ export const integrationsProduct: ProductPageContent = {
   heroIntro:
     "Integrations bring customer conversations and everyday business tools into one CRM workspace — so messaging, scheduling, commerce, and follow-up stay connected.",
   secondaryCta: { label: "See Unified Inbox", href: "/unified-inbox" },
+  themeId: "sky",
+  heroVariant: "screenshot",
+  workflowVariant: "both",
   heroVisual: {
     inquiryLabel: "Connected channel",
     inquiryMessage: "WhatsApp via Meta Embedded Signup is ready.",
@@ -1093,7 +1247,7 @@ export const integrationsProduct: ProductPageContent = {
     nextStep: "Next: open Unified Inbox",
   },
   screenshotKey: "channels",
-  screenshotAlt: "WhachatCRM connected messaging channels",
+  screenshotAlt: "WhachatCRM connected messaging channels including WhatsApp and social platforms",
   problemTitle: "Disconnected tools slow every reply",
   problems: [
     {
@@ -1359,6 +1513,9 @@ export const unifiedInboxProduct: ProductPageContent = {
   heroIntro:
     "Unified Inbox is where WhachatCRM conversations live — across supported messaging channels — with contact context, team ownership, AI assistance, and follow-up in the same workspace.",
   secondaryCta: { label: "See AI Copilot", href: "/ai-copilot" },
+  themeId: "emerald",
+  heroVariant: "screenshot",
+  workflowVariant: "both",
   heroVisual: {
     inquiryLabel: "Incoming message",
     inquiryMessage: "WhatsApp + Instagram threads waiting in one queue.",
@@ -1368,7 +1525,7 @@ export const unifiedInboxProduct: ProductPageContent = {
     nextStep: "Next: assign and reply",
   },
   screenshotKey: "unifiedInbox",
-  screenshotAlt: "WhachatCRM Unified Inbox showing multi-channel conversations",
+  screenshotAlt: "WhachatCRM Unified Inbox showing multi-channel conversations with contact context",
   problemTitle: "What happens when conversations scatter",
   problems: [
     {
@@ -1543,6 +1700,9 @@ export const teamCollaborationProduct: ProductPageContent = {
   heroIntro:
     "Team Collaboration turns Unified Inbox into a shared workspace — invite teammates, assign ownership, keep visibility into who replied, and move conversations forward together.",
   secondaryCta: { label: "See Unified Inbox", href: "/unified-inbox" },
+  themeId: "indigo",
+  heroVariant: "screenshot",
+  workflowVariant: "both",
   heroVisual: {
     inquiryLabel: "Shared conversation",
     inquiryMessage: "Assigned to Alex — notes visible to the team.",
@@ -1552,7 +1712,7 @@ export const teamCollaborationProduct: ProductPageContent = {
     nextStep: "Next: teammate replies",
   },
   screenshotKey: "unifiedInbox",
-  screenshotAlt: "Shared WhachatCRM inbox used by a collaborating team",
+  screenshotAlt: "Shared WhachatCRM inbox used by a collaborating team with conversation ownership",
   problemTitle: "Single-owner inboxes create risk",
   problems: [
     {

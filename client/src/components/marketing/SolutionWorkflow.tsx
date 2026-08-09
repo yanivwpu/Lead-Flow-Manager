@@ -10,17 +10,25 @@ type Props = {
   title: string;
   steps: WorkflowStep[];
   className?: string;
+  eyebrowClassName?: string;
+  stepBadgeClassName?: string;
 };
 
 /** Lightweight workflow graphic — HTML/CSS only, no heavy animation libs. */
-export function SolutionWorkflow({ title, steps, className }: Props) {
+export function SolutionWorkflow({
+  title,
+  steps,
+  className,
+  eyebrowClassName = "text-brand-green",
+  stepBadgeClassName = "bg-brand-green text-white",
+}: Props) {
   return (
     <section
       className={cn("scroll-mt-24", className)}
       aria-labelledby="solution-workflow-heading"
     >
       <div className="mb-8 max-w-3xl">
-        <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
+        <p className={cn("mb-2 text-sm font-semibold uppercase tracking-[0.16em]", eyebrowClassName)}>
           Visual workflow
         </p>
         <h2
@@ -39,7 +47,10 @@ export function SolutionWorkflow({ title, steps, className }: Props) {
           >
             <div className="mb-3 flex items-center gap-3">
               <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-green text-sm font-bold text-white"
+                className={cn(
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold",
+                  stepBadgeClassName,
+                )}
                 aria-hidden
               >
                 {index + 1}

@@ -23,6 +23,11 @@ export const MARKETING_SCREENSHOTS = {
   /** Closer Review crop — AI Qualification feature section */
   prospectAiQualification: "/images/screenshots/prospect-ai-qualification.webp",
   prospectAiPersonalizedOutreach: "/images/screenshots/prospect-ai-personalized-outreach.webp",
+  chatbotTrigger: "/images/screenshots/products/chatbot-trigger.webp",
+  chatbotFlowCanvas: "/images/screenshots/products/chatbot-flow-canvas.webp",
+  aiWorkspace: "/images/screenshots/products/ai-workspace.webp",
+  aiBrainAnalyze: "/images/screenshots/products/ai-brain-analyze.webp",
+  aiBrainQuestions: "/images/screenshots/products/ai-brain-questions.webp",
 } as const;
 
 export type MarketingScreenshotKey = keyof typeof MARKETING_SCREENSHOTS;
@@ -53,6 +58,11 @@ export const SCREENSHOT_DIMENSIONS: Record<
   prospectAiReview: { width: 1004, height: 510 },
   prospectAiQualification: { width: 983, height: 361 },
   prospectAiPersonalizedOutreach: { width: 721, height: 530 },
+  chatbotTrigger: { width: 357, height: 522 },
+  chatbotFlowCanvas: { width: 915, height: 586 },
+  aiWorkspace: { width: 900, height: 517 },
+  aiBrainAnalyze: { width: 784, height: 445 },
+  aiBrainQuestions: { width: 777, height: 553 },
 };
 
 export type MarketingScreenshotSize = "hero" | "content" | "compact";

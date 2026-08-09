@@ -243,7 +243,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   "/chatbot-builder": {
     title: "Visual Chatbot Builder for Customer Journeys | WhachatCRM",
     description:
-      "Build no-code chatbot journeys in WhachatCRM. Create message and question flows, capture inputs, branch conversations, tag contacts, assign teammates, and hand work into Unified Inbox across supported channels.",
+      "Build no-code chatbot journeys in WhachatCRM. Create message and question flows, capture inputs, tag contacts, assign teammates, and hand work into Unified Inbox across supported channels.",
     canonical: `${BASE_URL}/chatbot-builder`
   },
   "/campaigns": {
