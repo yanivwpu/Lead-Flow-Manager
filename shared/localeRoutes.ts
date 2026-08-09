@@ -236,3 +236,14 @@ export function getAllPhase2PublicPathnames(): string[] {
 export function marketingDirForLocale(locale: MarketingLocale): "ltr" | "rtl" {
   return locale === "he" ? "rtl" : "ltr";
 }
+
+/**
+ * True when the public URL must control language (not the account DB preference).
+ * Prefixed /es|/he Phase 2 pages and unprefixed English scoped marketing pages.
+ */
+export function isPublicLocaleAuthoritativePath(pathname: string): boolean {
+  const parsed = parseLocalizedPath(pathname || "/");
+  if (parsed.isLocalePrefixed && parsed.isSupported) return true;
+  if (!parsed.isLocalePrefixed && hasLocalizedVersion(parsed.englishPath)) return true;
+  return false;
+}

@@ -7,6 +7,7 @@ import connectPgSimple from 'connect-pg-simple';
 import { storage } from './storage';
 import type { User } from '@shared/schema';
 import { isDisposableEmail } from '@shared/disposableEmail';
+import { normalizeUserLanguage } from '@shared/userLanguage';
 import {
   AUTH_RATE_LIMIT_MESSAGE,
   checkForgotPasswordEmailLimit,
@@ -363,8 +364,11 @@ export function registerAuthRoutes(app: Express) {
     const requestId = getRequestId(req);
 
     try {
-      const { name, email, password, phoneNumber, businessName, turnstileToken } = req.body || {};
+      const { name, email, password, phoneNumber, businessName, turnstileToken, language: rawLanguage } =
+        req.body || {};
       const honeypotValue = typeof req.body?.[HONEYPOT_FIELD] === 'string' ? req.body[HONEYPOT_FIELD] : '';
+      // Prefer validated signup language (from localized marketing / selector); default English.
+      const signupLanguage = normalizeUserLanguage(rawLanguage) || 'en';
 
       await logAuthSecurityEvent({
         eventType: 'signup_attempt',
@@ -501,6 +505,7 @@ export function registerAuthRoutes(app: Express) {
         trialStartedAt: null,
         trialEndsAt: null,
         emailVerifiedAt: null,
+        language: signupLanguage,
       });
 
       console.log(

@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useLocation } from 'wouter';
 import { Globe, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,6 +11,12 @@ import {
 import { supportedLanguages, changeLanguage, getCurrentLanguage, type SupportedLanguage } from '@/lib/i18n';
 import { marketingLanguageTargetPath } from '@/lib/marketingLocaleRouting';
 import type { MarketingLocale } from '@shared/marketingLocale';
+import { useAuth } from '@/lib/auth-context';
+import {
+  noteExplicitLanguageSelection,
+  persistAuthenticatedLanguage,
+} from '@/lib/userLanguagePreference';
+import type { UserLanguage } from '@shared/userLanguage';
 
 interface LanguageSelectorProps {
   variant?: 'default' | 'compact';
@@ -25,7 +30,7 @@ export function LanguageSelector({
   className,
   navigateOnChange = false,
 }: LanguageSelectorProps) {
-  const { t } = useTranslation();
+  const { user } = useAuth();
   const [location, setLocation] = useLocation();
   const [currentLang, setCurrentLang] = useState<SupportedLanguage>(getCurrentLanguage());
 
@@ -39,6 +44,8 @@ export function LanguageSelector({
   }, []);
 
   const handleLanguageChange = async (lang: SupportedLanguage) => {
+    // Explicit session selection first so a slower /api/auth/me cannot overwrite it.
+    noteExplicitLanguageSelection(lang as UserLanguage);
     await changeLanguage(lang);
     setCurrentLang(lang);
 
@@ -48,17 +55,9 @@ export function LanguageSelector({
         setLocation(nextPath);
       }
     }
-    
-    try {
-      await fetch('/api/user/language', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ language: lang }),
-      });
-    } catch (error) {
-      console.error('Failed to save language preference:', error);
-    }
+
+    // Persist only when logged in; skip redundant PATCH for the current saved value.
+    void persistAuthenticatedLanguage(lang as UserLanguage, !!user);
   };
 
   const currentLanguageInfo = supportedLanguages[currentLang];

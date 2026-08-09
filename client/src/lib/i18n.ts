@@ -56,10 +56,16 @@ export const changeLanguage = async (lng: SupportedLanguage) => {
   } else {
     document.documentElement.classList.remove('rtl');
   }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('languageChanged'));
+  }
 };
 
 export const getCurrentLanguage = (): SupportedLanguage => {
-  return (i18n.language as SupportedLanguage) || 'en';
+  const raw = (i18n.language || 'en').split('-')[0];
+  if (raw === 'he' || raw === 'es' || raw === 'en') return raw;
+  return 'en';
 };
 
 export const getDirection = (): 'ltr' | 'rtl' => {

@@ -206,6 +206,7 @@ import { pollCalendlyBookingsForUser } from "./calendlySyncService";
 import { hubspotValidatePrivateAppToken } from "./hubspotApi";
 import { pushLeadsToHubSpot } from "./hubspotSync";
 import { SALESPERSON_AGREEMENT_VERSION } from "@shared/salespersonAgreement";
+import { normalizeUserLanguage } from "@shared/userLanguage";
 
 import { registerTemplateRoutes } from "./templateRoutes";
 import { registerMediaRoutes } from "./routes/media";
@@ -927,14 +928,14 @@ export async function registerRoutes(
     }
   });
 
-  // Update user language preference
+  // Update user language preference (authenticated account only; en | es | he)
   app.patch("/api/user/language", async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const { language } = req.body;
-      if (!language || !['en', 'he', 'es', 'ar'].includes(language)) {
+      const language = normalizeUserLanguage(req.body?.language);
+      if (!language) {
         return res.status(400).json({ error: "Invalid language" });
       }
       const updated = await storage.updateUser(req.user.id, { language });

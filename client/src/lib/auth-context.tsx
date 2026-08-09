@@ -1,6 +1,11 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { trackSignUp } from "@/lib/ga4Events";
+import {
+  applyDatabaseLanguagePreference,
+  clearExplicitLanguageSelection,
+  resolveSignupLanguagePreference,
+} from "@/lib/userLanguagePreference";
 
 interface User {
   id: string;
@@ -11,6 +16,8 @@ interface User {
   emailVerifiedAt?: string | null;
   /** Set when a self-service deletion request has been recorded (pending processing). */
   deletionRequestedAt?: string | null;
+  /** Saved account language preference from /api/auth/me (en | es | he). */
+  language?: string | null;
 }
 
 export type SignupOptions = {
@@ -47,7 +54,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   const refreshSession = useCallback(async () => {
     try {
@@ -72,6 +79,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     })();
   }, [refreshSession]);
+
+  // Restore DB language once auth is known (and when leaving public URL-locale routes).
+  useEffect(() => {
+    if (isLoading || !user) return;
+    void applyDatabaseLanguagePreference(user.language);
+  }, [user?.id, user?.language, location, isLoading]);
 
   const login = async (email: string, password: string, rememberMe: boolean = false): Promise<boolean> => {
     try {
@@ -105,6 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     options: SignupOptions = {},
   ): Promise<SignupResult> => {
     try {
+      const language = resolveSignupLanguagePreference();
       const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -116,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           businessName: options.businessName || "",
           turnstileToken: options.turnstileToken || undefined,
           website: options.website || "",
+          language,
         }),
         credentials: "include",
       });
@@ -168,7 +183,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("Logout error:", error);
     } finally {
+      clearExplicitLanguageSelection();
       setUser(null);
+      // Keep whachatcrm_language — not auth-sensitive; public URL locale still wins on marketing pages.
       setLocation("/");
     }
   };
