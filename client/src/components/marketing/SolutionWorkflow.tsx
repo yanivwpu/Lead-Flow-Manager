@@ -1,14 +1,18 @@
 import { ArrowRight } from "lucide-react";
-import type { SolutionWorkflowStep } from "@shared/solutionPages";
 import { cn } from "@/lib/utils";
+
+type WorkflowStep = {
+  label: string;
+  description: string;
+};
 
 type Props = {
   title: string;
-  steps: SolutionWorkflowStep[];
+  steps: WorkflowStep[];
   className?: string;
 };
 
-/** Lightweight industry workflow graphic — HTML/CSS only, no heavy animation libs. */
+/** Lightweight workflow graphic — HTML/CSS only, no heavy animation libs. */
 export function SolutionWorkflow({ title, steps, className }: Props) {
   return (
     <section

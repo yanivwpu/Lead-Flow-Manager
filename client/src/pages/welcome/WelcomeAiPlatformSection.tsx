@@ -2,8 +2,8 @@ import { Link } from "wouter";
 import { ArrowRight, Brain, MessageSquareText, Sparkles } from "lucide-react";
 
 /**
- * Homepage anchors for Product nav items without dedicated public landings.
- * Stable IDs: #ai-platform, #ai-brain, #ai-copilot
+ * Homepage AI Sales Team cards — link to dedicated Product pages.
+ * Stable IDs retained for deep links: #ai-platform, #ai-brain, #ai-copilot
  */
 export default function WelcomeAiPlatformSection() {
   return (
@@ -57,10 +57,17 @@ export default function WelcomeAiPlatformSection() {
               <Brain className="h-5 w-5" aria-hidden />
             </div>
             <h3 className="text-lg font-bold text-gray-950 mb-2">AI Brain</h3>
-            <p className="text-gray-600 text-sm leading-relaxed">
-              Analyzes prospects, helps create personalized campaigns, recommends strategy, and
-              powers AI features across the platform where enabled.
+            <p className="text-gray-600 text-sm leading-relaxed mb-4">
+              Analyzes business knowledge, helps create personalized campaigns, recommends strategy,
+              and powers AI features across the platform where enabled.
             </p>
+            <Link
+              href="/ai-brain"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-green hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40 rounded"
+            >
+              Explore AI Brain
+              <ArrowRight className="h-4 w-4" aria-hidden />
+            </Link>
           </article>
 
           <article
@@ -76,10 +83,10 @@ export default function WelcomeAiPlatformSection() {
               context so your team moves faster without losing quality.
             </p>
             <Link
-              href="/ai-lead-scoring"
+              href="/ai-copilot"
               className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-green hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40 rounded"
             >
-              See AI lead scoring
+              Explore AI Copilot
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
           </article>

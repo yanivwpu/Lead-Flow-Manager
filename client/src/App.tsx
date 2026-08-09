@@ -97,7 +97,28 @@ const MedSpasSolutionPage = lazy(() =>
   import("@/pages/solutions/SolutionPages").then((m) => ({ default: m.MedSpasSolutionPage }))
 );
 const UnifiedInboxPage = lazy(() =>
-  import("@/pages/seo/LandingPages").then((m) => ({ default: m.UnifiedInboxPage }))
+  import("@/pages/products/ProductPages").then((m) => ({ default: m.UnifiedInboxProductPage }))
+);
+const AiBrainProductPage = lazy(() =>
+  import("@/pages/products/ProductPages").then((m) => ({ default: m.AiBrainProductPage }))
+);
+const AiCopilotProductPage = lazy(() =>
+  import("@/pages/products/ProductPages").then((m) => ({ default: m.AiCopilotProductPage }))
+);
+const AutomationsProductPage = lazy(() =>
+  import("@/pages/products/ProductPages").then((m) => ({ default: m.AutomationsProductPage }))
+);
+const ChatbotBuilderProductPage = lazy(() =>
+  import("@/pages/products/ProductPages").then((m) => ({ default: m.ChatbotBuilderProductPage }))
+);
+const CampaignsProductPage = lazy(() =>
+  import("@/pages/products/ProductPages").then((m) => ({ default: m.CampaignsProductPage }))
+);
+const IntegrationsProductPage = lazy(() =>
+  import("@/pages/products/ProductPages").then((m) => ({ default: m.IntegrationsProductPage }))
+);
+const SharedTeamInboxPage = lazy(() =>
+  import("@/pages/products/ProductPages").then((m) => ({ default: m.TeamCollaborationProductPage }))
 );
 const ShopifyCrmPage = lazy(() =>
   import("@/pages/seo/LandingPages").then((m) => ({ default: m.ShopifyCrmPage }))
@@ -107,9 +128,6 @@ const WhatsappBusinessApiPage = lazy(() =>
 );
 const AiLeadScoringPage = lazy(() =>
   import("@/pages/seo/LandingPages").then((m) => ({ default: m.AiLeadScoringPage }))
-);
-const SharedTeamInboxPage = lazy(() =>
-  import("@/pages/seo/LandingPages").then((m) => ({ default: m.SharedTeamInboxPage }))
 );
 const AutomationTemplatesPage = lazy(() =>
   import("@/pages/seo/LandingPages").then((m) => ({ default: m.AutomationTemplatesPage }))
@@ -193,6 +211,12 @@ function MarketingRoutes() {
       <Route path="/solutions/marketing-agencies" component={MarketingAgenciesSolutionPage} />
       <Route path="/solutions/med-spas" component={MedSpasSolutionPage} />
       <Route path="/unified-inbox" component={UnifiedInboxPage} />
+      <Route path="/ai-brain" component={AiBrainProductPage} />
+      <Route path="/ai-copilot" component={AiCopilotProductPage} />
+      <Route path="/automations" component={AutomationsProductPage} />
+      <Route path="/chatbot-builder" component={ChatbotBuilderProductPage} />
+      <Route path="/campaigns" component={CampaignsProductPage} />
+      <Route path="/integrations" component={IntegrationsProductPage} />
       <Route path="/shopify-crm" component={ShopifyCrmPage} />
       <Route path="/whatsapp-business-api" component={WhatsappBusinessApiPage} />
       <Route path="/ai-lead-scoring" component={AiLeadScoringPage} />

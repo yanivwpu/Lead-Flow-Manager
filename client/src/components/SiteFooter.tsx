@@ -32,10 +32,15 @@ export function SiteFooter() {
               <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wider mb-4">{t('home.footer.product', 'Product')}</h3>
               <ul className="space-y-2.5 text-sm text-gray-500">
                 <li><Link href="/pricing"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.pricing', 'Pricing')}</span></Link></li>
-                <li><Link href="/whatsapp-crm"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.whatsappCrm', 'WhatsApp CRM')}</span></Link></li>
+                <li><Link href="/prospect-ai"><span className="hover:text-gray-900 transition-colors cursor-pointer">Prospect AI</span></Link></li>
+                <li><Link href="/ai-brain"><span className="hover:text-gray-900 transition-colors cursor-pointer">AI Brain</span></Link></li>
+                <li><Link href="/ai-copilot"><span className="hover:text-gray-900 transition-colors cursor-pointer">AI Copilot</span></Link></li>
                 <li><Link href="/unified-inbox"><span className="hover:text-gray-900 transition-colors cursor-pointer">Unified Inbox</span></Link></li>
-                <li><Link href="/whatsapp-business-api"><span className="hover:text-gray-900 transition-colors cursor-pointer">WhatsApp Business API</span></Link></li>
-                <li><Link href="/crm-for-whatsapp-business"><span className="hover:text-gray-900 transition-colors cursor-pointer">CRM for WhatsApp Business</span></Link></li>
+                <li><Link href="/automations"><span className="hover:text-gray-900 transition-colors cursor-pointer">Workflows & Automations</span></Link></li>
+                <li><Link href="/chatbot-builder"><span className="hover:text-gray-900 transition-colors cursor-pointer">Chatbot Builder</span></Link></li>
+                <li><Link href="/campaigns"><span className="hover:text-gray-900 transition-colors cursor-pointer">Campaigns</span></Link></li>
+                <li><Link href="/integrations"><span className="hover:text-gray-900 transition-colors cursor-pointer">Integrations</span></Link></li>
+                <li><Link href="/whatsapp-crm"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.whatsappCrm', 'WhatsApp CRM')}</span></Link></li>
                 <li><Link href="/contact"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.contact', 'Contact')}</span></Link></li>
               </ul>
             </div>

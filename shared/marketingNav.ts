@@ -35,12 +35,12 @@ export const PRODUCT_NAV: MarketingNavDropdown = {
         },
         {
           label: "AI Brain",
-          href: "/#ai-brain",
-          description: "Strategy, personalization, and AI across the platform",
+          href: "/ai-brain",
+          description: "Business knowledge and platform AI intelligence",
         },
         {
           label: "AI Copilot",
-          href: "/#ai-copilot",
+          href: "/ai-copilot",
           description: "Assist replies and next steps inside conversations",
         },
       ],
@@ -54,19 +54,19 @@ export const PRODUCT_NAV: MarketingNavDropdown = {
           description: "Customer messaging channels in one workspace",
         },
         {
-          label: "Automations",
-          href: "/automation-templates",
+          label: "Workflows & Automations",
+          href: "/automations",
           description: "Follow-up workflows and ready-to-use templates",
         },
         {
-          label: "Chatbots",
-          href: "/whatsapp-business-api#inbox-automation",
-          description: "Automated flows for WhatsApp and messaging",
+          label: "Chatbot Builder",
+          href: "/chatbot-builder",
+          description: "Visual journeys for WhatsApp and messaging",
         },
         {
           label: "Campaigns",
-          href: "/automation-templates#support-nurture",
-          description: "Nurture and re-engagement sequences",
+          href: "/campaigns",
+          description: "Personalized nurture and re-engagement sequences",
         },
       ],
     },
@@ -85,7 +85,7 @@ export const PRODUCT_NAV: MarketingNavDropdown = {
       items: [
         {
           label: "Integrations",
-          href: "/#integrations",
+          href: "/integrations",
           description: "Meta, Shopify, Gmail, Stripe, and more",
         },
         {

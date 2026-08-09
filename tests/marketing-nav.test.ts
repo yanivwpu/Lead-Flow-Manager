@@ -47,9 +47,15 @@ const KNOWN_PUBLIC_PATHS = new Set([
   "/solutions/local-service-businesses",
   "/solutions/marketing-agencies",
   "/solutions/med-spas",
+  "/ai-brain",
+  "/ai-copilot",
+  "/automations",
+  "/chatbot-builder",
+  "/campaigns",
+  "/integrations",
 ]);
 
-const HOMEPAGE_HASHES = new Set(["/#ai-brain", "/#ai-copilot", "/#integrations", "/#ai-platform", "/#built-for"]);
+const HOMEPAGE_HASHES = new Set(["/#ai-platform", "/#built-for", "/#integrations", "/#ai-brain", "/#ai-copilot"]);
 
 function normalizeHref(href: string): { path: string; isHomepageHash: boolean } {
   if (href.startsWith("/#")) {
@@ -87,6 +93,12 @@ assert.ok(
 assert.ok(
   PRODUCT_NAV.groups.some((g) => g.items.some((i) => i.href === "/realtor-growth-engine")),
   "RGE dedicated page",
+);
+assert.ok(
+  PRODUCT_NAV.groups.every((g) =>
+    g.items.every((i) => !i.href.startsWith("/#") && !i.href.includes("#")),
+  ),
+  "Product menu uses dedicated pages only (no homepage hashes)",
 );
 assert.equal(OMITTED_SOLUTIONS.length, 1);
 for (const item of SOLUTIONS_NAV.groups.flatMap((g) => g.items)) {

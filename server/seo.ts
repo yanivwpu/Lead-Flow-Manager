@@ -7,6 +7,7 @@ import {
 } from "@shared/blogPosts";
 import { getAllMarketingNavLinks, MARKETING_NAV_DROPDOWNS } from "@shared/marketingNav";
 import { ALL_SOLUTION_PAGES } from "@shared/solutionPages";
+import { ALL_PRODUCT_PAGES } from "@shared/productPages";
 
 const BASE_URL = (process.env.MARKETING_URL || "https://www.whachatcrm.com").replace(/\/+$/, "");
 
@@ -216,10 +217,46 @@ export const PAGE_META: Record<string, PageMeta> = {
     canonical: `${BASE_URL}/solutions/med-spas`
   },
   "/unified-inbox": {
-    title: "Unified Inbox for WhatsApp, Messenger & Instagram | WhachatCRM",
+    title: "Unified Inbox for Multi-Channel Messaging | WhachatCRM",
     description:
-      "Omnichannel shared inbox for WhatsApp, Facebook Messenger, and Instagram. AI Copilot, team assignments, internal notes, lead scoring, and full conversation history in one place.",
+      "WhachatCRM Unified Inbox brings WhatsApp, Instagram, Facebook, SMS, Telegram, web chat, and email into one intelligent workspace with assignments, tags, stages, AI Copilot, and follow-up.",
     canonical: `${BASE_URL}/unified-inbox`
+  },
+  "/ai-brain": {
+    title: "AI Brain for Business Knowledge & CRM Intelligence | WhachatCRM",
+    description:
+      "WhachatCRM AI Brain is the business-knowledge intelligence layer for your CRM. Teach your profile, analyze knowledge sources, review conflicts, publish approved intelligence, and power Copilot, Prospect AI, and campaigns.",
+    canonical: `${BASE_URL}/ai-brain`
+  },
+  "/ai-copilot": {
+    title: "AI Copilot for CRM Conversations | WhachatCRM",
+    description:
+      "WhachatCRM AI Copilot helps teams know what to say and what to do next inside customer conversations — with lead scoring, suggested replies, and next-action recommendations powered by conversation and business context.",
+    canonical: `${BASE_URL}/ai-copilot`
+  },
+  "/automations": {
+    title: "CRM Workflows & Automations | WhachatCRM",
+    description:
+      "Automate follow-up in WhachatCRM with workflows and ready-to-use templates. Trigger on new chats, keywords, tags, stages, or no reply — then assign, update contacts, and continue conversations.",
+    canonical: `${BASE_URL}/automations`
+  },
+  "/chatbot-builder": {
+    title: "Visual Chatbot Builder for Customer Journeys | WhachatCRM",
+    description:
+      "Build no-code chatbot journeys in WhachatCRM. Create message and question flows, capture inputs, branch conversations, tag contacts, assign teammates, and hand work into Unified Inbox across supported channels.",
+    canonical: `${BASE_URL}/chatbot-builder`
+  },
+  "/campaigns": {
+    title: "CRM Campaigns & Personalized Outreach | WhachatCRM",
+    description:
+      "Create personalized CRM campaigns in WhachatCRM. Select audiences, choose supported messaging channels, personalize with AI Brain where enabled, enroll contacts, track progress, and continue follow-up.",
+    canonical: `${BASE_URL}/campaigns`
+  },
+  "/integrations": {
+    title: "CRM Integrations Directory | WhachatCRM",
+    description:
+      "Connect WhachatCRM to messaging channels and business tools you already use — WhatsApp, Instagram, Facebook, SMS, email, Shopify, GoHighLevel, Calendly, Stripe, and more.",
+    canonical: `${BASE_URL}/integrations`
   },
   "/shopify-crm": {
     title: "Shopify CRM with WhatsApp & AI Automation | WhachatCRM",
@@ -240,9 +277,9 @@ export const PAGE_META: Record<string, PageMeta> = {
     canonical: `${BASE_URL}/ai-lead-scoring`
   },
   "/shared-team-inbox": {
-    title: "Shared Team Inbox for WhatsApp & Social | WhachatCRM",
+    title: "Shared Team Inbox & Collaboration | WhachatCRM",
     description:
-      "Shared team inbox with assignments, internal notes, conversation ownership, AI assistance, and full visibility for WhatsApp, Messenger, and Instagram teams.",
+      "Collaborate on customer conversations in WhachatCRM with shared inbox access, assignments, ownership visibility, and multi-user plans — so teams reply together without losing context.",
     canonical: `${BASE_URL}/shared-team-inbox`
   },
   "/automation-templates": {
@@ -611,6 +648,21 @@ const MARKETING_SSR_PAGES: Record<string, MarketingSsrPage> = {
       } satisfies MarketingSsrPage,
     ]),
   ),
+  ...Object.fromEntries(
+    ALL_PRODUCT_PAGES.map((product) => [
+      product.path,
+      {
+        h1: product.h1,
+        lead: product.heroIntro,
+        bullets: product.ssrBullets,
+        linksHtml: [
+          ...product.relatedProducts.slice(0, 2).map((l) => `<a href="${l.href}">${l.label}</a>`),
+          '<a href="/auth">Start Free Trial</a>',
+          '<a href="/pricing">Pricing</a>',
+        ].join(" · "),
+      } satisfies MarketingSsrPage,
+    ]),
+  ),
 };
 
 function renderMarketingSsrPage(page: MarketingSsrPage): string {
@@ -714,17 +766,20 @@ export function generateHomepageHtml(): string {
             <p>Bring WhatsApp and supported channels into one Unified Inbox. Use AI Copilot in-thread and automate follow-up with templates and chatbots.</p>
             <ul>
               <li><a href="/unified-inbox">Unified Inbox</a></li>
-              <li><a href="/automation-templates">Automations</a></li>
-              <li><a href="/ai-lead-scoring">AI lead scoring</a></li>
+              <li><a href="/automations">Workflows &amp; Automations</a></li>
+              <li><a href="/chatbot-builder">Chatbot Builder</a></li>
+              <li><a href="/ai-copilot">AI Copilot</a></li>
             </ul>
           </section>
 
           <section>
             <h2>AI Brain and AI Copilot</h2>
             <h3>AI Brain</h3>
-            <p>Analyzes prospects, helps create personalized campaigns, recommends strategy, and powers AI features across the platform where enabled.</p>
+            <p>Analyzes business knowledge, helps create personalized campaigns, recommends strategy, and powers AI features across the platform where enabled.</p>
+            <p><a href="/ai-brain">Explore AI Brain</a></p>
             <h3>AI Copilot</h3>
             <p>Assists inside customer conversations with summaries, suggested replies, and lead context.</p>
+            <p><a href="/ai-copilot">Explore AI Copilot</a></p>
           </section>
 
           <section>

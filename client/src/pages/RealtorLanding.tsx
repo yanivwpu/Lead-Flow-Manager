@@ -752,6 +752,32 @@ export function RealtorLanding() {
         </div>
       </section>
 
+      {/* Related products */}
+      <section className="border-t border-gray-100 bg-white px-4 py-12 md:px-6 md:py-16">
+        <div className="mx-auto max-w-5xl">
+          <h2 className="mb-6 text-center font-display text-2xl font-bold text-gray-950 md:text-3xl">
+            Related WhachatCRM products
+          </h2>
+          <div className="flex flex-wrap justify-center gap-3">
+            {[
+              { href: "/real-estate-crm", label: "Real Estate Solution" },
+              { href: "/ai-brain", label: "AI Brain" },
+              { href: "/ai-copilot", label: "AI Copilot" },
+              { href: "/automations", label: "Workflows & Automations" },
+              { href: "/unified-inbox", label: "Unified Inbox" },
+            ].map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-800 hover:border-emerald-200 hover:bg-emerald-50"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* FAQ */}
       <section className="bg-gray-50 px-4 py-16 md:px-6 md:py-24">
         <div className="mx-auto max-w-3xl xl:max-w-4xl">

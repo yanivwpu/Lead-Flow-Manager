@@ -30,6 +30,14 @@ const requiredRoutes = [
   "/solutions/local-service-businesses",
   "/solutions/marketing-agencies",
   "/solutions/med-spas",
+  "/ai-brain",
+  "/ai-copilot",
+  "/automations",
+  "/chatbot-builder",
+  "/campaigns",
+  "/integrations",
+  "/unified-inbox",
+  "/shared-team-inbox",
 ] as const;
 
 const expectedH1: Record<(typeof requiredRoutes)[number], RegExp> = {
@@ -49,6 +57,14 @@ const expectedH1: Record<(typeof requiredRoutes)[number], RegExp> = {
   "/solutions/local-service-businesses": /<h1>From Finding Local Customers to Booking the Next Job<\/h1>/,
   "/solutions/marketing-agencies": /<h1>Deliver Smarter Messaging and AI Automation for Your Clients<\/h1>/,
   "/solutions/med-spas": /<h1>Turn More Med Spa Inquiries Into Booked Consultations<\/h1>/,
+  "/ai-brain": /<h1>AI That Understands How Your Business Works<\/h1>/,
+  "/ai-copilot": /<h1>Know What to Say and What to Do Next<\/h1>/,
+  "/automations": /<h1>Automate the Follow-Up Work That Moves Leads Forward<\/h1>/,
+  "/chatbot-builder": /<h1>Build Customer Journeys Without Writing Code<\/h1>/,
+  "/campaigns": /<h1>Create Personalized Campaigns That Continue the Conversation<\/h1>/,
+  "/integrations": /<h1>Connect WhachatCRM to the Tools Your Business Already Uses<\/h1>/,
+  "/unified-inbox": /<h1>All Your Customer Conversations\. One Intelligent Inbox\.<\/h1>/,
+  "/shared-team-inbox": /<h1>Collaborate on Every Conversation Without Losing Context<\/h1>/,
 };
 
 const ssrRoutes = getMarketingSsrBodyRoutes();

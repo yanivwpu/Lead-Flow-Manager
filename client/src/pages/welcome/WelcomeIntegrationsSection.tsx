@@ -1,4 +1,6 @@
+import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
+import { ArrowRight } from "lucide-react";
 
 const INTEGRATIONS = [
   { name: "WhatsApp via Meta", logo: "/logos/whatsapp.svg" },
@@ -51,6 +53,15 @@ export default function WelcomeIntegrationsSection() {
         </div>
 
         <IntegrationsHub />
+        <div className="mt-10 text-center">
+          <Link
+            href="/integrations"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-green hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40 rounded"
+          >
+            Explore all integrations
+            <ArrowRight className="h-4 w-4" aria-hidden />
+          </Link>
+        </div>
       </div>
     </section>
   );

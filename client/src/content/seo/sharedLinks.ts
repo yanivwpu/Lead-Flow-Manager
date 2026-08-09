@@ -16,6 +16,12 @@ export const SEO_CLUSTER_LINKS = {
   crmForWhatsapp: { href: "/crm-for-whatsapp-business", label: "CRM for WhatsApp Business" },
   realtorGrowth: { href: "/realtor-growth-engine", label: "Realtor Growth Engine" },
   prospectAi: { href: "/prospect-ai", label: "Prospect AI" },
+  aiBrain: { href: "/ai-brain", label: "AI Brain" },
+  aiCopilot: { href: "/ai-copilot", label: "AI Copilot" },
+  automations: { href: "/automations", label: "Workflows & Automations" },
+  chatbotBuilder: { href: "/chatbot-builder", label: "Chatbot Builder" },
+  campaigns: { href: "/campaigns", label: "Campaigns" },
+  integrations: { href: "/integrations", label: "Integrations" },
   ecommerceSolution: { href: "/solutions/ecommerce", label: "E-commerce Solution" },
   localServiceSolution: {
     href: "/solutions/local-service-businesses",
