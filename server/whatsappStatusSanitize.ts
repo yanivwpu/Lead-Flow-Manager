@@ -11,6 +11,10 @@ export function stripSensitiveWhatsAppFields<T>(value: T): T {
 }
 
 function stripRecursive(value: unknown): unknown {
+  if (value instanceof Date) {
+    const t = value.getTime();
+    return Number.isNaN(t) ? null : value.toISOString();
+  }
   if (Array.isArray(value)) {
     return value.map(stripRecursive);
   }

@@ -198,6 +198,33 @@ describe("status/diagnostic redaction", () => {
     assert.equal(blob.includes("super-secret-verify"), false);
     assert.equal(blob.includes("EAAB"), false);
   });
+
+  it("serializes Date fields to ISO strings (or null) without emptying them", () => {
+    const valid = new Date("2026-08-10T18:00:00.000Z");
+    const invalid = new Date("not-a-date");
+    const cleaned = stripSensitiveWhatsAppFields({
+      webhookLastCheckedAt: valid,
+      tokenExpiresAt: invalid,
+      alreadyIso: "2026-08-10T19:00:00.000Z",
+      nullable: null,
+      nested: {
+        pin: "654321",
+        checkedAt: valid,
+        accessToken: "secret-token",
+      },
+      appSecret: "should-strip",
+    });
+    assert.equal((cleaned as any).webhookLastCheckedAt, "2026-08-10T18:00:00.000Z");
+    assert.equal((cleaned as any).tokenExpiresAt, null);
+    assert.equal((cleaned as any).alreadyIso, "2026-08-10T19:00:00.000Z");
+    assert.equal((cleaned as any).nullable, null);
+    assert.equal((cleaned as any).appSecret, undefined);
+    assert.equal((cleaned as any).nested.pin, undefined);
+    assert.equal((cleaned as any).nested.accessToken, undefined);
+    assert.equal((cleaned as any).nested.checkedAt, "2026-08-10T18:00:00.000Z");
+    assert.equal(typeof (cleaned as any).webhookLastCheckedAt, "string");
+    assert.notDeepEqual((cleaned as any).webhookLastCheckedAt, {});
+  });
 });
 
 describe("coexistence recommendation", () => {
