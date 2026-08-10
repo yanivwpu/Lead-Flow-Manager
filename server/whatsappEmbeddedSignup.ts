@@ -23,9 +23,10 @@ import { storage } from "./storage";
 import { getMetaGraphApiBase, getMetaFacebookOAuthDialogBase, getMetaGraphVersionSegment } from "./metaGraphVersion";
 import { exchangeForLongLivedUserToken, MetaOAuthExchangeError, exchangeWhatsappEmbeddedSignupAuthorizationCode, classifyMetaCodeExchangeFailure } from "./metaOAuth";
 import {
-  shouldUseV4DirectAssetValidation,
-  resolveV4EmbeddedSignupAssets,
-} from "./whatsappEmbeddedSignupV4Assets";
+  extractMetaPhoneGraphRegistrationFields,
+  isMetaPhoneCloudApiOperational,
+  isMetaPhoneCloudApiRegistrationRequired,
+} from "@shared/whatsappPhoneRegistration";
 import {
   connectUserMeta,
   type MetaCredentials,
@@ -42,6 +43,7 @@ import {
   deriveWhatsappConnectedReason,
   type WhatsappConnectedReason,
 } from "./whatsappService";
+import { stripSensitiveWhatsAppFields } from "./whatsappStatusSanitize";
 import {
   buildStandardEmbeddedSignupLoginOptions,
   configIdLast4,
@@ -1144,6 +1146,8 @@ export function buildWhatsAppInboundRoutingDiagnostics(input: {
   metaConnectionType: string | null;
   coexistenceServerConfigured: boolean;
   webhookSubscribed: boolean;
+  /** Optional Graph platform_type — only recommend coexistence when Business-App association is evident. */
+  phonePlatformType?: string | null;
 }): {
   summary: WhatsAppInboundRoutingSummary;
   customerMessageDelivery: "cloud_api_webhook_expected" | "whatsapp_business_app_may_be_primary" | "n_a";
@@ -1171,24 +1175,26 @@ export function buildWhatsAppInboundRoutingDiagnostics(input: {
     };
   }
 
-  const reconnect = input.webhookSubscribed && !usedCoexistence;
-
-  const envHint = input.coexistenceServerConfigured
-    ? "Disconnect Meta in Settings, then reconnect using the coexistence option (existing WhatsApp Business App number)."
-    : "Set META_WHATSAPP_COEXISTENCE_CONFIG_ID to a coexistence Embedded Signup configuration in Meta, redeploy, then disconnect and reconnect using the coexistence option.";
+  const platform = String(input.phonePlatformType ?? "").toUpperCase();
+  void platform;
+  // Do not recommend Coexistence merely because connectionType=embedded.
+  // Coexistence remains Coming soon in the product UI; recommendation stays false for standard Cloud API numbers.
+  const coexistenceReconnectRecommended = false;
 
   return {
     summary: "standard_embedded_or_manual",
-    customerMessageDelivery: "whatsapp_business_app_may_be_primary",
+    customerMessageDelivery: "cloud_api_webhook_expected",
     detail:
-      "This workspace connected Cloud API without the coexistence Embedded Signup flow. If customers message you in the WhatsApp Business App and nothing POSTs to WhachatCRM, Meta is likely delivering those chats only to the mobile app until coexistence is completed. " +
-      envHint,
-    coexistenceReconnectRecommended: reconnect,
+      "This workspace connected via standard Embedded Signup for Cloud API. Customer messages are expected on your Cloud API webhook when the phone is registered and CONNECTED. Coexistence is only needed if you also use the WhatsApp Business mobile app on the same number.",
+    coexistenceReconnectRecommended,
   };
 }
 
 /** Periodically refreshes Graph fields for the saved phone number into meta_last_oauth_debug.phoneGraphSnapshot (no secrets). */
-export async function refreshWhatsappPhoneGraphDebugIfStale(userId: string): Promise<void> {
+export async function refreshWhatsappPhoneGraphDebugIfStale(
+  userId: string,
+  opts?: { force?: boolean },
+): Promise<void> {
   try {
     const user = await storage.getUserForSession(userId);
     if (!user?.metaConnected || !user.metaPhoneNumberId) return;
@@ -1198,7 +1204,7 @@ export async function refreshWhatsappPhoneGraphDebugIfStale(userId: string): Pro
         ? (user.metaLastOAuthDebug as Record<string, unknown>)
         : {};
     const prevSnap = oauthDbg.phoneGraphSnapshot as { fetchedAt?: string } | undefined;
-    if (prevSnap?.fetchedAt) {
+    if (!opts?.force && prevSnap?.fetchedAt) {
       const t = new Date(prevSnap.fetchedAt).getTime();
       if (!Number.isNaN(t) && Date.now() - t < PHONE_GRAPH_DEBUG_TTL_MS) return;
     }
@@ -1207,13 +1213,61 @@ export async function refreshWhatsappPhoneGraphDebugIfStale(userId: string): Pro
     if (!token) return;
 
     const snap = await fetchMetaWhatsAppPhoneNumberGraphSnapshot(token, user.metaPhoneNumberId);
+    const regFields = extractMetaPhoneGraphRegistrationFields(
+      snap.ok ? { data: snap.data as Record<string, unknown> } : null,
+    );
+    const coexistence = user.metaConnectionType === "coexistence";
+    const isTest = isMetaTestPhoneFromSavedFields({
+      displayPhoneNumber: user.metaDisplayPhoneNumber ?? null,
+      verifiedName: user.metaVerifiedName ?? null,
+    });
+    const needsReg =
+      !coexistence &&
+      user.metaConnectionType !== "manual_legacy" &&
+      snap.ok &&
+      isMetaPhoneCloudApiRegistrationRequired(regFields, {
+        coexistence: false,
+        isTestNumber: isTest,
+      });
+    const operational = snap.ok && (isTest || isMetaPhoneCloudApiOperational(regFields));
+
     await mergeUserMetaOAuthDebug(userId, {
       phoneGraphSnapshot: {
         fetchedAt: new Date().toISOString(),
         phoneNumberId: user.metaPhoneNumberId,
         ...snap,
       },
+      ...(needsReg
+        ? {
+            phase: "phone_registration_required",
+            needsPhoneRegistration: true,
+            graphStatus: regFields.status || null,
+            platformType: regFields.platformType || null,
+          }
+        : operational
+          ? { needsPhoneRegistration: false }
+          : {}),
     });
+
+    // Recovery path: persisted Cloud API phone still PENDING → prompt for PIN without reconnect.
+    if (needsReg && user.metaIntegrationStatus !== "needs_phone_registration") {
+      await storage.updateUser(userId, {
+        metaIntegrationStatus: "needs_phone_registration",
+        metaLastErrorCode: "phone_registration_required",
+        metaLastErrorMessage:
+          "Phone registration required. Enter a six-digit WhatsApp PIN to finish Cloud API setup.",
+      });
+    } else if (
+      operational &&
+      user.metaIntegrationStatus === "needs_phone_registration" &&
+      !needsReg
+    ) {
+      await storage.updateUser(userId, {
+        metaIntegrationStatus: "connected",
+        metaLastErrorCode: null,
+        metaLastErrorMessage: null,
+      });
+    }
   } catch (e: any) {
     console.warn("[WhatsApp Embedded Signup] phoneGraphSnapshot refresh skipped:", e?.message || e);
   }
@@ -1803,7 +1857,7 @@ export async function getWhatsappConnectionDebug(userId: string): Promise<Whatsa
   const coexistenceCfg = getWhatsappMetaPublicConfig();
   const phoneGraphSnapshot =
     oauthDbg?.phoneGraphSnapshot && typeof oauthDbg.phoneGraphSnapshot === "object"
-      ? (oauthDbg.phoneGraphSnapshot as Record<string, unknown>)
+      ? stripSensitiveWhatsAppFields(oauthDbg.phoneGraphSnapshot as Record<string, unknown>)
       : null;
   return {
     wabaId: user.metaBusinessAccountId ?? null,
@@ -1819,7 +1873,7 @@ export async function getWhatsappConnectionDebug(userId: string): Promise<Whatsa
     lastErrorMessage: user.metaLastErrorMessage ?? null,
     lastOAuthDebug:
       user.metaLastOAuthDebug && typeof user.metaLastOAuthDebug === "object"
-        ? (user.metaLastOAuthDebug as Record<string, unknown>)
+        ? stripSensitiveWhatsAppFields(user.metaLastOAuthDebug as Record<string, unknown>)
         : null,
     coexistenceServerConfigured: coexistenceCfg.coexistenceEnabled,
     coexistenceConfigId: coexistenceCfg.coexistenceConfigId,
@@ -1835,7 +1889,7 @@ export async function getWhatsappConnectionDebug(userId: string): Promise<Whatsa
 }
 
 export type EmbeddedSignupOAuthResult =
-  | { success: true; userId: string }
+  | { success: true; userId: string; needsPhoneRegistration?: boolean }
   | { success: true; needsWabaPick: true; state: string }
   | {
       success: false;
@@ -1859,9 +1913,13 @@ export type EmbeddedSignupOAuthResult =
 function isPhoneRoutingReadyFromGraphSnapshot(data: any): boolean {
   const status = String(data?.status ?? "").toUpperCase();
   const code = String(data?.code_verification_status ?? "").toUpperCase();
-  // Conservative: require neither of the known “not ready” states.
+  const platform = String(data?.platform_type ?? "").toUpperCase();
   if (status === "DISCONNECTED") return false;
   if (code === "NOT_VERIFIED") return false;
+  if (status === "PENDING") return false;
+  if (platform === "NOT_APPLICABLE") return false;
+  if (status !== "CONNECTED") return false;
+  if (platform && platform !== "CLOUD_API") return false;
   return true;
 }
 
@@ -2588,28 +2646,59 @@ export async function completeEmbeddedSignupOAuth(params: {
 
   // Immediately fetch the phone node after connection so UI can distinguish
   // “connected but routing inactive” vs “ready for Cloud API”.
+  let needsPhoneRegistration = false;
   try {
     const snap = await fetchMetaWhatsAppPhoneNumberGraphSnapshot(longToken, resolved.phoneNumberId);
     const isTest = isMetaTestPhoneFromSavedFields({
       displayPhoneNumber: resolved.displayPhoneNumber ?? null,
       verifiedName: resolved.verifiedName ?? null,
     });
-    const routingReady = snap.ok ? isPhoneRoutingReadyFromGraphSnapshot(snap.data) : false;
-    const ready = isTest || routingReady;
+    const regFields = extractMetaPhoneGraphRegistrationFields(
+      snap.ok ? { data: snap.data as Record<string, unknown> } : null,
+    );
+    const operational = snap.ok && (isTest || isMetaPhoneCloudApiOperational(regFields));
+    needsPhoneRegistration =
+      row.flow === "embedded" &&
+      !isTest &&
+      snap.ok &&
+      isMetaPhoneCloudApiRegistrationRequired(regFields, { coexistence: false, isTestNumber: false });
+
     await mergeUserMetaOAuthDebug(row.userId, {
-      phase: "phone_graph_post_connect",
+      phase: needsPhoneRegistration ? "phone_registration_required" : "phone_graph_post_connect",
       ok: snap.ok,
-      routingReady: ready,
+      routingReady: operational,
       isMetaTestNumber: isTest,
+      needsPhoneRegistration,
       httpStatus: snap.httpStatus ?? null,
       error: snap.ok ? null : snap.error ?? null,
+      phoneGraphSnapshot: {
+        fetchedAt: new Date().toISOString(),
+        phoneNumberId: resolved.phoneNumberId,
+        ...snap,
+      },
+      graphStatus: regFields.status || null,
+      platformType: regFields.platformType || null,
+      architecture,
+      flow: row.flow,
     });
-    await storage.updateUser(row.userId, {
-      metaIntegrationStatus: ready ? "connected" : "needs_attention",
-      metaLastErrorMessage:
-        ready ? null : "WhatsApp setup is incomplete. Finish phone verification in Meta.",
-      metaWebhookLastCheckedAt: new Date(),
-    });
+
+    if (needsPhoneRegistration) {
+      await storage.updateUser(row.userId, {
+        metaIntegrationStatus: "needs_phone_registration",
+        metaLastErrorCode: "phone_registration_required",
+        metaLastErrorMessage:
+          "Phone registration required. Enter a six-digit WhatsApp PIN to finish Cloud API setup.",
+        metaWebhookLastCheckedAt: new Date(),
+      });
+    } else {
+      await storage.updateUser(row.userId, {
+        metaIntegrationStatus: operational ? "connected" : "needs_attention",
+        metaLastErrorMessage: operational
+          ? null
+          : "WhatsApp setup is incomplete. Finish phone verification in Meta.",
+        metaWebhookLastCheckedAt: new Date(),
+      });
+    }
   } catch (e: any) {
     await mergeUserMetaOAuthDebug(row.userId, {
       phase: "phone_graph_post_connect",
@@ -2626,10 +2715,10 @@ export async function completeEmbeddedSignupOAuth(params: {
 
   await repairMetaWabaWebhookSubscription(row.userId);
 
-  // Success path: state is no longer needed.
+  // Success path: state is no longer needed (credentials are persisted on the user).
   await db.delete(whatsappOauthStates).where(eq(whatsappOauthStates.stateToken, state));
 
-  return { success: true, userId: row.userId };
+  return { success: true, userId: row.userId, needsPhoneRegistration };
 }
 
 export async function finalizeEmbeddedSignupWabaSelection(params: {
@@ -2724,28 +2813,57 @@ export async function finalizeEmbeddedSignupWabaSelection(params: {
     return { success: false, error: result.error || "Could not save WhatsApp connection." };
   }
 
-  // Immediately verify the phone node for routing readiness (same logic as auto flow).
+  // Immediately verify the phone node for routing readiness / registration need.
   try {
     const snap = await fetchMetaWhatsAppPhoneNumberGraphSnapshot(token, matchPhone.id);
     const isTest = isMetaTestPhoneFromSavedFields({
       displayPhoneNumber: matchPhone.displayPhoneNumber ?? null,
       verifiedName: matchPhone.verifiedName ?? null,
     });
-    const routingReady = snap.ok ? isPhoneRoutingReadyFromGraphSnapshot(snap.data) : false;
-    const ready = isTest || routingReady;
+    const regFields = extractMetaPhoneGraphRegistrationFields(
+      snap.ok ? { data: snap.data as Record<string, unknown> } : null,
+    );
+    const operational = snap.ok && (isTest || isMetaPhoneCloudApiOperational(regFields));
+    const needsPhoneRegistration =
+      row.flow === "embedded" &&
+      !isTest &&
+      snap.ok &&
+      isMetaPhoneCloudApiRegistrationRequired(regFields, { coexistence: false, isTestNumber: false });
+
     await mergeUserMetaOAuthDebug(row.userId, {
-      phase: "phone_graph_post_connect",
+      phase: needsPhoneRegistration ? "phone_registration_required" : "phone_graph_post_connect",
       ok: snap.ok,
-      routingReady: ready,
+      routingReady: operational,
       isMetaTestNumber: isTest,
+      needsPhoneRegistration,
       httpStatus: snap.httpStatus ?? null,
       error: snap.ok ? null : snap.error ?? null,
+      phoneGraphSnapshot: {
+        fetchedAt: new Date().toISOString(),
+        phoneNumberId: matchPhone.id,
+        ...snap,
+      },
+      graphStatus: regFields.status || null,
+      platformType: regFields.platformType || null,
     });
-    await storage.updateUser(row.userId, {
-      metaIntegrationStatus: ready ? "connected" : "needs_attention",
-      metaLastErrorMessage: ready ? null : "WhatsApp setup is incomplete. Finish phone verification in Meta.",
-      metaWebhookLastCheckedAt: new Date(),
-    });
+
+    if (needsPhoneRegistration) {
+      await storage.updateUser(row.userId, {
+        metaIntegrationStatus: "needs_phone_registration",
+        metaLastErrorCode: "phone_registration_required",
+        metaLastErrorMessage:
+          "Phone registration required. Enter a six-digit WhatsApp PIN to finish Cloud API setup.",
+        metaWebhookLastCheckedAt: new Date(),
+      });
+    } else {
+      await storage.updateUser(row.userId, {
+        metaIntegrationStatus: operational ? "connected" : "needs_attention",
+        metaLastErrorMessage: operational
+          ? null
+          : "WhatsApp setup is incomplete. Finish phone verification in Meta.",
+        metaWebhookLastCheckedAt: new Date(),
+      });
+    }
   } catch (e: any) {
     await mergeUserMetaOAuthDebug(row.userId, {
       phase: "phone_graph_post_connect",

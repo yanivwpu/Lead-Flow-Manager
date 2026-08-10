@@ -30,6 +30,12 @@ import {
 import { disconnectWhatsAppProvider, getProviderStatus, buildMetaWhatsAppReadinessForUser } from "../whatsappService";
 import { getMetaGraphApiBase } from "../metaGraphVersion";
 import { getMetaAccessToken, fetchMetaWhatsAppPhoneNumberGraphSnapshotVerbose } from "../userMeta";
+import { registerPhoneForAuthenticatedUser } from "../whatsappPhoneRegister";
+import {
+  extractMetaPhoneGraphRegistrationFields,
+  isMetaPhoneCloudApiRegistrationRequired,
+} from "@shared/whatsappPhoneRegistration";
+import { stripSensitiveWhatsAppFields } from "../whatsappStatusSanitize";
 import { db } from "../../drizzle/db";
 import { whatsappOauthStates } from "@shared/schema";
 import { eq } from "drizzle-orm";
@@ -369,7 +375,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         wabaPhonesTruncated: truncateJson({ phoneIds: wabaPhones.phoneIds, error: wabaPhones.body?.error ?? null }, 7000),
       });
 
-      return res.json(payload);
+      return res.json(stripSensitiveWhatsAppFields(payload));
     } catch (e: any) {
       console.error("[CoexistenceDiagnostics] error:", e?.message || e);
       return res.status(500).json({ error: e?.message || "Diagnostics failed" });
@@ -564,7 +570,10 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       if ("needsWabaPick" in result && result.needsWabaPick) {
         return res.json({ success: true, needsWabaPick: true, state: result.state });
       }
-      res.json({ success: true });
+      res.json({
+        success: true,
+        needsPhoneRegistration: "needsPhoneRegistration" in result ? !!result.needsPhoneRegistration : false,
+      });
     } catch (e: any) {
       console.warn("[WhatsApp Integration] complete-sdk failed", e?.message || e);
       res.status(500).json({ error: "Complete signup failed" });
@@ -750,7 +759,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         },
         lastOAuthDebug:
           user.metaLastOAuthDebug && typeof user.metaLastOAuthDebug === "object"
-            ? user.metaLastOAuthDebug
+            ? stripSensitiveWhatsAppFields(user.metaLastOAuthDebug as Record<string, unknown>)
             : null,
       });
     } catch (e: any) {
@@ -762,16 +771,21 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       await applyMetaTokenExpiryAttention(req.user.id);
-      await refreshWhatsappPhoneGraphDebugIfStale(req.user.id);
+      const forceRefresh =
+        String(req.query.refresh || "").toLowerCase() === "1" ||
+        String(req.query.refresh || "").toLowerCase() === "true" ||
+        String(req.query.force || "").toLowerCase() === "1";
+      await refreshWhatsappPhoneGraphDebugIfStale(req.user.id, { force: forceRefresh });
       const userAfter = await storage.getUserForSession(req.user.id);
       if (!userAfter) return res.status(404).json({ error: "User not found" });
 
       const base = await getProviderStatus(req.user.id);
       const coexistenceCfg = getWhatsappMetaPublicConfig();
-      const oauthDbg =
+      const oauthDbgRaw =
         userAfter.metaLastOAuthDebug && typeof userAfter.metaLastOAuthDebug === "object"
           ? (userAfter.metaLastOAuthDebug as Record<string, unknown>)
           : null;
+      const oauthDbg = oauthDbgRaw ? stripSensitiveWhatsAppFields(oauthDbgRaw) : null;
       const phoneGraphSnapshot =
         oauthDbg?.phoneGraphSnapshot && typeof oauthDbg.phoneGraphSnapshot === "object"
           ? (oauthDbg.phoneGraphSnapshot as Record<string, unknown>)
@@ -789,12 +803,22 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         buildMetaWhatsAppPhoneClassificationInput(userAfter, phoneGraphSnapshot),
       );
 
+      const graphPlatform =
+        phoneGraphSnapshot && typeof phoneGraphSnapshot === "object"
+          ? extractMetaPhoneGraphRegistrationFields(
+              phoneGraphSnapshot.data
+                ? { data: phoneGraphSnapshot.data as Record<string, unknown> }
+                : phoneGraphSnapshot,
+            ).platformType
+          : null;
+
       const inboundRouting = buildWhatsAppInboundRoutingDiagnostics({
         metaConnected: !!userAfter.metaConnected,
         activeProvider: base.activeProvider,
         metaConnectionType: userAfter.metaConnectionType ?? null,
         coexistenceServerConfigured: coexistenceCfg.coexistenceEnabled,
         webhookSubscribed: !!userAfter.metaWebhookSubscribed,
+        phonePlatformType: graphPlatform,
       });
 
       const readiness = buildMetaWhatsAppReadinessForUser(userAfter, phoneGraphSnapshot);
@@ -805,100 +829,169 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
             ? !!base.twilio.connected
             : false;
 
-      res.json({
-        activeProvider: base.activeProvider,
-        whatsappConnectedReason: base.whatsappConnectedReason,
-        fullyReady,
-        readiness: {
-          wabaSaved: readiness.wabaSaved,
-          phoneSaved: readiness.phoneSaved,
-          phoneStatusReady: readiness.phoneStatusReady,
-          webhookSubscribed: readiness.webhookSubscribed,
-          inboxReady: readiness.inboxReady,
-        },
-        setupIncomplete: readiness.setupIncomplete,
-        metaPersistedButTwilioSelected: !!(userAfter.metaConnected && userAfter.whatsappProvider !== "meta"),
-        coexistenceEnabled: coexistenceCfg.coexistenceEnabled,
-        coexistenceConfigId: coexistenceCfg.coexistenceConfigId,
-        coexistenceFeatureFlagSet: coexistenceCfg.coexistenceFeatureFlagSet,
-        embeddedSignupArchitectureDiagnostics: {
-          v4FlagEnabled: coexistenceCfg.embeddedSignupV4FlagEnabled,
-          v4ConfigConfigured: coexistenceCfg.embeddedSignupV4ConfigConfigured,
-          v4EnvReady: coexistenceCfg.embeddedSignupV4EnvReady,
-          v2ConfigIdLast4: coexistenceCfg.embeddedSignupConfigIdLast4,
-          v4ConfigIdLast4: coexistenceCfg.embeddedSignupV4ConfigIdLast4,
-          coexistenceConfigIdLast4: coexistenceCfg.coexistenceConfigIdLast4,
-          lastOAuthArchitecture:
-            oauthDbg && typeof oauthDbg.architecture === "string" ? oauthDbg.architecture : null,
-          lastOAuthFlow: oauthDbg && typeof oauthDbg.flow === "string" ? oauthDbg.flow : null,
-          lastOAuthPhase: oauthDbg && typeof oauthDbg.phase === "string" ? oauthDbg.phase : null,
-          lastOAuthErrorCode:
-            oauthDbg && typeof oauthDbg.errorCode === "string"
-              ? oauthDbg.errorCode
-              : oauthDbg && typeof oauthDbg.error === "string"
-                ? oauthDbg.error
+      const regFields = extractMetaPhoneGraphRegistrationFields(
+        phoneGraphSnapshot?.data
+          ? { data: phoneGraphSnapshot.data as Record<string, unknown> }
+          : phoneGraphSnapshot,
+      );
+      const phoneRegistrationRequired =
+        userAfter.metaIntegrationStatus === "needs_phone_registration" ||
+        (userAfter.metaConnected &&
+          userAfter.metaConnectionType !== "coexistence" &&
+          userAfter.metaConnectionType !== "manual_legacy" &&
+          connectedPhoneClassification.kind !== "test" &&
+          isMetaPhoneCloudApiRegistrationRequired(regFields, {
+            coexistence: false,
+            isTestNumber: connectedPhoneClassification.kind === "test",
+          }));
+
+      res.json(
+        stripSensitiveWhatsAppFields({
+          activeProvider: base.activeProvider,
+          whatsappConnectedReason: base.whatsappConnectedReason,
+          fullyReady,
+          phoneRegistrationRequired,
+          readiness: {
+            wabaSaved: readiness.wabaSaved,
+            phoneSaved: readiness.phoneSaved,
+            phoneStatusReady: readiness.phoneStatusReady,
+            webhookSubscribed: readiness.webhookSubscribed,
+            inboxReady: readiness.inboxReady,
+          },
+          setupIncomplete: readiness.setupIncomplete || phoneRegistrationRequired,
+          metaPersistedButTwilioSelected: !!(userAfter.metaConnected && userAfter.whatsappProvider !== "meta"),
+          coexistenceEnabled: coexistenceCfg.coexistenceEnabled,
+          coexistenceConfigId: coexistenceCfg.coexistenceConfigId,
+          coexistenceFeatureFlagSet: coexistenceCfg.coexistenceFeatureFlagSet,
+          embeddedSignupArchitectureDiagnostics: {
+            v4FlagEnabled: coexistenceCfg.embeddedSignupV4FlagEnabled,
+            v4ConfigConfigured: coexistenceCfg.embeddedSignupV4ConfigConfigured,
+            v4EnvReady: coexistenceCfg.embeddedSignupV4EnvReady,
+            v2ConfigIdLast4: coexistenceCfg.embeddedSignupConfigIdLast4,
+            v4ConfigIdLast4: coexistenceCfg.embeddedSignupV4ConfigIdLast4,
+            coexistenceConfigIdLast4: coexistenceCfg.coexistenceConfigIdLast4,
+            lastOAuthArchitecture:
+              oauthDbg && typeof oauthDbg.architecture === "string" ? oauthDbg.architecture : null,
+            lastOAuthFlow: oauthDbg && typeof oauthDbg.flow === "string" ? oauthDbg.flow : null,
+            lastOAuthPhase: oauthDbg && typeof oauthDbg.phase === "string" ? oauthDbg.phase : null,
+            lastOAuthErrorCode:
+              oauthDbg && typeof oauthDbg.errorCode === "string"
+                ? oauthDbg.errorCode
+                : oauthDbg && typeof oauthDbg.error === "string"
+                  ? oauthDbg.error
+                  : null,
+            exchangeFailureCategory:
+              oauthDbg && typeof oauthDbg.exchangeFailureCategory === "string"
+                ? oauthDbg.exchangeFailureCategory
                 : null,
-          exchangeFailureCategory:
-            oauthDbg && typeof oauthDbg.exchangeFailureCategory === "string"
-              ? oauthDbg.exchangeFailureCategory
-              : null,
-          discoveryFailureCategory:
-            oauthDbg && typeof oauthDbg.discoveryFailureCategory === "string"
-              ? oauthDbg.discoveryFailureCategory
-              : null,
-          discoveryMethod:
-            oauthDbg && typeof oauthDbg.discoveryMethod === "string" ? oauthDbg.discoveryMethod : null,
-          usedMeBusinessesEnumeration: oauthDbg?.usedMeBusinessesEnumeration === true,
-          codeCallbackReceived: oauthDbg?.codeCallbackReceived === true,
-          sessionEventReceived: oauthDbg?.sessionEventReceived === true,
-          completeSdkAttempted: oauthDbg?.completeSdkAttempted === true,
-          allowlistConfigured: readEmbeddedSignupV4GateFromEnv().allowlistUserIds.length > 0,
-        },
-        inboundRouting,
-        phoneGraphSnapshot,
-        twilio: {
-          ...base.twilio,
-          providerLabel: "Twilio WhatsApp",
-        },
-        meta: {
-          ...base.meta,
-          /** True only when inbox can send/receive (canonical gate). */
-          fullyReady: base.activeProvider === "meta" ? readiness.fullyReady : false,
-          providerLabel: "Meta Cloud API",
-          connectionType: userAfter.metaConnectionType || null,
-          displayPhoneNumber: userAfter.metaDisplayPhoneNumber || null,
-          verifiedName: userAfter.metaVerifiedName || null,
-          connectedPhoneKind: connectedPhoneClassification.kind,
-          connectedToMetaTestNumber: connectedPhoneClassification.kind === "test",
-          metaTestNumberWarning:
-            connectedPhoneClassification.kind === "test"
-              ? "Connected to Meta test number — ready for testing only."
-              : null,
-          integrationStatus:
-            userAfter.metaIntegrationStatus ||
-            (userAfter.metaConnected ? "connected" : "disconnected"),
-          webhookSubscribed: userAfter.metaWebhookSubscribed ?? false,
-          webhookLastCheckedAt: userAfter.metaWebhookLastCheckedAt ?? null,
-          lastErrorCode: userAfter.metaLastErrorCode ?? null,
-          lastErrorMessage: userAfter.metaLastErrorMessage ?? null,
-          tokenExpiresAt: userAfter.metaTokenExpiresAt ?? null,
-          legacyManualConnection:
-            userAfter.metaConnectionType === "manual_legacy" ||
-            (!userAfter.metaConnectionType && userAfter.metaConnected),
-          /** Meta app secret present — required to verify signed webhook callbacks (separate from WABA app subscription). */
-          webhookSignatureHealth: userAfter.metaConnected ? (webhookLikelyOk ? "ok" : "needs_app_secret") : "n/a",
-          /** @deprecated Use webhookSignatureHealth — kept for older clients; same value. */
-          webhookHealth: userAfter.metaConnected ? (webhookLikelyOk ? "ok" : "needs_app_secret") : "n/a",
-          connectionUsedCoexistenceFlow: userAfter.metaConnectionType === "coexistence",
-        },
-        webhookCallbackUrl: `${String(webhookBaseUrl).replace(/\/+$/, "")}/api/webhook/meta`,
-      });
+            discoveryFailureCategory:
+              oauthDbg && typeof oauthDbg.discoveryFailureCategory === "string"
+                ? oauthDbg.discoveryFailureCategory
+                : null,
+            discoveryMethod:
+              oauthDbg && typeof oauthDbg.discoveryMethod === "string" ? oauthDbg.discoveryMethod : null,
+            usedMeBusinessesEnumeration: oauthDbg?.usedMeBusinessesEnumeration === true,
+            codeCallbackReceived: oauthDbg?.codeCallbackReceived === true,
+            sessionEventReceived: oauthDbg?.sessionEventReceived === true,
+            completeSdkAttempted: oauthDbg?.completeSdkAttempted === true,
+            allowlistConfigured: readEmbeddedSignupV4GateFromEnv().allowlistUserIds.length > 0,
+          },
+          inboundRouting,
+          phoneGraphSnapshot,
+          twilio: {
+            ...base.twilio,
+            providerLabel: "Twilio WhatsApp",
+          },
+          meta: {
+            ...base.meta,
+            /** True only when inbox can send/receive (canonical gate). */
+            fullyReady: base.activeProvider === "meta" ? readiness.fullyReady : false,
+            providerLabel: "Meta Cloud API",
+            connectionType: userAfter.metaConnectionType || null,
+            displayPhoneNumber: userAfter.metaDisplayPhoneNumber || null,
+            verifiedName: userAfter.metaVerifiedName || null,
+            connectedPhoneKind: connectedPhoneClassification.kind,
+            connectedToMetaTestNumber: connectedPhoneClassification.kind === "test",
+            metaTestNumberWarning:
+              connectedPhoneClassification.kind === "test"
+                ? "Connected to Meta test number — ready for testing only."
+                : null,
+            integrationStatus:
+              phoneRegistrationRequired
+                ? "needs_phone_registration"
+                : userAfter.metaIntegrationStatus ||
+                  (userAfter.metaConnected ? "connected" : "disconnected"),
+            phoneRegistrationRequired,
+            webhookSubscribed: userAfter.metaWebhookSubscribed ?? false,
+            webhookLastCheckedAt: userAfter.metaWebhookLastCheckedAt ?? null,
+            lastErrorCode: userAfter.metaLastErrorCode ?? null,
+            lastErrorMessage: userAfter.metaLastErrorMessage ?? null,
+            tokenExpiresAt: userAfter.metaTokenExpiresAt ?? null,
+            legacyManualConnection:
+              userAfter.metaConnectionType === "manual_legacy" ||
+              (!userAfter.metaConnectionType && userAfter.metaConnected),
+            webhookSignatureHealth: userAfter.metaConnected
+              ? webhookLikelyOk
+                ? "ok"
+                : "needs_app_secret"
+              : "n/a",
+            webhookHealth: userAfter.metaConnected ? (webhookLikelyOk ? "ok" : "needs_app_secret") : "n/a",
+            connectionUsedCoexistenceFlow: userAfter.metaConnectionType === "coexistence",
+          },
+          webhookCallbackUrl: `${String(webhookBaseUrl).replace(/\/+$/, "")}/api/webhook/meta`,
+        }),
+      );
     } catch (e: any) {
       console.error("[WhatsApp Integration] status error", e?.message || e);
       res.status(500).json({ error: "Failed to load WhatsApp status" });
     }
   });
 
+  app.post("/api/integrations/whatsapp/meta/register-phone", async (req: Request, res: Response) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const body = z
+        .object({
+          pin: z.string().regex(/^\d{6}$/, "PIN must be exactly six digits"),
+        })
+        .safeParse(req.body ?? {});
+      if (!body.success) {
+        return res.status(400).json({
+          success: false,
+          error: "Enter a six-digit PIN (numbers only).",
+          errorCode: "invalid_pin_format",
+          retryable: true,
+        });
+      }
+      const result = await registerPhoneForAuthenticatedUser({
+        userId: req.user.id,
+        pin: body.data.pin,
+      });
+      if (!result.success) {
+        const status =
+          result.errorCode === "unauthorized"
+            ? 401
+            : result.errorCode === "invalid_pin_format"
+              ? 400
+              : 400;
+        return res.status(status).json({
+          success: false,
+          error: result.error,
+          errorCode: result.errorCode,
+          retryable: result.retryable,
+        });
+      }
+      res.json({ success: true, fullyReady: result.fullyReady });
+    } catch (e: any) {
+      console.error("[WhatsApp Integration] register-phone error", e?.message || e);
+      res.status(500).json({
+        success: false,
+        error: "Could not register the phone number. Try again.",
+        errorCode: "unknown",
+        retryable: true,
+      });
+    }
+  });
   app.post("/api/integrations/whatsapp/disconnect", async (req: Request, res: Response) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
@@ -936,6 +1029,8 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const result = await repairMetaWabaWebhookSubscription(req.user.id);
+      // Always fetch a fresh phone Graph snapshot after repair (do not retain stale fetchedAt).
+      await refreshWhatsappPhoneGraphDebugIfStale(req.user.id, { force: true });
       console.log(
         `[WABA Repair] endpoint_response ${JSON.stringify({
           userId: req.user.id,
@@ -952,11 +1047,14 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
           error: result.errorMessage,
         });
       }
+      const user = await storage.getUserForSession(req.user.id);
+      const phoneRegistrationRequired = user?.metaIntegrationStatus === "needs_phone_registration";
       res.json({
         success: result.verified,
         subscribed: result.verified,
         verified: result.verified,
         error: result.errorMessage ?? null,
+        phoneRegistrationRequired,
       });
     } catch (e: any) {
       res.status(500).json({ error: e?.message || "Repair failed" });

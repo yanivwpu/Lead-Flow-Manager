@@ -48,6 +48,8 @@ import {
   WhatsAppConnectionHealthChecklist,
   type WhatsAppReadinessChecklist,
 } from "@/components/WhatsAppConnectionHealthChecklist";
+import { WhatsAppPhoneRegistrationPinForm } from "@/components/WhatsAppPhoneRegistrationPinForm";
+import { useTranslation } from "react-i18next";
 
 const META_TEST_NUMBER_HELP =
   "Connected to Meta test number — ready for testing only.";
@@ -163,6 +165,7 @@ interface WhatsappStatusResponse {
   whatsappConnectedReason: "twilio" | "meta" | "none";
   fullyReady?: boolean;
   setupIncomplete?: boolean;
+  phoneRegistrationRequired?: boolean;
   readiness?: WhatsAppReadinessChecklist;
   /** Server: Meta rows exist but `whatsapp_provider` is still twilio */
   metaPersistedButTwilioSelected?: boolean;
@@ -186,6 +189,7 @@ interface WhatsappStatusResponse {
     displayPhoneNumber: string | null;
     verifiedName: string | null;
     integrationStatus: string;
+    phoneRegistrationRequired?: boolean;
     webhookSubscribed: boolean;
     webhookLastCheckedAt: string | null;
     lastErrorMessage: string | null;
@@ -197,7 +201,8 @@ interface WhatsappStatusResponse {
     webhookSignatureHealth?: string;
     webhookHealth?: string;
     webhookUrl: string;
-    webhookVerifyToken: string | null;
+    /** Never return the raw verify token — boolean only. */
+    webhookVerifyTokenConfigured?: boolean;
     connectionUsedCoexistenceFlow?: boolean;
   };
   twilio: {
@@ -266,6 +271,7 @@ export function ConnectWhatsAppHub({
   onClose,
   showPostConnectHealth = false,
 }: ConnectWhatsAppHubProps) {
+  const { t } = useTranslation();
   const { user: authedUser } = useAuth();
   const queryClient = useQueryClient();
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -342,14 +348,19 @@ export function ConnectWhatsAppHub({
 
   const loading = cfgLoading || statusLoading;
   const meta = status?.meta;
+  const phoneRegistrationRequired =
+    status?.phoneRegistrationRequired === true ||
+    meta?.phoneRegistrationRequired === true ||
+    meta?.integrationStatus === "needs_phone_registration";
   const metaFullyReady =
     status?.activeProvider === "meta" &&
+    !phoneRegistrationRequired &&
     (status.fullyReady === true || meta?.fullyReady === true);
   const metaPartialSetup =
     status?.activeProvider === "meta" &&
     !!meta?.connected &&
     !metaFullyReady;
-  const metaManageView = metaFullyReady || metaPartialSetup;
+  const metaManageView = metaFullyReady || metaPartialSetup || phoneRegistrationRequired;
   const metaTestConnected = !!meta?.connectedToMetaTestNumber && status?.activeProvider === "meta" && !!meta?.connected;
   const readiness = status?.readiness;
   const pickerHasProduction = wabaChoices ? wabaChoicesHaveProduction(wabaChoices) : false;
@@ -363,10 +374,15 @@ export function ConnectWhatsAppHub({
         await queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
         await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
         await queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
-        const res = await fetch("/api/integrations/whatsapp/status", { credentials: "include" });
+        const refreshQs = attempt === 0 || pollUntilReady ? "?refresh=1" : "";
+        const res = await fetch(`/api/integrations/whatsapp/status${refreshQs}`, {
+          credentials: "include",
+        });
         if (res.ok) {
           const s = (await res.json()) as WhatsappStatusResponse;
+          queryClient.setQueryData(["/api/integrations/whatsapp/status"], s);
           if (s.fullyReady || s.activeProvider !== "meta" || !pollUntilReady) break;
+          if (s.phoneRegistrationRequired) break;
         }
         if (pollUntilReady && attempt < 11) {
           await new Promise((r) => setTimeout(r, 450));
@@ -596,7 +612,10 @@ export function ConnectWhatsAppHub({
           if (j?.needsWabaPick && j?.state) {
             return { ok: true as const, needsWabaPick: true as const, state: String(j.state) };
           }
-          return { ok: true as const };
+          return {
+            ok: true as const,
+            needsPhoneRegistration: j?.needsPhoneRegistration === true,
+          };
         },
       });
 
@@ -850,11 +869,22 @@ export function ConnectWhatsAppHub({
         </div>
       ) : metaManageView ? (
         <div className="space-y-3">
-          {(postConnectHealthOpen || metaPartialSetup) && (
+          {(postConnectHealthOpen || metaPartialSetup || phoneRegistrationRequired) && (
             <WhatsAppConnectionHealthChecklist
               readiness={readiness}
               fullyReady={metaFullyReady}
               loading={healthPollBusy || statusLoading}
+              phoneRegistrationRequired={phoneRegistrationRequired}
+            />
+          )}
+
+          {phoneRegistrationRequired && (
+            <WhatsAppPhoneRegistrationPinForm
+              onSuccess={async () => {
+                await refreshConnectionHealth(true);
+                setPostConnectHealthOpen(true);
+                setHubBanner(null);
+              }}
             />
           )}
 
@@ -886,11 +916,13 @@ export function ConnectWhatsAppHub({
                       : "text-amber-900",
                 )}
               >
-                {metaTestConnected
-                  ? META_TEST_NUMBER_HELP
-                  : metaFullyReady
-                    ? "Connected"
-                    : "Setup incomplete"}
+                {phoneRegistrationRequired
+                  ? t("whatsappPhoneRegistration.statusRequired")
+                  : metaTestConnected
+                    ? META_TEST_NUMBER_HELP
+                    : metaFullyReady
+                      ? "Connected"
+                      : "Setup incomplete"}
               </p>
               {metaTestConnected && metaFullyReady && (
                 <p className="text-xs text-amber-800/90 mt-1">

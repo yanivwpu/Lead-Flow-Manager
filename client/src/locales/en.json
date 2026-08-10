@@ -1239,5 +1239,18 @@
     "connectWhatsApp": "Connect WhatsApp",
     "connectInstagram": "Connect Instagram",
     "connectFacebook": "Connect Facebook"
+  },
+  "whatsappPhoneRegistration": {
+    "title": "Secure your WhatsApp number",
+    "body": "Meta requires a six-digit PIN to register and protect this number on Cloud API.",
+    "keepPin": "Keep this PIN somewhere safe. Meta may ask for it later when you manage the number.",
+    "pinLabel": "Six-digit PIN",
+    "confirmLabel": "Confirm PIN",
+    "submit": "Register phone",
+    "invalidPin": "Enter exactly six numeric digits.",
+    "pinMismatch": "PIN and confirmation do not match.",
+    "registerFailed": "Could not register the phone number. Try again.",
+    "statusRequired": "Phone registration required",
+    "checklistHint": "Enter your WhatsApp PIN below to finish Cloud API setup. Messaging is not ready yet."
   }
 }

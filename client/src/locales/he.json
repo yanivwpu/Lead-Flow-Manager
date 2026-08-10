@@ -1251,5 +1251,18 @@
     "connectWhatsApp": "חיבור WhatsApp",
     "connectInstagram": "חיבור Instagram",
     "connectFacebook": "חיבור Facebook"
+  },
+  "whatsappPhoneRegistration": {
+    "title": "אבטחת מספר ה-WhatsApp שלך",
+    "body": "Meta דורשת קוד PIN בן שש ספרות כדי לרשום ולהגן על המספר ב-Cloud API.",
+    "keepPin": "שמרו את ה-PIN במקום בטוח. Meta עשויה לבקש אותו בעתיד בעת ניהול המספר.",
+    "pinLabel": "PIN בן שש ספרות",
+    "confirmLabel": "אישור PIN",
+    "submit": "רישום מספר",
+    "invalidPin": "הזינו בדיוק שש ספרות.",
+    "pinMismatch": "ה-PIN ואישורו אינם תואמים.",
+    "registerFailed": "לא ניתן לרשום את המספר. נסו שוב.",
+    "statusRequired": "נדרש רישום מספר",
+    "checklistHint": "הזינו את ה-PIN של WhatsApp למטה כדי לסיים את הגדרת Cloud API. השליחה עדיין לא מוכנה."
   }
 }

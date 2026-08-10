@@ -481,6 +481,7 @@ export function ChannelSettings() {
     activeProvider: string;
     fullyReady?: boolean;
     setupIncomplete?: boolean;
+    phoneRegistrationRequired?: boolean;
     whatsappConnectedReason: "twilio" | "meta" | "none";
     metaPersistedButTwilioSelected?: boolean;
     twilio: { connected: boolean };
@@ -490,6 +491,7 @@ export function ChannelSettings() {
       phoneNumberId: string | null;
       businessAccountId: string | null;
       integrationStatus?: string;
+      phoneRegistrationRequired?: boolean;
       connectedToMetaTestNumber?: boolean;
       metaTestNumberWarning?: string | null;
       webhookSignatureHealth?: string;
@@ -792,7 +794,15 @@ export function ChannelSettings() {
       const metaRoute =
         wa.activeProvider === "meta" && !!meta?.connected;
       const metaFullyReady =
-        wa.fullyReady === true || meta?.fullyReady === true;
+        !(
+          wa.phoneRegistrationRequired === true ||
+          meta?.phoneRegistrationRequired === true ||
+          meta?.integrationStatus === "needs_phone_registration"
+        ) && (wa.fullyReady === true || meta?.fullyReady === true);
+      const phoneRegistrationRequired =
+        wa.phoneRegistrationRequired === true ||
+        meta?.phoneRegistrationRequired === true ||
+        meta?.integrationStatus === "needs_phone_registration";
       const twilioRoute =
         wa.activeProvider === "twilio" && !!wa.twilio?.connected;
 
@@ -804,6 +814,23 @@ export function ChannelSettings() {
             "Open Manage to finish selecting the WhatsApp connection you want to use.",
           action: "manage",
           actionLabel: "Manage",
+          onAction: () => setConfigChannel("whatsapp"),
+          cardClass: baseAmber,
+          showReceiveToggle: false,
+        };
+      }
+
+      if (metaRoute && phoneRegistrationRequired) {
+        return {
+          pill: "needs_attention",
+          pillLabel: "Phone registration required",
+          subline: "Enter a WhatsApp PIN to finish Cloud API setup",
+          warning:
+            meta?.lastErrorMessage ||
+            "Open Manage and register the phone with a six-digit PIN. Messaging stays disabled until Meta marks the number CONNECTED.",
+          footerHint: "Do not reconnect Embedded Signup unless registration fails with an expired token.",
+          action: "manage",
+          actionLabel: "Register phone",
           onAction: () => setConfigChannel("whatsapp"),
           cardClass: baseAmber,
           showReceiveToggle: false,

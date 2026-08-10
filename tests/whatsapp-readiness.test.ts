@@ -26,9 +26,32 @@ function run() {
   const evalReady = evaluateMetaWhatsAppReadiness(readyUser, {
     phoneGraphStatus: "CONNECTED",
     phoneGraphCodeVerification: "VERIFIED",
+    phoneGraphPlatformType: "CLOUD_API",
   });
   assert(evalReady.fullyReady, "fully ready");
   assert(evalReady.inboxReady, "inbox ready");
+
+  const evalPending = evaluateMetaWhatsAppReadiness(readyUser, {
+    phoneGraphStatus: "PENDING",
+    phoneGraphCodeVerification: "VERIFIED",
+    phoneGraphPlatformType: "NOT_APPLICABLE",
+  });
+  assert(!evalPending.fullyReady, "PENDING not fully ready");
+  assert(!evalPending.phoneStatusReady, "PENDING phone not ready");
+
+  const evalDisconnected = evaluateMetaWhatsAppReadiness(readyUser, {
+    phoneGraphStatus: "DISCONNECTED",
+    phoneGraphCodeVerification: "VERIFIED",
+    phoneGraphPlatformType: "CLOUD_API",
+  });
+  assert(!evalDisconnected.fullyReady, "DISCONNECTED not fully ready");
+
+  const evalNotVerified = evaluateMetaWhatsAppReadiness(readyUser, {
+    phoneGraphStatus: "CONNECTED",
+    phoneGraphCodeVerification: "NOT_VERIFIED",
+    phoneGraphPlatformType: "CLOUD_API",
+  });
+  assert(!evalNotVerified.fullyReady, "NOT_VERIFIED not fully ready");
 
   const partial = {
     ...readyUser,

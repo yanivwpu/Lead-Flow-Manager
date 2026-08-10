@@ -40,7 +40,7 @@ export type CompleteSdkPayload = {
 };
 
 export type CompleteSdkResult =
-  | { ok: true; needsWabaPick?: false }
+  | { ok: true; needsWabaPick?: false; needsPhoneRegistration?: boolean }
   | { ok: true; needsWabaPick: true; state: string }
   | {
       ok: false;

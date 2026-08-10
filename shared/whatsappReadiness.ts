@@ -2,6 +2,8 @@
  * Single source of truth for Meta WhatsApp Cloud API readiness (embedded signup + inbox).
  */
 
+import { isMetaPhoneCloudApiOperational } from "./whatsappPhoneRegistration";
+
 export type WhatsAppReadinessChecklist = {
   wabaSaved: boolean;
   phoneSaved: boolean;
@@ -36,14 +38,15 @@ export function isValidMetaWhatsAppGraphId(id: string | null | undefined): boole
 export function isMetaPhoneGraphRoutingReady(input: {
   status?: string | null;
   codeVerificationStatus?: string | null;
+  platformType?: string | null;
   isTestNumber?: boolean;
 }): boolean {
   if (input.isTestNumber) return true;
-  const status = String(input.status ?? "").toUpperCase();
-  const code = String(input.codeVerificationStatus ?? "").toUpperCase();
-  if (status === "DISCONNECTED") return false;
-  if (code === "NOT_VERIFIED") return false;
-  return true;
+  return isMetaPhoneCloudApiOperational({
+    status: input.status,
+    codeVerificationStatus: input.codeVerificationStatus,
+    platformType: input.platformType,
+  });
 }
 
 export function evaluateMetaWhatsAppReadiness(
@@ -51,6 +54,7 @@ export function evaluateMetaWhatsAppReadiness(
   opts?: {
     phoneGraphStatus?: string | null;
     phoneGraphCodeVerification?: string | null;
+    phoneGraphPlatformType?: string | null;
     isTestNumber?: boolean;
   },
 ): WhatsAppReadinessEvaluation {
@@ -61,13 +65,23 @@ export function evaluateMetaWhatsAppReadiness(
   const integrationStatus =
     user.metaIntegrationStatus || (user.metaConnected ? "connected" : "disconnected");
 
-  const phoneStatusReady =
-    integrationStatus === "connected" ||
-    isMetaPhoneGraphRoutingReady({
-      status: opts?.phoneGraphStatus,
-      codeVerificationStatus: opts?.phoneGraphCodeVerification,
-      isTestNumber: opts?.isTestNumber,
-    });
+  const hasGraphHints =
+    opts?.phoneGraphStatus != null ||
+    opts?.phoneGraphCodeVerification != null ||
+    opts?.phoneGraphPlatformType != null;
+
+  const graphPhoneReady = isMetaPhoneGraphRoutingReady({
+    status: opts?.phoneGraphStatus,
+    codeVerificationStatus: opts?.phoneGraphCodeVerification,
+    platformType: opts?.phoneGraphPlatformType,
+    isTestNumber: opts?.isTestNumber,
+  });
+
+  // With a Graph snapshot: require operational Cloud API state.
+  // Without snapshot: only trust explicit "connected" integration status (never needs_phone_registration).
+  const phoneStatusReady = hasGraphHints
+    ? graphPhoneReady
+    : integrationStatus === "connected";
 
   const inboxReady =
     activeProvider === "meta" &&
@@ -75,7 +89,8 @@ export function evaluateMetaWhatsAppReadiness(
     wabaSaved &&
     phoneSaved &&
     webhookSubscribed &&
-    integrationStatus === "connected";
+    integrationStatus === "connected" &&
+    phoneStatusReady;
 
   const fullyReady = inboxReady && phoneStatusReady;
 

@@ -77,7 +77,8 @@ export interface ProviderStatus {
     businessAccountId: string | null;
     hasCredentials: boolean;
     webhookUrl: string;
-    webhookVerifyToken: string | null;
+    /** True when a verify token is configured server-side — never return the token value. */
+    webhookVerifyTokenConfigured: boolean;
   };
 }
 
@@ -124,14 +125,23 @@ export function buildMetaWhatsAppReadinessForUser(
   const inner =
     phoneGraphSnapshot?.data && typeof phoneGraphSnapshot.data === "object"
       ? (phoneGraphSnapshot.data as Record<string, unknown>)
-      : phoneGraphSnapshot;
+      : phoneGraphSnapshot &&
+          (phoneGraphSnapshot.status != null ||
+            phoneGraphSnapshot.code_verification_status != null ||
+            phoneGraphSnapshot.platform_type != null)
+        ? phoneGraphSnapshot
+        : null;
   const phoneKind = classifyMetaWhatsAppPhone(
     buildMetaWhatsAppPhoneClassificationInput(user, phoneGraphSnapshot),
   );
+  if (!inner) {
+    return evaluateMetaWhatsAppReadiness(user, { isTestNumber: phoneKind.kind === "test" });
+  }
   return evaluateMetaWhatsAppReadiness(user, {
-    phoneGraphStatus: inner?.status != null ? String(inner.status) : null,
+    phoneGraphStatus: inner.status != null ? String(inner.status) : null,
     phoneGraphCodeVerification:
-      inner?.code_verification_status != null ? String(inner.code_verification_status) : null,
+      inner.code_verification_status != null ? String(inner.code_verification_status) : null,
+    phoneGraphPlatformType: inner.platform_type != null ? String(inner.platform_type) : null,
     isTestNumber: phoneKind.kind === "test",
   });
 }
@@ -377,7 +387,9 @@ export async function getProviderStatus(userId: string): Promise<ProviderStatus>
       businessAccountId: user.metaBusinessAccountId || null,
       hasCredentials: !!(user.metaAccessToken && user.metaPhoneNumberId),
       webhookUrl: `${webhookBaseUrl}/api/webhook/meta`,
-      webhookVerifyToken: user.metaConnected ? user.metaWebhookVerifyToken : null,
+      webhookVerifyTokenConfigured: !!(
+        user.metaConnected && (user.metaWebhookVerifyToken || process.env.META_WEBHOOK_VERIFY_TOKEN)
+      ),
     },
   };
 }

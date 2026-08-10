@@ -1,4 +1,5 @@
 import { CheckCircle2, Circle, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 export type WhatsAppReadinessChecklist = {
@@ -21,13 +22,24 @@ export function WhatsAppConnectionHealthChecklist({
   readiness,
   fullyReady,
   loading,
+  phoneRegistrationRequired,
   className,
 }: {
   readiness: WhatsAppReadinessChecklist | null | undefined;
   fullyReady: boolean;
   loading?: boolean;
+  phoneRegistrationRequired?: boolean;
   className?: string;
 }) {
+  const { t } = useTranslation();
+  const title = loading
+    ? "Checking connection…"
+    : fullyReady
+      ? "WhatsApp is ready"
+      : phoneRegistrationRequired
+        ? t("whatsappPhoneRegistration.statusRequired")
+        : "Setup incomplete";
+
   return (
     <div
       className={cn(
@@ -45,12 +57,14 @@ export function WhatsAppConnectionHealthChecklist({
           <Circle className="h-4 w-4 text-amber-700 shrink-0" />
         )}
         <p className={cn("text-sm font-semibold", fullyReady ? "text-emerald-900" : "text-amber-900")}>
-          {loading ? "Checking connection…" : fullyReady ? "WhatsApp is ready" : "Setup incomplete"}
+          {title}
         </p>
       </div>
       {!fullyReady && (
         <p className="text-xs text-amber-900/90 pl-6">
-          Your Meta login succeeded, but messaging is not fully active yet. Complete the steps below.
+          {phoneRegistrationRequired
+            ? t("whatsappPhoneRegistration.checklistHint")
+            : "Your Meta login succeeded, but messaging is not fully active yet. Complete the steps below."}
         </p>
       )}
       <ul className="space-y-1.5 pl-1">
