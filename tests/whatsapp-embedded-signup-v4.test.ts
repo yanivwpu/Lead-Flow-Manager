@@ -28,6 +28,15 @@ import {
   classifyV4DiscoveryGraphError,
   resolveV4EmbeddedSignupAssets,
 } from "../server/whatsappEmbeddedSignupV4Assets";
+import {
+  isV4SdkDirectAssetValidationEnabled,
+  sanitizeEmbeddedSignupClientError,
+  probeAccessTokenExpiryFromDebug,
+} from "../server/whatsappEmbeddedSignup";
+import {
+  isMetaPhoneCloudApiOperational,
+  isMetaPhoneCloudApiRegistrationRequired,
+} from "../shared/whatsappPhoneRegistration";
 
 describe("architecture parsing", () => {
   it("accepts v2 and v4 only", () => {
@@ -604,6 +613,59 @@ describe("v4 direct WABA/phone validation (no /me/businesses)", () => {
     );
   });
 
+  it("completion module binds shouldUseV4DirectAssetValidation at runtime (not a free identifier)", () => {
+    // Calling this exported wrapper fails with ReferenceError if the import was omitted
+    // from whatsappEmbeddedSignup.ts while the completion path still references the symbol.
+    assert.equal(isV4SdkDirectAssetValidationEnabled("v4", "sdk"), true);
+    assert.equal(isV4SdkDirectAssetValidationEnabled("v2", "sdk"), false);
+    assert.equal(isV4SdkDirectAssetValidationEnabled("v4", "redirect"), false);
+    assert.equal(
+      isV4SdkDirectAssetValidationEnabled("v4", "sdk"),
+      shouldUseV4DirectAssetValidation({ architecture: "v4", tokenExchange: "sdk" }),
+    );
+  });
+
+  it("sanitizes ReferenceError / undeclared-identifier messages for clients", () => {
+    assert.equal(
+      sanitizeEmbeddedSignupClientError(
+        new ReferenceError("shouldUseV4DirectAssetValidation is not defined"),
+      ),
+      "Could not finish WhatsApp setup. Please try Continue with Meta again.",
+    );
+    assert.match(
+      sanitizeEmbeddedSignupClientError("Phone not under WABA"),
+      /Phone not under WABA/,
+    );
+  });
+
+  it("Never-expire debug_token (expires_at: 0) normalizes expiry to null", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ data: { expires_at: 0, is_valid: true, type: "SYSTEM_USER" } }), {
+        status: 200,
+      })) as typeof fetch;
+    try {
+      process.env.META_APP_ID = process.env.META_APP_ID || "123";
+      process.env.META_APP_SECRET = process.env.META_APP_SECRET || "secret";
+      const probed = await probeAccessTokenExpiryFromDebug("tok");
+      assert.equal(probed.ok, true);
+      assert.equal(probed.neverExpires, true);
+      assert.equal(probed.expiresAt, null);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("already CONNECTED CLOUD_API phone skips registration on reconnect", () => {
+    const fields = {
+      status: "CONNECTED",
+      codeVerificationStatus: "VERIFIED",
+      platformType: "CLOUD_API",
+    };
+    assert.equal(isMetaPhoneCloudApiOperational(fields), true);
+    assert.equal(isMetaPhoneCloudApiRegistrationRequired(fields, { coexistence: false }), false);
+  });
+
   it("selects phone from WABA listing: one / zero / multiple", () => {
     assert.deepEqual(selectPhoneFromV4WabaListing([{ id: "1191517910720500" }]), {
       mode: "single",
@@ -853,8 +915,10 @@ describe("v4 direct WABA/phone validation (no /me/businesses)", () => {
       path.join(process.cwd(), "server/whatsappEmbeddedSignupV4Assets.ts"),
       "utf8",
     );
+    assert.match(main, /from ["']\.\/whatsappEmbeddedSignupV4Assets["']/);
     assert.match(main, /shouldUseV4DirectAssetValidation/);
     assert.match(main, /resolveV4EmbeddedSignupAssets/);
+    assert.match(main, /isV4SdkDirectAssetValidationEnabled/);
     assert.match(main, /fetchUserWabaChoices/);
     assert.match(main, /\/me\/businesses/);
     assert.doesNotMatch(v4mod, /\$\{base\}\/me\/businesses/);

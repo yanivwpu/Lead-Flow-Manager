@@ -20,6 +20,7 @@ import {
   buildWhatsAppInboundRoutingDiagnostics,
   fetchMetaUserTokenDebugSummary,
   extractAppIdsFromWabaSubscribedAppsPayload,
+  sanitizeEmbeddedSignupClientError,
 } from "../whatsappEmbeddedSignup";
 import { getAppOrigin } from "../urlOrigins";
 import { storage } from "../storage";
@@ -495,7 +496,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         tokenExchange: "redirect",
       });
       if (!result.success) {
-        return failRedirect(result.error);
+        return failRedirect(sanitizeEmbeddedSignupClientError(result.error));
       }
       if ("needsWabaPick" in result && result.needsWabaPick) {
         const pickUrl = `${base}/app/settings?section=channels&whatsapp_embedded=pick&state=${encodeURIComponent(state)}`;
@@ -562,7 +563,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       if (!result.success) {
         return res.status(400).json({
           success: false,
-          error: result.error,
+          error: sanitizeEmbeddedSignupClientError(result.error),
           errorCode: result.errorCode || null,
           wabaId: result.wabaId || null,
         });
@@ -576,7 +577,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       });
     } catch (e: any) {
       console.warn("[WhatsApp Integration] complete-sdk failed", e?.message || e);
-      res.status(500).json({ error: "Complete signup failed" });
+      res.status(500).json({ error: sanitizeEmbeddedSignupClientError(e) });
     }
   });
 
@@ -612,7 +613,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       if (!result.success) {
         return res.status(400).json({
           success: false,
-          error: result.error,
+          error: sanitizeEmbeddedSignupClientError(result.error),
           errorCode: result.errorCode || null,
           wabaId: result.wabaId || null,
         });
@@ -623,7 +624,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       res.json({ success: true });
     } catch (e: any) {
       console.warn("[WhatsApp Integration] complete-sdk failed", e?.message || e);
-      res.status(500).json({ error: "Complete signup failed" });
+      res.status(500).json({ error: sanitizeEmbeddedSignupClientError(e) });
     }
   });
 

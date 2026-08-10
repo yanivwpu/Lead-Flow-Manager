@@ -45,6 +45,10 @@ import {
 } from "./whatsappService";
 import { stripSensitiveWhatsAppFields } from "./whatsappStatusSanitize";
 import {
+  shouldUseV4DirectAssetValidation,
+  resolveV4EmbeddedSignupAssets,
+} from "./whatsappEmbeddedSignupV4Assets";
+import {
   buildStandardEmbeddedSignupLoginOptions,
   configIdLast4,
   parseWhatsappEmbeddedSignupArchitecture,
@@ -1301,19 +1305,65 @@ export async function recordWhatsappMetaRedirectCallbackDebug(params: {
 
 /** Expiry from Graph debug_token (`data.expires_at` unix seconds). */
 export async function getAccessTokenExpiryFromDebug(accessToken: string): Promise<Date | null> {
-  const base = getMetaGraphApiBase();
-  const appId = process.env.META_APP_ID!;
-  const appSecret = process.env.META_APP_SECRET!;
-  const appAccessToken = `${appId}|${appSecret}`;
-  const debugUrl = `${base}/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(appAccessToken)}`;
-  const debugRes = await fetch(debugUrl);
-  const debugJson = (await debugRes.json()) as any;
-  if (!debugRes.ok) return null;
-  const exp = debugJson?.data?.expires_at;
-  if (typeof exp === "number" && exp > 0) {
-    return new Date(exp * 1000);
+  const probed = await probeAccessTokenExpiryFromDebug(accessToken);
+  return probed.expiresAt;
+}
+
+/**
+ * Probe token lifetime via debug_token.
+ * Meta Never-expire tokens typically report `expires_at: 0`.
+ */
+export async function probeAccessTokenExpiryFromDebug(accessToken: string): Promise<{
+  ok: boolean;
+  expiresAt: Date | null;
+  /** True when Meta explicitly reports expires_at === 0 (never-expiring). */
+  neverExpires: boolean;
+}> {
+  try {
+    const base = getMetaGraphApiBase();
+    const appId = process.env.META_APP_ID!;
+    const appSecret = process.env.META_APP_SECRET!;
+    const appAccessToken = `${appId}|${appSecret}`;
+    const debugUrl = `${base}/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(appAccessToken)}`;
+    const debugRes = await fetch(debugUrl);
+    const debugJson = (await debugRes.json()) as any;
+    if (!debugRes.ok) return { ok: false, expiresAt: null, neverExpires: false };
+    const exp = debugJson?.data?.expires_at;
+    if (typeof exp === "number" && exp === 0) {
+      return { ok: true, expiresAt: null, neverExpires: true };
+    }
+    if (typeof exp === "number" && exp > 0) {
+      return { ok: true, expiresAt: new Date(exp * 1000), neverExpires: false };
+    }
+    return { ok: true, expiresAt: null, neverExpires: false };
+  } catch {
+    return { ok: false, expiresAt: null, neverExpires: false };
   }
-  return null;
+}
+
+/**
+ * Runtime-safe gate used by completion + tests.
+ * Ensures `shouldUseV4DirectAssetValidation` is imported into this module (not a free identifier).
+ */
+export function isV4SdkDirectAssetValidationEnabled(
+  architecture: string,
+  tokenExchange: "sdk" | "redirect",
+): boolean {
+  return shouldUseV4DirectAssetValidation({ architecture, tokenExchange });
+}
+
+/** Map unexpected runtime/engine errors to a safe client message (no raw identifiers). */
+export function sanitizeEmbeddedSignupClientError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  if (
+    /is not defined|ReferenceError|TypeError|Cannot read propert|Cannot access|Unexpected token|Internal Server Error/i.test(
+      msg,
+    )
+  ) {
+    return "Could not finish WhatsApp setup. Please try Continue with Meta again.";
+  }
+  const trimmed = msg.trim();
+  return trimmed || "Could not read WhatsApp account details from Meta.";
 }
 
 /**
@@ -2205,8 +2255,13 @@ export async function completeEmbeddedSignupOAuth(params: {
   }
 
   try {
-    const debugExp = await getAccessTokenExpiryFromDebug(longToken);
-    tokenExpiresAt = earliestExpiry(tokenExpiresAt, debugExp);
+    const probed = await probeAccessTokenExpiryFromDebug(longToken);
+    if (probed.ok && probed.neverExpires) {
+      // Never-expiration Login for Business / Business Integration tokens.
+      tokenExpiresAt = null;
+    } else {
+      tokenExpiresAt = earliestExpiry(tokenExpiresAt, probed.expiresAt);
+    }
   } catch {
     /* non-fatal */
   }
@@ -2534,9 +2589,16 @@ export async function completeEmbeddedSignupOAuth(params: {
     });
     } // end v2 discovery branch
   } catch (e: any) {
-    const msg = e?.message || "Could not read WhatsApp account details from Meta.";
+    const rawMsg = e?.message || "Could not read WhatsApp account details from Meta.";
+    const msg = sanitizeEmbeddedSignupClientError(e);
+    console.warn("[WhatsApp Embedded Signup] waba_discovery error", {
+      architecture,
+      tokenExchange,
+      rawError: String(rawMsg).slice(0, 300),
+      name: e?.name || null,
+    });
     const missingPerm =
-      /missing permission/i.test(msg) || /\(#100\).*permission/i.test(msg);
+      /missing permission/i.test(rawMsg) || /\(#100\).*permission/i.test(rawMsg);
     const errorCode = missingPerm
       ? ("waba_discovery_missing_permission" as const)
       : ("discovery_failed" as const);

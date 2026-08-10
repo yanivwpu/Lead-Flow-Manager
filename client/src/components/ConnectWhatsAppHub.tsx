@@ -42,6 +42,18 @@ import {
   shouldAutoRedirectAfterSdkFailure,
   type CompleteSdkResult,
 } from "@/lib/whatsappEmbeddedSignupCompletion";
+
+const SAFE_META_SETUP_ERROR =
+  "Could not finish WhatsApp setup. Please try Continue with Meta again.";
+
+function sanitizeWhatsappClientErrorMessage(message: string): string {
+  const msg = String(message || "").trim();
+  if (!msg) return SAFE_META_SETUP_ERROR;
+  if (/is not defined|ReferenceError|TypeError|Cannot read propert|Cannot access/i.test(msg)) {
+    return SAFE_META_SETUP_ERROR;
+  }
+  return msg;
+}
 import { buildStandardEmbeddedSignupLoginOptions } from "@shared/whatsappEmbeddedSignupVersion";
 import type { WhatsappEmbeddedSignupArchitecture } from "@shared/whatsappEmbeddedSignupVersion";
 import {
@@ -603,7 +615,9 @@ export function ConnectWhatsAppHub({
           if (!r.ok) {
             return {
               ok: false as const,
-              error: String(j?.error || "Could not complete Meta signup"),
+              error: sanitizeWhatsappClientErrorMessage(
+                String(j?.error || "Could not complete Meta signup"),
+              ),
               errorCode: typeof j?.errorCode === "string" ? j.errorCode : null,
               wabaId: typeof j?.wabaId === "string" ? j.wabaId : null,
               httpStatus: r.status,
@@ -693,7 +707,9 @@ export function ConnectWhatsAppHub({
                     "WhatsApp Business Account was created, but phone setup is incomplete. Finish the number in Meta Business Manager, then reconnect.",
                 );
               }
-              throw new Error(result.error || "Could not complete Meta signup");
+              throw new Error(
+                sanitizeWhatsappClientErrorMessage(result.error || "Could not complete Meta signup"),
+              );
             }
             if (result.needsWabaPick && result.state) {
               window.location.href = `/app/settings?section=channels&whatsapp_embedded=pick&state=${encodeURIComponent(result.state)}`;
@@ -739,7 +755,10 @@ export function ConnectWhatsAppHub({
         return;
       }
 
-      setHubBanner({ variant: "error", message: msg || "Could not complete Meta signup" });
+      setHubBanner({
+        variant: "error",
+        message: sanitizeWhatsappClientErrorMessage(msg || "Could not complete Meta signup"),
+      });
 
       const allowRedirect = shouldAutoRedirectAfterSdkFailure({
         architecture,
