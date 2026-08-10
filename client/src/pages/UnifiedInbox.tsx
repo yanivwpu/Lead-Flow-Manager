@@ -160,7 +160,9 @@ import {
 } from "@/lib/inboxConversationRow";
 import {
   INBOX_CHANNEL_HEALTH_LABELS,
+  INBOX_CHANNEL_HEALTH_SHORT_LABELS,
   buildInboxChannelHealthRows,
+  type InboxChannelHealthKey,
 } from "@shared/inboxChannelHealthBar";
 import { formatOutboundSendErrorDescription } from "@/lib/webchatSendError";
 import { webchatSendErrorDescription } from "@shared/webchatSendErrors";
@@ -2900,12 +2902,23 @@ export function UnifiedInbox() {
             ))}
           </div>
 
-          {/* Channel health bar — always shows main messaging channels; gray = not configured */}
+          {/* Channel health bar — compact abbreviations; full names in tooltip + aria */}
           {(() => {
             const rows = buildInboxChannelHealthRows(channelHealth);
 
+            const channelFullName = (key: string) =>
+              t(`chats.channelHealth.${key}.full`, {
+                defaultValue:
+                  INBOX_CHANNEL_HEALTH_LABELS[key as InboxChannelHealthKey] ?? key,
+              });
+            const channelShortName = (key: string) =>
+              t(`chats.channelHealth.${key}.short`, {
+                defaultValue:
+                  INBOX_CHANNEL_HEALTH_SHORT_LABELS[key as InboxChannelHealthKey] ?? key,
+              });
+
             const getTooltip = (ch: (typeof rows)[0]) => {
-              const label = INBOX_CHANNEL_HEALTH_LABELS[ch.channel as keyof typeof INBOX_CHANNEL_HEALTH_LABELS] ?? ch.channel;
+              const label = channelFullName(ch.channel);
               if (!ch.isConnected) return `${label}: not configured — set up in Settings`;
               if (ch.healthy === true) {
                 if (ch.channel === 'whatsapp') return `${label}: account verified and ready`;
@@ -2926,8 +2939,26 @@ export function UnifiedInbox() {
               return `${label}: status unknown`;
             };
 
+            const statusPhrase = (ch: (typeof rows)[0]) => {
+              if (!ch.isConnected) return t("chats.channelHealth.status.notConfigured", { defaultValue: "not configured" });
+              if (ch.healthy === true) {
+                const isDegraded =
+                  ch.healthState === "degraded" || (!!ch.warnings && ch.warnings.length > 0);
+                return isDegraded
+                  ? t("chats.channelHealth.status.degraded", { defaultValue: "connected with warnings" })
+                  : t("chats.channelHealth.status.connected", { defaultValue: "connected" });
+              }
+              if (ch.healthy === false) return t("chats.channelHealth.status.issue", { defaultValue: "needs attention" });
+              return t("chats.channelHealth.status.unknown", { defaultValue: "status unknown" });
+            };
+
             return (
-              <div className="flex items-center gap-x-2 gap-y-1 mt-2 pt-2 border-t flex-wrap" data-testid="channel-health-bar">
+              <div
+                className="flex flex-nowrap items-center gap-x-1.5 mt-2 pt-2 border-t overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                data-testid="channel-health-bar"
+                role="list"
+                aria-label={t("chats.channelHealth.barLabel", { defaultValue: "Channel connection status" })}
+              >
                 {rows.map(ch => {
                   const isDegraded =
                     ch.isConnected &&
@@ -2940,15 +2971,26 @@ export function UnifiedInbox() {
                     : isDegraded ? "bg-amber-400"
                     : "bg-gray-400";
                   const textColor = !ch.isConnected ? "text-gray-400" : "text-gray-500";
+                  const fullName = channelFullName(ch.channel);
+                  const shortName = channelShortName(ch.channel);
+                  const tooltip = getTooltip(ch);
                   return (
                     <div
                       key={ch.channel}
-                      title={getTooltip(ch)}
-                      className={cn("flex items-center gap-1 text-[10px]", textColor)}
+                      role="listitem"
+                      title={tooltip}
+                      aria-label={`${fullName}: ${statusPhrase(ch)}`}
+                      className={cn(
+                        "flex items-center gap-0.5 text-[9px] leading-none whitespace-nowrap flex-shrink-0",
+                        textColor,
+                      )}
                       data-testid={`channel-health-${ch.channel}`}
                     >
-                      <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", dotColor)} />
-                      <span>{INBOX_CHANNEL_HEALTH_LABELS[ch.channel as keyof typeof INBOX_CHANNEL_HEALTH_LABELS] ?? ch.channel}</span>
+                      <span
+                        className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", dotColor)}
+                        aria-hidden="true"
+                      />
+                      <span aria-hidden="true">{shortName}</span>
                     </div>
                   );
                 })}

@@ -115,7 +115,23 @@
     "pipeline": "צינור מכירה",
     "assignee": "מוקצה",
     "lastMessage": "הודעה אחרונה",
-    "thinking": "AI חושב..."
+    "thinking": "AI חושב...",
+    "channelHealth": {
+      "barLabel": "מצב חיבור ערוצים",
+      "whatsapp": { "short": "WA", "full": "WhatsApp" },
+      "facebook": { "short": "FB", "full": "Facebook" },
+      "instagram": { "short": "IG", "full": "Instagram" },
+      "telegram": { "short": "TG", "full": "Telegram" },
+      "tiktok": { "short": "TT", "full": "TikTok" },
+      "email": { "short": "Mail", "full": "אימייל" },
+      "status": {
+        "notConfigured": "לא מוגדר",
+        "connected": "מחובר",
+        "degraded": "מחובר עם אזהרות",
+        "issue": "דורש תשומת לב",
+        "unknown": "מצב לא ידוע"
+      }
+    }
   },
   "contacts": {
     "title": "אנשי קשר",
