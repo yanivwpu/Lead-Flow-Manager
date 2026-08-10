@@ -22,6 +22,12 @@ import {
   buildWhatsappEmbeddedSignupCodeExchangeUrl,
   classifyMetaCodeExchangeFailure,
 } from "../server/metaOAuth";
+import {
+  shouldUseV4DirectAssetValidation,
+  selectPhoneFromV4WabaListing,
+  classifyV4DiscoveryGraphError,
+  resolveV4EmbeddedSignupAssets,
+} from "../server/whatsappEmbeddedSignupV4Assets";
 
 describe("architecture parsing", () => {
   it("accepts v2 and v4 only", () => {
@@ -579,5 +585,305 @@ describe("v4 authorization-code exchange contract", () => {
     coordinator.acceptAuthCode("code-twice");
     await new Promise((r) => setTimeout(r, 20));
     assert.equal(calls, 1);
+  });
+});
+
+describe("v4 direct WABA/phone validation (no /me/businesses)", () => {
+  it("uses direct validation only for v4 SDK, not v2 or redirect", () => {
+    assert.equal(
+      shouldUseV4DirectAssetValidation({ architecture: "v4", tokenExchange: "sdk" }),
+      true,
+    );
+    assert.equal(
+      shouldUseV4DirectAssetValidation({ architecture: "v2", tokenExchange: "sdk" }),
+      false,
+    );
+    assert.equal(
+      shouldUseV4DirectAssetValidation({ architecture: "v4", tokenExchange: "redirect" }),
+      false,
+    );
+  });
+
+  it("selects phone from WABA listing: one / zero / multiple", () => {
+    assert.deepEqual(selectPhoneFromV4WabaListing([{ id: "1191517910720500" }]), {
+      mode: "single",
+      phoneId: "1191517910720500",
+    });
+    assert.deepEqual(selectPhoneFromV4WabaListing([]), { mode: "none" });
+    assert.deepEqual(
+      selectPhoneFromV4WabaListing([{ id: "1" }, { id: "2" }]),
+      { mode: "ambiguous" },
+    );
+  });
+
+  it("classifies Missing Permission on businesses/waba as discovery categories", () => {
+    assert.equal(
+      classifyV4DiscoveryGraphError({
+        httpStatus: 400,
+        meta: { code: 100, message: "(#100) Missing Permission" },
+        context: "businesses",
+      }),
+      "waba_discovery_missing_permission",
+    );
+    assert.equal(
+      classifyV4DiscoveryGraphError({
+        httpStatus: 400,
+        meta: { code: 100, message: "(#100) Missing Permission" },
+        context: "waba",
+      }),
+      "waba_discovery_missing_permission",
+    );
+  });
+
+  it("missing session assets returns session_assets_missing without calling Graph businesses", async () => {
+    const calls: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: any) => {
+      calls.push(String(input));
+      return new Response(JSON.stringify({ data: { scopes: [], type: "USER", is_valid: true } }), {
+        status: 200,
+      });
+    }) as typeof fetch;
+    try {
+      const r = await resolveV4EmbeddedSignupAssets({
+        accessToken: "tok",
+        sessionWabaId: null,
+        sessionPhoneNumberId: null,
+      });
+      assert.equal(r.ok, false);
+      if (!r.ok) assert.equal(r.errorCode, "session_assets_missing");
+      assert.equal(
+        calls.every((u) => !u.includes("/me/businesses")),
+        true,
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("validates WABA+phone directly via WABA node and phone_numbers listing", async () => {
+    const calls: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: any) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.includes("debug_token")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              app_id: "810621184995059",
+              type: "USER",
+              is_valid: true,
+              scopes: ["whatsapp_business_management", "whatsapp_business_messaging"],
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("/961217696997428?") && url.includes("fields=id")) {
+        return new Response(JSON.stringify({ id: "961217696997428", name: "Whachat CRM" }), {
+          status: 200,
+        });
+      }
+      if (url.includes("/961217696997428/phone_numbers")) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "1191517910720500",
+                display_phone_number: "+1 954-513-9408",
+                verified_name: "Whachat CRM",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("/1191517910720500?")) {
+        return new Response(
+          JSON.stringify({
+            id: "1191517910720500",
+            whatsapp_business_account: { id: "961217696997428" },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ error: { message: "unexpected" } }), { status: 400 });
+    }) as typeof fetch;
+    try {
+      const r = await resolveV4EmbeddedSignupAssets({
+        accessToken: "tok",
+        sessionWabaId: "961217696997428",
+        sessionPhoneNumberId: "1191517910720500",
+      });
+      assert.equal(r.ok, true);
+      if (r.ok) {
+        assert.equal(r.resolved.wabaId, "961217696997428");
+        assert.equal(r.resolved.phoneNumberId, "1191517910720500");
+      }
+      assert.equal(calls.some((u) => u.includes("/me/businesses")), false);
+      assert.equal(calls.some((u) => u.includes("/961217696997428?")), true);
+      assert.equal(calls.some((u) => u.includes("/phone_numbers")), true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("rejects phone/WABA mismatch", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: any) => {
+      const url = String(input);
+      if (url.includes("debug_token")) {
+        return new Response(JSON.stringify({ data: { scopes: [], type: "USER", is_valid: true } }), {
+          status: 200,
+        });
+      }
+      if (url.includes("/961217696997428?") && !url.includes("phone_numbers")) {
+        return new Response(JSON.stringify({ id: "961217696997428" }), { status: 200 });
+      }
+      if (url.includes("/phone_numbers")) {
+        return new Response(JSON.stringify({ data: [{ id: "999" }] }), { status: 200 });
+      }
+      if (url.includes("/1191517910720500?")) {
+        return new Response(
+          JSON.stringify({ whatsapp_business_account: { id: "111111111111111" } }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as typeof fetch;
+    try {
+      const r = await resolveV4EmbeddedSignupAssets({
+        accessToken: "tok",
+        sessionWabaId: "961217696997428",
+        sessionPhoneNumberId: "1191517910720500",
+      });
+      assert.equal(r.ok, false);
+      if (!r.ok) assert.equal(r.errorCode, "phone_not_under_waba");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("WABA-only with zero / one / multiple phones", async () => {
+    const originalFetch = globalThis.fetch;
+    async function run(phones: Array<{ id: string }>) {
+      globalThis.fetch = (async (input: any) => {
+        const url = String(input);
+        if (url.includes("debug_token")) {
+          return new Response(JSON.stringify({ data: { scopes: [], type: "USER", is_valid: true } }), {
+            status: 200,
+          });
+        }
+        if (url.includes("/961217696997428?") && !url.includes("phone_numbers")) {
+          return new Response(JSON.stringify({ id: "961217696997428" }), { status: 200 });
+        }
+        if (url.includes("/phone_numbers")) {
+          return new Response(JSON.stringify({ data: phones }), { status: 200 });
+        }
+        if (url.includes("whatsapp_business_account")) {
+          return new Response(
+            JSON.stringify({ whatsapp_business_account: { id: "961217696997428" } }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      }) as typeof fetch;
+      return resolveV4EmbeddedSignupAssets({
+        accessToken: "tok",
+        sessionWabaId: "961217696997428",
+        sessionPhoneNumberId: null,
+      });
+    }
+    try {
+      const zero = await run([]);
+      assert.equal(zero.ok, false);
+      if (!zero.ok) assert.equal(zero.errorCode, "phone_setup_incomplete");
+
+      const one = await run([{ id: "1191517910720500" }]);
+      assert.equal(one.ok, true);
+      if (one.ok) assert.equal(one.resolved.phoneNumberId, "1191517910720500");
+
+      const many = await run([{ id: "1" }, { id: "2" }]);
+      assert.equal(many.ok, false);
+      if (!many.ok) assert.equal(many.errorCode, "phone_ambiguous");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("direct WABA access denied maps to waba_access_denied", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: any) => {
+      const url = String(input);
+      if (url.includes("debug_token")) {
+        return new Response(JSON.stringify({ data: { scopes: [], type: "USER", is_valid: true } }), {
+          status: 200,
+        });
+      }
+      if (url.includes("/961217696997428?")) {
+        return new Response(
+          JSON.stringify({ error: { code: 100, message: "(#100) Missing Permission", type: "OAuthException" } }),
+          { status: 400 },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as typeof fetch;
+    try {
+      const r = await resolveV4EmbeddedSignupAssets({
+        accessToken: "tok",
+        sessionWabaId: "961217696997428",
+        sessionPhoneNumberId: "1191517910720500",
+      });
+      assert.equal(r.ok, false);
+      if (!r.ok) assert.equal(r.errorCode, "waba_access_denied");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("v4 completion never falls back to /me/businesses; v2 discovery still uses it", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const main = await fs.readFile(
+      path.join(process.cwd(), "server/whatsappEmbeddedSignup.ts"),
+      "utf8",
+    );
+    const v4mod = await fs.readFile(
+      path.join(process.cwd(), "server/whatsappEmbeddedSignupV4Assets.ts"),
+      "utf8",
+    );
+    assert.match(main, /shouldUseV4DirectAssetValidation/);
+    assert.match(main, /resolveV4EmbeddedSignupAssets/);
+    assert.match(main, /fetchUserWabaChoices/);
+    assert.match(main, /\/me\/businesses/);
+    assert.doesNotMatch(v4mod, /\$\{base\}\/me\/businesses/);
+    assert.doesNotMatch(v4mod, /fetch\([\s\S]*me\/businesses/);
+    assert.match(main, /usedMeBusinessesEnumeration:\s*false/);
+    assert.match(main, /discoveryFailureCategory/);
+    assert.match(main, /v4ProtectSnap/);
+    assert.match(main, /subscribeAppToWaba/);
+  });
+
+  it("successful oauth debug clears stale code_exchange_failed", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.join(process.cwd(), "server/whatsappEmbeddedSignup.ts"),
+      "utf8",
+    );
+    assert.match(src, /if \(patch\.ok === true\)/);
+    assert.match(src, /delete next\.errorCode/);
+  });
+
+  it("coexistence remains disabled", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const hub = await fs.readFile(
+      path.join(process.cwd(), "client/src/components/ConnectWhatsAppHub.tsx"),
+      "utf8",
+    );
+    assert.match(hub, /Coming soon/);
+    assert.match(hub, /disabled=\{true\}/);
   });
 });

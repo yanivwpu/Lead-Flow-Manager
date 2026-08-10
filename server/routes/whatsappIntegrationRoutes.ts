@@ -842,6 +842,13 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
             oauthDbg && typeof oauthDbg.exchangeFailureCategory === "string"
               ? oauthDbg.exchangeFailureCategory
               : null,
+          discoveryFailureCategory:
+            oauthDbg && typeof oauthDbg.discoveryFailureCategory === "string"
+              ? oauthDbg.discoveryFailureCategory
+              : null,
+          discoveryMethod:
+            oauthDbg && typeof oauthDbg.discoveryMethod === "string" ? oauthDbg.discoveryMethod : null,
+          usedMeBusinessesEnumeration: oauthDbg?.usedMeBusinessesEnumeration === true,
           codeCallbackReceived: oauthDbg?.codeCallbackReceived === true,
           sessionEventReceived: oauthDbg?.sessionEventReceived === true,
           completeSdkAttempted: oauthDbg?.completeSdkAttempted === true,

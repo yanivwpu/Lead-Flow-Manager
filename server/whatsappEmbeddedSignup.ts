@@ -23,6 +23,10 @@ import { storage } from "./storage";
 import { getMetaGraphApiBase, getMetaFacebookOAuthDialogBase, getMetaGraphVersionSegment } from "./metaGraphVersion";
 import { exchangeForLongLivedUserToken, MetaOAuthExchangeError, exchangeWhatsappEmbeddedSignupAuthorizationCode, classifyMetaCodeExchangeFailure } from "./metaOAuth";
 import {
+  shouldUseV4DirectAssetValidation,
+  resolveV4EmbeddedSignupAssets,
+} from "./whatsappEmbeddedSignupV4Assets";
+import {
   connectUserMeta,
   type MetaCredentials,
   encryptCredential,
@@ -31,6 +35,7 @@ import {
   getMetaAccessToken,
   fetchMetaWhatsAppPhoneNumberGraphSnapshot,
   fetchWhatsAppPhoneNumberParentWabaId,
+  findMetaPhoneNumberConflict,
 } from "./userMeta";
 import { classifyMetaWhatsAppPhone, type MetaWhatsAppPhoneKind, META_WABA_PHONE_DISCOVERY_FIELD_SETS, mapGraphPhoneRowToDiscoveryFields } from "./metaWhatsAppPhoneKind";
 import {
@@ -927,6 +932,15 @@ async function fetchUserWabaChoices(
   });
   if (!bizRes.ok) {
     const msg = bizJson?.error?.message || "Failed to fetch businesses.";
+    console.warn("[WABA DISCOVERY] GET /me/businesses failed", {
+      endpoint: `${base}/me/businesses?fields=id,name`,
+      graphVersion: getMetaGraphVersionSegment(),
+      httpStatus: bizRes.status,
+      meta_code: bizJson?.error?.code ?? null,
+      meta_type: bizJson?.error?.type ?? null,
+      meta_subcode: bizJson?.error?.error_subcode ?? null,
+      meta_message: typeof bizJson?.error?.message === "string" ? bizJson.error.message.slice(0, 300) : null,
+    });
     throw new Error(msg);
   }
   const businesses: Array<{ id: string; name?: string }> = Array.isArray(bizJson?.data)
@@ -1095,11 +1109,18 @@ export async function mergeUserMetaOAuthDebug(
       prevRow && prevRow.metaLastOAuthDebug && typeof prevRow.metaLastOAuthDebug === "object"
         ? (prevRow.metaLastOAuthDebug as Record<string, unknown>)
         : {};
-    const next = {
+    const next: Record<string, unknown> = {
       ...prev,
       ...patch,
       updatedAt: new Date().toISOString(),
     };
+    // Clear stale failure codes when a later phase succeeds (or when a new failure code is written).
+    if (patch.ok === true) {
+      if (patch.error === undefined) delete next.error;
+      if (patch.errorCode === undefined) delete next.errorCode;
+      if (patch.exchangeFailureCategory === undefined) delete next.exchangeFailureCategory;
+      if (patch.discoveryFailureCategory === undefined) delete next.discoveryFailureCategory;
+    }
     await storage.updateUser(userId, { metaLastOAuthDebug: next as any });
   } catch (e: any) {
     console.warn("[WhatsApp Embedded Signup] could not persist metaLastOAuthDebug", e?.message || e);
@@ -1825,7 +1846,13 @@ export type EmbeddedSignupOAuthResult =
         | "phone_setup_incomplete"
         | "no_valid_waba_or_phone"
         | "code_exchange_failed"
-        | "discovery_failed";
+        | "discovery_failed"
+        | "session_assets_missing"
+        | "waba_discovery_missing_permission"
+        | "waba_access_denied"
+        | "phone_not_under_waba"
+        | "phone_ambiguous"
+        | "waba_subscription_failed";
       wabaId?: string | null;
     };
 
@@ -2167,6 +2194,115 @@ export async function completeEmbeddedSignupOAuth(params: {
   let resolved: ResolvedWabaPhone;
   let discoveryDiagnostics: WabaDiscoveryRunDiagnostics | null = null;
   try {
+    if (shouldUseV4DirectAssetValidation({ architecture, tokenExchange })) {
+      // v4 SDK: never call /me/businesses (requires business_management).
+      // Prefer FINISH session assets and validate directly with WhatsApp scopes.
+      console.log("[WhatsApp Embedded Signup] v4_direct_asset_validation_start", {
+        architecture,
+        tokenExchange,
+        hasSessionWabaId: !!sessionEventSummary?.wabaId,
+        hasSessionPhoneNumberId: !!sessionEventSummary?.phoneNumberId,
+        graphApiVersion: getMetaGraphVersionSegment(),
+      });
+      const v4Assets = await resolveV4EmbeddedSignupAssets({
+        accessToken: longToken,
+        sessionWabaId: sessionEventSummary?.wabaId,
+        sessionPhoneNumberId: sessionEventSummary?.phoneNumberId,
+      });
+      await mergeUserMetaOAuthDebug(row.userId, {
+        phase: "waba_discovery",
+        architecture,
+        flow: row.flow,
+        discoveryMethod: "v4_direct_session_assets",
+        ok: v4Assets.ok,
+        errorCode: v4Assets.ok ? null : v4Assets.errorCode,
+        discoveryFailureCategory: v4Assets.ok ? null : v4Assets.errorCode,
+        graphVersion: v4Assets.graphVersion,
+        endpointsUsed: v4Assets.endpointsUsed,
+        failedEndpoint: v4Assets.ok ? null : v4Assets.failedEndpoint || null,
+        meta: v4Assets.ok ? null : v4Assets.meta || null,
+        debugTokenScopes: v4Assets.debugTokenScopes || null,
+        debugTokenType: v4Assets.debugTokenType || null,
+        sessionWabaId: sessionEventSummary?.wabaId || null,
+        sessionPhoneNumberId: sessionEventSummary?.phoneNumberId || null,
+        codeCallbackReceived: true,
+        sessionEventReceived: !!sessionEventSummary,
+        completeSdkAttempted: true,
+        usedMeBusinessesEnumeration: false,
+      });
+      if (!v4Assets.ok) {
+        const recoverableMsg = protectSnap?.hadMetaConnection
+          ? `${v4Assets.error} Your previous WhatsApp connection was preserved; see Settings → WhatsApp for details.`
+          : v4Assets.error;
+        if (protectSnap?.hadMetaConnection) {
+          await restorePersistedMetaSnapshot(row.userId, protectSnap);
+          await storage.updateUser(row.userId, {
+            metaIntegrationStatus: "needs_attention",
+            metaLastErrorCode: v4Assets.errorCode,
+            metaLastErrorMessage: recoverableMsg.slice(0, 500),
+          });
+        } else {
+          await storage.updateUser(row.userId, {
+            metaConnected: false,
+            metaIntegrationStatus:
+              v4Assets.errorCode === "phone_setup_incomplete" ? "needs_attention" : "failed",
+            metaLastErrorCode: v4Assets.errorCode,
+            metaLastErrorMessage: v4Assets.error.slice(0, 500),
+          });
+        }
+        return {
+          success: false,
+          error: recoverableMsg.slice(0, 400),
+          errorCode: v4Assets.errorCode,
+          wabaId: v4Assets.wabaId || sessionEventSummary?.wabaId || null,
+        };
+      }
+
+      const conflict = await findMetaPhoneNumberConflict(v4Assets.resolved.phoneNumberId, row.userId);
+      if (conflict) {
+        const msg =
+          "This WhatsApp phone number is already connected to another WhachatCRM workspace. Disconnect it there first, or choose a different number in Meta.";
+        await mergeUserMetaOAuthDebug(row.userId, {
+          phase: "waba_discovery",
+          ok: false,
+          errorCode: "discovery_failed",
+          discoveryFailureCategory: "phone_workspace_conflict",
+          architecture,
+        });
+        if (protectSnap?.hadMetaConnection) {
+          await restorePersistedMetaSnapshot(row.userId, protectSnap);
+          await storage.updateUser(row.userId, {
+            metaIntegrationStatus: "needs_attention",
+            metaLastErrorCode: "phone_workspace_conflict",
+            metaLastErrorMessage: msg.slice(0, 500),
+          });
+        } else {
+          await storage.updateUser(row.userId, {
+            metaConnected: false,
+            metaIntegrationStatus: "failed",
+            metaLastErrorCode: "phone_workspace_conflict",
+            metaLastErrorMessage: msg.slice(0, 500),
+          });
+        }
+        return { success: false, error: msg, errorCode: "discovery_failed", wabaId: v4Assets.resolved.wabaId };
+      }
+
+      resolved = {
+        wabaId: v4Assets.resolved.wabaId,
+        phoneNumberId: v4Assets.resolved.phoneNumberId,
+        displayPhoneNumber: v4Assets.resolved.displayPhoneNumber,
+        verifiedName: v4Assets.resolved.verifiedName,
+      };
+      await mergeUserMetaOAuthDebug(row.userId, {
+        phase: "waba_selection",
+        ok: true,
+        phoneSelectionMethod: v4Assets.method,
+        selectedWabaId: resolved.wabaId,
+        selectedPhoneNumberId: resolved.phoneNumberId,
+        architecture,
+        errorCode: null,
+      });
+    } else {
     const fetched = await fetchUserWabaChoices(longToken);
     discoveryDiagnostics = fetched.diagnostics;
     let rawChoices = fetched.choices;
@@ -2175,6 +2311,9 @@ export async function completeEmbeddedSignupOAuth(params: {
       phase: "waba_discovery_summary",
       ok: true,
       diagnostics: discoveryDiagnostics,
+      discoveryMethod: "v2_me_businesses_enumeration",
+      usedMeBusinessesEnumeration: true,
+      architecture,
     });
 
     let usedSyntheticFallback = false;
@@ -2288,6 +2427,7 @@ export async function completeEmbeddedSignupOAuth(params: {
       wabaDiscoveryDetail: buildWabaDiscoveryDetailPayload(enrichedChoices),
       selectionPolicy: "auto_production_only_never_auto_test_or_unknown",
       coexistenceSyntheticFallback: usedSyntheticFallback,
+      errorCode: null,
     });
 
     const decision = decideEmbeddedSignupPhoneSelection(enrichedChoices);
@@ -2334,17 +2474,25 @@ export async function completeEmbeddedSignupOAuth(params: {
         phoneNumberId: resolved.phoneNumberId,
       }),
     });
+    } // end v2 discovery branch
   } catch (e: any) {
     const msg = e?.message || "Could not read WhatsApp account details from Meta.";
+    const missingPerm =
+      /missing permission/i.test(msg) || /\(#100\).*permission/i.test(msg);
+    const errorCode = missingPerm
+      ? ("waba_discovery_missing_permission" as const)
+      : ("discovery_failed" as const);
     if (protectSnap?.hadMetaConnection) {
       await restorePersistedMetaSnapshot(row.userId, protectSnap);
       await storage.updateUser(row.userId, {
         metaIntegrationStatus: "needs_attention",
+        metaLastErrorCode: errorCode,
         metaLastErrorMessage: `${msg} Your previous WhatsApp connection was preserved.`.slice(0, 500),
       });
     } else {
       await storage.updateUser(row.userId, {
         metaIntegrationStatus: "failed",
+        metaLastErrorCode: errorCode,
         metaLastErrorMessage: msg.slice(0, 500),
       });
     }
@@ -2352,11 +2500,15 @@ export async function completeEmbeddedSignupOAuth(params: {
       phase: "waba_discovery",
       ok: false,
       error: msg.slice(0, 500),
+      errorCode,
+      discoveryFailureCategory: errorCode,
+      failedEndpointHint: missingPerm ? "GET /me/businesses?fields=id,name" : null,
       discoveryDiagnosticsSnapshot: discoveryDiagnostics,
       connectivityRestored: !!protectSnap?.hadMetaConnection,
       architecture,
+      usedMeBusinessesEnumeration: architecture !== "v4",
     });
-    return { success: false, error: msg };
+    return { success: false, error: msg, errorCode };
   }
 
   let subscribed = false;
