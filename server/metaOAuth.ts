@@ -2,21 +2,188 @@ import { getMetaGraphApiBase, getMetaFacebookOAuthDialogBase } from "./metaGraph
 
 const GRAPH = () => getMetaGraphApiBase();
 
+/** Sanitized reason categories for Embedded Signup code exchange failures (never secrets). */
+export type MetaCodeExchangeFailureCategory =
+  | "invalid_code"
+  | "redirect_uri_mismatch"
+  | "app_credentials_mismatch"
+  | "unsupported_token_response"
+  | "long_lived_exchange_failed"
+  | "meta_temporary_failure"
+  | "unknown";
+
 export class MetaOAuthExchangeError extends Error {
   public readonly meta?: {
     code?: number;
     type?: string;
     subcode?: number;
     message?: string;
+    fbtraceId?: string;
   };
   public readonly httpStatus?: number;
+  public readonly failureCategory?: MetaCodeExchangeFailureCategory;
 
-  constructor(message: string, opts?: { meta?: MetaOAuthExchangeError["meta"]; httpStatus?: number }) {
+  constructor(
+    message: string,
+    opts?: {
+      meta?: MetaOAuthExchangeError["meta"];
+      httpStatus?: number;
+      failureCategory?: MetaCodeExchangeFailureCategory;
+    },
+  ) {
     super(message);
     this.name = "MetaOAuthExchangeError";
     this.meta = opts?.meta;
     this.httpStatus = opts?.httpStatus;
+    this.failureCategory = opts?.failureCategory;
   }
+}
+
+/**
+ * Classify Meta OAuth code-exchange failures without storing secrets.
+ * Subcode 36008 is the documented redirect_uri mismatch for verification codes.
+ */
+export function classifyMetaCodeExchangeFailure(params: {
+  httpStatus?: number;
+  meta?: {
+    code?: number;
+    type?: string;
+    subcode?: number;
+    message?: string;
+  } | null;
+}): MetaCodeExchangeFailureCategory {
+  const msg = String(params.meta?.message || "").toLowerCase();
+  const sub = params.meta?.subcode;
+  const code = params.meta?.code;
+  const status = params.httpStatus;
+
+  if (sub === 36008 || msg.includes("redirect_uri")) {
+    return "redirect_uri_mismatch";
+  }
+  if (
+    msg.includes("client secret") ||
+    msg.includes("app secret") ||
+    msg.includes("invalid client_id") ||
+    code === 101
+  ) {
+    return "app_credentials_mismatch";
+  }
+  if (
+    msg.includes("code has expired") ||
+    msg.includes("authorization code has expired") ||
+    msg.includes("invalid verification code") ||
+    msg.includes("validating verification code")
+  ) {
+    return "invalid_code";
+  }
+  if (status != null && status >= 500) {
+    return "meta_temporary_failure";
+  }
+  if (code === 1 || code === 2) {
+    return "meta_temporary_failure";
+  }
+  if (msg.includes("unsupported") || msg.includes("unexpected token")) {
+    return "unsupported_token_response";
+  }
+  return "unknown";
+}
+
+/**
+ * Build Graph OAuth code-exchange URL.
+ * Login for Business **system-user / Embedded Signup SDK** codes: omit redirect_uri
+ * (official Meta docs: client_id + client_secret + code only).
+ * Redirect OAuth and legacy user-token dialogs: include the exact redirect_uri from the dialog.
+ */
+export function buildWhatsappEmbeddedSignupCodeExchangeUrl(params: {
+  graphBase: string;
+  clientId: string;
+  clientSecret: string;
+  code: string;
+  includeRedirectUri: boolean;
+  redirectUri?: string | null;
+}): { url: string; redirectUriSent: boolean } {
+  let url =
+    `${params.graphBase}/oauth/access_token` +
+    `?client_id=${encodeURIComponent(params.clientId)}` +
+    `&client_secret=${encodeURIComponent(params.clientSecret)}` +
+    `&code=${encodeURIComponent(params.code)}`;
+  let redirectUriSent = false;
+  if (params.includeRedirectUri) {
+    const redirectUri = (params.redirectUri || "").trim();
+    if (!redirectUri) {
+      throw new Error("redirect_uri is required when includeRedirectUri is true");
+    }
+    url += `&redirect_uri=${encodeURIComponent(redirectUri)}`;
+    redirectUriSent = true;
+  }
+  return { url, redirectUriSent };
+}
+
+export type WhatsappEmbeddedSignupCodeExchangeResult = {
+  accessToken: string;
+  expiresIn: number | null;
+  tokenType: string | null;
+  redirectUriSent: boolean;
+  graphEndpoint: string;
+};
+
+/**
+ * Exchange an Embedded Signup authorization code for a business / system-user access token.
+ * Does not perform the user-token `fb_exchange_token` extension.
+ */
+export async function exchangeWhatsappEmbeddedSignupAuthorizationCode(params: {
+  code: string;
+  includeRedirectUri: boolean;
+  redirectUri?: string | null;
+}): Promise<WhatsappEmbeddedSignupCodeExchangeResult> {
+  const appId = process.env.META_APP_ID;
+  const appSecret = process.env.META_APP_SECRET;
+  if (!appId?.trim() || !appSecret?.trim()) {
+    throw new MetaOAuthExchangeError("META_APP_ID / META_APP_SECRET are not configured", {
+      failureCategory: "app_credentials_mismatch",
+      httpStatus: 500,
+    });
+  }
+  const graphBase = GRAPH();
+  const built = buildWhatsappEmbeddedSignupCodeExchangeUrl({
+    graphBase,
+    clientId: appId,
+    clientSecret: appSecret,
+    code: params.code,
+    includeRedirectUri: params.includeRedirectUri,
+    redirectUri: params.redirectUri,
+  });
+  const resp = await fetch(built.url);
+  const data = (await resp.json()) as any;
+  if (!resp.ok || !data.access_token) {
+    const err = data?.error ?? {};
+    const meta = {
+      code: typeof err?.code === "number" ? (err.code as number) : undefined,
+      type: typeof err?.type === "string" ? (err.type as string) : undefined,
+      subcode: typeof err?.error_subcode === "number" ? (err.error_subcode as number) : undefined,
+      message: typeof err?.message === "string" ? (err.message as string) : undefined,
+      fbtraceId: typeof err?.fbtrace_id === "string" ? (err.fbtrace_id as string) : undefined,
+    };
+    const failureCategory =
+      !data.access_token && resp.ok
+        ? ("unsupported_token_response" as const)
+        : classifyMetaCodeExchangeFailure({ httpStatus: resp.status, meta });
+    throw new MetaOAuthExchangeError(meta.message || "Failed to exchange code for access token", {
+      meta,
+      httpStatus: resp.status,
+      failureCategory,
+    });
+  }
+  const expiresIn =
+    typeof data.expires_in === "number" && data.expires_in > 0 ? (data.expires_in as number) : null;
+  const tokenType = typeof data.token_type === "string" ? (data.token_type as string) : null;
+  return {
+    accessToken: data.access_token as string,
+    expiresIn,
+    tokenType,
+    redirectUriSent: built.redirectUriSent,
+    graphEndpoint: `${graphBase}/oauth/access_token`,
+  };
 }
 
 // ── Facebook Messenger / Pages flow ──────────────────────────────────────────
@@ -106,30 +273,12 @@ export function buildMetaOAuthUrl(state: string, redirectUri: string, channel: "
 }
 
 export async function exchangeCodeForToken(code: string, redirectUri: string): Promise<string> {
-  const appId = process.env.META_APP_ID!;
-  const appSecret = process.env.META_APP_SECRET!;
-  const url =
-    `${GRAPH()}/oauth/access_token` +
-    `?client_id=${encodeURIComponent(appId)}` +
-    `&client_secret=${encodeURIComponent(appSecret)}` +
-    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-    `&code=${encodeURIComponent(code)}`;
-  const resp = await fetch(url);
-  const data = (await resp.json()) as any;
-  if (!resp.ok || !data.access_token) {
-    const err = data?.error ?? {};
-    const meta = {
-      code: typeof err?.code === "number" ? (err.code as number) : undefined,
-      type: typeof err?.type === "string" ? (err.type as string) : undefined,
-      subcode: typeof err?.error_subcode === "number" ? (err.error_subcode as number) : undefined,
-      message: typeof err?.message === "string" ? (err.message as string) : undefined,
-    };
-    throw new MetaOAuthExchangeError(meta.message || "Failed to exchange code for access token", {
-      meta,
-      httpStatus: resp.status,
-    });
-  }
-  return data.access_token as string;
+  const result = await exchangeWhatsappEmbeddedSignupAuthorizationCode({
+    code,
+    includeRedirectUri: true,
+    redirectUri,
+  });
+  return result.accessToken;
 }
 
 export async function exchangeForLongLivedToken(shortToken: string): Promise<string> {

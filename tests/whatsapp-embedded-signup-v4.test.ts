@@ -18,6 +18,10 @@ import {
   createEmbeddedSignupCompletionCoordinator,
   shouldAutoRedirectAfterSdkFailure,
 } from "../client/src/lib/whatsappEmbeddedSignupCompletion";
+import {
+  buildWhatsappEmbeddedSignupCodeExchangeUrl,
+  classifyMetaCodeExchangeFailure,
+} from "../server/metaOAuth";
 
 describe("architecture parsing", () => {
   it("accepts v2 and v4 only", () => {
@@ -446,5 +450,134 @@ describe("oauth state TTL + public v2 / coexistence invariants", () => {
     assert.match(hub, /Coming soon/);
     assert.doesNotMatch(hub, /featureType:\s*["']whatsapp_business_app_onboarding["']/);
     assert.match(hub, /shouldAutoRedirectAfterSdkFailure/);
+  });
+});
+
+describe("v4 authorization-code exchange contract", () => {
+  it("omits redirect_uri for v4 SDK exchange URL (Login for Business SUAT shape)", () => {
+    const built = buildWhatsappEmbeddedSignupCodeExchangeUrl({
+      graphBase: "https://graph.facebook.com/v21.0",
+      clientId: "810621184995059",
+      clientSecret: "test-secret",
+      code: "test-code",
+      includeRedirectUri: false,
+    });
+    assert.equal(built.redirectUriSent, false);
+    assert.match(built.url, /client_id=810621184995059/);
+    assert.match(built.url, /code=test-code/);
+    assert.doesNotMatch(built.url, /redirect_uri=/);
+  });
+
+  it("includes exact redirect_uri for v2 / redirect exchange (unchanged contract)", () => {
+    const built = buildWhatsappEmbeddedSignupCodeExchangeUrl({
+      graphBase: "https://graph.facebook.com/v21.0",
+      clientId: "810621184995059",
+      clientSecret: "test-secret",
+      code: "test-code",
+      includeRedirectUri: true,
+      redirectUri: "https://app.whachatcrm.com/api/integrations/whatsapp/meta/callback",
+    });
+    assert.equal(built.redirectUriSent, true);
+    assert.match(
+      built.url,
+      /redirect_uri=https%3A%2F%2Fapp\.whachatcrm\.com%2Fapi%2Fintegrations%2Fwhatsapp%2Fmeta%2Fcallback/,
+    );
+  });
+
+  it("classifies Meta 36008 as redirect_uri_mismatch and secret errors as app_credentials_mismatch", () => {
+    assert.equal(
+      classifyMetaCodeExchangeFailure({
+        httpStatus: 400,
+        meta: {
+          code: 100,
+          type: "OAuthException",
+          subcode: 36008,
+          message:
+            "Error validating verification code. Please make sure your redirect_uri is identical to the one you used in the OAuth dialog request",
+        },
+      }),
+      "redirect_uri_mismatch",
+    );
+    assert.equal(
+      classifyMetaCodeExchangeFailure({
+        httpStatus: 400,
+        meta: { code: 101, message: "Invalid client_id" },
+      }),
+      "app_credentials_mismatch",
+    );
+    assert.equal(
+      classifyMetaCodeExchangeFailure({
+        httpStatus: 400,
+        meta: { message: "Error validating client secret." },
+      }),
+      "app_credentials_mismatch",
+    );
+    assert.equal(
+      classifyMetaCodeExchangeFailure({
+        httpStatus: 400,
+        meta: { message: "This authorization code has expired." },
+      }),
+      "invalid_code",
+    );
+  });
+
+  it("v4 path skips incompatible long-lived user-token exchange; v2 keeps it", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.join(process.cwd(), "server/whatsappEmbeddedSignup.ts"),
+      "utf8",
+    );
+    assert.match(src, /omitRedirectUriForSdkV4/);
+    assert.match(src, /v4_business_integration_token_no_user_fb_exchange/);
+    assert.match(src, /exchangeForLongLivedUserToken/);
+    // Ensure v4 branch skips fb_exchange before the v2 else path.
+    const v4Idx = src.indexOf('architecture === "v4"');
+    const skipIdx = src.indexOf("v4_business_integration_token_no_user_fb_exchange");
+    const longLivedIdx = src.indexOf("exchangeForLongLivedUserToken(shortToken)");
+    assert.ok(v4Idx > 0 && skipIdx > v4Idx && longLivedIdx > skipIdx);
+  });
+
+  it("failed exchange stores no token / no partial connection markers in source", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.join(process.cwd(), "server/whatsappEmbeddedSignup.ts"),
+      "utf8",
+    );
+    // On code_exchange failure we return before connectUserMeta / discovery.
+    const failReturn = src.indexOf('errorCode: "code_exchange_failed"');
+    const connectCall = src.indexOf("connectUserMeta(row.userId");
+    assert.ok(failReturn > 0 && connectCall > failReturn);
+  });
+
+  it("complete-sdk remains exactly-once on the client coordinator", async () => {
+    let calls = 0;
+    const coordinator = createEmbeddedSignupCompletionCoordinator({
+      state: "state-ex",
+      architecture: "v4",
+      counterpartWaitMs: 5,
+      completeSdk: async () => {
+        calls += 1;
+        return {
+          ok: false,
+          error: "exchange failed",
+          errorCode: "code_exchange_failed",
+          httpStatus: 400,
+        };
+      },
+    });
+    coordinator.acceptSessionEvent({
+      type: "WA_EMBEDDED_SIGNUP",
+      event: "FINISH",
+      rawEvent: "FINISH",
+      wabaId: "961217696997428",
+      phoneNumberId: "1191517910720500",
+    });
+    coordinator.acceptAuthCode("code-once");
+    await coordinator.done;
+    coordinator.acceptAuthCode("code-twice");
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(calls, 1);
   });
 });

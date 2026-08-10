@@ -21,7 +21,7 @@ import { db } from "../drizzle/db";
 import { whatsappOauthStates } from "@shared/schema";
 import { storage } from "./storage";
 import { getMetaGraphApiBase, getMetaFacebookOAuthDialogBase, getMetaGraphVersionSegment } from "./metaGraphVersion";
-import { exchangeCodeForToken, exchangeForLongLivedUserToken, MetaOAuthExchangeError } from "./metaOAuth";
+import { exchangeForLongLivedUserToken, MetaOAuthExchangeError, exchangeWhatsappEmbeddedSignupAuthorizationCode, classifyMetaCodeExchangeFailure } from "./metaOAuth";
 import {
   connectUserMeta,
   type MetaCredentials,
@@ -1959,56 +1959,116 @@ export async function completeEmbeddedSignupOAuth(params: {
       : null,
   });
 
-  // IMPORTANT: exchange MUST use byte-for-byte redirect URI from the start of this OAuth state.
-  // (If row.redirectUri is null due to older rows, fall back to env but log that mismatch risk.)
+  // Code exchange:
+  // - Redirect OAuth (v2 fallback): MUST send the exact redirect_uri from the dialog.
+  // - SDK + architecture v4 (Login for Business config_id / system-user style): Meta docs use
+  //   client_id + client_secret + code only — do NOT send our callback redirect_uri (FB.login never used it).
+  // - SDK + v2: preserve production contract (include state redirect_uri).
   const redirectUri = row.redirectUri || getWhatsappMetaRedirectUri();
+  const omitRedirectUriForSdkV4 = tokenExchange === "sdk" && architecture === "v4";
   let shortToken: string;
+  let codeExchangeExpiresIn: number | null = null;
+  let codeExchangeAttemptCount = 0;
   try {
     console.log("[META EXCHANGE DEBUG]", {
       flow: tokenExchange,
-      redirectUriUsed: redirectUri,
-      redirectUriSource: row.redirectUri ? "state_row" : "env_fallback",
+      architecture,
+      redirectUriUsed: omitRedirectUriForSdkV4 ? null : redirectUri,
+      redirectUriOmitted: omitRedirectUriForSdkV4,
+      redirectUriSource: omitRedirectUriForSdkV4
+        ? "omitted_for_v4_sdk"
+        : row.redirectUri
+          ? "state_row"
+          : "env_fallback",
       graphApiVersion: getMetaGraphVersionSegment(),
       graphApiBase: getMetaGraphApiBase(),
+      appIdTail: (process.env.META_APP_ID || "").slice(-6) || null,
     });
-    shortToken = await exchangeCodeForToken(code, redirectUri);
+    codeExchangeAttemptCount += 1;
+    const exchangedCode = await exchangeWhatsappEmbeddedSignupAuthorizationCode({
+      code,
+      includeRedirectUri: !omitRedirectUriForSdkV4,
+      redirectUri: omitRedirectUriForSdkV4 ? null : redirectUri,
+    });
+    shortToken = exchangedCode.accessToken;
+    codeExchangeExpiresIn = exchangedCode.expiresIn;
     await mergeUserMetaOAuthDebug(row.userId, {
       phase: "code_exchange",
       ok: true,
-      redirectUriUsed: redirectUri,
-      redirectUriSource: row.redirectUri ? "state_row" : "env_fallback",
+      architecture,
+      flow: row.flow,
+      tokenExchange,
+      redirectUriUsed: exchangedCode.redirectUriSent ? redirectUri : null,
+      redirectUriSent: exchangedCode.redirectUriSent,
+      redirectUriSource: omitRedirectUriForSdkV4
+        ? "omitted_for_v4_sdk"
+        : row.redirectUri
+          ? "state_row"
+          : "env_fallback",
+      graphEndpoint: exchangedCode.graphEndpoint,
+      tokenType: exchangedCode.tokenType,
+      expiresInFromCodeExchange: exchangedCode.expiresIn,
+      codeExchangeAttemptCount,
     });
   } catch (e: any) {
     const ex = e as MetaOAuthExchangeError;
+    const failureCategory =
+      ex?.failureCategory ||
+      classifyMetaCodeExchangeFailure({
+        httpStatus: ex?.httpStatus,
+        meta: ex?.meta,
+      });
     console.warn("[WhatsApp Embedded Signup] code exchange failed", {
       message: (ex as any)?.message || String(e),
       meta_code: ex?.meta?.code,
       meta_type: ex?.meta?.type,
       meta_subcode: ex?.meta?.subcode,
       meta_message: ex?.meta?.message,
+      meta_fbtrace_id: ex?.meta?.fbtraceId,
       http_status: (ex as any)?.httpStatus,
+      failureCategory,
       tokenExchange,
-      redirectUriUsed: redirectUri,
+      architecture,
+      redirectUriUsed: omitRedirectUriForSdkV4 ? null : redirectUri,
+      redirectUriOmitted: omitRedirectUriForSdkV4,
+      codeExchangeAttemptCount,
     });
     await mergeUserMetaOAuthDebug(row.userId, {
       phase: "code_exchange",
       ok: false,
       error: "code_exchange_failed",
       errorCode: "code_exchange_failed",
-      meta: ex?.meta,
+      exchangeFailureCategory: failureCategory,
+      meta: ex?.meta
+        ? {
+            code: ex.meta.code ?? null,
+            type: ex.meta.type ?? null,
+            subcode: ex.meta.subcode ?? null,
+            message: ex.meta.message ?? null,
+            fbtraceId: ex.meta.fbtraceId ?? null,
+          }
+        : null,
       httpStatus: (ex as any)?.httpStatus,
-      redirectUriUsed: redirectUri,
-      redirectUriSource: row.redirectUri ? "state_row" : "env_fallback",
+      redirectUriUsed: omitRedirectUriForSdkV4 ? null : redirectUri,
+      redirectUriSent: !omitRedirectUriForSdkV4,
+      redirectUriSource: omitRedirectUriForSdkV4
+        ? "omitted_for_v4_sdk"
+        : row.redirectUri
+          ? "state_row"
+          : "env_fallback",
       architecture,
       flow: row.flow,
       codeCallbackReceived: true,
       sessionEventReceived: !!sessionEventSummary,
       completeSdkAttempted: true,
+      codeExchangeAttemptCount,
     });
     return {
       success: false,
       error:
-        "Could not exchange the authorization code with Meta (redirect URI or app settings may not match). Close the window and try again with Continue with Meta.",
+        failureCategory === "redirect_uri_mismatch"
+          ? "Meta rejected the authorization-code exchange (redirect URI mismatch for this signup method). Close Facebook windows and try Continue with Meta again."
+          : "Could not exchange the authorization code with Meta (redirect URI or app settings may not match). Close the window and try again with Continue with Meta.",
       errorCode: "code_exchange_failed",
     };
   }
@@ -2016,25 +2076,47 @@ export async function completeEmbeddedSignupOAuth(params: {
   let longToken: string;
   let tokenExpiresAt: Date | null = null;
   let longLivedOk = false;
-  try {
-    const exchanged = await exchangeForLongLivedUserToken(shortToken);
-    longToken = exchanged.accessToken;
-    tokenExpiresAt = exchanged.expiresAt;
-    longLivedOk = true;
-  } catch {
+  if (architecture === "v4") {
+    // v4 Login for Business returns a business-integration / system-user style token.
+    // Do not run the v2 user-token fb_exchange_token extension.
     longToken = shortToken;
-    await mergeUserMetaOAuthDebug(row.userId, {
-      phase: "long_lived_token",
-      ok: false,
-      note: "exchange_failed_using_short_lived_token",
-    });
-  }
-  if (longLivedOk) {
+    if (codeExchangeExpiresIn && codeExchangeExpiresIn > 0) {
+      tokenExpiresAt = new Date(Date.now() + codeExchangeExpiresIn * 1000);
+    }
     await mergeUserMetaOAuthDebug(row.userId, {
       phase: "long_lived_token",
       ok: true,
+      skipped: true,
+      reason: "v4_business_integration_token_no_user_fb_exchange",
+      expiresInFromCodeExchange: codeExchangeExpiresIn,
       tokenExpiresAt: tokenExpiresAt ? tokenExpiresAt.toISOString() : null,
+      architecture,
     });
+  } else {
+    try {
+      const exchanged = await exchangeForLongLivedUserToken(shortToken);
+      longToken = exchanged.accessToken;
+      tokenExpiresAt = exchanged.expiresAt;
+      longLivedOk = true;
+    } catch {
+      longToken = shortToken;
+      await mergeUserMetaOAuthDebug(row.userId, {
+        phase: "long_lived_token",
+        ok: false,
+        errorCode: "long_lived_exchange_failed",
+        exchangeFailureCategory: "long_lived_exchange_failed",
+        note: "exchange_failed_using_short_lived_token",
+        architecture,
+      });
+    }
+    if (longLivedOk) {
+      await mergeUserMetaOAuthDebug(row.userId, {
+        phase: "long_lived_token",
+        ok: true,
+        tokenExpiresAt: tokenExpiresAt ? tokenExpiresAt.toISOString() : null,
+        architecture,
+      });
+    }
   }
 
   try {
