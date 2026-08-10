@@ -48,7 +48,14 @@ import {
   type WhatsappEmbeddedSignupFlow,
 } from "@shared/whatsappEmbeddedSignupVersion";
 
-const STATE_TTL_MS = 15 * 60 * 1000;
+/**
+ * OAuth state TTL for Embedded Signup.
+ * Meta’s in-dialog WABA/phone creation often exceeds 15 minutes; a short TTL caused
+ * production v4 complete-sdk to fail with “expired or invalid” after a successful Finish.
+ * Auth codes remain ~30s TTL and are exchanged only at Finish — this TTL covers the dialog, not the code.
+ */
+export const WHATSAPP_OAUTH_STATE_TTL_MS = 60 * 60 * 1000;
+const STATE_TTL_MS = WHATSAPP_OAUTH_STATE_TTL_MS;
 
 /**
  * Exact SQL from `migrations/0006_whatsapp_embedded_signup.sql` — run in Neon SQL Editor
@@ -421,6 +428,7 @@ export async function startEmbeddedSignupSession(
     appIdTail: appId.slice(-6),
     configIdTail: configId.slice(-8),
     graphApiVersion,
+    stateTtlMs: STATE_TTL_MS,
     redirectUriHost: (() => {
       try {
         return new URL(redirectUri).host;
@@ -430,6 +438,20 @@ export async function startEmbeddedSignupSession(
     })(),
     appIdMatchesInstagramAppId: !!(igAppId && igAppId === appId),
     embeddedSignupEnabled: cfg.embeddedSignupEnabled,
+  });
+
+  // Persist architecture/flow immediately so diagnostics survive even if complete never runs.
+  await mergeUserMetaOAuthDebug(userId, {
+    phase: "session_start",
+    flow,
+    architecture,
+    architectureSelectionReason: selected.reason,
+    configEnv: envName,
+    configIdLast4: configIdLast4(configId),
+    stateTokenTail: stateToken.slice(-8),
+    codeCallbackReceived: false,
+    sessionEventReceived: false,
+    completeSdkAttempted: false,
   });
 
   const loginOptions =
@@ -1794,7 +1816,18 @@ export async function getWhatsappConnectionDebug(userId: string): Promise<Whatsa
 export type EmbeddedSignupOAuthResult =
   | { success: true; userId: string }
   | { success: true; needsWabaPick: true; state: string }
-  | { success: false; error: string };
+  | {
+      success: false;
+      error: string;
+      errorCode?:
+        | "oauth_state_expired"
+        | "architecture_mismatch"
+        | "phone_setup_incomplete"
+        | "no_valid_waba_or_phone"
+        | "code_exchange_failed"
+        | "discovery_failed";
+      wabaId?: string | null;
+    };
 
 function isPhoneRoutingReadyFromGraphSnapshot(data: any): boolean {
   const status = String(data?.status ?? "").toUpperCase();
@@ -1848,7 +1881,34 @@ export async function completeEmbeddedSignupOAuth(params: {
 
   const row = rows[0];
   if (!row || row.expiresAt < new Date()) {
-    return { success: false, error: "This signup link expired or is invalid. Please start again from Settings." };
+    if (initiatingUserId) {
+      await mergeUserMetaOAuthDebug(initiatingUserId, {
+        phase: "complete_sdk_state_missing_or_expired",
+        ok: false,
+        error: "oauth_state_expired_or_invalid",
+        errorCode: "oauth_state_expired",
+        architecture: expectedArchitecture || null,
+        flow: "embedded",
+        tokenExchange,
+        codeCallbackReceived: true,
+        sessionEventReceived: !!sessionEventSummary,
+        sessionEvent: sessionEventSummary
+          ? {
+              event: sessionEventSummary.event || null,
+              wabaId: sessionEventSummary.wabaId || null,
+              phoneNumberId: sessionEventSummary.phoneNumberId || null,
+            }
+          : null,
+        completeSdkAttempted: true,
+      });
+    }
+    return {
+      success: false,
+      error:
+        "This signup session expired before Meta finished (signup can take longer than expected). Close any Facebook windows and start again from Settings — do not use a second browser Login tab.",
+      errorCode: "oauth_state_expired",
+      wabaId: sessionEventSummary?.wabaId || null,
+    };
   }
 
   if (initiatingUserId && row.userId !== initiatingUserId) {
@@ -1865,12 +1925,19 @@ export async function completeEmbeddedSignupOAuth(params: {
     await mergeUserMetaOAuthDebug(row.userId, {
       phase: "architecture_mismatch",
       ok: false,
+      errorCode: "architecture_mismatch",
       expectedArchitecture,
       stateArchitecture: architecture,
+      architecture,
+      flow: row.flow,
+      codeCallbackReceived: true,
+      sessionEventReceived: !!sessionEventSummary,
+      completeSdkAttempted: true,
     });
     return {
       success: false,
       error: "Signup version mismatch. Close the window and start again from Settings.",
+      errorCode: "architecture_mismatch",
     };
   }
 
@@ -1879,7 +1946,10 @@ export async function completeEmbeddedSignupOAuth(params: {
     architecture,
     tokenExchange,
     phase: "started",
-    oauthState: state,
+    oauthStateTail: state.slice(-8),
+    codeCallbackReceived: true,
+    sessionEventReceived: !!sessionEventSummary,
+    completeSdkAttempted: true,
     sessionEvent: sessionEventSummary
       ? {
           event: sessionEventSummary.event || null,
@@ -1924,15 +1994,22 @@ export async function completeEmbeddedSignupOAuth(params: {
       phase: "code_exchange",
       ok: false,
       error: "code_exchange_failed",
+      errorCode: "code_exchange_failed",
       meta: ex?.meta,
       httpStatus: (ex as any)?.httpStatus,
       redirectUriUsed: redirectUri,
       redirectUriSource: row.redirectUri ? "state_row" : "env_fallback",
+      architecture,
+      flow: row.flow,
+      codeCallbackReceived: true,
+      sessionEventReceived: !!sessionEventSummary,
+      completeSdkAttempted: true,
     });
     return {
       success: false,
       error:
         "Could not exchange the authorization code with Meta (redirect URI or app settings may not match). Close the window and try again with Continue with Meta.",
+      errorCode: "code_exchange_failed",
     };
   }
 
@@ -2044,23 +2121,31 @@ export async function completeEmbeddedSignupOAuth(params: {
 
     if (totalPhones === 0) {
       let msg: string;
+      let errorCode: "phone_setup_incomplete" | "no_valid_waba_or_phone" = "no_valid_waba_or_phone";
       const isCoexistence = row.flow === "coexistence";
+      const sessionWabaId = sessionEventSummary?.wabaId?.trim() || null;
+      const sessionFinishOnlyWaba =
+        sessionEventSummary?.event === "FINISH_ONLY_WABA" ||
+        (sessionWabaId && !sessionEventSummary?.phoneNumberId);
+      const discoveredWabaOnly =
+        !!discoveryDiagnostics &&
+        discoveryDiagnostics.distinctWabaCount > 0 &&
+        discoveryDiagnostics.totalPhonesListed === 0;
+
       if (
         discoveryDiagnostics &&
         discoveryDiagnostics.distinctWabaCount === 0 &&
-        discoveryDiagnostics.businessesCount === 0
+        discoveryDiagnostics.businessesCount === 0 &&
+        !sessionWabaId
       ) {
         msg = isCoexistence
           ? "Meta returned no Businesses linked to this login. Confirm you used the coexistence Embedded Signup configuration and granted WhatsApp / Business scopes."
           : "Meta returned no Business Manager linked to this Facebook account. Create or join a Business Manager at business.facebook.com, then try again.";
-      } else if (
-        discoveryDiagnostics &&
-        discoveryDiagnostics.distinctWabaCount > 0 &&
-        discoveryDiagnostics.totalPhonesListed === 0
-      ) {
+      } else if (discoveredWabaOnly || sessionFinishOnlyWaba || sessionWabaId) {
+        errorCode = "phone_setup_incomplete";
         msg = isCoexistence
           ? "Meta lists your WhatsApp Business Account but returned no phone numbers from Graph (GET …/phone_numbers empty). This is often a discovery or permission gap; your number may still exist in Meta. Try again or use Option A."
-          : "Meta found your WhatsApp Business Account but no phone numbers yet. Add or verify a phone number in Meta Business Manager, wait a minute, then try again.";
+          : "WhatsApp Business Account was created, but phone setup is incomplete — no phone number ID is available yet. Finish adding/verifying the number in Meta Business Manager, then reconnect with Continue with Meta (do not start a second Facebook Login tab).";
       } else {
         msg = isCoexistence
           ? "WhatsApp discovery did not yield a selectable phone line. Confirm the number appears under your WABA in Meta Business Manager."
@@ -2076,23 +2161,40 @@ export async function completeEmbeddedSignupOAuth(params: {
         await restorePersistedMetaSnapshot(row.userId, protectSnap);
         await storage.updateUser(row.userId, {
           metaIntegrationStatus: "needs_attention",
+          metaLastErrorCode: errorCode,
           metaLastErrorMessage: recoverableMsg.slice(0, 500),
         });
       } else {
         await storage.updateUser(row.userId, {
-          metaIntegrationStatus: "failed",
+          metaConnected: false,
+          metaIntegrationStatus: errorCode === "phone_setup_incomplete" ? "needs_attention" : "failed",
+          metaLastErrorCode: errorCode,
           metaLastErrorMessage: msg.slice(0, 500),
         });
       }
+      const wabaFromDiscovery =
+        rawChoices.length > 0 ? sortIds(rawChoices.map((c) => c.wabaId)).find(Boolean) || null : null;
       await mergeUserMetaOAuthDebug(row.userId, {
         phase: "complete",
         ok: false,
-        error: usedSyntheticFallback ? "no_phone_after_fallback" : "no_valid_waba_or_phone",
+        error: usedSyntheticFallback ? "no_phone_after_fallback" : errorCode,
+        errorCode,
         discoveryDiagnostics,
         connectivityRestored: !!protectSnap?.hadMetaConnection,
         architecture,
+        flow: row.flow,
+        sessionWabaId,
+        wabaId: sessionWabaId || wabaFromDiscovery,
+        codeCallbackReceived: true,
+        sessionEventReceived: !!sessionEventSummary,
+        completeSdkAttempted: true,
       });
-      return { success: false, error: recoverableMsg.slice(0, 400) };
+      return {
+        success: false,
+        error: recoverableMsg.slice(0, 400),
+        errorCode,
+        wabaId: sessionWabaId || wabaFromDiscovery,
+      };
     }
 
     const enrichedChoices = enrichWabaPhoneChoices(rawChoices);

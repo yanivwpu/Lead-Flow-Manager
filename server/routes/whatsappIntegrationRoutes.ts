@@ -554,7 +554,12 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         sessionEventSummary: parsed.data.sessionEvent,
       });
       if (!result.success) {
-        return res.status(400).json({ success: false, error: result.error });
+        return res.status(400).json({
+          success: false,
+          error: result.error,
+          errorCode: result.errorCode || null,
+          wabaId: result.wabaId || null,
+        });
       }
       if ("needsWabaPick" in result && result.needsWabaPick) {
         return res.json({ success: true, needsWabaPick: true, state: result.state });
@@ -596,7 +601,12 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         sessionEventSummary: parsed.data.sessionEvent,
       });
       if (!result.success) {
-        return res.status(400).json({ success: false, error: result.error });
+        return res.status(400).json({
+          success: false,
+          error: result.error,
+          errorCode: result.errorCode || null,
+          wabaId: result.wabaId || null,
+        });
       }
       if ("needsWabaPick" in result && result.needsWabaPick) {
         return res.json({ success: true, needsWabaPick: true, state: result.state });
@@ -821,6 +831,16 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
           lastOAuthArchitecture:
             oauthDbg && typeof oauthDbg.architecture === "string" ? oauthDbg.architecture : null,
           lastOAuthFlow: oauthDbg && typeof oauthDbg.flow === "string" ? oauthDbg.flow : null,
+          lastOAuthPhase: oauthDbg && typeof oauthDbg.phase === "string" ? oauthDbg.phase : null,
+          lastOAuthErrorCode:
+            oauthDbg && typeof oauthDbg.errorCode === "string"
+              ? oauthDbg.errorCode
+              : oauthDbg && typeof oauthDbg.error === "string"
+                ? oauthDbg.error
+                : null,
+          codeCallbackReceived: oauthDbg?.codeCallbackReceived === true,
+          sessionEventReceived: oauthDbg?.sessionEventReceived === true,
+          completeSdkAttempted: oauthDbg?.completeSdkAttempted === true,
           allowlistConfigured: readEmbeddedSignupV4GateFromEnv().allowlistUserIds.length > 0,
         },
         inboundRouting,

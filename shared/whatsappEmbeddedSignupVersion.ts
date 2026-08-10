@@ -127,24 +127,15 @@ export function parseEmbeddedSignupSessionMessageData(
 
   const nested =
     obj.data && typeof obj.data === "object" ? (obj.data as Record<string, unknown>) : {};
-  const wabaId =
-    typeof nested.waba_id === "string"
-      ? nested.waba_id
-      : typeof nested.wabaId === "string"
-        ? nested.wabaId
-        : undefined;
-  const phoneNumberId =
-    typeof nested.phone_number_id === "string"
-      ? nested.phone_number_id
-      : typeof nested.phoneNumberId === "string"
-        ? nested.phoneNumberId
-        : undefined;
-  const businessId =
-    typeof nested.business_id === "string"
-      ? nested.business_id
-      : typeof nested.businessId === "string"
-        ? nested.businessId
-        : undefined;
+  /** Meta may send WABA/phone IDs as strings or numbers — normalize without inventing values. */
+  const asMetaId = (value: unknown): string | undefined => {
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+    return undefined;
+  };
+  const wabaId = asMetaId(nested.waba_id) ?? asMetaId(nested.wabaId);
+  const phoneNumberId = asMetaId(nested.phone_number_id) ?? asMetaId(nested.phoneNumberId);
+  const businessId = asMetaId(nested.business_id) ?? asMetaId(nested.businessId);
 
   return {
     type: "WA_EMBEDDED_SIGNUP",

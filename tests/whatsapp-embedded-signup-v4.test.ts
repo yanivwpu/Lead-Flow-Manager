@@ -14,6 +14,10 @@ import {
   resolveEmbeddedSignupConfigIdFromEnv,
   selectEmbeddedSignupArchitecture,
 } from "../shared/whatsappEmbeddedSignupVersion";
+import {
+  createEmbeddedSignupCompletionCoordinator,
+  shouldAutoRedirectAfterSdkFailure,
+} from "../client/src/lib/whatsappEmbeddedSignupCompletion";
 
 describe("architecture parsing", () => {
   it("accepts v2 and v4 only", () => {
@@ -221,5 +225,226 @@ describe("session message origin + payload validation", () => {
       })?.event,
       "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING",
     );
+  });
+
+  it("parses FINISH_ONLY_WABA and numeric Meta IDs without inventing a phone", () => {
+    const wabaOnly = parseEmbeddedSignupSessionMessageData({
+      type: "WA_EMBEDDED_SIGNUP",
+      event: "FINISH_ONLY_WABA",
+      data: { waba_id: 9988776655 },
+    });
+    assert.equal(wabaOnly?.event, "FINISH_ONLY_WABA");
+    assert.equal(wabaOnly?.wabaId, "9988776655");
+    assert.equal(wabaOnly?.phoneNumberId, undefined);
+  });
+});
+
+describe("completion coordinator ordering + single complete-sdk", () => {
+  it("calls complete-sdk once when code arrives before finish event", async () => {
+    let calls = 0;
+    const coordinator = createEmbeddedSignupCompletionCoordinator({
+      state: "state-1",
+      architecture: "v4",
+      counterpartWaitMs: 30,
+      completeSdk: async (payload) => {
+        calls += 1;
+        assert.equal(payload.code, "code-a");
+        assert.equal(payload.sessionEvent?.event, "FINISH");
+        assert.equal(payload.sessionEvent?.wabaId, "w1");
+        assert.equal(payload.sessionEvent?.phoneNumberId, "p1");
+        return { ok: true };
+      },
+    });
+
+    coordinator.acceptAuthCode("code-a");
+    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(calls, 0);
+    coordinator.acceptSessionEvent({
+      type: "WA_EMBEDDED_SIGNUP",
+      event: "FINISH",
+      rawEvent: "FINISH",
+      wabaId: "w1",
+      phoneNumberId: "p1",
+    });
+    const result = await coordinator.done;
+    assert.equal(result.ok, true);
+    assert.equal(calls, 1);
+    // Second accept must not re-fire
+    coordinator.acceptAuthCode("code-b");
+    coordinator.acceptSessionEvent({
+      type: "WA_EMBEDDED_SIGNUP",
+      event: "FINISH",
+      rawEvent: "FINISH",
+      wabaId: "w2",
+    });
+    await new Promise((r) => setTimeout(r, 40));
+    assert.equal(calls, 1);
+  });
+
+  it("calls complete-sdk once when finish event arrives before code", async () => {
+    let calls = 0;
+    const coordinator = createEmbeddedSignupCompletionCoordinator({
+      state: "state-2",
+      architecture: "v4",
+      counterpartWaitMs: 30,
+      completeSdk: async (payload) => {
+        calls += 1;
+        assert.equal(payload.code, "code-z");
+        assert.equal(payload.sessionEvent?.event, "FINISH_ONLY_WABA");
+        assert.equal(payload.sessionEvent?.phoneNumberId, undefined);
+        return {
+          ok: false,
+          error: "phone incomplete",
+          errorCode: "phone_setup_incomplete",
+          wabaId: "waba-only",
+          httpStatus: 400,
+        };
+      },
+    });
+
+    coordinator.acceptSessionEvent({
+      type: "WA_EMBEDDED_SIGNUP",
+      event: "FINISH_ONLY_WABA",
+      rawEvent: "FINISH_ONLY_WABA",
+      wabaId: "waba-only",
+    });
+    assert.equal(calls, 0);
+    coordinator.acceptAuthCode("code-z");
+    const result = await coordinator.done;
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.errorCode, "phone_setup_incomplete");
+    assert.equal(calls, 1);
+  });
+
+  it("completes with code alone after brief wait when session event is missing", async () => {
+    let calls = 0;
+    const coordinator = createEmbeddedSignupCompletionCoordinator({
+      state: "state-3",
+      architecture: "v2",
+      counterpartWaitMs: 20,
+      completeSdk: async (payload) => {
+        calls += 1;
+        assert.equal(payload.code, "code-solo");
+        assert.equal(payload.sessionEvent, undefined);
+        return { ok: true };
+      },
+    });
+    coordinator.acceptAuthCode("code-solo");
+    const result = await coordinator.done;
+    assert.equal(result.ok, true);
+    assert.equal(calls, 1);
+  });
+});
+
+describe("redirect fallback policy after SDK signup", () => {
+  it("never redirects for v4, after FB.login, finish, or complete-sdk attempt", () => {
+    assert.equal(
+      shouldAutoRedirectAfterSdkFailure({
+        architecture: "v4",
+        fbLoginInvoked: false,
+        finishEventSeen: false,
+        completeSdkAttempted: false,
+      }),
+      false,
+    );
+    assert.equal(
+      shouldAutoRedirectAfterSdkFailure({
+        architecture: "v2",
+        fbLoginInvoked: true,
+        finishEventSeen: false,
+        completeSdkAttempted: false,
+      }),
+      false,
+    );
+    assert.equal(
+      shouldAutoRedirectAfterSdkFailure({
+        architecture: "v2",
+        fbLoginInvoked: false,
+        finishEventSeen: true,
+        completeSdkAttempted: false,
+      }),
+      false,
+    );
+    assert.equal(
+      shouldAutoRedirectAfterSdkFailure({
+        architecture: "v2",
+        fbLoginInvoked: false,
+        finishEventSeen: false,
+        completeSdkAttempted: true,
+      }),
+      false,
+    );
+  });
+
+  it("allows redirect only for early public v2 pre-login failures", () => {
+    assert.equal(
+      shouldAutoRedirectAfterSdkFailure({
+        architecture: "v2",
+        fbLoginInvoked: false,
+        finishEventSeen: false,
+        completeSdkAttempted: false,
+      }),
+      true,
+    );
+  });
+});
+
+describe("oauth state TTL + public v2 / coexistence invariants", () => {
+  it("keeps oauth state TTL long enough for Meta dialog completion", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.join(process.cwd(), "server/whatsappEmbeddedSignup.ts"),
+      "utf8",
+    );
+    assert.match(src, /WHATSAPP_OAUTH_STATE_TTL_MS\s*=\s*60\s*\*\s*60\s*\*\s*1000/);
+    assert.doesNotMatch(src, /const STATE_TTL_MS = 15 \* 60 \* 1000/);
+  });
+
+  it("records architecture on session_start and expired complete-sdk diagnostics", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.join(process.cwd(), "server/whatsappEmbeddedSignup.ts"),
+      "utf8",
+    );
+    assert.match(src, /phase:\s*"session_start"/);
+    assert.match(src, /complete_sdk_state_missing_or_expired/);
+    assert.match(src, /phone_setup_incomplete/);
+    assert.match(src, /codeCallbackReceived:\s*true/);
+  });
+
+  it("failed v4 completion preserves prior connection (protect snap)", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const src = await fs.readFile(
+      path.join(process.cwd(), "server/whatsappEmbeddedSignup.ts"),
+      "utf8",
+    );
+    assert.match(src, /v4ProtectSnap/);
+    assert.match(src, /restorePersistedMetaSnapshot/);
+  });
+
+  it("public v2 login options remain unchanged (sessionInfoVersion 2, no coexistence featureType)", () => {
+    const opts = buildStandardEmbeddedSignupLoginOptions({
+      architecture: "v2",
+      configId: "prod-v2",
+    });
+    assert.equal((opts.extras as any).sessionInfoVersion, "2");
+    assert.equal((opts.extras as any).feature, "whatsapp_embedded_signup");
+    assert.equal((opts.extras as any).featureType, undefined);
+  });
+
+  it("coexistence remains disabled in ConnectWhatsAppHub source", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const hub = await fs.readFile(
+      path.join(process.cwd(), "client/src/components/ConnectWhatsAppHub.tsx"),
+      "utf8",
+    );
+    assert.match(hub, /disabled=\{true\}/);
+    assert.match(hub, /Coming soon/);
+    assert.doesNotMatch(hub, /featureType:\s*["']whatsapp_business_app_onboarding["']/);
+    assert.match(hub, /shouldAutoRedirectAfterSdkFailure/);
   });
 });
