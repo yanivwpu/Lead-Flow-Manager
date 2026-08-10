@@ -25,6 +25,16 @@ export const INBOX_CHANNEL_HEALTH_LABELS: Record<InboxChannelHealthKey, string> 
   email: "Email",
 };
 
+/** Compact bar labels — one row on desktop/tablet; full names stay in tooltips / aria. */
+export const INBOX_CHANNEL_HEALTH_SHORT_LABELS: Record<InboxChannelHealthKey, string> = {
+  whatsapp: "WA",
+  facebook: "FB",
+  instagram: "IG",
+  telegram: "TG",
+  tiktok: "TT",
+  email: "Mail",
+};
+
 export type InboxChannelHealthLike = {
   channel: string;
   isConnected: boolean;
