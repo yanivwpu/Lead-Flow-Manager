@@ -1,12 +1,15 @@
 /**
  * Meta WhatsApp Embedded Signup + coexistence OAuth completion.
  * @see https://developers.facebook.com/docs/whatsapp/embedded-signup/overview
+ * @see https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/versions
+ * @see https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/version-4
  * @see https://developers.facebook.com/docs/whatsapp/embedded-signup/onboarding-business-app-users
  *
- * Production flow: Embedded Signup **v4** uses the JS SDK (`FB.login`) with `config_id`,
- * `response_type: code`, `override_default_response_type: true`, and `extras: { setup: {} }`,
- * then exchanges `authResponse.code` on the server immediately (TTL ~30s).
- * Redirect OAuth with `config_id` remains supported as a fallback (same token exchange).
+ * Production public path: Embedded Signup **architecture v2** via JS SDK (`FB.login`) with
+ * `META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID`, `response_type: code`, and v2 extras.
+ * Internal gated path: architecture **v4** uses a dedicated `META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID`
+ * (new Login for Business configuration) with purposely empty extras per Meta Versions docs.
+ * Redirect OAuth remains a v2-safe fallback (same token exchange).
  *
  * Webhook **fields** (messages, message statuses, etc.) are subscribed at the WhatsApp Business Account
  * via `POST /{waba-id}/subscribed_apps`; ensure your Meta App Dashboard WhatsApp product webhooks
@@ -34,6 +37,16 @@ import {
   deriveWhatsappConnectedReason,
   type WhatsappConnectedReason,
 } from "./whatsappService";
+import {
+  buildStandardEmbeddedSignupLoginOptions,
+  configIdLast4,
+  parseWhatsappEmbeddedSignupArchitecture,
+  readEmbeddedSignupV4GateFromEnv,
+  resolveEmbeddedSignupConfigIdFromEnv,
+  selectEmbeddedSignupArchitecture,
+  type WhatsappEmbeddedSignupArchitecture,
+  type WhatsappEmbeddedSignupFlow,
+} from "@shared/whatsappEmbeddedSignupVersion";
 
 const STATE_TTL_MS = 15 * 60 * 1000;
 
@@ -124,14 +137,26 @@ export interface WhatsappMetaPublicConfig {
   coexistenceEnabled: boolean;
   /** Optional legacy flag — coexistence no longer requires this when coexistence config ID is set. */
   coexistenceFeatureFlagSet: boolean;
+  /** Server flag WHATSAPP_EMBEDDED_SIGNUP_V4_ENABLED (does not alone unlock v4 for a user). */
+  embeddedSignupV4FlagEnabled: boolean;
+  /** Whether META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID is set. */
+  embeddedSignupV4ConfigConfigured: boolean;
+  /** Env ready for v4 (flag + config). Explicit user-ID allowlist still required to launch v4. */
+  embeddedSignupV4EnvReady: boolean;
   metaConfigured: boolean;
   /** Safe client-only fields */
   appId: string | null;
   graphApiVersion: string;
   redirectUri: string;
   embeddedSignupConfigId: string | null;
+  /** Last 4 of v2 config only — never full secret. */
+  embeddedSignupConfigIdLast4: string | null;
+  /** Present when configured — client may need it only after server selects v4 for the session. */
+  embeddedSignupV4ConfigId: string | null;
+  embeddedSignupV4ConfigIdLast4: string | null;
   /** Raw env value when present — same ID must exist as a dedicated coexistence Embedded Signup config in Meta. */
   coexistenceConfigId: string | null;
+  coexistenceConfigIdLast4: string | null;
   missingEnvHints: string[];
 }
 
@@ -218,6 +243,9 @@ export function getWhatsappMetaPublicConfig(): WhatsappMetaPublicConfig {
   /** Coexistence onboarding is available whenever the dedicated coexistence config ID exists and base Embedded Signup is enabled. */
   const coexistenceEnabled = embeddedSignupEnabled && !!coexistenceConfigOnly;
 
+  const v4Gate = readEmbeddedSignupV4GateFromEnv();
+  const embeddedV2Config = process.env.META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID?.trim() || null;
+
   const graphRaw = process.env.META_GRAPH_API_VERSION || "v21.0";
   const metaAppId = process.env.META_APP_ID?.trim() || null;
   const igAppId = process.env.INSTAGRAM_APP_ID?.trim() || null;
@@ -228,12 +256,19 @@ export function getWhatsappMetaPublicConfig(): WhatsappMetaPublicConfig {
     embeddedSignupEnabled,
     coexistenceEnabled,
     coexistenceFeatureFlagSet: coexistenceFlag,
+    embeddedSignupV4FlagEnabled: v4Gate.flagEnabled,
+    embeddedSignupV4ConfigConfigured: v4Gate.v4ConfigIdConfigured,
+    embeddedSignupV4EnvReady: v4Gate.flagEnabled && v4Gate.v4ConfigIdConfigured,
     metaConfigured: !!(process.env.META_APP_ID && process.env.META_APP_SECRET),
     appId: process.env.META_APP_ID || null,
     graphApiVersion: graphRaw.startsWith("v") ? graphRaw : `v${graphRaw}`,
     redirectUri: getWhatsappMetaRedirectUri(),
-    embeddedSignupConfigId: process.env.META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID?.trim() || null,
+    embeddedSignupConfigId: embeddedV2Config,
+    embeddedSignupConfigIdLast4: configIdLast4(embeddedV2Config),
+    embeddedSignupV4ConfigId: v4Gate.v4ConfigId,
+    embeddedSignupV4ConfigIdLast4: configIdLast4(v4Gate.v4ConfigId),
     coexistenceConfigId: coexistenceConfigOnly,
+    coexistenceConfigIdLast4: configIdLast4(coexistenceConfigOnly),
     missingEnvHints,
   };
 }
@@ -253,29 +288,25 @@ async function cleanupExpiredStates(): Promise<void> {
   }
 }
 
-/** Resolve Embedded Signup configuration ID — coexistence never falls back to the main config. */
-export function resolveEmbeddedSignupConfigId(flow: "embedded" | "coexistence"): string {
-  if (flow === "coexistence") {
-    const c = process.env.META_WHATSAPP_COEXISTENCE_CONFIG_ID?.trim();
-    if (!c) {
-      throw new Error(
-        "META_WHATSAPP_COEXISTENCE_CONFIG_ID is required for coexistence — create a separate Embedded Signup configuration in Meta and set this env var."
-      );
-    }
-    return c;
-  }
-  const e = process.env.META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID?.trim();
-  if (!e) throw new Error("META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID is not configured.");
-  return e;
+/** Resolve Embedded Signup configuration ID — v2 / v4 / coexistence never silently swap. */
+export function resolveEmbeddedSignupConfigId(
+  flow: WhatsappEmbeddedSignupFlow,
+  architecture: WhatsappEmbeddedSignupArchitecture = "v2",
+): string {
+  return resolveEmbeddedSignupConfigIdFromEnv(flow, architecture).configId;
 }
 
 /** Build Meta OAuth URL with Embedded Signup config_id (redirect fallback; same params as SDK dialog). */
-export function buildEmbeddedSignupAuthUrl(stateToken: string, flow: "embedded" | "coexistence"): string {
+export function buildEmbeddedSignupAuthUrl(
+  stateToken: string,
+  flow: WhatsappEmbeddedSignupFlow,
+  architecture: WhatsappEmbeddedSignupArchitecture = "v2",
+): string {
   const appId = process.env.META_APP_ID;
   if (!appId) throw new Error("META_APP_ID is not configured");
 
   const redirectUri = getWhatsappMetaRedirectUri();
-  const configId = resolveEmbeddedSignupConfigId(flow);
+  const configId = resolveEmbeddedSignupConfigId(flow, architecture);
 
   const dialogBase = getMetaFacebookOAuthDialogBase();
 
@@ -296,6 +327,11 @@ export interface EmbeddedSignupSdkPayload {
   appId: string;
   graphApiVersion: string;
   configId: string;
+  /** Server-selected architecture bound to this OAuth state. */
+  architecture: WhatsappEmbeddedSignupArchitecture;
+  /** FB.login options for the selected architecture (standard embedded only). */
+  loginOptions: ReturnType<typeof buildStandardEmbeddedSignupLoginOptions>;
+  configIdLast4: string | null;
 }
 
 export interface EmbeddedSignupStartResult {
@@ -303,12 +339,19 @@ export interface EmbeddedSignupStartResult {
   authUrl: string;
   /** Same string as META_WHATSAPP_REDIRECT_URI — must match FB.login and Graph code exchange. */
   redirectUri: string;
+  flow: WhatsappEmbeddedSignupFlow;
+  architecture: WhatsappEmbeddedSignupArchitecture;
+  architectureSelectionReason: string;
   sdk: EmbeddedSignupSdkPayload;
 }
 
 export async function startEmbeddedSignupSession(
   userId: string,
-  flow: "embedded" | "coexistence"
+  flow: WhatsappEmbeddedSignupFlow,
+  options?: {
+    /** Force architecture (server policy). Redirect fallback always forces v2. */
+    architecture?: WhatsappEmbeddedSignupArchitecture;
+  },
 ): Promise<EmbeddedSignupStartResult> {
   const cfg = getWhatsappMetaPublicConfig();
   if (flow === "embedded" && !cfg.embeddedSignupEnabled) {
@@ -316,8 +359,26 @@ export async function startEmbeddedSignupSession(
   }
   if (flow === "coexistence" && !cfg.coexistenceEnabled) {
     throw new Error(
-      "WhatsApp coexistence onboarding is not enabled — set META_WHATSAPP_COEXISTENCE_CONFIG_ID (dedicated coexistence Embedded Signup configuration in Meta) and ensure WHATSAPP_EMBEDDED_SIGNUP_ENABLED + META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID are configured."
+      "WhatsApp coexistence onboarding is not enabled — set META_WHATSAPP_COEXISTENCE_CONFIG_ID (dedicated coexistence Embedded Signup configuration in Meta) and ensure WHATSAPP_EMBEDDED_SIGNUP_ENABLED + META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID are configured.",
     );
+  }
+
+  const selected =
+    options?.architecture != null
+      ? {
+          architecture: options.architecture,
+          reason: "caller_forced_architecture",
+          v4EnvReady: cfg.embeddedSignupV4EnvReady,
+          userAuthorizedForV4: true,
+        }
+      : selectEmbeddedSignupArchitecture({
+          flow,
+          userId,
+        });
+
+  const architecture = selected.architecture;
+  if (architecture === "v4" && flow !== "embedded") {
+    throw new Error("Embedded Signup architecture v4 is only valid for the standard embedded flow.");
   }
 
   await cleanupExpiredStates();
@@ -330,11 +391,12 @@ export async function startEmbeddedSignupSession(
     userId,
     stateToken,
     flow,
+    architectureVersion: architecture,
     redirectUri,
     expiresAt,
   });
 
-  const configId = resolveEmbeddedSignupConfigId(flow);
+  const { configId, envName } = resolveEmbeddedSignupConfigIdFromEnv(flow, architecture);
   if (flow === "coexistence") {
     logCoexistenceDiagnostic({
       phase: "session_start_redirect",
@@ -352,6 +414,9 @@ export async function startEmbeddedSignupSession(
   console.log("[WhatsApp Embedded Signup] session_start", {
     userId,
     flow,
+    architecture,
+    architectureSelectionReason: selected.reason,
+    configEnv: envName,
     appIdSource: "META_APP_ID",
     appIdTail: appId.slice(-6),
     configIdTail: configId.slice(-8),
@@ -367,15 +432,26 @@ export async function startEmbeddedSignupSession(
     embeddedSignupEnabled: cfg.embeddedSignupEnabled,
   });
 
-  const authUrl = buildEmbeddedSignupAuthUrl(stateToken, flow);
+  const loginOptions =
+    flow === "embedded"
+      ? buildStandardEmbeddedSignupLoginOptions({ architecture, configId })
+      : buildStandardEmbeddedSignupLoginOptions({ architecture: "v2", configId });
+
+  const authUrl = buildEmbeddedSignupAuthUrl(stateToken, flow, architecture);
   return {
     state: stateToken,
     authUrl,
     redirectUri,
+    flow,
+    architecture,
+    architectureSelectionReason: selected.reason,
     sdk: {
       appId,
       graphApiVersion,
       configId,
+      architecture,
+      loginOptions,
+      configIdLast4: configIdLast4(configId),
     },
   };
 }
@@ -1748,8 +1824,19 @@ export async function completeEmbeddedSignupOAuth(params: {
   initiatingUserId?: string;
   /** `sdk` = POST complete-sdk; `redirect` = GET meta/callback — same redirect_uri / exchange for both. */
   tokenExchange: "sdk" | "redirect";
+  /**
+   * Optional client-reported architecture from the launch response.
+   * Must match the OAuth state when provided (prevents client/server mismatch).
+   */
+  expectedArchitecture?: WhatsappEmbeddedSignupArchitecture;
+  /** Safe session-event summary only (no tokens). Merged into oauth debug. */
+  sessionEventSummary?: {
+    event?: string;
+    wabaId?: string;
+    phoneNumberId?: string;
+  };
 }): Promise<EmbeddedSignupOAuthResult> {
-  const { code, state, initiatingUserId, tokenExchange } = params;
+  const { code, state, initiatingUserId, tokenExchange, expectedArchitecture, sessionEventSummary } = params;
 
   await cleanupExpiredStates();
 
@@ -1771,11 +1858,35 @@ export async function completeEmbeddedSignupOAuth(params: {
     };
   }
 
+  const architecture =
+    parseWhatsappEmbeddedSignupArchitecture(row.architectureVersion) || ("v2" as const);
+
+  if (expectedArchitecture && expectedArchitecture !== architecture) {
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "architecture_mismatch",
+      ok: false,
+      expectedArchitecture,
+      stateArchitecture: architecture,
+    });
+    return {
+      success: false,
+      error: "Signup version mismatch. Close the window and start again from Settings.",
+    };
+  }
+
   await mergeUserMetaOAuthDebug(row.userId, {
     flow: row.flow,
+    architecture,
     tokenExchange,
     phase: "started",
     oauthState: state,
+    sessionEvent: sessionEventSummary
+      ? {
+          event: sessionEventSummary.event || null,
+          wabaId: sessionEventSummary.wabaId || null,
+          phoneNumberId: sessionEventSummary.phoneNumberId || null,
+        }
+      : null,
   });
 
   // IMPORTANT: exchange MUST use byte-for-byte redirect URI from the start of this OAuth state.
@@ -1858,9 +1969,16 @@ export async function completeEmbeddedSignupOAuth(params: {
 
   const coexistenceRestoreSnap =
     row.flow === "coexistence" ? await capturePersistedMetaSnapshot(row.userId) : null;
+  /** Internal v4 tests must not wipe an existing working Meta connection on failure. */
+  const v4ProtectSnap =
+    row.flow === "embedded" && architecture === "v4"
+      ? await capturePersistedMetaSnapshot(row.userId)
+      : null;
+  const protectSnap = coexistenceRestoreSnap || v4ProtectSnap;
+
   if (row.flow === "coexistence") {
     try {
-      const cfgIdResolved = resolveEmbeddedSignupConfigId("coexistence");
+      const cfgIdResolved = resolveEmbeddedSignupConfigId("coexistence", "v2");
       logCoexistenceDiagnostic({
         phase: "coexistence_oauth_post_token",
         userId: row.userId,
@@ -1950,12 +2068,12 @@ export async function completeEmbeddedSignupOAuth(params: {
       }
 
       const recoverableMsg =
-        row.flow === "coexistence" && coexistenceRestoreSnap?.hadMetaConnection
+        protectSnap?.hadMetaConnection
           ? `${msg} Your previous WhatsApp connection was preserved; see Settings → WhatsApp for details.`
           : msg;
 
-      if (row.flow === "coexistence" && coexistenceRestoreSnap?.hadMetaConnection) {
-        await restorePersistedMetaSnapshot(row.userId, coexistenceRestoreSnap);
+      if (protectSnap?.hadMetaConnection) {
+        await restorePersistedMetaSnapshot(row.userId, protectSnap);
         await storage.updateUser(row.userId, {
           metaIntegrationStatus: "needs_attention",
           metaLastErrorMessage: recoverableMsg.slice(0, 500),
@@ -1971,7 +2089,8 @@ export async function completeEmbeddedSignupOAuth(params: {
         ok: false,
         error: usedSyntheticFallback ? "no_phone_after_fallback" : "no_valid_waba_or_phone",
         discoveryDiagnostics,
-        connectivityRestored: row.flow === "coexistence" && !!coexistenceRestoreSnap?.hadMetaConnection,
+        connectivityRestored: !!protectSnap?.hadMetaConnection,
+        architecture,
       });
       return { success: false, error: recoverableMsg.slice(0, 400) };
     }
@@ -2033,8 +2152,8 @@ export async function completeEmbeddedSignupOAuth(params: {
     });
   } catch (e: any) {
     const msg = e?.message || "Could not read WhatsApp account details from Meta.";
-    if (row.flow === "coexistence" && coexistenceRestoreSnap?.hadMetaConnection) {
-      await restorePersistedMetaSnapshot(row.userId, coexistenceRestoreSnap);
+    if (protectSnap?.hadMetaConnection) {
+      await restorePersistedMetaSnapshot(row.userId, protectSnap);
       await storage.updateUser(row.userId, {
         metaIntegrationStatus: "needs_attention",
         metaLastErrorMessage: `${msg} Your previous WhatsApp connection was preserved.`.slice(0, 500),
@@ -2050,7 +2169,8 @@ export async function completeEmbeddedSignupOAuth(params: {
       ok: false,
       error: msg.slice(0, 500),
       discoveryDiagnosticsSnapshot: discoveryDiagnostics,
-      coexistenceConnectivityRestored: row.flow === "coexistence" && !!coexistenceRestoreSnap?.hadMetaConnection,
+      connectivityRestored: !!protectSnap?.hadMetaConnection,
+      architecture,
     });
     return { success: false, error: msg };
   }

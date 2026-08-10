@@ -267,8 +267,13 @@ export const whatsappOauthStates = pgTable("whatsapp_oauth_states", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   stateToken: text("state_token").notNull().unique(),
-  /** embedded | coexistence */
+  /** embedded | coexistence — signup purpose (not ES architecture version). */
   flow: text("flow").notNull(),
+  /**
+   * Embedded Signup architecture: v2 (production default) | v4 (internal gated).
+   * Distinct from Graph API version and sessionInfoVersion.
+   */
+  architectureVersion: text("architecture_version").notNull().default("v2"),
   /**
    * The exact redirect URI string that was used when starting the OAuth dialog.
    * This must be re-used byte-for-byte for the token exchange.

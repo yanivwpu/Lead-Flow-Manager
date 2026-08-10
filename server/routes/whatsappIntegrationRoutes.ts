@@ -33,6 +33,11 @@ import { getMetaAccessToken, fetchMetaWhatsAppPhoneNumberGraphSnapshotVerbose } 
 import { db } from "../../drizzle/db";
 import { whatsappOauthStates } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import {
+  configIdLast4,
+  parseWhatsappEmbeddedSignupArchitecture,
+  readEmbeddedSignupV4GateFromEnv,
+} from "@shared/whatsappEmbeddedSignupVersion";
 
 export function registerWhatsappIntegrationRoutes(app: Express): void {
   logWhatsappEmbeddedSignupStartupWarnings();
@@ -376,9 +381,9 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
   });
 
   /**
-   * Embedded Signup JS SDK (Option A).
-   * Returns state + SDK config so the client can call FB.login() and immediately POST the auth code.
-   * Coexistence (Option B) is intentionally disabled for now.
+   * Embedded Signup JS SDK (Option A — standard).
+   * Server selects architecture v2 (default) or gated v4; client must not decide alone.
+   * Coexistence (Option B) remains intentionally disabled for public start.
    */
   app.post("/api/integrations/whatsapp/meta/start", async (req: Request, res: Response) => {
     try {
@@ -500,10 +505,18 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
   const completeSdkBody = z.object({
     code: z.string().min(1),
     state: z.string().min(1),
+    architecture: z.enum(["v2", "v4"]).optional(),
+    sessionEvent: z
+      .object({
+        event: z.string().optional(),
+        wabaId: z.string().optional(),
+        phoneNumberId: z.string().optional(),
+      })
+      .optional(),
   });
 
   /**
-   * Embedded Signup v4: exchange `authResponse.code` from FB.login within ~30s (JSON).
+   * Embedded Signup: exchange `authResponse.code` from FB.login within ~30s (JSON).
    * Same server logic as the redirect callback; ties completion to the logged-in user.
    */
   app.post("/api/integrations/whatsapp/meta/complete-sdk", async (req: Request, res: Response) => {
@@ -513,10 +526,12 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
       }
-      // Log the exact redirect URI we intend to use (must match the one used to mint the code).
-      // Do NOT log the code, token, or any secrets.
       const stateRow = await db
-        .select({ redirectUri: whatsappOauthStates.redirectUri })
+        .select({
+          redirectUri: whatsappOauthStates.redirectUri,
+          architectureVersion: whatsappOauthStates.architectureVersion,
+          flow: whatsappOauthStates.flow,
+        })
         .from(whatsappOauthStates)
         .where(eq(whatsappOauthStates.stateToken, parsed.data.state))
         .limit(1);
@@ -524,11 +539,19 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         tokenExchange: "sdk",
         graphApiVersion: process.env.META_GRAPH_API_VERSION || "v21.0",
         redirectUriUsed: stateRow[0]?.redirectUri || "(missing_on_state_row)",
+        architecture: stateRow[0]?.architectureVersion || "v2",
+        flow: stateRow[0]?.flow || null,
+        clientArchitecture: parsed.data.architecture || null,
       });
       const result = await completeEmbeddedSignupOAuth({
-        ...parsed.data,
+        code: parsed.data.code,
+        state: parsed.data.state,
         initiatingUserId: req.user.id,
         tokenExchange: "sdk",
+        expectedArchitecture: parsed.data.architecture
+          ? parseWhatsappEmbeddedSignupArchitecture(parsed.data.architecture) || undefined
+          : undefined,
+        sessionEventSummary: parsed.data.sessionEvent,
       });
       if (!result.success) {
         return res.status(400).json({ success: false, error: result.error });
@@ -563,9 +586,14 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         redirectUriUsed: stateRow[0]?.redirectUri || "(missing_on_state_row)",
       });
       const result = await completeEmbeddedSignupOAuth({
-        ...parsed.data,
+        code: parsed.data.code,
+        state: parsed.data.state,
         initiatingUserId: req.user.id,
         tokenExchange: "sdk",
+        expectedArchitecture: parsed.data.architecture
+          ? parseWhatsappEmbeddedSignupArchitecture(parsed.data.architecture) || undefined
+          : undefined,
+        sessionEventSummary: parsed.data.sessionEvent,
       });
       if (!result.success) {
         return res.status(400).json({ success: false, error: result.error });
@@ -639,18 +667,27 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
   });
 
   /**
-   * Full redirect OAuth entrypoint (production).
-   * Creates oauth state, stores redirect_uri, builds Meta dialog URL, and redirects.
+   * Full redirect OAuth entrypoint (production fallback).
+   * Always uses Embedded Signup architecture **v2** — query params cannot unlock v4 or coexistence.
    */
   app.get("/api/integrations/whatsapp/meta/start-redirect", async (req: Request, res: Response) => {
     try {
       if (!req.user) return res.status(401).send("Unauthorized");
-      const flow = (req.query.flow === "coexistence" ? "coexistence" : "embedded") as "embedded" | "coexistence";
-      const session = await startEmbeddedSignupSession(req.user.id, flow);
+      if (req.query.flow === "coexistence") {
+        return res.status(400).send("Coexistence onboarding is coming soon.");
+      }
+      if (typeof req.query.architecture === "string" && req.query.architecture !== "v2") {
+        return res.status(400).send("Redirect signup only supports the production Embedded Signup path.");
+      }
+      const session = await startEmbeddedSignupSession(req.user.id, "embedded", {
+        architecture: "v2",
+      });
       console.log("[WHATSAPP FULL REDIRECT START]", {
-        flow,
+        flow: "embedded",
+        architecture: "v2",
         redirectUriUsed: session.redirectUri,
         graphApiVersion: session.sdk.graphApiVersion,
+        configIdLast4: session.sdk.configIdLast4,
       });
       res.redirect(302, session.authUrl);
     } catch (e: any) {
@@ -695,6 +732,12 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         webhookLastCheckedAt: user.metaWebhookLastCheckedAt ?? null,
         lastErrorCode: user.metaLastErrorCode ?? null,
         lastErrorMessage: user.metaLastErrorMessage ?? null,
+        embeddedSignupV4: {
+          flagEnabled: readEmbeddedSignupV4GateFromEnv().flagEnabled,
+          configConfigured: !!process.env.META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID?.trim(),
+          configIdLast4: configIdLast4(process.env.META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID),
+          v2ConfigIdLast4: configIdLast4(process.env.META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID),
+        },
         lastOAuthDebug:
           user.metaLastOAuthDebug && typeof user.metaLastOAuthDebug === "object"
             ? user.metaLastOAuthDebug
@@ -768,6 +811,18 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         coexistenceEnabled: coexistenceCfg.coexistenceEnabled,
         coexistenceConfigId: coexistenceCfg.coexistenceConfigId,
         coexistenceFeatureFlagSet: coexistenceCfg.coexistenceFeatureFlagSet,
+        embeddedSignupArchitectureDiagnostics: {
+          v4FlagEnabled: coexistenceCfg.embeddedSignupV4FlagEnabled,
+          v4ConfigConfigured: coexistenceCfg.embeddedSignupV4ConfigConfigured,
+          v4EnvReady: coexistenceCfg.embeddedSignupV4EnvReady,
+          v2ConfigIdLast4: coexistenceCfg.embeddedSignupConfigIdLast4,
+          v4ConfigIdLast4: coexistenceCfg.embeddedSignupV4ConfigIdLast4,
+          coexistenceConfigIdLast4: coexistenceCfg.coexistenceConfigIdLast4,
+          lastOAuthArchitecture:
+            oauthDbg && typeof oauthDbg.architecture === "string" ? oauthDbg.architecture : null,
+          lastOAuthFlow: oauthDbg && typeof oauthDbg.flow === "string" ? oauthDbg.flow : null,
+          allowlistConfigured: readEmbeddedSignupV4GateFromEnv().allowlistUserIds.length > 0,
+        },
         inboundRouting,
         phoneGraphSnapshot,
         twilio: {

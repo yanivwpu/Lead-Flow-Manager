@@ -69,6 +69,8 @@ export function buildEmbeddedSignupPreLoginDiagnostics(input: {
   configIdMissing?: boolean;
   appIdMatchesInstagramAppId?: boolean;
   embeddedSignupEnabled?: boolean;
+  architecture?: string | null;
+  configIdLast4?: string | null;
 }): Record<string, unknown> {
   const origin = typeof window !== "undefined" ? window.location.origin : null;
   return {
@@ -78,6 +80,8 @@ export function buildEmbeddedSignupPreLoginDiagnostics(input: {
     appIdTail: input.appId ? input.appId.slice(-6) : null,
     configId: input.configId || null,
     configIdTail: input.configId ? input.configId.slice(-8) : null,
+    configIdLast4: input.configIdLast4 || (input.configId ? input.configId.slice(-4) : null),
+    architecture: input.architecture || null,
     graphVersion: input.graphVersion || null,
     userId: input.userId || null,
     userEmail: input.userEmail || null,

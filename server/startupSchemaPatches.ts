@@ -837,6 +837,10 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
         WHERE archived_at IS NOT NULL`,
     ].join(";\n"),
   },
+  {
+    tag: "0078_whatsapp_oauth_architecture_version",
+    sql: `ALTER TABLE whatsapp_oauth_states ADD COLUMN IF NOT EXISTS architecture_version text NOT NULL DEFAULT 'v2'`,
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {
