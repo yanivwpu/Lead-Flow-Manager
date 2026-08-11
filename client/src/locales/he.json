@@ -1280,5 +1280,65 @@
     "registerFailed": "לא ניתן לרשום את המספר. נסו שוב.",
     "statusRequired": "נדרש רישום מספר",
     "checklistHint": "הזינו את ה-PIN של WhatsApp למטה כדי לסיים את הגדרת Cloud API. השליחה עדיין לא מוכנה."
+  },
+  "whatsappEmbeddedSignup": {
+    "errors": {
+      "dialog_cancelled": {
+        "message": "הגדרת Meta בוטלה. אפשר לנסות שוב בכל עת.",
+        "recovery": "לחצו על המשך עם Meta כשתהיו מוכנים."
+      },
+      "oauth_state_expired": {
+        "message": "הפעלת ההרשמה פגה לפני ש-Meta סיימה. סגרו חלונות Facebook והתחילו שוב מההגדרות.",
+        "recovery": "התחילו הפעלה חדשה של המשך עם Meta — אל תשתמשו בכרטיסייה ישנה."
+      },
+      "code_exchange_failed": {
+        "message": "לא הצלחנו להשלים הרשאה מול Meta. נסו שוב.",
+        "recovery": "סגרו חלונות Meta ונסו שוב המשך עם Meta."
+      },
+      "session_assets_missing": {
+        "message": "Meta לא החזירה את פרטי חשבון ה-WhatsApp הדרושים לסיום ההגדרה.",
+        "recovery": "נסו שוב המשך עם Meta והשלימו את כל השלבים בחלון Meta."
+      },
+      "waba_validation_failed": {
+        "message": "לא הצלחנו לאמת את חשבון WhatsApp Business מול Meta.",
+        "recovery": "אשרו את החשבון ב-Meta Business Manager ונסו שוב."
+      },
+      "phone_waba_mismatch": {
+        "message": "מספר הטלפון שנבחר אינו שייך לחשבון WhatsApp Business זה.",
+        "recovery": "התחברו מחדש ובחרו מספר ששייך לאותו חשבון."
+      },
+      "phone_workspace_conflict": {
+        "message": "מספר WhatsApp זה כבר מחובר לסביבת עבודה אחרת ב-WhachatCRM.",
+        "recovery": "נתקו אותו מהסביבה האחרת, או השתמשו במספר אחר."
+      },
+      "webhook_subscription_failed": {
+        "message": "WhatsApp חובר, אך לא ניתן היה לאמת את מנוי ה-webhook.",
+        "recovery": "השתמשו בתיקון החיבור בהגדרות, או נסו שוב המשך עם Meta."
+      },
+      "phone_registration_required": {
+        "message": "Meta דורשת PIN בן שש ספרות כדי לרשום מספר זה ב-Cloud API.",
+        "recovery": "הזינו ואשרו את ה-PIN בן שש הספרות כדי לסיים."
+      },
+      "meta_temporary_unavailable": {
+        "message": "Meta אינה זמינה זמנית. נסו שוב בעוד כמה דקות.",
+        "recovery": "המתינו מעט ונסו שוב המשך עם Meta."
+      },
+      "completion_in_progress": {
+        "message": "הגדרת WhatsApp כבר מסתיימת. המתינו רגע.",
+        "recovery": "רעננו את ההגדרות בעוד כמה שניות אם החיבור לא מופיע."
+      },
+      "architecture_mismatch": {
+        "message": "אי-התאמה בגרסת ההרשמה. סגרו את החלון והתחילו שוב מההגדרות.",
+        "recovery": "התחילו הפעלה חדשה של המשך עם Meta מההגדרות."
+      },
+      "phone_setup_incomplete": {
+        "message": "חשבון WhatsApp Business נוצר, אך הגדרת המספר ב-Meta לא הושלמה.",
+        "recovery": "סיימו את המספר ב-Meta Business Manager ואז התחברו מחדש."
+      },
+      "unknown": {
+        "message": "לא ניתן היה לסיים את הגדרת WhatsApp. נסו שוב המשך עם Meta.",
+        "recovery": "אם הבעיה נמשכת, פנו לתמיכה מההגדרות."
+      }
+    }
   }
 }

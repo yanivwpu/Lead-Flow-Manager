@@ -390,6 +390,12 @@ export async function registerPhoneForAuthenticatedUser(params: {
     errorCode: null,
     attemptsUsed: polled.attemptsUsed,
   });
+  try {
+    const { recordPhoneRegistrationCompleted } = await import("./whatsappEmbeddedSignupRolloutMetrics");
+    recordPhoneRegistrationCompleted();
+  } catch {
+    /* metrics optional */
+  }
 
   return { success: true, fullyReady: true };
 }

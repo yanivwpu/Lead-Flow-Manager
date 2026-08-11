@@ -275,6 +275,31 @@ interface ConnectWhatsAppHubProps {
 const META_CANCELLED_MESSAGE =
   "Meta setup was cancelled. You can try again anytime.";
 
+function localizedEmbeddedSignupError(
+  t: (key: string, opts?: Record<string, unknown>) => string,
+  errorCode: string | null | undefined,
+  fallback: string,
+): string {
+  const code = String(errorCode || "").trim() || "unknown";
+  const key = `whatsappEmbeddedSignup.errors.${code}.message`;
+  const translated = t(key, { defaultValue: "" });
+  if (translated && translated !== key) return translated;
+  // Map common aliases
+  const aliasKey =
+    code === "oauth_state_expired_or_invalid"
+      ? "whatsappEmbeddedSignup.errors.oauth_state_expired.message"
+      : code === "discovery_failed" || code === "no_valid_waba_or_phone"
+        ? "whatsappEmbeddedSignup.errors.waba_validation_failed.message"
+        : code === "phone_not_under_waba"
+          ? "whatsappEmbeddedSignup.errors.phone_waba_mismatch.message"
+          : null;
+  if (aliasKey) {
+    const aliased = t(aliasKey, { defaultValue: "" });
+    if (aliased && aliased !== aliasKey) return aliased;
+  }
+  return sanitizeWhatsappClientErrorMessage(fallback);
+}
+
 type HubBanner = { variant: "error"; message: string } | { variant: "neutral"; message: string };
 
 export function ConnectWhatsAppHub({
@@ -613,12 +638,15 @@ export function ConnectWhatsAppHub({
           });
           const j = await r.json().catch(() => ({}));
           if (!r.ok) {
+            const errorCode = typeof j?.errorCode === "string" ? j.errorCode : null;
             return {
               ok: false as const,
-              error: sanitizeWhatsappClientErrorMessage(
+              error: localizedEmbeddedSignupError(
+                t,
+                errorCode,
                 String(j?.error || "Could not complete Meta signup"),
               ),
-              errorCode: typeof j?.errorCode === "string" ? j.errorCode : null,
+              errorCode,
               wabaId: typeof j?.wabaId === "string" ? j.wabaId : null,
               httpStatus: r.status,
             };
@@ -703,12 +731,20 @@ export function ConnectWhatsAppHub({
             if (!result.ok) {
               if (result.errorCode === "phone_setup_incomplete") {
                 throw new Error(
-                  result.error ||
-                    "WhatsApp Business Account was created, but phone setup is incomplete. Finish the number in Meta Business Manager, then reconnect.",
+                  localizedEmbeddedSignupError(
+                    t,
+                    "phone_setup_incomplete",
+                    result.error ||
+                      "WhatsApp Business Account was created, but phone setup is incomplete. Finish the number in Meta Business Manager, then reconnect.",
+                  ),
                 );
               }
               throw new Error(
-                sanitizeWhatsappClientErrorMessage(result.error || "Could not complete Meta signup"),
+                localizedEmbeddedSignupError(
+                  t,
+                  result.errorCode,
+                  result.error || "Could not complete Meta signup",
+                ),
               );
             }
             if (result.needsWabaPick && result.state) {
@@ -750,8 +786,11 @@ export function ConnectWhatsAppHub({
         return;
       }
 
-      if (msg === META_CANCELLED_MESSAGE) {
-        setHubBanner({ variant: "neutral", message: META_CANCELLED_MESSAGE });
+      if (msg === META_CANCELLED_MESSAGE || /cancelled/i.test(msg)) {
+        setHubBanner({
+          variant: "neutral",
+          message: localizedEmbeddedSignupError(t, "dialog_cancelled", META_CANCELLED_MESSAGE),
+        });
         return;
       }
 

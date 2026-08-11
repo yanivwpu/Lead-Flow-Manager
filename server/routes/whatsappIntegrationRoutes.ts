@@ -496,7 +496,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         tokenExchange: "redirect",
       });
       if (!result.success) {
-        return failRedirect(sanitizeEmbeddedSignupClientError(result.error));
+        return failRedirect(sanitizeEmbeddedSignupClientError(result.error, result.errorCode));
       }
       if ("needsWabaPick" in result && result.needsWabaPick) {
         const pickUrl = `${base}/app/settings?section=channels&whatsapp_embedded=pick&state=${encodeURIComponent(state)}`;
@@ -563,8 +563,10 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       if (!result.success) {
         return res.status(400).json({
           success: false,
-          error: sanitizeEmbeddedSignupClientError(result.error),
+          error: sanitizeEmbeddedSignupClientError(result.error, result.errorCode),
           errorCode: result.errorCode || null,
+          failureCategory: "failureCategory" in result ? result.failureCategory || null : null,
+          recoveryAction: "recoveryAction" in result ? result.recoveryAction || null : null,
           wabaId: result.wabaId || null,
         });
       }
@@ -613,8 +615,10 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       if (!result.success) {
         return res.status(400).json({
           success: false,
-          error: sanitizeEmbeddedSignupClientError(result.error),
+          error: sanitizeEmbeddedSignupClientError(result.error, result.errorCode),
           errorCode: result.errorCode || null,
+          failureCategory: "failureCategory" in result ? result.failureCategory || null : null,
+          recoveryAction: "recoveryAction" in result ? result.recoveryAction || null : null,
           wabaId: result.wabaId || null,
         });
       }

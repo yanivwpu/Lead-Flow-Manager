@@ -54,14 +54,26 @@ describe("architecture parsing", () => {
 });
 
 describe("server architecture selection", () => {
+  const prereqEnv = {
+    META_APP_ID: "810621184995059",
+    META_APP_SECRET: "test-meta-app-secret",
+    META_WHATSAPP_REDIRECT_URI: "https://app.example.com/api/integrations/whatsapp/meta/callback",
+    META_WEBHOOK_VERIFY_TOKEN: "verify-token-test",
+    META_ENCRYPTION_KEY: "test-meta-encryption-key-32b!!",
+    META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: "v2-config-aaaaaaaa",
+    APP_URL: "https://app.example.com",
+  };
+
   it("defaults to v2 when flag is false", () => {
     const r = selectEmbeddedSignupArchitecture({
       flow: "embedded",
       userId: "user-1",
       sessionIsAdmin: true,
       env: {
+        ...prereqEnv,
         WHATSAPP_EMBEDDED_SIGNUP_V4_ENABLED: "false",
         META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID: "9999999999999999",
+        WHATSAPP_EMBEDDED_SIGNUP_V4_ROLLOUT_MODE: "allowlist_only",
         WHATSAPP_EMBEDDED_SIGNUP_V4_ALLOWLIST_USER_IDS: "user-1",
       },
     });
@@ -75,8 +87,10 @@ describe("server architecture selection", () => {
       userId: "user-1",
       sessionIsAdmin: true,
       env: {
+        ...prereqEnv,
         WHATSAPP_EMBEDDED_SIGNUP_V4_ENABLED: "true",
         META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID: "",
+        WHATSAPP_EMBEDDED_SIGNUP_V4_ROLLOUT_MODE: "allowlist_only",
         WHATSAPP_EMBEDDED_SIGNUP_V4_ALLOWLIST_USER_IDS: "user-1",
       },
     });
@@ -84,13 +98,15 @@ describe("server architecture selection", () => {
     assert.equal(r.reason, "v4_config_id_missing");
   });
 
-  it("selects v4 only when flag + config + explicit allowlisted user ID", () => {
+  it("selects v4 only when flag + config + allowlist_only + explicit allowlisted user ID", () => {
     const allowlisted = selectEmbeddedSignupArchitecture({
       flow: "embedded",
       userId: "user-1",
       env: {
+        ...prereqEnv,
         WHATSAPP_EMBEDDED_SIGNUP_V4_ENABLED: "1",
         META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID: "1111222233334444",
+        WHATSAPP_EMBEDDED_SIGNUP_V4_ROLLOUT_MODE: "allowlist_only",
         WHATSAPP_EMBEDDED_SIGNUP_V4_ALLOWLIST_USER_IDS: "user-1,user-2",
       },
     });
@@ -101,8 +117,10 @@ describe("server architecture selection", () => {
       flow: "embedded",
       userId: "user-9",
       env: {
+        ...prereqEnv,
         WHATSAPP_EMBEDDED_SIGNUP_V4_ENABLED: "1",
         META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID: "1111222233334444",
+        WHATSAPP_EMBEDDED_SIGNUP_V4_ROLLOUT_MODE: "allowlist_only",
         WHATSAPP_EMBEDDED_SIGNUP_V4_ALLOWLIST_USER_IDS: "user-1",
       },
     });
@@ -114,8 +132,10 @@ describe("server architecture selection", () => {
       userId: "admin-user",
       sessionIsAdmin: true,
       env: {
+        ...prereqEnv,
         WHATSAPP_EMBEDDED_SIGNUP_V4_ENABLED: "1",
         META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID: "1111222233334444",
+        WHATSAPP_EMBEDDED_SIGNUP_V4_ROLLOUT_MODE: "allowlist_only",
         WHATSAPP_EMBEDDED_SIGNUP_V4_ALLOWLIST_USER_IDS: "user-1",
       },
     });
@@ -129,8 +149,10 @@ describe("server architecture selection", () => {
       userId: "user-1",
       sessionIsAdmin: true,
       env: {
+        ...prereqEnv,
         WHATSAPP_EMBEDDED_SIGNUP_V4_ENABLED: "1",
         META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID: "1111222233334444",
+        WHATSAPP_EMBEDDED_SIGNUP_V4_ROLLOUT_MODE: "allowlist_only",
         WHATSAPP_EMBEDDED_SIGNUP_V4_ALLOWLIST_USER_IDS: "",
       },
     });
@@ -142,8 +164,10 @@ describe("server architecture selection", () => {
       userId: "user-1",
       sessionIsAdmin: true,
       env: {
+        ...prereqEnv,
         WHATSAPP_EMBEDDED_SIGNUP_V4_ENABLED: "1",
         META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID: "1111222233334444",
+        WHATSAPP_EMBEDDED_SIGNUP_V4_ROLLOUT_MODE: "allowlist_only",
         WHATSAPP_EMBEDDED_SIGNUP_V4_ALLOWLIST_USER_IDS: " ,  , ",
       },
     });
@@ -157,8 +181,10 @@ describe("server architecture selection", () => {
       userId: "user-1",
       sessionIsAdmin: true,
       env: {
+        ...prereqEnv,
         WHATSAPP_EMBEDDED_SIGNUP_V4_ENABLED: "1",
         META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID: "1111222233334444",
+        WHATSAPP_EMBEDDED_SIGNUP_V4_ROLLOUT_MODE: "public",
         WHATSAPP_EMBEDDED_SIGNUP_V4_ALLOWLIST_USER_IDS: "user-1",
       },
     });

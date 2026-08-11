@@ -247,94 +247,16 @@ export function resolveEmbeddedSignupConfigIdFromEnv(
   return { envName: EMBEDDED_SIGNUP_CONFIG_ENV.v2, configId };
 }
 
-export function readEmbeddedSignupV4GateFromEnv(env: NodeJS.ProcessEnv = process.env): {
-  flagEnabled: boolean;
-  v4ConfigIdConfigured: boolean;
-  v4ConfigId: string | null;
-  allowlistUserIds: string[];
-} {
-  const flagEnabled =
-    env.WHATSAPP_EMBEDDED_SIGNUP_V4_ENABLED === "true" ||
-    env.WHATSAPP_EMBEDDED_SIGNUP_V4_ENABLED === "1";
-  const v4ConfigId = env.META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID?.trim() || null;
-  const allowlistUserIds = String(env.WHATSAPP_EMBEDDED_SIGNUP_V4_ALLOWLIST_USER_IDS || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return {
-    flagEnabled,
-    v4ConfigIdConfigured: !!v4ConfigId,
-    v4ConfigId,
-    allowlistUserIds,
-  };
-}
-
-/**
- * Server-side architecture selection for **standard** Embedded Signup.
- * v4 only when flag + dedicated v4 config are set AND the user ID is explicitly allowlisted.
- * Admin / Sales Admin / roles never bypass the allowlist.
- * Never selects v4 for coexistence.
- */
-export function selectEmbeddedSignupArchitecture(params: {
-  flow: WhatsappEmbeddedSignupFlow;
-  userId: string;
-  /** Ignored for v4 eligibility — retained for API compatibility / diagnostics callers. */
-  sessionIsAdmin?: boolean;
-  env?: NodeJS.ProcessEnv;
-}): {
-  architecture: WhatsappEmbeddedSignupArchitecture;
-  reason: string;
-  v4EnvReady: boolean;
-  userAuthorizedForV4: boolean;
-} {
-  if (params.flow === "coexistence") {
-    return {
-      architecture: "v2",
-      reason: "coexistence_uses_dedicated_config_not_standard_v4",
-      v4EnvReady: false,
-      userAuthorizedForV4: false,
-    };
-  }
-
-  const gate = readEmbeddedSignupV4GateFromEnv(params.env);
-  const v4EnvReady = gate.flagEnabled && gate.v4ConfigIdConfigured;
-  const onAllowlist = gate.allowlistUserIds.includes(params.userId);
-  // Explicit allowlist only — never grant v4 via session.isAdmin or other privileges.
-  const userAuthorizedForV4 = onAllowlist;
-
-  if (!v4EnvReady) {
-    return {
-      architecture: "v2",
-      reason: !gate.flagEnabled
-        ? "v4_flag_disabled"
-        : "v4_config_id_missing",
-      v4EnvReady: false,
-      userAuthorizedForV4,
-    };
-  }
-
-  if (gate.allowlistUserIds.length === 0) {
-    return {
-      architecture: "v2",
-      reason: "v4_allowlist_empty",
-      v4EnvReady: true,
-      userAuthorizedForV4: false,
-    };
-  }
-
-  if (!userAuthorizedForV4) {
-    return {
-      architecture: "v2",
-      reason: "v4_env_ready_but_user_not_allowlisted",
-      v4EnvReady: true,
-      userAuthorizedForV4: false,
-    };
-  }
-
-  return {
-    architecture: "v4",
-    reason: "v4_allowlisted_user",
-    v4EnvReady: true,
-    userAuthorizedForV4: true,
-  };
-}
+/** Rollout gate + architecture selection live in whatsappEmbeddedSignupRollout.ts */
+export {
+  readEmbeddedSignupV4GateFromEnv,
+  selectEmbeddedSignupArchitecture,
+  evaluateEmbeddedSignupV4Prerequisites,
+  embeddedSignupV4RolloutBucket,
+  parseEmbeddedSignupV4RolloutMode,
+  parseEmbeddedSignupV4RolloutPercent,
+  buildSanitizedV4RolloutConfigSummary,
+  type WhatsappEmbeddedSignupV4RolloutMode,
+  type EmbeddedSignupArchitectureSelection,
+  type V4PrerequisitesResult,
+} from "./whatsappEmbeddedSignupRollout";

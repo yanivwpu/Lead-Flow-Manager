@@ -1203,5 +1203,65 @@
     "registerFailed": "No se pudo registrar el número. Inténtalo de nuevo.",
     "statusRequired": "Registro del teléfono requerido",
     "checklistHint": "Introduce tu PIN de WhatsApp abajo para terminar la configuración de Cloud API. La mensajería aún no está lista."
+  },
+  "whatsappEmbeddedSignup": {
+    "errors": {
+      "dialog_cancelled": {
+        "message": "La configuración de Meta se canceló. Puedes intentarlo de nuevo cuando quieras.",
+        "recovery": "Haz clic en Continuar con Meta cuando estés listo."
+      },
+      "oauth_state_expired": {
+        "message": "Esta sesión de registro expiró antes de que Meta terminara. Cierra las ventanas de Facebook y vuelve a empezar desde Ajustes.",
+        "recovery": "Inicia una sesión nueva de Continuar con Meta; no reutilices una pestaña antigua."
+      },
+      "code_exchange_failed": {
+        "message": "No pudimos completar la autorización con Meta. Inténtalo de nuevo.",
+        "recovery": "Cierra las ventanas de Meta y vuelve a intentar Continuar con Meta."
+      },
+      "session_assets_missing": {
+        "message": "Meta no devolvió los datos de la cuenta de WhatsApp necesarios para terminar.",
+        "recovery": "Vuelve a Continuar con Meta y completa todos los pasos del diálogo."
+      },
+      "waba_validation_failed": {
+        "message": "No pudimos validar tu cuenta de WhatsApp Business con Meta.",
+        "recovery": "Confirma la cuenta en Meta Business Manager y vuelve a intentarlo."
+      },
+      "phone_waba_mismatch": {
+        "message": "El número seleccionado no pertenece a esta cuenta de WhatsApp Business.",
+        "recovery": "Vuelve a conectar y elige un número de la misma cuenta."
+      },
+      "phone_workspace_conflict": {
+        "message": "Este número de WhatsApp ya está conectado a otro espacio de trabajo de WhachatCRM.",
+        "recovery": "Desconéctalo del otro espacio o usa otro número."
+      },
+      "webhook_subscription_failed": {
+        "message": "WhatsApp se conectó, pero no se pudo verificar la suscripción del webhook.",
+        "recovery": "Usa Reparar conexión en Ajustes, o vuelve a Continuar con Meta."
+      },
+      "phone_registration_required": {
+        "message": "Meta requiere un PIN de seis dígitos para registrar este número en Cloud API.",
+        "recovery": "Introduce y confirma tu PIN de seis dígitos para terminar."
+      },
+      "meta_temporary_unavailable": {
+        "message": "Meta no está disponible temporalmente. Inténtalo en unos minutos.",
+        "recovery": "Espera un momento y vuelve a Continuar con Meta."
+      },
+      "completion_in_progress": {
+        "message": "La configuración de WhatsApp ya se está finalizando. Espera un momento.",
+        "recovery": "Actualiza Ajustes en unos segundos si la conexión no aparece."
+      },
+      "architecture_mismatch": {
+        "message": "Hay un desajuste de versión del registro. Cierra la ventana y vuelve a empezar desde Ajustes.",
+        "recovery": "Inicia una sesión nueva de Continuar con Meta desde Ajustes."
+      },
+      "phone_setup_incomplete": {
+        "message": "Se creó la cuenta de WhatsApp Business, pero la configuración del número está incompleta en Meta.",
+        "recovery": "Termina el número en Meta Business Manager y vuelve a conectar."
+      },
+      "unknown": {
+        "message": "No se pudo terminar la configuración de WhatsApp. Vuelve a intentar Continuar con Meta.",
+        "recovery": "Si el problema continúa, contacta con soporte desde Ajustes."
+      }
+    }
   }
 }

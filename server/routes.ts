@@ -8465,6 +8465,29 @@ export async function registerRoutes(
   });
 
   /**
+   * Sales Admin only — sanitized WhatsApp Embedded Signup v4 rollout summary.
+   * No customer tokens, phone numbers, WABA IDs, authorization codes, PINs, or secrets.
+   */
+  app.get("/api/admin/whatsapp/embedded-signup-v4-rollout", requireAdmin, async (_req, res) => {
+    try {
+      const { verifyWhatsappEmbeddedSignupMigration } = await import("./whatsappEmbeddedSignup");
+      const { getEmbeddedSignupV4RolloutAdminSummary } = await import(
+        "./whatsappEmbeddedSignupRolloutMetrics"
+      );
+      const oauthStatesSchemaAvailable = await verifyWhatsappEmbeddedSignupMigration();
+      res.json(
+        getEmbeddedSignupV4RolloutAdminSummary({
+          oauthStatesSchemaAvailable,
+        }),
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("[admin] embedded-signup-v4-rollout failed", msg);
+      res.status(500).json({ error: "Could not load rollout summary." });
+    }
+  });
+
+  /**
    * Preflight-only matrix: validates optional `WA_MATRIX_*` public URLs (HTTPS, MIME, length, no CDN/proxy).
    * Does not call Graph. Set env URLs to exercise image / PDF / video / carousel-style image checks.
    */

@@ -58,6 +58,17 @@ import {
   type WhatsappEmbeddedSignupArchitecture,
   type WhatsappEmbeddedSignupFlow,
 } from "@shared/whatsappEmbeddedSignupVersion";
+import { resolveEmbeddedSignupFailureCopy } from "@shared/whatsappEmbeddedSignupFailures";
+import { idTail } from "@shared/whatsappEmbeddedSignupObservability";
+import {
+  logWhatsappEmbeddedSignupEvent,
+  recordEmbeddedSignupAttempt,
+  recordEmbeddedSignupFailure,
+  recordEmbeddedSignupRolloutDecision,
+  recordEmbeddedSignupSuccess,
+  releaseEmbeddedSignupCompletion,
+  tryClaimEmbeddedSignupCompletion,
+} from "./whatsappEmbeddedSignupRolloutMetrics";
 
 /**
  * OAuth state TTL for Embedded Signup.
@@ -159,8 +170,12 @@ export interface WhatsappMetaPublicConfig {
   embeddedSignupV4FlagEnabled: boolean;
   /** Whether META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID is set. */
   embeddedSignupV4ConfigConfigured: boolean;
-  /** Env ready for v4 (flag + config). Explicit user-ID allowlist still required to launch v4. */
+  /** Env ready for v4 (flag + config). Rollout mode + allowlist/percentage still apply per user. */
   embeddedSignupV4EnvReady: boolean;
+  /** Controlled rollout mode (never implies this user is on v4). */
+  embeddedSignupV4RolloutMode: string;
+  embeddedSignupV4RolloutModeValid: boolean;
+  embeddedSignupV4RolloutPercent: number;
   metaConfigured: boolean;
   /** Safe client-only fields */
   appId: string | null;
@@ -277,6 +292,10 @@ export function getWhatsappMetaPublicConfig(): WhatsappMetaPublicConfig {
     embeddedSignupV4FlagEnabled: v4Gate.flagEnabled,
     embeddedSignupV4ConfigConfigured: v4Gate.v4ConfigIdConfigured,
     embeddedSignupV4EnvReady: v4Gate.flagEnabled && v4Gate.v4ConfigIdConfigured,
+    /** Rollout mode only — never exposes allowlist membership or percent assignment for a user. */
+    embeddedSignupV4RolloutMode: v4Gate.rolloutMode,
+    embeddedSignupV4RolloutModeValid: v4Gate.rolloutModeValid,
+    embeddedSignupV4RolloutPercent: v4Gate.rolloutPercent,
     metaConfigured: !!(process.env.META_APP_ID && process.env.META_APP_SECRET),
     appId: process.env.META_APP_ID || null,
     graphApiVersion: graphRaw.startsWith("v") ? graphRaw : `v${graphRaw}`,
@@ -381,6 +400,9 @@ export async function startEmbeddedSignupSession(
     );
   }
 
+  const oauthStatesSchemaAvailable =
+    flow === "embedded" ? await verifyWhatsappEmbeddedSignupMigration() : null;
+
   const selected =
     options?.architecture != null
       ? {
@@ -388,11 +410,28 @@ export async function startEmbeddedSignupSession(
           reason: "caller_forced_architecture",
           v4EnvReady: cfg.embeddedSignupV4EnvReady,
           userAuthorizedForV4: true,
+          rolloutMode: cfg.embeddedSignupV4RolloutMode as any,
+          rolloutPercent: cfg.embeddedSignupV4RolloutPercent,
+          rolloutBucket: null as number | null,
+          prerequisitesOk: true,
+          prerequisitesMissing: [] as string[],
         }
       : selectEmbeddedSignupArchitecture({
           flow,
           userId,
+          oauthStatesSchemaAvailable,
         });
+
+  if (options?.architecture == null && flow === "embedded") {
+    recordEmbeddedSignupRolloutDecision({
+      architecture: selected.architecture,
+      reason: selected.reason,
+      rolloutMode: selected.rolloutMode,
+      rolloutPercent: selected.rolloutPercent,
+      rolloutBucket: selected.rolloutBucket,
+      userId,
+    });
+  }
 
   const architecture = selected.architecture;
   if (architecture === "v4" && flow !== "embedded") {
@@ -429,11 +468,21 @@ export async function startEmbeddedSignupSession(
   const graphApiVersion = graphRaw.startsWith("v") ? graphRaw : `v${graphRaw}`;
   const igAppId = process.env.INSTAGRAM_APP_ID?.trim() || "";
 
+  recordEmbeddedSignupAttempt(architecture);
+  logWhatsappEmbeddedSignupEvent({
+    event: "signup_started",
+    architecture,
+    flow,
+    reason: selected.reason,
+    userIdTail: idTail(userId),
+  });
+
   console.log("[WhatsApp Embedded Signup] session_start", {
-    userId,
+    userIdTail: idTail(userId),
     flow,
     architecture,
     architectureSelectionReason: selected.reason,
+    rolloutMode: "rolloutMode" in selected ? selected.rolloutMode : null,
     configEnv: envName,
     appIdSource: "META_APP_ID",
     appIdTail: appId.slice(-6),
@@ -457,6 +506,10 @@ export async function startEmbeddedSignupSession(
     flow,
     architecture,
     architectureSelectionReason: selected.reason,
+    rolloutMode: "rolloutMode" in selected ? selected.rolloutMode : null,
+    rolloutPercent: "rolloutPercent" in selected ? selected.rolloutPercent : null,
+    prerequisitesMissing:
+      "prerequisitesMissing" in selected ? selected.prerequisitesMissing : null,
     configEnv: envName,
     configIdLast4: configIdLast4(configId),
     stateTokenTail: stateToken.slice(-8),
@@ -1353,17 +1406,27 @@ export function isV4SdkDirectAssetValidationEnabled(
 }
 
 /** Map unexpected runtime/engine errors to a safe client message (no raw identifiers). */
-export function sanitizeEmbeddedSignupClientError(err: unknown): string {
+export function sanitizeEmbeddedSignupClientError(
+  err: unknown,
+  errorCode?: string | null,
+): string {
+  if (errorCode) {
+    return resolveEmbeddedSignupFailureCopy(errorCode).message;
+  }
   const msg = err instanceof Error ? err.message : String(err ?? "");
   if (
     /is not defined|ReferenceError|TypeError|Cannot read propert|Cannot access|Unexpected token|Internal Server Error/i.test(
       msg,
     )
   ) {
-    return "Could not finish WhatsApp setup. Please try Continue with Meta again.";
+    return resolveEmbeddedSignupFailureCopy("unknown").message;
+  }
+  // Prefer known category phrases already in message; never return secrets-looking blobs.
+  if (/access_token|app_secret|verify_token|client_secret|EAA[A-Za-z0-9]/i.test(msg)) {
+    return resolveEmbeddedSignupFailureCopy("unknown").message;
   }
   const trimmed = msg.trim();
-  return trimmed || "Could not read WhatsApp account details from Meta.";
+  return trimmed || resolveEmbeddedSignupFailureCopy("unknown").message;
 }
 
 /**
@@ -1956,9 +2019,31 @@ export type EmbeddedSignupOAuthResult =
         | "waba_access_denied"
         | "phone_not_under_waba"
         | "phone_ambiguous"
-        | "waba_subscription_failed";
+        | "waba_subscription_failed"
+        | "phone_workspace_conflict"
+        | "completion_in_progress"
+        | "meta_temporary_unavailable";
+      failureCategory?: string;
+      recoveryAction?: string;
       wabaId?: string | null;
     };
+
+function failEmbeddedSignup(
+  architecture: WhatsappEmbeddedSignupArchitecture | null | undefined,
+  errorCode: NonNullable<Extract<EmbeddedSignupOAuthResult, { success: false }>["errorCode"]>,
+  overrides?: { error?: string; wabaId?: string | null },
+): Extract<EmbeddedSignupOAuthResult, { success: false }> {
+  const copy = resolveEmbeddedSignupFailureCopy(errorCode);
+  recordEmbeddedSignupFailure(architecture, copy.category);
+  return {
+    success: false,
+    error: overrides?.error || copy.message,
+    errorCode,
+    failureCategory: copy.category,
+    recoveryAction: copy.recovery,
+    wabaId: overrides?.wabaId ?? null,
+  };
+}
 
 function isPhoneRoutingReadyFromGraphSnapshot(data: any): boolean {
   const status = String(data?.status ?? "").toUpperCase();
@@ -2005,9 +2090,18 @@ export async function completeEmbeddedSignupOAuth(params: {
   };
 }): Promise<EmbeddedSignupOAuthResult> {
   const { code, state, initiatingUserId, tokenExchange, expectedArchitecture, sessionEventSummary } = params;
+  const phaseStartedAt = Date.now();
 
   await cleanupExpiredStates();
 
+  if (!tryClaimEmbeddedSignupCompletion(state)) {
+    return failEmbeddedSignup(
+      expectedArchitecture || null,
+      "completion_in_progress",
+    );
+  }
+
+  try {
   const rows = await db
     .select()
     .from(whatsappOauthStates)
@@ -2037,24 +2131,35 @@ export async function completeEmbeddedSignupOAuth(params: {
         completeSdkAttempted: true,
       });
     }
-    return {
-      success: false,
-      error:
-        "This signup session expired before Meta finished (signup can take longer than expected). Close any Facebook windows and start again from Settings — do not use a second browser Login tab.",
-      errorCode: "oauth_state_expired",
+    return failEmbeddedSignup(expectedArchitecture || null, "oauth_state_expired", {
       wabaId: sessionEventSummary?.wabaId || null,
-    };
+    });
   }
 
   if (initiatingUserId && row.userId !== initiatingUserId) {
-    return {
-      success: false,
+    return failEmbeddedSignup(null, "architecture_mismatch", {
       error: "This signup does not match your session. Start again from Settings.",
-    };
+    });
   }
 
   const architecture =
     parseWhatsappEmbeddedSignupArchitecture(row.architectureVersion) || ("v2" as const);
+
+  logWhatsappEmbeddedSignupEvent({
+    event: "oauth_code_received",
+    architecture,
+    flow: row.flow === "coexistence" ? "coexistence" : "embedded",
+    userIdTail: idTail(row.userId),
+    phaseMs: Date.now() - phaseStartedAt,
+  });
+  if (sessionEventSummary?.event) {
+    logWhatsappEmbeddedSignupEvent({
+      event: "meta_session_event",
+      architecture,
+      detail: sessionEventSummary.event,
+      userIdTail: idTail(row.userId),
+    });
+  }
 
   if (expectedArchitecture && expectedArchitecture !== architecture) {
     await mergeUserMetaOAuthDebug(row.userId, {
@@ -2069,11 +2174,7 @@ export async function completeEmbeddedSignupOAuth(params: {
       sessionEventReceived: !!sessionEventSummary,
       completeSdkAttempted: true,
     });
-    return {
-      success: false,
-      error: "Signup version mismatch. Close the window and start again from Settings.",
-      errorCode: "architecture_mismatch",
-    };
+    return failEmbeddedSignup(architecture, "architecture_mismatch");
   }
 
   await mergeUserMetaOAuthDebug(row.userId, {
@@ -2198,14 +2299,7 @@ export async function completeEmbeddedSignupOAuth(params: {
       completeSdkAttempted: true,
       codeExchangeAttemptCount,
     });
-    return {
-      success: false,
-      error:
-        failureCategory === "redirect_uri_mismatch"
-          ? "Meta rejected the authorization-code exchange (redirect URI mismatch for this signup method). Close Facebook windows and try Continue with Meta again."
-          : "Could not exchange the authorization code with Meta (redirect URI or app settings may not match). Close the window and try again with Continue with Meta.",
-      errorCode: "code_exchange_failed",
-    };
+    return failEmbeddedSignup(architecture, "code_exchange_failed");
   }
 
   let longToken: string;
@@ -2397,7 +2491,10 @@ export async function completeEmbeddedSignupOAuth(params: {
             metaLastErrorMessage: msg.slice(0, 500),
           });
         }
-        return { success: false, error: msg, errorCode: "discovery_failed", wabaId: v4Assets.resolved.wabaId };
+        return failEmbeddedSignup(architecture, "phone_workspace_conflict", {
+          error: msg,
+          wabaId: v4Assets.resolved.wabaId,
+        });
       }
 
       resolved = {
@@ -2780,7 +2877,12 @@ export async function completeEmbeddedSignupOAuth(params: {
   // Success path: state is no longer needed (credentials are persisted on the user).
   await db.delete(whatsappOauthStates).where(eq(whatsappOauthStates.stateToken, state));
 
+  recordEmbeddedSignupSuccess(architecture, { needsPhoneRegistration });
+
   return { success: true, userId: row.userId, needsPhoneRegistration };
+  } finally {
+    releaseEmbeddedSignupCompletion(state);
+  }
 }
 
 export async function finalizeEmbeddedSignupWabaSelection(params: {
