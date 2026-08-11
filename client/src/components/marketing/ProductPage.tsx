@@ -9,7 +9,6 @@ import {
   Puzzle,
   Sparkles,
 } from "lucide-react";
-import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { MarketingBreadcrumbs } from "@/components/marketing/MarketingBreadcrumbs";
@@ -18,7 +17,8 @@ import { SolutionWorkflow } from "@/components/marketing/SolutionWorkflow";
 import { MarketingScreenshot } from "@/components/marketing/MarketingScreenshot";
 import { ProductFlowSchema } from "@/components/marketing/ProductFlowSchema";
 import { MARKETING_URL } from "@/lib/marketingUrl";
-import { getCurrentLanguage, getDirection } from "@/lib/i18n";
+import { getDirection } from "@/lib/i18n";
+import { useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
 import { cn } from "@/lib/utils";
 import { screenshot } from "@shared/marketingScreenshots";
 import { PRODUCT_THEMES } from "@shared/productThemes";
@@ -27,7 +27,6 @@ import {
   BRAIN_CONSUMER_TEXT,
   getLocalizedProductPage,
   getMarketingChrome,
-  normalizeMarketingLocale,
   PLATFORM_STORY_STEP_TEXT,
 } from "@shared/localizeMarketingContent";
 import {
@@ -115,9 +114,8 @@ const BRAIN_CONSUMER_LINKS = [
 
 export function ProductPage({ content: baseContent }: Props) {
   const { user } = useAuth();
-  const { i18n } = useTranslation();
   const [showDemo, setShowDemo] = useState(false);
-  const locale = normalizeMarketingLocale(i18n.language || getCurrentLanguage());
+  const locale = useMarketingUrlLocale();
   const chrome = getMarketingChrome(locale);
   const content = getLocalizedProductPage(baseContent, locale);
   const isRTL = getDirection() === "rtl";

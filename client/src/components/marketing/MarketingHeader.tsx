@@ -1,16 +1,14 @@
 import { Suspense, lazy, useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link } from "wouter";
 import { ChevronDown, Menu, X } from "lucide-react";
-import { useTranslation } from "react-i18next";
 import { type MarketingNavDropdown } from "@shared/marketingNav";
 import {
   getLocalizedMarketingNav,
   getMarketingChrome,
   getLocalizedHomepage,
-  normalizeMarketingLocale,
 } from "@shared/localizeMarketingContent";
 import { localizedInternalHref } from "@shared/localeRoutes";
-import { getCurrentLanguage } from "@/lib/i18n";
+import { useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
 import { cn } from "@/lib/utils";
 
 const LanguageSelector = lazy(() =>
@@ -212,8 +210,9 @@ export function MarketingHeader({
   dashboardLabel: dashboardLabelProp,
   pricingLabel: pricingLabelProp,
 }: MarketingHeaderProps) {
-  const { i18n } = useTranslation();
-  const locale = normalizeMarketingLocale(i18n.language || getCurrentLanguage());
+  // Public URL locale is authoritative for all chrome links (logo, menus, Pricing).
+  // Never derive hrefs from i18n/localStorage — that caused Spanish↔English flips.
+  const locale = useMarketingUrlLocale();
   const chrome = getMarketingChrome(locale);
   const a11y = getLocalizedHomepage(locale).chromeA11y;
   const navDropdowns = getLocalizedMarketingNav(locale);
@@ -282,6 +281,7 @@ export function MarketingHeader({
           className="flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40"
           aria-label={a11y.homeAria}
           onClick={closeAll}
+          data-testid="marketing-logo-home"
         >
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-green">
             <span className="text-lg font-bold text-white">W</span>

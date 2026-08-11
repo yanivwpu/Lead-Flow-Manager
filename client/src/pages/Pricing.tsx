@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
-import { supportedLanguages } from "@/lib/i18n";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { SiteFooter } from "@/components/SiteFooter";
 import {
@@ -31,7 +30,6 @@ import {
   getLocalizedAiBrainAddonHighlights,
   getLocalizedPlanPricingHighlights,
   getLocalizedPricingPage,
-  normalizeMarketingLocale,
 } from "@shared/localizeMarketingContent";
 import { getCanonicalUrl, getHreflangLinks, localizePath } from "@shared/localeRoutes";
 import {
@@ -44,7 +42,8 @@ import {
   TransparentPricingStrip,
   WhyChooseSection,
 } from "@/components/pricing/PricingMarketingSections";
-import { getCurrentLanguage } from "@/lib/i18n";
+import { useLocalizedHref, useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
+import { getDirection } from "@/lib/i18n";
 
 // ─── Shared structural components ───────────────────────────────────────────
 function FeatureItem({
@@ -87,15 +86,14 @@ export function Pricing() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const { t, i18n } = useTranslation();
   const p = "pricingPage";
-  const marketingLocale = normalizeMarketingLocale(i18n.language || getCurrentLanguage());
+  const marketingLocale = useMarketingUrlLocale();
+  const homeHref = useLocalizedHref("/");
   const pricingContent = useMemo(
     () => getLocalizedPricingPage(marketingLocale),
     [marketingLocale],
   );
 
-  const isRTL =
-    (supportedLanguages[i18n.language as keyof typeof supportedLanguages]?.dir ??
-      "ltr") === "rtl";
+  const isRTL = getDirection() === "rtl";
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -406,11 +404,12 @@ export function Pricing() {
 
       <div className="max-w-6xl 2xl:max-w-7xl mx-auto px-4 py-10">
 
-        <Link href={user ? "/app/settings" : "/"}>
+        <Link href={user ? "/app/settings" : homeHref}>
           <a
             className={`inline-flex items-center text-sm text-gray-500 hover:text-brand-green mb-8 ${
               isRTL ? "flex-row-reverse" : ""
             }`}
+            data-testid="pricing-back-home"
           >
             <ArrowLeft
               className={`h-4 w-4 ${isRTL ? "ml-2 rotate-180" : "mr-2"}`}

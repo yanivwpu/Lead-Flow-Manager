@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   Brain,
@@ -18,12 +17,11 @@ import { trackPricingEvent } from "@/lib/ga4Events";
 import { BookDemoModal } from "@/components/BookDemoModal";
 import {
   getLocalizedPricingPage,
-  normalizeMarketingLocale,
   type PricingPageContent,
 } from "@shared/localizeMarketingContent";
 import { localizedInternalHref } from "@shared/localeRoutes";
 import { FULL_PRO_AI_TRIAL_COPY as FULL_PRO_AI_TRIAL_COPY_EN } from "@shared/pricingPageContent";
-import { getCurrentLanguage } from "@/lib/i18n";
+import { useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
 
 /** Kept for entitlement/regression tests that assert English string presence. */
 export const FULL_PRO_AI_TRIAL_COPY = FULL_PRO_AI_TRIAL_COPY_EN;
@@ -35,15 +33,12 @@ export const COMPARE_FEATURE_HINTS = getLocalizedPricingPage("en").compareHints;
 export const COMPARE_GROUP_LABELS = getLocalizedPricingPage("en").compareGroups;
 
 function usePricingContent(): PricingPageContent {
-  const { i18n } = useTranslation();
-  return getLocalizedPricingPage(
-    normalizeMarketingLocale(i18n.language || getCurrentLanguage()),
-  );
+  const locale = useMarketingUrlLocale();
+  return getLocalizedPricingPage(locale);
 }
 
 function useMarketingLocale() {
-  const { i18n } = useTranslation();
-  return normalizeMarketingLocale(i18n.language || getCurrentLanguage());
+  return useMarketingUrlLocale();
 }
 
 export function PricingHeroChips() {

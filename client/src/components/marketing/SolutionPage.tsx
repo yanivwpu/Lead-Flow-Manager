@@ -9,20 +9,19 @@ import {
   Puzzle,
   Sparkles,
 } from "lucide-react";
-import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { MarketingBreadcrumbs } from "@/components/marketing/MarketingBreadcrumbs";
 import { MarketingLandingCta } from "@/components/marketing/MarketingLandingCta";
 import { SolutionWorkflow } from "@/components/marketing/SolutionWorkflow";
 import { MARKETING_URL } from "@/lib/marketingUrl";
-import { getCurrentLanguage, getDirection } from "@/lib/i18n";
+import { getDirection } from "@/lib/i18n";
+import { useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
 import { cn } from "@/lib/utils";
 import type { SolutionPageContent } from "@shared/solutionPages";
 import {
   getLocalizedSolutionPage,
   getMarketingChrome,
-  normalizeMarketingLocale,
 } from "@shared/localizeMarketingContent";
 import {
   getCanonicalUrl,
@@ -86,9 +85,8 @@ function HeroVisual({
 
 export function SolutionPage({ content: baseContent }: Props) {
   const { user } = useAuth();
-  const { i18n } = useTranslation();
   const [showDemo, setShowDemo] = useState(false);
-  const locale = normalizeMarketingLocale(i18n.language || getCurrentLanguage());
+  const locale = useMarketingUrlLocale();
   const chrome = getMarketingChrome(locale);
   const content = getLocalizedSolutionPage(baseContent, locale);
   const isRTL = getDirection() === "rtl";

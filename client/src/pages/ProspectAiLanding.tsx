@@ -13,10 +13,10 @@ import {
   Users,
 } from "lucide-react";
 import { Helmet } from "react-helmet";
-import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
-import { getCurrentLanguage, getDirection } from "@/lib/i18n";
+import { getDirection } from "@/lib/i18n";
 import { MARKETING_URL } from "@/lib/marketingUrl";
+import { useLocalizedHref, useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
 import { SiteFooter } from "@/components/SiteFooter";
 import { BookDemoModal } from "@/components/BookDemoModal";
 import { MarketingBreadcrumbs } from "@/components/marketing/MarketingBreadcrumbs";
@@ -30,8 +30,8 @@ import {
 import {
   getLocalizedProspectAiContent,
   getMarketingChrome,
-  normalizeMarketingLocale,
 } from "@shared/localizeMarketingContent";
+import { getCanonicalUrl, getHreflangLinks, localizePath } from "@shared/localeRoutes";
 import { cn } from "@/lib/utils";
 
 const FLOW_ICONS = [Radar, Sparkles, Send, Inbox, Users] as const;
@@ -63,14 +63,19 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
 
 export function ProspectAiLanding() {
   const { user } = useAuth();
-  const { i18n } = useTranslation();
   const [showDemoModal, setShowDemoModal] = useState(false);
-  const locale = normalizeMarketingLocale(i18n.language || getCurrentLanguage());
+  const locale = useMarketingUrlLocale();
+  const homeHref = useLocalizedHref("/");
+  const pricingHref = useLocalizedHref("/pricing");
   const chrome = getMarketingChrome(locale);
   const C = getLocalizedProspectAiContent(PROSPECT_AI_LANDING, PROSPECT_AI_LANDING_SEO, locale);
   const isRTL = getDirection() === "rtl";
 
-  const canonical = `${MARKETING_URL}${PROSPECT_AI_LANDING_PATH}`;
+  const localePath = localizePath(PROSPECT_AI_LANDING_PATH, locale) || PROSPECT_AI_LANDING_PATH;
+  const canonical =
+    getCanonicalUrl(PROSPECT_AI_LANDING_PATH, locale, MARKETING_URL) ||
+    `${MARKETING_URL}${PROSPECT_AI_LANDING_PATH}`;
+  const hreflangLinks = getHreflangLinks(PROSPECT_AI_LANDING_PATH, MARKETING_URL);
   const ogImage = `${MARKETING_URL}${PROSPECT_AI_LANDING_SEO.ogImagePath}`;
   const ctaHref = user
     ? PROSPECT_AI_LANDING.authRedirect
@@ -118,6 +123,9 @@ export function ProspectAiLanding() {
         <meta name="description" content={C.seo.description} />
         <meta name="keywords" content={PROSPECT_AI_LANDING_SEO.keywords} />
         <link rel="canonical" href={canonical} />
+        {hreflangLinks.map((alt) => (
+          <link key={alt.hreflang} rel="alternate" hrefLang={alt.hreflang} href={alt.href} />
+        ))}
         <meta property="og:title" content={C.seo.ogTitle} />
         <meta property="og:description" content={C.seo.ogDescription} />
         <meta property="og:url" content={canonical} />
@@ -132,8 +140,8 @@ export function ProspectAiLanding() {
       </Helmet>
 
       <nav className="relative z-20 mx-auto flex max-w-7xl items-center justify-between px-4 py-4 md:px-6 md:py-6 xl:max-w-[1440px]">
-        <Link href="/">
-          <a className="flex cursor-pointer items-center gap-2">
+        <Link href={homeHref}>
+          <a className="flex cursor-pointer items-center gap-2" data-testid="prospect-ai-logo-home">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-green">
               <span className="text-lg font-bold text-white">W</span>
             </div>
@@ -141,7 +149,7 @@ export function ProspectAiLanding() {
           </a>
         </Link>
         <div className="flex items-center gap-2 md:gap-4">
-          <Link href="/pricing">
+          <Link href={pricingHref}>
             <a className="hidden text-sm font-medium text-gray-600 hover:text-gray-900 sm:block">
               {chrome.pricing}
             </a>
@@ -166,8 +174,8 @@ export function ProspectAiLanding() {
         <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-6 md:px-6 md:pb-24 md:pt-10 xl:max-w-[1440px]">
           <MarketingBreadcrumbs
             items={[
-              { label: C.ui.breadcrumbHome, href: "/" },
-              { label: C.brand, href: PROSPECT_AI_LANDING_PATH },
+              { label: C.ui.breadcrumbHome, href: homeHref },
+              { label: C.brand, href: localePath },
             ]}
             className="mb-8"
           />

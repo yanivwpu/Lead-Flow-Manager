@@ -9,6 +9,7 @@ async function mount() {
   let lang = localStorage.getItem("whachatcrm_language") || "";
 
   if (parsed.isLocalePrefixed && parsed.isSupported) {
+    // Explicit /es or /he URL is authoritative — ignore stale storage.
     lang = parsed.locale;
     localStorage.setItem("whachatcrm_language", lang);
   } else if (!parsed.isLocalePrefixed && hasLocalizedVersion(parsed.englishPath)) {
@@ -17,9 +18,12 @@ async function mount() {
     localStorage.setItem("whachatcrm_language", "en");
   }
 
-  if (lang && lang !== "en" && ["he", "es"].includes(lang)) {
+  if (lang === "he" || lang === "es") {
     await loadLocale(lang);
     await i18n.changeLanguage(lang);
+  } else if (lang === "en" && i18n.language !== "en") {
+    // Clear stale non-English i18n (LanguageDetector / localStorage) before first paint.
+    await i18n.changeLanguage("en");
   }
   createRoot(document.getElementById("root")!).render(<App />);
 }

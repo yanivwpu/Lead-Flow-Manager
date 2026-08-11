@@ -146,10 +146,11 @@ test("marketing URL sync still forces public locale (Phase 2 regression guard)",
   assert.match(routing, /changeLanguage\("en"\)/);
 });
 
-test("bootstrap prefers URL locale then localStorage (no DB before auth)", () => {
+test("bootstrap prefers URL locale and forces English i18n on unprefixed Phase 2", () => {
   const boot = read("client/src/bootstrap.tsx");
   assert.match(boot, /whachatcrm_language/);
   assert.match(boot, /parseLocalizedPath/);
+  assert.match(boot, /changeLanguage\("en"\)|changeLanguage\('en'\)/);
   assert.doesNotMatch(boot, /\/api\/auth\/me|applyDatabaseLanguagePreference/);
 });
 

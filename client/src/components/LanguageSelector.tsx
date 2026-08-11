@@ -9,8 +9,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { supportedLanguages, changeLanguage, getCurrentLanguage, type SupportedLanguage } from '@/lib/i18n';
-import { marketingLanguageTargetPath } from '@/lib/marketingLocaleRouting';
+import { marketingLanguageTargetPath, useMarketingUrlLocale } from '@/lib/marketingLocaleRouting';
 import type { MarketingLocale } from '@shared/marketingLocale';
+import { isPublicLocaleAuthoritativePath } from '@shared/localeRoutes';
 import { useAuth } from '@/lib/auth-context';
 import {
   noteExplicitLanguageSelection,
@@ -32,6 +33,7 @@ export function LanguageSelector({
 }: LanguageSelectorProps) {
   const { user } = useAuth();
   const [location, setLocation] = useLocation();
+  const urlLocale = useMarketingUrlLocale();
   const [currentLang, setCurrentLang] = useState<SupportedLanguage>(getCurrentLanguage());
 
   useEffect(() => {
@@ -42,6 +44,15 @@ export function LanguageSelector({
     window.addEventListener('languageChanged', handleLanguageChange);
     return () => window.removeEventListener('languageChanged', handleLanguageChange);
   }, []);
+
+  // On public marketing URLs, the selector reflects the URL locale (not stale i18n).
+  useEffect(() => {
+    if (!navigateOnChange) return;
+    if (!isPublicLocaleAuthoritativePath(location)) return;
+    if (currentLang !== urlLocale) {
+      setCurrentLang(urlLocale as SupportedLanguage);
+    }
+  }, [navigateOnChange, location, urlLocale, currentLang]);
 
   const handleLanguageChange = async (lang: SupportedLanguage) => {
     // Explicit session selection first so a slower /api/auth/me cannot overwrite it.
