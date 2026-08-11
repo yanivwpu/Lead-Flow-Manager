@@ -10419,25 +10419,48 @@ export async function registerRoutes(
 
   // ============= UNIFIED INBOX API (Multi-Channel CRM) =============
 
-  // Get unified inbox - all contacts sorted by last activity
+  // Get unified inbox - recent page, or server-side search via ?q= (min 2 chars).
   app.get("/api/inbox", async (req, res) => {
     const t0 = Date.now();
     const userId = req.user?.id ?? null;
-    devLog("[InboxEvidence:GET /api/inbox] start", { userId });
+    const rawQ = typeof req.query.q === "string" ? req.query.q : "";
+    const {
+      sanitizeInboxSearchQuery,
+      INBOX_SEARCH_RESULT_LIMIT,
+      recordInboxTiming,
+    } = await import("@shared/inboxListMerge");
+    const searchQ = sanitizeInboxSearchQuery(rawQ);
+    devLog("[InboxEvidence:GET /api/inbox] start", {
+      userId,
+      search: Boolean(searchQ),
+    });
     try {
       if (!req.user) {
         console.warn("[InboxEvidence:GET /api/inbox] unauthorized — no req.user");
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const limit = parseInt(req.query.limit as string) || 100;
-      const inbox = await storage.getUnifiedInbox(req.user.id, limit);
+      let inbox;
+      if (searchQ) {
+        inbox = await storage.searchUnifiedInbox(
+          req.user.id,
+          searchQ,
+          INBOX_SEARCH_RESULT_LIMIT,
+        );
+      } else {
+        const limit = parseInt(req.query.limit as string) || 100;
+        inbox = await storage.getUnifiedInbox(req.user.id, limit);
+      }
       const ms = Date.now() - t0;
       const rowCount = Array.isArray(inbox) ? inbox.length : -1;
+      recordInboxTiming(searchQ ? "inbox_search" : "inbox_recent", ms, {
+        rowCount,
+      });
       devLog("[InboxEvidence:GET /api/inbox] end", {
         userId: req.user.id,
         rowCount,
         returnedZero: rowCount === 0,
         ms,
+        search: Boolean(searchQ),
       });
       res.json(inbox);
     } catch (error) {

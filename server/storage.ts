@@ -405,6 +405,7 @@ export interface IStorage {
   
   // Unified inbox methods
   getUnifiedInbox(userId: string, limit?: number): Promise<InboxItem[]>;
+  searchUnifiedInbox(userId: string, query: string, limit?: number): Promise<InboxItem[]>;
   getContactWithConversations(contactId: string): Promise<{ contact: Contact; conversations: Conversation[] } | undefined>;
   
   // Activity event methods
@@ -2918,17 +2919,17 @@ export class DbStorage implements IStorage {
   }
 
   // Unified inbox methods
-  async getUnifiedInbox(userId: string, limit: number = 100): Promise<InboxItem[]> {
-    // Contact-scoped fetch; email threads expand to one row each below.
-    const userContacts = await db.select().from(contacts)
-      .where(eq(contacts.userId, userId))
-      .orderBy(desc(contacts.updatedAt))
-      .limit(limit);
-
-    // Cold Prospect AI outreach: hide linked email threads until first inbound reply.
-    // Conversation-scoped via prospect_intelligence + queue conversationId fallback
-    // (covers missing/stale PI.outreachConversationId after successful campaign send).
-    const contactIds = userContacts.map((c) => c.id);
+  /**
+   * Build InboxItem rows for an already-scoped contact list (must be owned by userId).
+   * Shared by recent inbox + server-side search — does not change identity matching.
+   */
+  private async buildUnifiedInboxForContacts(
+    userId: string,
+    userContacts: Contact[],
+  ): Promise<InboxItem[]> {
+    // Defense in depth: never emit contacts outside this workspace.
+    const scoped = userContacts.filter((c) => c.userId === userId);
+    const contactIds = scoped.map((c) => c.id);
     let hiddenColdOutreachConversationIds = new Set<string>();
     if (contactIds.length > 0) {
       const piSignals = await db
@@ -2975,7 +2976,7 @@ export class DbStorage implements IStorage {
 
     const inboxItems: InboxItem[] = [];
 
-    for (const contact of userContacts) {
+    for (const contact of scoped) {
       const convs = await db.select().from(conversations)
         .where(eq(conversations.contactId, contact.id))
         .orderBy(desc(conversations.lastMessageAt));
@@ -2991,7 +2992,6 @@ export class DbStorage implements IStorage {
           row.channel === "email" &&
           row.conversation?.id
         ) {
-          // Prefer newest local message that has a Gmail provider id (trash-email requires it).
           const latest = await db
             .select({
               id: messages.id,
@@ -3022,7 +3022,6 @@ export class DbStorage implements IStorage {
       }
     }
 
-    // Attach website-form visitor identity for email rows (display-only overlay).
     try {
       const emailConvIds = inboxItems
         .filter((i) => i.channel === "email" && i.conversation?.id)
@@ -3050,6 +3049,58 @@ export class DbStorage implements IStorage {
       const bTime = b.lastMessageAt?.getTime() || 0;
       return bTime - aTime;
     });
+  }
+
+  async getUnifiedInbox(userId: string, limit: number = 100): Promise<InboxItem[]> {
+    // Contact-scoped fetch; email threads expand to one row each below.
+    const userContacts = await db.select().from(contacts)
+      .where(eq(contacts.userId, userId))
+      .orderBy(desc(contacts.updatedAt))
+      .limit(limit);
+
+    return this.buildUnifiedInboxForContacts(userId, userContacts);
+  }
+
+  /**
+   * Server-side Inbox search: name / email / phone (incl. digit-normalized).
+   * Always scoped to userId; capped result set. Does not load the full contact DB.
+   */
+  async searchUnifiedInbox(
+    userId: string,
+    query: string,
+    limit: number = 50,
+  ): Promise<InboxItem[]> {
+    const {
+      sanitizeInboxSearchQuery,
+      inboxSearchPhoneDigits,
+      INBOX_SEARCH_RESULT_LIMIT,
+    } = await import("@shared/inboxListMerge");
+    const q = sanitizeInboxSearchQuery(query);
+    if (!q) return [];
+    const cappedLimit = Math.min(Math.max(1, limit), INBOX_SEARCH_RESULT_LIMIT);
+    const searchPattern = `%${q}%`;
+    const phoneDigits = inboxSearchPhoneDigits(q);
+
+    const predicates = [
+      ilike(contacts.name, searchPattern),
+      ilike(contacts.email, searchPattern),
+      ilike(contacts.phone, searchPattern),
+    ];
+    if (phoneDigits) {
+      // Parameterized digit strip — never interpolate raw user input into SQL text.
+      predicates.push(
+        sql`regexp_replace(coalesce(${contacts.phone}, ''), '[^0-9]', '', 'g') like ${"%" + phoneDigits + "%"}`,
+      );
+    }
+
+    const matched = await db
+      .select()
+      .from(contacts)
+      .where(and(eq(contacts.userId, userId), or(...predicates)))
+      .orderBy(desc(contacts.updatedAt))
+      .limit(cappedLimit);
+
+    return this.buildUnifiedInboxForContacts(userId, matched);
   }
 
   async getContactWithConversations(contactId: string): Promise<{ contact: Contact; conversations: Conversation[] } | undefined> {

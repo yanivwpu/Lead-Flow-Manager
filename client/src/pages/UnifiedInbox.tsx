@@ -16,7 +16,18 @@ import {
   shouldFetchInboxMessages,
 } from "@/lib/inboxSelectionState";
 import { inboxRowKey, isEmailConversationChannel } from "@shared/inboxRowModel";
+import {
+  mergeInboxWithSessionPins,
+  recordInboxTiming,
+  sanitizeInboxSearchQuery,
+  upsertSessionPins,
+} from "@shared/inboxListMerge";
+import {
+  inboxItemsFromContactDetail,
+  selectPinCandidates,
+} from "@/lib/inboxSessionPins";
 import { inboxRowDisplayName } from "@shared/websiteFormIdentity";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   PROSPECT_OUTREACH_COMPOSE_STORAGE_KEY,
   parseProspectOutreachComposePayload,
@@ -624,6 +635,30 @@ export function UnifiedInbox() {
   const capabilities = useAICapabilities();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchRaw, setDebouncedSearchRaw] = useState("");
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setDebouncedSearchRaw(searchQuery);
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [searchQuery]);
+  const sanitizedSearch = useMemo(
+    () => sanitizeInboxSearchQuery(debouncedSearchRaw),
+    [debouncedSearchRaw],
+  );
+  const isServerSearching = Boolean(sanitizedSearch);
+
+  /** Session pins for deep-linked rows missing from the recent page; cleared on user change. */
+  const [sessionPins, setSessionPins] = useState<InboxItem[]>([]);
+  const pinScopeUserIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const scope = user?.id ?? null;
+    if (pinScopeUserIdRef.current !== scope) {
+      pinScopeUserIdRef.current = scope;
+      setSessionPins([]);
+    }
+  }, [user?.id]);
+
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const allChannels: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'email', 'tiktok', 'calendly', 'shopify', 'woocommerce'];
   const [selectedChannels, setSelectedChannels] = useState<Set<Channel>>(new Set(allChannels));
@@ -793,6 +828,7 @@ export function UnifiedInbox() {
     refetchIntervalInBackground: true,
     placeholderData: keepPreviousData,
     queryFn: async ({ signal }) => {
+      const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
       const res = await fetch("/api/inbox", {
         credentials: "include",
         cache: "no-store",
@@ -803,6 +839,9 @@ export function UnifiedInbox() {
       }
       const incoming = (await res.json()) as InboxItem[];
       const previous = queryClient.getQueryData<InboxItem[]>(["/api/inbox"]);
+      const ms =
+        (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
+      recordInboxTiming("inbox_recent_client", ms, { rowCount: incoming.length });
       return mergeInboxUnreadPreservingLocalRead(
         previous,
         incoming,
@@ -811,7 +850,35 @@ export function UnifiedInbox() {
     },
   });
 
-  const inbox: InboxItem[] = useMemo(() => inboxData || [], [inboxData]);
+  const inboxSettledOnce = inboxData !== undefined;
+
+  const {
+    data: searchInboxData,
+    isPending: searchInboxPending,
+  } = useQuery<InboxItem[]>({
+    queryKey: ["/api/inbox", "search", sanitizedSearch],
+    enabled: isServerSearching,
+    staleTime: 10_000,
+    queryFn: async ({ signal }) => {
+      const q = sanitizedSearch!;
+      const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
+      const res = await fetch(`/api/inbox?q=${encodeURIComponent(q)}`, {
+        credentials: "include",
+        cache: "no-store",
+        signal,
+      });
+      if (!res.ok) {
+        throw new Error(`${res.status}: ${await res.text()}`);
+      }
+      const incoming = (await res.json()) as InboxItem[];
+      const ms =
+        (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
+      recordInboxTiming("inbox_search_client", ms, { rowCount: incoming.length });
+      return incoming;
+    },
+  });
+
+  const recentInbox: InboxItem[] = useMemo(() => inboxData || [], [inboxData]);
 
   const { data: inboxAppointments = [] } = useQuery<Array<{
     id: string;
@@ -837,6 +904,37 @@ export function UnifiedInbox() {
     // via resolveInboxSelectionState — never render previous contact's conversations/messages.
     placeholderData: keepPreviousData,
   });
+
+  const contactMatchesSelection = contactData?.contact?.id === selectedContactId;
+  const matchedContact = contactMatchesSelection ? contactData!.contact : undefined;
+  const matchedConversations = contactMatchesSelection ? (contactData?.conversations ?? []) : [];
+
+  // Pin deep-linked / selected rows missing from the recent page; recent server rows win on key match.
+  useEffect(() => {
+    setSessionPins((prev) => {
+      const candidates =
+        matchedContact && selectedContactId
+          ? selectPinCandidates(
+              inboxItemsFromContactDetail(matchedContact, matchedConversations) as InboxItem[],
+              selectedConversationId,
+            )
+          : [];
+      return upsertSessionPins(prev, candidates, recentInbox);
+    });
+  }, [
+    matchedContact,
+    matchedConversations,
+    selectedContactId,
+    selectedConversationId,
+    recentInbox,
+  ]);
+
+  const inbox: InboxItem[] = useMemo(() => {
+    if (isServerSearching) {
+      return searchInboxData ?? [];
+    }
+    return mergeInboxWithSessionPins(recentInbox, sessionPins);
+  }, [isServerSearching, searchInboxData, recentInbox, sessionPins]);
 
   const inboxSelectedItem = useMemo(() => {
     if (!selectedContactId) return undefined;
@@ -872,11 +970,6 @@ export function UnifiedInbox() {
     stickyConversationIdRef.current = null;
     setStickyEpoch((n) => n + 1);
   }, []);
-
-  // First pass: match contact only (channel preference computed after reachable channels).
-  const contactMatchesSelection = contactData?.contact?.id === selectedContactId;
-  const matchedContact = contactMatchesSelection ? contactData!.contact : undefined;
-  const matchedConversations = contactMatchesSelection ? (contactData?.conversations ?? []) : [];
 
   /** Header/CRM: matched detail or inbox list row — never a mismatched previous contact. */
   const displayContact: Contact | undefined =
@@ -1611,6 +1704,7 @@ export function UnifiedInbox() {
   };
   const { data: channelHealth = [] } = useQuery<ChannelHealthEntry[]>({
     queryKey: ["/api/channel-health"],
+    enabled: inboxSettledOnce,
     refetchInterval: 5 * 60 * 1000, // re-check every 5 minutes
     staleTime: 4 * 60 * 1000,
   });
@@ -2576,7 +2670,7 @@ export function UnifiedInbox() {
   // --- Filtering ---
 
   const filteredInbox = useMemo(() => {
-    const q = searchQuery.toLowerCase();
+    const q = isServerSearching ? "" : searchQuery.toLowerCase();
     let result = inbox.filter((item) => {
       if (!q) return true;
       const formId =
@@ -2608,6 +2702,7 @@ export function UnifiedInbox() {
   }, [
     inbox,
     searchQuery,
+    isServerSearching,
     filterTab,
     user?.id,
     selectedChannels,
@@ -2813,14 +2908,9 @@ export function UnifiedInbox() {
   const convStatus = primaryConversation?.status || 'open';
   const conversationStatusRow = getConversationStatusRow(convStatus);
 
-  // Only block on first load with no rows yet — never swap the whole page out during background refetch.
-  if (inboxPending && inboxData === undefined) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const showListSkeleton =
+    (!isServerSearching && inboxPending && inboxData === undefined) ||
+    (isServerSearching && searchInboxPending && searchInboxData === undefined);
 
   return (
     <div className="flex h-full bg-white overflow-hidden w-full max-w-full" data-testid="unified-inbox">
@@ -3074,7 +3164,19 @@ export function UnifiedInbox() {
 
         {/* List */}
         <div className="flex-1 overflow-y-auto">
-          {filteredInbox.length === 0 ? (
+          {showListSkeleton ? (
+            <div className="p-3 space-y-3" data-testid="inbox-list-skeleton">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2.5">
+                  <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+                  <div className="flex-1 space-y-2 min-w-0">
+                    <Skeleton className="h-3 w-2/3 max-w-[10rem]" />
+                    <Skeleton className="h-3 w-full" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredInbox.length === 0 ? (
             showInboxEmptyNoChannels ? (
               <div className="p-6 text-center" data-testid="inbox-empty-no-channels">
                 <Smartphone className="w-10 h-10 mx-auto mb-3 text-gray-300" aria-hidden />
@@ -3097,7 +3199,9 @@ export function UnifiedInbox() {
             ) : (
               <div className="p-6 text-center text-muted-foreground">
                 <User className="w-10 h-10 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">No conversations</p>
+                <p className="text-sm">
+                  {isServerSearching ? "No matching conversations" : "No conversations"}
+                </p>
               </div>
             )
           ) : (
@@ -4229,9 +4333,20 @@ export function UnifiedInbox() {
           </>
         ) : selectedContactId ? (
           /* Contact selected but detail still loading (and not yet in inbox list cache) */
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#efeae2]/30">
-            <Loader2 className="w-8 h-8 animate-spin text-primary mb-3" />
-            <p className="text-sm text-muted-foreground">Loading contact…</p>
+          <div
+            className="flex-1 flex flex-col p-6 bg-[#efeae2]/30 space-y-4"
+            data-testid="inbox-center-skeleton"
+          >
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <div className="space-y-2 flex-1">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </div>
+            <Skeleton className="h-16 w-3/4 rounded-2xl" />
+            <Skeleton className="h-16 w-2/3 rounded-2xl ml-auto" />
+            <Skeleton className="h-16 w-3/5 rounded-2xl" />
           </div>
         ) : (
           /* Empty state — no contact selected */
