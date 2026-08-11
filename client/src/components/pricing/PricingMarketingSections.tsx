@@ -15,6 +15,7 @@ import { PROSPECT_AI_MONTHLY_QUOTAS } from "@shared/prospectAI";
 import { PROSPECT_AI_PATH } from "@/lib/prospectAi";
 import { trackPricingEvent } from "@/lib/ga4Events";
 import { BookDemoModal } from "@/components/BookDemoModal";
+import { renderRtlAwareHeadingText } from "@/components/marketing/RtlAwareHeadingText";
 import {
   getLocalizedPricingPage,
   type PricingPageContent,
@@ -180,6 +181,10 @@ export function ProspectAiCallout({ loggedIn }: { loggedIn: boolean }) {
   const href = loggedIn
     ? PROSPECT_AI_PATH
     : localizedInternalHref("/prospect-ai", locale);
+  const prospectAiTitle =
+    locale === "he"
+      ? renderRtlAwareHeadingText(content.prospectAi.title)
+      : content.prospectAi.title;
   return (
     <section
       className="mb-6 overflow-hidden rounded-2xl border border-emerald-200/80 bg-gradient-to-b from-white to-gray-50 px-4 py-6 sm:mb-8 sm:px-8 sm:py-8"
@@ -190,7 +195,7 @@ export function ProspectAiCallout({ loggedIn }: { loggedIn: boolean }) {
           {content.prospectAi.badge}
         </p>
         <h2 className="mt-1.5 font-display text-xl font-bold text-gray-900 sm:text-2xl">
-          {content.prospectAi.title}
+          {prospectAiTitle}
         </h2>
         <p className="mx-auto mt-2 max-w-lg text-sm leading-relaxed text-gray-600">
           {content.prospectAi.body}

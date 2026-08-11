@@ -8,6 +8,10 @@ import fs from "fs";
 import path from "path";
 import { getLocalizedHomepage } from "../shared/localizeMarketingContent";
 import {
+  needsHebrewAiBidiLayout,
+  splitHebrewAiBidiText,
+} from "../shared/rtlLeadingLtrIsolate";
+import {
   generateHomepageHtml,
   injectHomepageSeoMeta,
   injectLocalizedStaticShell,
@@ -219,4 +223,25 @@ test("complete homepage HTML has exactly one localized H1", () => {
 test("index.html boot keeps static shell on localized homepage roots", () => {
   const html = fs.readFileSync(path.join(process.cwd(), "client/index.html"), "utf8");
   assert.ok(html.includes('p !== "/" && p !== "/es" && p !== "/he"'));
+});
+
+test("Hebrew AI Sales Team copy keeps stored order; homepage isolates standalone AI", () => {
+  const he = getLocalizedHomepage("he").aiPlatform;
+
+  assert.equal(he.eyebrow, "צוות מכירות AI");
+  assert.equal(he.title, "AI שמוצא הזדמנויות ומנחה כל צעד הבא");
+  assert.equal(needsHebrewAiBidiLayout(he.title), true);
+  assert.deepEqual(splitHebrewAiBidiText(he.title), [
+    { kind: "aiHebrew", ai: "AI", hebrew: "שמוצא הזדמנויות ומנחה כל צעד הבא" },
+  ]);
+  assert.equal(needsHebrewAiBidiLayout(he.eyebrow), false);
+
+  const sectionPath = path.join(
+    process.cwd(),
+    "client/src/pages/welcome/WelcomeAiPlatformSection.tsx",
+  );
+  const section = fs.readFileSync(sectionPath, "utf8");
+  assert.ok(section.includes("renderRtlAwareHeadingText"));
+  assert.ok(section.includes('<bdi dir="ltr">AI</bdi>'));
+  assert.ok(section.includes("renderHomepageHebrewAiCopy"));
 });

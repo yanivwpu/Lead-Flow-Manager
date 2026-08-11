@@ -1,7 +1,31 @@
 import { Link } from "wouter";
 import { ArrowRight, Brain, MessageSquareText, Sparkles } from "lucide-react";
+import type { ReactNode } from "react";
 import { getLocalizedHomepage } from "@shared/localizeMarketingContent";
+import { needsHebrewAiBidiLayout } from "@shared/rtlLeadingLtrIsolate";
+import { renderRtlAwareHeadingText } from "@/components/marketing/RtlAwareHeadingText";
 import { useLocalizedHref, useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
+
+/**
+ * Homepage Hebrew AI copy: keep stored order, isolate standalone Latin "AI"
+ * so bidi does not push it to the wrong visual end under dir=rtl.
+ */
+function renderHomepageHebrewAiCopy(text: string): ReactNode {
+  if (needsHebrewAiBidiLayout(text)) {
+    return renderRtlAwareHeadingText(text);
+  }
+  const trailingAi = text.match(/^(.*?)(\s+)(AI)$/u);
+  if (trailingAi) {
+    return (
+      <>
+        {trailingAi[1]}
+        {trailingAi[2]}
+        <bdi dir="ltr">AI</bdi>
+      </>
+    );
+  }
+  return text;
+}
 
 /**
  * Homepage AI Sales Team cards — link to dedicated Product pages.
@@ -13,6 +37,8 @@ export default function WelcomeAiPlatformSection() {
   const prospectHref = useLocalizedHref(content.prospectAi.href);
   const brainHref = useLocalizedHref(content.aiBrain.href);
   const copilotHref = useLocalizedHref(content.aiCopilot.href);
+  const eyebrow = locale === "he" ? renderHomepageHebrewAiCopy(content.eyebrow) : content.eyebrow;
+  const title = locale === "he" ? renderHomepageHebrewAiCopy(content.title) : content.title;
 
   return (
     <section
@@ -23,13 +49,13 @@ export default function WelcomeAiPlatformSection() {
       <div className="max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
         <div className="mx-auto mb-12 max-w-3xl text-center md:mb-14">
           <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-brand-green">
-            {content.eyebrow}
+            {eyebrow}
           </p>
           <h2
             id="ai-platform-heading"
             className="text-3xl md:text-5xl font-display font-bold tracking-tight text-gray-950 mb-4"
           >
-            {content.title}
+            {title}
           </h2>
           <p className="text-base md:text-lg text-gray-600">{content.subtitle}</p>
         </div>
