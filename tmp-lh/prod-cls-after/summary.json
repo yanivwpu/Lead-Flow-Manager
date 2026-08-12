@@ -1,0 +1,199 @@
+[
+  {
+    "id": "en-desktop",
+    "earlyGeom": {
+      "host": {
+        "t": 0,
+        "l": 0,
+        "w": 1265,
+        "h": 60
+      },
+      "product": {
+        "t": 14,
+        "l": 416.6,
+        "w": 67.6,
+        "h": 32
+      },
+      "pricing": {
+        "t": 14,
+        "l": 919.3,
+        "w": 45.8,
+        "h": 32
+      },
+      "centerDisplay": "flex",
+      "portal": false,
+      "width": 1280
+    },
+    "final": {
+      "cls": 0.00069,
+      "shifts": [
+        {
+          "value": 0.000692578125,
+          "startTime": 345.5,
+          "sources": [
+            {
+              "prev": {
+                "x": 751,
+                "y": 132,
+                "width": 380,
+                "height": 591.03125,
+                "top": 132,
+                "right": 1131,
+                "bottom": 723.03125,
+                "left": 751
+              },
+              "cur": {
+                "x": 755,
+                "y": 132,
+                "width": 380,
+                "height": 591.03125,
+                "top": 132,
+                "right": 1135,
+                "bottom": 723.03125,
+                "left": 755
+              },
+              "sel": ".wcs-hero-image-slot",
+              "text": ""
+            }
+          ]
+        }
+      ],
+      "host": {
+        "t": 0,
+        "l": 0,
+        "w": 1270,
+        "h": 60
+      },
+      "portal": {
+        "t": 0,
+        "l": 0,
+        "w": 1270,
+        "h": 60
+      },
+      "shellLive": true,
+      "width": 1280,
+      "hasScrollbarCss": "stable"
+    }
+  },
+  {
+    "id": "en-mobile",
+    "earlyGeom": {
+      "host": {
+        "t": 0,
+        "l": 0,
+        "w": 390,
+        "h": 56
+      },
+      "product": {
+        "t": 0,
+        "l": 0,
+        "w": 0,
+        "h": 0
+      },
+      "pricing": {
+        "t": 0,
+        "l": 0,
+        "w": 0,
+        "h": 0
+      },
+      "centerDisplay": "none",
+      "portal": false,
+      "width": 390
+    },
+    "final": {
+      "cls": 0,
+      "shifts": [],
+      "host": {
+        "t": 0,
+        "l": 0,
+        "w": 390,
+        "h": 56
+      },
+      "portal": {
+        "t": 0,
+        "l": 0,
+        "w": 390,
+        "h": 56
+      },
+      "shellLive": true,
+      "width": 390,
+      "hasScrollbarCss": "stable"
+    }
+  },
+  {
+    "id": "he-desktop",
+    "earlyGeom": {
+      "host": {
+        "t": 0,
+        "l": 0,
+        "w": 1265,
+        "h": 60
+      },
+      "product": {
+        "t": 14,
+        "l": 780.8,
+        "w": 67.6,
+        "h": 32
+      },
+      "pricing": {
+        "t": 14,
+        "l": 299.9,
+        "w": 45.8,
+        "h": 32
+      },
+      "centerDisplay": "flex",
+      "portal": false,
+      "width": 1280
+    },
+    "final": {
+      "cls": 0.15353,
+      "shifts": [
+        {
+          "value": 0.1535329008102417,
+          "startTime": 156.19999999995343,
+          "sources": [
+            {
+              "prev": {
+                "x": 0,
+                "y": 0,
+                "width": 1265,
+                "height": 755.03125,
+                "top": 0,
+                "right": 1265,
+                "bottom": 755.03125,
+                "left": 0
+              },
+              "cur": {
+                "x": 0,
+                "y": 0,
+                "width": 1270,
+                "height": 755.03125,
+                "top": 0,
+                "right": 1270,
+                "bottom": 755.03125,
+                "left": 0
+              },
+              "sel": ".rtl",
+              "text": "html.wcs-shopify-preboot #whachat-static"
+            }
+          ]
+        }
+      ],
+      "host": {
+        "t": 0,
+        "l": 0,
+        "w": 1270,
+        "h": 60
+      },
+      "portal": {
+        "t": 0,
+        "l": 0,
+        "w": 1270,
+        "h": 60
+      },
+      "shellLive": true,
+      "width": 1280,
+      "hasScrollbarCss": "stable"
+    }
+  }
+]

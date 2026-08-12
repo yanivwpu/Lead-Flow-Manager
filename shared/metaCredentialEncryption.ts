@@ -111,3 +111,20 @@ export function isLegacyMetaCiphertext(text: string): boolean {
 export function isMetaEncryptedCredential(text: string): boolean {
   return isVersionedMetaCiphertext(text) || isLegacyMetaCiphertext(text);
 }
+
+/** Safe stored-credential classification for diagnostics (no ciphertext returned). */
+export type MetaStoredCredentialEncryptionStatus =
+  | "missing"
+  | "v1"
+  | "legacy_unversioned"
+  | "plaintext_or_unknown";
+
+export function classifyStoredMetaCredentialEncryption(
+  raw: string | null | undefined,
+): MetaStoredCredentialEncryptionStatus {
+  if (raw == null || !String(raw).trim()) return "missing";
+  const s = String(raw);
+  if (isVersionedMetaCiphertext(s)) return "v1";
+  if (isLegacyMetaCiphertext(s)) return "legacy_unversioned";
+  return "plaintext_or_unknown";
+}

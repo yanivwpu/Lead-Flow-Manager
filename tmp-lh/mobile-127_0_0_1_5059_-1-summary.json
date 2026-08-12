@@ -1,0 +1,22 @@
+{
+  "form": "mobile",
+  "url": "http://127.0.0.1:5059/",
+  "i": 1,
+  "perf": 57,
+  "FCP": 2958.1115500000005,
+  "LCP": 3492.934375000001,
+  "CLS": 0.016682245898284046,
+  "TBT": 2015.2385250000007,
+  "TTFB": 491.83299999999997,
+  "lcpEl": "",
+  "shifts": [
+    {
+      "score": 0.01339137838781277,
+      "node": "<section class=\"wcs-hero\" aria-labelledby=\"whachat-static-hero-title\">"
+    },
+    {
+      "score": 0.003290867510471277,
+      "node": "<section class=\"wcs-hero\" aria-labelledby=\"whachat-static-hero-title\">"
+    }
+  ]
+}

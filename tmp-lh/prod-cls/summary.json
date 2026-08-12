@@ -1,0 +1,2764 @@
+[
+  {
+    "id": "en-desktop",
+    "url": "https://www.whachatcrm.com/",
+    "viewport": {
+      "width": 1280,
+      "height": 800
+    },
+    "assets": {
+      "css": [
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+        "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+      ],
+      "scripts": [
+        "https://www.whachatcrm.com/assets/index-BoqAmiso.js"
+      ],
+      "preloads": [
+        {
+          "as": "style",
+          "href": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "imagesrcset": null
+        },
+        {
+          "as": "image",
+          "href": "https://www.whachatcrm.com/hero/hero-640.avif",
+          "imagesrcset": "/hero/hero-400.avif 400w, /hero/hero-640.avif 640w, /hero/hero-768.avif 768w, /hero/hero-1024.avif 1024w"
+        }
+      ],
+      "htmlHasShellLive": true,
+      "criticalHasShellLive": true,
+      "sheetHasShellLive": true,
+      "dir": "ltr",
+      "lang": "en",
+      "classes": "wcs-homepage-shell-live"
+    },
+    "stages": [
+      "01-initial-html-paint",
+      "03-react-header-portal",
+      "04-locale-sync",
+      "05-final-settled"
+    ],
+    "clsLog": [
+      {
+        "value": 0.002944915771484375,
+        "startTime": 3230.79999999993,
+        "sources": [
+          {
+            "prev": {
+              "x": 648.3125,
+              "y": 132,
+              "width": 607.671875,
+              "height": 591.03125,
+              "top": 132,
+              "right": 1255.984375,
+              "bottom": 723.03125,
+              "left": 648.3125
+            },
+            "cur": {
+              "x": 643.40625,
+              "y": 133,
+              "width": 602.59375,
+              "height": 591.03125,
+              "top": 133,
+              "right": 1246,
+              "bottom": 724.03125,
+              "left": 643.40625
+            },
+            "sel": ".wcs-order-img.wcs-hero-image-column",
+            "tag": "DIV",
+            "id": null,
+            "cls": "wcs-order-img wcs-hero-image-column",
+            "text": ""
+          },
+          {
+            "prev": {
+              "x": 641.4375,
+              "y": 12,
+              "width": 614.5625,
+              "height": 36,
+              "top": 12,
+              "right": 1256,
+              "bottom": 48,
+              "left": 641.4375
+            },
+            "cur": {
+              "x": 631.4375,
+              "y": 12,
+              "width": 614.5625,
+              "height": 37,
+              "top": 12,
+              "right": 1246,
+              "bottom": 49,
+              "left": 631.4375
+            },
+            "sel": ".wcs-nav-links",
+            "tag": "NAV",
+            "id": null,
+            "cls": "wcs-nav-links",
+            "text": "Product\n          Solutions\n          Resources\n          Pr"
+          }
+        ]
+      }
+    ],
+    "snapshots": [
+      {
+        "label": "domcontentloaded",
+        "t": 1374.6,
+        "classes": "",
+        "dir": "ltr",
+        "lang": "en",
+        "title": "Meet Your AI Sales Team | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav"
+        ],
+        "h1": {
+          "t": 184,
+          "h": 156.8,
+          "w": 584.3,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 60,
+          "w": 1280,
+          "v": "visible",
+          "d": "grid"
+        },
+        "portal": null,
+        "host": {
+          "t": 0,
+          "h": 60,
+          "w": 1280,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 755,
+          "h": 0,
+          "w": 1280,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 755,
+          "w": 1280,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 132,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loading",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "01-initial-html-paint",
+        "t": 2380.6,
+        "classes": "",
+        "dir": "ltr",
+        "lang": "en",
+        "title": "Meet Your AI Sales Team | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav"
+        ],
+        "h1": {
+          "t": 184,
+          "h": 156.8,
+          "w": 584.3,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 60,
+          "w": 1280,
+          "v": "visible",
+          "d": "grid"
+        },
+        "portal": null,
+        "host": {
+          "t": 0,
+          "h": 60,
+          "w": 1280,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 755,
+          "h": 0,
+          "w": 1280,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 755,
+          "w": 1280,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 132,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "load",
+        "t": 3232,
+        "classes": "",
+        "dir": "ltr",
+        "lang": "en",
+        "title": "Meet Your AI Sales Team | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav"
+        ],
+        "h1": {
+          "t": 185,
+          "h": 156.8,
+          "w": 579.4,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "grid"
+        },
+        "portal": null,
+        "host": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 756,
+          "h": 0,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 756,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 133,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loading",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "03-react-header-portal",
+        "t": 3818.4,
+        "classes": "wcs-homepage-shell-live",
+        "dir": "ltr",
+        "lang": "en",
+        "title": "WhatsApp & Unified Mailbox | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 185,
+          "h": 156.8,
+          "w": 579.4,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 756,
+          "h": 2640,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 756,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 133,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0.00294,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "04-locale-sync",
+        "t": 4145.6,
+        "classes": "wcs-homepage-shell-live",
+        "dir": "ltr",
+        "lang": "en",
+        "title": "WhatsApp & Unified Mailbox | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 185,
+          "h": 156.8,
+          "w": 579.4,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 756,
+          "h": 4742.9,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 756,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 133,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0.00294,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "05-final-settled",
+        "t": 6767.9,
+        "classes": "wcs-homepage-shell-live",
+        "dir": "ltr",
+        "lang": "en",
+        "title": "WhatsApp & Unified Mailbox | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 185,
+          "h": 156.8,
+          "w": 579.4,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 756,
+          "h": 4742.9,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 756,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 133,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0.00294,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      }
+    ],
+    "cls": 0.00294
+  },
+  {
+    "id": "es-desktop",
+    "url": "https://www.whachatcrm.com/es/",
+    "viewport": {
+      "width": 1280,
+      "height": 800
+    },
+    "assets": {
+      "css": [
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+        "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+      ],
+      "scripts": [
+        "https://www.whachatcrm.com/assets/index-BoqAmiso.js"
+      ],
+      "preloads": [
+        {
+          "as": "style",
+          "href": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "imagesrcset": null
+        },
+        {
+          "as": "image",
+          "href": "https://www.whachatcrm.com/hero/hero-640.avif",
+          "imagesrcset": "/hero/hero-400.avif 400w, /hero/hero-640.avif 640w, /hero/hero-768.avif 768w, /hero/hero-1024.avif 1024w"
+        }
+      ],
+      "htmlHasShellLive": true,
+      "criticalHasShellLive": true,
+      "sheetHasShellLive": true,
+      "dir": "ltr",
+      "lang": "es",
+      "classes": "wcs-homepage-shell-live"
+    },
+    "stages": [
+      "01-initial-html-paint",
+      "03-react-header-portal",
+      "04-locale-sync",
+      "05-final-settled"
+    ],
+    "clsLog": [
+      {
+        "value": 0.0029813308715820313,
+        "startTime": 1021.4000000000233,
+        "sources": [
+          {
+            "prev": {
+              "x": 648.3125,
+              "y": 132,
+              "width": 607.671875,
+              "height": 591.03125,
+              "top": 132,
+              "right": 1255.984375,
+              "bottom": 723.03125,
+              "left": 648.3125
+            },
+            "cur": {
+              "x": 643.40625,
+              "y": 133,
+              "width": 602.59375,
+              "height": 591.03125,
+              "top": 133,
+              "right": 1246,
+              "bottom": 724.03125,
+              "left": 643.40625
+            },
+            "sel": ".wcs-order-img.wcs-hero-image-column",
+            "tag": "DIV",
+            "id": null,
+            "cls": "wcs-order-img wcs-hero-image-column",
+            "text": ""
+          },
+          {
+            "prev": {
+              "x": 511.515625,
+              "y": 12,
+              "width": 744.484375,
+              "height": 36,
+              "top": 12,
+              "right": 1256,
+              "bottom": 48,
+              "left": 511.515625
+            },
+            "cur": {
+              "x": 501.515625,
+              "y": 12,
+              "width": 744.484375,
+              "height": 37,
+              "top": 12,
+              "right": 1246,
+              "bottom": 49,
+              "left": 501.515625
+            },
+            "sel": ".wcs-nav-links",
+            "tag": "NAV",
+            "id": null,
+            "cls": "wcs-nav-links",
+            "text": "Producto\n          Soluciones\n          Recursos\n          P"
+          }
+        ]
+      }
+    ],
+    "snapshots": [
+      {
+        "label": "domcontentloaded",
+        "t": 480.4,
+        "classes": "",
+        "dir": "ltr",
+        "lang": "es",
+        "title": "WhachatCRM | Equipo de ventas con IA y mensajería multicanal",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav"
+        ],
+        "h1": {
+          "t": 199,
+          "h": 235.2,
+          "w": 584.3,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 60,
+          "w": 1280,
+          "v": "visible",
+          "d": "grid"
+        },
+        "portal": null,
+        "host": {
+          "t": 0,
+          "h": 60,
+          "w": 1280,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 757.7,
+          "h": 0,
+          "w": 1280,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 757.7,
+          "w": 1280,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 132,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loading",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "load",
+        "t": 980.3,
+        "classes": "",
+        "dir": "ltr",
+        "lang": "es",
+        "title": "WhachatCRM | Equipo de ventas con IA y mensajería multicanal",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav"
+        ],
+        "h1": {
+          "t": 200,
+          "h": 235.2,
+          "w": 579.4,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "grid"
+        },
+        "portal": null,
+        "host": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 758.7,
+          "h": 0,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 758.7,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 133,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loading",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "01-initial-html-paint",
+        "t": 1164.4,
+        "classes": "",
+        "dir": "ltr",
+        "lang": "es",
+        "title": "WhachatCRM | Equipo de ventas con IA y mensajería multicanal",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav"
+        ],
+        "h1": {
+          "t": 200,
+          "h": 235.2,
+          "w": 579.4,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "grid"
+        },
+        "portal": null,
+        "host": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 758.7,
+          "h": 0,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 758.7,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 133,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loading",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "03-react-header-portal",
+        "t": 1652.3,
+        "classes": "wcs-homepage-shell-live",
+        "dir": "ltr",
+        "lang": "es",
+        "title": "WhatsApp y buzón unificado | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 200,
+          "h": 235.2,
+          "w": 579.4,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 758.7,
+          "h": 2640,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 758.7,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 133,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0.00298,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "04-locale-sync",
+        "t": 1855.1,
+        "classes": "wcs-homepage-shell-live",
+        "dir": "ltr",
+        "lang": "es",
+        "title": "WhatsApp y buzón unificado | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 200,
+          "h": 235.2,
+          "w": 579.4,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 758.7,
+          "h": 4841,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 758.7,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 133,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0.00298,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "05-final-settled",
+        "t": 4521.1,
+        "classes": "wcs-homepage-shell-live",
+        "dir": "ltr",
+        "lang": "es",
+        "title": "WhatsApp y buzón unificado | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 200,
+          "h": 235.2,
+          "w": 579.4,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 758.7,
+          "h": 4841,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 758.7,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 133,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0.00298,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      }
+    ],
+    "cls": 0.00298
+  },
+  {
+    "id": "he-desktop",
+    "url": "https://www.whachatcrm.com/he/",
+    "viewport": {
+      "width": 1280,
+      "height": 800
+    },
+    "assets": {
+      "css": [
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+        "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+      ],
+      "scripts": [
+        "https://www.whachatcrm.com/assets/index-BoqAmiso.js"
+      ],
+      "preloads": [
+        {
+          "as": "style",
+          "href": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "imagesrcset": null
+        },
+        {
+          "as": "image",
+          "href": "https://www.whachatcrm.com/hero/hero-640.avif",
+          "imagesrcset": "/hero/hero-400.avif 400w, /hero/hero-640.avif 640w, /hero/hero-768.avif 768w, /hero/hero-1024.avif 1024w"
+        }
+      ],
+      "htmlHasShellLive": true,
+      "criticalHasShellLive": true,
+      "sheetHasShellLive": true,
+      "dir": "rtl",
+      "lang": "he",
+      "classes": "rtl wcs-homepage-shell-live"
+    },
+    "stages": [
+      "01-initial-html-paint",
+      "03-react-header-portal",
+      "04-locale-sync",
+      "05-final-settled"
+    ],
+    "clsLog": [
+      {
+        "value": 0.01904534912109375,
+        "startTime": 706.8000000000466,
+        "sources": [
+          {
+            "prev": {
+              "x": 0,
+              "y": 0,
+              "width": 1270,
+              "height": 755.03125,
+              "top": 0,
+              "right": 1270,
+              "bottom": 755.03125,
+              "left": 0
+            },
+            "cur": {
+              "x": 0,
+              "y": 0,
+              "width": 1270,
+              "height": 756.03125,
+              "top": 0,
+              "right": 1270,
+              "bottom": 756.03125,
+              "left": 0
+            },
+            "sel": ".rtl",
+            "tag": "HTML",
+            "id": null,
+            "cls": "rtl",
+            "text": "html.wcs-shopify-preboot #whachat-static-shell,\n      html.w"
+          }
+        ]
+      }
+    ],
+    "snapshots": [
+      {
+        "label": "domcontentloaded",
+        "t": 323,
+        "classes": "rtl",
+        "dir": "rtl",
+        "lang": "he",
+        "title": "WhachatCRM | צוות מכירות AI ומסרים רב-ערוציים",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav"
+        ],
+        "h1": {
+          "t": 184,
+          "h": 235.2,
+          "w": 584.3,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 60,
+          "w": 1280,
+          "v": "visible",
+          "d": "grid"
+        },
+        "portal": null,
+        "host": {
+          "t": 0,
+          "h": 60,
+          "w": 1280,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 755,
+          "h": 0,
+          "w": 1280,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 755,
+          "w": 1280,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 132,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "load",
+        "t": 862.9,
+        "classes": "rtl",
+        "dir": "rtl",
+        "lang": "he",
+        "title": "WhachatCRM | צוות מכירות AI ומסרים רב-ערוציים",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav"
+        ],
+        "h1": {
+          "t": 185,
+          "h": 235.2,
+          "w": 579.4,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "grid"
+        },
+        "portal": null,
+        "host": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 756,
+          "h": 0,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 756,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 133,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loading",
+        "clsSum": 0.01905,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "01-initial-html-paint",
+        "t": 1229.7,
+        "classes": "rtl wcs-homepage-shell-live",
+        "dir": "rtl",
+        "lang": "he",
+        "title": "WhatsApp ותיבת דואר מאוחדת | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 185,
+          "h": 235.2,
+          "w": 579.4,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 756,
+          "h": 2640,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 756,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 133,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0.01905,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "03-react-header-portal",
+        "t": 1616,
+        "classes": "rtl wcs-homepage-shell-live",
+        "dir": "rtl",
+        "lang": "he",
+        "title": "WhatsApp ותיבת דואר מאוחדת | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 185,
+          "h": 235.2,
+          "w": 579.4,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 756,
+          "h": 4408.4,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 756,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 133,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0.01905,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "04-locale-sync",
+        "t": 1756.8,
+        "classes": "rtl wcs-homepage-shell-live",
+        "dir": "rtl",
+        "lang": "he",
+        "title": "WhatsApp ותיבת דואר מאוחדת | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 185,
+          "h": 235.2,
+          "w": 579.4,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 756,
+          "h": 4408.4,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 756,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 133,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0.01905,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "05-final-settled",
+        "t": 4376.7,
+        "classes": "rtl wcs-homepage-shell-live",
+        "dir": "rtl",
+        "lang": "he",
+        "title": "WhatsApp ותיבת דואר מאוחדת | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 185,
+          "h": 235.2,
+          "w": 579.4,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 61,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 756,
+          "h": 4408.4,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 756,
+          "w": 1270,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 133,
+          "h": 591,
+          "w": 380,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0.01905,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      }
+    ],
+    "cls": 0.01905
+  },
+  {
+    "id": "en-mobile",
+    "url": "https://www.whachatcrm.com/",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "assets": {
+      "css": [
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+        "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+      ],
+      "scripts": [
+        "https://www.whachatcrm.com/assets/index-BoqAmiso.js"
+      ],
+      "preloads": [
+        {
+          "as": "style",
+          "href": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "imagesrcset": null
+        },
+        {
+          "as": "image",
+          "href": "https://www.whachatcrm.com/hero/hero-640.avif",
+          "imagesrcset": "/hero/hero-400.avif 400w, /hero/hero-640.avif 640w, /hero/hero-768.avif 768w, /hero/hero-1024.avif 1024w"
+        }
+      ],
+      "htmlHasShellLive": true,
+      "criticalHasShellLive": true,
+      "sheetHasShellLive": true,
+      "dir": "ltr",
+      "lang": "en",
+      "classes": "wcs-homepage-shell-live"
+    },
+    "stages": [
+      "01-initial-html-paint",
+      "03-react-header-portal",
+      "04-locale-sync",
+      "05-final-settled"
+    ],
+    "clsLog": [],
+    "snapshots": [
+      {
+        "label": "domcontentloaded",
+        "t": 1831.9,
+        "classes": "",
+        "dir": "ltr",
+        "lang": "en",
+        "title": "Meet Your AI Sales Team | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav"
+        ],
+        "h1": {
+          "t": 151,
+          "h": 86.2,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 80,
+          "w": 390,
+          "v": "visible",
+          "d": "grid"
+        },
+        "portal": null,
+        "host": {
+          "t": 0,
+          "h": 80,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1288.6,
+          "h": 0,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1288.6,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 712.2,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "01-initial-html-paint",
+        "t": 2069.4,
+        "classes": "",
+        "dir": "ltr",
+        "lang": "en",
+        "title": "Meet Your AI Sales Team | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav"
+        ],
+        "h1": {
+          "t": 151,
+          "h": 86.2,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 80,
+          "w": 390,
+          "v": "visible",
+          "d": "grid"
+        },
+        "portal": null,
+        "host": {
+          "t": 0,
+          "h": 80,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1288.6,
+          "h": 0,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1288.6,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 712.2,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loading",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "load",
+        "t": 2305.4,
+        "classes": "",
+        "dir": "ltr",
+        "lang": "en",
+        "title": "Meet Your AI Sales Team | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav"
+        ],
+        "h1": {
+          "t": 166,
+          "h": 86.2,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 95,
+          "w": 390,
+          "v": "visible",
+          "d": "grid"
+        },
+        "portal": null,
+        "host": {
+          "t": 0,
+          "h": 95,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1303.6,
+          "h": 0,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1303.6,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 727.2,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loading",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "03-react-header-portal",
+        "t": 2916.3,
+        "classes": "wcs-homepage-shell-live",
+        "dir": "ltr",
+        "lang": "en",
+        "title": "WhatsApp & Unified Mailbox | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 166,
+          "h": 86.2,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 95,
+          "w": 390,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 57,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 95,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1303.6,
+          "h": 2640,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1303.6,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 727.2,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "04-locale-sync",
+        "t": 3304.1,
+        "classes": "wcs-homepage-shell-live",
+        "dir": "ltr",
+        "lang": "en",
+        "title": "WhatsApp & Unified Mailbox | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 166,
+          "h": 86.2,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 95,
+          "w": 390,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 57,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 95,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1303.6,
+          "h": 9045.3,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1303.6,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 727.2,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "05-final-settled",
+        "t": 5946.7,
+        "classes": "wcs-homepage-shell-live",
+        "dir": "ltr",
+        "lang": "en",
+        "title": "WhatsApp & Unified Mailbox | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 166,
+          "h": 86.2,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 95,
+          "w": 390,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 57,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 95,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1303.6,
+          "h": 9045.3,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1303.6,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 727.2,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      }
+    ],
+    "cls": 0
+  },
+  {
+    "id": "es-mobile",
+    "url": "https://www.whachatcrm.com/es/",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "assets": {
+      "css": [
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+        "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+      ],
+      "scripts": [
+        "https://www.whachatcrm.com/assets/index-BoqAmiso.js"
+      ],
+      "preloads": [
+        {
+          "as": "style",
+          "href": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "imagesrcset": null
+        },
+        {
+          "as": "image",
+          "href": "https://www.whachatcrm.com/hero/hero-640.avif",
+          "imagesrcset": "/hero/hero-400.avif 400w, /hero/hero-640.avif 640w, /hero/hero-768.avif 768w, /hero/hero-1024.avif 1024w"
+        }
+      ],
+      "htmlHasShellLive": true,
+      "criticalHasShellLive": true,
+      "sheetHasShellLive": true,
+      "dir": "ltr",
+      "lang": "es",
+      "classes": "wcs-homepage-shell-live"
+    },
+    "stages": [
+      "01-initial-html-paint",
+      "03-react-header-portal",
+      "04-locale-sync",
+      "05-final-settled"
+    ],
+    "clsLog": [],
+    "snapshots": [
+      {
+        "label": "domcontentloaded",
+        "t": 296.2,
+        "classes": "",
+        "dir": "ltr",
+        "lang": "es",
+        "title": "WhachatCRM | Equipo de ventas con IA y mensajería multicanal",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav"
+        ],
+        "h1": {
+          "t": 167,
+          "h": 129.3,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 96,
+          "w": 390,
+          "v": "visible",
+          "d": "grid"
+        },
+        "portal": null,
+        "host": {
+          "t": 0,
+          "h": 96,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1375.7,
+          "h": 0,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1375.7,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 799.3,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "load",
+        "t": 731.7,
+        "classes": "",
+        "dir": "ltr",
+        "lang": "es",
+        "title": "WhachatCRM | Equipo de ventas con IA y mensajería multicanal",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav"
+        ],
+        "h1": {
+          "t": 187,
+          "h": 129.3,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 116,
+          "w": 390,
+          "v": "visible",
+          "d": "grid"
+        },
+        "portal": null,
+        "host": {
+          "t": 0,
+          "h": 116,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1395.7,
+          "h": 0,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1395.7,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 819.3,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loading",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "01-initial-html-paint",
+        "t": 1181.8,
+        "classes": "wcs-homepage-shell-live",
+        "dir": "ltr",
+        "lang": "es",
+        "title": "WhatsApp y buzón unificado | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 187,
+          "h": 129.3,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 116,
+          "w": 390,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 57,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 116,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1395.7,
+          "h": 2640,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1395.7,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 819.3,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "03-react-header-portal",
+        "t": 1590.2,
+        "classes": "wcs-homepage-shell-live",
+        "dir": "ltr",
+        "lang": "es",
+        "title": "WhatsApp y buzón unificado | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 187,
+          "h": 129.3,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 116,
+          "w": 390,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 57,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 116,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1395.7,
+          "h": 9463.7,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1395.7,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 819.3,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "04-locale-sync",
+        "t": 1878.9,
+        "classes": "wcs-homepage-shell-live",
+        "dir": "ltr",
+        "lang": "es",
+        "title": "WhatsApp y buzón unificado | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 187,
+          "h": 129.3,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 116,
+          "w": 390,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 57,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 116,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1395.7,
+          "h": 9463.7,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1395.7,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 819.3,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "05-final-settled",
+        "t": 4565.5,
+        "classes": "wcs-homepage-shell-live",
+        "dir": "ltr",
+        "lang": "es",
+        "title": "WhatsApp y buzón unificado | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 187,
+          "h": 129.3,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 116,
+          "w": 390,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 57,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 116,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1395.7,
+          "h": 9463.7,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1395.7,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 819.3,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      }
+    ],
+    "cls": 0
+  },
+  {
+    "id": "he-mobile",
+    "url": "https://www.whachatcrm.com/he/",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "assets": {
+      "css": [
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+        "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+      ],
+      "scripts": [
+        "https://www.whachatcrm.com/assets/index-BoqAmiso.js"
+      ],
+      "preloads": [
+        {
+          "as": "style",
+          "href": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "imagesrcset": null
+        },
+        {
+          "as": "image",
+          "href": "https://www.whachatcrm.com/hero/hero-640.avif",
+          "imagesrcset": "/hero/hero-400.avif 400w, /hero/hero-640.avif 640w, /hero/hero-768.avif 768w, /hero/hero-1024.avif 1024w"
+        }
+      ],
+      "htmlHasShellLive": true,
+      "criticalHasShellLive": true,
+      "sheetHasShellLive": true,
+      "dir": "rtl",
+      "lang": "he",
+      "classes": "rtl wcs-homepage-shell-live"
+    },
+    "stages": [
+      "01-initial-html-paint",
+      "03-react-header-portal",
+      "04-locale-sync",
+      "05-final-settled"
+    ],
+    "clsLog": [],
+    "snapshots": [
+      {
+        "label": "domcontentloaded",
+        "t": 619,
+        "classes": "rtl",
+        "dir": "rtl",
+        "lang": "he",
+        "title": "WhachatCRM | צוות מכירות AI ומסרים רב-ערוציים",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav"
+        ],
+        "h1": {
+          "t": 136,
+          "h": 129.3,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 80,
+          "w": 390,
+          "v": "visible",
+          "d": "grid"
+        },
+        "portal": null,
+        "host": {
+          "t": 0,
+          "h": 80,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1288.7,
+          "h": 0,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1288.7,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 712.3,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "01-initial-html-paint",
+        "t": 626.3,
+        "classes": "rtl",
+        "dir": "rtl",
+        "lang": "he",
+        "title": "WhachatCRM | צוות מכירות AI ומסרים רב-ערוציים",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav"
+        ],
+        "h1": {
+          "t": 136,
+          "h": 129.3,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 80,
+          "w": 390,
+          "v": "visible",
+          "d": "grid"
+        },
+        "portal": null,
+        "host": {
+          "t": 0,
+          "h": 80,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1288.7,
+          "h": 0,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1288.7,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 712.3,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "load",
+        "t": 949.4,
+        "classes": "rtl",
+        "dir": "rtl",
+        "lang": "he",
+        "title": "WhachatCRM | צוות מכירות AI ומסרים רב-ערוציים",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav"
+        ],
+        "h1": {
+          "t": 151,
+          "h": 129.3,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 95,
+          "w": 390,
+          "v": "visible",
+          "d": "grid"
+        },
+        "portal": null,
+        "host": {
+          "t": 0,
+          "h": 95,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1303.7,
+          "h": 0,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1303.7,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 727.3,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loading",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "03-react-header-portal",
+        "t": 1518.4,
+        "classes": "rtl wcs-homepage-shell-live",
+        "dir": "rtl",
+        "lang": "he",
+        "title": "WhatsApp ותיבת דואר מאוחדת | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 151,
+          "h": 129.3,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 95,
+          "w": 390,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 57,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 95,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1303.7,
+          "h": 2887.2,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1303.7,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 727.3,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "04-locale-sync",
+        "t": 1742,
+        "classes": "rtl wcs-homepage-shell-live",
+        "dir": "rtl",
+        "lang": "he",
+        "title": "WhatsApp ותיבת דואר מאוחדת | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 151,
+          "h": 129.3,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 95,
+          "w": 390,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 57,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 95,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1303.7,
+          "h": 2887.2,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1303.7,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 727.3,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      },
+      {
+        "label": "05-final-settled",
+        "t": 4408.6,
+        "classes": "rtl wcs-homepage-shell-live",
+        "dir": "rtl",
+        "lang": "he",
+        "title": "WhatsApp ותיבת דואר מאוחדת | WhachatCRM",
+        "h1Count": 1,
+        "hostChildren": [
+          "wcs-nav",
+          "wcs-react-header-portal"
+        ],
+        "h1": {
+          "t": 151,
+          "h": 129.3,
+          "w": 358,
+          "v": "visible",
+          "d": "block"
+        },
+        "nav": {
+          "t": 0,
+          "h": 95,
+          "w": 390,
+          "v": "hidden",
+          "d": "grid"
+        },
+        "portal": {
+          "t": 0,
+          "h": 57,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "host": {
+          "t": 0,
+          "h": 95,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "root": {
+          "t": 1303.7,
+          "h": 8564.7,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "shell": {
+          "t": 0,
+          "h": 1303.7,
+          "w": 390,
+          "v": "visible",
+          "d": "block"
+        },
+        "heroImg": {
+          "t": 727.3,
+          "h": 544.4,
+          "w": 350,
+          "v": "visible",
+          "d": "block"
+        },
+        "fonts": "loaded",
+        "clsSum": 0,
+        "cssHrefs": [
+          "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=optional",
+          "https://www.whachatcrm.com/assets/bootstrap-BDveMUop.css"
+        ]
+      }
+    ],
+    "cls": 0
+  }
+]

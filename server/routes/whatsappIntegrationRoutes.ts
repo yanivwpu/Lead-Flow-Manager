@@ -30,7 +30,15 @@ import {
 } from "../metaWhatsAppPhoneKind";
 import { disconnectWhatsAppProvider, getProviderStatus, buildMetaWhatsAppReadinessForUser } from "../whatsappService";
 import { getMetaGraphApiBase } from "../metaGraphVersion";
-import { getMetaAccessToken, fetchMetaWhatsAppPhoneNumberGraphSnapshotVerbose } from "../userMeta";
+import { fetchMetaWhatsAppPhoneNumberGraphSnapshotVerbose } from "../userMeta";
+import {
+  isEncrypted,
+  decryptMetaCredentialOrNull,
+} from "../metaCredentialCrypto";
+import {
+  classifyStoredMetaCredentialEncryption,
+  isMetaCredentialEncryptionConfigured,
+} from "@shared/metaCredentialEncryption";
 import { registerPhoneForAuthenticatedUser } from "../whatsappPhoneRegister";
 import {
   extractMetaPhoneGraphRegistrationFields,
@@ -140,11 +148,115 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       const phoneNumberId = (user.metaPhoneNumberId || "").trim();
       const connectionSavedAsCoexistence = user.metaConnectionType === "coexistence";
 
-      const token = await getMetaAccessToken(req.user.id);
+      const metaEncryptionKeyConfigured = isMetaCredentialEncryptionConfigured(process.env);
+      const accessTokenEncryptionStatus = classifyStoredMetaCredentialEncryption(user.metaAccessToken);
+      const appSecretEncryptionStatus = classifyStoredMetaCredentialEncryption(user.metaAppSecret);
+      const accessTokenLooksEncrypted = !!(
+        user.metaAccessToken && isEncrypted(String(user.metaAccessToken))
+      );
+
+      let tokenStatus:
+        | "ok"
+        | "missing"
+        | "not_connected"
+        | "decrypt_failed"
+        | "plaintext_legacy" = "missing";
+      let token: string | null = null;
+      try {
+        if (!user.metaConnected || !user.metaAccessToken) {
+          tokenStatus = user.metaConnected ? "missing" : "not_connected";
+        } else if (accessTokenEncryptionStatus === "plaintext_or_unknown") {
+          tokenStatus = "plaintext_legacy";
+          token = String(user.metaAccessToken);
+        } else {
+          const decrypted = decryptMetaCredentialOrNull(String(user.metaAccessToken), process.env);
+          if (decrypted == null) {
+            tokenStatus = "decrypt_failed";
+          } else {
+            token = decrypted;
+            tokenStatus = "ok";
+          }
+        }
+      } catch {
+        tokenStatus = "decrypt_failed";
+        token = null;
+      }
+
+      const v4Gate = readEmbeddedSignupV4GateFromEnv(process.env);
+      const architectureStatus = {
+        embeddedSignupV4FlagEnabled: v4Gate.flagEnabled,
+        embeddedSignupV4ConfigConfigured: v4Gate.v4ConfigIdConfigured,
+        embeddedSignupV4ConfigIdLast4: configIdLast4(v4Gate.v4ConfigId),
+        embeddedSignupV4RolloutMode: v4Gate.rolloutMode,
+        embeddedSignupV4RolloutModeValid: v4Gate.rolloutModeValid,
+        coexistenceConfigIdLast4: configIdLast4(
+          process.env.META_WHATSAPP_COEXISTENCE_CONFIG_ID?.trim() || null,
+        ),
+        standardV2ConfigIdLast4: configIdLast4(
+          process.env.META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID?.trim() || null,
+        ),
+        connectionArchitectureHint:
+          user.metaConnectionType === "coexistence"
+            ? "coexistence"
+            : user.metaConnectionType === "embedded_signup" || user.metaConnectionType === "embedded"
+              ? "embedded"
+              : user.metaConnectionType ?? "unknown",
+      };
+
+      const encryptionDiagnostics = {
+        metaEncryptionKeyConfigured,
+        v1DecryptReady: metaEncryptionKeyConfigured,
+        accessTokenPresent: !!user.metaAccessToken,
+        accessTokenEncrypted: accessTokenLooksEncrypted,
+        accessTokenEncryptionStatus,
+        appSecretPresent: !!user.metaAppSecret,
+        appSecretEncrypted: !!(user.metaAppSecret && isEncrypted(String(user.metaAppSecret))),
+        appSecretEncryptionStatus,
+        tokenStatus,
+      };
+
       if (!token) {
-        return res.status(400).json({
-          error: "No Meta access token found. Reconnect WhatsApp with Meta to run diagnostics.",
+        const early = stripSensitiveWhatsAppFields({
+          ok: false,
+          error: null,
+          diagnosticOnly: true,
+          encryption: encryptionDiagnostics,
+          architectureStatus,
+          connectionSavedAsCoexistence,
+          activeProvider: base.activeProvider,
+          meta: {
+            connected: !!user.metaConnected,
+            integrationStatus: user.metaIntegrationStatus ?? null,
+            webhookSubscribedFlag: user.metaWebhookSubscribed ?? false,
+            connectionType: user.metaConnectionType ?? null,
+            wabaId: wabaId || null,
+            phoneNumberId: phoneNumberId || null,
+            displayPhoneNumber: user.metaDisplayPhoneNumber ?? null,
+          },
+          blockerReason:
+            tokenStatus === "decrypt_failed"
+              ? "Stored Meta access token could not be decrypted with the configured key material."
+              : tokenStatus === "plaintext_legacy"
+                ? "Stored Meta access token does not look encrypted."
+                : "No usable Meta access token for Graph probes. Reconnect WhatsApp if needed.",
+          reasons: [
+            tokenStatus === "decrypt_failed"
+              ? "meta_access_token_decrypt_failed"
+              : tokenStatus === "not_connected"
+                ? "meta_not_connected"
+                : tokenStatus === "plaintext_legacy"
+                  ? "meta_access_token_plaintext_or_unknown"
+                  : "meta_access_token_missing",
+          ],
         });
+        logCoexistenceDiagnostics({
+          userId: req.user.id,
+          connectionSavedAsCoexistence,
+          tokenStatus,
+          accessTokenEncryptionStatus,
+          metaEncryptionKeyConfigured,
+        });
+        return res.json(early);
       }
 
       const graphBase = getMetaGraphApiBase();
@@ -305,6 +417,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         wabaPhones.phoneUnderWaba;
 
       const payload = {
+        ok: true,
         /** Flat summary for operators */
         wabaId: wabaId || null,
         phoneNumberId: phoneNumberId || null,
@@ -327,6 +440,8 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         tokenAppIdFromDebug: debugToken.app_id ?? null,
         connectionSavedAsCoexistence,
         activeProvider: base.activeProvider,
+        encryption: encryptionDiagnostics,
+        architectureStatus,
         meta: {
           connected: !!user.metaConnected,
           integrationStatus: user.metaIntegrationStatus ?? null,
@@ -371,6 +486,9 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         phoneGraphOk: phoneGraph.ok,
         subscribedAppsOk: subscribedApps.httpOk,
         phoneUnderWaba: wabaPhones.phoneUnderWaba,
+        tokenStatus,
+        accessTokenEncryptionStatus,
+        metaEncryptionKeyConfigured,
         graphPhoneTruncated: truncateJson(phoneGraph.ok ? phoneGraph.data : phoneGraph.error, 7000),
         subscribedAppsTruncated: truncateJson({ appIds: subscribedApps.appIds, error: subscribedApps.body?.error ?? null }, 7000),
         wabaPhonesTruncated: truncateJson({ phoneIds: wabaPhones.phoneIds, error: wabaPhones.body?.error ?? null }, 7000),
@@ -379,7 +497,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       return res.json(stripSensitiveWhatsAppFields(payload));
     } catch (e: any) {
       console.error("[CoexistenceDiagnostics] error:", e?.message || e);
-      return res.status(500).json({ error: e?.message || "Diagnostics failed" });
+      return res.status(500).json({ error: "Diagnostics failed" });
     }
   });
 

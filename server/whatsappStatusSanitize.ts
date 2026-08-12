@@ -4,7 +4,7 @@
  */
 
 const SENSITIVE_KEY_RE =
-  /^(pin|pin_confirm|confirm_pin|access_token|accessToken|metaAccessToken|app_secret|appSecret|metaAppSecret|webhook_verify_token|webhookVerifyToken|metaWebhookVerifyToken|authorization_code|authCode|client_secret|clientSecret)$/i;
+  /^(pin|pin_confirm|confirm_pin|access_token|accessToken|metaAccessToken|app_secret|appSecret|metaAppSecret|webhook_verify_token|webhookVerifyToken|metaWebhookVerifyToken|authorization_code|authCode|client_secret|clientSecret|META_ENCRYPTION_KEY|EMAIL_ENCRYPTION_KEY|SESSION_SECRET|pendingAccessToken)$/i;
 
 export function stripSensitiveWhatsAppFields<T>(value: T): T {
   return stripRecursive(value) as T;

@@ -27,6 +27,8 @@ export {
 } from "./metaCredentialCrypto";
 import {
   encryptCredential,
+  decryptCredential,
+  isEncrypted,
   MetaCredentialEncryptionConfigError,
 } from "./metaCredentialCrypto";
 

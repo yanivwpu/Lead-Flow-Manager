@@ -1,0 +1,18 @@
+{
+  "form": "mobile",
+  "url": "http://127.0.0.1:5059/es/",
+  "i": 3,
+  "perf": 38,
+  "FCP": 4440.463375,
+  "LCP": 7452.045,
+  "CLS": 0.02146667276906791,
+  "TBT": 1600.854375,
+  "TTFB": 274.723,
+  "lcpEl": "",
+  "shifts": [
+    {
+      "score": 0.02146667276906791,
+      "node": "<section class=\"wcs-hero\" aria-labelledby=\"whachat-static-hero-title\">"
+    }
+  ]
+}
