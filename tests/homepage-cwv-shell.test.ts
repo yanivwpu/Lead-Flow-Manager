@@ -37,6 +37,24 @@ test("hero LCP uses picture + responsive AVIF/WebP and is not lazy-loaded", () =
   assert.ok(fs.existsSync(path.join(root, "client/public/hero/hero-640.avif")));
 });
 
+test("shell header mirrors React: centered primary nav + action cluster + fixed band", () => {
+  assert.ok(indexHtml.includes('class="wcs-nav-center"'));
+  assert.ok(indexHtml.includes('class="wcs-nav-actions"'));
+  assert.ok(indexHtml.includes("wcs-hide-lg-down"));
+  assert.ok(indexHtml.includes("scrollbar-gutter: stable"));
+  assert.ok(indexHtml.includes("#wcs-react-header-host { position: relative; height: 56px"));
+  assert.ok(heroCss.includes("height: 56px"));
+  assert.ok(heroCss.includes("scrollbar-gutter: stable"));
+  // Product/Solutions/Resources live in the center column (not the right actions cluster).
+  const centerIdx = indexHtml.indexOf('class="wcs-nav-center"');
+  const actionsIdx = indexHtml.indexOf('class="wcs-nav-actions"');
+  const productIdx = indexHtml.indexOf('href="/prospect-ai">Product');
+  const pricingIdx = indexHtml.indexOf('href="/pricing">Pricing');
+  assert.ok(centerIdx > 0 && actionsIdx > centerIdx);
+  assert.ok(productIdx > centerIdx && productIdx < actionsIdx);
+  assert.ok(pricingIdx > actionsIdx);
+});
+
 test("shell reserves lang/menu header slots; trust pill not shown in header", () => {
   assert.ok(indexHtml.includes("wcs-slot-lang"));
   assert.ok(indexHtml.includes("wcs-slot-menu"));

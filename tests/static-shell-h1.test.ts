@@ -197,5 +197,5 @@ test("canonical and hreflang survive shell removal", () => {
 
   const { html: he } = assembleCompleteHtml("/he/pricing");
   assert.match(he, /rel="canonical" href="https:\/\/www\.whachatcrm\.com\/he\/pricing"/);
-  assert.match(he, /<html lang="he" dir="rtl">/);
+  assert.match(he, /<html lang="he" dir="rtl" class="rtl">/);
 });

@@ -178,7 +178,7 @@ test("localized static shell replaces English first-paint copy", () => {
   assertNoEnglishMarketing("es", "static shell", esShell);
 
   const he = injectLocalizedStaticShell(injectHomepageSeoMeta(shell, "he"), "he");
-  assert.match(he, /<html lang="he" dir="rtl">/);
+  assert.match(he, /<html lang="he" dir="rtl" class="rtl">/);
   const heH1 = getLocalizedHomepage("he").staticShell.h1;
   assert.ok(he.includes(heH1), `missing Hebrew shell H1: ${heH1}`);
   assert.ok(he.includes("התחל ניסיון חינם"));

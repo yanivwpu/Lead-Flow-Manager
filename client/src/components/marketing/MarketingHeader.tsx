@@ -273,9 +273,9 @@ export function MarketingHeader({
   return (
     <header
       ref={headerRef}
-      className="relative z-40 border-b border-transparent bg-white"
+      className="relative z-40 bg-white"
     >
-      <div className="mx-auto grid min-h-[56px] max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-2 box-border md:px-6 md:py-3">
+      <div className="mx-auto grid h-14 max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 box-border md:h-[60px] md:px-6">
         <Link
           href={homeHref}
           className="flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40"

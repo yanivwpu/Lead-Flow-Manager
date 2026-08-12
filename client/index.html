@@ -175,40 +175,51 @@
         descent-override: 22%;
         line-gap-override: 0%;
       }
+      /* Reserve classic scrollbar width from first paint (main CSS repeats this). */
+      html { overflow-y: scroll; scrollbar-gutter: stable; }
       body { margin: 0; font-family: Inter, "Inter Fallback", ui-sans-serif, system-ui, sans-serif; color: #111; background: #fff; }
       /* Hide SSR content - visible only to crawlers */
       [data-ssr-content] { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
       /*
         Static marketing shell: visible without JS (see Welcome.tsx — English copy matches client/src/locales/en.json landing.*).
         LCP: hero image + headline paint before React bundle executes.
+        Header geometry mirrors MarketingHeader: logo | centered Product/Solutions/Resources | Pricing+lang+auth+menu.
       */
       #whachat-static-shell { background: #fff; overflow-x: hidden; }
       #whachat-static-shell a { color: inherit; }
-      #whachat-static-shell .wcs-nav { min-height: 56px; padding: 8px 16px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; max-width: 1280px; margin: 0 auto; box-sizing: border-box; }
+      #whachat-static-shell .wcs-nav { height: 56px; min-height: 56px; padding: 8px 16px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; max-width: 1280px; margin: 0 auto; box-sizing: border-box; }
       #whachat-static-shell .wcs-brand { display: flex; align-items: center; gap: 8px; text-decoration: none; }
       #whachat-static-shell .wcs-logo { height: 32px; width: 32px; background: #059669; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 1.125rem; }
       #whachat-static-shell .wcs-wordmark { font-family: 'Plus Jakarta Sans', 'Plus Jakarta Sans Fallback', Inter, sans-serif; font-weight: 700; font-size: 1.25rem; color: #111827; }
-      #whachat-static-shell .wcs-nav-links { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; justify-self: end; }
+      /* Match React: primary dropdowns centered (lg+); actions cluster on the end. */
+      #whachat-static-shell .wcs-nav-center { display: none; align-items: center; justify-content: center; justify-self: center; gap: 24px; }
+      #whachat-static-shell .wcs-nav-actions { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; justify-self: end; }
       /* Trust pill moved to hero eyebrow to match React (avoids header→hero content jump). */
       #whachat-static-shell .wcs-trust-pill { display: none !important; }
-      #whachat-static-shell .wcs-link { font-size: 0.875rem; font-weight: 500; color: #4b5563; text-decoration: none; padding: 8px 0; }
+      #whachat-static-shell .wcs-link { font-size: 0.875rem; font-weight: 500; color: #4b5563; text-decoration: none; padding: 8px 0; display: inline-flex; align-items: center; gap: 4px; }
       #whachat-static-shell .wcs-link:hover { color: #111827; }
+      /* Decorative chevron to match React dropdown affordance (shell links stay single anchors). */
+      #whachat-static-shell .wcs-link-chevron { display: inline-block; width: 12px; height: 12px; flex-shrink: 0; background: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); }
       #whachat-static-shell .wcs-hide-sm { display: none; }
+      #whachat-static-shell .wcs-hide-lg-down { display: none; }
       /* Reserve React header chrome slots so shell→React does not insert width. */
       #whachat-static-shell .wcs-header-slot { display: inline-block; height: 36px; width: 36px; flex-shrink: 0; visibility: hidden; pointer-events: none; }
       #whachat-static-shell .wcs-slot-lang { display: none; }
       @media (min-width: 640px) {
-        #whachat-static-shell .wcs-hide-sm { display: inline-block; }
+        #whachat-static-shell .wcs-hide-sm { display: inline-flex; }
         #whachat-static-shell .wcs-slot-lang { display: inline-block; }
+        #whachat-static-shell .wcs-nav-actions { gap: 12px; }
       }
       @media (min-width: 768px) {
-        #whachat-static-shell .wcs-nav-links { gap: 20px; }
+        #whachat-static-shell .wcs-nav { height: 60px; min-height: 60px; padding: 12px 24px; }
+        #whachat-static-shell .wcs-nav-actions { gap: 12px; }
       }
       @media (min-width: 1024px) {
-        #whachat-static-shell .wcs-nav-links { gap: 24px; }
+        #whachat-static-shell .wcs-nav-center { display: flex; }
+        #whachat-static-shell .wcs-hide-lg-down { display: inline-flex; }
         #whachat-static-shell .wcs-slot-menu { display: none; }
       }
-      #whachat-static-shell .wcs-btn-header { font-size: 0.875rem; font-weight: 500; padding: 8px 16px; border-radius: 9999px; text-decoration: none; border: none; cursor: pointer; font-family: inherit; min-height: 36px; display: inline-flex; align-items: center; box-sizing: border-box; }
+      #whachat-static-shell .wcs-btn-header { font-size: 0.875rem; font-weight: 500; padding: 8px 16px; border-radius: 9999px; text-decoration: none; border: none; cursor: pointer; font-family: inherit; min-height: 36px; height: 36px; display: inline-flex; align-items: center; box-sizing: border-box; }
       #whachat-static-shell .wcs-btn-ghost { color: #4b5563; background: transparent; }
       #whachat-static-shell .wcs-btn-green { background: #059669; color: #fff; font-weight: 500; }
       #whachat-static-shell .wcs-hero { box-sizing: border-box; max-width: 1280px; margin: 0 auto; padding: 20px 16px 32px; }
@@ -217,7 +228,6 @@
       .wcs-hero-image-column { order: 2; width: 100%; flex-shrink: 0; position: relative; }
       #whachat-static-shell .wcs-order-txt { order: 1; width: 100%; max-width: 780px; min-width: 0; }
       @media (min-width: 768px) {
-        #whachat-static-shell .wcs-nav { padding: 12px 24px; }
         #whachat-static-shell .wcs-hero { padding: 32px 24px; }
         #whachat-static-shell .wcs-hero-grid { display: grid; grid-template-columns: 1fr 1.04fr; gap: 40px; align-items: start; }
         #whachat-static-shell .wcs-order-img,
@@ -251,9 +261,12 @@
       #whachat-static-shell .wcs-btn-demo { background: linear-gradient(to right, #f59e0b, #f97316); color: #fff; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08); }
       #whachat-static-shell .wcs-hero-note { margin: 0; font-size: .875rem; color: #6b7280; line-height: 1.5; }
       html.wcs-hide-static-marketing #whachat-static-shell { display: none !important; }
-      #wcs-react-header-host { position: relative; min-height: 56px; }
+      #wcs-react-header-host { position: relative; height: 56px; min-height: 56px; }
+      @media (min-width: 768px) {
+        #wcs-react-header-host { height: 60px; min-height: 60px; }
+      }
       html.wcs-homepage-shell-live #wcs-react-header-host > .wcs-nav { visibility: hidden; pointer-events: none; }
-      html.wcs-homepage-shell-live #wcs-react-header-host > .wcs-react-header-portal { position: absolute; left: 0; right: 0; top: 0; z-index: 40; }
+      html.wcs-homepage-shell-live #wcs-react-header-host > .wcs-react-header-portal { position: absolute; left: 0; right: 0; top: 0; height: 100%; z-index: 40; }
       .wcs-hero-image-slot {
         box-sizing: border-box;
         display: block;
@@ -408,24 +421,25 @@
     </div>
     <!-- Instant above-the-fold (no React): visible on "/" without JS; hidden on other paths via wcs-hide-static-marketing. -->
     <div id="whachat-static-shell">
-      <!-- React MarketingHeader portals here in-place (same 56px band) to avoid CLS. -->
+      <!-- React MarketingHeader portals here in-place (same header band) to avoid CLS. -->
       <div id="wcs-react-header-host">
       <header class="wcs-nav" role="banner">
         <a class="wcs-brand" href="/" aria-label="WhachatCRM home">
           <span class="wcs-logo" aria-hidden="true">W</span>
           <span class="wcs-wordmark">WhachatCRM</span>
         </a>
-        <div class="wcs-nav-center" aria-hidden="true"></div>
-        <nav class="wcs-nav-links" aria-label="Primary">
-          <a class="wcs-link wcs-hide-sm" href="/prospect-ai">Product</a>
-          <a class="wcs-link wcs-hide-sm" href="/real-estate-crm">Solutions</a>
-          <a class="wcs-link wcs-hide-sm" href="/blog">Resources</a>
+        <nav class="wcs-nav-center" aria-label="Primary">
+          <a class="wcs-link wcs-hide-lg-down" href="/prospect-ai">Product<span class="wcs-link-chevron" aria-hidden="true"></span></a>
+          <a class="wcs-link wcs-hide-lg-down" href="/real-estate-crm">Solutions<span class="wcs-link-chevron" aria-hidden="true"></span></a>
+          <a class="wcs-link wcs-hide-lg-down" href="/blog">Resources<span class="wcs-link-chevron" aria-hidden="true"></span></a>
+        </nav>
+        <div class="wcs-nav-actions">
           <a class="wcs-link wcs-hide-sm" href="/pricing">Pricing</a>
           <span class="wcs-header-slot wcs-slot-lang" aria-hidden="true"></span>
           <a class="wcs-btn-header wcs-btn-ghost wcs-hide-sm" href="/auth?mode=login">Log in</a>
           <a class="wcs-btn-header wcs-btn-green" href="/auth">Start Free Trial</a>
           <span class="wcs-header-slot wcs-slot-menu" aria-hidden="true"></span>
-        </nav>
+        </div>
       </header>
       </div>
       <section class="wcs-hero" aria-labelledby="whachat-static-hero-title">

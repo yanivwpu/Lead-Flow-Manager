@@ -521,9 +521,10 @@ export function injectPageMeta(html: string, url: string): string {
 /** Set <html lang dir> for the initial SSR response. */
 export function applyHtmlLangDir(html: string, locale: MarketingLocale): string {
   const dir = marketingDirForLocale(locale);
+  const rtlClass = dir === "rtl" ? ' class="rtl"' : "";
   return html.replace(
     /<html\b[^>]*>/i,
-    `<html lang="${locale}" dir="${dir}">`,
+    `<html lang="${locale}" dir="${dir}"${rtlClass}>`,
   );
 }
 
@@ -1062,20 +1063,20 @@ export function injectLocalizedStaticShell(html: string, locale: MarketingLocale
     `$1${escapeHtmlText(shell.trustPill)}$2`,
   );
   replaceOnce(
-    /(<nav class="wcs-nav-links" aria-label=")[^"]*(">)/,
+    /(<nav class="wcs-nav-center" aria-label=")[^"]*(">)/,
     `$1${escapeHtmlAttr(shell.primaryNavAria)}$2`,
   );
   replaceOnce(
-    /(<a class="wcs-link wcs-hide-sm" href=")\/prospect-ai(">Product<\/a>)/,
-    `$1${productHref}">${escapeHtmlText(shell.navProduct)}</a>`,
+    /(<a class="wcs-link wcs-hide-lg-down" href=")\/prospect-ai(">Product)/,
+    `$1${productHref}">${escapeHtmlText(shell.navProduct)}`,
   );
   replaceOnce(
-    /(<a class="wcs-link wcs-hide-sm" href=")\/real-estate-crm(">Solutions<\/a>)/,
-    `$1${solutionsHref}">${escapeHtmlText(shell.navSolutions)}</a>`,
+    /(<a class="wcs-link wcs-hide-lg-down" href=")\/real-estate-crm(">Solutions)/,
+    `$1${solutionsHref}">${escapeHtmlText(shell.navSolutions)}`,
   );
   replaceOnce(
-    /(<a class="wcs-link wcs-hide-sm" href="\/blog">)Resources(<\/a>)/,
-    `$1${escapeHtmlText(shell.navResources)}$2`,
+    /(<a class="wcs-link wcs-hide-lg-down" href="\/blog">)Resources/,
+    `$1${escapeHtmlText(shell.navResources)}`,
   );
   replaceOnce(
     /(<a class="wcs-link wcs-hide-sm" href=")\/pricing(">Pricing<\/a>)/,
