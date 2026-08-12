@@ -68,7 +68,7 @@ export default function WelcomeHowPricingBuilt() {
           </div>
 
           <Link href={pricingHref}>
-            <button className="h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center gap-2 transition-all shadow-lg">
+            <button className="h-14 px-8 bg-brand-dark hover:bg-emerald-900 text-white font-semibold rounded-full inline-flex items-center gap-2 transition-all shadow-lg">
               {t("home.pricingTeaser.seePlans")}
               <ArrowRight className="h-5 w-5" />
             </button>

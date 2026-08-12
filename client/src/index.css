@@ -3,8 +3,8 @@
 
 @theme inline {
   /* Slate & Emerald Color Palette */
-  --color-brand-green: #059669;
-  --color-brand-dark: #047857;
+  --color-brand-green: #047857;
+  --color-brand-dark: #065f46;
   --color-brand-light: #10b981;
   --color-slate: #475569;
   --color-slate-dark: #0f172a;
@@ -18,7 +18,7 @@
   --color-popover: hsl(0 0% 100%);
   --color-popover-foreground: #0f172a;
   
-  --color-primary: #059669;
+  --color-primary: #047857;
   --color-primary-foreground: hsl(0 0% 100%);
   
   --color-secondary: #f1f5f9;
@@ -35,7 +35,7 @@
   
   --color-border: #e2e8f0;
   --color-input: #e2e8f0;
-  --color-ring: #059669;
+  --color-ring: #047857;
   
   --radius: 0.5rem;
   
@@ -48,6 +48,19 @@
     @apply border-border;
     box-sizing: border-box;
   }
+  /* Homepage: darken brand-green token + utility classes for WCAG AA text/button
+     contrast. Tailwind emits hardcoded .text-brand-green { color:#059669 }, so
+     override those utilities while shell-live is active. */
+  html.wcs-homepage-shell-live {
+    --color-brand-green: #047857;
+  }
+  html.wcs-homepage-shell-live .text-brand-green {
+    color: #047857;
+  }
+  html.wcs-homepage-shell-live .bg-brand-green {
+    background-color: #047857;
+  }
+
   html {
     overflow-y: scroll;
     scrollbar-gutter: stable;
@@ -417,7 +430,7 @@ img.wcs-hero-image {
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #059669;
+  color: #047857;
   line-height: 1.25;
 }
 
@@ -549,7 +562,7 @@ img.wcs-hero-image {
 
 .wcs-hero-btn-primary,
 #whachat-static-shell .wcs-btn-primary {
-  background: #059669;
+  background: #047857;
   color: #fff;
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08);
 }

@@ -1051,7 +1051,12 @@ export function injectLocalizedStaticShell(html: string, locale: MarketingLocale
   };
 
   replaceOnce(
-    /(<a class="wcs-brand" href=")\/(" aria-label=")[^"]*(">)/,
+    /(<a class="wcs-brand" href=")\/(")/,
+    `$1${homeHref}$2`,
+  );
+  // Optional legacy aria-label form (older shells / mid-deploy cache).
+  replaceOnce(
+    /(<a class="wcs-brand" href=")[^"]*(" aria-label=")[^"]*(">)/,
     `$1${homeHref}$2${escapeHtmlAttr(shell.homeAria)}$3`,
   );
   replaceOnce(

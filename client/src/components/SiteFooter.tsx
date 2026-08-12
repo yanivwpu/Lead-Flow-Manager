@@ -233,7 +233,7 @@ export function SiteFooter() {
         </div>
 
         <div className="mt-7 border-t border-gray-200 pt-4 md:mt-8">
-          <p className="text-[13px] leading-5 text-gray-400">{footer.copyright}</p>
+          <p className="text-[13px] leading-5 text-gray-600">{footer.copyright}</p>
         </div>
       </div>
     </footer>

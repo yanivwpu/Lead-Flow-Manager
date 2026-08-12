@@ -279,11 +279,10 @@ export function MarketingHeader({
         <Link
           href={homeHref}
           className="flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40"
-          aria-label={a11y.homeAria}
           onClick={closeAll}
           data-testid="marketing-logo-home"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-green">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-green" aria-hidden>
             <span className="text-lg font-bold text-white">W</span>
           </div>
           <span className="font-display text-xl font-bold text-gray-900">WhachatCRM</span>
@@ -337,12 +336,12 @@ export function MarketingHeader({
               </Link>
               <Link
                 href="/auth"
-                className="inline-flex h-9 max-w-[9.5rem] shrink-0 items-center justify-center truncate rounded-full bg-brand-green px-3 text-sm font-semibold text-white hover:bg-emerald-700 sm:max-w-none sm:px-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40"
+                className="inline-flex h-9 max-w-[9.5rem] shrink-0 items-center justify-center truncate rounded-full bg-brand-green px-3 text-sm font-semibold text-white hover:bg-emerald-800 sm:max-w-none sm:px-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40"
                 onClick={closeAll}
                 data-testid="button-header-start-trial"
               >
-                <span className="sm:hidden">{startTrialShortLabel}</span>
-                <span className="hidden sm:inline">{startTrialLabel}</span>
+                <span className="sm:hidden text-white">{startTrialShortLabel}</span>
+                <span className="hidden sm:inline text-white">{startTrialLabel}</span>
               </Link>
             </>
           )}

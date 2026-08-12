@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
+import { useTranslation } from 'react-i18next';
 import { Globe, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -31,10 +32,12 @@ export function LanguageSelector({
   className,
   navigateOnChange = false,
 }: LanguageSelectorProps) {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [location, setLocation] = useLocation();
   const urlLocale = useMarketingUrlLocale();
   const [currentLang, setCurrentLang] = useState<SupportedLanguage>(getCurrentLanguage());
+  const languageMenuLabel = t("language.select");
 
   useEffect(() => {
     const handleLanguageChange = () => {
@@ -81,8 +84,9 @@ export function LanguageSelector({
           size={variant === 'compact' ? 'icon' : 'sm'}
           className={className}
           data-testid="language-selector"
+          aria-label={languageMenuLabel}
         >
-          <Globe className="h-4 w-4" />
+          <Globe className="h-4 w-4" aria-hidden />
           {variant === 'default' && (
             <span className="ml-2 hidden sm:inline">{currentLanguageInfo.nativeName}</span>
           )}
@@ -100,7 +104,7 @@ export function LanguageSelector({
               <span className={(info.dir as string) === 'rtl' ? 'font-hebrew' : ''}>
                 {info.nativeName}
               </span>
-              {currentLang === code && <Check className="h-4 w-4 text-emerald-600" />}
+              {currentLang === code && <Check className="h-4 w-4 text-emerald-600" aria-hidden />}
             </DropdownMenuItem>
           )
         )}

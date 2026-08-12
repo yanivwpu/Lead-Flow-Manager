@@ -17,7 +17,7 @@ export default function WelcomeFinalCta({ isLoggedIn }: Props) {
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
           <Link href={isLoggedIn ? "/app/inbox" : "/auth"}>
             <button
-              className="h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl"
+              className="h-14 px-8 bg-brand-dark hover:bg-emerald-900 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl"
               data-testid="button-final-cta"
             >
               {t("home.cta.primary")}
