@@ -18,14 +18,22 @@ async function mount() {
     localStorage.setItem("whachatcrm_language", "en");
   }
 
+  // Mount immediately — do not block first paint / LCP on locale JSON.
+  // Homepage above-fold copy uses sync shared homepage locales; below-fold
+  // sections update when the locale bundle finishes loading.
+  createRoot(document.getElementById("root")!).render(<App />);
+
   if (lang === "he" || lang === "es") {
-    await loadLocale(lang);
-    await i18n.changeLanguage(lang);
+    try {
+      await loadLocale(lang);
+      await i18n.changeLanguage(lang);
+    } catch {
+      // keep English fallback
+    }
   } else if (lang === "en" && i18n.language !== "en") {
-    // Clear stale non-English i18n (LanguageDetector / localStorage) before first paint.
+    // Clear stale non-English i18n (LanguageDetector / localStorage).
     await i18n.changeLanguage("en");
   }
-  createRoot(document.getElementById("root")!).render(<App />);
 }
 
 mount();

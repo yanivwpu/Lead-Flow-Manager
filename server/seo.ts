@@ -1058,6 +1058,10 @@ export function injectLocalizedStaticShell(html: string, locale: MarketingLocale
     `$1${escapeHtmlText(shell.trustPill)}$2`,
   );
   replaceOnce(
+    /(<p class="wcs-hero-eyebrow">)[^<]*(<\/p>)/,
+    `$1${escapeHtmlText(shell.trustPill)}$2`,
+  );
+  replaceOnce(
     /(<nav class="wcs-nav-links" aria-label=")[^"]*(">)/,
     `$1${escapeHtmlAttr(shell.primaryNavAria)}$2`,
   );
@@ -1090,9 +1094,15 @@ export function injectLocalizedStaticShell(html: string, locale: MarketingLocale
     `alt="${escapeHtmlAttr(shell.heroImageAlt)}"`,
   );
   replaceOnce(
-    /(<h1 id="whachat-static-hero-title">)[^<]*(<\/h1>)/,
+    /(<h1 id="whachat-static-hero-title"[^>]*>)[^<]*(<\/h1>)/,
     `$1${escapeHtmlText(shell.h1)}$2`,
   );
+  replaceOnce(/(<p class="wcs-hero-sub">)[^<]*(<\/p>)/, `$1${escapeHtmlText(shell.subtitle)}$2`);
+  replaceOnce(
+    /(<p class="wcs-hero-channels">)[^<]*(<\/p>)/,
+    `$1${escapeHtmlText(shell.channels)}$2`,
+  );
+  // Legacy class names (kept for safety if an older shell is cached mid-deploy)
   replaceOnce(/(<p class="wcs-sub">)[^<]*(<\/p>)/, `$1${escapeHtmlText(shell.subtitle)}$2`);
   replaceOnce(
     /(<p class="wcs-note" style="margin-bottom: 24px;">)[^<]*(<\/p>)/,
@@ -1109,6 +1119,10 @@ export function injectLocalizedStaticShell(html: string, locale: MarketingLocale
   replaceOnce(
     /(<a class="wcs-btn-demo" href="\/contact"[^>]*>)Book a Demo(<\/a>)/,
     `$1${escapeHtmlText(shell.ctaDemo)}$2`,
+  );
+  replaceOnce(
+    /(<p class="wcs-hero-note">)No credit card required(<\/p>)/,
+    `$1${escapeHtmlText(shell.noCreditCard)}$2`,
   );
   replaceOnce(
     /(<p class="wcs-note">)No credit card required(<\/p>)/,

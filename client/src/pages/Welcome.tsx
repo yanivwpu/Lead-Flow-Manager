@@ -1,8 +1,8 @@
 import { useState, lazy, Suspense, useLayoutEffect, useEffect } from "react";
-import { Link, useLocation } from "wouter";
+import { createPortal } from "react-dom";
+import { useLocation } from "wouter";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, Calendar } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 const SiteFooter = lazy(() =>
@@ -17,34 +17,14 @@ const WelcomeIntegrationsSection = lazy(() => import("@/pages/welcome/WelcomeInt
 const WelcomeHowPricingBuilt = lazy(() => import("@/pages/welcome/WelcomeHowPricingBuilt"));
 const WelcomeFinalCta = lazy(() => import("@/pages/welcome/WelcomeFinalCta"));
 const WelcomeDiscoveryPaths = lazy(() => import("@/pages/welcome/WelcomeDiscoveryPaths"));
-import { getDirection } from "@/lib/i18n";
 import { MARKETING_URL } from "@/lib/marketingUrl";
 import { getLocalizedHomepage } from "@shared/localizeMarketingContent";
 import { getCanonicalUrl, getHreflangLinks } from "@shared/localeRoutes";
-import { useLocalizedHref, useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
+import { useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
 
 /** Fixed min-heights reduce layout shift when lazy sections hydrate (approximate final block size). */
 function BelowFoldFallback({ className }: { className?: string }) {
   return <div className={className ?? "min-h-[240px] bg-gray-50"} aria-hidden />;
-}
-
-function HeroConversationMockup({ alt }: { alt: string }) {
-  return (
-    <div className="wcs-hero-image-column w-full md:order-2">
-      <div className="wcs-hero-image-slot">
-        <img
-          className="wcs-hero-image"
-          src="/hero/whachat-hero-mockup.png"
-          alt={alt}
-          width={560}
-          height={871}
-          loading="eager"
-          decoding="async"
-          fetchPriority="high"
-        />
-      </div>
-    </div>
-  );
 }
 
 function scrollToHashTarget(hash: string) {
@@ -56,15 +36,32 @@ function scrollToHashTarget(hash: string) {
   }
 }
 
+function isHomepagePath(location: string): boolean {
+  return location === "/" || location === "/es/" || location === "/he/";
+}
+
+/**
+ * Keep #whachat-static-shell hero painted as the LCP surface.
+ * Remounting the same copy in React was causing 5–7s text LCP (render delay).
+ * Header portals into #wcs-react-header-host in-place (not above the shell).
+ */
+function getReactHeaderHost(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  return document.getElementById("wcs-react-header-host");
+}
+
 export function Welcome() {
   const { user } = useAuth();
   const [location] = useLocation();
   const { t } = useTranslation();
   const [showDemoModal, setShowDemoModal] = useState(false);
-  const isRTL = getDirection() === "rtl";
+  const [headerHost, setHeaderHost] = useState<HTMLElement | null>(null);
+  const [shellLive, setShellLive] = useState(false);
   const locale = useMarketingUrlLocale();
   const home = getLocalizedHomepage(locale);
-  const pricingHref = useLocalizedHref("/pricing");
+  const shell = home.staticShell;
+  // URL locale is authoritative for dir — do not wait on async i18n (avoids LTR→RTL CLS).
+  const isRTL = locale === "he";
   const canonical = getCanonicalUrl("/", locale, MARKETING_URL) || `${MARKETING_URL}/`;
   const hreflang = getHreflangLinks("/", MARKETING_URL);
 
@@ -74,14 +71,69 @@ export function Welcome() {
     document.body.style.paddingRight = "";
     document.documentElement.style.overflow = "";
 
-    if (!document.getElementById("whachat-static-shell")) return;
-    document.documentElement.classList.add("wcs-hide-static-marketing");
-  }, [location, user]);
+    const shellEl = document.getElementById("whachat-static-shell");
+    if (!shellEl || !isHomepagePath(location)) {
+      setShellLive(false);
+      setHeaderHost(null);
+      return;
+    }
+
+    // Keep shell hero for LCP; enhance header via portal; React owns below-fold.
+    document.documentElement.classList.add("wcs-homepage-shell-live");
+    document.documentElement.classList.remove("wcs-hide-static-marketing");
+    const host = getReactHeaderHost();
+    const shellNav = host?.querySelector<HTMLElement>(":scope > .wcs-nav");
+    if (shellNav) {
+      shellNav.setAttribute("aria-hidden", "true");
+      shellNav.setAttribute("inert", "");
+    }
+    setHeaderHost(host);
+    setShellLive(true);
+
+    return () => {
+      document.documentElement.classList.remove("wcs-homepage-shell-live");
+      if (shellNav) {
+        shellNav.removeAttribute("aria-hidden");
+        shellNav.removeAttribute("inert");
+      }
+    };
+  }, [location]);
+
+  // Shell Book a Demo → React modal (shell href is /contact fallback without JS).
+  useEffect(() => {
+    if (!shellLive) return;
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      const demo = t?.closest?.("#whachat-static-shell [data-testid='button-book-demo']");
+      if (!demo) return;
+      e.preventDefault();
+      setShowDemoModal(true);
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, [shellLive]);
+
+  // Logged-in: point shell trial CTA at inbox.
+  useEffect(() => {
+    if (!shellLive) return;
+    const cta = document.querySelector<HTMLAnchorElement>(
+      "#whachat-static-shell [data-testid='button-hero-cta']",
+    );
+    const headerCta = document.querySelector<HTMLAnchorElement>(
+      "#whachat-static-shell a.wcs-btn-green",
+    );
+    if (user) {
+      if (cta) cta.setAttribute("href", "/app/inbox");
+      if (headerCta) {
+        headerCta.setAttribute("href", "/app/inbox");
+        headerCta.textContent = t("landing.dashboard");
+      }
+    }
+  }, [shellLive, user, t]);
 
   useEffect(() => {
     const hash = window.location.hash;
     if (!hash) return;
-    // Wait a tick for lazy sections; retry briefly for #ai-brain etc.
     const tryScroll = () => scrollToHashTarget(hash);
     tryScroll();
     const t1 = window.setTimeout(tryScroll, 200);
@@ -92,8 +144,24 @@ export function Welcome() {
     };
   }, [location]);
 
+  const header = (
+    <div className="wcs-react-header-portal">
+      <MarketingHeader
+        isLoggedIn={!!user}
+        loginLabel={shell.navLogin}
+        startTrialLabel={shell.navStartTrial}
+        startTrialShortLabel={shell.navStartTrial}
+        dashboardLabel={t("landing.dashboard")}
+        pricingLabel={shell.navPricing}
+      />
+    </div>
+  );
+
   return (
-    <div dir={isRTL ? "rtl" : "ltr"} className={`min-h-screen bg-white overflow-x-hidden ${isRTL ? "text-right" : "text-left"}`}>
+    <div
+      dir={isRTL ? "rtl" : "ltr"}
+      className={`bg-white overflow-x-hidden ${shellLive ? "" : "min-h-screen"} ${isRTL ? "text-right" : "text-left"}`}
+    >
       <Helmet>
         <html lang={locale} dir={isRTL ? "rtl" : "ltr"} />
         <title>{home.seo.title}</title>
@@ -120,72 +188,33 @@ export function Welcome() {
         </Suspense>
       ) : null}
 
-      <MarketingHeader
-        isLoggedIn={!!user}
-        loginLabel={t("landing.login")}
-        startTrialLabel={t("landing.startTrial")}
-        startTrialShortLabel={t("landing.startFree")}
-        dashboardLabel={t("landing.dashboard")}
-        pricingLabel={t("landing.pricing")}
-      />
+      {shellLive && headerHost ? createPortal(header, headerHost) : header}
 
-      <section className="px-4 md:px-6 pt-5 md:pt-8 pb-6 md:pb-8 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
-        <div className="flex flex-col gap-8 md:grid md:grid-cols-[1fr_1.04fr] md:gap-10 xl:gap-14 items-start">
-          <HeroConversationMockup alt={home.heroImageAlt} />
-
-          <div className="order-1 md:order-1 max-w-[780px] md:mt-12 lg:mt-14">
-            <p className="mb-4 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
-              {t("landing.heroEyebrow")}
-            </p>
-            <h1 className="text-[2.75rem] md:text-[3.75rem] lg:text-[4.5rem] xl:text-[5rem] font-display font-bold text-gray-950 tracking-tight leading-[0.98] mb-6">
-              {t("landing.heroTitle")}
-            </h1>
-            <p className="text-base md:text-[1.05rem] text-gray-600 mb-4 leading-7 max-w-xl">
-              {t("landing.heroSubtitle")}
-            </p>
-            <p className="text-sm text-gray-500 mb-8 max-w-xl leading-6">
-              {t("landing.heroChannels")}
-            </p>
-
-            <div className="flex flex-col sm:flex-row gap-2.5 mb-4">
-              <div className="w-full sm:w-auto">
-                <Link
-                  href={user ? "/app/inbox" : "/auth"}
-                  className="w-full sm:w-auto h-11 px-5 bg-brand-green hover:bg-emerald-700 text-white text-sm font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-colors shadow-md hover:shadow-lg"
-                  data-testid="button-hero-cta"
-                >
-                  {t("landing.startTrial")}
-                  <ArrowRight className="h-5 w-5" />
-                </Link>
-              </div>
-              <div className="w-full sm:w-auto">
-                <Link
-                  href={pricingHref}
-                  className="w-full sm:w-auto h-11 px-5 bg-white border border-gray-200 text-gray-800 text-sm font-semibold rounded-full inline-flex items-center justify-center gap-1.5 hover:bg-gray-50 transition-colors"
-                  data-testid="button-hero-pricing"
-                >
-                  {t("landing.pricing")}
-                </Link>
-              </div>
-              <div className="flex flex-col items-center sm:items-start">
-                <button
-                  type="button"
-                  onClick={() => setShowDemoModal(true)}
-                  className="w-full sm:w-auto h-11 px-5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-semibold rounded-full flex items-center justify-center gap-2 hover:from-amber-600 hover:to-orange-600 transition-colors shadow-md"
-                  data-testid="button-book-demo"
-                >
-                  <Calendar className="h-4 w-4" />
-                  {t("landing.bookDemo")}
-                </button>
+      {/* When the static shell is live, its hero is the LCP/SEO surface — do not remount. */}
+      {!shellLive ? (
+        <section className="wcs-hero-section" aria-label={shell.h1}>
+          <div className="wcs-hero-grid-react">
+            <div className="wcs-hero-image-column w-full md:order-2">
+              <div className="wcs-hero-image-slot">
+                <img
+                  className="wcs-hero-image"
+                  src="/hero/whachat-hero-mockup.png"
+                  alt={shell.heroImageAlt || home.heroImageAlt}
+                  width={560}
+                  height={871}
+                  loading="eager"
+                  decoding="async"
+                />
               </div>
             </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">{t("landing.noCreditCard")}</span>
+            <div className="wcs-hero-copy order-1 md:order-1">
+              <p className="wcs-hero-eyebrow">{shell.trustPill}</p>
+              <h1 className="wcs-hero-h1">{shell.h1}</h1>
+              <p className="wcs-hero-sub">{shell.subtitle}</p>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       <Suspense fallback={<BelowFoldFallback className="min-h-[180px] bg-white [contain-intrinsic-size:auto_180px]" />}>
         <WelcomeDiscoveryPaths />

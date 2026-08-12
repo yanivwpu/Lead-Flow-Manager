@@ -53,14 +53,50 @@
     scrollbar-gutter: stable;
   }
   html, body, #root {
-    height: 100%;
-    /* dvh (dynamic viewport height) adapts to browser chrome on mobile.
-       Use it as a progressive enhancement — browsers that don't support dvh
-       fall back to the height:100% above. */
-    height: 100dvh;
     width: 100%;
     margin: 0;
     padding: 0;
+  }
+  /* While the static marketing shell is visible, do not force #root to a full viewport
+     height (that reserved empty space below the shell and inflated CLS on swap). */
+  html:not(.wcs-hide-static-marketing):not(.wcs-shopify-preboot):not(.wcs-shopify-bootstrap):not(.wcs-homepage-shell-live) #root {
+    height: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  /* Homepage: keep shell hero painted (LCP); React mounts below-fold in #root. */
+  html.wcs-homepage-shell-live #root {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+  #wcs-react-header-host {
+    position: relative;
+    min-height: 56px;
+  }
+  html.wcs-homepage-shell-live #wcs-react-header-host > .wcs-nav {
+    /* Keep layout space so the hero does not jump when React chrome mounts. */
+    visibility: hidden;
+    pointer-events: none;
+  }
+  html.wcs-homepage-shell-live #wcs-react-header-host > .wcs-react-header-portal {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 40;
+  }
+  html.wcs-hide-static-marketing,
+  html.wcs-hide-static-marketing body,
+  html.wcs-hide-static-marketing #root,
+  html.wcs-shopify-preboot,
+  html.wcs-shopify-preboot body,
+  html.wcs-shopify-preboot #root,
+  html.wcs-shopify-bootstrap,
+  html.wcs-shopify-bootstrap body,
+  html.wcs-shopify-bootstrap #root {
+    height: 100%;
+    height: 100dvh;
   }
   body {
     @apply font-sans antialiased bg-gray-50 text-foreground;
@@ -282,6 +318,12 @@
   }
 }
 
+.wcs-hero-image-slot picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .wcs-hero-image-slot img,
 img.wcs-hero-image {
   display: block;
@@ -304,6 +346,258 @@ img.wcs-hero-image {
 img.wcs-hero-image {
   transform: none !important;
   animation: none !important;
+}
+
+/*
+ * Hero copy/CTA geometry — shared by static shell + React Welcome.
+ * Matching these classes is the primary CLS control for shell→React swap.
+ */
+.wcs-hero-section,
+#whachat-static-shell .wcs-hero {
+  box-sizing: border-box;
+  max-width: 1280px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 20px 16px 32px;
+}
+
+@media (min-width: 768px) {
+  .wcs-hero-section,
+  #whachat-static-shell .wcs-hero {
+    padding: 32px 24px;
+  }
+}
+
+.wcs-hero-grid-react,
+#whachat-static-shell .wcs-hero-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  align-items: stretch;
+}
+
+@media (min-width: 768px) {
+  .wcs-hero-grid-react,
+  #whachat-static-shell .wcs-hero-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.04fr;
+    gap: 40px;
+    align-items: start;
+  }
+}
+
+.wcs-hero-copy,
+#whachat-static-shell .wcs-order-txt {
+  order: 1;
+  width: 100%;
+  max-width: 780px;
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .wcs-hero-copy,
+  #whachat-static-shell .wcs-order-txt {
+    margin-top: 56px;
+  }
+}
+
+.wcs-hero-eyebrow,
+#whachat-static-shell .wcs-hero-eyebrow {
+  margin: 0 0 1rem;
+  min-height: 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #059669;
+  line-height: 1.25;
+}
+
+.wcs-hero-h1,
+#whachat-static-shell .wcs-hero-h1,
+#whachat-static-shell h1.wcs-hero-h1 {
+  font-family: "Plus Jakarta Sans", "Plus Jakarta Sans Fallback", Inter, "Inter Fallback", ui-sans-serif, system-ui, sans-serif;
+  font-size: 2.75rem;
+  font-weight: 700;
+  line-height: 0.98;
+  letter-spacing: -0.025em;
+  margin: 0 0 1.5rem;
+  color: #030712;
+  max-width: 780px;
+}
+
+@media (min-width: 768px) {
+  .wcs-hero-h1,
+  #whachat-static-shell .wcs-hero-h1,
+  #whachat-static-shell h1.wcs-hero-h1 {
+    font-size: 3.75rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .wcs-hero-h1,
+  #whachat-static-shell .wcs-hero-h1,
+  #whachat-static-shell h1.wcs-hero-h1 {
+    font-size: 4.5rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .wcs-hero-h1,
+  #whachat-static-shell .wcs-hero-h1,
+  #whachat-static-shell h1.wcs-hero-h1 {
+    font-size: 5rem;
+  }
+}
+
+.wcs-hero-sub,
+#whachat-static-shell .wcs-hero-sub {
+  margin: 0 0 1rem;
+  max-width: 36rem;
+  font-size: 1rem;
+  line-height: 1.75;
+  color: #4b5563;
+}
+
+@media (min-width: 768px) {
+  .wcs-hero-sub,
+  #whachat-static-shell .wcs-hero-sub {
+    font-size: 1.05rem;
+  }
+}
+
+.wcs-hero-channels,
+#whachat-static-shell .wcs-hero-channels {
+  margin: 0 0 2rem;
+  max-width: 36rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #6b7280;
+}
+
+.wcs-hero-cta-stack,
+#whachat-static-shell .wcs-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin-bottom: 1rem;
+  max-width: 100%;
+}
+
+@media (min-width: 640px) {
+  .wcs-hero-cta-stack,
+  #whachat-static-shell .wcs-stack {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.625rem;
+  }
+}
+
+.wcs-hero-cta-row,
+#whachat-static-shell .wcs-btn-row {
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  .wcs-hero-cta-row,
+  #whachat-static-shell .wcs-btn-row {
+    width: auto;
+  }
+}
+
+.wcs-hero-btn-primary,
+.wcs-hero-btn-outline,
+.wcs-hero-btn-demo,
+#whachat-static-shell .wcs-btn-primary,
+#whachat-static-shell .wcs-btn-outline,
+#whachat-static-shell .wcs-btn-demo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  box-sizing: border-box;
+  min-height: 44px;
+  width: 100%;
+  padding: 0 1.25rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+@media (min-width: 640px) {
+  .wcs-hero-btn-primary,
+  .wcs-hero-btn-outline,
+  .wcs-hero-btn-demo,
+  #whachat-static-shell .wcs-btn-primary,
+  #whachat-static-shell .wcs-btn-outline,
+  #whachat-static-shell .wcs-btn-demo {
+    width: auto;
+  }
+}
+
+.wcs-hero-btn-primary,
+#whachat-static-shell .wcs-btn-primary {
+  background: #059669;
+  color: #fff;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08);
+}
+
+.wcs-hero-btn-outline,
+#whachat-static-shell .wcs-btn-outline {
+  background: #fff;
+  color: #1f2937;
+  border: 1px solid #e5e7eb;
+}
+
+.wcs-hero-btn-demo,
+#whachat-static-shell .wcs-btn-demo {
+  background: linear-gradient(to right, #f59e0b, #f97316);
+  color: #fff;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08);
+}
+
+.wcs-hero-note,
+#whachat-static-shell .wcs-hero-note {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+/* Reduce font-swap CLS: metric-aligned fallbacks for Inter / Plus Jakarta Sans */
+@supports (font-size-adjust: 1) {
+  html {
+    font-family: Inter, "Inter Fallback", ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+@font-face {
+  font-family: "Inter Fallback";
+  src: local("Arial");
+  size-adjust: 107%;
+  ascent-override: 90%;
+  descent-override: 22%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Plus Jakarta Sans Fallback";
+  src: local("Arial");
+  size-adjust: 105%;
+  ascent-override: 95%;
+  descent-override: 22%;
+  line-gap-override: 0%;
+}
+
+.font-display,
+.wcs-hero-h1,
+#whachat-static-shell .wcs-hero-h1,
+#whachat-static-shell .wcs-wordmark {
+  font-family: "Plus Jakarta Sans", "Plus Jakarta Sans Fallback", Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
 /* Mobile / reduced-motion: skip entrance animations — opacity 0 delays LCP and increases main-thread work */
