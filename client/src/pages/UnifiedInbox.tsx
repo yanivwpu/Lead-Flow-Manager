@@ -23,6 +23,13 @@ import {
   upsertSessionPins,
 } from "@shared/inboxListMerge";
 import {
+  INBOX_RECENT_QUERY_KEY,
+  inboxSearchQueryKey,
+  shouldCancelInboxRecentQuery,
+  shouldShowInboxListError,
+  shouldShowInboxListSkeleton,
+} from "@shared/inboxListLoading";
+import {
   inboxItemsFromContactDetail,
   selectPinCandidates,
 } from "@/lib/inboxSessionPins";
@@ -820,8 +827,9 @@ export function UnifiedInbox() {
     status: inboxQueryStatus,
     error: inboxQueryError,
     isEnabled: inboxQueryEnabled,
+    refetch: refetchInbox,
   } = useQuery<InboxItem[]>({
-    queryKey: ["/api/inbox"],
+    queryKey: INBOX_RECENT_QUERY_KEY,
     staleTime: 10_000,
     refetchInterval: () =>
       typeof document !== "undefined" && document.hidden ? false : 15_000,
@@ -829,6 +837,9 @@ export function UnifiedInbox() {
     placeholderData: keepPreviousData,
     queryFn: async ({ signal }) => {
       const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
+      recordInboxTiming("inbox_recent_client_start", 0, {
+        aborted: signal.aborted,
+      });
       const res = await fetch("/api/inbox", {
         credentials: "include",
         cache: "no-store",
@@ -838,10 +849,14 @@ export function UnifiedInbox() {
         throw new Error(`${res.status}: ${await res.text()}`);
       }
       const incoming = (await res.json()) as InboxItem[];
-      const previous = queryClient.getQueryData<InboxItem[]>(["/api/inbox"]);
+      const previous = queryClient.getQueryData<InboxItem[]>(INBOX_RECENT_QUERY_KEY);
       const ms =
         (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
-      recordInboxTiming("inbox_recent_client", ms, { rowCount: incoming.length });
+      recordInboxTiming("inbox_recent_client", ms, {
+        rowCount: incoming.length,
+        status: res.status,
+        hadCache: previous !== undefined,
+      });
       return mergeInboxUnreadPreservingLocalRead(
         previous,
         incoming,
@@ -856,7 +871,7 @@ export function UnifiedInbox() {
     data: searchInboxData,
     isPending: searchInboxPending,
   } = useQuery<InboxItem[]>({
-    queryKey: ["/api/inbox", "search", sanitizedSearch],
+    queryKey: inboxSearchQueryKey(sanitizedSearch || ""),
     enabled: isServerSearching,
     staleTime: 10_000,
     queryFn: async ({ signal }) => {
@@ -1833,13 +1848,18 @@ export function UnifiedInbox() {
 
     void (async () => {
       rememberClearedConversation();
-      await queryClient.cancelQueries({ queryKey: ["/api/inbox"] });
-      queryClient.setQueryData<InboxItem[]>(["/api/inbox"], (old) =>
-        applyInboxConversationMarkRead(old, contactId, {
-          conversationId,
-          remainingUnread,
-        }) as InboxItem[] | undefined,
-      );
+      // Never cancel an in-flight initial /api/inbox fetch — that left data undefined
+      // and stuck the conversation list on skeletons while the center pane loaded.
+      const cachedRecent = queryClient.getQueryData<InboxItem[]>(INBOX_RECENT_QUERY_KEY);
+      if (shouldCancelInboxRecentQuery(cachedRecent)) {
+        await queryClient.cancelQueries({ queryKey: INBOX_RECENT_QUERY_KEY, exact: true });
+        queryClient.setQueryData<InboxItem[]>(INBOX_RECENT_QUERY_KEY, (old) =>
+          applyInboxConversationMarkRead(old, contactId, {
+            conversationId,
+            remainingUnread,
+          }) as InboxItem[] | undefined,
+        );
+      }
       queryClient.setQueryData<{ contact: Contact; conversations: Conversation[] }>(
         ["/api/contacts", contactId],
         (old) => {
@@ -1859,7 +1879,7 @@ export function UnifiedInbox() {
         });
         if (cancelled) return;
         if (res.ok) {
-          queryClient.setQueryData<InboxItem[]>(["/api/inbox"], (old) =>
+          queryClient.setQueryData<InboxItem[]>(INBOX_RECENT_QUERY_KEY, (old) =>
             applyInboxConversationMarkRead(old, contactId, {
               conversationId,
               remainingUnread,
@@ -2201,10 +2221,13 @@ export function UnifiedInbox() {
       const { contactId, ...body } = data;
       const contactKey = ["/api/contacts", contactId] as const;
       await queryClient.cancelQueries({ queryKey: contactKey });
-      await queryClient.cancelQueries({ queryKey: ["/api/inbox"] });
+      const cachedRecent = queryClient.getQueryData<InboxItem[]>(INBOX_RECENT_QUERY_KEY);
+      if (shouldCancelInboxRecentQuery(cachedRecent)) {
+        await queryClient.cancelQueries({ queryKey: INBOX_RECENT_QUERY_KEY, exact: true });
+      }
 
       const previousContact = queryClient.getQueryData<{ contact: Contact; conversations: Conversation[] }>(contactKey);
-      const previousInbox = queryClient.getQueryData<InboxItem[]>(["/api/inbox"]);
+      const previousInbox = queryClient.getQueryData<InboxItem[]>(INBOX_RECENT_QUERY_KEY);
 
       const patchContact = (contact: Contact): Contact => ({ ...contact, ...body });
 
@@ -2336,8 +2359,11 @@ export function UnifiedInbox() {
       };
     },
     onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey: ["/api/inbox"] });
-      const previousInbox = queryClient.getQueryData<InboxItem[]>(["/api/inbox"]);
+      const cachedRecent = queryClient.getQueryData<InboxItem[]>(INBOX_RECENT_QUERY_KEY);
+      if (shouldCancelInboxRecentQuery(cachedRecent)) {
+        await queryClient.cancelQueries({ queryKey: INBOX_RECENT_QUERY_KEY, exact: true });
+      }
+      const previousInbox = queryClient.getQueryData<InboxItem[]>(INBOX_RECENT_QUERY_KEY);
       return { previousInbox };
     },
     onError: (_err, _vars, context) => {
@@ -2908,9 +2934,20 @@ export function UnifiedInbox() {
   const convStatus = primaryConversation?.status || 'open';
   const conversationStatusRow = getConversationStatusRow(convStatus);
 
-  const showListSkeleton =
-    (!isServerSearching && inboxPending && inboxData === undefined) ||
-    (isServerSearching && searchInboxPending && searchInboxData === undefined);
+  const showListSkeleton = shouldShowInboxListSkeleton({
+    isServerSearching,
+    inboxPending,
+    inboxData,
+    searchPending: searchInboxPending,
+    searchData: searchInboxData,
+    pinnedRowCount: isServerSearching ? 0 : sessionPins.length,
+  });
+  const showListError = shouldShowInboxListError({
+    isServerSearching,
+    inboxError: inboxQueryError,
+    inboxData,
+    pinnedRowCount: sessionPins.length,
+  });
 
   return (
     <div className="flex h-full bg-white overflow-hidden w-full max-w-full" data-testid="unified-inbox">
@@ -3164,7 +3201,24 @@ export function UnifiedInbox() {
 
         {/* List */}
         <div className="flex-1 overflow-y-auto">
-          {showListSkeleton ? (
+          {showListError ? (
+            <div className="p-6 text-center" data-testid="inbox-list-error">
+              <AlertCircle className="w-10 h-10 mx-auto mb-3 text-red-400" aria-hidden />
+              <p className="text-sm font-medium text-gray-900 mb-1">Couldn’t load conversations</p>
+              <p className="text-xs text-muted-foreground mb-4">Check your connection and try again.</p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                data-testid="inbox-list-retry"
+                onClick={() => {
+                  void refetchInbox();
+                }}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : showListSkeleton ? (
             <div className="p-3 space-y-3" data-testid="inbox-list-skeleton">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-2.5">

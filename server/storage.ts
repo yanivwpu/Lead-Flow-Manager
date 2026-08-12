@@ -2921,16 +2921,20 @@ export class DbStorage implements IStorage {
   // Unified inbox methods
   /**
    * Build InboxItem rows for an already-scoped contact list (must be owned by userId).
-   * Shared by recent inbox + server-side search — does not change identity matching.
+   * Batched DB access: O(1) query count vs contact count (no per-contact loops).
    */
   private async buildUnifiedInboxForContacts(
     userId: string,
     userContacts: Contact[],
   ): Promise<InboxItem[]> {
+    const { recordInboxTiming } = await import("@shared/inboxListMerge");
+    const t0 = Date.now();
     // Defense in depth: never emit contacts outside this workspace.
     const scoped = userContacts.filter((c) => c.userId === userId);
     const contactIds = scoped.map((c) => c.id);
     let hiddenColdOutreachConversationIds = new Set<string>();
+
+    let tPhase = Date.now();
     if (contactIds.length > 0) {
       const piSignals = await db
         .select({
@@ -2973,39 +2977,53 @@ export class DbStorage implements IStorage {
         queueSentSignals,
       );
     }
+    recordInboxTiming("inbox_phase_cold_outreach", Date.now() - tPhase, {
+      contactCount: contactIds.length,
+    });
 
-    const inboxItems: InboxItem[] = [];
-
-    for (const contact of scoped) {
-      const convs = await db.select().from(conversations)
-        .where(eq(conversations.contactId, contact.id))
+    // Batch conversations for all contacts in one query (preserves lastMessageAt ordering per contact).
+    tPhase = Date.now();
+    const convsByContact = new Map<string, Conversation[]>();
+    if (contactIds.length > 0) {
+      const allConvs = await db
+        .select()
+        .from(conversations)
+        .where(inArray(conversations.contactId, contactIds))
         .orderBy(desc(conversations.lastMessageAt));
+      for (const conv of allConvs) {
+        const list = convsByContact.get(conv.contactId);
+        if (list) list.push(conv);
+        else convsByContact.set(conv.contactId, [conv]);
+      }
+    }
+    recordInboxTiming("inbox_phase_conversations", Date.now() - tPhase, {
+      contactCount: contactIds.length,
+      conversationCount: [...convsByContact.values()].reduce((n, a) => n + a.length, 0),
+    });
 
+    // Build rows in memory (same semantics as before).
+    tPhase = Date.now();
+    type BuiltRow = {
+      contact: Contact;
+      conversation: Conversation | null;
+      channel: Channel;
+      lastMessage: string;
+      lastMessageAt: Date | null;
+      unreadCount: number;
+      contactUnreadTotal: number;
+    };
+    const builtRows: BuiltRow[] = [];
+    for (const contact of scoped) {
+      const convs = convsByContact.get(contact.id) || [];
       const built = buildInboxItemsForContact({
         contact,
         conversations: convs,
         hiddenColdOutreachConversationIds,
       });
       for (const row of built) {
-        let lastEmailMessageId: string | null = null;
-        if (
-          row.channel === "email" &&
-          row.conversation?.id
-        ) {
-          const latest = await db
-            .select({
-              id: messages.id,
-              externalMessageId: messages.externalMessageId,
-            })
-            .from(messages)
-            .where(eq(messages.conversationId, row.conversation.id))
-            .orderBy(desc(messages.sentAt), desc(messages.createdAt))
-            .limit(10);
-          lastEmailMessageId = resolveLastEmailMessageIdForInboxRow(latest);
-        }
-        inboxItems.push({
+        builtRows.push({
           contact: row.contact,
-          conversation: (row.conversation as Conversation) || (null as any),
+          conversation: (row.conversation as Conversation) || null,
           channel: row.channel as Channel,
           lastMessage: row.lastMessage,
           lastMessageAt:
@@ -3016,21 +3034,87 @@ export class DbStorage implements IStorage {
                 : null,
           unreadCount: row.unreadCount,
           contactUnreadTotal: row.contactUnreadTotal,
-          lastEmailMessageId,
-          formIdentity: null,
         });
       }
     }
+    recordInboxTiming("inbox_phase_row_build", Date.now() - tPhase, {
+      rowCount: builtRows.length,
+    });
 
+    // Batch last-email message candidates (up to 10 per email thread) in one SQL round-trip.
+    tPhase = Date.now();
+    const emailConvIds = builtRows
+      .filter((r) => r.channel === "email" && r.conversation?.id)
+      .map((r) => r.conversation!.id);
+    const lastEmailMessageIdByConv = new Map<string, string | null>();
+    if (emailConvIds.length > 0) {
+      const ranked = await db.execute(sql`
+        SELECT id, conversation_id AS "conversationId", external_message_id AS "externalMessageId"
+        FROM (
+          SELECT
+            id,
+            conversation_id,
+            external_message_id,
+            ROW_NUMBER() OVER (
+              PARTITION BY conversation_id
+              ORDER BY sent_at DESC NULLS LAST, created_at DESC
+            ) AS rn
+          FROM messages
+          WHERE conversation_id IN (${sql.join(
+            emailConvIds.map((id) => sql`${id}`),
+            sql`, `,
+          )})
+        ) ranked
+        WHERE rn <= 10
+        ORDER BY conversation_id, rn
+      `);
+      const rows = (ranked as { rows?: Array<Record<string, unknown>> }).rows ?? [];
+      const byConv = new Map<string, Array<{ id: string; externalMessageId: string | null }>>();
+      for (const row of rows) {
+        const convId = String(row.conversationId ?? "");
+        const id = String(row.id ?? "");
+        if (!convId || !id) continue;
+        const ext =
+          row.externalMessageId != null ? String(row.externalMessageId) : null;
+        const list = byConv.get(convId) || [];
+        list.push({ id, externalMessageId: ext });
+        byConv.set(convId, list);
+      }
+      for (const convId of emailConvIds) {
+        lastEmailMessageIdByConv.set(
+          convId,
+          resolveLastEmailMessageIdForInboxRow(byConv.get(convId) || []),
+        );
+      }
+    }
+    recordInboxTiming("inbox_phase_email_lookup", Date.now() - tPhase, {
+      emailConvCount: emailConvIds.length,
+    });
+
+    const inboxItems: InboxItem[] = builtRows.map((row) => ({
+      contact: row.contact,
+      conversation: (row.conversation as Conversation) || (null as any),
+      channel: row.channel,
+      lastMessage: row.lastMessage,
+      lastMessageAt: row.lastMessageAt,
+      unreadCount: row.unreadCount,
+      contactUnreadTotal: row.contactUnreadTotal,
+      lastEmailMessageId: row.conversation?.id
+        ? lastEmailMessageIdByConv.get(row.conversation.id) ?? null
+        : null,
+      formIdentity: null,
+    }));
+
+    tPhase = Date.now();
     try {
-      const emailConvIds = inboxItems
+      const formEmailIds = inboxItems
         .filter((i) => i.channel === "email" && i.conversation?.id)
         .map((i) => i.conversation!.id);
-      if (emailConvIds.length > 0) {
+      if (formEmailIds.length > 0) {
         const { loadInboxFormIdentitiesByConversationIds } = await import(
           "./emailChannel/inboxFormIdentity"
         );
-        const formMap = await loadInboxFormIdentitiesByConversationIds(emailConvIds);
+        const formMap = await loadInboxFormIdentitiesByConversationIds(formEmailIds);
         for (const item of inboxItems) {
           const convId = item.conversation?.id;
           if (!convId) continue;
@@ -3043,20 +3127,34 @@ export class DbStorage implements IStorage {
         err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
       );
     }
+    recordInboxTiming("inbox_phase_form_identity", Date.now() - tPhase, {
+      emailConvCount: emailConvIds.length,
+    });
 
-    return inboxItems.sort((a, b) => {
+    const sorted = inboxItems.sort((a, b) => {
       const aTime = a.lastMessageAt?.getTime() || 0;
       const bTime = b.lastMessageAt?.getTime() || 0;
       return bTime - aTime;
     });
+    recordInboxTiming("inbox_build_total", Date.now() - t0, {
+      contactCount: contactIds.length,
+      rowCount: sorted.length,
+    });
+    return sorted;
   }
 
   async getUnifiedInbox(userId: string, limit: number = 100): Promise<InboxItem[]> {
+    const { recordInboxTiming } = await import("@shared/inboxListMerge");
+    const t0 = Date.now();
     // Contact-scoped fetch; email threads expand to one row each below.
     const userContacts = await db.select().from(contacts)
       .where(eq(contacts.userId, userId))
       .orderBy(desc(contacts.updatedAt))
       .limit(limit);
+    recordInboxTiming("inbox_phase_contacts", Date.now() - t0, {
+      contactCount: userContacts.length,
+      limit,
+    });
 
     return this.buildUnifiedInboxForContacts(userId, userContacts);
   }

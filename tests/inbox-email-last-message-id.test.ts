@@ -39,7 +39,9 @@ const cssSrc = readFileSync(join(process.cwd(), "client/src/index.css"), "utf8")
 run("getUnifiedInbox maps lastEmailMessageId via resolver", () => {
   assert.ok(storageSrc.includes("resolveLastEmailMessageIdForInboxRow"));
   assert.ok(storageSrc.includes("lastEmailMessageId"));
-  assert.ok(storageSrc.includes("externalMessageId: messages.externalMessageId"));
+  // Batched email lookup (ROW_NUMBER) still surfaces provider-backed external ids.
+  assert.ok(storageSrc.includes('external_message_id AS "externalMessageId"'));
+  assert.ok(storageSrc.includes("ROW_NUMBER() OVER"));
   assert.ok(!storageSrc.includes("debug-4bac18.log"));
   assert.ok(!storageSrc.includes("#region agent log"));
 });

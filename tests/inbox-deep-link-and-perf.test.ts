@@ -31,7 +31,7 @@ test("UnifiedInbox defers channel-health until inbox settles; no full-page spinn
   assert.ok(src.includes("showListSkeleton"));
   assert.ok(src.includes("mergeInboxWithSessionPins"));
   assert.ok(src.includes("upsertSessionPins"));
-  assert.ok(src.includes('queryKey: ["/api/inbox", "search", sanitizedSearch]'));
+  assert.ok(src.includes("inboxSearchQueryKey"));
   assert.ok(src.includes("pinScopeUserIdRef"));
 });
 
