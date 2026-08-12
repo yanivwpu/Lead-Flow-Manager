@@ -290,17 +290,29 @@ export async function validateMetaCredentials(credentials: MetaCredentials): Pro
   }
 }
 
+/** Customer-facing copy when a Meta phone number ID is already bound elsewhere. */
+export const META_PHONE_NUMBER_WORKSPACE_CONFLICT_MESSAGE =
+  "This WhatsApp number is already connected to another WhachatCRM account. Disconnect it there first, or choose a different number.";
+
+/** Postgres unique_violation on users.meta_phone_number_id (race after app-level check). */
+export function isMetaPhoneNumberUniqueViolation(err: unknown): boolean {
+  const e = err as { code?: string; constraint?: string; detail?: string; message?: string } | null;
+  if (!e || e.code !== "23505") return false;
+  const hay = `${e.constraint || ""} ${e.detail || ""} ${e.message || ""}`;
+  return /meta_phone_number_id|users_meta_phone_number_id_uidx/i.test(hay);
+}
+
 export async function connectUserMeta(
   userId: string,
   credentials: MetaCredentials,
   extras?: MetaConnectExtras & { skipCredentialValidation?: boolean }
-): Promise<{ success: boolean; error?: string; phoneNumber?: string }> {
+): Promise<{ success: boolean; error?: string; phoneNumber?: string; errorCode?: string }> {
   const conflict = await findMetaPhoneNumberConflict(credentials.phoneNumberId, userId);
   if (conflict) {
     return {
       success: false,
-      error:
-        "This WhatsApp phone number is already connected to another WhachatCRM workspace. Disconnect it there first, or choose a different number in Meta.",
+      error: META_PHONE_NUMBER_WORKSPACE_CONFLICT_MESSAGE,
+      errorCode: "phone_workspace_conflict",
     };
   }
 
@@ -340,24 +352,39 @@ export async function connectUserMeta(
     connectionType: extras?.connectionType ?? "manual_legacy",
     skipCredentialValidation: !!extras?.skipCredentialValidation,
   });
-  await storage.updateUser(userId, {
-    metaAccessToken: encryptedAccessToken,
-    metaPhoneNumberId: credentials.phoneNumberId,
-    metaBusinessAccountId: credentials.businessAccountId,
-    metaAppSecret: encryptedAppSecret,
-    metaWebhookVerifyToken: webhookVerifyToken,
-    metaConnected: true,
-    whatsappProvider: "meta",
-    metaConnectionType: extras?.connectionType ?? "manual_legacy",
-    metaDisplayPhoneNumber: extras?.displayPhoneNumber ?? validation.phoneNumber ?? null,
-    metaVerifiedName: extras?.verifiedName ?? null,
-    metaTokenExpiresAt: extras?.tokenExpiresAt ?? null,
-    metaWebhookSubscribed: extras?.webhookSubscribed ?? false,
-    metaWebhookLastCheckedAt: extras?.webhookSubscribed ? now : null,
-    metaIntegrationStatus: extras?.metaIntegrationStatus ?? "connected",
-    metaLastErrorCode: null,
-    metaLastErrorMessage: null,
-  });
+  try {
+    await storage.updateUser(userId, {
+      metaAccessToken: encryptedAccessToken,
+      metaPhoneNumberId: credentials.phoneNumberId,
+      metaBusinessAccountId: credentials.businessAccountId,
+      metaAppSecret: encryptedAppSecret,
+      metaWebhookVerifyToken: webhookVerifyToken,
+      metaConnected: true,
+      whatsappProvider: "meta",
+      metaConnectionType: extras?.connectionType ?? "manual_legacy",
+      metaDisplayPhoneNumber: extras?.displayPhoneNumber ?? validation.phoneNumber ?? null,
+      metaVerifiedName: extras?.verifiedName ?? null,
+      metaTokenExpiresAt: extras?.tokenExpiresAt ?? null,
+      metaWebhookSubscribed: extras?.webhookSubscribed ?? false,
+      metaWebhookLastCheckedAt: extras?.webhookSubscribed ? now : null,
+      metaIntegrationStatus: extras?.metaIntegrationStatus ?? "connected",
+      metaLastErrorCode: null,
+      metaLastErrorMessage: null,
+    });
+  } catch (err) {
+    if (isMetaPhoneNumberUniqueViolation(err)) {
+      console.warn("[WHATSAPP SAVE] phone_workspace_conflict unique race", {
+        userIdTail: String(userId).slice(-6),
+        phoneNumberIdTail: String(credentials.phoneNumberId || "").slice(-6),
+      });
+      return {
+        success: false,
+        error: META_PHONE_NUMBER_WORKSPACE_CONFLICT_MESSAGE,
+        errorCode: "phone_workspace_conflict",
+      };
+    }
+    throw err;
+  }
   console.log("[WHATSAPP SAVE] Saved integration", {
     userId,
     wabaId: credentials.businessAccountId,
@@ -1000,17 +1027,30 @@ export function parseMetaStatusWebhook(body: any): {
   }
 }
 
+/**
+ * Resolve inbound webhook workspace by Meta phone number ID.
+ * Fail closed on duplicate/corrupt ownership — never pick an arbitrary first row.
+ */
 export async function findUserByMetaPhoneNumberId(phoneNumberId: string): Promise<User | undefined> {
+  const id = String(phoneNumberId || "").trim();
+  if (!id) return undefined;
+
   const result = await db
     .select()
     .from(users)
-    .where(eq(users.metaPhoneNumberId, phoneNumberId))
+    .where(eq(users.metaPhoneNumberId, id))
     .limit(2);
 
   if (result.length > 1) {
-    console.warn(
-      `[Meta WhatsApp] Multiple users share metaPhoneNumberId=${phoneNumberId}; using the first match. Assign unique phone number IDs per tenant.`
+    console.error(
+      `[Meta WhatsApp] CRITICAL inbound routing blocked: duplicate meta_phone_number_id ownership`,
+      {
+        phoneNumberIdLast6: id.slice(-6),
+        ownerCount: result.length,
+        userIdTails: result.map((u) => String(u.id).slice(-6)),
+      },
     );
+    return undefined;
   }
 
   return result[0];

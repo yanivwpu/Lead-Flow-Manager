@@ -11,10 +11,10 @@ export type WhatsAppReadinessChecklist = {
 };
 
 const STEPS: Array<{ key: keyof WhatsAppReadinessChecklist; label: string }> = [
-  { key: "wabaSaved", label: "WhatsApp Business Account saved" },
+  { key: "wabaSaved", label: "Business account saved" },
   { key: "phoneSaved", label: "Phone number saved" },
-  { key: "phoneStatusReady", label: "Phone status ready in Meta" },
-  { key: "webhookSubscribed", label: "Webhook subscribed" },
+  { key: "phoneStatusReady", label: "Phone ready in Meta" },
+  { key: "webhookSubscribed", label: "Inbound messages enabled" },
   { key: "inboxReady", label: "Inbox ready to send & receive" },
 ];
 
@@ -33,12 +33,12 @@ export function WhatsAppConnectionHealthChecklist({
 }) {
   const { t } = useTranslation();
   const title = loading
-    ? "Checking connection…"
+    ? "Finishing WhatsApp setup…"
     : fullyReady
       ? "WhatsApp is ready"
       : phoneRegistrationRequired
         ? t("whatsappPhoneRegistration.statusRequired")
-        : "Setup incomplete";
+        : "Finishing WhatsApp setup…";
 
   return (
     <div
@@ -64,7 +64,7 @@ export function WhatsAppConnectionHealthChecklist({
         <p className="text-xs text-amber-900/90 pl-6">
           {phoneRegistrationRequired
             ? t("whatsappPhoneRegistration.checklistHint")
-            : "Your Meta login succeeded, but messaging is not fully active yet. Complete the steps below."}
+            : "Your WhatsApp login was saved. We’re confirming messaging is ready — this usually takes a moment."}
         </p>
       )}
       <ul className="space-y-1.5 pl-1">

@@ -118,12 +118,30 @@
     "thinking": "IA pensando...",
     "channelHealth": {
       "barLabel": "Estado de conexión de canales",
-      "whatsapp": { "short": "WA", "full": "WhatsApp" },
-      "facebook": { "short": "FB", "full": "Facebook" },
-      "instagram": { "short": "IG", "full": "Instagram" },
-      "telegram": { "short": "TG", "full": "Telegram" },
-      "tiktok": { "short": "TT", "full": "TikTok" },
-      "email": { "short": "Mail", "full": "Email" },
+      "whatsapp": {
+        "short": "WA",
+        "full": "WhatsApp"
+      },
+      "facebook": {
+        "short": "FB",
+        "full": "Facebook"
+      },
+      "instagram": {
+        "short": "IG",
+        "full": "Instagram"
+      },
+      "telegram": {
+        "short": "TG",
+        "full": "Telegram"
+      },
+      "tiktok": {
+        "short": "TT",
+        "full": "TikTok"
+      },
+      "email": {
+        "short": "Mail",
+        "full": "Email"
+      },
       "status": {
         "notConfigured": "no configurado",
         "connected": "conectado",
@@ -1231,8 +1249,8 @@
         "recovery": "Vuelve a conectar y elige un número de la misma cuenta."
       },
       "phone_workspace_conflict": {
-        "message": "Este número de WhatsApp ya está conectado a otro espacio de trabajo de WhachatCRM.",
-        "recovery": "Desconéctalo del otro espacio o usa otro número."
+        "message": "This WhatsApp number is already connected to another WhachatCRM account.",
+        "recovery": "Disconnect it from the other account, or use a different number."
       },
       "webhook_subscription_failed": {
         "message": "WhatsApp se conectó, pero no se pudo verificar la suscripción del webhook.",
@@ -1261,6 +1279,10 @@
       "unknown": {
         "message": "No se pudo terminar la configuración de WhatsApp. Vuelve a intentar Continuar con Meta.",
         "recovery": "Si el problema continúa, contacta con soporte desde Ajustes."
+      },
+      "sdk_launch_failed": {
+        "message": "We couldn't open the secure WhatsApp connection window. Please allow pop-ups and try again.",
+        "recovery": "Allow pop-ups for this site, then click Connect WhatsApp again."
       }
     }
   }

@@ -530,21 +530,9 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/integrations/whatsapp/meta/start__disabled", async (req: Request, res: Response) => {
-    try {
-      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      const parsed = startBody.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
-      }
-      const session = await startEmbeddedSignupSession(req.user.id, parsed.data.flow);
-      res.json(session);
-    } catch (e: any) {
-      console.warn("[WhatsApp Integration] start failed", e?.message || e);
-      res.status(400).json({
-        error: e?.message || "Could not start Meta signup",
-      });
-    }
+  /** Retired alias — must not start onboarding (including coexistence). */
+  app.post("/api/integrations/whatsapp/meta/start__disabled", (_req: Request, res: Response) => {
+    res.status(404).json({ error: "Not found" });
   });
 
   /** OAuth redirect target — Meta sends GET with ?code=&state= */
@@ -701,53 +689,9 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/integrations/whatsapp/meta/complete-sdk__disabled", async (req: Request, res: Response) => {
-    try {
-      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      const parsed = completeSdkBody.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
-      }
-      // Log the exact redirect URI we intend to use (must match the one used to mint the code).
-      // Do NOT log the code, token, or any secrets.
-      const stateRow = await db
-        .select({ redirectUri: whatsappOauthStates.redirectUri })
-        .from(whatsappOauthStates)
-        .where(eq(whatsappOauthStates.stateToken, parsed.data.state))
-        .limit(1);
-      console.log("[WhatsApp Embedded Signup] complete-sdk request", {
-        tokenExchange: "sdk",
-        graphApiVersion: process.env.META_GRAPH_API_VERSION || "v21.0",
-        redirectUriUsed: stateRow[0]?.redirectUri || "(missing_on_state_row)",
-      });
-      const result = await completeEmbeddedSignupOAuth({
-        code: parsed.data.code,
-        state: parsed.data.state,
-        initiatingUserId: req.user.id,
-        tokenExchange: "sdk",
-        expectedArchitecture: parsed.data.architecture
-          ? parseWhatsappEmbeddedSignupArchitecture(parsed.data.architecture) || undefined
-          : undefined,
-        sessionEventSummary: parsed.data.sessionEvent,
-      });
-      if (!result.success) {
-        return res.status(400).json({
-          success: false,
-          error: sanitizeEmbeddedSignupClientError(result.error, result.errorCode),
-          errorCode: result.errorCode || null,
-          failureCategory: "failureCategory" in result ? result.failureCategory || null : null,
-          recoveryAction: "recoveryAction" in result ? result.recoveryAction || null : null,
-          wabaId: result.wabaId || null,
-        });
-      }
-      if ("needsWabaPick" in result && result.needsWabaPick) {
-        return res.json({ success: true, needsWabaPick: true, state: result.state });
-      }
-      res.json({ success: true });
-    } catch (e: any) {
-      console.warn("[WhatsApp Integration] complete-sdk failed", e?.message || e);
-      res.status(500).json({ error: sanitizeEmbeddedSignupClientError(e) });
-    }
+  /** Retired alias — must not complete onboarding. */
+  app.post("/api/integrations/whatsapp/meta/complete-sdk__disabled", (_req: Request, res: Response) => {
+    res.status(404).json({ error: "Not found" });
   });
 
   const chooseWabaBody = z.object({
@@ -810,7 +754,8 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
 
   /**
    * Full redirect OAuth entrypoint (production fallback).
-   * Always uses Embedded Signup architecture **v2** — query params cannot unlock v4 or coexistence.
+   * Uses the same server-authoritative architecture selection as SDK start (v2 or v4).
+   * Client query params cannot unlock coexistence or force an architecture.
    */
   app.get("/api/integrations/whatsapp/meta/start-redirect", async (req: Request, res: Response) => {
     try {
@@ -818,15 +763,13 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       if (req.query.flow === "coexistence") {
         return res.status(400).send("Coexistence onboarding is coming soon.");
       }
-      if (typeof req.query.architecture === "string" && req.query.architecture !== "v2") {
-        return res.status(400).send("Redirect signup only supports the production Embedded Signup path.");
+      if (typeof req.query.architecture === "string") {
+        return res.status(400).send("Architecture cannot be selected by the client.");
       }
-      const session = await startEmbeddedSignupSession(req.user.id, "embedded", {
-        architecture: "v2",
-      });
+      const session = await startEmbeddedSignupSession(req.user.id, "embedded");
       console.log("[WHATSAPP FULL REDIRECT START]", {
         flow: "embedded",
-        architecture: "v2",
+        architecture: session.architecture || session.sdk?.architecture || null,
         redirectUriUsed: session.redirectUri,
         graphApiVersion: session.sdk.graphApiVersion,
         configIdLast4: session.sdk.configIdLast4,
@@ -984,7 +927,8 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
           setupIncomplete: readiness.setupIncomplete || phoneRegistrationRequired,
           metaPersistedButTwilioSelected: !!(userAfter.metaConnected && userAfter.whatsappProvider !== "meta"),
           coexistenceEnabled: coexistenceCfg.coexistenceEnabled,
-          coexistenceConfigId: coexistenceCfg.coexistenceConfigId,
+          coexistenceConfigIdConfigured: !!coexistenceCfg.coexistenceConfigIdLast4,
+          coexistenceConfigIdLast4: coexistenceCfg.coexistenceConfigIdLast4,
           coexistenceFeatureFlagSet: coexistenceCfg.coexistenceFeatureFlagSet,
           embeddedSignupArchitectureDiagnostics: {
             v4FlagEnabled: coexistenceCfg.embeddedSignupV4FlagEnabled,

@@ -856,12 +856,12 @@ export function ChannelSettings() {
         if (!metaFullyReady) {
           return {
             pill: "needs_attention",
-            pillLabel: "Setup incomplete",
-            subline: "Meta login saved — finish WhatsApp setup",
+            pillLabel: "Finishing setup",
+            subline: "WhatsApp saved — finishing messaging setup",
             warning:
               meta?.lastErrorMessage ||
-              "Open Manage to review the connection checklist and refresh the webhook subscription.",
-            footerHint: "Messaging stays disabled until all setup steps are complete.",
+              "Open Manage to check progress or tap Check again. You usually do not need to reconnect.",
+            footerHint: "Messaging stays disabled until setup finishes.",
             action: "manage",
             actionLabel: "Manage",
             onAction: () => setConfigChannel("whatsapp"),
@@ -872,7 +872,7 @@ export function ChannelSettings() {
         if (meta?.integrationStatus === "failed") {
           return {
             pill: "needs_attention",
-            subline: "Connected through Meta",
+            subline: "WhatsApp connected",
             warning: "WhatsApp needs attention. Open Manage to review or reconnect.",
             action: "manage",
             actionLabel: "Manage",
@@ -888,9 +888,9 @@ export function ChannelSettings() {
         if (needsAttention) {
           return {
             pill: "needs_attention",
-            subline: "Connected through Meta",
+            subline: "WhatsApp connected",
             footerHint:
-              "Open Manage to review the connection and finish any remaining Meta setup.",
+              "Open Manage to review the connection and finish any remaining setup.",
             action: "manage",
             actionLabel: "Manage",
             onAction: () => setConfigChannel("whatsapp"),
@@ -900,7 +900,7 @@ export function ChannelSettings() {
         }
         return {
           pill: "connected",
-          subline: "Connected through Meta",
+          subline: "WhatsApp connected",
           action: "manage",
           actionLabel: "Manage",
           onAction: () => setConfigChannel("whatsapp"),

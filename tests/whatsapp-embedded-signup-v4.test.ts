@@ -382,11 +382,11 @@ describe("completion coordinator ordering + single complete-sdk", () => {
 });
 
 describe("redirect fallback policy after SDK signup", () => {
-  it("never redirects for v4, after FB.login, finish, or complete-sdk attempt", () => {
+  it("never redirects after FB.login, finish, or complete-sdk attempt", () => {
     assert.equal(
       shouldAutoRedirectAfterSdkFailure({
         architecture: "v4",
-        fbLoginInvoked: false,
+        fbLoginInvoked: true,
         finishEventSeen: false,
         completeSdkAttempted: false,
       }),
@@ -421,10 +421,19 @@ describe("redirect fallback policy after SDK signup", () => {
     );
   });
 
-  it("allows redirect only for early public v2 pre-login failures", () => {
+  it("allows redirect for early pre-login failures (v2 and v4; server selects architecture)", () => {
     assert.equal(
       shouldAutoRedirectAfterSdkFailure({
         architecture: "v2",
+        fbLoginInvoked: false,
+        finishEventSeen: false,
+        completeSdkAttempted: false,
+      }),
+      true,
+    );
+    assert.equal(
+      shouldAutoRedirectAfterSdkFailure({
+        architecture: "v4",
         fbLoginInvoked: false,
         finishEventSeen: false,
         completeSdkAttempted: false,
@@ -656,7 +665,7 @@ describe("v4 direct WABA/phone validation (no /me/businesses)", () => {
       sanitizeEmbeddedSignupClientError(
         new ReferenceError("shouldUseV4DirectAssetValidation is not defined"),
       ),
-      "Could not finish WhatsApp setup. Please try Continue with Meta again.",
+      "Could not finish WhatsApp setup. Please try Connect WhatsApp again.",
     );
     assert.match(
       sanitizeEmbeddedSignupClientError("Phone not under WABA"),

@@ -62,24 +62,18 @@ console.log("ENV CHECK:", {
   APP_URL: !!process.env.APP_URL
 });
 
-const metaAppSecretForStartupLog = process.env.META_APP_SECRET || "";
-console.log(
-  `[Meta] Using META_APP_SECRET length=${metaAppSecretForStartupLog.length} prefix=${metaAppSecretForStartupLog.slice(0, 4) || "(unset)"}`
-);
+const metaAppSecretConfigured = !!(process.env.META_APP_SECRET || "").trim();
+console.log("[Meta] Startup secret readiness", {
+  metaAppSecretConfigured,
+  metaClientSecretConfigured: !!(process.env.META_CLIENT_SECRET || "").trim(),
+  facebookAppSecretConfigured: !!(process.env.FACEBOOK_APP_SECRET || "").trim(),
+  fbAppSecretConfigured: !!(process.env.FB_APP_SECRET || "").trim(),
+  instagramAppSecretConfigured: !!(process.env.INSTAGRAM_APP_SECRET || "").trim(),
+});
 console.log("[Meta] App env snapshot", {
-  META_APP_ID: process.env.META_APP_ID || null,
-  INSTAGRAM_APP_ID: process.env.INSTAGRAM_APP_ID || null,
-  META_CLIENT_SECRET: process.env.META_CLIENT_SECRET
-    ? { length: process.env.META_CLIENT_SECRET.length, prefix: process.env.META_CLIENT_SECRET.slice(0, 4) }
-    : null,
-  FACEBOOK_APP_SECRET: process.env.FACEBOOK_APP_SECRET
-    ? { length: process.env.FACEBOOK_APP_SECRET.length, prefix: process.env.FACEBOOK_APP_SECRET.slice(0, 4) }
-    : null,
-  FB_APP_SECRET: process.env.FB_APP_SECRET
-    ? { length: process.env.FB_APP_SECRET.length, prefix: process.env.FB_APP_SECRET.slice(0, 4) }
-    : null,
-  INSTAGRAM_APP_SECRET: process.env.INSTAGRAM_APP_SECRET
-    ? { length: process.env.INSTAGRAM_APP_SECRET.length, prefix: process.env.INSTAGRAM_APP_SECRET.slice(0, 4) }
+  META_APP_ID: process.env.META_APP_ID ? { configured: true, last4: process.env.META_APP_ID.slice(-4) } : null,
+  INSTAGRAM_APP_ID: process.env.INSTAGRAM_APP_ID
+    ? { configured: true, last4: process.env.INSTAGRAM_APP_ID.slice(-4) }
     : null,
   railwayDeploymentId: process.env.RAILWAY_DEPLOYMENT_ID || null,
   railwayGitCommitSha: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT || null,

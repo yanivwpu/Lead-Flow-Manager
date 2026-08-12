@@ -29,6 +29,7 @@ import {
 } from "@shared/whatsappPhoneRegistration";
 import {
   connectUserMeta,
+  META_PHONE_NUMBER_WORKSPACE_CONFLICT_MESSAGE,
   type MetaCredentials,
   encryptCredential,
   decryptCredential,
@@ -181,13 +182,17 @@ export interface WhatsappMetaPublicConfig {
   appId: string | null;
   graphApiVersion: string;
   redirectUri: string;
+  /**
+   * Public `/meta/config` returns null (last4 only). Full IDs are delivered on session start
+   * for FB.login / redirect URL construction.
+   */
   embeddedSignupConfigId: string | null;
   /** Last 4 of v2 config only — never full secret. */
   embeddedSignupConfigIdLast4: string | null;
-  /** Present when configured — client may need it only after server selects v4 for the session. */
+  /** Public `/meta/config` returns null; session start returns the selected config. */
   embeddedSignupV4ConfigId: string | null;
   embeddedSignupV4ConfigIdLast4: string | null;
-  /** Raw env value when present — same ID must exist as a dedicated coexistence Embedded Signup config in Meta. */
+  /** Public `/meta/config` returns null; coexistence remains server-gated. */
   coexistenceConfigId: string | null;
   coexistenceConfigIdLast4: string | null;
   missingEnvHints: string[];
@@ -300,11 +305,13 @@ export function getWhatsappMetaPublicConfig(): WhatsappMetaPublicConfig {
     appId: process.env.META_APP_ID || null,
     graphApiVersion: graphRaw.startsWith("v") ? graphRaw : `v${graphRaw}`,
     redirectUri: getWhatsappMetaRedirectUri(),
-    embeddedSignupConfigId: embeddedV2Config,
+    // Diagnostic hygiene: do not expose full Meta config IDs on the public status/config payload.
+    // Session start still returns the selected full configId required for FB.login / authUrl.
+    embeddedSignupConfigId: null,
     embeddedSignupConfigIdLast4: configIdLast4(embeddedV2Config),
-    embeddedSignupV4ConfigId: v4Gate.v4ConfigId,
+    embeddedSignupV4ConfigId: null,
     embeddedSignupV4ConfigIdLast4: configIdLast4(v4Gate.v4ConfigId),
-    coexistenceConfigId: coexistenceConfigOnly,
+    coexistenceConfigId: null,
     coexistenceConfigIdLast4: configIdLast4(coexistenceConfigOnly),
     missingEnvHints,
   };
@@ -386,7 +393,7 @@ export async function startEmbeddedSignupSession(
   userId: string,
   flow: WhatsappEmbeddedSignupFlow,
   options?: {
-    /** Force architecture (server policy). Redirect fallback always forces v2. */
+    /** Force architecture (server policy only). Prefer omitting so rollout selection applies. */
     architecture?: WhatsappEmbeddedSignupArchitecture;
   },
 ): Promise<EmbeddedSignupStartResult> {
@@ -1954,6 +1961,7 @@ export interface WhatsappConnectionDebugInfo {
   lastOAuthDebug: Record<string, unknown> | null;
   coexistenceServerConfigured: boolean;
   coexistenceConfigId: string | null;
+  coexistenceConfigIdLast4: string | null;
   inboundRouting: ReturnType<typeof buildWhatsAppInboundRoutingDiagnostics>;
   /** Last Graph snapshot for the saved phone number id (from meta_last_oauth_debug.phoneGraphSnapshot). */
   phoneGraphSnapshot: Record<string, unknown> | null;
@@ -1989,7 +1997,8 @@ export async function getWhatsappConnectionDebug(userId: string): Promise<Whatsa
         ? stripSensitiveWhatsAppFields(user.metaLastOAuthDebug as Record<string, unknown>)
         : null,
     coexistenceServerConfigured: coexistenceCfg.coexistenceEnabled,
-    coexistenceConfigId: coexistenceCfg.coexistenceConfigId,
+    coexistenceConfigId: null,
+    coexistenceConfigIdLast4: coexistenceCfg.coexistenceConfigIdLast4,
     inboundRouting: buildWhatsAppInboundRoutingDiagnostics({
       metaConnected: !!user.metaConnected,
       activeProvider: (user.whatsappProvider as string) || "twilio",
@@ -2467,8 +2476,7 @@ export async function completeEmbeddedSignupOAuth(params: {
 
       const conflict = await findMetaPhoneNumberConflict(v4Assets.resolved.phoneNumberId, row.userId);
       if (conflict) {
-        const msg =
-          "This WhatsApp phone number is already connected to another WhachatCRM workspace. Disconnect it there first, or choose a different number in Meta.";
+        const msg = META_PHONE_NUMBER_WORKSPACE_CONFLICT_MESSAGE;
         await mergeUserMetaOAuthDebug(row.userId, {
           phase: "waba_discovery",
           ok: false,
@@ -2760,6 +2768,20 @@ export async function completeEmbeddedSignupOAuth(params: {
   });
 
   if (!result.success) {
+    if (result.errorCode === "phone_workspace_conflict") {
+      await mergeUserMetaOAuthDebug(row.userId, {
+        phase: "persist_integration",
+        ok: false,
+        errorCode: "phone_workspace_conflict",
+        connectUserMetaError: result.error || "phone_workspace_conflict",
+        forcedSave: false,
+      });
+      return {
+        success: false,
+        error: result.error || META_PHONE_NUMBER_WORKSPACE_CONFLICT_MESSAGE,
+        errorCode: "phone_workspace_conflict",
+      };
+    }
     console.warn("[WHATSAPP SAVE] connectUserMeta failed; forcing save without Graph validation", {
       userId: row.userId,
       wabaId: resolved.wabaId,
@@ -2781,6 +2803,13 @@ export async function completeEmbeddedSignupOAuth(params: {
       metaIntegrationStatus: subscribed ? "connected" : "needs_attention",
       skipCredentialValidation: true,
     });
+    if (!result.success && result.errorCode === "phone_workspace_conflict") {
+      return {
+        success: false,
+        error: result.error || META_PHONE_NUMBER_WORKSPACE_CONFLICT_MESSAGE,
+        errorCode: "phone_workspace_conflict",
+      };
+    }
   }
 
   if (!result.success) {
@@ -2790,7 +2819,13 @@ export async function completeEmbeddedSignupOAuth(params: {
       error: result.error || "Could not save WhatsApp connection.",
       forcedSave: false,
     });
-    return { success: false, error: result.error || "Could not save WhatsApp connection." };
+    return {
+      success: false,
+      error: result.error || "Could not save WhatsApp connection.",
+      ...(result.errorCode === "phone_workspace_conflict"
+        ? { errorCode: "phone_workspace_conflict" as const }
+        : {}),
+    };
   }
 
   await mergeUserMetaOAuthDebug(row.userId, {
@@ -2890,7 +2925,9 @@ export async function finalizeEmbeddedSignupWabaSelection(params: {
   initiatingUserId: string;
   wabaId: string;
   phoneNumberId: string;
-}): Promise<{ success: true } | { success: false; error: string }> {
+}): Promise<
+  { success: true } | { success: false; error: string; errorCode?: "phone_workspace_conflict" }
+> {
   const { state, initiatingUserId, wabaId, phoneNumberId } = params;
   await cleanupExpiredStates();
 
@@ -2962,6 +2999,13 @@ export async function finalizeEmbeddedSignupWabaSelection(params: {
   });
 
   if (!result.success) {
+    if (result.errorCode === "phone_workspace_conflict") {
+      return {
+        success: false,
+        error: result.error || META_PHONE_NUMBER_WORKSPACE_CONFLICT_MESSAGE,
+        errorCode: "phone_workspace_conflict",
+      };
+    }
     result = await connectUserMeta(row.userId, credentials, {
       connectionType,
       displayPhoneNumber: matchPhone.displayPhoneNumber ?? null,
@@ -2974,7 +3018,13 @@ export async function finalizeEmbeddedSignupWabaSelection(params: {
   }
 
   if (!result.success) {
-    return { success: false, error: result.error || "Could not save WhatsApp connection." };
+    return {
+      success: false,
+      error: result.error || "Could not save WhatsApp connection.",
+      ...(result.errorCode === "phone_workspace_conflict"
+        ? { errorCode: "phone_workspace_conflict" as const }
+        : {}),
+    };
   }
 
   // Immediately verify the phone node for routing readiness / registration need.

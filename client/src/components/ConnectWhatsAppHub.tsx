@@ -806,7 +806,7 @@ export function ConnectWhatsAppHub({
         completeSdkAttempted,
       });
       if (allowRedirect) {
-        // Public v2 only: early pre-login SDK failures may use redirect fallback.
+        // Same server-authoritative architecture as SDK start (v2 or v4) — no silent downgrade.
         console.warn("[WhatsApp Embedded Signup] SDK pre-login failed; falling back to redirect.", msg);
         window.location.href = "/api/integrations/whatsapp/meta/start-redirect?flow=embedded";
       } else {
@@ -814,6 +814,16 @@ export function ConnectWhatsAppHub({
           "[WhatsApp Embedded Signup] SDK completion failed; not starting redirect fallback.",
           { msg, architecture, fbLoginInvoked, finishEventSeen, completeSdkAttempted },
         );
+        if (!fbLoginInvoked) {
+          setHubBanner({
+            variant: "error",
+            message: localizedEmbeddedSignupError(
+              t,
+              "sdk_launch_failed",
+              "We couldn't open the secure WhatsApp connection window. Please allow pop-ups and try again.",
+            ),
+          });
+        }
         await refreshConnectionHealth(true);
       }
     }
@@ -979,9 +989,18 @@ export function ConnectWhatsAppHub({
                   : metaTestConnected
                     ? META_TEST_NUMBER_HELP
                     : metaFullyReady
-                      ? "Connected"
-                      : "Setup incomplete"}
+                      ? "WhatsApp connected"
+                      : healthPollBusy
+                        ? "Finishing WhatsApp setup…"
+                        : meta?.integrationStatus === "failed"
+                          ? "WhatsApp setup needs attention"
+                          : "Finishing WhatsApp setup…"}
               </p>
+              {metaFullyReady && meta?.displayPhoneNumber && (
+                <p className="text-xs text-emerald-900/90 mt-1">
+                  Connected number: {meta.displayPhoneNumber}
+                </p>
+              )}
               {metaTestConnected && metaFullyReady && (
                 <p className="text-xs text-amber-800/90 mt-1">
                   Add a production number in Meta Business Manager and reconnect to message real customers.
@@ -1063,6 +1082,11 @@ export function ConnectWhatsAppHub({
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {metaFullyReady && (
+              <Button type="button" size="sm" asChild>
+                <a href="/app/inbox">Go to Unified Inbox</a>
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"
@@ -1072,14 +1096,14 @@ export function ConnectWhatsAppHub({
                 await subscribeMutation.mutateAsync();
                 await refreshConnectionHealth(true);
               }}
-              title="Re-subscribe webhooks and refresh WhatsApp connection status"
+              title="Refresh WhatsApp connection and inbound message setup"
             >
               {subscribeMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-1" />
               ) : (
                 <RefreshCw className="h-4 w-4 mr-1" />
               )}
-              Repair / Refresh WhatsApp connection
+              {metaFullyReady ? "Check again" : "Check again"}
             </Button>
 
             {supportMode && (
@@ -1112,9 +1136,9 @@ export function ConnectWhatsAppHub({
         <>
           <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
             <div className="px-3 py-2 border-b bg-gray-50/80">
-              <h3 className="text-sm font-semibold text-gray-900">Connect WhatsApp</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Connect WhatsApp to WhachatCRM</h3>
               <p className="text-[11px] text-gray-500 mt-0.5">
-                Connect WhatsApp through Meta Embedded Signup. WhachatCRM will verify the connection automatically.
+                Link your WhatsApp Business number so messages appear in your Unified Inbox.
               </p>
             </div>
             <div className="p-3 space-y-3">
@@ -1132,9 +1156,9 @@ export function ConnectWhatsAppHub({
                 <div className="flex items-center gap-2">
                   <MessageCircle className="h-5 w-5 text-emerald-600" />
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">Continue with Meta Embedded Signup</p>
+                    <p className="text-sm font-semibold text-gray-900">Connect WhatsApp</p>
                     <p className="text-[11px] text-gray-600 mt-0.5">
-                      Choose your business account, WhatsApp account, and phone number in Meta.
+                      Choose your business and phone number securely with Meta.
                     </p>
                   </div>
                 </div>
@@ -1156,13 +1180,15 @@ export function ConnectWhatsAppHub({
                 <div className="flex items-center gap-2">
                   <Smartphone className="h-5 w-5 text-blue-600" />
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">Use an existing WhatsApp Business App number</p>
-                    <p className="text-[11px] text-gray-600 mt-0.5">
-                      Coming soon
+                    <p className="text-sm font-semibold text-gray-900">
+                      Already use this number in WhatsApp Business App?
                     </p>
+                    <p className="text-[11px] text-gray-600 mt-0.5">Coming soon</p>
                   </div>
                 </div>
-                <p className="text-[10px] text-gray-500 mt-2">Planned support for businesses that want shared app and inbox access.</p>
+                <p className="text-[10px] text-gray-500 mt-2">
+                  Planned support for businesses that want shared app and inbox access.
+                </p>
               </button>
 
               <button

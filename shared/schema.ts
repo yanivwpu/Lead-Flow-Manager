@@ -177,7 +177,12 @@ export const users = pgTable("users", {
   emailVerifiedAt: timestamp("email_verified_at"),
   /** When the post-verification welcome email was sent (prevents duplicate welcome sequences). */
   welcomeEmailSentAt: timestamp("welcome_email_sent_at"),
-});
+}, (t) => ({
+  /** Inbound webhook routing: at most one workspace per Meta phone number ID (nulls allowed). */
+  metaPhoneNumberIdUq: uniqueIndex("users_meta_phone_number_id_uidx")
+    .on(t.metaPhoneNumberId)
+    .where(sql`${t.metaPhoneNumberId} IS NOT NULL`),
+}));
 
 /** Hashed, single-use email verification tokens for public signup. */
 export const emailVerificationTokens = pgTable(

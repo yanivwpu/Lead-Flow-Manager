@@ -25,7 +25,8 @@ export function shouldAutoRedirectAfterSdkFailure(params: {
   completeSdkAttempted: boolean;
 }): boolean {
   // Never open a second Meta session after SDK signup was launched or finished.
-  if (params.architecture === "v4") return false;
+  // Pre-login failures (e.g. popup blocked before FB.login) may use redirect —
+  // start-redirect now uses the same server-authoritative v2/v4 selection.
   if (params.fbLoginInvoked) return false;
   if (params.finishEventSeen) return false;
   if (params.completeSdkAttempted) return false;

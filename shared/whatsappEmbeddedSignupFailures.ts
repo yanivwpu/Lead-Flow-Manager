@@ -17,6 +17,7 @@ export const EMBEDDED_SIGNUP_FAILURE_CATEGORIES = [
   "completion_in_progress",
   "architecture_mismatch",
   "phone_setup_incomplete",
+  "sdk_launch_failed",
   "unknown",
 ] as const;
 
@@ -65,6 +66,10 @@ export function mapEmbeddedSignupFailureCategory(
       return "architecture_mismatch";
     case "phone_setup_incomplete":
       return "phone_setup_incomplete";
+    case "sdk_launch_failed":
+    case "popup_blocked":
+    case "fb_sdk_unavailable":
+      return "sdk_launch_failed";
     default:
       return "unknown";
   }
@@ -76,22 +81,22 @@ export const EMBEDDED_SIGNUP_FAILURE_COPY_EN: Record<
   { message: string; recovery: string }
 > = {
   dialog_cancelled: {
-    message: "Meta setup was cancelled. You can try again anytime.",
-    recovery: "Click Continue with Meta when you are ready.",
+    message: "WhatsApp setup was cancelled. You can try again anytime.",
+    recovery: "Click Connect WhatsApp when you are ready.",
   },
   oauth_state_expired: {
     message:
       "This signup session expired before Meta finished. Close any Facebook windows and start again from Settings.",
-    recovery: "Start a fresh Continue with Meta session — do not reuse an old browser tab.",
+    recovery: "Start a fresh Connect WhatsApp session — do not reuse an old browser tab.",
   },
   code_exchange_failed: {
     message: "We could not complete authorization with Meta. Please try again.",
-    recovery: "Close Meta windows, then try Continue with Meta again.",
+    recovery: "Close Meta windows, then try Connect WhatsApp again.",
   },
   session_assets_missing: {
     message:
       "Meta did not return the WhatsApp account details needed to finish setup.",
-    recovery: "Try Continue with Meta again and complete every step in the Meta dialog.",
+    recovery: "Try Connect WhatsApp again and complete every step in the Meta dialog.",
   },
   waba_validation_failed: {
     message: "We could not validate your WhatsApp Business Account with Meta.",
@@ -103,20 +108,20 @@ export const EMBEDDED_SIGNUP_FAILURE_COPY_EN: Record<
   },
   phone_workspace_conflict: {
     message:
-      "This WhatsApp phone number is already connected to another WhachatCRM workspace.",
-    recovery: "Disconnect it from the other workspace, or use a different number.",
+      "This WhatsApp number is already connected to another WhachatCRM account.",
+    recovery: "Disconnect it from the other account, or use a different number.",
   },
   webhook_subscription_failed: {
-    message: "WhatsApp connected, but webhook subscription could not be verified.",
-    recovery: "Use Repair connection in Settings, or try Continue with Meta again.",
+    message: "WhatsApp was saved, but inbound message setup could not be verified yet.",
+    recovery: "Use Check again in Settings, or try Connect WhatsApp again.",
   },
   phone_registration_required: {
-    message: "Meta requires a six-digit PIN to register this phone number on Cloud API.",
+    message: "Meta requires a six-digit PIN to finish activating this phone number.",
     recovery: "Enter and confirm your six-digit PIN to finish setup.",
   },
   meta_temporary_unavailable: {
     message: "Meta is temporarily unavailable. Please try again in a few minutes.",
-    recovery: "Wait briefly, then try Continue with Meta again.",
+    recovery: "Wait briefly, then try Connect WhatsApp again.",
   },
   completion_in_progress: {
     message: "WhatsApp setup is already finishing. Please wait a moment.",
@@ -124,15 +129,20 @@ export const EMBEDDED_SIGNUP_FAILURE_COPY_EN: Record<
   },
   architecture_mismatch: {
     message: "Signup version mismatch. Close the window and start again from Settings.",
-    recovery: "Start a new Continue with Meta session from Settings.",
+    recovery: "Start a new Connect WhatsApp session from Settings.",
   },
   phone_setup_incomplete: {
     message:
-      "WhatsApp Business Account was created, but phone setup is incomplete in Meta.",
+      "Your WhatsApp account was created, but phone setup is incomplete in Meta.",
     recovery: "Finish the number in Meta Business Manager, then reconnect.",
   },
+  sdk_launch_failed: {
+    message:
+      "We couldn't open the secure WhatsApp connection window. Please allow pop-ups and try again.",
+    recovery: "Allow pop-ups for this site, then click Connect WhatsApp again.",
+  },
   unknown: {
-    message: "Could not finish WhatsApp setup. Please try Continue with Meta again.",
+    message: "Could not finish WhatsApp setup. Please try Connect WhatsApp again.",
     recovery: "If this keeps happening, contact support from Settings.",
   },
 };

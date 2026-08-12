@@ -205,8 +205,8 @@ describe("v4 rollout modes", () => {
   });
 });
 
-describe("client cannot force v4 / no second-dialog fallback", () => {
-  it("v4 never auto-redirects to a second Facebook dialog", () => {
+describe("client cannot force architecture / no second-dialog after login", () => {
+  it("v4 may redirect only before FB.login (same server architecture selection)", () => {
     assert.equal(
       shouldAutoRedirectAfterSdkFailure({
         architecture: "v4",
@@ -214,17 +214,26 @@ describe("client cannot force v4 / no second-dialog fallback", () => {
         finishEventSeen: false,
         completeSdkAttempted: false,
       }),
+      true,
+    );
+    assert.equal(
+      shouldAutoRedirectAfterSdkFailure({
+        architecture: "v4",
+        fbLoginInvoked: true,
+        finishEventSeen: false,
+        completeSdkAttempted: false,
+      }),
       false,
     );
   });
 
-  it("start-redirect route rejects non-v2 architecture query", () => {
+  it("start-redirect rejects client architecture override and does not hardcode v2", () => {
     const src = fs.readFileSync(
       path.join(process.cwd(), "server/routes/whatsappIntegrationRoutes.ts"),
       "utf8",
     );
-    assert.match(src, /architecture !== "v2"/);
-    assert.match(src, /architecture:\s*"v2"/);
+    assert.match(src, /Architecture cannot be selected by the client/);
+    assert.doesNotMatch(src, /architecture:\s*"v2"/);
   });
 });
 

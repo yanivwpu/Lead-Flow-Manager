@@ -206,7 +206,7 @@ export async function registerPhoneForAuthenticatedUser(params: {
   if (conflict) {
     return {
       success: false,
-      error: "This WhatsApp phone number is already connected to another workspace.",
+      error: "This WhatsApp number is already connected to another WhachatCRM account.",
       errorCode: "phone_waba_mismatch",
       retryable: false,
     };

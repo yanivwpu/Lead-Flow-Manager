@@ -118,12 +118,30 @@
     "thinking": "AI חושב...",
     "channelHealth": {
       "barLabel": "מצב חיבור ערוצים",
-      "whatsapp": { "short": "WA", "full": "WhatsApp" },
-      "facebook": { "short": "FB", "full": "Facebook" },
-      "instagram": { "short": "IG", "full": "Instagram" },
-      "telegram": { "short": "TG", "full": "Telegram" },
-      "tiktok": { "short": "TT", "full": "TikTok" },
-      "email": { "short": "Mail", "full": "אימייל" },
+      "whatsapp": {
+        "short": "WA",
+        "full": "WhatsApp"
+      },
+      "facebook": {
+        "short": "FB",
+        "full": "Facebook"
+      },
+      "instagram": {
+        "short": "IG",
+        "full": "Instagram"
+      },
+      "telegram": {
+        "short": "TG",
+        "full": "Telegram"
+      },
+      "tiktok": {
+        "short": "TT",
+        "full": "TikTok"
+      },
+      "email": {
+        "short": "Mail",
+        "full": "אימייל"
+      },
       "status": {
         "notConfigured": "לא מוגדר",
         "connected": "מחובר",
@@ -1308,8 +1326,8 @@
         "recovery": "התחברו מחדש ובחרו מספר ששייך לאותו חשבון."
       },
       "phone_workspace_conflict": {
-        "message": "מספר WhatsApp זה כבר מחובר לסביבת עבודה אחרת ב-WhachatCRM.",
-        "recovery": "נתקו אותו מהסביבה האחרת, או השתמשו במספר אחר."
+        "message": "This WhatsApp number is already connected to another WhachatCRM account.",
+        "recovery": "Disconnect it from the other account, or use a different number."
       },
       "webhook_subscription_failed": {
         "message": "WhatsApp חובר, אך לא ניתן היה לאמת את מנוי ה-webhook.",
@@ -1338,6 +1356,10 @@
       "unknown": {
         "message": "לא ניתן היה לסיים את הגדרת WhatsApp. נסו שוב המשך עם Meta.",
         "recovery": "אם הבעיה נמשכת, פנו לתמיכה מההגדרות."
+      },
+      "sdk_launch_failed": {
+        "message": "We couldn't open the secure WhatsApp connection window. Please allow pop-ups and try again.",
+        "recovery": "Allow pop-ups for this site, then click Connect WhatsApp again."
       }
     }
   }
