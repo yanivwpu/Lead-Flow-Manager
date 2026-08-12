@@ -2,8 +2,10 @@ import { Worker, Job } from "bullmq";
 import { QUEUE_NAME, WORKER_CONCURRENCY, createRedisConnection, type InboxJobPayload } from "./queue";
 import { channelService } from "./channelService";
 import { registerChannelAdapters } from "./channelAdapters";
+import { logMetaCredentialEncryptionBootDiag } from "./metaCredentialCrypto";
 
 registerChannelAdapters();
+logMetaCredentialEncryptionBootDiag(process.env, "worker");
 
 async function processMessage(job: Job<InboxJobPayload>): Promise<void> {
   const { userId, channel, channelContactId, contactName, content, contentType, mediaUrl, externalMessageId } = job.data;

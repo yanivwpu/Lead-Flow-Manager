@@ -6,6 +6,30 @@ import { storage } from "./storage";
 import type { User, Chat } from "@shared/schema";
 import { getMetaGraphApiBase } from "./metaGraphVersion";
 
+export {
+  isMetaCredentialEncryptionConfigured,
+  resolveMetaCredentialEncryptionSource,
+  validateMetaEncryptionKey,
+} from "@shared/metaCredentialEncryption";
+
+export {
+  encryptCredential,
+  decryptCredential,
+  isEncrypted,
+  MetaCredentialEncryptionConfigError,
+  migrateMetaCredentialEncryption,
+  encryptMetaCredentialWithLegacyFallbackForTests,
+  encryptMetaCredentialUnversionedForTests,
+  decryptMetaCredentialOrNull,
+  migrateMetaCiphertextFieldForTests,
+  listUnversionedMetaDecryptPassphrases,
+  logMetaCredentialEncryptionBootDiag,
+} from "./metaCredentialCrypto";
+import {
+  encryptCredential,
+  MetaCredentialEncryptionConfigError,
+} from "./metaCredentialCrypto";
+
 export interface WhatsAppMessage {
   id: string;
   text: string;
@@ -14,47 +38,6 @@ export interface WhatsAppMessage {
   sender?: "me" | "them";
   status?: "sent" | "delivered" | "read" | "failed";
   metaMessageId?: string;
-}
-
-const ENCRYPTION_KEY = process.env.META_ENCRYPTION_KEY || process.env.SESSION_SECRET || "default-encryption-key-change-in-production";
-const ALGORITHM = "aes-256-gcm";
-
-function getEncryptionKey(): Buffer {
-  return crypto.scryptSync(ENCRYPTION_KEY, "salt", 32);
-}
-
-export function encryptCredential(text: string): string {
-  const iv = crypto.randomBytes(16);
-  const key = getEncryptionKey();
-  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-  let encrypted = cipher.update(text, "utf8", "hex");
-  encrypted += cipher.final("hex");
-  const authTag = cipher.getAuthTag();
-  return `${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted}`;
-}
-
-export function decryptCredential(encryptedText: string): string {
-  try {
-    const [ivHex, authTagHex, encrypted] = encryptedText.split(":");
-    if (!ivHex || !authTagHex || !encrypted) {
-      return encryptedText;
-    }
-    const iv = Buffer.from(ivHex, "hex");
-    const authTag = Buffer.from(authTagHex, "hex");
-    const key = getEncryptionKey();
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv, { authTagLength: 16 });
-    decipher.setAuthTag(authTag);
-    let decrypted = decipher.update(encrypted, "hex", "utf8");
-    decrypted += decipher.final("utf8");
-    return decrypted;
-  } catch {
-    return encryptedText;
-  }
-}
-
-export function isEncrypted(text: string): boolean {
-  const parts = text.split(":");
-  return parts.length === 3 && parts[0].length === 32;
 }
 
 export interface MetaCredentials {
@@ -327,8 +310,17 @@ export async function connectUserMeta(
     return { success: false, error: validation.error };
   }
 
-  const encryptedAccessToken = encryptCredential(credentials.accessToken);
-  const encryptedAppSecret = credentials.appSecret ? encryptCredential(credentials.appSecret) : null;
+  let encryptedAccessToken: string;
+  let encryptedAppSecret: string | null;
+  try {
+    encryptedAccessToken = encryptCredential(credentials.accessToken);
+    encryptedAppSecret = credentials.appSecret ? encryptCredential(credentials.appSecret) : null;
+  } catch (err) {
+    if (err instanceof MetaCredentialEncryptionConfigError) {
+      return { success: false, error: err.message };
+    }
+    throw err;
+  }
   const globalVerify = process.env.META_WEBHOOK_VERIFY_TOKEN;
   const webhookVerifyToken =
     credentials.webhookVerifyToken ||

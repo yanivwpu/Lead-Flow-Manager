@@ -59,7 +59,7 @@ describe("server architecture selection", () => {
     META_APP_SECRET: "test-meta-app-secret",
     META_WHATSAPP_REDIRECT_URI: "https://app.example.com/api/integrations/whatsapp/meta/callback",
     META_WEBHOOK_VERIFY_TOKEN: "verify-token-test",
-    META_ENCRYPTION_KEY: "test-meta-encryption-key-32b!!",
+    META_ENCRYPTION_KEY: "test-meta-encryption-key-32bytes!!",
     META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: "v2-config-aaaaaaaa",
     APP_URL: "https://app.example.com",
   };

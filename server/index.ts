@@ -27,6 +27,7 @@ import { getAppOrigin } from "./urlOrigins";
 import { corsMiddleware } from "./corsMiddleware";
 import { rateLimitMiddleware } from "./rateLimitMiddleware";
 import { logGhlOAuthRecoveryAllowlistAtStartup } from "./ghlOAuthRecoveryStartup";
+import { logMetaCredentialEncryptionBootDiag } from "./metaCredentialCrypto";
 
 /** SaaS routes must run on APP_URL host (e.g. app.whachatcrm.com), not www marketing. */
 function isSaaSPathname(pathname: string): boolean {
@@ -83,6 +84,7 @@ console.log("[Meta] App env snapshot", {
   railwayDeploymentId: process.env.RAILWAY_DEPLOYMENT_ID || null,
   railwayGitCommitSha: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT || null,
 });
+logMetaCredentialEncryptionBootDiag(process.env, "web");
 
 async function runStartupGhlCleanup() {
   const targetUserId = process.env.GHL_CLEANUP_USER_ID;

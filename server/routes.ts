@@ -8488,6 +8488,39 @@ export async function registerRoutes(
   });
 
   /**
+   * Sales Admin only — re-encrypt legacy Meta credential ciphertext under META_ENCRYPTION_KEY.
+   * Auth: requireAdmin (Sales Admin session isAdmin OR x-admin-token), same as other /api/admin mutations.
+   * Cookie session uses sameSite=lax; CORS restricts browser origins. No separate CSRF token is used
+   * for admin POSTs in this app (matches siblings such as inventory resync / IndexNow).
+   * Body: { dryRun?: boolean }. Aggregate counts only — never tokens/ciphertext/PII/keys/key-source.
+   * Does not run automatically at startup.
+   */
+  app.post("/api/admin/meta-credential-encryption/migrate", requireAdmin, async (req, res) => {
+    try {
+      const { migrateMetaCredentialEncryption } = await import("./metaCredentialCrypto");
+      const dryRun = req.body?.dryRun === true || req.body?.dryRun === "true";
+      const report = await migrateMetaCredentialEncryption({ dryRun });
+      // Strip any accidental non-aggregate fields before responding.
+      res.json({
+        dryRun: report.dryRun,
+        primaryKeyConfigured: report.primaryKeyConfigured,
+        users: report.users,
+        oauthPending: report.oauthPending,
+        rowsUpdated: report.rowsUpdated,
+        remainingUnversionedFields: report.remainingUnversionedFields,
+        legacyReadStillRequired: report.legacyReadStillRequired,
+      });
+    } catch (error: unknown) {
+      const { MetaCredentialEncryptionConfigError } = await import("./metaCredentialCrypto");
+      if (error instanceof MetaCredentialEncryptionConfigError) {
+        return res.status(503).json({ error: error.message, code: error.code });
+      }
+      console.error("[admin] meta-credential-encryption migrate failed");
+      res.status(500).json({ error: "Migration could not be completed." });
+    }
+  });
+
+  /**
    * Preflight-only matrix: validates optional `WA_MATRIX_*` public URLs (HTTPS, MIME, length, no CDN/proxy).
    * Does not call Graph. Set env URLs to exercise image / PDF / video / carousel-style image checks.
    */

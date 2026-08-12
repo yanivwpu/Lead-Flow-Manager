@@ -40,7 +40,7 @@ const PREREQ = {
   META_APP_SECRET: "test-meta-app-secret",
   META_WHATSAPP_REDIRECT_URI: "https://app.example.com/api/integrations/whatsapp/meta/callback",
   META_WEBHOOK_VERIFY_TOKEN: "verify-token-test",
-  META_ENCRYPTION_KEY: "test-meta-encryption-key-32b!!",
+  META_ENCRYPTION_KEY: "test-meta-encryption-key-32bytes!!",
   META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: "v2-config-aaaaaaaa",
   META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID: "v4-config-bbbbbbbb",
   APP_URL: "https://app.example.com",
@@ -364,6 +364,73 @@ describe("duplicate completion protection + admin summary", () => {
     assert.equal(prereq.missing.includes("redirect_or_app_url"), false);
     assert.equal(prereq.diagnostics.appUrlConfigured, true);
     assert.equal(prereq.diagnostics.redirectUriConfigured, false);
+  });
+
+  it("Meta encryption env (META_ENCRYPTION_KEY only) satisfies v4 token_encryption readiness", () => {
+    const withMetaKey = evaluateEmbeddedSignupV4Prerequisites({
+      ...PREREQ,
+      META_ENCRYPTION_KEY: "prod-meta-encryption-key-32bytes!",
+      SESSION_SECRET: "",
+      EMAIL_ENCRYPTION_KEY: "",
+    });
+    assert.equal(withMetaKey.diagnostics.tokenEncryptionConfigured, true);
+    assert.equal(withMetaKey.missing.includes("token_encryption"), false);
+
+    // SESSION_SECRET alone must NOT green-light Meta / v4 token encryption readiness.
+    const withSessionOnly = evaluateEmbeddedSignupV4Prerequisites({
+      ...PREREQ,
+      META_ENCRYPTION_KEY: "",
+      SESSION_SECRET: "prod-session-secret-for-meta-tokens!!",
+      EMAIL_ENCRYPTION_KEY: "",
+    });
+    assert.equal(withSessionOnly.diagnostics.tokenEncryptionConfigured, false);
+    assert.ok(withSessionOnly.missing.includes("token_encryption"));
+
+    // EMAIL_ENCRYPTION_KEY is email-channel only — must not green-light Meta token readiness.
+    const emailOnly = evaluateEmbeddedSignupV4Prerequisites({
+      ...PREREQ,
+      META_ENCRYPTION_KEY: "",
+      SESSION_SECRET: "",
+      EMAIL_ENCRYPTION_KEY: "railway-email-encryption-key-present!!",
+    });
+    assert.equal(emailOnly.diagnostics.tokenEncryptionConfigured, false);
+    assert.ok(emailOnly.missing.includes("token_encryption"));
+  });
+
+  it("missing Meta encryption safely selects v2 and never exposes key material", () => {
+    const secret = "super-secret-encryption-key-value-do-not-leak";
+    const r = selectEmbeddedSignupArchitecture({
+      flow: "embedded",
+      userId: "user-1",
+      env: {
+        ...PREREQ,
+        META_ENCRYPTION_KEY: "",
+        SESSION_SECRET: "",
+        EMAIL_ENCRYPTION_KEY: secret,
+        WHATSAPP_EMBEDDED_SIGNUP_V4_ENABLED: "1",
+        WHATSAPP_EMBEDDED_SIGNUP_V4_ROLLOUT_MODE: "public",
+      },
+    });
+    assert.equal(r.architecture, "v2");
+    assert.match(r.reason, /^v4_prerequisites_incomplete:/);
+    assert.ok(r.prerequisitesMissing.includes("token_encryption"));
+
+    const summary = getEmbeddedSignupV4RolloutAdminSummary({
+      oauthStatesSchemaAvailable: true,
+      env: {
+        ...PREREQ,
+        META_ENCRYPTION_KEY: secret,
+        SESSION_SECRET: "another-secret-must-not-appear",
+        EMAIL_ENCRYPTION_KEY: "email-secret-must-not-appear",
+        WHATSAPP_EMBEDDED_SIGNUP_V4_ENABLED: "1",
+        WHATSAPP_EMBEDDED_SIGNUP_V4_ROLLOUT_MODE: "public",
+      },
+    });
+    const text = JSON.stringify(summary);
+    assert.doesNotMatch(text, /super-secret-encryption-key-value-do-not-leak/);
+    assert.doesNotMatch(text, /another-secret-must-not-appear/);
+    assert.doesNotMatch(text, /email-secret-must-not-appear/);
+    assert.equal(typeof (summary as any).prerequisites?.diagnostics?.tokenEncryptionConfigured, "boolean");
   });
 
   it("admin summary has no secrets and includes rollout fields", () => {

@@ -20,6 +20,7 @@ import {
   type WhatsappEmbeddedSignupArchitecture,
   type WhatsappEmbeddedSignupFlow,
 } from "./whatsappEmbeddedSignupVersion";
+import { isMetaCredentialEncryptionConfigured } from "./metaCredentialEncryption";
 
 export const WHATSAPP_EMBEDDED_SIGNUP_V4_ROLLOUT_MODES = [
   "disabled",
@@ -134,10 +135,9 @@ export function evaluateEmbeddedSignupV4Prerequisites(
   const redirectUri = env.META_WHATSAPP_REDIRECT_URI?.trim() || null;
   const appUrl = env.APP_URL?.trim() || null;
   const webhookVerify = env.META_WEBHOOK_VERIFY_TOKEN?.trim() || null;
-  const encKey =
-    env.META_ENCRYPTION_KEY?.trim() ||
-    env.SESSION_SECRET?.trim() ||
-    null;
+  // Same readiness helper as Meta token persistence: valid META_ENCRYPTION_KEY only.
+  // SESSION_SECRET and the legacy hardcoded fallback never satisfy public v4 readiness.
+  const tokenEncryptionConfigured = isMetaCredentialEncryptionConfigured(env);
 
   const missing: V4PrerequisiteKey[] = [];
 
@@ -152,7 +152,7 @@ export function evaluateEmbeddedSignupV4Prerequisites(
   if (!redirectOk && !appUrlOk) missing.push("redirect_or_app_url");
 
   if (!isNonEmpty(webhookVerify)) missing.push("webhook_verify_token");
-  if (!isNonEmpty(encKey)) missing.push("token_encryption");
+  if (!tokenEncryptionConfigured) missing.push("token_encryption");
 
   const schemaAvail =
     options?.oauthStatesSchemaAvailable === undefined
@@ -183,7 +183,7 @@ export function evaluateEmbeddedSignupV4Prerequisites(
       redirectUriConfigured: redirectOk,
       appUrlConfigured: appUrlOk,
       webhookVerifyTokenConfigured: !!webhookVerify,
-      tokenEncryptionConfigured: !!encKey,
+      tokenEncryptionConfigured,
       oauthStatesSchemaAvailable: schemaAvail,
       configIsolationOk,
     },
