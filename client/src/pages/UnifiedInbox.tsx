@@ -8,6 +8,7 @@ import {
   type TemplateCarouselDefaultMediaMap,
 } from "@shared/metaTemplateSend";
 import { waUploadFileSizeCheck, waUploadTooLargeMessage } from "@shared/whatsappMediaLimits";
+import { shouldBlockListingRecommendationMissingText } from "@shared/inboxComposerAttachmentGuard";
 import { Link, useRoute, useLocation, useSearch } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
@@ -739,6 +740,8 @@ export function UnifiedInbox() {
     mediaType: string;
     mediaFilename: string;
     mimeType: string;
+    /** Explicit listing/inventory attach only — never inferred from Realtor workspace. */
+    attachmentSource: "manual_upload" | "listing_recommendation";
   } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   /** Inline hint under composer (replaces toast for picker / type validation). */
@@ -807,12 +810,14 @@ export function UnifiedInbox() {
         setPendingFile(null);
         return;
       }
+      // Copilot / ListingDetailDialog insert path — explicit listing recommendation context.
       setPendingFile({
         localPreview: media.url,
         mediaUrl: media.url,
         mediaType: media.mediaType,
         mediaFilename: media.filename || "listing-photo.jpg",
         mimeType: media.mediaType === "image" ? "image/jpeg" : "",
+        attachmentSource: "listing_recommendation",
       });
     },
     [],
@@ -2127,6 +2132,7 @@ export function UnifiedInbox() {
             mediaType: String(data.mediaType),
             mediaFilename: data.mediaFilename || "Attachment",
             mimeType: "",
+            attachmentSource: "manual_upload",
           });
         }
         setTimeout(() => {
@@ -2440,7 +2446,13 @@ export function UnifiedInbox() {
       });
       return;
     }
-    if (pendingFile && !messageInput.trim()) {
+    if (
+      shouldBlockListingRecommendationMissingText({
+        hasPendingAttachment: !!pendingFile,
+        attachmentSource: pendingFile?.attachmentSource,
+        messageText: messageInput,
+      })
+    ) {
       toast({
         title: "Add listing details text",
         description:
@@ -2568,6 +2580,7 @@ export function UnifiedInbox() {
         mediaType: json.mediaType,
         mediaFilename: json.mediaFilename,
         mimeType: json.mimeType,
+        attachmentSource: "manual_upload",
       });
     } catch (err: any) {
       URL.revokeObjectURL(localPreview);
