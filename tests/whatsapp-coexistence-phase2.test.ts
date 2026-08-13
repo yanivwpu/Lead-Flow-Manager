@@ -20,6 +20,7 @@ import {
   resolveEmbeddedSignupConfigIdFromEnv,
   selectEmbeddedSignupArchitecture,
   evaluateEmbeddedSignupV4Prerequisites,
+  parseEmbeddedSignupSessionMessageData,
 } from "../shared/whatsappEmbeddedSignupVersion";
 import { isMetaPhoneCloudApiRegistrationRequired } from "../shared/whatsappPhoneRegistration";
 import { evaluateMetaWhatsAppReadiness } from "../shared/whatsappReadiness";
@@ -27,6 +28,16 @@ import {
   buildWhatsappEmbeddedSignupCodeExchangeUrl,
   shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange,
 } from "../server/metaOAuth";
+import {
+  shouldUseDirectSessionAssetValidation,
+  shouldUseV4DirectAssetValidation,
+  selectPhoneFromV4WabaListing,
+  resolveV4EmbeddedSignupAssets,
+} from "../server/whatsappEmbeddedSignupV4Assets";
+import {
+  isDirectSessionAssetValidationEnabled,
+  isV4SdkDirectAssetValidationEnabled,
+} from "../server/whatsappEmbeddedSignup";
 
 const BASE = {
   META_APP_ID: "810621184995059",
@@ -145,6 +156,15 @@ describe("Coexistence login options vs Standard", () => {
     assert.deepEqual(coex.extras.setup, {});
     assert.equal((coex.extras as any).featureType, "whatsapp_business_app_onboarding");
     assert.equal((coex.extras as any).sessionInfoVersion, "3");
+    assert.match(coex.scope, /whatsapp_business_management/);
+    assert.match(coex.scope, /whatsapp_business_messaging/);
+    assert.equal(
+      coex.scope
+        .split(",")
+        .map((s) => s.trim())
+        .includes("business_management"),
+      false,
+    );
     const std = buildStandardEmbeddedSignupLoginOptions({
       architecture: "v2",
       configId: BASE.META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID,
@@ -156,6 +176,144 @@ describe("Coexistence login options vs Standard", () => {
     });
     assert.equal((v4.extras as any).featureType, undefined);
     assert.deepEqual(v4.extras, {});
+  });
+});
+
+describe("Coexistence direct session-asset discovery", () => {
+  it("uses direct session assets for coexistence SDK even when architecture label is v2", () => {
+    assert.equal(
+      shouldUseDirectSessionAssetValidation({
+        architecture: "v2",
+        tokenExchange: "sdk",
+        flow: "coexistence",
+      }),
+      true,
+    );
+    assert.equal(
+      shouldUseV4DirectAssetValidation({ architecture: "v2", tokenExchange: "sdk" }),
+      false,
+    );
+    assert.equal(isDirectSessionAssetValidationEnabled("v2", "sdk", "coexistence"), true);
+    assert.equal(isV4SdkDirectAssetValidationEnabled("v2", "sdk"), false);
+  });
+
+  it("does not broaden direct path to legacy Standard v2 embedded SDK", () => {
+    assert.equal(
+      shouldUseDirectSessionAssetValidation({
+        architecture: "v2",
+        tokenExchange: "sdk",
+        flow: "embedded",
+      }),
+      false,
+    );
+    assert.equal(
+      shouldUseDirectSessionAssetValidation({
+        architecture: "v4",
+        tokenExchange: "sdk",
+        flow: "embedded",
+      }),
+      true,
+    );
+  });
+
+  it("parses FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING waba_id from Meta coexistence payload", () => {
+    const parsed = parseEmbeddedSignupSessionMessageData({
+      type: "WA_EMBEDDED_SIGNUP",
+      event: "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING",
+      version: 3,
+      data: { waba_id: "961217696997428" },
+    });
+    assert.ok(parsed);
+    assert.equal(parsed!.event, "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING");
+    assert.equal(parsed!.wabaId, "961217696997428");
+    assert.equal(parsed!.phoneNumberId, undefined);
+  });
+
+  it("WABA-only listing: single phone ok; zero/ambiguous fail closed", () => {
+    assert.equal(selectPhoneFromV4WabaListing([{ id: "111" }]).mode, "single");
+    assert.equal(selectPhoneFromV4WabaListing([]).mode, "none");
+    assert.equal(selectPhoneFromV4WabaListing([{ id: "1" }, { id: "2" }]).mode, "ambiguous");
+  });
+
+  it("resolveV4EmbeddedSignupAssets never calls /me/businesses (coexistence reuses this path)", async () => {
+    const calls: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: any) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.includes("/debug_token")) {
+        return new Response(JSON.stringify({ data: { is_valid: true, scopes: ["whatsapp_business_management"], type: "USER" } }), {
+          status: 200,
+        });
+      }
+      if (url.includes("/961217696997428?") && url.includes("fields=id")) {
+        return new Response(JSON.stringify({ id: "961217696997428", name: "Coex WABA" }), { status: 200 });
+      }
+      if (url.includes("/961217696997428/phone_numbers")) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "1191517910720500",
+                display_phone_number: "+1 555 0100",
+                verified_name: "Test Biz",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("whatsapp_business_account")) {
+        return new Response(
+          JSON.stringify({
+            id: "1191517910720500",
+            whatsapp_business_account: { id: "961217696997428" },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ error: { message: "unexpected", code: 1 } }), { status: 400 });
+    }) as typeof fetch;
+    try {
+      const r = await resolveV4EmbeddedSignupAssets({
+        accessToken: "test-token",
+        sessionWabaId: "961217696997428",
+        sessionPhoneNumberId: null,
+      });
+      assert.equal(r.ok, true);
+      if (r.ok) {
+        assert.equal(r.resolved.wabaId, "961217696997428");
+        assert.equal(r.resolved.phoneNumberId, "1191517910720500");
+        assert.equal(r.method, "session_waba_single_phone");
+      }
+      assert.equal(calls.some((u) => u.includes("/me/businesses")), false);
+      assert.equal(calls.some((u) => u.includes("/phone_numbers")), true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("completion path wires coexistence_direct_session_assets and never uses /me/businesses for coexistence", () => {
+    const src = fs.readFileSync(path.join(process.cwd(), "server/whatsappEmbeddedSignup.ts"), "utf8");
+    assert.match(src, /shouldUseDirectSessionAssetValidation/);
+    assert.match(src, /coexistence_direct_session_assets/);
+    assert.match(src, /isDirectSessionAssetValidationEnabled/);
+    const methodIdx = src.indexOf('coexistence_direct_session_assets');
+    assert.ok(methodIdx > 0);
+    const directBlock = src.slice(methodIdx - 800, methodIdx + 2200);
+    assert.match(directBlock, /resolveV4EmbeddedSignupAssets/);
+    assert.match(directBlock, /usedMeBusinessesEnumeration:\s*false/);
+    assert.doesNotMatch(directBlock, /fetchUserWabaChoices/);
+    // No Graph call to /me/businesses in the direct branch (comments may mention the endpoint).
+    assert.doesNotMatch(directBlock, /fetch\(\s*[`"'].*me\/businesses/);
+    assert.doesNotMatch(directBlock, /\$\{base\}\/me\/businesses/);
+  });
+
+  it("persists coexistence connection type and never registers phone", () => {
+    const main = fs.readFileSync(path.join(process.cwd(), "server/whatsappEmbeddedSignup.ts"), "utf8");
+    assert.match(main, /connectionType = row\.flow === "coexistence" \? "coexistence"/);
+    const reg = fs.readFileSync(path.join(process.cwd(), "server/whatsappPhoneRegister.ts"), "utf8");
+    assert.match(reg, /coexistence_forbidden/);
   });
 });
 

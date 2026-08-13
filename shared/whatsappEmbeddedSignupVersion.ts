@@ -159,6 +159,10 @@ export type StandardEmbeddedSignupLoginOptions = {
 const DEFAULT_SCOPES =
   "whatsapp_business_management,whatsapp_business_messaging,business_management";
 
+/** Coexistence Login for Business: WhatsApp scopes only — never business_management for /me/businesses. */
+const COEXISTENCE_SCOPES =
+  "whatsapp_business_management,whatsapp_business_messaging";
+
 /**
  * Build FB.login options for **standard** Embedded Signup only.
  * Coexistence `featureType` must never be added here.
@@ -219,7 +223,7 @@ export function buildCoexistenceEmbeddedSignupLoginOptions(params: {
   if (!configId) {
     throw new Error("configId is required to build Coexistence Embedded Signup login options");
   }
-  const scope = params.scope?.trim() || DEFAULT_SCOPES;
+  const scope = params.scope?.trim() || COEXISTENCE_SCOPES;
   return {
     config_id: configId,
     response_type: "code",

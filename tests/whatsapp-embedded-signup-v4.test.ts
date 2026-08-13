@@ -25,12 +25,14 @@ import {
 } from "../server/metaOAuth";
 import {
   shouldUseV4DirectAssetValidation,
+  shouldUseDirectSessionAssetValidation,
   selectPhoneFromV4WabaListing,
   classifyV4DiscoveryGraphError,
   resolveV4EmbeddedSignupAssets,
 } from "../server/whatsappEmbeddedSignupV4Assets";
 import {
   isV4SdkDirectAssetValidationEnabled,
+  isDirectSessionAssetValidationEnabled,
   sanitizeEmbeddedSignupClientError,
   probeAccessTokenExpiryFromDebug,
 } from "../server/whatsappEmbeddedSignup";
@@ -674,6 +676,27 @@ describe("v4 direct WABA/phone validation (no /me/businesses)", () => {
     );
   });
 
+  it("flow-aware direct validation includes coexistence SDK without converting architecture to v4", () => {
+    assert.equal(
+      shouldUseDirectSessionAssetValidation({
+        architecture: "v2",
+        tokenExchange: "sdk",
+        flow: "coexistence",
+      }),
+      true,
+    );
+    assert.equal(
+      shouldUseDirectSessionAssetValidation({
+        architecture: "v2",
+        tokenExchange: "sdk",
+        flow: "embedded",
+      }),
+      false,
+    );
+    assert.equal(isDirectSessionAssetValidationEnabled("v2", "sdk", "coexistence"), true);
+    assert.equal(isDirectSessionAssetValidationEnabled("v2", "sdk", "embedded"), false);
+  });
+
   it("completion module binds shouldUseV4DirectAssetValidation at runtime (not a free identifier)", () => {
     // Calling this exported wrapper fails with ReferenceError if the import was omitted
     // from whatsappEmbeddedSignup.ts while the completion path still references the symbol.
@@ -977,9 +1000,11 @@ describe("v4 direct WABA/phone validation (no /me/businesses)", () => {
       "utf8",
     );
     assert.match(main, /from ["']\.\/whatsappEmbeddedSignupV4Assets["']/);
+    assert.match(main, /shouldUseDirectSessionAssetValidation/);
     assert.match(main, /shouldUseV4DirectAssetValidation/);
     assert.match(main, /resolveV4EmbeddedSignupAssets/);
     assert.match(main, /isV4SdkDirectAssetValidationEnabled/);
+    assert.match(main, /isDirectSessionAssetValidationEnabled/);
     assert.match(main, /fetchUserWabaChoices/);
     assert.match(main, /\/me\/businesses/);
     assert.doesNotMatch(v4mod, /\$\{base\}\/me\/businesses/);
@@ -988,6 +1013,7 @@ describe("v4 direct WABA/phone validation (no /me/businesses)", () => {
     assert.match(main, /discoveryFailureCategory/);
     assert.match(main, /v4ProtectSnap/);
     assert.match(main, /subscribeAppToWaba/);
+    assert.match(main, /coexistence_direct_session_assets/);
   });
 
   it("successful oauth debug clears stale code_exchange_failed", async () => {

@@ -47,6 +47,7 @@ import {
 import { stripSensitiveWhatsAppFields } from "./whatsappStatusSanitize";
 import {
   shouldUseV4DirectAssetValidation,
+  shouldUseDirectSessionAssetValidation,
   resolveV4EmbeddedSignupAssets,
 } from "./whatsappEmbeddedSignupV4Assets";
 import {
@@ -1441,13 +1442,21 @@ export async function probeAccessTokenExpiryFromDebug(accessToken: string): Prom
 
 /**
  * Runtime-safe gate used by completion + tests.
- * Ensures `shouldUseV4DirectAssetValidation` is imported into this module (not a free identifier).
+ * Ensures direct-session asset helpers are imported into this module (not free identifiers).
  */
 export function isV4SdkDirectAssetValidationEnabled(
   architecture: string,
   tokenExchange: "sdk" | "redirect",
 ): boolean {
   return shouldUseV4DirectAssetValidation({ architecture, tokenExchange });
+}
+
+export function isDirectSessionAssetValidationEnabled(
+  architecture: string,
+  tokenExchange: "sdk" | "redirect",
+  flow?: string | null,
+): boolean {
+  return shouldUseDirectSessionAssetValidation({ architecture, tokenExchange, flow });
 }
 
 /** Map unexpected runtime/engine errors to a safe client message (no raw identifiers). */
@@ -2461,12 +2470,24 @@ export async function completeEmbeddedSignupOAuth(params: {
   let resolved: ResolvedWabaPhone;
   let discoveryDiagnostics: WabaDiscoveryRunDiagnostics | null = null;
   try {
-    if (shouldUseV4DirectAssetValidation({ architecture, tokenExchange })) {
-      // v4 SDK: never call /me/businesses (requires business_management).
-      // Prefer FINISH session assets and validate directly with WhatsApp scopes.
-      console.log("[WhatsApp Embedded Signup] v4_direct_asset_validation_start", {
+    if (
+      shouldUseDirectSessionAssetValidation({
         architecture,
         tokenExchange,
+        flow: row.flow,
+      })
+    ) {
+      // Standard v4 SDK + Coexistence SDK: never call /me/businesses (requires business_management).
+      // Prefer FINISH / FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING session assets and validate with WhatsApp scopes.
+      const isCoexistenceDirect = row.flow === "coexistence";
+      const discoveryMethod = isCoexistenceDirect
+        ? "coexistence_direct_session_assets"
+        : "v4_direct_session_assets";
+      console.log("[WhatsApp Embedded Signup] direct_session_asset_validation_start", {
+        architecture,
+        tokenExchange,
+        flow: row.flow,
+        discoveryMethod,
         hasSessionWabaId: !!sessionEventSummary?.wabaId,
         hasSessionPhoneNumberId: !!sessionEventSummary?.phoneNumberId,
         graphApiVersion: getMetaGraphVersionSegment(),
@@ -2480,7 +2501,14 @@ export async function completeEmbeddedSignupOAuth(params: {
         phase: "waba_discovery",
         architecture,
         flow: row.flow,
-        discoveryMethod: "v4_direct_session_assets",
+        discoveryMethod,
+        phoneDiscoverySource: v4Assets.ok
+          ? v4Assets.method
+          : sessionEventSummary?.phoneNumberId
+            ? "session_phone_id"
+            : sessionEventSummary?.wabaId
+              ? "waba_phone_numbers_edge"
+              : "session_assets_missing",
         ok: v4Assets.ok,
         errorCode: v4Assets.ok ? null : v4Assets.errorCode,
         discoveryFailureCategory: v4Assets.ok ? null : v4Assets.errorCode,
@@ -2492,6 +2520,7 @@ export async function completeEmbeddedSignupOAuth(params: {
         debugTokenType: v4Assets.debugTokenType || null,
         sessionWabaId: sessionEventSummary?.wabaId || null,
         sessionPhoneNumberId: sessionEventSummary?.phoneNumberId || null,
+        sessionEventName: sessionEventSummary?.event || null,
         codeCallbackReceived: true,
         sessionEventReceived: !!sessionEventSummary,
         completeSdkAttempted: true,
@@ -2531,9 +2560,12 @@ export async function completeEmbeddedSignupOAuth(params: {
         await mergeUserMetaOAuthDebug(row.userId, {
           phase: "waba_discovery",
           ok: false,
-          errorCode: "discovery_failed",
+          errorCode: "phone_workspace_conflict",
           discoveryFailureCategory: "phone_workspace_conflict",
+          discoveryMethod,
           architecture,
+          flow: row.flow,
+          usedMeBusinessesEnumeration: false,
         });
         if (protectSnap?.hadMetaConnection) {
           await restorePersistedMetaSnapshot(row.userId, protectSnap);
@@ -2566,10 +2598,14 @@ export async function completeEmbeddedSignupOAuth(params: {
         phase: "waba_selection",
         ok: true,
         phoneSelectionMethod: v4Assets.method,
+        phoneDiscoverySource: v4Assets.method,
         selectedWabaId: resolved.wabaId,
         selectedPhoneNumberId: resolved.phoneNumberId,
+        discoveryMethod,
         architecture,
+        flow: row.flow,
         errorCode: null,
+        usedMeBusinessesEnumeration: false,
       });
     } else {
     const fetched = await fetchUserWabaChoices(longToken);
@@ -2782,7 +2818,12 @@ export async function completeEmbeddedSignupOAuth(params: {
       discoveryDiagnosticsSnapshot: discoveryDiagnostics,
       connectivityRestored: !!protectSnap?.hadMetaConnection,
       architecture,
-      usedMeBusinessesEnumeration: architecture !== "v4",
+      flow: row.flow,
+      usedMeBusinessesEnumeration: !shouldUseDirectSessionAssetValidation({
+        architecture,
+        tokenExchange,
+        flow: row.flow,
+      }),
     });
     return { success: false, error: msg, errorCode };
   }

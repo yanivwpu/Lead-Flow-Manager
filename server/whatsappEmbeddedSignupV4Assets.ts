@@ -63,6 +63,25 @@ export function shouldUseV4DirectAssetValidation(params: {
   return params.architecture === "v4" && params.tokenExchange === "sdk";
 }
 
+/**
+ * Prefer FINISH session assets + direct Graph validation (never /me/businesses).
+ * - Standard Embedded Signup architecture v4 + SDK
+ * - Coexistence + SDK (architecture label remains v2 by design)
+ * Legacy Standard v2 SDK/redirect keeps Business Manager enumeration.
+ */
+export function shouldUseDirectSessionAssetValidation(params: {
+  architecture: string;
+  tokenExchange: "sdk" | "redirect";
+  flow?: string | null;
+}): boolean {
+  if (params.tokenExchange !== "sdk") return false;
+  if (params.flow === "coexistence") return true;
+  return shouldUseV4DirectAssetValidation({
+    architecture: params.architecture,
+    tokenExchange: params.tokenExchange,
+  });
+}
+
 export function classifyV4DiscoveryGraphError(params: {
   httpStatus?: number;
   meta?: { code?: number; type?: string; message?: string; subcode?: number } | null;
