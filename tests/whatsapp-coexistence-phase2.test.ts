@@ -472,9 +472,82 @@ describe("Readiness + account_update recovery", () => {
       metaPhoneNumberId: "222222222222222",
       metaWebhookSubscribed: false,
       metaIntegrationStatus: "connected",
+      metaConnectionType: "coexistence",
     });
     assert.equal(r.fullyReady, false);
     assert.equal(r.setupIncomplete, true);
+  });
+
+  it("coexistence CONNECTED + NOT_VERIFIED is fullyReady when webhook/WABA/phone saved", () => {
+    const r = evaluateMetaWhatsAppReadiness(
+      {
+        whatsappProvider: "meta",
+        metaConnected: true,
+        metaBusinessAccountId: "111111111111111",
+        metaPhoneNumberId: "222222222222222",
+        metaWebhookSubscribed: true,
+        metaIntegrationStatus: "connected",
+        metaConnectionType: "coexistence",
+      },
+      {
+        phoneGraphStatus: "CONNECTED",
+        phoneGraphCodeVerification: "NOT_VERIFIED",
+        phoneGraphPlatformType: "CLOUD_API",
+      },
+    );
+    assert.equal(r.phoneStatusReady, true);
+    assert.equal(r.fullyReady, true);
+    assert.equal(r.setupIncomplete, false);
+  });
+
+  it("standard embedded CONNECTED + NOT_VERIFIED remains not fullyReady", () => {
+    const r = evaluateMetaWhatsAppReadiness(
+      {
+        whatsappProvider: "meta",
+        metaConnected: true,
+        metaBusinessAccountId: "111111111111111",
+        metaPhoneNumberId: "222222222222222",
+        metaWebhookSubscribed: true,
+        metaIntegrationStatus: "connected",
+        metaConnectionType: "embedded",
+      },
+      {
+        phoneGraphStatus: "CONNECTED",
+        phoneGraphCodeVerification: "NOT_VERIFIED",
+        phoneGraphPlatformType: "CLOUD_API",
+      },
+    );
+    assert.equal(r.phoneStatusReady, false);
+    assert.equal(r.fullyReady, false);
+    assert.equal(r.setupIncomplete, true);
+  });
+
+  it("coexistence still blocks DISCONNECTED / PENDING", () => {
+    const base = {
+      whatsappProvider: "meta",
+      metaConnected: true,
+      metaBusinessAccountId: "111111111111111",
+      metaPhoneNumberId: "222222222222222",
+      metaWebhookSubscribed: true,
+      metaIntegrationStatus: "connected",
+      metaConnectionType: "coexistence",
+    };
+    assert.equal(
+      evaluateMetaWhatsAppReadiness(base, {
+        phoneGraphStatus: "DISCONNECTED",
+        phoneGraphCodeVerification: "NOT_VERIFIED",
+        phoneGraphPlatformType: "CLOUD_API",
+      }).fullyReady,
+      false,
+    );
+    assert.equal(
+      evaluateMetaWhatsAppReadiness(base, {
+        phoneGraphStatus: "PENDING",
+        phoneGraphCodeVerification: "VERIFIED",
+        phoneGraphPlatformType: "CLOUD_API",
+      }).fullyReady,
+      false,
+    );
   });
 
   it("parses supported partner-removed account_update", () => {

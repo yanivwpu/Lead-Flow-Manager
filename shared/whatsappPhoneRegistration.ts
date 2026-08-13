@@ -20,15 +20,19 @@ export function isValidWhatsAppTwoStepPin(pin: unknown): pin is string {
 
 /**
  * True when Graph reports an operational Cloud API phone for messaging.
- * NOT_APPLICABLE / PENDING / DISCONNECTED / NOT_VERIFIED are never ready.
+ * Standard Embedded Signup: NOT_APPLICABLE / PENDING / DISCONNECTED / NOT_VERIFIED are never ready.
+ * Coexistence: NOT_VERIFIED is allowed when status is CONNECTED (Business App numbers often stay NOT_VERIFIED).
  */
-export function isMetaPhoneCloudApiOperational(input: MetaPhoneGraphRegistrationFields): boolean {
+export function isMetaPhoneCloudApiOperational(
+  input: MetaPhoneGraphRegistrationFields,
+  opts?: { coexistence?: boolean },
+): boolean {
   const status = upper(input.status);
   const code = upper(input.codeVerificationStatus);
   const platform = upper(input.platformType);
 
   if (status !== "CONNECTED") return false;
-  if (code === "NOT_VERIFIED") return false;
+  if (code === "NOT_VERIFIED" && !opts?.coexistence) return false;
   if (platform === "NOT_APPLICABLE") return false;
   // When Meta supplies platform_type, prefer CLOUD_API; empty/missing is allowed if CONNECTED.
   if (platform && platform !== "CLOUD_API") return false;
@@ -45,7 +49,7 @@ export function isMetaPhoneCloudApiRegistrationRequired(
 ): boolean {
   if (opts?.coexistence) return false;
   if (opts?.isTestNumber) return false;
-  if (isMetaPhoneCloudApiOperational(input)) return false;
+  if (isMetaPhoneCloudApiOperational(input, { coexistence: opts?.coexistence })) return false;
 
   const status = upper(input.status);
   const code = upper(input.codeVerificationStatus);

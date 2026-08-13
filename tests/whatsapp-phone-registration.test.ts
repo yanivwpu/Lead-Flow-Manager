@@ -110,6 +110,28 @@ describe("readiness gates", () => {
     });
     assert.equal(notVerified.phoneStatusReady, false);
     assert.equal(notVerified.fullyReady, false);
+
+    const coexNotVerified = evaluateMetaWhatsAppReadiness(
+      { ...user, metaConnectionType: "coexistence" },
+      {
+        phoneGraphStatus: "CONNECTED",
+        phoneGraphCodeVerification: "NOT_VERIFIED",
+        phoneGraphPlatformType: "CLOUD_API",
+      },
+    );
+    assert.equal(coexNotVerified.phoneStatusReady, true);
+    assert.equal(coexNotVerified.fullyReady, true);
+    assert.equal(
+      isMetaPhoneCloudApiOperational(
+        {
+          status: "CONNECTED",
+          codeVerificationStatus: "NOT_VERIFIED",
+          platformType: "CLOUD_API",
+        },
+        { coexistence: true },
+      ),
+      true,
+    );
   });
 
   it("readiness true for CONNECTED / CLOUD_API", () => {

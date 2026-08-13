@@ -107,6 +107,7 @@ export type CanonicalWhatsAppUser = Pick<
   | "metaBusinessAccountId"
   | "metaDisplayPhoneNumber"
   | "metaVerifiedName"
+  | "metaConnectionType"
 >;
 
 /**
@@ -135,7 +136,10 @@ export function buildMetaWhatsAppReadinessForUser(
     buildMetaWhatsAppPhoneClassificationInput(user, phoneGraphSnapshot),
   );
   if (!inner) {
-    return evaluateMetaWhatsAppReadiness(user, { isTestNumber: phoneKind.kind === "test" });
+    return evaluateMetaWhatsAppReadiness(user, {
+      isTestNumber: phoneKind.kind === "test",
+      coexistence: user.metaConnectionType === "coexistence",
+    });
   }
   return evaluateMetaWhatsAppReadiness(user, {
     phoneGraphStatus: inner.status != null ? String(inner.status) : null,
@@ -143,6 +147,7 @@ export function buildMetaWhatsAppReadinessForUser(
       inner.code_verification_status != null ? String(inner.code_verification_status) : null,
     phoneGraphPlatformType: inner.platform_type != null ? String(inner.platform_type) : null,
     isTestNumber: phoneKind.kind === "test",
+    coexistence: user.metaConnectionType === "coexistence",
   });
 }
 

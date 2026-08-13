@@ -53,6 +53,17 @@ function run() {
   });
   assert(!evalNotVerified.fullyReady, "NOT_VERIFIED not fully ready");
 
+  const evalCoexNotVerified = evaluateMetaWhatsAppReadiness(
+    { ...readyUser, metaConnectionType: "coexistence" },
+    {
+      phoneGraphStatus: "CONNECTED",
+      phoneGraphCodeVerification: "NOT_VERIFIED",
+      phoneGraphPlatformType: "CLOUD_API",
+    },
+  );
+  assert(evalCoexNotVerified.fullyReady, "coexistence NOT_VERIFIED still fully ready when CONNECTED");
+  assert(evalCoexNotVerified.phoneStatusReady, "coexistence phone ready despite NOT_VERIFIED");
+
   const partial = {
     ...readyUser,
     metaWebhookSubscribed: false,

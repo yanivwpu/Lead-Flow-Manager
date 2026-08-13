@@ -1332,7 +1332,7 @@ export async function refreshWhatsappPhoneGraphDebugIfStale(
         coexistence: false,
         isTestNumber: isTest,
       });
-    const operational = snap.ok && (isTest || isMetaPhoneCloudApiOperational(regFields));
+    const operational = snap.ok && (isTest || isMetaPhoneCloudApiOperational(regFields, { coexistence }));
 
     await mergeUserMetaOAuthDebug(userId, {
       phoneGraphSnapshot: {
@@ -1362,7 +1362,8 @@ export async function refreshWhatsappPhoneGraphDebugIfStale(
       });
     } else if (
       operational &&
-      user.metaIntegrationStatus === "needs_phone_registration" &&
+      (user.metaIntegrationStatus === "needs_phone_registration" ||
+        user.metaIntegrationStatus === "needs_attention") &&
       !needsReg
     ) {
       await storage.updateUser(userId, {
@@ -2101,17 +2102,19 @@ function failEmbeddedSignup(
   };
 }
 
-function isPhoneRoutingReadyFromGraphSnapshot(data: any): boolean {
-  const status = String(data?.status ?? "").toUpperCase();
-  const code = String(data?.code_verification_status ?? "").toUpperCase();
-  const platform = String(data?.platform_type ?? "").toUpperCase();
-  if (status === "DISCONNECTED") return false;
-  if (code === "NOT_VERIFIED") return false;
-  if (status === "PENDING") return false;
-  if (platform === "NOT_APPLICABLE") return false;
-  if (status !== "CONNECTED") return false;
-  if (platform && platform !== "CLOUD_API") return false;
-  return true;
+function isPhoneRoutingReadyFromGraphSnapshot(
+  data: any,
+  opts?: { coexistence?: boolean },
+): boolean {
+  return isMetaPhoneCloudApiOperational(
+    {
+      status: data?.status != null ? String(data.status) : null,
+      codeVerificationStatus:
+        data?.code_verification_status != null ? String(data.code_verification_status) : null,
+      platformType: data?.platform_type != null ? String(data.platform_type) : null,
+    },
+    { coexistence: !!opts?.coexistence },
+  );
 }
 
 function isMetaTestPhoneFromSavedFields(input: { displayPhoneNumber?: string | null; verifiedName?: string | null }): boolean {
@@ -2944,7 +2947,10 @@ export async function completeEmbeddedSignupOAuth(params: {
     const regFields = extractMetaPhoneGraphRegistrationFields(
       snap.ok ? { data: snap.data as Record<string, unknown> } : null,
     );
-    const operational = snap.ok && (isTest || isMetaPhoneCloudApiOperational(regFields));
+    const operational =
+      snap.ok &&
+      (isTest ||
+        isMetaPhoneCloudApiOperational(regFields, { coexistence: row.flow === "coexistence" }));
     needsPhoneRegistration =
       row.flow === "embedded" &&
       !isTest &&
@@ -3133,7 +3139,10 @@ export async function finalizeEmbeddedSignupWabaSelection(params: {
     const regFields = extractMetaPhoneGraphRegistrationFields(
       snap.ok ? { data: snap.data as Record<string, unknown> } : null,
     );
-    const operational = snap.ok && (isTest || isMetaPhoneCloudApiOperational(regFields));
+    const operational =
+      snap.ok &&
+      (isTest ||
+        isMetaPhoneCloudApiOperational(regFields, { coexistence: row.flow === "coexistence" }));
     const needsPhoneRegistration =
       row.flow === "embedded" &&
       !isTest &&

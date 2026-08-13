@@ -26,6 +26,7 @@ export type MetaWhatsAppReadinessUser = {
   metaIntegrationStatus?: string | null;
   metaPhoneNumberId?: string | null;
   metaBusinessAccountId?: string | null;
+  metaConnectionType?: string | null;
   twilioConnected?: boolean | null;
 };
 
@@ -40,13 +41,17 @@ export function isMetaPhoneGraphRoutingReady(input: {
   codeVerificationStatus?: string | null;
   platformType?: string | null;
   isTestNumber?: boolean;
+  coexistence?: boolean;
 }): boolean {
   if (input.isTestNumber) return true;
-  return isMetaPhoneCloudApiOperational({
-    status: input.status,
-    codeVerificationStatus: input.codeVerificationStatus,
-    platformType: input.platformType,
-  });
+  return isMetaPhoneCloudApiOperational(
+    {
+      status: input.status,
+      codeVerificationStatus: input.codeVerificationStatus,
+      platformType: input.platformType,
+    },
+    { coexistence: !!input.coexistence },
+  );
 }
 
 export function evaluateMetaWhatsAppReadiness(
@@ -56,9 +61,14 @@ export function evaluateMetaWhatsAppReadiness(
     phoneGraphCodeVerification?: string | null;
     phoneGraphPlatformType?: string | null;
     isTestNumber?: boolean;
+    /** Override; defaults from user.metaConnectionType === "coexistence". */
+    coexistence?: boolean;
   },
 ): WhatsAppReadinessEvaluation {
   const activeProvider = (user.whatsappProvider as "meta" | "twilio" | undefined) || "twilio";
+  const coexistence =
+    opts?.coexistence === true ||
+    (opts?.coexistence !== false && user.metaConnectionType === "coexistence");
   const wabaSaved = isValidMetaWhatsAppGraphId(user.metaBusinessAccountId);
   const phoneSaved = isValidMetaWhatsAppGraphId(user.metaPhoneNumberId);
   const webhookSubscribed = !!user.metaWebhookSubscribed;
@@ -75,6 +85,7 @@ export function evaluateMetaWhatsAppReadiness(
     codeVerificationStatus: opts?.phoneGraphCodeVerification,
     platformType: opts?.phoneGraphPlatformType,
     isTestNumber: opts?.isTestNumber,
+    coexistence,
   });
 
   // With a Graph snapshot: require operational Cloud API state.
