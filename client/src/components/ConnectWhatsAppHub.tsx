@@ -85,6 +85,8 @@ interface MetaConfigResponse {
   embeddedSignupV4ConfigIdLast4?: string | null;
   coexistenceConfigId: string | null;
   coexistenceConfigIdLast4?: string | null;
+  /** Server-authoritative: this session may launch Coexistence (allowlist test gate). */
+  coexistenceLaunchAllowed?: boolean;
   missingEnvHints: string[];
 }
 
@@ -546,7 +548,9 @@ export function ConnectWhatsAppHub({
     if (!w.FB) throw new Error("Facebook SDK did not initialize");
   }
 
-  async function startEmbeddedSignupViaSdk(): Promise<void> {
+  async function startEmbeddedSignupViaSdk(
+    flow: "embedded" | "coexistence" = "embedded",
+  ): Promise<void> {
     const priorSdkAppId =
       (window as Window & typeof globalThis & Record<string, unknown>)[WCS_WHATSAPP_FB_SDK] as
         | WhatsappFbSdkState
@@ -564,7 +568,7 @@ export function ConnectWhatsAppHub({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ flow: "embedded" }),
+        body: JSON.stringify({ flow }),
       });
       const startJson = await start.json().catch(() => ({}));
       if (!start.ok) throw new Error(startJson?.error || "Could not start Meta signup");
@@ -584,7 +588,7 @@ export function ConnectWhatsAppHub({
 
       const preLoginDiag = buildEmbeddedSignupPreLoginDiagnostics({
         phase: "pre_fb_login",
-        loginMethod: "embedded_signup",
+        loginMethod: flow === "coexistence" ? "coexistence" : "embedded_signup",
         appId,
         configId,
         graphVersion: graphApiVersion,
@@ -806,9 +810,9 @@ export function ConnectWhatsAppHub({
         completeSdkAttempted,
       });
       if (allowRedirect) {
-        // Same server-authoritative architecture as SDK start (v2 or v4) — no silent downgrade.
+        // Same server-authoritative flow + architecture as SDK start — no silent Standard/Coexistence swap.
         console.warn("[WhatsApp Embedded Signup] SDK pre-login failed; falling back to redirect.", msg);
-        window.location.href = "/api/integrations/whatsapp/meta/start-redirect?flow=embedded";
+        window.location.href = `/api/integrations/whatsapp/meta/start-redirect?flow=${encodeURIComponent(flow)}`;
       } else {
         console.warn(
           "[WhatsApp Embedded Signup] SDK completion failed; not starting redirect fallback.",
@@ -1001,6 +1005,11 @@ export function ConnectWhatsAppHub({
                   Connected number: {meta.displayPhoneNumber}
                 </p>
               )}
+              {metaFullyReady && meta?.connectionType === "coexistence" && (
+                <p className="text-xs text-emerald-900/90 mt-1">
+                  You can keep using the WhatsApp Business App while messages also appear in WhachatCRM.
+                </p>
+              )}
               {metaTestConnected && metaFullyReady && (
                 <p className="text-xs text-amber-800/90 mt-1">
                   Add a production number in Meta Business Manager and reconnect to message real customers.
@@ -1087,6 +1096,16 @@ export function ConnectWhatsAppHub({
                 <a href="/app/inbox">Go to Unified Inbox</a>
               </Button>
             )}
+            {metaFullyReady && meta?.connectionType === "coexistence" && cfg?.coexistenceLaunchAllowed && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void startEmbeddedSignupViaSdk("coexistence")}
+              >
+                Reconnect WhatsApp Business App
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"
@@ -1171,10 +1190,16 @@ export function ConnectWhatsAppHub({
 
               <button
                 type="button"
-                disabled={true}
+                disabled={!cfg?.coexistenceLaunchAllowed}
+                onClick={() => {
+                  if (!cfg?.coexistenceLaunchAllowed) return;
+                  void startEmbeddedSignupViaSdk("coexistence");
+                }}
                 className={cn(
                   "w-full text-left rounded-lg border p-3 transition-colors",
-                  "border-gray-100 opacity-60 cursor-not-allowed"
+                  cfg?.coexistenceLaunchAllowed
+                    ? "border-blue-200 hover:bg-blue-50/50"
+                    : "border-gray-100 opacity-60 cursor-not-allowed",
                 )}
               >
                 <div className="flex items-center gap-2">
@@ -1183,12 +1208,20 @@ export function ConnectWhatsAppHub({
                     <p className="text-sm font-semibold text-gray-900">
                       Already use this number in WhatsApp Business App?
                     </p>
-                    <p className="text-[11px] text-gray-600 mt-0.5">Coming soon</p>
+                    <p className="text-[11px] text-gray-600 mt-0.5">
+                      {cfg?.coexistenceLaunchAllowed
+                        ? "Keep using the WhatsApp Business App while connecting messages to WhachatCRM."
+                        : "Coming soon"}
+                    </p>
                   </div>
                 </div>
-                <p className="text-[10px] text-gray-500 mt-2">
-                  Planned support for businesses that want shared app and inbox access.
-                </p>
+                {cfg?.coexistenceLaunchAllowed ? (
+                  <p className="text-[10px] text-blue-800 mt-2 font-medium">Test / Internal</p>
+                ) : (
+                  <p className="text-[10px] text-gray-500 mt-2">
+                    Planned support for businesses that want shared app and inbox access.
+                  </p>
+                )}
               </button>
 
               <button
@@ -1235,9 +1268,11 @@ export function ConnectWhatsAppHub({
       <AlertDialog open={confirmDisconnect} onOpenChange={setConfirmDisconnect}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Disconnect Meta WhatsApp?</AlertDialogTitle>
+            <AlertDialogTitle>Disconnect WhatsApp from WhachatCRM?</AlertDialogTitle>
             <AlertDialogDescription>
-              Inbound WhatsApp messages will stop routing here until you reconnect. Conversations and contacts are kept.
+              This disconnects WhachatCRM only. Your WhatsApp Business App account and chats are not
+              deleted. Inbound WhatsApp messages will stop routing here until you reconnect.
+              Conversations and contacts in WhachatCRM are kept.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

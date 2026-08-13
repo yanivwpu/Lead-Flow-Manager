@@ -3001,6 +3001,24 @@ export async function registerRoutes(
       const incomingMessage = parseMetaIncomingWebhook(req.body);
       const statusUpdate = parseMetaStatusWebhook(req.body);
 
+      try {
+        const { parseMetaWhatsappAccountUpdate } = await import(
+          "../shared/whatsappCoexistenceAccountUpdate"
+        );
+        const accountUpdate = parseMetaWhatsappAccountUpdate(req.body);
+        if (accountUpdate) {
+          const { applyCoexistenceAccountUpdateAttention } = await import(
+            "./whatsappCoexistenceAccountUpdateHandler"
+          );
+          await applyCoexistenceAccountUpdateAttention(accountUpdate);
+        }
+      } catch (accountUpdateErr) {
+        console.warn(
+          "[Meta Webhook] account_update handling failed (non-fatal)",
+          accountUpdateErr instanceof Error ? accountUpdateErr.message : accountUpdateErr,
+        );
+      }
+
       // [Stage 2] Classify the payload by object type so downstream sections are easy to trace
       const webhookEntry0 = req.body.entry?.[0];
       const webhookHasMessaging = !!(webhookEntry0?.messaging?.length);

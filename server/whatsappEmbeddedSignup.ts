@@ -50,7 +50,13 @@ import {
   resolveV4EmbeddedSignupAssets,
 } from "./whatsappEmbeddedSignupV4Assets";
 import {
+  evaluateCoexistenceOnboardingGate,
+  evaluateCoexistenceConfigIsolation,
+  COEXISTENCE_COMING_SOON_MESSAGE,
+} from "../shared/whatsappCoexistenceGate";
+import {
   buildStandardEmbeddedSignupLoginOptions,
+  buildCoexistenceEmbeddedSignupLoginOptions,
   configIdLast4,
   parseWhatsappEmbeddedSignupArchitecture,
   readEmbeddedSignupV4GateFromEnv,
@@ -401,10 +407,31 @@ export async function startEmbeddedSignupSession(
   if (flow === "embedded" && !cfg.embeddedSignupEnabled) {
     throw new Error("WhatsApp Embedded Signup is not enabled or Meta app is not fully configured.");
   }
-  if (flow === "coexistence" && !cfg.coexistenceEnabled) {
-    throw new Error(
-      "WhatsApp coexistence onboarding is not enabled — set META_WHATSAPP_COEXISTENCE_CONFIG_ID (dedicated coexistence Embedded Signup configuration in Meta) and ensure WHATSAPP_EMBEDDED_SIGNUP_ENABLED + META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID are configured.",
-    );
+  if (flow === "coexistence") {
+    const gate = evaluateCoexistenceOnboardingGate({ userId });
+    if (!gate.allowed) {
+      if (
+        gate.reason === "test_flag_disabled" ||
+        gate.reason === "not_on_allowlist" ||
+        gate.reason === "empty_user_id"
+      ) {
+        throw new Error(COEXISTENCE_COMING_SOON_MESSAGE);
+      }
+      if (gate.reason === "config_isolation_failed") {
+        const iso = evaluateCoexistenceConfigIsolation();
+        console.error("[WhatsApp Coexistence] config isolation failed", {
+          coexistenceConfigIdLast4: iso.coexistenceConfigIdLast4,
+          v2ConfigIdLast4: iso.v2ConfigIdLast4,
+          v4ConfigIdLast4: iso.v4ConfigIdLast4,
+        });
+        throw new Error(
+          "WhatsApp coexistence onboarding is misconfigured (config isolation). Contact support.",
+        );
+      }
+      throw new Error(
+        "WhatsApp coexistence onboarding is not available — set META_WHATSAPP_COEXISTENCE_CONFIG_ID and ensure Embedded Signup base env is configured.",
+      );
+    }
   }
 
   const oauthStatesSchemaAvailable =
@@ -462,12 +489,23 @@ export async function startEmbeddedSignupSession(
 
   const { configId, envName } = resolveEmbeddedSignupConfigIdFromEnv(flow, architecture);
   if (flow === "coexistence") {
+    const iso = evaluateCoexistenceConfigIsolation();
+    if (!iso.ok) {
+      console.error("[WhatsApp Coexistence] refusing session — config equals Standard v2/v4", {
+        coexistenceConfigIdLast4: iso.coexistenceConfigIdLast4,
+        v2ConfigIdLast4: iso.v2ConfigIdLast4,
+        v4ConfigIdLast4: iso.v4ConfigIdLast4,
+      });
+      throw new Error(
+        "WhatsApp coexistence onboarding is misconfigured (config isolation). Contact support.",
+      );
+    }
     logCoexistenceDiagnostic({
       phase: "session_start_redirect",
       userId,
       flow,
       coexistenceUsesEnv: "META_WHATSAPP_COEXISTENCE_CONFIG_ID",
-      configId,
+      configIdLast4: configIdLast4(configId),
     });
   }
   const appId = process.env.META_APP_ID!;
@@ -526,9 +564,9 @@ export async function startEmbeddedSignupSession(
   });
 
   const loginOptions =
-    flow === "embedded"
-      ? buildStandardEmbeddedSignupLoginOptions({ architecture, configId })
-      : buildStandardEmbeddedSignupLoginOptions({ architecture: "v2", configId });
+    flow === "coexistence"
+      ? buildCoexistenceEmbeddedSignupLoginOptions({ configId })
+      : buildStandardEmbeddedSignupLoginOptions({ architecture, configId });
 
   const authUrl = buildEmbeddedSignupAuthUrl(stateToken, flow, architecture);
   return {
@@ -2760,6 +2798,7 @@ export async function completeEmbeddedSignupOAuth(params: {
 
   let result = await connectUserMeta(row.userId, credentials, {
     connectionType,
+    allowArchitectureChange: true,
     displayPhoneNumber: resolved.displayPhoneNumber || null,
     verifiedName: resolved.verifiedName || null,
     webhookSubscribed: subscribed,
@@ -2796,6 +2835,7 @@ export async function completeEmbeddedSignupOAuth(params: {
     });
     result = await connectUserMeta(row.userId, credentials, {
       connectionType,
+      allowArchitectureChange: true,
       displayPhoneNumber: resolved.displayPhoneNumber || null,
       verifiedName: resolved.verifiedName || null,
       webhookSubscribed: subscribed,
@@ -2991,6 +3031,7 @@ export async function finalizeEmbeddedSignupWabaSelection(params: {
   const connectionType = row.flow === "coexistence" ? "coexistence" : "embedded";
   let result = await connectUserMeta(row.userId, credentials, {
     connectionType,
+    allowArchitectureChange: true,
     displayPhoneNumber: matchPhone.displayPhoneNumber ?? null,
     verifiedName: matchPhone.verifiedName ?? null,
     webhookSubscribed: subscribed,
@@ -3008,6 +3049,7 @@ export async function finalizeEmbeddedSignupWabaSelection(params: {
     }
     result = await connectUserMeta(row.userId, credentials, {
       connectionType,
+      allowArchitectureChange: true,
       displayPhoneNumber: matchPhone.displayPhoneNumber ?? null,
       verifiedName: matchPhone.verifiedName ?? null,
       webhookSubscribed: subscribed,

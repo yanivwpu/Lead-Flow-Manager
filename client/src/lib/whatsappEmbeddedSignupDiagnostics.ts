@@ -55,7 +55,7 @@ export async function postWhatsappEmbeddedSignupDiagnostics(
 
 export function buildEmbeddedSignupPreLoginDiagnostics(input: {
   phase: string;
-  loginMethod: "embedded_signup";
+  loginMethod: "embedded_signup" | "coexistence";
   appId: string | null | undefined;
   configId: string | null | undefined;
   graphVersion: string | null | undefined;

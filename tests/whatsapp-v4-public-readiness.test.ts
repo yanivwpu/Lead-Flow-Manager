@@ -216,13 +216,13 @@ describe("security surfaces", () => {
     assert.match(src, /coexistenceConfigId:\s*null/);
   });
 
-  it("live start still blocks coexistence", () => {
+  it("live start blocks unauthorized coexistence (server gate)", () => {
     const src = fs.readFileSync(
       path.join(process.cwd(), "server/routes/whatsappIntegrationRoutes.ts"),
       "utf8",
     );
-    assert.match(src, /Coexistence onboarding is coming soon/);
-    assert.match(src, /parsed\.data\.flow !== "embedded"/);
+    assert.match(src, /COEXISTENCE_COMING_SOON_MESSAGE|Coexistence onboarding is coming soon/);
+    assert.match(src, /evaluateCoexistenceOnboardingGate/);
   });
 });
 

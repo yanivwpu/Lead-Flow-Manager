@@ -170,6 +170,16 @@ export function evaluateEmbeddedSignupV4Prerequisites(
       missing.push("config_isolation");
     }
   }
+  // Standard v2 must never share the Coexistence config ID either.
+  if (
+    configIsolationOk &&
+    v2ConfigId &&
+    coexistenceConfigId &&
+    v2ConfigId === coexistenceConfigId
+  ) {
+    configIsolationOk = false;
+    missing.push("config_isolation");
+  }
 
   return {
     ok: missing.length === 0,

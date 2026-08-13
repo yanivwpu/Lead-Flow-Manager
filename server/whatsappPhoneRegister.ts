@@ -13,6 +13,7 @@ import {
   isMetaPhoneCloudApiRegistrationRequired,
   isValidWhatsAppTwoStepPin,
 } from "@shared/whatsappPhoneRegistration";
+import { resolvePersistedMetaConnectionType } from "@shared/whatsappConnectionType";
 import { classifyMetaWhatsAppPhone, buildMetaWhatsAppPhoneClassificationInput } from "./metaWhatsAppPhoneKind";
 
 export type PhoneRegisterFailureCategory =
@@ -378,7 +379,11 @@ export async function registerPhoneForAuthenticatedUser(params: {
   await storage.updateUser(userId, {
     metaConnected: true,
     whatsappProvider: "meta",
-    metaConnectionType: user.metaConnectionType === "coexistence" ? "coexistence" : "embedded",
+    metaConnectionType: resolvePersistedMetaConnectionType({
+      previousType: user.metaConnectionType,
+      requestedType: user.metaConnectionType === "coexistence" ? "coexistence" : "embedded",
+      allowArchitectureChange: false,
+    }),
     metaIntegrationStatus: "connected",
     metaLastErrorCode: null,
     metaLastErrorMessage: null,

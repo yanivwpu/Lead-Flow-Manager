@@ -5,6 +5,7 @@ import { users } from "@shared/schema";
 import { storage } from "./storage";
 import type { User, Chat } from "@shared/schema";
 import { getMetaGraphApiBase } from "./metaGraphVersion";
+import { resolvePersistedMetaConnectionType } from "../shared/whatsappConnectionType";
 
 export {
   isMetaCredentialEncryptionConfigured,
@@ -59,6 +60,11 @@ export interface MetaConnectExtras {
   tokenExpiresAt?: Date | null;
   webhookSubscribed?: boolean;
   metaIntegrationStatus?: string;
+  /**
+   * When true, allow changing metaConnectionType away from coexistence
+   * (authoritative OAuth completion only). Default false preserves coexistence.
+   */
+  allowArchitectureChange?: boolean;
 }
 
 export async function getMetaAccessToken(userId: string): Promise<string | null> {
@@ -335,12 +341,19 @@ export async function connectUserMeta(
     }
     throw err;
   }
+  const existing = await storage.getUserForSession(userId);
+  const requestedType = extras?.connectionType ?? "manual_legacy";
+  const persistedConnectionType = resolvePersistedMetaConnectionType({
+    previousType: existing?.metaConnectionType,
+    requestedType,
+    allowArchitectureChange: extras?.allowArchitectureChange === true,
+  });
   const globalVerify = process.env.META_WEBHOOK_VERIFY_TOKEN;
   const webhookVerifyToken =
     credentials.webhookVerifyToken ||
-    (extras?.connectionType === "embedded_signup" ||
-    extras?.connectionType === "embedded" ||
-    extras?.connectionType === "coexistence"
+    (persistedConnectionType === "embedded_signup" ||
+    persistedConnectionType === "embedded" ||
+    persistedConnectionType === "coexistence"
       ? globalVerify || crypto.randomBytes(32).toString("hex")
       : crypto.randomBytes(32).toString("hex"));
 
@@ -349,7 +362,9 @@ export async function connectUserMeta(
     userId,
     wabaId: credentials.businessAccountId,
     phoneNumberId: credentials.phoneNumberId,
-    connectionType: extras?.connectionType ?? "manual_legacy",
+    connectionType: persistedConnectionType,
+    requestedConnectionType: requestedType,
+    previousConnectionType: existing?.metaConnectionType ?? null,
     skipCredentialValidation: !!extras?.skipCredentialValidation,
   });
   try {
@@ -361,7 +376,7 @@ export async function connectUserMeta(
       metaWebhookVerifyToken: webhookVerifyToken,
       metaConnected: true,
       whatsappProvider: "meta",
-      metaConnectionType: extras?.connectionType ?? "manual_legacy",
+      metaConnectionType: persistedConnectionType,
       metaDisplayPhoneNumber: extras?.displayPhoneNumber ?? validation.phoneNumber ?? null,
       metaVerifiedName: extras?.verifiedName ?? null,
       metaTokenExpiresAt: extras?.tokenExpiresAt ?? null,
@@ -397,12 +412,16 @@ export async function connectUserMeta(
 
 export async function disconnectUserMeta(userId: string): Promise<void> {
   const user = await storage.getUserForSession(userId);
-  
+
+  // WhachatCRM-only disconnect: clears local Meta credentials and routing flags.
+  // Does NOT call Meta Graph deregister/delete APIs — WhatsApp Business App
+  // (including Coexistence) remains intact on the customer's phone.
+
   // Determine the provider after disconnect:
   // - If Twilio is connected, switch to it
   // - Otherwise, keep "twilio" as the default (but it won't be available)
   const newProvider = "twilio";
-  
+
   await storage.updateUser(userId, {
     metaAccessToken: null,
     metaPhoneNumberId: null,

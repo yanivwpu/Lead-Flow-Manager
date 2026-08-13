@@ -53,6 +53,12 @@ import {
   parseWhatsappEmbeddedSignupArchitecture,
   readEmbeddedSignupV4GateFromEnv,
 } from "@shared/whatsappEmbeddedSignupVersion";
+import {
+  evaluateCoexistenceOnboardingGate,
+  isCoexistenceOnboardingAllowedForUser,
+  COEXISTENCE_COMING_SOON_MESSAGE,
+  buildSanitizedCoexistenceGateSummary,
+} from "@shared/whatsappCoexistenceGate";
 
 export function registerWhatsappIntegrationRoutes(app: Express): void {
   logWhatsappEmbeddedSignupStartupWarnings();
@@ -62,10 +68,18 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/integrations/whatsapp/meta/config", (_req: Request, res: Response) => {
+  app.get("/api/integrations/whatsapp/meta/config", (req: Request, res: Response) => {
     try {
       const cfg = getWhatsappMetaPublicConfig();
-      res.json(cfg);
+      const userId = (req as any).user?.id as string | undefined;
+      res.json({
+        ...cfg,
+        /** Session-scoped: true only when this user may start Coexistence (allowlist test gate). */
+        coexistenceLaunchAllowed: userId
+          ? isCoexistenceOnboardingAllowedForUser(userId)
+          : false,
+        coexistenceTestGate: buildSanitizedCoexistenceGateSummary(),
+      });
     } catch (e: any) {
       res.status(500).json({ error: "Failed to load Meta configuration" });
     }
@@ -506,9 +520,9 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
   });
 
   /**
-   * Embedded Signup JS SDK (Option A — standard).
-   * Server selects architecture v2 (default) or gated v4; client must not decide alone.
-   * Coexistence (Option B) remains intentionally disabled for public start.
+   * Embedded Signup JS SDK (Option A — standard) + gated Coexistence (Option B).
+   * Server selects architecture; client must not decide alone.
+   * Coexistence requires WHATSAPP_COEXISTENCE_TEST_ENABLED + allowlist (public stays Coming soon).
    */
   app.post("/api/integrations/whatsapp/meta/start", async (req: Request, res: Response) => {
     try {
@@ -517,8 +531,16 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
       }
+      if (parsed.data.flow === "coexistence") {
+        const gate = evaluateCoexistenceOnboardingGate({ userId: req.user.id });
+        if (!gate.allowed) {
+          return res.status(400).json({ error: COEXISTENCE_COMING_SOON_MESSAGE });
+        }
+        const session = await startEmbeddedSignupSession(req.user.id, "coexistence");
+        return res.json(session);
+      }
       if (parsed.data.flow !== "embedded") {
-        return res.status(400).json({ error: "Coexistence onboarding is coming soon." });
+        return res.status(400).json({ error: COEXISTENCE_COMING_SOON_MESSAGE });
       }
       const session = await startEmbeddedSignupSession(req.user.id, "embedded");
       res.json(session);
@@ -755,13 +777,29 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
   /**
    * Full redirect OAuth entrypoint (production fallback).
    * Uses the same server-authoritative architecture selection as SDK start (v2 or v4).
+   * Coexistence redirect requires the same test allowlist gate as POST /start.
    * Client query params cannot unlock coexistence or force an architecture.
    */
   app.get("/api/integrations/whatsapp/meta/start-redirect", async (req: Request, res: Response) => {
     try {
       if (!req.user) return res.status(401).send("Unauthorized");
       if (req.query.flow === "coexistence") {
-        return res.status(400).send("Coexistence onboarding is coming soon.");
+        const gate = evaluateCoexistenceOnboardingGate({ userId: req.user.id });
+        if (!gate.allowed) {
+          return res.status(400).send(COEXISTENCE_COMING_SOON_MESSAGE);
+        }
+        if (typeof req.query.architecture === "string") {
+          return res.status(400).send("Architecture cannot be selected by the client.");
+        }
+        const session = await startEmbeddedSignupSession(req.user.id, "coexistence");
+        console.log("[WHATSAPP FULL REDIRECT START]", {
+          flow: "coexistence",
+          architecture: session.architecture || session.sdk?.architecture || null,
+          redirectUriUsed: session.redirectUri,
+          graphApiVersion: session.sdk.graphApiVersion,
+          configIdLast4: session.sdk.configIdLast4,
+        });
+        return res.redirect(302, session.authUrl);
       }
       if (typeof req.query.architecture === "string") {
         return res.status(400).send("Architecture cannot be selected by the client.");

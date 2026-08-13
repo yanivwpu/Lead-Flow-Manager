@@ -202,6 +202,36 @@ export function buildStandardEmbeddedSignupLoginOptions(params: {
   };
 }
 
+/**
+ * Build FB.login options for WhatsApp Business App Coexistence only.
+ * Uses dedicated META_WHATSAPP_COEXISTENCE_CONFIG_ID + Meta's coexistence featureType.
+ * Never used for Standard Embedded Signup (v2 or v4).
+ *
+ * Note: Coexistence sessions store architectureVersion "v2" as the Embedded Signup
+ * OAuth architecture label required by this product path — that is NOT the same as
+ * the legacy public Standard Embedded Signup v2 product rollout.
+ */
+export function buildCoexistenceEmbeddedSignupLoginOptions(params: {
+  configId: string;
+  scope?: string;
+}): StandardEmbeddedSignupLoginOptions {
+  const configId = params.configId.trim();
+  if (!configId) {
+    throw new Error("configId is required to build Coexistence Embedded Signup login options");
+  }
+  const scope = params.scope?.trim() || DEFAULT_SCOPES;
+  return {
+    config_id: configId,
+    response_type: "code",
+    override_default_response_type: true,
+    scope,
+    extras: {
+      featureType: "whatsapp_business_app_onboarding",
+      sessionInfoVersion: "3",
+    },
+  };
+}
+
 /** Env-name helpers for config isolation tests / diagnostics. */
 export const EMBEDDED_SIGNUP_CONFIG_ENV = {
   v2: "META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID",
