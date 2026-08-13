@@ -21,6 +21,7 @@ import {
 import {
   buildWhatsappEmbeddedSignupCodeExchangeUrl,
   classifyMetaCodeExchangeFailure,
+  shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange,
 } from "../server/metaOAuth";
 import {
   shouldUseV4DirectAssetValidation,
@@ -506,6 +507,14 @@ describe("oauth state TTL + public v2 / coexistence invariants", () => {
 
 describe("v4 authorization-code exchange contract", () => {
   it("omits redirect_uri for v4 SDK exchange URL (Login for Business SUAT shape)", () => {
+    assert.equal(
+      shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange({
+        tokenExchange: "sdk",
+        architecture: "v4",
+        flow: "embedded",
+      }),
+      true,
+    );
     const built = buildWhatsappEmbeddedSignupCodeExchangeUrl({
       graphBase: "https://graph.facebook.com/v21.0",
       clientId: "810621184995059",
@@ -520,6 +529,22 @@ describe("v4 authorization-code exchange contract", () => {
   });
 
   it("includes exact redirect_uri for v2 / redirect exchange (unchanged contract)", () => {
+    assert.equal(
+      shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange({
+        tokenExchange: "sdk",
+        architecture: "v2",
+        flow: "embedded",
+      }),
+      false,
+    );
+    assert.equal(
+      shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange({
+        tokenExchange: "redirect",
+        architecture: "v2",
+        flow: "embedded",
+      }),
+      false,
+    );
     const built = buildWhatsappEmbeddedSignupCodeExchangeUrl({
       graphBase: "https://graph.facebook.com/v21.0",
       clientId: "810621184995059",
@@ -579,7 +604,7 @@ describe("v4 authorization-code exchange contract", () => {
       path.join(process.cwd(), "server/whatsappEmbeddedSignup.ts"),
       "utf8",
     );
-    assert.match(src, /omitRedirectUriForSdkV4/);
+    assert.match(src, /shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange/);
     assert.match(src, /v4_business_integration_token_no_user_fb_exchange/);
     assert.match(src, /exchangeForLongLivedUserToken/);
     // Ensure v4 branch skips fb_exchange before the v2 else path.

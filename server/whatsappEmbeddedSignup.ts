@@ -21,7 +21,7 @@ import { db } from "../drizzle/db";
 import { whatsappOauthStates } from "@shared/schema";
 import { storage } from "./storage";
 import { getMetaGraphApiBase, getMetaFacebookOAuthDialogBase, getMetaGraphVersionSegment } from "./metaGraphVersion";
-import { exchangeForLongLivedUserToken, MetaOAuthExchangeError, exchangeWhatsappEmbeddedSignupAuthorizationCode, classifyMetaCodeExchangeFailure } from "./metaOAuth";
+import { exchangeForLongLivedUserToken, MetaOAuthExchangeError, exchangeWhatsappEmbeddedSignupAuthorizationCode, classifyMetaCodeExchangeFailure, shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange } from "./metaOAuth";
 import {
   extractMetaPhoneGraphRegistrationFields,
   isMetaPhoneCloudApiOperational,
@@ -2243,12 +2243,23 @@ export async function completeEmbeddedSignupOAuth(params: {
   });
 
   // Code exchange:
-  // - Redirect OAuth (v2 fallback): MUST send the exact redirect_uri from the dialog.
-  // - SDK + architecture v4 (Login for Business config_id / system-user style): Meta docs use
-  //   client_id + client_secret + code only — do NOT send our callback redirect_uri (FB.login never used it).
-  // - SDK + v2: preserve production contract (include state redirect_uri).
+  // - Redirect OAuth (v2 fallback / genuine redirect callback): MUST send the exact redirect_uri.
+  // - SDK + architecture v4 (Login for Business): omit redirect_uri.
+  // - SDK + coexistence (architecture label remains v2): omit redirect_uri — FB.login never used it.
+  // - SDK + standard v2: preserve production contract (include state redirect_uri).
   const redirectUri = row.redirectUri || getWhatsappMetaRedirectUri();
-  const omitRedirectUriForSdkV4 = tokenExchange === "sdk" && architecture === "v4";
+  const oauthFlow = row.flow === "coexistence" ? "coexistence" : "embedded";
+  const omitRedirectUri = shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange({
+    tokenExchange,
+    architecture,
+    flow: oauthFlow,
+  });
+  const redirectUriOmitSource =
+    omitRedirectUri && oauthFlow === "coexistence"
+      ? "omitted_for_coexistence_sdk"
+      : omitRedirectUri
+        ? "omitted_for_v4_sdk"
+        : null;
   let shortToken: string;
   let codeExchangeExpiresIn: number | null = null;
   let codeExchangeAttemptCount = 0;
@@ -2256,10 +2267,11 @@ export async function completeEmbeddedSignupOAuth(params: {
     console.log("[META EXCHANGE DEBUG]", {
       flow: tokenExchange,
       architecture,
-      redirectUriUsed: omitRedirectUriForSdkV4 ? null : redirectUri,
-      redirectUriOmitted: omitRedirectUriForSdkV4,
-      redirectUriSource: omitRedirectUriForSdkV4
-        ? "omitted_for_v4_sdk"
+      oauthFlow,
+      redirectUriUsed: omitRedirectUri ? null : redirectUri,
+      redirectUriOmitted: omitRedirectUri,
+      redirectUriSource: omitRedirectUri
+        ? redirectUriOmitSource
         : row.redirectUri
           ? "state_row"
           : "env_fallback",
@@ -2270,8 +2282,8 @@ export async function completeEmbeddedSignupOAuth(params: {
     codeExchangeAttemptCount += 1;
     const exchangedCode = await exchangeWhatsappEmbeddedSignupAuthorizationCode({
       code,
-      includeRedirectUri: !omitRedirectUriForSdkV4,
-      redirectUri: omitRedirectUriForSdkV4 ? null : redirectUri,
+      includeRedirectUri: !omitRedirectUri,
+      redirectUri: omitRedirectUri ? null : redirectUri,
     });
     shortToken = exchangedCode.accessToken;
     codeExchangeExpiresIn = exchangedCode.expiresIn;
@@ -2283,8 +2295,8 @@ export async function completeEmbeddedSignupOAuth(params: {
       tokenExchange,
       redirectUriUsed: exchangedCode.redirectUriSent ? redirectUri : null,
       redirectUriSent: exchangedCode.redirectUriSent,
-      redirectUriSource: omitRedirectUriForSdkV4
-        ? "omitted_for_v4_sdk"
+      redirectUriSource: omitRedirectUri
+        ? redirectUriOmitSource
         : row.redirectUri
           ? "state_row"
           : "env_fallback",
@@ -2312,8 +2324,9 @@ export async function completeEmbeddedSignupOAuth(params: {
       failureCategory,
       tokenExchange,
       architecture,
-      redirectUriUsed: omitRedirectUriForSdkV4 ? null : redirectUri,
-      redirectUriOmitted: omitRedirectUriForSdkV4,
+      oauthFlow,
+      redirectUriUsed: omitRedirectUri ? null : redirectUri,
+      redirectUriOmitted: omitRedirectUri,
       codeExchangeAttemptCount,
     });
     await mergeUserMetaOAuthDebug(row.userId, {
@@ -2332,10 +2345,10 @@ export async function completeEmbeddedSignupOAuth(params: {
           }
         : null,
       httpStatus: (ex as any)?.httpStatus,
-      redirectUriUsed: omitRedirectUriForSdkV4 ? null : redirectUri,
-      redirectUriSent: !omitRedirectUriForSdkV4,
-      redirectUriSource: omitRedirectUriForSdkV4
-        ? "omitted_for_v4_sdk"
+      redirectUriUsed: omitRedirectUri ? null : redirectUri,
+      redirectUriSent: !omitRedirectUri,
+      redirectUriSource: omitRedirectUri
+        ? redirectUriOmitSource
         : row.redirectUri
           ? "state_row"
           : "env_fallback",

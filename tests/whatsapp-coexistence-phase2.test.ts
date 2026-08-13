@@ -23,6 +23,10 @@ import {
 } from "../shared/whatsappEmbeddedSignupVersion";
 import { isMetaPhoneCloudApiRegistrationRequired } from "../shared/whatsappPhoneRegistration";
 import { evaluateMetaWhatsAppReadiness } from "../shared/whatsappReadiness";
+import {
+  buildWhatsappEmbeddedSignupCodeExchangeUrl,
+  shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange,
+} from "../server/metaOAuth";
 
 const BASE = {
   META_APP_ID: "810621184995059",
@@ -134,11 +138,13 @@ describe("Coexistence config isolation", () => {
 });
 
 describe("Coexistence login options vs Standard", () => {
-  it("coexistence login includes featureType; standard never does", () => {
+  it("coexistence login includes setup + featureType; standard never does", () => {
     const coex = buildCoexistenceEmbeddedSignupLoginOptions({
       configId: BASE.META_WHATSAPP_COEXISTENCE_CONFIG_ID,
     });
+    assert.deepEqual(coex.extras.setup, {});
     assert.equal((coex.extras as any).featureType, "whatsapp_business_app_onboarding");
+    assert.equal((coex.extras as any).sessionInfoVersion, "3");
     const std = buildStandardEmbeddedSignupLoginOptions({
       architecture: "v2",
       configId: BASE.META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID,
@@ -149,6 +155,83 @@ describe("Coexistence login options vs Standard", () => {
       configId: BASE.META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID,
     });
     assert.equal((v4.extras as any).featureType, undefined);
+    assert.deepEqual(v4.extras, {});
+  });
+});
+
+describe("Coexistence SDK code exchange omits redirect_uri", () => {
+  it("omits redirect_uri for coexistence SDK even when architecture label is v2", () => {
+    assert.equal(
+      shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange({
+        tokenExchange: "sdk",
+        architecture: "v2",
+        flow: "coexistence",
+      }),
+      true,
+    );
+    const built = buildWhatsappEmbeddedSignupCodeExchangeUrl({
+      graphBase: "https://graph.facebook.com/v21.0",
+      clientId: "810621184995059",
+      clientSecret: "test-secret",
+      code: "test-code",
+      includeRedirectUri: !shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange({
+        tokenExchange: "sdk",
+        architecture: "v2",
+        flow: "coexistence",
+      }),
+    });
+    assert.equal(built.redirectUriSent, false);
+    assert.doesNotMatch(built.url, /redirect_uri=/);
+  });
+
+  it("still includes redirect_uri for coexistence redirect OAuth", () => {
+    assert.equal(
+      shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange({
+        tokenExchange: "redirect",
+        architecture: "v2",
+        flow: "coexistence",
+      }),
+      false,
+    );
+    const built = buildWhatsappEmbeddedSignupCodeExchangeUrl({
+      graphBase: "https://graph.facebook.com/v21.0",
+      clientId: "810621184995059",
+      clientSecret: "test-secret",
+      code: "test-code",
+      includeRedirectUri: true,
+      redirectUri: BASE.META_WHATSAPP_REDIRECT_URI,
+    });
+    assert.equal(built.redirectUriSent, true);
+    assert.match(built.url, /redirect_uri=/);
+  });
+
+  it("standard v4 SDK still omits; standard v2 SDK still includes", () => {
+    assert.equal(
+      shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange({
+        tokenExchange: "sdk",
+        architecture: "v4",
+        flow: "embedded",
+      }),
+      true,
+    );
+    assert.equal(
+      shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange({
+        tokenExchange: "sdk",
+        architecture: "v2",
+        flow: "embedded",
+      }),
+      false,
+    );
+  });
+
+  it("completeEmbeddedSignupOAuth uses flow-aware omit helper (not architecture===v4 alone)", () => {
+    const src = fs.readFileSync(path.join(process.cwd(), "server/whatsappEmbeddedSignup.ts"), "utf8");
+    assert.match(src, /shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange/);
+    assert.match(src, /omitted_for_coexistence_sdk/);
+    assert.doesNotMatch(
+      src,
+      /omitRedirectUriForSdkV4 = tokenExchange === "sdk" && architecture === "v4"/,
+    );
   });
 });
 

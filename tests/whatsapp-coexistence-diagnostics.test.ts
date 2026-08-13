@@ -18,14 +18,17 @@ import {
   encryptMetaCredentialWithLegacyFallbackForTests,
   isEncrypted,
 } from "../server/metaCredentialCrypto";
-import { stripSensitiveWhatsAppFields } from "../server/whatsappStatusSanitize";
+import {
+  buildSanitizedLastOAuthStatusFields,
+  stripSensitiveWhatsAppFields,
+} from "../server/whatsappStatusSanitize";
 
 const VALID_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
 describe("userMeta local bindings for encrypt helpers", () => {
   it("imports isEncrypted and decryptCredential into module scope (not re-export-only)", () => {
     const src = fs.readFileSync(path.join(process.cwd(), "server/userMeta.ts"), "utf8");
-    // Must be a value import used by getMetaAccessToken — re-export-only caused ReferenceError in prod.
+    // Must be a value import used by getMetaAccessToken â€” re-export-only caused ReferenceError in prod.
     assert.match(
       src,
       /import\s*\{[^}]*\bisEncrypted\b[^}]*\}\s*from\s*["']\.\/metaCredentialCrypto["']/,
@@ -82,6 +85,8 @@ describe("coexistence-diagnostics route safety", () => {
     assert.match(block, /v1DecryptReady/);
     assert.match(block, /accessTokenEncryptionStatus/);
     assert.match(block, /architectureStatus/);
+    assert.match(block, /buildSanitizedLastOAuthStatusFields/);
+    assert.match(block, /oauthDiagnostics/);
     assert.match(block, /error:\s*["']Diagnostics failed["']/);
     assert.match(block, /\[CoexistenceDiagnostics\] error:/);
     assert.doesNotMatch(block, /json\(\{\s*error:\s*e\?\.message/);
@@ -112,5 +117,52 @@ describe("coexistence-diagnostics route safety", () => {
     assert.doesNotMatch(text, /EAA\.leak/);
     assert.doesNotMatch(text, /app-secret-leak/);
     assert.equal((cleaned.encryption as any)?.metaEncryptionKeyConfigured, true);
+  });
+
+  it("buildSanitizedLastOAuthStatusFields exposes only safe OAuth status fields", () => {
+    const dirty = {
+      phase: "code_exchange",
+      flow: "coexistence",
+      architecture: "v2",
+      errorCode: "code_exchange_failed",
+      exchangeFailureCategory: "redirect_uri_mismatch",
+      discoveryFailureCategory: null,
+      discoveryMethod: "v2_me_businesses_enumeration",
+      codeCallbackReceived: true,
+      sessionEventReceived: false,
+      completeSdkAttempted: true,
+      redirectUriSent: true,
+      redirectUriUsed: "https://example.com/api/integrations/whatsapp/meta/callback",
+      accessToken: "EAA.should.never.leak",
+      authorization_code: "AQB.oauth.code.leak",
+      code: "AQB.very.long.oauth.authorization.code.value.that.must.not.leak",
+      META_ENCRYPTION_KEY: "should-not-appear",
+      metaAccessToken: "v1:cipher:text:here",
+      sessionEvent: { event: "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING", wabaId: "123" },
+      configId: "1111222233339682",
+    };
+    const cleanedDbg = stripSensitiveWhatsAppFields(dirty) as Record<string, unknown>;
+    const status = buildSanitizedLastOAuthStatusFields(cleanedDbg);
+    assert.equal(status.lastOAuthPhase, "code_exchange");
+    assert.equal(status.lastOAuthFlow, "coexistence");
+    assert.equal(status.lastOAuthArchitecture, "v2");
+    assert.equal(status.lastOAuthErrorCode, "code_exchange_failed");
+    assert.equal(status.exchangeFailureCategory, "redirect_uri_mismatch");
+    assert.equal(status.codeCallbackReceived, true);
+    assert.equal(status.sessionEventReceived, false);
+    assert.equal(status.completeSdkAttempted, true);
+    assert.equal(status.redirectUriSent, true);
+    assert.equal(status.sessionEventName, "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING");
+    const text = JSON.stringify(status);
+    assert.doesNotMatch(text, /EAA\.should\.never\.leak/);
+    assert.doesNotMatch(text, /AQB\.oauth\.code\.leak/);
+    assert.doesNotMatch(text, /AQB\.very\.long\.oauth/);
+    assert.doesNotMatch(text, /should-not-appear/);
+    assert.doesNotMatch(text, /v1:cipher:text:here/);
+    assert.doesNotMatch(text, /1111222233339682/);
+    assert.equal(Object.prototype.hasOwnProperty.call(status, "accessToken"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(status, "authorization_code"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(status, "code"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(status, "configId"), false);
   });
 });

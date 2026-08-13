@@ -226,6 +226,7 @@ export function buildCoexistenceEmbeddedSignupLoginOptions(params: {
     override_default_response_type: true,
     scope,
     extras: {
+      setup: {},
       featureType: "whatsapp_business_app_onboarding",
       sessionInfoVersion: "3",
     },

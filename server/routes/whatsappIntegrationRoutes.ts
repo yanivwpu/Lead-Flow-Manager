@@ -44,7 +44,10 @@ import {
   extractMetaPhoneGraphRegistrationFields,
   isMetaPhoneCloudApiRegistrationRequired,
 } from "@shared/whatsappPhoneRegistration";
-import { stripSensitiveWhatsAppFields } from "../whatsappStatusSanitize";
+import {
+  buildSanitizedLastOAuthStatusFields,
+  stripSensitiveWhatsAppFields,
+} from "../whatsappStatusSanitize";
 import { db } from "../../drizzle/db";
 import { whatsappOauthStates } from "@shared/schema";
 import { eq } from "drizzle-orm";
@@ -229,6 +232,14 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         tokenStatus,
       };
 
+      const oauthDbgRaw =
+        user.metaLastOAuthDebug && typeof user.metaLastOAuthDebug === "object"
+          ? (user.metaLastOAuthDebug as Record<string, unknown>)
+          : null;
+      const oauthDiagnostics = buildSanitizedLastOAuthStatusFields(
+        oauthDbgRaw ? stripSensitiveWhatsAppFields(oauthDbgRaw) : null,
+      );
+
       if (!token) {
         const early = stripSensitiveWhatsAppFields({
           ok: false,
@@ -236,6 +247,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
           diagnosticOnly: true,
           encryption: encryptionDiagnostics,
           architectureStatus,
+          oauthDiagnostics,
           connectionSavedAsCoexistence,
           activeProvider: base.activeProvider,
           meta: {
@@ -269,6 +281,9 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
           tokenStatus,
           accessTokenEncryptionStatus,
           metaEncryptionKeyConfigured,
+          lastOAuthPhase: oauthDiagnostics.lastOAuthPhase,
+          lastOAuthErrorCode: oauthDiagnostics.lastOAuthErrorCode,
+          exchangeFailureCategory: oauthDiagnostics.exchangeFailureCategory,
         });
         return res.json(early);
       }
@@ -456,6 +471,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         activeProvider: base.activeProvider,
         encryption: encryptionDiagnostics,
         architectureStatus,
+        oauthDiagnostics,
         meta: {
           connected: !!user.metaConnected,
           integrationStatus: user.metaIntegrationStatus ?? null,

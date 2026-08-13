@@ -360,8 +360,9 @@ describe("duplicate completion protection + admin summary", () => {
 
   it("v4 SDK exchange continues to omit redirect_uri (source guard)", () => {
     const main = fs.readFileSync(path.join(process.cwd(), "server/whatsappEmbeddedSignup.ts"), "utf8");
-    assert.match(main, /omitRedirectUriForSdkV4 = tokenExchange === "sdk" && architecture === "v4"/);
-    assert.match(main, /includeRedirectUri: !omitRedirectUriForSdkV4/);
+    assert.match(main, /shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange/);
+    assert.match(main, /includeRedirectUri: !omitRedirectUri/);
+    assert.match(main, /architecture === "v4"/);
   });
 
   it("prereq redirect_or_app_url accepts APP_URL alone (routing readiness, not exchange)", () => {

@@ -89,6 +89,26 @@ export function classifyMetaCodeExchangeFailure(params: {
 }
 
 /**
+ * Whether Graph `/oauth/access_token` must omit `redirect_uri` for Embedded Signup.
+ *
+ * - Redirect OAuth callbacks: always include the exact dialog redirect_uri.
+ * - Standard Embedded Signup SDK + architecture v4: omit (Login for Business SUAT).
+ * - Coexistence SDK: omit even though architecture label is intentionally "v2"
+ *   (config_id FB.login never used our callback redirect_uri).
+ * - Standard Embedded Signup SDK + architecture v2: include (legacy production contract).
+ */
+export function shouldOmitRedirectUriForWhatsappEmbeddedSignupCodeExchange(params: {
+  tokenExchange: "sdk" | "redirect";
+  architecture: "v2" | "v4" | string;
+  flow: "embedded" | "coexistence" | string;
+}): boolean {
+  if (params.tokenExchange !== "sdk") return false;
+  if (params.flow === "coexistence") return true;
+  if (params.architecture === "v4") return true;
+  return false;
+}
+
+/**
  * Build Graph OAuth code-exchange URL.
  * Login for Business **system-user / Embedded Signup SDK** codes: omit redirect_uri
  * (official Meta docs: client_id + client_secret + code only).
