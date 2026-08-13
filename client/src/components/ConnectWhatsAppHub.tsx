@@ -85,7 +85,7 @@ interface MetaConfigResponse {
   embeddedSignupV4ConfigIdLast4?: string | null;
   coexistenceConfigId: string | null;
   coexistenceConfigIdLast4?: string | null;
-  /** Server-authoritative: this session may launch Coexistence (allowlist test gate). */
+  /** Server-authoritative: this session may launch Coexistence (public kill-switch gate). */
   coexistenceLaunchAllowed?: boolean;
   missingEnvHints: string[];
 }
@@ -1215,9 +1215,7 @@ export function ConnectWhatsAppHub({
                     </p>
                   </div>
                 </div>
-                {cfg?.coexistenceLaunchAllowed ? (
-                  <p className="text-[10px] text-blue-800 mt-2 font-medium">Test / Internal</p>
-                ) : (
+                {cfg?.coexistenceLaunchAllowed ? null : (
                   <p className="text-[10px] text-gray-500 mt-2">
                     Planned support for businesses that want shared app and inbox access.
                   </p>

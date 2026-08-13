@@ -1,5 +1,5 @@
 /**
- * Phase 2: WhatsApp Business App Coexistence — controlled test readiness.
+ * Phase 2: WhatsApp Business App Coexistence — public launch + protections.
  * Run: npx tsx --test tests/whatsapp-coexistence-phase2.test.ts
  */
 import assert from "node:assert/strict";
@@ -52,8 +52,8 @@ const BASE = {
   APP_URL: "https://app.example.com",
 };
 
-describe("Coexistence test gate", () => {
-  it("normal public user cannot launch when test flag off", () => {
+describe("Coexistence public gate", () => {
+  it("blocks all users when public kill switch is off", () => {
     const d = evaluateCoexistenceOnboardingGate({
       userId: "user-public",
       env: { ...BASE, WHATSAPP_COEXISTENCE_TEST_ENABLED: "false" },
@@ -62,24 +62,37 @@ describe("Coexistence test gate", () => {
     assert.equal(d.reason, "test_flag_disabled");
   });
 
-  it("allowlisted user can launch when test flag on", () => {
+  it("ordinary non-allowlisted user can launch when public flag is on", () => {
     const d = evaluateCoexistenceOnboardingGate({
-      userId: "tester-1",
+      userId: "any-authenticated-user",
       env: {
         ...BASE,
         WHATSAPP_COEXISTENCE_TEST_ENABLED: "true",
-        WHATSAPP_COEXISTENCE_ALLOWLIST_USER_IDS: "tester-1,tester-2",
+        WHATSAPP_COEXISTENCE_ALLOWLIST_USER_IDS: "someone-else-only",
       },
     });
     assert.equal(d.allowed, true);
+    assert.equal(d.reason, "allowed");
     assert.equal(
-      isCoexistenceOnboardingAllowedForUser("outsider", {
+      isCoexistenceOnboardingAllowedForUser("outsider-no-allowlist", {
         ...BASE,
         WHATSAPP_COEXISTENCE_TEST_ENABLED: "true",
-        WHATSAPP_COEXISTENCE_ALLOWLIST_USER_IDS: "tester-1",
+        WHATSAPP_COEXISTENCE_ALLOWLIST_USER_IDS: "",
       }),
-      false,
+      true,
     );
+  });
+
+  it("WHATSAPP_COEXISTENCE_ENABLED alias also unlocks public launch", () => {
+    const d = evaluateCoexistenceOnboardingGate({
+      userId: "user-public",
+      env: {
+        ...BASE,
+        WHATSAPP_COEXISTENCE_TEST_ENABLED: "false",
+        WHATSAPP_COEXISTENCE_ENABLED: "true",
+      },
+    });
+    assert.equal(d.allowed, true);
   });
 
   it("missing coexistence config fails closed", () => {
@@ -89,14 +102,13 @@ describe("Coexistence test gate", () => {
         ...BASE,
         META_WHATSAPP_COEXISTENCE_CONFIG_ID: "",
         WHATSAPP_COEXISTENCE_TEST_ENABLED: "true",
-        WHATSAPP_COEXISTENCE_ALLOWLIST_USER_IDS: "tester-1",
       },
     });
     assert.equal(d.allowed, false);
     assert.equal(d.reason, "missing_coexistence_config");
   });
 
-  it("start route still returns coming-soon for unauthorized callers", () => {
+  it("start route still returns coming-soon when kill switch disables Coexistence", () => {
     const src = fs.readFileSync(
       path.join(process.cwd(), "server/routes/whatsappIntegrationRoutes.ts"),
       "utf8",
@@ -104,6 +116,23 @@ describe("Coexistence test gate", () => {
     assert.match(src, /evaluateCoexistenceOnboardingGate/);
     assert.match(src, /COEXISTENCE_COMING_SOON_MESSAGE/);
     assert.equal(COEXISTENCE_COMING_SOON_MESSAGE.includes("coming soon"), true);
+  });
+
+  it("UI has no Test/Internal badge; uses coexistenceLaunchAllowed + production copy", () => {
+    const hub = fs.readFileSync(
+      path.join(process.cwd(), "client/src/components/ConnectWhatsAppHub.tsx"),
+      "utf8",
+    );
+    assert.doesNotMatch(hub, /Test\s*\/\s*Internal/);
+    assert.doesNotMatch(hub, /\bBeta\b/);
+    assert.doesNotMatch(hub, /allowlist/i);
+    assert.match(hub, /Already use this number in WhatsApp Business App\?/);
+    assert.match(
+      hub,
+      /Keep using the WhatsApp Business App while connecting messages to WhachatCRM/,
+    );
+    assert.match(hub, /coexistenceLaunchAllowed/);
+    assert.match(hub, /Coming soon/);
   });
 });
 

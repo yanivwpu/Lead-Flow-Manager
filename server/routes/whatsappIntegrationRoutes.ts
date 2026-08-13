@@ -77,7 +77,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       const userId = (req as any).user?.id as string | undefined;
       res.json({
         ...cfg,
-        /** Session-scoped: true only when this user may start Coexistence (allowlist test gate). */
+        /** Session-scoped: true when Coexistence public kill switch is on for this authenticated user. */
         coexistenceLaunchAllowed: userId
           ? isCoexistenceOnboardingAllowedForUser(userId)
           : false,
@@ -536,9 +536,10 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
   });
 
   /**
-   * Embedded Signup JS SDK (Option A — standard) + gated Coexistence (Option B).
+   * Embedded Signup JS SDK (Option A — standard) + Coexistence (Option B).
    * Server selects architecture; client must not decide alone.
-   * Coexistence requires WHATSAPP_COEXISTENCE_TEST_ENABLED + allowlist (public stays Coming soon).
+   * Coexistence requires public kill switch (WHATSAPP_COEXISTENCE_TEST_ENABLED or
+   * WHATSAPP_COEXISTENCE_ENABLED) + dedicated config; disabled → Coming soon.
    */
   app.post("/api/integrations/whatsapp/meta/start", async (req: Request, res: Response) => {
     try {

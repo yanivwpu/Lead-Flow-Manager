@@ -1281,7 +1281,7 @@ export function buildWhatsAppInboundRoutingDiagnostics(input: {
   const platform = String(input.phonePlatformType ?? "").toUpperCase();
   void platform;
   // Do not recommend Coexistence merely because connectionType=embedded.
-  // Coexistence remains Coming soon in the product UI; recommendation stays false for standard Cloud API numbers.
+  // Coexistence reconnect recommendation is unused in product UI; keep false for standard Cloud API.
   const coexistenceReconnectRecommended = false;
 
   return {

@@ -492,7 +492,7 @@ describe("oauth state TTL + public v2 / coexistence invariants", () => {
     assert.equal((opts.extras as any).featureType, undefined);
   });
 
-  it("coexistence stays Coming soon for public users; gated launch uses server flag", async () => {
+  it("coexistence public option uses server flag; Coming soon only when disabled", async () => {
     const fs = await import("node:fs/promises");
     const path = await import("node:path");
     const hub = await fs.readFile(
@@ -502,6 +502,7 @@ describe("oauth state TTL + public v2 / coexistence invariants", () => {
     assert.match(hub, /Coming soon/);
     assert.match(hub, /coexistenceLaunchAllowed/);
     assert.match(hub, /startEmbeddedSignupViaSdk\("coexistence"\)/);
+    assert.doesNotMatch(hub, /Test\s*\/\s*Internal/);
     assert.doesNotMatch(hub, /featureType:\s*["']whatsapp_business_app_onboarding["']/);
     assert.match(hub, /shouldAutoRedirectAfterSdkFailure/);
   });
@@ -1027,7 +1028,7 @@ describe("v4 direct WABA/phone validation (no /me/businesses)", () => {
     assert.match(src, /delete next\.errorCode/);
   });
 
-  it("coexistence remains Coming soon for non-gated public UI", async () => {
+  it("coexistence UI uses public launch gate (Coming soon when flag off)", async () => {
     const fs = await import("node:fs/promises");
     const path = await import("node:path");
     const hub = await fs.readFile(
@@ -1036,5 +1037,6 @@ describe("v4 direct WABA/phone validation (no /me/businesses)", () => {
     );
     assert.match(hub, /Coming soon/);
     assert.match(hub, /coexistenceLaunchAllowed/);
+    assert.doesNotMatch(hub, /Test\s*\/\s*Internal/);
   });
 });
