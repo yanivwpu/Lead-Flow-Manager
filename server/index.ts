@@ -10,9 +10,8 @@ import { startCronJobs } from "./cron";
 import { WebhookHandlers } from "./webhookHandlers";
 import { setupPresenceServer } from "./presence";
 import { registerChannelAdapters } from "./channelAdapters";
-import { getQueue } from "./queue";
+import { getQueue, isRedisUrlConfigured } from "./queue";
 import { startInstagramDevPolling } from "./instagramPolling";
-import "./worker";
 import oidcRouter from "./oidc";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
@@ -360,8 +359,29 @@ app.use((req, res, next) => {
   // Register channel adapters for unified inbox
   registerChannelAdapters();
 
+  // Background BullMQ worker — only when REDIS_URL is configured (local may omit Redis).
+  if (isRedisUrlConfigured()) {
+    void import("./worker")
+      .then((m) => m.startInboxWorker())
+      .catch((err) => {
+        console.error(
+          "[Worker] Failed to start background worker:",
+          err instanceof Error ? err.message : String(err),
+        );
+      });
+  } else if (process.env.NODE_ENV === "production") {
+    console.error(
+      "[Worker] REDIS_URL not configured — background worker disabled (unexpected in production)",
+    );
+  } else {
+    console.warn("[Worker] REDIS_URL not configured — background worker disabled");
+  }
+
   // Initialize BullMQ queue and Bull Board monitoring
   try {
+    if (!isRedisUrlConfigured()) {
+      throw new Error("REDIS_URL not configured");
+    }
     const queue = getQueue();
     const serverAdapter = new ExpressAdapter();
     serverAdapter.setBasePath("/admin/queues");
@@ -430,17 +450,45 @@ app.use((req, res, next) => {
   
   await registerRoutes(httpServer, app);
 
-  // Prospect bulk AI qualification worker — start early so pending jobs resume even if
-  // later startup work (dedup/seeds) is slow. Same process as production `npm start`.
-  const { startProspectBulkAnalysisWorker } = await import(
-    "./prospectImport/prospectBulkAnalysisWorker"
-  );
-  startProspectBulkAnalysisWorker();
+  // Prospect bulk AI + KnowledgeScan are DB-polled (not Redis/BullMQ).
+  // Production always starts them. Local Inbox debugging skips unless opted in —
+  // REDIS_URL= does not gate these workers.
+  const enableOptionalDbWorkers =
+    process.env.NODE_ENV === "production" ||
+    String(process.env.ENABLE_OPTIONAL_DB_WORKERS || "").trim() === "1";
+  // #region agent log
+  {
+    const { appendDebug34aeafLog } = await import("./debugSessionLog");
+    appendDebug34aeafLog({
+      hypothesisId: "C",
+      runId: "post-fix",
+      location: "server/index.ts:boot_workers",
+      message: "optional_db_workers_gate",
+      data: {
+        redisUrlConfigured: isRedisUrlConfigured(),
+        redisUrlEmpty: !String(process.env.REDIS_URL || "").trim(),
+        enableOptionalDbWorkers,
+        nodeEnv: process.env.NODE_ENV || null,
+        note: "ProspectBulkAnalysis is DB-polled; REDIS_URL does not gate it",
+      },
+    });
+  }
+  // #endregion
+  if (enableOptionalDbWorkers) {
+    const { startProspectBulkAnalysisWorker } = await import(
+      "./prospectImport/prospectBulkAnalysisWorker"
+    );
+    startProspectBulkAnalysisWorker();
 
-  // AI Brain structured-knowledge extraction — one fetch plus one model call per source,
-  // so it runs as a leased job rather than inside the scan request.
-  const { startKnowledgeScanWorker } = await import("./websiteKnowledge/scanJobWorker");
-  startKnowledgeScanWorker();
+    // AI Brain structured-knowledge extraction — one fetch plus one model call per source,
+    // so it runs as a leased job rather than inside the scan request.
+    const { startKnowledgeScanWorker } = await import("./websiteKnowledge/scanJobWorker");
+    startKnowledgeScanWorker();
+  } else {
+    console.log(
+      "[Workers] Skipping ProspectBulkAnalysis + KnowledgeScan in development (set ENABLE_OPTIONAL_DB_WORKERS=1 to enable).",
+    );
+  }
 
   // Ensure SSO user exists for LeadConnector integration
   try {

@@ -8,13 +8,19 @@ import { nanoid } from "nanoid";
 import { getMarketingRoutes, getLocalizedMarketingRoutes, injectNoindexMeta, isNoIndexPath, removeStaticShellFromHtml } from "./seo";
 import { normalizeRequestPath, shouldServeSpaFallback } from "./spaRouting";
 import { isLocaleRootRedirect, localeRootRedirectTarget } from "@shared/localeRoutes";
+import { appendDebug34aeafLog } from "./debugSessionLog";
 
 const viteLogger = createLogger();
 
 export async function setupVite(server: Server, app: Express) {
+  const expressPort = parseInt(process.env.PORT || "5000", 10);
   const serverOptions = {
     middlewareMode: true,
-    hmr: { server, path: "/vite-hmr" },
+    // Attach HMR to the Express HTTP server. Local browsers must use Express PORT,
+    // not Vite's default 5173 or Replit's 443.
+    hmr: process.env.REPL_ID
+      ? { server, path: "/vite-hmr", clientPort: 443 }
+      : { server, path: "/vite-hmr", clientPort: expressPort },
     allowedHosts: true as const,
   };
 
@@ -31,6 +37,35 @@ export async function setupVite(server: Server, app: Express) {
     server: serverOptions,
     appType: "custom",
   });
+
+  // #region agent log
+  {
+    const addr = server.address();
+    const hmr = vite.config.server?.hmr;
+    appendDebug34aeafLog({
+      hypothesisId: "A",
+      runId: "post-fix",
+      location: "server/vite.ts:setupVite",
+      message: "vite_middleware_hmr_config",
+      data: {
+        expressPortEnv: process.env.PORT || "5000",
+        expressPortUsed: expressPort,
+        expressListenAddress: typeof addr === "object" && addr ? { port: addr.port, address: addr.address } : addr,
+        middlewareMode: true,
+        hmrResolved: hmr && typeof hmr === "object" ? {
+          path: (hmr as { path?: string }).path ?? null,
+          clientPort: (hmr as { clientPort?: number }).clientPort ?? null,
+          protocol: (hmr as { protocol?: string }).protocol ?? null,
+          host: (hmr as { host?: string }).host ?? null,
+          hasServer: Boolean((hmr as { server?: unknown }).server),
+        } : hmr,
+        viteConfigFileHmr: (viteConfig as { server?: { hmr?: unknown } }).server?.hmr ?? null,
+        replIdSet: Boolean(process.env.REPL_ID),
+        nodeEnv: process.env.NODE_ENV || null,
+      },
+    });
+  }
+  // #endregion
 
   app.use(vite.middlewares);
 

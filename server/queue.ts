@@ -17,7 +17,7 @@ export interface InboxJobPayload {
   externalMessageId?: string;
 }
 
-function parseRedisUrl(raw: string): string {
+export function parseRedisUrl(raw: string): string {
   let url = raw.trim();
   const match = url.match(/(rediss?:\/\/.+)/);
   if (match) {
@@ -29,9 +29,14 @@ function parseRedisUrl(raw: string): string {
   return url;
 }
 
+/** True when REDIS_URL is set and non-empty (after trim). Does not validate credentials. */
+export function isRedisUrlConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(String(env.REDIS_URL || "").trim());
+}
+
 export function createRedisConnection(): IORedis {
   const rawUrl = process.env.REDIS_URL;
-  if (!rawUrl) {
+  if (!rawUrl || !String(rawUrl).trim()) {
     throw new Error("REDIS_URL environment variable is required for message queue");
   }
 

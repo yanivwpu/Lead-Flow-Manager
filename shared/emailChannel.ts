@@ -42,15 +42,48 @@ export const GMAIL_WATCH_STATUSES = [
 ] as const;
 export type GmailWatchStatus = (typeof GMAIL_WATCH_STATUSES)[number];
 
-/** Soft caps for manual one-to-one sends (WhachatCRM-side). */
-export const EMAIL_SEND_HOURLY_SOFT_CAP = Number(process.env.EMAIL_SEND_HOURLY_SOFT_CAP || 30);
-export const EMAIL_SEND_DAILY_SOFT_CAP = Number(process.env.EMAIL_SEND_DAILY_SOFT_CAP || 200);
+/** Soft caps for manual one-to-one sends (WhachatCRM-side). Browser-safe defaults only. */
+export const EMAIL_SEND_HOURLY_SOFT_CAP_DEFAULT = 30;
+export const EMAIL_SEND_DAILY_SOFT_CAP_DEFAULT = 200;
 
 /**
  * Safety cap for recent historical bootstrap per mailbox.
  * Default 100 — not a fake "mailbox total" for UI progress.
+ * Browser-safe default; server may override via ENV (see resolveEmailChannelCaps).
  */
-export const EMAIL_INITIAL_SYNC_MESSAGE_CAP = Number(process.env.EMAIL_INITIAL_SYNC_MESSAGE_CAP || 100);
+export const EMAIL_INITIAL_SYNC_MESSAGE_CAP_DEFAULT = 100;
+
+/** @deprecated Prefer EMAIL_*_DEFAULT / resolveEmailChannelCaps — kept as aliases for defaults. */
+export const EMAIL_SEND_HOURLY_SOFT_CAP = EMAIL_SEND_HOURLY_SOFT_CAP_DEFAULT;
+export const EMAIL_SEND_DAILY_SOFT_CAP = EMAIL_SEND_DAILY_SOFT_CAP_DEFAULT;
+export const EMAIL_INITIAL_SYNC_MESSAGE_CAP = EMAIL_INITIAL_SYNC_MESSAGE_CAP_DEFAULT;
+
+export type EmailChannelCaps = {
+  hourlySoftCap: number;
+  dailySoftCap: number;
+  initialSyncMessageCap: number;
+};
+
+/**
+ * Resolve email channel soft caps from an ENV map.
+ * Shared-safe: caller passes env (server passes process.env). Never reads process itself.
+ */
+export function resolveEmailChannelCaps(
+  env: Record<string, string | undefined>,
+): EmailChannelCaps {
+  const positiveInt = (raw: string | undefined, fallback: number): number => {
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+  };
+  return {
+    hourlySoftCap: positiveInt(env.EMAIL_SEND_HOURLY_SOFT_CAP, EMAIL_SEND_HOURLY_SOFT_CAP_DEFAULT),
+    dailySoftCap: positiveInt(env.EMAIL_SEND_DAILY_SOFT_CAP, EMAIL_SEND_DAILY_SOFT_CAP_DEFAULT),
+    initialSyncMessageCap: positiveInt(
+      env.EMAIL_INITIAL_SYNC_MESSAGE_CAP,
+      EMAIL_INITIAL_SYNC_MESSAGE_CAP_DEFAULT,
+    ),
+  };
+}
 
 /**
  * Sentinel for `syncProgressTotal` while recent bootstrap is running.

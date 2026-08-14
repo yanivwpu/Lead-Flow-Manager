@@ -345,15 +345,36 @@ export function registerChannelRoutes(app: Express): void {
 
   /** Activation onboarding: channel connection + first outbound message (for checklist UI). */
   app.get("/api/activation-status", async (req, res) => {
+    // #region agent log
+    const t0 = Date.now();
+    const mark = (step: string, extra: Record<string, unknown> = {}) => {
+      void import("../debugSessionLog")
+        .then(({ appendDebug34aeafLog }) => {
+          appendDebug34aeafLog({
+            hypothesisId: "B",
+            runId: "pre-fix",
+            location: "server/routes/channels.ts:activation-status",
+            message: "activation_status_step",
+            data: { step, ms: Date.now() - t0, ...extra },
+          });
+        })
+        .catch(() => {});
+    };
+    // #endregion
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
+      mark("auth_ok");
       const user = await storage.getUserForSession(req.user.id);
+      mark("getUserForSession");
       const legacyRowBefore = await storage.getChannelSetting(req.user.id, "whatsapp");
       const legacyChannelConnected = !!legacyRowBefore?.isConnected;
+      mark("getChannelSetting_whatsapp");
       await syncWhatsAppChannelRowFromCanonicalMeta(req.user.id);
+      mark("syncWhatsAppChannelRowFromCanonicalMeta");
       const settings = await storage.getChannelSettings(req.user.id);
+      mark("getChannelSettings", { settingsCount: settings.length });
       const legacyAfterSync = settings.some((s) => s.channel === "whatsapp" && !!s.isConnected);
       const canonicalWa = user ? isCanonicalWhatsAppFullyConnected(user) : false;
       const whatsappConnected = canonicalWa || legacyAfterSync;
@@ -380,8 +401,16 @@ export function registerChannelRoutes(app: Express): void {
           and(eq(messagesTable.userId, req.user.id), eq(messagesTable.direction, "outbound")),
         )
         .limit(1);
+      mark("outbound_message_query", { hasOutbound: !!outbound });
 
       const hasSentFirstMessage = !!outbound;
+
+      // #region agent log
+      mark("response_ready", {
+        totalMs: Date.now() - t0,
+        hasAnyMessagingChannel,
+      });
+      // #endregion
 
       res.json({
         whatsappConnected,
@@ -394,6 +423,12 @@ export function registerChannelRoutes(app: Express): void {
           whatsappConnected && metaConnected && hasSentFirstMessage,
       });
     } catch (error) {
+      // #region agent log
+      mark("error", {
+        totalMs: Date.now() - t0,
+        error: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
+      });
+      // #endregion
       console.error("Error fetching activation status:", error);
       res.status(500).json({ error: "Failed to fetch activation status" });
     }

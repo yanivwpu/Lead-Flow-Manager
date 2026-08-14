@@ -119,6 +119,54 @@ export function registerEmailChannelRoutes(app: Express): void {
     }
   });
 
+  /**
+   * Regular (non-CID) email attachment — on-demand Gmail fetch with strict ownership checks.
+   * Query: attachmentId (providerAttachmentId), optional download=1
+   */
+  app.get("/api/messages/:messageId/email-attachment", async (req, res) => {
+    try {
+      if (!requireAuth(req, res)) return;
+      const attachmentId =
+        typeof req.query.attachmentId === "string"
+          ? req.query.attachmentId
+          : typeof req.query.id === "string"
+            ? req.query.id
+            : "";
+      const forceDownload =
+        req.query.download === "1" ||
+        req.query.download === "true" ||
+        req.query.disposition === "attachment";
+      const { fetchEmailAttachmentForUser } = await import("../emailChannel/emailAttachments");
+      const { sanitizeEmailAttachmentFilename } = await import("@shared/emailAttachmentPolicy");
+      const result = await fetchEmailAttachmentForUser({
+        workspaceUserId: req.user.id,
+        messageId: req.params.messageId,
+        providerAttachmentId: attachmentId,
+        forceDownload,
+      });
+      if (!result.ok) {
+        return res.status(result.status).json({ error: result.code });
+      }
+      const filename = sanitizeEmailAttachmentFilename(result.filename);
+      res.setHeader("Content-Type", result.contentType);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Cache-Control", "private, max-age=300");
+      const disposition = result.asAttachment ? "attachment" : "inline";
+      res.setHeader(
+        "Content-Disposition",
+        `${disposition}; filename="${filename.replace(/"/g, "")}"`,
+      );
+      res.setHeader("Content-Length", String(result.body.length));
+      return res.status(200).send(result.body);
+    } catch (err) {
+      console.error(
+        "[EmailAttachment] route failed:",
+        err instanceof Error ? err.message : String(err),
+      );
+      return res.status(500).json({ error: "Attachment fetch failed" });
+    }
+  });
+
   app.get("/api/integrations/email/status", async (req, res) => {
     try {
       if (!requireAuth(req, res)) return;

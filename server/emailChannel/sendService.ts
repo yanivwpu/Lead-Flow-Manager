@@ -1,11 +1,8 @@
-import {
-  EMAIL_SEND_DAILY_SOFT_CAP,
-  EMAIL_SEND_HOURLY_SOFT_CAP,
-  type EmailRichSendPayload,
-} from "@shared/emailChannel";
+import { type EmailRichSendPayload, normalizeEmailAddress } from "@shared/emailChannel";
 import { contactHasDoNotContact } from "../automationSendGuard";
 import { storage } from "../storage";
 import { notifyUser } from "../presence";
+import { getEmailChannelCaps } from "./emailChannelConfig";
 import { getValidMailboxAccessToken } from "./oauth";
 import { getEmailProvider } from "./gmailProvider";
 import {
@@ -16,7 +13,6 @@ import {
 } from "./mailboxStore";
 import { findEmailConversationByThread } from "./persistInbound";
 import { sanitizeEmailHtml, htmlToPlainText } from "./htmlSanitize";
-import { normalizeEmailAddress } from "@shared/emailChannel";
 import { resolveOutboundToForContactSend } from "./resolveConversationReplyTarget";
 
 function dayKey(d = new Date()): string {
@@ -33,11 +29,12 @@ export async function assertEmailSendRateLimit(mailboxId: string): Promise<void>
   const hKey = hourKey();
   let dayCount = mailbox.sendCountDayKey === dKey ? mailbox.messagesSentToday || 0 : 0;
   let hourCount = mailbox.sendCountHourKey === hKey ? mailbox.messagesSentHour || 0 : 0;
-  if (hourCount >= EMAIL_SEND_HOURLY_SOFT_CAP) {
-    throw new Error(`Hourly email send limit reached (${EMAIL_SEND_HOURLY_SOFT_CAP})`);
+  const { hourlySoftCap, dailySoftCap } = getEmailChannelCaps();
+  if (hourCount >= hourlySoftCap) {
+    throw new Error(`Hourly email send limit reached (${hourlySoftCap})`);
   }
-  if (dayCount >= EMAIL_SEND_DAILY_SOFT_CAP) {
-    throw new Error(`Daily email send limit reached (${EMAIL_SEND_DAILY_SOFT_CAP})`);
+  if (dayCount >= dailySoftCap) {
+    throw new Error(`Daily email send limit reached (${dailySoftCap})`);
   }
 }
 

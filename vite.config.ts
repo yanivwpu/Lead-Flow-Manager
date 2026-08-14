@@ -67,10 +67,15 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     allowedHosts: true,
-    hmr: {
-      clientPort: 443,
-      path: "/vite-hmr",
-    },
+    // Replit terminates TLS on 443; local Express middleware mode uses PORT (default 5000).
+    hmr: process.env.REPL_ID
+      ? {
+          clientPort: 443,
+          path: "/vite-hmr",
+        }
+      : {
+          path: "/vite-hmr",
+        },
     fs: {
       strict: true,
       deny: ["**/.*"],

@@ -17,9 +17,9 @@ function testProductionEntrypointStartsWorker() {
   const src = readFileSync(join(process.cwd(), "server/index.ts"), "utf8");
   assert.ok(/startProspectBulkAnalysisWorker/.test(src));
   assert.ok(/prospectBulkAnalysisWorker/.test(src));
-  // Must start during boot — not gated by a feature flag / env skip.
-  // (OpenAI key validation inside startProspectBulkAnalysisWorker is allowed.)
-  assert.ok(!/DISABLE_PROSPECT_BULK|SKIP_PROSPECT_BULK|PROSPECT_BULK_WORKER_ENABLED/.test(src));
+  // Production always starts the worker; local may skip unless ENABLE_OPTIONAL_DB_WORKERS=1.
+  assert.ok(/ENABLE_OPTIONAL_DB_WORKERS/.test(src));
+  assert.ok(/NODE_ENV === ["']production["']/.test(src));
   // Starts after registerRoutes (server routes ready) and before listen is fine.
   const routesIdx = src.indexOf("await registerRoutes");
   const startIdx = src.indexOf("startProspectBulkAnalysisWorker()");

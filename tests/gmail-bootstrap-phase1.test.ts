@@ -13,6 +13,7 @@ import {
   describeEmailMailboxBootstrapUi,
   initialSyncModeToDays,
   isEmailBootstrapInProgress,
+  resolveEmailChannelCaps,
 } from "../shared/emailChannel";
 import { preferNewerHistoryId } from "../server/emailChannel/gmailPushConfig";
 import { isEmailMailboxUiConnected } from "../shared/emailMailboxAvailability";
@@ -23,6 +24,30 @@ describe("Gmail Phase 1 defaults", () => {
     assert.equal(initialSyncModeToDays("last_7_days"), 7);
     assert.equal(EMAIL_INITIAL_SYNC_MESSAGE_CAP, 100);
     assert.ok(EMAIL_INITIAL_SYNC_MESSAGE_CAP <= 150);
+  });
+
+  it("resolveEmailChannelCaps reads ENV without touching process in shared", () => {
+    assert.deepEqual(resolveEmailChannelCaps({}), {
+      hourlySoftCap: 30,
+      dailySoftCap: 200,
+      initialSyncMessageCap: 100,
+    });
+    assert.deepEqual(
+      resolveEmailChannelCaps({
+        EMAIL_SEND_HOURLY_SOFT_CAP: "12",
+        EMAIL_SEND_DAILY_SOFT_CAP: "99",
+        EMAIL_INITIAL_SYNC_MESSAGE_CAP: "42",
+      }),
+      { hourlySoftCap: 12, dailySoftCap: 99, initialSyncMessageCap: 42 },
+    );
+    assert.equal(resolveEmailChannelCaps({ EMAIL_INITIAL_SYNC_MESSAGE_CAP: "0" }).initialSyncMessageCap, 100);
+    assert.equal(resolveEmailChannelCaps({ EMAIL_INITIAL_SYNC_MESSAGE_CAP: "abc" }).initialSyncMessageCap, 100);
+  });
+
+  it("shared emailChannel module has no top-level process.env", () => {
+    const src = fs.readFileSync(path.join(process.cwd(), "shared/emailChannel.ts"), "utf8");
+    assert.doesNotMatch(src, /Number\s*\(\s*process\.env/);
+    assert.doesNotMatch(src, /=\s*process\.env\./);
   });
 
   it("Inbox+Sent query remains; no Drafts/Spam/Trash expansion", () => {

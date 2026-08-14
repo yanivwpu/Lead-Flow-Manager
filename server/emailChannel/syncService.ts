@@ -1,9 +1,9 @@
 import {
   EMAIL_BOOTSTRAP_IN_PROGRESS_TOTAL,
-  EMAIL_INITIAL_SYNC_MESSAGE_CAP,
   initialSyncModeToDays,
   type EmailInitialSyncMode,
 } from "@shared/emailChannel";
+import { getEmailChannelCaps } from "./emailChannelConfig";
 import { getEmailProvider } from "./gmailProvider";
 import { getValidMailboxAccessToken } from "./oauth";
 import {
@@ -113,10 +113,12 @@ export async function runRecentEmailBootstrap(mailboxId: string): Promise<void> 
     syncProgressTotal: EMAIL_BOOTSTRAP_IN_PROGRESS_TOTAL,
   });
 
+  const { initialSyncMessageCap } = getEmailChannelCaps();
+
   logEmailSyncEvent("bootstrap_start", {
     mailboxId,
     initialSyncMode: mailbox.initialSyncMode,
-    cap: EMAIL_INITIAL_SYNC_MESSAGE_CAP,
+    cap: initialSyncMessageCap,
     syncCursorPresent: Boolean(mailbox.syncCursor),
   });
 
@@ -149,7 +151,7 @@ export async function runRecentEmailBootstrap(mailboxId: string): Promise<void> 
       }
 
       for (const msg of page.messages) {
-        if (imported >= EMAIL_INITIAL_SYNC_MESSAGE_CAP) break;
+        if (imported >= initialSyncMessageCap) break;
         await persistNormalizedEmailMessage({
           mailbox: fresh,
           normalized: msg,
@@ -164,7 +166,7 @@ export async function runRecentEmailBootstrap(mailboxId: string): Promise<void> 
       });
 
       pageToken = page.nextPageToken;
-      if (imported >= EMAIL_INITIAL_SYNC_MESSAGE_CAP) break;
+      if (imported >= initialSyncMessageCap) break;
     } while (pageToken);
 
     await updateEmailMailbox(mailboxId, {
@@ -178,7 +180,7 @@ export async function runRecentEmailBootstrap(mailboxId: string): Promise<void> 
     logEmailSyncEvent("bootstrap_complete", {
       mailboxId,
       imported,
-      cap: EMAIL_INITIAL_SYNC_MESSAGE_CAP,
+      cap: initialSyncMessageCap,
     });
 
     // Catch anything that arrived during bootstrap (history.list from live cursor).

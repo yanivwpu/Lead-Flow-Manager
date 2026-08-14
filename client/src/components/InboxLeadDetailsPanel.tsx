@@ -80,6 +80,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { debug34aeaf } from "@/lib/debug34aeaf";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -850,6 +851,23 @@ export function InboxLeadDetailsPanel({
 }: InboxLeadDetailsPanelProps) {
   const { toast } = useToast();
   const hideGrowthEngine = useHideGrowthEngineForShopify();
+
+  // #region agent log
+  useEffect(() => {
+    debug34aeaf({
+      hypothesisId: "D",
+      location: "InboxLeadDetailsPanel.tsx:mountOrUpdate",
+      message: "copilot_panel_render",
+      data: {
+        contactId: contact?.id ?? null,
+        hasPrimaryConversation: !!primaryConversation,
+        primaryConversationId: primaryConversation?.id ?? null,
+        primaryChannel: primaryConversation?.channel ?? null,
+        messagesLen: Array.isArray(messages) ? messages.length : -1,
+      },
+    });
+  }, [contact?.id, primaryConversation?.id, primaryConversation?.channel, messages]);
+  // #endregion
 
   // Workspace-scoped snapshot — long staleTime; not refetched per conversation/contact.
   const { data: workspaceIntelligenceQuery } = useQuery<WorkspaceIntelligenceSnapshot>({

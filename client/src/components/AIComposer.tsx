@@ -285,10 +285,12 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     // Briefly set overflow-y hidden to avoid scrollbar flash during resize
     el.style.overflowY = "hidden";
     el.style.height = "auto";
-    const next = Math.min(Math.max(el.scrollHeight, MIN_TEXTAREA_HEIGHT), MAX_TEXTAREA_HEIGHT);
+    const minH = String(channel || "").toLowerCase() === "email" ? 96 : MIN_TEXTAREA_HEIGHT;
+    const maxH = String(channel || "").toLowerCase() === "email" ? Math.max(MAX_TEXTAREA_HEIGHT, 220) : MAX_TEXTAREA_HEIGHT;
+    const next = Math.min(Math.max(el.scrollHeight, minH), maxH);
     el.style.height = `${next}px`;
-    el.style.overflowY = next >= MAX_TEXTAREA_HEIGHT ? "auto" : "hidden";
-  }, [value]);
+    el.style.overflowY = next >= maxH ? "auto" : "hidden";
+  }, [value, channel]);
 
   // Reset internal AI state when active contact/conversation changes — parent owns draft text.
   useEffect(() => {
@@ -795,6 +797,8 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   };
 
   const keyboardHelperText = useMemo(() => composerKeyboardHelperText(channel), [channel]);
+  const isEmailComposer = String(channel || "").toLowerCase() === "email";
+  const composerMinHeight = isEmailComposer ? 96 : MIN_TEXTAREA_HEIGHT;
   const keyboardHelperId = "ai-composer-keyboard-hint";
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -844,9 +848,17 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   })();
 
   return (
-    <div className={cn("border-t border-gray-200 bg-white shrink-0", className)}>
+    <div
+      className={cn(
+        "border-t border-gray-200 bg-white shrink-0",
+        isEmailComposer && "w-full max-w-full",
+        className,
+      )}
+      data-testid={isEmailComposer ? "inbox-email-composer" : "inbox-chat-composer"}
+      data-composer-layout={isEmailComposer ? "email" : "chat"}
+    >
 
-      <div className="px-3 pt-1.5 pb-2 flex flex-col gap-1.5">
+      <div className={cn("flex flex-col gap-1.5", isEmailComposer ? "px-4 sm:px-5 pt-2.5 pb-3" : "px-3 pt-1.5 pb-2")}>
 
         {/* Row 1: AI mode pills + usage hint (no public credit counts) */}
         {showAIModes && (
@@ -928,7 +940,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
                 ? "bg-purple-50 border border-purple-200"
                 : "bg-gray-50 border border-gray-200 hover:bg-gray-100/60"
             )}
-            style={{ minHeight: MIN_TEXTAREA_HEIGHT }}
+            style={{ minHeight: composerMinHeight }}
           >
             <AutoIcon
               className={cn(
@@ -956,16 +968,21 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
           <textarea
             ref={textareaRef}
             placeholder={
-              isSuggestMode && isDrafting ? "AI is drafting…" : "Type a message…"
+              isSuggestMode && isDrafting
+                ? "AI is drafting…"
+                : isEmailComposer
+                  ? "Write your email…"
+                  : "Type a message…"
             }
             className={cn(
-              "w-full border rounded-xl px-3.5 py-2.5 text-base md:text-[13px] leading-relaxed focus:outline-none transition-colors resize-none",
+              "w-full border text-base md:text-[13px] leading-relaxed focus:outline-none transition-colors resize-none",
+              isEmailComposer ? "rounded-md px-3.5 py-3 min-h-[96px]" : "rounded-xl px-3.5 py-2.5",
               (isSuggestMode && (isDrafting || aiDraft)) ||
                 (aiMode === "auto" && autoSkippedWithDraft && value.trim())
                 ? "bg-violet-50/30 border-purple-200/70 focus:border-purple-300 text-gray-800"
                 : "bg-white border-gray-200 focus:border-brand-green text-gray-800"
             )}
-            style={{ minHeight: MIN_TEXTAREA_HEIGHT, maxHeight: MAX_TEXTAREA_HEIGHT, touchAction: "manipulation" }}
+            style={{ minHeight: composerMinHeight, maxHeight: isEmailComposer ? Math.max(MAX_TEXTAREA_HEIGHT, 220) : MAX_TEXTAREA_HEIGHT, touchAction: "manipulation" }}
             value={value}
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
@@ -973,6 +990,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
             readOnly={isSuggestMode && isDrafting}
             aria-describedby={!isMobile ? keyboardHelperId : undefined}
             data-testid="input-message"
+            data-composer-layout={isEmailComposer ? "email" : "chat"}
           />
         )}
 

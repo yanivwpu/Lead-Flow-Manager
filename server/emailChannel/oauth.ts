@@ -2,8 +2,6 @@ import crypto from "crypto";
 import {
   EMAIL_BOOTSTRAP_IN_PROGRESS_TOTAL,
   EMAIL_DEFAULT_INITIAL_SYNC_MODE,
-  EMAIL_SEND_DAILY_SOFT_CAP,
-  EMAIL_SEND_HOURLY_SOFT_CAP,
   GMAIL_OAUTH_SCOPES,
   isEmailBootstrapInProgress,
   type EmailMailboxPublic,
@@ -462,4 +460,6 @@ export async function getWorkspaceEmailStatus(workspaceUserId: string) {
   return { connected: true, mailbox: toPublicMailbox(fresh) };
 }
 
-export { EMAIL_SEND_DAILY_SOFT_CAP, EMAIL_SEND_HOURLY_SOFT_CAP };
+/** Soft-cap exports are browser-safe defaults; runtime ENV overrides via getEmailChannelCaps(). */
+export { EMAIL_SEND_DAILY_SOFT_CAP, EMAIL_SEND_HOURLY_SOFT_CAP } from "@shared/emailChannel";
+export { getEmailChannelCaps } from "./emailChannelConfig";

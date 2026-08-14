@@ -38,10 +38,13 @@ export function EmailMessageBody({
   messageId,
   fallbackText,
   className,
+  layout = "inline",
 }: {
   messageId: string;
   fallbackText: string;
   className?: string;
+  /** document = show subject/from meta above body (email reader) */
+  layout?: "inline" | "document";
 }) {
   const { data, isLoading } = useQuery<EmailDetailsResponse>({
     queryKey: ["/api/messages", messageId, "email-details"],
@@ -75,19 +78,45 @@ export function EmailMessageBody({
     );
   }
 
+  const meta =
+    layout === "document" ? (
+      <div className="mb-3 space-y-1" data-testid="email-document-meta">
+        {detail?.subject ? (
+          <h4 className="text-sm font-semibold text-gray-900 [overflow-wrap:anywhere] break-words">
+            {detail.subject}
+          </h4>
+        ) : null}
+        {detail?.fromAddress ? (
+          <p className="text-xs text-gray-600 [overflow-wrap:anywhere] break-words">
+            <span className="text-gray-400">From</span> {detail.fromAddress}
+          </p>
+        ) : null}
+        {detail?.replyToAddress && detail.replyToAddress !== detail.fromAddress ? (
+          <p className="text-xs text-gray-500 [overflow-wrap:anywhere] break-words">
+            <span className="text-gray-400">Reply-To</span> {detail.replyToAddress}
+          </p>
+        ) : null}
+      </div>
+    ) : null;
+
   if (html) {
-    return <EmailHtmlFrame html={html} className={className} />;
+    return (
+      <div className={cn("w-full max-w-full min-w-0", className)} data-testid="email-message-body">
+        {meta}
+        <EmailHtmlFrame html={html} className="w-full max-w-full" />
+      </div>
+    );
   }
 
   return (
-    <pre
-      className={cn(
-        "whitespace-pre-wrap font-sans text-sm text-gray-800 [overflow-wrap:anywhere] break-words",
-        className,
-      )}
-      data-testid="email-text-body"
-    >
-      {text}
-    </pre>
+    <div className={cn("w-full max-w-full min-w-0", className)} data-testid="email-message-body">
+      {meta}
+      <pre
+        className="whitespace-pre-wrap font-sans text-sm text-gray-800 [overflow-wrap:anywhere] break-words"
+        data-testid="email-text-body"
+      >
+        {text}
+      </pre>
+    </div>
   );
 }

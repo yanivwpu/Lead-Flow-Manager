@@ -64,11 +64,35 @@ function AppContent() {
     writeActivationSetupModalLastShownDay(activationDayKey, todayLocalYYYYMMDD());
   };
 
-  const { data: activation, isPending: activationPending } = useQuery<ActivationStatusPayload>({
+  const { data: activation, isPending: activationPending, isError: activationError, error: activationErr } =
+    useQuery<ActivationStatusPayload>({
     queryKey: ["/api/activation-status"],
     staleTime: 15_000,
     refetchOnWindowFocus: true,
   });
+
+  // #region agent log
+  useEffect(() => {
+    const started = Date.now();
+    void import("@/lib/debug34aeaf").then(({ debug34aeaf }) => {
+      debug34aeaf({
+        hypothesisId: "B",
+        runId: "pre-fix",
+        location: "client/src/pages/AppLayout.tsx:activation",
+        message: "activation_query_watch",
+        data: {
+          activationPending,
+          activationError,
+          hasActivation: !!activation,
+          hasAnyMessagingChannel: activation?.hasAnyMessagingChannel ?? null,
+          errMsg: activationErr instanceof Error ? activationErr.message.slice(0, 200) : null,
+          pathname: window.location.pathname,
+          sinceMountMs: Date.now() - started,
+        },
+      });
+    });
+  }, [activation, activationPending, activationError, activationErr]);
+  // #endregion
 
   useEffect(() => {
     if (activation?.hasAnyMessagingChannel) {

@@ -83,6 +83,13 @@ import {
   Mail,
 } from "lucide-react";
 import { EmailMessageBody } from "@/components/inbox/EmailMessageBody";
+import { EmailThreadMessage } from "@/components/inbox/conversation/EmailThreadMessage";
+import { UnifiedConversationMessagesPane } from "@/components/inbox/conversation/UnifiedConversationMessagesPane";
+import {
+  chatBubbleMetaTextClass,
+  chatBubbleShellClassName,
+  resolveConversationLayoutMode,
+} from "@/lib/inboxConversationPresentation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -111,6 +118,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import { debug34aeaf } from "@/lib/debug34aeaf";
+import { decideEmailTrashSelectionCleanup } from "@/lib/emailTrashSelectionCleanup";
 import { format } from "date-fns";
 import { ChatAvatar } from "@/components/ChatAvatar";
 import { TAG_COLORS } from "@/lib/data";
@@ -485,6 +494,75 @@ export function UnifiedInbox() {
   const bumpReplyWindowClockRef = useRef<() => void>(() => {});
   /** Ignore first snapshot per conversation; then invalidate window-status when a new inbound tail appears (polling path). */
   const lastInboundTailRef = useRef<{ convId: string; msgId: string } | null>(null);
+
+  // #region agent log
+  const inboxRenderCountRef = useRef(0);
+  inboxRenderCountRef.current += 1;
+  if (inboxRenderCountRef.current === 1 || inboxRenderCountRef.current === 30 || inboxRenderCountRef.current === 60) {
+    debug34aeaf({
+      hypothesisId: "D",
+      runId: "post-fix",
+      location: "UnifiedInbox.tsx:render",
+      message: "inbox_render_count",
+      data: {
+        renderCount: inboxRenderCountRef.current,
+        pathname: typeof window !== "undefined" ? window.location.pathname : null,
+      },
+    });
+  }
+  if (inboxRenderCountRef.current === 80) {
+    debug34aeaf({
+      hypothesisId: "D",
+      runId: "post-fix",
+      location: "UnifiedInbox.tsx:render",
+      message: "inbox_render_storm",
+      data: {
+        renderCount: inboxRenderCountRef.current,
+        search: typeof window !== "undefined" ? String(window.location.search || "").slice(0, 120) : null,
+      },
+    });
+  }
+  // #endregion
+
+  // #region agent log
+  useEffect(() => {
+    const onErr = (event: ErrorEvent) => {
+      debug34aeaf({
+        hypothesisId: "E",
+        runId: "post-fix",
+        location: "UnifiedInbox.tsx:window.onerror",
+        message: "window_onerror",
+        data: {
+          errMessage: String(event.message || "").slice(0, 400),
+          filename: String(event.filename || "").slice(0, 200),
+          lineno: event.lineno || null,
+          colno: event.colno || null,
+          stack: String((event.error && event.error.stack) || "").slice(0, 1200),
+          componentStack: String((event.error && (event.error as { componentStack?: string }).componentStack) || "").slice(0, 800),
+          inboxRenderCount: inboxRenderCountRef.current,
+        },
+      });
+    };
+    const onRej = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      debug34aeaf({
+        hypothesisId: "E",
+        location: "UnifiedInbox.tsx:unhandledrejection",
+        message: "unhandledrejection",
+        data: {
+          reason: String(reason?.message || reason || "").slice(0, 400),
+          stack: String(reason?.stack || "").slice(0, 800),
+        },
+      });
+    };
+    window.addEventListener("error", onErr);
+    window.addEventListener("unhandledrejection", onRej);
+    return () => {
+      window.removeEventListener("error", onErr);
+      window.removeEventListener("unhandledrejection", onRej);
+    };
+  }, []);
+  // #endregion
 
   useEffect(() => {
     if (!user) return;
@@ -1405,14 +1483,29 @@ export function UnifiedInbox() {
 
   const isWhatsAppContact = activeChannel === 'whatsapp';
   const isEmailChannel = activeChannel === 'email';
+  const conversationLayoutMode = resolveConversationLayoutMode(activeChannel);
 
   // Prefill subject when opening an email thread
   useEffect(() => {
     if (!isEmailChannel) return;
     if (forceNewEmailCompose) return;
     const subj = primaryConversation?.subject?.trim();
-    if (subj) setEmailSubject(subj.startsWith("Re:") ? subj : `Re: ${subj}`);
-    else if (!primaryConversation) setEmailSubject((prev) => prev); // keep draft for new compose
+    if (!subj) return;
+    const next = subj.startsWith("Re:") ? subj : `Re: ${subj}`;
+    // #region agent log
+    debug34aeaf({
+      hypothesisId: "D",
+      runId: "post-fix",
+      location: "UnifiedInbox.tsx:emailSubjectEffect",
+      message: "email_subject_prefill",
+      data: {
+        conversationId: primaryConversation?.id ?? null,
+        subjLen: subj.length,
+        nextLen: next.length,
+      },
+    });
+    // #endregion
+    setEmailSubject((prev) => (prev === next ? prev : next));
   }, [isEmailChannel, primaryConversation?.id, primaryConversation?.subject, forceNewEmailCompose]);
 
   const windowConversationId = useMemo(() => {
@@ -2373,6 +2466,9 @@ export function UnifiedInbox() {
       return { previousInbox };
     },
     onError: (_err, _vars, context) => {
+      // #region agent log
+      debug34aeaf({ hypothesisId: "E", location: "UnifiedInbox.tsx:trashEmailMutation.onError", message: "trash_onerror", data: { errMessage: String((_err as any)?.message || _err || "").slice(0, 400) } });
+      // #endregion
       if (context?.previousInbox) {
         queryClient.setQueryData(["/api/inbox"], context.previousInbox);
       }
@@ -2382,6 +2478,38 @@ export function UnifiedInbox() {
       });
     },
     onSuccess: (data) => {
+      // #region agent log
+      const cleanup = decideEmailTrashSelectionCleanup({
+        conversationDeleted: !!data.conversationDeleted,
+        deletedConversationId: data.conversationId,
+        selectedConversationId,
+        stickyConversationId: stickyConversationIdRef.current,
+        selectedContactId,
+      });
+      debug34aeaf({
+        hypothesisId: "A",
+        runId: "post-fix",
+        location: "UnifiedInbox.tsx:trashEmailMutation.onSuccess",
+        message: "trash_onsuccess_enter",
+        data: {
+          ok: data?.ok,
+          messageId: data?.messageId,
+          conversationId: data?.conversationId,
+          conversationDeleted: !!data?.conversationDeleted,
+          hasConversationPayload: !!data?.conversation,
+          selectedContactId,
+          selectedConversationId,
+          willNavigateAway: cleanup.shouldNavigateToInboxRoot,
+          cleanupReason: cleanup.reason,
+          activeConversationId,
+          primaryConversationId: primaryConversation?.id ?? null,
+          stickyConversationId: stickyConversationIdRef.current,
+          pathname,
+          searchString: String(searchString || "").slice(0, 120),
+        },
+      });
+      // #endregion
+      try {
       setEmailTrashTarget(null);
       if (data.conversationId) {
         queryClient.setQueryData<Message[] | undefined>(
@@ -2396,7 +2524,24 @@ export function UnifiedInbox() {
         queryClient.setQueryData<InboxItem[]>(["/api/inbox"], (old) =>
           old ? old.filter((item) => item.conversation?.id !== data.conversationId) : old,
         );
-        if (selectedConversationId === data.conversationId) {
+        if (cleanup.shouldClearSticky) {
+          stickyConversationIdRef.current = null;
+          setStickyEpoch((n) => n + 1);
+        }
+        if (cleanup.shouldNavigateToInboxRoot) {
+          // #region agent log
+          debug34aeaf({
+            hypothesisId: "A",
+            runId: "post-fix",
+            location: "UnifiedInbox.tsx:trashEmailMutation.navigate",
+            message: "trash_navigate_inbox_root",
+            data: {
+              conversationId: data.conversationId,
+              selectedConversationId,
+              reason: cleanup.reason,
+            },
+          });
+          // #endregion
           setLocation("/app/inbox");
         }
       } else if (data.conversation) {
@@ -2421,6 +2566,15 @@ export function UnifiedInbox() {
         });
       }
       void queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      // #region agent log
+      debug34aeaf({ hypothesisId: "E", runId: "post-fix", location: "UnifiedInbox.tsx:trashEmailMutation.onSuccess", message: "trash_onsuccess_exit_ok", data: { conversationDeleted: !!data?.conversationDeleted, cleanupReason: cleanup.reason } });
+      // #endregion
+      } catch (err: any) {
+        // #region agent log
+        debug34aeaf({ hypothesisId: "E", location: "UnifiedInbox.tsx:trashEmailMutation.onSuccess", message: "trash_onsuccess_threw", data: { errMessage: String(err?.message || err).slice(0, 400), stack: String(err?.stack || "").slice(0, 800) } });
+        // #endregion
+        throw err;
+      }
     },
   });
 
@@ -2946,6 +3100,29 @@ export function UnifiedInbox() {
   const hasConversation = !!activeConversationId && contactMatchesSelection;
   const convStatus = primaryConversation?.status || 'open';
   const conversationStatusRow = getConversationStatusRow(convStatus);
+
+  // #region agent log
+  useEffect(() => {
+    debug34aeaf({
+      hypothesisId: "B",
+      location: "UnifiedInbox.tsx:selectionSnapshot",
+      message: "inbox_selection_snapshot",
+      data: {
+        selectedContactId,
+        selectedConversationId,
+        activeConversationId,
+        primaryConversationId: primaryConversation?.id ?? null,
+        hasConversation,
+        contactMatchesSelection,
+        contactPresent: !!contact,
+        displayContactPresent: !!displayContact,
+        stickyConversationId: stickyConversationIdRef.current,
+        pathname,
+        searchString: String(searchString || "").slice(0, 120),
+      },
+    });
+  }, [selectedContactId, selectedConversationId, activeConversationId, primaryConversation?.id, hasConversation, contactMatchesSelection, contact, displayContact, pathname, searchString]);
+  // #endregion
 
   const showListSkeleton = shouldShowInboxListSkeleton({
     isServerSearching,
@@ -3652,21 +3829,47 @@ export function UnifiedInbox() {
               </div>
             </div>
 
-            {/* Messages area */}
-            <div
-              ref={messagesContainerRef}
-              className="flex-1 overflow-y-auto relative"
-              style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '400px' }}
+            {/* Messages area — channel-adaptive chrome (email document vs chat bubbles) */}
+            <UnifiedConversationMessagesPane
+              channel={activeChannel}
+              containerRef={messagesContainerRef}
+              innerRef={messagesInnerRef}
+              banner={
+                showNewMsgBanner ? (
+                  <button
+                    data-testid="banner-new-messages"
+                    onClick={() => {
+                      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                      setShowNewMsgBanner(false);
+                    }}
+                    className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 bg-white text-gray-700 text-xs font-medium px-3 py-1.5 rounded-full shadow-md border border-gray-200 hover:bg-gray-50 transition-all"
+                  >
+                    New messages <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                ) : null
+              }
             >
-              <div className="absolute inset-0 bg-[#efeae2]/90 pointer-events-none" />
-              <div ref={messagesInnerRef} className="relative z-10 flex min-w-0 flex-col gap-1.5 p-2 sm:p-3">
+
                 {messagesLoading && messagesEnabled && messages.length === 0 ? (
                   <div className="flex flex-col gap-3 pb-4">
-                    {[80, 55, 120, 45, 90].map((w, i) => (
-                      <div key={i} className={`flex min-w-0 ${i % 2 === 0 ? 'justify-start' : 'justify-end'}`}>
-                        <div className="h-8 max-w-[min(82vw,100%)] rounded-lg bg-white/70 animate-pulse sm:max-w-[70%]" style={{ width: `${w}%` }} />
-                      </div>
-                    ))}
+                    {conversationLayoutMode === "email-document"
+                      ? [100, 100, 100].map((w, i) => (
+                          <div key={i} className="flex min-w-0 w-full">
+                            <div
+                              className="h-24 w-full max-w-full rounded-lg bg-white animate-pulse border border-gray-100"
+                              style={{ width: `${w}%` }}
+                              data-testid="email-thread-skeleton"
+                            />
+                          </div>
+                        ))
+                      : [80, 55, 120, 45, 90].map((w, i) => (
+                          <div key={i} className={`flex min-w-0 ${i % 2 === 0 ? "justify-start" : "justify-end"}`}>
+                            <div
+                              className="h-8 max-w-[min(82vw,100%)] rounded-lg bg-white/70 animate-pulse sm:max-w-[70%]"
+                              style={{ width: `${w}%` }}
+                            />
+                          </div>
+                        ))}
                   </div>
                 ) : !hasConversation ? (
                   <div
@@ -3716,6 +3919,24 @@ export function UnifiedInbox() {
                       );
                     }
                     const isOut = msg.direction === 'outbound';
+                    // Email: document/mail reader — full center-pane width (not chat bubbles)
+                    if (isEmailChannel) {
+                      return (
+                        <EmailThreadMessage
+                          key={msg.id || i}
+                          message={msg}
+                          contactEmail={
+                            emailComposeTo || formDisplayContact?.email || contact.email || null
+                          }
+                          trashPending={trashEmailMutation.isPending}
+                          onRequestTrash={
+                            msg.id.startsWith("optimistic-")
+                              ? undefined
+                              : () => setEmailTrashTarget({ messageId: msg.id, source: "bubble" })
+                          }
+                        />
+                      );
+                    }
                     const isSending = msg.status === 'sending';
                     const errBubbleText = (msg.errorMessage || "").trim();
                     const showReplyWindowFailureUi =
@@ -3735,15 +3956,20 @@ export function UnifiedInbox() {
                     const isWaTightTemplateBubble =
                       msg.contentType === "template" && !isWaCarouselChatBubble;
                     return (
-                      <div key={msg.id || i} className={cn("flex min-w-0 animate-msg-in", isOut ? "justify-end" : "justify-start")}>
-                        <div className={cn(
-                          "relative flex min-w-0 max-w-[min(82vw,100%)] flex-col rounded-lg text-sm shadow-sm sm:max-w-[70%]",
-                          isWaCarouselChatBubble || isWaTightTemplateBubble
-                            ? "px-1.5 pt-0.5 pb-1"
-                            : "px-2.5 py-1.5 sm:px-3",
-                          isOut ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" : "bg-white text-gray-900 rounded-tl-none",
-                          isSending && "opacity-75"
-                        )}>
+                      <div
+                        key={msg.id || i}
+                        className={cn("flex min-w-0 animate-msg-in", isOut ? "justify-end" : "justify-start")}
+                        data-conversation-layout="chat-bubbles"
+                        data-message-direction={isOut ? "outbound" : "inbound"}
+                        data-testid={`chat-bubble-${msg.id}`}
+                      >
+                        <div
+                          className={chatBubbleShellClassName(activeChannel, {
+                            isOutbound: isOut,
+                            tightPadding: isWaCarouselChatBubble || isWaTightTemplateBubble,
+                            sending: isSending,
+                          })}
+                        >
                           <div className="min-w-0 max-w-full [overflow-wrap:anywhere] break-words">
                             {(() => {
                             if (
@@ -4154,7 +4380,7 @@ export function UnifiedInbox() {
                             {msg.sentViaFallback && (
                               <span className="text-[10px] text-amber-600 [overflow-wrap:anywhere] break-words">via {msg.fallbackChannel}</span>
                             )}
-                            <span className="text-[10px] text-gray-400">{format(new Date(msg.createdAt), 'h:mm a')}</span>
+                            <span className={chatBubbleMetaTextClass(activeChannel, isOut)}>{format(new Date(msg.createdAt), 'h:mm a')}</span>
                             {isOut && (
                               isSending
                                 ? <Loader2 className="w-2.5 h-2.5 text-gray-400 animate-spin" />
@@ -4165,40 +4391,10 @@ export function UnifiedInbox() {
                                       isMetaReplyWindowExpiredError(errBubbleText)
                                     ? null
                                     : <span className="text-[10px] text-red-500 font-medium">Not sent</span>
-                                  : <span className="text-[10px] text-gray-400">
+                                  : <span className={chatBubbleMetaTextClass(activeChannel, isOut)}>
                                       {msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : '✓'}
                                     </span>
                             )}
-                            {isEmailChannel && !msg.id.startsWith("optimistic-") ? (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button
-                                    type="button"
-                                    title="Email actions"
-                                    aria-label="Email actions"
-                                    data-testid={`button-email-message-menu-${msg.id}`}
-                                    className="inline-flex h-4 w-4 items-center justify-center rounded text-gray-400 hover:text-gray-700"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <MoreVertical className="h-3 w-3" />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-40">
-                                  <DropdownMenuItem
-                                    className="text-red-600 focus:text-red-600"
-                                    data-testid={`menu-delete-email-message-${msg.id}`}
-                                    disabled={trashEmailMutation.isPending}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEmailTrashTarget({ messageId: msg.id, source: "bubble" });
-                                    }}
-                                  >
-                                    <Trash2 className="mr-2 h-3.5 w-3.5" />
-                                    Delete Email
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            ) : null}
                           </div>
                           {isOut &&
                             msg.status === "failed" &&
@@ -4232,23 +4428,8 @@ export function UnifiedInbox() {
                     );
                   })
                 )}
-                <div ref={messagesEndRef} className="h-2 w-full shrink-0" aria-hidden />
-              </div>
-
-              {/* New messages banner — shown when user is scrolled up */}
-              {showNewMsgBanner && (
-                <button
-                  data-testid="banner-new-messages"
-                  onClick={() => {
-                    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-                    setShowNewMsgBanner(false);
-                  }}
-                  className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 bg-white text-gray-700 text-xs font-medium px-3 py-1.5 rounded-full shadow-md border border-gray-200 hover:bg-gray-50 transition-all"
-                >
-                  New messages <ChevronDown className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
+                                <div ref={messagesEndRef} className="h-2 w-full shrink-0" aria-hidden />
+            </UnifiedConversationMessagesPane>
 
             {filePickerHint && (
               <div className="border-t border-amber-100 bg-amber-50/70 px-4 py-2.5 text-xs text-gray-800 flex gap-2 items-start shrink-0">
@@ -4318,7 +4499,11 @@ export function UnifiedInbox() {
             ) : null}
 
             {isEmailChannel && (
-              <div className="border-t border-gray-200 bg-white px-4 pt-2.5 pb-1 space-y-1.5 shrink-0">
+              <div
+                className="border-t border-gray-200 bg-white px-4 sm:px-5 pt-3 pb-2 space-y-2 shrink-0 w-full max-w-full"
+                data-testid="inbox-email-compose-headers"
+                data-composer-layout="email"
+              >
                 <div className="flex items-center gap-2 text-xs text-gray-500">
                   <span className="w-10 shrink-0">To</span>
                   <span className="truncate text-gray-800" data-testid="inbox-email-to">
@@ -4351,7 +4536,7 @@ export function UnifiedInbox() {
                         ? "Subject"
                         : "Re: …"
                     }
-                    className="h-8 text-sm"
+                    className="h-9 text-sm w-full max-w-full"
                     data-testid="input-inbox-email-subject"
                     disabled={
                       !forceNewEmailCompose &&
@@ -4380,6 +4565,7 @@ export function UnifiedInbox() {
               contactContext={contactContext}
               conversationId={hasConversation ? (primaryConversation?.id ?? null) : null}
               channel={isEmailChannel ? "email" : activeChannel}
+              className={isEmailChannel ? "border-t border-gray-200 data-[composer-layout=email]:bg-white" : undefined}
               messages={
                 hasConversation
                   ? messages.map((m) => ({
@@ -4431,6 +4617,7 @@ export function UnifiedInbox() {
 
       {/* ── RIGHT COLUMN: CRM Panel (desktop) ── */}
       {!isMobile && selectedContactId && contact && (
+        <div className="contents" data-testid="inbox-copilot-column" data-copilot-visible="true">
         <InboxLeadDetailsPanel
           key={contact.id}
           contact={(formDisplayContact || contact) as InboxLeadDetailsPanelContact}
@@ -4463,6 +4650,7 @@ export function UnifiedInbox() {
           onEditContact={handleEditContact}
           onDeleteContact={() => setShowDeleteConfirm(true)}
         />
+        </div>
       )}
 
       {/* ── MOBILE CRM Sheet ── */}
