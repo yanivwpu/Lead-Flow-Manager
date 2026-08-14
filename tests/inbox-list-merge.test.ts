@@ -78,6 +78,51 @@ test("upsertSessionPins drops candidates already in recent", () => {
   assert.equal(next.length, 0);
 });
 
+test("upsertSessionPins no-op returns SAME array reference (React #185 guard)", () => {
+  const recent = [row("whachat", "wa-1", "2026-08-01T00:00:00Z")];
+  const prev = [row("samantha", "msg-1", "2024-01-01T00:00:00Z")];
+  const once = upsertSessionPins(prev, [], recent);
+  assert.equal(once.length, 1);
+  const twice = upsertSessionPins(once, [], recent);
+  assert.equal(twice, once);
+  const emptyPrev: ReturnType<typeof row>[] = [];
+  const emptyOnce = upsertSessionPins(emptyPrev, [], recent);
+  assert.equal(emptyOnce, emptyPrev);
+  const emptyTwice = upsertSessionPins(emptyOnce, [], recent);
+  assert.equal(emptyTwice, emptyOnce);
+});
+
+test("upsertSessionPins returns new array when pin content actually changes", () => {
+  const recent = [row("whachat", "wa-1", "2026-08-01T00:00:00Z")];
+  const prev = [row("samantha", "msg-1", "2024-01-01T00:00:00Z")];
+  const kept = upsertSessionPins(prev, [], recent);
+  const added = upsertSessionPins(kept, [row("other", "msg-2", "2024-02-01T00:00:00Z")], recent);
+  assert.notEqual(added, kept);
+  assert.equal(added.length, 2);
+  const dropped = upsertSessionPins(added, [], [
+    ...recent,
+    row("other", "msg-2", "2026-08-02T00:00:00Z"),
+  ]);
+  assert.notEqual(dropped, added);
+  assert.equal(dropped.length, 1);
+  assert.equal(inboxRowKey(dropped[0]!), "msg-1");
+});
+
+test("post-delete empty selection does not churn sessionPins across many effect cycles", () => {
+  // Simulates UnifiedInbox after navigate to /app/inbox: no selection, empty candidates.
+  const recent = [
+    row("whachat", "wa-1", "2026-08-01T00:00:00Z"),
+    row("other", "wa-2", "2026-07-01T00:00:00Z"),
+  ];
+  let pins: ReturnType<typeof row>[] = [];
+  const EMPTY_CANDIDATES: ReturnType<typeof row>[] = [];
+  for (let i = 0; i < 80; i++) {
+    const next = upsertSessionPins(pins, EMPTY_CANDIDATES, recent);
+    assert.equal(next, pins, `cycle ${i} must preserve reference`);
+    pins = next;
+  }
+});
+
 test("upsertSessionPins keeps deep-link when switching away (still not in recent)", () => {
   const recent = [row("whachat", "wa-1", "2026-08-01T00:00:00Z")];
   const candidates = [row("samantha", "msg-1", "2024-01-01T00:00:00Z")];
@@ -85,6 +130,7 @@ test("upsertSessionPins keeps deep-link when switching away (still not in recent
   assert.equal(afterOpen.length, 1);
   const afterSwitch = upsertSessionPins(afterOpen, [], recent);
   assert.equal(afterSwitch.length, 1);
+  assert.equal(afterSwitch, afterOpen);
   assert.equal(inboxRowKey(afterSwitch[0]!), "msg-1");
 });
 

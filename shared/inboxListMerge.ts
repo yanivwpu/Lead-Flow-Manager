@@ -44,6 +44,9 @@ export function mergeInboxWithSessionPins<T extends InboxListItemLike>(
 /**
  * Upsert candidate pins for deep-linked / selected contacts.
  * Drops any candidate (or prior pin) whose key already exists in `recent`.
+ * Returns `prevPins` (same reference) when the pin set/order is unchanged —
+ * required to avoid React #185 when callers pass a fresh `[]` candidates array
+ * every render (e.g. empty Inbox selection).
  */
 export function upsertSessionPins<T extends InboxListItemLike>(
   prevPins: readonly T[],
@@ -64,7 +67,25 @@ export function upsertSessionPins<T extends InboxListItemLike>(
     }
     next.set(key, candidate);
   }
+  if (sessionPinsUnchanged(prevPins, next)) {
+    return prevPins as T[];
+  }
   return [...next.values()];
+}
+
+/** True when `next` has the same keys/order and the same row object refs as `prevPins`. */
+function sessionPinsUnchanged<T extends InboxListItemLike>(
+  prevPins: readonly T[],
+  next: Map<string, T>,
+): boolean {
+  if (prevPins.length !== next.size) return false;
+  let i = 0;
+  for (const [key, item] of next) {
+    const prev = prevPins[i];
+    if (!prev || inboxRowKey(prev) !== key || prev !== item) return false;
+    i += 1;
+  }
+  return true;
 }
 
 /** Sanitize Inbox search query: trim, min 2, max length. */

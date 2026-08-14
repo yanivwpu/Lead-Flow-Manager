@@ -246,6 +246,9 @@ interface Conversation {
   lastMessageDirection?: string;
 }
 
+/** Stable empty list — never allocate a fresh `[]` for unmatched selection (React #185). */
+const EMPTY_MATCHED_CONVERSATIONS: Conversation[] = [];
+
 interface Message {
   id: string;
   direction: 'inbound' | 'outbound';
@@ -317,6 +320,9 @@ interface InboxItem {
   /** Website-form visitor identity overlay (display-only). */
   formIdentity?: InboxFormIdentity | null;
 }
+
+/** Stable empty pin candidates for the session-pins effect when nothing is selected. */
+const EMPTY_PIN_CANDIDATES: InboxItem[] = [];
 
 interface TeamMember {
   id: string;
@@ -997,7 +1003,9 @@ export function UnifiedInbox() {
 
   const contactMatchesSelection = contactData?.contact?.id === selectedContactId;
   const matchedContact = contactMatchesSelection ? contactData!.contact : undefined;
-  const matchedConversations = contactMatchesSelection ? (contactData?.conversations ?? []) : [];
+  const matchedConversations = contactMatchesSelection
+    ? (contactData?.conversations ?? EMPTY_MATCHED_CONVERSATIONS)
+    : EMPTY_MATCHED_CONVERSATIONS;
 
   // Pin deep-linked / selected rows missing from the recent page; recent server rows win on key match.
   useEffect(() => {
@@ -1008,7 +1016,7 @@ export function UnifiedInbox() {
               inboxItemsFromContactDetail(matchedContact, matchedConversations) as InboxItem[],
               selectedConversationId,
             )
-          : [];
+          : EMPTY_PIN_CANDIDATES;
       return upsertSessionPins(prev, candidates, recentInbox);
     });
   }, [
