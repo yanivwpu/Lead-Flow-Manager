@@ -118,7 +118,6 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
-import { debug34aeaf } from "@/lib/debug34aeaf";
 import { decideEmailTrashSelectionCleanup } from "@/lib/emailTrashSelectionCleanup";
 import { format } from "date-fns";
 import { ChatAvatar } from "@/components/ChatAvatar";
@@ -148,7 +147,6 @@ import {
   buildComposerDraftScopeKey,
   clearComposerDraft,
   loadComposerDraft,
-  logComposerDraftTrace,
   saveComposerDraft,
   shouldApplyComposerDraft,
   type ComposerDraftMeta,
@@ -500,67 +498,6 @@ export function UnifiedInbox() {
   const bumpReplyWindowClockRef = useRef<() => void>(() => {});
   /** Ignore first snapshot per conversation; then invalidate window-status when a new inbound tail appears (polling path). */
   const lastInboundTailRef = useRef<{ convId: string; msgId: string } | null>(null);
-
-  // #region agent log
-  const inboxRenderCountRef = useRef(0);
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    inboxRenderCountRef.current += 1;
-    const n = inboxRenderCountRef.current;
-    if (n === 1 || n === 30 || n === 60 || n === 80) {
-      debug34aeaf({
-        hypothesisId: "D",
-        runId: "post-fix",
-        location: "UnifiedInbox.tsx:renderSample",
-        message: n >= 80 ? "inbox_render_storm" : "inbox_render_count",
-        data: {
-          renderCount: n,
-          pathname: typeof window !== "undefined" ? window.location.pathname : null,
-        },
-      });
-    }
-  }, [pathname, searchString]);
-  // #endregion
-
-  // #region agent log
-  useEffect(() => {
-    const onErr = (event: ErrorEvent) => {
-      debug34aeaf({
-        hypothesisId: "E",
-        runId: "post-fix",
-        location: "UnifiedInbox.tsx:window.onerror",
-        message: "window_onerror",
-        data: {
-          errMessage: String(event.message || "").slice(0, 400),
-          filename: String(event.filename || "").slice(0, 200),
-          lineno: event.lineno || null,
-          colno: event.colno || null,
-          stack: String((event.error && event.error.stack) || "").slice(0, 1200),
-          componentStack: String((event.error && (event.error as { componentStack?: string }).componentStack) || "").slice(0, 800),
-          inboxRenderCount: inboxRenderCountRef.current,
-        },
-      });
-    };
-    const onRej = (event: PromiseRejectionEvent) => {
-      const reason = event.reason;
-      debug34aeaf({
-        hypothesisId: "E",
-        location: "UnifiedInbox.tsx:unhandledrejection",
-        message: "unhandledrejection",
-        data: {
-          reason: String(reason?.message || reason || "").slice(0, 400),
-          stack: String(reason?.stack || "").slice(0, 800),
-        },
-      });
-    };
-    window.addEventListener("error", onErr);
-    window.addEventListener("unhandledrejection", onRej);
-    return () => {
-      window.removeEventListener("error", onErr);
-      window.removeEventListener("unhandledrejection", onRej);
-    };
-  }, []);
-  // #endregion
 
   useEffect(() => {
     if (!user) return;
@@ -1353,13 +1290,6 @@ export function UnifiedInbox() {
           draftConversationId: meta.conversationId,
         })
       ) {
-        logComposerDraftTrace({
-          event: "ignore_stale",
-          activeContactId: selectedContactId,
-          draftContactId: meta.contactId,
-          source: meta.source,
-          conversationId: meta.conversationId ?? null,
-        });
         return;
       }
       setMessageInput(val);
@@ -1383,12 +1313,6 @@ export function UnifiedInbox() {
 
     if (!composerScopeKey || !selectedContactId) {
       setMessageInput("");
-      logComposerDraftTrace({
-        event: "clear",
-        activeContactId: selectedContactId,
-        draftContactId: null,
-        source: "manual",
-      });
       return;
     }
 
@@ -1399,13 +1323,6 @@ export function UnifiedInbox() {
       if (pending.subject) setEmailSubject(pending.subject);
       pendingOutreachPrefillRef.current = null;
       outreachHandoffAdoptedRef.current = true;
-      logComposerDraftTrace({
-        event: "load",
-        activeContactId: selectedContactId,
-        draftContactId: selectedContactId,
-        source: "manual",
-        conversationId: null,
-      });
       console.info(
         JSON.stringify({
           tag: "[ProspectOutreachHandoff]",
@@ -1427,13 +1344,6 @@ export function UnifiedInbox() {
 
     const loaded = loadComposerDraft(composerScopeKey);
     setMessageInput(loaded);
-    logComposerDraftTrace({
-      event: "load",
-      activeContactId: selectedContactId,
-      draftContactId: selectedContactId,
-      source: "local_storage",
-      conversationId: primaryConversation?.id ?? null,
-    });
   }, [composerScopeKey, selectedContactId, primaryConversation?.id]);
 
   /** Immediate UI selection for outbound sends while PATCH /channel refetches; cleared when server state matches. */
@@ -1492,19 +1402,6 @@ export function UnifiedInbox() {
     const subj = primaryConversation?.subject?.trim();
     if (!subj) return;
     const next = subj.startsWith("Re:") ? subj : `Re: ${subj}`;
-    // #region agent log
-    debug34aeaf({
-      hypothesisId: "D",
-      runId: "post-fix",
-      location: "UnifiedInbox.tsx:emailSubjectEffect",
-      message: "email_subject_prefill",
-      data: {
-        conversationId: primaryConversation?.id ?? null,
-        subjLen: subj.length,
-        nextLen: next.length,
-      },
-    });
-    // #endregion
     setEmailSubject((prev) => (prev === next ? prev : next));
   }, [isEmailChannel, primaryConversation?.id, primaryConversation?.subject, forceNewEmailCompose]);
 
@@ -2466,9 +2363,6 @@ export function UnifiedInbox() {
       return { previousInbox };
     },
     onError: (_err, _vars, context) => {
-      // #region agent log
-      debug34aeaf({ hypothesisId: "E", location: "UnifiedInbox.tsx:trashEmailMutation.onError", message: "trash_onerror", data: { errMessage: String((_err as any)?.message || _err || "").slice(0, 400) } });
-      // #endregion
       if (context?.previousInbox) {
         queryClient.setQueryData(["/api/inbox"], context.previousInbox);
       }
@@ -2478,7 +2372,6 @@ export function UnifiedInbox() {
       });
     },
     onSuccess: (data) => {
-      // #region agent log
       const cleanup = decideEmailTrashSelectionCleanup({
         conversationDeleted: !!data.conversationDeleted,
         deletedConversationId: data.conversationId,
@@ -2486,30 +2379,6 @@ export function UnifiedInbox() {
         stickyConversationId: stickyConversationIdRef.current,
         selectedContactId,
       });
-      debug34aeaf({
-        hypothesisId: "A",
-        runId: "post-fix",
-        location: "UnifiedInbox.tsx:trashEmailMutation.onSuccess",
-        message: "trash_onsuccess_enter",
-        data: {
-          ok: data?.ok,
-          messageId: data?.messageId,
-          conversationId: data?.conversationId,
-          conversationDeleted: !!data?.conversationDeleted,
-          hasConversationPayload: !!data?.conversation,
-          selectedContactId,
-          selectedConversationId,
-          willNavigateAway: cleanup.shouldNavigateToInboxRoot,
-          cleanupReason: cleanup.reason,
-          activeConversationId,
-          primaryConversationId: primaryConversation?.id ?? null,
-          stickyConversationId: stickyConversationIdRef.current,
-          pathname,
-          searchString: String(searchString || "").slice(0, 120),
-        },
-      });
-      // #endregion
-      try {
       setEmailTrashTarget(null);
       if (data.conversationId) {
         queryClient.setQueryData<Message[] | undefined>(
@@ -2529,19 +2398,6 @@ export function UnifiedInbox() {
           setStickyEpoch((n) => n + 1);
         }
         if (cleanup.shouldNavigateToInboxRoot) {
-          // #region agent log
-          debug34aeaf({
-            hypothesisId: "A",
-            runId: "post-fix",
-            location: "UnifiedInbox.tsx:trashEmailMutation.navigate",
-            message: "trash_navigate_inbox_root",
-            data: {
-              conversationId: data.conversationId,
-              selectedConversationId,
-              reason: cleanup.reason,
-            },
-          });
-          // #endregion
           setLocation("/app/inbox");
         }
       } else if (data.conversation) {
@@ -2566,15 +2422,6 @@ export function UnifiedInbox() {
         });
       }
       void queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
-      // #region agent log
-      debug34aeaf({ hypothesisId: "E", runId: "post-fix", location: "UnifiedInbox.tsx:trashEmailMutation.onSuccess", message: "trash_onsuccess_exit_ok", data: { conversationDeleted: !!data?.conversationDeleted, cleanupReason: cleanup.reason } });
-      // #endregion
-      } catch (err: any) {
-        // #region agent log
-        debug34aeaf({ hypothesisId: "E", location: "UnifiedInbox.tsx:trashEmailMutation.onSuccess", message: "trash_onsuccess_threw", data: { errMessage: String(err?.message || err).slice(0, 400), stack: String(err?.stack || "").slice(0, 800) } });
-        // #endregion
-        throw err;
-      }
     },
   });
 
@@ -3100,41 +2947,6 @@ export function UnifiedInbox() {
   const hasConversation = !!activeConversationId && contactMatchesSelection;
   const convStatus = primaryConversation?.status || 'open';
   const conversationStatusRow = getConversationStatusRow(convStatus);
-
-  // #region agent log
-  useEffect(() => {
-    debug34aeaf({
-      hypothesisId: "B",
-      location: "UnifiedInbox.tsx:selectionSnapshot",
-      message: "inbox_selection_snapshot",
-      data: {
-        selectedContactId,
-        selectedConversationId,
-        activeConversationId,
-        primaryConversationId: primaryConversation?.id ?? null,
-        hasConversation,
-        contactMatchesSelection,
-        contactPresent: !!contact,
-        displayContactPresent: !!displayContact,
-        stickyConversationId: stickyConversationIdRef.current,
-        pathname,
-        searchString: String(searchString || "").slice(0, 120),
-      },
-    });
-    // Prefer primitives — object identity for contact/displayContact changes every parent render.
-  }, [
-    selectedContactId,
-    selectedConversationId,
-    activeConversationId,
-    primaryConversation?.id,
-    hasConversation,
-    contactMatchesSelection,
-    contact?.id,
-    displayContact?.id,
-    pathname,
-    searchString,
-  ]);
-  // #endregion
 
   const showListSkeleton = shouldShowInboxListSkeleton({
     isServerSearching,

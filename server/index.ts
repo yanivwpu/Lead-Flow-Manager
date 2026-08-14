@@ -456,24 +456,6 @@ app.use((req, res, next) => {
   const enableOptionalDbWorkers =
     process.env.NODE_ENV === "production" ||
     String(process.env.ENABLE_OPTIONAL_DB_WORKERS || "").trim() === "1";
-  // #region agent log
-  {
-    const { appendDebug34aeafLog } = await import("./debugSessionLog");
-    appendDebug34aeafLog({
-      hypothesisId: "C",
-      runId: "post-fix",
-      location: "server/index.ts:boot_workers",
-      message: "optional_db_workers_gate",
-      data: {
-        redisUrlConfigured: isRedisUrlConfigured(),
-        redisUrlEmpty: !String(process.env.REDIS_URL || "").trim(),
-        enableOptionalDbWorkers,
-        nodeEnv: process.env.NODE_ENV || null,
-        note: "ProspectBulkAnalysis is DB-polled; REDIS_URL does not gate it",
-      },
-    });
-  }
-  // #endregion
   if (enableOptionalDbWorkers) {
     const { startProspectBulkAnalysisWorker } = await import(
       "./prospectImport/prospectBulkAnalysisWorker"

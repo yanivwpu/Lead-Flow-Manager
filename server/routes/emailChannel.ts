@@ -27,8 +27,6 @@ function requireAuth(req: Request, res: Response): req is Request & { user: { id
 }
 
 export function registerEmailChannelRoutes(app: Express): void {
-  console.error("[EmailRouteBootProbe] entered_register");
-
   try {
     logEmailImageProxySecretStartupStatus();
     if (process.env.NODE_ENV === "production") {

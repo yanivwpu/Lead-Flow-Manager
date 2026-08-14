@@ -68,7 +68,6 @@ import {
   buildComposerDraftScopeKey,
   clearComposerDraft,
   loadComposerDraft,
-  logComposerDraftTrace,
   saveComposerDraft,
   shouldApplyComposerDraft,
   type ComposerDraftMeta,
@@ -392,13 +391,6 @@ export function Chats() {
           draftConversationId: meta.conversationId,
         })
       ) {
-        logComposerDraftTrace({
-          event: "ignore_stale",
-          activeContactId: selectedChatId,
-          draftContactId: meta.contactId,
-          source: meta.source,
-          conversationId: meta.conversationId ?? null,
-        });
         return;
       }
       setNewMessage(val);
@@ -422,24 +414,11 @@ export function Chats() {
 
     if (!composerScopeKey || !selectedChatId) {
       setNewMessage("");
-      logComposerDraftTrace({
-        event: "clear",
-        activeContactId: selectedChatId,
-        draftContactId: null,
-        source: "manual",
-      });
       return;
     }
 
     const loaded = loadComposerDraft(composerScopeKey);
     setNewMessage(loaded);
-    logComposerDraftTrace({
-      event: "load",
-      activeContactId: selectedChatId,
-      draftContactId: selectedChatId,
-      source: "local_storage",
-      conversationId: selectedChatId,
-    });
   }, [composerScopeKey, selectedChatId]);
 
   const [localNotes, setLocalNotes] = useState("");

@@ -10,7 +10,6 @@ import { getValidMailboxAccessToken } from "./oauth";
 import { getEmailProvider } from "./gmailProvider";
 import { getEmailMailboxById, getEmailMessageDetail } from "./mailboxStore";
 import { htmlToPlainText } from "./htmlSanitize";
-import { appendDebug34aeafLog } from "../debugSessionLog";
 
 export type TrashEmailMessageResult = {
   ok: true;
@@ -121,20 +120,6 @@ export async function trashEmailMessageByLocalId(params: {
         providerMessageId,
       }),
     );
-    // #region agent log
-    appendDebug34aeafLog({
-      runId: "pre-fix",
-      hypothesisId: "B",
-      location: "trashEmailMessage.ts:conversationDeleted",
-      message: "server_trash_conversation_deleted",
-      data: {
-        messageId: msg.id,
-        conversationId: conversation.id,
-        contactId: conversation.contactId,
-        conversationDeleted: true,
-      },
-    });
-    // #endregion
     return {
       ok: true,
       messageId: msg.id,
@@ -170,21 +155,6 @@ export async function trashEmailMessageByLocalId(params: {
       remainingMessages: true,
     }),
   );
-
-  // #region agent log
-  appendDebug34aeafLog({
-    runId: "pre-fix",
-    hypothesisId: "B",
-    location: "trashEmailMessage.ts:messageOnly",
-    message: "server_trash_message_remaining",
-    data: {
-      messageId: msg.id,
-      conversationId: conversation.id,
-      contactId: conversation.contactId,
-      conversationDeleted: false,
-    },
-  });
-  // #endregion
 
   return {
     ok: true,

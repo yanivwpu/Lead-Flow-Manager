@@ -7472,9 +7472,6 @@ export async function registerRoutes(
 
   // Native email channel routes MUST register before /api/integrations/:id/*
   // or POST /api/integrations/email/sync is captured as id="email" → "Integration not found".
-  console.error("[EmailRouteBootProbe] before_register");
-  const { registerDebugSessionLogRoute } = await import("./debugSessionLog");
-  registerDebugSessionLogRoute(app);
   registerEmailChannelRoutes(app);
 
   // Update an integration

@@ -17,8 +17,6 @@ export type ComposerDraftMeta = {
   source?: ComposerDraftSource;
 };
 
-export type ComposerDraftTraceEvent = "save" | "load" | "clear" | "ignore_stale";
-
 const draftByScope = new Map<string, string>();
 
 export function buildComposerDraftScopeKey(
@@ -56,21 +54,9 @@ export function saveComposerDraft(scopeKey: string, text: string, source: Compos
   if (!scopeKey) return;
   if (!trimmed) {
     draftByScope.delete(scopeKey);
-    logComposerDraftTrace({
-      event: "clear",
-      activeContactId: scopeKey.split("::")[0] || null,
-      draftContactId: scopeKey.split("::")[0] || null,
-      source,
-    });
     return;
   }
   draftByScope.set(scopeKey, text);
-  logComposerDraftTrace({
-    event: "save",
-    activeContactId: scopeKey.split("::")[0] || null,
-    draftContactId: scopeKey.split("::")[0] || null,
-    source,
-  });
 }
 
 export function loadComposerDraft(scopeKey: string): string {
@@ -81,32 +67,6 @@ export function loadComposerDraft(scopeKey: string): string {
 export function clearComposerDraft(scopeKey: string, source: ComposerDraftSource = "manual"): void {
   if (!scopeKey) return;
   draftByScope.delete(scopeKey);
-  logComposerDraftTrace({
-    event: "clear",
-    activeContactId: scopeKey.split("::")[0] || null,
-    draftContactId: scopeKey.split("::")[0] || null,
-    source,
-  });
-}
-
-export function logComposerDraftTrace(params: {
-  event: ComposerDraftTraceEvent;
-  activeContactId?: string | null;
-  draftContactId?: string | null;
-  source?: ComposerDraftSource;
-  conversationId?: string | null;
-}): void {
-  console.info(
-    "[ComposerDraftTrace]",
-    JSON.stringify({
-      event: params.event,
-      activeContactId: params.activeContactId ?? null,
-      draftContactId: params.draftContactId ?? null,
-      source: params.source ?? null,
-      conversationId: params.conversationId ?? null,
-      loggedAt: new Date().toISOString(),
-    }),
-  );
 }
 
 /** Test helper — reset in-memory draft store. */

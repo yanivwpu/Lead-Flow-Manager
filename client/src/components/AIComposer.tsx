@@ -23,7 +23,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import type { LucideIcon } from "lucide-react";
 import { resolveAiRouting, routingShouldTriggerHandoff } from "@shared/aiRouting";
 import {
-  logComposerDraftTrace,
   shouldApplyComposerDraft,
   type ComposerDraftMeta,
   type ComposerDraftSource,
@@ -214,13 +213,6 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
           draftConversationId: draftConversationId ?? conversationId,
         })
       ) {
-        logComposerDraftTrace({
-          event: "ignore_stale",
-          activeContactId: contactId,
-          draftContactId,
-          source,
-          conversationId: draftConversationId ?? conversationId,
-        });
         return false;
       }
       onChange(text, { contactId, conversationId: draftConversationId ?? conversationId, source });
@@ -430,13 +422,6 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
             draftConversationId: responseConversationId,
           })
         ) {
-          logComposerDraftTrace({
-            event: "ignore_stale",
-            activeContactId: contactId,
-            draftContactId: responseContactId,
-            source: "auto_ai",
-            conversationId: responseConversationId,
-          });
           return;
         }
         const suggestion: string = data.suggestion || "";
@@ -627,13 +612,6 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
               draftConversationId: responseConversationId,
             })
           ) {
-            logComposerDraftTrace({
-              event: "ignore_stale",
-              activeContactId: contactId,
-              draftContactId: responseContactId,
-              source: "suggest_reply",
-              conversationId: responseConversationId,
-            });
             return;
           }
           const suggestion = data.suggestion || null;
@@ -719,13 +697,6 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
             draftConversationId: responseConversationId,
           })
         ) {
-          logComposerDraftTrace({
-            event: "ignore_stale",
-            activeContactId: contactId,
-            draftContactId: responseContactId,
-            source: "suggest_reply",
-            conversationId: responseConversationId,
-          });
           return;
         }
         const suggestion = data.suggestion || null;

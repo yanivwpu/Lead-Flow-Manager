@@ -3,7 +3,6 @@
  * Full center-pane width — never uses chat-bubble max-width.
  */
 import { format } from "date-fns";
-import { useEffect } from "react";
 import { Loader2, MoreVertical, Trash2 } from "lucide-react";
 import { EmailMessageBody } from "@/components/inbox/EmailMessageBody";
 import { EmailAttachmentsSection } from "@/components/inbox/conversation/EmailAttachmentsSection";
@@ -14,7 +13,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { debug34aeaf } from "@/lib/debug34aeaf";
 import { EMAIL_DOCUMENT_MAX_WIDTH_CLASS } from "@/lib/inboxConversationPresentation";
 
 export type EmailThreadMessageModel = {
@@ -40,21 +38,6 @@ export function EmailThreadMessage({
 }) {
   const isOut = message.direction === "outbound";
   const isSending = message.status === "sending";
-
-  // #region agent log
-  useEffect(() => {
-    debug34aeaf({
-      hypothesisId: "C",
-      location: "EmailThreadMessage.tsx:effect",
-      message: "email_thread_message_mounted",
-      data: {
-        messageId: message?.id ?? null,
-        hasCreatedAt: message?.createdAt != null,
-        direction: message?.direction ?? null,
-      },
-    });
-  }, [message?.id]);
-  // #endregion
 
   return (
     <div

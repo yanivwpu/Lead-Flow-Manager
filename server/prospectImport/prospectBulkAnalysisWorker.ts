@@ -62,21 +62,6 @@ async function tick(): Promise<void> {
         }),
       ),
     );
-    // #region agent log
-    if (tickCount <= 3) {
-      void import("../debugSessionLog")
-        .then(({ appendDebug34aeafLog }) => {
-          appendDebug34aeafLog({
-            hypothesisId: "C",
-            runId: "pre-fix",
-            location: "server/prospectImport/prospectBulkAnalysisWorker.ts:tick",
-            message: "bulk_analysis_tick",
-            data: { workerId, tickCount, pollIntervalMs: POLL_INTERVAL_MS },
-          });
-        })
-        .catch(() => {});
-    }
-    // #endregion
 
     try {
       const recovered = await recoverStaleBulkAnalysisJobs();
@@ -301,28 +286,6 @@ export function startProspectBulkAnalysisWorker(): void {
 
   const keyDiag = describeOpenAiKeyRuntimeDiagnostics();
   const gate = shouldStartProspectAiBulkWorker(keyDiag);
-
-  // #region agent log
-  void import("../debugSessionLog")
-    .then(({ appendDebug34aeafLog }) => {
-      appendDebug34aeafLog({
-        hypothesisId: "C",
-        runId: "pre-fix",
-        location: "server/prospectImport/prospectBulkAnalysisWorker.ts:start",
-        message: "bulk_analysis_worker_start_attempt",
-        data: {
-          redisUrlConfigured: Boolean(String(process.env.REDIS_URL || "").trim()),
-          nodeEnv: process.env.NODE_ENV || null,
-          gateStart: gate.start,
-          gateReason: gate.reason,
-          pollIntervalMs: POLL_INTERVAL_MS,
-          workerKind: "db_poll_not_bullmq",
-        },
-      });
-    })
-    .catch(() => {});
-  // #endregion
-
 
   const ownership = {
     workerId,
