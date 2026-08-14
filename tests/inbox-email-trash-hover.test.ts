@@ -79,10 +79,14 @@ run("UnifiedInbox: time outside LINE1; trash absolute; no flex sibling column", 
   assert.ok(!inboxSrc.includes("group/email-row"));
 });
 
-run("click handlers stopPropagation and use trash-email API", () => {
-  assert.ok(inboxSrc.includes('source: "list"'));
+run("click handlers stopPropagation and trash immediately (no confirm dialog)", () => {
+  assert.ok(inboxSrc.includes('source: "list"') || inboxSrc.includes('"list"'));
+  assert.ok(inboxSrc.includes("requestEmailTrash"));
   assert.ok(inboxSrc.includes("/api/messages/${encodeURIComponent(vars.messageId)}/trash-email"));
   assert.ok(inboxSrc.includes("stopPropagation"));
+  assert.ok(!inboxSrc.includes("dialog-delete-email"));
+  assert.ok(!inboxSrc.includes("button-confirm-delete-email"));
+  assert.ok(!inboxSrc.includes("setEmailTrashTarget"));
 });
 
 run("fixed row height unchanged", () => {

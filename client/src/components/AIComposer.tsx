@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
 import {
   Send,
   Smile,
@@ -32,6 +32,10 @@ import {
   composerKeyboardHelperText,
   resolveComposerEnterAction,
 } from "@shared/composerKeyboard";
+import {
+  composerTextareaBounds,
+  nextComposerTextareaLayout,
+} from "@shared/composerTextareaHeight";
 
 type AIMode = "manual" | "suggest" | "auto";
 type AutoPhase = "idle" | "typing" | "replied" | "waiting";
@@ -102,9 +106,6 @@ export interface AIComposerProps {
   /** Messaging channel for AI tone/context (e.g. email vs WhatsApp). */
   channel?: string | null;
 }
-
-const MIN_TEXTAREA_HEIGHT = 58;
-const MAX_TEXTAREA_HEIGHT = 160;
 
 /**
  * Subtle notice when auto-send was blocked. Returns null to hide the row (no misleading generic copy).
@@ -188,7 +189,13 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   /** After auto-send was blocked but we have suggestion text — show composer instead of passive panel. */
   const [autoSkippedWithDraft, setAutoSkippedWithDraft] = useState(false);
   const [autoSendBlockedMessage, setAutoSendBlockedMessage] = useState<string | null>(null);
+  const textareaBounds = useMemo(() => composerTextareaBounds(channel), [channel]);
+  const isEmailComposer = textareaBounds.kind === "email";
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [textareaLayout, setTextareaLayout] = useState(() => ({
+    heightPx: composerTextareaBounds(channel).minPx,
+    overflowY: "hidden" as const,
+  }));
   const prevScopeRef = useRef<{ conversationId: string | null; contactId: string | null }>({
     conversationId: null,
     contactId: null,
@@ -270,19 +277,28 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     },
   }), [applyComposerText, onAttachPendingMedia]);
 
-  // Auto-resize textarea — avoid height-auto jump on mobile by reading scrollHeight before reset
-  useEffect(() => {
+  // Auto-grow within [min, max]. Email collapses to 0 and drops maxHeight while
+  // measuring so content height is accurate; past max the textarea scrolls.
+  // Chat keeps the prior height:auto measure so WhatsApp/IG/FB/SMS stay compact.
+  useLayoutEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
-    // Briefly set overflow-y hidden to avoid scrollbar flash during resize
+    const { minPx, maxPx, kind } = textareaBounds;
     el.style.overflowY = "hidden";
-    el.style.height = "auto";
-    const minH = String(channel || "").toLowerCase() === "email" ? 96 : MIN_TEXTAREA_HEIGHT;
-    const maxH = String(channel || "").toLowerCase() === "email" ? Math.max(MAX_TEXTAREA_HEIGHT, 220) : MAX_TEXTAREA_HEIGHT;
-    const next = Math.min(Math.max(el.scrollHeight, minH), maxH);
-    el.style.height = `${next}px`;
-    el.style.overflowY = next >= maxH ? "auto" : "hidden";
-  }, [value, channel]);
+    if (kind === "email") {
+      el.style.maxHeight = "none";
+      el.style.height = "0px";
+    } else {
+      el.style.height = "auto";
+    }
+    const layout = nextComposerTextareaLayout(el.scrollHeight, minPx, maxPx);
+    el.style.maxHeight = `${maxPx}px`;
+    el.style.height = `${layout.heightPx}px`;
+    el.style.overflowY = layout.overflowY;
+    setTextareaLayout((prev) =>
+      prev.heightPx === layout.heightPx && prev.overflowY === layout.overflowY ? prev : layout,
+    );
+  }, [value, textareaBounds, aiMode, autoOverride, autoSkippedWithDraft, forceManualMode]);
 
   // Reset internal AI state when active contact/conversation changes — parent owns draft text.
   useEffect(() => {
@@ -768,8 +784,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   };
 
   const keyboardHelperText = useMemo(() => composerKeyboardHelperText(channel), [channel]);
-  const isEmailComposer = String(channel || "").toLowerCase() === "email";
-  const composerMinHeight = isEmailComposer ? 96 : MIN_TEXTAREA_HEIGHT;
+  const composerMinHeight = textareaBounds.minPx;
   const keyboardHelperId = "ai-composer-keyboard-hint";
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -822,7 +837,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     <div
       className={cn(
         "border-t border-gray-200 bg-white shrink-0",
-        isEmailComposer && "w-full max-w-full",
+        isEmailComposer && "w-full max-w-full overflow-hidden",
         className,
       )}
       data-testid={isEmailComposer ? "inbox-email-composer" : "inbox-chat-composer"}
@@ -938,6 +953,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
         ) : (
           <textarea
             ref={textareaRef}
+            rows={isEmailComposer ? 1 : 2}
             placeholder={
               isSuggestMode && isDrafting
                 ? "AI is drafting…"
@@ -947,13 +963,21 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
             }
             className={cn(
               "w-full border text-base md:text-[13px] leading-relaxed focus:outline-none transition-colors resize-none",
-              isEmailComposer ? "rounded-md px-3.5 py-3 min-h-[96px]" : "rounded-xl px-3.5 py-2.5",
+              isEmailComposer && "[field-sizing:fixed]",
+              isEmailComposer ? "rounded-md px-3.5 py-3" : "rounded-xl px-3.5 py-2.5",
               (isSuggestMode && (isDrafting || aiDraft)) ||
                 (aiMode === "auto" && autoSkippedWithDraft && value.trim())
                 ? "bg-violet-50/30 border-purple-200/70 focus:border-purple-300 text-gray-800"
                 : "bg-white border-gray-200 focus:border-brand-green text-gray-800"
             )}
-            style={{ minHeight: composerMinHeight, maxHeight: isEmailComposer ? Math.max(MAX_TEXTAREA_HEIGHT, 220) : MAX_TEXTAREA_HEIGHT, touchAction: "manipulation" }}
+            style={{
+              height: textareaLayout.heightPx,
+              minHeight: textareaBounds.minPx,
+              maxHeight: textareaBounds.maxPx,
+              overflowY: textareaLayout.overflowY,
+              ...(isEmailComposer ? { overscrollBehavior: "contain" as const } : {}),
+              touchAction: "manipulation",
+            }}
             value={value}
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
@@ -962,6 +986,8 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
             aria-describedby={!isMobile ? keyboardHelperId : undefined}
             data-testid="input-message"
             data-composer-layout={isEmailComposer ? "email" : "chat"}
+            data-composer-min-height={textareaBounds.minPx}
+            data-composer-max-height={textareaBounds.maxPx}
           />
         )}
 

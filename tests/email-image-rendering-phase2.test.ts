@@ -3,7 +3,7 @@
  * Run: npx tsx --test tests/email-image-rendering-phase2.test.ts
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, before } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -31,6 +31,12 @@ import {
 import { buildIsolatedEmailSrcDoc } from "../shared/emailHtmlIsolation";
 
 describe("inbound sanitizer preserves images via proxy/CID rewrite", () => {
+  before(() => {
+    const secret = String(process.env.EMAIL_IMAGE_PROXY_SECRET || "").trim();
+    if (secret.length < 32) {
+      process.env.EMAIL_IMAGE_PROXY_SECRET = "test-email-image-proxy-secret-32b!!";
+    }
+  });
   it("rewrites remote HTTPS img to signed proxy URL (not Remote image blocked)", () => {
     const { html, remoteImagesProxied, remoteImagesBlocked } = sanitizeEmailHtml(
       `<p>Hi</p><img src="https://cdn.example.com/logo.png" alt="Logo" width="120" height="40" />`,

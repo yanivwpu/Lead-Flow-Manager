@@ -329,10 +329,16 @@ export async function persistNormalizedEmailMessage(params: {
   }
 
   if (!params.silent) {
+    let inboxNewActivityCount: number | undefined;
+    if (normalized.direction === "inbound") {
+      const { incrementInboxNewActivity } = await import("../inboxNewActivity");
+      inboxNewActivityCount = await incrementInboxNewActivity(mailbox.workspaceUserId, 1);
+    }
     notifyUser(mailbox.workspaceUserId, {
       type: "new_message",
       conversationId: conversation.id,
       contactId: contact.id,
+      ...(inboxNewActivityCount != null ? { inboxNewActivityCount } : {}),
     });
   }
 

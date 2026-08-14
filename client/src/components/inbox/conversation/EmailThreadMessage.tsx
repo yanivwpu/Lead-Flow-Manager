@@ -112,7 +112,7 @@ export function EmailThreadMessage({
                     }}
                   >
                     <Trash2 className="mr-2 h-3.5 w-3.5" />
-                    Delete Email
+                    Move to Trash
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

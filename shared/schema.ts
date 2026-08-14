@@ -177,6 +177,13 @@ export const users = pgTable("users", {
   emailVerifiedAt: timestamp("email_verified_at"),
   /** When the post-verification welcome email was sent (prevents duplicate welcome sequences). */
   welcomeEmailSentAt: timestamp("welcome_email_sent_at"),
+  /**
+   * Sidebar Inbox badge: inbound messages since the user last visibly checked Inbox.
+   * Independent of per-conversation unread_count / Needs Reply.
+   */
+  inboxNewActivityCount: integer("inbox_new_activity_count").notNull().default(0),
+  /** When the user last visibly acknowledged Inbox (does not mark conversations read). */
+  lastInboxCheckedAt: timestamp("last_inbox_checked_at"),
 }, (t) => ({
   /** Inbound webhook routing: at most one workspace per Meta phone number ID (nulls allowed). */
   metaPhoneNumberIdUq: uniqueIndex("users_meta_phone_number_id_uidx")

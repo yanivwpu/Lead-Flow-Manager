@@ -85,4 +85,22 @@ describe("UnifiedInbox wires cleanup helper", () => {
       /if\s*\(\s*selectedConversationId\s*===\s*data\.conversationId\s*\)\s*\{\s*[\s\S]*?setLocation\("\/app\/inbox"\)/,
     );
   });
+
+  it("trash is immediate — no confirmation dialog; success/error toasts use Trash wording", () => {
+    const src = fs.readFileSync(
+      path.join(process.cwd(), "client/src/pages/UnifiedInbox.tsx"),
+      "utf8",
+    );
+    assert.match(src, /requestEmailTrash/);
+    assert.match(src, /requestEmailTrash\(item\.lastEmailMessageId!,\s*"list"\)/);
+    assert.match(src, /requestEmailTrash\(msg\.id,\s*"bubble"\)/);
+    assert.doesNotMatch(src, /dialog-delete-email/);
+    assert.doesNotMatch(src, /button-confirm-delete-email/);
+    assert.doesNotMatch(src, /Are you sure you want to move this email to Trash/);
+    assert.doesNotMatch(src, /permanently deleted/i);
+    assert.match(src, /Email moved to Trash/);
+    assert.match(src, /Email could not be moved to Trash\. Please try again\./);
+    // Failed trash restores previous inbox snapshot.
+    assert.match(src, /onError:[\s\S]*previousInbox[\s\S]*setQueryData\(\["\/api\/inbox"\]/);
+  });
 });

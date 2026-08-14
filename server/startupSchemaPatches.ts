@@ -841,6 +841,13 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
     tag: "0078_whatsapp_oauth_architecture_version",
     sql: `ALTER TABLE whatsapp_oauth_states ADD COLUMN IF NOT EXISTS architecture_version text NOT NULL DEFAULT 'v2'`,
   },
+  {
+    tag: "0079_users_inbox_new_activity",
+    sql: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS inbox_new_activity_count integer NOT NULL DEFAULT 0`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_inbox_checked_at timestamp`,
+    ].join(";\n"),
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {

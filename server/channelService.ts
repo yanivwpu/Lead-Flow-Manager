@@ -1355,10 +1355,13 @@ class ChannelService {
     }
 
     if (!isCommerceInbound) {
+      const { incrementInboxNewActivity } = await import("./inboxNewActivity");
+      const inboxNewActivityCount = await incrementInboxNewActivity(userId, 1);
       notifyUser(userId, {
         type: 'new_message',
         conversationId: conversation.id,
         contactId: contact.id,
+        inboxNewActivityCount,
         ...(shouldNotifyReplyWindowReopened ? { replyWindowReopened: true } : {}),
       });
     }

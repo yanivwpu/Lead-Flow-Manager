@@ -105,15 +105,45 @@ export function isBlockedIpAddress(ip: string): boolean {
   return true;
 }
 
-/** Lookup factory that always returns the pre-validated public IP (anti DNS-rebinding). */
+type PinnedLookupCallback = {
+  (err: Error | null, address: string, family: number): void;
+  (err: Error | null, addresses: Array<{ address: string; family: number }>): void;
+};
+
+function lookupWantsAllAddresses(options: unknown): boolean {
+  return Boolean(options && typeof options === "object" && (options as { all?: boolean }).all);
+}
+
+/**
+ * Lookup factory that always returns the pre-validated public IP (anti DNS-rebinding).
+ * Node 20 Happy Eyeballs (`https.request`) may call lookup with `{ all: true }`, which
+ * requires `callback(null, [{ address, family }])` — the legacy `(address, family)`
+ * shape causes ERR_INVALID_IP_ADDRESS before any TCP connect.
+ */
 export function createPinnedDnsLookup(pinnedIp: string, family: 4 | 6) {
   return (
     _hostname: string,
-    _options: unknown,
-    callback: (err: Error | null, address: string, family: number) => void,
+    optionsOrCb: unknown,
+    maybeCb?: PinnedLookupCallback,
   ) => {
+    const callback = (
+      typeof optionsOrCb === "function" ? optionsOrCb : maybeCb
+    ) as PinnedLookupCallback | undefined;
+    const options = typeof optionsOrCb === "function" ? undefined : optionsOrCb;
+    if (typeof callback !== "function") return;
+
+    const wantsAll = lookupWantsAllAddresses(options);
     if (isBlockedIpAddress(pinnedIp)) {
-      callback(Object.assign(new Error("pinned_ip_blocked"), { code: "pinned_ip_blocked" }), "", 0);
+      const err = Object.assign(new Error("pinned_ip_blocked"), { code: "pinned_ip_blocked" });
+      if (wantsAll) {
+        callback(err, []);
+      } else {
+        callback(err, "", 0);
+      }
+      return;
+    }
+    if (wantsAll) {
+      callback(null, [{ address: pinnedIp, family }]);
       return;
     }
     callback(null, pinnedIp, family);
@@ -214,10 +244,16 @@ async function pinnedHttpGet(
           Connection: "close",
         },
         // Pin TCP connect to the validated public IP (blocks DNS rebinding TOCTOU).
-        lookup: createPinnedDnsLookup(dest.pinnedIp, dest.family) as any,
+        lookup: createPinnedDnsLookup(dest.pinnedIp, dest.family),
+        // One already-validated IP — do not Happy-Eyeballs across extra addresses.
+        autoSelectFamily: false,
         // Preserve TLS certificate hostname verification + SNI for the original host.
         servername: isHttps ? url.hostname.replace(/^\[|\]$/g, "") : undefined,
         timeout: EMAIL_IMAGE_PROXY_TIMEOUT_MS,
+      } as http.RequestOptions & {
+        lookup: ReturnType<typeof createPinnedDnsLookup>;
+        autoSelectFamily: boolean;
+        servername?: string;
       },
       (res) => {
         const chunks: Buffer[] = [];
@@ -368,6 +404,10 @@ export async function fetchEmailImageViaProxy(params: {
     if (err?.name === "AbortError" || code === "timeout") {
       logImageProxy("timeout", {});
       return { ok: false, code: "timeout", status: 504 };
+    }
+    if (code === "ERR_INVALID_IP_ADDRESS") {
+      logImageProxy("invalid_lookup", { reason: "ERR_INVALID_IP_ADDRESS" });
+      return { ok: false, code: "ERR_INVALID_IP_ADDRESS", status: 502 };
     }
     logImageProxy("failed", { code: code.slice(0, 80) });
     return { ok: false, code: "fetch_failed", status: 502 };

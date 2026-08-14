@@ -127,5 +127,8 @@ describe("overflow / responsive contracts", () => {
     const chrome = getConversationThreadChrome("email");
     assert.match(chrome.innerClassName, /min-w-0/);
     assert.match(chrome.innerClassName, /w-full|max-w-full/);
+    assert.match(chrome.scrollerClassName, /min-h-0/);
+    const chatChrome = getConversationThreadChrome("whatsapp");
+    assert.doesNotMatch(chatChrome.scrollerClassName, /min-h-0/);
   });
 });

@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useTranslation } from "react-i18next";
 import { getDirection } from "@/lib/i18n";
 import { PROSPECT_AI_PATH, useProspectAiStatus } from "@/lib/prospectAi";
+import { InboxActivityNavBadge } from "@/components/InboxActivityNavBadge";
 
 export function MobileNav() {
   const [location] = useLocation();
@@ -58,7 +59,12 @@ export function MobileNav() {
                   isActive ? "text-brand-green" : "text-gray-500"
                 )}
               >
-                <item.icon className="h-5 w-5" />
+                <span className="relative inline-flex">
+                  <item.icon className="h-5 w-5" />
+                  {item.href === "/app/inbox" ? (
+                    <InboxActivityNavBadge testId="mobile-nav-inbox-activity-badge" />
+                  ) : null}
+                </span>
                 <span className="text-[10px] mt-0.5 font-medium">{item.label}</span>
               </a>
             </Link>

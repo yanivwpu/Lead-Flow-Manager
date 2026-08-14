@@ -34,6 +34,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProspectAiStatus, PROSPECT_AI_PATH } from "@/lib/prospectAi";
+import { InboxActivityNavBadge } from "@/components/InboxActivityNavBadge";
 
 function readCollapsed(): boolean {
   try {
@@ -217,7 +218,14 @@ export function Sidebar() {
                   : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
               );
 
-              const inner = <item.icon className={iconClasses} />;
+              const inner = (
+                <span className="relative inline-flex">
+                  <item.icon className={iconClasses} />
+                  {item.href === "/app/inbox" ? (
+                    <InboxActivityNavBadge testId="sidebar-inbox-activity-badge" />
+                  ) : null}
+                </span>
+              );
 
               return (
                 <Tooltip key={item.href}>
@@ -309,7 +317,12 @@ export function Sidebar() {
                         return (
                           <Link key={item.href} href={item.href}>
                             <a data-testid={item.testId} className={linkClasses}>
-                              <item.icon className={iconClasses} />
+                              <span className="relative inline-flex shrink-0">
+                                <item.icon className={iconClasses} />
+                                {item.href === "/app/inbox" ? (
+                                  <InboxActivityNavBadge testId="sidebar-inbox-activity-badge" />
+                                ) : null}
+                              </span>
                               <span
                                 className={cn(
                                   "text-sm ms-3",

@@ -27,7 +27,7 @@ const variants = [
   { name: "selected", input: { selected: true } },
   { name: "unread (chrome same as normal)", input: { selected: false } },
   { name: "selected + unread", input: { selected: true } },
-  { name: "Needs Reply + second tag (chrome)", input: { selected: false } },
+  { name: "follow-up + second tag (chrome)", input: { selected: false } },
   { name: "email row (chrome)", input: { selected: false } },
 ] as const;
 

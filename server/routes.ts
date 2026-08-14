@@ -10469,6 +10469,35 @@ export async function registerRoutes(
 
   // ============= UNIFIED INBOX API (Multi-Channel CRM) =============
 
+  // Lightweight sidebar badge — new inbound since last visible Inbox check (not total unread).
+  app.get("/api/inbox/activity", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const { getInboxNewActivity } = await import("./inboxNewActivity");
+      const payload = await getInboxNewActivity(req.user.id);
+      res.json(payload);
+    } catch (error) {
+      console.error("Error fetching inbox activity:", error);
+      res.status(500).json({ error: "Failed to fetch inbox activity" });
+    }
+  });
+
+  app.post("/api/inbox/activity/ack", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const { ackInboxNewActivity } = await import("./inboxNewActivity");
+      const payload = await ackInboxNewActivity(req.user.id);
+      res.json(payload);
+    } catch (error) {
+      console.error("Error acknowledging inbox activity:", error);
+      res.status(500).json({ error: "Failed to acknowledge inbox activity" });
+    }
+  });
+
   // Get unified inbox - recent page, or server-side search via ?q= (min 2 chars).
   app.get("/api/inbox", async (req, res) => {
     const t0 = Date.now();

@@ -24,6 +24,7 @@ import { getUpgradeProvider } from "@/lib/upgradeRouting";
 import { Loader2 } from "lucide-react";
 import { supportedLanguages, type SupportedLanguage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useInboxNewActivityRealtime } from "@/lib/useInboxNewActivityBadge";
 
 const FollowUps = lazy(() => import("./FollowUps").then(m => ({ default: m.FollowUps })));
 
@@ -54,6 +55,7 @@ function AppContent() {
   /** Same-tab: after dismiss or CTA, avoid re-open until localStorage day key updates on next render. */
   const [activationIntroDismissedSession, setActivationIntroDismissedSession] = useState(false);
   const { i18n } = useTranslation();
+  useInboxNewActivityRealtime();
 
   const activationDayKey = activationSetupModalStorageKey(user?.id);
   const shownActivationModalToday =

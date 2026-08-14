@@ -151,6 +151,7 @@ import {
   shouldApplyComposerDraft,
   type ComposerDraftMeta,
 } from "@/lib/composerDraftScope";
+import { useAckInboxActivityWhenVisible } from "@/lib/useInboxNewActivityBadge";
 import { scheduleInventoryMatchesRefetch } from "@/lib/inventoryMatchesQuery";
 import {
   isGenericOutboundSendFallbackMessage,
@@ -494,10 +495,13 @@ export function UnifiedInbox() {
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { ackIfVisible } = useAckInboxActivityWhenVisible();
   /** Set after `replyWindowNow` exists; WS handler bumps clock when inbound pushes so UI doesn’t wait for the 1m tick. */
   const bumpReplyWindowClockRef = useRef<() => void>(() => {});
   /** Ignore first snapshot per conversation; then invalidate window-status when a new inbound tail appears (polling path). */
   const lastInboundTailRef = useRef<{ convId: string; msgId: string } | null>(null);
+  const ackIfVisibleRef = useRef(ackIfVisible);
+  ackIfVisibleRef.current = ackIfVisible;
 
   useEffect(() => {
     if (!user) return;
@@ -540,6 +544,7 @@ export function UnifiedInbox() {
             }
           } else if (msg.type === "new_message") {
             queryClient.refetchQueries({ queryKey: ["/api/inbox"], type: "active" });
+            ackIfVisibleRef.current();
             if (typeof msg.contactId === "string" && msg.contactId) {
               queryClient.invalidateQueries({
                 queryKey: ["/api/contacts", msg.contactId],
@@ -706,11 +711,6 @@ export function UnifiedInbox() {
   const [showEditContact, setShowEditContact] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [emailTrashTarget, setEmailTrashTarget] = useState<{
-    messageId: string;
-    /** list = latest message on thread row; bubble = exact open message */
-    source: "list" | "bubble";
-  } | null>(null);
   const [showDetailsSheet, setShowDetailsSheet] = useState(false);
   const [editContactForm, setEditContactForm] = useState({ name: "", phone: "", email: "" });
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -2367,7 +2367,7 @@ export function UnifiedInbox() {
         queryClient.setQueryData(["/api/inbox"], context.previousInbox);
       }
       toast({
-        title: "Email could not be deleted. Please try again.",
+        title: "Email could not be moved to Trash. Please try again.",
         variant: "destructive",
       });
     },
@@ -2379,7 +2379,6 @@ export function UnifiedInbox() {
         stickyConversationId: stickyConversationIdRef.current,
         selectedContactId,
       });
-      setEmailTrashTarget(null);
       if (data.conversationId) {
         queryClient.setQueryData<Message[] | undefined>(
           [`/api/conversations/${data.conversationId}/messages`],
@@ -2422,8 +2421,20 @@ export function UnifiedInbox() {
         });
       }
       void queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      toast({ title: "Email moved to Trash" });
     },
   });
+
+  const pendingTrashMessageId =
+    trashEmailMutation.isPending ? trashEmailMutation.variables?.messageId ?? null : null;
+
+  const requestEmailTrash = useCallback(
+    (messageId: string, source: "list" | "bubble") => {
+      if (!messageId || trashEmailMutation.isPending) return;
+      trashEmailMutation.mutate({ messageId, source });
+    },
+    [trashEmailMutation.isPending, trashEmailMutation.mutate],
+  );
 
   // --- CRM helpers ---
 
@@ -3379,14 +3390,7 @@ export function UnifiedInbox() {
                       </p>
                     </div>
                     <div className={INBOX_ROW_LINE3}>
-                      {needsReply ? (
-                        <span
-                          className={cn(INBOX_ROW_CHIP, "border-blue-200 bg-blue-50 font-semibold text-blue-700")}
-                          data-testid={`badge-needs-reply-${item.contact.id}`}
-                        >
-                          <Zap className="h-2.5 w-2.5 shrink-0" />Needs Reply
-                        </span>
-                      ) : showFollowUpBadge && fuStatus === 'overdue' ? (
+                      {showFollowUpBadge && fuStatus === 'overdue' ? (
                         <span
                           className={cn(INBOX_ROW_CHIP, "border-red-200 bg-red-50 font-semibold text-red-600")}
                           data-testid={`badge-overdue-${item.contact.id}`}
@@ -3445,27 +3449,19 @@ export function UnifiedInbox() {
                     aria-label="Move latest email to Trash"
                     data-testid={`button-trash-email-row-${rowId}`}
                     data-inbox-email-trash="true"
-                    disabled={
-                      trashEmailMutation.isPending &&
-                      emailTrashTarget?.messageId === item.lastEmailMessageId
-                    }
+                    disabled={pendingTrashMessageId === item.lastEmailMessageId}
                     className={cn(
                       INBOX_ROW_EMAIL_TRASH_BUTTON,
-                      trashEmailMutation.isPending &&
-                        emailTrashTarget?.messageId === item.lastEmailMessageId &&
+                      pendingTrashMessageId === item.lastEmailMessageId &&
                         "opacity-100 pointer-events-auto",
                     )}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      setEmailTrashTarget({
-                        messageId: item.lastEmailMessageId!,
-                        source: "list",
-                      });
+                      requestEmailTrash(item.lastEmailMessageId!, "list");
                     }}
                   >
-                    {trashEmailMutation.isPending &&
-                    emailTrashTarget?.messageId === item.lastEmailMessageId ? (
+                    {pendingTrashMessageId === item.lastEmailMessageId ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
                       <Trash2 className="h-3.5 w-3.5" />
@@ -3752,11 +3748,14 @@ export function UnifiedInbox() {
                           contactEmail={
                             emailComposeTo || formDisplayContact?.email || contact.email || null
                           }
-                          trashPending={trashEmailMutation.isPending}
+                          trashPending={
+                            trashEmailMutation.isPending &&
+                            pendingTrashMessageId === msg.id
+                          }
                           onRequestTrash={
                             msg.id.startsWith("optimistic-")
                               ? undefined
-                              : () => setEmailTrashTarget({ messageId: msg.id, source: "bubble" })
+                              : () => requestEmailTrash(msg.id, "bubble")
                           }
                         />
                       );
@@ -4619,50 +4618,6 @@ export function UnifiedInbox() {
             <Button variant="destructive" onClick={() => { if (selectedContactId) deleteContactMutation.mutate(selectedContactId); }} disabled={deleteContactMutation.isPending} data-testid="button-confirm-delete">
               {deleteContactMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Delete Contact
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Email message trash — separate from Delete Contact */}
-      <Dialog
-        open={!!emailTrashTarget}
-        onOpenChange={(open) => {
-          if (!open && !trashEmailMutation.isPending) setEmailTrashTarget(null);
-        }}
-      >
-        <DialogContent className="max-w-sm" data-testid="dialog-delete-email">
-          <DialogHeader>
-            <DialogTitle>Delete Email</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Are you sure you want to move this email to Trash? Other messages and the contact will remain.
-          </p>
-          <div className="mt-4 flex justify-end gap-2">
-            <Button
-              variant="outline"
-              disabled={trashEmailMutation.isPending}
-              onClick={() => setEmailTrashTarget(null)}
-              data-testid="button-cancel-delete-email"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={trashEmailMutation.isPending || !emailTrashTarget}
-              data-testid="button-confirm-delete-email"
-              onClick={() => {
-                if (!emailTrashTarget) return;
-                trashEmailMutation.mutate({
-                  messageId: emailTrashTarget.messageId,
-                  source: emailTrashTarget.source,
-                });
-              }}
-            >
-              {trashEmailMutation.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
-              Delete Email
             </Button>
           </div>
         </DialogContent>

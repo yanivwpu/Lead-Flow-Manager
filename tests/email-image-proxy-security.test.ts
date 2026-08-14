@@ -24,12 +24,18 @@ import { EMAIL_IMAGE_PROXY_PATH } from "../shared/emailImagePolicy";
 
 const PREV = { ...process.env };
 
+function restoreEnv(key: "NODE_ENV" | "EMAIL_IMAGE_PROXY_SECRET" | "EMAIL_ENCRYPTION_KEY" | "SESSION_SECRET"): void {
+  const v = PREV[key];
+  if (v === undefined) delete process.env[key];
+  else process.env[key] = v;
+}
+
 describe("EMAIL_IMAGE_PROXY_SECRET production policy", () => {
   afterEach(() => {
-    process.env.NODE_ENV = PREV.NODE_ENV;
-    process.env.EMAIL_IMAGE_PROXY_SECRET = PREV.EMAIL_IMAGE_PROXY_SECRET;
-    process.env.EMAIL_ENCRYPTION_KEY = PREV.EMAIL_ENCRYPTION_KEY;
-    process.env.SESSION_SECRET = PREV.SESSION_SECRET;
+    restoreEnv("NODE_ENV");
+    restoreEnv("EMAIL_IMAGE_PROXY_SECRET");
+    restoreEnv("EMAIL_ENCRYPTION_KEY");
+    restoreEnv("SESSION_SECRET");
   });
 
   it("production rejects missing secret (no hardcoded/empty fallback)", () => {
@@ -110,8 +116,8 @@ describe("signed proxy URL expiry + timing-safe verify", () => {
     process.env.EMAIL_IMAGE_PROXY_SECRET = "test-email-image-proxy-secret-32b!!";
   });
   afterEach(() => {
-    process.env.NODE_ENV = PREV.NODE_ENV;
-    process.env.EMAIL_IMAGE_PROXY_SECRET = PREV.EMAIL_IMAGE_PROXY_SECRET;
+    restoreEnv("NODE_ENV");
+    restoreEnv("EMAIL_IMAGE_PROXY_SECRET");
   });
 
   it("valid signature within expiry passes; tampered fails", () => {
@@ -214,6 +220,126 @@ describe("DNS pin / rebinding SSRF hardening", () => {
     assert.equal((blockedErr as any).code, "pinned_ip_blocked");
   });
 
+  it("Node 20 { all: true } lookup returns [{ address, family }]", () => {
+    const lookup = createPinnedDnsLookup("203.0.113.10", 4);
+    let addresses: unknown = null;
+    lookup("cdn.example", { all: true }, ((err: Error | null, result: unknown) => {
+      assert.equal(err, null);
+      addresses = result;
+    }) as any);
+    assert.deepEqual(addresses, [{ address: "203.0.113.10", family: 4 }]);
+  });
+
+  it("legacy all:false lookup still returns (address, family)", () => {
+    const lookup = createPinnedDnsLookup("198.51.100.20", 4);
+    let address: unknown;
+    let family: unknown;
+    lookup("cdn.example", { all: false }, (err, addr, fam) => {
+      assert.equal(err, null);
+      address = addr;
+      family = fam;
+    });
+    assert.equal(address, "198.51.100.20");
+    assert.equal(family, 4);
+  });
+
+  it("blocked pin still errors when lookup is called with all:true", () => {
+    const lookup = createPinnedDnsLookup("10.0.0.1", 4);
+    let blockedErr: Error | null = null;
+    lookup("evil.example", { all: true }, ((err: Error | null) => {
+      blockedErr = err;
+    }) as any);
+    assert.ok(blockedErr);
+    assert.equal((blockedErr as any).code, "pinned_ip_blocked");
+  });
+
+  it("Node 20-style http.request with pinned lookup does not throw ERR_INVALID_IP_ADDRESS", async () => {
+    const http = await import("node:http");
+    await new Promise<void>((resolve, reject) => {
+      const req = http.request(
+        {
+          protocol: "http:",
+          hostname: "pin-test.example",
+          port: 80,
+          path: "/",
+          method: "GET",
+          lookup: createPinnedDnsLookup("203.0.113.10", 4) as any,
+          autoSelectFamily: true,
+          timeout: 400,
+        },
+        () => {
+          req.destroy();
+          resolve();
+        },
+      );
+      req.on("error", (err: NodeJS.ErrnoException) => {
+        if (err?.code === "ERR_INVALID_IP_ADDRESS") {
+          reject(err);
+          return;
+        }
+        resolve();
+      });
+      req.on("timeout", () => {
+        req.destroy();
+        resolve();
+      });
+      req.end();
+    });
+  });
+
+  it("all:true array lookup shape lets Node complete an HTTP GET", async () => {
+    const http = await import("node:http");
+    const { once } = await import("node:events");
+    const payload = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { "Content-Type": "image/png" });
+      res.end(payload);
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const addr = server.address();
+    assert.ok(addr && typeof addr === "object");
+    const port = addr.port;
+    try {
+      const lookup = createPinnedDnsLookup("203.0.113.10", 4);
+      let productionAllTrueShape: unknown;
+      lookup("cdn.example", { all: true }, ((err: Error | null, result: unknown) => {
+        assert.equal(err, null);
+        productionAllTrueShape = result;
+      }) as any);
+      assert.equal(Array.isArray(productionAllTrueShape), true);
+      assert.equal((productionAllTrueShape as { address: string }[])[0].address, "203.0.113.10");
+
+      const chunks: Buffer[] = [];
+      await new Promise<void>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: "localhost",
+            port,
+            path: "/",
+            method: "GET",
+            lookup: ((_hostname: string, options: { all?: boolean }, cb: Function) => {
+              const family = 4 as const;
+              const ip = "127.0.0.1";
+              if (options?.all) cb(null, [{ address: ip, family }]);
+              else cb(null, ip, family);
+            }) as any,
+          },
+          (res) => {
+            res.on("data", (c: Buffer) => chunks.push(c));
+            res.on("end", () => resolve());
+            res.on("error", reject);
+          },
+        );
+        req.on("error", reject);
+        req.end();
+      });
+      assert.deepEqual(Buffer.concat(chunks), payload);
+    } finally {
+      server.close();
+      await once(server, "close").catch(() => undefined);
+    }
+  });
+
   it("literal private IP URLs are rejected at pin time", async () => {
     await assert.rejects(
       () => resolveAndPinPublicHttpUrl("http://127.0.0.1/x.png"),
@@ -238,6 +364,8 @@ describe("DNS pin / rebinding SSRF hardening", () => {
     assert.match(src, /resolveAndPinPublicHttpUrl/);
     assert.match(src, /servername:/);
     assert.match(src, /lookup:\s*createPinnedDnsLookup/);
+    assert.match(src, /autoSelectFamily:\s*false/);
+    assert.match(src, /ERR_INVALID_IP_ADDRESS/);
     assert.match(src, /Next hop: resolve \+ validate \+ pin again/);
     assert.doesNotMatch(src, /fetch\(current,\s*\{/);
   });
