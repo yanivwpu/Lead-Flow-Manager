@@ -262,6 +262,7 @@ export function ChannelSettings() {
       lastSyncAt: string | null;
       syncProgressCurrent: number;
       syncProgressTotal: number;
+      bootstrapInProgress?: boolean;
       syncMode?: string | null;
       syncModeLabel?: string | null;
       watchStatus?: string | null;
@@ -271,8 +272,11 @@ export function ChannelSettings() {
     queryKey: ["/api/integrations/email/status"],
     staleTime: 15_000,
     refetchInterval: (q) => {
-      const st = q.state.data?.mailbox?.syncStatus;
-      return st === "syncing" || st === "connecting" ? 4_000 : false;
+      const mb = q.state.data?.mailbox;
+      const st = mb?.syncStatus;
+      if (st === "syncing" || st === "connecting") return 4_000;
+      if (mb?.bootstrapInProgress || Number(mb?.syncProgressTotal) === -1) return 4_000;
+      return false;
     },
   });
 
@@ -1060,15 +1064,16 @@ export function ChannelSettings() {
         };
       }
       if (isEmailMailboxUiConnected(syncStatus)) {
-        const syncHint =
-          syncStatus === "syncing"
-            ? " · initial sync in progress"
-            : mb?.syncModeLabel
-              ? ` · ${mb.syncModeLabel}`
-              : "";
+        const bootstraping =
+          !!mb?.bootstrapInProgress || Number(mb?.syncProgressTotal) === -1;
+        const syncHint = bootstraping
+          ? " · importing recent conversations"
+          : mb?.syncModeLabel
+            ? ` · ${mb.syncModeLabel}`
+            : "";
         return {
-          pill: syncStatus === "syncing" ? "loading" : "connected",
-          pillLabel: syncStatus === "syncing" ? "Syncing…" : "Connected",
+          pill: "connected",
+          pillLabel: "Connected",
           subline: mb?.emailAddress
             ? `${mb.emailAddress}${syncHint}`
             : config.description,
@@ -1887,7 +1892,11 @@ export function ChannelSettings() {
               <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-1.5">
                 <p className="text-sm font-medium text-gray-900">{emailStatus.mailbox.emailAddress}</p>
                 <p className="text-xs text-gray-500 capitalize">
-                  Status: {emailStatus.mailbox.syncStatus.replace(/_/g, " ")}
+                  Status:{" "}
+                  {emailStatus.mailbox.bootstrapInProgress ||
+                  Number(emailStatus.mailbox.syncProgressTotal) === -1
+                    ? "connected"
+                    : emailStatus.mailbox.syncStatus.replace(/_/g, " ")}
                   {emailStatus.mailbox.lastSyncAt
                     ? ` · Last sync ${new Date(emailStatus.mailbox.lastSyncAt).toLocaleString()}`
                     : ""}
@@ -1895,15 +1904,23 @@ export function ChannelSettings() {
                 {emailStatus.mailbox.syncModeLabel ? (
                   <p className="text-xs text-gray-500">{emailStatus.mailbox.syncModeLabel}</p>
                 ) : null}
-                {emailStatus.mailbox.syncStatus === "syncing" && (
+                {emailStatus.mailbox.bootstrapInProgress ||
+                Number(emailStatus.mailbox.syncProgressTotal) === -1 ? (
                   <p className="text-xs text-amber-800">
-                    Syncing {emailStatus.mailbox.syncProgressCurrent}
-                    {emailStatus.mailbox.syncProgressTotal
-                      ? ` / ${emailStatus.mailbox.syncProgressTotal}`
-                      : ""}{" "}
-                    messages…
+                    {emailStatus.mailbox.syncProgressCurrent > 0
+                      ? `Gmail connected — importing recent conversations (${emailStatus.mailbox.syncProgressCurrent} imported)…`
+                      : "Gmail connected — importing recent conversations…"}
                   </p>
-                )}
+                ) : emailStatus.mailbox.syncStatus === "connected" ? (
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-gray-600">
+                      {emailStatus.mailbox.syncProgressCurrent > 0
+                        ? "Recent conversations imported"
+                        : "Gmail connected"}
+                    </p>
+                    <p className="text-xs text-gray-500">New emails sync automatically</p>
+                  </div>
+                ) : null}
                 {emailStatus.mailbox.syncError ? (
                   <p className="text-xs text-red-700">{emailStatus.mailbox.syncError}</p>
                 ) : null}

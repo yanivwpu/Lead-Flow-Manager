@@ -93,7 +93,7 @@ run("htmlToPlainText and stripQuotedEmailReplies support AI context", () => {
 });
 
 run("initial sync mode maps to day windows", () => {
-  assert.equal(EMAIL_DEFAULT_INITIAL_SYNC_MODE, "last_30_days");
+  assert.equal(EMAIL_DEFAULT_INITIAL_SYNC_MODE, "last_7_days");
   assert.equal(initialSyncModeToDays("last_7_days"), 7);
   assert.equal(initialSyncModeToDays("last_30_days"), 30);
   assert.equal(initialSyncModeToDays("last_90_days"), 90);

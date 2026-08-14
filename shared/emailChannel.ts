@@ -20,7 +20,8 @@ export const GMAIL_OAUTH_SCOPES = [
 export const EMAIL_INITIAL_SYNC_MODES = ["last_7_days", "last_30_days", "last_90_days", "new_only"] as const;
 export type EmailInitialSyncMode = (typeof EMAIL_INITIAL_SYNC_MODES)[number];
 
-export const EMAIL_DEFAULT_INITIAL_SYNC_MODE: EmailInitialSyncMode = "last_30_days";
+/** Phase 1 live-first bootstrap: recent week, not a heavy 30-day import. */
+export const EMAIL_DEFAULT_INITIAL_SYNC_MODE: EmailInitialSyncMode = "last_7_days";
 
 export const EMAIL_SYNC_STATUSES = [
   "disconnected",
@@ -45,8 +46,59 @@ export type GmailWatchStatus = (typeof GMAIL_WATCH_STATUSES)[number];
 export const EMAIL_SEND_HOURLY_SOFT_CAP = Number(process.env.EMAIL_SEND_HOURLY_SOFT_CAP || 30);
 export const EMAIL_SEND_DAILY_SOFT_CAP = Number(process.env.EMAIL_SEND_DAILY_SOFT_CAP || 200);
 
-/** Safety cap for initial sync message imports per mailbox. */
-export const EMAIL_INITIAL_SYNC_MESSAGE_CAP = Number(process.env.EMAIL_INITIAL_SYNC_MESSAGE_CAP || 2000);
+/**
+ * Safety cap for recent historical bootstrap per mailbox.
+ * Default 100 — not a fake "mailbox total" for UI progress.
+ */
+export const EMAIL_INITIAL_SYNC_MESSAGE_CAP = Number(process.env.EMAIL_INITIAL_SYNC_MESSAGE_CAP || 100);
+
+/**
+ * Sentinel for `syncProgressTotal` while recent bootstrap is running.
+ * UI must not invent a fake `/ 2000` (or `/ cap`) denominator.
+ */
+export const EMAIL_BOOTSTRAP_IN_PROGRESS_TOTAL = -1;
+
+export function isEmailBootstrapInProgress(mailbox: {
+  syncProgressTotal?: number | null;
+}): boolean {
+  return Number(mailbox.syncProgressTotal) === EMAIL_BOOTSTRAP_IN_PROGRESS_TOTAL;
+}
+
+/** Customer-facing bootstrap / post-connect copy for Settings Email channel. */
+export function describeEmailMailboxBootstrapUi(mailbox: {
+  syncStatus?: string | null;
+  syncProgressCurrent?: number | null;
+  syncProgressTotal?: number | null;
+}): {
+  bootstrapInProgress: boolean;
+  primaryLine: string | null;
+  secondaryLine: string | null;
+} {
+  const status = String(mailbox.syncStatus || "").toLowerCase();
+  if (status !== "connected" && status !== "syncing") {
+    return { bootstrapInProgress: false, primaryLine: null, secondaryLine: null };
+  }
+  if (isEmailBootstrapInProgress(mailbox)) {
+    const n = Math.max(0, Number(mailbox.syncProgressCurrent) || 0);
+    return {
+      bootstrapInProgress: true,
+      primaryLine:
+        n > 0
+          ? `Gmail connected — importing recent conversations (${n} imported)…`
+          : "Gmail connected — importing recent conversations…",
+      secondaryLine: "New emails sync automatically",
+    };
+  }
+  if (status === "connected") {
+    const imported = Math.max(0, Number(mailbox.syncProgressCurrent) || 0);
+    return {
+      bootstrapInProgress: false,
+      primaryLine: imported > 0 ? "Recent conversations imported" : "Gmail connected",
+      secondaryLine: "New emails sync automatically",
+    };
+  }
+  return { bootstrapInProgress: false, primaryLine: null, secondaryLine: null };
+}
 
 export type NormalizedEmailAddress = {
   email: string;
@@ -184,6 +236,8 @@ export type EmailMailboxPublic = {
   lastSyncAt: string | null;
   syncProgressCurrent: number;
   syncProgressTotal: number;
+  /** True while recent bootstrap is running (syncProgressTotal sentinel). */
+  bootstrapInProgress?: boolean;
   isPrimary: boolean;
   initialSyncMode: EmailInitialSyncMode;
   connectedAt: string | null;

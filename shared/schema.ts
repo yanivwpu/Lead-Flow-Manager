@@ -1405,7 +1405,7 @@ export const emailMailboxes = pgTable(
     visibility: text("visibility").notNull().default("workspace"),
     signatureHtml: text("signature_html"),
     syncFromDate: timestamp("sync_from_date"),
-    initialSyncMode: text("initial_sync_mode").notNull().default("last_30_days"),
+    initialSyncMode: text("initial_sync_mode").notNull().default("last_7_days"),
     messagesSentToday: integer("messages_sent_today").default(0),
     messagesSentHour: integer("messages_sent_hour").default(0),
     sendCountDayKey: text("send_count_day_key"),

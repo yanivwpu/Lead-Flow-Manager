@@ -9,7 +9,6 @@ import {
   toGmailOAuthRedirectError,
 } from "../emailChannel/oauth";
 import { getPrimaryEmailMailbox, getEmailMailboxById, listEmailMailboxes } from "../emailChannel/mailboxStore";
-import { runInitialEmailSync } from "../emailChannel/syncService";
 import { getEmailMessageDetail } from "../emailChannel/mailboxStore";
 import { assertEmailEncryptionConfigured } from "../emailChannel/credentials";
 import { GMAIL_OAUTH_SCOPES } from "@shared/emailChannel";
@@ -130,8 +129,20 @@ export function registerEmailChannelRoutes(app: Express): void {
       if (!requireAuth(req, res)) return;
       const mailbox = await getPrimaryEmailMailbox(req.user.id);
       if (!mailbox) return res.status(404).json({ error: "No mailbox connected" });
-      void runInitialEmailSync(mailbox.id);
-      res.status(202).json({ ok: true, mailboxId: mailbox.id, status: "syncing" });
+      void import("../emailChannel/syncService")
+        .then(async ({ establishGmailLiveSyncBaseline, runRecentEmailBootstrap }) => {
+          if (!mailbox.syncCursor) {
+            await establishGmailLiveSyncBaseline(mailbox.id);
+          }
+          await runRecentEmailBootstrap(mailbox.id);
+        })
+        .catch((err) =>
+          console.error(
+            "[EmailSync] manual bootstrap failed:",
+            err instanceof Error ? err.message : String(err),
+          ),
+        );
+      res.status(202).json({ ok: true, mailboxId: mailbox.id, status: "bootstrap" });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "Sync failed" });
     }

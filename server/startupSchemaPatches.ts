@@ -312,7 +312,7 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
         visibility text NOT NULL DEFAULT 'workspace',
         signature_html text,
         sync_from_date timestamp,
-        initial_sync_mode text NOT NULL DEFAULT 'last_30_days',
+        initial_sync_mode text NOT NULL DEFAULT 'last_7_days',
         messages_sent_today integer DEFAULT 0,
         messages_sent_hour integer DEFAULT 0,
         send_count_day_key text,

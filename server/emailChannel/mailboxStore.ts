@@ -75,6 +75,107 @@ export async function setMailboxSyncStatus(
   });
 }
 
+/**
+ * Monotonic syncCursor advance — never moves the live history baseline backward.
+ * Bootstrap must use this (or omit cursor writes) so it cannot rewind incremental sync.
+ */
+export async function advanceMailboxSyncCursor(params: {
+  mailboxId: string;
+  candidateHistoryId: string | null | undefined;
+  source: string;
+}): Promise<{
+  previous: string | null;
+  next: string | null;
+  advanced: boolean;
+  regressionPrevented: boolean;
+}> {
+  const { preferNewerHistoryId, logGmailSyncTriggerEvent } = await import("./gmailPushConfig");
+  const candidate = params.candidateHistoryId ? String(params.candidateHistoryId).trim() : "";
+  if (!candidate) {
+    const row = await getEmailMailboxById(params.mailboxId);
+    return {
+      previous: row?.syncCursor ?? null,
+      next: row?.syncCursor ?? null,
+      advanced: false,
+      regressionPrevented: false,
+    };
+  }
+
+  const before = await getEmailMailboxById(params.mailboxId);
+  const previous = before?.syncCursor ?? null;
+  const preferred = preferNewerHistoryId(previous, candidate);
+  const regressionPrevented = Boolean(
+    previous && preferred === previous && candidate !== previous,
+  );
+
+  if (preferred == null || preferred === previous) {
+    if (regressionPrevented) {
+      logGmailSyncTriggerEvent("cursor_regression_prevented", {
+        mailboxId: params.mailboxId,
+        source: params.source,
+        previousCursor: previous,
+        candidateHistoryId: candidate,
+      });
+      console.log(
+        JSON.stringify({
+          tag: "[EmailSync]",
+          event: "cursor_regression_prevented",
+          mailboxId: params.mailboxId,
+          source: params.source,
+          previousCursor: previous,
+          candidateHistoryId: candidate,
+        }),
+      );
+    }
+    return { previous, next: previous, advanced: false, regressionPrevented };
+  }
+
+  // Atomic numeric advance — concurrent writers cannot rewind.
+  await db.execute(sql`
+    UPDATE email_mailboxes
+    SET
+      sync_cursor = CASE
+        WHEN sync_cursor IS NULL THEN ${preferred}
+        WHEN ${preferred} ~ '^[0-9]+$' AND sync_cursor ~ '^[0-9]+$'
+          AND (${preferred})::numeric > (sync_cursor)::numeric
+          THEN ${preferred}
+        WHEN sync_cursor !~ '^[0-9]+$' THEN ${preferred}
+        ELSE sync_cursor
+      END,
+      updated_at = now()
+    WHERE id = ${params.mailboxId}
+  `);
+
+  const after = await getEmailMailboxById(params.mailboxId);
+  const next = after?.syncCursor ?? null;
+  const advanced = next != null && next !== previous;
+  if (advanced) {
+    console.log(
+      JSON.stringify({
+        tag: "[EmailSync]",
+        event: "cursor_advanced",
+        mailboxId: params.mailboxId,
+        source: params.source,
+        previousCursor: previous,
+        nextCursor: next,
+      }),
+    );
+  } else if (previous && candidate !== previous) {
+    logGmailSyncTriggerEvent("cursor_regression_prevented", {
+      mailboxId: params.mailboxId,
+      source: params.source,
+      previousCursor: previous,
+      candidateHistoryId: candidate,
+    });
+  }
+  return {
+    previous,
+    next,
+    advanced,
+    regressionPrevented: !advanced && Boolean(previous && candidate !== previous),
+  };
+}
+
 export async function saveOauthState(params: {
   state: string;
   workspaceUserId: string;

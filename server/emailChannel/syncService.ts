@@ -1,4 +1,5 @@
 import {
+  EMAIL_BOOTSTRAP_IN_PROGRESS_TOTAL,
   EMAIL_INITIAL_SYNC_MESSAGE_CAP,
   initialSyncModeToDays,
   type EmailInitialSyncMode,
@@ -6,6 +7,7 @@ import {
 import { getEmailProvider } from "./gmailProvider";
 import { getValidMailboxAccessToken } from "./oauth";
 import {
+  advanceMailboxSyncCursor,
   getEmailMailboxById,
   setMailboxSyncStatus,
   updateEmailMailbox,
@@ -17,33 +19,117 @@ import {
   logEmailChannelHealthDiag,
   syncErrorFromUnknown,
 } from "./credentials";
+import { logGmailSyncTriggerEvent } from "./gmailPushConfig";
 
 /** Temporary safe inbound timing diag — no tokens, bodies, subjects, or addresses. */
 function logGmailInboundTiming(payload: Record<string, unknown>): void {
   console.log(JSON.stringify({ tag: "[GmailInboundTiming]", ...payload }));
 }
 
+function logEmailSyncEvent(event: string, fields: Record<string, unknown>): void {
+  console.log(JSON.stringify({ tag: "[EmailSync]", event, ...fields }));
+}
+
+/**
+ * Capture live history baseline + start watch before any historical bootstrap.
+ * Safe to call after OAuth; watch failure fails soft (polling remains).
+ */
+export async function establishGmailLiveSyncBaseline(mailboxId: string): Promise<{
+  syncCursor: string | null;
+  watchOk: boolean;
+}> {
+  const { accessToken, mailbox } = await getValidMailboxAccessToken(mailboxId);
+  const provider = getEmailProvider(mailbox.provider);
+  const profile = await provider.getMailboxProfile(accessToken, {
+    grantedScopes: mailbox.scopes,
+    hasRefreshToken: Boolean(mailbox.refreshTokenEncrypted),
+  });
+  const historyId = profile.historyId ? String(profile.historyId) : null;
+
+  if (historyId) {
+    await advanceMailboxSyncCursor({
+      mailboxId,
+      candidateHistoryId: historyId,
+      source: "live_baseline_profile",
+    });
+    logEmailSyncEvent("baseline_history_id_captured", {
+      mailboxId,
+      historyIdLast4: historyId.slice(-4),
+      historyIdLen: historyId.length,
+    });
+  } else {
+    logEmailSyncEvent("baseline_history_id_missing", { mailboxId });
+  }
+
+  await setMailboxSyncStatus(mailboxId, "connected", { syncError: null });
+
+  let watchOk = false;
+  try {
+    const { ensureGmailWatch } = await import("./gmailWatch");
+    const watch = await ensureGmailWatch(mailboxId);
+    watchOk = watch.ok;
+    logEmailSyncEvent(watch.ok ? "watch_start_ok" : "watch_start_failed", {
+      mailboxId,
+      watchStatus: watch.status,
+      reason: watch.reason ?? null,
+    });
+  } catch (err) {
+    logEmailSyncEvent("watch_start_failed", {
+      mailboxId,
+      reason: err instanceof Error ? err.message.slice(0, 200) : "watch_failed",
+    });
+  }
+
+  // Close the OAuth→watch window via history.list as soon as a cursor exists.
+  if (historyId) {
+    const { scheduleMailboxIncrementalSync } = await import("./gmailSyncTrigger");
+    scheduleMailboxIncrementalSync({
+      mailboxId,
+      source: "watch_post_setup",
+    });
+    logEmailSyncEvent("incremental_scheduled_after_baseline", { mailboxId });
+  }
+
+  return { syncCursor: historyId, watchOk };
+}
+
+/**
+ * Recent historical bootstrap only — does not establish live sync and never rewinds syncCursor.
+ * Alias kept as runInitialEmailSync for route compatibility.
+ */
 export async function runInitialEmailSync(mailboxId: string): Promise<void> {
+  return runRecentEmailBootstrap(mailboxId);
+}
+
+export async function runRecentEmailBootstrap(mailboxId: string): Promise<void> {
   const mailbox = await getEmailMailboxById(mailboxId);
   if (!mailbox) return;
 
-  await setMailboxSyncStatus(mailboxId, "syncing", { syncError: null });
+  // Do not block channel on bootstrap — stay/become connected; mark indeterminate progress.
   await updateEmailMailbox(mailboxId, {
+    syncStatus: mailbox.syncStatus === "error" ? mailbox.syncStatus : "connected",
+    syncError: mailbox.syncStatus === "error" ? mailbox.syncError : null,
     syncProgressCurrent: 0,
-    syncProgressTotal: 0,
+    syncProgressTotal: EMAIL_BOOTSTRAP_IN_PROGRESS_TOTAL,
+  });
+
+  logEmailSyncEvent("bootstrap_start", {
+    mailboxId,
+    initialSyncMode: mailbox.initialSyncMode,
+    cap: EMAIL_INITIAL_SYNC_MESSAGE_CAP,
+    syncCursorPresent: Boolean(mailbox.syncCursor),
   });
 
   try {
     const { accessToken, mailbox: fresh } = await getValidMailboxAccessToken(mailboxId);
     const provider = getEmailProvider(fresh.provider);
-    const mode = (fresh.initialSyncMode as EmailInitialSyncMode) || "last_30_days";
+    const mode = (fresh.initialSyncMode as EmailInitialSyncMode) || "last_7_days";
     const days = initialSyncModeToDays(mode);
     const afterDate =
       days == null ? null : fresh.syncFromDate || new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
     let pageToken: string | null | undefined = null;
     let imported = 0;
-    let historyId: string | null = null;
 
     do {
       const page = await provider.listRecentMessages({
@@ -52,7 +138,15 @@ export async function runInitialEmailSync(mailboxId: string): Promise<void> {
         pageToken,
         maxResults: 25,
       });
-      if (page.historyId) historyId = page.historyId;
+
+      // Never persist page/profile historyId as a blind overwrite — only monotonic advance.
+      if (page.historyId) {
+        await advanceMailboxSyncCursor({
+          mailboxId,
+          candidateHistoryId: page.historyId,
+          source: "bootstrap_page",
+        });
+      }
 
       for (const msg of page.messages) {
         if (imported >= EMAIL_INITIAL_SYNC_MESSAGE_CAP) break;
@@ -66,7 +160,7 @@ export async function runInitialEmailSync(mailboxId: string): Promise<void> {
 
       await updateEmailMailbox(mailboxId, {
         syncProgressCurrent: imported,
-        syncProgressTotal: Math.max(imported, EMAIL_INITIAL_SYNC_MESSAGE_CAP),
+        syncProgressTotal: EMAIL_BOOTSTRAP_IN_PROGRESS_TOTAL,
       });
 
       pageToken = page.nextPageToken;
@@ -77,29 +171,22 @@ export async function runInitialEmailSync(mailboxId: string): Promise<void> {
       syncStatus: "connected",
       syncError: null,
       lastSyncAt: new Date(),
-      syncCursor: historyId,
       syncProgressCurrent: imported,
       syncProgressTotal: imported,
     });
 
-    console.log(
-      JSON.stringify({
-        tag: "[EmailSync]",
-        event: "initial_complete",
-        mailboxId,
-        imported,
-      }),
-    );
+    logEmailSyncEvent("bootstrap_complete", {
+      mailboxId,
+      imported,
+      cap: EMAIL_INITIAL_SYNC_MESSAGE_CAP,
+    });
 
-    // Phase 1B: register watch after incremental cursor is established (never resets syncCursor).
-    void import("./gmailWatch")
-      .then(({ ensureGmailWatch }) => ensureGmailWatch(mailboxId))
-      .catch((err) =>
-        console.warn(
-          "[GmailWatch] post-initial register failed:",
-          err instanceof Error ? err.message : String(err),
-        ),
-      );
+    // Catch anything that arrived during bootstrap (history.list from live cursor).
+    const { scheduleMailboxIncrementalSync } = await import("./gmailSyncTrigger");
+    scheduleMailboxIncrementalSync({
+      mailboxId,
+      source: "manual",
+    });
   } catch (err) {
     const message = syncErrorFromUnknown(err);
     if (isEmailCredentialDecryptFailure(err)) {
@@ -114,9 +201,18 @@ export async function runInitialEmailSync(mailboxId: string): Promise<void> {
       });
       await setMailboxSyncStatus(mailboxId, "needs_reconnect", { syncError: message });
     } else {
-      await setMailboxSyncStatus(mailboxId, "error", { syncError: message });
+      // Keep channel connected for live sync; clear bootstrap sentinel.
+      await updateEmailMailbox(mailboxId, {
+        syncStatus: "connected",
+        syncError: message,
+        syncProgressTotal: 0,
+      });
+      logEmailSyncEvent("bootstrap_failed", {
+        mailboxId,
+        errorName: err instanceof Error ? err.name : "Error",
+      });
     }
-    console.error("[EmailSync] initial failed:", message);
+    console.error("[EmailSync] bootstrap failed:", message);
   }
 }
 
@@ -127,6 +223,17 @@ export async function runIncrementalEmailSync(mailboxId: string): Promise<void> 
 
   const syncStartedAt = new Date().toISOString();
   const historyStartId = mailbox.syncCursor ?? null;
+  const bootstrapActive = Number(mailbox.syncProgressTotal) === EMAIL_BOOTSTRAP_IN_PROGRESS_TOTAL;
+  if (bootstrapActive) {
+    logEmailSyncEvent("incremental_while_bootstrap_active", {
+      mailboxId,
+      syncCursorPresent: Boolean(mailbox.syncCursor),
+    });
+    logGmailSyncTriggerEvent("incremental_while_bootstrap_active", {
+      mailboxId,
+      storedSyncCursor: mailbox.syncCursor ?? null,
+    });
+  }
 
   try {
     const { accessToken, mailbox: fresh } = await getValidMailboxAccessToken(mailboxId);
@@ -167,11 +274,15 @@ export async function runIncrementalEmailSync(mailboxId: string): Promise<void> 
           });
         }
       }
+      await advanceMailboxSyncCursor({
+        mailboxId,
+        candidateHistoryId: page.historyId,
+        source: "bounded_resync_no_cursor",
+      });
       await updateEmailMailbox(mailboxId, {
         syncStatus: "connected",
         syncError: null,
         lastSyncAt: new Date(),
-        syncCursor: page.historyId || fresh.syncCursor,
       });
       logGmailInboundTiming({
         mailboxId,
@@ -229,11 +340,15 @@ export async function runIncrementalEmailSync(mailboxId: string): Promise<void> 
           });
         }
       }
+      await advanceMailboxSyncCursor({
+        mailboxId,
+        candidateHistoryId: page.historyId,
+        source: "bounded_resync_stale_history",
+      });
       await updateEmailMailbox(mailboxId, {
         syncStatus: "connected",
         syncError: null,
         lastSyncAt: new Date(),
-        syncCursor: page.historyId || fresh.syncCursor,
       });
       logGmailInboundTiming({
         mailboxId,
@@ -282,11 +397,15 @@ export async function runIncrementalEmailSync(mailboxId: string): Promise<void> 
       }
     }
 
+    await advanceMailboxSyncCursor({
+      mailboxId,
+      candidateHistoryId: history.historyId,
+      source: "history_list",
+    });
     await updateEmailMailbox(mailboxId, {
       syncStatus: "connected",
       syncError: null,
       lastSyncAt: new Date(),
-      syncCursor: history.historyId || fresh.syncCursor,
     });
 
     logGmailInboundTiming({

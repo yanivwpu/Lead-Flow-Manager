@@ -1,9 +1,11 @@
 import crypto from "crypto";
 import {
+  EMAIL_BOOTSTRAP_IN_PROGRESS_TOTAL,
   EMAIL_DEFAULT_INITIAL_SYNC_MODE,
   EMAIL_SEND_DAILY_SOFT_CAP,
   EMAIL_SEND_HOURLY_SOFT_CAP,
   GMAIL_OAUTH_SCOPES,
+  isEmailBootstrapInProgress,
   type EmailMailboxPublic,
   type EmailInitialSyncMode,
   type EmailSyncMode,
@@ -136,7 +138,11 @@ export async function completeGmailOAuth(params: {
   });
 
   try {
-    const syncFromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const syncFromDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const baselineHistoryId =
+      "historyId" in exchanged && exchanged.historyId
+        ? String(exchanged.historyId)
+        : null;
     const mailbox = await insertEmailMailbox({
       workspaceUserId: oauthState.workspaceUserId,
       connectedByUserId: oauthState.connectedByUserId,
@@ -148,7 +154,10 @@ export async function completeGmailOAuth(params: {
       refreshTokenEncrypted: encryptEmailCredential(exchanged.refreshToken),
       tokenExpiresAt: exchanged.expiresAt ?? null,
       scopes: exchanged.scopes || GMAIL_OAUTH_SCOPES.join(" "),
-      syncStatus: "syncing",
+      syncStatus: "connected",
+      syncCursor: baselineHistoryId,
+      syncProgressCurrent: 0,
+      syncProgressTotal: EMAIL_BOOTSTRAP_IN_PROGRESS_TOTAL,
       isPrimary: true,
       visibility: "workspace",
       syncFromDate,
@@ -167,15 +176,19 @@ export async function completeGmailOAuth(params: {
 
     logGmailOAuthDiag("mailbox_persist_ok", {
       mailboxId: mailbox.id,
-      syncStatus: "syncing",
+      syncStatus: "connected",
+      baselineHistoryIdPresent: Boolean(baselineHistoryId),
     });
 
-    // Fire-and-forget initial sync
+    // Live-first: ensure cursor (profile refresh if missing) + watch, then small bootstrap.
     void import("./syncService")
-      .then(({ runInitialEmailSync }) => runInitialEmailSync(mailbox.id))
+      .then(async ({ establishGmailLiveSyncBaseline, runRecentEmailBootstrap }) => {
+        await establishGmailLiveSyncBaseline(mailbox.id);
+        await runRecentEmailBootstrap(mailbox.id);
+      })
       .catch((err) =>
         console.error(
-          "[EmailOAuth] initial sync failed:",
+          "[EmailOAuth] live baseline / bootstrap failed:",
           err instanceof Error ? err.message : String(err),
         ),
       );
@@ -382,6 +395,7 @@ export function toPublicMailbox(
     lastSyncAt: m.lastSyncAt?.toISOString() ?? null,
     syncProgressCurrent: m.syncProgressCurrent ?? 0,
     syncProgressTotal: m.syncProgressTotal ?? 0,
+    bootstrapInProgress: isEmailBootstrapInProgress(m),
     isPrimary: m.isPrimary,
     initialSyncMode: (m.initialSyncMode as EmailInitialSyncMode) || EMAIL_DEFAULT_INITIAL_SYNC_MODE,
     connectedAt: m.createdAt?.toISOString() ?? null,

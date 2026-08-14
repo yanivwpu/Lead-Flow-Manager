@@ -15,6 +15,8 @@ export type EmailMailboxProfile = {
   emailAddress: string;
   displayName: string | null;
   providerAccountId: string | null;
+  /** Gmail users.getProfile historyId — live incremental baseline (not watch metadata). */
+  historyId?: string | null;
 };
 
 export type EmailSendResult = {

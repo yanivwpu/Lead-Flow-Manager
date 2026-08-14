@@ -454,10 +454,16 @@ export class GmailEmailProvider implements EmailProvider {
       /* optional — not required for mailbox connect */
     }
 
+    const historyId =
+      json.historyId != null && String(json.historyId).trim()
+        ? String(json.historyId).trim()
+        : null;
+
     return {
       emailAddress,
       displayName,
       providerAccountId: emailAddress,
+      historyId,
     };
   }
 
