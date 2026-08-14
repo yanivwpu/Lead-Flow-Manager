@@ -866,7 +866,8 @@ export function InboxLeadDetailsPanel({
         messagesLen: Array.isArray(messages) ? messages.length : -1,
       },
     });
-  }, [contact?.id, primaryConversation?.id, primaryConversation?.channel, messages]);
+    // Do not depend on `messages` array identity — parent passes a fresh .map() every render.
+  }, [contact?.id, primaryConversation?.id, primaryConversation?.channel, messages.length]);
   // #endregion
 
   // Workspace-scoped snapshot — long staleTime; not refetched per conversation/contact.

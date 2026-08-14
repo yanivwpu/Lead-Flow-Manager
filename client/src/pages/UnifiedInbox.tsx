@@ -497,31 +497,23 @@ export function UnifiedInbox() {
 
   // #region agent log
   const inboxRenderCountRef = useRef(0);
-  inboxRenderCountRef.current += 1;
-  if (inboxRenderCountRef.current === 1 || inboxRenderCountRef.current === 30 || inboxRenderCountRef.current === 60) {
-    debug34aeaf({
-      hypothesisId: "D",
-      runId: "post-fix",
-      location: "UnifiedInbox.tsx:render",
-      message: "inbox_render_count",
-      data: {
-        renderCount: inboxRenderCountRef.current,
-        pathname: typeof window !== "undefined" ? window.location.pathname : null,
-      },
-    });
-  }
-  if (inboxRenderCountRef.current === 80) {
-    debug34aeaf({
-      hypothesisId: "D",
-      runId: "post-fix",
-      location: "UnifiedInbox.tsx:render",
-      message: "inbox_render_storm",
-      data: {
-        renderCount: inboxRenderCountRef.current,
-        search: typeof window !== "undefined" ? String(window.location.search || "").slice(0, 120) : null,
-      },
-    });
-  }
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    inboxRenderCountRef.current += 1;
+    const n = inboxRenderCountRef.current;
+    if (n === 1 || n === 30 || n === 60 || n === 80) {
+      debug34aeaf({
+        hypothesisId: "D",
+        runId: "post-fix",
+        location: "UnifiedInbox.tsx:renderSample",
+        message: n >= 80 ? "inbox_render_storm" : "inbox_render_count",
+        data: {
+          renderCount: n,
+          pathname: typeof window !== "undefined" ? window.location.pathname : null,
+        },
+      });
+    }
+  }, [pathname, searchString]);
   // #endregion
 
   // #region agent log
@@ -3121,7 +3113,19 @@ export function UnifiedInbox() {
         searchString: String(searchString || "").slice(0, 120),
       },
     });
-  }, [selectedContactId, selectedConversationId, activeConversationId, primaryConversation?.id, hasConversation, contactMatchesSelection, contact, displayContact, pathname, searchString]);
+    // Prefer primitives — object identity for contact/displayContact changes every parent render.
+  }, [
+    selectedContactId,
+    selectedConversationId,
+    activeConversationId,
+    primaryConversation?.id,
+    hasConversation,
+    contactMatchesSelection,
+    contact?.id,
+    displayContact?.id,
+    pathname,
+    searchString,
+  ]);
   // #endregion
 
   const showListSkeleton = shouldShowInboxListSkeleton({

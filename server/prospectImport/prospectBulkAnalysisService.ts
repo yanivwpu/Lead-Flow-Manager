@@ -143,7 +143,7 @@ export async function createBulkAnalysisJob(params: {
   }
 
   // #region agent log
-  fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+  if (process.env.NODE_ENV !== "production") fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "d96ff4" },
     body: JSON.stringify({
@@ -993,7 +993,7 @@ export async function enqueueAiReviewAfterEnrichment(params: {
     rawResult: raw,
   });
   // #region agent log
-  fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
+  if (process.env.NODE_ENV !== "production") fetch("http://127.0.0.1:7693/ingest/2f005315-cdf4-402a-a15b-868ee3486ee2", {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "d96ff4" },
     body: JSON.stringify({
