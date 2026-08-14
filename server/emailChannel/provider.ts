@@ -77,6 +77,13 @@ export interface EmailProvider {
 
   getMessage(accessToken: string, providerMessageId: string): Promise<NormalizedEmailMessage | null>;
 
+  /** Fetch a single attachment body (CID / inline images). Optional — Gmail implements. */
+  getAttachment?(params: {
+    accessToken: string;
+    providerMessageId: string;
+    providerAttachmentId: string;
+  }): Promise<{ data: Buffer; mimeType?: string | null } | null>;
+
   historyList(params: {
     accessToken: string;
     startHistoryId: string;

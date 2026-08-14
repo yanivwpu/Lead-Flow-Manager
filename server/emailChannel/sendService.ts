@@ -211,7 +211,7 @@ export async function sendEmailViaMailbox(params: {
     sentByUserId: params.sentByUserId,
   } as any);
 
-  const sanitized = sanitizeEmailHtml(htmlBody);
+  const sanitized = sanitizeEmailHtml(htmlBody, { purpose: "outbound" });
   await insertEmailMessageDetail({
     messageId: pending.id,
     subject,

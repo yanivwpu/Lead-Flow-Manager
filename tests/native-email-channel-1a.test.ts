@@ -66,18 +66,22 @@ run("noreply / system addresses are suppressed for contact creation", () => {
   assert.equal(shouldSuppressEmailContactCreation("ada@example.com"), null);
 });
 
-run("sanitizeEmailHtml strips scripts, handlers, and remote images", () => {
+run("sanitizeEmailHtml strips scripts/handlers; inbound proxies remote images", () => {
   const raw = `
     <p onclick="alert(1)">Hello <script>evil()</script></p>
-    <img src="https://evil.example/track.png" />
+    <img src="https://evil.example/track.png" width="120" height="40" />
     <a href="javascript:alert(1)">x</a>
   `;
-  const { html, remoteImagesBlocked } = sanitizeEmailHtml(raw);
-  assert.equal(remoteImagesBlocked, 1);
+  const { html, remoteImagesProxied } = sanitizeEmailHtml(raw, {
+    purpose: "inbound",
+    messageId: "msg-test",
+  });
+  assert.ok(remoteImagesProxied >= 1);
   assert.doesNotMatch(html, /<script/i);
   assert.doesNotMatch(html, /onclick/i);
   assert.doesNotMatch(html, /javascript:/i);
-  assert.match(html, /Remote image blocked/i);
+  assert.doesNotMatch(html, /Remote image blocked/i);
+  assert.match(html, /\/api\/email\/image-proxy/);
   assert.match(html, /Hello/);
 });
 

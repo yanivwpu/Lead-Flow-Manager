@@ -101,12 +101,25 @@ function extractAttachments(payload: any): NormalizedEmailMessage["attachments"]
     if (!part) return;
     const filename = String(part.filename || "").trim();
     const attId = part.body?.attachmentId;
-    if (filename && attId) {
+    const partHeaders = headerMap(part.headers);
+    const rawCid = partHeaders["content-id"] || "";
+    const contentId = rawCid.replace(/^<|>$/g, "").trim() || null;
+    const disposition = String(partHeaders["content-disposition"] || "").toLowerCase();
+    const isInline = disposition.includes("inline") || !!contentId;
+    const mime = String(part.mimeType || "").toLowerCase();
+    const looksLikeInlineImage =
+      !!attId &&
+      (isInline || mime.startsWith("image/")) &&
+      (contentId || filename || mime.startsWith("image/"));
+
+    if (attId && (filename || looksLikeInlineImage)) {
       out.push({
-        filename,
+        filename: filename || (contentId ? `inline-${contentId.slice(0, 24)}` : "inline"),
         mimeType: part.mimeType || null,
         size: typeof part.body?.size === "number" ? part.body.size : null,
         providerAttachmentId: String(attId),
+        contentId,
+        isInline: isInline || undefined,
       });
     }
     for (const child of part.parts || []) walk(child);
@@ -539,6 +552,27 @@ export class GmailEmailProvider implements EmailProvider {
       ? ((await profileRes.json()) as { emailAddress?: string })
       : { emailAddress: "" };
     return normalizeGmailApiMessage(raw, String(profile.emailAddress || ""));
+  }
+
+  async getAttachment(params: {
+    accessToken: string;
+    providerMessageId: string;
+    providerAttachmentId: string;
+  }): Promise<{ data: Buffer; mimeType?: string | null } | null> {
+    const msgId = encodeURIComponent(params.providerMessageId);
+    const attId = encodeURIComponent(params.providerAttachmentId);
+    const res = await fetch(`${GMAIL_API}/users/me/messages/${msgId}/attachments/${attId}`, {
+      headers: { Authorization: `Bearer ${params.accessToken}` },
+    });
+    if (!res.ok) return null;
+    const json = (await res.json().catch(() => ({}))) as { data?: string; size?: number };
+    if (!json.data) return null;
+    const normalized = String(json.data).replace(/-/g, "+").replace(/_/g, "/");
+    try {
+      return { data: Buffer.from(normalized, "base64"), mimeType: null };
+    } catch {
+      return null;
+    }
   }
 
   async historyList(params: {

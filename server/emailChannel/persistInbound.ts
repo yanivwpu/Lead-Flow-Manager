@@ -284,7 +284,10 @@ export async function persistNormalizedEmailMessage(params: {
     sentAt: normalized.sentAt,
   } as any);
 
-  const sanitized = sanitizeEmailHtml(normalized.htmlBody);
+  const sanitized = sanitizeEmailHtml(normalized.htmlBody, {
+    purpose: "inbound",
+    messageId: message.id,
+  });
   await insertEmailMessageDetail({
     messageId: message.id,
     subject: normalized.subject,

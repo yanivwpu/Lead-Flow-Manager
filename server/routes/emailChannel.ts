@@ -11,6 +11,10 @@ import {
 import { getPrimaryEmailMailbox, getEmailMailboxById, listEmailMailboxes } from "../emailChannel/mailboxStore";
 import { getEmailMessageDetail } from "../emailChannel/mailboxStore";
 import { assertEmailEncryptionConfigured } from "../emailChannel/credentials";
+import {
+  assertEmailImageProxySecretConfigured,
+  logEmailImageProxySecretStartupStatus,
+} from "../emailChannel/emailImageProxySecret";
 import { GMAIL_OAUTH_SCOPES } from "@shared/emailChannel";
 import { logGmailOAuthDiag, logGmailOAuthDiagStartupReady } from "../emailChannel/gmailOAuthDiagnostic";
 
@@ -24,6 +28,97 @@ function requireAuth(req: Request, res: Response): req is Request & { user: { id
 
 export function registerEmailChannelRoutes(app: Express): void {
   console.error("[EmailRouteBootProbe] entered_register");
+
+  try {
+    logEmailImageProxySecretStartupStatus();
+    if (process.env.NODE_ENV === "production") {
+      assertEmailImageProxySecretConfigured();
+    }
+  } catch (err) {
+    console.error(
+      "[EmailImageProxy] startup secret check failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+    if (process.env.NODE_ENV === "production") {
+      // Fail closed for image proxy only — app continues; proxy route returns 503.
+      console.error(
+        JSON.stringify({
+          tag: "[EmailImageProxy]",
+          event: "production_secret_required",
+          action: "Set EMAIL_IMAGE_PROXY_SECRET (≥32 chars) on Railway before relying on email images",
+        }),
+      );
+    }
+  }
+
+  /** Proxied remote image — auth required; SSRF-hardened; signed+expiring URL. */
+  app.get("/api/email/image-proxy", async (req, res) => {
+    try {
+      if (!requireAuth(req, res)) return;
+      const { assertEmailImageProxySecretConfigured } = await import(
+        "../emailChannel/emailImageProxySecret"
+      );
+      try {
+        assertEmailImageProxySecretConfigured();
+      } catch {
+        return res.status(503).json({ error: "image_proxy_not_configured" });
+      }
+      const encoded = typeof req.query.u === "string" ? req.query.u : "";
+      const signature = typeof req.query.s === "string" ? req.query.s : "";
+      const expiresRaw = typeof req.query.e === "string" ? req.query.e : "";
+      const expiresUnixSec = Number(expiresRaw);
+      if (!encoded || !signature || !Number.isFinite(expiresUnixSec)) {
+        return res.status(400).json({ error: "Missing image parameters" });
+      }
+      const { fetchEmailImageViaProxy } = await import("../emailChannel/emailImageProxy");
+      const result = await fetchEmailImageViaProxy({
+        encodedUrl: encoded,
+        signature,
+        expiresUnixSec,
+      });
+      if (!result.ok) {
+        return res.status(result.status).json({ error: result.code });
+      }
+      res.setHeader("Content-Type", result.contentType);
+      res.setHeader("Cache-Control", "private, max-age=1800");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      return res.status(200).send(result.body);
+    } catch (err) {
+      console.error(
+        "[EmailImageProxy] route failed:",
+        err instanceof Error ? err.message : String(err),
+      );
+      return res.status(500).json({ error: "Image proxy failed" });
+    }
+  });
+
+  /** CID / inline MIME image for a message the user owns. */
+  app.get("/api/messages/:messageId/email-inline", async (req, res) => {
+    try {
+      if (!requireAuth(req, res)) return;
+      const cid = typeof req.query.cid === "string" ? req.query.cid : "";
+      const { fetchEmailInlineImageForUser } = await import("../emailChannel/emailInlineImages");
+      const result = await fetchEmailInlineImageForUser({
+        workspaceUserId: req.user.id,
+        messageId: req.params.messageId,
+        contentId: cid,
+      });
+      if (!result.ok) {
+        return res.status(result.status).json({ error: result.code });
+      }
+      res.setHeader("Content-Type", result.contentType);
+      res.setHeader("Cache-Control", "private, max-age=3600");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      return res.status(200).send(result.body);
+    } catch (err) {
+      console.error(
+        "[EmailInlineImage] route failed:",
+        err instanceof Error ? err.message : String(err),
+      );
+      return res.status(500).json({ error: "Inline image failed" });
+    }
+  });
+
   app.get("/api/integrations/email/status", async (req, res) => {
     try {
       if (!requireAuth(req, res)) return;
@@ -194,6 +289,16 @@ export function registerEmailChannelRoutes(app: Express): void {
         mailboxEmail,
       });
 
+      // Defense-in-depth: rewrite any leftover cid:/http(s) imgs to same-origin endpoints.
+      let htmlBody = detail.htmlBody;
+      if (htmlBody) {
+        const { sanitizeEmailHtml } = await import("../emailChannel/htmlSanitize");
+        htmlBody = sanitizeEmailHtml(htmlBody, {
+          purpose: "inbound",
+          messageId: req.params.messageId,
+        }).html;
+      }
+
       // Idempotent on-read persist so Inbox list can show visitor identity next fetch.
       const { isWebsiteFormSourceMetadata } = await import("@shared/websiteFormEmail");
       const needsSourcePersist =
@@ -230,6 +335,7 @@ export function registerEmailChannelRoutes(app: Express): void {
       res.json({
         detail: {
           ...detail,
+          htmlBody,
           sourceType: detail.sourceType || formMeta?.sourceType || null,
           formMeta: formMeta || null,
         },

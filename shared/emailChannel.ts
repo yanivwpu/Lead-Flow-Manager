@@ -110,6 +110,10 @@ export type NormalizedEmailAttachmentMeta = {
   mimeType?: string | null;
   size?: number | null;
   providerAttachmentId: string;
+  /** Content-ID without angle brackets (inline MIME parts). */
+  contentId?: string | null;
+  /** True when Content-Disposition is inline or Content-ID is present. */
+  isInline?: boolean;
 };
 
 export type NormalizedEmailMessage = {
