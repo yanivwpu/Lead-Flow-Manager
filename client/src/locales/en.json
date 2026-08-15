@@ -1334,7 +1334,7 @@
         "recovery": "Refresh Settings after a few seconds if the connection does not appear."
       },
       "architecture_mismatch": {
-        "message": "Signup version mismatch. Close the window and start again from Settings.",
+        "message": "This connection session is out of date. Close the window and start again from Settings.",
         "recovery": "Start a new Connect WhatsApp session from Settings."
       },
       "phone_setup_incomplete": {

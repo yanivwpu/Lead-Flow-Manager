@@ -186,7 +186,7 @@ export async function registerPhoneForAuthenticatedUser(params: {
     });
     return {
       success: false,
-      error: "WhatsApp Business App coexistence numbers use a different registration path.",
+      error: "This WhatsApp Business App number is already set up. Extra registration is not needed.",
       errorCode: "coexistence_forbidden",
       retryable: false,
     };

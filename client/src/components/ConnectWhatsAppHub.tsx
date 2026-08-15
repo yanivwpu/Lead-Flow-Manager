@@ -42,26 +42,22 @@ import {
   shouldAutoRedirectAfterSdkFailure,
   type CompleteSdkResult,
 } from "@/lib/whatsappEmbeddedSignupCompletion";
-
-const SAFE_META_SETUP_ERROR =
-  "Could not finish WhatsApp setup. Please try Continue with Meta again.";
-
-function sanitizeWhatsappClientErrorMessage(message: string): string {
-  const msg = String(message || "").trim();
-  if (!msg) return SAFE_META_SETUP_ERROR;
-  if (/is not defined|ReferenceError|TypeError|Cannot read propert|Cannot access/i.test(msg)) {
-    return SAFE_META_SETUP_ERROR;
-  }
-  return msg;
-}
 import { buildStandardEmbeddedSignupLoginOptions } from "@shared/whatsappEmbeddedSignupVersion";
 import type { WhatsappEmbeddedSignupArchitecture } from "@shared/whatsappEmbeddedSignupVersion";
+import { sanitizeWhatsappCustomerFacingError } from "@shared/whatsappEmbeddedSignupFailures";
 import {
   WhatsAppConnectionHealthChecklist,
   type WhatsAppReadinessChecklist,
 } from "@/components/WhatsAppConnectionHealthChecklist";
 import { WhatsAppPhoneRegistrationPinForm } from "@/components/WhatsAppPhoneRegistrationPinForm";
 import { useTranslation } from "react-i18next";
+
+const SAFE_META_SETUP_ERROR =
+  "Could not finish WhatsApp setup. Please try Connect WhatsApp again.";
+
+function sanitizeWhatsappClientErrorMessage(message: string): string {
+  return sanitizeWhatsappCustomerFacingError(message, SAFE_META_SETUP_ERROR);
+}
 
 const META_TEST_NUMBER_HELP =
   "Connected to Meta test number — ready for testing only.";
@@ -1016,7 +1012,9 @@ export function ConnectWhatsAppHub({
                 </p>
               )}
               {!metaFullyReady && meta?.lastErrorMessage && (
-                <p className="text-xs text-amber-900/90 mt-2">{meta.lastErrorMessage}</p>
+                <p className="text-xs text-amber-900/90 mt-2">
+                  {sanitizeWhatsappClientErrorMessage(meta.lastErrorMessage)}
+                </p>
               )}
               <dl className="mt-2 space-y-1.5 text-xs text-gray-700">
                 <div className="flex justify-between gap-2">
@@ -1103,7 +1101,7 @@ export function ConnectWhatsAppHub({
                 size="sm"
                 onClick={() => void startEmbeddedSignupViaSdk("coexistence")}
               >
-                Reconnect WhatsApp Business App
+                Reconnect this number
               </Button>
             )}
             <Button
@@ -1211,13 +1209,13 @@ export function ConnectWhatsAppHub({
                     <p className="text-[11px] text-gray-600 mt-0.5">
                       {cfg?.coexistenceLaunchAllowed
                         ? "Keep using the WhatsApp Business App while connecting messages to WhachatCRM."
-                        : "Coming soon"}
+                        : "This option isn't available right now."}
                     </p>
                   </div>
                 </div>
                 {cfg?.coexistenceLaunchAllowed ? null : (
                   <p className="text-[10px] text-gray-500 mt-2">
-                    Planned support for businesses that want shared app and inbox access.
+                    You can still connect a WhatsApp Business number with Connect WhatsApp above.
                   </p>
                 )}
               </button>

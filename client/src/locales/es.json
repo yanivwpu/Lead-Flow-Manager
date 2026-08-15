@@ -1269,7 +1269,7 @@
         "recovery": "Actualiza Ajustes en unos segundos si la conexión no aparece."
       },
       "architecture_mismatch": {
-        "message": "Hay un desajuste de versión del registro. Cierra la ventana y vuelve a empezar desde Ajustes.",
+        "message": "Esta sesión de conexión ya no es válida. Cierra la ventana y vuelve a empezar desde Ajustes.",
         "recovery": "Inicia una sesión nueva de Continuar con Meta desde Ajustes."
       },
       "phone_setup_incomplete": {

@@ -55,6 +55,7 @@ import {
 } from "@/lib/gmailGoogleVerification";
 import { GmailVerificationGuidance } from "@/components/GmailVerificationGuidance";
 import { isEmailMailboxUiConnected } from "@shared/emailMailboxAvailability";
+import { sanitizeWhatsappCustomerFacingError } from "@shared/whatsappEmbeddedSignupFailures";
 
 type UnifiedPillKind = "connected" | "needs_attention" | "not_connected" | "test_number" | "error" | "loading";
 
@@ -830,8 +831,10 @@ export function ChannelSettings() {
           pillLabel: "Phone registration required",
           subline: "Enter a WhatsApp PIN to finish Cloud API setup",
           warning:
-            meta?.lastErrorMessage ||
-            "Open Manage and register the phone with a six-digit PIN. Messaging stays disabled until Meta marks the number CONNECTED.",
+            sanitizeWhatsappCustomerFacingError(
+              meta?.lastErrorMessage || "",
+              "Open Manage and register the phone with a six-digit PIN. Messaging stays disabled until Meta marks the number CONNECTED.",
+            ),
           footerHint: "Do not reconnect Embedded Signup unless registration fails with an expired token.",
           action: "manage",
           actionLabel: "Register phone",
@@ -863,8 +866,10 @@ export function ChannelSettings() {
             pillLabel: "Finishing setup",
             subline: "WhatsApp saved — finishing messaging setup",
             warning:
-              meta?.lastErrorMessage ||
-              "Open Manage to check progress or tap Check again. You usually do not need to reconnect.",
+              sanitizeWhatsappCustomerFacingError(
+                meta?.lastErrorMessage || "",
+                "Open Manage to check progress or tap Check again. You usually do not need to reconnect.",
+              ),
             footerHint: "Messaging stays disabled until setup finishes.",
             action: "manage",
             actionLabel: "Manage",

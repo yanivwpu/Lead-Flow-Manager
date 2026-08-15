@@ -11,6 +11,9 @@ import {
   evaluateCoexistenceConfigIsolation,
   isCoexistenceOnboardingAllowedForUser,
   COEXISTENCE_COMING_SOON_MESSAGE,
+  COEXISTENCE_UNAVAILABLE_MESSAGE,
+  EXPECTED_PRODUCTION_COEXISTENCE_CONFIG_ID,
+  buildSanitizedCoexistenceGateSummary,
 } from "../shared/whatsappCoexistenceGate";
 import { resolvePersistedMetaConnectionType } from "../shared/whatsappConnectionType";
 import { parseMetaWhatsappAccountUpdate } from "../shared/whatsappCoexistenceAccountUpdate";
@@ -37,6 +40,7 @@ import {
 import {
   isDirectSessionAssetValidationEnabled,
   isV4SdkDirectAssetValidationEnabled,
+  sanitizeEmbeddedSignupClientError,
 } from "../server/whatsappEmbeddedSignup";
 
 const BASE = {
@@ -108,17 +112,19 @@ describe("Coexistence public gate", () => {
     assert.equal(d.reason, "missing_coexistence_config");
   });
 
-  it("start route still returns coming-soon when kill switch disables Coexistence", () => {
+  it("start route returns unavailable copy when kill switch disables Coexistence", () => {
     const src = fs.readFileSync(
       path.join(process.cwd(), "server/routes/whatsappIntegrationRoutes.ts"),
       "utf8",
     );
     assert.match(src, /evaluateCoexistenceOnboardingGate/);
-    assert.match(src, /COEXISTENCE_COMING_SOON_MESSAGE/);
-    assert.equal(COEXISTENCE_COMING_SOON_MESSAGE.includes("coming soon"), true);
+    assert.match(src, /COEXISTENCE_COMING_SOON_MESSAGE|COEXISTENCE_UNAVAILABLE_MESSAGE/);
+    assert.equal(COEXISTENCE_UNAVAILABLE_MESSAGE.includes("isn't available right now"), true);
+    assert.equal(COEXISTENCE_COMING_SOON_MESSAGE, COEXISTENCE_UNAVAILABLE_MESSAGE);
+    assert.equal(COEXISTENCE_UNAVAILABLE_MESSAGE.toLowerCase().includes("coming soon"), false);
   });
 
-  it("UI has no Test/Internal badge; uses coexistenceLaunchAllowed + production copy", () => {
+  it("UI has no Test/Internal/Beta/allowlist wording; uses coexistenceLaunchAllowed + production copy", () => {
     const hub = fs.readFileSync(
       path.join(process.cwd(), "client/src/components/ConnectWhatsAppHub.tsx"),
       "utf8",
@@ -126,13 +132,36 @@ describe("Coexistence public gate", () => {
     assert.doesNotMatch(hub, /Test\s*\/\s*Internal/);
     assert.doesNotMatch(hub, /\bBeta\b/);
     assert.doesNotMatch(hub, /allowlist/i);
+    assert.doesNotMatch(hub, /Coming soon/);
+    assert.doesNotMatch(hub, /Planned support/);
     assert.match(hub, /Already use this number in WhatsApp Business App\?/);
     assert.match(
       hub,
       /Keep using the WhatsApp Business App while connecting messages to WhachatCRM/,
     );
+    assert.match(hub, /This option isn't available right now/);
     assert.match(hub, /coexistenceLaunchAllowed/);
-    assert.match(hub, /Coming soon/);
+    assert.match(hub, /This disconnects WhachatCRM only/);
+    assert.match(hub, /Reconnect this number/);
+  });
+
+  it("allowlist is not used for customer gating", () => {
+    const summary = buildSanitizedCoexistenceGateSummary({
+      ...BASE,
+      WHATSAPP_COEXISTENCE_TEST_ENABLED: "true",
+      WHATSAPP_COEXISTENCE_ALLOWLIST_USER_IDS: "only-this-user",
+    } as NodeJS.ProcessEnv);
+    assert.equal(summary.allowlistRequired, false);
+    assert.equal(summary.publicFlagEnabled, true);
+    const gateSrc = fs.readFileSync(
+      path.join(process.cwd(), "shared/whatsappCoexistenceGate.ts"),
+      "utf8",
+    );
+    assert.match(gateSrc, /Allowlist is no longer required/);
+    assert.doesNotMatch(
+      gateSrc,
+      /parseAllowlistUserIds\(env\)[\s\S]{0,200}return \{ allowed: false, reason: "not_on_allowlist"/,
+    );
   });
 });
 
@@ -629,5 +658,100 @@ describe("Dead routes stay dead", () => {
       "utf8",
     );
     assert.match(src, /start__disabled[\s\S]*?status\(404\)/);
+  });
+});
+
+describe("Coexistence launch customer-safety", () => {
+  it("missing coexistence config throws instead of substituting Standard IDs", () => {
+    assert.throws(
+      () =>
+        resolveEmbeddedSignupConfigIdFromEnv("coexistence", "v2", {
+          ...BASE,
+          META_WHATSAPP_COEXISTENCE_CONFIG_ID: "",
+        } as NodeJS.ProcessEnv),
+      /META_WHATSAPP_COEXISTENCE_CONFIG_ID/,
+    );
+    const stdV2 = resolveEmbeddedSignupConfigIdFromEnv("embedded", "v2", BASE as NodeJS.ProcessEnv);
+    const stdV4 = resolveEmbeddedSignupConfigIdFromEnv("embedded", "v4", BASE as NodeJS.ProcessEnv);
+    assert.equal(stdV2.configId, BASE.META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID);
+    assert.equal(stdV4.configId, BASE.META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID);
+    const coex = resolveEmbeddedSignupConfigIdFromEnv("coexistence", "v2", BASE as NodeJS.ProcessEnv);
+    assert.equal(coex.configId, BASE.META_WHATSAPP_COEXISTENCE_CONFIG_ID);
+    assert.notEqual(coex.configId, stdV2.configId);
+    assert.notEqual(coex.configId, stdV4.configId);
+  });
+
+  it("production coexistence config ID is documented and never hardcoded as a runtime fallback", () => {
+    assert.equal(EXPECTED_PRODUCTION_COEXISTENCE_CONFIG_ID, "1575486920645190");
+    const envExample = fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8");
+    assert.match(envExample, /1575486920645190/);
+    const resolver = fs.readFileSync(
+      path.join(process.cwd(), "shared/whatsappEmbeddedSignupVersion.ts"),
+      "utf8",
+    );
+    const resolveFn = resolver.slice(
+      resolver.indexOf("export function resolveEmbeddedSignupConfigIdFromEnv"),
+      resolver.indexOf("/** Rollout gate + architecture selection"),
+    );
+    assert.doesNotMatch(resolveFn, /1575486920645190/);
+    assert.match(resolveFn, /META_WHATSAPP_COEXISTENCE_CONFIG_ID/);
+  });
+
+  it("start catch sanitizes env/config isolation errors", () => {
+    const startSrc = fs.readFileSync(
+      path.join(process.cwd(), "server/routes/whatsappIntegrationRoutes.ts"),
+      "utf8",
+    );
+    assert.match(startSrc, /sanitizeEmbeddedSignupClientError\(e\)/);
+    assert.doesNotMatch(
+      startSrc,
+      /error:\s*e\?\.message \|\| "Could not start Meta signup"/,
+    );
+    assert.equal(
+      sanitizeEmbeddedSignupClientError(
+        new Error("META_WHATSAPP_COEXISTENCE_CONFIG_ID is required for coexistence"),
+      ),
+      "Could not finish WhatsApp setup. Please try Connect WhatsApp again.",
+    );
+    assert.equal(
+      sanitizeEmbeddedSignupClientError(new Error("config isolation failed")),
+      "Could not finish WhatsApp setup. Please try Connect WhatsApp again.",
+    );
+    assert.doesNotMatch(
+      sanitizeEmbeddedSignupClientError(
+        new Error("Graph GET …/phone_numbers empty for WABA 961217696997428"),
+      ),
+      /phone_numbers|WABA|961217696997428/,
+    );
+  });
+
+  it("oauth debug stores coexistence config last4 only", () => {
+    const src = fs.readFileSync(path.join(process.cwd(), "server/whatsappEmbeddedSignup.ts"), "utf8");
+    assert.match(src, /coexistenceConfigIdUsedLast4:\s*configIdLast4\(cfgIdResolved\)/);
+    assert.doesNotMatch(src, /coexistenceConfigIdUsed:\s*cfgIdResolved/);
+    assert.doesNotMatch(src, /coexistenceEmbeddedConfigIdResolved:\s*cfgIdResolved/);
+  });
+
+  it("coexistence discovery failures use customer copy, not Graph endpoints", () => {
+    const src = fs.readFileSync(path.join(process.cwd(), "server/whatsappEmbeddedSignup.ts"), "utf8");
+    assert.doesNotMatch(src, /GET \.\.\.\/phone_numbers empty/);
+    assert.doesNotMatch(src, /use Option A/);
+    assert.match(src, /WhatsApp connected, but we couldn't finish setup\. Retry setup\./);
+  });
+
+  it("register is never called for coexistence connections", () => {
+    const main = fs.readFileSync(path.join(process.cwd(), "server/whatsappEmbeddedSignup.ts"), "utf8");
+    assert.match(main, /needsPhoneRegistration =\s*row\.flow === "embedded" &&/);
+    const reg = fs.readFileSync(path.join(process.cwd(), "server/whatsappPhoneRegister.ts"), "utf8");
+    assert.match(reg, /coexistence_forbidden/);
+    assert.doesNotMatch(reg, /different registration path/);
+    assert.match(reg, /Extra registration is not needed/);
+  });
+
+  it("duplicate complete is idempotent via completion lock + expired state", () => {
+    const src = fs.readFileSync(path.join(process.cwd(), "server/whatsappEmbeddedSignup.ts"), "utf8");
+    assert.match(src, /tryClaimEmbeddedSignupCompletion/);
+    assert.match(src, /oauth_state_expired/);
+    assert.match(src, /phone_workspace_conflict/);
   });
 });

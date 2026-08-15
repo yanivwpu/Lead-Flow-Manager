@@ -128,7 +128,7 @@ export const EMBEDDED_SIGNUP_FAILURE_COPY_EN: Record<
     recovery: "Refresh Settings after a few seconds if the connection does not appear.",
   },
   architecture_mismatch: {
-    message: "Signup version mismatch. Close the window and start again from Settings.",
+    message: "This connection session is out of date. Close the window and start again from Settings.",
     recovery: "Start a new Connect WhatsApp session from Settings.",
   },
   phone_setup_incomplete: {
@@ -163,4 +163,23 @@ export function resolveEmbeddedSignupFailureCopy(
     recovery: copy.recovery,
     i18nKey: `whatsappEmbeddedSignup.errors.${category}`,
   };
+}
+
+/** True when a message looks like Graph/env/stack detail that must not reach customers. */
+export function looksLikeTechnicalWhatsappCustomerError(message: string): boolean {
+  const msg = String(message || "");
+  return /is not defined|ReferenceError|TypeError|Cannot read propert|Cannot access|Unexpected token|Internal Server Error|access_token|app_secret|verify_token|client_secret|EAA[A-Za-z0-9]|META_[A-Z0-9_]+|config_id|FINISH_WHATSAPP|\/me\/businesses|\/phone_numbers|\/register\b|subscribed_apps|config isolation|architecture v[24]|Graph endpoint|stack trace|\bWABA\b|featureType|sessionInfoVersion|GET \.\.\.\/phone_numbers/i.test(
+    msg,
+  );
+}
+
+/** Strip Graph/env/stack detail from customer-visible WhatsApp errors. */
+export function sanitizeWhatsappCustomerFacingError(
+  message: string,
+  fallback = EMBEDDED_SIGNUP_FAILURE_COPY_EN.unknown.message,
+): string {
+  const trimmed = String(message || "").trim();
+  if (!trimmed) return fallback;
+  if (looksLikeTechnicalWhatsappCustomerError(trimmed)) return fallback;
+  return trimmed;
 }

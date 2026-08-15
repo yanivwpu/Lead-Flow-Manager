@@ -492,14 +492,15 @@ describe("oauth state TTL + public v2 / coexistence invariants", () => {
     assert.equal((opts.extras as any).featureType, undefined);
   });
 
-  it("coexistence public option uses server flag; Coming soon only when disabled", async () => {
+  it("coexistence public option uses server flag; unavailable copy when disabled", async () => {
     const fs = await import("node:fs/promises");
     const path = await import("node:path");
     const hub = await fs.readFile(
       path.join(process.cwd(), "client/src/components/ConnectWhatsAppHub.tsx"),
       "utf8",
     );
-    assert.match(hub, /Coming soon/);
+    assert.match(hub, /This option isn't available right now/);
+    assert.doesNotMatch(hub, /Coming soon/);
     assert.match(hub, /coexistenceLaunchAllowed/);
     assert.match(hub, /startEmbeddedSignupViaSdk\("coexistence"\)/);
     assert.doesNotMatch(hub, /Test\s*\/\s*Internal/);
@@ -717,9 +718,9 @@ describe("v4 direct WABA/phone validation (no /me/businesses)", () => {
       ),
       "Could not finish WhatsApp setup. Please try Connect WhatsApp again.",
     );
-    assert.match(
+    assert.equal(
       sanitizeEmbeddedSignupClientError("Phone not under WABA"),
-      /Phone not under WABA/,
+      "Could not finish WhatsApp setup. Please try Connect WhatsApp again.",
     );
   });
 
@@ -1028,14 +1029,15 @@ describe("v4 direct WABA/phone validation (no /me/businesses)", () => {
     assert.match(src, /delete next\.errorCode/);
   });
 
-  it("coexistence UI uses public launch gate (Coming soon when flag off)", async () => {
+  it("coexistence UI uses public launch gate (unavailable copy when flag off)", async () => {
     const fs = await import("node:fs/promises");
     const path = await import("node:path");
     const hub = await fs.readFile(
       path.join(process.cwd(), "client/src/components/ConnectWhatsAppHub.tsx"),
       "utf8",
     );
-    assert.match(hub, /Coming soon/);
+    assert.match(hub, /This option isn't available right now/);
+    assert.doesNotMatch(hub, /Coming soon/);
     assert.match(hub, /coexistenceLaunchAllowed/);
     assert.doesNotMatch(hub, /Test\s*\/\s*Internal/);
   });

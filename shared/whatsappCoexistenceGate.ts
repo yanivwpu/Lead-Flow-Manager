@@ -158,6 +158,11 @@ export function buildSanitizedCoexistenceGateSummary(
   };
 }
 
+export const EXPECTED_PRODUCTION_COEXISTENCE_CONFIG_ID = "1575486920645190";
+
 /** Customer-facing copy when Coexistence is disabled or unavailable. */
-export const COEXISTENCE_COMING_SOON_MESSAGE =
-  "Coexistence onboarding is coming soon.";
+export const COEXISTENCE_UNAVAILABLE_MESSAGE =
+  "WhatsApp Business App connection isn't available right now.";
+
+/** @deprecated use COEXISTENCE_UNAVAILABLE_MESSAGE */
+export const COEXISTENCE_COMING_SOON_MESSAGE = COEXISTENCE_UNAVAILABLE_MESSAGE;

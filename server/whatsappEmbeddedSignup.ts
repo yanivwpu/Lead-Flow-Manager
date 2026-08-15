@@ -66,7 +66,10 @@ import {
   type WhatsappEmbeddedSignupArchitecture,
   type WhatsappEmbeddedSignupFlow,
 } from "@shared/whatsappEmbeddedSignupVersion";
-import { resolveEmbeddedSignupFailureCopy } from "@shared/whatsappEmbeddedSignupFailures";
+import {
+  resolveEmbeddedSignupFailureCopy,
+  sanitizeWhatsappCustomerFacingError,
+} from "@shared/whatsappEmbeddedSignupFailures";
 import { idTail } from "@shared/whatsappEmbeddedSignupObservability";
 import {
   logWhatsappEmbeddedSignupEvent,
@@ -426,11 +429,11 @@ export async function startEmbeddedSignupSession(
           v4ConfigIdLast4: iso.v4ConfigIdLast4,
         });
         throw new Error(
-          "WhatsApp coexistence onboarding is misconfigured (config isolation). Contact support.",
+          "We couldn't finish connecting WhatsApp. Please try again.",
         );
       }
       throw new Error(
-        "WhatsApp coexistence onboarding is not available — set META_WHATSAPP_COEXISTENCE_CONFIG_ID and ensure Embedded Signup base env is configured.",
+        "We couldn't finish connecting WhatsApp. Please try again.",
       );
     }
   }
@@ -498,7 +501,7 @@ export async function startEmbeddedSignupSession(
         v4ConfigIdLast4: iso.v4ConfigIdLast4,
       });
       throw new Error(
-        "WhatsApp coexistence onboarding is misconfigured (config isolation). Contact support.",
+        "We couldn't finish connecting WhatsApp. Please try again.",
       );
     }
     logCoexistenceDiagnostic({
@@ -1469,19 +1472,10 @@ export function sanitizeEmbeddedSignupClientError(
     return resolveEmbeddedSignupFailureCopy(errorCode).message;
   }
   const msg = err instanceof Error ? err.message : String(err ?? "");
-  if (
-    /is not defined|ReferenceError|TypeError|Cannot read propert|Cannot access|Unexpected token|Internal Server Error/i.test(
-      msg,
-    )
-  ) {
-    return resolveEmbeddedSignupFailureCopy("unknown").message;
-  }
-  // Prefer known category phrases already in message; never return secrets-looking blobs.
-  if (/access_token|app_secret|verify_token|client_secret|EAA[A-Za-z0-9]/i.test(msg)) {
-    return resolveEmbeddedSignupFailureCopy("unknown").message;
-  }
-  const trimmed = msg.trim();
-  return trimmed || resolveEmbeddedSignupFailureCopy("unknown").message;
+  return sanitizeWhatsappCustomerFacingError(
+    msg,
+    resolveEmbeddedSignupFailureCopy("unknown").message,
+  );
 }
 
 /**
@@ -2448,10 +2442,10 @@ export async function completeEmbeddedSignupOAuth(params: {
         phase: "coexistence_oauth_post_token",
         userId: row.userId,
         flow: row.flow,
-        coexistenceEmbeddedConfigIdResolved: cfgIdResolved,
+        coexistenceEmbeddedConfigIdLast4: configIdLast4(cfgIdResolved),
       });
       await mergeUserMetaOAuthDebug(row.userId, {
-        coexistenceConfigIdUsed: cfgIdResolved,
+        coexistenceConfigIdUsedLast4: configIdLast4(cfgIdResolved),
         coexistencePreviousConnection: coexistenceRestoreSnap
           ? {
               hadMetaConnection: coexistenceRestoreSnap.hadMetaConnection,
@@ -2668,16 +2662,16 @@ export async function completeEmbeddedSignupOAuth(params: {
         !sessionWabaId
       ) {
         msg = isCoexistence
-          ? "Meta returned no Businesses linked to this login. Confirm you used the coexistence Embedded Signup configuration and granted WhatsApp / Business scopes."
+          ? resolveEmbeddedSignupFailureCopy("no_valid_waba_or_phone").message
           : "Meta returned no Business Manager linked to this Facebook account. Create or join a Business Manager at business.facebook.com, then try again.";
       } else if (discoveredWabaOnly || sessionFinishOnlyWaba || sessionWabaId) {
         errorCode = "phone_setup_incomplete";
         msg = isCoexistence
-          ? "Meta lists your WhatsApp Business Account but returned no phone numbers from Graph (GET …/phone_numbers empty). This is often a discovery or permission gap; your number may still exist in Meta. Try again or use Option A."
+          ? "WhatsApp connected, but we couldn't finish setup. Retry setup."
           : "WhatsApp Business Account was created, but phone setup is incomplete — no phone number ID is available yet. Finish adding/verifying the number in Meta Business Manager, then reconnect with Continue with Meta (do not start a second Facebook Login tab).";
       } else {
         msg = isCoexistence
-          ? "WhatsApp discovery did not yield a selectable phone line. Confirm the number appears under your WABA in Meta Business Manager."
+          ? resolveEmbeddedSignupFailureCopy("no_valid_waba_or_phone").message
           : "We could not find a WhatsApp phone number on your account. Finish setup in Meta Embedded Signup or add a number in Meta Business Manager, then reconnect.";
       }
 

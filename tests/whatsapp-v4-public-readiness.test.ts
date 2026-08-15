@@ -221,7 +221,7 @@ describe("security surfaces", () => {
       path.join(process.cwd(), "server/routes/whatsappIntegrationRoutes.ts"),
       "utf8",
     );
-    assert.match(src, /COEXISTENCE_COMING_SOON_MESSAGE|Coexistence onboarding is coming soon/);
+    assert.match(src, /COEXISTENCE_COMING_SOON_MESSAGE|COEXISTENCE_UNAVAILABLE_MESSAGE/);
     assert.match(src, /evaluateCoexistenceOnboardingGate/);
   });
 });

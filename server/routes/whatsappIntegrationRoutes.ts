@@ -539,7 +539,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
    * Embedded Signup JS SDK (Option A — standard) + Coexistence (Option B).
    * Server selects architecture; client must not decide alone.
    * Coexistence requires public kill switch (WHATSAPP_COEXISTENCE_TEST_ENABLED or
-   * WHATSAPP_COEXISTENCE_ENABLED) + dedicated config; disabled → Coming soon.
+   * WHATSAPP_COEXISTENCE_ENABLED) + dedicated config; disabled → unavailable copy.
    */
   app.post("/api/integrations/whatsapp/meta/start", async (req: Request, res: Response) => {
     try {
@@ -564,7 +564,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
     } catch (e: any) {
       console.warn("[WhatsApp Integration] start failed", e?.message || e);
       res.status(400).json({
-        error: e?.message || "Could not start Meta signup",
+        error: sanitizeEmbeddedSignupClientError(e),
       });
     }
   });
