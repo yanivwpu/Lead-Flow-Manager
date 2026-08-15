@@ -58,7 +58,8 @@ export function getConversationThreadChrome(
   if (mode === "email-document") {
     return {
       layout: "email-document",
-      scrollerClassName: "flex-1 min-h-0 overflow-y-auto relative bg-slate-50",
+      scrollerClassName:
+        "flex-1 min-h-0 overflow-y-auto relative bg-slate-50 [overflow-anchor:none]",
       scrollerStyle: undefined,
       overlayClassName: null,
       innerClassName:

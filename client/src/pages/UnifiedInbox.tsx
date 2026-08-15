@@ -90,6 +90,16 @@ import {
   chatBubbleShellClassName,
   resolveConversationLayoutMode,
 } from "@/lib/inboxConversationPresentation";
+import {
+  inboxOpenScrollAction,
+  inboxShouldFollowNewMessagesToBottom,
+  inboxShouldFollowResizeToBottom,
+  inboxShouldPinOnOpen,
+  inboxShouldTrackNearBottomPin,
+  inboxThreadScrollKey,
+  resolveInboxScrollMode,
+  type InboxScrollMode,
+} from "@/lib/inboxConversationScroll";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -719,19 +729,21 @@ export function UnifiedInbox() {
   const messagesInnerRef = useRef<HTMLDivElement>(null);
   const prevMsgCountRef = useRef(0);
   const prevLastMessageSigRef = useRef<string>("");
-  const prevContactIdRef = useRef<string | null>(null);
+  const prevThreadScrollKeyRef = useRef<string>("");
   const [showNewMsgBanner, setShowNewMsgBanner] = useState(false);
-  // true when user is at/near the bottom — auto-scroll should happen
+  // true when user is at/near the bottom — auto-scroll should happen (chat only)
   const shouldPinRef = useRef(true);
   // Set to true on every send so that all post-render scrolls are forced,
   // regardless of where the user was scrolled before they sent.
   const justSentRef = useRef(false);
+  const inboxScrollModeRef = useRef<InboxScrollMode>("chat-pin-bottom");
   /** Conversations cleared in this session — blocks stale inbox refetch from restoring that row badge. */
   const recentlyClearedConversationIdsRef = useRef<Set<string>>(new Set());
   const recentlyClearedClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const scrollToBottom = useCallback(() => {
     const run = () => {
+      if (inboxScrollModeRef.current === "email-document-top") return;
       const c = messagesContainerRef.current;
       const end = messagesEndRef.current;
       if (end) {
@@ -740,6 +752,16 @@ export function UnifiedInbox() {
       if (c) {
         c.scrollTop = Math.max(0, c.scrollHeight - c.clientHeight);
       }
+    };
+    requestAnimationFrame(() => {
+      requestAnimationFrame(run);
+    });
+  }, []);
+
+  const scrollToTop = useCallback(() => {
+    const run = () => {
+      const c = messagesContainerRef.current;
+      if (c) c.scrollTop = 0;
     };
     requestAnimationFrame(() => {
       requestAnimationFrame(run);
@@ -1394,6 +1416,8 @@ export function UnifiedInbox() {
   const isWhatsAppContact = activeChannel === 'whatsapp';
   const isEmailChannel = activeChannel === 'email';
   const conversationLayoutMode = resolveConversationLayoutMode(activeChannel);
+  const inboxScrollMode = resolveInboxScrollMode(activeChannel);
+  inboxScrollModeRef.current = inboxScrollMode;
 
   // Prefill subject when opening an email thread
   useEffect(() => {
@@ -1751,9 +1775,7 @@ export function UnifiedInbox() {
   }, [channelHealth]);
 
 
-  // Smart scroll: runs synchronously after DOM commit (useLayoutEffect) so
-  // scrollHeight already reflects the new message text. Images/media are handled
-  // separately via onLoad + ResizeObserver below.
+  // Smart scroll: chat pins to newest; Email document opens at top once per thread.
   useLayoutEffect(() => {
     const container = messagesContainerRef.current;
     if (!container || messages.length === 0) return;
@@ -1762,15 +1784,25 @@ export function UnifiedInbox() {
     const lastSig = last
       ? `${last.id}:${last.status}:${last.errorMessage ?? ""}:${last.errorCode ?? ""}:${last.deliveryFailureKind ?? ""}`
       : "";
+    const mode = resolveInboxScrollMode(activeChannel);
+    inboxScrollModeRef.current = mode;
+    const threadKey = inboxThreadScrollKey({
+      contactId: selectedContactId,
+      conversationId: selectedConversationId || activeConversationId,
+    });
 
-    // Conversation switch: pin to bottom immediately.
-    if (selectedContactId !== prevContactIdRef.current) {
-      prevContactIdRef.current = selectedContactId;
+    if (threadKey !== prevThreadScrollKeyRef.current) {
+      prevThreadScrollKeyRef.current = threadKey;
       prevMsgCountRef.current = messages.length;
       prevLastMessageSigRef.current = lastSig;
-      shouldPinRef.current = true;
+      shouldPinRef.current = inboxShouldPinOnOpen(mode);
       setShowNewMsgBanner(false);
-      scrollToBottom();
+      if (inboxOpenScrollAction(mode) === "top") {
+        container.scrollTop = 0;
+        scrollToTop();
+      } else {
+        scrollToBottom();
+      }
       return;
     }
 
@@ -1781,20 +1813,34 @@ export function UnifiedInbox() {
 
     if (!isNew && !tailChanged) return;
 
-    if (justSentRef.current || shouldPinRef.current) {
+    if (inboxShouldFollowNewMessagesToBottom(mode, {
+      shouldPin: shouldPinRef.current,
+      justSent: justSentRef.current,
+    })) {
       setShowNewMsgBanner(false);
       scrollToBottom();
-    } else {
-      // User is reading history — show banner instead of yanking them down.
+    } else if (mode === "chat-pin-bottom") {
       setShowNewMsgBanner(true);
     }
-  }, [messages, selectedContactId, scrollToBottom]);
+  }, [
+    messages,
+    selectedContactId,
+    selectedConversationId,
+    activeConversationId,
+    activeChannel,
+    scrollToBottom,
+    scrollToTop,
+  ]);
 
-  // Track pin state and hide banner when user scrolls near bottom.
+  // Track pin state and hide banner when user scrolls near bottom (chat only).
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
     const onScroll = () => {
+      if (!inboxShouldTrackNearBottomPin(inboxScrollModeRef.current)) {
+        shouldPinRef.current = false;
+        return;
+      }
       const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
       const nearBottom = dist < 150;
       shouldPinRef.current = nearBottom;
@@ -1802,21 +1848,25 @@ export function UnifiedInbox() {
     };
     container.addEventListener("scroll", onScroll, { passive: true });
     return () => container.removeEventListener("scroll", onScroll);
-  }, [selectedContactId]);
+  }, [selectedContactId, selectedConversationId, activeChannel]);
 
-  // ResizeObserver: catches async height changes (images/media decoding, window
-  // resize). Re-scrolls whenever content grows and the user was pinned to bottom.
+  // ResizeObserver: chat re-pins when content grows; Email never follows to bottom.
   useEffect(() => {
     const inner = messagesInnerRef.current;
     if (!inner) return;
     const ro = new ResizeObserver(() => {
-      if (shouldPinRef.current || justSentRef.current) {
+      if (
+        inboxShouldFollowResizeToBottom(inboxScrollModeRef.current, {
+          shouldPin: shouldPinRef.current,
+          justSent: justSentRef.current,
+        })
+      ) {
         scrollToBottom();
       }
     });
     ro.observe(inner);
     return () => ro.disconnect();
-  }, [selectedContactId, scrollToBottom]);
+  }, [selectedContactId, selectedConversationId, activeChannel, scrollToBottom]);
 
   // Mark only the viewed conversation/thread as read. Sibling channels stay unread.
   // Row badge uses that conversation's unreadCount (not contact aggregate).
@@ -3655,7 +3705,7 @@ export function UnifiedInbox() {
               containerRef={messagesContainerRef}
               innerRef={messagesInnerRef}
               banner={
-                showNewMsgBanner ? (
+                showNewMsgBanner && inboxScrollMode === "chat-pin-bottom" ? (
                   <button
                     data-testid="banner-new-messages"
                     onClick={() => {
