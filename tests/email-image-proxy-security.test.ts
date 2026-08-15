@@ -16,11 +16,17 @@ import {
 } from "../server/emailChannel/emailImageProxySecret";
 import {
   createPinnedDnsLookup,
+  fetchEmailImageViaProxy,
   isBlockedIpAddress,
   resolveAndPinPublicHttpUrl,
 } from "../server/emailChannel/emailImageProxy";
 import { buildEmailRemoteProxySrc, sanitizeEmailHtml } from "../server/emailChannel/htmlSanitize";
-import { EMAIL_IMAGE_PROXY_PATH } from "../shared/emailImagePolicy";
+import {
+  decodeEmailProxyUrlPayload,
+  decodeHtmlEntitiesInRemoteUrl,
+  EMAIL_IMAGE_PROXY_PATH,
+  encodeEmailProxyUrlPayload,
+} from "../shared/emailImagePolicy";
 
 const PREV = { ...process.env };
 
@@ -374,5 +380,77 @@ describe("DNS pin / rebinding SSRF hardening", () => {
     assert.equal(isBlockedIpAddress("::ffff:127.0.0.1"), true);
     assert.equal(isBlockedIpAddress("::ffff:192.168.1.1"), true);
     assert.equal(isBlockedIpAddress("::ffff:8.8.8.8"), false);
+  });
+});
+
+describe("HTML entity decode does not bypass proxy security", () => {
+  beforeEach(() => {
+    process.env.NODE_ENV = "development";
+    process.env.EMAIL_IMAGE_PROXY_SECRET = "test-email-image-proxy-secret-32b!!";
+  });
+  afterEach(() => {
+    restoreEnv("NODE_ENV");
+    restoreEnv("EMAIL_IMAGE_PROXY_SECRET");
+  });
+
+  it("historical signed u= with literal &amp; still verifies; fetch target is decoded", () => {
+    const historical =
+      "https://media.licdn.com/dms/image/v2/abc/photo?e=1999999999&amp;v=beta&amp;t=sig";
+    const decoded = "https://media.licdn.com/dms/image/v2/abc/photo?e=1999999999&v=beta&t=sig";
+    const { expiresUnixSec, signature } = buildSignedEmailImageProxyQuery(historical);
+    assert.equal(
+      verifyEmailImageProxyRequest({ remoteUrl: historical, expiresUnixSec, signature }),
+      true,
+    );
+    assert.equal(
+      verifyEmailImageProxyRequest({ remoteUrl: decoded, expiresUnixSec, signature }),
+      false,
+    );
+    assert.equal(decodeHtmlEntitiesInRemoteUrl(historical), decoded);
+    assert.equal(decodeEmailProxyUrlPayload(encodeEmailProxyUrlPayload(historical)), historical);
+  });
+
+  it("entity decoding does not bypass private-IP/SSRF checks", async () => {
+    const historical = "http://127.0.0.1/secret.png?e=1&amp;v=2";
+    assert.equal(decodeHtmlEntitiesInRemoteUrl(historical), "http://127.0.0.1/secret.png?e=1&v=2");
+    await assert.rejects(
+      () => resolveAndPinPublicHttpUrl(decodeHtmlEntitiesInRemoteUrl(historical)),
+      /ip_blocked|host_blocked/,
+    );
+    const { expiresUnixSec, signature } = buildSignedEmailImageProxyQuery(historical);
+    const result = await fetchEmailImageViaProxy({
+      encodedUrl: encodeEmailProxyUrlPayload(historical),
+      signature,
+      expiresUnixSec,
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.status, 403);
+      assert.match(result.code, /ip_blocked|host_blocked/);
+    }
+  });
+
+  it("entity decoding does not bypass scheme rejection", async () => {
+    await assert.rejects(
+      () => resolveAndPinPublicHttpUrl(decodeHtmlEntitiesInRemoteUrl("file:///etc/passwd&amp;x=1")),
+      /scheme_blocked|invalid_url/,
+    );
+    assert.equal(decodeEmailProxyUrlPayload(encodeEmailProxyUrlPayload("javascript:alert(1)")), null);
+  });
+
+  it("proxy verifies signature before HTML-entity decode; redirects still re-pin", () => {
+    const src = fs.readFileSync(
+      path.join(process.cwd(), "server/emailChannel/emailImageProxy.ts"),
+      "utf8",
+    );
+    const verifyAt = src.indexOf("verifyEmailImageProxyRequest");
+    const decodeAt = src.indexOf("decodeHtmlEntitiesInRemoteUrl(remoteUrl)");
+    assert.ok(verifyAt > 0 && decodeAt > verifyAt, "signature verify must precede entity decode");
+    assert.match(src, /Next hop: resolve \+ validate \+ pin again/);
+    assert.match(src, /isEmailSafeImageMime/);
+    assert.match(src, /rejected_html_masquerade/);
+    assert.match(src, /EMAIL_IMAGE_PROXY_MAX_BYTES/);
+    assert.doesNotMatch(src, /127\.0\.0\.1:7693/);
+    assert.doesNotMatch(src, /#region agent log/);
   });
 });

@@ -10,6 +10,7 @@ import {
   EMAIL_IMAGE_UNAVAILABLE_PLACEHOLDER,
   EMAIL_TRACKING_PIXEL_PLACEHOLDER,
   buildEmailInlineImagePath,
+  decodeHtmlEntitiesInRemoteUrl,
   encodeEmailProxyUrlPayload,
   isLikelyTrackingPixelAttrs,
   normalizeEmailContentId,
@@ -37,8 +38,9 @@ export type SanitizeEmailHtmlResult = {
 };
 
 export function buildEmailRemoteProxySrc(remoteUrl: string): string {
-  const u = encodeEmailProxyUrlPayload(remoteUrl);
-  const { expiresUnixSec, signature } = buildSignedEmailImageProxyQuery(remoteUrl);
+  const normalized = decodeHtmlEntitiesInRemoteUrl(remoteUrl);
+  const u = encodeEmailProxyUrlPayload(normalized);
+  const { expiresUnixSec, signature } = buildSignedEmailImageProxyQuery(normalized);
   return `${EMAIL_IMAGE_PROXY_PATH}?u=${encodeURIComponent(u)}&e=${expiresUnixSec}&s=${encodeURIComponent(signature)}`;
 }
 

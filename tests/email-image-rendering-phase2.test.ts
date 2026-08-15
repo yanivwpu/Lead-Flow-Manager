@@ -10,6 +10,7 @@ import {
   EMAIL_IMAGE_PROXY_PATH,
   buildEmailInlineImagePath,
   decodeEmailProxyUrlPayload,
+  decodeHtmlEntitiesInRemoteUrl,
   encodeEmailProxyUrlPayload,
   isEmailSafeImageMime,
   isLikelyTrackingPixelAttrs,
@@ -29,6 +30,15 @@ import {
   isBlockedIpAddress,
 } from "../server/emailChannel/emailImageProxy";
 import { buildIsolatedEmailSrcDoc } from "../shared/emailHtmlIsolation";
+
+function signedProxyTargetFromHtml(html: string): string {
+  const m = html.match(/\/api\/email\/image-proxy\?([^"'>\s]+)/i);
+  assert.ok(m, "expected proxy URL in HTML");
+  const qs = new URLSearchParams(m[1].replace(/&amp;/g, "&"));
+  const remote = decodeEmailProxyUrlPayload(qs.get("u") || "");
+  assert.ok(remote, "expected decodable proxy payload");
+  return remote;
+}
 
 describe("inbound sanitizer preserves images via proxy/CID rewrite", () => {
   before(() => {
@@ -120,6 +130,66 @@ describe("inbound sanitizer preserves images via proxy/CID rewrite", () => {
     assert.match(twice, new RegExp(EMAIL_IMAGE_PROXY_PATH.replace(/\//g, "\\/")));
     assert.doesNotMatch(twice, /data-email-image-unavailable/);
   });
+
+  it("HTML-entity-decodes img src query separators before signing", () => {
+    const { html, remoteImagesProxied } = sanitizeEmailHtml(
+      `<img src="https://cdn.example/image.jpg?e=1&amp;v=2" alt="x" />`,
+      { purpose: "inbound", messageId: "m1" },
+    );
+    assert.equal(remoteImagesProxied, 1);
+    assert.equal(signedProxyTargetFromHtml(html), "https://cdn.example/image.jpg?e=1&v=2");
+    const qs = new URLSearchParams(
+      html.match(/\/api\/email\/image-proxy\?([^"'>\s]+)/i)![1].replace(/&amp;/g, "&"),
+    );
+    assert.equal(
+      verifyEmailImageProxyRequest({
+        remoteUrl: "https://cdn.example/image.jpg?e=1&v=2",
+        expiresUnixSec: Number(qs.get("e")),
+        signature: qs.get("s") || "",
+      }),
+      true,
+    );
+  });
+
+  it("HTML-entity-decodes CSS url() query separators before signing", () => {
+    const { html, remoteImagesProxied } = sanitizeEmailHtml(
+      `<div style="background-image:url(https://cdn.example/image.jpg?e=1&amp;v=2)"></div>`,
+      { purpose: "inbound", messageId: "m1" },
+    );
+    assert.ok(remoteImagesProxied >= 1);
+    assert.equal(signedProxyTargetFromHtml(html), "https://cdn.example/image.jpg?e=1&v=2");
+  });
+
+  it("leaves ordinary URLs without HTML entities unchanged", () => {
+    const { html } = sanitizeEmailHtml(
+      `<img src="https://cdn.example/image.jpg?e=1&v=2" />`,
+      { purpose: "inbound", messageId: "m1" },
+    );
+    assert.equal(signedProxyTargetFromHtml(html), "https://cdn.example/image.jpg?e=1&v=2");
+  });
+
+  it("LinkedIn/Instagram-style signed CDN query with multiple &amp; params", () => {
+    const linkedIn =
+      "https://media.licdn.com/dms/image/v2/abc/photo?e=1999999999&amp;v=beta&amp;t=sig";
+    const instagram =
+      "https://scontent.cdninstagram.com/v/t51.2885-19/n.jpg?stp=dst-jpg&amp;_nc_cat=1&amp;oh=abc&amp;oe=def";
+    const { html: liHtml } = sanitizeEmailHtml(`<img src="${linkedIn}" />`, {
+      purpose: "inbound",
+      messageId: "m1",
+    });
+    const { html: igHtml } = sanitizeEmailHtml(`<img src="${instagram}" />`, {
+      purpose: "inbound",
+      messageId: "m1",
+    });
+    assert.equal(
+      signedProxyTargetFromHtml(liHtml),
+      "https://media.licdn.com/dms/image/v2/abc/photo?e=1999999999&v=beta&t=sig",
+    );
+    assert.equal(
+      signedProxyTargetFromHtml(igHtml),
+      "https://scontent.cdninstagram.com/v/t51.2885-19/n.jpg?stp=dst-jpg&_nc_cat=1&oh=abc&oe=def",
+    );
+  });
 });
 
 describe("proxy signing + payload", () => {
@@ -154,6 +224,26 @@ describe("proxy signing + payload", () => {
     assert.equal(isLikelyTrackingPixelAttrs('width="120" height="40"'), false);
     assert.equal(isEmailSafeImageMime("image/png"), true);
     assert.equal(isEmailSafeImageMime("image/svg+xml"), false);
+  });
+
+  it("decodeHtmlEntitiesInRemoteUrl is idempotent and does not percent-decode", () => {
+    const plain = "https://cdn.example/image.jpg?e=1&v=2";
+    assert.equal(decodeHtmlEntitiesInRemoteUrl(plain), plain);
+    assert.equal(decodeHtmlEntitiesInRemoteUrl(decodeHtmlEntitiesInRemoteUrl(plain)), plain);
+    assert.equal(
+      decodeHtmlEntitiesInRemoteUrl("https://cdn.example/image.jpg?e=1&amp;v=2"),
+      "https://cdn.example/image.jpg?e=1&v=2",
+    );
+    assert.equal(
+      decodeHtmlEntitiesInRemoteUrl("https://cdn.example/image.jpg?e=1&#38;v=2"),
+      "https://cdn.example/image.jpg?e=1&v=2",
+    );
+    assert.equal(
+      decodeHtmlEntitiesInRemoteUrl("https://cdn.example/image.jpg?e=1&#x26;v=2"),
+      "https://cdn.example/image.jpg?e=1&v=2",
+    );
+    const percent = "https://cdn.example/image.jpg?q=%26amp%3B";
+    assert.equal(decodeHtmlEntitiesInRemoteUrl(percent), percent);
   });
 });
 
@@ -213,6 +303,13 @@ describe("CSP + wiring", () => {
     assert.match(provider, /content-id/);
     assert.match(persist, /purpose:\s*"inbound"/);
     assert.match(send, /purpose:\s*"outbound"/);
+    const sanitizer = fs.readFileSync(
+      path.join(process.cwd(), "server/emailChannel/htmlSanitize.ts"),
+      "utf8",
+    );
+    assert.match(sanitizer, /decodeHtmlEntitiesInRemoteUrl\(remoteUrl\)/);
+    assert.doesNotMatch(sanitizer, /127\.0\.0\.1:7693/);
+    assert.doesNotMatch(sanitizer, /#region agent log/);
   });
 
   it("Phase 1 live-first sync files still present (unchanged architecture)", () => {

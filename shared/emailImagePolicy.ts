@@ -65,6 +65,24 @@ export function buildEmailInlineImagePath(messageId: string, contentId: string):
   return `${EMAIL_INLINE_IMAGE_PATH_PREFIX}${encodeURIComponent(messageId)}/email-inline?cid=${cid}`;
 }
 
+/**
+ * Decode HTML entities that appear in email HTML URL attributes (`src`, CSS `url()`).
+ * Only ampersand entities — does not percent-decode, so `%26amp%3B` stays intact.
+ * Idempotent for already-decoded `https://…?a=1&b=2` URLs.
+ */
+export function decodeHtmlEntitiesInRemoteUrl(raw: string): string {
+  let v = String(raw || "");
+  for (let i = 0; i < 2; i++) {
+    const next = v
+      .replace(/&amp;/gi, "&")
+      .replace(/&#0*38;/g, "&")
+      .replace(/&#x0*26;/gi, "&");
+    if (next === v) break;
+    v = next;
+  }
+  return v;
+}
+
 export function encodeEmailProxyUrlPayload(remoteUrl: string): string {
   return Buffer.from(String(remoteUrl), "utf8").toString("base64url");
 }

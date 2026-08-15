@@ -7,7 +7,11 @@ import dns from "node:dns/promises";
 import http from "node:http";
 import https from "node:https";
 import net from "node:net";
-import { decodeEmailProxyUrlPayload, isEmailSafeImageMime } from "@shared/emailImagePolicy";
+import {
+  decodeEmailProxyUrlPayload,
+  decodeHtmlEntitiesInRemoteUrl,
+  isEmailSafeImageMime,
+} from "@shared/emailImagePolicy";
 import { verifyEmailImageProxyRequest } from "./emailImageProxySecret";
 
 export const EMAIL_IMAGE_PROXY_TIMEOUT_MS = Number(
@@ -318,13 +322,25 @@ export async function fetchEmailImageViaProxy(params: {
     return { ok: false, code: "bad_signature", status: 403 };
   }
 
-  const cached = getCached(remoteUrl);
+  // Historical stored `u=` payloads may still contain HTML `&amp;` in the query.
+  // Verify the signature against the exact signed string first, then normalize
+  // the outbound fetch target. Do not percent-decode.
+  const fetchTarget = decodeHtmlEntitiesInRemoteUrl(remoteUrl);
+  if (!/^https?:\/\//i.test(fetchTarget)) {
+    logImageProxy("rejected", { reason: "entity_decode_scheme" });
+    return { ok: false, code: "invalid_url", status: 400 };
+  }
+  if (fetchTarget !== remoteUrl) {
+    logImageProxy("html_entities_decoded", { urlLen: fetchTarget.length });
+  }
+
+  const cached = getCached(fetchTarget);
   if (cached) {
-    logImageProxy("cache_hit", { urlLen: remoteUrl.length });
+    logImageProxy("cache_hit", { urlLen: fetchTarget.length });
     return { ok: true, contentType: cached.contentType, body: cached.body, cached: true };
   }
 
-  let current = remoteUrl;
+  let current = fetchTarget;
   try {
     for (let hop = 0; hop <= EMAIL_IMAGE_PROXY_MAX_REDIRECTS; hop++) {
       const pinned = await resolveAndPinPublicHttpUrl(current);
@@ -377,7 +393,7 @@ export async function fetchEmailImageViaProxy(params: {
         return { ok: false, code: "content_type", status: 415 };
       }
 
-      setCached(remoteUrl, contentType, body);
+      setCached(fetchTarget, contentType, body);
       logImageProxy("ok", {
         bytes: body.length,
         contentType,
