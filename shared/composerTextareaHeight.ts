@@ -1,7 +1,7 @@
 /**
  * Channel-isolated composer textarea auto-grow bounds.
- * Email: comfortable reply height with a hard cap + internal scroll.
- * Chat (WhatsApp / IG / FB / SMS / …): compact existing behavior.
+ * Email starts as compact as chat, grows to ~2×, then scrolls internally.
+ * Chat (WhatsApp / IG / FB / SMS / …): compact existing behavior — do not change.
  */
 
 import { isComposerEmailChannel } from "./composerKeyboard";
@@ -10,9 +10,9 @@ import { isComposerEmailChannel } from "./composerKeyboard";
 export const CHAT_COMPOSER_TEXTAREA_MIN_PX = 58;
 export const CHAT_COMPOSER_TEXTAREA_MAX_PX = 160;
 
-/** Email composer — initial ~120–150px; grow up to ~220–260px then scroll. */
-export const EMAIL_COMPOSER_TEXTAREA_MIN_PX = 140;
-export const EMAIL_COMPOSER_TEXTAREA_MAX_PX = 240;
+/** Email: same initial height as chat; cap at ~double, then internal scroll. */
+export const EMAIL_COMPOSER_TEXTAREA_MIN_PX = CHAT_COMPOSER_TEXTAREA_MIN_PX;
+export const EMAIL_COMPOSER_TEXTAREA_MAX_PX = 120;
 
 export type ComposerTextareaKind = "email" | "chat";
 

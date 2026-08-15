@@ -23,20 +23,22 @@ function read(rel: string): string {
 }
 
 describe("Email composer bounds", () => {
-  it("initial Email height is in the 120–150px band", () => {
-    assert.equal(EMAIL_COMPOSER_TEXTAREA_MIN_PX, 140);
-    assert.ok(EMAIL_COMPOSER_TEXTAREA_MIN_PX >= 120);
-    assert.ok(EMAIL_COMPOSER_TEXTAREA_MIN_PX <= 150);
-    assert.equal(composerTextareaBounds("email").minPx, EMAIL_COMPOSER_TEXTAREA_MIN_PX);
+  it("empty / one-line Email starts at the same height as chat (58–60px)", () => {
+    assert.equal(EMAIL_COMPOSER_TEXTAREA_MIN_PX, CHAT_COMPOSER_TEXTAREA_MIN_PX);
+    assert.equal(EMAIL_COMPOSER_TEXTAREA_MIN_PX, 58);
+    assert.ok(EMAIL_COMPOSER_TEXTAREA_MIN_PX >= 58);
+    assert.ok(EMAIL_COMPOSER_TEXTAREA_MIN_PX <= 60);
+    assert.equal(composerTextareaBounds("email").minPx, composerTextareaBounds("whatsapp").minPx);
     assert.equal(composerTextareaBounds("EMAIL").kind, "email");
   });
 
-  it("Email max height is in the 220–260px band", () => {
-    assert.equal(EMAIL_COMPOSER_TEXTAREA_MAX_PX, 240);
-    assert.ok(EMAIL_COMPOSER_TEXTAREA_MAX_PX >= 220);
-    assert.ok(EMAIL_COMPOSER_TEXTAREA_MAX_PX <= 260);
+  it("Email max height is ~120px (about double the initial height)", () => {
+    assert.equal(EMAIL_COMPOSER_TEXTAREA_MAX_PX, 120);
+    assert.ok(EMAIL_COMPOSER_TEXTAREA_MAX_PX >= 116);
+    assert.ok(EMAIL_COMPOSER_TEXTAREA_MAX_PX <= 124);
     assert.equal(composerTextareaBounds("email").maxPx, EMAIL_COMPOSER_TEXTAREA_MAX_PX);
     assert.ok(EMAIL_COMPOSER_TEXTAREA_MAX_PX > EMAIL_COMPOSER_TEXTAREA_MIN_PX);
+    assert.ok(EMAIL_COMPOSER_TEXTAREA_MAX_PX <= EMAIL_COMPOSER_TEXTAREA_MIN_PX * 2 + 4);
   });
 });
 
@@ -75,7 +77,7 @@ describe("Email auto-grow, cap, scroll, shrink", () => {
     assert.ok(heights.every((h) => h <= max), "never exceeds Email max");
   });
 
-  it("beyond max, height is fixed and internal scrolling is enabled", () => {
+  it("beyond max, height is fixed and overflow-y becomes auto", () => {
     const over = nextComposerTextareaLayout(max + 80, min, max);
     assert.equal(over.heightPx, max);
     assert.equal(over.overflowY, "auto");
@@ -107,8 +109,8 @@ describe("Chat composer unchanged", () => {
       assert.equal(bounds.minPx, 58, channel);
       assert.equal(bounds.maxPx, 160, channel);
     }
-    assert.equal(composerTextareaBounds("whatsapp").minPx, 58);
-    assert.notEqual(composerTextareaBounds("whatsapp").minPx, EMAIL_COMPOSER_TEXTAREA_MIN_PX);
+    assert.equal(composerTextareaBounds("whatsapp").minPx, EMAIL_COMPOSER_TEXTAREA_MIN_PX);
+    assert.equal(composerTextareaBounds("whatsapp").maxPx, 160);
     assert.notEqual(composerTextareaBounds("whatsapp").maxPx, EMAIL_COMPOSER_TEXTAREA_MAX_PX);
   });
 
@@ -138,6 +140,11 @@ describe("AIComposer wiring (Email only)", () => {
     assert.doesNotMatch(composer, /min-h-\[96px\]/);
     assert.doesNotMatch(composer, /MIN_TEXTAREA_HEIGHT/);
     assert.doesNotMatch(composer, /MAX_TEXTAREA_HEIGHT/);
+    const helper = read("shared/composerTextareaHeight.ts");
+    assert.match(helper, /EMAIL_COMPOSER_TEXTAREA_MIN_PX = CHAT_COMPOSER_TEXTAREA_MIN_PX/);
+    assert.match(helper, /EMAIL_COMPOSER_TEXTAREA_MAX_PX = 120/);
+    assert.doesNotMatch(helper, /EMAIL_COMPOSER_TEXTAREA_MIN_PX = 140/);
+    assert.doesNotMatch(helper, /EMAIL_COMPOSER_TEXTAREA_MAX_PX = 240/);
     // Email measures by collapsing; chat keeps height:auto
     assert.match(composer, /el\.style\.height = "0px"/);
     assert.match(composer, /el\.style\.height = "auto"/);

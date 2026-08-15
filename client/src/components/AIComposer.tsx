@@ -964,7 +964,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
             className={cn(
               "w-full border text-base md:text-[13px] leading-relaxed focus:outline-none transition-colors resize-none",
               isEmailComposer && "[field-sizing:fixed]",
-              isEmailComposer ? "rounded-md px-3.5 py-3" : "rounded-xl px-3.5 py-2.5",
+              isEmailComposer ? "rounded-md px-3.5 py-2.5" : "rounded-xl px-3.5 py-2.5",
               (isSuggestMode && (isDrafting || aiDraft)) ||
                 (aiMode === "auto" && autoSkippedWithDraft && value.trim())
                 ? "bg-violet-50/30 border-purple-200/70 focus:border-purple-300 text-gray-800"
