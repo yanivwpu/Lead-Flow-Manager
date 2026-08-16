@@ -898,6 +898,7 @@ const NOINDEX_EXACT_PATHS = new Set([
 /** Routes that must not be indexed (auth, portals, embeds). */
 export function isNoIndexPath(path: string): boolean {
   const normalized = path.split("?")[0].replace(/\/$/, "") || "/";
+  if (normalized === "/app" || normalized.startsWith("/app/")) return true;
   if (NOINDEX_EXACT_PATHS.has(normalized)) return true;
   if (normalized.startsWith("/widget-frame/")) return true;
   if (normalized.startsWith("/chat/")) return true;

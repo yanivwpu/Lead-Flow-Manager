@@ -21,6 +21,7 @@ import { MARKETING_URL } from "@/lib/marketingUrl";
 import { getLocalizedHomepage } from "@shared/localizeMarketingContent";
 import { getCanonicalUrl, getHreflangLinks } from "@shared/localeRoutes";
 import { useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
+import { hideStaticMarketingShell } from "@/lib/marketingShell";
 
 /** Fixed min-heights reduce layout shift when lazy sections hydrate (approximate final block size). */
 function BelowFoldFallback({ className }: { className?: string }) {
@@ -91,7 +92,7 @@ export function Welcome() {
     setShellLive(true);
 
     return () => {
-      document.documentElement.classList.remove("wcs-homepage-shell-live");
+      hideStaticMarketingShell();
       if (shellNav) {
         shellNav.removeAttribute("aria-hidden");
         shellNav.removeAttribute("inert");

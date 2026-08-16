@@ -24,6 +24,7 @@ import {
 } from "@/lib/shopifyBootstrap";
 import { useSyncLanguageFromMarketingUrl } from "@/lib/marketingLocaleRouting";
 import { parseLocalizedPath } from "@shared/localeRoutes";
+import { hideStaticMarketingShell, isMarketingHomepagePath } from "@/lib/marketingShell";
 
 const AuthPage = lazy(() => import("@/pages/Auth").then(m => ({ default: m.AuthPage })));
 const VerifyEmailPage = lazy(() =>
@@ -184,6 +185,10 @@ function MarketingRoutes() {
   const [location] = useLocation();
   useSyncLanguageFromMarketingUrl();
 
+  if (!isMarketingHomepagePath(location)) {
+    hideStaticMarketingShell();
+  }
+
   if (location === "/es" || location === "/he") {
     return <Redirect to={`${location}/`} />;
   }
@@ -304,11 +309,8 @@ function Router() {
       return;
     }
     applyShopifyBootstrapDocumentFlags(false);
-    const isHome =
-      location === "/" || location === "/es/" || location === "/he/";
-    if (!isHome) {
-      document.documentElement.classList.add("wcs-hide-static-marketing");
-      document.documentElement.classList.remove("wcs-homepage-shell-live");
+    if (!isMarketingHomepagePath(location)) {
+      hideStaticMarketingShell();
     }
   }, [bootstrap.active, location]);
 
