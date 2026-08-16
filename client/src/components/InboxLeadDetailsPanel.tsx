@@ -129,9 +129,10 @@ import {
   contactHasInventoryMatchCriteria,
 } from "@/lib/copilotRgeVisibility";
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
+import { hasPropertyShowingIntent } from "@shared/aiDomainEligibility";
 import { isQualificationDowngrade, systemTagForQualification } from "@shared/leadQualification";
 
-type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
+type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok' | 'email';
 
 interface Contact {
   id: string;
@@ -161,6 +162,7 @@ interface Conversation {
   channel: Channel;
   status: string;
   unreadCount: number;
+  subject?: string | null;
 }
 
 interface TeamMember {
@@ -1420,13 +1422,17 @@ export function InboxLeadDetailsPanel({
 
   // ── Conversation intelligence — re-runs whenever messages change ──
   const intel = useMemo(
-    () =>
-      analyzeConversation(messages, {
+    () => {
+      const lastInbound = [...messages].reverse().find((m) => m.direction === "inbound");
+      return analyzeConversation(messages, {
         industry: businessKnowledge?.industry,
         businessKnowledge,
         crmLeadScore: contact.leadScore ?? null,
-      }),
-    [messages, businessKnowledge, contact.leadScore]
+        fromEmail: lastInbound?.fromAddress || null,
+        channel: primaryConversation?.channel || null,
+      });
+    },
+    [messages, businessKnowledge, contact.leadScore, primaryConversation?.channel]
   );
 
   // ── Workflow layer — computes recommended actions from intel + contact state ──
@@ -1562,7 +1568,11 @@ export function InboxLeadDetailsPanel({
   }, [intel.leadScoreDetails?.bucket, intel.leadScore.label, intel.aiState, aiStateLabel]);
 
   const stageSignals = useMemo(
-    () => getStageSignals(messages, businessKnowledge),
+    () =>
+      getStageSignals(messages, businessKnowledge, {
+        fromEmail: [...messages].reverse().find((m) => m.direction === "inbound")?.fromAddress || null,
+        channel: primaryConversation?.channel || null,
+      }),
     [messages, businessKnowledge],
   );
 
@@ -1807,6 +1817,21 @@ export function InboxLeadDetailsPanel({
     return last?.content ?? "";
   }, [messages]);
 
+  const lastInboundFromAddress = useMemo(() => {
+    const last = [...messages].reverse().find((m) => m.direction === "inbound");
+    return last?.fromAddress?.trim() || null;
+  }, [messages]);
+
+  const conversationChannel = String(primaryConversation?.channel || "").toLowerCase() || null;
+  const currentInboundForIntent = useMemo(() => {
+    const body = lastInboundText.trim();
+    if (!body) return "";
+    const subject = conversationChannel === "email" ? String(primaryConversation?.subject || "").trim() : "";
+    return subject && !body.toLowerCase().includes(subject.toLowerCase())
+      ? `${subject}\n${body}`
+      : body;
+  }, [lastInboundText, conversationChannel, primaryConversation?.subject]);
+
   /** Buyer Preferences — shared domain eligibility (buyer/rental/mixed only). */
   const showCopilotBuyerPreferences = useMemo(
     () =>
@@ -1815,9 +1840,11 @@ export function InboxLeadDetailsPanel({
         industry: businessKnowledge?.industry,
         customFields: contact.customFields,
         hideGrowthEngineForShopify: hideGrowthEngine,
-        inboundText: lastInboundText || inboundText,
+        inboundText: currentInboundForIntent || lastInboundText || inboundText,
         conversationText: inboundText,
         contactEmail: contact.email,
+        fromEmail: lastInboundFromAddress,
+        channel: conversationChannel,
         buyerPreferenceProfile: persistedBuyerProfile,
       }),
     [
@@ -1829,6 +1856,9 @@ export function InboxLeadDetailsPanel({
       lastInboundText,
       inboundText,
       persistedBuyerProfile,
+      currentInboundForIntent,
+      lastInboundFromAddress,
+      conversationChannel,
     ],
   );
 
@@ -1891,15 +1921,12 @@ export function InboxLeadDetailsPanel({
   );
 
   const contextualNextActions = useMemo(() => {
-    const intentText = `${intel.intent ?? ""}`.toLowerCase();
     const lastMsg = messages[messages.length - 1];
-    const lastMsgText =
-      lastMsg?.direction === "inbound" ? `${lastMsg.content ?? ""}`.toLowerCase() : "";
-    const hay = `${inboundText} ${intentText}`.toLowerCase();
+    const currentInbound = currentInboundForIntent || lastInboundText;
     const workspaceIndustry =
       workspaceIntelligence?.industry ?? businessKnowledge?.industry;
     const aiRouting = resolveAiRouting({
-      inbound: lastMsgText || inboundText,
+      inbound: currentInbound,
       joinedInbound: inboundText,
       history: messages.map((m) => ({
         role: m.direction === "inbound" ? "user" : "assistant",
@@ -1907,28 +1934,27 @@ export function InboxLeadDetailsPanel({
       })),
       industry: workspaceIndustry,
       industrySignals: {
-        viewingIntent: stageSignals.viewingIntent,
+        viewingIntent: hasPropertyShowingIntent(currentInbound),
         strongIntent: stageSignals.strongIntent,
       },
     });
-    const hasBookingIntent =
-      aiRouting.decision === "BOOK_APPOINTMENT" ||
-      (stageSignals.viewingIntent ||
-        /book|schedule|appointment|showing|tour|viewing|visit|availability/.test(hay));
-    const mentionedDeposit = /\b(deposit|earnest money|down payment)\b/i.test(inboundText);
+    const hasBookingIntent = hasPropertyShowingIntent(currentInbound);
+    const mentionedDeposit = /\b(deposit|earnest money|down payment)\b/i.test(currentInbound);
     const hasFinancingDiscussion =
       mentionedDeposit ||
-      /\b(mortgage|loan|financ)\b/i.test(inboundText) ||
-      (!intel.hasFinancing && /\b(pre.?approv|lender)\b/i.test(inboundText));
+      /\b(mortgage|loan|financ)\b/i.test(currentInbound) ||
+      (!intel.hasFinancing && /\b(pre.?approv|lender)\b/i.test(currentInbound));
     const hasStrongPurchaseIntent =
-      /buy|purchase|ready to buy|make an offer|offer|ready to move/.test(hay);
+      /\b(?:looking\s+to\s+buy|ready\s+to\s+buy|make\s+an\s+offer|ready\s+to\s+move)\b/i.test(
+        currentInbound,
+      );
     const hasDelayLaterSignal =
-      /\blater\b|\bnot now\b|\bnext week\b|\bnext month\b|\bbusy\b|\bmaybe later\b/.test(lastMsgText);
+      /\blater\b|\bnot now\b|\bnext week\b|\bnext month\b|\bbusy\b|\bmaybe later\b/i.test(currentInbound);
 
     const sellerProfile = (contact as { sellerPreferenceProfile?: { lastSellerIntent?: string } })
       .sellerPreferenceProfile;
     const sellerIntent = classifySellerIntent({
-      inboundText: lastMsgText || inboundText,
+      inboundText: currentInbound,
       hasSellerProfile: Boolean(sellerProfile),
       priorSellerIntent:
         (sellerProfile?.lastSellerIntent as import("@shared/sellerIntent").SellerIntentClass | undefined) ??
@@ -1948,10 +1974,10 @@ export function InboxLeadDetailsPanel({
       confidence: intel.leadScoreDetails?.confidence01,
       aiPaused: effectiveAiPaused,
       hasDelayLater: hasDelayLaterSignal,
-      lastOutbound: messages.length > 0 && messages[messages.length - 1].direction === "outbound",
+      lastOutbound: messages.length > 0 && lastMsg?.direction === "outbound",
       inboundText,
-      latestInboundText: lastMsgText || undefined,
-      showingTimingPhrase: extractShowingTimingPhrase(inboundText),
+      latestInboundText: currentInbound || undefined,
+      showingTimingPhrase: extractShowingTimingPhrase(currentInbound),
       mentionedDeposit,
       schedulingLinkSent,
       aiRoutingDecision: aiRouting.decision,
@@ -1968,6 +1994,8 @@ export function InboxLeadDetailsPanel({
       buyerProfileHasCriteria: contactHasInventoryMatchCriteria(persistedBuyerProfile),
       sellerProfileHasData: Boolean(sellerProfile),
       contactEmail: contact.email ?? null,
+      fromEmail: lastInboundFromAddress,
+      channel: conversationChannel,
       conversationText: inboundText,
       workspaceIntelligence: workspaceIntelligence ?? null,
     });
@@ -2000,6 +2028,10 @@ export function InboxLeadDetailsPanel({
     intel.leadScoreDetails?.confidence01,
     messages,
     inboundText,
+    currentInboundForIntent,
+    lastInboundText,
+    lastInboundFromAddress,
+    conversationChannel,
     contact.assignedTo,
     contact.followUpDate,
     contact.customFields,

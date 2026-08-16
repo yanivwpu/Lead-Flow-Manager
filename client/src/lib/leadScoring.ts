@@ -8,6 +8,8 @@ import {
   MIN_HOT_TAG_SCORE,
   type LeadBucket,
 } from "@shared/leadQualification";
+import { looksLikeSystemOrNotificationEmail } from "@shared/aiDomainEligibility";
+import { hasPropertyShowingIntent } from "@shared/conversationTextSignals";
 
 export type { LeadBucket } from "@shared/leadQualification";
 
@@ -61,6 +63,8 @@ export type LeadScoreResult = {
 type ScoreOptions = {
   /** Force a profile; otherwise inferred from businessKnowledge.industry */
   isRealEstate?: boolean;
+  fromEmail?: string | null;
+  channel?: string | null;
 };
 
 export type InterestIntent = "booking" | "pricing" | "quote" | "availability" | "inquiry";
@@ -213,9 +217,21 @@ function detectIntent(inbound: string): InterestIntent[] {
   if (/\b(book|booking|schedule|appointment|call|demo|meeting|viewing|tour)\b/i.test(inbound)) intents.push("booking");
   if (/\b(price|pricing|cost|how much|rate|rates|fee|fees)\b/i.test(inbound)) intents.push("pricing");
   if (/\bquote|estimate\b/i.test(inbound)) intents.push("quote");
-  if (/\bavailable|availability|in stock|still available|open slots?\b/i.test(inbound)) intents.push("availability");
+  if (hasAvailabilityInterest(inbound)) intents.push("availability");
   if (/\b(interested|interest in)\b/i.test(inbound)) intents.push("inquiry");
   return intents;
+}
+
+function hasAvailabilityInterest(inbound: string): boolean {
+  if (/\bavailable\s+(?:credit|balance|funds?|plans?)\b|\b(?:product|credit|account)\s+availability\b/i.test(inbound)) {
+    return false;
+  }
+  if (/\b(?:in stock|still available|open slots?)\b/i.test(inbound)) return true;
+  if (/\bis\s+(?:it|the\s+\w+)\s+(?:still\s+)?available\b/i.test(inbound)) return true;
+  if (/\bavailable\b/i.test(inbound) && /\b(?:condo|home|house|property|listing|apartment|showing|tour)\b/i.test(inbound)) {
+    return true;
+  }
+  return false;
 }
 
 function detectQuestionInterest(inbound: string): boolean {
@@ -339,8 +355,10 @@ function extractRealEstateSignals(fullInbound: string, latestInbound?: string) {
   const hasTimeline =
     /\b(asap|urgent|immediately|this week|next week|next month|within \d+ (?:day|week|month|year)s?)\b/i.test(fullInbound) ||
     /\b(in|within|around)\s+\d+\s+(day|week|month|year)s?\b/i.test(fullInbound);
-  const hasFinancing = /\b(pre-?approved|cash|mortgage|loan|financing)\b/i.test(fullInbound);
-  const viewingIntent = /\b(viewing|showing|tour|see (?:the|it)|visit|open house)\b/i.test(fullInbound);
+  const hasFinancing =
+    /\b(pre-?approved|mortgage|loan|financing)\b/i.test(fullInbound) ||
+    /\b(?:cash buyer|paying cash|all cash|cash offer)\b/i.test(fullInbound);
+  const viewingIntent = hasPropertyShowingIntent(latest);
 
   const latestBuy =
     BUY_SALE_INTENT_RE.test(latest) ||
@@ -426,6 +444,7 @@ function computeIndustryLayer(
   inbound: string,
   businessKnowledge: BusinessKnowledgeForScoring | undefined,
   options: ScoreOptions | undefined,
+  latestInbound?: string,
 ): { bonus: number; layer: "real_estate" | "property_management"; detected: string[] } | null {
   if (inferPropertyManagement(businessKnowledge)) {
     const pm = extractPropertyManagementSignals(inbound);
@@ -448,7 +467,7 @@ function computeIndustryLayer(
     (businessKnowledge?.industry || "").toLowerCase() === "real_estate" || inferIsRealEstate(businessKnowledge, options);
   if (!reLayer) return null;
 
-  const re = extractRealEstateSignals(inbound);
+  const re = extractRealEstateSignals(inbound, latestInbound);
   let bonus = 0;
   const detected: string[] = [];
   if (re.viewingIntent) {
@@ -559,14 +578,15 @@ function getStageSignals(
   options?: ScoreOptions,
 ): StageSignalSummary {
   const inbound = inboundText(messages);
+  const latest = latestInboundText(messages);
   const stats = messageStats(messages);
   const isRealEstate = inferIsRealEstate(businessKnowledge, options);
-  const intents = detectIntent(inbound);
-  const reSignals = isRealEstate ? extractRealEstateSignals(inbound) : null;
+  const intents = detectIntent(latest || inbound);
+  const reSignals = isRealEstate ? extractRealEstateSignals(inbound, latest) : null;
 
   const strongEngagement = stats.inbound >= 2 && stats.turns >= 1;
   const strongIntent = intents.length > 0;
-  const viewingIntent = !!reSignals?.viewingIntent;
+  const viewingIntent = hasPropertyShowingIntent(latest);
 
   return { isRealEstate, strongEngagement, strongIntent, viewingIntent, intents };
 }
@@ -582,6 +602,11 @@ export function scoreLead(
   const isRealEstate = inferIsRealEstate(businessKnowledge, options);
   const reSignalsForQual = isRealEstate ? extractRealEstateSignals(inbound, latestInbound) : null;
   const mediaOnly = isInboundMediaOnlyMessages(messages);
+  const systemNotification = looksLikeSystemOrNotificationEmail({
+    inboundText: latestInbound || inbound,
+    fromEmail: options?.fromEmail,
+    channel: options?.channel,
+  });
 
   if (mediaOnly && !hasSubstantiveInboundText(inbound)) {
     const { missingRequired } = computeQualificationCompleteness({
@@ -657,13 +682,15 @@ export function scoreLead(
   }
 
   const engagement = computeEngagementScore(stats, inbound);
-  const interest = computeInterestScore(inbound);
-  const decision = computeDecisionScore(inbound);
-  const urgency = computeUrgencyScore(inbound);
+  const interest = computeInterestScore(systemNotification ? latestInbound : inbound);
+  const decision = computeDecisionScore(systemNotification ? latestInbound : inbound);
+  const urgency = computeUrgencyScore(systemNotification ? latestInbound : inbound);
   const softNeg = computeSoftNegativeScore(inbound);
   const criticalUrgency = computeCriticalUrgencyBoost(inbound);
 
-  const industry = computeIndustryLayer(inbound, businessKnowledge, options);
+  const industry = systemNotification
+    ? null
+    : computeIndustryLayer(inbound, businessKnowledge, options, latestInbound);
 
   const core: LeadScoringSignals["core"] = {
     engagementScore: engagement.value,
@@ -695,17 +722,21 @@ export function scoreLead(
     (/\b(price|pricing|cost|how much|buy|purchase|appointment|book)\b/i.test(inbound) ||
       interest.detected.some((d) => d === "interest:pricing" || d === "interest:booking"));
   let comboBoost = 0;
-  if (comboPricingAndBuy || comboPricingAndRent || comboHumanAndCommercial) {
+  if (!systemNotification && (comboPricingAndBuy || comboPricingAndRent || comboHumanAndCommercial)) {
     comboBoost = 12;
     score += comboBoost;
   }
 
-  const rentalCriteriaBoost = computeSpecificRentalSearchBoost(inbound, latestInbound);
+  const rentalCriteriaBoost = systemNotification
+    ? { boost: 0, detected: [] as string[] }
+    : computeSpecificRentalSearchBoost(inbound, latestInbound);
   if (rentalCriteriaBoost.boost > 0) {
     score += rentalCriteriaBoost.boost;
   }
 
-  const buySearchBoost = computeSpecificActiveBuySearchBoost(inbound, latestInbound);
+  const buySearchBoost = systemNotification
+    ? { boost: 0, detected: [] as string[] }
+    : computeSpecificActiveBuySearchBoost(inbound, latestInbound);
   if (buySearchBoost.boost > 0) {
     score += buySearchBoost.boost;
   }

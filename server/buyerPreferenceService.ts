@@ -18,6 +18,7 @@ import {
   logBuyerPreferenceFastPath,
   type PreferenceArrayReplaceKey,
 } from "@shared/buyerPreferenceInventorySignals";
+import { looksLikeSystemOrNotificationEmail } from "@shared/aiDomainEligibility";
 import {
   applyInboundSearchCommandOverrides,
   isFullReplacementSearch,
@@ -507,6 +508,13 @@ export async function syncBuyerPreferencesForInboundMessage(input: {
 }): Promise<BuyerPreferenceProfile> {
   const freshContact = (await storage.getContact(input.contact.id)) ?? input.contact;
   const priorProfile = readBuyerPreferenceProfile(freshContact);
+  if (looksLikeSystemOrNotificationEmail({ inboundText: input.inboundText })) {
+    logBuyerPreferenceFastPath("preference_change_skipped", {
+      contactId: input.contact.id,
+      reason: "system_or_notification_email",
+    });
+    return priorProfile;
+  }
   const command = parseBuyerSearchCommand(input.inboundText, priorProfile);
   const fullReplacement = isFullReplacementSearch(
     input.inboundText,
@@ -690,6 +698,17 @@ export async function processInboundBuyerPreferencesOnMessage(params: {
     triggerSource = "channelService",
   } = params;
   const text = (inboundText || "").trim();
+
+  if (looksLikeSystemOrNotificationEmail({ inboundText: text })) {
+    logTrigger("extraction_skipped", {
+      contactId: contact.id,
+      userId,
+      triggerSource,
+      reason: "system_or_notification_email",
+      textLen: text.length,
+    });
+    return null;
+  }
 
   if (text.length > 0 && detectHighConfidenceBookingIntent(text)) {
     logTrigger("extraction_skipped", {
@@ -1090,6 +1109,17 @@ export function scheduleBuyerPreferenceExtraction(params: {
     triggerSource = "schedule",
   } = params;
   const text = (inboundText || "").trim();
+
+  if (looksLikeSystemOrNotificationEmail({ inboundText: text })) {
+    logTrigger("extraction_skipped", {
+      contactId,
+      userId,
+      triggerSource,
+      reason: "system_or_notification_email",
+      textLen: text.length,
+    });
+    return;
+  }
 
   if (text.length > 0 && detectHighConfidenceBookingIntent(text)) {
     logTrigger("extraction_skipped", {

@@ -25,6 +25,7 @@ export interface ConversationMessage {
   direction: 'inbound' | 'outbound';
   content: string;
   createdAt?: string;
+  fromAddress?: string | null;
 }
 
 /**
@@ -347,6 +348,8 @@ export function analyzeConversation(
     businessKnowledge?: BusinessKnowledgeForScoring;
     /** When present, Copilot uses this as the primary score (aligned with `contacts.lead_score`). */
     crmLeadScore?: number | null;
+    fromEmail?: string | null;
+    channel?: string | null;
   }
 ): CopilotIntelligence {
   const crmScore = normalizeCrmLeadScore(opts?.crmLeadScore);
@@ -399,7 +402,11 @@ export function analyzeConversation(
   const lastDirection = messages.length > 0 ? messages[messages.length - 1].direction : null;
   const signalCount   = [hasBudget, hasTimeline, hasFinancing].filter(Boolean).length;
 
-  const scoring = scoreLead(messages, opts?.businessKnowledge ?? { industry: opts?.industry }, { isRealEstate });
+  const scoring = scoreLead(messages, opts?.businessKnowledge ?? { industry: opts?.industry }, {
+    isRealEstate,
+    fromEmail: opts?.fromEmail,
+    channel: opts?.channel,
+  });
 
   /**
    * Conversation-level AI intent only. Do NOT max() with contacts.lead_score —

@@ -5,17 +5,19 @@
 import { detectShowMeAllPropertyTypeRelaxation } from "./buyerPreferencePropertyTypeRelax";
 
 const PROPERTY_TYPE_SIGNAL_RE =
-  /\b(sfh|single[\s-]?family(?:\s+home)?|condo(?:minium)?s?|apartments?|townhouse|town[\s-]?house|multi[\s-]?family|houses?|homes?|land)\b/i;
+  /\b(sfh|single[\s-]?family(?:\s+home)?|condo(?:minium)?s?|apartments?|townhouse|town[\s-]?house|multi[\s-]?family|land)\b/i;
+
+const GENERIC_DWELLING_RE = /\b(houses?|homes?)\b/i;
 
 /** Common typo: "apparent" → apartment in listing-search context. */
 const REAL_ESTATE_APPARENT_RE =
   /\bapparent\b/i;
 
 const REAL_ESTATE_SEARCH_CONTEXT_RE =
-  /\b(for\s+sale|for\s+rent|show\s+me|looking\s+for|find\s+me|\d+\s*\/\s*\d+)/i;
+  /\b(for\s+sale|for\s+rent|show\s+me|looking\s+(?:for|to)|searching\s+for|find\s+me|\d+\s*\/\s*\d+|under\s+\$|in\s+[A-Z][a-z]+)\b/i;
 
 const TRANSACTION_INTENT_SIGNAL_RE =
-  /\b(for\s+sale|for\s+rent|rental|rentals?|lease|leasing|buy(?:ing)?|purchase)\b/i;
+  /\b(for\s+sale|for\s+rent|rentals?|lease|leasing|looking\s+(?:for|to)\s+(?:a|an|the|\d+|buy|rent|purchase)|searching\s+for|ready\s+to\s+buy|want\s+to\s+(?:buy|rent)|buy(?:ing)?\s+(?:a|an|the)\s+(?:home|house|condo|property|listing|apartment)|show\s+me)\b/i;
 
 const STRONG_BUDGET_SIGNAL_RE =
   /\$\s*[\d,.]+|\bbudget\b|\bbetween\s+\d|\d+\s*-\s*\d+\s+dollars?|\d+\s+dollars?\b|\b(?:up\s+to|under|max)\s+[\d,.]+\s*(?:k|m|mil|million)?/i;
@@ -37,6 +39,7 @@ export function hasPropertyTypeSignalInMessage(text: string): boolean {
   const t = (text || "").trim();
   if (!t) return false;
   if (PROPERTY_TYPE_SIGNAL_RE.test(t)) return true;
+  if (GENERIC_DWELLING_RE.test(t) && REAL_ESTATE_SEARCH_CONTEXT_RE.test(t)) return true;
   return REAL_ESTATE_APPARENT_RE.test(t) && REAL_ESTATE_SEARCH_CONTEXT_RE.test(t);
 }
 
@@ -74,6 +77,8 @@ export function hasStrongStructuredSearchSignals(text: string): boolean {
     POOL_SIGNAL_RE.test(t) || WATERFRONT_SIGNAL_RE.test(t) || /\bhoa\b/i.test(t);
 
   const criteriaCount = [hasBudget, hasBeds, hasType, hasArea, hasAmenity].filter(Boolean).length;
+  const genericHomeOnly = hasType && !hasBeds && !hasBudget && !hasArea && !hasAmenity;
+  if (genericHomeOnly) return false;
   if (hasIntent && criteriaCount >= 1) return true;
   if (hasBudget && (hasBeds || hasType)) return true;
   if (criteriaCount >= 2 && (hasBeds || hasBudget)) return true;

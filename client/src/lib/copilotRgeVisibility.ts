@@ -40,6 +40,8 @@ export function shouldShowCopilotBuyerPreferences(input: {
   inboundText?: string | null;
   conversationText?: string | null;
   contactEmail?: string | null;
+  fromEmail?: string | null;
+  channel?: string | null;
   sellerIntent?: SellerIntentClass | null;
   buyerPreferenceProfile?: unknown;
 }): boolean {
@@ -53,6 +55,8 @@ export function shouldShowCopilotBuyerPreferences(input: {
     industry: input.industry,
     buyerProfileHasCriteria: contactHasInventoryMatchCriteria(input.buyerPreferenceProfile),
     contactEmail: input.contactEmail,
+    fromEmail: input.fromEmail,
+    channel: input.channel,
   };
   return resolveAiDomainEligibility(domainInput).showBuyerPreferencesPanel;
 }

@@ -149,6 +149,18 @@ export function registerConversationRoutes(app: Express): void {
       const offset = Number.isFinite(rawO) ? rawO : 0;
       const messages = await storage.getMessages(conversationId, limit, offset);
       const payload = enrichConversationMessagesForClient(messages);
+      if (String(conversation.channel || "").toLowerCase() === "email") {
+        const { getEmailFromAddressesByMessageIds } = await import("../emailChannel/mailboxStore");
+        const ids = payload
+          .map((row) => String((row as { id?: string }).id || ""))
+          .filter(Boolean);
+        const fromById = await getEmailFromAddressesByMessageIds(ids);
+        for (const row of payload) {
+          const rec = row as Record<string, unknown>;
+          const from = fromById.get(String(rec.id || ""));
+          if (from) rec.fromAddress = from;
+        }
+      }
       if (process.env.NODE_ENV !== "production") {
         console.log("[GET /api/conversations/:id/messages] end", {
           conversationId,

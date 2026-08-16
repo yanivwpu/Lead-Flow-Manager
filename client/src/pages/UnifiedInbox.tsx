@@ -280,6 +280,8 @@ interface Message {
   deliveryFailureInline?: string;
   errorMessage?: string | null;
   errorCode?: string | null;
+  /** Actual inbound Email From — used for Copilot system/notification detection. */
+  fromAddress?: string | null;
 }
 
 /** Prefer direct <img src> for permanent URLs (R2, app uploads); never use expiring provider CDNs. */
@@ -2932,12 +2934,18 @@ export function UnifiedInbox() {
   // messages is already selection-isolated (empty when no conversation / contact mismatch).
   const contactContext: ContactContext | undefined = useMemo(() => {
     if (!contact || contact.id !== selectedContactId) return undefined;
-    const msgList = messages.map(m => ({ direction: m.direction, content: m.content || '' }));
+    const msgList = messages.map(m => ({
+      direction: m.direction,
+      content: m.content || '',
+      fromAddress: m.fromAddress,
+    }));
     const intel =
       msgList.length > 0
         ? analyzeConversation(msgList, {
             industry: aiBusinessKnowledge?.industry,
             crmLeadScore: contact.leadScore ?? null,
+            fromEmail: [...msgList].reverse().find((m) => m.direction === "inbound")?.fromAddress || null,
+            channel: primaryConversation?.channel || null,
           })
         : null;
     const lastInbound =
@@ -2955,6 +2963,7 @@ export function UnifiedInbox() {
       industry: aiBusinessKnowledge?.industry,
       buyerProfileHasCriteria: extractBuyerMatchCriteria(persistedBuyerProfile).hasAnyCriteria,
       contactEmail: (contact as { email?: string | null }).email ?? null,
+      fromEmail: [...msgList].reverse().find((m) => m.direction === "inbound")?.fromAddress || null,
       channel: primaryConversation?.channel,
     });
 
@@ -4500,7 +4509,7 @@ export function UnifiedInbox() {
           contact={(formDisplayContact || contact) as InboxLeadDetailsPanelContact}
           primaryConversation={hasConversation ? (primaryConversation as InboxLeadDetailsPanelConversation) : undefined}
           teamMembers={teamMembers}
-          messages={hasConversation ? messages.map(m => ({ direction: m.direction, content: m.content || '' })) : []}
+          messages={hasConversation ? messages.map(m => ({ direction: m.direction, content: m.content || '', fromAddress: m.fromAddress })) : []}
           capabilities={capabilities}
           currentUserId={user?.id}
           handoffActive={!!activeHandoff && hasConversation}
@@ -4548,7 +4557,7 @@ export function UnifiedInbox() {
                   contact={(formDisplayContact || contact) as InboxLeadDetailsPanelContact}
                   primaryConversation={hasConversation ? (primaryConversation as InboxLeadDetailsPanelConversation) : undefined}
                   teamMembers={teamMembers}
-                  messages={hasConversation ? messages.map(m => ({ direction: m.direction, content: m.content || '' })) : []}
+                  messages={hasConversation ? messages.map(m => ({ direction: m.direction, content: m.content || '', fromAddress: m.fromAddress })) : []}
                   capabilities={capabilities}
                   currentUserId={user?.id}
                   panelClassName="flex flex-col w-full bg-white"

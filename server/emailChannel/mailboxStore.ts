@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import {
   emailMailboxes,
   emailOauthStates,
@@ -218,6 +218,25 @@ export async function getEmailMessageDetail(messageId: string) {
     .where(eq(emailMessageDetails.messageId, messageId))
     .limit(1);
   return rows[0];
+}
+
+export async function getEmailFromAddressesByMessageIds(
+  messageIds: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const ids = [...new Set(messageIds.filter(Boolean))];
+  if (ids.length === 0) return out;
+  const rows = await db
+    .select({
+      messageId: emailMessageDetails.messageId,
+      fromAddress: emailMessageDetails.fromAddress,
+    })
+    .from(emailMessageDetails)
+    .where(inArray(emailMessageDetails.messageId, ids));
+  for (const row of rows) {
+    if (row.fromAddress) out.set(row.messageId, row.fromAddress);
+  }
+  return out;
 }
 
 /** Idempotent patch for on-read website-form classification (no body rewrite). */

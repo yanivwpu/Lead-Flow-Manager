@@ -18,6 +18,8 @@ export function resolveCopilotDominantIntent(input: {
   buyerProfileHasCriteria?: boolean;
   sellerProfileHasData?: boolean;
   contactEmail?: string | null;
+  fromEmail?: string | null;
+  channel?: string | null;
   rgeInstalled?: boolean;
   industry?: string | null;
 }): CopilotDominantIntent {
@@ -29,6 +31,8 @@ export function resolveCopilotDominantIntent(input: {
     buyerProfileHasCriteria: input.buyerProfileHasCriteria,
     sellerProfileHasData: input.sellerProfileHasData,
     contactEmail: input.contactEmail,
+    fromEmail: input.fromEmail,
+    channel: input.channel,
     rgeInstalled: input.rgeInstalled,
     industry: input.industry,
   };

@@ -19,7 +19,7 @@ import {
   resolveAiDomainEligibility,
   type AiDomainEligibilityInput,
 } from "./aiDomainEligibility";
-import { looksLikeGreetingOnly } from "./conversationTextSignals";
+import { looksLikeGreetingOnly, hasPropertyShowingIntent } from "./conversationTextSignals";
 import type { SellerIntentClass } from "./sellerIntent";
 import type { WorkspaceIntelligenceSnapshot } from "./workspaceIntelligence";
 import {
@@ -205,6 +205,8 @@ export type ContextualActionContext = {
   buyerProfileHasCriteria?: boolean;
   sellerProfileHasData?: boolean;
   contactEmail?: string | null;
+  fromEmail?: string | null;
+  channel?: string | null;
   conversationText?: string | null;
   /**
    * Client-safe Workspace Intelligence Snapshot (Phase 1).
@@ -265,14 +267,15 @@ function collectBuyerInventoryActions(ctx: ContextualActionContext): ActionCandi
 function domainEligibilityFromActionContext(
   ctx: ContextualActionContext,
 ): AiDomainEligibilityInput {
-  const intentText = ctx.latestInboundText ?? ctx.inboundText;
+  const currentInbound = String(ctx.latestInboundText || "").trim();
+  const joinedInbound = String(ctx.inboundText || "").trim();
   const snap = ctx.workspaceIntelligence;
   // Snapshot industry is preferred for eligibility signals; RGE may also come from snapshot.
   const industry = snap?.industry ?? ctx.industry;
   const rgeInstalled =
     ctx.rgeInstalled === true || snap?.growthEngines?.rgeInstalled === true;
   return {
-    inboundText: intentText,
+    inboundText: currentInbound || joinedInbound,
     conversationText: ctx.conversationText ?? ctx.inboundText,
     sellerIntent: ctx.sellerIntent ?? null,
     leadType: ctx.leadType,
@@ -281,6 +284,8 @@ function domainEligibilityFromActionContext(
     buyerProfileHasCriteria: ctx.buyerProfileHasCriteria,
     sellerProfileHasData: ctx.sellerProfileHasData,
     contactEmail: ctx.contactEmail,
+    fromEmail: ctx.fromEmail,
+    channel: ctx.channel,
   };
 }
 
@@ -440,6 +445,9 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Collec
   const domainDecision = resolveAiDomainEligibility(domainInput);
   const dominantIntent = resolveCopilotDominantIntent(domainInput);
   const relevance = resolveWorkspaceRelevance(ctx);
+  const currentInbound = String(ctx.latestInboundText || "").trim();
+  const showingFromCurrent = hasPropertyShowingIntent(currentInbound);
+  const hasShowingIntent = showingFromCurrent;
 
   const base = {
     relevance,
@@ -578,7 +586,7 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Collec
 
     if (dominantIntent === "buyer") {
       actions.push(
-        ...collectBuyerInventoryActions(ctx).map((a) => ({
+        ...collectBuyerInventoryActions({ ...ctx, hasShowingIntent }).map((a) => ({
           ...a,
           capability: a.group === "showing" ? "book" : "ge_share_listings",
           source: "realtor_buyer_eligibility",
@@ -592,9 +600,10 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Collec
     });
   }
 
+  const routingText = currentInbound || String(ctx.inboundText || "").trim();
   const routing =
-    ctx.inboundText?.trim()
-      ? resolveAiRouting({ inbound: ctx.inboundText, joinedInbound: ctx.inboundText })
+    routingText
+      ? resolveAiRouting({ inbound: routingText, joinedInbound: ctx.inboundText })
       : null;
   const routingDecision = ctx.aiRoutingDecision ?? routing?.decision;
   const needsClarify =
@@ -647,14 +656,14 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Collec
 
   const allowBookingActions =
     routingDecision === "BOOK_APPOINTMENT" ||
-    (!routingDecision && ctx.hasShowingIntent) ||
-    (routingDecision === "CONTINUE_AI" && ctx.hasShowingIntent && !needsClarify);
+    (!routingDecision && hasShowingIntent) ||
+    (routingDecision === "CONTINUE_AI" && hasShowingIntent && !needsClarify);
 
   // Showing / financing recommendations are real-estate domain actions.
   if (
     domainDecision.showRealEstateCopilotRecommendations &&
     allowBookingActions &&
-    ctx.hasShowingIntent
+    hasShowingIntent
   ) {
     actions.push({
       label: timing ? `Confirm ${timing} availability` : "Confirm showing availability",
@@ -688,7 +697,7 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Collec
   } else if (
     domainDecision.showRealEstateCopilotRecommendations &&
     ctx.hasStrongPurchaseIntent &&
-    !ctx.hasShowingIntent &&
+    !hasShowingIntent &&
     routingDecision !== "ASSIGN_AGENT" &&
     !needsClarify
   ) {
