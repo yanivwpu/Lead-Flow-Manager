@@ -58,6 +58,8 @@ function RealtorMark() {
 
 import { useLocation, Link } from "wouter";
 import { useQuery, useMutation, type UseMutationResult } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth-context";
+import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 import { InventorySourcesSection } from "@/components/inventory/InventorySourcesSection";
 import { InventorySidebarSummary } from "@/components/inventory/InventorySidebarSummary";
@@ -301,18 +303,21 @@ function RGEOnboardingWizard({
   setLocation: (path: string) => void;
 }) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const bookingReturnHandledRef = React.useRef(false);
 
   const { data: activationStatus } = useQuery<ActivationStatusPayload>({
-    queryKey: ["/api/activation-status"],
+    queryKey: withUserQueryScope(["/api/activation-status"], user?.id),
     staleTime: 15_000,
     refetchInterval: 20_000,
+    enabled: !!user?.id,
   });
 
   const { data: channelSettings } = useQuery<ChannelSettingRow[]>({
-    queryKey: ["/api/channels"],
+    queryKey: withUserQueryScope(["/api/channels"], user?.id),
     staleTime: 15_000,
     refetchInterval: 20_000,
+    enabled: !!user?.id,
   });
 
   const { data: engineStatusData, refetch: refetchEngineStatus } = useQuery<RgeEngineStatusPayload>({

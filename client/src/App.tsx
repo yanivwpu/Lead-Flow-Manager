@@ -142,7 +142,7 @@ import { Welcome } from "@/pages/Welcome";
 
 // Wrapper for protected routes
 function ProtectedRoute({ component: Component, ...rest }: any) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, sessionAligned } = useAuth();
   const bootstrap = readShopifyBootstrapFromWindow();
 
   if (shouldSuppressAppRoutes(bootstrap)) {
@@ -150,7 +150,7 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
     return <ShopifyBootstrapScreen />;
   }
 
-  if (isLoading) {
+  if (isLoading || (user && !sessionAligned)) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <Loader2 className="h-8 w-8 text-brand-green animate-spin" />
@@ -340,7 +340,7 @@ function Router() {
     }
 
     let cancelled = false;
-    fetch("/api/auth/me", { credentials: "include" })
+    fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((me) => {
         if (cancelled) return;

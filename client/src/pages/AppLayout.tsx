@@ -19,6 +19,7 @@ import {
   todayLocalYYYYMMDD,
 } from "@/lib/activationStatus";
 import { useAuth } from "@/lib/auth-context";
+import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { SubscriptionProvider, useSubscription } from "@/lib/subscription-context";
 import { getUpgradeProvider } from "@/lib/upgradeRouting";
 import { Loader2 } from "lucide-react";
@@ -49,7 +50,7 @@ const PageLoader = () => (
 );
 
 function AppContent() {
-  const { user } = useAuth();
+  const { user, sessionAligned } = useAuth();
   const { data: subscription, isLoading } = useSubscription();
   const [trialModalOpen, setTrialModalOpen] = useState(false);
   /** Same-tab: after dismiss or CTA, avoid re-open until localStorage day key updates on next render. */
@@ -68,9 +69,10 @@ function AppContent() {
 
   const { data: activation, isPending: activationPending, isError: activationError, error: activationErr } =
     useQuery<ActivationStatusPayload>({
-    queryKey: ["/api/activation-status"],
+    queryKey: withUserQueryScope(["/api/activation-status"], user?.id),
     staleTime: 15_000,
     refetchOnWindowFocus: true,
+    enabled: !!user?.id && sessionAligned,
   });
 
   useEffect(() => {

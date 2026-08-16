@@ -11,6 +11,7 @@ import { waUploadFileSizeCheck, waUploadTooLargeMessage } from "@shared/whatsapp
 import { shouldBlockListingRecommendationMissingText } from "@shared/inboxComposerAttachmentGuard";
 import { Link, useRoute, useLocation, useSearch } from "wouter";
 import { useAuth } from "@/lib/auth-context";
+import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
   resolveInboxSelectionState,
@@ -500,10 +501,11 @@ export function UnifiedInbox() {
   const [match, params] = useRoute("/app/inbox/:contactId?");
   const [pathname, setLocation] = useLocation();
   const searchString = useSearch();
-  const { user } = useAuth();
+  const { user, sessionAligned } = useAuth();
   const { t } = useTranslation();
 
   const queryClient = useQueryClient();
+  const inboxRecentKey = withUserQueryScope(INBOX_RECENT_QUERY_KEY, user?.id);
   const { toast } = useToast();
   const { ackIfVisible } = useAckInboxActivityWhenVisible();
   /** Set after `replyWindowNow` exists; WS handler bumps clock when inbound pushes so UI doesn’t wait for the 1m tick. */
@@ -869,7 +871,8 @@ export function UnifiedInbox() {
     isEnabled: inboxQueryEnabled,
     refetch: refetchInbox,
   } = useQuery<InboxItem[]>({
-    queryKey: INBOX_RECENT_QUERY_KEY,
+    queryKey: inboxRecentKey,
+    enabled: !!user?.id && sessionAligned,
     staleTime: 10_000,
     refetchInterval: () =>
       typeof document !== "undefined" && document.hidden ? false : 15_000,
@@ -889,7 +892,7 @@ export function UnifiedInbox() {
         throw new Error(`${res.status}: ${await res.text()}`);
       }
       const incoming = (await res.json()) as InboxItem[];
-      const previous = queryClient.getQueryData<InboxItem[]>(INBOX_RECENT_QUERY_KEY);
+      const previous = queryClient.getQueryData<InboxItem[]>(inboxRecentKey);
       const ms =
         (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
       recordInboxTiming("inbox_recent_client", ms, {
@@ -911,8 +914,8 @@ export function UnifiedInbox() {
     data: searchInboxData,
     isPending: searchInboxPending,
   } = useQuery<InboxItem[]>({
-    queryKey: inboxSearchQueryKey(sanitizedSearch || ""),
-    enabled: isServerSearching,
+    queryKey: withUserQueryScope(inboxSearchQueryKey(sanitizedSearch || ""), user?.id),
+    enabled: isServerSearching && !!user?.id && sessionAligned,
     staleTime: 10_000,
     queryFn: async ({ signal }) => {
       const q = sanitizedSearch!;
@@ -1657,8 +1660,8 @@ export function UnifiedInbox() {
   }, [replyWindowDerived]);
 
   const { data: whatsappAvailability } = useQuery<WhatsAppAvailability>({
-    queryKey: ["/api/channels/whatsapp/availability"],
-    enabled: isWhatsAppContact && !!selectedContactId,
+    queryKey: withUserQueryScope(["/api/channels/whatsapp/availability"], user?.id),
+    enabled: isWhatsAppContact && !!selectedContactId && !!user?.id && sessionAligned,
     refetchInterval: 30000,
   });
 
@@ -1737,16 +1740,17 @@ export function UnifiedInbox() {
     };
   };
   const { data: channelHealth = [] } = useQuery<ChannelHealthEntry[]>({
-    queryKey: ["/api/channel-health"],
-    enabled: inboxSettledOnce,
+    queryKey: withUserQueryScope(["/api/channel-health"], user?.id),
+    enabled: inboxSettledOnce && !!user?.id && sessionAligned,
     refetchInterval: 5 * 60 * 1000, // re-check every 5 minutes
     staleTime: 4 * 60 * 1000,
   });
 
   const { data: activationStatus } = useQuery<ActivationStatusPayload>({
-    queryKey: ["/api/activation-status"],
+    queryKey: withUserQueryScope(["/api/activation-status"], user?.id),
     staleTime: 15_000,
     refetchOnWindowFocus: true,
+    enabled: !!user?.id && sessionAligned,
   });
 
   // Channels that are connected but failed definitive health checks (not transient Meta timeouts)
@@ -1895,10 +1899,10 @@ export function UnifiedInbox() {
       rememberClearedConversation();
       // Never cancel an in-flight initial /api/inbox fetch — that left data undefined
       // and stuck the conversation list on skeletons while the center pane loaded.
-      const cachedRecent = queryClient.getQueryData<InboxItem[]>(INBOX_RECENT_QUERY_KEY);
+      const cachedRecent = queryClient.getQueryData<InboxItem[]>(inboxRecentKey);
       if (shouldCancelInboxRecentQuery(cachedRecent)) {
-        await queryClient.cancelQueries({ queryKey: INBOX_RECENT_QUERY_KEY, exact: true });
-        queryClient.setQueryData<InboxItem[]>(INBOX_RECENT_QUERY_KEY, (old) =>
+        await queryClient.cancelQueries({ queryKey: inboxRecentKey, exact: true });
+        queryClient.setQueryData<InboxItem[]>(inboxRecentKey, (old) =>
           applyInboxConversationMarkRead(old, contactId, {
             conversationId,
             remainingUnread,
@@ -1924,7 +1928,7 @@ export function UnifiedInbox() {
         });
         if (cancelled) return;
         if (res.ok) {
-          queryClient.setQueryData<InboxItem[]>(INBOX_RECENT_QUERY_KEY, (old) =>
+          queryClient.setQueryData<InboxItem[]>(inboxRecentKey, (old) =>
             applyInboxConversationMarkRead(old, contactId, {
               conversationId,
               remainingUnread,
@@ -2267,13 +2271,13 @@ export function UnifiedInbox() {
       const { contactId, ...body } = data;
       const contactKey = ["/api/contacts", contactId] as const;
       await queryClient.cancelQueries({ queryKey: contactKey });
-      const cachedRecent = queryClient.getQueryData<InboxItem[]>(INBOX_RECENT_QUERY_KEY);
+      const cachedRecent = queryClient.getQueryData<InboxItem[]>(inboxRecentKey);
       if (shouldCancelInboxRecentQuery(cachedRecent)) {
-        await queryClient.cancelQueries({ queryKey: INBOX_RECENT_QUERY_KEY, exact: true });
+        await queryClient.cancelQueries({ queryKey: inboxRecentKey, exact: true });
       }
 
       const previousContact = queryClient.getQueryData<{ contact: Contact; conversations: Conversation[] }>(contactKey);
-      const previousInbox = queryClient.getQueryData<InboxItem[]>(INBOX_RECENT_QUERY_KEY);
+      const previousInbox = queryClient.getQueryData<InboxItem[]>(inboxRecentKey);
 
       const patchContact = (contact: Contact): Contact => ({ ...contact, ...body });
 
@@ -2405,11 +2409,11 @@ export function UnifiedInbox() {
       };
     },
     onMutate: async () => {
-      const cachedRecent = queryClient.getQueryData<InboxItem[]>(INBOX_RECENT_QUERY_KEY);
+      const cachedRecent = queryClient.getQueryData<InboxItem[]>(inboxRecentKey);
       if (shouldCancelInboxRecentQuery(cachedRecent)) {
-        await queryClient.cancelQueries({ queryKey: INBOX_RECENT_QUERY_KEY, exact: true });
+        await queryClient.cancelQueries({ queryKey: inboxRecentKey, exact: true });
       }
-      const previousInbox = queryClient.getQueryData<InboxItem[]>(INBOX_RECENT_QUERY_KEY);
+      const previousInbox = queryClient.getQueryData<InboxItem[]>(inboxRecentKey);
       return { previousInbox };
     },
     onError: (_err, _vars, context) => {

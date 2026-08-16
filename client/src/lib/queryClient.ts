@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { resolveQueryRequestUrl } from "@/lib/accountQueryScope";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -61,7 +62,7 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey, signal }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    const res = await fetch(resolveQueryRequestUrl(queryKey), {
       credentials: "include",
       /** User-specific JSON must not be served from disk/bfcache after mutations (e.g. template sync). */
       cache: "no-store",

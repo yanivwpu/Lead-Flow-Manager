@@ -19,6 +19,8 @@ import {
   Calendar, Mail, Link2
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth-context";
+import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -486,10 +488,7 @@ function WebhookUrlDisplay({ integrationType }: { integrationType: string }) {
   const [showInstructions, setShowInstructions] = useState(false);
   
   const baseUrl = window.location.origin;
-  const { data: user } = useQuery<{ id: string }>({
-    queryKey: ["/api/user"],
-  });
-  
+  const { user } = useAuth();
   const webhookUrl = user ? `${baseUrl}/api/webhooks/${integrationType}/${user.id}` : '';
   
   const copyWebhookUrl = () => {
@@ -572,6 +571,7 @@ function WebhookUrlDisplay({ integrationType }: { integrationType: string }) {
 
 export function Integrations() {
   const { data: subscription, isLoading: subLoading } = useSubscription();
+  const { user, sessionAligned } = useAuth();
   const queryClient = useQueryClient();
   const [isWebhookDialogOpen, setIsWebhookDialogOpen] = useState(false);
   const [connectingIntegration, setConnectingIntegration] = useState<IntegrationConfig | null>(null);
@@ -605,13 +605,13 @@ export function Integrations() {
   const maxWebhooks = (subscription?.limits as any)?.maxWebhooks || 0;
 
   const { data: webhooks = [], isLoading: webhooksLoading } = useQuery<Webhook[]>({
-    queryKey: ["/api/webhooks"],
-    enabled: !!integrationsEnabled,
+    queryKey: withUserQueryScope(["/api/webhooks"], user?.id),
+    enabled: !!integrationsEnabled && !!user?.id && sessionAligned,
   });
 
   const { data: integrations = [], isLoading: integrationsLoading } = useQuery<Integration[]>({
-    queryKey: ["/api/integrations"],
-    enabled: !!integrationsEnabled,
+    queryKey: withUserQueryScope(["/api/integrations"], user?.id),
+    enabled: !!integrationsEnabled && !!user?.id && sessionAligned,
   });
 
   const lcLocationId = integrations.find((i) => i.type === "gohighlevel")?.config?.locationId as
@@ -794,7 +794,7 @@ export function Integrations() {
     data: shopifyStatus,
     isFetching: shopifyStatusFetching,
   } = useQuery<{ connected: boolean; shop: string | null; syncEnabled: boolean; integrationId: string | null }>({
-    queryKey: ["/api/shopify/connection-status"],
+    queryKey: withUserQueryScope(["/api/shopify/connection-status"], user?.id),
     queryFn: async () => {
       const res = await fetch("/api/shopify/connection-status", { credentials: "include" });
       if (!res.ok) {
@@ -802,7 +802,7 @@ export function Integrations() {
       }
       return res.json();
     },
-    enabled: !!integrationsEnabled,
+    enabled: !!integrationsEnabled && !!user?.id && sessionAligned,
     staleTime: 30_000,
   });
 

@@ -17,6 +17,8 @@ import {
   AlertCircle, Plus, Trash2
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth-context";
+import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -217,6 +219,7 @@ function WidgetPreview({ settings }: { settings: WidgetSettings }) {
 
 export function WebsiteWidget() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [copiedType, setCopiedType] = useState<
     "script" | "iframe" | "iframeParent" | "hosted" | null
   >(null);
@@ -236,12 +239,9 @@ export function WebsiteWidget() {
     }
   }, []);
 
-  const { data: user } = useQuery<{ id: string }>({
-    queryKey: ["/api/auth/me"],
-  });
-  
   const { data: savedSettings } = useQuery<WidgetSettings>({
-    queryKey: ["/api/widget-settings"],
+    queryKey: withUserQueryScope(["/api/widget-settings"], user?.id),
+    enabled: !!user?.id,
   });
   
   useEffect(() => {

@@ -56,6 +56,7 @@ import {
 import { GmailVerificationGuidance } from "@/components/GmailVerificationGuidance";
 import { isEmailMailboxUiConnected } from "@shared/emailMailboxAvailability";
 import { sanitizeWhatsappCustomerFacingError } from "@shared/whatsappEmbeddedSignupFailures";
+import { withUserQueryScope } from "@/lib/accountQueryScope";
 
 type UnifiedPillKind = "connected" | "needs_attention" | "not_connected" | "test_number" | "error" | "loading";
 
@@ -123,6 +124,7 @@ interface Integration {
   name: string;
   isActive: boolean;
   config: any;
+  userId?: string;
 }
 
 const CHANNEL_CONFIG: Record<Channel, {
@@ -224,7 +226,7 @@ function ChannelStatusPill({ kind, label }: { kind: UnifiedPillKind; label?: str
 }
 
 export function ChannelSettings() {
-  const { user } = useAuth();
+  const { user, sessionAligned } = useAuth();
   const searchString = useSearch();
   const queryClient = useQueryClient();
   const [configChannel, setConfigChannel] = useState<Channel | null>(null);
@@ -270,7 +272,8 @@ export function ChannelSettings() {
     } | null;
     redirectUri?: string;
   }>({
-    queryKey: ["/api/integrations/email/status"],
+    queryKey: withUserQueryScope(["/api/integrations/email/status"], user?.id),
+    enabled: !!user?.id && sessionAligned,
     staleTime: 15_000,
     refetchInterval: (q) => {
       const mb = q.state.data?.mailbox;
@@ -449,8 +452,9 @@ export function ChannelSettings() {
     }
   }, [searchString, queryClient]);
 
-  const { data: channels = [], isLoading } = useQuery<ChannelSetting[]>({
-    queryKey: ["/api/channels"],
+  const { data: channels = [], isLoading, isPending: channelsPending } = useQuery<ChannelSetting[]>({
+    queryKey: withUserQueryScope(["/api/channels"], user?.id),
+    enabled: !!user?.id && sessionAligned,
   });
 
   // TikTok: derived active state — must live AFTER channels is declared
@@ -479,7 +483,8 @@ export function ChannelSettings() {
     metaConnected?: boolean;
     whatsappProvider?: string;
   }>({
-    queryKey: ["/api/auth/me"],
+    queryKey: withUserQueryScope(["/api/auth/me"], user?.id),
+    enabled: !!user?.id && sessionAligned,
   });
 
   const { data: waIntegrationStatus } = useQuery<{
@@ -505,12 +510,14 @@ export function ChannelSettings() {
       lastErrorMessage?: string | null;
     };
   }>({
-    queryKey: ["/api/integrations/whatsapp/status"],
+    queryKey: withUserQueryScope(["/api/integrations/whatsapp/status"], user?.id),
+    enabled: !!user?.id && sessionAligned,
     staleTime: 15_000,
   });
 
-  const { data: integrations = [] } = useQuery<Integration[]>({
-    queryKey: ["/api/integrations"],
+  const { data: integrations = [], isPending: integrationsPending } = useQuery<Integration[]>({
+    queryKey: withUserQueryScope(["/api/integrations"], user?.id),
+    enabled: !!user?.id && sessionAligned,
   });
 
   const { data: metaWebhookConfig } = useQuery<{
@@ -518,7 +525,8 @@ export function ChannelSettings() {
     facebook: { isConnected: boolean; verifyToken: string; pageName?: string | null; pageId?: string | null };
     instagram: { isConnected: boolean; verifyToken: string; pageName?: string | null; pageId?: string | null };
   }>({
-    queryKey: ["/api/integrations/meta-webhook-config"],
+    queryKey: withUserQueryScope(["/api/integrations/meta-webhook-config"], user?.id),
+    enabled: !!user?.id && sessionAligned,
   });
 
   const updateChannelMutation = useMutation({
@@ -648,6 +656,11 @@ export function ChannelSettings() {
 
   const getChannelStatus = (channel: Channel): 'connected' | 'pending' | 'disconnected' => {
     const setting = channels.find(c => c.channel === channel);
+    const ownedIntegrations = integrations.filter((i) => {
+      if (!user?.id) return false;
+      if (typeof i.userId === "string" && i.userId.length > 0) return i.userId === user.id;
+      return true;
+    });
 
     if (channel === 'whatsapp') {
       if (waIntegrationStatus?.fullyReady && waIntegrationStatus.activeProvider === 'meta') return 'connected';
@@ -667,7 +680,7 @@ export function ChannelSettings() {
     if (channel === 'facebook' || channel === 'instagram') {
       if (setting?.isConnected) return 'connected';
       const integrationType = channel === 'facebook' ? 'meta_facebook' : 'meta_instagram';
-      const hasIntegration = integrations.some(i => i.type === integrationType);
+      const hasIntegration = ownedIntegrations.some(i => i.type === integrationType);
       if (hasIntegration) return 'pending';
       return 'disconnected';
     }
@@ -756,7 +769,9 @@ export function ChannelSettings() {
     : metaWebhookConfig?.instagram;
 
   const manageIntegration = integrations.find(
-    i => i.type === (manageFbIgChannel === 'facebook' ? 'meta_facebook' : 'meta_instagram')
+    i =>
+      i.type === (manageFbIgChannel === 'facebook' ? 'meta_facebook' : 'meta_instagram') &&
+      (!i.userId || i.userId === user?.id),
   );
 
   type CardAction = "connect" | "manage" | "reconnect" | "setup";
@@ -1122,7 +1137,7 @@ export function ChannelSettings() {
     };
   };
 
-  if (isLoading) {
+  if (!sessionAligned || isLoading || channelsPending || integrationsPending) {
     return (
       <div className="flex justify-center py-8">
         <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
@@ -1335,7 +1350,8 @@ export function ChannelSettings() {
                 }}
                 disabled={
                   disconnectFbIgMutation.isPending ||
-                  (manageFbIgChannel === "instagram" && !manageIntegration)
+                  (manageFbIgChannel === "instagram" &&
+                    (!manageIntegration || (manageIntegration.userId != null && manageIntegration.userId !== user?.id)))
                 }
                 data-testid={`button-disconnect-${manageFbIgChannel}`}
               >

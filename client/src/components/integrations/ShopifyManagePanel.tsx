@@ -1,4 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth-context";
+import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -29,9 +31,10 @@ export function ShopifyManagePanel({
   toggleSyncPending,
 }: Props) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const { data: status, isLoading, isFetching, error } = useQuery<ShopifyConnectionStatus>({
-    queryKey: ["/api/shopify/connection-status"],
+    queryKey: withUserQueryScope(["/api/shopify/connection-status"], user?.id),
     queryFn: async () => {
       const res = await fetch("/api/shopify/connection-status", { credentials: "include" });
       const body = (await res.json().catch(() => ({}))) as ShopifyConnectionStatus & { error?: string };

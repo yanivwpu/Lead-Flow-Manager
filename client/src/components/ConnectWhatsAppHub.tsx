@@ -25,6 +25,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { trackWhatsappConnected } from "@/lib/ga4Events";
 import {
   META_EMBEDDED_SIGNUP_BLOCKED_MESSAGE,
@@ -307,7 +308,7 @@ export function ConnectWhatsAppHub({
   showPostConnectHealth = false,
 }: ConnectWhatsAppHubProps) {
   const { t } = useTranslation();
-  const { user: authedUser } = useAuth();
+  const { user: authedUser, sessionAligned } = useAuth();
   const queryClient = useQueryClient();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
@@ -329,13 +330,15 @@ export function ConnectWhatsAppHub({
       : null;
 
   const { data: cfg, isLoading: cfgLoading } = useQuery<MetaConfigResponse>({
-    queryKey: ["/api/integrations/whatsapp/meta/config"],
+    queryKey: withUserQueryScope(["/api/integrations/whatsapp/meta/config"], authedUser?.id),
     staleTime: 60_000,
+    enabled: !!authedUser?.id && sessionAligned,
   });
 
   const { data: status, isLoading: statusLoading } = useQuery<WhatsappStatusResponse>({
-    queryKey: ["/api/integrations/whatsapp/status"],
+    queryKey: withUserQueryScope(["/api/integrations/whatsapp/status"], authedUser?.id),
     staleTime: 15_000,
+    enabled: !!authedUser?.id && sessionAligned,
   });
 
   const subscribeMutation = useMutation({
@@ -834,8 +837,8 @@ export function ConnectWhatsAppHub({
     isFetching: diagFetching,
     refetch: refetchDiag,
   } = useQuery<CoexistenceDiagnosticsResponse>({
-    queryKey: ["/api/integrations/whatsapp/coexistence-diagnostics"],
-    enabled: !!metaManageView,
+    queryKey: withUserQueryScope(["/api/integrations/whatsapp/coexistence-diagnostics"], authedUser?.id),
+    enabled: !!metaManageView && !!authedUser?.id && sessionAligned,
     staleTime: 20_000,
     refetchOnWindowFocus: true,
   });

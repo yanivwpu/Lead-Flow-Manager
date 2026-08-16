@@ -754,7 +754,7 @@ export function registerAuthRoutes(app: Express) {
   app.get('/api/auth/me', (req, res) => {
     if (req.isAuthenticated()) {
       const { password: _, ...safeUser } = req.user as User;
-      res.set('Cache-Control', 'private, max-age=60');
+      res.set('Cache-Control', 'no-store, private');
       res.json(safeUser);
     } else {
       res.set('Cache-Control', 'no-store');

@@ -23,7 +23,8 @@ test("UnifiedInbox defers channel-health until inbox settles; no full-page spinn
     "utf8",
   );
   assert.ok(src.includes("enabled: inboxSettledOnce"));
-  assert.ok(src.includes('queryKey: ["/api/channel-health"]'));
+  assert.ok(src.includes('["/api/channel-health"]'));
+  assert.ok(src.includes("withUserQueryScope"));
   assert.ok(src.includes("refetchInterval: 5 * 60 * 1000"));
   assert.ok(src.includes("staleTime: 4 * 60 * 1000"));
   assert.ok(src.includes("data-testid=\"inbox-list-skeleton\""));

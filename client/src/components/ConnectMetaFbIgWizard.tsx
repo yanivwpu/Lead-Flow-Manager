@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
+import { instagramAccountHintStorageKey, LEGACY_IG_ACCOUNT_HINT_KEY } from "@/lib/accountQueryScope";
 import { trackFacebookConnected, trackInstagramConnected } from "@/lib/ga4Events";
 
 export interface MetaPage {
@@ -197,16 +198,18 @@ export function ConnectMetaFbIgWizard({
 
   // Called when user picks a page. For Instagram without auto-detected IG account
   // ID, we first collect it manually before proceeding to the connecting stage.
-  const LS_KEY = "whachat_ig_account_id_hint";
+  const igHintKey = instagramAccountHintStorageKey(user?.id);
 
   const handlePageSelect = (page: MetaPage) => {
     setSelectedPage(page);
     setConnectError(null);
     if (channel === "instagram" && !page.instagramAccountId) {
-      // Pre-fill order: server-stored ID → localStorage hint → empty
+      // Pre-fill order: server-stored ID → scoped localStorage hint → legacy hint → empty
       const hint =
         existingInstagramAccountId ||
-        (typeof localStorage !== "undefined" ? localStorage.getItem(LS_KEY) || "" : "");
+        (typeof localStorage !== "undefined"
+          ? localStorage.getItem(igHintKey) || localStorage.getItem(LEGACY_IG_ACCOUNT_HINT_KEY) || ""
+          : "");
       setManualInstagramId(hint);
       setStage("ig_account_id");
     } else {
@@ -219,7 +222,8 @@ export function ConnectMetaFbIgWizard({
 
     // Persist the entered Instagram account ID so reconnects are pre-filled
     if (manualIgId && typeof localStorage !== "undefined") {
-      localStorage.setItem(LS_KEY, manualIgId);
+      localStorage.setItem(igHintKey, manualIgId);
+      localStorage.removeItem(LEGACY_IG_ACCOUNT_HINT_KEY);
     }
 
     // Animate steps optimistically, fire request in background

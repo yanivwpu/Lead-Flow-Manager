@@ -3,6 +3,7 @@ import { useRoute, useLocation } from "wouter";
 import { ChatListItem } from "@/components/ChatListItem";
 import { TAG_COLORS, PIPELINE_STAGES } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
+import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePresence } from "@/lib/usePresence";
 import { isMetaReplyWindowExpiredError } from "@/lib/metaReplyWindowError";
@@ -148,12 +149,12 @@ export function Chats() {
   const hasAssignment = subscription?.limits?.assignmentEnabled ?? false;
 
   const { data: twilioStatus, isLoading: isTwilioLoading } = useQuery<{ connected: boolean; whatsappNumber: string | null }>({
-    queryKey: ["/api/twilio/status"],
+    queryKey: withUserQueryScope(["/api/twilio/status"], user?.id),
     enabled: !!user,
   });
 
   const { data: metaStatus, isLoading: isMetaLoading } = useQuery<{ connected: boolean; phoneNumber: string | null }>({
-    queryKey: ["/api/meta/status"],
+    queryKey: withUserQueryScope(["/api/meta/status"], user?.id),
     enabled: !!user,
   });
 
@@ -163,12 +164,12 @@ export function Chats() {
   const isAnyProviderConnected = isTwilioConnected || isMetaConnected;
 
   const { data: chats = [], isLoading } = useQuery<Chat[]>({
-    queryKey: ['/api/chats'],
+    queryKey: withUserQueryScope(['/api/chats'], user?.id),
     enabled: !!user && viewMode === "my",
   });
 
   const { data: teamChats = [] } = useQuery<Chat[]>({
-    queryKey: ['/api/chats/team'],
+    queryKey: withUserQueryScope(['/api/chats/team'], user?.id),
     enabled: !!user && viewMode === "team" && hasTeamInbox,
   });
 
