@@ -109,6 +109,11 @@ import {
 import { getStageSignals } from "@/lib/leadScoring";
 import { AIUpgradePrompt } from "./AIUpgradePrompt";
 import type { AICapabilities } from "@/lib/useAICapabilities";
+import {
+  resolveCopilotEntitlementStatus,
+  shouldShowCopilotIntelligence,
+  shouldShowCopilotUpgradeCard,
+} from "@/lib/copilotEntitlement";
 import { BuyerPreferencesPanel } from "@/components/BuyerPreferencesPanel";
 import { usePersistedBuyerPreferences } from "@/lib/buyerPreferencesQuery";
 import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
@@ -868,8 +873,11 @@ export function InboxLeadDetailsPanel({
     workspaceIntelligenceProp !== undefined
       ? workspaceIntelligenceProp
       : workspaceIntelligenceQuery ?? null;
-  // Default to full access if no capabilities provided (backward compat)
-  const canSeeCopilot    = capabilities ? capabilities.canUseCopilotIntelligence    : true;
+  // Entitlement loading/unknown must not render the upgrade card.
+  const copilotEntitlement = resolveCopilotEntitlementStatus(capabilities);
+  const canSeeCopilot = shouldShowCopilotIntelligence(capabilities);
+  const showCopilotUpgrade = shouldShowCopilotUpgradeCard(capabilities);
+  const copilotEntitlementLoading = copilotEntitlement === "loading";
   const canSeeWorkflow   = capabilities ? capabilities.canUseWorkflowRecommendations : true;
   const hasAIBrain       = capabilities?.hasAIBrain ?? false;
   const copilotUpgradeTo = capabilities?.upgradePlan ?? "Starter";
@@ -2225,7 +2233,12 @@ export function InboxLeadDetailsPanel({
           </div>
 
           <div className="flex items-center gap-2 shrink-0 pt-0.5">
-            {canSeeCopilot ? (
+            {copilotEntitlementLoading ? (
+              <span
+                className="h-4 w-12 rounded-full bg-gray-100 animate-pulse"
+                data-testid="copilot-entitlement-loading-pill"
+              />
+            ) : canSeeCopilot ? (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -2701,7 +2714,13 @@ export function InboxLeadDetailsPanel({
         <div className="px-3 py-3 animate-in fade-in slide-in-from-top-1 duration-200">
           <div className="min-w-0 pt-1 pb-2">
 
-              {!canSeeCopilot ? (
+              {copilotEntitlementLoading ? (
+                <div className="space-y-2 py-1" data-testid="copilot-entitlement-loading">
+                  <div className="h-3 w-2/5 rounded bg-gray-100 animate-pulse" />
+                  <div className="h-16 rounded-lg bg-gray-50 border border-gray-100 animate-pulse" />
+                  <div className="h-10 rounded-lg bg-gray-50 border border-gray-100 animate-pulse" />
+                </div>
+              ) : showCopilotUpgrade ? (
                 <AIUpgradePrompt
                   feature="Copilot"
                   requiredPlan={copilotUpgradeTo}

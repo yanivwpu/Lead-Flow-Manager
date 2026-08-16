@@ -1,5 +1,7 @@
 import { createContext, useContext, ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { withUserQueryScope } from "./accountQueryScope";
+import { useAuth } from "./auth-context";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "./shopifyBillingHint";
 
 interface SubscriptionLimits {
@@ -75,9 +77,10 @@ const SubscriptionContext = createContext<SubscriptionContextType>({
 });
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const shopHint = useShopifyShopHint();
   const { data, isLoading, refetch } = useQuery<SubscriptionData>({
-    queryKey: ["/api/subscription", shopHint ?? ""],
+    queryKey: withUserQueryScope(["/api/subscription", shopHint ?? ""], user?.id),
     queryFn: async () => {
       const res = await fetch(getSubscriptionApiUrl(), { credentials: "include" });
       if (res.status === 401) {

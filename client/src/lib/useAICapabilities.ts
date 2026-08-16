@@ -17,6 +17,8 @@ import {
   AI_BRAIN_PRO_CREDIT_BONUS,
   INBOX_AI_REPLY_GENERATIONS_MONTHLY,
 } from "@shared/pricingEntitlements";
+import { withUserQueryScope } from "./accountQueryScope";
+import { useAuth } from "./auth-context";
 import { useSubscription } from "./subscription-context";
 
 export interface AIUsageData {
@@ -111,19 +113,20 @@ const DEFAULT_CAPABILITIES: AICapabilities = {
 };
 
 export function useAICapabilities(): AICapabilities {
+  const { user } = useAuth();
   const { data: subscription, isLoading: subLoading } = useSubscription();
   const plan = (subscription?.limits as any)?.plan || "free";
-  const isAIPlan = plan === "starter" || plan === "pro" || plan === "enterprise";
 
   const { data: usageData, isLoading: usageLoading } = useQuery<AIUsageData>({
-    queryKey: ["/api/ai/usage"],
+    queryKey: withUserQueryScope(["/api/ai/usage"], user?.id),
     enabled:  !!subscription,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
 
+  // Unknown entitlement must stay loading — never treat missing usage as Free/locked.
   if (subLoading || usageLoading || !usageData) {
-    return { ...DEFAULT_CAPABILITIES, plan, isLoading: subLoading || usageLoading };
+    return { ...DEFAULT_CAPABILITIES, plan, isLoading: true };
   }
 
   const creditsUsed =
